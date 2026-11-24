@@ -52,7 +52,9 @@ class AiDigestService
      */
     public function generate(Child $child, ?string $date = null): ?AiDailyDigest
     {
-        $date ??= today()->toDateString();
+        $date ??= \App\Support\AgencyTime::today();
+        // Bill the AI this spends to the child's agency (App\Support\UsageMeter).
+        \App\Support\UsageMeter::forChild($child);
 
         // Skip if no events that day
         // That day in the child's own agency, as instants — see AgencyTime::dayRange.
@@ -72,6 +74,7 @@ class AiDigestService
         $prompt = $this->buildPrompt($child, $factSummary);
 
         try {
+            \App\Support\AiFresh::as('child_digest', \App\Support\AiFresh::agencyFrom(['child_id' => $child->id]));   // fresh writing (AiFresh)
             $response = Http::withHeaders([
                 'x-api-key' => $this->apiKey,
                 'anthropic-version' => '2023-06-01',
@@ -100,7 +103,7 @@ class AiDigestService
             }
 
             $body = $response->json();
-            $digestText = $body['content'][0]['text'] ?? '';
+            $digestText = \App\Support\AiConfig::text($body) ?? '';
             $tokensUsed = ($body['usage']['input_tokens'] ?? 0) + ($body['usage']['output_tokens'] ?? 0);
 
             // Save (one per child per day — upsert)
@@ -254,6 +257,9 @@ class AiDigestService
      */
     protected function buildFactSummary(Child $child, $events, string $date): array
     {
+        // The child's agency day, as instants (the observations below use it). It was never defined here, so every
+        // child with a logged day threw "Undefined variable $dayFrom" and no digest was ever built (2026-10-30).
+        [$dayFrom, $dayTo] = \App\Support\AgencyTime::dayRangeForChild((int) $child->id, $date);
         $summary = [
             'child_name' => $child->display_name,
             'age' => $child->age['human'],
@@ -371,7 +377,7 @@ PROMPT;
      */
     public function generateForCentre(int $centreId, ?string $date = null): array
     {
-        $date ??= today()->toDateString();
+        $date ??= \App\Support\AgencyTime::today();
         $stats = ['generated' => 0, 'skipped' => 0, 'failed' => 0];
 
         $children = Child::enrolled()

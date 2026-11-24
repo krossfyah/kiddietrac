@@ -188,14 +188,14 @@
     Dom.clear(modal.body);
 
     if (families.length === 0) {
-      modal.body.appendChild(Dom.el('div', { style: 'background: #FEF3C7; padding: 16px; border-radius: 8px; border-left: 3px solid #F59E0B;' }, [
+      modal.body.appendChild(Dom.el('div', { style: 'background: #FEF3C7; padding: 16px; border-radius: 8px; --kt-edge:#F59E0B;' }, [
         Dom.el('strong', {}, 'Add a family first'),
         Dom.el('p', { style: 'margin: 4px 0 0;' }, 'A child must belong to a family. Close this and click "Add Family" first.'),
       ]));
       return;
     }
     if (rooms.length === 0) {
-      modal.body.appendChild(Dom.el('div', { style: 'background: #FEF3C7; padding: 16px; border-radius: 8px; border-left: 3px solid #F59E0B;' }, [
+      modal.body.appendChild(Dom.el('div', { style: 'background: #FEF3C7; padding: 16px; border-radius: 8px; --kt-edge:#F59E0B;' }, [
         Dom.el('strong', {}, 'Add a room first'),
         Dom.el('p', { style: 'margin: 4px 0 0;' }, 'A child must be enrolled in a room. Close this and click "Add Room" first.'),
       ]));
@@ -231,7 +231,7 @@
     ));
 
     const enrollRow = Dom.el('div', { style: 'display: grid; grid-template-columns: 1fr 1fr; gap: 12px;' });
-    enrollRow.appendChild(field('Start date', 'start_date', { type: 'date', required: true, value: new Date().toISOString().split('T')[0] }));
+    enrollRow.appendChild(field('Start date', 'start_date', { type: 'date', required: true, value: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) }));
     enrollRow.appendChild(field('Monthly fee ($)', 'monthly_fee', { type: 'number', required: true, min: 0, step: 0.01, placeholder: '1450.00' }));
     form.appendChild(enrollRow);
 

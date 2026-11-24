@@ -1,0 +1,72 @@
+/* ═══════════════════════════════════════════════════════════════════
+   KiddieTrac — COMPACT TILES + FIELDS THAT LINE UP, ON A PHONE (2026-10-28).
+
+   Anthony (phone screenshots): "cards are too big and waste of space - fix this throughout the mobile view" and
+   "fields are not aligned - check entire mobile view".
+
+   1. STAT TILES. Every screen builds its summary tiles its own way (kt-kpi, ki-tile, kc-, rh-, pv-, pd-, plain inline
+      grids ...), and their grids ask for ~180-210px columns, so on a phone each tile took the whole width: five tiles = a
+      full screen of "$0". On a phone they sit two to a row, tighter, with a smaller number and no watermark icon.
+   2. FIELDS IN A ROW. "Default frequency | Deposit (CAD) | Registration fee (CAD)": a label that wrapped to two lines
+      pushed its input lower than its neighbours'. Each field now sits its input at the bottom, so a row shares one line,
+      and a three-across row of fields becomes two-across on a phone.
+
+   CLASSES ONLY. The hand-built grids are recognised once per screen by kt-phone-gutter.js (markPhoneLayout, in the pass
+   it already makes after a screen settles) and tagged kt-ph-tiles / kt-ph-fieldrow / kt-ph-field. A first version did
+   the recognising here with :has() and cost ~0.8s per navigation at phone speed - the browser re-checked the screen on
+   every change.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* ── 2. fields line up ── */
+  #appMain .kt-ph-field {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-end !important;
+  }
+  #appMain .kt-ph-fieldrow.kt-ph-three { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+@media (max-width: 600px) {
+  /* ── 1. stat tiles: two to a row ── */
+  #appMain :is(.kt-kpi-grid, .ki-tiles, .kc-tiles, .rh-tiles, .rh-kpis, .wf-tiles, .tk-dash-tiles, .pv-tiles, .pd-tiles,
+      .lic-tiles, .kt-pay-tiles, .cl-tiles, .kt-ph-tiles) {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  #appMain :is(.kt-kpi-grid, .ki-tiles, .kc-tiles, .rh-tiles, .rh-kpis, .wf-tiles, .tk-dash-tiles, .pv-tiles, .pd-tiles,
+      .lic-tiles, .kt-pay-tiles, .cl-tiles, .kt-ph-tiles) > *,
+  #appMain .kt-kpi {
+    padding: 10px 12px !important;
+    min-height: 0 !important;
+    min-width: 0 !important;
+    border-radius: 12px !important;
+  }
+  /* the number */
+  #appMain :is(.kt-kpi-value, .ki-tile .v) { font-size: 20px !important; line-height: 1.1 !important; margin-top: 3px !important; overflow-wrap: anywhere; }
+  #appMain .kt-ph-tiles > div [style*="font-size:2"],
+  #appMain .kt-ph-tiles > div [style*="font-size: 2"],
+  #appMain .kt-ph-tiles > div [style*="font-size:3"],
+  #appMain .kt-ph-tiles > div [style*="font-size: 3"] { font-size: 20px !important; line-height: 1.15 !important; }
+  /* the label and the line under it */
+  #appMain :is(.kt-kpi-label, .ki-tile .l) { font-size: 11.5px !important; }
+  #appMain :is(.ki-tile .s, .kt-kpi-trend) { font-size: 11px !important; margin-top: 2px !important; }
+
+  /* The overview's KPI tiles (screen-agency-admin .kt-kpi-tile): icon disc, number, label, line. */
+  #appMain .kt-kpi-tile { padding: 10px 11px !important; gap: 9px !important; border-radius: 14px !important; }
+  #appMain .kt-kpi-tile > div:first-child { width: 34px !important; height: 34px !important; font-size: 17px !important; }
+  #appMain .kt-kpi-tile [data-kpi][style*="font-size:27px"],
+  #appMain .kt-kpi-tile [data-kpi][style*="font-size:22px"] { font-size: 21px !important; }
+
+  /* the faint big icon in the corner: decoration that costs a line on a phone */
+  #appMain .ki-tile > .g { display: none !important; }
+}
+
+/* ── 3. the phone header: room for the floating gear (2026-10-29) ──
+   The logo carried 18px of padding each side and the user block a 10px margin + 14px padding,
+   while the gear floated over the role pill. Tighter edges here give back the ~40px the gear
+   needs (kt-mobilenav.js padGearClearance pads the user block for it). */
+@media (max-width: 768px) {
+  #appSidebar #navBrand { padding-left: 4px !important; padding-right: 4px !important; }
+  #appSidebar #navUser { margin-left: 4px !important; padding-left: 6px !important; }
+}

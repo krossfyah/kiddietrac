@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kiddietrac.app",
+      "sha256_cert_fingerprints": [
+        "9E:18:32:E9:BB:40:2F:C5:8A:A8:B4:6C:65:1F:95:CE:C8:6D:3A:E6:FC:74:50:EE:05:A2:18:B0:6F:69:BF:C1"
+      ]
+    }
+  }
+]

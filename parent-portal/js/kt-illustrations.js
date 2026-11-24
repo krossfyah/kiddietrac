@@ -162,7 +162,7 @@
 
   // Helper: pick the greeting for current time of day.
   window.KT.greetingForNow = function (firstName) {
-    var h = new Date().getHours();
+    var h = ((window.KT && KT.agencyHM) ? KT.agencyHM() : { h: new Date().getHours() }).h;   // the centre's hour (kt-tz.js)
     var greet = h < 5 ? 'Good night' :
                 h < 12 ? 'Good morning' :
                 h < 17 ? 'Good afternoon' :

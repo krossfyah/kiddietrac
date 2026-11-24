@@ -105,6 +105,57 @@ final class Audit
      * address (a webhook naming its sender, an impersonation recording the real
      * admin) keeps whatever it passed.
      */
+    /**
+     * Set when this request wrote a NAMED entry for what it did ("child.check_in"), as
+     * opposed to a side effect (an email, a slow-request note). AuditActivity reads it so
+     * the raw request line is not written as a second, duplicate row for the same action.
+     */
+    public static bool $namedThisRequest = false;
+
+    private const SIDE_EFFECTS = ['email.', 'perf.', 'sms.', 'push.', 'notification', 'voice.', 'fcm.'];
+
+    /* NO SEALED VALUE IN THE AUDIT LOG (2026-11-10, PIPEDA review). AuditActivity records each request's body
+       and controllers record what they saved; between them they copied staff bank numbers and children's
+       medical notes, allergies and immunizations into this table in plain text (9 bank, 15 medical rows) -
+       the values Sensitive keeps encrypted in their own tables, readable here and in every backup. The key
+       stays, so the record still says WHAT changed; the value does not. Every Sensitive::COLUMNS column of
+       children and contacts is included automatically, so a newly sealed column is never logged in clear. */
+    public const SEALED_KEYS = [
+        'health_flags', 'health_card_last4', 'immunizations', 'immunization', 'immunization_note',
+        'immunization_exemptions', 'medications', 'medication', 'transit_number', 'institution_number',
+        'bank_account', 'signature', 'signature_data',
+    ];
+
+    public const SEALED = '[sealed]';
+
+    private static ?array $sealedKeys = null;
+
+    /** The payload with every sealed key's value replaced; a JSON string stays a JSON string. $only narrows the keys. */
+    public static function seal(mixed $payload, ?array $only = null): mixed
+    {
+        $keys = self::$sealedKeys ??= array_flip(array_merge(self::SEALED_KEYS,
+            array_keys(Sensitive::COLUMNS['children'] ?? []), array_keys(Sensitive::COLUMNS['contacts'] ?? [])));
+        if ($only !== null) $keys = array_intersect_key($keys, array_flip($only));
+        $data = is_string($payload) ? json_decode($payload, true) : $payload;
+        if (! is_array($data)) return $payload;
+        $changed = false;
+        $walk = function (array $a) use (&$walk, &$changed, $keys): array {
+            foreach ($a as $k => $v) {
+                // Text and lists only: a true/false switch named "signature" says nothing about anybody.
+                if (is_string($k) && isset($keys[strtolower($k)]) && ((is_string($v) && $v !== '' && $v !== self::SEALED) || (is_array($v) && $v !== []))) {
+                    $a[$k] = self::SEALED;
+                    $changed = true;
+                } elseif (is_array($v)) {
+                    $a[$k] = $walk($v);
+                }
+            }
+            return $a;
+        };
+        $data = $walk($data);
+        if (! $changed) return $payload;
+        return is_string($payload) ? json_encode($data) : $data;
+    }
+
     public static function write(array $row): void
     {
         if ($row === []) {
@@ -117,6 +168,44 @@ final class Audit
         foreach ($rows as $i => $r) {
             if (! is_array($r)) {
                 continue;
+            }
+            /* OLD FIELD NAMES ARE TRANSLATED, UNKNOWN ONES DROPPED (ticket #169, 2026-10-22).
+               A caller wrote event/data/centre_id - names from an older audit table - and the
+               insert failed on the unknown column, so every agency branding/feature save went
+               unrecorded. The row is mapped onto the real columns instead of being lost. */
+            if (! isset($r['action']) && isset($r['event'])) { $r['action'] = $r['event']; }
+            if (! isset($r['payload']) && isset($r['data'])) {
+                $r['payload'] = is_string($r['data']) ? $r['data'] : json_encode($r['data']);
+            }
+            if (empty($r['agency_id']) && ! empty($r['payload'])) {
+                $pl = is_string($r['payload']) ? json_decode($r['payload'], true) : $r['payload'];
+                if (is_array($pl) && ! empty($pl['agency_id']) && is_numeric($pl['agency_id'])) {
+                    $r['agency_id'] = (int) $pl['agency_id'];
+                }
+            }
+            /* Unknown keys are folded into the payload instead of being dropped (2026-10-31): a caller that wrote
+               'summary' or 'subject_type' at the top level lost its whole description. */
+            if (empty($r['entity_type']) && ! empty($r['subject_type'])) { $r['entity_type'] = $r['subject_type']; }
+            if (empty($r['entity_id']) && ! empty($r['subject_id'])) { $r['entity_id'] = $r['subject_id']; }
+            $__cols = ['user_id', 'agency_id', 'action', 'entity_type', 'entity_id', 'payload', 'ip_address', 'user_agent', 'created_at', 'event', 'data', 'subject_type', 'subject_id'];
+            $__extra = array_diff_key($r, array_flip($__cols));
+            if ($__extra) {
+                $__pl = $r['payload'] ?? [];
+                $__pl = is_string($__pl) ? (json_decode($__pl, true) ?: []) : (is_array($__pl) ? $__pl : []);
+                $r['payload'] = json_encode($__pl + $__extra);
+            }
+            $r = array_intersect_key($r, array_flip(['user_id', 'agency_id', 'action', 'entity_type',
+                'entity_id', 'payload', 'ip_address', 'user_agent', 'created_at']));
+            $rows[$i] = $r;
+            $act = (string) ($r['action'] ?? '');
+            if ($act !== '' && ! str_contains($act, ':')) {
+                $side = false;
+                foreach (self::SIDE_EFFECTS as $p) {
+                    if (str_starts_with($act, $p)) { $side = true; break; }
+                }
+                if (! $side) {
+                    self::$namedThisRequest = true;
+                }
             }
             if (trim((string) ($r['ip_address'] ?? '')) === '') {
                 $rows[$i]['ip_address'] = $ip ??= self::ip();
@@ -145,6 +234,9 @@ final class Audit
                caller passes or forgets. */
             $rows[$i]['created_at'] = self::stamp($r['created_at'] ?? null)
                 ?? now()->format(self::TS);
+            if (isset($rows[$i]['payload'])) {
+                $rows[$i]['payload'] = self::seal($rows[$i]['payload']);
+            }
         }
 
         // An audit row must never be the reason a real action fails. This mirrors

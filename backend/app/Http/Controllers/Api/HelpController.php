@@ -82,13 +82,20 @@ final class HelpController extends Controller
             ]);
         }
 
+        /* The same question from the same kind of user gets the same answer for 7 days - the suggested questions in
+           the assistant are asked again and again (2026-10-28). Help articles change by deploy, not by the hour. */
+        $norm = trim(preg_replace('/\s+/', ' ', mb_strtolower(preg_replace('/[?!.]+$/', '', trim($data['question'])))));
+        $ckey = 'help-ask:' . md5($role . '|' . app()->getLocale() . '|' . $norm);
+        if ($hit = \Illuminate\Support\Facades\Cache::get($ckey)) {
+            return response()->json($hit + ['configured' => true, 'cached' => true]);
+        }
         try {
             $answer = $this->askAI($data['question'], $role);
-            return response()->json([
-                'answer' => $answer['answer'],
-                'sources' => $answer['sources'],
-                'configured' => true,
-            ]);
+            $out = ['answer' => $answer['answer'], 'sources' => $answer['sources']];
+            if (trim((string) $out['answer']) !== '') {
+                \Illuminate\Support\Facades\Cache::put($ckey, $out, now()->addDays(7));
+            }
+            return response()->json($out + ['configured' => true]);
         } catch (Throwable $e) {
             Log::error('Help AI failed', ['error' => $e->getMessage(), 'q' => $data['question']]);
             return response()->json([
@@ -104,7 +111,8 @@ final class HelpController extends Controller
      */
     private function askAI(string $question, string $role): array
     {
-        $corpus = $this->help->getCorpusForRole($role);
+        // Only the articles that match the question, plus an index of every title (see HelpService::relevantForRole).
+        $rel = $this->help->relevantForRole($role, $question);
         /* config/services.php defines this as `key`; `api_key` was never set, so the Help
            assistant reported "not configured" while every other AI caller reached the API.
            Same defensive order AnthropicService uses. (2026-08-30) */
@@ -125,7 +133,7 @@ final class HelpController extends Controller
         $systemPrompt = <<<PROMPT
 You are the Kiddietrac help assistant. The user asking is {$roleLabel}.
 
-Below is the FULL help documentation for Kiddietrac. ONLY answer questions using information from these articles. If the answer isn't in the docs, say so honestly and suggest contacting support.
+Below are the help articles that best match the question, and an INDEX of every help article (title and slug). ONLY answer using information from the articles provided. If the answer isn't in them, say so honestly, point to the most relevant article from the INDEX by its title, and suggest contacting support.
 
 When you reference a help article, mention its title in the answer (e.g. "see 'How to add a new child'"). At the END of your answer, list the slugs of any articles you cited, in this exact format on its own line:
 
@@ -136,11 +144,12 @@ If you didn't reference any specific article, output: SOURCES: none
 Keep answers concise (2-4 short paragraphs). Friendly but professional. Don't invent features that aren't in the docs.
 
 ═══════════════════════════════════════════
-HELP DOCUMENTATION
+INDEX OF ALL HELP ARTICLES
 ═══════════════════════════════════════════
 
-{$corpus}
+{$rel['index']}
 PROMPT;
+        $matched = $rel['articles'] ? implode("\n", $rel['articles']) : '(No article matched this question closely.)';
 
         $response = Http::timeout(30)
             ->withHeaders([
@@ -151,7 +160,13 @@ PROMPT;
             ->post('https://api.anthropic.com/v1/messages', [
                 'model' => config('services.anthropic.model', 'claude-opus-4-7'),
                 'max_tokens' => 800,
-                'system' => $systemPrompt,
+                /* The instructions + index are the same for every question from this role: marked for Anthropic's
+                   prompt cache, so a repeat within the hour reads them at a tenth of the price. The matched articles
+                   follow, uncached. */
+                'system' => [
+                    ['type' => 'text', 'text' => $systemPrompt, 'cache_control' => ['type' => 'ephemeral']],
+                    ['type' => 'text', 'text' => "═══════════════════════════════════════════\nMATCHED HELP ARTICLES\n═══════════════════════════════════════════\n\n" . $matched],
+                ],
                 'messages' => [
                     ['role' => 'user', 'content' => $question],
                 ],
@@ -162,7 +177,7 @@ PROMPT;
         }
 
         $body = $response->json();
-        $text = trim($body['content'][0]['text'] ?? '');
+        $text = trim(\App\Support\AiConfig::text($body) ?? '');
 
         // Extract SOURCES line
         $sources = [];
@@ -214,6 +229,7 @@ PROMPT;
                 'auditor' => 'auditor',
                 'home_visitor' => 'home_visitor',
                 'sales_rep' => 'sales_rep',
+                'reseller_admin' => 'reseller_admin', 'reseller' => 'reseller_admin',
             ];
             $va = strtolower(trim((string) $request->header('X-View-As-Role')));
             if (isset($map[$va])) {
@@ -222,6 +238,9 @@ PROMPT;
         }
 
         return match (true) {
+            // A reseller (2026-10-22) had no arm and fell to the guardian default, so it was
+            // served the PARENT library. It works as agency admin in its own agencies.
+            in_array('reseller_admin', $roles, true) && ! in_array('platform_admin', $roles, true) => 'reseller_admin',
             in_array('agency_admin', $roles, true) => 'agency_admin',
             // A platform admin holding no agency role fell through every arm to the
             // guardian default, and was served the PARENT library. They have the
@@ -555,9 +574,8 @@ PROMPT;
      */
     public function pinFeatured(\Illuminate\Http\Request $request): \Illuminate\Http\JsonResponse
     {
-        $user = $request->user();
-        $role = $this->resolveRole($user);
-        if (!in_array($role, ['agency_admin', 'platform_admin'])) {
+        $scope = $this->featuredScope($request);
+        if ($scope === false) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $data = $request->validate([
@@ -565,7 +583,7 @@ PROMPT;
             'sort' => ['nullable', 'integer'],
         ]);
         \Illuminate\Support\Facades\DB::table('help_article_featured')->updateOrInsert(
-            ['agency_id' => $role === 'platform_admin' ? null : $user->agency_id, 'slug' => $data['slug']],
+            ['agency_id' => $scope, 'slug' => $data['slug']],
             ['sort' => $data['sort'] ?? 0, 'updated_at' => now(), 'created_at' => now()],
         );
         return response()->json(['ok' => true]);
@@ -573,18 +591,33 @@ PROMPT;
 
     public function unpinFeatured(\Illuminate\Http\Request $request, string $slug): \Illuminate\Http\JsonResponse
     {
-        $user = $request->user();
-        $role = $this->resolveRole($user);
-        if (!in_array($role, ['agency_admin', 'platform_admin'])) {
+        $scope = $this->featuredScope($request);
+        if ($scope === false) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
         \Illuminate\Support\Facades\DB::table('help_article_featured')
             ->where('slug', $slug)
-            ->where(function ($q) use ($user, $role) {
-                if ($role === 'platform_admin') $q->whereNull('agency_id');
-                else $q->where('agency_id', $user->agency_id);
+            ->where(function ($q) use ($scope) {
+                if ($scope === null) $q->whereNull('agency_id');
+                else $q->where('agency_id', $scope);
             })
             ->delete();
         return response()->json(['ok' => true]);
+    }
+
+    /* WHOSE FEATURED LIST THIS CALLER MAY CHANGE (2026-11-05 leak sweep). This used `$user->agency_id`,
+       which does not exist (always null), so every agency admin pinned into and deleted from the
+       platform-wide list that every agency sees. Now: null = the platform-wide list, platform admins only;
+       an int = the active agency's own list, for its agency admin; false = refuse. */
+    private function featuredScope(\Illuminate\Http\Request $request): int|null|false
+    {
+        if (\App\Support\UserRoles::has($request, 'platform_admin')) {
+            return null;
+        }
+        if (! in_array('agency_admin', \App\Support\AgencyRole::names($request), true)) {
+            return false;
+        }
+        $agencyId = $this->helpAgencyId($request);
+        return $agencyId ?: false;
     }
 }

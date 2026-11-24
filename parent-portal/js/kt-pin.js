@@ -110,6 +110,7 @@
   }
   function restore(sess) {
     try {
+      sessionStorage.removeItem('kt_locked');
       sessionStorage.setItem('kt_token', sess.token);
       if (sess.user) sessionStorage.setItem('kt_user', sess.user);
       if (sess.agency) sessionStorage.setItem('kt_active_agency_id', sess.agency);
@@ -121,12 +122,13 @@
   }
 
   // ── Lock screen: a real numeric keypad, not a text field ────────────
-  function showLock(onDash) {
+  /* inPlace: the idle lock over a live portal (see kt-biometric.js showLock). */
+  function showLock(onDash, inPlace) {
     if (document.getElementById('kt-pin-lock')) return;
     var ov = document.createElement('div'); ov.id = 'kt-pin-lock';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:radial-gradient(120% 55% at 50% 0%, rgba(19,183,204,.18) 0%, rgba(19,183,204,0) 55%), linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;color:#ffffff;font-family:system-ui,-apple-system,sans-serif;';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:' + (inPlace ? 2147483000 : 2147482000) + ';background:radial-gradient(120% 55% at 50% 0%, rgba(19,183,204,.18) 0%, rgba(19,183,204,0) 55%), linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;color:#ffffff;font-family:system-ui,-apple-system,sans-serif;';
     ov.innerHTML =
-      '<div style="font-size:52px;line-height:1;margin-bottom:10px;">🔢</div>'
+      (window.KT_lockLogo ? window.KT_lockLogo() : '<div style="font-size:52px;line-height:1;margin-bottom:10px;">🔢</div>')
       + '<div style="font-weight:800;font-size:20px;margin-bottom:6px;">Enter your PIN</div>'
       + '<div id="kt-pin-msg" style="font-size:13.5px;color:#93a8c2;margin-bottom:20px;min-height:18px;">Quick unlock for KiddieTrac</div>'
       + '<div id="kt-pin-dots" style="display:flex;gap:12px;margin-bottom:26px;"></div>'
@@ -178,6 +180,11 @@
           del('kt_pin_tries');
           pinInMemory = candidate;
           set('kt_pin_unlocked_at', String(Date.now()));
+          if (inPlace) {
+            try { sessionStorage.setItem('kt_pin_session', '1'); } catch (e) {}
+            ov.remove(); try { inPlace.done(); } catch (e) {}
+            return;
+          }
           restore(sess);
           commit(onDash);
           return;
@@ -192,7 +199,10 @@
           if (tries >= MAX_TRIES) {
             remove();
             msg.textContent = 'Too many attempts — sign in with your password.';
-            setTimeout(function () { location.replace('/index.html?signed_out=pin_locked'); }, 1400);
+            setTimeout(function () {
+              if (inPlace) { ov.remove(); try { inPlace.out(); } catch (e) {} return; }
+              if (window.KT_out) window.KT_out.go('/index.html?signed_out=pin_locked', true); else location.replace('/index.html?signed_out=pin_locked');
+            }, 1400);
           } else {
             msg.textContent = 'Wrong PIN — ' + (MAX_TRIES - tries) + ' attempt' + (MAX_TRIES - tries === 1 ? '' : 's') + ' left.';
           }
@@ -202,7 +212,8 @@
 
     ov.querySelector('#kt-pin-pw').onclick = function () {
       ov.remove();
-      if (onDash) location.replace('/index.html');
+      if (inPlace) { try { inPlace.out(); } catch (e) {} return; }
+      if (onDash) { if (window.KT_out) window.KT_out.go('/index.html', true); else location.replace('/index.html'); }
     };
 
     // Hardware keyboard (and the APK's soft keyboard, if one is attached).
@@ -219,7 +230,9 @@
   // Validate first so a dead vault token falls back to the password instead of
   // looping through the lock screen.
   function commit(onDash) {
-    var go = function () { if (onDash) location.reload(); else location.replace('/dashboard.html'); };
+    // Straight to the bare splash frame while the session is checked (kt-launch-scene.js).
+    try { if (!onDash && window.KT_portalFade && window.KT_portalFade.prepare) window.KT_portalFade.prepare(); } catch (e) {}
+    var go = function () { if (onDash) location.reload(); else (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html', true); };
     var t = tok(); if (!t) { go(); return; }
     var settled = false;
     var timer = setTimeout(function () { if (!settled) { settled = true; go(); } }, 3500);
@@ -230,7 +243,7 @@
           pinDiag('commit-401', { status: r.status });
           remove();
           try { sessionStorage.removeItem('kt_token'); } catch (e) {}
-          location.replace('/index.html?signed_out=pin_expired');
+          if (window.KT_out) window.KT_out.go('/index.html?signed_out=pin_expired', true); else location.replace('/index.html?signed_out=pin_expired');
         } else go();
       })
       .catch(function () { if (!settled) { settled = true; clearTimeout(timer); go(); } });
@@ -246,7 +259,7 @@
 
   function boot() {
     var onDash = /dashboard\.html/i.test(location.pathname);
-    var hasSession = false; try { hasSession = !!sessionStorage.getItem('kt_token'); } catch (e) {}
+    var hasSession = false; try { hasSession = !!sessionStorage.getItem('kt_token') && sessionStorage.getItem('kt_locked') !== '1'; } catch (e) {}
     var unlockedThisSession = false; try { unlockedThisSession = sessionStorage.getItem('kt_pin_session') === '1'; } catch (e) {}
     var recentlyUnlocked = (Date.now() - (parseInt(get('kt_pin_unlocked_at') || '0', 10) || 0)) < 20000;
 

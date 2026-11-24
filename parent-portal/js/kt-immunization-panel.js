@@ -110,12 +110,19 @@
      2nd dose" is a clinical judgement and it is the centre's to make; the server enforces
      that too, this is only the half you can see. (Anthony, 2026-09-15)
 
-     KT.immunFileRecord({ scope, child?, children?, status?, onFiled? })
+     KT.immunFileRecord({ scope, child?, children?, status?, files?, onFiled?, onClose? })
        child    : { id, first_name, last_name, preferred_name } — fixed, no picker
        children : [{ id, name }] — offered in a picker when no child is fixed
        status   : a /immunization/child/{id}/status payload already in hand
+       files    : File[] already chosen elsewhere (the new-family form) — used unless others are picked here
        onFiled  : called after a successful filing
-     Returns false when it cannot open, so a caller can fall back. */
+       onClose  : called when the dialog closes, filed or not
+     Returns false when it cannot open.
+
+     THE DOSES ARE MANDATORY (2026-11-13, Anthony: "when uploading immunization make it mandatory to record the
+     doses/type of immunization - full sweep"). Nothing is filed - by staff or by a parent - until at least one
+     dose is ticked or added by name. A parent's ticks are still a claim the centre confirms; staff ticks still
+     record. The server refuses a record without either (ParentImmunizationRecordController::store). */
   KT.immunFileRecord = function (opts) {
     opts = opts || {};
     var M = window.KT && KT.Shell && KT.Shell.Modal;
@@ -140,20 +147,22 @@
 
       + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin-bottom:6px;">'
       + 'The record <span style="color:#DC2626;">*</span></label>'
-      + '<input type="file" class="fr-file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" '
+      + '<input type="file" class="fr-file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" '
       +   'style="display:block;width:100%;font-size:13px;margin-bottom:4px;">'
+      + '<div class="fr-given" style="color:#0F766E;font-size:12px;margin-bottom:4px;"></div>'
       + '<div style="color:#64748B;font-size:12px;margin-bottom:16px;">'
-      +   'PDF or a photo of the card, up to 10 MB.</div>'
+      +   'PDFs or photos of the card - pick several at once (front, back, extra pages), up to 10 MB each.</div>'
 
       + '<label style="display:block;font-weight:700;font-size:13px;color:#0F172A;margin-bottom:6px;">'
-      + (scope === 'parent' ? 'What does this record show?' : 'What does this record cover?') + '</label>'
+      + (scope === 'parent' ? 'What does this record show?' : 'What does this record cover?')
+      + ' <span style="color:#DC2626;">*</span></label>'
       + '<div style="color:#64748B;font-size:12px;margin-bottom:8px;">'
       +   (scope === 'parent'
             /* Said plainly, because the difference is the whole safeguard: a parent is
                telling the centre what is on the page, not clearing their own child's
                compliance. Promising otherwise would be a lie the first time somebody
                checked whether their child still showed overdue. */
-            ? 'Tick each immunisation you can see on the record. This helps '
+            ? 'Tick each immunization you can see on the record. This helps '
               + 'the centre read it \u2014 they will confirm each one before it counts. '
               + 'A date is optional; leave it blank if the card is unclear.'
             : 'Tick each dose the record shows. A date is optional \u2014 leave it blank if the '
@@ -253,20 +262,22 @@
       fillVaccineList(items);
       if (!items.length) {
         listEl.innerHTML = '<div style="padding:14px;color:#64748B;font-size:13px;">'
-          + 'No immunisation schedule has been set up for this agency, so there is nothing '
-          + 'to tick. The record can still be filed.</div>';
+          + 'No immunization schedule has been set up for this agency, so there is nothing '
+          + 'to tick. Add what the record shows with “+ Add a dose that is not listed”.</div>';
         return;
       }
       var done = 0;
       items.forEach(function (i, idx) {
         var already = (i.status === 'done' || i.status === 'exempt');
         if (already) { done++; }
+        /* An already-recorded dose can be ticked too (2026-11-13): a clearer photo of a card that is all on file
+           still has to say what it covers now that the doses are mandatory. The server skips a dose already
+           recorded - it is never doubled - and the tick is what ties this record to it. */
         var row = document.createElement('label');
         row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 11px;'
-          + 'border-top:' + (idx ? '1px solid #F1F5F9' : 'none') + ';font-size:13px;'
-          + (already ? 'opacity:0.55;' : 'cursor:pointer;');
+          + 'border-top:' + (idx ? '1px solid #F1F5F9' : 'none') + ';font-size:13px;cursor:pointer;';
         row.innerHTML =
-          '<input type="checkbox" class="fr-tick"' + (already ? ' checked disabled' : '') + ' '
+          '<input type="checkbox" class="fr-tick"' + (already ? ' data-already="1"' : '') + ' '
           +   'data-vaccine="' + esc(i.vaccine) + '" data-dose="' + esc(i.dose_label || '') + '" '
           +   'style="width:17px;height:17px;flex:none;">'
           + '<span style="flex:1;min-width:0;">'
@@ -281,17 +292,16 @@
         var date = row.querySelector('.fr-date');
         // The date box only means something once the dose is ticked; leaving it live
         // invites a date against a dose nobody claimed.
-        if (!already) {
-          tick.addEventListener('change', function () {
-            date.disabled = !tick.checked;
-            if (!tick.checked) { date.value = ''; }
-          });
-        }
+        tick.addEventListener('change', function () {
+          date.disabled = !tick.checked;
+          if (!tick.checked) { date.value = ''; }
+        });
         listEl.appendChild(row);
       });
       if (done) {
         noteEl.textContent = done + ' dose' + (done === 1 ? ' is' : 's are')
-          + ' already on file and cannot be ticked again here.';
+          + ' already on file - tick ' + (done === 1 ? 'it' : 'them') + ' too if this record shows '
+          + (done === 1 ? 'it' : 'them') + '; nothing is recorded twice.';
       }
     }
 
@@ -307,9 +317,15 @@
            that cannot wait, and the doses can be recorded afterwards. */
         listEl.innerHTML = '<div style="padding:14px;color:#9A3412;font-size:13px;">'
           + 'The dose list could not be loaded' + (e && e.message ? ' (' + esc(e.message) + ')' : '')
-          + '. The record can still be filed.</div>';
+          + '. Add what the record shows with “+ Add a dose that is not listed”.</div>';
         noteEl.textContent = '';
       });
+    }
+
+    var given = (opts.files || []).slice(0, 10);
+    if (given.length) {
+      form.querySelector('.fr-given').textContent = '✓ ' + (given.length === 1 ? given[0].name : given.length + ' files')
+        + ' from the family form - or choose others below.';
     }
 
     if (pickEl) { pickEl.addEventListener('change', loadDoses); }
@@ -319,6 +335,7 @@
       title: 'File an immunization record' + (child ? ' — ' + childName(child) : ''),
       body: form,
       large: true,
+      onClose: opts.onClose || null,
       actions: [
         { label: 'Cancel' },
         {
@@ -330,17 +347,23 @@
             err.textContent = '';
             var id = currentChildId();
             if (!id) { err.textContent = 'Choose the child this record belongs to.'; return false; }
-            var f = form.querySelector('.fr-file').files[0];
-            if (!f) { err.textContent = 'Choose the record to file.'; return false; }
-            if (f.size > 10 * 1024 * 1024) {
-              err.textContent = 'That file is larger than 10 MB.'; return false;
+            /* SEVERAL FILES, ONE RECORD (2026-11-13): the input is `multiple` and every page goes up in ONE
+               request as files[] - the server files each as its own document and sends one alert, not one per page. */
+            var picked = Array.prototype.slice.call(form.querySelector('.fr-file').files || []);
+            if (!picked.length) { picked = given; }
+            if (!picked.length) { err.textContent = 'Choose the record to file.'; return false; }
+            if (picked.length > 10) { err.textContent = 'Up to 10 files at a time, please.'; return false; }
+            for (var b = 0; b < picked.length; b++) {
+              if (picked[b].size > 10 * 1024 * 1024) {
+                err.textContent = '“' + picked[b].name + '” is larger than 10 MB.'; return false;
+              }
             }
 
             var doses = [];
             var ticks = form.querySelectorAll('.fr-tick');
             for (var k = 0; k < ticks.length; k++) {
               var t = ticks[k];
-              if (t.disabled || !t.checked) { continue; }
+              if (!t.checked) { continue; }
               doses.push({
                 vaccine: t.getAttribute('data-vaccine'),
                 dose_label: t.getAttribute('data-dose'),
@@ -365,9 +388,15 @@
               }
               doses.push({ vaccine: vac, dose_label: dl, administered_on: dt });
             }
+            if (!doses.length) {
+              err.textContent = scope === 'parent'
+                ? 'Tick at least one immunization you can see on the record, or add it by name.'
+                : 'Tick at least one dose this record covers, or add it by name.';
+              return false;
+            }
 
             var fd = new FormData();
-            fd.append('file', f);
+            picked.forEach(function (pf) { fd.append('files[]', pf, pf.name); });
             fd.append('title', 'Immunization record');
             fd.append('notes', form.querySelector('.fr-notes').value || '');
             /* THE ONLY LINE THAT DECIDES WHICH OF THE TWO THIS IS.
@@ -440,7 +469,7 @@
        Choosing the exemption reading swaps the date boxes for one reason and turns the
        required doses on, because a form that exempts a child almost always exempts the
        required schedule and ticking eleven boxes by hand is how one gets missed. */
-    var EXEMPTION_REASONS = [
+    var EXEMPTION_REASONS = (window.KT && KT.jurExemptionReasons) ? KT.jurExemptionReasons() : [
       'Religious or conscientious belief',
       'Medical reason (documented by a physician)',
       'Other',
@@ -459,7 +488,7 @@
       +     'border-radius:10px;padding:10px 12px;cursor:pointer;">'
       +     '<input type="radio" name="dt-mode" class="dt-mode" value="exempt" style="margin-top:2px;">'
       +     '<span><span style="font-weight:700;font-size:13px;color:#0F172A;">Exemption form</span>'
-      +       '<div style="font-size:11.5px;color:#64748B;line-height:1.4;">A statement of belief, or a medical exemption.</div></span>'
+      +       '<div style="font-size:11.5px;color:#64748B;line-height:1.4;">' + esc((window.KT && KT.jurMedicalOnly && KT.jurMedicalOnly()) ? 'A medical exemption (the only kind accepted here).' : 'A statement of belief, or a medical exemption.') + '</div></span>'
       +   '</label>'
       + '</div>'
       + '<div class="dt-reason" style="display:none;margin-bottom:12px;">'
@@ -496,7 +525,7 @@
       listEl2.innerHTML = '';
       if (!items.length) {
         listEl2.innerHTML = '<div style="padding:14px;color:#64748B;font-size:13px;">'
-          + 'No immunisation schedule is set up for this agency, so there is nothing to tick.</div>';
+          + 'No immunization schedule is set up for this agency, so there is nothing to tick.</div>';
         return;
       }
       var pre = 0;
@@ -761,7 +790,7 @@
 
       if (!items.length) {
         dueEl.innerHTML = '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:14px;'
-          + 'font-size:13px;color:#475569;">No immunisation schedule has been set up for this agency yet, '
+          + 'font-size:13px;color:#475569;">No immunization schedule has been set up for this agency yet, '
           + 'so nothing can be worked out as due.</div>';
         return;
       }
@@ -797,7 +826,7 @@
               + 'and record the doses it shows.';
         }
         return scope === 'parent'
-          ? 'If ' + esc(childName(child)) + ' has had these, send a photo of the immunisation '
+          ? 'If ' + esc(childName(child)) + ' has had these, send a photo of the immunization '
             + 'card or a printout from your clinic and the centre will update the record.'
           : 'Nothing has been recorded against these, and no card or printout has been filed '
             + 'either. Upload one if the family has sent it in.';
@@ -807,19 +836,19 @@
          count. The table is underneath for whoever needs the detail. */
       var head;
       if (over.length) {
-        head = '<div style="background:#FEF2F2;border:1px solid #FECACA;border-left:4px solid #DC2626;border-radius:12px;'
+        head = '<div style="background:#FEF2F2;border:1px solid #FECACA;--kt-edge:#DC2626;border-radius:12px;'
           + 'padding:14px 16px;"><div style="font-weight:800;color:#991B1B;font-size:14.5px;">'
           + over.length + ' dose' + (over.length === 1 ? '' : 's') + ' overdue for ' + esc(childName(child)) + '</div>'
           + '<div style="color:#7F1D1D;font-size:13px;margin-top:4px;line-height:1.55;">'
           + overdueAsk(d)
           + '</div></div>';
       } else if (soon.length) {
-        head = '<div style="background:#FFFBEB;border:1px solid #FDE68A;border-left:4px solid #F59E0B;border-radius:12px;'
+        head = '<div style="background:#FFFBEB;border:1px solid #FDE68A;--kt-edge:#F59E0B;border-radius:12px;'
           + 'padding:14px 16px;"><div style="font-weight:800;color:#92400E;font-size:14.5px;">'
           + soon.length + ' dose' + (soon.length === 1 ? '' : 's') + ' due in the next two months</div>'
           + '<div style="color:#78350F;font-size:13px;margin-top:4px;">Nothing is late — this is a heads-up.' + filedNote(d) + '</div></div>';
       } else {
-        head = '<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-left:4px solid #16A34A;border-radius:12px;'
+        head = '<div style="background:#F0FDF4;border:1px solid #BBF7D0;--kt-edge:#16A34A;border-radius:12px;'
           + 'padding:14px 16px;"><div style="font-weight:800;color:#166534;font-size:14.5px;">'
           + 'Nothing outstanding</div>'
           + '<div style="color:#14532D;font-size:13px;margin-top:4px;">'
@@ -931,7 +960,7 @@
        reason, or a statement of conscience or religious belief - so the dialog asks for
        one and the endpoint refuses without it. The presets are the wording the
        regulation uses; "Other" leaves it to whoever is filing it. */
-    var EXEMPTION_REASONS = [
+    var EXEMPTION_REASONS = (window.KT && KT.jurExemptionReasons) ? KT.jurExemptionReasons() : [
       'Religious or conscientious belief',
       'Medical reason (documented by a physician)',
       'Other',
@@ -1043,7 +1072,7 @@
       if (!records.length) {
         var none = document.createElement('div');
         none.style.cssText = 'color:#64748B;padding:6px 0;font-size:13px;';
-        none.textContent = 'Nothing on file yet — a clear photo of the immunisation card is enough.';
+        none.textContent = 'Nothing on file yet — a clear photo of the immunization card is enough.';
         recEl.appendChild(none);
         if (canUpload) { recEl.appendChild(uploader()); }
         return;
@@ -1203,6 +1232,7 @@
 
       var input = document.createElement('input');
       input.type = 'file';
+      input.multiple = true;
       input.accept = '.pdf,.jpg,.jpeg,.png,.webp,.heic';
       input.style.display = 'none';
 
@@ -1223,19 +1253,26 @@
          confirms. Same list, same card, two different acts, and the server keeps them
          apart: `doses` is refused from a guardian, `covers` is not.
 
-         The plain file picker remains the fallback for anyone whose shell Modal did not
-         load, so handing the record over never depends on the dialog. */
+         No bare-file fallback any more (2026-11-13): the doses are mandatory, and a file on its own would be
+         refused. If the dialog cannot open, say so. */
       btn.addEventListener('click', function () {
         if (fileRecordModal()) { return; }
-        input.click();
+        msg.style.color = '#B91C1C';
+        msg.textContent = 'The record form could not open. Please refresh the page and try again.';
       });
       input.addEventListener('change', function () {
-        var f = input.files && input.files[0];
+        var picked = Array.prototype.slice.call(input.files || []);
         input.value = '';                       // so the same file can be picked twice
-        if (!f) { return; }
-        if (f.size > 10 * 1024 * 1024) {
+        if (!picked.length) { return; }
+        if (picked.length > 10) {
           msg.style.color = '#B91C1C';
-          msg.textContent = 'That file is over 10 MB — a photo is usually well under.';
+          msg.textContent = 'Up to 10 files at a time, please.';
+          return;
+        }
+        var big = picked.filter(function (pf) { return pf.size > 10 * 1024 * 1024; })[0];
+        if (big) {
+          msg.style.color = '#B91C1C';
+          msg.textContent = '“' + big.name + '” is over 10 MB — a photo is usually well under.';
           return;
         }
         btn.disabled = true;
@@ -1245,7 +1282,7 @@
         msg.textContent = '';
 
         var fd = new FormData();
-        fd.append('file', f, f.name);
+        picked.forEach(function (pf) { fd.append('files[]', pf, pf.name); });
         /* Multipart, so the bytes travel as bytes — this host rejects a body with no file
            part just over 1 MB and a phone photo is several. */
         KT.Api.postForm(base + '/immunization-records', fd).then(function () {
@@ -1270,7 +1307,7 @@
       box.appendChild(input);
       box.appendChild(msg);
       box.appendChild(Object.assign(document.createElement('span'), {
-        textContent: 'PDF or a photo, up to 10 MB.',
+        textContent: 'PDFs or photos - several at once, up to 10 MB each.',
       })).style.cssText = 'font-size:12px;color:#94A3B8;';
       return box;
     }

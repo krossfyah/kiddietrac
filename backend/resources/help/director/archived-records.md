@@ -60,7 +60,7 @@ about that child, gathered from across the whole system:
 
 - Attendance, daily events and care logs
 - Observations, incidents, medications and doses given
-- Immunisations, wellness screenings, absences
+- Immunizations, wellness screenings, absences
 - Photos and video they appear in
 - Chats, signed documents and files
 - Report cards, awards, birthdays, field trips

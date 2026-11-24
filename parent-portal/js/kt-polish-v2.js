@@ -27,6 +27,46 @@
     document.head.appendChild(s);
   }
 
+  /* A TICK BOX IN A ROW ONLY TICKS (2026-11-09, Anthony: "hitting the selection box in the field trips opens the view -
+     it souldnt do that - full swweep to check that behaviour throughout and make this right"). attachBulkSelect below
+     puts a box at the start of every list table, and ~35 screens open the record when its row is clicked (field trips,
+     invoices, children, staff...). Their row handlers skip buttons, not boxes, so ticking a row to select it opened it.
+     One rule here instead of 35 patches: a click on a tick box (or the label around it) inside a table row still ticks
+     it and still reaches the box's own listeners, then stops at its cell - the row never hears it. A tap on the empty
+     padding of a cell that holds nothing but a tick box ticks the box (a 16px box is a small target). Selection works
+     on 'change', which is untouched. Marker: kt-tick-only. */
+  (function () {
+    if (window.__ktTickOnly) return; window.__ktTickOnly = 1;   // kt-tick-only
+    var BOX = 'input[type="checkbox"], input[type="radio"]';
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var tr = t.closest('tr');
+      if (!tr) return;
+      var cell = t.closest('td, th');
+      var box = t.closest(BOX);
+      if (!box) {
+        var lab = t.closest('label');
+        if (lab && tr.contains(lab)) box = lab.control || lab.querySelector(BOX);
+      }
+      if (!box) {
+        // The padding round a lone box: tick it.
+        if (!cell || t !== cell) return;
+        var boxes = cell.querySelectorAll(BOX);
+        if (boxes.length !== 1 || boxes[0].disabled || cell.querySelector('a, button, select, textarea, [role="button"]')
+          || (cell.textContent || '').trim()) return;
+        e.preventDefault(); e.stopPropagation();
+        boxes[0].click();
+        return;
+      }
+      var stopAt = cell || box.parentNode;
+      if (!stopAt || !tr.contains(stopAt)) return;
+      var stop = function (ev) { if (ev === e) ev.stopPropagation(); };
+      stopAt.addEventListener('click', stop);
+      setTimeout(function () { stopAt.removeEventListener('click', stop); }, 0);
+    }, true);
+  })();
+
   // ============================ Bulk select on tables ============================
   function attachBulkSelect(table) {
     // Opt-out, matching the data-kt-no-* family the other primitives use. Some tables
@@ -187,7 +227,7 @@
       const blob = new Blob(['﻿' + csv.join('\n')], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'selected-rows-' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.download = 'selected-rows-' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '.csv';
       a.click();
       if (KT.toast) KT.toast('Exported ' + (csv.length - 1) + ' row(s)', 'success');
     };
@@ -220,12 +260,15 @@
     const optIn = parseInt(table.getAttribute('data-kt-paginate') || '', 10);
     const wanted = (optIn > 0) ? optIn : 0;
     if (!wanted && rows.length < 200) return;
-    if (wanted && rows.length <= wanted) return;   // one page is not a pager
+    if (wanted && rows.length <= 10) return;   // too short for a pager or a size choice
     table.dataset.ktPaginated = '1';
 
-    const PAGE_SIZE = wanted || 100;
+    // Rows per page (2026-10-20): the person's choice for this table, else the default.
+    const rppKey = (window.KT && KT.rowsPerPage) ? KT.rowsPerPage.keyFor(table) : null;
+    let chosen = rppKey ? KT.rowsPerPage.get(rppKey) : null;
+    let PAGE_SIZE = chosen === 0 ? rows.length : (chosen || wanted || 100);
     let currentPage = 1;
-    const totalPages = Math.ceil(rows.length / PAGE_SIZE);
+    let totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
 
     const pager = document.createElement('div');
     pager.className = 'kt-pager';
@@ -244,7 +287,16 @@
         else if (r.dataset.ktFilterHidden !== '1') r.style.display = '';
       });
       pager.querySelector('.kt-pager-info').textContent = `Showing ${start + 1}–${Math.min(end, rows.length)} of ${rows.length}`;
-      if (window.KT && KT.pagerBar) KT.pagerBar(pager.querySelector('.kt-pager-nav'), currentPage, totalPages, (p) => { currentPage = p; render(); });
+      const sizeOpts = rppKey ? {
+        size: PAGE_SIZE >= rows.length && chosen === 0 ? 0 : PAGE_SIZE, total: rows.length, allowAll: true,
+        onSize: (n) => {
+          KT.rowsPerPage.set(rppKey, n); chosen = n;
+          PAGE_SIZE = n === 0 ? rows.length : n;
+          totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+          currentPage = 1; render();
+        },
+      } : undefined;
+      if (window.KT && KT.pagerBar) KT.pagerBar(pager.querySelector('.kt-pager-nav'), currentPage, totalPages, (p) => { currentPage = p; render(); }, sizeOpts);
     }
     render();
   }
@@ -289,6 +341,10 @@
          provider, room or child called "Sandy", "Brunt" or "Tagg" would trip the same
          wire. */
       if (btn.closest('.kt-select-sheet, .kt-date-sheet')) return;
+      /* [data-kt-nospin] (2026-11-03): a screen that shows its own progress opts out. The email client's Delete
+         ("delete" matches the list above) was disabled and its label put back for 2.5 s on every click, so a
+         second click - or any quick follow-up - landed on a dead button and nothing was ever deleted. */
+      if (btn.closest('[data-kt-nospin]')) return;
       if (btn.closest('.app-sidebar, .kt-sidebar, nav, .kt-v5a-actions, .kt-quickadd-menu, .kt-qa-menu, #kt-quickadd-menu')) return;
 
       const original = btn.innerHTML;
@@ -385,11 +441,75 @@
     o.addEventListener('keydown', (e) => { if (e.key === 'Escape') o.remove(); });
   }
 
+  /* ROWS PER PAGE FOR TABLES WITH THEIR OWN FILTER (2026-10-20).
+
+     A table marked data-kt-filtered (the screen filters it itself) or data-kt-no-filter
+     (an editing grid such as Attendance days) gets no shared search bar, and with it no
+     pager, so it never got the rows-per-page choice. It gets the choice here, and
+     nothing else:
+       - the default is All, so a table looks exactly as before until somebody picks a
+         size for it;
+       - paging only hides rows it hid itself (data-kt-pg-hide). A row the screen hid
+         (a filtered-out row, a collapsed detail row) stays hidden and is not counted,
+         so this can never undo the screen's own filter;
+       - a table whose screen already draws a pager is left alone. */
+  function attachPageOnly(table) {
+    if (table.dataset.ktPageOnly || table.dataset.ktPaginated || table.hasAttribute('data-kt-server-paged')) return;
+    if (!(window.KT && KT.rowsPerPage && KT.pagerBar)) return;
+    if (table.closest('.modal, #modalRoot, .kt-report-doc')) return;
+    const tbody = table.querySelector(':scope > tbody');
+    if (!tbody || !table.querySelector(':scope > thead')) return;
+    const par = table.parentElement;
+    const anchor = (par && par.id !== 'appMain' && par.children.length === 1) ? par : table;
+    const foreignPager = () => {
+      let el = anchor.parentElement;
+      for (let i = 0; i < 2 && el && el.id !== 'appMain'; i++, el = el.parentElement) {
+        if (el.querySelector('.kt-pager-bar:not(.kt-pageonly-bar)')) return true;
+      }
+      return false;
+    };
+    if (foreignPager()) return;
+    table.dataset.ktPageOnly = '1';
+    const key = KT.rowsPerPage.keyFor(table);
+    let page = 1;
+    const bar = document.createElement('div');
+    bar.className = 'kt-pager-bar kt-pageonly-bar';
+    anchor.parentNode.insertBefore(bar, anchor.nextSibling);
+    let mo = null;
+    function render() {
+      if (!table.isConnected) { if (mo) mo.disconnect(); return; }
+      if (foreignPager()) { bar.remove(); if (mo) mo.disconnect(); return; }
+      const rows = Array.from(tbody.children).filter(r => r.tagName === 'TR'
+        && !(r.children.length === 1 && r.firstElementChild && r.firstElementChild.colSpan > 1));
+      const mine = rows.filter(r => r.dataset.ktPgHide === '1' || r.style.display !== 'none');
+      const chosen = KT.rowsPerPage.get(key);           // null or 0 = All
+      const size = chosen ? chosen : Math.max(1, mine.length);
+      const pages = Math.max(1, Math.ceil(mine.length / size));
+      if (page > pages) page = pages;
+      if (mo) mo.disconnect();
+      mine.forEach((r, i) => {
+        const show = i >= (page - 1) * size && i < page * size;
+        if (show) { if (r.dataset.ktPgHide === '1') { r.style.display = ''; delete r.dataset.ktPgHide; } }
+        else if (r.style.display !== 'none') { r.style.display = 'none'; r.dataset.ktPgHide = '1'; }
+      });
+      if (mo) mo.observe(tbody, { childList: true });
+      KT.pagerBar(bar, page, pages, (p) => { page = p; render(); }, {
+        size: chosen || 0, total: mine.length, allowAll: true,
+        onSize: (n) => { KT.rowsPerPage.set(key, n); page = 1; render(); },
+      });
+    }
+    try { mo = new MutationObserver(() => { page = 1; render(); }); } catch (e) {}
+    render();
+  }
+
   // ============================ Sweep + auto-attach ============================
   function sweep() {
     document.querySelectorAll('[data-kt-pretty] table').forEach(t => {
       attachBulkSelect(t);
       attachPagination(t);
+    });
+    document.querySelectorAll('#appMain table[data-kt-filtered], #appMain table[data-kt-no-filter]').forEach(t => {
+      try { attachPageOnly(t); } catch (e) {}
     });
   }
   /* EXPOSED, because a screen that repaints its table without changing the hash gets no

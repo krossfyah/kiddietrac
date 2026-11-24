@@ -148,7 +148,7 @@ final class IlearnInvoiceRenderer
         if (! $isPaid) {
             $body .= '<div style="margin-top:14px;padding:10px 14px;background:#EFF6FF;border:1px solid #93C5FD;'
                 . 'border-radius:8px;font-size:.82rem;color:#1E3A5F;line-height:1.55">'
-                . '<strong>💳 Paying by Interac e-Transfer?</strong> '
+                . '<strong>Paying by Interac e-Transfer?</strong> '
                 . 'Please include your invoice number <strong>' . $e($number) . '</strong> in the e-Transfer message '
                 . 'when sending payment to <strong>' . $e($agencyName) . '</strong>. '
                 . 'This lets us match your payment to your account right away and helps us avoid any processing '
@@ -181,7 +181,7 @@ final class IlearnInvoiceRenderer
             $body,
             $agencyName, $agencyAddr, $agencyEmail, $agencyPhone, $logo,
             'Invoice', $number,
-            'Invoice ' . $number . ' · Generated ' . now()->format('M j, Y g:i A'),
+            'Invoice ' . $number . ' · Generated ' . \App\Support\AgencyTime::now()->format('M j, Y g:i A'),
             $forPdf
         );
     }
@@ -235,7 +235,7 @@ final class IlearnInvoiceRenderer
             . '</table>'
             . '<div style="margin-top:14px;padding:10px 14px;background:#EFF6FF;border:1px solid #93C5FD;'
             . 'border-radius:8px;font-size:.82rem;color:#1E3A5F;line-height:1.55">'
-            . '<strong>💳 Paying by Interac e-Transfer?</strong> Please include your invoice number '
+            . '<strong>Paying by Interac e-Transfer?</strong> Please include your invoice number '
             . '<strong>' . $e($number) . '</strong> in the e-Transfer message when sending payment to '
             . '<strong>' . $e($agencyName) . '</strong>.</div>'
             . '<div style="margin-top:14px;padding:10px 14px;background:#FEFCE8;border:1px solid #EAB308;'
@@ -256,6 +256,30 @@ final class IlearnInvoiceRenderer
     }
 
     /** iLearn's <x-print.layout>, reproduced. Tables rather than flex/grid — dompdf. */
+    /**
+     * Any document in this template's page and header (2026-10-31: the split guardian copy). The header is the AGENCY's
+     * identity - logo, name, brand address, contact email and phone - exactly as on the family invoice; never a
+     * provider's/centre's address.
+     */
+    public function wrapForAgency(int $agencyId, string $body, string $docTitle, string $docSub, string $footNote, bool $forPdf = true): string
+    {
+        $agency = DB::table('agencies')->where('id', $agencyId)->first();
+        $settings = [];
+        if ($agency && $agency->settings) {
+            try { $settings = json_decode((string) $agency->settings, true) ?: []; } catch (Throwable $e) {}
+        }
+
+        return $this->layout($body, $agency->name ?? 'Your childcare agency', trim((string) ($settings['brand_address'] ?? '')),
+            (string) ($agency->contact_email ?? $agency->brand_support_email ?? ''), (string) ($agency->contact_phone ?? ''),
+            $this->inlineLogo($agency->brand_logo_url ?? $agency->logo_url ?? null), $docTitle, $docSub, $footNote, $forPdf);
+    }
+
+    /** The agency logo as a data: URI (PDF-safe), for documents built outside this class. */
+    public function logoData(?string $url): ?string
+    {
+        return $this->inlineLogo($url);
+    }
+
     private function layout(string $slot, string $agencyName, string $addr, string $email,
         string $phone, ?string $logo, string $docTitle, string $docSub, string $footNote, bool $pdf): string
     {

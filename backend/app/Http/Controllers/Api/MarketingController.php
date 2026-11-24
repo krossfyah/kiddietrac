@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -27,33 +28,42 @@ final class MarketingController extends Controller
     private function getAgencyId(Request $request): ?int
     {
         $userId = $request->user()->id;
-        $isPlatform = DB::table('role_assignments')
+        $isPlatform = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists();
         $activeId = (int) $request->header('X-Active-Agency-Id');
         if ($isPlatform) {
             if ($activeId && DB::table('agencies')->where('id', $activeId)->whereNull('deleted_at')->exists()) {
                 return $activeId;
             }
-            return (int) DB::table('agencies')->whereNull('deleted_at')->orderBy('id')->value('id');
+            // No agency chosen means none (2026-11-05 leak sweep), not whichever agency has the lowest id.
+            return null;
         }
-        if ($activeId && DB::table('role_assignments')
-                ->where('user_id', $userId)->where('agency_id', $activeId)
-                ->whereIn('role', ['agency_admin', 'centre_director'])->where('active', true)->exists()) {
-            return $activeId;
+        /* The agency you are working in, and only if you are an admin or director THERE (2026-11-05 leak sweep):
+           this used to fall back to the first director/admin row held anywhere, so a person with roles in two
+           agencies could have campaigns read, sent and deleted in the other one. */
+        $active = \App\Support\AgencyRole::activeAgency($request);
+        if ($active && array_intersect(\App\Support\AgencyRole::names($request), ['agency_admin', 'centre_director'])) {
+            return $active;
         }
-        // Director's centre -> agency
-        $centreId = DB::table('role_assignments')
-            ->where('user_id', $userId)->where('role', 'centre_director')->where('active', true)->value('centre_id');
-        if ($centreId) {
-            return (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
-        }
-        return DB::table('role_assignments')
-            ->where('user_id', $userId)->where('role', 'agency_admin')->where('active', true)->value('agency_id');
+        return null;
+    }
+
+    /* The centres a director may run campaigns for (2026-11-05 leak sweep). null = agency-wide (admin /
+       platform). Otherwise the centres where the caller is centre_director in this agency: Visibility alone
+       would also count a centre where they are only an educator. Fails closed ([] = nothing). */
+    private function campaignScope(Request $request, int $agencyId): ?array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope === null) return null;
+        $dir = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
+            ->where('user_id', $request->user()->id)->where('role', 'centre_director')->where('active', true)
+            ->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->all();
+        return array_values(array_intersect($scope, $dir));
     }
 
     private function getCentreIdIfDirector(Request $request): ?int
     {
-        $assignment = DB::table('role_assignments')
+        $assignment = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $request->user()->id)
             ->where('role', 'centre_director')
             ->where('active', true)
@@ -78,9 +88,111 @@ final class MarketingController extends Controller
         if ($centreId) {
             $q->where(function ($x) use ($centreId) { $x->whereNull('centre_id')->orWhere('centre_id', $centreId); });
         }
+        /* A centre-scoped caller sees agency-wide campaigns and their own centres' only (2026-11-05 leak sweep):
+           with no director row found above, the list was the whole agency. */
+        $scope = $this->campaignScope($request, $agencyId);
+        if ($scope !== null) {
+            $q->where(function ($x) use ($scope) { $x->whereNull('centre_id')->orWhereIn('centre_id', $scope ?: [0]); });
+        }
 
         $rows = $q->limit(100)->get();
         return response()->json(['campaigns' => $rows]);
+    }
+
+    /* ── CAMPAIGN REPORT (2026-10-31, Anthony: "in reports, add a ... campaign report") ─────────────────────────
+       Reports → Campaign report. The agency's own campaigns (Marketing → Campaigns) with the counts the send
+       actually recorded, plus announcements to families with their email delivery/opens from email_logs. Nothing
+       is estimated: a figure the platform never recorded comes back null and the screen says "not tracked".
+       Same scope as the campaigns list: the active agency; a director sees agency-wide + their centre only. */
+    public function report(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) return response()->json(['campaigns' => [], 'announcements' => [], 'months' => [], 'totals' => []]);
+        $isDate = fn ($v) => (bool) preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $v);
+        $from = $isDate($request->query('from')) ? (string) $request->query('from') : now()->subMonths(12)->toDateString();
+        $to = $isDate($request->query('to')) ? (string) $request->query('to') : now()->toDateString();
+        $centreId = $this->getCentreIdIfDirector($request);
+
+        $q = DB::table('marketing_campaigns')->where('agency_id', $agencyId)->whereNull('deleted_at')
+            ->where(function ($w) use ($from, $to) {
+                $w->whereBetween(DB::raw('DATE(COALESCE(sent_at, email_sent_at, scheduled_for, created_at))'), [$from, $to]);
+            });
+        if ($centreId) { $q->where(function ($x) use ($centreId) { $x->whereNull('centre_id')->orWhere('centre_id', $centreId); }); }
+        /* Same centre limit as the list, and the announcements below too (2026-11-05 leak sweep): a scoped caller
+           with no director row read every centre's figures. */
+        $scope = $this->campaignScope($request, $agencyId);
+        if ($scope !== null) {
+            $q->where(function ($x) use ($scope) { $x->whereNull('centre_id')->orWhereIn('centre_id', $scope ?: [0]); });
+        }
+        $camps =$q->orderByDesc(DB::raw('COALESCE(sent_at, email_sent_at, created_at)'))->get();
+
+        $campaigns = $camps->map(function ($c) {
+            $sent = $c->sent_at ?: $c->email_sent_at;
+            $delivered = $c->email_delivery_count !== null ? (int) $c->email_delivery_count : ($c->delivery_count !== null ? (int) $c->delivery_count : null);
+            $opens = $c->open_count !== null ? (int) $c->open_count : null;
+            $clicks = $c->click_count !== null ? (int) $c->click_count : null;
+            return [
+                'id' => (int) $c->id, 'title' => $c->title ?: $c->subject ?: 'Untitled campaign', 'channel' => $c->channel ?: 'email',
+                'status' => $c->status, 'audience' => $c->audience, 'sent_at' => $sent, 'scheduled_for' => $c->scheduled_for,
+                'recipients' => $c->recipient_count !== null ? (int) $c->recipient_count : null,
+                'delivered' => $delivered,
+                'failed' => $c->email_failure_count !== null ? (int) $c->email_failure_count : null,
+                'opens' => $opens, 'clicks' => $clicks,
+                'open_rate' => ($delivered && $opens !== null) ? round($opens / $delivered * 100, 1) : null,
+                'click_rate' => ($delivered && $clicks !== null) ? round($clicks / $delivered * 100, 1) : null,
+                'automated' => (bool) $c->trigger_event,
+            ];
+        })->values();
+
+        // Announcements to families: channels chosen, and for email the logged deliveries/opens (email_logs rows of
+        // this agency with the announcement's title in the subject, within two days of sending).
+        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        $aq = DB::table('announcements')->whereNotNull('sent_at')->whereBetween(DB::raw('DATE(sent_at)'), [$from, $to])
+            ->where(function ($w) use ($agencyId, $centreIds, $centreId, $scope) {
+                $w->where(function ($x) use ($agencyId) { $x->where('scope_type', 'agency')->where('scope_id', $agencyId); });
+                $ids = $centreId ? [$centreId] : $centreIds;
+                if ($scope !== null) $ids = array_values(array_intersect(array_map('intval', $ids), $scope));
+                if ($ids) { $w->orWhere(function ($x) use ($ids) { $x->where('scope_type', 'centre')->whereIn('scope_id', $ids); }); }
+            });
+        $anns = $aq->orderByDesc('sent_at')->limit(500)->get(['id', 'title', 'audience', 'scope_type', 'send_email', 'send_sms', 'send_push', 'send_voice', 'sent_at']);
+        $announcements = $anns->map(function ($a) use ($agencyId) {
+            $emails = null; $opened = null; $failed = null;
+            if ($a->send_email && trim((string) $a->title) !== '') {
+                $logs = DB::table('email_logs')->where('agency_id', $agencyId)
+                    ->where('subject', 'like', '%' . str_replace(['%', '_'], ['\%', '\_'], mb_substr((string) $a->title, 0, 120)) . '%')
+                    ->whereBetween('created_at', [Carbon::parse($a->sent_at)->subMinutes(10), Carbon::parse($a->sent_at)->addDays(2)])
+                    ->selectRaw("SUM(status = 'sent') sent, SUM(status = 'sent' AND opened_at IS NOT NULL) opened, SUM(status IN ('failed','bounced')) failed")->first();
+                $emails = (int) ($logs->sent ?? 0); $opened = (int) ($logs->opened ?? 0); $failed = (int) ($logs->failed ?? 0);
+            }
+            $ch = array_values(array_filter([$a->send_email ? 'email' : null, $a->send_sms ? 'sms' : null, $a->send_push ? 'push' : null, $a->send_voice ? 'voice' : null]));
+            return ['id' => (int) $a->id, 'title' => $a->title, 'audience' => $a->audience, 'scope' => $a->scope_type, 'channels' => $ch,
+                'sent_at' => $a->sent_at, 'emails_sent' => $emails, 'emails_opened' => $opened, 'emails_failed' => $failed,
+                'open_rate' => $emails ? round($opened / $emails * 100, 1) : null];
+        })->values();
+
+        $months = [];
+        foreach ($campaigns as $c) {
+            $m = substr((string) ($c['sent_at'] ?: ''), 0, 7); if (! $m) continue;
+            $months[$m] = $months[$m] ?? ['month' => $m, 'campaigns' => 0, 'announcements' => 0, 'delivered' => 0, 'opens' => 0];
+            $months[$m]['campaigns']++; $months[$m]['delivered'] += (int) $c['delivered']; $months[$m]['opens'] += (int) $c['opens'];
+        }
+        foreach ($announcements as $a) {
+            $m = substr((string) $a['sent_at'], 0, 7); if (! $m) continue;
+            $months[$m] = $months[$m] ?? ['month' => $m, 'campaigns' => 0, 'announcements' => 0, 'delivered' => 0, 'opens' => 0];
+            $months[$m]['announcements']++; $months[$m]['delivered'] += (int) $a['emails_sent']; $months[$m]['opens'] += (int) $a['emails_opened'];
+        }
+        ksort($months);
+        $sentCamps = $campaigns->filter(fn ($c) => $c['sent_at']);
+        $del = (int) $sentCamps->sum('delivered') + (int) $announcements->sum('emails_sent');
+        $opn = (int) $sentCamps->sum('opens') + (int) $announcements->sum('emails_opened');
+        return response()->json([
+            'from' => $from, 'to' => $to,
+            'campaigns' => $campaigns, 'announcements' => $announcements, 'months' => array_values($months),
+            'totals' => ['campaigns_sent' => $sentCamps->count(), 'announcements' => $announcements->count(),
+                'delivered' => $del, 'opens' => $opn, 'open_rate' => $del ? round($opn / $del * 100, 1) : null,
+                'clicks' => (int) $sentCamps->sum('clicks')],
+            'not_tracked' => ['Per-link clicks', 'Unsubscribes per campaign', 'SMS opens'],
+        ]);
     }
 
     public function show(Request $request, int $id): JsonResponse
@@ -88,6 +200,11 @@ final class MarketingController extends Controller
         $agencyId = $this->getAgencyId($request);
         $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
         if (!$row) return response()->json(['message' => 'Not found'], 404);
+        /* A director opens agency-wide campaigns and their own centres' only (2026-11-05 leak sweep): any id in
+           the agency used to open, including another centre's draft. */
+        if (! \App\Support\CentreScope::canRead($this->campaignScope($request, (int) $agencyId), $row->centre_id, true)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
         return response()->json(['campaign' => $row]);
     }
 
@@ -110,7 +227,10 @@ final class MarketingController extends Controller
             'centre_id' => ['nullable', 'integer'],
             'scheduled_for' => ['nullable', 'date'],
             'status' => ['nullable', 'in:draft,scheduled'],
+            'sender_id' => ['nullable', 'integer'],
         ]);
+        [$okSender, $senderMsg] = \App\Support\CampaignSender::validateChoice($agencyId, $data['sender_id'] ?? null);
+        if (! $okSender) return response()->json(['message' => $senderMsg], 422);
 
         $status = $data['status'] ?? ($data['scheduled_for'] ?? null ? 'scheduled' : 'draft');
 
@@ -123,6 +243,11 @@ final class MarketingController extends Controller
             $belongs = DB::table('centres')->where('id', $data['centre_id'])->where('agency_id', $agencyId)->exists();
             if (!$belongs) return response()->json(['message' => 'Invalid centre'], 422);
         }
+        /* A centre-scoped caller may only create a campaign for a centre they direct (2026-11-05 leak sweep):
+           with no director row found above, a NULL (whole agency) or any in-agency centre_id was accepted. */
+        if (! \App\Support\CentreScope::canWrite($this->campaignScope($request, $agencyId), $data['centre_id'] ?? null)) {
+            return response()->json(['message' => 'You can only create campaigns for a centre you direct.'], 403);
+        }
 
         $id = DB::table('marketing_campaigns')->insertGetId([
             'agency_id' => $agencyId,
@@ -134,6 +259,7 @@ final class MarketingController extends Controller
             'hero_image_url' => $data['hero_image_url'] ?? null,
             'audience' => $data['audience'],
             'channel' => $data['channel'],
+            'sender_id' => ! empty($data['sender_id']) ? (int) $data['sender_id'] : null,
             'status' => $status,
             'scheduled_for' => $data['scheduled_for'] ?? null,
             'created_at' => now(),
@@ -148,6 +274,11 @@ final class MarketingController extends Controller
         $agencyId = $this->getAgencyId($request);
         $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
         if (!$row) return response()->json(['message' => 'Not found'], 404);
+        /* Only a campaign of a centre you direct (2026-11-05 leak sweep): a director could edit any campaign in
+           the agency by id, including agency-wide ones. */
+        if (! \App\Support\CentreScope::canWrite($this->campaignScope($request, (int) $agencyId), $row->centre_id)) {
+            return response()->json(['message' => 'You can only change campaigns for a centre you direct.'], 403);
+        }
         if ($row->status === 'sent') return response()->json(['message' => 'Sent campaigns are read-only'], 422);
 
         $data = $request->validate([
@@ -161,7 +292,21 @@ final class MarketingController extends Controller
             'channel' => ['sometimes', 'in:email,in_portal,both'],
             'scheduled_for' => ['sometimes', 'nullable', 'date'],
             'status' => ['sometimes', 'in:draft,scheduled,archived'],
+            'sender_id' => ['sometimes', 'nullable', 'integer'],
         ]);
+        if (array_key_exists('sender_id', $data)) {
+            [$okSender, $senderMsg] = \App\Support\CampaignSender::validateChoice($agencyId, $data['sender_id']);
+            if (! $okSender) return response()->json(['message' => $senderMsg], 422);
+            $data['sender_id'] = ! empty($data['sender_id']) ? (int) $data['sender_id'] : null;
+        }
+        /* A header/footer must be one of this agency's saved blocks (2026-11-05 leak sweep): any asset id was
+           written, and composeBody then pulled another agency's header/footer into this campaign. */
+        foreach (['header_asset_id', 'footer_asset_id'] as $k) {
+            if (! empty($data[$k]) && ! DB::table('marketing_assets')->where('id', (int) $data[$k])
+                    ->where('agency_id', $agencyId)->whereNull('deleted_at')->exists()) {
+                return response()->json(['message' => 'That header or footer was not found for this agency.'], 422);
+            }
+        }
         if (isset($data['body_html'])) $data['body_html'] = $this->sanitiseHtml($data['body_html']);
         $data['updated_at'] = now();
         DB::table('marketing_campaigns')->where('id', $id)->update($data);
@@ -173,6 +318,10 @@ final class MarketingController extends Controller
         $agencyId = $this->getAgencyId($request);
         $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
         if (!$row) return response()->json(['message' => 'Not found'], 404);
+        /* Only a campaign of a centre you direct (2026-11-05 leak sweep): any id in the agency could be deleted. */
+        if (! \App\Support\CentreScope::canWrite($this->campaignScope($request, (int) $agencyId), $row->centre_id)) {
+            return response()->json(['message' => 'You can only delete campaigns for a centre you direct.'], 403);
+        }
         DB::table('marketing_campaigns')->where('id', $id)->update(['deleted_at' => now()]);
         return response()->json(['message' => 'Campaign deleted']);
     }
@@ -184,6 +333,11 @@ final class MarketingController extends Controller
         $agencyId = $this->getAgencyId($request);
         $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
         if (!$row) return response()->json(['message' => 'Not found'], 404);
+        /* Only a campaign of a centre you direct (2026-11-05 leak sweep): a director could send an agency-wide
+           or another centre's campaign by id, so it reached families outside their centres. */
+        if (! \App\Support\CentreScope::canWrite($this->campaignScope($request, (int) $agencyId), $row->centre_id)) {
+            return response()->json(['message' => 'You can only send campaigns for a centre you direct.'], 403);
+        }
         if (in_array($row->status, ['sent', 'sending'], true)) return response()->json(['message' => 'Already sent or sending'], 422);
 
         DB::table('marketing_campaigns')->where('id', $id)->update(['status' => 'sending', 'updated_at' => now()]);
@@ -210,18 +364,45 @@ final class MarketingController extends Controller
             ]);
         }
 
+        /* Only the in-portal copy has been delivered at this point. The email goes out from
+           kiddietrac:campaigns-mail within ~5 minutes (paced for a Gmail sender), which fills
+           in email_delivery_count / email_failure_count. This used to report every recipient
+           as delivered before a single email had left (2026-10-20). */
+        $portal = in_array($row->channel, ['in_portal', 'both'], true);
         DB::table('marketing_campaigns')->where('id', $id)->update([
             'status' => 'sent',
             'sent_at' => now(),
             'recipient_count' => count($recipients),
-            'delivery_count' => count($recipients),
+            'delivery_count' => $portal ? count($recipients) : 0,
             'updated_at' => now(),
         ]);
 
+        $emailing = in_array($row->channel, ['email', 'both'], true);
         return response()->json([
-            'message' => 'Campaign sent',
+            'message' => $emailing ? 'Campaign queued: the email goes out within a few minutes' : 'Campaign sent',
             'recipients' => count($recipients),
             'channel' => $row->channel,
+            'email_pending' => $emailing,
+        ]);
+    }
+
+    // ── Send from (white-label) ───────────────────────────────────────────
+
+    /**
+     * GET /marketing/senders — what the campaign editor's "Send from" offers. A non
+     * white-label agency gets white_label:false and no accounts, so the editor can say
+     * the option is part of the licence instead of offering something the server refuses.
+     */
+    public function senders(Request $request): JsonResponse
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
+        $wl = \App\Support\CampaignSender::whiteLabelAgency($agencyId);
+
+        return response()->json([
+            'white_label' => $wl,
+            'default' => \App\Support\CampaignSender::defaultFrom($agencyId),
+            'senders' => $wl ? \App\Support\CampaignSender::options($agencyId) : [],
         ]);
     }
 
@@ -421,11 +602,15 @@ final class MarketingController extends Controller
      */
     public function composeBody($row): string
     {
-        $part = function ($assetId) {
+        /* Only the campaign's own agency's blocks are ever composed in (2026-11-05 leak sweep). */
+        $agencyOf = isset($row->agency_id) ? (int) $row->agency_id : null;
+        $part = function ($assetId) use ($agencyOf) {
             if (! $assetId) {
                 return '';
             }
-            $a = DB::table('marketing_assets')->where('id', $assetId)->whereNull('deleted_at')->first();
+            $aq = DB::table('marketing_assets')->where('id', $assetId)->whereNull('deleted_at');
+            if ($agencyOf) $aq->where('agency_id', $agencyOf);
+            $a = $aq->first();
             if (! $a) {
                 return '';
             }

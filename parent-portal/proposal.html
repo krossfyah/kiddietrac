@@ -23,7 +23,6 @@
     input,textarea{width:100%;padding:11px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;font-family:inherit}
     input:focus,textarea:focus{outline:none;border-color:#1F6080}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media(max-width:600px){.row{grid-template-columns:1fr} .card{padding:18px 16px} .hero{padding:18px}}
-    canvas{width:100%;height:170px;border:1.5px dashed #94A3B8;border-radius:12px;background:#fff;touch-action:none;display:block}
     .btn{display:inline-block;padding:13px 22px;border-radius:12px;border:0;background:#1F6080;color:#fff;font-weight:800;font-size:15px;cursor:pointer;text-decoration:none}
     .btn.light{background:#EEF4F8;color:#1F6080}
     .btn[disabled]{opacity:.5;cursor:not-allowed} .link{background:none;border:0;color:#1F6080;font-weight:700;cursor:pointer;font-size:13px;padding:0}
@@ -47,6 +46,9 @@
   <div id="main"></div>
   <div class="conf">🔒 Private and confidential. This proposal is intended only for the organisation it is addressed to. Please do not share or distribute it.</div>
 </div>
+<script src="/js/kt-net.js?v=20261022raw"></script>
+<!-- The shared signature pad (2026-11-06). No sign-in here, so no saved signatures: it just draws. -->
+<script src="/js/kt-signature-pad.js?v=20261106sig"></script>
 <script>
 (function () {
   var API = 'https://api.kiddietrac.com/api/v1';
@@ -59,8 +61,34 @@
 
   function docCard(intro) {
     var c = card('<h2>Proposal</h2><p class="lead">' + intro + '</p><iframe class="doc" title="Proposal" sandbox="allow-same-origin"></iframe>'
-      + '<div class="actions"><a class="btn light" href="' + pdfUrl + '">⬇ Download PDF</a></div>');
+      + '<div class="actions"><a class="btn light" href="' + pdfUrl + '">⬇ Download PDF</a><button type="button" class="btn light" data-print>🖨 Print</button></div>');
     return c.querySelector('iframe');
+  }
+  /* Print (2026-11-10): the proposal as shown, signature block included - blank lines before signing, so it can also
+     be printed and signed on paper. A print window first (phones print the top page); a hidden frame if pop-ups are
+     blocked. The document is ours (the API's html), never anything the visitor typed. */
+  function printProposal(html) {
+    var done = false;
+    function once(w) { if (done) return; done = true; try { w.focus(); w.print(); } catch (e) {} }
+    var w = null;
+    try { w = window.open('', '_blank'); } catch (e) {}
+    if (w && w.document) {
+      w.document.open(); w.document.write(html); w.document.close();
+      w.addEventListener('load', function () { setTimeout(function () { once(w); }, 200); });
+      setTimeout(function () { once(w); }, 1500);
+      return;
+    }
+    var f = document.createElement('iframe');
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    f.onload = function () { setTimeout(function () { once(f.contentWindow); }, 200); setTimeout(function () { f.remove(); }, 60000); };
+    document.body.appendChild(f);
+    f.srcdoc = html;
+  }
+  // Today at head office: the date printed under the signature on the signed copy.
+  function hqToday() {
+    try { return new Date().toLocaleDateString('en-US', { timeZone: 'America/Toronto', year: 'numeric', month: 'long', day: 'numeric' }); }
+    catch (e) { return new Date().toDateString(); }
   }
   function fit(frame) {
     // Same-origin sandbox without scripts: we can read its height, it can run nothing.
@@ -95,6 +123,8 @@
 
       var frame = docCard(j.state === 'open' ? 'Please read the proposal and its terms and conditions, then sign below.' : 'The proposal as signed.');
       frame.srcdoc = j.html || '';
+      var pbtn = frame.parentNode.querySelector('[data-print]');
+      if (pbtn) pbtn.onclick = function () { printProposal(j.html || ''); };
       frame.addEventListener('load', function () { fit(frame); setTimeout(function () { fit(frame); }, 400); });
       var rt; window.addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { frame.style.height = '200px'; fit(frame); }, 150); });
       if (j.state === 'open') signCard(pf);
@@ -105,25 +135,18 @@
     var c = card('<h2>Sign the proposal</h2>'
       + '<p class="lead">Signing accepts this proposal and its terms and conditions. KiddieTrac then countersigns and emails you the fully signed copy.</p>'
       + '<label for="org">Organisation (legal name)</label><input id="org" autocomplete="organization" value="' + esc(pf.company || '') + '">'
-      + '<div class="row"><div><label for="sn">Your full name</label><input id="sn" autocomplete="name" value="' + esc(pf.name || '') + '"></div>'
+      + '<div class="row"><div><label for="sn">Print your full name</label><input id="sn" autocomplete="name" value="' + esc(pf.name || '') + '"></div>'
       + '<div><label for="st">Your title</label><input id="st" autocomplete="organization-title" value="' + esc(pf.title || '') + '" placeholder="e.g. Owner, Director"></div></div>'
-      + '<label>Signature</label><canvas id="pad" aria-label="Draw your signature"></canvas><button type="button" class="link" id="clr" style="margin-top:6px">Clear signature</button>'
+      + '<label for="dt">Date</label><input id="dt" readonly tabindex="-1" value="' + esc(hqToday()) + '" style="background:#F8FAFC;color:#475569">'
+      + '<label>Signature</label><div id="pad" aria-label="Draw your signature"></div><button type="button" class="link" id="clr" style="margin-top:6px">Clear signature</button>'
       + '<label class="agree"><input type="checkbox" id="ag"> <span>I have read and accept this proposal and its Terms &amp; Conditions on behalf of the organisation named above, and I am authorised to sign for it. I agree that my electronic signature is as valid as a handwritten one.</span></label>'
       + '<div class="actions"><button class="btn" id="go">✍️ Sign the proposal</button></div><div class="msg" id="m"></div>'
       + '<div style="margin-top:18px;border-top:1px solid #EEF2F6;padding-top:12px"><button type="button" class="link" id="decl">Not going ahead? Let us know</button><div id="declBox" style="display:none">'
       + '<label for="why">Anything you would like to tell us? (optional)</label><textarea id="why" rows="3" maxlength="1000"></textarea>'
       + '<div class="actions"><button class="btn light" id="declGo">Decline this proposal</button></div><div class="msg" id="dm"></div></div></div>');
 
-    var cv = c.querySelector('#pad'), ctx, drawing = false, inked = false;
-    function size() { var r = cv.getBoundingClientRect(), d = window.devicePixelRatio || 1; cv.width = r.width * d; cv.height = r.height * d; ctx = cv.getContext('2d'); ctx.scale(d, d); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0F172A'; inked = false; }
-    size();
-    function pos(e) { var r = cv.getBoundingClientRect(), t = e.touches ? e.touches[0] : e; return [t.clientX - r.left, t.clientY - r.top]; }
-    function start(e) { e.preventDefault(); drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p[0], p[1]); }
-    function move(e) { if (!drawing) return; e.preventDefault(); var p = pos(e); ctx.lineTo(p[0], p[1]); ctx.stroke(); inked = true; }
-    function end() { drawing = false; }
-    cv.addEventListener('mousedown', start); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
-    cv.addEventListener('touchstart', start, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); cv.addEventListener('touchend', end);
-    c.querySelector('#clr').onclick = size;
+    var pad = KT.signaturePadInline(c.querySelector('#pad'), { height: 170 });
+    c.querySelector('#clr').onclick = function () { pad.clear(); };
     var m = c.querySelector('#m'), go = c.querySelector('#go');
     function v(id) { return c.querySelector('#' + id).value.trim(); }
     function post(path, body) {
@@ -135,11 +158,11 @@
       if (v('org').length < 2) miss.push('organisation');
       if (v('sn').length < 2) miss.push('your name');
       if (v('st').length < 2) miss.push('your title');
-      if (!inked) miss.push('your signature');
+      if (pad.isEmpty()) miss.push('your signature');
       if (!c.querySelector('#ag').checked) miss.push('the acceptance checkbox');
       if (miss.length) { m.className = 'msg err'; m.textContent = 'Please add: ' + miss.join(', ') + '.'; return; }
       go.disabled = true; m.className = 'msg'; m.textContent = 'Signing…';
-      post('/sign', { organisation: v('org'), signer_name: v('sn'), signer_title: v('st'), signature: cv.toDataURL('image/png'), agree: true })
+      post('/sign', { organisation: v('org'), signer_name: v('sn'), signer_title: v('st'), signature: pad.toDataURL(), agree: true })
         .then(function (x) {
           if (!x.ok) { go.disabled = false; m.className = 'msg err'; m.textContent = (x.j && x.j.message) || 'That did not go through. Please try again.'; return; }
           main.innerHTML = '';

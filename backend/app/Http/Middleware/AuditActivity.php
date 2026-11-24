@@ -34,12 +34,34 @@ class AuditActivity
         // and isn't a meaningful user action. staff/punch is skipped here because
         // CareController@punch writes its OWN detailed audit entry (clock IN vs OUT
         // with the centre + duration), which the generic middleware entry can't.
-        'push/device', 'push/subscribe', 'staff/punch',
+        // staff/break/ (2026-11-05): breakStart / breakEnd write their own the same way.
+        'push/device', 'push/subscribe', 'staff/punch', 'staff/break/',
+        // diag/net: the browser's once-a-session connection-speed summary (NetQuality).
+        'diag/net',
+        // diag/search-words: a screen's on-screen words for the global search (SearchKeywords) - never stored in audit.
+        'diag/search-words',
         // integration/* = machine-to-machine sync between iLearn and KiddieTrac
         // (waitlist + contacts, every 5 min). It re-pushes the same rows on a schedule
         // and was writing ~1,500 identical "integration/waitlist" audit rows a DAY —
         // pure noise, not a person's action. Skip the whole integration namespace.
         'integration/',
+        // badges/sync: the page telling the person's iPhones their icon number went down (kt-badges.js). It fires
+        // whenever a count drops, from every open tab - 80 "Synced the app icon badge" rows on 2026-11-02, none of
+        // them something a person did. The reads that cause it are audited on their own.
+        'badges/sync',
+        /* AUTOMATIC TRAFFIC, NOT ACTIONS (2026-11-03, Anthony: "why so many entries for matched menu dishes to food
+           photos ... fix this and anything similiar like this - full sweep"). The week before: 777 food-images/match,
+           637 me/device-permissions, 367 demo/pulse, 317 me/markers, 309 notifications/seen, 247 mark-read.
+           - food-images/match: the menu editor looking up a photo for a dish name AS IT IS TYPED ("Di", "Diegs",
+             "Digestive"...) - a read-only search sent as POST. Saving the menu is audited (operations/menu); the paid
+             AI lookup (ai/assist/food-photo) stays audited.
+           - mark-read / read-all / seen: read receipts. '/read' above was meant to cover them but never matched
+             "mark-read" (a hyphen, not a slash) - the same spelling gap kt-live.js closed on 2026-09-08.
+           - me/device-permissions: the app reporting what the phone allows, on start and on return (kt-device-perms.js).
+           - demo/pulse: the web demo's timer asking for its next scripted, fictional notification.
+           - me/markers: interface state (when the bell was last opened, tips dismissed). auth/me/ui-prefs is already
+             covered by 'auth/me'. */
+        'food-images/match', 'mark-read', 'read-all', '/seen', 'me/device-permissions', 'demo/pulse', 'me/markers',
     ];
 
     /** Request fields to redact from the stored payload. */
@@ -109,6 +131,7 @@ class AuditActivity
         // Taken BEFORE anything runs, so the window covers every row this request
         // goes on to write.
         $startedAt = now()->toDateTimeString();
+        \App\Support\Audit::$namedThisRequest = false;
 
         $response = $next($request);
         try {
@@ -144,8 +167,8 @@ class AuditActivity
                 return;
             }
             $st = $response->getStatusCode();
-            if ($st < 400) {
-                return;                 // a working read
+            if ($st < 400 && ! ($request->user() && $this->isExport($request->path()))) {
+                return;                 // a working read (an export of records is the exception)
             }
             if (in_array($st, [401, 429], true)) {
                 // Ordinary traffic: an expired token in somebody's pocket, or a rate
@@ -160,9 +183,23 @@ class AuditActivity
         }
         $user = $request->user();
         if (! $user) {
-            return; // unauthenticated (e.g. login attempts) — handled by AuthController's own audit
+            /* SIGNED-OUT ACTIONS THAT ARE STILL SOMEBODY'S ACTION (2026-10-21). Sign-in,
+               password reset and the signed form/file links audit themselves in their
+               controllers; the routes in GUEST below did not audit at all - a parent
+               signing a child in at the kiosk, a director approving time off from the email
+               link, an RSVP. Each is filed under the agency its token or record belongs to. */
+            if ($isWrite) {
+                $this->recordGuest($request, $response);
+            }
+            return;
         }
         $path = $request->path();
+        /* A DOWNLOAD OF PEOPLE'S DATA IS AN EVENT (2026-10-21). Successful reads are not
+           audited (that would drown the table), but an export, a CSV or a PDF of records is
+           exactly what an auditor asks about after a leak: who took a copy, and when. */
+        if (! $isWrite && $response->getStatusCode() < 400 && ! $this->isExport($path)) {
+            return;
+        }
         foreach (self::SKIP as $frag) {
             if (stripos($path, $frag) !== false) {
                 return;
@@ -183,6 +220,14 @@ class AuditActivity
 
         $status = $response->getStatusCode();
         $ok = $status >= 200 && $status < 300;
+
+        /* ONE ROW PER ACTION (2026-10-20). When the controller already wrote a named entry
+           for this request ("child.care_schedule_updated", "staff.clock_in"), the raw
+           request line was a second row saying the same thing in URL form. A FAILED request
+           is still written: the named entry is usually only written on success. */
+        if ($ok && \App\Support\Audit::$namedThisRequest) {
+            return;
+        }
 
         /* action = "post:admin/centres" (route name if present), capped at 80 chars.
 
@@ -245,13 +290,132 @@ class AuditActivity
             'user_id'     => $user->id ?? null,
             'agency_id'   => $agencyId,
             'action'      => $action,
-            'entity_type' => $entityType,
+            'entity_type' => \App\Support\AuditLabels::entityType($entityType),
             'entity_id'   => $entityId,
             'payload'     => json_encode($payload),
             'ip_address'  => substr((string) $request->ip(), 0, 45),
             'user_agent'  => substr((string) $request->userAgent(), 0, 500),
             'created_at'  => now(),
         ]);
+    }
+
+    /* Reads that hand someone a copy of records: exports, CSVs, PDFs, printouts, downloads.
+       Photos (media/) and the app's own housekeeping are left out - they are viewing, not
+       taking a copy, and would bury the rows that matter. */
+    private const EXPORT = ['#/exports?(/|$)#', '#\.csv$#', '#/csv(/|$)#', '#/download(/|$)#', '#/pdf$#', '#/print$#'];
+    private const EXPORT_SKIP = ['media/', 'diag/', 'whats-new', 'marketing-site/', 'storage/'];
+
+    private function isExport(string $path): bool
+    {
+        foreach (self::EXPORT_SKIP as $s) {
+            if (stripos($path, $s) !== false) {
+                return false;
+            }
+        }
+        foreach (self::EXPORT as $re) {
+            if (preg_match($re, $path)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Signed-out write routes that are a person's action, and how to find whose agency it is.
+     *
+     * Deliberately NOT here (see kt:audit-labels --coverage): payment and SMS/voice webhooks
+     * (machine traffic with their own logs), website visitors (leads, chat, newsletter),
+     * diagnostics, and form drafts (autosave). Sign-in, reset, signed forms/files, NDA and
+     * proposal signing, sign-up and SMS consent audit themselves in their controllers.
+     */
+    public const GUEST = [
+        '#^api/kiosk/([^/]+)/check-event$#'          => ['kiosk.check_event', 'kiosk'],
+        '#^api/kiosk/([^/]+)/signature$#'            => ['kiosk.signature', 'kiosk'],
+        '#^api/v1/kiosk/([^/]+)/temperature$#'       => ['kiosk.temperature', 'kiosk'],
+        '#^api/v1/time-off/act/(\d+)$#'              => ['time_off.decided_by_link', 'time_off'],
+        '#^api/v1/feedback/day/(\d+)$#'              => ['parent_feedback.submitted', 'child'],
+        '#^api/v1/public/rsvp/event/([^/]+)$#'       => ['rsvp.submitted', 'rsvp_event'],
+        '#^api/v1/public/rsvp/invite/([^/]+)$#'      => ['rsvp.submitted', 'rsvp_invite'],
+        '#^api/v1/public/give/([^/]+)$#'             => ['donation.pledged', 'donation'],
+        '#^api/v1/public/tours$#'                    => ['tour.booked', 'tour'],
+        '#^api/v1/public/proposal/([^/]+)/decline$#' => ['sales_quote.client_declined', null],
+        '#^api/v1/auth/register$#'                   => ['auth.registered', null],
+    ];
+
+    private function recordGuest(Request $request, Response $response): void
+    {
+        $path = $request->path();
+        foreach (self::GUEST as $re => [$action, $kind]) {
+            if (! preg_match($re, $path, $m)) {
+                continue;
+            }
+            $status = $response->getStatusCode();
+            $ok = $status >= 200 && $status < 300;
+            if ($ok && \App\Support\Audit::$namedThisRequest) {
+                return;     // the controller wrote its own, better entry
+            }
+            $key = $m[1] ?? null;
+            [$agencyId, $entityType, $entityId, $actorId] = $this->guestOwner($kind, $key, $request, $ok);
+            \App\Support\Audit::write([
+                'user_id'     => $actorId,
+                'agency_id'   => $agencyId,
+                'action'      => substr($action . ($ok ? '' : ' [fail]'), 0, 80),
+                'entity_type' => $entityType,
+                'entity_id'   => $entityId,
+                'payload'     => json_encode([
+                    'method'     => strtoupper($request->method()),
+                    // A kiosk or RSVP token is a key: never copy it into the log.
+                    'path'       => ($key !== null && ! ctype_digit($key)) ? str_replace($key, '…', $path) : $path,
+                    'status'     => $status,
+                    'signed_out' => true,
+                    'input'      => $this->safeInput($request),
+                ]),
+                'ip_address'  => substr((string) $request->ip(), 0, 45),
+                'user_agent'  => substr((string) $request->userAgent(), 0, 500),
+                'created_at'  => now(),
+            ]);
+            return;
+        }
+    }
+
+    /** [agency_id, entity_type, entity_id, actor user id] for a signed-out action. */
+    private function guestOwner(?string $kind, ?string $key, Request $request, bool $ok): array
+    {
+        try {
+            // A signed link names who it was sent to (?u=); only trusted once the request
+            // succeeded, i.e. the signature held.
+            $u = $ok ? (int) $request->query('u') : 0;
+            $actor = ($u > 0 && DB::table('users')->where('id', $u)->exists()) ? $u : null;
+            switch ($kind) {
+                case 'kiosk':
+                    $c = DB::table('centres')->where('kiosk_token', (string) $key)->first(['id', 'agency_id']);
+                    return [$c ? (int) $c->agency_id : null, 'centre', $c ? (int) $c->id : null, null];
+                case 'time_off':
+                    $t = DB::table('time_off_requests')->where('id', (int) $key)->first(['id', 'agency_id']);
+                    return [$t ? (int) $t->agency_id : null, 'time_off_request', $t ? (int) $t->id : null, $actor];
+                case 'child':
+                    $ag = DB::table('enrollments as e')->join('rooms as r', 'r.id', '=', 'e.room_id')
+                        ->join('centres as c', 'c.id', '=', 'r.centre_id')
+                        ->where('e.child_id', (int) $key)->orderByDesc('e.id')->value('c.agency_id');
+                    return [$ag ? (int) $ag : null, 'child', (int) $key, $actor];
+                case 'rsvp_event':
+                    $e = DB::table('rsvp_events')->where('public_token', (string) $key)->first(['id', 'agency_id']);
+                    return [$e ? (int) $e->agency_id : null, 'rsvp_event', $e ? (int) $e->id : null, null];
+                case 'rsvp_invite':
+                    $i = DB::table('rsvp_invites')->where('token', (string) $key)->first(['event_id', 'agency_id', 'user_id']);
+                    return [$i ? (int) $i->agency_id : null, 'rsvp_event', $i ? (int) $i->event_id : null,
+                        ($ok && $i && $i->user_id) ? (int) $i->user_id : null];
+                case 'donation':
+                    $d = DB::table('donation_campaigns')->where('slug', (string) $key)->first(['id', 'agency_id']);
+                    return [$d ? (int) $d->agency_id : null, 'donation_campaign', $d ? (int) $d->id : null, null];
+                case 'tour':
+                    $ag = DB::table('agencies')->where('slug', (string) $request->input('agency_slug'))->value('id');
+                    $cid = (int) $request->input('centre_id');
+                    return [$ag ? (int) $ag : null, 'centre', $cid ?: null, null];
+            }
+        } catch (Throwable $e) {
+        }
+        return [null, null, null, null];
     }
 
     /** Redacted, size-capped snapshot of the request body for the audit record. */

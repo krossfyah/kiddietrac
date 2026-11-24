@@ -74,7 +74,7 @@
               : '<div style="font-size:13px;color:#6B7280;margin-top:4px;">Autopay off · monthly invoice must be paid manually</div>'
             }
           </div>
-          <button class="kt-ap-switch" data-fid="${f.family_id}" data-fname="${esc(f.family_name)}" data-on="${f.autopay_enabled ? '1' : '0'}" role="switch" aria-checked="${f.autopay_enabled ? 'true' : 'false'}" aria-label="Autopay for ${esc(f.family_name)}" style="-webkit-appearance:none;appearance:none;position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;max-height:28px;box-sizing:border-box;border-radius:999px;border:none;background:${f.autopay_enabled ? '#159FB4' : '#CBD5E1'};cursor:pointer;padding:0;font:inherit;transition:background .18s ease;">
+          <button class="kt-ap-switch kt-sw-btn" data-fid="${f.family_id}" data-fname="${esc(f.family_name)}" data-on="${f.autopay_enabled ? '1' : '0'}" role="switch" aria-checked="${f.autopay_enabled ? 'true' : 'false'}" aria-label="Autopay for ${esc(f.family_name)}" style="-webkit-appearance:none;appearance:none;position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;max-height:28px;box-sizing:border-box;border-radius:999px;border:none;background:${f.autopay_enabled ? '#159FB4' : '#CBD5E1'};cursor:pointer;padding:0;font:inherit;transition:background .18s ease;">
             <span style="position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.28);transition:transform .18s ease;transform:${f.autopay_enabled ? 'translateX(20px)' : 'translateX(0)'};"></span>
           </button>
         </div>
@@ -142,26 +142,29 @@
       return;
     }
 
-    const stripe = Stripe(intent.publishable_key, { stripeAccount: intent.connect_account_id });
-    const elements = stripe.elements();
-    const card = elements.create('card', { hidePostalCode: false });
-    card.mount('#kt-card-element');
-    card.on('change', (e) => {
-      $('#kt-card-errors', mount).textContent = e.error ? e.error.message : '';
-    });
+    // The one card form (kt-card-form.js): labelled fields where the phone can offer its camera card scan.
+    void Stripe;
+    const cardHost = $('#kt-card-element', mount);
+    cardHost.style.padding = '0'; cardHost.style.border = '0';
+    let form;
+    try {
+      form = await KT.cardForm.mount(cardHost, { publishableKey: intent.publishable_key, clientSecret: intent.client_secret, stripeAccount: intent.connect_account_id || undefined });
+    } catch (e) {
+      $('#kt-status', mount).style.color = '#DC2626';
+      $('#kt-status', mount).textContent = e.message;
+      return;
+    }
 
     $('#kt-save-card', mount).addEventListener('click', async () => {
       $('#kt-save-card', mount).disabled = true;
       $('#kt-status', mount).style.color = '#6B7280';
       $('#kt-status', mount).textContent = 'Saving card…';
 
-      const result = await stripe.confirmCardSetup(intent.client_secret, {
-        payment_method: { card: card },
-      });
-
-      if (result.error) {
+      let pmId;
+      try { pmId = await form.confirm(); }
+      catch (err) {
         $('#kt-status', mount).style.color = '#DC2626';
-        $('#kt-status', mount).textContent = '✗ ' + result.error.message;
+        $('#kt-status', mount).textContent = '✗ ' + err.message;
         $('#kt-save-card', mount).disabled = false;
         return;
       }
@@ -169,7 +172,7 @@
       try {
         await api('POST', '/parent/billing/confirm-autopay', {
           family_id: familyId,
-          payment_method_id: result.setupIntent.payment_method,
+          payment_method_id: pmId,
         });
         $('#kt-status', mount).style.color = '#16A34A';
         $('#kt-status', mount).textContent = '✓ Autopay enabled';

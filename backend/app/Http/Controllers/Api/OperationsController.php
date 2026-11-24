@@ -81,7 +81,7 @@ final class OperationsController extends Controller
         $centreId = (int) $request->query('centre_id', 0);
         abort_unless($centreId, 400, 'centre_id required');
         $this->assertCentreAccess($request, $centreId); // v22p96: was an unscoped read by centre_id
-        $weekStart = Carbon::parse($request->query('week_start', Carbon::now()->startOfWeek()->toDateString()))->toDateString();
+        $weekStart = Carbon::parse($request->query('week_start', \App\Support\AgencyTime::todayDate()->startOfWeek()->toDateString()))->toDateString();
         $week = DB::table('menu_weeks')
             ->where('centre_id', $centreId)
             ->where('week_start', $weekStart)
@@ -104,6 +104,8 @@ final class OperationsController extends Controller
         }
         $items = DB::table('menu_items')->where('menu_week_id', $week->id)
             ->orderBy('day_of_week')->orderBy('meal_type')->get();
+        // Weeks written before food photos existed have none stored; show the match Save would store (FoodPhotos::forDisplay).
+        \App\Support\FoodPhotos::forDisplay($items, (int) DB::table('centres')->where('id', $centreId)->value('agency_id'));
 
         return response()->json(['data' => $week, 'items' => $items, 'week_start' => $weekStart,
             'open_days' => $openDays, 'meal_times' => $mealTimes]);
@@ -158,6 +160,11 @@ final class OperationsController extends Controller
             'items.*.name' => 'required|string|max:255',
             'items.*.description' => 'nullable|string|max:1000',
             'items.*.allergens' => 'nullable|string|max:500',
+            // Food photos (2026-10-31, App\Support\FoodPhotos). The URL is checked below: a library photo, this
+            // agency's own upload, or a photo the week already had - nothing else can be written.
+            'items.*.image_url' => 'nullable|string|max:700',
+            'items.*.image_source' => 'nullable|in:library,upload,auto,none',
+            'items.*.food_image_id' => 'nullable|integer',
         ]);
 
         // An empty DRAFT is fine; an empty PUBLISHED menu is not — families would be shown
@@ -168,6 +175,13 @@ final class OperationsController extends Controller
             ], 422);
         }
         $this->assertCentreAccess($request, (int) $data['centre_id']);
+        /* SAVE NO LONGER DROPS THE PHOTOS. Items are deleted and re-inserted on every save, and image_url was never
+           part of the insert, so pressing Save wiped every photo on the week. */
+        $photoAgency = (int) DB::table('centres')->where('id', $data['centre_id'])->value('agency_id');
+        $photoAuto = \App\Support\FoodPhotos::autoOn($photoAgency);
+        $photoKeep = DB::table('menu_items as i')->join('menu_weeks as w', 'w.id', '=', 'i.menu_week_id')
+            ->where('w.centre_id', $data['centre_id'])->where('w.week_start', $data['week_start'])
+            ->whereNotNull('i.image_url')->pluck('i.image_url')->all();
         $week = DB::table('menu_weeks')
             ->where('centre_id', $data['centre_id'])
             ->where('week_start', $data['week_start'])
@@ -191,6 +205,7 @@ final class OperationsController extends Controller
             $weekId = DB::table('menu_weeks')->insertGetId($weekPayload);
         }
         foreach ($data['items'] as $it) {
+            [$img, $imgSrc, $foodId] = self::menuPhoto($it, $photoAgency, $photoKeep, $photoAuto);
             DB::table('menu_items')->insert([
                 'menu_week_id' => $weekId,
                 'day_of_week' => $it['day_of_week'],
@@ -198,12 +213,50 @@ final class OperationsController extends Controller
                 'name' => $it['name'],
                 'description' => $it['description'] ?? null,
                 'allergens' => $it['allergens'] ?? null,
+                'image_url' => $img,
+                'image_source' => $imgSrc,
+                'food_image_id' => $foodId,
             ]);
         }
         if ($data['status'] === 'published') {
             $this->notifyMenuPublished((int) $data['centre_id'], $data['week_start']);
         }
         return response()->json(['id' => $weekId, 'status' => $data['status']]);
+    }
+
+    /**
+     * One menu item's photo: [stored url, source, food_image_id].
+     *   none            removed on purpose - stays empty, never refilled automatically
+     *   a URL           kept when it is a library photo, this agency's upload, or one the week already had
+     *   nothing         the best confident library match, when the agency has "Add food photos automatically" on
+     */
+    private static function menuPhoto(array $it, int $agencyId, array $keep, bool $auto): array
+    {
+        $src = $it['image_source'] ?? null;
+        if ($src === 'none') {
+            return [null, 'none', null];
+        }
+        $url = \App\Support\FoodPhotos::stored($it['image_url'] ?? null);
+        if ($url && \App\Support\FoodPhotos::allowed($url, $agencyId, $keep)) {
+            $fid = ! empty($it['food_image_id']) ? (int) $it['food_image_id'] : null;
+            if ($fid && ! \App\Support\FoodPhotos::byId($fid)) {
+                $fid = null;
+            }
+            $libRow = \App\Support\FoodPhotos::libraryByPath($url);
+            if ($libRow) {
+                // A library photo is stored by its absolute thumb URL (it has to load in the app shells too).
+                $fid = (int) $libRow['id'];
+                $url = $libRow['thumb_url'];
+            }
+            if (! in_array($src, ['library', 'upload', 'auto'], true)) {
+                $src = $fid ? 'library' : 'upload';
+            }
+            return [$url, $src, $fid];
+        }
+        if ($auto && ($b = \App\Support\FoodPhotos::best((string) ($it['name'] ?? '')))) {
+            return [$b['thumb_url'], 'auto', $b['id']];
+        }
+        return [null, null, null];
     }
 
     private function notifyMenuPublished(int $centreId, string $weekStart): void
@@ -236,7 +289,11 @@ final class OperationsController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $centreId = (int) $request->query('centre_id', 0);
         if ($centreId) $this->assertCentreAccess($request, $centreId);
+        /* Scoped to the person (2026-11-09): any educator could read every child's allergy and health alerts in the
+           agency. null = an admin. */
+        $scope = \App\Support\Visibility::planningChildIds((int) $agencyId, $request->user());
         $q = DB::table('children as c')
+            ->when($scope !== null, fn ($w) => $w->whereIn('c.id', $scope ?: [0]))
             ->join('families as f', 'f.id', '=', 'c.family_id')
             ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
             ->where('ce.agency_id', $agencyId)
@@ -292,6 +349,7 @@ final class OperationsController extends Controller
            that we do not know. (Anthony, 2026-08-26) */
         $unrecordedQ = DB::table('children as c')
             ->join('families as f', 'f.id', '=', 'c.family_id')
+            ->when($scope !== null, fn ($w) => $w->whereIn('c.id', $scope ?: [0]))
             ->join('centres as ce', 'ce.id', '=', 'f.centre_id')
             ->where('ce.agency_id', $agencyId)
             ->whereNull('c.deleted_at')
@@ -333,7 +391,119 @@ final class OperationsController extends Controller
             ->select('ft.*', 'c.name as centre_name')
             ->limit(100)
             ->get();
-        return response()->json(['data' => $rows]);
+        return response()->json(['data' => $rows, 'stats' => $this->fieldTripStats($agencyId, $this->visibleCentreIds($request) ?: [0])]);
+    }
+
+    /**
+     * FIELD TRIP STATS (2026-11-09, Anthony: "field trips section add stats, circle graphs etc"). Over every trip the
+     * viewer can see (same scope as the list, not just its 100 rows). A Walk Watch walk is a field_trips row too
+     * (WalkController: transport 'walking', its children attached as approved slips noted WALK_SLIP_NOTE), so a
+     * 'walking' row whose slips are all walk attachments is a walk, counted on its own and never as a trip. A trip has
+     * real slips (sent to parents), whatever its transport.
+     * "Upcoming" = from today (agency time) and not completed/cancelled; the year figures are the last 12 months.
+     */
+    /** The note WalkController puts on each child it attaches to a walk (an approved slip nobody was asked for). */
+    private const WALK_SLIP_NOTE = 'Auto-attached (walk started by educator)';
+
+    private function fieldTripStats(int $agencyId, array $centreIds): array
+    {
+        $today = \App\Support\AgencyTime::today($agencyId);
+        $yearAgo = \Illuminate\Support\Carbon::parse($today)->subMonths(11)->startOfMonth()->toDateString();
+        $realSlip = fn ($e) => $e->from('field_trip_permissions as p')->whereColumn('p.field_trip_id', 'ft.id')
+            ->where(fn ($n) => $n->whereNull('p.notes')->orWhere('p.notes', '<>', self::WALK_SLIP_NOTE));
+        $isWalk = fn ($q) => $q->where('ft.transport_method', 'walking')->whereNotExists($realSlip);
+        $base = fn () => DB::table('field_trips as ft')->where('ft.agency_id', $agencyId)->whereIn('ft.centre_id', $centreIds);
+        $trips = fn () => $base()->where(fn ($q) => $q->whereNull('ft.transport_method')->orWhere('ft.transport_method', '<>', 'walking')
+            ->orWhereExists($realSlip));
+
+        $upcoming = $trips()->where('ft.trip_date', '>=', $today)->whereNotIn('ft.status', ['completed', 'cancelled']);
+        $next = (clone $upcoming)->orderBy('ft.trip_date')->first(['ft.title', 'ft.trip_date']);
+        $slips = DB::table('field_trip_permissions')->whereIn('field_trip_id', (clone $upcoming)->select('ft.id'))
+            ->selectRaw('status, COUNT(*) n')->groupBy('status')->pluck('n', 'status');
+
+        $held = $trips()->whereBetween('ft.trip_date', [$yearAgo, $today])->where('ft.trip_date', '<', $today)->where('ft.status', '<>', 'cancelled');
+        $went = DB::table('field_trip_permissions')->whereIn('field_trip_id', (clone $held)->select('ft.id'))->where('status', 'approved');
+        $fees = (float) DB::table('field_trip_permissions as p')->join('field_trips as t', 't.id', '=', 'p.field_trip_id')
+            ->whereIn('p.field_trip_id', $trips()->where('ft.trip_date', '>=', $yearAgo)->where('ft.status', '<>', 'cancelled')->select('ft.id'))
+            ->where('p.status', 'approved')->sum('t.cost_per_child');
+        $children = DB::table('children as c')->join('families as fa', 'fa.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'fa.centre_id')->whereIn('ce.id', $centreIds)->whereNull('c.deleted_at')
+            ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families($q, 'fa'), 'ce'))->distinct()->count('c.id');
+
+        // Month by month, trips and walks, over the last 12 months up to this one.
+        $months = [];
+        for ($i = 11; $i >= 0; $i--) {
+            $m = \Illuminate\Support\Carbon::parse($today)->startOfMonth()->subMonths($i);
+            $months[$m->format('Y-m')] = ['month' => $m->format('Y-m'), 'label' => $m->format('M'), 'trips' => 0, 'walks' => 0];
+        }
+        $byMonth = fn ($q) => $q->whereBetween('ft.trip_date', [$yearAgo, \Illuminate\Support\Carbon::parse($today)->endOfMonth()->toDateString()])
+            ->where('ft.status', '<>', 'cancelled')->selectRaw("DATE_FORMAT(ft.trip_date, '%Y-%m') ym, COUNT(*) n")->groupBy('ym')->pluck('n', 'ym');
+        foreach ($byMonth($trips()) as $ym => $n) { if (isset($months[$ym])) $months[$ym]['trips'] = (int) $n; }
+        foreach ($byMonth($base()->where(fn ($q) => $isWalk($q))) as $ym => $n) { if (isset($months[$ym])) $months[$ym]['walks'] = (int) $n; }
+
+        $transport = $trips()->where('ft.trip_date', '>=', $yearAgo)->where('ft.status', '<>', 'cancelled')
+            ->selectRaw("COALESCE(NULLIF(TRIM(ft.transport_method), ''), 'Not set') t, COUNT(*) n")->groupBy('t')->orderByDesc('n')->pluck('n', 't');
+
+        return [
+            'upcoming' => (clone $upcoming)->count(),
+            'next' => $next ? ['title' => $next->title, 'date' => $next->trip_date] : null,
+            'slips' => ['approved' => (int) ($slips['approved'] ?? 0), 'pending' => (int) ($slips['pending'] ?? 0),
+                'denied' => (int) ($slips['denied'] ?? 0), 'total' => (int) $slips->sum()],
+            'held_12m' => (clone $held)->count(),
+            'walks_12m' => $base()->where(fn ($q) => $isWalk($q))->where('ft.trip_date', '>=', $yearAgo)->where('ft.status', '<>', 'cancelled')->count(),
+            'children_went_12m' => (clone $went)->distinct()->count('child_id'),
+            'children_total' => $children,
+            'fees_12m' => round($fees, 2),
+            'months' => array_values($months),
+            'transport' => collect($transport)->map(fn ($n, $t) => ['label' => $t, 'n' => (int) $n])->values(),
+        ];
+    }
+
+    /**
+     * GET /operations/field-trips/{id} — everything about one trip or walk for the details view
+     * (2026-10-24, Anthony: "pops up all of the information about the trip including map, children,
+     * steps, how long, add more detail"). Same scope as the list: the active agency, and a director
+     * only their own centres.
+     */
+    public function showFieldTrip(Request $request, int $id): JsonResponse
+    {
+        $trip = DB::table('field_trips as ft')->join('centres as c', 'c.id', '=', 'ft.centre_id')
+            ->leftJoin('users as lead', 'lead.id', '=', 'ft.staff_lead_id')
+            ->leftJoin('users as cb', 'cb.id', '=', 'ft.created_by_id')
+            ->where('ft.id', $id)
+            ->first(['ft.*', 'c.name as centre_name', 'c.address_line1 as centre_address',
+                DB::raw("TRIM(CONCAT(COALESCE(lead.first_name,''),' ',COALESCE(lead.last_name,''))) as lead_name"),
+                DB::raw("TRIM(CONCAT(COALESCE(cb.first_name,''),' ',COALESCE(cb.last_name,''))) as created_by_name")]);
+        abort_unless($trip, 404);
+        abort_unless((int) $trip->agency_id === (int) $this->resolveAgencyId($request), 403);
+        abort_unless(in_array((int) $trip->centre_id, array_map('intval', $this->visibleCentreIds($request) ?: []), true), 403);
+
+        $children = DB::table('field_trip_permissions as p')
+            ->join('children as c', 'c.id', '=', 'p.child_id')
+            ->leftJoin('users as g', 'g.id', '=', 'p.guardian_user_id')
+            ->where('p.field_trip_id', $id)
+            ->orderBy('c.first_name')
+            ->get(['p.child_id', 'p.status', 'p.responded_at', 'p.notes', DB::raw('p.signature_data IS NOT NULL as signed'),
+                'c.first_name', 'c.last_name', 'c.photo_url',
+                DB::raw("TRIM(CONCAT(COALESCE(g.first_name,''),' ',COALESCE(g.last_name,''))) as guardian_name")]);
+        $counts = ['total' => $children->count(), 'approved' => $children->where('status', 'approved')->count(),
+            'denied' => $children->where('status', 'denied')->count(), 'pending' => $children->where('status', 'pending')->count()];
+
+        // The route, thinned to at most ~600 points so a long day still draws quickly.
+        $pings = DB::table('field_trip_pings')->where('field_trip_id', $id)->orderBy('recorded_at')->orderBy('id')
+            ->get(['lat', 'lon', 'accuracy_m', 'recorded_at', 'user_id']);
+        $step = max(1, (int) ceil($pings->count() / 600));
+        $trail = $pings->filter(fn ($pt, $i) => $i % $step === 0 || $i === $pings->count() - 1)
+            ->map(fn ($pt) => [(float) $pt->lat, (float) $pt->lon, $pt->recorded_at])->values();
+        $staff = $pings->pluck('user_id')->filter()->unique()->values();
+        $staffNames = $staff->count() ? DB::table('users')->whereIn('id', $staff)->get(['first_name', 'last_name'])
+            ->map(fn ($u) => trim($u->first_name . ' ' . $u->last_name))->values() : collect();
+
+        $summary = WalkController::walkSummary($id);
+        return response()->json(['trip' => $trip, 'children' => $children, 'counts' => $counts, 'trail' => $trail,
+            'first_ping' => $pings->first()->recorded_at ?? null, 'last_ping' => $pings->last()->recorded_at ?? null,
+            'ping_count' => $pings->count(), 'tracked_by' => $staffNames,
+            'distance_m' => $summary['distance_m'] ?? null, 'steps_est' => $summary['steps_est'] ?? null, 'duration_min' => $summary['duration_min'] ?? null]);
     }
 
     public function deleteFieldTrip(Request $request, int $id): JsonResponse
@@ -368,6 +538,38 @@ final class OperationsController extends Controller
         ]);
         $this->assertCentreAccess($request, (int) $data['centre_id']);
         $agencyId = (int) DB::table('centres')->where('id', $data['centre_id'])->value('agency_id');
+        /* Every child must be at the trip's centre (family there, or an open placement in one of its
+           rooms), and the lead must be staff of that agency (2026-11-05 leak sweep): child_ids and
+           staff_lead_id were written unchecked, so a trip could carry another centre's or agency's
+           children (their parents were sent the permission slip) and name an outsider as lead. */
+        $childIds = array_values(array_unique(array_map('intval', $data['child_ids'])));
+        $atCentre = DB::table('children as c')
+            ->leftJoin('families as f', 'f.id', '=', 'c.family_id')
+            ->whereIn('c.id', $childIds ?: [0])
+            ->where(function ($w) use ($data) {
+                $w->where('f.centre_id', (int) $data['centre_id'])
+                  ->orWhereExists(function ($e) use ($data) {
+                      $e->select(DB::raw(1))->from('enrollments as en')->join('rooms as r', 'r.id', '=', 'en.room_id')
+                        ->whereColumn('en.child_id', 'c.id')->whereNull('en.end_date')
+                        ->where('r.centre_id', (int) $data['centre_id']);
+                  });
+            })
+            ->distinct()->count('c.id');
+        if ($atCentre !== count($childIds)) {
+            return response()->json(['message' => 'Some of the children picked are not at this centre.'], 422);
+        }
+        $data['child_ids'] = $childIds;
+        if (! empty($data['staff_lead_id'])) {
+            $leadOk = DB::table('role_assignments')->where('user_id', (int) $data['staff_lead_id'])->where('active', true)
+                ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
+                ->where(function ($w) use ($agencyId) {
+                    $w->where('agency_id', $agencyId)
+                      ->orWhereIn('centre_id', DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all() ?: [0]);
+                })->exists();
+            if (! $leadOk) {
+                return response()->json(['message' => 'The trip lead must be a staff member of this agency.'], 422);
+            }
+        }
         $tripId = DB::table('field_trips')->insertGetId([
             'agency_id' => $agencyId,
             'centre_id' => $data['centre_id'],
@@ -565,6 +767,15 @@ final class OperationsController extends Controller
         $req = DB::table('substitute_requests')->where('id', $id)->first();
         abort_unless($req, 404);
         abort_unless($req->status === 'open', 422, 'Already filled');
+        /* Only a substitute in this agency's pool, or staff of the request's centre, may claim it (2026-11-05 leak
+           sweep): the route has no role gate and nothing was checked, so any signed-in person (a parent, another
+           agency's staff) could take any open shift in any agency and be sent to work it. */
+        $reqAgency = (int) DB::table('centres')->where('id', (int) $req->centre_id)->value('agency_id');
+        $inPool = $reqAgency && DB::table('substitute_pool')->where('agency_id', $reqAgency)
+            ->where('user_id', $request->user()->id)->where('active', 1)->exists();
+        if (! $inPool) {
+            $this->assertCentreAccess($request, (int) $req->centre_id);
+        }
         DB::table('substitute_requests')->where('id', $id)->update([
             'assigned_user_id' => $request->user()->id,
             'status' => 'filled',
@@ -615,6 +826,16 @@ final class OperationsController extends Controller
             'notes' => 'nullable|string|max:5000',
             'evidence_url' => 'nullable|string|max:500',
         ]);
+        /* The item must be this agency's, and a centre's own item only at a centre you work at (2026-11-05 leak
+           sweep): it was updated by id alone, so any director could mark another agency's inspection items
+           passed. Agency-wide items (centre_id NULL, the seeded checklist) stay shared by the agency's directors. */
+        $item = DB::table('inspection_checklist_items')->where('id', $id)->first();
+        abort_unless($item, 404);
+        $agencyId = (int) $this->resolveAgencyId($request);
+        abort_unless((int) $item->agency_id === $agencyId, 403);
+        if ($item->centre_id !== null) {
+            $this->assertCentreAccess($request, (int) $item->centre_id);
+        }
         DB::table('inspection_checklist_items')->where('id', $id)->update($data + [
             'reviewed_by_id' => $request->user()->id,
             'reviewed_at' => now(),
@@ -767,7 +988,7 @@ final class OperationsController extends Controller
     public function parentMenu(Request $request): JsonResponse
     {
         $u = $request->user();
-        $weekStart = Carbon::parse($request->query('week_start', Carbon::now()->startOfWeek()->toDateString()))->toDateString();
+        $weekStart = Carbon::parse($request->query('week_start', \App\Support\AgencyTime::todayDate()->startOfWeek()->toDateString()))->toDateString();
         $centreIds = DB::table('guardians as g')
             ->join('families as f', 'f.id', '=', 'g.family_id')
             ->where('g.user_id', $u->id)
@@ -789,6 +1010,7 @@ final class OperationsController extends Controller
         }
         $items = DB::table('menu_items')->where('menu_week_id', $week->id)
             ->orderBy('day_of_week')->orderBy('meal_type')->get();
+        \App\Support\FoodPhotos::forDisplay($items, (int) DB::table('centres')->where('id', $centreId)->value('agency_id'));
 
         // Families asked what time meals are served, so the published week carries its
         // serving times too, inherited from the last week that set them.
@@ -820,5 +1042,12 @@ final class OperationsController extends Controller
             ->whereIn('role', ['agency_admin', 'centre_director', 'educator'])
             ->where('active', true)->exists();
         abort_unless($hasRole, 403);
+        /* A centre you work at, not any centre of your agency (2026-11-05 leak sweep): the role check above is
+           agency-wide, so a director or educator of one centre could read and save another centre's menus,
+           allergy list, field trips and substitute requests. Agency admins still pass for every centre; staff
+           placed in one of the centre's rooms pass as authorizeCentreAccess() allows. */
+        abort_unless($agencyId === (int) $this->resolveAgencyId($request)
+            && (\App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, $agencyId), $centreId)
+                || $this->authorizeCentreAccess($u, $centreId)), 403);
     }
 }

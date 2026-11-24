@@ -127,7 +127,7 @@ class GrantController extends Controller
 
     public function addTransaction(Request $request, int $id): JsonResponse
     {
-        $g = $this->grant($request, $id);
+        $g = $this->grantForWrite($request, $id);
         $data = $request->validate([
             'kind' => ['required', 'in:' . implode(',', self::KINDS)],
             'txn_date' => ['required', 'date'],
@@ -140,7 +140,13 @@ class GrantController extends Controller
             'expense_invoice_id' => ['nullable', 'integer'],
         ]);
         if (! empty($data['expense_invoice_id'])) {
-            abort_unless(DB::table('expense_invoices')->where('id', $data['expense_invoice_id'])->where('agency_id', $g->agency_id)->exists(), 422, 'Unknown expense bill.');
+            /* The bill must be one the grant screen offers: this agency, and for a centre grant
+               that centre's or an agency-wide bill (2026-11-05 leak sweep) - a director could
+               link another centre's expense bill to their grant. */
+            abort_unless(DB::table('expense_invoices')->where('id', $data['expense_invoice_id'])->where('agency_id', $g->agency_id)
+                ->whereNull('deleted_at')
+                ->when($g->centre_id, fn ($w) => $w->where(fn ($x) => $x->whereNull('centre_id')->orWhere('centre_id', $g->centre_id)))
+                ->exists(), 422, 'Unknown expense bill.');
         }
         if ($data['kind'] !== 'spent') { $data['category'] = null; $data['expense_invoice_id'] = null; }
         $tid = DB::table('grant_transactions')->insertGetId($data + ['grant_id' => $id, 'created_by_id' => (int) $request->user()->id,
@@ -153,7 +159,7 @@ class GrantController extends Controller
 
     public function deleteTransaction(Request $request, int $id, int $txnId): JsonResponse
     {
-        $g = $this->grant($request, $id);
+        $g = $this->grantForWrite($request, $id);
         $t = DB::table('grant_transactions')->where('id', $txnId)->where('grant_id', $id)->first();
         abort_unless($t, 404);
         DB::table('grant_transactions')->where('id', $txnId)->delete();
@@ -186,7 +192,7 @@ class GrantController extends Controller
         $this->audit($request, (int) $g->agency_id, 'grants.exported', 'grant', $id, 'Exported grant "' . $g->name . '"');
 
         return new Response("\xEF\xBB\xBF" . stream_get_contents($fh), 200, ['Content-Type' => 'text/csv; charset=utf-8',
-            'Content-Disposition' => 'attachment; filename="grant-' . $id . '-' . now()->format('Y-m-d') . '.csv"']);
+            'Content-Disposition' => 'attachment; filename="grant-' . $id . '-' . \App\Support\AgencyTime::today() . '.csv"']);
     }
 
     /* ── helpers ── */
@@ -234,6 +240,21 @@ class GrantController extends Controller
             ->first(['g.*', 'c.name as centre_name']);
         abort_unless($g, 404);
         abort_unless($centreIds === null || $g->centre_id === null || in_array((int) $g->centre_id, $centreIds, true), 403);
+        return $g;
+    }
+
+    /**
+     * A grant this caller may CHANGE (2026-11-05 leak sweep). grant() lets a director read the
+     * agency-wide grants (centre_id NULL) beside their own, and add/delete transactions used it
+     * too - so any director could record spending against, or delete receipts from, a grant
+     * that belongs to the whole agency. Agency-wide rows are written by agency admins only
+     * (the CentreScope::canWrite rule).
+     */
+    private function grantForWrite(Request $request, int $id): object
+    {
+        [, $centreIds] = $this->scope($request);
+        $g = $this->grant($request, $id);
+        abort_unless($centreIds === null || $g->centre_id !== null, 403, 'Only an agency admin can change an agency-wide grant.');
         return $g;
     }
 

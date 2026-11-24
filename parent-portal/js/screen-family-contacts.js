@@ -56,7 +56,7 @@
     var prompt = KT.prompt
       ? KT.prompt({
           title: 'Pick-up login for ' + c.name,
-          description: 'The centre will set up a login so ' + c.name + ' can check the children in and out with their own QR code. They will not see billing. Where should their sign-in details go?',
+          description: 'The centre will set up a login so ' + c.name + ' can check the children in and out with One-Tap from their own phone. They will not see billing. Where should their sign-in details go?',
           fields: [{ key: 'email', label: 'Their email', type: 'email', value: (c.request && c.request.email) || c.email || '', placeholder: 'name@example.com' }],
           okLabel: again ? 'Update request' : 'Send request',
         })
@@ -159,7 +159,7 @@
     main.appendChild(wrap);
     wrap.appendChild(D.el('h1', { style: 'font-family:var(--kt-font-display);font-size:23px;margin:0 0 4px;' }, 'Family & pick-ups'));
     wrap.appendChild(D.el('p', { style: 'color:var(--kt-text-muted);font-size:14px;line-height:1.6;margin:0 0 18px;' },
-      'The people on your family’s file at the centre. You can ask the centre to give an emergency contact their own pick-up login — their own QR code to check the children in and out. They never see billing.'));
+      'The people on your family’s file at the centre. You can ask the centre to give an emergency contact their own pick-up login, so they can check the children in and out with One-Tap from their own phone. They never see billing.'));
     var list = D.el('div', {}, [D.el('div', { style: 'color:var(--kt-text-muted);font-size:13.5px;' }, 'Loading…')]);
     wrap.appendChild(list);
 

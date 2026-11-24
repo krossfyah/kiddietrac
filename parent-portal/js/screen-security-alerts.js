@@ -65,7 +65,7 @@
     main.innerHTML = '<div style="padding:14px 24px;max-width:1100px;">'
       + '<div class="kt-page-hero"><h2>🛡️ Security alerts</h2><p>Anomalous authentication activity flagged automatically every 15 minutes from the audit log — brute-force attempts, MFA hammering, and credential stuffing.</p></div>'
       + '<div style="display:flex;gap:14px;margin:0 0 18px;">'
-      +   '<div style="background:#fff;border:1px solid #E7EBF0;border-left:4px solid ' + (data.open ? '#BE4038' : '#1E8E60') + ';border-radius:12px;padding:14px 18px;min-width:140px;"><div style="font:600 30px/1 ui-monospace,monospace;color:' + (data.open ? '#BE4038' : '#1E8E60') + ';">' + data.open + '</div><div style="font-size:12.5px;color:#64748B;margin-top:6px;">Open alerts</div></div>'
+      +   '<div style="background:#fff;border:1px solid #E7EBF0;--kt-edge:' + (data.open ? '#BE4038' : '#1E8E60') + ';border-radius:12px;padding:14px 18px;min-width:140px;"><div style="font:600 30px/1 ui-monospace,monospace;color:' + (data.open ? '#BE4038' : '#1E8E60') + ';">' + data.open + '</div><div style="font-size:12.5px;color:#64748B;margin-top:6px;">Open alerts</div></div>'
       +   '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:12px;padding:14px 18px;min-width:140px;"><div style="font:600 30px/1 ui-monospace,monospace;color:#0F2540;">' + data.total + '</div><div style="font-size:12.5px;color:#64748B;margin-top:6px;">Total recorded</div></div>'
       + '<div style="margin-left:auto;display:flex;align-items:center;gap:8px;">'
       +   (data.open

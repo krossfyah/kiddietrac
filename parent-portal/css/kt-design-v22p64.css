@@ -46,10 +46,11 @@
 
 /* ============================ Hero — animated gradient + floating orb ============================ */
 [data-kt-pretty] .kt-page-hero {
-  background: linear-gradient(125deg, #1F6080 0%, #2D7BA8 35%, #4A90B8 70%, #2D7BA8 100%) !important;
-  background-size: 200% 200% !important;
-  animation: kt-hero-shift 18s ease-in-out infinite;
-  border-radius: 20px !important;
+  /* The same banner as every other screen (2026-10-30): the brand gradient when the agency has one,
+     else the screen's own palette colour. This was a fixed navy at 20px, out-ranking both. */
+  background: var(--kt-brand-hero, var(--kt-hero-grad)) !important;
+  background-size: auto !important;
+  border-radius: 18px !important;
   padding: 32px 36px !important;
   margin-bottom: 28px !important;
   box-shadow:

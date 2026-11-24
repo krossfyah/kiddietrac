@@ -17,6 +17,9 @@ use Illuminate\Support\Facades\Log;
  */
 class FcmService
 {
+    /** user_id => unix time of the last push to them in this process (App\Support\Notify::flushPush). */
+    public static array $pushedAt = [];
+
     private ?array $sa = null;
 
     private function sa(): ?array
@@ -34,6 +37,7 @@ class FcmService
     {
         $sa = $this->sa();
         if (!$sa || empty($sa['client_email']) || empty($sa['private_key'])) return null;
+        if (\App\Support\Outbound::off()) return null;
 
         return Cache::remember('fcm_access_token', 3300, function () use ($sa) {
             $b64 = fn ($x) => rtrim(strtr(base64_encode($x), '+/', '-_'), '=');
@@ -78,11 +82,49 @@ class FcmService
         });
     }
 
+    /**
+     * Set the app icon number on iPhones without showing anything (2026-10-30, App\Support\Badges::syncIos): an APNs
+     * message carrying only aps.badge. Android needs nothing from here - its dot follows the delivered notifications,
+     * which the app clears itself.
+     */
+    public function badgeOnly(array $tokens, int $n): array
+    {
+        $tokens = array_values(array_unique(array_filter($tokens)));
+        if (! $tokens) return ['sent' => 0, 'failed' => 0];
+        if (\App\Support\Outbound::off()) return ['sent' => 0, 'failed' => count($tokens), 'error' => 'outbound_off'];
+        $token = $this->accessToken();
+        if (! $token) return ['sent' => 0, 'failed' => count($tokens), 'error' => 'no_access_token'];
+        $sa = $this->sa();
+        $project = config('services.fcm.project_id') ?: env('FCM_PROJECT_ID') ?: ($sa['project_id'] ?? null);
+        if (! $project) return ['sent' => 0, 'failed' => count($tokens), 'error' => 'no_project'];
+        $url = "https://fcm.googleapis.com/v1/projects/{$project}/messages:send";
+        $sent = 0; $failed = 0; $err = null;
+        foreach ($tokens as $t) {
+            $payload = ['message' => ['token' => $t, 'apns' => [
+                'headers' => ['apns-priority' => '5', 'apns-push-type' => 'alert'],
+                'payload' => ['aps' => ['badge' => max(0, $n)]],
+            ]]];
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 8,
+                CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token, 'Content-Type: application/json'],
+                CURLOPT_POSTFIELDS => json_encode($payload),
+            ]);
+            $res = curl_exec($ch); $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+            if ($code >= 200 && $code < 300) $sent++; else { $failed++; $err = mb_substr((string) $res, 0, 200); }
+        }
+        return ['sent' => $sent, 'failed' => $failed, 'error' => $err];
+    }
+
     /** Send to explicit device tokens. Returns ['sent'=>int,'failed'=>int,'error'=>?]. */
-    public function sendToTokens(array $tokens, string $title, string $body, array $data = [], bool $urgent = false): array
+    public function sendToTokens(array $tokens, string $title, string $body, array $data = [], bool $urgent = false, ?array $sound = null): array
     {
         $tokens = array_values(array_unique(array_filter($tokens)));
         if (!$tokens) return ['sent' => 0, 'failed' => 0];
+        if (\App\Support\Outbound::off()) {
+            \App\Support\Outbound::note('phone push', ['devices' => count($tokens), 'title' => $title]);
+            return ['sent' => 0, 'failed' => count($tokens), 'error' => 'outbound_off'];
+        }
         $token = $this->accessToken();
         if (!$token) return ['sent' => 0, 'failed' => count($tokens), 'error' => 'no_access_token'];
 
@@ -96,6 +138,62 @@ class FcmService
 
         $sent = 0; $failed = 0;
         foreach ($tokens as $t) {
+            $payload = $this->buildPayload($t, $title, $body, $strData, $urgent, $sound);
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true,
+                /* 15s was the cost of ONE push, and these are sent in a LOOP inside the
+                   request - one per guardian, then one per staff member. Three that hung
+                   made POST /parent/absences take 46s while a parent watched a spinner to
+                   report their child off sick. FCM answers in well under a second when it
+                   is healthy, so 5s is generous and 2s to connect is plenty; past that the
+                   push is not worth the person's time. Failing a notification is recoverable,
+                   blocking the action that caused it is not. */
+                CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token, 'Content-Type: application/json'],
+                CURLOPT_POSTFIELDS => json_encode($payload),
+            ]);
+            $resp = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($code >= 200 && $code < 300) {
+                $sent++;
+            } else {
+                $failed++;
+                // FCM 404 = token no longer valid → prune it.
+                if ($code === 404) DB::table('device_tokens')->where('token', $t)->delete();
+            }
+        }
+        return ['sent' => $sent, 'failed' => $failed];
+    }
+
+    /**
+     * The FCM v1 message for one handset.
+     *
+     * $sound (App\Support\NotificationSounds::soundFor + 'mode') is null for the old
+     * behaviour. mode 'android' = an app build with the per-category channels: the push
+     * goes DATA-ONLY so KtMessagingService always runs and posts it on the chosen channel
+     * (tone + vibration). mode 'ios' = the same alert as before with the chosen sound file.
+     * Public so a payload can be checked without sending anything. (2026-10-21)
+     */
+    public function buildPayload(string $t, string $title, string $body, array $strData, bool $urgent, ?array $sound = null): array
+    {
+        $iosSound = ! empty($sound['tone']) ? $sound['tone'] . '.wav' : 'kt_notify.wav';
+        if ($sound !== null) {
+            $strData += [
+                'kt_category' => (string) $sound['category'],
+                'kt_tone' => (string) $sound['tone'],
+                'kt_vib' => (string) $sound['vibration'],
+                'kt_channel' => (string) $sound['channel'],
+            ];
+        }
+        if ($sound !== null && ($sound['mode'] ?? '') === 'android' && ! $urgent) {
+            return ['message' => [
+                'token' => $t,
+                'data' => $strData + ['title' => $title, 'body' => $body],
+                'android' => ['priority' => 'high'],
+            ]];
+        }
             if ($urgent) {
                 // DATA-ONLY on purpose. A message carrying a 'notification' block is
                 // rendered by Android itself when the app is backgrounded, and app
@@ -136,9 +234,9 @@ class FcmService
                         'payload' => [
                             'aps' => [
                                 'alert' => ['title' => $title, 'body' => $body],
-                                'sound' => 'kt_notify.wav',
+                                'sound' => $iosSound,
                                 'interruption-level' => 'time-sensitive',
-                                'badge' => 1,
+                                'badge' => max(1, (int) ($strData['kt_badge'] ?? 1)),
                             ],
                         ],
                     ],
@@ -163,39 +261,14 @@ class FcmService
                         ],
                         'payload' => [
                             'aps' => [
-                                'sound' => 'kt_notify.wav',
-                                'badge' => 1,
+                                'sound' => $iosSound,
+                                'badge' => max(1, (int) ($strData['kt_badge'] ?? 1)),
                             ],
                         ],
                     ],
                 ]];
             }
-            $ch = curl_init($url);
-            curl_setopt_array($ch, [
-                CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true,
-                /* 15s was the cost of ONE push, and these are sent in a LOOP inside the
-                   request - one per guardian, then one per staff member. Three that hung
-                   made POST /parent/absences take 46s while a parent watched a spinner to
-                   report their child off sick. FCM answers in well under a second when it
-                   is healthy, so 5s is generous and 2s to connect is plenty; past that the
-                   push is not worth the person's time. Failing a notification is recoverable,
-                   blocking the action that caused it is not. */
-                CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 2,
-                CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token, 'Content-Type: application/json'],
-                CURLOPT_POSTFIELDS => json_encode($payload),
-            ]);
-            $resp = curl_exec($ch);
-            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            if ($code >= 200 && $code < 300) {
-                $sent++;
-            } else {
-                $failed++;
-                // FCM 404 = token no longer valid → prune it.
-                if ($code === 404) DB::table('device_tokens')->where('token', $t)->delete();
-            }
-        }
-        return ['sent' => $sent, 'failed' => $failed];
+        return $payload;
     }
 
     /**
@@ -224,6 +297,12 @@ class FcmService
      */
     public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false, bool $webFallback = true, array $extra = []): array
     {
+        self::$pushedAt[$userId] = time();
+        // Working in a test agency: no push to anyone (2026-11-24, App\Support\TestAgency).
+        if (\App\Support\TestAgency::isSession() && ! \App\Support\TicketAlerts::allowsUser($userId)) {   // ticket alerts to platform admins excepted
+            \App\Support\PushAudit::record('fcm', [$userId], $title, $body, 'suppressed');
+            return ['sent' => 0, 'failed' => 0, 'suppressed' => true];
+        }
         // Do-not-contact: a user at a suppressed (live) agency gets NOTHING while we
         // are testing. The email kill-switch didn't cover push, which is how 16
         // real iLearn parents received a phone notification on 2026-07-14.
@@ -236,8 +315,27 @@ class FcmService
             return ['sent' => 0, 'failed' => 0, 'suppressed' => true];
         }
 
-        $tokens = DB::table('device_tokens')->where('user_id', $userId)
-            ->whereIn('platform', ['android', 'ios'])->pluck('token')->all();
+        // Sign-in locked out everywhere: no notifications until the lock is lifted (SignInLocks, 2026-11-10).
+        if (\App\Support\SignInLocks::pushPaused($userId)) {
+            \App\Support\PushAudit::record('fcm', [$userId], $title, $body, 'sign_in_locked');
+
+            return ['sent' => 0, 'failed' => 0, 'sign_in_locked' => true];
+        }
+
+        /* In this person's language (2026-10-22); English if not ready within 5 seconds. AFTER the do-not-contact and
+           lock checks (2026-11-24): translating first spent an AI call on every push that was then not sent. */
+        if (($loc = \App\Support\MessageTranslator::forUser($userId)) !== null) {
+            [$title, $body] = \App\Support\MessageTranslator::many([$title, $body], $loc, 5);
+        }
+
+        // A white-label agency's people see its brand in the notification (2026-10-21).
+        $__brandAgency = \App\Support\Brand::agencyOfUser($userId);
+        $title = \App\Support\Brand::rename($title, $__brandAgency);
+        $body = \App\Support\Brand::rename($body, $__brandAgency);
+
+        $tokenRows = DB::table('device_tokens')->where('user_id', $userId)
+            ->whereIn('platform', ['android', 'ios'])->get(['token', 'platform', 'app_build']);
+        $tokens = $tokenRows->pluck('token')->all();
 
         // Urgent (full-screen takeover) normally only for staff; chat passes
         // forceUrgent so the takeover reaches parents too when they get a message.
@@ -247,7 +345,11 @@ class FcmService
         if ($link !== '') $data['link'] = $link;
         if ($urgent) $data['kt_urgent'] = '1';
         // Extra keys for the app, e.g. kt_emergency + kt_ring_secs (App\Support\EmergencyMessage).
-        foreach ($extra as $k => $v) $data[(string) $k] = (string) $v;
+        // kt_tone is not passed through as data: it replaces the category's tone below, so the tone, the Android channel
+        // and the iPhone sound file stay one choice.
+        foreach ($extra as $k => $v) if ($k !== 'kt_tone') $data[(string) $k] = (string) $v;
+        // The iPhone icon shows the person's real count (App\Support\Badges), not a hard 1 (2026-10-30).
+        if (! isset($data['kt_badge'])) { try { $data['kt_badge'] = (string) \App\Support\Badges::totalFor($userId); } catch (\Throwable $e) {} }
         $isEmergency = ($extra['kt_emergency'] ?? '') === '1';
 
         if (! $tokens) {
@@ -281,7 +383,55 @@ class FcmService
             return ['sent' => 0, 'failed' => 0];
         }
 
-        $result = $this->sendToTokens($tokens, $title, $body, $data, $urgent);
+        /* TONES PER CATEGORY (2026-10-21, App\Support\NotificationSounds). The person's own
+           tone + vibration for this kind of push. Old app builds are sent exactly what they
+           always were (kt_alerts / the urgent channel); only handsets that report a build
+           with the new channels get them, and iPhones get the chosen sound file. */
+        $category = (string) ($extra['kt_category'] ?? ($isEmergency ? 'emergency' : \App\Support\NotificationSounds::categoryFromCaller()));
+        $result = ['sent' => 0, 'failed' => 0];
+        try {
+            $snd = \App\Support\NotificationSounds::soundFor($userId, $category);
+            /* ONE SOURCE'S OWN TONE (2026-11-05): a mailbox can carry its own new-mail sound (email_account_alerts). Same
+               vibration as the category; the channel follows the tone, so Android creates one for the combination. */
+            $own = (string) ($extra['kt_tone'] ?? '');
+            if ($own !== '' && \App\Support\NotificationSounds::isTone($own)) {
+                $snd['tone'] = $own;
+                $snd['channel'] = \App\Support\NotificationSounds::channelId($snd['category'], $own, $snd['vibration']);
+            }
+        } catch (\Throwable $e) {
+            $snd = null;
+        }
+        $groups = ['old' => [], 'android' => [], 'android55' => [], 'ios' => []];
+        foreach ($tokenRows as $tr) {
+            if ($snd && $tr->platform === 'ios') {
+                $groups['ios'][] = $tr->token;
+            } elseif ($snd && $tr->platform === 'android' && (int) $tr->app_build >= \App\Support\NotificationSounds::REMOTE_BUILD) {
+                $groups['android'][] = $tr->token;
+            } elseif ($snd && $tr->platform === 'android' && (int) $tr->app_build >= \App\Support\NotificationSounds::MIN_BUILD) {
+                $groups['android55'][] = $tr->token;   // channels, but only the bundled tones
+            } else {
+                $groups['old'][] = $tr->token;
+            }
+        }
+        foreach ($groups as $mode => $list) {
+            if (! $list) {
+                continue;
+            }
+            $s = null;
+            if ($mode !== 'old') {
+                $s = $snd + ['mode' => $mode === 'android55' ? 'android' : $mode];
+                if ($mode === 'android55') {
+                    $s['tone'] = \App\Support\NotificationSounds::toneForBuild($snd['tone'], 55, $category);
+                    $s['channel'] = \App\Support\NotificationSounds::channelId($category, $s['tone'], $snd['vibration']);
+                }
+            }
+            $r = $this->sendToTokens($list, $title, $body, $data, $urgent, $s);
+            $result['sent'] += (int) ($r['sent'] ?? 0);
+            $result['failed'] += (int) ($r['failed'] ?? 0);
+            if (isset($r['error'])) {
+                $result['error'] = $r['error'];
+            }
+        }
 
         /* Every handset refused it. That is the moment a stale token is found — FCM 404s,
            the row is pruned above — and it used to end the send: the Safe Arrival alert
@@ -313,6 +463,7 @@ class FcmService
                 'sent' => $result['sent'] ?? 0,
                 'failed' => $result['failed'] ?? 0,
                 'via_web' => $viaWeb ?: null,
+                'category' => $category,
             ]);
 
         if ($viaWeb > 0) {

@@ -299,12 +299,12 @@
     max-width: 100% !important;
   }
 
-  /* Form modals — bottom sheet style */
+  /* Form modals - a card in the middle of the screen (2026-11-06, Anthony: "all pop ups and selections should be
+     centered to the middle of the screen"). Was a bottom sheet: pinned to the bottom edge, full width, square foot. */
   [style*="position:fixed"][style*="rgba(15"] > div {
-    align-self: flex-end !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    border-radius: 18px 18px 0 0 !important;
+    align-self: center !important;
+    max-width: calc(100% - 24px) !important;
+    border-radius: 18px !important;
     max-height: 86vh !important;
   }
 

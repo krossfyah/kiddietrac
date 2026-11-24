@@ -318,7 +318,7 @@ final class OperationsV2Controller extends Controller
             'close_time' => 'required',
             'notes' => 'nullable|string|max:500',
         ]);
-        $this->assertCentreAccess($request, (int) $data['centre_id']);
+        $this->assertCentreAccess($request, (int) $data['centre_id'], true);
         $centre = DB::table('centres')->where('id', $data['centre_id'])->first();
         abort_unless($centre && \App\Support\Live::centreOpen((int) $centre->id), 422, 'That centre is closed.');
         $child = \App\Support\Live::enrolledChildren(DB::table('children as c'), 'c')->join('families as f', 'f.id', '=', 'c.family_id')
@@ -394,13 +394,8 @@ final class OperationsV2Controller extends Controller
             $kids = (int) $v['children_present'];
             $overGroup = ! empty($v['over_group']) || ! empty($v['home']['over_cap']);
             $issues = (array) ($v['compliance_issues'] ?? []);
-            $status = match (true) {
-                $have < $need => 'breach',
-                $overGroup => 'over_group',
-                (bool) $issues => 'attention',
-                $kids > 0 && $have - $need < 1 => 'tight',
-                default => 'ok',
-            };
+            // The same rule the 15-minute breach alerts use (kiddietrac:check-ratios), so the two never disagree.
+            $status = \App\Support\RatioAlerts::status($v);
             $on = $v['ontario'] ?? null;
 
             return [
@@ -442,7 +437,35 @@ final class OperationsV2Controller extends Controller
             'jurisdiction' => $code,
             'groups' => $code === 'CA-ON' ? \App\Support\OntarioRatios::GROUPS : null,
             'as_of' => now()->toIso8601String(),
+            // Breach alerts (2026-10-30): who is told when a room goes out of ratio; admins may change it.
+            'alerts' => \App\Support\RatioAlerts::settings((int) $agencyId) + ['can_edit' => $this->canEditRatioAlerts($request, (int) $agencyId)],
         ]);
+    }
+
+    private function canEditRatioAlerts(Request $request, int $agencyId): bool
+    {
+        $uid = (int) $request->user()->id;
+        return DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+            ->where(fn ($q) => $q->where('role', 'platform_admin')->orWhere(fn ($w) => $w->where('role', 'agency_admin')->where('agency_id', $agencyId)))
+            ->exists();
+    }
+
+    /** PUT /operations/ratio-alerts - who is alerted when a room goes out of ratio (agency admins). */
+    public function saveRatioAlerts(Request $request): JsonResponse
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        abort_unless($agencyId && $this->canEditRatioAlerts($request, $agencyId), 403, 'Only an agency admin can change ratio alerts.');
+        $d = $request->validate([
+            'enabled' => 'required|boolean', 'notify_educators' => 'required|boolean',
+            'notify_directors' => 'required|boolean', 'notify_admins' => 'required|boolean',
+        ]);
+        $s = \App\Support\RatioAlerts::saveSettings($agencyId, $d);
+        try {
+            \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => $agencyId, 'action' => 'ratio_alerts.updated',
+                'entity_type' => 'agency', 'entity_id' => $agencyId, 'payload' => json_encode(['summary' => 'Changed who is alerted when a room goes out of ratio', 'settings' => $s]),
+                'created_at' => now()]);
+        } catch (\Throwable $e) {}
+        return response()->json(['alerts' => $s + ['can_edit' => true]]);
     }
 
     /**
@@ -808,6 +831,8 @@ final class OperationsV2Controller extends Controller
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('c.agency_id', $agencyId)
             ->where(fn ($q) => \App\Support\Live::centres($q, 'c'))
+            // A centre director sees their own centres' children only (roles sweep 2026-11-04).
+            ->when(($scope = \App\Support\CentreScope::ids($request, (int) $agencyId)) !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
             ->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
             ->select('ch.id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth',
@@ -852,6 +877,17 @@ final class OperationsV2Controller extends Controller
         $agencyId = (int) DB::table('families')->where('id', $child->family_id)
             ->join('centres', 'centres.id', '=', 'families.centre_id')
             ->value('centres.agency_id');
+        /* The child and the destination room must both be at centres you manage, in the
+           agency you are working in (2026-11-05 leak sweep): neither id was checked, so any
+           director could plan a move for another agency's child - and its parents were
+           notified - or point one into another centre's room. */
+        $childCentre = (int) DB::table('families')->where('id', $child->family_id)->value('centre_id');
+        $roomCentre = (int) DB::table('rooms')->where('id', $data['to_room_id'])->value('centre_id');
+        abort_unless($childCentre > 0 && $roomCentre > 0 && $agencyId === (int) $this->resolveAgencyId($request), 403);
+        $this->assertCentreAccess($request, $childCentre);
+        if ($roomCentre !== $childCentre) {
+            $this->assertCentreAccess($request, $roomCentre);
+        }
         $id = DB::table('room_rotations')->insertGetId([
             'agency_id' => $agencyId,
             'child_id' => $data['child_id'],
@@ -908,11 +944,8 @@ final class OperationsV2Controller extends Controller
      */
     public function closureTargets(Request $request): JsonResponse
     {
-        $agencyId = (int) $request->header('X-Active-Agency-Id');
-        if (! $agencyId) {
-            $agencyId = (int) DB::table('role_assignments')->where('user_id', $request->user()->id)
-                ->where('active', true)->whereNotNull('agency_id')->value('agency_id');
-        }
+        // The header only counts for an agency the caller belongs to (roles sweep 2026-11-04: it was taken on trust).
+        $agencyId = $this->resolveAgencyId($request);
         abort_unless($agencyId, 403);
 
         $centres = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)
@@ -1082,7 +1115,7 @@ final class OperationsV2Controller extends Controller
         ], 201);
     }
 
-    private function assertCentreAccess(Request $request, int $centreId): void
+    private function assertCentreAccess(Request $request, int $centreId, bool $staffOk = false): void
     {
         $u = $request->user();
         $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
@@ -1095,10 +1128,18 @@ final class OperationsV2Controller extends Controller
             abort_unless($agencyId === (int) $request->header('X-Active-Agency-Id'), 403);
             return;
         }
+        /* An agency admin of the centre's agency, or a director OF THIS CENTRE - plus an
+           educator of this centre where $staffOk (late pickups) (2026-11-05 leak sweep). Any
+           admin/director/educator row carrying the agency_id used to pass for EVERY centre of
+           the agency, so an educator could schedule or delete closures (which email every
+           family) and a director of centre Y could close or charge centre X. */
+        $roles = $staffOk ? ['centre_director', 'educator'] : ['centre_director'];
         $hasRole = DB::table('role_assignments')->where('user_id', $u->id)
-            ->where('agency_id', $agencyId)
-            ->whereIn('role', ['agency_admin', 'centre_director', 'educator'])
-            ->where('active', true)->exists();
+            ->where('active', true)
+            ->where(function ($q) use ($agencyId, $centreId, $roles) {
+                $q->where(fn ($w) => $w->where('role', 'agency_admin')->where('agency_id', $agencyId))
+                  ->orWhere(fn ($w) => $w->whereIn('role', $roles)->where('centre_id', $centreId));
+            })->exists();
         abort_unless($hasRole, 403);
     }
 }

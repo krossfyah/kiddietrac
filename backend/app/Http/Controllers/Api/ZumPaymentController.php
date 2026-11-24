@@ -111,6 +111,15 @@ final class ZumPaymentController extends Controller
         $onFile = ZumRails::methodsOnFile($userId);
         $mode = \App\Support\PaymentProviders::mode($agencyId, \App\Support\PaymentProviders::ZUM);
 
+        /* A SANDBOX IS FOR STAFF (2026-10-28, Anthony: "why does the test mode show up under parents with the billing
+           that message should only be internal"). Hiding only the banner would leave a parent with buttons that move
+           no money - "submitted" on a payment that never happens. So while the provider is in test mode a parent is
+           told it is not set up at all, exactly as before it was configured, and pay() refuses them too. Staff
+           previewing the parent screens still see it, labelled. */
+        if ($mode !== 'production' && ! self::isStaff($userId)) {
+            return response()->json(['configured' => false, 'methods' => [], 'on_file' => ['bank' => false, 'card' => false]]);
+        }
+
         return response()->json([
             'configured' => true,
             /* Passed through so the screen can label it. A sandbox provider on a live
@@ -131,6 +140,13 @@ final class ZumPaymentController extends Controller
             ],
             'on_file' => $onFile,
         ]);
+    }
+
+    /** Anyone with an active role other than guardian - the office, previewing the parent screens. */
+    private static function isStaff(int $userId): bool
+    {
+        return DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+            ->where('role', '!=', 'guardian')->exists();
     }
 
     /** POST /parent/zum/bank-account — put an account on file for EFT. */
@@ -169,6 +185,12 @@ final class ZumPaymentController extends Controller
         ]);
 
         $userId = (int) $request->user()->id;
+        // Test mode is internal (see status()): a parent never pays into a sandbox.
+        $payAgency = ZumRails::agencyOf($userId);
+        if ($payAgency && \App\Support\PaymentProviders::mode($payAgency, \App\Support\PaymentProviders::ZUM) !== 'production'
+            && ! self::isStaff($userId)) {
+            return response()->json(['message' => 'Online payment is not available yet. Please pay by Interac e-Transfer or ask your centre.'], 422);
+        }
         $invoice = $this->invoiceForPayer($userId, (int) $data['invoice_id']);
         if (! $invoice) {
             return response()->json(['message' => 'That invoice is not yours.'], 403);
@@ -215,6 +237,12 @@ final class ZumPaymentController extends Controller
 
         if (! $this->staffMayAct($request, (int) $data['user_id'])) {
             return response()->json(['message' => 'That person is not in your agency.'], 403);
+        }
+        /* The invoice the money is filed against must be THIS payer's (2026-11-05 leak sweep). It was
+           passed through unchecked, so a request from one family could be linked to any invoice id -
+           another family's, or another agency's. The same rule pay() applies to a parent. */
+        if (! empty($data['invoice_id']) && ! $this->invoiceForPayer((int) $data['user_id'], (int) $data['invoice_id'])) {
+            return response()->json(['message' => 'That invoice does not belong to this person.'], 422);
         }
 
         return $this->submit($request, $data['method'], (int) $data['user_id'], round((float) $data['amount'], 2),

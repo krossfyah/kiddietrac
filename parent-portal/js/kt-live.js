@@ -43,7 +43,12 @@
      Carrier settings half a second later, which put it back on the Text messages
      tab and wiped the test message being typed. Reported as "when testing voice
      calls the screen keeps jumping back to text messages". */
-  var IGNORE = /([\/-]read\b|\bmark[-_]?read\b|\bread[-_]?all\b|[\/-]seen\b|typing|heartbeat|presence|ping|push\/device|push\/subscribe|diag\/|auth\/refresh|\/view\b|track|admin\/voice\/test-call|admin\/sms-settings\/test(-send)?\b|\/me\/markers\b|\/me\/ui-prefs\b)/i;
+  var IGNORE = /([\/-]read\b|\bmark[-_]?read\b|\bread[-_]?all\b|[\/-]seen\b|typing|heartbeat|presence|ping|push\/device|push\/subscribe|diag\/|auth\/refresh|\/view\b|track|admin\/voice\/test-call|admin\/sms-settings\/test(-send)?\b|\/me\/markers\b|\/me\/ui-prefs\b|\/me\/notification-(sounds|prefs)\b|\/me\/contact-prefs\b)/i;
+  /* /me/notification-sounds, /me/notification-prefs, /me/contact-prefs (2026-10-21): a
+     person's own notification choices, saved from Settings, which already shows them. As
+     a write each rang the bus and rebuilt Settings 600 ms later — on its first tab — so
+     picking a tone in the app threw you back to Profile ("when choosing new notifications
+     and sounds the screen just goes back to profile in apk mobile"). */
   /* /me/ui-prefs (2026-10-16): how a person arranges their own screen (Quick access
      tiles, the chat popup's size) is interface state, like /me/markers. As a PUT it rang
      the bus and rebuilt the home screen 3s later, which dropped Quick access out of
@@ -105,6 +110,12 @@
   var timer = null;
   var pending = false;
   var lastRender = 0;
+  /* THE SAVE IS NOT DRAWN TWICE (2026-11-13, portal speed sweep). A screen redraws itself after its own save; this
+     then rebuilt it again 600 ms later and fetched all of its data a second time, queued behind the first lot on the
+     server - the slow "save" Anthony saw. When the change came from THIS tab and the whole screen has been drawn again
+     since (kt:main-swapped), that second rebuild is dropped. A change from another tab always refreshes. */
+  var signalAt = 0, remoteSignal = false, swappedAt = 0;
+  d.addEventListener('kt:main-swapped', function () { swappedAt = Date.now(); });
   var MIN_GAP_MS = 3000;   // floor between automatic renders
 
   function run() {
@@ -121,6 +132,9 @@
     if (since < MIN_GAP_MS) { timer = setTimeout(run, MIN_GAP_MS - since); return; }
 
     pending = false;
+    var local = !remoteSignal;
+    remoteSignal = false;
+    if (local && swappedAt >= signalAt) { return; }   // already redrawn by the screen itself (see signalAt above)
     lastRender = Date.now();
     /* DROPPED, not deferred. Everything else here waits for a safe moment because the
        refresh is still wanted; this one is not wanted at all — the screen has already
@@ -142,7 +156,9 @@
     } catch (e) { /* a failed refresh must never break the page */ }
   }
 
-  function schedule() {
+  function schedule(remote) {
+    if (!pending) { signalAt = Date.now(); }
+    if (remote) remoteSignal = true;
     pending = true;
     if (timer) return;
     timer = setTimeout(run, QUIET_MS);
@@ -166,7 +182,7 @@
   }
 
   w.addEventListener('storage', function (e) {
-    if (e && e.key === KEY) schedule();
+    if (e && e.key === KEY) schedule(true);
   });
 
   // Refresh on return, too: a tab left open in the background can be arbitrarily

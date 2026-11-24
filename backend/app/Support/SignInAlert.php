@@ -37,10 +37,14 @@ use Illuminate\Support\Facades\Log;
  */
 final class SignInAlert
 {
+    /** device_platform the sign-in form sent (ios | android from the app), for device(). */
+    private static string $platform = '';
+
     /** Record a sign-in; email the owner if it is from somewhere new. */
     public static function check(int $userId, Request $request, string $method = 'password'): void
     {
         try {
+            self::$platform = (string) $request->input('device_platform', '');
             self::run($userId, (string) $request->userAgent(), (string) $request->ip(), $method, true);
         } catch (\Throwable $e) {
             Log::warning('SignInAlert failed', ['user' => $userId, 'error' => $e->getMessage()]);
@@ -65,7 +69,10 @@ final class SignInAlert
         self::seedFromHistory($userId);
         $known = DB::table('user_signin_places')->where('user_id', $userId)->get(['kind', 'place_key']);
         $hadHistory = $known->isNotEmpty();
-        $newDevice = ! $known->contains(fn ($r) => $r->kind === 'device' && $r->place_key === $dKey);
+        /* The iPhone app used to be filed as "browser|iphone" (its WebView has no Safari token), so that key counts as
+           this device too: nobody who already used the app gets a "new device" email the first time it is named right. */
+        $alias = str_starts_with($dKey, 'kiddietrac app|') ? 'browser|' . substr($dKey, strlen('kiddietrac app|')) : null;
+        $newDevice = ! $known->contains(fn ($r) => $r->kind === 'device' && ($r->place_key === $dKey || ($alias && $r->place_key === $alias)));
         // An area we could not work out is not "new" — that would alert on every VPN.
         $newRegion = $rKey !== null && ! $known->contains(fn ($r) => $r->kind === 'region' && $r->place_key === $rKey);
 
@@ -152,8 +159,14 @@ final class SignInAlert
         elseif (preg_match('/Macintosh|Mac OS X/i', $ua)) { $os = 'Mac'; }
         elseif (preg_match('/Linux/i', $ua)) { $os = 'Linux'; }
 
+        /* THE IPHONE APP (2026-11-02). Sukhman's sign-in on the iPhone app was filed as "Browser on iPhone": only the
+           Android WebView ("; wv)") was recognised. The iOS app's WKWebView User-Agent is Safari's without the
+           "Safari/" token (…like Gecko) Mobile/15E148); Chrome, Firefox, Edge, Google and Facebook/Instagram on iPhone
+           name themselves. The sign-in form now also sends device_platform ios/android from the app. */
+        $iosApp = preg_match('/iPhone|iPad|iPod/i', $ua) && stripos($ua, 'AppleWebKit') !== false && stripos($ua, 'Safari') === false
+            && ! preg_match('/CriOS|FxiOS|EdgiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram|Line\//i', $ua);
         $b = 'Browser';
-        if (preg_match('/; wv\)/', $ua)) { $b = 'KiddieTrac app'; }
+        if (preg_match('/; wv\)/', $ua) || $iosApp || in_array(self::$platform, ['ios', 'android'], true)) { $b = 'KiddieTrac app'; }
         elseif (preg_match('/Edg\//', $ua)) { $b = 'Edge'; }
         elseif (preg_match('/SamsungBrowser/i', $ua)) { $b = 'Samsung Internet'; }
         elseif (preg_match('/OPR\/|Opera/i', $ua)) { $b = 'Opera'; }

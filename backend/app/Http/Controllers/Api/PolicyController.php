@@ -621,7 +621,8 @@ final class PolicyController extends Controller
         abort_unless($v->file_path && Storage::disk('local')->exists($v->file_path), 404);
         $this->recordView($id, (int) $request->user()->id);
 
-        return Storage::disk('local')->response($v->file_path, $v->file_name ?: 'policy', ['Cache-Control' => 'private, no-store']);
+        // FileResponse, not Storage::response(): that streams with fpassthru(), which this server's PHP disables (ticket #197, 2026-11-01).
+        return \App\Support\FileResponse::download($v->file_path, $v->file_name ?: 'policy', ['Cache-Control' => 'private, no-store'], 'local', true);
     }
 
     /** GET /my-policies — what I still have to sign, and what I have signed. */

@@ -81,7 +81,26 @@ class IntegrationController extends Controller
                     ->where('external_source', $source)->count(),
                 'external_ids' => DB::table('external_invoices')->where('agency_id', $agencyId)
                     ->where('external_source', $source)->pluck('external_id')->values(),
+                /* What each one SAYS, not only that it is here (2026-11-02): a paid-in-the-partner invoice still open
+                   here is the fault the id list cannot see. */
+                'states' => DB::table('external_invoices as x')->leftJoin('invoices as n', 'n.id', '=', 'x.applied_to_invoice_id')
+                    ->where('x.agency_id', $agencyId)->where('x.external_source', $source)
+                    ->get(['x.external_id', 'x.status', 'x.total', 'x.amount_paid', 'x.balance_due', 'n.invoice_number as applied_to'])
+                    ->keyBy('external_id'),
             ],
+            /* Partner payments mirrored onto our own invoices, and the state of every open invoice of ours in a
+               family the partner bills too - so the partner can name a payment that never landed. */
+            'native' => \Illuminate\Support\Facades\Schema::hasColumn('payments', 'external_ref') ? [
+                'mirrored' => DB::table('payments as p')->join('invoices as i', 'i.id', '=', 'p.invoice_id')
+                    ->join('centres as c', 'c.id', '=', 'i.centre_id')->where('c.agency_id', $agencyId)
+                    ->where('p.external_source', $source)
+                    ->get(['p.external_id', 'p.external_ref', 'p.amount', 'i.invoice_number', 'i.status', 'i.balance_due']),
+                'open' => DB::table('invoices as i')->join('centres as c', 'c.id', '=', 'i.centre_id')
+                    ->join('families as f', 'f.id', '=', 'i.family_id')->where('c.agency_id', $agencyId)
+                    ->whereNotIn('i.status', ['paid', 'void', 'draft', 'cancelled'])->where('i.balance_due', '>', 0)
+                    ->get(['i.invoice_number', 'i.status', 'i.total', 'i.balance_due', 'i.due_at', 'i.family_id',
+                        'f.family_name', 'f.external_id as family_external_id']),
+            ] : null,
             'payroll' => [
                 'count' => DB::table('payroll_documents')->where('agency_id', $agencyId)
                     ->where('external_source', $source)->whereNotNull('external_id')->count(),
@@ -89,6 +108,49 @@ class IntegrationController extends Controller
                     ->where('external_source', $source)->whereNotNull('external_id')
                     ->pluck('external_id')->values(),
             ],
+        ]);
+    }
+
+    /**
+     * GET /integration/families/open-invoices?family_external_id= — ONE family's open invoices of ours (2026-11-03).
+     *
+     * So the partner's payment approval can ask "which KiddieTrac invoice does this e-Transfer pay?" at the moment a
+     * person knows the answer, instead of hoping the parent typed the number (Kicks-Ward, Oct 23). Read-only. Scoped
+     * like upsertInvoice: the token's agency, the caller's own family id or ktfam-{id} for a family that started here
+     * (only a family of THIS agency with no external id), and that family's native invoices only. 404 for any other.
+     */
+    public function familyOpenInvoices(Request $request): JsonResponse
+    {
+        $agencyId = $this->resolveAgencyId($request);
+        $this->assertAgencyAdmin($request, $agencyId);
+        $data = $request->validate(['family_external_id' => 'required|string|max:191']);
+        $source = $this->source($request);
+
+        $centreIds = Centre::where('agency_id', $agencyId)->pluck('id');
+        $family = Family::whereIn('centre_id', $centreIds)->where('external_source', $source)
+            ->where('external_id', $data['family_external_id'])->first();
+        if (! $family && preg_match('/^ktfam-(\d+)$/', $data['family_external_id'], $m)) {
+            $family = Family::whereIn('centre_id', $centreIds)->whereKey((int) $m[1])->whereNull('external_id')->first();
+        }
+        if (! $family) {
+            return response()->json(['ok' => true, 'known' => false, 'invoices' => []], 404);
+        }
+
+        $rows = DB::table('invoices')->where('family_id', $family->id)->whereIn('centre_id', $centreIds)
+            ->whereNotIn('status', ['paid', 'void', 'draft', 'cancelled', 'refunded'])->where('balance_due', '>', 0)
+            ->whereNotNull('invoice_number')
+            ->orderBy('due_at')->orderBy('id')->limit(40)
+            ->get(['invoice_number', 'status', 'issued_at', 'due_at', 'total', 'amount_paid', 'balance_due']);
+
+        return response()->json([
+            'ok' => true, 'known' => true,
+            'invoices' => $rows->map(fn ($r) => [
+                'number' => (string) $r->invoice_number, 'status' => (string) $r->status,
+                'issued_at' => $r->issued_at ? substr((string) $r->issued_at, 0, 10) : null,
+                'due_at' => $r->due_at ? substr((string) $r->due_at, 0, 10) : null,
+                'total' => round((float) $r->total, 2), 'amount_paid' => round((float) $r->amount_paid, 2),
+                'balance_due' => round((float) $r->balance_due, 2),
+            ])->values(),
         ]);
     }
 
@@ -981,6 +1043,23 @@ class IntegrationController extends Controller
             /* The source withdrew this invoice. Stated rather than inferred — the sync
                pushes in chunks, so an invoice missing from a batch means nothing. */
             'deleted'             => 'nullable|boolean',
+            /* The payments behind it (2026-10-28) - the parent's account ledger shows when each was made. */
+            'payments'            => 'nullable|array|max:200',
+            'payments.*.date'     => 'nullable|date',
+            'payments.*.amount'   => 'required_with:payments|numeric',
+            'payments.*.method'   => 'nullable|string|max:60',
+            'payments.*.reference' => 'nullable|string|max:120',
+            /* PAID IN THE PARTNER, AGAINST ONE OF OUR INVOICES (2026-11-02). The partner's payment id (the mirror's
+               idempotency key), the KiddieTrac invoice number(s) the payment names (e-Transfer memo / notes), and
+               how much of it the partner has refunded. See App\Support\ExternalPaymentSync. */
+            'payments.*.id'           => 'nullable|string|max:60',
+            'payments.*.applies_to'   => 'nullable|array|max:12',
+            'payments.*.applies_to.*' => 'string|max:60',
+            'payments.*.refunded'     => 'nullable|numeric',
+            /* The partner's staff said this payment is not for one of our invoices (2026-11-03): no reminder hold. */
+            'payments.*.not_for_invoice' => 'nullable|boolean',
+            /* The partner made this invoice only to hold an e-Transfer (its approval needs one). */
+            'auto_created'        => 'nullable|boolean',
         ]);
         $source = $this->source($request);
 
@@ -1013,6 +1092,13 @@ class IntegrationController extends Controller
                 'balance_due' => 0,
                 'updated_at'  => now(),
             ]);
+            // Any of its payments mirrored onto our own invoices go with it (and those invoices re-open).
+            try {
+                \App\Support\ExternalPaymentSync::apply($agencyId, $source, (int) $row->family_id, $data['external_id'], [],
+                    false, false, 0.0, (string) ($row->source_label ?: ucfirst($source)), $request->user()?->id);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('external payment withdraw failed', ['external_id' => $data['external_id'], 'error' => $e->getMessage()]);
+            }
 
             try {
                 \App\Support\Audit::write([
@@ -1043,6 +1129,15 @@ class IntegrationController extends Controller
         $family = Family::whereIn('centre_id', $agencyCentreIds)
             ->where('external_source', $source)
             ->where('external_id', $data['family_external_id'])->first();
+        /* A FAMILY THAT STARTED HERE (2026-10-28). A family created in KiddieTrac is pulled into the partner as
+           "ktfam-{our id}" and has no external_id of ours, so the lookup above could never find it - Patricia Burgess
+           and two other families had 20 iLearn invoices refused every night ("Unknown family_external_id") while the
+           partner's audit blamed the family sync. The partner now names such a family by ktfam-{id}: accepted only for
+           a family of THIS agency that has no external id (a family the partner made is always found by its own id). */
+        if (! $family && preg_match('/^ktfam-(\d+)$/', $data['family_external_id'], $m)) {
+            $family = Family::whereIn('centre_id', $agencyCentreIds)->whereKey((int) $m[1])
+                ->whereNull('external_id')->first();
+        }
         abort_unless($family, 422, 'Unknown family_external_id for this agency — upsert the family first.');
 
         $status  = strtolower($data['status'] ?? 'open');
@@ -1081,6 +1176,12 @@ class IntegrationController extends Controller
                 : null,
             'updated_at'          => now(),
         ];
+        if (array_key_exists('payments', $data) && \Illuminate\Support\Facades\Schema::hasColumn('external_invoices', 'payments')) {
+            $attrs['payments'] = $data['payments'] === null ? null : json_encode(array_values(array_map(fn ($p) => [
+                'date' => $p['date'] ?? null, 'amount' => round((float) ($p['amount'] ?? 0), 2),
+                'method' => $p['method'] ?? null, 'reference' => $p['reference'] ?? null,
+            ], $data['payments'])));
+        }
         if ($created) {
             $attrs['created_at'] = now();
             $id = DB::table('external_invoices')->insertGetId($attrs);
@@ -1089,9 +1190,78 @@ class IntegrationController extends Controller
             $id = $existing->id;
         }
 
+        /* PAYMENTS AGAINST OUR OWN INVOICES (2026-11-02). A payment that names a KiddieTrac invoice of this family
+           (the parent quoted iL-INV-202610-0136-01 in the e-Transfer) is mirrored onto it, keyed by the partner's
+           payment id; when this invoice was only the receipt shell for it, it is voided so the money shows once.
+           Never a charge. A payment row created for the first time gets the receipt + paid-in-full notice a manual
+           "Record payment" sends, once per partner payment, ever (ExternalPaymentSync::receipt, 2026-11-02). */
+        $paymentSync = null;
+        if (\Illuminate\Support\Facades\Schema::hasColumn('payments', 'external_ref')) {
+            try {
+                $paymentSync = \App\Support\ExternalPaymentSync::apply(
+                    $agencyId, $source, (int) $family->id, $data['external_id'], (array) ($data['payments'] ?? []),
+                    $status !== 'void', ! empty($data['auto_created']), $total,
+                    (string) ($data['source_label'] ?? ucfirst($source)), $request->user()?->id
+                );
+                $shell = $paymentSync['shell_invoice_id'];
+                $now = DB::table('external_invoices')->where('id', $id)->first(['applied_to_invoice_id']);
+                if ($shell) {
+                    DB::table('external_invoices')->where('id', $id)->update([
+                        'status' => 'void', 'balance_due' => 0, 'applied_to_invoice_id' => $shell,
+                    ]);
+                } elseif ($now && $now->applied_to_invoice_id) {
+                    // No longer a shell (a payment was unlinked upstream): the attrs above already restored it.
+                    DB::table('external_invoices')->where('id', $id)->update(['applied_to_invoice_id' => null]);
+                }
+                if (\Illuminate\Support\Facades\Schema::hasTable('external_payment_receipts')) {
+                    $paymentSync['receipts'] = [];
+                    $claimedNow = [];
+                    foreach ($paymentSync['new_payment_ids'] ?? [] as $newPid) {
+                        try {
+                            $paymentSync['receipts'][] = \App\Support\ExternalPaymentSync::receipt((int) $newPid, false, $claimedNow);
+                        } catch (\Throwable $e) {
+                            \Illuminate\Support\Facades\Log::warning('external payment receipt failed', ['payment' => $newPid, 'error' => $e->getMessage()]);
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('external payment sync failed', ['external_id' => $data['external_id'], 'error' => $e->getMessage()]);
+                $paymentSync = ['error' => 'payment sync failed: ' . $e->getMessage()];
+            }
+        }
+
+        /* WHICH PARTNER PAYMENTS ARE ON NONE OF OUR INVOICES (2026-11-03). Kicks-Ward paid iL-INV-202610-0448-01 into
+           the partner with no number in the message; we emailed her "Overdue" four days running. Each payment on a
+           receipt shell is marked linked / unlinked here, so InvoiceReminders can hold that family's reminders and the
+           agency's billing people get a bell notice - from our own data, with no call back to the partner. */
+        if (array_key_exists('payments', $data) && is_array($paymentSync) && empty($paymentSync['error'])
+            && \Illuminate\Support\Facades\Schema::hasColumn('external_invoices', 'payments')) {
+            try {
+                $prev = $existing && $existing->payments ? (json_decode((string) $existing->payments, true) ?: []) : [];
+                $appliedIds = array_map(fn ($a) => (string) $a['payment'], (array) ($paymentSync['applied'] ?? []));
+                $list = \App\Support\PartnerPaymentHold::annotate((array) ($data['payments'] ?? []), $appliedIds,
+                    ! empty($data['auto_created']), $status !== 'void', is_array($prev) ? $prev : []);
+                DB::table('external_invoices')->where('id', $id)->update(['payments' => json_encode($list)]);
+                $paymentSync['unlinked'] = [];
+                foreach ($list as $p) {
+                    if (empty($p['unlinked'])) continue;
+                    $paymentSync['unlinked'][] = $p['id'];
+                    if (empty($p['alerted_at'])) {
+                        \App\Support\PartnerPaymentHold::alert($agencyId, (int) $family->id, $p + [
+                            'external_invoice_id' => (int) $id,
+                            'label' => (string) ($data['source_label'] ?? ucfirst($source)),
+                        ], null);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('partner payment link state failed', ['external_id' => $data['external_id'], 'error' => $e->getMessage()]);
+            }
+        }
+
         return response()->json([
             'ok' => true, 'entity' => 'invoice', 'created' => $created,
             'id' => $id, 'external_id' => $data['external_id'], 'family_id' => $family->id,
+            'payment_sync' => $paymentSync,
         ], $created ? 201 : 200);
     }
 
@@ -1199,6 +1369,38 @@ class IntegrationController extends Controller
             }
         }
 
+        /* PAY BELONGS ON THE STAFF ACCOUNT (2026-10-28). A person can have two KiddieTrac accounts - a parent one
+           and a staff one - and the partner sends pay to whichever address it holds. Safia Ali's payslips all went to
+           her PARENT account (her iLearn address) while her educator account (the office address) showed nothing.
+           When the email lands on an account that is only a guardian here, and exactly one active staff account in
+           this agency has the same first and last name, the pay goes to that staff account. Exactly one, or nobody
+           is moved: putting one person's pay on another's record is the worst outcome here. */
+        if ($candidate) {
+            $roles = DB::table('role_assignments')->where('user_id', $candidate->id)->where('active', 1)
+                ->where('agency_id', $agencyId)->pluck('role')->unique()->values()->all();
+            if ($roles === ['guardian']) {
+                $nm = DB::table('users')->where('id', $candidate->id)->first(['first_name', 'last_name']);
+                $full = strtolower(trim(($nm->first_name ?? '') . ' ' . ($nm->last_name ?? '')));
+                if ($full !== '' && str_contains($full, ' ')) {
+                    $staff = DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
+                        ->where('ra.active', 1)->where('ra.agency_id', $agencyId)->where('ra.role', '!=', 'guardian')
+                        ->whereNull('u.deleted_at')->where('u.id', '!=', $candidate->id)
+                        ->whereRaw("LOWER(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')))) = ?", [$full])
+                        ->distinct()->pluck('u.id');
+                    /* Several staff accounts by that name (Safia Ali has an admin login AND an educator login): pay
+                       goes to the one that is PAID - an educator or home visitor - if exactly one is. */
+                    if ($staff->count() > 1) {
+                        $staff = DB::table('role_assignments')->whereIn('user_id', $staff->all())->where('active', 1)
+                            ->where('agency_id', $agencyId)->whereIn('role', ['educator', 'home_visitor'])
+                            ->distinct()->pluck('user_id');
+                    }
+                    if ($staff->count() === 1) {
+                        $candidate = (object) ['id' => (int) $staff->first()];
+                    }
+                }
+            }
+        }
+
         if ($candidate) {
             $inAgency = DB::table('role_assignments')->where('user_id', $candidate->id)
                 ->where('active', 1)->where('agency_id', $agencyId)->exists();
@@ -1285,10 +1487,18 @@ class IntegrationController extends Controller
             'updated_at'       => now(),
         ];
 
-        $existing = DB::table('payroll_documents')->where('external_key', $key)->first(['id', 'agency_id']);
+        $existing = DB::table('payroll_documents')->where('external_key', $key)->first(['id', 'agency_id', 'user_id', 'staff_group', 'role_label']);
         if ($existing) {
             // Never let a re-push move a document between agencies.
             abort_unless((int) $existing->agency_id === $agencyId, 422, 'That document belongs to another agency.');
+            /* A RE-PUSH NEVER UNLINKS (2026-10-28). A payslip linked to its person stays linked when this push cannot
+               match anyone - an account deleted since (staff who left keep their history), or an address that no
+               longer resolves. A full re-sync unlinked 13 payslips that way. A NEW match still wins. */
+            if ($userId === null && $existing->user_id) {
+                $row['user_id'] = (int) $existing->user_id;
+                $row['staff_group'] = $existing->staff_group;
+                $row['role_label'] = $existing->role_label;
+            }
             DB::table('payroll_documents')->where('id', $existing->id)->update($row);
 
             return response()->json(['ok' => true, 'created' => false, 'id' => $existing->id, 'linked' => $userId !== null]);
@@ -1703,6 +1913,13 @@ class IntegrationController extends Controller
         $centres = DB::table('centres')->where('agency_id', $agencyId)
             ->get(['id', 'name', 'external_id', 'external_source', 'deleted_at'])->keyBy('id');
         $centreIds = $centres->keys()->all() ?: [0];
+        /* OPEN CENTRES DECIDE WHAT IS CURRENT (2026-10-20). kt:leak-sweep (support ticket #158)
+           found this feed naming closed centres #13 and #20: a provider whose centre had closed
+           still held an "active" role there, so the feed told iLearn she was current staff at
+           a closed centre. A role at a closed centre is not a current assignment, and a
+           family at a closed centre is not attached here (pull/new already reports it). */
+        $live = array_flip(\App\Support\Live::centreIds($agencyId));
+        $liveIds = array_keys($live) ?: [0];
         $staffRoles = ['educator', 'home_visitor', 'centre_director', 'agency_admin'];
         $me = (int) $request->user()->id;
 
@@ -1720,7 +1937,7 @@ class IntegrationController extends Controller
 
         // The families each guardian belongs to, inside this agency only.
         $guardianRows = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
-            ->whereIn('g.user_id', $userIds ?: [0])->whereIn('f.centre_id', $centreIds)->whereNull('f.deleted_at')
+            ->whereIn('g.user_id', $userIds ?: [0])->whereIn('f.centre_id', $liveIds)->whereNull('f.deleted_at')
             ->get(['g.user_id', 'g.is_primary', 'g.relationship', 'f.id as family_id', 'f.family_name',
                    'f.external_id', 'f.external_source', 'f.centre_id'])
             ->groupBy('user_id');
@@ -1732,7 +1949,9 @@ class IntegrationController extends Controller
                 continue;
             }
             $rows = $roleRows->where('user_id', $u->id);
-            $active = $rows->filter(fn ($r) => (bool) $r->active);
+            $activeAnywhere = $rows->filter(fn ($r) => (bool) $r->active);
+            // Current = active AND agency-wide (no centre) or at a centre that is still open.
+            $active = $activeAnywhere->filter(fn ($r) => ! $r->centre_id || isset($live[(int) $r->centre_id]));
             $label = trim(($u->first_name ?? '').' '.($u->last_name ?? ''));
 
             if ($u->deleted_at || $active->isEmpty()) {
@@ -1740,7 +1959,8 @@ class IntegrationController extends Controller
                 // which pull/new already states.
                 if ($rows->whereIn('role', $staffRoles)->isNotEmpty()) {
                     $gone[] = ['kt_user_id' => (int) $u->id, 'name' => $label, 'email' => $u->email,
-                        'reason' => $u->deleted_at ? 'deleted' : 'roles_ended', 'at' => $u->updated_at];
+                        'reason' => $u->deleted_at ? 'deleted' : ($activeAnywhere->isNotEmpty() ? 'centre_closed' : 'roles_ended'),
+                        'at' => $u->updated_at];
                 }
                 continue;
             }

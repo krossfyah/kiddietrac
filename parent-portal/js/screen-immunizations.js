@@ -64,18 +64,16 @@
      <h2> and a table, which is why an empty table read as "the section is broken"
      rather than "there is nothing filed yet". */
   function immHero(subtitle) {
-    return '<div class="kt-page-hero" style="background:linear-gradient(135deg,#0F172A 0%,#1F6080 60%,#16637A 100%);' +
-      'color:white;border-radius:16px;padding:22px 26px;margin-bottom:18px;">' +
-      '<div style="font-size:11px;font-weight:800;letter-spacing:1.4px;opacity:.85;">💉 IMMUNIZATION</div>' +
-      '<h2 style="font-size:24px;margin:6px 0 4px;color:white;">Immunizations</h2>' +
-      '<div style="opacity:.9;font-size:13px;">' + subtitle + '</div>' +
+    return '<div class="kt-page-hero" style="color:white;margin-bottom:18px;">' +
+      '<h2 style="color:white;">💉 Immunizations</h2>' +
+      '<div class="kt-hero-sub" style="opacity:.9;">' + subtitle + '</div>' +
     '</div>';
   }
 
   /* One definition of the tab bar for all four views. They were being written out
      three times with the active state hand-set in each, which is how a tab ends up
      looking selected on a screen it did not open. */
-  /* ONE SECTION FOR IMMUNISATIONS.
+  /* ONE SECTION FOR IMMUNIZATIONS.
 
      "Immunizations" held the roster, the dose table and the records families have sent in;
      "Immunization due" held the age schedule and the children measured against it. Two nav
@@ -93,7 +91,7 @@
      "Due at age" absorbed the other's columns and totals and now lists the whole roster.
 
      "All records" is gone as well: a dose-by-dose dump of every child at once answered no
-     question anybody actually arrives with, and for an agency that keeps immunisation
+     question anybody actually arrives with, and for an agency that keeps immunization
      records on paper it was simply empty — which reads as missing data rather than as a
      table nobody needed. "Overdue only" keeps the same view where it is useful.
      (Anthony, 2026-09-10) */
@@ -656,57 +654,11 @@
     });
     if (opened) { return; }
 
-    /* Fallback: the panel file is not loaded. File the document alone rather than
-       leaving the button dead — a record on file is still better than one in an inbox,
-       and the doses can be recorded from the child's tab. */
-    var body = document.createElement('div');
-    body.innerHTML =
-      '<div style="display:grid;gap:10px;">' +
-        '<label style="font-size:12px;font-weight:700;color:#6B7280;">Child</label>' +
-        '<select id="kt-imm-child" style="padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
-          roster.map(function (c) {
-            return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
-          }).join('') +
-        '</select>' +
-        '<label style="font-size:12px;font-weight:700;color:#6B7280;">File</label>' +
-        '<input id="kt-imm-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,image/*,application/pdf" ' +
-          'style="padding:9px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;">' +
-        '<span style="font-size:12px;color:#6B7280;">PDF or photo, up to 10 MB.</span>' +
-        '<div id="kt-imm-out" style="font-size:13px;min-height:16px;"></div>' +
-      '</div>';
-
-    Modal.open({
-      title: 'Upload an immunization record',
-      body: body,
-      actions: [
-        { label: 'Cancel', style: 'btn-secondary' },
-        { label: 'Upload', style: 'btn-primary', handler: async function () {
-          var out = body.querySelector('#kt-imm-out');
-          var sel = body.querySelector('#kt-imm-child');
-          var f = body.querySelector('#kt-imm-file').files[0];
-          if (!f) { out.style.color = '#DC2626'; out.textContent = 'Choose a file first.'; return false; }
-          if (f.size > 10 * 1024 * 1024) {
-            out.style.color = '#DC2626';
-            out.textContent = 'That file is ' + fmtSize(f.size) + ' — the limit is 10 MB.';
-            return false;
-          }
-          out.style.color = '#64748B';
-          out.textContent = 'Uploading…';
-          try {
-            var fd = new FormData();
-            fd.append('file', f);
-            fd.append('title', f.name);
-            await apiUpload('/director/children/' + sel.value + '/immunization-records', fd);
-            renderRecords(container);
-            return true;
-          } catch (e) {
-            out.style.color = '#DC2626';
-            out.textContent = e.message || 'Upload failed.';
-            return false;
-          }
-        } },
-      ],
-    });
+    /* No bare-file fallback (2026-11-13): the doses are mandatory, so a file on its own would be refused.
+       If the record form is not loaded, say so where the person is looking. */
+    if (window.KT && KT.toast) {
+      KT.toast('💉', 'Could not open the record form', 'Please refresh the page and try again.', '#B45309');
+    }
   }
 
   /* Staff read through /director/, parents through /parent/ — same controller and the
@@ -744,10 +696,17 @@
     container.innerHTML = '';
     var wrap = document.createElement('div');
     wrap.style.cssText = 'padding:24px;max-width:1800px;';
+    // The state's rule (California: IMM-230, medical exemptions only) can arrive after this paints.
+    if (!window.__ktImmNote) { window.__ktImmNote = 1; window.addEventListener('kt:jurisdiction', function () {
+      var n = (window.KT && KT.jurisdiction && KT.jurisdiction.immunization_note) || '';
+      document.querySelectorAll('[data-imm-note]').forEach(function (el) { el.textContent = n; });
+    }); }
     wrap.innerHTML = '<h2 style="font-size:24px;margin:0 0 4px;">Immunizations</h2>'
       + '<p style="color:#6B7280;margin:0 0 18px;font-size:13px;">'
-      + 'What is still needed, what the centre has on file, and a place to send a record in. '
-      + 'Your child\'s educator and the centre are told as soon as one arrives.</p>';
+      + esc((window.KT && KT.termText ? KT.termText : function (t) { return t; })('What is still needed, what the centre has on file, and a place to send a record in. '
+      + 'Your child\'s educator and the centre are told as soon as one arrives.'))
+      + '<br><span data-imm-note style="color:#475569;">' + esc((window.KT && KT.jurisdiction && KT.jurisdiction.immunization_note) || '') + '</span>'
+      + '</p>';
 
     if (kids.length === 0) {
       wrap.innerHTML += '<p style="color:#6B7280;">No children on record.</p>';
@@ -758,7 +717,7 @@
     /* A CARD PER CHILD, LED BY WHAT IS OUTSTANDING.
 
        This screen used to show only the doses the centre had already typed in — which for
-       an agency that keeps immunisation records on paper is an empty table, right after
+       an agency that keeps immunization records on paper is an empty table, right after
        an email telling the family their records are missing. The panel works the due list
        out from the child's date of birth against the schedule, so it is complete whether
        or not anybody has typed anything, and puts the upload button beside it.

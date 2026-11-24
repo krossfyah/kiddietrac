@@ -56,7 +56,7 @@
       ov.className = 'kt-scrim';
       ov.setAttribute('data-no-modal-guard', '1');
       ov.style.cssText = 'position:fixed;inset:0;z-index:2147479000;display:flex;align-items:flex-start;'
-        + 'justify-content:center;padding:20px;overflow-y:auto;background:rgba(8,20,40,.55);';
+        + 'justify-content:center;padding:calc(20px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 20px calc(20px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));box-sizing:border-box;overflow-y:auto;background:rgba(8,20,40,.55);';
       ov.innerHTML =
         '<div style="background:#fff;border-radius:16px;max-width:760px;width:100%;margin:auto;'
         + 'overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'

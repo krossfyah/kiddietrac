@@ -138,9 +138,15 @@ final class SsoController extends Controller
         if (!$user) return $this->htmlError('No account exists for ' . htmlspecialchars((string) $email) . '. Ask your centre to invite you first.');
 
         // Mint a Sanctum token + redirect back to the app
+        if (! \App\Support\BrandLock::allows($request, (int) $user->id, 'sso', 'kiddietrac')) {
+            return $this->htmlError('No account exists for ' . htmlspecialchars((string) $email) . '. Ask your centre to invite you first.');
+        }
+        if ($locked = \App\Support\SignInLocks::refusal((int) $user->id, $request, 'sso')) {   // sign-in locks (2026-11-10)
+            return $this->htmlError(e($locked->getData(true)['message']));
+        }
         $userModel = \App\Models\User::find($user->id);
         \App\Support\AccountStatus::markClaimed((int) $user->id);
-        $token = $userModel->createToken('sso-' . $provider)->plainTextToken;
+        $token = $userModel->createToken('sso-' . $provider, ['*'], now()->addDays(30))->plainTextToken;   // 30 days, as a password sign-in (PIPEDA review 2026-11-10)
         \App\Support\SignInAlert::check((int) $user->id, $request, 'sso');
         DB::table('users')->where('id', $user->id)->update([
             'last_login_at' => now(),

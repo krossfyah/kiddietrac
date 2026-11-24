@@ -46,7 +46,7 @@ class SocialAuthController extends Controller
     private function appChallenge(?string $state): ?string
     {
         if (! is_string($state) || strncmp($state, 'app.', 4) !== 0) return null;
-        $cc = substr($state, 4);
+        $cc = explode('~', substr($state, 4), 2)[0];
         return preg_match('/^[A-Za-z0-9_-]{43}$/', $cc) ? $cc : null;
     }
 
@@ -76,9 +76,14 @@ class SocialAuthController extends Controller
             Socialite::forgetDrivers();
             $driver = Socialite::driver($provider)->stateless();
             $cc = (string) request()->query('cc', '');
+            // The app the person started from (BrandLock), carried through the provider in the state.
+            $brand = strtolower((string) request()->query('brand', ''));
+            $brand = preg_match('/^[a-z0-9-]{1,80}$/', $brand) ? '~' . $brand : '';
             if (request()->query('app') === '1' && preg_match('/^[A-Za-z0-9_-]{43}$/', $cc)) {
                 // Comes back to callback() untouched as ?state=, which is how it knows.
-                $driver->with(['state' => 'app.' . $cc]);
+                $driver->with(['state' => 'app.' . $cc . $brand]);
+            } elseif ($brand !== '') {
+                $driver->with(['state' => 'web' . $brand]);
             }
             return $driver->redirect();
         } catch (\Throwable $e) {
@@ -88,6 +93,11 @@ class SocialAuthController extends Controller
 
     public function callback(string $provider)
     {
+        // An Email client mailbox signing in with Microsoft shares this redirect URI;
+        // its state starts "mbx." (App\Support\MicrosoftMailbox). Not a portal sign-in.
+        if ($provider === 'microsoft' && \App\Support\MicrosoftMailbox::isOurs(request()->query('state'))) {
+            return \App\Support\MicrosoftMailbox::callback(request());
+        }
         $this->appCc = $this->appChallenge(request()->query('state'));
         if (! $this->enabled($provider)) {
             return $this->fail("That sign-in method isn't enabled yet.");
@@ -111,6 +121,7 @@ class SocialAuthController extends Controller
         $user = \App\Support\EmailAccounts::soleLive($email);
 
         if (! $user && \App\Support\EmailAccounts::isAmbiguous($email)) {
+            $this->auditSignIn(null, 'login_failed', $provider, $email, 'ambiguous_email');
             return $this->fail(
                 'More than one KiddieTrac account uses ' . $email . '. Sign in with your '
                 . 'username and password, then link ' . ucfirst((string) $provider)
@@ -119,10 +130,22 @@ class SocialAuthController extends Controller
         }
 
         if (! $user) {
+            $this->auditSignIn(null, 'login_failed', $provider, $email, 'no_account');
             return $this->fail('No KiddieTrac account is linked to ' . $email . '. Ask your administrator to invite you first.');
         }
         if (in_array($user->status ?? '', ['suspended', 'deactivated'], true)) {
+            $this->auditSignIn((int) $user->id, 'login_failed', $provider, $email, 'account_' . $user->status);
             return $this->fail('This account is not active. Please contact your administrator.');
+        }
+        if ($locked = \App\Support\SignInLocks::refusal((int) $user->id, request(), $provider)) {   // sign-in locks (2026-11-10)
+            return $this->fail($locked->getData(true)['message']);
+        }
+
+        // The right app (BrandLock): the wrong one gets the same answer as an address with no account.
+        $st = (string) request()->query('state', '');
+        $brandSlug = str_contains($st, '~') ? substr($st, strpos($st, '~') + 1) : 'kiddietrac';
+        if (! \App\Support\BrandLock::allows(request(), (int) $user->id, 'social', $brandSlug)) {
+            return $this->fail('No account is linked to ' . $email . '. Ask your administrator to invite you first.');
         }
 
         // Remember the link so the same provider identity maps straight here next time.
@@ -143,12 +166,37 @@ class SocialAuthController extends Controller
 
         $token = User::find($user->id)->createToken($provider . '-sso', ['*'], now()->addHours(12))->plainTextToken;
         \App\Support\SignInAlert::check((int) $user->id, request(), 'social');
+        $this->auditSignIn((int) $user->id, 'login', $provider, $email, null);
 
         // Hand the token to the SPA via the URL fragment (never sent to servers/logs).
         return redirect(self::FRONTEND . '/index.html#kt_social=' . urlencode($token));
     }
 
     private ?string $appCc = null;
+
+    /* SOCIAL SIGN-INS ARE SIGN-INS (2026-10-21). Password sign-ins are audited in
+       AuthController; this path wrote nothing, so a Google/Microsoft sign-in (or a refused
+       one) never appeared in the audit log. Same action names, so the log reads the same. */
+    private function auditSignIn(?int $userId, string $action, string $provider, ?string $email, ?string $reason, string $via = 'web'): void
+    {
+        try {
+            \App\Support\Audit::write([
+                'user_id' => $userId,
+                'agency_id' => $userId ? \App\Support\AuditScope::ownAgency($userId) : null,
+                'action' => $action,
+                'entity_type' => $userId ? 'user' : null,
+                'entity_id' => $userId,
+                'payload' => json_encode(array_filter([
+                    'method' => 'social', 'provider' => $provider, 'via' => $via,
+                    'email' => $email, 'reason' => $reason,
+                ], fn ($v) => $v !== null)),
+                'ip_address' => request()->ip(),
+                'user_agent' => substr((string) request()->userAgent(), 0, 500),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+        }
+    }
 
     private function fail(string $msg)
     {
@@ -169,14 +217,19 @@ class SocialAuthController extends Controller
         $row = \Illuminate\Support\Facades\Cache::pull('kt_social_app:' . hash('sha256', $data['code']));
         $cc = rtrim(strtr(base64_encode(hash('sha256', $data['verifier'], true)), '+/', '-_'), '=');
         if (! is_array($row) || ! hash_equals((string) $row['cc'], $cc)) {
+            $this->auditSignIn(is_array($row) ? (int) $row['user_id'] : null, 'login_failed', is_array($row) ? (string) $row['provider'] : 'app', null, 'app_code_invalid_or_expired');
             return response()->json(['message' => 'That sign-in link has expired. Please try again.'], 422);
         }
         $user = User::find((int) $row['user_id']);
         if (! $user || in_array($user->status ?? '', ['suspended', 'deactivated'], true)) {
             return response()->json(['message' => 'This account is not active. Please contact your administrator.'], 403);
         }
+        if ($locked = \App\Support\SignInLocks::refusal((int) $user->id, $request, (string) $row['provider'])) {
+            return $locked;
+        }
         $token = $user->createToken($row['provider'] . '-sso', ['*'], now()->addHours(12))->plainTextToken;
         \App\Support\SignInAlert::check((int) $user->id, $request, 'social');
+        $this->auditSignIn((int) $user->id, 'login', (string) $row['provider'], $user->email, null, 'app');
         return response()->json(['token' => $token]);
     }
 

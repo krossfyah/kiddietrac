@@ -58,7 +58,7 @@ final class ImmunizationRemindersController extends Controller
 
         // The header is a request, not a fact — honoured only for a platform_admin or
         // for someone who actually holds an active role in the agency named.
-        $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)
+        $isPlatform = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->where('role', 'platform_admin')->where('active', 1)->exists();
         if ($header && $isPlatform) {
             return $header;
@@ -76,7 +76,7 @@ final class ImmunizationRemindersController extends Controller
 
     private function assertAccess(Request $request): void
     {
-        $ok = DB::table('role_assignments')
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $request->user()->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])
             ->exists();
@@ -107,7 +107,7 @@ final class ImmunizationRemindersController extends Controller
             'reminders' => self::read($agencyId),
             // What the reminder would say if it went out right now — so an admin can
             // see the size of the problem before deciding whether to turn it on.
-            'preview' => self::outstanding($agencyId, self::read($agencyId)),
+            'preview' => self::forCaller($request, $agencyId, self::outstanding($agencyId, self::read($agencyId))),
         ]);
     }
 
@@ -242,7 +242,7 @@ final class ImmunizationRemindersController extends Controller
             )),
             // How many children are still outstanding, so the subtab can show it
             // beside the list without a second call.
-            'outstanding' => self::outstanding($agencyId, $cfg)['count'],
+            'outstanding' => self::forCaller($request, $agencyId, self::outstanding($agencyId, $cfg))['count'],
         ]);
     }
 
@@ -257,6 +257,16 @@ final class ImmunizationRemindersController extends Controller
      *
      * @return array{count:int, children:array<int,array<string,mixed>>}
      */
+    /** The outstanding list cut to the centres this caller covers: a centre director sees their own centres only
+        (roles sweep 2026-11-04). Agency-wide callers, and the nightly job, get the whole list. */
+    private static function forCaller(Request $request, int $agencyId, array $o): array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope === null) return $o;
+        $kids = array_values(array_filter($o['children'], fn ($c) => in_array((int) $c['centre_id'], $scope, true)));
+        return ['count' => count($kids), 'children' => $kids] + $o;
+    }
+
     public static function outstanding(int $agencyId, array $cfg): array
     {
         $centreIds = collect(\App\Support\Live::centreIds($agencyId));

@@ -77,13 +77,18 @@
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: 'announcement' }),
-      }).catch(() => {}).finally(updateAnnouncementBadge);
+      }).catch(() => {}).finally(() => { if (window.KT && window.KT.badges) window.KT.badges.refresh(); else updateAnnouncementBadge(); });
     }
   }
 
   // ─── ANNOUNCEMENT UNREAD BADGE ──────────────────────────────────
   async function updateAnnouncementBadge() {
     if (!token()) return;
+    if (window.KT && window.KT.badges) {   // one answer for every badge (kt-badges.js, 2026-10-30)
+      const b = await window.KT.badges.get();
+      if (b) setBadge('announcements', b.announcements || 0);
+      return;
+    }
     try {
       const r = await fetch(apiBase() + '/notifications/unread-count?type=announcement', {
         headers: { 'Authorization': 'Bearer ' + token() }
@@ -94,21 +99,13 @@
     } catch (e) {}
   }
 
+  /* No pill of its own any more (2026-11-06): it landed after the label on the News home tile, unlike every other
+     count. The menu's badge key and the tile badge are painted by kt-badges.js (KT.paintCounts); this only clears an
+     old pill and asks for a repaint. */
   function setBadge(route, count) {
-    document.querySelectorAll('a[data-route="' + route + '"], a[href="#' + route + '"]').forEach(a => {
-      let badge = a.querySelector('.kt-unread-badge');
-      if (count > 0) {
-        if (!badge) {
-          badge = document.createElement('span');
-          badge.className = 'kt-unread-badge';
-          badge.style.cssText = 'background:#DC2626;color:white;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;min-width:18px;text-align:center;';
-          a.appendChild(badge);
-        }
-        badge.textContent = count > 99 ? '99+' : count;
-      } else if (badge) {
-        badge.remove();
-      }
-    });
+    document.querySelectorAll('a[data-route="' + route + '"] .kt-unread-badge, a[href="#' + route + '"] .kt-unread-badge').forEach(b => b.remove());
+    if (window.KT && window.KT.paintCounts) { window.KT.paintCounts(); }
+    else if (window.KT && window.KT.Shell && window.KT.Shell.setBadge && route === 'announcements') { window.KT.Shell.setBadge('announcement_unread', count); }
   }
 
   function init() {
@@ -123,6 +120,7 @@
     window.addEventListener('hashchange', route);
     // Poll every 30 sec
     setInterval(updateAnnouncementBadge, 30000);
+    window.addEventListener('kt:badges', updateAnnouncementBadge);   // real time
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

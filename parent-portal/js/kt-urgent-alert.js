@@ -32,7 +32,32 @@
      for any message). Non-message alerts (headcount, absences…) are unchanged. */
   var RING_MS = 120000;
   var CHIME_EVERY_MS = 2600;    // keep chiming until acknowledged
-  var VIBE = [700, 250, 700, 250, 900];   // long + strong, repeated
+  var VIBE = [700, 250, 700, 250, 900];   // long + strong, repeated - HIGH (red) alerts only
+  /* RED IS FOR HIGH ALERTS ONLY (2026-10-30, Anthony: "head count alert should be a yellow screen vs the red which
+     should only be used for high alerts"). Every takeover has a severity:
+       high    red   - emergency messages, Safe Arrival "not here", out of ratio, serious incidents
+       warning amber - headcounts due, still signed in, reminders, walk check-ins, incidents to review
+       info    teal  - messages and everything else
+     The server stamps it (App\Support\AlertSeverity -> data.severity); SEV_OF is the same rules for older rows. */
+  var VIBE_SEV = { high: VIBE, warning: [450, 200, 450], info: [250, 120, 250] };
+  var WARN_TYPES = ['headcount_due', 'clock_reminder', 'checkin_reminder', 'children_still_in', 'late_pickup', 'walk_quiet',
+    'walk_auto_closed', 'countersign_reminder', 'records_reminder', 'immunization_reminder', 'time_off_reminder',
+    'bio_reminder', 'compliance', 'pfcc_copay_unpaid', 'incident', 'medication_due'];
+  function severityOf(n) {
+    var d = {}; try { d = (n && n.data) || {}; if (typeof d === 'string') d = JSON.parse(d) || {}; } catch (e) { d = {}; }
+    if (d.severity === 'high' || d.severity === 'warning' || d.severity === 'info') return d.severity;
+    if (d.emergency === 1 || d.emergency === '1' || d.emergency === true) return 'high';
+    var type = String((n && n.type) || ''), t = String((n && n.title) || '').toLowerCase();
+    if (type === 'safe_arrival') {
+      if (t.indexOf('not here') > -1 || t.indexOf('\ud83d\udea8') > -1 || t.indexOf('unaccounted') > -1) return 'high';
+      if (t.indexOf('still signed in') > -1 || (t.indexOf('has ') > -1 && t.indexOf('arrived?') > -1)) return 'warning';
+      return 'info';
+    }
+    if (type === 'ratio_breach') return (t.indexOf('back in ratio') > -1 || t.indexOf('\u2713') > -1) ? 'info' : 'high';
+    if (type === 'incident') return /serious|major|critical|severe/.test(String(d.severity || d.incident_severity || '') + ' ' + t) ? 'high' : 'warning';
+    if (/^(walk_missing|child_missing|allergy_emergency|medical_emergency)$/.test(type)) return 'high';
+    return WARN_TYPES.indexOf(type) > -1 ? 'warning' : 'info';
+  }
 
   var KT = window.KT || (window.KT = {});
   var active = null;            // the open overlay, if any
@@ -117,7 +142,16 @@
   ['pointerdown', 'keydown', 'touchstart'].forEach(function (e) {
     window.addEventListener(e, function () { canSound = true; }, { once: true, capture: true });
   });
-  function chime() {
+  /* The person's own tone for this kind of alert (KT.sounds, 2026-10-21), at their
+     volume, in one tab only; the synthesised chime below is only the fallback. `first`
+     skips a ring that would land on top of the tone kt-sounds just played for the same
+     arrival. */
+  function chime(cat, first) {
+    if (KT.sounds) {
+      if (first && KT.sounds.recentlyPlayed(2000)) return;
+      KT.sounds.play(cat || 'chat', { force: true });
+      return;
+    }
     if (!canSound) return;
     try {
       audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -134,7 +168,8 @@
       });
     } catch (e) {}
   }
-  function buzz() { try { if (navigator.vibrate) navigator.vibrate(VIBE); } catch (e) {} }
+  var buzzSev = 'high';
+  function buzz() { try { if (navigator.vibrate) navigator.vibrate(VIBE_SEV[buzzSev] || VIBE); } catch (e) {} }
 
   function stopAll() {
     timers.forEach(function (t) { clearInterval(t); clearTimeout(t); }); timers = [];
@@ -142,7 +177,7 @@
     // cleared; answering it here answers it there too (APK 54+).
     try { var KB = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.KtBio; if (KB && KB.cancelUrgent) KB.cancelUrgent(); } catch (e) {}
     try { if (navigator.vibrate) navigator.vibrate(0); } catch (e) {}
-    document.body.classList.remove('kt-urgent-flash');
+    document.body.classList.remove('kt-urgent-flash', 'kt-urgent-flash-warn', 'kt-urgent-flash-info');
   }
 
   function style() {
@@ -152,10 +187,16 @@
     s.textContent = [
       '@keyframes kt-urgent-pulse{0%,100%{background:rgba(220,38,38,.96);}50%{background:rgba(248,113,113,.96);}}',
       '@keyframes kt-urgent-msg-pulse{0%,100%{background:rgba(21,159,180,.97);}50%{background:rgba(56,189,208,.97);}}',
+      '@keyframes kt-urgent-warn-pulse{0%,100%{background:rgba(245,158,11,.97);}50%{background:rgba(252,211,77,.97);}}',
       '@keyframes kt-urgent-shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}',
       '#kt-urgent{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;',
       '  text-align:center;padding:30px 26px;color:#fff;font-family:system-ui,-apple-system,sans-serif;animation:kt-urgent-pulse 1s ease-in-out infinite;}',
       '#kt-urgent.msg{animation:kt-urgent-msg-pulse 1s ease-in-out infinite;}',
+      '#kt-urgent.warn{animation:kt-urgent-warn-pulse 1.4s ease-in-out infinite;color:#1F1300;}',
+      '#kt-urgent.warn .sev{display:inline-block;background:#1F1300;color:#FCD34D;font-weight:900;letter-spacing:.12em;font-size:12px;border-radius:999px;padding:4px 12px;margin-bottom:12px;}',
+      '#kt-urgent.warn .open{background:#1F1300;color:#FFFFFF;}',
+      '#kt-urgent.warn .dismiss{color:#1F1300;border-color:rgba(31,19,0,.55);}',
+      '#kt-urgent.warn p,#kt-urgent.warn .from{opacity:1;}',
       '#kt-urgent.em-missed{animation:none;background:rgba(127,29,29,.97);}',
       '#kt-urgent .em-flag{display:inline-block;background:#fff;color:#B91C1C;font-weight:900;letter-spacing:.12em;font-size:12px;border-radius:999px;padding:4px 12px;margin-bottom:12px;}',
       '#kt-urgent .ic{font-size:66px;line-height:1;margin-bottom:14px;animation:kt-urgent-shake .6s ease-in-out 3;}',
@@ -168,13 +209,19 @@
       // The whole screen "lights up" even behind the overlay (visible in the
       // status-bar area / on a re-render).
       'body.kt-urgent-flash{animation:kt-urgent-pulse 1s ease-in-out infinite;}',
+      'body.kt-urgent-flash-warn{animation:kt-urgent-warn-pulse 1.4s ease-in-out infinite;}',
+      'body.kt-urgent-flash-info{animation:kt-urgent-msg-pulse 1s ease-in-out infinite;}',
     ].join('\n');
     document.head.appendChild(s);
   }
 
-  // kind: 'message' | 'alert' | 'emergency'
-  function raise(kind, title, body, hash) {
+  // kind: 'message' | 'alert' | 'emergency'; cat = the notification category (tone)
+  function raise(kind, title, body, hash, cat, sev) {
     var em = kind === 'emergency';
+    // Emergencies are always red; a message is info unless told otherwise; an alert is red only when it is high.
+    sev = em ? 'high' : (sev || (kind === 'message' ? 'info' : 'warning'));
+    buzzSev = sev;
+    var ringCat = em ? 'emergency' : (kind === 'message' ? 'chat' : (cat || 'general'));
     if (active) {
       // An emergency outranks whatever is showing; anything else waits its turn.
       if (!em || active.__em) return;
@@ -183,12 +230,14 @@
     style();
     var ov = document.createElement('div');
     ov.id = 'kt-urgent';
-    if (kind === 'message') ov.className = 'msg';
+    if (sev === 'warning') ov.className = 'warn';
+    else if (sev === 'info') ov.className = 'msg';
+    ov.setAttribute('data-severity', sev);
     ov.__em = em;
     ov.innerHTML =
-      (em ? '<div class="em-flag">EMERGENCY</div>' : '')
-      + '<div class="ic">' + (kind === 'message' ? '💬' : '🚨') + '</div>'
-      + '<h2 id="kt-urgent-h">' + (em ? 'Emergency message' : (kind === 'message' ? 'New message' : 'New alert')) + '</h2>'
+      (em ? '<div class="em-flag">EMERGENCY</div>' : (sev === 'warning' ? '<div class="sev">REMINDER</div>' : ''))
+      + '<div class="ic">' + (kind === 'message' ? '💬' : (sev === 'high' ? '🚨' : (sev === 'warning' ? '⚠️' : '🔔'))) + '</div>'
+      + '<h2 id="kt-urgent-h">' + (em ? 'Emergency message' : (kind === 'message' ? 'New message' : (sev === 'high' ? 'Urgent alert' : (sev === 'warning' ? 'Needs your attention' : 'New alert')))) + '</h2>'
       + '<p id="kt-urgent-body"></p>'
       + '<div class="from" id="kt-urgent-from"></div>'
       + '<button type="button" class="open">Open</button>'
@@ -198,17 +247,17 @@
     document.body.appendChild(ov);
     ov.querySelector('#kt-urgent-body').textContent = title || (kind === 'message' ? 'You have a new message.' : 'You have a new alert.');
     ov.querySelector('#kt-urgent-from').textContent = body || '';
-    document.body.classList.add('kt-urgent-flash');
+    document.body.classList.add(sev === 'high' ? 'kt-urgent-flash' : (sev === 'warning' ? 'kt-urgent-flash-warn' : 'kt-urgent-flash-info'));
     active = ov;
 
-    chime(); buzz();
+    chime(ringCat, true); buzz();
     /* Repeating is for somebody who cannot look at the screen. For everyone else one tone
        is the whole notification — a tone every 2.6s until you find the Dismiss button is
        not urgency, it is nagging, and it is what changed for admins today.
        An EMERGENCY repeats for everybody, and stops after RING_MS: the card stays, silent,
        as a missed emergency until it is opened or dismissed. */
     if (em || isFloorStaff()) {
-      timers.push(setInterval(chime, CHIME_EVERY_MS));
+      timers.push(setInterval(function () { chime(ringCat); }, CHIME_EVERY_MS));
       timers.push(setInterval(buzz, CHIME_EVERY_MS));
     }
     if (em) {
@@ -264,12 +313,23 @@
   function isEmergencyRow(n) { var d = rowData(n); return d.emergency === 1 || d.emergency === '1' || d.emergency === true; }
   function isMessageRow(n) { return n && (n.type === 'chat' || n.type === 'team_message' || n.type === 'message'); }
 
+  /* No polling of its own when KT.badges is there (2026-10-30, speed follow-up): the message count is the badges
+     answer, and the list arrives as kt:notification-list - fetched once at start and again only when a new
+     notification exists, which is the only time this could raise anything. */
+  var lastList = null;
+  window.addEventListener('kt:notification-list', function (e) { lastList = e && e.detail; poll(); });
+  window.addEventListener('kt:badges', function () { poll(); });
   function poll() {
     if (!tok() || !enabled()) return;
     if (document.hidden) return;              // backgrounded → the OS notification owns it
     var staff = isStaffView();
+    var B = KT.badges;
+    if (B && lastList === null) return;       // the baseline waits for the first list
 
-    Promise.all([staff ? get('/chats/unread-count') : Promise.resolve(null), get('/notifications')]).then(function (res) {
+    Promise.all([
+      staff ? (B ? B.get().then(function (b) { return b ? { unread: (B.msgs ? B.msgs(b) : b.chats) } : null; }) : get('/chats/unread-count')) : Promise.resolve(null),
+      B ? Promise.resolve(lastList) : get('/notifications')
+    ]).then(function (res) {
       var msg = (res[0] && (res[0].unread | 0)) || 0;
       var rows = res[1] ? (res[1].data || res[1].notifications || (Array.isArray(res[1]) ? res[1] : [])) : [];
       if (!Array.isArray(rows)) rows = [];
@@ -307,15 +367,21 @@
 
       if (msg > lastSeen.msg && sec !== 'chat') {
         // A normal message is a normal notification now: one chime, the badge and the
-        // bell — no takeover (only an EMERGENCY seizes the screen, above).
-        chime();
+        // bell — no takeover (only an EMERGENCY seizes the screen, above). kt-sounds plays
+        // it (every role, the chosen tone) from the same unread-count response.
+        if (!KT.sounds) chime('chat');
       } else if (notif > lastSeen.notif && sec !== 'notifications' && sec !== 'announcements' && !isMessageRow(top)) {
         /* A general notification is portal ACTIVITY — a family added, a form signed, an
            invoice issued. Worth a badge; not worth seizing the screen. Only floor staff,
            who cannot watch a badge, get a takeover for one. Everybody else finds it in the
            bell, exactly as before today. */
-        if (isFloorStaff()) {
-          raise('alert', top.title || 'You have a new alert.', top.body || '', topLink || 'notifications');
+        /* A SAFE ARRIVAL "not here" takes a director's or admin's screen too (2026-11-10, Anthony: "Popup for
+           admins too"): a child unaccounted for is not portal activity. Once - one tone, no repeating ring (raise()
+           repeats only for floor staff); warnings and all-clears stay in the bell. */
+        var saHigh = top.type === 'safe_arrival' && severityOf(top) === 'high';
+        if (isFloorStaff() || saHigh) {
+          raise('alert', top.title || 'You have a new alert.', top.body || '', topLink || 'notifications',
+            KT.sounds ? KT.sounds.categoryOf(top) : 'general', severityOf(top));
         }
       }
       lastSeen = { msg: msg, notif: notif };
@@ -323,10 +389,21 @@
   }
 
   KT.urgentAlert = {
-    test: function (kind) { raise(kind || 'message', 'Test alert', 'This is what a new message looks like.', kind === 'alert' ? 'notifications' : 'chat'); },
+    test: function (kind) {
+      if (kind === 'high') { raise('alert', 'Test urgent alert', 'Red is only for high alerts: a child not here, out of ratio, an emergency.', 'notifications', 'safety', 'high'); return; }
+      if (kind === 'warning') { raise('alert', 'Test warning alert', 'Amber is for things to do soon: a headcount due, a reminder.', 'notifications', 'headcount', 'warning'); return; }
+      raise(kind || 'message', 'Test alert', 'This is what a new message looks like.', kind === 'alert' ? 'notifications' : 'chat');
+    },
+    severityOf: severityOf,
     // Show a real takeover on demand — used when the app is cold-launched by an
     // urgent push's full-screen intent (the message wasn't "received" in-app).
     show: function (title, body, link) {
+      // A ringing call (PhoneMenuController::ringMobiles): no alert screen - pick the call up.
+      var call = /[?&]answer=([A-Za-z0-9]{10,64})/.exec(String(link || ''));
+      if (call) { if (KT.portalPhone && KT.portalPhone.answerFromPush) KT.portalPhone.answerFromPush(call[1]); else location.hash = 'phone?answer=' + call[1]; return; }
+      // 📞 A call from a chat (kt-chat-call.js): its ringing card, not an alert screen.
+      var cc = /[?&]call=(\d+)/.exec(String(link || ''));
+      if (cc && KT.chatCall) { KT.chatCall.ring(cc[1]); return; }
       // Cold launch from the phone's full-screen notification: an emergency says so in its title.
       if (/EMERGENCY/i.test(String(title || ''))) { raiseEmergency('', title, body, link); return; }
       raise('message', title || 'New message', body || '', toHash(link) || 'chat');
@@ -336,6 +413,12 @@
        waited up to fifteen seconds and then announced itself as "you have N unread"
        rather than as the message that just landed. */
     fromPush: function (title, body, link, data) {
+      // App open: the portal phone is ringing for this call already - no takeover.
+      if (data && (data.kt_call === '1' || data.kt_call === true)) {
+        var cc = /[?&]call=(\d+)/.exec(String(link || ''));
+        if (cc && KT.chatCall) KT.chatCall.ring(cc[1]);   // 📞 a chat call rings at once, not at the next bell look
+        return true;
+      }
       if (!enabled()) { return false; }
       if (data && (data.kt_emergency === '1' || data.kt_emergency === true)) {
         return raiseEmergency('p' + (link || '') + '|' + (title || ''), title, body, link);

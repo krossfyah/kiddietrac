@@ -140,7 +140,24 @@ final class VoiceController extends Controller
         }
         BroadcastAudience::assertOwned($agencyId, $data);
 
+        /* A director rings only their own centres (2026-11-05 leak sweep): the audience was checked
+           against the agency only, so a director could call every family in the agency, or name
+           another centre, room or family. A named target outside their centres is refused; an
+           agency or role audience is narrowed to the people at their centres. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope !== null) {
+            $targetCentre = ! empty($data['family_id']) ? DB::table('families')->where('id', $data['family_id'])->value('centre_id')
+                : (! empty($data['room_id']) ? DB::table('rooms')->where('id', $data['room_id'])->value('centre_id')
+                : ($data['centre_id'] ?? null));
+            if ($data['audience'] !== 'agency' && $data['audience'] !== 'role' && ! \App\Support\CentreScope::canWrite($scope, $targetCentre ? (int) $targetCentre : null)) {
+                return response()->json(['message' => 'You can only call people at your own centres.'], 403);
+            }
+        }
+
         $recipients = BroadcastAudience::resolve($agencyId, $data, 'voice', $category);
+        if (($allowed = $this->scopedPeople($request, $agencyId)) !== null) {
+            $recipients = $recipients->whereIn('id', $allowed)->values();
+        }
 
         $placed = 0;
         $skipped = 0;
@@ -473,6 +490,11 @@ final class VoiceController extends Controller
         $security = $category === 'password_reset';
         // What the call is about (a Safe Arrival check), written on every row, placed or not.
         $refCols = $ref ? ['ref_type' => (string) $ref['type'], 'ref_id' => (int) $ref['id']] : [];
+        /* 0. THE WEBSITE DEMO PHONE (2026-10-30, App\Support\WebDemoPhone): a fictional person of a PUBLIC demo agency
+              is never rung by a carrier - the call is logged and rings on the website's demo phone instead. */
+        if (! $security && \App\Support\WebDemoPhone::applies($agencyId, $userId)) {
+            return \App\Support\WebDemoPhone::ring($agencyId, $userId, $phone, $script, $category, $startedBy, $refCols);
+        }
         // 1. Do-not-contact: never ring a parent at a live agency while we are testing.
         if (! $security && \App\Support\Suppression::isUser($userId)) {
             \App\Support\Suppression::note('voice', $userId, $category);
@@ -513,7 +535,9 @@ final class VoiceController extends Controller
             if (! $selfTest && ! \App\Support\SafeArrival::settings($agencyId)['call_parents']) {
                 return $write('skipped', 'Safe Arrival calls are switched off for this agency');
             }
-        } elseif ($category !== 'test' && ! $security && ! in_array($category, self::allowedCategories($agencyId), true)) {
+        } elseif ($category !== 'test' && $category !== 'task' && ! $security && ! in_array($category, self::allowedCategories($agencyId), true)) {
+            // 'task' (2026-10-27): a task reminder an admin chose to send by voice for that one task -
+            // not a broadcast reason. The person's own opt-out, do-not-ring and consent below still apply.
             return $write('skipped', 'calls for this reason (' . $category . ') are switched off for this agency');
         }
         // 2c. The reasons this person wants calls for (My profile → Texts and phone calls).

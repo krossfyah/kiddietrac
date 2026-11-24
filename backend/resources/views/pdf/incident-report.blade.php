@@ -41,7 +41,7 @@
 
   .prose { font-size: 11px; color: #1E293B; white-space: pre-wrap; margin: 2px 0 0; }
 
-  .flag { background: #FBEAE8; border-left: 3px solid #B3261E; color: #7A1710;
+  .flag { background: #FBEAE8; --kt-edge:#B3261E; color: #7A1710;
           padding: 7px 10px; font-size: 10.5px; margin: 8px 0; font-weight: bold; }
 
   table.notes { width: 100%; border-collapse: collapse; margin-top: 4px; }
@@ -245,7 +245,7 @@
 </table>
 
 <div style="font-size:9.5px; color:#94A3B8; margin-top:7px; line-height:1.45;">
-  Signatures above were captured electronically in KiddieTrac and are stored with this record.
+  Signatures above were captured electronically in {{ \App\Support\Brand::nameFor($agency ?? null) }} and are stored with this record.
 </div>
 
 {{-- Room for a wet signature: this gets printed and put in a file. --}}

@@ -102,18 +102,49 @@
     });
   }
 
+  function injectedSections() {
+    var out = [];
+    try {
+      document.querySelectorAll('#navLinks [data-platform-section]').forEach(function (sec) {
+        var lab = sec.querySelector('.sidebar-section-label');
+        var label = lab ? lab.textContent.replace(/^[^A-Za-z]+/, '').trim() : 'Platform';
+        var items = [];
+        sec.querySelectorAll('a.nav-link[data-hash]').forEach(function (a) {
+          var ic = a.querySelector('.nav-icon'), nl = a.querySelector('.nav-label');
+          items.push({ hash: a.getAttribute('data-hash'), label: nl ? nl.textContent.trim() : a.textContent.trim(), icon: ic ? ic.textContent.trim() : '' });
+        });
+        if (items.length) out.push({ label: label, items: items });
+      });
+    } catch (e) {}
+    return out;
+  }
+
   function sectionsFor(role) {
     try {
       var secs = (Shell.navItemsForRole && Shell.navItemsForRole(role)) || [];
       secs = secs.filter(function (s) { return s && s.items && s.items.length; });
       if (!isSuperAdmin()) { return secs; }
+      /* THE SIDEBAR'S OWN PLATFORM + SALES BLOCKS (2026-10-26). Read from the sidebar itself, so whatever
+         agency-switcher.js puts there (now or later) is on the phone too - no second list to keep in step. */
+      var injected = injectedSections();
+      if (injected.length) {
+        var have = {};
+        injected.forEach(function (sec) { sec.items.forEach(function (it) { have[it.hash] = 1; }); });
+        secs = secs.map(function (sec) {
+          return { label: sec.label, items: sec.items.filter(function (it) { return !have[it.hash]; }) };
+        }).filter(function (sec) { return sec.items.length; });
+        secs = injected.concat(secs);
+      }
       // Stable partition: platform sections first, everything else in its original order.
       var plat = [], rest = [];
       secs.forEach(function (sec) {
         var label = String(sec.label || '').toLowerCase();
         (PLATFORM_SECTIONS.indexOf(label) !== -1 ? plat : rest).push(sec);
       });
-      return plat.concat(rest);
+      // The sidebar's Platform and Sales blocks lead, as they do on the desktop sidebar.
+      var lead = injected.map(function (x) { return x.label; });
+      var first = plat.concat(rest).filter(function (x) { return lead.indexOf(x.label) !== -1; });
+      return first.concat(plat.concat(rest).filter(function (x) { return lead.indexOf(x.label) === -1; }));
     } catch (e) { return []; }
   }
 
@@ -125,17 +156,41 @@
     try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(map)); } catch (e) {}
   }
 
+  // Walk Watch's own mark on its tile (2026-10-26), as in the sidebar.
+  var WW_HASH = { 'trip-gps': 1, 'walk': 1, 'walks': 1 };
+  var WW_ICON = '<img src="/img/walk-watch.svg" alt="" style="width:1em;height:1em;display:block;border-radius:24%;">';
   function tile(it) {
     var label = it.label || it.hash;
     return '<a class="kt-tile" href="#' + esc(it.hash) + '"'
       + ' data-find="' + esc((label + ' ' + (it.hash || '')).toLowerCase()) + '"'
       + ' aria-label="' + esc(label) + '">'
-      + '<span class="kt-tile-icon" aria-hidden="true">' + (it.icon || '▫️') + '</span>'
+      + '<span class="kt-tile-icon" aria-hidden="true">' + (WW_HASH[it.hash] ? WW_ICON : it.hash === 'safe-arrival' ? '<img src="/img/safe-arrival.svg" alt="" style="width:1em;height:1em;display:block;">' : (it.icon || '▫️')) + '</span>'
       + '<span class="kt-tile-label">' + esc(label) + '</span>'
       + '</a>';
   }
 
+  /* The block can also arrive much later (a retried /auth/agencies after a network blip, 2026-10-26): redraw the
+     launcher when it lands, if the launcher is what is on screen. */
+  window.addEventListener('kt:platform-nav', function () {
+    setTimeout(function () {
+      try { if (document.querySelector('#appMain #kt-ah-sections') && Shell.renderScreen) Shell.renderScreen(); } catch (e) {}
+    }, 0);
+  });
+
   function renderAdminHome(main, ctx) {
+    /* The Platform/Sales blocks arrive in the sidebar once /auth/agencies answers - after a cold start that can be
+       just after this screen draws. Look again for a few seconds and redraw once they are there. */
+    if (isSuperAdmin() && !injectedSections().length && !renderAdminHome.waiting) {
+      renderAdminHome.waiting = true;
+      var tries = 0, iv = setInterval(function () {
+        tries++;
+        if (injectedSections().length || tries > 20) {
+          clearInterval(iv); renderAdminHome.waiting = false;
+          // Only if the launcher is still the screen on show (#appMain is replaced on every route change).
+          if (injectedSections().length && main.isConnected && main.querySelector('#kt-ah-sections')) { try { renderAdminHome(main, ctx); } catch (e) {} }
+        }
+      }, 300);
+    }
     var role = (ctx && ctx.role) || 'agency_admin';
     var secs = sectionsFor(role);
 
@@ -199,6 +254,9 @@
       +     'aria-label="Search every section" class="kt-ah-search">'
       + '</div>'
       + '<div id="kt-ah-results" class="kt-ah-body" hidden></div>'
+      /* Records (people, invoices, payments…) from /admin/search, under or above the
+         screens depending on which matched better. (2026-11-02) */
+      + '<div id="kt-gsr" class="kt-gsr" hidden></div>'
       + '<div id="kt-ah-noresult" class="kt-ah-noresult" hidden>Nothing matches that.</div>'
       /* Quick access folds like every other section (open until you close it). It sits
          outside #kt-ah-sections so search can hide it on its own. */
@@ -241,6 +299,14 @@
         + '.kt-admin-home section.kt-ah-sec .kt-ah-body{margin:10px 0 12px;}'
         + '.kt-admin-home section.kt-ah-sec .kt-ah-count{background:rgba(255,255,255,.75);}'
         + '.kt-qa-tools{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin:-4px 0 10px;}'
+        /* Record results from the global search (2026-11-02): one compact card per group. */
+        + '.kt-admin-home .kt-gsr{margin:0 0 12px;}'
+        + '.kt-admin-home .kt-gsr-grp{background:#fff;border:1px solid #E2E8F0;border-radius:14px;margin:0 0 10px;overflow:hidden;box-shadow:0 6px 18px -14px rgba(31,96,128,.35);}'
+        + '.kt-admin-home .kt-gsr-head{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#64748B;padding:9px 12px 5px;}'
+        + '.kt-admin-home a.kt-gsr-row{display:flex;flex-direction:column;justify-content:center;gap:2px;min-height:32px;padding:7px 12px;border-top:1px solid #F1F5F9;text-decoration:none;color:#0F172A;}'
+        + '.kt-admin-home a.kt-gsr-row:active,.kt-admin-home a.kt-gsr-row:hover{background:#F1F7FB;}'
+        + '.kt-admin-home .kt-gsr-l{font-weight:700;font-size:14px;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+        + '.kt-admin-home .kt-gsr-s{font-size:12px;line-height:1.3;color:#64748B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
         /* PHONE SIZES (2026-10-16). kt-mobile-app.css gives every `#appMain button` a
            42px min-height under 768px, which drew the 26px ✕ as a 26×42 red oval and the
            ◀ ▶ as tall slabs ("the x to remove looks stretched"). These controls have their
@@ -421,6 +487,48 @@
     var nores = main.querySelector('#kt-ah-noresult');
     var quickWrap = main.querySelector('.kt-ah-quick');
     var results = main.querySelector('#kt-ah-results');
+    var gsr = main.querySelector('#kt-gsr');
+
+    /* RECORDS TOO, NOT ONLY SCREENS (2026-11-02). Anthony: "make the search on the portal pull
+       up invoices, receipts (global search)". On a phone this box IS the portal's search — the
+       sidebar widget and ⌘K do not exist there — and it only ever found screens. It now also
+       asks /admin/search, the same answer the desktop boxes give (people, invoices, payments,
+       ranked, scoped by the server), and draws the groups in the server's order. */
+    var gsrTimer = null, gsrSeq = 0, navHitCount = 0;
+    function clearRecords() { clearTimeout(gsrTimer); gsrSeq++; if (gsr) { gsr.hidden = true; gsr.innerHTML = ''; } }
+    function askRecords(q) {
+      clearTimeout(gsrTimer);
+      if (!gsr || !(KT.Api && KT.Api.get) || (q.length < 2 && !/^\d$/.test(q))) { clearRecords(); return; }
+      gsrTimer = setTimeout(function () {
+        var my = ++gsrSeq;
+        KT.Api.get('/admin/search?q=' + encodeURIComponent(q)).then(function (d) {
+          if (my !== gsrSeq || (input.value || '').trim() !== q) { return; }
+          var groups = KT.searchGroups ? KT.searchGroups(d) : [];
+          if (!groups.length) {
+            gsr.hidden = true; gsr.innerHTML = '';
+            nores.hidden = navHitCount !== 0;
+            return;
+          }
+          gsr.innerHTML = groups.map(function (g) {
+            return '<div class="kt-gsr-grp"><div class="kt-gsr-head">' + esc(g.icon + ' ' + g.label) + '</div>'
+              + g.items.map(function (x) {
+                return '<a class="kt-gsr-row" href="' + esc(x.hash || '#') + '">'
+                  + '<span class="kt-gsr-l">' + esc(x.label) + '</span>'
+                  + (x.sublabel ? '<span class="kt-gsr-s">' + esc(x.sublabel) + '</span>' : '')
+                  + '</a>';
+              }).join('') + '</div>';
+          }).join('');
+          // What was typed leads: an exact record above the screen tiles, otherwise below them.
+          if (groups[0].best <= 1) { results.parentNode.insertBefore(gsr, results); }
+          else { results.parentNode.insertBefore(gsr, results.nextSibling); }
+          gsr.hidden = false;
+          nores.hidden = true;
+        }).catch(function () {
+          if (my !== gsrSeq) { return; }
+          gsr.hidden = true; gsr.innerHTML = '';   // the screens still answer; never a raw error
+        });
+      }, 280);
+    }
     var sectionsWrap = main.querySelector('#kt-ah-sections');
 
     /* SEARCHING IS NOT FILTERING.
@@ -458,9 +566,11 @@
 
       if (!searching) {
         nores.hidden = true;
+        clearRecords();
         restoreSections();
         return;
       }
+      askRecords(q);
 
       var hits = (window.KT && KT.navSearch) ? KT.navSearch(q, { limit: 20 }) : null;
 
@@ -492,7 +602,8 @@
         return tile({ label: h.label, hash: String(h.hash || '').replace(/^#/, ''), icon: h.icon });
       }).join('');
       results.hidden = hits.length === 0;
-      nores.hidden = hits.length !== 0;
+      navHitCount = hits.length;
+      nores.hidden = hits.length !== 0 || (gsr && !gsr.hidden);
     });
   }
 

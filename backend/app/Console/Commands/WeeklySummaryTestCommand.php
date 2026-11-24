@@ -417,7 +417,7 @@ class WeeklySummaryTestCommand extends Command
             . '<div style="font-size:20px;font-weight:800;color:#0D1B2A;margin:0 0 2px;">' . htmlspecialchars($childName) . "'s week</div>"
             . '<div style="font-size:13px;color:#64748B;margin:0 0 16px;">' . htmlspecialchars($child->centre_name) . $room . '</div>'
             // AI note card
-            . '<div style="background:linear-gradient(135deg,#EAF3FB,#F3F0FF);border:1px solid rgba(31,96,128,.12);border-radius:14px;padding:16px 18px;margin-bottom:18px;">'
+            . '<div style="background-color:#EEF1FD;background-image:linear-gradient(135deg,#EAF3FB,#F3F0FF);border:1px solid rgba(31,96,128,.12);border-radius:14px;padding:16px 18px;margin-bottom:18px;">'
             . '<div style="font-size:11px;font-weight:800;letter-spacing:.8px;color:#0FA3B1;margin-bottom:8px;">✨ THIS WEEK IN WORDS</div>'
             . $aiHtml . '</div>'
             // Quick stats

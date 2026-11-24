@@ -101,6 +101,10 @@ final class FormsController extends Controller
             'centre_id' => ['nullable', 'integer'],
             'status' => ['nullable', 'in:draft,published'],
         ]);
+        // A centre of THIS agency, or none (2026-11-05 leak sweep): centre_id was stored unchecked.
+        if (! empty($data['centre_id']) && ! DB::table('centres')->where('id', $data['centre_id'])->where('agency_id', $agencyId)->exists()) {
+            return response()->json(['message' => 'That centre is not in your agency.'], 422);
+        }
 
         $id = DB::table('custom_forms')->insertGetId([
             'agency_id' => $agencyId,
@@ -191,7 +195,7 @@ final class FormsController extends Controller
         $fieldLabels = array_map(fn ($f) => $f['label'] ?? $f['id'] ?? '', $schema);
 
         $filename = preg_replace('/[^a-z0-9\-]+/i', '-', strtolower($form->title ?: 'form'));
-        $filename = trim($filename, '-') . '-responses-' . date('Y-m-d') . '.csv';
+        $filename = trim($filename, '-') . '-responses-' . \App\Support\AgencyTime::today() . '.csv';
 
         return new StreamedResponse(function () use ($rows, $fieldIds, $fieldLabels) {
             $out = fopen('php://output', 'w');
@@ -365,6 +369,24 @@ final class FormsController extends Controller
         $form = DB::table('custom_forms')->where('id', $id)->whereNull('deleted_at')->where('status', 'published')->first();
         if (!$form) return response()->json(['message' => 'Form not available'], 404);
 
+        /* ONLY THE FORM'S OWN PEOPLE (2026-11-05 leak sweep). Any signed-in account could post into any
+           agency's published form by id, and a payment field then booked a charge against the submitter's
+           first family - whichever agency that was in. Now: a parent of a family at the form's centre (or
+           any of its agency's centres), or for a staff form, staff of that agency. The charge goes on THAT
+           family. */
+        $formCentres = $form->centre_id ? [(int) $form->centre_id]
+            : DB::table('centres')->where('agency_id', $form->agency_id)->pluck('id')->map(fn ($v) => (int) $v)->all();
+        $familyId = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+            ->where('g.user_id', $request->user()->id)->whereNull('f.deleted_at')
+            ->whereIn('f.centre_id', $formCentres ?: [0])->value('f.id');
+        $isStaffHere = $form->audience === 'staff' && DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)->where('active', true)
+            ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
+            ->where(fn ($w) => $w->where('agency_id', $form->agency_id)->orWhereIn('centre_id', $formCentres ?: [0]))->exists();
+        if (! $familyId && ! $isStaffHere) {
+            return response()->json(['message' => 'Form not available'], 404);
+        }
+
         $schema = json_decode((string) $form->schema_json, true) ?: [];
         $data = $request->validate(['response' => ['required', 'array']]);
         $response = $data['response'];
@@ -389,7 +411,6 @@ final class FormsController extends Controller
 
         // v22p85: record any "payment" field charges against the family's account
         // (status pending = owed). Only fires when the respondent authorised it.
-        $familyId = DB::table('guardians')->where('user_id', $request->user()->id)->value('family_id');
         if ($familyId) {
             foreach ($schema as $field) {
                 if (($field['type'] ?? '') !== 'payment') continue;

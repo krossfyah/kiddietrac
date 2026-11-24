@@ -71,6 +71,7 @@ class SendPlatformInvoice extends Command
             . e($period) . '.</p>'
             . EmailTemplate::calloutBox(
                 '<strong>Invoice:</strong> ' . e((string) $inv->number) . '<br>'
+                . (($cusNo = \App\Support\SalesCustomers::numberForAgency($inv->agency_id ? (int) $inv->agency_id : null)) ? '<strong>Customer #:</strong> ' . e($cusNo) . '<br>' : '')
                 . '<strong>Period:</strong> ' . e($period) . '<br>'
                 . '<strong>Amount:</strong> ' . e($cur . ' ' . $money) . '<br>'
                 . '<strong>Due:</strong> ' . e((string) ($inv->due_at ?: 'on receipt')),

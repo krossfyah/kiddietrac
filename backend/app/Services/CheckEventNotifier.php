@@ -117,11 +117,11 @@ class CheckEventNotifier
 
             $isIn = $eventType === 'check_in';
             $verb = $isIn ? 'signed in' : 'signed out';
-            $how = $source === 'qr' ? ' · 📱 via QR code'
+            $how = $source === 'qr' ? ' · 📱 with One-Tap'
                  : ($source === 'kiosk' ? ' · 📱 at the kiosk' : '');
             $title = $isIn ? "✅ {$name} arrived" : "👋 {$name} left";
             if ($source === 'qr') {
-                $title .= ' (QR)';
+                $title .= ' (One-Tap)';
             }
             $line = "{$name} was {$verb} at " . $when->format('g:i A')
                 . ($by ? " by {$by}" : '')
@@ -226,10 +226,10 @@ class CheckEventNotifier
             $at = Carbon::now()->timezone($tz)->format('g:i A');
 
             $isIn = $eventType === 'check_in';
-            $how = $source === 'qr' ? "\u{1F4F1} QR " : ($source === 'kiosk' ? "\u{1F4F1} Kiosk " : '');
+            $how = $source === 'qr' ? "\u{1F4F1} One-Tap " : ($source === 'kiosk' ? "\u{1F4F1} Kiosk " : '');
             $title = $how . ($isIn ? 'check-in' : 'check-out') . " \u{2014} {$name}";
             $body = $name . ($isIn ? ' was signed in' : ' was signed out') . ' at ' . $at
-                . ($source === 'qr' ? ' by QR scan' : ($source === 'kiosk' ? ' at the kiosk' : ''))
+                . ($source === 'qr' ? ' with One-Tap' : ($source === 'kiosk' ? ' at the kiosk' : ''))
                 . ($by ? ' by ' . $by : '') . '.';
 
             $recipients = [];

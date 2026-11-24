@@ -15,12 +15,15 @@
 (function (window) {
   'use strict';
   if (window.__ktClockBar) return; window.__ktClockBar = true;
-  try { window.__KT_CLK_VER = 'clkfix'; } catch (e) {}   // load-time stamp: proves THIS (new) file executed, even if paint() hasn't run
+  try { window.__KT_CLK_VER = 'breaks1105'; } catch (e) {}   // load-time stamp: proves THIS (new) file executed, even if paint() hasn't run
 
   var KT = window.KT || (window.KT = {});
   var POLL_MS = 60000;          // re-check the punch state once a minute
   var LONG_SHIFT_HOURS = 9;     // past this, start nudging them to clock out
   var openPunch = null;         // the current open punch, if any
+  /* On lunch / a break (2026-11-05, App\Support\StaffBreaks): the shift row is closed but the
+     day is not over. {kind, label, paid, started_at} from /staff/punches/me, else null. */
+  var onBreak = null;
   /* Has a check ever actually SUCCEEDED? Until it has, we do not know whether this
      person is on the clock, and saying "You're not clocked in" is a claim we have not
      earned. Cassandra Schnarr reported being shown as clocked out while punch #334 was
@@ -97,9 +100,25 @@
     return { hours: ms / 3600000, text: (h ? h + 'h ' : '') + m + 'm' };
   }
 
+  /* THE LIVE STRIP, NEVER A PICTURE OF IT (2026-10-28, Sukhman could not clock in - the tap sent nothing).
+     The shell's screen covers (__ktNavCover, __ktSnapshot) are cloneNode copies of #appMain: this strip included,
+     same id, but no click listener. While the live strip was gone mid-render, getElementById found the COPY and
+     mount() moved that dead button onto the screen. Only a strip outside a cover counts, and whichever strip is
+     used is made sure to carry onTap. */
+  function livePill() {
+    var all = document.querySelectorAll('#kt-clockpill');
+    for (var i = 0; i < all.length; i++) {
+      if (!all[i].closest('[data-kt-refresh-snap], [data-kt-nav-cover]')) return all[i];
+    }
+    return null;
+  }
+  function armPill(el) {
+    if (el && !el.__ktClockTap) { el.__ktClockTap = true; el.addEventListener('click', onTap); }
+    return el;
+  }
   function pill() {
-    var el = document.getElementById('kt-clockpill');
-    if (el) return el;
+    var el = livePill();
+    if (el) return armPill(el);
     el = document.createElement('button');
     el.id = 'kt-clockpill';
     el.type = 'button';
@@ -110,16 +129,20 @@
     el.style.cssText = 'display:flex;align-items:center;gap:12px;width:100%;text-align:left;'
       + 'border:none;border-radius:16px;padding:13px 14px;margin:0 0 12px;'
       + 'cursor:pointer;font-family:inherit;box-sizing:border-box;box-shadow:0 8px 20px -10px rgba(15,23,42,.45);';
-    el.addEventListener('click', onTap);
-    return el;
+    return armPill(el);
   }
 
-  function punchPost() {
+  /* intent in|out (2026-11-05): the server answers a press that no longer matches the real
+     state with that state, instead of flipping it. `extra` carries confirm_children. */
+  function punchPost(intent, extra, path) {
     var t = tok();
-    return fetch(apiBase() + '/staff/punch', {
+    var body = { source: 'mobile' };
+    if (intent) body.intent = intent;
+    if (extra) for (var k in extra) body[k] = extra[k];
+    return fetch(apiBase() + (path || '/staff/punch'), {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: 'mobile' }),
+      body: JSON.stringify(body),
     }).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (d) {
         /* A REFUSAL IS NOT A SUCCESS. This used to return r.json() straight through, so a
@@ -144,7 +167,12 @@
   // status changes immediately instead of waiting on a round-trip + re-fetch — the
   // "takes forever to show clocked in" complaint. Clocking out still confirms first
   // (it ends the paid shift). If the POST fails we revert.
-  function onTap() {
+  function onTap(sure) {
+    if (!openPunch && onBreak) {
+      if (sure === true) { backFromBreak(); return; }
+      confirmBack(onBreak.kind).then(function (ok) { if (ok) backFromBreak(); });
+      return;
+    }
     if (!openPunch) {
       // CLOCK IN — instant. Flip to "Clocked in · 0m" now, reconcile after the POST.
       var nowUtc = new Date().toISOString().slice(0, 19).replace('T', ' ');   // server (UTC) format
@@ -152,9 +180,9 @@
       paint();
       if (KT.clockGlow) try { KT.clockGlow.update(); } catch (e) {}
       // Dimmed spinner on the strip while the punch confirms with the server.
-      var pill = document.getElementById('kt-clockpill');
+      var pill = livePill();
       var doneBusy = (KT.busy && pill) ? KT.busy(pill) : function () {};
-      punchPost()
+      punchPost('in')
         .then(function (d) {
           doneBusy();
           if (d && d.action === 'in') { if (d.id) openPunch.id = d.id; if (KT.toast) KT.toast('✅', 'Clocked in', 'Your shift has started — have a great day!', '#16A34A'); }
@@ -163,6 +191,7 @@
         })
         .catch(function (e) {
           doneBusy(); openPunch = null; paint();
+          if (e && e.kt_body && e.kt_body.reason === 'already_in') { refresh(); return; }   // it was right all along
           if (! KT.toast) return;
           /* A refusal is a normal answer, not a fault: say what the server said, in its
              own words, and in a calm colour. Only a genuine failure gets the red warning
@@ -179,77 +208,152 @@
       return;
     }
 
-    var go = function () {
-      var prev = openPunch;
-      openPunch = null; paint();   // instant "Clocked out"
-      if (KT.clockGlow) try { KT.clockGlow.update(); } catch (e) {}
-      // Same dimmed spinner as clock-in while the punch confirms with the server.
-      var pill = document.getElementById('kt-clockpill');
-      var doneBusy = (KT.busy && pill) ? KT.busy(pill) : function () {};
-      punchPost()
-        .then(function (d) { doneBusy(); refresh(); if (KT.toast) KT.toast('👋', 'Clocked out', 'Your shift has been closed. Have a good evening.', '#0E7C90'); })
-        .catch(function (e) {
-          doneBusy(); openPunch = prev; paint();
-          if (! KT.toast) return;
-          /* A CHILD LEFT SIGNED IN IS NOT AN "ℹ️".
-
-             Every refusal used to share one calm blue toast, and the detail the server
-             sends — each child, their room, how long they have been marked present —
-             never reached the screen. "Children are still signed in" to somebody who
-             believes they signed them all out is not something they can act on; a list
-             of names is. */
-          var body = (e && e.kt_body) || {};
-          if (body.reason === 'children_still_signed_in') {
-            var kids = body.children || [];
-            var lines = kids.map(function (c) { return '• ' + c.label; }).join('\n');
-            KT.toast('🛑', 'You cannot clock out yet',
-              e.message + (lines ? '\n\n' + lines : '')
-                + (body.what_to_do ? '\n\n' + body.what_to_do : ''),
-              '#B91C1C');
-            return;
-          }
-          if (e && e.kt_refusal) { KT.toast('ℹ️', 'Still clocked in', e.message, '#0E7C90'); }
-          else { KT.toast('⚠️', 'Could not clock out', 'Please try again.', '#B91C1C'); }
-        });
-    };
-    var normalConfirm = function () {
-      var e = elapsed(openPunch.punched_in_at);
-      ktConfirmThen({
-        title: 'Clock out now?',
-        message: "You've been clocked in for " + e.text + '. This ends your shift for today.',
-        confirmLabel: 'Yes, clock out',
-        tone: 'default',
-      }, go);
-    };
-    // SAFETY: never let an educator clock out while children are still signed in
-    // without a loud warning — they must be handed over or checked out first.
-    get('/provider/present-count')
-      .then(function (d) {
-        var n = (d && d.present) || 0;
-        if (n > 0) { showChildrenStillInWarning(n, go); return; }
-        normalConfirm();
-      })
-      .catch(function () { normalConfirm(); });
+    chooseOff();
   }
 
-  // Big, red, impossible-to-miss warning shown when clocking out with children in.
-  function showChildrenStillInWarning(n, onProceed) {
+  /* LUNCH, BREAK OR THE END OF THE DAY (2026-11-05, Anthony: "if educator wants to sign out
+     for lunch or break - wire something up to allow for that which doesnt completely sign
+     them out for the day"). Tapping the strip while on the clock asks which one. */
+  function chooseOff() {
+    var e = elapsed(openPunch.punched_in_at);
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(8,17,33,.55);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+    var opt = function (id, icon, title, sub) {
+      return '<button id="' + id + '" type="button" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px;margin:0 0 8px;cursor:pointer;font-family:inherit;">'
+        + '<span style="font-size:22px;line-height:1;">' + icon + '</span><span style="display:flex;flex-direction:column;line-height:1.3;">'
+        + '<span style="font-size:14.5px;font-weight:800;color:#0D1B2A;">' + title + '</span>'
+        + '<span style="font-size:12px;color:#64748B;">' + sub + '</span></span></button>';
+    };
+    ov.innerHTML = '<div role="dialog" aria-modal="true" aria-label="Taking a break or finishing?" style="background:#fff;border-radius:18px;max-width:390px;width:100%;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.45);">'
+      + '<div class="kt-dlg-head" style="position:relative;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);box-shadow:inset 0 -3px 0 #7FD3CC;color:#fff;padding:16px 48px 16px 18px;">'
+      +   '<div style="font-size:17px;font-weight:800;">Taking a break or finishing?</div>'
+      +   '<div style="font-size:12.5px;opacity:.9;margin-top:2px;">Clocked in for ' + e.text + '</div>'
+      +   '<button id="kt-off-x" type="button" aria-label="Close" style="position:absolute;top:10px;right:10px;width:30px;height:30px;border:none;border-radius:8px;background:rgba(255,255,255,.16);color:#fff;font-size:16px;cursor:pointer;">✕</button>'
+      + '</div>'
+      + '<div style="padding:14px 16px 8px;">'
+      +   opt('kt-off-lunch', '🍽️', 'Lunch', 'Off the floor - you stay on today\'s shift')
+      +   opt('kt-off-break', '☕', 'Short break', 'Off the floor - you stay on today\'s shift')
+      +   opt('kt-off-day', '👋', 'End my day', 'Clock out for today')
+      + '</div></div>';
+    document.body.appendChild(ov);
+    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    var pick = function (fn) { return function () { if (KT.popOverlay) { try { KT.popOverlay(ov); } catch (x) { close(); } } else close(); close(); fn(); }; };
+    ov.querySelector('#kt-off-x').addEventListener('click', function () { if (KT.popOverlay) { try { KT.popOverlay(ov); return; } catch (x) {} } close(); });
+    ov.addEventListener('click', function (ev) { if (ev.target === ov) close(); });
+    ov.querySelector('#kt-off-lunch').addEventListener('click', pick(function () { startBreak('lunch'); }));
+    ov.querySelector('#kt-off-break').addEventListener('click', pick(function () { startBreak('break'); }));
+    ov.querySelector('#kt-off-day').addEventListener('click', pick(function () { clockOut(); }));
+    if (KT.pushOverlay) { try { KT.pushOverlay(ov, close); } catch (x) {} }
+  }
+
+  /* Children still signed in: the SERVER names them (and who else is on the clock), and
+     the person may go ahead after a clear warning (2026-11-05: warn, then allow). */
+  function childrenWarning(body, doing, onProceed) {
+    showChildrenStillInWarning(body, doing, onProceed);
+  }
+
+  function clockOut(confirmed) {
+    var prev = openPunch;
+    openPunch = null; paint();   // instant "Clocked out"
+    if (KT.clockGlow) try { KT.clockGlow.update(); } catch (e) {}
+    var pill = livePill();
+    var doneBusy = (KT.busy && pill) ? KT.busy(pill) : function () {};
+    punchPost('out', confirmed ? { confirm_children: true } : null)
+      .then(function (d) { doneBusy(); refresh(); if (KT.toast) KT.toast('👋', 'Clocked out', 'Your shift has been closed. Have a good evening.', '#0E7C90'); })
+      .catch(function (e) {
+        doneBusy(); openPunch = prev; paint();
+        var body = (e && e.kt_body) || {};
+        if (body.reason === 'children_still_signed_in') { childrenWarning(body, 'Clock out anyway', function () { clockOut(true); }); return; }
+        if (body.reason === 'not_clocked_in') { refresh(); return; }
+        if (! KT.toast) return;
+        if (e && e.kt_refusal) { KT.toast('ℹ️', 'Still clocked in', e.message, '#0E7C90'); }
+        else { KT.toast('⚠️', 'Could not clock out', 'Please try again.', '#B91C1C'); }
+      });
+  }
+
+  function startBreak(kind, confirmed) {
+    var prev = openPunch;
+    var nowUtc = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    openPunch = null; onBreak = { kind: kind, label: kind === 'lunch' ? 'Lunch' : 'Break', started_at: nowUtc }; paint();
+    if (KT.clockGlow) try { KT.clockGlow.update(); } catch (e) {}
+    if (KT.clockGlow) try { KT.clockGlow.update(); } catch (e) {}
+    var pill = livePill();
+    var doneBusy = (KT.busy && pill) ? KT.busy(pill) : function () {};
+    var extra = { kind: kind }; if (confirmed) extra.confirm_children = true;
+    punchPost(null, extra, '/staff/break/start')
+      .then(function (d) {
+        doneBusy();
+        if (d && d.on_break) onBreak = d.on_break;
+        paint(); refresh();
+        if (KT.toast) KT.toast(kind === 'lunch' ? '🍽️' : '☕', kind === 'lunch' ? 'Enjoy your lunch' : 'Enjoy your break', 'Tap the strip when you are back.', '#6D28D9');
+      })
+      .catch(function (e) {
+        doneBusy(); openPunch = prev; onBreak = null; paint();
+        var body = (e && e.kt_body) || {};
+        if (body.reason === 'children_still_signed_in') { childrenWarning(body, kind === 'lunch' ? 'Go on lunch anyway' : 'Take the break anyway', function () { startBreak(kind, true); }); return; }
+        if (body.reason === 'not_clocked_in' || body.reason === 'already_on_break') { refresh(); return; }
+        if (KT.toast) KT.toast(e && e.kt_refusal ? 'ℹ️' : '⚠️', 'Could not start the break', (e && e.kt_refusal) ? e.message : 'Please try again.', e && e.kt_refusal ? '#0E7C90' : '#B91C1C');
+      });
+  }
+
+  /* ARE YOU BACK? (2026-11-06, Anthony: "when they come back and they click clock in - prompt them with a pop up are you
+     back from break or lunch - just to be certain they didn't click on the clock in by accident"). Ending a break puts
+     them back on the clock and in the room's ratio, so a stray tap on the strip or the time clock asks first. Used by
+     the strip and the Clock in/out screen (screen-care.js); the "You're on lunch" gate's own "I'm back" already asked. */
+  function confirmBack(kind) {
+    var lunch = kind === 'lunch';
+    if (!KT.confirm) return Promise.resolve(true);
+    return Promise.resolve(KT.confirm({
+      title: lunch ? 'Are you back from lunch?' : 'Are you back from your break?',
+      description: 'You will be back on the clock and counted in your room again.',
+      keepHeaderTitle: true,
+      okLabel: 'Yes, I\u2019m back', cancelLabel: lunch ? 'Still on lunch' : 'Still on break',
+    })).then(function (ok) { return !!ok; });
+  }
+  KT.confirmBackFromBreak = confirmBack;
+
+  function backFromBreak() {
+    var prev = onBreak;
+    var nowUtc = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    onBreak = null; openPunch = { id: 0, punched_in_at: nowUtc }; paint();
+    if (KT.clockGlow) try { KT.clockGlow.update(); } catch (e) {}
+    var pill = livePill();
+    var doneBusy = (KT.busy && pill) ? KT.busy(pill) : function () {};
+    punchPost(null, null, '/staff/break/end')
+      .then(function (d) { doneBusy(); refresh(); if (KT.toast) KT.toast('✅', 'Welcome back', (d && d.message) || 'You are back on the clock.', '#16A34A'); })
+      .catch(function (e) {
+        doneBusy(); onBreak = prev; openPunch = null; paint();
+        var body = (e && e.kt_body) || {};
+        if (body.reason === 'not_on_break') { refresh(); return; }
+        if (KT.toast) KT.toast('⚠️', 'Could not end the break', (e && e.kt_refusal) ? e.message : 'Please try again.', '#B91C1C');
+      });
+  }
+
+  // Big, red, impossible-to-miss warning: children still signed in. A genuine alarm, so the
+  // red band (the popup header rule's one exception). Names come from the server.
+  function showChildrenStillInWarning(body, proceedLabel, onProceed) {
+    var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var kids = (body && body.children) || [];
+    var n = kids.length || 0;
+    var list = kids.slice(0, 12).map(function (c) { return '<li style="margin:2px 0;">' + esc(c.label || c.name) + '</li>'; }).join('')
+      + (kids.length > 12 ? '<li>and ' + (kids.length - 12) + ' more</li>' : '');
     var ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(90,10,10,.6);display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
-    ov.innerHTML = '<div style="background:#fff;border-radius:18px;max-width:390px;width:100%;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.45);">'
-      + '<div style="background:linear-gradient(135deg,#DC2626,#991B1B);color:#fff;padding:22px 20px;text-align:center;">'
-      + '<div style="font-size:46px;line-height:1;">⚠️</div>'
-      + '<div style="font-size:20px;font-weight:900;margin-top:8px;line-height:1.2;">' + n + (n === 1 ? ' child is' : ' children are') + ' still checked in</div>'
+    ov.innerHTML = '<div role="alertdialog" aria-modal="true" style="background:#fff;border-radius:18px;max-width:390px;width:100%;max-height:calc(100vh - 40px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 22px 60px rgba(0,0,0,.45);">'
+      + '<div style="background:linear-gradient(135deg,#DC2626,#991B1B);color:#fff;padding:20px;text-align:center;flex-shrink:0;">'
+      + '<div style="font-size:40px;line-height:1;">⚠️</div>'
+      + '<div style="font-size:19px;font-weight:900;margin-top:8px;line-height:1.2;">' + n + (n === 1 ? ' child is' : ' children are') + ' still signed in</div>'
       + '</div>'
-      + '<div style="padding:18px 20px;">'
-      + '<p style="margin:0 0 16px;font-size:14px;color:#334155;line-height:1.55;">Before you clock out, please make sure every child has been <b>signed out or handed to another educator</b>. Leaving while a child is still checked in is a serious safety risk.</p>'
-      + '<button id="kt-cow-back" type="button" style="display:block;width:100%;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;">Go back and check the room</button>'
-      + '<button id="kt-cow-out" type="button" style="display:block;width:100%;background:none;color:#B91C1C;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:6px;">Clock out anyway</button>'
+      + '<div style="padding:16px 20px;overflow:auto;">'
+      + (list ? '<ul style="margin:0 0 12px;padding-left:18px;font-size:13.5px;color:#334155;line-height:1.45;">' + list + '</ul>' : '')
+      + '<p style="margin:0 0 14px;font-size:13.5px;color:#334155;line-height:1.55;">' + esc((body && body.what_to_do) || 'Make sure every child is signed out or handed to another educator.') + '</p>'
+      + '<button id="kt-cow-back" type="button" style="display:block;width:100%;background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:800;cursor:pointer;">Go back and check the room</button>'
+      + '<button id="kt-cow-out" type="button" style="display:block;width:100%;background:none;color:#B91C1C;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:700;cursor:pointer;margin-top:6px;">' + esc(proceedLabel || 'Continue anyway') + '</button>'
       + '</div></div>';
     document.body.appendChild(ov);
     var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
     ov.querySelector('#kt-cow-back').addEventListener('click', function () { if (KT.popOverlay) { try { KT.popOverlay(ov); return; } catch (e) {} } close(); });
-    ov.querySelector('#kt-cow-out').addEventListener('click', function () { close(); onProceed(); });
+    ov.querySelector('#kt-cow-out').addEventListener('click', function () { if (KT.popOverlay) { try { KT.popOverlay(ov); } catch (e) {} } close(); onProceed(); });
     if (KT.pushOverlay) { try { KT.pushOverlay(ov, close); } catch (e) {} }
   }
 
@@ -284,6 +388,9 @@
   function mount(el) {
     var main = document.getElementById('appMain');
     if (!main) return;
+    /* TODAY (2026-10-23, Anthony: "the clock in banner should be at the top like it is in the home
+       page"): the day brief's cards now live OUTSIDE #kt-day-brief (screen-educator.js), so
+       "right after the banner" puts the strip under the header and above the cards. */
     var hero = main.querySelector('.kt-hero, .kt-page-hero') || main.querySelector('[data-kt-hero], #kt-day-brief');
     if (hero && !hero.contains(el)) {
       if (el.previousElementSibling !== hero) hero.parentNode.insertBefore(el, hero.nextSibling);
@@ -319,7 +426,7 @@
     // them. The strip is prominent + in-your-face, matching the APK.
     try { window.__KT_CLK = currentHash() + '/st' + (isStaff() ? 1 : 0) + '/oh' + (onHome() ? 1 : 0); } catch (e) {}
     if (!isStaff() || !tok() || !onHome()) {
-      var old = document.getElementById('kt-clockpill');
+      var old = livePill();
       if (old) old.remove();
       return;
     }
@@ -359,6 +466,22 @@
       el.style.border = 'none';
       return;
     }
+    if (!openPunch && onBreak) {
+      var be = elapsed(onBreak.started_at);
+      var bAt = '';
+      try { bAt = parseTs(onBreak.started_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (x) {}
+      el.innerHTML =
+        '<span style="' + ICON + '">' + (onBreak.kind === 'lunch' ? '🍽️' : '☕') + '</span>'
+        + '<span style="' + MID + '">'
+        +   '<span style="font-size:15px;font-weight:800;">On ' + (onBreak.kind === 'lunch' ? 'lunch' : 'a break') + ' · ' + be.text + '</span>'
+        +   '<span style="font-size:12px;font-weight:600;opacity:.9;">' + (bAt ? 'Since ' + bAt + ' · ' : '') + 'still on today\'s shift</span>'
+        + '</span>'
+        + '<span style="' + CHIP + 'color:#6D28D9;">I\'m back</span>';
+      el.style.background = '#6D28D9';
+      el.style.color = '#fff';
+      el.style.border = 'none';
+      return;
+    }
     if (!openPunch) {
       el.innerHTML =
         '<span style="' + ICON + '">⏱</span>'
@@ -383,7 +506,7 @@
       +   '<span style="font-size:15px;font-weight:800;">Clocked in · ' + e.text + '</span>'
       +   '<span style="font-size:12px;font-weight:600;opacity:.9;">' + (overdue ? 'Long shift — please clock out' : (inTime ? 'Since ' + inTime : 'On the clock')) + '</span>'
       + '</span>'
-      + '<span style="' + CHIP + 'color:' + (overdue ? '#B45309' : '#15803D') + ';">Clock out</span>';
+      + '<span style="' + CHIP + 'color:' + (overdue ? '#B45309' : '#15803D') + ';">Break / out</span>';
     el.style.background = overdue ? '#B45309' : '#16A34A';
     el.style.color = '#fff';
     el.style.border = 'none';
@@ -418,6 +541,7 @@
       checkFailed = false;
       lastCheckError = null;
       openPunch = d.punches.find(function (p) { return !p.punched_out_at; }) || null;
+      onBreak = (!openPunch && d.on_break) ? d.on_break : null;
       punchKnown = true;
       paint();
     });
@@ -426,6 +550,9 @@
   KT.clockBar = {
     refresh: refresh,
     isClockedIn: function () { return !!openPunch; },
+    isOnBreak: function () { return !!onBreak; },
+    // Has the shift state been read from the server yet? Until then isClockedIn() is a guess (false), not a "no".
+    isKnown: function () { return punchKnown; },
     clockIn: function () { if (!openPunch) onTap(); },
   };
 
@@ -441,16 +568,16 @@
     var card = document.createElement('div');
     card.style.cssText = 'background:#fff;border-radius:18px;max-width:340px;width:100%;padding:24px 22px;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.35);';
     card.innerHTML = '<div style="font-size:46px;line-height:1;margin-bottom:10px;">\u23F0</div>'
-      + '<div style="font-size:18px;font-weight:800;color:#0D1B2A;margin-bottom:6px;">Clock in first</div>'
-      + '<div style="font-size:14px;color:#475569;line-height:1.5;margin-bottom:18px;">You need to be clocked in before you can check children in or out. This keeps attendance and ratio records accurate.</div>';
+      + '<div style="font-size:18px;font-weight:800;color:#0D1B2A;margin-bottom:6px;">' + (onBreak ? 'You\'re on ' + (onBreak.kind === 'lunch' ? 'lunch' : 'a break') : 'Clock in first') + '</div>'
+      + '<div style="font-size:14px;color:#475569;line-height:1.5;margin-bottom:18px;">' + (onBreak ? 'Come back from your break before you check children in or out, so the ratio counts you on the floor.' : 'You need to be clocked in before you can check children in or out. This keeps attendance and ratio records accurate.') + '</div>';
     var row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px;';
     var no = document.createElement('button'); no.type = 'button'; no.textContent = 'Not now';
     no.style.cssText = 'flex:1;background:#F1F5F9;color:#475569;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;';
-    var yes = document.createElement('button'); yes.type = 'button'; yes.textContent = 'Clock in now';
+    var yes = document.createElement('button'); yes.type = 'button'; yes.textContent = onBreak ? 'I\'m back' : 'Clock in now';
     yes.style.cssText = 'flex:1;background:#16A34A;color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;';
     var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
     no.addEventListener('click', close);
-    yes.addEventListener('click', function () { close(); try { if (!openPunch) onTap(); } catch (e) {} });
+    yes.addEventListener('click', function () { close(); try { if (!openPunch) onTap(true); } catch (e) {} });
     row.appendChild(no); row.appendChild(yes);
     card.appendChild(row); ov.appendChild(card);
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });

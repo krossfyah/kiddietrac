@@ -21,33 +21,91 @@
      alone. Everything returns the moment the dialog closes. (Anthony, 2026-09-07) */
   var DUCK_CSS = 'body.kt-dialog-open #kt-mobilenav,'
     + 'body.kt-dialog-open #kt-gear,'
-    + 'body.kt-dialog-open #kt-agency-switcher{z-index:500 !important;}';
+    + 'body.kt-dialog-open #kt-agency-switcher{z-index:500 !important;}'
+    // The dial pad's floating 📞 sat ON TOP of every popup (z 9300). Gone while one is open (2026-10-23).
+    + 'body.kt-dialog-open #kt-dp-fab{display:none !important;}'
+    /* NOTHING BEHIND A POPUP ANSWERS A TAP (2026-10-23, Anthony: "I can still click on the bottom
+       bar and goto other sections while this popup is still on the screen - full sweep"). The
+       z-index duck relied on every popup covering the bar; on some phones one did not. While a
+       popup is open, the bottom bar, the gear and the agency switcher simply ignore taps. */
+    /* SWALLOWED, NOT CLICK-THROUGH (2026-10-28, Anthony: "hitting phone at the bottom bar, it pops
+       up a random screen and it locks up"). pointer-events:none made a tap on the bar land on
+       whatever lay UNDER it - a Families row, whose popup then opened behind the dial pad. The bar
+       keeps its pointer events; swallowTaps() below eats the tap while a popup is open. */
+    + '';
+  var CHROME_IDS = ['kt-mobilenav', 'kt-gear', 'kt-agency-switcher'];
+  function inChrome(t) {
+    for (var n = t; n && n.nodeType === 1; n = n.parentElement) { if (CHROME_IDS.indexOf(n.id) !== -1) { return true; } }
+    return false;
+  }
+  /* RE-CHECKED AT THE TAP (2026-10-28, Anthony: "closed the popup ... the bottom bar is frozen"). The flag is
+     refreshed on DOM changes; if it is ever stale, a tap must not be eaten for a popup that is gone. */
+  var dlgBeaconed = {};
+  function dlgBeacon(kind, what) {
+    if (dlgBeaconed[kind]) { return; }
+    dlgBeaconed[kind] = 1;
+    try {
+      var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+      fetch('https://api.kiddietrac.com/api/v1/diag/scroll', { method: 'POST', keepalive: true,
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: tok ? 'Bearer ' + tok : '' },
+        body: JSON.stringify({ data: kind + ' ' + location.hash + ' ' + String(what || '').slice(0, 300) }) }).catch(function () {});
+    } catch (err) {}
+  }
+  function swallowTaps(e) {
+    if (!document.body || !document.body.classList.contains('kt-dialog-open') || !inChrome(e.target)) { return; }
+    var what = dialogOnScreen(true);
+    if (!what) {
+      document.body.classList.remove('kt-dialog-open');
+      dlgBeacon('STALEDLG', 'flag was on with no popup; tap let through');
+      return;
+    }
+    if (e.type === 'click') { dlgBeacon('DLGBLOCK', what); }
+    e.preventDefault(); e.stopPropagation(); if (e.stopImmediatePropagation) { e.stopImmediatePropagation(); }
+  }
+  ['click', 'pointerup', 'touchend', 'mouseup'].forEach(function (t) { window.addEventListener(t, swallowTaps, { capture: true, passive: false }); });
+  /* Not blocking dialogs: the phone dial pad and its Texts sheet. The bar stays live under them -
+     kt-dialer closes the pad when another bar item is tapped, and Phone toggles it. */
+  var NONBLOCKING = '#kt-dpop, #kt-txfull, #kt-dpop *, #kt-txfull *';
 
   /* Is a dialog on screen? The same shape test KT.uiBusy() uses, so the portal keeps ONE
      definition of "a dialog is open" rather than two that drift. uiBusy() itself is not
      called: it also answers true for a focused input, which is about deferring refreshes,
      not about furniture. */
-  function dialogOnScreen() {
+  /* VISIBLE only (2026-10-28): a hidden leftover node of a closed popup used to count. */
+  function shown(el) {
+    if (!el.getClientRects().length) { return false; }
+    var cs = window.getComputedStyle(el);
+    if (cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') < 0.05) { return false; }
+    var r = el.getBoundingClientRect();
+    return r.width > 40 && r.height > 40;
+  }
+  function label(el) { return el.tagName + '#' + (el.id || '') + '.' + String(el.className || '').slice(0, 50); }
+  function dialogOnScreen(describe) {
     try {
-      if (document.querySelector('.kt-modal, .kt-modal-overlay, .modal-backdrop, .kt-scrim,'
-          + ' .kt-lightbox, .kt-doc-viewer, .kt-av-zoom, [role="dialog"]')) { return true; }
+      var found = document.querySelectorAll('.kt-modal, .kt-modal-overlay, .modal-backdrop, .kt-scrim,'
+          + ' .kt-lightbox, .kt-doc-viewer, .kt-av-zoom, [role="dialog"]');
+      for (var f = 0; f < found.length; f++) { if (!found[f].matches(NONBLOCKING) && shown(found[f])) { return describe ? label(found[f]) : true; } }
       var mr = document.getElementById('modalRoot');
-      if (mr && mr.firstElementChild) { return true; }
+      if (mr && mr.firstElementChild && shown(mr.firstElementChild)) { return describe ? 'modalRoot > ' + label(mr.firstElementChild) : true; }
       var kids = document.body ? document.body.children : [];
       for (var i = 0; i < kids.length; i++) {
         var el = kids[i];
         if (el.id === 'appMain' || el.id === 'kt-mobilenav' || el.id === 'kt-gear'
-            || el.id === 'kt-agency-switcher') { continue; }
+            || el.id === 'kt-agency-switcher' || el.id === 'kt-dpop' || el.id === 'kt-txfull') { continue; }
         if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE' || el.tagName === 'LINK') { continue; }
         if (el.hidden) { continue; }
         var cs = window.getComputedStyle(el);
         if (cs.position !== 'fixed' || cs.display === 'none' || cs.visibility === 'hidden') { continue; }
         if (parseFloat(cs.opacity || '1') < 0.05) { continue; }
+        /* A layer that takes no taps is decoration, not a popup (2026-10-23): the clocked-in
+           screen glow (#kt-clockglow) counted as one, so for anyone on the clock the bar was
+           always "behind a dialog" — and with taps now blocked behind dialogs, unusable. */
+        if (cs.pointerEvents === 'none' || el.id === 'kt-clockglow' || /^claude-/.test(el.id || '')) { continue; }
         var z = parseInt(cs.zIndex, 10);
         if (isNaN(z) || z < 900) { continue; }
         var r = el.getBoundingClientRect();
         if (r.width < 200 || r.height < 120) { continue; }   // a badge, not a dialog
-        return true;
+        return describe ? 'fixed ' + label(el) + ' z' + z : true;
       }
     } catch (e) {}
     return false;
@@ -76,6 +134,22 @@
         ? window.requestAnimationFrame(apply)
         : window.setTimeout(apply, 16);
     };
+    /* A POPUP THAT FADES IN IS STILL A POPUP (2026-11-03). The test runs one frame after a node lands on <body>,
+       and shown() rightly ignores anything under 5% opacity - but a popup that fades in from opacity 0 (the photo
+       viewer, kt-avatar-zoom: 0 -> 1 over 180ms) is still at ~0 in that frame, and nothing else on <body> changes
+       afterwards, so it was never counted: no kt-dialog-open, the bar was not ducked and taps on it were not
+       swallowed for as long as the viewer stayed open. Measured: dialogOpen false at 60, 400 and 900ms.
+       The test now runs again when a transition or animation on a top-level layer ends (the end of the fade).
+       Only <body>'s own children and #modalRoot's are considered, so the many small transitions inside a
+       screen cost nothing. */
+    var layerSettled = function (e) {
+      var t = e && e.target;
+      if (!t || t.nodeType !== 1) { return; }
+      var p = t.parentElement;
+      if (p === document.body || (p && p.id === 'modalRoot')) { schedule(); }
+    };
+    document.addEventListener('transitionend', layerSettled, true);
+    document.addEventListener('animationend', layerSettled, true);
     try {
       new MutationObserver(schedule).observe(document.body, { childList: true });
     } catch (e) {
@@ -311,6 +385,19 @@
     if (g.style.getPropertyPriority('right') !== 'important') {
       g.style.setProperty('right', '12px', 'important');
     }
+    dockDialFab(want);
+  }
+
+  /* THE 📞 BESIDE THE GEAR (2026-11-06, Anthony: "the floating call ... fix those too"). kt-dialer.js drew the dial
+     pad as a round button above the bottom bar, over the page, so it covered the bottom-left stat card or tile on every
+     staff phone. With a gear on screen it now sits in the header, left of the gear on the same row (body.kt-dp-docked,
+     styled in kt-dialer.js), and padGearClearance makes room for it as it did for the educator's old QR button. */
+  function dialFabOn() { var f = document.getElementById('kt-dp-fab'); return !!f && window.getComputedStyle(f).display !== 'none'; }
+  function dockDialFab(top) {
+    var f = document.getElementById('kt-dp-fab');
+    var on = !!f && !!document.getElementById('kt-gear');
+    if (document.body.classList.contains('kt-dp-docked') !== on) document.body.classList.toggle('kt-dp-docked', on);
+    if (on && (f.style.getPropertyValue('top') !== top || f.style.getPropertyPriority('top') !== 'important')) f.style.setProperty('top', top, 'important');
   }
 
   function padGearClearance() {
@@ -318,12 +405,15 @@
     if (!document.getElementById('kt-gear')) return;
     var nu = document.getElementById('navUser');
     if (!nu) return;
-    // The parent/educator chrome adds a right-aligned date/time (kt-pc-mobmeta) that
-    // already clears the floating gear — padding navUser too just crushes the name.
-    if (document.getElementById('kt-pc-navgreet')) { if (nu.style.paddingRight) nu.style.removeProperty('padding-right'); return; }
-    // Each floating button is 40px wide with an 8px gap; the QR button (educators)
-    // sits left of the gear, so the name/role block has to clear both.
-    var pad = (document.getElementById('kt-eduqr') ? 106 : 58) + 'px';
+    /* Each floating button is 40px wide with an 8px gap; the QR button (educators) sits left
+       of the gear, so the name/role block has to clear both.
+       This used to bail out whenever the greeting eyebrow existed, on the grounds that a
+       right-aligned date block (kt-pc-mobmeta) already cleared the gear - but that block was
+       folded into the eyebrow long ago, and on a 375px iPhone the gear sat on the role pill
+       (2026-10-29). The eyebrow clears nothing. Its row is tighter (kt-phone-compact.css trims
+       the logo's side padding), so the gap it needs is just the button and a breath. */
+    var eyebrow = !!document.getElementById('kt-pc-navgreet');
+    var pad = ((document.getElementById('kt-eduqr') || dialFabOn()) ? (eyebrow ? 94 : 106) : (eyebrow ? 46 : 58)) + 'px';
     if (nu.style.paddingRight !== pad) nu.style.setProperty('padding-right', pad, 'important');
   }
 
@@ -347,7 +437,7 @@
       var roles = Array.isArray(u.roles) ? u.roles : [];
       var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
       if (va && roles.indexOf('platform_admin') !== -1 &&
-          ['agency_admin', 'centre_director', 'educator', 'guardian', 'auditor', 'home_visitor'].indexOf(va) !== -1) return va;
+          ['agency_admin', 'centre_director', 'educator', 'guardian', 'auditor', 'home_visitor', 'sales_rep'].indexOf(va) !== -1) return va;
       if (roles.indexOf('agency_admin') !== -1) return 'agency_admin';
       if (roles.indexOf('platform_admin') !== -1) return 'agency_admin';
       if (roles.indexOf('centre_director') !== -1) return 'centre_director';
@@ -355,6 +445,8 @@
       if (roles.indexOf('guardian') !== -1) return 'guardian';
       if (roles.indexOf('home_visitor') !== -1) return 'home_visitor';
       if (roles.indexOf('auditor') !== -1) return 'auditor';
+      if (roles.indexOf('sales_rep') !== -1) return 'sales_rep';
+      if (roles.indexOf('reseller_admin') !== -1) return 'reseller_admin';
       return u.primary_role || '';
     } catch (e) { return ''; }
   }
@@ -453,33 +545,59 @@
     var centreId = u.centre_id;
     var tok = null; try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
     var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+    /* A STANDARD POPUP (2026-11-06, ticket #225). This was a full-window navy overlay with Print / Close at the foot
+       of the content. In App Review's iPhone-app-on-iPad window (466x678) the content ran taller than the window and
+       Close sat off screen (breadcrumb "XREACH close off screen: kt-qr-overlay"). Now Shell.Modal: the navy-to-teal
+       header with the ✕ inside it, the body the one scroll region, Print / Close pinned in the footer - reachable at
+       any size. The body keeps id kt-qr-overlay, so the one-at-a-time guard above still holds. */
     var ov = document.createElement('div');
     ov.id = 'kt-qr-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(8,28,65,.95);overflow-y:auto;color:#fff;';
+    ov.style.cssText = 'display:flex;flex-direction:column;align-items:center;text-align:center;color:#0F172A;';
     ov.innerHTML =
-      '<div style="font-size:21px;font-weight:800;margin-bottom:4px;">📲 Check-in QR</div>'
-      + '<div id="kt-qr-sub" style="font-size:13.5px;opacity:.85;margin-bottom:18px;">Loading…</div>'
-      + '<div id="kt-qr-holder" style="background:#fff;padding:16px;border-radius:18px;width:250px;height:250px;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:13px;">Generating…</div>'
-      + '<div id="kt-qr-codebox" style="display:none;margin-top:14px;max-width:300px;">'
-      +   '<div style="font-size:11.5px;opacity:.8;margin-bottom:6px;">📷 No camera? Enter this code in the app:</div>'
-      +   '<div id="kt-qr-code" style="font-family:ui-monospace,Menlo,monospace;font-size:26px;font-weight:800;letter-spacing:5px;text-align:center;background:rgba(255,255,255,.16);border:1px dashed rgba(255,255,255,.4);border-radius:10px;padding:12px 14px;user-select:all;-webkit-user-select:all;"></div>'
+      '<div id="kt-qr-sub" style="font-size:13.5px;color:#475569;margin-bottom:12px;">Loading…</div>'
+      + '<div id="kt-qr-holder" style="background:#fff;border:1px solid #E2E8F0;padding:12px;border-radius:14px;width:236px;height:236px;max-width:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:13px;">Generating…</div>'
+      + '<div id="kt-qr-codebox" style="display:none;margin-top:12px;width:100%;max-width:300px;">'
+      +   '<div style="font-size:12px;color:#475569;margin-bottom:6px;">📷 No camera? Enter this code in the app:</div>'
+      +   '<div id="kt-qr-code" style="font-family:ui-monospace,Menlo,monospace;font-size:24px;font-weight:800;letter-spacing:5px;text-align:center;color:#0B2545;background:#F1F5F9;border:1px dashed #94A3B8;border-radius:10px;padding:10px 12px;user-select:all;-webkit-user-select:all;"></div>'
       + '</div>'
-      + '<div style="font-size:12px;opacity:.75;margin-top:14px;max-width:300px;line-height:1.5;">Parents scan this with the KiddieTrac app to sign in or out (or type the code above). It refreshes every day for security.</div>'
-      + '<div style="display:flex;gap:12px;margin-top:22px;">'
-      +   '<button id="kt-qr-print" style="background:#fff;color:#0B2545;border:none;border-radius:12px;padding:12px 24px;font-size:15px;font-weight:800;cursor:pointer;">🖨 Print</button>'
-      +   '<button id="kt-qr-close" style="background:transparent;color:rgba(255,255,255,.85);border:1px solid rgba(255,255,255,.4);border-radius:12px;padding:12px 24px;font-size:15px;font-weight:700;cursor:pointer;">Close</button>'
-      + '</div>';
-    // Center the content but allow scrolling on short screens — previously the QR
-    // + code + helper text could be taller than the viewport, so the top was
-    // clipped and it looked off-centre. Wrap it all in a min-height flex box.
-    var _qrInner = document.createElement('div');
-    _qrInner.style.cssText = 'min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 24px) 24px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 24px);box-sizing:border-box;';
-    while (ov.firstChild) _qrInner.appendChild(ov.firstChild);
-    ov.appendChild(_qrInner);
-    document.body.appendChild(ov);
-    var close = function () { if (ov && ov.parentNode) ov.parentNode.removeChild(ov); };
-    ov.querySelector('#kt-qr-close').addEventListener('click', close);
-    if (window.KT && KT.pushOverlay) KT.pushOverlay(ov, close); // Android back closes it
+      + '<div style="font-size:12px;color:#64748B;margin-top:12px;max-width:300px;line-height:1.5;">One-Tap: parents scan this with the KiddieTrac app to check in or out, contactless (or type the code above). It refreshes every day for security.</div>';
+    var qrData = null;
+    var close = function () {};
+    var Sh = window.KT && KT.Shell;
+    if (Sh && Sh.Modal && Sh.Modal.open) {
+      var handle = Sh.Modal.open({
+        title: '📲 One-Tap code', body: ov,
+        actions: [
+          { label: '🖨 Print', primary: true, busyLabel: 'Preparing…', handler: function () {
+            /* Prints the poster on its own (kt-qr.js), never the page behind this code:
+               agency name and logo, centre, QR, the typeable code and the steps. Stays open. */
+            var d = qrData;
+            if (!d || !d.code || !(window.KT && KT.printQRPoster)) return false;
+            return KT.printQRPoster({
+              data: d.code, kind: 'app', centreId: centreId, centreName: d.centre_name || '',
+              shortCode: d.short_code || '', validFor: d.valid_for || '',
+              agencyName: d.agency_name || '', agencyLogo: d.agency_logo || '',
+              brandColor: d.brand_color || '', poweredBy: d.powered_by !== false,
+            }).catch(function () {}).then(function () { return false; });
+          } },
+          { label: 'Close' },
+        ],
+      });
+      close = function () { try { handle.close(); } catch (e) {} };
+      if (window.KT && KT.pushOverlay && handle && handle.backdrop) KT.pushOverlay(handle.backdrop, close); // Android back closes it
+    } else {
+      // The shell is not up (should not happen once signed in): the same content, simply on the page.
+      var bd = document.createElement('div');
+      bd.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(8,28,65,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+      var card = document.createElement('div');
+      card.style.cssText = 'background:#fff;border-radius:16px;max-height:100%;overflow-y:auto;padding:18px;box-sizing:border-box;width:100%;max-width:360px;';
+      card.appendChild(ov);
+      var cb = document.createElement('button'); cb.type = 'button'; cb.textContent = 'Close';
+      cb.style.cssText = 'margin-top:14px;height:32px;padding:0 16px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-weight:700;';
+      card.appendChild(cb); bd.appendChild(card); document.body.appendChild(bd);
+      close = function () { if (bd.parentNode) bd.parentNode.removeChild(bd); };
+      cb.addEventListener('click', close);
+    }
     if (!centreId) { ov.querySelector('#kt-qr-sub').textContent = 'No centre is assigned to your account.'; ov.querySelector('#kt-qr-holder').textContent = '—'; return; }
     fetch(base + '/checkin/centre-code/' + centreId, { headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('load failed')); })
@@ -489,23 +607,15 @@
         // parent whose camera fails can type it. Falls back to the long code.
         var _mc = d.short_code || d.code;
         if (_mc) { var _cb = ov.querySelector('#kt-qr-codebox'), _cc = ov.querySelector('#kt-qr-code'); if (_cb && _cc) { _cc.textContent = _mc; _cb.style.display = 'block'; } }
+        qrData = d;
         var holder = ov.querySelector('#kt-qr-holder');
         if (window.KT && KT.qrImg && d.code) {
-          KT.qrImg(d.code, { size: 224, cell: 6, margin: 2 })
-            .then(function (img) { if (holder) { holder.innerHTML = ''; holder.appendChild(img); } })
-            .catch(function () { if (holder) holder.textContent = 'QR unavailable'; });
-          var pb = ov.querySelector('#kt-qr-print');
-          if (pb) pb.addEventListener('click', function () {
-            if (window.KT && KT.printQRPoster) KT.printQRPoster({
-              url: d.code, title: (d.centre_name || 'Check-in'),
-              subtitle: 'Scan to sign your child in or out',
-              steps: '<strong>1.</strong> Open the KiddieTrac app.<br><strong>2.</strong> Tap the camera / scan button.<br><strong>3.</strong> Point it at this code.',
-              footer: 'Valid ' + (d.valid_for || 'today') + ' · Powered by KiddieTrac',
-            });
-          });
-        } else if (holder) { holder.textContent = 'QR unavailable'; }
+          KT.qrImg(d.code, { size: 210, cell: 6, margin: 2 })
+            .then(function (img) { if (holder) { img.style.maxWidth = '100%'; img.style.height = 'auto'; holder.innerHTML = ''; holder.appendChild(img); } })
+            .catch(function () { if (holder) holder.textContent = 'One-Tap code unavailable'; });
+        } else if (holder) { holder.textContent = 'One-Tap code unavailable'; }
       })
-      .catch(function () { var s = ov.querySelector('#kt-qr-sub'); if (s) s.textContent = 'Could not load the check-in code.'; var h = ov.querySelector('#kt-qr-holder'); if (h) h.textContent = '—'; });
+      .catch(function () { var s = ov.querySelector('#kt-qr-sub'); if (s) s.textContent = 'Could not load the One-Tap code.'; var h = ov.querySelector('#kt-qr-holder'); if (h) h.textContent = '—'; });
   }
 
   function ensure() {
@@ -521,17 +631,46 @@
     };
     var parent = isParentView();
     document.body.classList.toggle('kt-parentview', parent);
-    if (parent) {
+    var pending = parent && (function () {
+      /* Not linked to a family yet (/auth/me family_pending, 2026-10-21): only what works
+         without one. The shell shows the waiting screen for everything else. */
+      try {
+        if (sessionStorage.getItem('kt_view_as')) return false;
+        return !!JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}').family_pending;
+      } catch (e) { return false; }
+    })();
+    if (pending) {
+      nav.appendChild(btn('⏳', 'Status', function () { go('#pending'); }, null, 'pending'));
+      nav.appendChild(btn('✍️', 'Forms', function () { go('#my-forms'); }, null, 'my-forms'));
+      nav.appendChild(btn('📄', 'Documents', function () { go('#my-documents'); }, null, 'my-documents'));
+      nav.appendChild(btn('🔔', 'Inbox', function () { go('#notifications'); }, 'kt-b-inbox', 'notifications'));
+    } else if (parent) {
       // Parents get a full, self-contained bottom bar — every section one tap away.
       // Home returns to the icon-tile launcher (#home), the parent's main screen.
       nav.appendChild(btn('🏠', 'Home', function () { go('#home'); }, null, 'home'));
       nav.appendChild(btn('🖼️', 'Photos', function () { go('#photos'); }, 'kt-b-photos', 'photos'));
       // Center, raised camera button — QR check-in / out. The "camera button".
-      var scanBtn = btn('📷', 'Check in', function () { go('#scan'); }, null, 'scan');
+      var scanBtn = btn('📷', 'One-Tap', function () { go('#scan'); }, null, 'scan');
       scanBtn.classList.add('scan');
       nav.appendChild(scanBtn);
       nav.appendChild(btn('💬', 'Message Centre', function () { go('#messages'); }, 'kt-mnav-msg', 'messages'));
       nav.appendChild(btn('💳', 'Billing', function () { go('#billing'); }, 'kt-b-billing', 'billing'));
+    } else if (activeRole() === 'sales_rep') {
+      /* A SALES REP'S OWN BAR (2026-11-06, Anthony: "make sure all other roles ... are consistent ... full sweep on
+         mobile"). They fell through to the centre-staff bar, whose Daily log (#care-log) and Message Centre (#chat)
+         have no sales_rep screen: two of five tabs opened "Screen not available". Now the sales sidebar's own
+         first stops, in its order. */
+      nav.appendChild(btn('🏠', 'Home', function () { go('#home'); }, null, 'home'));
+      nav.appendChild(btn('📊', 'Pipeline', function () { go('#sales'); }, null, 'sales'));
+      nav.appendChild(btn('🎯', 'Leads', function () { go('#sales-leads'); }, null, 'sales-leads'));
+      nav.appendChild(btn('🗨️', 'Website chat', function () { go('#sales-webchat'); }, 'kt-mnav-msg', 'sales-webchat'));
+      nav.appendChild(btn('🔔', 'Inbox', function () { go('#notifications'); }, 'kt-b-inbox', 'notifications'));
+    } else if (activeRole() === 'reseller_admin') {
+      // Same fall-through for a reseller: no daily log, no Message Centre. Their sidebar's sections instead.
+      nav.appendChild(btn('🏪', 'Agencies', function () { go('#reseller'); }, null, 'reseller'));
+      nav.appendChild(btn('➕', 'Onboard', function () { go('#reseller-onboard'); }, null, 'reseller-onboard'));
+      nav.appendChild(btn('🎧', 'Support', function () { go('#reseller-support'); }, null, 'reseller-support'));
+      nav.appendChild(btn('⚙️', 'Settings', function () { go('#settings'); }, null, 'settings'));
     } else {
       // No Menu button for anyone now. The dashboard carries the tile launcher
       // (every section, one tap), so the sidebar drawer was a second, redundant
@@ -567,9 +706,40 @@
            morning to see the day across the agency. Children is one tap away on the
            launcher, and #provider-day is registered for all three admin roles
            (screen-provider-day.js). */
-        nav.appendChild(btn('🗓️', 'Daily', function () { go('#provider-day'); }, null, 'provider-day'));
+        /* THE SUPERADMIN GETS THE PHONE HERE (2026-10-23, Anthony: "super admin view under mobile
+           needs to have the dialer phone on the bottom bar and remove daily"). Their own view
+           only — viewing as someone else keeps that role's bar. The badge is the missed-call /
+           voicemail / texts count kt-dialer.js keeps. */
+        var _super = (function () {
+          try {
+            if (sessionStorage.getItem('kt_view_as')) return false;
+            var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+            return (u.roles || []).indexOf('platform_admin') !== -1;
+          } catch (e) { return false; }
+        })();
+        if (_super) {
+          nav.appendChild(btn('📞', 'Phone', function () { if (window.KT && KT.dialer && KT.dialer.open) KT.dialer.open(); else go('#phone'); }, 'kt-b-phone', 'phone'));
+          setTimeout(function () { try { if (window.KT && KT.dialer && KT.dialer.paint) KT.dialer.paint(); } catch (e) {} }, 0);
+        } else {
+          nav.appendChild(btn('🗓️', 'Daily', function () { go('#provider-day'); }, null, 'provider-day'));
+        }
       } else {
-        nav.appendChild(btn('📝', 'Daily log', function () { go('#care-log'); }, null, 'care-log'));
+        /* Daily log is the educator's slot. A home visitor and an auditor have no #care-log screen, so this tab
+           opened "Screen not available" for them (2026-11-06 role sweep). They get their own first tool instead:
+           the visit report for a home visitor, Compliance for an auditor. */
+        var _ar = activeRole();
+        if (_ar === 'home_visitor') {
+          /* Five tabs like every other phone bar (2026-11-06, home visitor consistency): My reports, then New visit as
+             the raised centre button - the slot the educator's One-Tap and the parent's camera use. */
+          nav.appendChild(btn('📋', 'My reports', function () { go('#home-visits'); }, null, 'home-visits'));
+          var nvBtn = btn('📝', 'New visit', function () { go('#new-home-visit'); }, null, 'new-home-visit');
+          nvBtn.classList.add('scan');
+          nav.appendChild(nvBtn);
+        } else if (_ar === 'auditor') {
+          nav.appendChild(btn('✅', 'Compliance', function () { go('#compliance'); }, null, 'compliance'));
+        } else {
+          nav.appendChild(btn('📝', 'Daily log', function () { go('#care-log'); }, null, 'care-log'));
+        }
       }
 
       /* Third of five, so it lands in the middle — the raised slot the parent bar
@@ -584,11 +754,16 @@
         // The educator's check-in QR, as a raised centre button — the same
         // affordance parents get for scanning. A 🔳 glyph floating in the corner
         // was too easy to miss for something parents queue up to scan.
-        var qrBtn = btn('📷', 'Check-in QR', function () { showCheckinQr(); }, null, 'eduqr');
+        var qrBtn = btn('📷', 'One-Tap', function () { showCheckinQr(); }, null, 'eduqr');
         qrBtn.classList.add('scan');
         nav.appendChild(qrBtn);
       }
-      nav.appendChild(btn('💬', 'Message Centre', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
+      // An auditor has no Message Centre (no auditor:chat screen); Audit logs is their next stop.
+      if (activeRole() === 'auditor') {
+        nav.appendChild(btn('📜', 'Audit logs', function () { go('#audit-logs'); }, null, 'audit-logs'));
+      } else {
+        nav.appendChild(btn('💬', 'Message Centre', function () { go('#chat'); }, 'kt-mnav-msg', 'chat'));
+      }
       // Alerts folded INTO the Inbox: an announcement already lands in the inbox
       // as a notification, so a separate Alerts tab showed the same thing twice.
       // (Composing an alert lives on the Home launcher, under Alerts.)
@@ -649,7 +824,11 @@
        personal profile screen to send it to; screen-settings registers
        agency_admin and centre_director as of 2026-09-01, so it now goes somewhere
        — and it is where their two-factor lives. */
-    var showGear = parent || isEducatorView() || _adminRole;
+    /* Every role (2026-11-06, Anthony: home visitor's phone header "all messed up"): a home visitor, sales rep, auditor
+       or reseller had no gear, so the parent-chrome header had no gear slot (no body.kt-pc-gear) and wrapped onto
+       two rows. screen-settings.js registers :settings for all of them. */
+    var showGear = parent || isEducatorView() || _adminRole
+      || ['home_visitor', 'sales_rep', 'auditor', 'reseller_admin'].indexOf(activeRole()) !== -1;
     if (showGear && !document.getElementById('kt-gear')) {
       var gear = document.createElement('button');
       gear.id = 'kt-gear'; gear.type = 'button'; gear.setAttribute('aria-label', 'Settings'); gear.textContent = '⚙️';
@@ -707,20 +886,80 @@
         .getPropertyValue('--kt-safe-bottom'));
       if (v > 0) { return v; }
     } catch (e) {}
+    /* ONE PROBE, KEPT (2026-10-28). It used to be created, read and removed on every call -
+       every 700 ms - and each insert/remove threw away the page's style and layout, so the
+       bar's next measurement re-laid out the whole screen (seconds of frozen taps on a long
+       list at phone speed). A permanent, invisible probe reads the same env() for nothing. */
     try {
-      var probe = document.createElement('div');
-      probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;'
-        + 'padding-bottom:env(safe-area-inset-bottom, 0px);';
-      document.documentElement.appendChild(probe);
-      var b = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
-      probe.remove();
-      return b;
+      if (!_insetProbe || !_insetProbe.isConnected) {
+        _insetProbe = document.createElement('div');
+        _insetProbe.setAttribute('aria-hidden', 'true');
+        _insetProbe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;'
+          + 'padding-bottom:env(safe-area-inset-bottom, 0px);';
+        (document.body || document.documentElement).appendChild(_insetProbe);
+      }
+      return parseFloat(getComputedStyle(_insetProbe).paddingBottom) || 0;
+    } catch (e) { return 0; }
+  }
+  var _insetProbe = null;
+  function setVar(name, val) {
+    var st = document.documentElement.style;
+    if (st.getPropertyValue(name) !== val) st.setProperty(name, val);
+  }
+
+  /* KEYBOARD UP = NO BAR (2026-10-20, Closed Testing Report issue 3).
+
+     Pinning to the visible bottom meant that with the keyboard open the bar sat on top of
+     it, mid-screen, over half of the New award form. While a text field has focus AND the
+     visible height is well below the tallest seen without typing (the keyboard; adjustResize
+     in the APK shrinks innerHeight too, so innerHeight alone cannot tell), html gets
+     .kt-kb-open and kt-mobile-app.css hides the bar and the back button. */
+  var kbBase = 0, kbOrient = null;
+  function typingTarget() {
+    var ae = document.activeElement;
+    if (!ae) return false;
+    if (ae.isContentEditable || ae.tagName === 'TEXTAREA') return true;
+    return ae.tagName === 'INPUT'
+      && !/^(checkbox|radio|button|submit|reset|file|range|color|image|hidden)$/i.test(ae.type || '');
+  }
+  function trackKeyboard(vv) {
+    var h = vv ? vv.height : window.innerHeight;
+    var o = (screen.orientation && screen.orientation.type) || (window.innerWidth > window.innerHeight ? 'l' : 'p');
+    if (o !== kbOrient) { kbOrient = o; kbBase = 0; }
+    var typing = typingTarget();
+    if (!typing && h > kbBase) kbBase = h;
+    if (!kbBase) kbBase = Math.max(h, window.innerHeight);
+    var open = typing && (kbBase - h) > 120;
+    document.documentElement.classList.toggle('kt-kb-open', open);
+  }
+
+  /* THE IPHONE HOME-SCREEN GAP (2026-10-27), MEASURED. A real iPhone (390x844, opened from
+     the Home Screen) reported through the IOSLAYOUT beacon: inner 797, 100lvh 844, insets
+     47/34 - the page is given the screen MINUS the status bar, so everything fixed to the
+     bottom (this bar, the clocked-in glow) stopped 47px above the real edge with white under
+     it (Anthony's screenshot, 2026-10-27). The bar's own padding was right (34 for the home
+     indicator, lift 0), so this is not the double count of 2026-09-21. 100lvh still measures
+     the whole screen, so the gap is lvh - innerHeight, and the bar is moved down by it.
+     Home Screen app only: in a Safari tab that difference is Safari's own toolbar, which
+     the bar must stay above. Never while the keyboard is up. */
+  var _gapProbe = null;
+  function standaloneGap() {
+    try {
+      if (!isIOS() || !(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches))) return 0;
+      if (!_gapProbe) {
+        _gapProbe = document.createElement('div');
+        _gapProbe.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:100lvh;visibility:hidden;pointer-events:none;';
+        document.body.appendChild(_gapProbe);
+      }
+      var gap = Math.round(_gapProbe.getBoundingClientRect().height - window.innerHeight);
+      return gap > 0 && gap <= 80 ? gap : 0;   // a status bar's worth at most; anything bigger is not this
     } catch (e) { return 0; }
   }
 
   function pinToVisualViewport() {
     var nav = document.getElementById('kt-mobilenav'); if (!nav) return;
     var vv = window.visualViewport;
+    try { trackKeyboard(vv); } catch (e) {}
     if (vv) {
       var offset = window.innerHeight - (vv.offsetTop + vv.height);
       if (!(offset > 1)) { offset = 0; }
@@ -749,7 +988,15 @@
         offset = Math.max(0, offset - _inset);
       }
 
-      nav.style.bottom = Math.round(offset) + 'px';
+      var _gap = offset === 0 ? standaloneGap() : 0;
+      var _bot = (_gap ? -_gap : Math.round(offset)) + 'px';
+      if (nav.style.bottom !== _bot) nav.style.bottom = _bot;
+      try {
+        // The clocked-in glow is drawn to the same short viewport: extend it to the edge too.
+        var _glow = document.getElementById('kt-clockglow');
+        if (_glow) { _glow.style.bottom = _gap ? (-_gap) + 'px' : ''; }
+        setVar('--kt-ios-gap', _gap + 'px');
+      } catch (e) {}
 
       /* THE NUMBERS, WHERE SOMEBODY CAN READ THEM.
 
@@ -758,11 +1005,11 @@
          as data-kt-insets on <html>: one attribute turns "still a gap" into a reading.
          Visible in a crash report and in the DOM. */
       try {
-        nav.setAttribute('data-kt-pin',
-          'vv ' + Math.round(vv.height) + '+' + Math.round(vv.offsetTop)
+        var _pin = 'vv ' + Math.round(vv.height) + '+' + Math.round(vv.offsetTop)
           + ' vs inner ' + window.innerHeight
           + ' | inset ' + _inset + (isIOS() ? ' (ios, subtracted)' : ' (kept)')
-          + ' -> bottom ' + Math.round(offset));
+          + ' -> bottom ' + Math.round(offset) + (_gap ? ' | home-screen gap ' + _gap + ' (moved down)' : '');
+        if (nav.getAttribute('data-kt-pin') !== _pin) nav.setAttribute('data-kt-pin', _pin);
       } catch (e) {}
     } else {
       nav.style.bottom = '0px';
@@ -773,6 +1020,10 @@
     var main = document.getElementById('appMain');
     if (main && window.innerWidth <= 600) {
       var need = Math.round(nav.getBoundingClientRect().height) + 16;
+      // How much of the VISIBLE screen the bar covers (not its height: on an iPhone Home Screen
+      // app the bar is moved below the page's own bottom - see standaloneGap).
+      try { var _vvb = window.visualViewport ? window.visualViewport.offsetTop + window.visualViewport.height : window.innerHeight;
+        setVar('--kt-nav-h', Math.max(0, Math.round(_vvb - nav.getBoundingClientRect().top)) + 'px'); } catch (e) {}
       // If the floating back button (FAB, bottom-left) is showing, reserve enough
       // room that content clears IT too — it floats ABOVE the nav bar, so the
       // nav-only clearance leaves the last controls/text hidden behind the FAB.
@@ -792,7 +1043,28 @@
   }
   window.addEventListener('resize', pinToVisualViewport);
   window.addEventListener('orientationchange', pinToVisualViewport);
-  setInterval(function () { pinToVisualViewport(); padGearClearance(); placeGear(); }, 700);   // catch SPA navigations / URL-bar changes
+  // Focus changes before the keyboard finishes animating; look again once it has.
+  document.addEventListener('focusin', function () { setTimeout(pinToVisualViewport, 350); }, true);
+  document.addEventListener('focusout', function () { setTimeout(pinToVisualViewport, 120); }, true);
+  /* ONLY WHEN SOMETHING CHANGED (2026-10-28, Anthony: "the bottom bar with the buttons freezes
+     and I cannot click on anything"). This ran the full measure every 700 ms whatever happened;
+     each pass reads layout (the bar, the name row), and on a screen still settling - a long list
+     being turned into cards - that meant laying out the whole list again, over and over. Now the
+     tick compares a few numbers that cost nothing to read (window and visible-area size, the
+     keyboard, the screen, the back button) and measures only when one moved, plus every 4 s as
+     a backstop. Resize / scroll / focus listeners above still measure at once. */
+  var _tickSig = '', _tickAt = 0;
+  setInterval(function () {
+    var vv = window.visualViewport, now = Date.now();
+    var sig = window.innerWidth + 'x' + window.innerHeight
+      + (vv ? '|' + Math.round(vv.width) + 'x' + Math.round(vv.height) + '+' + Math.round(vv.offsetTop) : '')
+      + '|' + (typingTarget() ? 1 : 0) + '|' + location.hash
+      + '|' + (document.getElementById('kt-role-back') ? 1 : 0) + (document.getElementById('kt-gear') ? 1 : 0)
+      + (document.getElementById('kt-mobilenav') ? 1 : 0) + (dialFabOn() ? 1 : 0);
+    if (sig === _tickSig && now - _tickAt < 4000) return;
+    _tickSig = sig; _tickAt = now;
+    pinToVisualViewport(); padGearClearance(); placeGear();
+  }, 700);   // catch SPA navigations / URL-bar changes
 
   // ── Screen-transition animation (phones only) ───────────────────────
   // A real navigation (hashchange) arms a one-shot; the first #appMain childList
@@ -879,6 +1151,20 @@
   function curSection() { return (location.hash || '').replace('#', '').split('?')[0]; }
   function refreshBadges() {
     if (!tok()) return;
+    /* One answer for every badge (kt-badges.js, 2026-10-30). The Inbox counted the unread among the newest 200
+       rows (17) while the bell counted them all (38), and opening the inbox did not reset either. */
+    if (window.KT && KT.badges) {
+      KT.badges.get().then(function (b) {
+        if (!b) return;
+        var sec = curSection();
+        _setBadge('kt-mnav-msg', sec === 'messages' || sec === 'chat' ? 0 : (isParentView() ? (b.parent_messages || 0) : (KT.badges.msgs ? KT.badges.msgs(b) : (b.chats || 0))));
+        var cat = b.cat || {};
+        _setBadge('kt-b-photos', sec === 'photos' ? 0 : (cat.photos || 0));
+        _setBadge('kt-b-billing', sec === 'billing' ? 0 : (cat.billing || 0));
+        _setBadge('kt-b-inbox', sec === 'notifications' ? 0 : (b.notifications || 0));
+      });
+      return;
+    }
     // Parents use the /parent/messages store (not /chats); staff use /chats.
     var msgPath = isParentView() ? '/parent/messages/unread-count' : '/chats/unread-count';
     _get(msgPath).then(function (d) { if (d) _setBadge('kt-mnav-msg', curSection() === 'messages' || curSection() === 'chat' ? 0 : (d.unread || 0)); });
@@ -904,6 +1190,7 @@
     });
   }
   setInterval(refreshBadges, 15000);   // was 60s, and it disagreed with the top bar's 15s figure
+  window.addEventListener('kt:badges', refreshBadges);   // real time: any change repaints at once
   // On entering a section, instantly clear its badge, then re-sync shortly after
   // (the screen marks its notifications read on open).
   window.addEventListener('hashchange', function () {
@@ -949,4 +1236,75 @@
       }, 50);
     });
   })();
+
+  /* THE IPHONE BOTTOM, MEASURED (2026-10-27). Anthony's screenshot: white space under the
+     bottom bar on an iPhone, and the clocked-in outline (position:fixed; inset:0) ends ~30px
+     above the screen's edge too - so the layout viewport itself stops short, not just the
+     bar. Two earlier rounds of this were fixed from screenshots (memory: ios-inset-double-
+     count, ios-env-inset-is-zero). This sends the real numbers ONCE per session from an
+     iPhone, to /diag/scroll (prefix IOSLAYOUT), so the next fix is made from a reading. */
+  (function () {
+    var ua = navigator.userAgent || '';
+    if (!/iPhone|iPad/.test(ua)) return;
+    try { if (sessionStorage.getItem('kt_ioslayout_sent')) return; } catch (e) {}
+    setTimeout(function () {
+      try {
+        var vv = window.visualViewport, de = document.documentElement;
+        var nav = document.getElementById('kt-mobilenav');
+        var nr = nav ? nav.getBoundingClientRect() : null;
+        var probe = document.createElement('div');
+        probe.style.cssText = 'position:fixed;left:0;right:0;bottom:0;height:1px;pointer-events:none;visibility:hidden;';
+        document.body.appendChild(probe);
+        var fixedBottom = Math.round(probe.getBoundingClientRect().bottom);
+        probe.style.cssText = 'position:fixed;left:0;top:0;height:100vh;width:1px;visibility:hidden;';
+        var vh100 = Math.round(probe.getBoundingClientRect().height);
+        probe.style.cssText = 'position:fixed;left:0;top:0;height:100dvh;width:1px;visibility:hidden;';
+        var dvh = Math.round(probe.getBoundingClientRect().height);
+        probe.style.cssText = 'position:fixed;left:0;top:0;height:100lvh;width:1px;visibility:hidden;';
+        var lvh = Math.round(probe.getBoundingClientRect().height);
+        probe.remove();
+        var data = 'IOSLAYOUT standalone=' + (!!navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches))
+          + ' screen=' + screen.width + 'x' + screen.height + ' dpr=' + (window.devicePixelRatio || 1)
+          + ' inner=' + innerWidth + 'x' + innerHeight + ' outerH=' + outerHeight + ' clientH=' + de.clientHeight
+          + ' vv=' + (vv ? Math.round(vv.height) + '+' + Math.round(vv.offsetTop) : '-')
+          + ' fixedBottom=' + fixedBottom + ' 100vh=' + vh100 + ' dvh=' + dvh + ' lvh=' + lvh
+          + ' nav=' + (nr ? Math.round(nr.top) + '..' + Math.round(nr.bottom) + ' pad' + getComputedStyle(nav).paddingBottom + ' style.bottom=' + nav.style.bottom : '-')
+          + ' insets=' + (de.getAttribute('data-kt-insets') || '-') + ' pin=' + (nav ? nav.getAttribute('data-kt-pin') : '-')
+          + ' safeB=' + getComputedStyle(de).getPropertyValue('--kt-safe-bottom') + ' hash=' + (location.hash || '').split('?')[0];
+        var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+        fetch(base + '/diag/scroll', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: data }) }).catch(function () {});
+        try { sessionStorage.setItem('kt_ioslayout_sent', '1'); } catch (e) {}
+      } catch (e) {}
+    }, 4000);
+  })();
+})();
+
+/* "WHEN THE PORTAL REFRESHES I LOSE ACCESS TO THE SALES AND PLATFORM VIEWS" (Anthony,
+   2026-10-27). A refresh re-applies the last role picked in View as (kt_view_as_pref, by
+   design since 2026-09-17), and a clean test keeps both sections - so what decides it lives on
+   the device. Once per session, for an account that HOLDS platform_admin, report what this
+   load ended up showing: real roles, the view-as in force and the remembered one, the agency,
+   and whether Platform / Sales actually appeared. Read with: grep ROLEVIEW scroll-diag.log. */
+(function () {
+  try { if (sessionStorage.getItem('kt_roleview_sent')) return; } catch (e) { return; }
+  setTimeout(function () {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var roles = (u && u.roles) || [];
+      if (roles.indexOf('platform_admin') < 0) return;
+      var txt = '';
+      ['appSidebar', 'appMain'].forEach(function (id) { var el = document.getElementById(id); if (el) txt += ' ' + (el.innerText || ''); });
+      var pref = null; try { pref = JSON.parse(localStorage.getItem('kt_view_as_pref') || 'null'); } catch (e) {}
+      var C = window.Capacitor, app = !!(C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative));
+      var data = 'ROLEVIEW uid=' + u.id + ' roles=' + roles.join(',') + ' viewAs=' + (sessionStorage.getItem('kt_view_as') || '-')
+        + ' pref=' + (pref ? (pref.role + (String(pref.uid) === String(u.id) ? '' : '(other uid)')) : '-')
+        + ' agency=' + (sessionStorage.getItem('kt_active_agency_id') || '-') + ' last_agency=' + (u.last_agency_id || '-')
+        + ' platformShown=' + /PLATFORM/i.test(txt) + ' salesShown=' + /\bSALES\b|Pipeline/.test(txt)
+        + ' app=' + app + ' w=' + innerWidth + ' hash=' + String(location.hash || '').split('?')[0]
+        + ' tokenIn=' + (sessionStorage.getItem('kt_token') ? 'session' : (localStorage.getItem('kt_token') ? 'local' : 'none'));
+      var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+      fetch(base + '/diag/scroll', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: data }) }).catch(function () {});
+      sessionStorage.setItem('kt_roleview_sent', '1');
+    } catch (e) {}
+  }, 7000);
 })();

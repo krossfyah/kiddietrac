@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * WHICH CENTRES MAY THIS CALLER TOUCH, inside an agency already resolved (2026-10-05).
@@ -27,10 +28,45 @@ final class CentreScope
     /** @return int[]|null */
     public static function ids(Request $request, int $agencyId): ?array
     {
-        if (array_intersect(UserRoles::names($request), self::WIDE)) {
+        // Roles in the ACTIVE agency (2026-11-05): an admin role held in another agency must not
+        // make this one agency-wide.
+        if (array_intersect(AgencyRole::names($request), self::WIDE)) {
             return null;
         }
         return Visibility::centreIds($agencyId, $request->user());
+    }
+
+    /**
+     * THE PEOPLE OF THESE CENTRES (2026-11-13, Forms Manager for directors): anyone holding an active role placed
+     * at one of them (staff, and the guardian rows that carry their family's centre) plus the guardians of the
+     * families anchored there. For modules whose rows belong to a PERSON, not a centre (signed forms, file
+     * requests). Fails closed: no centres, nobody.
+     *
+     * @param  int[] $centreIds
+     * @return int[]
+     */
+    public static function peopleIds(array $centreIds): array
+    {
+        $centreIds = array_values(array_unique(array_map('intval', $centreIds)));
+        if (! $centreIds) {
+            return [];
+        }
+        return DB::table('role_assignments')->where('active', 1)->whereIn('centre_id', $centreIds)->pluck('user_id')
+            ->merge(DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                ->whereIn('f.centre_id', $centreIds)->whereNull('f.deleted_at')->whereNotNull('g.user_id')
+                ->pluck('g.user_id'))
+            ->map(fn ($v) => (int) $v)->unique()->values()->all();
+    }
+
+    /**
+     * For a caller: null = agency-wide (no filter, exactly as before); otherwise the people of their centres.
+     *
+     * @return int[]|null
+     */
+    public static function people(Request $request, int $agencyId): ?array
+    {
+        $scope = self::ids($request, $agencyId);
+        return $scope === null ? null : self::peopleIds($scope);
     }
 
     /** May this caller change a row with this centre_id? */

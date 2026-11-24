@@ -3,8 +3,44 @@
    Tabs: Centres · Users · Families · Branding · Billing
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
+
   'use strict';
+  /* THE KIDDIETRAC APP ON THEIR PHONE (2026-10-23, App\Support\AppInstalls): the app has
+     been signed in on that phone and is registered for notifications. */
+  function ktAppText(app) {
+    if (!app || (!app.android && !app.ios)) return 'Not installed';
+    var rel = function (t) {
+      if (!t) return '';
+      var d = new Date(String(t).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(t)) ? '' : 'Z'));
+      var m = Math.round((Date.now() - d.getTime()) / 60000);
+      if (!(m >= 0)) return '';
+      return m < 60 ? 'active ' + Math.max(1, m) + ' min ago' : (m < 1440 ? 'active ' + Math.round(m / 60) + ' h ago' : 'active ' + Math.round(m / 1440) + ' d ago');
+    };
+    var part = function (name, x) { return name + (x.build ? ' (build ' + x.build + ')' : '') + (x.phones > 1 ? ' on ' + x.phones + ' phones' : '') + (rel(x.last) ? ', ' + rel(x.last) : ''); };
+    return [app.android ? part('Android app', app.android) : null, app.ios ? part('iPhone app', app.ios) : null].filter(Boolean).join(' · ');
+  }
   const { Api, Dom, Shell } = window.KT;
+  /* Allergies, health alerts and dietary needs are stored as lists ([{allergen, severity}], or plain strings) -
+     shown as words, never as the raw ["Dairy"] (2026-11-04, the educator's child record). */
+  function _ktHealthText(raw, key) {
+    if (raw == null || raw === '') return '';
+    var arr = raw;
+    if (typeof raw === 'string') {
+      var t = raw.trim();
+      if (!t) return '';
+      if (t.charAt(0) !== '[' && t.charAt(0) !== '{') return t;
+      try { arr = JSON.parse(t); } catch (e) { return t; }
+    }
+    if (!Array.isArray(arr)) arr = [arr];
+    return arr.map(function (x) {
+      if (x == null) return '';
+      if (typeof x !== 'object') return String(x).trim();
+      var n = String(x[key] || x.name || x.label || x.allergen || x.restriction || '').trim();
+      return n ? n + (x.severity ? ' (' + String(x.severity).replace(/_/g, ' ') + ')' : '') : '';
+    }).filter(Boolean).join(', ');
+  }
+  /** A stored code as words: prefer_not_to_say -> "Prefer not to say", active -> "Active". */
+  function _ktWords(v) { if (!v) return ''; var w = String(v).replace(/_/g, ' '); return w.charAt(0).toUpperCase() + w.slice(1); }
 
   /* SOFT GRADIENT CARDS FOR RECORD VIEWS (2026-10-09: "under daily overview and where it
      shows the educators name its using a nice gradient can you use that when viewing user,
@@ -62,9 +98,9 @@
     const isDeepLink = hash.startsWith('admin-') || hash.startsWith('admin/');
     if (hash.startsWith('admin-')) state.activeTab = hash.replace('admin-', '');
     else if (hash.startsWith('admin/')) state.activeTab = hash.replace('admin/', '');
-    // A director has the Users section only; centres, families, branding and billing
-    // here are agency-admin screens.
-    if (isDirectorView()) state.activeTab = 'users';
+    // A director has Users and Families (their own centres', 2026-11-13); centres, branding and
+    // billing here are agency-admin screens.
+    if (isDirectorView() && state.activeTab !== 'families') state.activeTab = 'users';
 
     // Header — the legacy hub title only. The per-section titles that used to live here
     // are gone with the header they fed; each section's own banner carries its name now.
@@ -363,6 +399,11 @@
     var PLAIN = 'background:transparent;border:1px solid var(--ink-300);padding:6px 12px;'
       + 'border-radius:6px;cursor:pointer;font-size:13px;';
     function mk(label) { return Dom.el('button', { type: 'button', style: PLAIN }, label); }
+    /* Sign-in lock for the whole centre / provider, before "Close this provider" (kt-signin-locks.js, 2026-11-10). */
+    function withLock(list) {
+      if (window.KT && KT.signinLock) list.splice(list.length - 1, 0, KT.signinLock.centreButton(c, mk));
+      return list;
+    }
 
     function toast(msg, kind) {
       if (window.KT && window.KT.Dom && window.KT.Dom.toast) window.KT.Dom.toast(msg, kind);
@@ -391,9 +432,9 @@
     if (window.KT && window.KT.Headcount && window.KT.Headcount.editActing) {
       var actingBtn = mk('Acting supervisor');
       actingBtn.addEventListener('click', function (e) { e.stopPropagation(); window.KT.Headcount.editActing(c.id); });
-      return [viewBtn, editBtn, actingBtn, offboardBtn];
+      return withLock([viewBtn, editBtn, actingBtn, offboardBtn]);
     }
-    return [viewBtn, editBtn, offboardBtn];
+    return withLock([viewBtn, editBtn, offboardBtn]);
   }
 
   async function renderCentresTab(content) {
@@ -445,7 +486,7 @@
       return;
     }
 
-    var view = localStorage.getItem('kt_view_centres') || localStorage.getItem('kt_view_pref') || 'table';
+    var view = (window.matchMedia && window.matchMedia('(max-width:768px)').matches) ? 'table' : (localStorage.getItem('kt_view_centres') || localStorage.getItem('kt_view_pref') || 'table');
     if (view === 'cards') {
       content.appendChild(renderCentresCards(data.centres, content));
       maybeAutoOpenCentre(data.centres, content);
@@ -601,7 +642,7 @@
       /* Was a flat #1F6080 for everyone, since no provider has a brand_color set —
          nine identical navy cards. */
       var accent = providerBand(c);
-      var card = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;cursor:pointer;border-left:6px solid ' + accent + ';position:relative;' });
+      var card = Dom.el('div', { style: 'background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;cursor:pointer;--kt-edge:' + accent + ';position:relative;' });
 
       // Edit moved into the action bar at the foot of the card, with the rest.
 
@@ -646,7 +687,7 @@
       var _in = c.children_present || 0;
       if (_lim) {
         var _over = _in > _lim, _at = _in === _lim;
-        stats.appendChild(statCell('In now', _in + ' / ' + _lim,
+        stats.appendChild(statCell('At Centre now', _in + ' / ' + _lim,
           _over ? '#B91C1C' : (_at ? '#B45309' : '#1D4ED8'),
           _over ? '#FEE2E2' : (_at ? '#FEF3C7' : '#EFF6FF')));
       } else {
@@ -885,7 +926,7 @@
       // Logo upload
       const logoWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin-bottom:12px;' });
       let logoEl = renderCentreLogoPreview(centre);
-      const fileIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/svg+xml', style: 'display:none;' });
+      const fileIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp,image/svg+xml', style: 'display:none;', 'data-kt-noface': '1' });
       const upBtn = Dom.el('button', { type: 'button', style: 'padding:6px 12px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;' }, centre.logo_url ? 'Change logo' : 'Upload logo');
       const upMsg = Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);margin-left:8px;' });
       upBtn.addEventListener('click', () => fileIn.click());
@@ -973,7 +1014,7 @@
       // child. A short, warm first-person introduction works best.
       const bioWrap = Dom.el('div', { style: 'margin-bottom:12px;' });
       bioWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:13px;font-weight:600;margin-bottom:4px;' }, 'Provider bio'));
-      const bioIn = Dom.el('textarea', { placeholder: "Hi! I'm … I've cared for children for … years. I believe every child grows best with …", style: 'width:100%;min-height:190px;padding:10px 12px;line-height:1.55;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;font-family:inherit;resize:vertical;' });
+      const bioIn = Dom.el('textarea', { placeholder: "Hi! I'm … I've cared for children for … years. I believe every child grows best with …", style: 'width:100%;min-height:260px;padding:10px 12px;line-height:1.55;border:1px solid var(--ink-300);border-radius:6px;font-size:14px;box-sizing:border-box;font-family:inherit;resize:vertical;' });
       bioIn.value = centre.provider_bio || '';
       inputs.provider_bio = bioIn;
       bioWrap.appendChild(bioIn);
@@ -1044,17 +1085,21 @@
         const rotBtn = Dom.el('button', {
           type: 'button',
           style: 'padding:7px 12px;background:#FEF3C7;color:#92400E;border:1.5px solid #FCD34D;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;',
-        }, kioskState.token ? '↻ Rotate token' : 'Generate token');
+        }, kioskState.token ? '🚫 Sign out all kiosk tablets' : 'Generate token');
+        /* LOST OR STOLEN TABLET (2026-11-09, Anthony: "sign out a lost phone or kiosk remotely in one click"). A kiosk
+           signs in with the centre's link, not a person, so a new link signs every tablet on the old one out at once;
+           the tablets still in use get the new link (Copy / QR below). */
+        rotBtn.title = 'For a lost or stolen kiosk tablet: the current link stops working on every tablet at once.';
         rotBtn.addEventListener('click', async function () {
-          if (kioskState.token && !await KT.confirm('Rotate the kiosk token? The current URL will stop working immediately — any tablet using the old link will need the new one.')) return;
+          if (kioskState.token && !await KT.confirm({ title: 'Sign out all kiosk tablets?', description: 'Every tablet using this centre’s kiosk link is signed out straight away (use this for a lost or stolen tablet). A new link is made: open it on the tablets you still use.', okLabel: 'Sign out all kiosks' })) return;
           rotBtn.disabled = true; rotBtn.textContent = 'Rotating…';
           Api.post('/director/centres/' + centre.id + '/kiosk-token', {}).then(function (r) {
             kioskState.token = r.kiosk_token;
             renderKioskActions();
-            if (Dom.toast) Dom.toast('Kiosk token rotated', 'success');
+            if (Dom.toast) Dom.toast('Kiosk tablets signed out · open the new link on the ones you still use', 'success');
           }).catch(function (e) {
             rotBtn.disabled = false;
-            rotBtn.textContent = '↻ Rotate token';
+            rotBtn.textContent = '🚫 Sign out all kiosk tablets';
             alert('Could not rotate: ' + (e.message || 'server error'));
           });
         });
@@ -1063,27 +1108,22 @@
 
         // v22p85: QR check-in — scannable code + printable poster for the centre door.
         if (kioskState.token && window.KT && KT.qrImg) {
-          var qrSteps = '<strong>1.</strong> Scan this code with your phone camera.<br>'
-            + '<strong>2.</strong> Tap your child’s name.<br>'
-            + '<strong>3.</strong> Enter your 4–6 digit PIN to sign in or out.';
           var qrRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;margin:6px 0 10px;padding:12px;border:1px solid var(--ink-100,#E5E7EB);border-radius:10px;background:#FAFCFD;' });
           var qrBox = Dom.el('div', { style: 'width:96px;height:96px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#64748B;font-size:11px;' }, 'QR…');
           qrRow.appendChild(qrBox);
           var qrSide = Dom.el('div', { style: 'flex:1;min-width:0;' });
-          qrSide.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:13px;margin-bottom:2px;' }, '📲 QR check-in'));
-          qrSide.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-bottom:8px;line-height:1.4;' }, 'Print and post this at the door — families scan it to sign children in or out, no tablet needed.'));
+          qrSide.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:13px;margin-bottom:2px;' }, '📲 One-Tap (QR check-in)'));
+          qrSide.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-bottom:8px;line-height:1.4;' }, 'Print and post this at the door: families scan it with their phone camera to check children in or out, contactless, no tablet needed.'));
           var printBtn = Dom.el('button', {
             type: 'button',
             style: 'padding:7px 14px;background:#1F6080;color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;',
-          }, '🖨️ Print QR poster');
+          }, '🖨️ Print One-Tap poster');
           printBtn.addEventListener('click', function () {
+            // The poster alone, with the agency's name and logo (kt-qr.js, poster-info).
             KT.printQRPoster({
-              title: centre.name || 'Centre check-in',
-              subtitle: 'Scan to sign your child in or out',
-              url: kioskUrlFor(kioskState.token),
-              steps: qrSteps,
-              footer: 'Powered by KiddieTrac',
-            }).catch(function (e) { alert(e.message || 'Could not open the QR poster.'); });
+              data: kioskUrlFor(kioskState.token), kind: 'kiosk',
+              centreId: centre.id, centreName: centre.name || '',
+            }).catch(function (e) { alert(e.message || 'Could not open the One-Tap poster.'); });
           });
           qrSide.appendChild(printBtn);
           qrRow.appendChild(qrSide);
@@ -1091,12 +1131,12 @@
           // Render the inline preview thumbnail.
           KT.qrImg(kioskUrlFor(kioskState.token), { size: 96, cell: 4, margin: 2 })
             .then(function (img) { Dom.clear(qrBox); qrBox.appendChild(img); })
-            .catch(function () { qrBox.textContent = 'QR unavailable'; });
+            .catch(function () { qrBox.textContent = 'One-Tap code unavailable'; });
         }
 
         kioskActions.appendChild(Dom.el('p', {
           style: 'font-size:11px;color:var(--ink-500);margin:4px 0 12px;line-height:1.4;',
-        }, 'Open this URL on the tablet at your centre entrance, or print the QR poster above. Parents tap their child + enter their PIN to sign in or out. Set per-guardian PINs from the family detail (or via API).'));
+        }, 'Open this URL on the tablet at your centre entrance, or print the One-Tap poster above. Parents tap their child + enter their PIN to sign in or out. Set per-guardian PINs from the family detail (or via API).'));
       };
 
       togIn.addEventListener('change', function () {
@@ -1357,6 +1397,8 @@
      answers the question and no date arithmetic is needed. 'not_invited' is the same
      state one step earlier: the account exists and no invite has gone out yet, which
      is exactly the row an admin on this tab is looking for. */
+  /* CIRCLE STATS: KT.statRings lives in kt-stat-rings.js (a "d" dependency of this file in __KT_LAZY). */
+
   function isUnclaimedUser(u) {
     var st = String((u && u.status) || '').toLowerCase();
     return st === 'invited' || st === 'not_invited';
@@ -1406,7 +1448,7 @@
     content.appendChild(tabHero(
       view === 'deactivated' ? '🗄️ De-boarded & deactivated'
         : view === 'invited' ? '✉️ Invited users'
-        : '👥 User management',
+        : '🆔 User management',
       view === 'deactivated'
         ? (rows.length + ' closed account' + (rows.length === 1 ? '' : 's')
            + '. Staff who were deactivated and guardians whose family was de-boarded. '
@@ -1465,6 +1507,20 @@
     // Reactivating is an agency admin's call, so a director has no closed-accounts view.
     if (!_dir) subTabs.appendChild(subTab('deactivated', '🗄️ De-boarded / deactivated', showDeactivated ? rows.length : null));
     content.appendChild(subTabs);
+
+    if (view === 'all' && allUsers.length) {
+      const signedIn = allUsers.filter(u => !isUnclaimedUser(u)).length;
+      const onApp = allUsers.filter(u => u.app && (u.app.android || u.app.ios)).length;
+      const parents = allUsers.filter(u => (u.roles || []).length && (u.roles || []).every(r => r === 'guardian')).length;
+      const rings = [
+        { label: 'Active users', value: allUsers.length, color: '#1F6080' },
+        { label: 'Signed in', value: signedIn, of: allUsers.length, color: '#16A34A' },
+        { label: 'Using the app', value: onApp, of: allUsers.length, color: '#7C3AED' },
+      ];
+      if (!_dir) rings.push({ label: 'Online now', value: allUsers.filter(u => presenceSet.has(u.id)).length, of: allUsers.length, color: '#0E7490' });
+      else rings.push({ label: 'Parents', value: parents, of: allUsers.length, color: '#D97706' });
+      content.appendChild(KT.statRings(rings));
+    }
 
     // Possible-duplicate-accounts advisory (best-effort; only on the active list).
     if (view === 'all' && !_dir) {   // merging accounts is an agency admin's job
@@ -1619,7 +1675,17 @@
 
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px;' }, statusBadge(u, inviteTip(u))));
       row.appendChild(userOnboardingCell(u));
-      row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px; white-space: nowrap;' }, fmtLoginStamp(u.last_seen_at || u.last_login_at)));
+      const seenTd = Dom.el('td', { style: 'padding: 14px 16px; color: var(--ink-500); font-size: 13px; white-space: nowrap;' }, fmtLoginStamp(u.last_seen_at || u.last_login_at));
+      // The KiddieTrac app on their phone, under "last seen" (2026-10-23).
+      if (u.app && (u.app.android || u.app.ios)) {
+        const pill = document.createElement('div');
+        pill.title = ktAppText(u.app);
+        pill.style.cssText = 'margin-top:4px;display:inline-flex;gap:4px;align-items:center;font-size:11px;font-weight:700;color:#047857;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:1px 8px;white-space:nowrap';
+        pill.textContent = '📱 ' + [u.app.android ? 'Android' : null, u.app.ios ? 'iPhone' : null].filter(Boolean).join(' + ') + ' app';
+        seenTd.appendChild(document.createElement('br'));
+        seenTd.appendChild(pill);
+      }
+      row.appendChild(seenTd);
 
       let actionEl;
       if (showDeactivated) {
@@ -1652,12 +1718,12 @@
           var mBtn = iconBtn('⚙️', u.can_manage ? 'Manage' : (u.manage_block || 'Ask an agency admin'), function () { if (u.can_manage) showUserModal(u, content); });
           if (!u.can_manage) { mBtn.disabled = true; mBtn.style.opacity = '.4'; mBtn.style.cursor = 'not-allowed'; }
           actionEl = Dom.el('div', { style: 'display:inline-flex; gap:6px; justify-content:flex-end;' }, [
-            iconBtn('ℹ️', 'View details', function () { showUserView(u, content); }),
+            iconBtn('ℹ️', 'View details', function () { showUserModal(u, content, { view: true }); }),
             mBtn,
           ]);
         } else
         actionEl = Dom.el('div', { style: 'display:inline-flex; gap:6px; justify-content:flex-end;' }, [
-          iconBtn('ℹ️', 'View details', function () { showUserView(u, content); }),
+          iconBtn('ℹ️', 'View details', function () { showUserModal(u, content, { view: true }); }),
           iconBtn('⚙️', 'Manage', function () { showUserModal(u, content); }),
           iconBtn('✉️', 'Resend welcome invite', function () { rowResendWelcome(u); }),
           iconBtn('🔑', 'Reset password', function () { rowResetPassword(u); }),
@@ -1668,7 +1734,11 @@
              this is where an admin already is when somebody phones to say they cannot
              get in. A plain button: kt-row-actions.js collapses the last cell's buttons
              into the ⋮ itself, and adding our own would be a kebab inside a kebab. */
-          iconBtn('🔓', 'Unlock sign-in', function () { rowUnlockLogin(u); }),
+          iconBtn('🔓', 'Clear failed sign-in lockout', function () { rowUnlockLogin(u); }),
+          // Pause / restore this person's sign-in, or let them in past a centre lock (kt-signin-locks.js, 2026-11-10).
+          iconBtn('🚷', 'Sign-in lock…', function () {
+            if (window.KT && KT.signinLock) KT.signinLock.openPerson(u.id, u.name || u.email, function () { renderUsersTab(content); });
+          }),
         ]);
       }
       row.appendChild(Dom.el('td', { style: 'padding: 14px 16px; text-align: right;' }, actionEl));
@@ -1789,11 +1859,11 @@
     // "Parent / guardian" is picked we route to the Add Family wizard instead of
     // creating an orphan login that would see no children. This hint + the toggling
     // below make that switch obvious.
-    const parentHint = Dom.el('div', { style: 'display:none; background:#EFF6FF; border-left:3px solid #3B82F6; padding:10px 12px; font-size:13px; color:#1E3A8A; border-radius:4px; margin-bottom:12px;' },
+    const parentHint = Dom.el('div', { style: 'display:none; background:#EFF6FF; --kt-edge:#3B82F6; padding:10px 12px; font-size:13px; color:#1E3A8A; border-radius:4px; margin-bottom:12px;' },
       '👪 Parents are added together with their child. Continue to open Add Family, where you can enter the child, guardians, billing split, and send their invite.');
     body.appendChild(parentHint);
 
-    const note = Dom.el('div', { style: 'background: #ECFDF5; border-left: 3px solid #10B981; padding: 10px 12px; font-size: 13px; color: #065F46; border-radius: 4px; margin-top: 12px;' },
+    const note = Dom.el('div', { style: 'background: #ECFDF5; --kt-edge:#10B981; padding: 10px 12px; font-size: 13px; color: #065F46; border-radius: 4px; margin-top: 12px;' },
       '✉ An invite email with a secure “set your password” link will be sent to this address automatically.');
     body.appendChild(note);
 
@@ -2074,6 +2144,7 @@
     /* A different fact, worth having beside it: last_login_at is the last
        authentication; this is when they were last actually in the portal. */
     target.appendChild(rowEl('Last seen', fmtDT(u.last_seen_at)));
+    target.appendChild(rowEl('Mobile app', ktAppText(u.app)));
     /* Beside the sign-in facts, because that is the group it belongs to: an admin
        looking at "last login" is already asking questions about this account's access. */
     (function () {
@@ -2176,7 +2247,7 @@
     });
 
     Shell.Modal.open({
-      title: 'User details',
+      title: 'At a glance',
       body: body,
       actions: (isDirectorView() && !u.can_manage) ? [
         { label: 'Close', primary: true, onClick: function () { Shell.Modal.close(); } },
@@ -2185,6 +2256,7 @@
         { label: 'Close', onClick: function () { Shell.Modal.close(); } },
       ],
     });
+    markRecordModal(false);
   }
 
   function _toast(icon, title, body, color) {
@@ -2415,7 +2487,112 @@
     } catch (e) { _toast('⚠️', 'Reset failed', e && e.message ? e.message : 'error', '#DC2626'); }
   }
 
-  function showUserModal(user, content) {
+  /* RECORD POPUPS MATCH THE CHILD RECORD (2026-10-20). Anthony: "for the user management and
+     editing the user details - change the top heading to At a glance with the gradient as
+     well including when editing the top bar should be gradient and the tabs at the top ...
+     should look better with highlighting the section that you are in". Same soft navy bar
+     as the child record (screen-child-detail.js ensureChildModalStyles), navy-to-teal while
+     editing. Scoped by .kt-record-modal; other popups are unchanged. */
+  function ensureRecordModalStyles() {
+    if (document.getElementById('kt-record-modal-css')) { return; }
+    var css = ''
+      + '.modal.kt-record-modal{overflow:hidden;border:1px solid #1B3A63;}'
+      + '.modal.kt-record-modal .modal-header{background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%) !important;border-bottom:0 !important;padding:13px 18px !important;}'
+      + '.modal.kt-record-modal .modal-header h2{color:#FFFFFF !important;font-size:16px !important;font-weight:800 !important;letter-spacing:.2px;}'
+      + '.modal.kt-record-modal .modal-close{color:#FFFFFF !important;background:rgba(255,255,255,.14) !important;border-radius:8px;opacity:1 !important;}'
+      + '.modal.kt-record-modal .modal-close:hover{background:rgba(255,255,255,.26) !important;}'
+      + '.modal.kt-record-modal.kt-editing .modal-header{background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%) !important;box-shadow:inset 0 -3px 0 #7FD3CC;}'
+      /* Edge to edge, like the child record: no white gutter; the tab strip is a band
+         flush under the bar; the content keeps a 16px margin. */
+      + '.modal.kt-record-modal .modal-body{padding:0 0 16px !important;}'
+      + '.modal.kt-record-modal .modal-body>div{padding:12px 16px 0;}'
+      + '.modal.kt-record-modal .kt-rtabbar{margin:0 -16px 16px !important;border-radius:0 !important;border-width:0 0 1px 0 !important;padding:8px 12px !important;}'
+      + '.kt-rtab{transition:background .15s,color .15s,box-shadow .15s;}'
+      + '.kt-rtab:not([aria-selected="true"]):hover{background:#FFFFFF !important;color:#1B3A63 !important;}'
+      + '.kt-rtab:focus-visible{outline:2px solid #4A7FA6;outline-offset:2px;}';
+    var st = document.createElement('style');
+    st.id = 'kt-record-modal-css';
+    st.textContent = css;
+    document.head.appendChild(st);
+  }
+  function markRecordModal(editing) {
+    ensureRecordModalStyles();
+    try {
+      var m = document.querySelector('#modalRoot .modal');
+      if (m) { m.classList.add('kt-record-modal'); m.classList.toggle('kt-editing', !!editing); }
+    } catch (e) {}
+  }
+
+  /* VIEW ONLY (2026-11-06, Anthony: "when I goto user management and view a user, the view should be all tabs as if
+     i am editing the user but in view only mode"). View opens the SAME record as Manage - every tab, the same layout
+     and tab strip - with every field read-only and every button that changes something taken away. It is applied to
+     the built record and again whenever a tab fills in (MutationObserver), so a section added later is locked without
+     anyone having to remember to. Reading stays: the tabs, links, and View / Open / Download / Print / Copy / Show
+     more buttons. */
+  var VIEW_OK_WORD = /^(view|open|download|preview|print|show|hide|more|less|see|expand|collapse|copy|read|older|newer|load more|prev|next|close)\b/i;
+  var VIEW_OK_GLYPH = /^[⧉‹›«»]$/;
+  function viewOnlyLock(root) {
+    root.setAttribute('data-kt-view-only', '1');   // what a detached menu asks (the linked-email ⋮ leaves out Unlink)
+    function okButton(b) {
+      if (b.closest('[role="tablist"], [data-kt-tabbar], .kt-tabband')) return true;
+      if (b.hasAttribute('data-kt-view-ok')) return true;
+      var label = String(b.textContent || b.getAttribute('aria-label') || b.title || '').trim();
+      if (VIEW_OK_GLYPH.test(label)) return true;
+      label = label.replace(/^[^A-Za-z0-9]+/, '');
+      return VIEW_OK_WORD.test(label);
+    }
+    function lock() {
+      Array.prototype.forEach.call(root.querySelectorAll('input, select, textarea'), function (i) {
+        if (i.getAttribute('data-kt-view-locked')) return;
+        if (i.hasAttribute('data-kt-view-ok')) return;   // a search box or a filter: reading, not changing
+        i.setAttribute('data-kt-view-locked', '1');
+        var t = String(i.type || '').toLowerCase();
+        if (i.tagName === 'SELECT' || /^(checkbox|radio|file|range|color|button|submit|reset)$/.test(t)) {
+          i.disabled = true;
+        } else {
+          i.readOnly = true;
+          i.style.background = '#F8FAFC';
+          i.style.cursor = 'default';
+        }
+        i.setAttribute('aria-readonly', 'true');
+      });
+      Array.prototype.forEach.call(root.querySelectorAll('[contenteditable="true"], [contenteditable=""]'), function (e) {
+        e.setAttribute('contenteditable', 'false');
+      });
+      Array.prototype.forEach.call(root.querySelectorAll('button, [role="button"], label.kt-btn'), function (b) {
+        if (b.getAttribute('data-kt-view-seen')) return;
+        b.setAttribute('data-kt-view-seen', '1');
+        // A choice chip (a room ticked or not) is information: shown as it is, locked.
+        if (b.hasAttribute('data-kt-chip')) { b.disabled = true; b.style.cursor = 'default'; b.style.opacity = '1'; return; }
+        if (okButton(b)) return;
+        b.style.setProperty('display', 'none', 'important');
+        b.setAttribute('data-kt-view-hidden', '1');
+      });
+      // An upload drawn as a label around a file input reads as a button.
+      Array.prototype.forEach.call(root.querySelectorAll('label'), function (l) {
+        if (l.querySelector('input[type="file"]')) l.style.setProperty('display', 'none', 'important');
+      });
+    }
+    lock();
+    var queued = false;
+    var mo = new MutationObserver(function () {
+      if (!document.body.contains(root)) { mo.disconnect(); return; }
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; lock(); });
+    });
+    mo.observe(root, { childList: true, subtree: true });
+    // A click on something that slipped through (a chip, a switch drawn as a div) changes nothing.
+    root.addEventListener('click', function (e) {
+      var t = e.target && e.target.closest && e.target.closest('[role="switch"], [role="checkbox"], [aria-pressed], [data-kt-view-hidden]');
+      if (t && root.contains(t)) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
+  }
+
+  function showUserModal(user, content, opts) {
+    opts = opts || {};
+    /* View (the ℹ️ on the list, "View profile", a reference-ID search): this same record, locked - viewOnlyLock. */
+    const _viewOnly = !!opts.view;
     const root = Dom.el('div', {});
     // v23: two-tab layout so the record isn't one long scroll. "Details" holds
     // profile/status/roles/notes/etc.; "Files" holds documents (incl. signed NDA).
@@ -2425,7 +2602,8 @@
        three lines under its emoji. Now each tab is a compact one-line pill; they wrap
        onto a second row when there is no room instead of squashing, and the one you
        are on is filled. */
-    const tabBar = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--ink-100,#E5E7EB);' });
+    // A tinted strip; the section you are in is filled (paintTab) - 2026-10-20.
+    const tabBar = Dom.el('div', { role: 'tablist', class: 'kt-rtabbar', style: 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px;padding:5px;background:#EEF3F8;border:1px solid #E2E8F0;border-radius:14px;' });
     /* On a phone the pills wrapped to five rows, a fifth of the screen. There they are
        one row you swipe sideways instead, and the chosen tab scrolls into view. */
     const _tabsSwipe = !!(window.matchMedia && window.matchMedia('(max-width: 600px)').matches);
@@ -2439,14 +2617,16 @@
     const paneFiles = Dom.el('div', { style: 'display:none;' });
     const _tabs = [];
     function paintTab(b, on) {
-      b.style.background = on ? '#1F6080' : '#fff';
+      b.style.background = on ? 'linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%)' : 'transparent';
       b.style.color = on ? '#fff' : '#475569';
-      b.style.borderColor = on ? '#1F6080' : '#E2E8F0';
+      b.style.borderColor = 'transparent';
+      b.style.boxShadow = on ? '0 4px 12px -4px rgba(27,58,99,.55)' : 'none';
+      b.style.fontWeight = on ? '800' : '700';
       b.setAttribute('aria-selected', on ? 'true' : 'false');
     }
     function mkTab(label, pane) {
-      const b = Dom.el('button', { type: 'button', role: 'tab', style: 'appearance:none;display:inline-flex;align-items:center;gap:6px;'
-        + 'height:30px;padding:0 10px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;color:#475569;'
+      const b = Dom.el('button', { type: 'button', role: 'tab', class: 'kt-rtab', style: 'appearance:none;display:inline-flex;align-items:center;gap:6px;'
+        + 'height:32px;padding:0 12px;border-radius:10px;border:1px solid transparent;background:transparent;color:#475569;'
         + 'font-size:12px;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer;flex:0 0 auto;' }, label);
       // A tab, not an action: the icon-button pass must not shrink it to a bare glyph.
       b.setAttribute('data-kt-iconized', '1');
@@ -2467,6 +2647,8 @@
     const paneCerts = Dom.el('div', { style: 'display:none;' });
     const paneClock = Dom.el('div', { style: 'display:none;' });
     const paneData = Dom.el('div', { style: 'display:none;' });
+    const paneEmails = Dom.el('div', { style: 'display:none;' });
+    const panePhotos = Dom.el('div', { style: 'display:none;' });
 
     // Marked so the button normaliser below leaves the tabs alone — without this it
     // applied min-height + inline-flex to them and they grew to 65px.
@@ -2529,6 +2711,38 @@
       _certTab.addEventListener('click', function () { if (!_certsDrawn) { _certsDrawn = true; KT.StaffCerts.renderList(paneCerts, user.id); } });
     }
     if (_isSelf) { mkTab('💬 Texts & calls', paneContact); }
+    /* EMAILS (2026-11-07): what an agency mailbox linked to this person (App\Support\PersonMail). Admins; loaded the
+       first time the tab is opened, and the tab removes itself when the agency has linking off and nothing is linked. */
+    /* Who sees it is the agency's choice (2026-11-06, Email settings → "Who can see linked emails"): the tab is made
+       hidden and shown once /email-links/access says this reader may - admins, directors for their own centres,
+       named people. */
+    {
+      var _emTab = mkTab('✉️ Emails', paneEmails), _emDrawn = false;
+      _emTab.style.display = 'none';
+      linkedEmailAccess().then(function (a) { if (a && a.view) _emTab.style.display = ''; });
+      _emTab.addEventListener('click', function () {
+        if (_emDrawn) return;
+        _emDrawn = true;
+        renderLinkedEmails(paneEmails, '/email-links/person?type=user&id=' + encodeURIComponent(user.id), {
+          onCount: function (n) { _emTab.textContent = '✉️ Emails (' + n + ')'; },
+          /* Say what actually happened (2026-11-07): this said "linking is off" for a load error and for a reader who
+             may not see this person, which is how iLearn - linking on, 600 emails linked - was told it was off. */
+          onHide: function (why) {
+            var msg = why === 'off' ? 'Linking emails to people is off for this agency. Turn it on in Email settings.'
+              : why === 'denied' ? 'You do not have access to this person\u2019s linked emails.'
+              : 'Linked emails could not be loaded. Try again in a moment.';
+            paneEmails.innerHTML = '<div style="font-size:13px;color:var(--ink-500);">' + msg + '</div>';
+            if (why === 'error') _emDrawn = false;   // a later click tries again
+          },
+        });
+      });
+    }
+    /* PHOTOS ON A PARENT'S RECORD (2026-11-06): their children's photo permission - the same panel as the family
+       record (KT.photoConsentPanel), loaded the first time the tab is opened. */
+    if ((user.roles || []).indexOf('guardian') >= 0 && window.KT && KT.photoConsentPanel) {
+      var _pcTab = mkTab('🤳 Photos', panePhotos), _pcDrawn = false;
+      _pcTab.addEventListener('click', function () { if (!_pcDrawn) { _pcDrawn = true; KT.photoConsentPanel(panePhotos, { user_id: user.id }); } });
+    }
     if (!_dirMode) mkTab('🗄️ Data & retention', paneData);
     if (_isSelf) { mkTab('ℹ️ About', paneAbout); }
 
@@ -2596,6 +2810,12 @@
       codes.forEach(function (c) { idRow.appendChild(KT.refPill(c[1], { label: c[0] })); });
       root.appendChild(idRow);
     })();
+    if (_viewOnly) {
+      root.appendChild(Dom.el('div', {
+        style: 'display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:8px 12px;border-radius:10px;'
+             + 'background:#F1F5F9;border:1px solid #E2E8F0;color:#334155;font-size:12.5px;font-weight:600;line-height:1.4;',
+      }, '👁️ View only: nothing here can be changed.' + ((_dirMode && !user.can_manage) ? ' An agency admin can make changes.' : ' Press Edit to make changes.')));
+    }
     root.appendChild(tabBar);
     /* A STEADY WINDOW (2026-10-09: "make sure the popup window doesnt resize when
        navigating to subtabs"). The dialog took the height of whichever tab was showing,
@@ -2613,6 +2833,8 @@
     paneHost.appendChild(paneClock);
     paneHost.appendChild(paneAccount);
     paneHost.appendChild(paneData);
+    paneHost.appendChild(paneEmails);
+    paneHost.appendChild(panePhotos);
     if (_isSelf) {
       paneHost.appendChild(paneContact);
       if (window.KT && KT.renderContactPrefs) { KT.renderContactPrefs(paneContact); }
@@ -2632,7 +2854,7 @@
     const avatarSide = Dom.el('div', { style: 'flex:1;' });
     avatarSide.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:15px;' }, user.name));
     avatarSide.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);margin-bottom:8px;' }, user.email));
-    const fileInput = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none;' });
+    const fileInput = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none;', 'data-kt-noface': '1', 'data-kt-face': '1' });
     const changeBtn = Dom.el('button', { type: 'button', style: 'padding:6px 12px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;' }, 'Change avatar');
     const avatarMsg = Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);margin-left:8px;' });
     changeBtn.addEventListener('click', () => fileInput.click());
@@ -2647,7 +2869,9 @@
         doAvatarUpload(file);
       }
     });
+    // A profile photo must show a face, checked on the device (KT.faceGate, 2026-10-30).
     async function doAvatarUpload(blob) {
+      if (window.KT && KT.faceGate && !(await KT.faceGate(blob, { who: 'person', name: user.first_name, retry: () => fileInput.click() }))) return;
       changeBtn.disabled = true; changeBtn.textContent = 'Uploading...';
       try {
         const fd = new FormData(); fd.append('avatar', blob, 'avatar.jpg');
@@ -2831,7 +3055,14 @@
           line(sec, 'Sign-in lock', lk, 'Too many wrong passwords.' + (_dirMode ? ' An agency admin can unlock it.' : ''));
         }
         var ss = s2.sessions || {};
-        line(sec, 'Signed-in sessions', String(ss.active || 0), ss.last_used ? 'Last used ' + ss.last_used : null);
+        // Lost phone (2026-11-09): see each signed-in device and sign one, or all, out remotely (kt-devices.js).
+        var ssv = Dom.el('div', {}, String(ss.active || 0));
+        if (ss.active > 0 && KT.devices) {
+          var dvb = Dom.el('button', { type: 'button', style: 'margin-left:8px;height:28px;padding:0 10px;border:1px solid #CBD5E1;border-radius:7px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;' }, '📱 Devices · sign out');
+          dvb.addEventListener('click', function () { KT.devices.open({ userId: uid, name: (user && (user.first_name || user.name)) || '' }); });
+          ssv.appendChild(dvb);
+        }
+        line(sec, 'Signed-in sessions', ssv, ss.last_used ? 'Last used ' + ss.last_used : null);
         var pd = s2.push_devices || [];
         // device_name is often a raw browser user-agent; show "Chrome on Windows" instead.
         var uaShort = function (n, plat) {
@@ -3061,23 +3292,32 @@
       var titleIn = Dom.el('input', { type: 'text', placeholder: 'Title (optional)', style: 'flex:1;min-width:120px;padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;' });
       var catSel = Dom.el('select', { style: 'padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;background:#fff;' });
       [['file', 'File'], ['contract', 'Contract'], ['certificate', 'Certificate'], ['id', 'ID document'], ['other', 'Other']].forEach(function (o) { catSel.appendChild(Dom.el('option', { value: o[0] }, o[1])); });
-      var fileIn = Dom.el('input', { type: 'file', accept: '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx', style: 'display:none;' });
-      var upBtn = Dom.el('button', { type: 'button', style: 'padding:7px 14px;background:#1F6080;color:#fff;border:0;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;' }, '＋ Attach file');
+      var fileIn = Dom.el('input', { type: 'file', multiple: 'multiple', accept: '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx', style: 'display:none;' });
+      var upBtn = Dom.el('button', { type: 'button', style: 'padding:7px 14px;background:#1F6080;color:#fff;border:0;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;' }, '＋ Attach files');
       var upMsg = Dom.el('span', { style: 'font-size:12px;color:#6B7280;' });
       upBtn.addEventListener('click', function () { fileIn.click(); });
+      // SEVERAL AT ONCE (2026-11-13): each picked file is its own document; a failed one is named, the rest still go.
       fileIn.addEventListener('change', async function () {
-        var f = fileIn.files[0]; if (!f) return;
-        if (f.size > 10 * 1024 * 1024) { upMsg.style.color = '#B91C1C'; upMsg.textContent = 'Max 10 MB'; return; }
-        upBtn.disabled = true; upMsg.style.color = '#6B7280'; upMsg.textContent = 'Uploading…';
+        var files = Array.prototype.slice.call(fileIn.files || []); if (!files.length) return;
+        var big = files.filter(function (f) { return f.size > 10 * 1024 * 1024; })[0];
+        if (big) { upMsg.style.color = '#B91C1C'; upMsg.textContent = big.name + ' is over 10 MB'; fileIn.value = ''; return; }
+        upBtn.disabled = true; upMsg.style.color = '#6B7280';
+        var title = titleIn.value.trim(), failed = [], lastErr = '';
         try {
-          var fd = new FormData();
-          fd.append('file', f);
-          if (titleIn.value.trim()) fd.append('title', titleIn.value.trim());
-          fd.append('category', catSel.value);
-          await Api.postForm('/admin/users/' + uid + '/documents', fd);
-          titleIn.value = ''; upMsg.style.color = '#16A34A'; upMsg.textContent = '✓ Attached'; load();
-        } catch (e) {
-          upMsg.style.color = '#B91C1C'; upMsg.textContent = e.message || 'Upload failed';
+          for (var i = 0; i < files.length; i++) {
+            upMsg.textContent = files.length > 1 ? 'Uploading ' + (i + 1) + ' of ' + files.length + '…' : 'Uploading…';
+            try {
+              var fd = new FormData();
+              fd.append('file', files[i]);
+              if (title) fd.append('title', files.length > 1 ? title + ' (' + (i + 1) + ' of ' + files.length + ')' : title);
+              fd.append('category', catSel.value);
+              await Api.postForm('/admin/users/' + uid + '/documents', fd);
+            } catch (e) { failed.push(files[i].name); lastErr = e.message || ''; }
+          }
+          if (failed.length < files.length) titleIn.value = '';
+          if (!failed.length) { upMsg.style.color = '#16A34A'; upMsg.textContent = '✓ ' + (files.length > 1 ? files.length + ' files attached' : 'Attached'); }
+          else { upMsg.style.color = '#B91C1C'; upMsg.textContent = files.length > 1 ? 'Not attached: ' + failed.join(', ') + (lastErr ? ' — ' + lastErr : '') : (lastErr || 'Upload failed'); }
+          load();
         } finally {
           upBtn.disabled = false; fileIn.value = '';
         }
@@ -3169,6 +3409,23 @@
 
         Api.get('/admin/users/' + uid + '/data-map').then(function (d) {
           Dom.clear(mapBody);
+          /* Privacy notice read (2026-11-10): when this parent confirmed reading the agency's notice, each version. */
+          var pn = d && d.privacy_notice;
+          if (pn) {
+            var h = pn.history || [], last = h[0];
+            var line = !pn.required ? ['Not asked - the privacy notice is switched off for this agency.', '#64748B']
+              : pn.read_current ? ['Read on ' + last.at + ' (version ' + last.version + ', current)', '#16A34A']
+              : last ? ['Not read the current notice (version ' + pn.current_version + ') yet - last read version ' + last.version + ' on ' + last.at, '#B45309']
+              : ['Not read yet - they will be asked the next time they open the portal.', '#B45309'];
+            var pnBox = Dom.el('div', { style: 'margin:0 0 12px;padding:9px 12px;background:#fff;border:1px solid #E5E7EB;border-radius:9px;' });
+            pnBox.appendChild(Dom.el('div', { style: 'font-weight:700;color:#0F172A;font-size:13px;' }, '🛡️ Privacy notice'));
+            pnBox.appendChild(Dom.el('div', { style: 'font-size:12.5px;margin-top:2px;color:' + line[1] + ';' }, line[0]));
+            if (h.length > 1 || (h.length === 1 && !pn.read_current)) {
+              pnBox.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#94A3B8;margin-top:4px;' },
+                'History: ' + h.map(function (r) { return 'v' + r.version + ' ' + r.at; }).join(' · ')));
+            }
+            mapBody.appendChild(pnBox);
+          }
           var cats = (d && d.categories) || [];
           if (!cats.length) {
             mapBody.appendChild(Dom.el('div', {}, 'Nothing recorded against this person yet.'));
@@ -3359,8 +3616,9 @@
         });
 
         function chipFor(room) {
+          // data-kt-chip: an on/off choice, not a tab or an action - View shows it locked (viewOnlyLock).
           const chip = Dom.el('button', {
-            type: 'button',
+            type: 'button', 'data-kt-chip': '1',
             style: 'border-radius:999px;padding:8px 13px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid;',
           }, room.name);
           const paint = function () {
@@ -3387,12 +3645,14 @@
             roomBody.appendChild(Dom.el('div', {
               style: 'font-size:11.5px;font-weight:800;color:#64748B;margin:12px 0 6px;',
             }, String(key)));
-            const row = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;' });
+            const row = Dom.el('div', { 'data-kt-noband': '1', style: 'display:flex;flex-wrap:wrap;gap:7px;' });
             byCentre[key].forEach(function (room) { row.appendChild(chipFor(room)); });
             roomBody.appendChild(row);
           });
         } else {
-          const grid = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:7px;' });
+          /* data-kt-noband (2026-11-06): with one room ticked, kt-tab-band read the row as a tab strip (one chip painted
+             differently = "the current tab") and redrew the chips as tabs. */
+          const grid = Dom.el('div', { 'data-kt-noband': '1', style: 'display:flex;flex-wrap:wrap;gap:7px;' });
           rooms.forEach(function (room) { grid.appendChild(chipFor(room)); });
           roomBody.appendChild(grid);
         }
@@ -3684,7 +3944,7 @@
       const re = user.profile_extras.role_extras;
       const keys = Object.keys(re).filter(k => re[k] !== null && re[k] !== '' && re[k] !== undefined);
       if (keys.length) {
-        const credBox = Dom.el('div', { style: 'background:#F1F5F9;border-left:3px solid #1F6080;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:14px;' });
+        const credBox = Dom.el('div', { style: 'background:#F1F5F9;--kt-edge:#1F6080;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:14px;' });
         credBox.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;color:#475569;letter-spacing:0.8px;text-transform:uppercase;margin-bottom:6px;' }, 'From onboarding'));
         const grid = Dom.el('div', { style: 'display:grid;grid-template-columns:auto 1fr;gap:4px 14px;' });
         keys.forEach(k => {
@@ -3859,6 +4119,9 @@
     });
     actionRow.appendChild(reopenBtn);
 
+    // Sign-in lock / unlock for this person (kt-signin-locks.js, 2026-11-10). It reads their state itself.
+    if (window.KT && KT.signinLock) KT.signinLock.userButton(actionRow, user);
+
     const resendBtn = Dom.el('button', { class: 'kt-btn kt-btn-secondary' }, '✉ Resend welcome');
     resendBtn.addEventListener('click', async () => {
       var _alreadyIn = ['invited', 'not_invited'].indexOf(String(user.status)) === -1;
@@ -3971,8 +4234,21 @@
     danger.appendChild(actionRow);
     if (!_dirMode) body.appendChild(danger);   // reset, resend, off-board, delete: agency admin
 
+    if (_viewOnly) {
+      var _canEdit = !_dirMode || !!user.can_manage;
+      Shell.Modal.open({
+        title: '👁️ ' + (user.name || user.email),
+        body: root,
+        actions: (_canEdit ? [{ label: '✏️ Edit', primary: true, onClick: function () {
+          Shell.Modal.close(); setTimeout(function () { showUserModal(user, content); }, 60);
+        } }] : []).concat([{ label: 'Close', primary: !_canEdit, onClick: function () { Shell.Modal.close(); } }]),
+      });
+      markRecordModal(true);
+      viewOnlyLock(root);
+      return;
+    }
     Shell.Modal.open({
-      title: 'Manage ' + user.name,
+      title: '✏️ Editing · ' + user.name,
       body: root,
       // A director has no status to save; each card on Details has its own Save.
       actions: _dirMode ? [{ label: 'Close', primary: true, onClick: function () { Shell.Modal.close(); } }] : [{
@@ -3996,6 +4272,7 @@
         },
       }],
     });
+    markRecordModal(true);
   }
 
   // ════════════════════════════════════════════════════════════════
@@ -4026,6 +4303,10 @@
    * Families. The count is filled in after paint so a section never waits on it.
    */
   function archiveSwitch(content, key, renderActive, showing) {
+    /* Archived records are an agency admin's (GET /admin/archived is admin-only). A director
+       was offered the switch on Children and Families and got a 403 behind it (2026-11-13
+       role audit) - an empty placeholder keeps every caller's appendChild working. */
+    if (isDirectorView()) return document.createComment('archive switch: agency admins only');
     var wrap = Dom.el('div', { style: 'display:inline-flex;gap:0;border:1px solid var(--ink-200,#E5E7EB);border-radius:9px;overflow:hidden;margin-bottom:14px;' });
     function seg(label, on, go) {
       var b = Dom.el('button', {
@@ -4926,27 +5207,47 @@
     var famStatus = 'enrolled';
     try {
       var _fs = sessionStorage.getItem(FAM_STATUS_KEY);
-      if (_fs === '' || _fs === 'enrolled' || _fs === 'suspended') { famStatus = _fs; }
+      if (_fs === '' || _fs === 'enrolled' || _fs === 'suspended' || _fs === 'waitlisted') { famStatus = _fs; }
     } catch (e) {}
 
     var _allFamilies = data.families || [];
     data = Object.assign({}, data, {
       families: _allFamilies.filter(function (f) {
-        if (famStatus === 'enrolled') { return !f.suspended; }
+        if (famStatus === 'enrolled') { return !f.suspended && !f.waitlisted; }
         if (famStatus === 'suspended') { return !!f.suspended; }
+        if (famStatus === 'waitlisted') { return !!f.waitlisted; }   // provider closed, waiting to be placed (2026-11-24)
         return true;
       }),
     });
     var _suspendedCount = _allFamilies.filter(function (f) { return !!f.suspended; }).length;
+    var _waitlistedCount = _allFamilies.filter(function (f) { return !!f.waitlisted; }).length;
+    // Billing filter (2026-10-30): split bills / one payer, remembered for the session.
+    var FAM_BILL_KEY = 'kt_fam_bill', famBill = '';
+    try { famBill = sessionStorage.getItem(FAM_BILL_KEY) || ''; } catch (e) {}
+    function _isSplitFam(f) { return !!f.billing_split && f.billing_split !== 'single'; }
+    var _splitCount = _allFamilies.filter(_isSplitFam).length;
+    if (famBill === 'split') data.families = data.families.filter(_isSplitFam);
+    else if (famBill === 'single') data.families = data.families.filter(function (f) { return !_isSplitFam(f); });
 
     // v22p12.1: tab hero
     content.appendChild(tabHero(
       '👪 Families',
       data.families.length + ' famil' + (data.families.length === 1 ? 'y' : 'ies')
-        + (famStatus === 'enrolled' ? ' enrolled' : (famStatus === 'suspended' ? ' suspended' : ''))
+        + (famStatus === 'enrolled' ? ' enrolled' : (famStatus === 'suspended' ? ' suspended' : (famStatus === 'waitlisted' ? ' waitlisted' : '')))
         + ' across your centres. Click any card to see children, guardians, and balances.',
       'familyGroup'
     ));
+
+    // Circle stats for the families listed (2026-11-04, "add circle stats to families as well").
+    if (data.families.length) {
+      var _fl = data.families;
+      content.appendChild(KT.statRings([
+        { label: 'Families', value: _fl.length, color: '#1F6080', sub: 'in this list' },
+        { label: 'Children', value: _fl.reduce(function (t, f) { return t + (Number(f.child_count) || 0); }, 0), color: '#16A34A', sub: 'in these families' },
+        { label: 'Balance owing', value: _fl.filter(function (f) { return Number(f.outstanding_balance) > 0; }).length, of: _fl.length, color: '#DC2626' },
+        { label: 'Split bills', value: _fl.filter(_isSplitFam).length, of: _fl.length, color: '#7C3AED' },
+      ]));
+    }
 
     // v22p11: action bar with count on the left + Add button on the right
     const bar = Dom.el('div', { style: 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; flex-wrap: wrap;' });
@@ -4959,6 +5260,7 @@
     [
       ['enrolled',  'Enrolled'],
       ['suspended', 'Suspended' + (_suspendedCount ? ' (' + _suspendedCount + ')' : '')],
+      ['waitlisted', 'Waitlisted' + (_waitlistedCount ? ' (' + _waitlistedCount + ')' : '')],
       ['',          'All statuses'],
     ].forEach(function (o) {
       var opt = Dom.el('option', { value: o[0] }, o[1]);
@@ -4970,6 +5272,12 @@
       renderFamiliesTab(content);
     });
     bar.appendChild(famStatusSel);
+    var famBillSel = Dom.el('select', { style: famStatusSel.style.cssText, title: 'Filter by billing' });
+    [['', 'All billing'], ['split', 'Split bills' + (_splitCount ? ' (' + _splitCount + ')' : '')], ['single', 'One payer']].forEach(function (o) {
+      var opt = Dom.el('option', { value: o[0] }, o[1]); if (famBill === o[0]) opt.selected = true; famBillSel.appendChild(opt);
+    });
+    famBillSel.addEventListener('change', function () { try { sessionStorage.setItem(FAM_BILL_KEY, famBillSel.value); } catch (e) {} renderFamiliesTab(content); });
+    bar.appendChild(famBillSel);
 
     bar.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px; flex: 1;' },
       famStatus === 'enrolled' ? 'Families currently in care'
@@ -4982,7 +5290,10 @@
     bar.appendChild(famCsvBtn);
 
     const addBtn = Dom.el('button', { style: btnPrimary() }, '+ Add family');
-    addBtn.addEventListener('click', () => showFamilyWizard(centresData.centres, content));
+    addBtn.addEventListener('click', () => {
+      if (isDirectorView()) { if (KT.directorFamily) KT.directorFamily.add(() => renderFamiliesTab(content)); return; }
+      showFamilyWizard(centresData.centres, content);
+    });
     bar.appendChild(addBtn);
 
     // v22p26: card/table view toggle remembered per-list in localStorage.
@@ -4995,7 +5306,7 @@
     try {
       if (sessionStorage.getItem('kt_open_add_family') === '1') {
         sessionStorage.removeItem('kt_open_add_family');
-        setTimeout(function () { showFamilyWizard(centresData.centres, content); }, 120);
+        setTimeout(function () { addBtn.click(); }, 120);
       }
     } catch (e) {}
 
@@ -5015,7 +5326,7 @@
       return;
     }
 
-    var view = localStorage.getItem('kt_view_families') || localStorage.getItem('kt_view_pref') || 'cards';
+    var view = (window.matchMedia && window.matchMedia('(max-width:768px)').matches) ? 'table' : (localStorage.getItem('kt_view_families') || localStorage.getItem('kt_view_pref') || 'cards');
     if (view === 'table') {
       content.appendChild(renderFamiliesTable(data.families, centresData.centres, content));
       return;
@@ -5032,6 +5343,7 @@
       famText.appendChild(Dom.el('div', { style: 'font-size: 17px; font-weight: 700; margin-bottom: 2px;' }, f.family_name));
       famText.appendChild(Dom.el('div', { style: 'color: var(--ink-500); font-size: 13px;' }, f.centre_name || '—'));
       if (f.ref_code && KT.refPill) famText.appendChild(Dom.el('div', { style: 'margin-top:4px;' }, [KT.refPill(f.ref_code)]));
+      if (f.billing_split && f.billing_split !== 'single') famText.appendChild(Dom.el('span', { title: 'This family splits the bill', style: 'display:inline-block;margin-top:4px;background:#E0F2FE;color:#075985;font-weight:700;font-size:10.5px;padding:2px 8px;border-radius:20px;' }, '💳 Split · ' + (({ single: 'One payer', split_50_50: 'Split 50 / 50', custom: 'Custom split', even: 'Shared evenly', percent: 'Percentage split', fixed: 'Fixed amount + rest', by_type: 'By charge type', by_child: 'By child' })[f.billing_split] || 'Split')));
       famHead.appendChild(famText);
       card.appendChild(famHead);
 
@@ -5052,6 +5364,10 @@
       if (f.suspended) {
         card.appendChild(Dom.el('div', { style: 'margin-top: 10px; display:inline-block; background:#FEF3C7; color:#92400E; font-weight:700; font-size:11px; padding:3px 9px; border-radius:20px;' }, '⏸ Suspended'));
       }
+      if (f.waitlisted) {
+        card.appendChild(Dom.el('div', { 'data-kttip': 'Their provider closed. They keep their access and wait on the agency waitlist to be placed with a new educator or centre.',
+          style: 'margin-top: 10px; display:inline-block; background:#EDE9FE; color:#5B21B6; font-weight:700; font-size:11px; padding:3px 9px; border-radius:20px;' }, '⏳ Waitlisted'));
+      }
 
       // Action bar as the card's LAST child → ⋮ kebab via kt-row-actions.
       const famActBar = familyActions(f, centresData.centres, content);
@@ -5070,6 +5386,8 @@
   // user has never set a preference. Families + Children default to 'cards';
   // Centres defaults to 'table' (more columns to compare at a glance).
   function viewToggle(storageKey, onChange, defaultView) {
+    // Phone: no Cards / Table switch - always the table (Anthony 2026-10-27: "with mobile view remove the ability to toggle with cards to table and just keep table").
+    if ((window.matchMedia && window.matchMedia('(max-width:768px)').matches)) { return Dom.el('span', { style: 'display:none;' }); }
     // Per-section choice wins; otherwise fall back to the user's GLOBAL
     // card/table preference (kt_view_pref) so a choice made in one section
     // carries to the others they haven't explicitly set.
@@ -5217,7 +5535,7 @@
     body.appendChild(Dom.el('div', { style: 'padding:14px;color:var(--ink-500);font-size:13px;' }, 'Loading the plan\u2026'));
 
     let plan = null;
-    const picks = {};                 // family_id -> 'withdraw' | room id
+    const picks = {};                 // family_id -> 'withdraw' | 'waitlist' | room id
     const dateInput = Dom.el('input', { type: 'date',
       style: 'padding:9px 12px;border:1px solid var(--ink-300);border-radius:8px;font-size:14px;font-family:inherit;' });
     const closeStaff = Dom.el('input', { type: 'checkbox', style: 'width:17px;height:17px;' });
@@ -5240,7 +5558,7 @@
           onClick: async () => {
             const ok = await KT.confirm({
               title: 'Close ' + centre.name + '?',
-              description: 'Transfers and withdrawals are applied and parents are emailed. This cannot be undone.',
+              description: 'Transfers and withdrawals are applied and parents are emailed. Families sent to the waitlist leave this provider but keep their access, show as Waitlisted, and admins and directors are emailed to place them. This cannot be undone.',
               tone: 'danger',
             });
             if (!ok) return false;
@@ -5258,8 +5576,8 @@
       (plan ? plan.families : []).forEach((f) => {
         const v = picks[f.family_id];
         if (!v) { missing++; return; }
-        decisions.push(v === 'withdraw'
-          ? { family_id: f.family_id, action: 'withdraw' }
+        decisions.push(v === 'withdraw' || v === 'waitlist'
+          ? { family_id: f.family_id, action: v }
           : { family_id: f.family_id, action: 'transfer', to_room_id: Number(v) });
       });
       if (missing) {
@@ -5283,7 +5601,8 @@
         if (!confirm) {
           status.style.color = 'var(--ink-700)';
           status.textContent = 'Ready: ' + res.transfers + ' transfer(s), ' + res.withdrawals
-            + ' withdrawal(s)' + (res.will_close_staff ? ', staff accounts closed' : '')
+            + ' withdrawal(s)' + (res.waitlisted ? ', ' + res.waitlisted + ' to the waitlist' : '')
+            + (res.will_close_staff ? ', staff accounts closed' : '')
             + (res.will_archive ? ', then archived' : '') + '. Nothing has changed yet.';
           return false;
         }
@@ -5295,6 +5614,33 @@
         status.style.color = errs.length ? '#B91C1C' : '#15803D';
         status.textContent = (res.timing || '') + ' ' + (res.archive_message || '')
           + (errs.length ? ('  Problems: ' + errs.map(e => (e.stage + ': ' + e.message)).join('; ')) : '');
+        /* FAMILIES LEFT OPEN ARE SAID WHERE THEY ARE SEEN (2026-11-12, support ticket #249). The note about
+           them was in this status line, and a successful closure closes the dialog at once - so nobody read
+           it, and Bruni Meeser's two families stayed live on her closed home. Now it is a dialog of its own. */
+        const open = (res.report && res.report.closure && res.report.closure.families_still_open) || [];
+        if (!errs.length && open.length) {
+          /* #251: the usual answer is "they still want care" - so the first choice puts them on the
+             agency waitlist (and emails admins + directors how to place them); Families stays for
+             recording a departure. */
+          const go = await KT.confirm({
+            title: open.length + (open.length === 1 ? ' family is' : ' families are') + ' still open',
+            description: centre.name + ' is closed, but ' + open.map(f => f.family_name || ('Family #' + f.id)).join(', ')
+              + (open.length === 1 ? ' has' : ' have') + ' no child enrolled anywhere. '
+              + 'Put them on the agency waitlist so an admin or director can place them with a new educator or centre, '
+              + 'or record their departure from Families.',
+            tone: 'warning',
+            okLabel: 'Put on waitlist',
+            cancelLabel: 'Later',
+          });
+          if (go) {
+            try {
+              const w = await Api.post('/agency/waitlist/from-families', { family_ids: open.map(f => f.id) });
+              if (KT.Dom && KT.Dom.toast) KT.Dom.toast((w && w.message) || 'Added to the waitlist', 'success');
+            } catch (x) {
+              if (KT.Dom && KT.Dom.toast) KT.Dom.toast((x && x.message) || 'Could not add them to the waitlist', 'error');
+            }
+          }
+        }
         return !errs.length;
       } catch (e) {
         status.style.color = '#DC2626';
@@ -5341,6 +5687,7 @@
       });
       sel.appendChild(Dom.el('option', { value: '' }, 'Choose\u2026'));
       sel.appendChild(Dom.el('option', { value: 'withdraw' }, 'Withdraw \u2014 leaving care'));
+      sel.appendChild(Dom.el('option', { value: 'waitlist' }, 'Waitlist \u2014 place with a new educator later'));
       (plan.destinations || []).forEach((d) => {
         const need = (f.children || []).length;
         const fits = d.capacity === 0 || d.places_left >= need;
@@ -5668,6 +6015,14 @@
     };
 
     bar.appendChild(mk('👁️', 'kt-act-info', 'View', function () { showFamilyDetail(f.id); }));
+    if (isDirectorView()) {
+      if (KT.directorFamily) {
+        bar.appendChild(mk('✉️', 'kt-act-teal', 'Invite a parent', function () {
+          KT.directorFamily.invite(f.id, f.family_name, function () { renderFamiliesTab(content); });
+        }));
+      }
+      return bar;
+    }
     bar.appendChild(mk('✏️', 'kt-act-edit', 'Edit', function () { showFamilyModal(f, centres, content); }));
     bar.appendChild(mk('✉️', 'kt-act-teal', 'Send welcome email', async function () {
       try { await sendFamilyWelcome(f.id); }
@@ -5827,6 +6182,7 @@
       if (f.ref_code && KT.refPill) _fnCol.appendChild(KT.refPill(f.ref_code));
       famWrap.appendChild(_fnCol);
       if (f.suspended) famWrap.appendChild(Dom.el('span', { style: 'background:#FEF3C7;color:#92400E;font-weight:700;font-size:10px;padding:2px 7px;border-radius:20px;' }, '⏸ Suspended'));
+      if (f.billing_split && f.billing_split !== 'single') famWrap.appendChild(Dom.el('span', { title: 'This family splits the bill', style: 'background:#E0F2FE;color:#075985;font-weight:700;font-size:10px;padding:2px 7px;border-radius:20px;white-space:nowrap;' }, '💳 Split'));
       famCell.appendChild(famWrap);
       tr.appendChild(famCell);
       tr.appendChild(Dom.el('td', { style: 'padding:11px 14px;color:#6B7280;font-size:13px;' }, f.centre_name || '—'));
@@ -5921,11 +6277,12 @@
       right.appendChild(Dom.el('div', { style: 'font-size:12.5px;font-weight:700;color:#1F6080;' }, 'Child photo'));
       var msg = Dom.el('div', { style: 'font-size:11.5px;margin-top:2px;color:' + (c.photo_url ? '#16A34A' : '#64748B') + ';' }, c.photo_url ? '✓ Photo added' : 'Optional — the family can add it later');
       right.appendChild(msg);
-      var file = Dom.el('input', { type: 'file', accept: 'image/*', capture: 'environment', style: 'display:none;' });
+      var file = Dom.el('input', { type: 'file', accept: 'image/*', capture: 'environment', style: 'display:none;', 'data-kt-noface': '1', 'data-kt-face': '1' });
       var btn = Dom.el('button', { type: 'button', style: 'background:#1F6080;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;flex-shrink:0;' }, c.photo_url ? 'Change' : '📷 Upload');
       btn.addEventListener('click', function () { file.click(); });
       file.addEventListener('change', function () {
         var f = file.files && file.files[0]; if (!f) return;
+        if (window.KT && KT.faceGateInput && !KT.faceGateInput(file, { who: 'child', name: c.first_name })) return;
         if (f.size > 8 * 1024 * 1024) { msg.style.color = '#DC2626'; msg.textContent = 'Image too large (max 8 MB)'; return; }
         msg.style.color = '#64748B'; msg.textContent = 'Uploading…'; btn.disabled = true;
         var fd = new FormData(); fd.append('photo', f);
@@ -6037,11 +6394,11 @@
       r2.appendChild(wrap('Province / State *', bindInput(state.family, 'province')));
       r2.appendChild(wrap('Postal / ZIP code *', bindInput(state.family, 'postal_code')));
       bodyEl.appendChild(r2);
-      bodyEl.appendChild(wrap('Billing split', bindSelect(state.family, 'billing_split', [
-        { value: 'single', label: 'Single payer' },
-        { value: 'split_50_50', label: 'Split 50 / 50 between guardians' },
-        { value: 'custom', label: 'Custom split' },
-      ])));
+      // Split billing (2026-10-30): set up after the guardians are added - Edit family → Billing split (even, %, fixed,
+      // by charge type, by child, from a date). The wizard no longer offers the old 50/50 / custom choice.
+      state.family.billing_split = 'single';
+      bodyEl.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#475569;background:#F0F7FD;border:1px solid #BFDBFE;border-radius:8px;padding:8px 10px;margin:0 0 12px;line-height:1.45;' },
+        '💳 Splitting the bill between guardians? Add the family first, then Edit family → Billing split: share evenly, by percentage, a fixed amount, by charge type or by child.'));
       // Room to write (2026-10-13: "internal notes field should be bigger").
       var notes = Dom.el('textarea', { rows: '6', style: inStyle + 'min-height:150px;font-family:inherit;line-height:1.5;resize:vertical;' });
       notes.value = state.family.notes || '';
@@ -6391,7 +6748,7 @@
       bodyEl.innerHTML = '';
       bodyEl.appendChild(Dom.el('p', { style: 'font-size:13px;color:#64748B;margin:0 0 10px;' }, 'Add the children in this family. Health and other details can be edited after creating.'));
       // Why the photo is mandatory — reassure parents on confidentiality/security.
-      var blurb = Dom.el('div', { style: 'background:#F0F7FB;border:1px solid #D6E6F0;border-left:4px solid #1F6080;border-radius:10px;padding:12px 14px;margin:0 0 16px;font-size:12.5px;color:#334155;line-height:1.55;' });
+      var blurb = Dom.el('div', { style: 'background:#F0F7FB;border:1px solid #D6E6F0;--kt-edge:#1F6080;border-radius:10px;padding:12px 14px;margin:0 0 16px;font-size:12.5px;color:#334155;line-height:1.55;' });
       blurb.innerHTML = '<strong style="color:#1F6080;">📷 A photo helps, but you can add it later.</strong><br>'
         + 'Educators use it to confirm they have the right child at drop-off, pickup, headcounts and in an emergency, so it is worth having — but you do not need one to add the family now. '
         + '<strong>The family is asked for it during their own onboarding</strong>, when they have one to hand.<br>'
@@ -6495,6 +6852,31 @@
         var med = Dom.el('textarea', { style: inStyle + 'min-height:52px;font-family:inherit;' });
         med.value = c.medical_notes || ''; med.addEventListener('input', function () { c.medical_notes = med.value; });
         card.appendChild(wrap('Medical notes (medications, conditions)', med));
+        /* IMMUNIZATION RECORD - OPTIONAL (2026-10-28, Anthony: "add the flow to add immunization record (optional if it
+           has been provided to the agency)"). The card or printout the family handed over; filed on the child's record
+           (POST /children/{id}/immunization-records) once the family is saved. Doses can be filled in later from the
+           child's record, as with any record that arrives. data-kt-noface: a document, not a photo of a face. */
+        (function () {
+          var box = Dom.el('div', { style: 'margin-top:10px;padding:10px 12px;border:1px dashed #CBD5E1;border-radius:10px;background:#F8FAFC;' });
+          box.appendChild(Dom.el('div', { style: 'font-size:13px;font-weight:700;color:#0F172A;' }, '💉 Immunization record (optional)'));
+          box.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:2px 0 8px;' }, 'Only if the family has already given you one — a photo or PDF of the record. Once the family is saved you tick which doses it shows, then it is filed. You can also add it later from the child’s record.'));
+          // Several at once (2026-11-13): front, back, the clinic's page - up to 10, filed in one go.
+          var fi = Dom.el('input', { type: 'file', multiple: 'multiple', accept: '.pdf,.jpg,.jpeg,.png,.webp,.heic,image/*,application/pdf', 'data-kt-noface': '1', style: 'font-size:13px;max-width:100%;' });
+          var immNames = function (fs) { return fs.length === 1 ? fs[0].name : fs.length + ' files'; };
+          var note = Dom.el('div', { style: 'font-size:12px;color:#0F766E;margin-top:6px;' }, (c._immFiles || []).length ? '✓ ' + immNames(c._immFiles) + ' - you will record the doses after saving' : '');
+          fi.addEventListener('change', function () {
+            var fs = Array.prototype.slice.call(fi.files || []);
+            if (fs.length > 10) { note.style.color = '#B91C1C'; note.textContent = 'Up to 10 files, please.'; fi.value = ''; c._immFiles = []; return; }
+            var big = fs.filter(function (f) { return f.size > 10 * 1024 * 1024; })[0];
+            if (big) { note.style.color = '#B91C1C'; note.textContent = big.name + ' is over 10 MB — please use a smaller photo or PDF.'; fi.value = ''; c._immFiles = []; return; }
+            c._immFiles = fs;
+            note.style.color = '#0F766E';
+            note.textContent = fs.length ? '✓ ' + immNames(fs) + ' - you will record the doses after saving' : '';
+          });
+          box.appendChild(fi);
+          box.appendChild(note);
+          card.appendChild(box);
+        })();
         bodyEl.appendChild(card);
       });
       var add = Dom.el('button', { type: 'button', style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add another child');
@@ -6544,7 +6926,7 @@
         lgRow.appendChild(Dom.el('label', { style: 'font-size:13px;font-weight:700;color:#0F172A;' }, 'Give a pick-up login'));
         loginWrap.appendChild(lgRow);
         loginWrap.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:3px 0 0 24px;line-height:1.45;' },
-          'Signs in like a parent: their own QR to check the children in and out, daily reports, photos and messages. No billing or payment information.'));
+          'Signs in like a parent: One-Tap check-in and check-out from their own phone, daily reports, photos and messages. No billing or payment information.'));
         var lgEmail = wrap('Email for the login *', bindInput(e, 'email', { type: 'email', placeholder: 'name@example.com' }));
         lgEmail.style.margin = '8px 0 0 24px';
         loginWrap.appendChild(lgEmail);
@@ -6603,6 +6985,7 @@
             ? (days.length === 7 ? 'Every day' : days.map(function (d) { return DAY_SHORT[d] || d; }).join(', '))
             : '— no days chosen'));
         }
+        ch.appendChild(row('   ↳ Immunization record', (c._immFiles || []).length ? '✓ ' + ((c._immFiles.length === 1) ? c._immFiles[0].name : c._immFiles.length + ' files') : 'Not provided'));
       });
       bodyEl.appendChild(ch);
       /* ASK before emailing the family, on the step where they can still see who is
@@ -6787,6 +7170,17 @@
       try {
         var res = await Api.post('/admin/families', payload);
         status.innerHTML = '<span style="display:inline-flex;align-items:center;gap:10px;color:#16A34A;"><span style="width:18px;height:18px;border:3px solid #BBF7D0;border-top-color:#16A34A;border-radius:50%;display:inline-block;animation:kt-spin .7s linear infinite;"></span> Family created — finishing up…</span>';
+        /* The immunization records chosen on the Children step (2026-10-28). child_ids come back in the order the
+           children were sent. SINCE 2026-11-13 THE DOSES ARE MANDATORY, so the files are not posted bare: once the
+           family is saved, each child's files open in the one record dialog (KT.immunFileRecord) to tick what they
+           show, one child after another. Cancelling one files nothing for that child and moves to the next; the
+           record can still be added from the child's record. */
+        var _immQueue = [];
+        for (var _i = 0; _i < state.children.length; _i++) {
+          var _ch = state.children[_i], _cid = (res.child_ids || [])[_i];
+          if (!(_ch._immFiles || []).length || !_cid) { continue; }
+          _immQueue.push({ child: { id: _cid, first_name: _ch.first_name, last_name: _ch.last_name, preferred_name: _ch.preferred_name }, files: _ch._immFiles });
+        }
         await new Promise(function (r) { setTimeout(r, 1000); });
         /* Say what actually happened, not what we hoped would happen.
            This used to end with a flat "Invites sent." regardless — but the API returns
@@ -6795,6 +7189,12 @@
            invites were sent when none were is how a parent ends up never hearing from us
            and nobody knowing. (Anthony, 2026-08-26) */
         await renderFamiliesTab(content);
+        (function _nextImm() {
+          var _q = _immQueue.shift();
+          if (!_q) { return; }
+          var _ok = window.KT && KT.immunFileRecord && KT.immunFileRecord({ scope: 'director', child: _q.child, files: _q.files, onClose: function () { setTimeout(_nextImm, 0); } });
+          if (!_ok && window.KT && KT.toast) { KT.toast('💉', 'Immunization record not filed', 'Add it from ' + (_q.child.first_name || 'the child') + '’s record.', '#B45309'); _nextImm(); }
+        })();
         Shell.Modal.close();
         ktFamilyCreatedSummary(res);
       } catch (e) {
@@ -6834,7 +7234,8 @@
       }
     }
 
-    Shell.Modal.open({ title: 'New family', body: root, large: true, actions: [] });
+    Shell.Modal.open({ title: '✏️ New family', body: root, large: true, actions: [] });
+    markRecordModal(true);
     render();
   }
 
@@ -6910,7 +7311,14 @@
     return b;
   }
 
-  function showFamilyEditTabs(family, centres, content) {
+  /* VIEW ONLY (2026-11-11, Anthony: "when you view a family record it should show the subtabs in a view only state as
+     well"). Viewing a family opens this same tabbed record - Family, Guardians, Children, Photos, Emergency, Billing
+     split - locked by viewOnlyLock, as the user record does (2026-11-06), with the at-a-glance summary (map, IDs,
+     health notes, incidents, history, subsidies, emails, notes) as its first tab, Overview. opts.view; opts.data is
+     the family already loaded; opts.overview(host) draws the summary. Edit and Send welcome sit in the footer. */
+  function showFamilyEditTabs(family, centres, content, opts) {
+    opts = opts || {};
+    var _view = !!opts.view;
     centres = centres || [];
     content = content || document.getElementById('appMain');
     const EREL = ['Mother', 'Father', 'Guardian', 'Grandmother', 'Grandfather', 'Grandparent', 'Aunt', 'Uncle', 'Sibling', 'Family friend', 'Neighbour', 'Other'];
@@ -6921,7 +7329,46 @@
     function inp(val, ph, type) { var e = Dom.el('input', { type: type || 'text', style: IN }); if (ph) e.placeholder = ph; e.value = val == null ? '' : val; return e; }
     function selEl(val, opts) { var s = Dom.el('select', { style: IN + 'background:#fff;' }); opts.forEach(function (o) { var op = Dom.el('option', { value: o.value }, o.label); if (String(val) === String(o.value)) op.selected = true; s.appendChild(op); }); return s; }
     function fwrap(l, e) { var d = Dom.el('div', { style: 'margin-bottom:12px;' }); d.appendChild(Dom.el('label', { style: 'display:block;font-size:12.5px;font-weight:600;color:#334155;margin-bottom:4px;' }, l)); d.appendChild(e); return d; }
-    function grid(cols) { return Dom.el('div', { style: 'display:grid;grid-template-columns:' + cols + ';gap:12px;' }); }
+    function grid(cols) { return Dom.el('div', { class: 'kt-fe-row', style: 'display:grid;grid-template-columns:' + cols + ';gap:12px;' }); }
+    /* ONE LAYOUT FOR THE WHOLE EDITOR (2026-10-20). Anthony: "when i edit a family and look at
+       all of the sections, the fields and presentment is all over the place". Four tabs had
+       four layouts. Now every group of fields is a card with the light band header, fields
+       sit in aligned rows and fill their column, and each card's buttons sit bottom-right;
+       one column on a phone. */
+    (function feCss() {
+      if (document.getElementById('kt-fe-css')) { return; }
+      var st = document.createElement('style'); st.id = 'kt-fe-css';
+      st.textContent = ''
+        + '.kt-fe-sec{border:1px solid #E2E8F0;border-radius:12px;background:#fff;margin:0 0 14px;overflow:hidden;}'
+        + '.kt-fe-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px;background:linear-gradient(90deg,#E8F1FB 0%,#F5F9FD 100%);'
+        + 'border-bottom:1px solid #E2E8F0;--kt-edge:#4A7FA6;}'
+        + '.kt-fe-h .kt-fe-t{flex:1;min-width:0;font-size:12.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#12305A;}'
+        + '.kt-fe-h .kt-fe-t.kt-fe-name{text-transform:none;letter-spacing:0;font-size:14px;}'
+        + '.kt-fe-b{padding:12px 14px 2px;}'
+        + '.kt-fe-b>.kt-fe-row{margin-bottom:0;}'
+        + '.kt-fe-act{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 14px 12px;}'
+        + '.kt-fe-btn{height:32px;padding:0 14px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;border:1px solid transparent;white-space:nowrap;}'
+        + '.kt-fe-btn.p{background:#1F6080;color:#fff;}.kt-fe-btn.p:hover{background:#18506C;}'
+        + '.kt-fe-btn.s{background:#fff;color:#1F6080;border-color:#9EC2E3;}.kt-fe-btn.s:hover{background:#F0F7FC;}'
+        + '.kt-fe-btn.d{background:#fff;color:#B91C1C;border-color:#FCA5A5;}.kt-fe-btn.d:hover{background:#FEF2F2;}'
+        + '.kt-fe-btn.sm{height:28px;padding:0 10px;font-size:12px;}'
+        + '.kt-fe-check{display:flex;align-items:center;gap:8px;font-size:13px;color:#0F172A;margin:2px 0 12px;}'
+        + '.kt-fe-muted{font-size:12px;color:#64748B;}'
+        + '@media (max-width:640px){.kt-fe-row{grid-template-columns:1fr !important;}}';
+      document.head.appendChild(st);
+    })();
+    function feBtn(label, kind, small) { return Dom.el('button', { type: 'button', class: 'kt-fe-btn ' + (kind || 'p') + (small ? ' sm' : '') }, label); }
+    /* A card: band header (title, or a person's name, plus optional small buttons), body. */
+    function feSection(title, opts) {
+      opts = opts || {};
+      var sec = Dom.el('div', { class: 'kt-fe-sec', 'data-kt-nosechead': '1' });
+      var h = Dom.el('div', { class: 'kt-fe-h' });
+      h.appendChild(Dom.el('div', { class: 'kt-fe-t' + (opts.name ? ' kt-fe-name' : '') }, title));
+      (opts.tools || []).forEach(function (t) { h.appendChild(t); });
+      var b = Dom.el('div', { class: 'kt-fe-b' });
+      sec.appendChild(h); sec.appendChild(b);
+      return { el: sec, head: h, body: b, actions: function () { var a = Dom.el('div', { class: 'kt-fe-act' }); sec.appendChild(a); return a; } };
+    }
     /* One field, formatted as you type by KT.Phone — the separate "Area" box was the
        last place in the portal still splitting a phone across two inputs. Same
        { wrap, get } contract, so every caller is untouched. */
@@ -6932,23 +7379,50 @@
     }
 
     var root = Dom.el('div', {});
-    var tabBar = Dom.el('div', { style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-bottom:14px;' });
-    var pane = Dom.el('div', {});
+    // Same tab strip as the user record (2026-10-20): tinted band, current section filled.
+    var tabBar = Dom.el('div', { role: 'tablist', class: 'kt-rtabbar', style: 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;padding:5px;background:#EEF3F8;border:1px solid #E2E8F0;border-radius:14px;' });
+    var pane = Dom.el('div', { 'data-kt-nogrid': '1', 'data-kt-nofit': '1' });
     var msg = Dom.el('div', { style: 'min-height:18px;font-size:13px;margin-top:10px;' });
     // Same steady height as the user dialog, so switching tabs never resizes the popup.
     pane.style.height = 'min(58vh, 640px)'; pane.style.overflowY = 'auto'; pane.style.overflowX = 'hidden';
     root.appendChild(tabBar); root.appendChild(pane); root.appendChild(msg);
+    if (_view) {
+      root.insertBefore(Dom.el('div', {
+        style: 'display:flex;align-items:center;gap:8px;margin:0 0 12px;padding:8px 12px;border-radius:10px;'
+             + 'background:#F1F5F9;border:1px solid #E2E8F0;color:#334155;font-size:12.5px;font-weight:600;line-height:1.4;',
+      }, isDirectorView() ? '👁️ View only.' : '👁️ View only: nothing here can be changed. Press Edit to make changes.'), tabBar);
+    }
     function setMsg(t, ok) { msg.style.color = ok ? '#16A34A' : '#DC2626'; msg.textContent = t; }
     function refreshList() { try { renderFamiliesTab(content); } catch (e) {} }
 
-    var TABS = ['Family', 'Guardians', 'Children', 'Emergency'];
-    var active = 'Family', DATA = null, tabBtns = {};
+    /* PHOTOS (2026-11-06, Anthony: "with the photo permissions section, add those details to the families and user
+       profile as well"): each child's photo permission, who answered, and the paper form - KT.photoConsentPanel
+       (screen-photo-consent.js). Only the primary parent chooses (App\Support\MediaConsent). */
+    var TABS = ['Family', 'Guardians', 'Children', 'Photos', 'Emergency', 'Billing split', 'Emails'];
+    if (!(window.KT && KT.photoConsentPanel)) TABS.splice(TABS.indexOf('Photos'), 1);
+    if (_view && opts.overview) TABS.unshift('Overview');
+    var active = TABS[0], DATA = null, tabBtns = {};
     TABS.forEach(function (t) {
-      var b = Dom.el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;margin-bottom:-1px;font-size:13.5px;font-weight:700;color:#64748B;cursor:pointer;' }, t);
+      var b = Dom.el('button', { type: 'button', role: 'tab', class: 'kt-rtab', 'data-kt-iconized': '1', style: 'appearance:none;display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:10px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap;' }, t);
       b.addEventListener('click', function () { active = t; paintTabs(); renderTab(); });
       tabBtns[t] = b; tabBar.appendChild(b);
     });
-    function paintTabs() { TABS.forEach(function (t) { var on = t === active; tabBtns[t].style.color = on ? '#1F6080' : '#64748B'; tabBtns[t].style.borderBottomColor = on ? '#1F6080' : 'transparent'; }); }
+    /* EMAILS, ITS OWN TAB (2026-11-11, Anthony: "under family record group the email into its own subtab - full sweep
+       across all user records to have a subtab for linked emails"). Every record an email can be linked to has one: a
+       user (✉️ Emails), a family (here) and a directory contact (screen-contacts.js). Shown once /email-links/access says
+       this reader may see linked emails - the same rule as the user record's tab. */
+    tabBtns['Emails'].style.display = 'none';
+    linkedEmailAccess().then(function (a) { if (a && a.view) tabBtns['Emails'].style.display = ''; });
+    function paintTabs() {
+      TABS.forEach(function (t) {
+        var on = t === active, b = tabBtns[t];
+        b.style.background = on ? 'linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%)' : 'transparent';
+        b.style.color = on ? '#fff' : '#475569';
+        b.style.boxShadow = on ? '0 4px 12px -4px rgba(27,58,99,.55)' : 'none';
+        b.style.fontWeight = on ? '800' : '700';
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+    }
 
     function renderFamily() {
       pane.innerHTML = ''; var f = DATA.family;
@@ -6963,7 +7437,9 @@
       var iCountry = selEl(f.country || 'CA', [{ value: 'CA', label: 'Canada' }, { value: 'US', label: 'United States' }]);
       var iBill = selEl(f.billing_split, [{ value: 'single', label: 'Single payer' }, { value: 'split_50_50', label: 'Split 50 / 50' }, { value: 'custom', label: 'Custom split' }]);
       var iNotes = Dom.el('textarea', { style: IN + 'min-height:60px;font-family:inherit;' }); iNotes.value = f.notes || '';
-      pane.appendChild(fwrap('Family name *', iName));
+      var sFam = feSection('Family'), sCon = feSection('Contact'), sAdr = feSection('Address'), sBil = feSection('Billing'), sNot = feSection('Notes');
+      var famRow = grid('1fr 1fr'); sFam.body.appendChild(famRow);
+      famRow.appendChild(fwrap('Family name *', iName));
       /* Locked once a child is enrolled (2026-10-09): the provider changes only through
          ⋮ → Move to another provider, which moves the children's rooms, tells the parents
          and both educators, and keeps the history. The server refuses it here too. */
@@ -6973,24 +7449,29 @@
         var cw = fwrap('Provider', iCentre);
         var hint = Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin:-6px 0 12px;line-height:1.45;' },
           '🔒 A child here is enrolled with this provider. To change provider, use ');
-        var mv = Dom.el('a', { href: '#', style: 'color:#1F6080;font-weight:700;' }, 'Move to another provider');
-        mv.addEventListener('click', function (ev) { ev.preventDefault(); try { Shell.Modal.close(); } catch (e) {} openFamilyTransfer(family, content); });
+        var mv = _view ? Dom.el('b', {}, 'Move to another provider') : Dom.el('a', { href: '#', style: 'color:#1F6080;font-weight:700;' }, 'Move to another provider');
+        if (!_view) mv.addEventListener('click', function (ev) { ev.preventDefault(); try { Shell.Modal.close(); } catch (e) {} openFamilyTransfer(family, content); });
         hint.appendChild(mv);
         hint.appendChild(document.createTextNode(' — it moves the children\u2019s rooms, tells the parents and both educators, and keeps the history.'));
-        pane.appendChild(cw); pane.appendChild(hint);
+        famRow.appendChild(cw); hint.style.margin = '-4px 0 12px'; sFam.body.appendChild(hint);
       } else {
-        pane.appendChild(fwrap('Provider', iCentre));
+        famRow.appendChild(fwrap('Provider', iCentre));
       }
-      var g1 = grid('1fr 1fr'); g1.appendChild(ph.wrap); g1.appendChild(fwrap('Primary email', iEmail)); pane.appendChild(g1);
-      pane.appendChild(fwrap('Country', iCountry));
-      pane.appendChild(fwrap('Street address', iAddr));
-      var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province / State', iProv)); g2.appendChild(fwrap('Postal / ZIP code', iPost)); pane.appendChild(g2);
-      pane.appendChild(fwrap('Billing split', iBill));
+      var g1 = grid('1fr 1fr'); g1.appendChild(ph.wrap); g1.appendChild(fwrap('Primary email', iEmail)); sCon.body.appendChild(g1);
+      var gA = grid('2fr 1fr'); gA.appendChild(fwrap('Street address', iAddr)); gA.appendChild(fwrap('Country', iCountry)); sAdr.body.appendChild(gA);
+      var g2 = grid('2fr 1fr 1fr'); g2.appendChild(fwrap('City', iCity)); g2.appendChild(fwrap('Province / State', iProv)); g2.appendChild(fwrap('Postal / ZIP code', iPost)); sAdr.body.appendChild(g2);
+      var _bsRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;' });
+      _bsRow.appendChild(Dom.el('div', { style: 'flex:1;min-width:180px;font-size:13.5px;' }, [Dom.el('div', { style: 'font-size:12.5px;font-weight:600;color:#334155;margin-bottom:2px;' }, 'Billing split'),
+        Dom.el('div', {}, ({ single: 'One payer', split_50_50: 'Split 50 / 50', custom: 'Custom split', even: 'Shared evenly', percent: 'Percentage split', fixed: 'Fixed amount + rest', by_type: 'By charge type', by_child: 'By child' })[f.billing_split] || 'One payer')]));
+      var _bsGo = feBtn('Set up the split', 's', true);
+      _bsGo.addEventListener('click', function () { active = 'Billing split'; paintTabs(); renderTab(); });
+      _bsRow.appendChild(_bsGo); sBil.body.appendChild(_bsRow);
+      [sFam, sCon, sAdr, sBil].forEach(function (x) { pane.appendChild(x.el); });
       /* WHO PAYS WHAT (split billing, 2026-09-29). The select only said "split"; nothing
          said between whom or in what proportion, and nothing billed that way. The panel
          saves on its own endpoint with the percentages, which must total 100%. */
-      var splitBox = Dom.el('div', { style: 'border:1px solid #BFDBFE;background:#F8FBFF;border-radius:10px;padding:10px 12px;margin:-4px 0 12px;' });
-      pane.appendChild(splitBox);
+      var splitBox = Dom.el('div', { style: 'border:1px solid #BFDBFE;background:#F8FBFF;border-radius:10px;padding:10px 12px;margin:0 0 12px;' });
+      sBil.body.appendChild(splitBox);
       function paintSplit() {
         var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
         var mode = iBill.value;
@@ -7025,22 +7506,20 @@
           } catch (e) { setMsg(e.message || 'Could not save the split'); }
         });
       }
-      iBill.addEventListener('change', paintSplit);
-      paintSplit();
-      pane.appendChild(fwrap('Internal notes', iNotes));
-      var save = Dom.el('button', { style: 'padding:9px 18px;background:#1F6080;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;' }, 'Save family');
+      splitBox.style.display = 'none';   // the split is edited on its own tab now
+      sNot.body.appendChild(fwrap('Internal notes (staff only)', iNotes));
+      pane.appendChild(sNot.el);
+      var save = feBtn('Save family', 'p');
       save.addEventListener('click', async function () {
         if (!iName.value.trim()) { setMsg('Family name is required.'); return; }
         save.disabled = true; setMsg('Saving…', true);
         try {
-          await Api.patch('/admin/families/' + f.id, { family_name: iName.value.trim(), centre_id: DATA.provider_locked ? undefined : parseInt(iCentre.value, 10), primary_phone: ph.get() || null, primary_email: iEmail.value.trim() || null, address_line1: iAddr.value.trim() || null, city: iCity.value.trim() || null, province: iProv.value.trim() || null, postal_code: iPost.value.trim() || null, country: iCountry.value || null, billing_split: iBill.value, notes: iNotes.value.trim() || null });
-          // Going back to one payer also resets the shares (the primary carries 100%).
-          if (iBill.value === 'single') { try { await Api.put('/admin/families/' + f.id + '/billing-split', { mode: 'single' }); } catch (e2) {} }
+          await Api.patch('/admin/families/' + f.id, { family_name: iName.value.trim(), centre_id: DATA.provider_locked ? undefined : parseInt(iCentre.value, 10), primary_phone: ph.get() || null, primary_email: iEmail.value.trim() || null, address_line1: iAddr.value.trim() || null, city: iCity.value.trim() || null, province: iProv.value.trim() || null, postal_code: iPost.value.trim() || null, country: iCountry.value || null, notes: iNotes.value.trim() || null });
           setMsg('✓ Family saved', true); refreshList();
         } catch (e) { setMsg((e.message || 'Save failed') + (e.errors ? ' — ' + Object.values(e.errors).flat().join(', ') : '')); }
         save.disabled = false;
       });
-      pane.appendChild(save);
+      var famAct = Dom.el('div', { class: 'kt-fe-act', style: 'padding:0 0 4px;' }); famAct.appendChild(save); pane.appendChild(famAct);
     }
 
     function renderGuardians() {
@@ -7052,26 +7531,28 @@
         showAddGuardian(DATA.family, function () { Shell.Modal.close(); showFamilyEditTabs(family, centres, content); });
       }));
       (DATA.guardians || []).forEach(function (g) {
-        var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
-        card.appendChild(Dom.el('div', { style: 'font-weight:700;color:#1F6080;font-size:13px;margin-bottom:10px;' }, ((g.first_name || '') + ' ' + (g.last_name || '')).trim() + (g.is_primary ? ' ★ primary' : '') + (Number(g.billing_hidden) ? '  ·  🚸 Pick-up login (no billing)' : '')));
+        var gsec = feSection(((g.first_name || '') + ' ' + (g.last_name || '')).trim() + (g.is_primary ? '  ★ primary' : '') + (Number(g.billing_hidden) ? '  ·  🚸 Pick-up login (no billing)' : ''), { name: true });
+        var card = gsec.body;
         var iF = inp(g.first_name, 'First name'), iL = inp(g.last_name, 'Last name');
         var ph = phoneField('Phone', g.phone);
         var iR = selEl(g.relationship, [{ value: 'mother', label: 'Mother' }, { value: 'father', label: 'Father' }, { value: 'guardian', label: 'Guardian' }, { value: 'grandparent', label: 'Grandparent' }, { value: 'foster', label: 'Foster' }, { value: 'other', label: 'Other' }]);
-        var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin-top:26px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = g.can_pickup !== false; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
-        var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('First name', iF)); g1.appendChild(fwrap('Last name', iL)); card.appendChild(g1);
+        var pickWrap = Dom.el('label', { class: 'kt-fe-check' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = g.can_pickup !== false; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('span', {}, 'Authorized for pickup'));
         var iSex = selEl(g.sex || '', [{ value: '', label: '—' }, { value: 'Female', label: 'Female' }, { value: 'Male', label: 'Male' }, { value: 'Non-binary', label: 'Non-binary' }, { value: 'Prefer not to say', label: 'Prefer not to say' }]);
-        var g2 = grid('1fr 1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(fwrap('Gender', iSex)); g2.appendChild(fwrap('Relationship', iR)); card.appendChild(g2);
+        var g1 = grid('1fr 1fr 1fr'); g1.appendChild(fwrap('First name', iF)); g1.appendChild(fwrap('Last name', iL)); g1.appendChild(fwrap('Relationship', iR)); card.appendChild(g1);
+        var g2 = grid('1fr 1fr 1fr'); g2.appendChild(ph.wrap); g2.appendChild(fwrap('Gender', iSex)); g2.appendChild(Dom.el('div', {})); card.appendChild(g2);
         // Second number + its type, with an extension for a work number (2026-10-13).
         var ph2 = phoneField('Second phone', g.phone2);
         var iT2 = selEl(g.phone2_type || 'work', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
         var iX2 = inp(g.phone2_ext, 'Ext.'); iX2.setAttribute('inputmode', 'numeric');
         var x2wrap = fwrap('Ext. (optional)', iX2);
-        var g3 = grid('130px 1fr 110px'); g3.appendChild(fwrap('Type', iT2)); g3.appendChild(ph2.wrap); g3.appendChild(x2wrap); card.appendChild(g3);
+        var g3 = grid('1fr 1fr 1fr'); g3.appendChild(ph2.wrap); g3.appendChild(fwrap('Second phone type', iT2)); g3.appendChild(x2wrap); card.appendChild(g3);
         var syncX2 = function () { x2wrap.style.visibility = iT2.value === 'work' ? 'visible' : 'hidden'; };
         iT2.addEventListener('change', syncX2); syncX2();
-        card.appendChild(pickWrap);
-        card.appendChild(Dom.el('div', { style: 'font-size:12px;color:#94A3B8;margin-top:8px;' }, 'Login email: ' + (g.email || '—')));
-        var save = Dom.el('button', { style: 'margin-top:10px;padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save guardian');
+        var gRow = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;' });
+        gRow.appendChild(pickWrap);
+        gRow.appendChild(Dom.el('div', { class: 'kt-fe-muted', style: 'margin:2px 0 12px;' }, 'Login email: ' + (g.email || '—')));
+        card.appendChild(gRow);
+        var save = feBtn('Save guardian', 'p');
         save.addEventListener('click', async function () {
           save.disabled = true; setMsg('Saving…', true);
           try { await Api.patch('/admin/guardians/' + g.id, { first_name: iF.value.trim(), last_name: iL.value.trim(), phone: ph.get() || null,
@@ -7081,12 +7562,11 @@
           catch (e) { setMsg(e.message || 'Save failed'); }
           save.disabled = false;
         });
-        card.appendChild(save);
         /* Kiosk PIN and Remove — these were only on the family record, behind its edit
-           mode; with Edit now opening this form in one click, they live here. */
-        var gx = Dom.el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;' });
+           mode; with Edit now opening this form in one click, they live here (in the band). */
+        var gx = gsec.head;
         if (g.can_pickup !== false && g.id) {
-          var pinB = Dom.el('button', { type: 'button', style: 'padding:7px 12px;background:#fff;color:#1F6080;border:1px solid #1F6080;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;' }, '🔐 Set kiosk PIN');
+          var pinB = feBtn('🔐 Set kiosk PIN', 's', true);
           pinB.addEventListener('click', async function () {
             var who = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
             var pin = await window.KT.prompt({ title: 'Set kiosk PIN for ' + who,
@@ -7102,7 +7582,7 @@
           gx.appendChild(pinB);
         }
         if (g.id) {
-          var rmB = Dom.el('button', { type: 'button', style: 'padding:7px 12px;background:#fff;color:#B91C1C;border:1px solid #FCA5A5;border-radius:7px;font-weight:700;font-size:12.5px;cursor:pointer;' }, 'Remove from family');
+          var rmB = feBtn('Remove from family', 'd', true);
           rmB.addEventListener('click', async function () {
             var who = ((g.first_name || '') + ' ' + (g.last_name || '')).trim();
             var ok = !(window.KT && KT.confirm) || await KT.confirm({ title: 'Remove ' + who + ' from this family?',
@@ -7118,8 +7598,8 @@
           });
           gx.appendChild(rmB);
         }
-        card.appendChild(gx);
-        pane.appendChild(card);
+        gsec.actions().appendChild(save);
+        pane.appendChild(gsec.el);
       });
       if (!(DATA.guardians || []).length) pane.appendChild(Dom.el('div', { style: 'color:#64748B;' }, 'No guardians.'));
     }
@@ -7131,14 +7611,14 @@
       }));
       pane.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:12px;' }, 'Open a child’s record to edit health, enrolment and details.'));
       (DATA.children || []).forEach(function (c) {
-        var row = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;' });
+        var row = Dom.el('div', { class: 'kt-fe-sec', style: 'padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;--kt-edge:#4A7FA6;' });
         var info = Dom.el('div', {});
         info.appendChild(Dom.el('div', { style: 'font-weight:700;' }, (c.preferred_name || ((c.first_name || '') + ' ' + (c.last_name || ''))).trim()));
-        var bits = [c.date_of_birth ? 'Born ' + c.date_of_birth : null, c.gender, c.enrollment_status].filter(Boolean).join(' · ');
+        var bits = [c.date_of_birth ? 'Born ' + c.date_of_birth : null, _ktWords(c.gender), _ktWords(c.enrollment_status)].filter(Boolean).join(' · ');
         info.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;' }, bits));
-        if (c.allergies) info.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#B45309;margin-top:2px;' }, '⚠️ ' + c.allergies));
+        if (_ktHealthText(c.allergies, 'allergen')) info.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#B45309;margin-top:2px;' }, '⚠️ ' + _ktHealthText(c.allergies, 'allergen')));
         row.appendChild(info);
-        var open = Dom.el('button', { style: 'padding:7px 12px;background:#fff;color:#1F6080;border:1px solid #1F6080;border-radius:7px;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;' }, 'Open record →');
+        var open = feBtn('Open record →', 's', true);
         open.addEventListener('click', function () { Shell.Modal.close(); location.hash = '#child-detail?id=' + c.id; });
         row.appendChild(open); pane.appendChild(row);
       });
@@ -7146,7 +7626,8 @@
     }
 
     function ecCard(e) {
-      var card = Dom.el('div', { style: 'border:1px solid #E5E7EB;border-radius:10px;padding:14px;margin-bottom:12px;' });
+      var esec = feSection(e.__new ? 'New emergency contact' : ((e.name || 'Emergency contact') + (e.relationship ? '  ·  ' + e.relationship : '')), { name: true });
+      var card = esec.body;
       var iN = inp(e.name, 'Full name'); var iR = selEl(e.relationship || '', [{ value: '', label: 'Relationship…' }].concat(EREL.map(function (r) { return { value: r, label: r }; })));
       var ph = phoneField('Phone', e.phone); var pha = phoneField('Second phone', e.alt_phone);
       var iAT = selEl(e.alt_phone_type || 'work', [{ value: 'mobile', label: 'Mobile' }, { value: 'home', label: 'Home' }, { value: 'work', label: 'Work' }, { value: 'other', label: 'Other' }]);
@@ -7154,26 +7635,25 @@
       var axWrap = fwrap('Ext. (optional)', iAX);
       var iEm = inp(e.email, 'name@example.com', 'email');
       var lg = Dom.el('input', { type: 'checkbox' }); lg.checked = !!e.user_id;
-      var pickWrap = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('label', { style: 'font-size:13px;' }, 'Authorized for pickup'));
-      var g1 = grid('1fr 1fr'); g1.appendChild(fwrap('Full name', iN)); g1.appendChild(fwrap('Relationship', iR)); card.appendChild(g1);
-      card.appendChild(ph.wrap);
-      var g2 = grid('130px 1fr 110px'); g2.appendChild(fwrap('Type', iAT)); g2.appendChild(pha.wrap); g2.appendChild(axWrap); card.appendChild(g2);
+      var pickWrap = Dom.el('label', { class: 'kt-fe-check' }); var pick = Dom.el('input', { type: 'checkbox' }); pick.checked = !!e.can_pickup; pickWrap.appendChild(pick); pickWrap.appendChild(Dom.el('span', {}, 'Authorized for pickup'));
+      var g1 = grid('1fr 1fr 1fr'); g1.appendChild(fwrap('Full name', iN)); g1.appendChild(fwrap('Relationship', iR)); g1.appendChild(ph.wrap); card.appendChild(g1);
+      var g2 = grid('1fr 1fr 1fr'); g2.appendChild(pha.wrap); g2.appendChild(fwrap('Second phone type', iAT)); g2.appendChild(axWrap); card.appendChild(g2);
       var axSync = function () { axWrap.style.visibility = iAT.value === 'work' ? 'visible' : 'hidden'; };
       iAT.addEventListener('change', axSync); axSync();
       card.appendChild(pickWrap);
       // Pick-up login: parent view minus billing (2026-10-13).
-      var lgBox = Dom.el('div', { style: 'margin-top:10px;border:1px solid #E2E8F0;background:#F8FAFC;border-radius:10px;padding:10px 12px;' });
+      var lgBox = Dom.el('div', { style: 'margin:0 0 12px;border:1px solid #E2E8F0;background:#F8FAFC;border-radius:10px;padding:10px 12px;' });
       var lgRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
       lgRow.appendChild(lg); lgRow.appendChild(Dom.el('label', { style: 'font-size:13px;font-weight:700;color:#0F172A;' }, e.user_id ? 'Has a pick-up login' : 'Give a pick-up login'));
       lgBox.appendChild(lgRow);
-      lgBox.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:3px 0 6px 24px;line-height:1.45;' }, 'Signs in like a parent: their own QR to check the children in and out, daily reports, photos and messages. No billing or payment information. Untick to remove the login.'));
+      lgBox.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:3px 0 6px 24px;line-height:1.45;' }, 'Signs in like a parent: One-Tap check-in and check-out from their own phone, daily reports, photos and messages. No billing or payment information. Untick to remove the login.'));
       var emWrap = fwrap('Email for the login', iEm); emWrap.style.marginLeft = '24px';
       lgBox.appendChild(emWrap);
       var lgSync = function () { emWrap.style.display = lg.checked ? 'block' : 'none'; };
       lg.addEventListener('change', function () { if (lg.checked) pick.checked = true; lgSync(); }); lgSync();
       card.appendChild(lgBox);
-      var bar = Dom.el('div', { style: 'display:flex;gap:8px;margin-top:10px;' });
-      var save = Dom.el('button', { style: 'padding:8px 14px;background:#1F6080;color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Save');
+      var bar = esec.actions();
+      var save = feBtn('Save contact', 'p');
       save.addEventListener('click', async function () {
         if (!iN.value.trim()) { setMsg('Name is required.'); return; }
         save.disabled = true; setMsg('Saving…', true);
@@ -7191,14 +7671,14 @@
         save.disabled = false;
       });
       bar.appendChild(save);
-      if (!e.__new) { var del = Dom.el('button', { style: 'padding:8px 14px;background:#FEE2E2;color:#B91C1C;border:none;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Delete'); del.addEventListener('click', async function () { if (KT.confirm && !await KT.confirm('Delete this emergency contact?')) return; try { await Api.delete('/admin/emergency-contacts/' + e.id); card.remove(); setMsg('✓ Deleted', true); refreshList(); } catch (err) { setMsg(err.message || 'Delete failed'); } }); bar.appendChild(del); }
-      card.appendChild(bar);
-      return card;
+      if (!e.__new) { var del = feBtn('Delete', 'd', true); del.addEventListener('click', async function () { if (KT.confirm && !await KT.confirm('Delete this emergency contact?')) return; try { await Api.delete('/admin/emergency-contacts/' + e.id); esec.el.remove(); setMsg('✓ Deleted', true); refreshList(); } catch (err) { setMsg(err.message || 'Delete failed'); } }); esec.head.appendChild(del); }
+      return esec.el;
     }
     function renderEmergency() {
       pane.innerHTML = '';
       // Adding is the inline "+ Add emergency contact" card below (one add button, not two).
       (DATA.emergency_contacts || []).forEach(function (e) { pane.appendChild(ecCard(e)); });
+      if (!(DATA.emergency_contacts || []).length) pane.appendChild(Dom.el('div', { style: 'color:#64748B;margin:0 0 10px;' }, 'No emergency contacts.'));
       var add = Dom.el('button', { style: 'background:#EFF6FB;border:1px dashed #1F6080;color:#1F6080;border-radius:8px;padding:10px;width:100%;font-weight:600;cursor:pointer;font-size:13px;' }, '+ Add emergency contact');
       add.addEventListener('click', function () { pane.insertBefore(ecCard({ __new: true, name: '', relationship: '', phone: '', alt_phone: '', can_pickup: false }), add); });
       pane.appendChild(add);
@@ -7206,14 +7686,75 @@
 
     function renderTab() {
       if (!DATA) return;
-      if (active === 'Family') renderFamily();
+      if (active === 'Overview') { pane.innerHTML = ''; opts.overview(pane); }
+      else if (active === 'Family') renderFamily();
       else if (active === 'Guardians') renderGuardians();
       else if (active === 'Children') renderChildren();
+      else if (active === 'Billing split') renderSplitTab();
+      else if (active === 'Emails') renderEmailsTab();
+      else if (active === 'Photos') { pane.innerHTML = ''; KT.photoConsentPanel(pane, { family_id: family.id }); }
       else renderEmergency();
     }
+    /* WHO PAYS WHAT (2026-10-30, Anthony: "add configuration within families to setup the split payment settings"):
+       its own tab - kt-billing-split.js (one payer / even / percent / fixed + rest / by charge type / by child, from a
+       date, preview, how each guardian pays, history). */
+    function renderEmailsTab() {
+      pane.innerHTML = '';
+      var host = Dom.el('div', {});   // its own box: a slow load never paints over a tab opened since
+      pane.appendChild(host);
+      renderLinkedEmails(host, '/email-links/family/' + family.id, { family: true,
+        onCount: function (n) { tabBtns['Emails'].textContent = 'Emails (' + n + ')'; },
+        onHide: function (why) {
+        host.innerHTML = '<div style="font-size:13px;color:var(--ink-500);">' + (why === 'off'
+          ? 'Linking emails to people is off for this agency. Turn it on in Email settings.'
+          : why === 'denied' ? 'You do not have access to this family’s linked emails.'
+          : 'Linked emails could not be loaded. Try again in a moment.') + '</div>';
+      } });
+    }
+    function renderSplitTab() {
+      pane.innerHTML = '';
+      if (window.KT && KT.billingSplitPanel) { KT.billingSplitPanel(pane, family.id, { onSaved: function () { setMsg('✓ Billing split saved', true); refreshList(); } }); }
+      else { pane.appendChild(Dom.el('div', { style: 'color:#B91C1C;font-size:13px;' }, 'The billing split could not load. Refresh the page and try again.')); }
+    }
 
-    Shell.Modal.open({ title: 'Edit family — ' + family.family_name, body: root, large: true });
+    if (_view && isDirectorView()) {
+      Shell.Modal.open({
+        title: '👁️ ' + family.family_name, body: root, large: true,
+        actions: [
+          KT.directorFamily ? { label: '✉️ Invite a parent', onClick: function () {
+            Shell.Modal.close();
+            setTimeout(function () { KT.directorFamily.invite(family.id, family.family_name, refreshList); }, 80);
+          } } : null,
+          { label: 'Close', primary: true, onClick: function () { Shell.Modal.close(); } },
+        ].filter(Boolean),
+      });
+      markRecordModal(true);
+      viewOnlyLock(root);
+    } else if (_view) {
+      Shell.Modal.open({
+        title: '👁️ ' + family.family_name, body: root, large: true,
+        actions: [
+          { label: '✉️ Send welcome', onClick: async function () {
+            try { var rr = await sendFamilyWelcome(family.id); if (rr && KT.Dom && KT.Dom.toast) KT.Dom.toast('Welcome sent', 'success'); }
+            catch (e) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not send: ' + (e.message || 'error'), 'error'); }
+          } },
+          { label: '✏️ Edit', primary: true, onClick: async function () {
+            var cs = centres;
+            if (!cs.length) { try { var r = await Api.get('/admin/centres'); cs = r.centres || []; } catch (e) {} }
+            Shell.Modal.close();
+            setTimeout(function () { showFamilyModal(DATA ? DATA.family : family, cs, content); }, 80);
+          } },
+          { label: 'Close', onClick: function () { Shell.Modal.close(); } },
+        ],
+      });
+      markRecordModal(true);
+      viewOnlyLock(root);
+    } else {
+      Shell.Modal.open({ title: '✏️ Editing · ' + family.family_name, body: root, large: true });
+      markRecordModal(true);
+    }
     paintTabs();
+    if (opts.data) { DATA = opts.data; renderTab(); return; }
     pane.appendChild(loading('Loading family…'));
     Api.get('/admin/families/' + family.id).then(function (data) { DATA = data; renderTab(); }).catch(function (e) { pane.innerHTML = ''; setMsg('Could not load: ' + (e.message || 'error')); });
     return;
@@ -7346,12 +7887,18 @@
   }
 
   /** A section heading with an optional action on the right. */
+  /* A LIGHT BAND, NOT GREY CAPS (2026-10-20). Anthony: "the section headers such as emergency
+     contacts, incidents etc is hard to read as its not lightly gradient like how you have it
+     for guardians and children". Every section of the family record now opens with the same
+     soft band (navy edge, navy text), whatever sits under it. */
   function famSectionHead(label, actionLabel, onAction) {
     var h = Dom.el('div', {
-      style: 'display:flex;align-items:center;gap:10px;margin:18px 0 8px;',
+      'data-kt-nosechead': '1',
+      style: 'display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:7px 8px 7px 12px;'
+           + 'background:linear-gradient(90deg,#E8F1FB 0%,#F5F9FD 100%);--kt-edge:#4A7FA6;border-radius:8px;',
     });
     h.appendChild(Dom.el('h4', {
-      style: 'flex:1;font-size:14px;font-weight:700;margin:0;letter-spacing:0.5px;color:var(--ink-700);',
+      style: 'flex:1;font-size:13px;font-weight:800;margin:0;letter-spacing:0.6px;color:#12305A;',
     }, label));
     if (actionLabel && onAction) {
       var b = Dom.el('button', {
@@ -7398,7 +7945,7 @@
     var first = famInput({ placeholder: 'First name' });
     var last = famInput({ placeholder: 'Last name', value: family.family_name || '' });
     var dob = famInput({ type: 'date' });
-    var start = famInput({ type: 'date', value: (new Date()).toISOString().slice(0, 10) });
+    var start = famInput({ type: 'date', value: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) });
     var fee = famInput({ type: 'number', min: '0', step: '0.01', value: '0' });
     var room = Dom.el('select', {
       style: 'width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #CBD5E1;'
@@ -7407,7 +7954,7 @@
 
     // Rooms at the family's own centre first — that is nearly always the answer.
     try {
-      var rr = await Api.get('/director/rooms').catch(function () { return { rooms: [] }; });
+      var rr = await Api.get('/director/rooms' + (family.centre_id ? '?centre_id=' + encodeURIComponent(family.centre_id) : '')).catch(function () { return { rooms: [] }; });   // the family's own centre (2026-11-13)
       var rooms = rr.rooms || rr.data || [];
       rooms.forEach(function (r) {
         room.appendChild(Dom.el('option', { value: r.id }, (r.centre_name ? r.centre_name + ' · ' : '') + r.name));
@@ -7579,6 +8126,381 @@
    * stops being that the moment anyone can rewrite it — so corrections are made by
    * adding another note, and only the author can remove their own within the hour.
    */
+  /* EMAILS ON THE RECORD (2026-11-07, App\Support\PersonMail). The emails an agency mailbox linked to this person or
+     family - by address or by hand - newest first: when, which way, the subject and the start of it. The mailbox's
+     owner can open the mailbox, and anyone here can unlink one (kept in the audit log). Hides itself when the agency
+     has linking off and nothing is linked, or when the reader may not see it (admins only). */
+  /* May this reader see linked emails? Asked once per screen load (GET /email-links/access). */
+  var _emAccess = null;
+  function linkedEmailAccess() {
+    if (!_emAccess) {
+      _emAccess = Api.get('/email-links/access').catch(function () { return { view: false }; });
+      setTimeout(function () { _emAccess = null; }, 60000);
+    }
+    return _emAccess;
+  }
+  async function renderLinkedEmails(host, url, opts) {
+    opts = opts || {};
+    host.innerHTML = '<div style="font-size:13px;color:var(--ink-500);">Loading emails…</div>';
+    var d;
+    // onHide(why): 'error' (could not load), 'denied' (not this reader's to see), 'off' (the agency has linking off).
+    try { d = await Api.get(url); } catch (e) { host.innerHTML = ''; if (opts.onHide) opts.onHide('error'); return; }
+    var list = (d && d.emails) || [];
+    if (d && d.allowed === false) { host.innerHTML = ''; if (opts.onHide) opts.onHide('denied'); return; }
+    if (!list.length && !(d && d.enabled)) { host.innerHTML = ''; if (opts.onHide) opts.onHide(d && d.enabled === false ? 'off' : 'error'); return; }
+    var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var when = function (ts) {
+      if (!ts) return '';
+      try { return (window.KT && KT.fmtDateTime) ? KT.fmtDateTime(ts) : new Date(ts).toLocaleString(); } catch (e) { return ts; }
+    };
+    var AS = { guardian: 'Parent', staff: 'Staff', contact: 'Contact' };
+    var total = (d && typeof d.total === 'number') ? d.total : list.length;
+    if (opts.onCount) { try { opts.onCount(total); } catch (e) {} }
+    if (!list.length) {
+      host.innerHTML = '<div style="font-size:13px;color:var(--ink-500);">No emails linked yet. Emails from this agency\'s mailboxes appear here when they are linked - by address, or with 🔗 Link to person in Email.</div>';
+      return;
+    }
+    var rowHtml = function (m) {
+      var out = m.direction === 'out';
+      return '<div data-el="' + m.id + '" style="display:flex;align-items:flex-start;gap:8px;border:1px solid #E2E8F0;border-radius:10px;padding:9px 11px;margin-bottom:8px;background:#fff;"><div style="flex:1;min-width:0;">'
+        + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#64748B;">'
+        + '<span style="font-weight:800;color:' + (out ? '#1F6080' : '#047857') + ';">' + (out ? '↗ Sent' : '↙ Received') + '</span>'
+        + '<span>' + esc(when(m.at)) + '</span>'
+        + '<span>' + (out ? 'from ' + esc(m.mailbox || '') + (m.to ? ' to ' + esc(m.to) : '') : 'from ' + esc(m.from || m.from_addr || '') + ' to ' + esc(m.mailbox || '')) + '</span>'
+        + (opts.family && m.matched_as ? '<span style="background:#EEF3F8;border-radius:6px;padding:1px 6px;">' + esc(AS[m.matched_as] || '') + '</span>' : '')
+        + '<span style="margin-left:auto;">' + (m.source === 'auto' ? 'matched by address' : 'linked' + (m.linked_by ? ' by ' + esc(m.linked_by) : '')) + '</span>'
+        + '</div>'
+        + '<button type="button" data-kt-view-ok data-el-open="' + m.id + '" data-kttip="Open the email" style="all:unset;cursor:pointer;display:block;font-weight:700;color:#0F172A;font-size:13.5px;margin-top:4px;overflow-wrap:anywhere;">' + (m.has_attachments ? '📎 ' : '') + esc(m.subject) + '</button>'
+        + (m.preview ? '<div style="font-size:12.5px;color:#475569;margin-top:3px;line-height:1.45;overflow-wrap:anywhere;">' + esc(m.preview) + '</div>' : '')
+        + '</div><button type="button" class="kt-ka-kebab" data-kt-view-ok data-el-menu="' + m.id + '" aria-haspopup="true" aria-label="Email actions" data-kttip="Open, download, print or forward" style="flex:none;">⋮</button></div>';
+    };
+
+    /* COUNT, SEARCH, FILTER, SORT (2026-11-11, Anthony: "in the email subtab add a count on how many emails and filters
+       and sorts to search"). One bar over the list on every record with an Emails tab (user, family, directory contact):
+       how many, a search across subject, words, sender, recipients and mailbox, then filters that only appear when they
+       would choose between something - Received / Sent, attachments, mailbox, who it matched (a family), how it was
+       linked, when - and a sort. All in the page: the server sends the newest 1,000 and the true total
+       (EmailLinkController::LIST_MAX). The controls are data-kt-view-ok, so they work on a record opened with View. */
+    var S = { q: '', dir: '', att: '', box: '', who: '', how: '', range: '', sort: 'new' };
+    var distinct = function (f) { var o = {}; list.forEach(function (m) { var v = f(m); if (v !== '' && v != null) o[v] = 1; }); return Object.keys(o).sort(); };
+    var CTL = 'height:30px;min-height:0;padding:0 8px;border:1px solid #CBD5E1;border-radius:8px;font-size:12.5px;'
+      + 'background:#fff;color:#0F172A;box-sizing:border-box;font-family:inherit;margin:0;';
+    var bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px;';
+    var countEl = document.createElement('span');
+    countEl.style.cssText = 'font-size:13px;font-weight:800;color:#0F172A;margin-right:4px;white-space:nowrap;';
+    countEl.setAttribute('aria-live', 'polite');
+    bar.appendChild(countEl);
+    var listEl = document.createElement('div');
+    var ctls = [];
+    var clearBtn = null, fBtn = null;
+    if (list.length > 1) {
+      var qIn = document.createElement('input');
+      qIn.type = 'search'; qIn.placeholder = 'Search subject, words, sender…'; qIn.setAttribute('aria-label', 'Search these emails');
+      qIn.setAttribute('data-kt-view-ok', '1'); qIn.setAttribute('autocomplete', 'off');
+      qIn.style.cssText = CTL + 'flex:1 1 200px;min-width:150px;';
+      var qT = null;
+      qIn.addEventListener('input', function () { clearTimeout(qT); qT = setTimeout(function () { S.q = qIn.value.trim().toLowerCase(); draw(); }, 120); });
+      bar.appendChild(qIn);
+      // On a phone the filters fold behind one button, so the emails stay on the screen.
+      var narrow = (host.clientWidth || window.innerWidth) < 520;
+      var fWrap = document.createElement('div');
+      fWrap.style.cssText = narrow ? 'display:none;flex-wrap:wrap;gap:6px;width:100%;' : 'display:contents;';
+      if (narrow) {
+        fBtn = document.createElement('button');
+        fBtn.type = 'button'; fBtn.setAttribute('data-kt-view-ok', '1'); fBtn.setAttribute('data-kt-iconized', '1'); fBtn.setAttribute('aria-expanded', 'false');
+        fBtn.style.cssText = CTL + 'cursor:pointer;font-weight:700;color:#1F6080;flex:0 0 auto;';
+        fBtn.addEventListener('click', function () {
+          var open = fWrap.style.display === 'none';
+          fWrap.style.display = open ? 'flex' : 'none';
+          fBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        bar.appendChild(fBtn);
+      }
+      var pick = function (key, label, options, always) {
+        if (!always && options.length < 3) return;   // the "all" choice plus at least two to choose between
+        var sel = document.createElement('select');
+        sel.setAttribute('data-kt-view-ok', '1'); sel.setAttribute('aria-label', label); sel.title = label;
+        sel.style.cssText = CTL + 'max-width:200px;cursor:pointer;';
+        options.forEach(function (o) { var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; sel.appendChild(op); });
+        sel.value = S[key];
+        sel.addEventListener('change', function () { S[key] = sel.value; draw(); });
+        if (narrow) { sel.style.flex = '1 1 calc(50% - 3px)'; sel.style.maxWidth = 'none'; }
+        fWrap.appendChild(sel); ctls.push([key, sel]);
+      };
+      pick('dir', 'Received or sent', [['', 'Received & sent']].concat(distinct(function (m) { return m.direction === 'out' ? 'out' : 'in'; })
+        .map(function (v) { return [v, v === 'out' ? '↗ Sent' : '↙ Received']; })));
+      if (list.some(function (m) { return m.has_attachments; }) && list.some(function (m) { return !m.has_attachments; })) {
+        pick('att', 'Attachments', [['', 'Any attachments'], ['1', '📎 With attachments'], ['0', 'No attachments']]);
+      }
+      pick('box', 'Mailbox', [['', 'All mailboxes']].concat(distinct(function (m) { return m.mailbox || ''; }).map(function (v) { return [v, v]; })));
+      if (opts.family) pick('who', 'Who it was matched to', [['', 'Everyone']].concat(distinct(function (m) { return m.matched_as || ''; }).map(function (v) { return [v, AS[v] || v]; })));
+      pick('how', 'How it was linked', [['', 'Linked any way']].concat(distinct(function (m) { return m.source === 'auto' ? 'auto' : 'hand'; })
+        .map(function (v) { return [v, v === 'auto' ? 'Matched by address' : 'Linked by hand']; })));
+      pick('range', 'When', [['', 'Any time'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last 12 months']], true);
+      pick('sort', 'Sort', [['new', 'Newest first'], ['old', 'Oldest first'], ['subj', 'Subject A–Z'], ['from', 'Sender A–Z']], true);
+      bar.appendChild(fWrap);
+      clearBtn = document.createElement('button');
+      clearBtn.type = 'button'; clearBtn.textContent = 'Clear filters'; clearBtn.setAttribute('data-kt-view-ok', '1'); clearBtn.setAttribute('data-kt-iconized', '1');
+      clearBtn.style.cssText = 'all:unset;cursor:pointer;font-size:12.5px;font-weight:700;color:#1F6080;padding:0 4px;display:none;';
+      clearBtn.addEventListener('click', function () {
+        S = { q: '', dir: '', att: '', box: '', who: '', how: '', range: '', sort: S.sort };
+        qIn.value = '';
+        ctls.forEach(function (c) { c[1].value = S[c[0]]; });
+        draw();
+      });
+      bar.appendChild(clearBtn);
+    }
+    host.innerHTML = '';
+    host.appendChild(bar);
+    host.appendChild(listEl);
+
+    var DAY = 864e5;
+    var atOf = function (m) { var t = m.at ? Date.parse(m.at) : NaN; return isNaN(t) ? 0 : t; };
+    var senderOf = function (m) { return String((m.direction === 'out' ? m.mailbox : (m.from || m.from_addr)) || '').toLowerCase(); };
+    var match = function (m) {
+      if (S.dir && (m.direction === 'out' ? 'out' : 'in') !== S.dir) return false;
+      if (S.att && !!m.has_attachments !== (S.att === '1')) return false;
+      if (S.box && (m.mailbox || '') !== S.box) return false;
+      if (S.who && (m.matched_as || '') !== S.who) return false;
+      if (S.how && (m.source === 'auto' ? 'auto' : 'hand') !== S.how) return false;
+      if (S.range && Date.now() - atOf(m) > Number(S.range) * DAY) return false;
+      if (S.q) {
+        var hay = [m.subject, m.preview, m.from, m.from_addr, m.to, m.mailbox, m.linked_by].join(' ').toLowerCase();
+        if (!S.q.split(/\s+/).every(function (w) { return hay.indexOf(w) >= 0; })) return false;
+      }
+      return true;
+    };
+    var SORTS = {
+      'new': function (a, b) { return atOf(b) - atOf(a); },
+      'old': function (a, b) { return atOf(a) - atOf(b); },
+      'subj': function (a, b) { return String(a.subject || '').localeCompare(String(b.subject || ''), undefined, { sensitivity: 'base' }) || atOf(b) - atOf(a); },
+      'from': function (a, b) { return senderOf(a).localeCompare(senderOf(b)) || atOf(b) - atOf(a); },
+    };
+    var fmtN = function (n) { try { return Number(n).toLocaleString(); } catch (e) { return String(n); } };
+    var byId = {}; list.forEach(function (m) { byId[m.id] = m; });
+
+    function draw() {
+      var rows = list.filter(match).sort(SORTS[S.sort] || SORTS['new']);
+      var filtered = !!(S.q || S.dir || S.att || S.box || S.who || S.how || S.range);
+      countEl.textContent = filtered
+        ? fmtN(rows.length) + ' of ' + fmtN(total) + ' email' + (total === 1 ? '' : 's')
+        : fmtN(total) + ' email' + (total === 1 ? '' : 's');
+      countEl.title = total > list.length ? 'Searching the newest ' + fmtN(list.length) + ' of ' + fmtN(total) : '';
+      if (clearBtn) clearBtn.style.display = filtered ? '' : 'none';
+      if (fBtn) {
+        var on = [S.dir, S.att, S.box, S.who, S.how, S.range].filter(Boolean).length;
+        fBtn.textContent = 'Filters' + (on ? ' (' + on + ')' : '') + ' ▾';
+      }
+      listEl.innerHTML = rows.length ? rows.map(rowHtml).join('')
+        : '<div style="font-size:13px;color:var(--ink-500);padding:8px 2px;">No emails match these filters.</div>';
+      if (total > list.length && !filtered) {
+        listEl.insertAdjacentHTML('beforeend', '<div style="font-size:12px;color:var(--ink-500);padding:4px 2px 8px;">Showing the newest '
+          + fmtN(list.length) + ' of ' + fmtN(total) + '. Search or filter to narrow them down.</div>');
+      }
+      bind();
+    }
+
+    function bind() {
+    listEl.querySelectorAll('[data-el-open]').forEach(function (b) {
+      b.addEventListener('click', function () { linkedEmailOpen(byId[b.getAttribute('data-el-open')]); });
+    });
+    listEl.querySelectorAll('[data-el-menu]').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var m = byId[b.getAttribute('data-el-menu')];
+        var item = function (label, fn) { var x = document.createElement('button'); x.type = 'button'; x.textContent = label; x.addEventListener('click', fn); return x; };
+        var acts = [
+          item('👁 Open email', function () { linkedEmailOpen(m); }),
+          item('⬇️ Download email (.eml)', function () { linkedEmailDownload(m); }),
+          item('🖨 Print email', function () { linkedEmailPrint(m); }),
+          item('↪️ Forward to someone', function () { linkedEmailForward(m); })
+        ];
+        // Opened with View (the record is locked): reading, saving and sending a copy only - nothing that changes the record.
+        var viewOnly = !!b.closest('[data-kt-view-only]');
+        if (d.me && m.mailbox_owner_id === d.me) acts.push(item('📬 Open in my mailbox', function () { location.hash = '#email?acct=' + m.account_id; }));
+        if (!viewOnly && (d.can_unlink || (d.me && m.mailbox_owner_id === d.me))) {
+          var u = item('🔗 Unlink from this record', function () { unlink(m.id); }); u.style.color = '#B91C1C'; acts.push(u);
+        }
+        if (KT.openActionMenu) KT.openActionMenu(b, acts);
+      });
+    });
+    }
+    draw();
+    async function unlink(id) {
+      var ok = KT.confirm ? await KT.confirm({ title: 'Unlink this email?', description: 'It comes off this record. The link and the unlink stay in the audit log.', okLabel: 'Unlink', cancelLabel: 'Keep it', tone: 'warning' }) : true;
+      if (!ok) return;
+      try { await Api.delete('/email/links/' + id); renderLinkedEmails(host, url, opts); }
+      catch (e) { if (Dom.toast) Dom.toast(e.message || 'Could not unlink it.', 'error'); }
+    }
+  }
+
+  /* OPEN, DOWNLOAD, PRINT, FORWARD A LINKED EMAIL (2026-11-09, Anthony: "have a kebab that can pop up the email in a
+     popup to view the original contents of the email with all info and another option to download that email, print
+     that email or ability to resend that email to someone"). GET /email-links/{id}/message reads it from whichever
+     mailbox holds it, as a peek (it stays unread for its owner). The original HTML is drawn in a sandboxed frame with
+     no scripts, so the email's own styles cannot leak into the portal and nothing in it can run. */
+  function elEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function elPeople(list) {
+    return (list || []).filter(function (p) { return p && (p.email || p.name); })
+      .map(function (p) { return p.name && p.email && p.name !== p.email ? p.name + ' <' + p.email + '>' : (p.email || p.name); }).join(', ');
+  }
+  function elApi() { return (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
+  var _elCache = {};
+  function linkedEmailLoad(m) {
+    if (!_elCache[m.id]) {
+      _elCache[m.id] = Api.get('/email-links/' + m.id + '/message');
+      _elCache[m.id].catch(function () { delete _elCache[m.id]; });
+      setTimeout(function () { delete _elCache[m.id]; }, 120000);
+    }
+    return _elCache[m.id];
+  }
+  function linkedEmailFail(e, what) {
+    if (KT.toast) KT.toast('⚠️', 'Could not ' + what, (e && e.message) || 'Please try again.', '#DC2626');
+  }
+  function elHeaderRows(m, x) {
+    var from = x.from && (x.from.email || x.from.name) ? elPeople([x.from]) : (m.from_addr || m.from || '');
+    return [
+      ['From', from], ['To', elPeople(x.to) || m.to || ''], ['Cc', elPeople(x.cc)], ['Bcc', elPeople(x.bcc)],
+      ['Date', x.when || ''], ['Mailbox', x.mailbox || m.mailbox || '']
+    ].filter(function (r) { return r[1]; });
+  }
+  /* The email as a whole document: for the frame and for printing. Links open in a new tab. */
+  function elDoc(m, x, withHead) {
+    var head = withHead ? '<h2 style="font:700 17px Segoe UI,Arial,sans-serif;margin:0 0 8px;">' + elEsc(x.subject || m.subject || '(no subject)') + '</h2>'
+      + '<table style="border-collapse:collapse;font:13px Segoe UI,Arial,sans-serif;margin:0 0 12px;">'
+      + elHeaderRows(m, x).map(function (r) { return '<tr><td style="padding:2px 12px 2px 0;color:#64748B;vertical-align:top;white-space:nowrap;">' + r[0] + '</td><td style="padding:2px 0;">' + elEsc(r[1]) + '</td></tr>'; }).join('')
+      + ((x.attachments || []).length ? '<tr><td style="padding:2px 12px 2px 0;color:#64748B;vertical-align:top;">Attached</td><td style="padding:2px 0;">' + x.attachments.map(function (a) { return elEsc(a.name); }).join(', ') + '</td></tr>' : '')
+      + '</table><hr style="border:0;border-top:1px solid #CBD5E1;margin:0 0 12px;">' : '';
+    return '<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><title>' + elEsc(x.subject || m.subject || 'Email') + '</title>'
+      + '<style>html,body{margin:0;background:#fff;color:#1F2937;}body{padding:12px 14px;font:14px/1.5 Segoe UI,Calibri,Arial,sans-serif;overflow-wrap:anywhere;}img{max-width:100%;height:auto;}table{max-width:100%;}</style></head><body>'
+      + head + (x.html || '<p style="color:#64748B;">This email has no message text.</p>') + '</body></html>';
+  }
+  /* A popup ON TOP of the record it was opened from. Shell.Modal has a single root, so opening one there would
+     replace the person's record and Close would leave nothing behind. Same look as KT.prompt (its header class, so a
+     white-label agency's colours apply), ✕ inside the header, one scroll region, centred on phones; Esc and the
+     Android back button close only this popup. KT.prompt (Forward) still opens above it. */
+  // z 2147483100: over the record popup's backdrop (2147483010), under toasts (…600) and KT.prompt (…640).
+  function elPopup(title, body, actions) {
+    var o = document.createElement('div');
+    o.setAttribute('data-kt-no-close', '1');
+    o.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.5);backdrop-filter:blur(2px);z-index:2147483100;display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;';
+    var m = document.createElement('div');
+    m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', title);
+    m.style.cssText = 'background:#fff;border-radius:14px;width:100%;max-width:860px;max-height:min(92vh,100%);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(15,23,42,.25);';
+    m.innerHTML = '<div class="kt-dlg-head" style="flex:none;position:relative;padding:16px 56px 14px 22px;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);border-bottom:3px solid #2F8C86;">'
+      + '<h3 style="margin:0;color:#fff;font-size:17px;font-weight:700;overflow-wrap:anywhere;">' + elEsc(title) + '</h3>'
+      + '<button type="button" data-el-x aria-label="Close" data-kttip="Close" style="position:absolute;top:12px;right:12px;width:32px;height:32px;border:0;border-radius:8px;background:rgba(255,255,255,.16);color:#fff;font-size:18px;line-height:1;cursor:pointer;">✕</button></div>'
+      + '<div data-el-body style="flex:1;min-height:0;overflow:auto;padding:14px 22px;scrollbar-width:thin;"></div>'
+      + '<div data-el-foot style="flex:none;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding:12px 22px;border-top:1px solid #E2E8F0;"></div>';
+    m.querySelector('[data-el-body]').appendChild(body);
+    var foot = m.querySelector('[data-el-foot]');
+    (actions || []).forEach(function (a) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = a.label;
+      b.className = 'kt-btn kt-btn-sm' + (a.primary ? ' kt-btn-primary' : '');
+      b.addEventListener('click', function () { if (a.handler) a.handler(); else close(); });
+      foot.appendChild(b);
+    });
+    o.appendChild(m);
+    function onKey(e) {
+      if (e.key !== 'Escape' || !o.isConnected) return;
+      if ([].some.call(document.body.children, function (c) { return c !== o && +getComputedStyle(c).zIndex >= 2147483640 && c.getClientRects().length && /fixed/.test(getComputedStyle(c).position); })) return;   // a prompt / confirm above has it (toasts sit lower)
+      e.preventDefault(); e.stopImmediatePropagation(); close();
+    }
+    function close() {
+      window.removeEventListener('keydown', onKey, true);
+      if (o.isConnected) o.remove();
+      if (KT.popOverlay) KT.popOverlay(o);
+    }
+    window.addEventListener('keydown', onKey, true);
+    m.querySelector('[data-el-x]').addEventListener('click', close);
+    var downOnBack = false;
+    o.addEventListener('mousedown', function (e) { downOnBack = e.target === o; });
+    o.addEventListener('click', function (e) { if (e.target === o && downOnBack) close(); });
+    document.body.appendChild(o);
+    if (KT.pushOverlay) KT.pushOverlay(o, function () { window.removeEventListener('keydown', onKey, true); o.remove(); });
+    return { el: o, close: close };
+  }
+  async function linkedEmailOpen(m) {
+    if (!m) return;
+    var body = document.createElement('div');
+    body.innerHTML = '<div style="font-size:13px;color:var(--ink-500);padding:6px 0;">Opening the email…</div>';
+    var modal = elPopup('✉️ ' + (m.subject || '(no subject)'), body, [
+      { label: '⬇️ Download', handler: function () { linkedEmailDownload(m); } },
+      { label: '🖨 Print', handler: function () { linkedEmailPrint(m); } },
+      { label: '↪️ Forward', handler: function () { linkedEmailForward(m); } },
+      { label: 'Close', primary: true }
+    ]);
+    var x;
+    try { x = await linkedEmailLoad(m); }
+    catch (e) { body.innerHTML = '<div style="font-size:13px;color:#B91C1C;padding:6px 0;">' + elEsc((e && e.message) || 'This email could not be opened.') + '</div>'; return; }
+    var rows = elHeaderRows(m, x);
+    body.innerHTML = '<div style="display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13px;margin-bottom:10px;">'
+      + rows.map(function (r) { return '<div style="color:#64748B;">' + r[0] + '</div><div style="color:#0F172A;overflow-wrap:anywhere;">' + elEsc(r[1]) + '</div>'; }).join('')
+      + '</div>'
+      + ((x.attachments || []).length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">' + x.attachments.map(function (a, i) {
+          return '<button type="button" class="kt-btn kt-btn-sm" data-el-att="' + i + '" data-kttip="Download ' + elEsc(a.name) + '">📎 ' + elEsc(a.name)
+            + (a.size ? ' <span style="color:#64748B;font-weight:400;">' + (a.size >= 1048576 ? (a.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(a.size / 1024)) + ' KB') + '</span>' : '') + '</button>';
+        }).join('') + '</div>' : '')
+      + '<iframe title="Email message" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer" style="display:block;width:100%;min-height:260px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;"></iframe>';
+    var fr = body.querySelector('iframe');
+    if (window.KT && KT.frameLinks) KT.frameLinks(fr);   // links open in the browser, in the app too (kt-doc-viewer)
+    fr.addEventListener('load', function () {
+      try { var h = fr.contentDocument.documentElement.scrollHeight; fr.style.height = Math.max(260, h + 4) + 'px'; } catch (e) {}
+    });
+    fr.srcdoc = elDoc(m, x, false);
+    body.querySelectorAll('[data-el-att]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = x.attachments[+b.getAttribute('data-el-att')];
+        elSave(elApi() + '/email-links/' + m.id + '/attachment?part=' + encodeURIComponent(a.section), a.name, 'application/octet-stream', 'download the attachment');
+      });
+    });
+    return modal;
+  }
+  /* A protected file to the device: a[download] in a browser; in the apps the file viewer, whose Download saves it. */
+  function elSave(src, name, mime, what) {
+    if (!KT.fetchFileBlob) return;
+    var nativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    var p = KT.fetchFileBlob(src).then(function (b) { return new Blob([b], { type: mime }); });
+    if (nativeApp && KT.openFile) { KT.openFile(p, { title: name, filename: name, mime: mime, label: 'Email' }); return; }
+    p.then(function (b) {
+      var a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name;
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+    }).catch(function (e) { linkedEmailFail(e, what); });
+  }
+  function elFileName(m) {
+    var day = ''; try { day = m.at ? new Date(m.at).toLocaleDateString('en-CA') : ''; } catch (e) {}
+    return String(m.subject || 'Email').replace(/[\\/:*?"<>|\x00-\x1F]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) + (day ? ' - ' + day : '') + '.eml';
+  }
+  function linkedEmailDownload(m) {
+    elSave(elApi() + '/email-links/' + m.id + '/download', elFileName(m), 'message/rfc822', 'download the email');
+  }
+  function linkedEmailPrint(m) {
+    if (!KT.printDoc) return;
+    linkedEmailLoad(m).then(function (x) { return KT.printDoc(elDoc(m, x, true), { title: x.subject || m.subject || 'Email' }); })
+      .catch(function (e) { linkedEmailFail(e, 'print the email'); });
+  }
+  async function linkedEmailForward(m) {
+    if (!KT.prompt) return;
+    var v = await KT.prompt({
+      title: '↪️ Forward this email',
+      description: '"' + (m.subject || '(no subject)') + '" goes to the people you name, with everything in it. It is sent from your own Microsoft mailbox when you have one connected here, otherwise from the agency\'s email with replies coming to you.',
+      okLabel: 'Send it', cancelLabel: 'Cancel',
+      fields: [
+        { key: 'to', label: 'Send to (separate several with commas)', type: 'text', placeholder: 'name@example.com' },
+        { key: 'note', label: 'Add a note (optional)', type: 'textarea', rows: 4, placeholder: 'A few words to go above it' }
+      ]
+    });
+    if (!v) return;
+    var to = String(v.to || '').split(/[\s,;]+/).map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!to.length) { linkedEmailFail(new Error('Add who it should go to.'), 'forward it'); return; }
+    if (KT.toast) KT.toast('↪️', 'Sending…', 'Forwarding it to ' + to.join(', ') + '.', '#2C7BA0');
+    try {
+      var r = await Api.post('/email-links/' + m.id + '/forward', { to: to, note: v.note || '' });
+      if (KT.toast) KT.toast('✅', 'Forwarded', 'Sent to ' + (r.to || to).join(', ') + (r.via && r.via !== 'agency' ? ' from ' + r.via : ' from the agency\'s email') + '.', '#16A34A');
+    } catch (e) { linkedEmailFail(e, 'forward it'); }
+  }
+
   async function renderFamilyNotes(host, familyId) {
     host.innerHTML = '<div style="font-size:13px;color:var(--ink-500);">Loading notes…</div>';
 
@@ -7616,6 +8538,7 @@
         }).join('')
       : '<div style="font-size:13px;color:var(--ink-500);margin-bottom:8px;">No notes yet.</div>';
 
+    if (isDirectorView()) { host.innerHTML = list; return; }
     host.innerHTML = list
       + '<textarea id="fn-body" rows="2" maxlength="4000" placeholder="Add a note — it is saved with your name and the time."'
       + ' style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #CBD5E1;'
@@ -7684,7 +8607,7 @@
     host.innerHTML = Object.keys(byChild).map(function (name) {
       var lines = byChild[name].map(function (r) {
         return '<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;'
-          + (r.current ? 'border-left:3px solid #1F6080;padding-left:9px;margin-left:-9px;' : '') + '">'
+          + (r.current ? 'background:#EEF4FB;border-radius:8px;padding-left:9px;margin-left:-9px;' : '') + '">'
           + '<span style="flex:1;min-width:0;font-size:13.5px;color:#0F172A;'
             + (r.current ? 'font-weight:700;' : '') + '">' + esc(r.provider || '—')
             + (r.current ? ' <span style="font-size:11px;font-weight:800;color:#1F6080;">CURRENT</span>' : '')
@@ -8029,17 +8952,32 @@
     });
   }
 
-  async function showFamilyDetail(familyId, archived) {
-    Shell.Modal.open({
-      title: archived ? 'Family details (archived)' : 'Family details',
-      body: loading('Loading...'),
-      large: true,
-    });
+  async function showFamilyDetail(familyId, archived, opts) {
+    opts = opts || {};
+    // opts.into: draw the summary into this element (the record's Overview tab) instead of its own popup.
+    if (!opts.into) {
+      Shell.Modal.open({
+        title: archived ? 'Family details (archived)' : 'Family details',
+        body: loading('Loading...'),
+        large: true,
+      });
+    }
     try {
       /* A de-enrolled family is retained, not deleted, so the record is still
          readable — but only when asked for explicitly, so no ordinary screen
          starts showing departed families by accident. (2026-08-25) */
-      const data = await Api.get('/admin/families/' + familyId + (archived ? '?archived=1' : ''));
+      var _centresP = (!archived && !opts.into) ? Api.get('/admin/centres').then(function (r) { return r.centres || []; }, function () { return []; }) : null;
+      const data = opts.data || await Api.get('/admin/families/' + familyId + (archived ? '?archived=1' : ''));
+      /* An active family opens as the tabbed record, view only (see showFamilyEditTabs). A de-enrolled one is history:
+         it keeps this summary, which is where Bring this family back lives. */
+      if (!opts.into && !data.is_archived) {
+        var _cs = await _centresP;
+        showFamilyEditTabs(data.family, _cs, document.getElementById('appMain'), {
+          view: true, data: data,
+          overview: function (host) { showFamilyDetail(familyId, false, { into: host, data: data }); },
+        });
+        return;
+      }
       const body = Dom.el('div', {});
 
       /* ESC-SCOPE: the departure block below builds raw HTML and calls esc(), but this
@@ -8111,7 +9049,7 @@
           }
         });
         _restoreWrap.appendChild(_restoreBtn);
-        body.appendChild(_restoreWrap);
+        if (!isDirectorView()) body.appendChild(_restoreWrap);
 
         /* Who, when and why — on the record itself. It was only ever in the audit log,
            which you have to know to go and look at. (2026-08-27) */
@@ -8185,8 +9123,10 @@
         famEditFor = null;
         _edit.textContent = '\u270f\ufe0f Edit';
         _edit.style.background = '#fff'; _edit.style.color = '#1F6080'; _edit.style.border = '1.5px solid #1F6080';
-        _btns.appendChild(_resend);
-        _btns.appendChild(_edit);
+        if (!isDirectorView()) {
+          _btns.appendChild(_resend);
+          _btns.appendChild(_edit);
+        }
       }
 
       _hd.appendChild(_btns);
@@ -8205,7 +9145,7 @@
       _famCard.appendChild(_kv('Phone', _f.primary_phone));
       var _addr = [_f.address_line1, _f.address_line2, [_f.city, _f.province, _f.postal_code].filter(Boolean).join(' ')].filter(Boolean).join(', ');
       _famCard.appendChild(_kv('Address', _addr));
-      _famCard.appendChild(_kv('Billing', ({ single: 'Single payer', split_50_50: 'Split 50 / 50', custom: 'Custom split' })[_f.billing_split] || _f.billing_split));
+      _famCard.appendChild(_kv('Billing', ({ single: 'One payer', split_50_50: 'Split 50 / 50', custom: 'Custom split', even: 'Shared evenly', percent: 'Percentage split', fixed: 'Fixed amount + rest', by_type: 'By charge type', by_child: 'By child' })[_f.billing_split] || _f.billing_split));
       if (_f.status) _famCard.appendChild(_kv('Status', _f.status));
       if (_f.notes) _famCard.appendChild(_kv('Notes', _f.notes));
       body.appendChild(_famCard);
@@ -8236,10 +9176,10 @@
           row.appendChild(Dom.el('span', { html: KT.avatar(c.first_name + ' ' + c.last_name, { size: 34, photoUrl: c.photo_url }) }));
           const cInfo = Dom.el('div', { style: 'min-width:0;flex:1;' });
           cInfo.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, cName));
-          cInfo.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, (c.date_of_birth ? 'Born ' + c.date_of_birth + ' · ' : '') + (c.gender ? c.gender + ' · ' : '') + c.enrollment_status));
+          cInfo.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, (c.date_of_birth ? 'Born ' + c.date_of_birth + ' · ' : '') + (c.gender ? _ktWords(c.gender) + ' · ' : '') + _ktWords(c.enrollment_status)));
           var _extra = [];
-          if (c.allergies) _extra.push('⚠️ Allergies: ' + c.allergies);
-          if (c.dietary_restrictions) _extra.push('🍽️ Dietary: ' + c.dietary_restrictions);
+          if (_ktHealthText(c.allergies, 'allergen')) _extra.push('⚠️ Allergies: ' + _ktHealthText(c.allergies, 'allergen'));
+          if (_ktHealthText(c.dietary_restrictions, 'restriction')) _extra.push('🍽️ Dietary: ' + _ktHealthText(c.dietary_restrictions, 'restriction'));
           if (c.medical_notes) _extra.push('💊 Medical: ' + c.medical_notes);
           if (c.doctor_name || c.doctor_phone) _extra.push('🩺 Doctor: ' + [c.doctor_name, c.doctor_phone].filter(Boolean).join(' · '));
           if (c.school) _extra.push('🏫 School: ' + c.school);
@@ -8259,7 +9199,10 @@
         const info = Dom.el('div', { style: 'flex: 1; min-width: 0;' });
         info.appendChild(Dom.el('div', { style: 'font-weight: 600;' }, g.first_name + ' ' + g.last_name + (g.is_primary ? ' ★ primary' : '')));
         info.appendChild(Dom.el('div', { style: 'font-size: 13px; color: var(--ink-500);' }, [g.relationship, g.email, g.phone].filter(Boolean).join(' · ')));
-        info.appendChild(Dom.el('div', { style: 'font-size: 11px; color: #94A3B8;margin-top:1px;' }, (g.can_pickup ? '✓ authorized for pickup' : '✗ not for pickup') + (g.status ? ' · ' + g.status : '')));
+        const _gState = Dom.el('div', { style: 'font-size: 11px; color: #94A3B8;margin-top:1px;' }, (g.can_pickup ? '✓ authorized for pickup' : '✗ not for pickup') + (g.status ? ' · ' + g.status : ''));
+        info.appendChild(_gState);
+        // Sign-in locked? Said beside the status, which a lock leaves as it is (kt-signin-locks.js, 2026-11-10).
+        if (g.user_id && window.KT && KT.signinLock) KT.signinLock.markLocked(_gState, g.user_id, 'append');
         row.appendChild(info);
         // v22p5.2: per-guardian kiosk PIN setter (gates parent sign-in on the kiosk)
         if (_canEdit && g.can_pickup && g.id) {
@@ -8372,13 +9315,26 @@
       body.appendChild(_subHost);
       renderFamilySubsidies(_subHost, familyId, !!data.is_archived);
 
+      // Emails an agency mailbox linked to this family's parents (2026-11-07) - whoever the agency lets see them
+      // (2026-11-06, PersonMail::viewScope), when linking is on or has been. The server says no for anyone else.
+      if (!opts.into) {   // the tabbed record has its own Emails tab
+        var _emHead = famSectionHead('EMAILS', null, null);
+        var _emHost = Dom.el('div', {});
+        body.appendChild(_emHead);
+        body.appendChild(_emHost);
+        renderLinkedEmails(_emHost, '/email-links/family/' + familyId, { family: true, onHide: function () { _emHead.remove(); _emHost.remove(); } });
+      }
+
       body.appendChild(famSectionHead('NOTES', null, null));
       var _notesHost = Dom.el('div', {});
       body.appendChild(_notesHost);
       renderFamilyNotes(_notesHost, familyId);
 
-      Shell.Modal.open({ title: 'Family — ' + (data.family.family_name || ''), body: body, large: true });
+      if (opts.into) { opts.into.appendChild(body); return; }
+      Shell.Modal.open({ title: 'At a glance', body: body, large: true });
+      markRecordModal(false);
     } catch (e) {
+      if (opts.into) { opts.into.appendChild(Dom.el('div', { style: 'color:#B91C1C;font-size:13px;' }, e.message || 'Could not load family')); return; }
       Shell.Modal.open({ title: 'Error', body: Dom.el('div', {}, e.message || 'Could not load family') });
     }
   }
@@ -8484,7 +9440,7 @@
     // Logo upload
     const logoWrap = Dom.el('div', { style: 'margin-bottom: 14px;' });
     logoWrap.appendChild(Dom.el('label', { style: 'display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px;' }, 'Logo (PNG/SVG, max 2MB)'));
-    const fileInput = Dom.el('input', { type: 'file', accept: 'image/png,image/jpeg,image/svg+xml' });
+    const fileInput = Dom.el('input', { type: 'file', accept: 'image/png,image/jpeg,image/svg+xml', 'data-kt-noface': '1' });
     fileInput.style = 'width: 100%; padding: 8px; border: 1px dashed var(--ink-300); border-radius: 6px;';
     const logoStatus = Dom.el('div', { style: 'font-size: 12px; margin-top: 4px;' });
     fileInput.addEventListener('change', async () => {
@@ -9117,7 +10073,7 @@
       var rows = (data && (data.data || data.users || data)) || [];
       var u = (rows.length ? rows : []).filter(function (r) { return String(r.id) === String(userId); })[0];
       if (!u) { try { KT.Shell.navigate('admin-users'); } catch (e) {} return false; }
-      showUserModal(u, Dom.el('div', {}));
+      showUserModal(u, Dom.el('div', {}), { view: true });
       return true;
     }).catch(function () {
       try { KT.Shell.navigate('admin-users'); } catch (e) {}
@@ -9341,6 +10297,22 @@
         + ' left on ' + when + '. The account was closed with the de-boarding.';
     }
 
+    /* SIGN-IN LOCKED (2026-11-10). The account stays 'active' under a lock (nothing on it changes, so unlocking puts
+       it back exactly), so the badge says Locked and the tip says which lock. listUsers sends u.signin_lock. */
+    /* WAITLISTED (2026-11-24): a guardian whose family is held on the agency waitlist after their provider closed.
+       The account is open; the badge says where the family stands. */
+    if (u && u.waitlisted && status === 'active') {
+      label = '⏳ Waitlisted';
+      c = ['#EDE9FE', '#5B21B6'];
+      tip = 'Their provider closed. The family keeps its access and waits on the agency waitlist to be placed.';
+    }
+
+    if (u && u.signin_lock && status !== 'deactivated' && status !== 'suspended') {
+      label = '🚷 Locked';
+      c = ['#FEE2E2', '#991B1B'];
+      tip = (window.KT && KT.signinLock) ? KT.signinLock.lockTip(u.signin_lock) : 'Sign-in paused.';
+    }
+
     if (tip) { return badgeWithTip(c, label, tip); }
     return Dom.el('span', {
       style: 'display: inline-block; background: ' + c[0] + '; color: ' + c[1] + '; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;',
@@ -9362,6 +10334,8 @@
   // A family's record (with its ✏️ Edit family) from anywhere — All contacts uses it
   // for parent rows, whose phone and address live on the family.
   window.KT.openFamilyRecord = function (familyId) { if (familyId) { showFamilyDetail(familyId, false); } };
+  window.KT.renderLinkedEmails = renderLinkedEmails;
+  window.KT.linkedEmailAccess = linkedEmailAccess;
   // Clicking your own name in the top bar opens your account record (view + edit
   // details/roles) instead of re-running the onboarding wizard. Self-edit is
   // allowed by the backend even for a platform-level superadmin.
@@ -9393,9 +10367,13 @@
       return openUserFromHash(renderAdmin(main, ctx));
     });
   });
-  // Centre directors: Users only — their own centre's people (2026-10-07).
+  // Centre directors: Users and Families - their own centres' people (2026-10-07; Families 2026-11-13).
   Shell.registerScreen('centre_director:admin-users', function (main, ctx) {
     state.activeTab = 'users';
+    return openUserFromHash(renderAdmin(main, ctx));
+  });
+  Shell.registerScreen('centre_director:admin-families', function (main, ctx) {
+    state.activeTab = 'families';
     return openUserFromHash(renderAdmin(main, ctx));
   });
   /* #admin-users?user=N opens that person's record — where a reference-ID search lands

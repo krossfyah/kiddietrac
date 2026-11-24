@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
 use App\Support\Audit;
+use App\Support\ProtectedMedia;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -273,6 +274,7 @@ final class ContactController extends Controller
         }
 
         $row = array_intersect_key($data, array_flip(self::FIELDS));
+        $row = self::storedUrls($row);
         $row['agency_id'] = $agencyId;
         $row['tags'] = isset($data['tags']) ? json_encode(array_values($data['tags'])) : null;
         $row['created_by_id'] = $request->user()->id;
@@ -295,6 +297,7 @@ final class ContactController extends Controller
         $this->assertCentreBelongs($agencyId, $data['centre_id'] ?? null);
 
         $row = array_intersect_key($data, array_flip(self::FIELDS));
+        $row = self::storedUrls($row);
         if (array_key_exists('tags', $data)) {
             $row['tags'] = $data['tags'] === null ? null : json_encode(array_values($data['tags']));
         }
@@ -388,7 +391,7 @@ final class ContactController extends Controller
                     $reason = 'The card reader refused: '
                         . ($body['error']['message'] ?? ('HTTP ' . $res->status()));
                 } else {
-                    $text = (string) ($res->json()['content'][0]['text'] ?? '');
+                    $text = (string) (\App\Support\AiConfig::text($res->json()) ?? '');
                     // The model is asked for bare JSON; a fenced block is still tolerated.
                     if (preg_match('/\{.*\}/s', $text, $m)) {
                         $decoded = json_decode($m[0], true);
@@ -432,6 +435,21 @@ final class ContactController extends Controller
         if (! $centreId) { return; }
         $ok = DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists();
         abort_unless($ok, 422, 'That centre is not in this agency.');
+    }
+
+    /* The scanned card is a protected file (contact-cards, 2026-11-10), so the screen holds - and sends back - the
+       signed /media/f link it was given. Store the /storage path that link stands for, never the link: it dies in
+       12 hours. */
+    private static function storedUrls(array $row): array
+    {
+        foreach (['card_image_url', 'photo_url'] as $k) {
+            $u = (string) ($row[$k] ?? '');
+            if (str_contains($u, '/media/f') && preg_match('/[?&]p=([A-Za-z0-9_-]+)/', $u, $m)) {
+                $rel = ProtectedMedia::decode($m[1]);
+                $row[$k] = $rel === null ? null : '/storage/' . $rel;
+            }
+        }
+        return $row;
     }
 
     private function audit(int $agencyId, Request $request, string $action, int $id, array $row, string $verb, ?object $was = null): void

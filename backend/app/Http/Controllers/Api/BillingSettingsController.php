@@ -44,7 +44,7 @@ final class BillingSettingsController extends Controller
     {
         // Deliberately tighter than the other settings screens: a tax rate is a number
         // that ends up on money leaving or entering the business.
-        $ok = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
         abort_unless($ok, 403, 'Agency administrators only');
     }

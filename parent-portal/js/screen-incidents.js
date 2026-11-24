@@ -284,7 +284,7 @@
     var card = document.createElement('button');
     card.type = 'button';
     card.className = 'kt-inc-card';
-    card.style.cssText = 'width:100%;text-align:left;display:block;background:#fff;border:1px solid #EDF1F6;border-left:5px solid ' + sev + ';border-radius:15px;padding:13px 14px;margin-bottom:11px;cursor:pointer;box-shadow:0 2px 8px -3px rgba(15,23,42,.12);font:inherit;';
+    card.style.cssText = 'width:100%;text-align:left;display:block;background:#fff;border:1px solid #EDF1F6;--kt-edge:' + sev + ';border-radius:15px;padding:13px 14px;margin-bottom:11px;cursor:pointer;box-shadow:0 2px 8px -3px rgba(15,23,42,.12);font:inherit;';
     card.innerHTML =
       '<div style="display:flex;align-items:center;gap:11px;">' +
         '<span style="flex:0 0 auto;">' + avatarHtml + '</span>' +
@@ -1124,10 +1124,8 @@
         '</div>' +
         '<div class="form-row" style="margin-top:12px;">' +
           '<label>Sign here</label>' +
-          '<div style="border:1.5px solid var(--kt-border);border-radius:8px;background:#fff;position:relative;">' +
-            '<canvas id="kt-ack-sig" style="width:100%;height:140px;display:block;touch-action:none;border-radius:8px;cursor:crosshair;"></canvas>' +
-            '<button type="button" id="kt-ack-sig-clear" style="position:absolute;top:6px;right:6px;font-size:11px;padding:3px 8px;border:1px solid var(--kt-border);background:#fff;border-radius:6px;cursor:pointer;">Clear</button>' +
-          '</div>' +
+          '<div id="kt-ack-sig"></div>' +
+          '<button type="button" id="kt-ack-sig-clear" style="margin-top:6px;font-size:11px;padding:3px 8px;border:1px solid var(--kt-border);background:#fff;border-radius:6px;cursor:pointer;">Clear</button>' +
           '<div style="font-size:11px;color:var(--kt-text-faint);margin-top:4px;">Draw your signature with your mouse or finger. Dated <span id="kt-ack-date"></span>.</div>' +
         '</div>' +
         '<div class="form-row" style="margin-top:12px;">' +
@@ -1144,29 +1142,11 @@
 
       appendParentVoiceCard(el, inc, base);
 
-      // Signature pad (draw with mouse/finger). The drawn PNG is sent alongside
-      // the typed name so the acknowledgment has a real signature + date.
-      (function initSigPad() {
-        var cv = card.querySelector('#kt-ack-sig');
-        if (!cv) return;
-        var dpr = window.devicePixelRatio || 1, cx;
-        function resize() {
-          var r = cv.getBoundingClientRect();
-          if (!r.width) return;
-          cv.width = Math.round(r.width * dpr); cv.height = Math.round(140 * dpr);
-          cx = cv.getContext('2d'); cx.scale(dpr, dpr); cx.lineWidth = 2; cx.lineCap = 'round'; cx.lineJoin = 'round'; cx.strokeStyle = '#0F172A';
-        }
-        setTimeout(resize, 0);
-        var drawing = false, last = null;
-        function pt(e) { var r = cv.getBoundingClientRect(); var t = (e.touches && e.touches[0]) ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
-        function down(e) { e.preventDefault(); if (!cx) resize(); drawing = true; last = pt(e); }
-        function move(e) { if (!drawing || !cx) return; e.preventDefault(); var p = pt(e); cx.beginPath(); cx.moveTo(last.x, last.y); cx.lineTo(p.x, p.y); cx.stroke(); last = p; cv._drawn = true; }
-        function up() { drawing = false; }
-        cv.addEventListener('mousedown', down); cv.addEventListener('mousemove', move); window.addEventListener('mouseup', up);
-        cv.addEventListener('touchstart', down, { passive: false }); cv.addEventListener('touchmove', move, { passive: false }); cv.addEventListener('touchend', up);
-        card.querySelector('#kt-ack-sig-clear').addEventListener('click', function () { if (cx) cx.clearRect(0, 0, cv.width, cv.height); cv._drawn = false; });
-        card._sig = cv;
-      })();
+      // Signature pad (draw with mouse/finger, or the parent's saved signature). The PNG is
+      // sent alongside the typed name so the acknowledgment has a real signature + date.
+      // The shared pad (kt-signature-pad.js) since 2026-11-06: one pad, saved signatures included.
+      card._sig = KT.signaturePadInline(card.querySelector('#kt-ack-sig'), { height: 140, context: 'incident_ack:' + inc.id });
+      card.querySelector('#kt-ack-sig-clear').addEventListener('click', function () { card._sig.clear(); });
       var _dt = card.querySelector('#kt-ack-date'); if (_dt) _dt.textContent = new Date().toLocaleDateString();
 
       card.querySelector('#kt-ack-submit').addEventListener('click', async function () {
@@ -1177,7 +1157,7 @@
           return;
         }
         var sig = null;
-        try { var cv = card._sig; if (cv && cv._drawn) sig = cv.toDataURL('image/png'); } catch (e) {}
+        try { if (card._sig && !card._sig.isEmpty()) sig = card._sig.toDataURL(); } catch (e) {}
         if (!sig) { Dom.toast('Please draw your signature above', 'error'); return; }
         const btn = card.querySelector('#kt-ack-submit');
         btn.disabled = true; btn.textContent = 'Saving...';

@@ -1,5 +1,10 @@
 <?php
 
+/* Files and folders this app creates are group-writable (2026-10-29, ticket #195). Maintenance
+   runs over SSH as another user in the www-data group created cache folders 0755, and the web
+   process then failed to write into them ("Permission denied" on passkey sign-in). */
+umask(0002);
+
 use App\Http\Middleware\AuditActivity;
 use App\Http\Middleware\CheckFeatureFlag;
 use App\Http\Middleware\EnforceAuditorReadOnly;
@@ -39,24 +44,41 @@ return Application::configure(basePath: dirname(__DIR__))
         // CORS first in the API pipeline
         $middleware->api(prepend: [
             HandleCors::class,
+            // The agency header always names one of the caller's agencies, before anything reads it (2026-11-05).
+            \App\Http\Middleware\NormalizeActiveAgency::class,
+            // Every request knows its agency's timezone: AgencyTime::today()/now()/boundaryUtc()
+            // with no agency id answer for the agency of whoever is asking (2026-10-21).
+            \App\Http\Middleware\ResolveAgencyTimezone::class,
         ]);
 
         // v22p94: pure-auditor accounts are read-only across the whole API.
         // SecurityHeaders: hardened response headers on every API response (SOC 2).
         $middleware->api(append: [
+            // The plan, enforced by the API for each sold feature's paths (2026-10-24).
+            \App\Http\Middleware\EnforcePlanFeatures::class,
             // Onboarding gate — blocks all non-onboarding API calls until the
             // user has completed onboarding (server-side backstop; skips
             // impersonation tokens + platform admins). Kill switch:
             // ONBOARDING_GATE=false in .env + config:cache.
             EnsureOnboarded::class,
+            // Public website demo sessions: risky actions refused, shared records protected, inserts recorded (2026-10-31).
+            \App\Http\Middleware\PublicDemoGuard::class,
             // Password-change gate — blocks all non-auth API calls while a user is
             // carrying a password an administrator issued rather than one they chose.
             // Kill switch: PASSWORD_CHANGE_GATE=false in .env + config:cache.
             \App\Http\Middleware\EnsurePasswordChanged::class,
+            // Two-factor gate - admins, directors, platform admins and resellers must have an authenticator app or a
+            // passkey; everything but set-up answers 403 until they do (App\Support\StrongSignIn, 2026-11-10).
+            \App\Http\Middleware\EnsureStrongSignIn::class,
+            // Sign-in locks - a paused person, centre or agency answers 423 to everything but sign-out
+            // (App\Support\SignInLocks, 2026-11-10).
+            \App\Http\Middleware\EnforceSignInLocks::class,
             EnforceAuditorReadOnly::class,
             // Pick-up logins see the parent view minus billing: refuse money paths (2026-10-13).
             \App\Http\Middleware\PickupOnlyNoBilling::class,
             SecurityHeaders::class,
+            // A reseller naming an agency it does not own is refused (2026-10-21).
+            \App\Http\Middleware\ResellerAgencyGuard::class,
             // Portal-wide activity audit — records every write action to audit_logs.
             AuditActivity::class,
             // Presence: stamps users.last_seen_at from ordinary traffic, throttled
@@ -87,6 +109,13 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\SignProtectedMedia::class,
         ]);
 
+        /* No raw error text leaves the API (2026-10-22): a message that reads like PHP
+           or SQL becomes a plain sentence + reference; the original is logged. GLOBAL,
+           not in the api group: a URL that matches no route is answered before any route
+           middleware runs, and its "The route api/v1/... could not be found." went out
+           untouched. Only JSON replies are looked at. */
+        $middleware->append(\App\Http\Middleware\FriendlyErrorMessages::class);
+
         // Trust GoDaddy / CloudFlare proxy headers if present
         $middleware->trustProxies(at: '*');
     })
@@ -95,6 +124,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn ($request, $e) => $request->is('api/*') || $request->expectsJson()
         );
+
+        /* A session a sign-in lock ended (SignInLocks::signOut, 2026-11-10) answers 423 "your access is paused" with the
+           agency's words, not "session expired", so a screen left open says why. Anything else stays a plain 401. */
+        $exceptions->render(function (\Illuminate\Auth\AuthenticationException $e, $request) {
+            return \App\Support\SignInLocks::revokedAnswer($request->bearerToken());
+        });
 
         /* A URL id that is not a number is a 404, not a server error (2026-10-01).
 

@@ -168,6 +168,106 @@ final class Jurisdictions
                 'terms' => ['registry' => 'Ohio Professional Registry (OPIN)', 'subsidy' => 'Publicly funded child care (PFCC)', 'quality_rating' => 'Step Up To Quality'],
             ],
 
+            /* CALIFORNIA (2026-10-28, Anthony: "look for any US, california compliance related childcare items to be
+               considered for this setup - full sweep"). Researched 2026-10-28 from the CCR Title 22 text (Cornell LII /
+               Justia copies), the Health and Safety Code and CDSS / CDPH forms; sections cited per line. */
+            'US-CA' => [
+                'label' => 'California', 'country' => 'US', 'currency' => 'USD', 'timezone' => 'America/Los_Angeles',
+                'authority' => 'Department of Social Services (CDSS), Community Care Licensing — CCR Title 22, Div. 12 (Ch. 1 centers, Ch. 3 family child care homes)',
+                'license_types' => [
+                    'ca_center' => 'Child care center (infant / preschool / school-age)',
+                    'ca_small_fcch' => 'Small family child care home (up to 8)',
+                    'ca_large_fcch' => 'Large family child care home (up to 14)',
+                ],
+                'ratios' => [
+                    /* Teachers per child. Infant 1:4 (101416.5; 1 teacher may oversee 12 with aides; 12 sleeping infants
+                       per teacher at nap); toddler program 18 months–3 years 1:6, group 12 (H&SC 1596.955 — optional
+                       component; outside one, under-2s are infants and 2-year-olds preschool); preschool 1:12, or 1 teacher
+                       + 1 aide per 15, or a qualified aide 1:18 (101216.3); school-age 1:14, 28 with an aide (101516.5).
+                       Mixed ages: the youngest child sets the ratio (101516.5). The director counts only while teaching. */
+                    'centre' => [
+                        ['band' => 'infant', 'label' => 'Infant (under 18 months)', 'min_months' => 0, 'max_months' => 18, 'ratio' => 4, 'group' => 12],
+                        ['band' => 'toddler', 'label' => 'Toddler program (18 months–3 years)', 'min_months' => 18, 'max_months' => 36, 'ratio' => 6, 'group' => 12],
+                        ['band' => 'preschool', 'label' => 'Preschool (3 years to school age)', 'min_months' => 36, 'max_months' => null, 'ratio' => 12, 'group' => null],
+                        ['band' => 'school_age', 'label' => 'School-age', 'min_months' => null, 'max_months' => null, 'ratio' => 14, 'group' => 28],
+                    ],
+                    'mixed_age' => 'youngest',
+                    // 101230(c): one teacher (or an 18+ qualified aide) may supervise 24 napping children while the rest are on site.
+                    'nap_relief' => ['max_hours' => null, 'factor' => 2, 'no_infants' => true],
+                    'second_adult_at' => null,
+                    /* Family child care homes (H&SC 1597.44 / 1597.465, 22 CCR 102416.5). Not a per-caregiver ratio: a
+                       capacity table by infants (under 2). The provider's own children under 10 count. A large home needs
+                       an assistant provider once it is past the small-home limits. */
+                    'home' => ['engine' => 'ca_fcch', 'counts_own_under' => 10, 'infant_under_months' => 24,
+                        'tiers' => [
+                            'ca_small_fcch' => [
+                                ['max' => 4, 'max_infants' => 4, 'staff' => 1],
+                                ['max' => 6, 'max_infants' => 3, 'staff' => 1],
+                                ['max' => 8, 'max_infants' => 2, 'staff' => 1, 'note' => '7–8 children only with a child in kindergarten or elementary school and another child at least 6, parents told in writing (and the owner\'s consent if rented)'],
+                            ],
+                            'ca_large_fcch' => [
+                                ['max' => 4, 'max_infants' => 4, 'staff' => 1],
+                                ['max' => 6, 'max_infants' => 3, 'staff' => 1],
+                                ['max' => 8, 'max_infants' => 2, 'staff' => 1, 'note' => '7–8 children without an assistant only on the small-home conditions'],
+                                ['max' => 12, 'max_infants' => 4, 'staff' => 2],
+                                ['max' => 14, 'max_infants' => 3, 'staff' => 2, 'note' => '13–14 children only with a child in kindergarten or elementary school and another child at least 6, parents told in writing'],
+                            ],
+                        ]],
+                ],
+                // 101174(d) centers and 102417(g)(9)(A) homes: fire and disaster (earthquake, flood) drills at least every six months; keep the log 1 year.
+                'drills' => [
+                    ['type' => 'fire', 'every' => 'half_year', 'label' => 'Fire drill — at least every six months'],
+                    ['type' => 'disaster', 'every' => 'half_year', 'label' => 'Disaster drill (earthquake / flood) — at least every six months'],
+                ],
+                'drill_note' => 'Your local fire authority (State Fire Marshal, Title 19) may ask for more. Keep the Emergency Disaster Plan (LIC 610) on site.',
+                'background_checks' => [
+                    // H&SC 1596.871: CDSS clearance (DOJ + FBI fingerprints by Live Scan) before first being present; DOJ sends subsequent arrest notices, so no renewal.
+                    ['code' => 'livescan', 'label' => 'Criminal record clearance — DOJ + FBI fingerprints (Live Scan)', 'renew_years' => null],
+                    // 22 CCR 101170.2 / 102370.2: Child Abuse Central Index check (LIC 198A) before working, living in or being present.
+                    ['code' => 'caci', 'label' => 'Child Abuse Central Index (CACI, LIC 198A)', 'renew_years' => null],
+                    ['code' => 'driver', 'label' => 'Driver record', 'renew_years' => null],
+                    ['code' => 'reference', 'label' => 'Reference check', 'renew_years' => null],
+                    ['code' => 'other', 'label' => 'Other', 'renew_years' => null],
+                ],
+                'background_check_note' => 'Clearance from CDSS before day one (Live Scan, plus the CACI form LIC 198A). In family child care homes every adult who lives there is cleared too. Arrests after clearance are reported to CDSS automatically.',
+                'checks_required' => ['livescan', 'caci'],
+                'household_checks' => true,
+                'certifications' => [
+                    // 101216(g): health screening incl. a TB test or risk assessment, no more than 1 year before to 7 days after hire (LIC 503).
+                    ['code' => 'TB_Clearance', 'label' => 'Health screening + TB clearance (LIC 503)', 'within_days_of_hire' => 7],
+                    // H&SC 1596.7995 (SB 792): influenza (yearly, or a signed declination), pertussis (Tdap) and measles (MMR), before starting.
+                    ['code' => 'Staff_Immunizations', 'label' => 'Staff immunizations — flu, Tdap, MMR (SB 792)', 'within_days_of_hire' => 1],
+                    // H&SC 1596.8662 (AB 1207): mandated reporter training within 90 days of hire, renewed every 2 years.
+                    ['code' => 'Mandated_Reporter', 'label' => 'Mandated reporter training (renew every 2 years)', 'within_days_of_hire' => 90],
+                    // H&SC 1596.866: at least one director or teacher per center (and each home licensee) holds the 15-hour EMSA course.
+                    ['code' => 'Health_Safety_15', 'label' => '15-hour Preventive Health & Safety (EMSA) incl. nutrition + lead', 'within_days_of_hire' => null],
+                    ['code' => 'First_Aid', 'label' => 'Pediatric first aid', 'within_days_of_hire' => null],
+                    ['code' => 'CPR', 'label' => 'Pediatric CPR', 'within_days_of_hire' => null],
+                    // 101216.1: teachers 12 ECE/CD units + experience; directors more (101215.1).
+                    ['code' => 'ECE_Units', 'label' => 'ECE units (12 for a teacher)', 'within_days_of_hire' => null],
+                    ['code' => 'CD_Permit', 'label' => 'Child Development Permit (CTC)', 'within_days_of_hire' => null],
+                    ['code' => 'Food_Handler', 'label' => 'Food handler', 'within_days_of_hire' => null],
+                    ['code' => 'Other', 'label' => 'Other', 'within_days_of_hire' => null],
+                ],
+                'pd_hours' => null,   // Title 22 sets no yearly hours (Child Development Permits renew on CTC hours instead)
+                'immunization_schedule' => 'cdph_child_care',
+                // H&SC 120325 + SB 277 (2016): no personal-belief exemptions for child care entry; medical exemptions only (CAIR-ME).
+                'immunization_exemptions' => ['medical'],
+                'immunization_note' => 'California: proof of every required dose for the child\'s age (CDPH IMM-230), within 30 days of each new age checkpoint. Only medical exemptions are accepted (SB 277). Report status to CDPH each fall.',
+                // 101212(d): phone/fax licensing the next working day, written report (LIC 624) within 7 days; parent the same day.
+                'incident' => ['serious_label' => 'Unusual incident / injury (LIC 624)', 'report_to' => 'Community Care Licensing (CDSS)', 'deadline' => 'next working day by phone, written LIC 624 within 7 days',
+                    'same_day_parent_notice' => ['injury', 'medical_treatment', 'unusual_incident']],
+                // 101221(g) children's records 3 years after leaving; 102416.1 personnel 3 years; 101174(d) drill log 1 year.
+                'retention_floor_months' => ['children_records_after_leaving' => 36, 'staff_records_after_leaving' => 36, 'drills' => 12, 'cacfp' => self::US_CACFP_RETENTION_MONTHS],
+                // 101229.1(a)(1): the adult signing a child in or out uses a full signature and the time.
+                'sign_in' => ['full_signature' => true, 'note' => 'California: the adult dropping off or picking up signs in full, with the time (22 CCR 101229.1).'],
+                // AB 2370 (2018): centers in buildings from before 2010 test drinking water for lead, then every 5 years.
+                'facility_checks' => [
+                    ['code' => 'lead_water', 'label' => 'Drinking water lead test (centers built before 2010, every 5 years — AB 2370)', 'every_years' => 5, 'only' => ['ca_center']],
+                ],
+                'terms' => ['registry' => null, 'registry_optional' => 'California ECE Workforce Registry', 'subsidy' => 'CDSS subsidized care (CalWORKs / Alternative Payment)', 'quality_rating' => 'Quality Counts California'],
+            ],
+
             'CA-AB' => [
                 'label' => 'Alberta', 'country' => 'CA', 'currency' => 'CAD', 'timezone' => 'America/Edmonton',
                 'authority' => 'Early Learning and Child Care Act and Regulation',

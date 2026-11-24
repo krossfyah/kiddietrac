@@ -30,7 +30,7 @@ final class TeamChatController extends Controller
     /** Is this a platform admin — somebody whose remit is every agency? */
     private function isPlatformAdmin(int $uid): bool
     {
-        return DB::table('role_assignments')->where('user_id', $uid)
+        return \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $uid)
             ->where('role', 'platform_admin')->where('active', true)->exists();
     }
 
@@ -172,12 +172,12 @@ final class TeamChatController extends Controller
      */
     private function reachableGuardianIds(int $uid, array $agencyCentreIds): array
     {
-        $isWide = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+        $isWide = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $uid)->where('active', true)
             ->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
 
         $centreIds = $isWide
             ? $agencyCentreIds
-            : DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+            : DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $uid)->where('active', true)
                 ->whereNotNull('centre_id')->pluck('centre_id')->all();
 
         if (empty($centreIds)) {
@@ -251,17 +251,43 @@ final class TeamChatController extends Controller
         $label = ['agency_admin' => 'Admin', 'platform_admin' => 'Admin', 'centre_director' => 'Director', 'educator' => 'Educator', 'home_visitor' => 'Home visitor', 'auditor' => 'Auditor', 'guardian' => 'Parent'];
 
         $contacts = DB::table('users')->whereIn('id', $ids)->whereNull('deleted_at')
-            /* email comes back so the picker can tell apart people who share a name —
+            /* email is read so the picker can tell apart people who share a name —
                one person legitimately holds several accounts here (educator, admin,
-               parent), and four identical rows are unpickable. (2026-08-26) */
-            ->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'photo_url', 'email'])
+               parent), and four identical rows are unpickable. (2026-08-26) It is
+               not sent: see the mask below. */
+            ->orderBy('first_name')->get(['id', 'first_name', 'last_name', 'photo_url', 'email', 'username'])
             ->map(fn ($u) => [
                 'id'        => $u->id,
                 'name'      => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: 'Colleague',
                 'photo_url' => $u->photo_url,
                 'role'      => $label[$roleBy[$u->id] ?? ''] ?? 'Staff',
                 'email'     => $u->email,
-            ])->values();
+                'username'  => $u->username,
+            ])->values()->all();
+
+        /* SAME PERSON, SEVERAL ACCOUNTS (2026-11-10, Anthony: Lloydene messaged Safia's educator account, Safia signs in
+           as Safia03 and never saw it). Where two contacts share a name or an email, each carries its sign-in name in
+           `account` and every picker shows it beside the role, so the sender can see which account they are picking.
+           Everyone else gets null: the common case stays clean. */
+        $keys = fn ($c) => array_values(array_filter(['n:' . strtolower(trim($c['name'])), $c['email'] ? 'e:' . strtolower(trim((string) $c['email'])) : null]));
+        $count = [];
+        foreach ($contacts as $c) foreach ($keys($c) as $k) $count[$k] = ($count[$k] ?? 0) + 1;
+        /* NO COLLEAGUE'S EMAIL LEAVES THE SERVER (2026-11-10, PIPEDA review): every contact's address went to the
+           browser of everyone who could open the picker, though nothing displays it. It is only needed above, to
+           spot the shared ones; the label is the sign-in name, else a masked address ("sa•••@gmail.com"). */
+        $mask = function (?string $e): ?string {
+            $e = trim((string) $e);
+            if (! str_contains($e, '@')) return null;
+            [$local, $domain] = explode('@', $e, 2);
+            return mb_substr($local, 0, 2) . '•••@' . $domain;
+        };
+        foreach ($contacts as &$c) {
+            $shared = (bool) array_filter($keys($c), fn ($k) => $count[$k] > 1);
+            $c['account'] = $shared ? ($c['username'] ?: $mask($c['email'])) : null;
+            unset($c['username'], $c['email']);
+        }
+        unset($c);
+
         return response()->json(['contacts' => $contacts]);
     }
 
@@ -333,6 +359,12 @@ final class TeamChatController extends Controller
         // Threads to an account with no active role never reach the list — see the note
         // on the helper for why a delivered-but-unreadable message is the worst outcome.
         $hiddenThreads = array_flip($this->threadsWithInactiveCounterpart($uid, $mine));
+        $memberIds = $everyOther->flatten(1)->pluck('uid')->map(fn ($v) => (int) $v)->unique()->values()->all();
+        $liveMemberIds = $memberIds ? array_flip(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->whereIn('ra.user_id', $memberIds)->where('ra.active', true)->whereNull('u.deleted_at')
+            ->where(fn ($q) => $q->whereNull('u.status')->orWhere('u.status', '!=', 'deactivated'))
+            ->pluck('ra.user_id')->map(fn ($v) => (int) $v)->unique()->all()) : [];
+        $isGroupRow = fn ($t) => (bool) ($t->is_group ?? false);
         $out = [];
         foreach ($threads as $t) {
             if (isset($hiddenThreads[(int) $t->id])) continue;
@@ -357,7 +389,13 @@ final class TeamChatController extends Controller
                 }
             }
 
-            $members = ($everyOther[$t->id] ?? collect())->map(fn ($m) => [
+            /* A group keeps going when somebody leaves, but its member list, count and name are
+               the people in it NOW (2026-11-12 leak sweep: a closed provider, Bruni Meeser, was
+               still listed in a staff group). The same test as a 1:1 thread to a closed account:
+               no active role, or the account is closed. Her messages stay in the history. */
+            $members = ($everyOther[$t->id] ?? collect())
+                ->filter(fn ($m) => ! $isGroupRow($t) || isset($liveMemberIds[(int) $m->uid]))
+                ->map(fn ($m) => [
                 'id'    => (int) $m->uid,
                 'name'  => trim(($m->first_name ?? '') . ' ' . ($m->last_name ?? '')) ?: 'Colleague',
                 'photo' => $m->photo_url,
@@ -688,7 +726,7 @@ final class TeamChatController extends Controller
     private function canManageGroup(Request $request, int $uid, $row): bool
     {
         if ((int) ($row->created_by ?? 0) === $uid) return true;
-        $roles = \App\Support\UserRoles::names($request);
+        $roles = \App\Support\AgencyRole::names($request);
         foreach (['platform_admin', 'agency_admin', 'centre_director'] as $r) {
             if (in_array($r, $roles, true)) return true;
         }
@@ -782,7 +820,11 @@ final class TeamChatController extends Controller
             ->where('m.thread_id', $thread)->orderBy('m.id')
             // attachments must be SELECTED to be readable — the mapper below reads it, and
             // without it every thread read 500'd on an undefined property.
-            ->get(['m.id', 'm.sender_id', 'm.body', 'm.attachments', 'm.is_system', 'm.is_emergency', 'm.created_at', 'u.first_name', 'u.last_name', 'u.photo_url'])
+            ->get(array_merge(['m.id', 'm.sender_id', 'm.body', 'm.attachments', 'm.is_system', 'm.is_emergency', 'm.created_at', 'u.first_name', 'u.last_name', 'u.photo_url'],
+                \App\Support\ChatReply::enabled('staff') ? ['m.reply_to_id'] : []));
+        // The messages these reply to - read from THIS thread only (App\Support\ChatReply).
+        $quotes = \App\Support\ChatReply::quotes('staff', $thread, $msgs->pluck('reply_to_id')->filter()->all());
+        $msgs = $msgs
             ->map(fn ($m) => [
                 'id'      => $m->id,
                 // A system line belongs to nobody, so it must not render as my own bubble
@@ -790,10 +832,15 @@ final class TeamChatController extends Controller
                 'mine'    => ! $m->is_system && $m->sender_id == $uid,
                 'system'  => (bool) $m->is_system,
                 'sender'  => trim(($m->first_name ?? '') . ' ' . ($m->last_name ?? '')) ?: 'Colleague',
+                'sender_id' => (int) $m->sender_id,
                 'photo'   => $m->photo_url,
-                'body'    => $m->body,
-                'attachments' => $m->attachments ? (json_decode($m->attachments, true) ?: []) : [],
+                // Someone this reader blocked (App\Support\UserBlocks, 2026-11-03): hidden for them alone, never an emergency.
+                'blocked' => $hid = \App\Support\UserBlocks::hides($uid, (int) $m->sender_id, (bool) ($m->is_emergency ?? false), (bool) $m->is_system),
+                'body'    => $hid ? \App\Support\UserBlocks::hiddenText($m->first_name ?? '') : $m->body,
+                'attachments' => (! $hid && $m->attachments) ? (json_decode($m->attachments, true) ?: []) : [],
                 'is_emergency' => (bool) ($m->is_emergency ?? false),
+                'reply_to_id' => ! empty($m->reply_to_id) ? (int) $m->reply_to_id : null,
+                'reply_to' => ! empty($m->reply_to_id) ? ($quotes[(int) $m->reply_to_id] ?? null) : null,
                 'at'      => $m->created_at,
             ])->values();
 
@@ -823,6 +870,8 @@ final class TeamChatController extends Controller
 
         DB::table('staff_thread_participants')->where('thread_id', $thread)->where('user_id', $uid)
             ->update(['last_read_at' => now(), 'updated_at' => now()]);
+        // ...and the alerts this thread raised for them (App\Support\Badges, 2026-10-30).
+        \App\Support\Badges::readAlerts($uid, 'thread_id', (int) $thread, ['team_message', 'message']);
 
         $row = DB::table('staff_threads')->where('id', $thread)->first();
         $isGroup = (bool) ($row->is_group ?? false);
@@ -933,11 +982,37 @@ final class TeamChatController extends Controller
         $data = $request->validate([
             'body' => ['required_without:attachment', 'nullable', 'string', 'max:5000'],
             'emergency' => ['sometimes', 'boolean'],   // App\Support\EmergencyMessage
+            'reply_to_id' => ['sometimes', 'nullable', 'integer'],   // App\Support\ChatReply
         ]);
         $attachments = \App\Support\ChatAttachments::extract($request);
         $id = $this->post($uid, $thread, (string) ($data['body'] ?? ''), now(), $attachments,
-            \App\Support\EmergencyMessage::requested($request));
+            \App\Support\EmergencyMessage::requested($request),
+            // Only a message in THIS thread; anything else is dropped (App\Support\ChatReply).
+            \App\Support\ChatReply::valid('staff', $thread, $data['reply_to_id'] ?? null));
         return response()->json(['id' => $id], 201);
+    }
+
+    /** POST /provider/team-threads/{thread}/nudge and /parent/threads/{thread}/nudge (App\Support\ChatNudge). */
+    public function nudge(Request $request, int $thread): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
+        if (\App\Support\MessagingRules::threadState($uid, $thread) !== 'ok') {
+            return response()->json(['message' => \App\Support\MessagingRules::READ_ONLY_MESSAGE, 'read_only' => true], 403);
+        }
+        // The parent routes reach this too: a parent nudging is a family nudge (the agency can switch those off).
+        return \App\Support\ChatNudge::thread($thread, $uid, str_starts_with($request->path(), 'api/v1/parent/'));
+    }
+
+    /** POST /provider/team-threads/{thread}/call (and /parent/threads/{thread}/call) - 📞 App\Support\ChatCall. */
+    public function call(Request $request, int $thread): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        if (! $this->isParticipant($uid, $thread)) return response()->json(['message' => 'Not found'], 404);
+        if (\App\Support\MessagingRules::threadState($uid, $thread) !== 'ok') {
+            return response()->json(['message' => \App\Support\MessagingRules::READ_ONLY_MESSAGE, 'read_only' => true], 403);
+        }
+        return \App\Support\ChatCall::thread($thread, $uid, str_starts_with($request->path(), 'api/v1/parent/'));
     }
 
     /** GET /provider/team-threads/unread-count — total unread for the nav badge. */
@@ -951,12 +1026,21 @@ final class TeamChatController extends Controller
         $hidden = array_flip($this->threadsWithInactiveCounterpart(
             $uid, $parts->pluck('thread_id')->map(fn ($v) => (int) $v)->all()
         ));
-        $total = 0;
+        // ...and the Message Centre rules' hidden threads, which the list skips too (2026-10-23).
+        $rules = (bool) \App\Support\MessagingRules::forUser($uid);
+        $visible = [];
         foreach ($parts as $p) {
             if (isset($hidden[(int) $p->thread_id])) continue;
-            $total += DB::table('staff_messages')->where('thread_id', $p->thread_id)->where('sender_id', '!=', $uid)
-                ->when($p->last_read_at, fn ($q) => $q->where('created_at', '>', $p->last_read_at))->count();
+            if ($rules && \App\Support\MessagingRules::threadState($uid, (int) $p->thread_id) === 'hidden') continue;
+            $visible[] = (int) $p->thread_id;
         }
+        /* ONE COUNT (2026-11-13, portal speed sweep): a count per thread ran on every badge poll - 13 queries for a
+           director in 13 threads. Same rule: messages from others after this person's last read of that thread. */
+        $total = $visible ? (int) DB::table('staff_messages as m')
+            ->join('staff_thread_participants as p', fn ($j) => $j->on('p.thread_id', '=', 'm.thread_id')->where('p.user_id', '=', $uid))
+            ->whereIn('m.thread_id', $visible)->where('m.sender_id', '!=', $uid)
+            ->where(fn ($w) => $w->whereNull('p.last_read_at')->orWhereColumn('m.created_at', '>', 'p.last_read_at'))
+            ->count() : 0;
         return response()->json(['unread' => $total]);
     }
 
@@ -966,18 +1050,48 @@ final class TeamChatController extends Controller
     }
 
     /** $attachments is optional, so start() — which never carries one — is untouched. */
-    private function post(int $uid, int $thread, string $body, $now, array $attachments = [], bool $emergency = false): int
+    private function post(int $uid, int $thread, string $body, $now, array $attachments = [], bool $emergency = false, ?int $replyTo = null): int
     {
-        $id = DB::table('staff_messages')->insertGetId([
+        $row = [
             'thread_id' => $thread, 'sender_id' => $uid, 'body' => trim($body),
             'attachments' => $attachments ? json_encode($attachments) : null,
             'is_emergency' => $emergency,
             'created_at' => $now, 'updated_at' => $now,
-        ]);
+        ];
+        if ($replyTo && \App\Support\ChatReply::enabled('staff')) {
+            $row['reply_to_id'] = $replyTo;
+        } else {
+            $replyTo = null;
+        }
+        $id = DB::table('staff_messages')->insertGetId($row);
+        $replyLine = \App\Support\ChatReply::line(\App\Support\ChatReply::one('staff', $thread, $replyTo));
         DB::table('staff_threads')->where('id', $thread)->update(['last_message_at' => $now, 'updated_at' => $now]);
+
+        /* THE PUSHES GO AFTER THE ANSWER (Anthony, 2026-11-03: "sending chat messages are not
+           quick enough"). The message is stored above; everything below only tells the others.
+           Done inline it was a web push AND an FCM call per recipient, all to outside services,
+           before the sender's phone heard "sent", so every send sat waiting on Google and the
+           push services. Same cure as CheckEventNotifier: afterResponse runs the moment the reply
+           has gone, so nobody's notification is any later. A console caller has no response to
+           come after, so it runs inline; if deferring fails, it runs inline too. */
+        $notify = function () use ($uid, $thread, $body, $now, $attachments, $emergency, $replyLine, $id) {
+            app(self::class)->notifyOthers($uid, $thread, $body, $now, $attachments, $emergency, $replyLine, $id);
+        };
+        if (app()->runningInConsole()) {
+            $notify();
+        } else {
+            try { dispatch($notify)->afterResponse(); } catch (\Throwable $e) { $notify(); }
+        }
+        return $id;
+    }
+
+    private function notifyOthers(int $uid, int $thread, string $body, $now, array $attachments, bool $emergency, string $replyLine, int $id): void
+    {
         // Notify the other participant(s) so it shows in their bell/inbox.
         try {
             $others = DB::table('staff_thread_participants')->where('thread_id', $thread)->where('user_id', '!=', $uid)->pluck('user_id');
+            // Not the colleagues who blocked the sender (App\Support\UserBlocks) - unless it is an emergency.
+            $others = collect(\App\Support\UserBlocks::keep($uid, $others, $emergency));
             $me = DB::table('users')->where('id', $uid)->first(['first_name', 'last_name']);
             $meName = trim(($me->first_name ?? '') . ' ' . ($me->last_name ?? '')) ?: 'A colleague';
             /* One preview for both push transports, matching the wording of the
@@ -986,6 +1100,9 @@ final class TeamChatController extends Controller
             $preview = trim($body) !== ''
                 ? mb_substr(strip_tags($body), 0, 140)
                 : ($attachments ? '📎 sent an attachment' : 'New message');
+            // A reply says what it answers, on its own line.
+            $replySuffix = $replyLine !== '' ? "\n↩ " . $replyLine : '';
+            $preview .= $replySuffix;
             $pushTitle = $emergency ? \App\Support\EmergencyMessage::title($meName) : '💬 ' . $meName;
             if ($emergency) {
                 \App\Support\EmergencyMessage::audit($uid, $this->agencyOfUser($uid), 'staff_thread', $thread, (int) $id,
@@ -1038,7 +1155,7 @@ final class TeamChatController extends Controller
                     'title'   => $pushTitle,
                     'body'    => $meName . ': ' . (trim($body) !== ''
                         ? mb_substr(strip_tags($body), 0, 140)
-                        : ($attachments ? '📎 sent an attachment' : 'New message')),
+                        : ($attachments ? '📎 sent an attachment' : 'New message')) . $replySuffix,
                     /* 'url' was MISSING here. The inbox renderer navigates to data.url, so
                        this row carried a thread_id nothing read, and clicking it in the
                        bell did nothing at all. */
@@ -1052,6 +1169,5 @@ final class TeamChatController extends Controller
                 ]);
             }
         } catch (\Throwable $e) { /* best-effort */ }
-        return $id;
     }
 }

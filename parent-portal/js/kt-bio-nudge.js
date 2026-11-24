@@ -23,13 +23,14 @@
 
   function hide() { var el = document.getElementById(ID); if (el) el.remove(); }
   function show() {
+    if (window.KT_PUBLIC_DEMO) return;   // website demo person: no set-up nudges (2026-10-31)
     if (document.getElementById(ID)) return;
     var box = document.createElement('div');
     box.id = ID;
     box.setAttribute('role', 'status');
     box.setAttribute('data-kt-no-tone', '1');
-    box.style.cssText = 'position:fixed;left:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:9000;max-width:360px;width:calc(100% - 32px);'
-      + 'background:#fff;border:1px solid #CFE3EA;border-left:4px solid #2EA9AC;border-radius:12px;box-shadow:0 10px 30px rgba(15,23,42,.18);'
+    box.style.cssText = 'position:fixed;left:16px;bottom:calc(84px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));z-index:9000;max-width:360px;width:calc(100% - 32px);'
+      + 'background:#fff;border:1px solid #CFE3EA;--kt-edge:#2EA9AC;border-radius:12px;box-shadow:0 10px 30px rgba(15,23,42,.18);'
       + 'padding:12px 14px;font-family:inherit;color:#0F172A;';
     box.innerHTML = '<div style="display:flex;gap:10px;align-items:flex-start;">'
       + '<div style="font-size:22px;line-height:1;">✍️</div>'

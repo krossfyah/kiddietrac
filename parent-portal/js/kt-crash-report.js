@@ -19,6 +19,10 @@
   window.addEventListener('error', function (e) {
     try {
       if (isNetworkNoise(e && (e.error || e.message))) return;
+      /* "ResizeObserver loop completed with undelivered notifications" (tickets #216 / #217, 2026-11-04): the browser's
+         notice that a resize callback moved layout and the rest arrive next frame. Spec-mandated through onerror, no
+         Error object, nothing broken - not a crash. */
+      if (/ResizeObserver loop/i.test(String((e && e.message) || ''))) return;
       var where = (e && e.filename ? e.filename : '') + ':' + (e && e.lineno ? e.lineno : '') + ':' + (e && e.colno ? e.colno : '');
       var stack = (e && e.error && e.error.stack) ? e.error.stack : ((e && e.message ? e.message : 'error') + ' @ ' + where);
       if (isForeignStack(stack + ' ' + ((e && e.filename) || ''))) return;
@@ -49,6 +53,13 @@
       return /network error|failed to fetch|load failed|networkerror|the internet connection|err_internet|err_network|err_timed_out|err_connection|err_name_not_resolved|failed to update a serviceworker|error occurred when fetching the script|serviceworker.*script/i.test(m);
     } catch (x) { return false; }
   }
+  /* A SIGN-IN GATE, NOT A CRASH (ticket #256, 2026-11-24). app.js answers these 403/423 replies by showing the gate
+     (two-factor set-up, password change, paused access) and then rejects the call so the screen stops. A screen
+     that does not catch that rejection is behaving correctly; filing it as a crash only fills the queue. */
+  function isGateRefusal(r) {
+    try { return !!r && /^(mfa_setup_required|password_change_required|access_locked)$/.test(String(r.type || '')); }
+    catch (x) { return false; }
+  }
   /* NOT OUR CODE (ticket #154 / #156, 2026-10-16). "Crash: Error: blocked" was filed twice
      with a trace that never touched KiddieTrac: a browser extension's content script
      (chrome-extension://…) rejecting a call from the host's injected traffic script
@@ -70,6 +81,7 @@
     try {
       var r = e && e.reason;
       if (isNetworkNoise(r)) return;
+      if (isGateRefusal(r)) return;
       var s = (r && r.stack) ? r.stack : String(r);
       if (isForeignStack(s)) return;
       var _t = nowIso() + '  UNHANDLED PROMISE  ' + String(s).slice(0, 4000);

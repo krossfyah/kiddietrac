@@ -19,15 +19,21 @@ final class RoomManagementController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (!$centreId) {
-            return response()->json(['rooms' => []]);
+        /* EVERY CENTRE THIS PERSON MAY SEE (2026-11-13 sweep): resolveCentreId() is ONE centre - an agency admin's is
+           the agency's first - so the admin's "Add child" room list offered centre 8's rooms for a family at any of
+           iLearn's seven centres, and the enrolment was then refused. ?centre_id narrows to one of those centres (the
+           family's, from that dialog); a centre outside them gives nothing. Each room says its centre. Fails closed. */
+        $ids = $this->visibleCentreIds($request);
+        if ($want = (int) $request->query('centre_id')) {
+            $ids = in_array($want, $ids, true) ? [$want] : [];
         }
 
         $rooms = DB::table('rooms')
-            ->where('centre_id', $centreId)
-            ->orderBy('age_min_months')
-            ->get();
+            ->leftJoin('centres', 'centres.id', '=', 'rooms.centre_id')
+            ->whereIn('rooms.centre_id', $ids ?: [0])
+            ->orderBy('centres.name')
+            ->orderBy('rooms.age_min_months')
+            ->get(['rooms.*', 'centres.name as centre_name']);
 
         return response()->json(['rooms' => $rooms]);
     }
@@ -40,6 +46,9 @@ final class RoomManagementController extends Controller
         $centreId = $this->resolveCentreId($request->user());
         if (!$centreId) {
             return response()->json(['message' => 'No centre access'], 403);
+        }
+        if (!$this->mayManageRooms($request, $centreId)) {
+            abort(403);
         }
 
         $data = $request->validate([
@@ -81,7 +90,8 @@ final class RoomManagementController extends Controller
             return response()->json(['message' => 'Not found'], 404);
         }
 
-        if (!$this->authorizeCentreAccess($request->user(), (int) $room->centre_id)) {
+        if (!$this->authorizeCentreAccess($request->user(), (int) $room->centre_id)
+            || !$this->mayManageRooms($request, (int) $room->centre_id)) {
             abort(403);
         }
 
@@ -120,7 +130,8 @@ final class RoomManagementController extends Controller
             return response()->json(['message' => 'Not found'], 404);
         }
 
-        if (!$this->authorizeCentreAccess($request->user(), (int) $room->centre_id)) {
+        if (!$this->authorizeCentreAccess($request->user(), (int) $room->centre_id)
+            || !$this->mayManageRooms($request, (int) $room->centre_id)) {
             abort(403);
         }
 
@@ -152,7 +163,8 @@ final class RoomManagementController extends Controller
     {
         $room = DB::table('rooms')->where('id', $roomId)->first();
         if (!$room) return response()->json(['message' => 'Not found'], 404);
-        if (!$this->authorizeCentreAccess($request->user(), (int) $room->centre_id)) abort(403);
+        if (!$this->authorizeCentreAccess($request->user(), (int) $room->centre_id)
+            || !$this->mayManageRooms($request, (int) $room->centre_id)) abort(403);
 
         $request->validate([
             'logo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,svg', 'max:2048'],
@@ -171,5 +183,26 @@ final class RoomManagementController extends Controller
             'logo_url' => $publicPath,
             'message'  => 'Room logo updated',
         ]);
+    }
+
+    /**
+     * Rooms are the centre's structure, so only its director or an agency admin changes them
+     * (2026-11-05 leak sweep). authorizeCentreAccess() says yes to any staff role at the
+     * centre, so an educator there - or a director of another centre who is an educator
+     * here - could rename, resize, re-ratio or deactivate its rooms.
+     */
+    private function mayManageRooms(Request $request, int $centreId): bool
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $centreAgency = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        if ($agencyId <= 0 || $centreAgency !== $agencyId) {
+            return false;
+        }
+        if (\App\Support\CentreScope::ids($request, $agencyId) === null) {
+            return true;
+        }
+        return in_array('centre_director', \App\Support\AgencyRole::names($request), true)
+            && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+                ->where('role', 'centre_director')->where('centre_id', $centreId)->exists();
     }
 }

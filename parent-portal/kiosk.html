@@ -74,6 +74,7 @@
     <div class="splash"><h1>Loading kiosk…</h1></div>
   </div>
 
+  <script src="/js/kt-net.js?v=20261022raw"></script>
   <script>
     (function () {
       var qs = new URLSearchParams(window.location.search);
@@ -128,7 +129,7 @@
             html += '  </div>';
             html += '  <div class="name">' + esc(c.display_name) + '</div>';
             html += '  <div class="room">' + esc(c.room_name || '') + '</div>';
-            html += '  <div class="status ' + (c.is_at_centre ? 'status-in' : 'status-out') + '">' + (c.is_at_centre ? 'AT CENTRE' : 'NOT IN') + '</div>';
+            html += '  <div class="status ' + (c.is_at_centre ? 'status-in' : 'status-out') + '">' + (c.is_at_centre ? 'AT CENTRE' : 'NOT AT CENTRE') + '</div>';
             html += '</div>';
           });
           html += '</div>';
@@ -240,7 +241,7 @@
        signed-out page, the password-reset dialog on this one included, still closed on a
        stray click and lost whatever had been typed. Both files are standalone (no shell,
        no Api, no Dom), so they load anywhere. -->
-  <script src="/js/kt-modal-guard.js?v=20260921ms" defer></script>
+  <script src="/js/kt-modal-guard.js?v=20261026g" defer></script>
   <script src="/js/kt-modal-safety.js?v=20260921ms" defer></script>
 </body>
 </html>

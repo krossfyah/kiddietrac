@@ -54,7 +54,7 @@ class PlatformInvoiceReminders extends Command
             return self::FAILURE;
         }
 
-        $today = Carbon::now()->startOfDay();
+        $today = \App\Support\AgencyTime::todayDate();
 
         $rows = DB::table('platform_invoices as pi')
             ->leftJoin('agencies as a', 'a.id', '=', 'pi.agency_id')
@@ -65,7 +65,7 @@ class PlatformInvoiceReminders extends Command
             ->whereDate('pi.due_at', '<', $today->toDateString())
             ->orderBy('pi.due_at')
             ->get([
-                'pi.id', 'pi.number', 'pi.due_at', 'pi.amount_cents', 'pi.amount_paid_cents',
+                'pi.id', 'pi.agency_id', 'pi.number', 'pi.due_at', 'pi.amount_cents', 'pi.amount_paid_cents',
                 'pi.currency', 'a.name as agency_name', 'a.contact_email as agency_email',
             ]);
 
@@ -116,7 +116,8 @@ class PlatformInvoiceReminders extends Command
                     . '</strong> was due on ' . e(Carbon::parse($r->due_at)->format('j M Y'))
                     . ' and is still showing as unpaid.</p>'
                     . EmailTemplate::calloutBox(
-                        '<strong>Outstanding:</strong> ' . e($money) . '<br>'
+                        (($cusNo = \App\Support\SalesCustomers::numberForAgency($r->agency_id ? (int) $r->agency_id : null)) ? '<strong>Customer #:</strong> ' . e($cusNo) . '<br>' : '')
+                        . '<strong>Outstanding:</strong> ' . e($money) . '<br>'
                         . '<strong>Days overdue:</strong> ' . $days,
                         'warning'
                     )

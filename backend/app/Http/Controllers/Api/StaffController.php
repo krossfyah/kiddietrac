@@ -93,7 +93,22 @@ final class StaffController extends Controller
         $tempPassword = null;
         $isNewUser = false;
 
+        $centre = DB::table('centres')->where('id', $centreId)->first();
         if ($existing) {
+            /* Only someone already of this agency, or of none (2026-11-05 leak sweep): any account
+               on the platform could be pulled in by email - another agency's staff or parents - and
+               then appeared in this agency's staff lists with their details. */
+            $centres = DB::table('centres')->where('agency_id', $centre->agency_id)->pluck('id')->all() ?: [0];
+            $elsewhere = DB::table('role_assignments')->where('user_id', $existing->id)
+                    ->where(fn ($w) => $w->where(fn ($a) => $a->whereNotNull('agency_id')->where('agency_id', '!=', $centre->agency_id))
+                        ->orWhere(fn ($c) => $c->whereNull('agency_id')->whereNotNull('centre_id')->whereNotIn('centre_id', $centres)))
+                    ->exists()
+                || DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                    ->where('g.user_id', $existing->id)->whereNotIn('f.centre_id', $centres)->exists();
+            if ($elsewhere) {
+                return response()->json(['message' => 'That email belongs to an account at another organisation. '
+                    . 'Ask your agency admin to add this person under Users with a username.'], 422);
+            }
             $userId = (int) $existing->id;
         } else {
             $isNewUser = true;
@@ -111,7 +126,6 @@ final class StaffController extends Controller
             ]);
         }
 
-        $centre = DB::table('centres')->where('id', $centreId)->first();
         DB::table('role_assignments')->updateOrInsert(
             ['user_id' => $userId, 'role' => $data['role'], 'centre_id' => $centreId, 'agency_id' => $centre->agency_id],
             ['active' => true, 'created_at' => now()]
@@ -158,13 +172,26 @@ final class StaffController extends Controller
     {
         $data = $request->validate(['is_contractor' => ['required', 'boolean']]);
 
-        $centreId = $this->resolveCentreId($request->user());
-        abort_unless($centreId, 403, 'No centre for this account.');
+        /* Staff at ANY centre this person may see (2026-11-13 sweep): it was resolveCentreId()'s one centre - an agency
+           admin's is the agency's first - so marking someone at another centre a contractor answered "not staff at
+           your centre". An agency-wide caller also reaches staff held at agency level (centre_id NULL) in the active
+           agency. Fails closed. */
+        $agencyId = (int) $this->resolveAgencyId($request);
+        abort_unless($agencyId, 403, 'No centre for this account.');
+        $ids = $this->visibleCentreIds($request);
+        $agencyWide = \App\Support\CentreScope::ids($request, $agencyId) === null;
 
         $inScope = DB::table('role_assignments')
             ->where('user_id', $userId)
-            ->where('centre_id', $centreId)
             ->where('active', true)
+            // Staff roles only (2026-11-05 leak sweep): a parent's guardian row carries centre_id too.
+            ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
+            ->where(function ($q) use ($ids, $agencyWide, $agencyId) {
+                $q->whereIn('centre_id', $ids ?: [0]);
+                if ($agencyWide) {
+                    $q->orWhere(fn ($q2) => $q2->whereNull('centre_id')->where('agency_id', $agencyId));
+                }
+            })
             ->exists();
         abort_unless($inScope, 403, 'That person is not staff at your centre.');
 
@@ -252,8 +279,8 @@ final class StaffController extends Controller
             return response()->json(['shifts' => []]);
         }
 
-        $from = $request->input('from', now()->startOfWeek()->toDateString());
-        $to = $request->input('to', now()->endOfWeek()->toDateString());
+        $from = $request->input('from', \App\Support\AgencyTime::todayDate()->startOfWeek()->toDateString());
+        $to = $request->input('to', \App\Support\AgencyTime::todayDate()->endOfWeek()->toDateString());
 
         // shifts table has room_id, not centre_id — scope via rooms in this centre
         $roomIds = DB::table('rooms')->where('centre_id', $centreId)->pluck('id')->all();
@@ -283,6 +310,19 @@ final class StaffController extends Controller
             'ends_at' => ['required', 'date', 'after:starts_at'],
             'notes' => ['nullable', 'string'],
         ]);
+        /* Staff of this centre or its agency (home visitors are agency-wide), in a room of this
+           centre (2026-11-05 leak sweep): both ids were written unchecked, so a shift could be
+           booked for anyone into any centre's room. */
+        $centreAgency = DB::table('centres')->where('id', $centreId)->value('agency_id');
+        $isStaff = DB::table('role_assignments')->where('user_id', $data['user_id'])->where('active', true)
+            ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
+            ->where(fn ($w) => $w->where('centre_id', $centreId)->orWhere('agency_id', $centreAgency))->exists();
+        if (! $isStaff) {
+            return response()->json(['message' => 'That person is not staff at your centre.'], 422);
+        }
+        if (! empty($data['room_id']) && ! DB::table('rooms')->where('id', $data['room_id'])->where('centre_id', $centreId)->exists()) {
+            return response()->json(['message' => 'That room is not at your centre.'], 422);
+        }
 
         $id = DB::table('shifts')->insertGetId([
             ...$data,

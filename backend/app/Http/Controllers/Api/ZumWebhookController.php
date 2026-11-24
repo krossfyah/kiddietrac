@@ -155,14 +155,12 @@ class ZumWebhookController extends Controller
         );
         $agencyId = $agencyIds[0] ?? null;   // still used where only a hint is needed
 
-        // While no agency has configured Zum at all there is nothing to match against, and
-        // rejecting everything would make the endpoint untestable. Once ANY agency is
-        // live, an unmatched secret is refused.
-        $anyConfigured = DB::table('agency_payment_providers')
-            ->where('provider', \App\Support\PaymentProviders::ZUM)
-            ->where('enabled', true)->exists();
-
-        if ($anyConfigured && ! $agencyIds) {
+        /* AN UNSIGNED CALLBACK IS ALWAYS REFUSED (2026-11-05 leak sweep). While no agency had
+           Zum configured this let anything through, and the lookups below then ran across every
+           agency's transactions: a made-up "Completed" naming a pending transaction settled it
+           and marked the invoice paid. With nothing configured there is nobody who could have
+           sent a genuine callback; tests configure a provider first. */
+        if (! $agencyIds) {
             return response()->json(['message' => 'Bad signature'], 401);
         }
 
@@ -295,6 +293,8 @@ class ZumWebhookController extends Controller
                         [
                             'invoice_id' => (int) $inv->id,
                             'family_id' => $inv->family_id,
+                            // Split billing: whose share this pays (the person who started the payment).
+                            'payer_guardian_id' => $row->user_id ? (DB::table('guardians')->where('user_id', $row->user_id)->where('family_id', $inv->family_id)->value('id') ?: null) : null,
                             'amount' => round((float) $row->amount, 2),
                             /* Their name -> the ledger's. Explicit, because the enum
                                rejects anything else outright ("Data truncated for column

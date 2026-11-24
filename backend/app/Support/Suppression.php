@@ -230,7 +230,7 @@ final class Suppression
             $childIds = DB::table('children')->whereIn('family_id', $familyIds)
                 ->whereNull('deleted_at')->pluck('id')->all();
             if ($childIds) {
-                $today = now()->toDateString();
+                $today = \App\Support\AgencyTime::today();
                 $roomIds = DB::table('enrollments')->whereIn('child_id', $childIds)
                     ->whereNotNull('room_id')
                     ->where(function ($q) use ($today) {
@@ -276,6 +276,15 @@ final class Suppression
     {
         if (! $userId) {
             return false;
+        }
+
+        // The public website demo's people are never contacted by anything (2026-10-31, App\Support\PublicDemo).
+        if (\App\Support\PublicDemo::isUser((int) $userId)) {
+            return true;
+        }
+        // Someone who belongs only to test agencies is never contacted either (2026-11-24, App\Support\TestAgency).
+        if (\App\Support\TestAgency::isUser((int) $userId)) {
+            return true;
         }
 
         /* The account itself is switched off.

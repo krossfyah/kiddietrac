@@ -214,7 +214,8 @@ final class PfccController extends Controller
         abort_unless($a->agreement_path && Storage::disk('local')->exists($a->agreement_path), 404);
         $this->audit($request, $agencyId, 'pfcc.agreement_viewed', 'child', (int) $a->child_id, 'Opened a PFCC copay agreement');
 
-        return Storage::disk('local')->response($a->agreement_path, $a->agreement_name ?: 'copay-agreement', ['Content-Disposition' => 'inline; filename="' . addslashes($a->agreement_name ?: 'copay-agreement') . '"']);
+        // FileResponse, not Storage::response(): that streams with fpassthru(), which this server's PHP disables (ticket #197, 2026-11-01).
+        return \App\Support\FileResponse::download($a->agreement_path, $a->agreement_name ?: 'copay-agreement', [], 'local', true);
     }
 
     /** GET /pfcc/authorizations/{id}/copays */

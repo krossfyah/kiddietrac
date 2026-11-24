@@ -94,7 +94,23 @@
     if (hero) { container.insertBefore(hero, container.firstChild); }
   }
 
+  /* PHONE WEEK (2026-10-26): one row per day instead of seven 40px columns. */
+  function phoneCss() {
+    if (document.getElementById('kt-sched-phone-css')) return;
+    var st = document.createElement('style'); st.id = 'kt-sched-phone-css';
+    st.textContent = '@media (max-width:640px){'
+      + '.kt-sched-week{grid-template-columns:1fr !important;gap:8px !important;}'
+      + '.kt-sched-day{min-height:0 !important;display:grid !important;grid-template-columns:72px minmax(0,1fr);gap:10px;align-items:start;padding:10px 12px !important;}'
+      + '.kt-sched-day > div:first-child{margin:0 !important;flex-direction:column;align-items:flex-start !important;line-height:1.35;letter-spacing:.5px !important;white-space:normal;}'
+      + '.kt-sched-body{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;min-width:0;}'
+      + '.kt-sched-body .kt-shift-card{margin:0 !important;font-size:12.5px !important;word-break:normal;overflow-wrap:anywhere;}'
+      + '.kt-sched-body .kt-shift-card div{white-space:normal;}'
+      + '}';
+    document.head.appendChild(st);
+  }
+
   async function render(container) {
+    phoneCss();
     paint(container, '<div style="padding:32px;text-align:center;color:#6B7280;">Loading…</div>');
 
     const centres = await getCentres();
@@ -102,7 +118,9 @@
       paint(container, '<div style="padding:24px;color:#DC2626;">No centres found.</div>');
       return;
     }
-    if (!activeCentreId) activeCentreId = centres[0].id;
+    if (!activeCentreId && centres.length === 1) activeCentreId = centres[0].id;
+    // Select a provider first (2026-10-24) — never the first one in the list.
+    if (!activeCentreId && window.KT && KT.selectFirst) { KT.selectFirst(container, { items: centres, onPick: function (id) { activeCentreId = id; render(container); } }); return; }
 
     let week, staff, month = null;
     try {
@@ -149,13 +167,14 @@
             <button id="kt-next-week" title="${activeView === 'month' ? 'Next month' : 'Next week'}" style="${navBtnStyle()}">›</button>
             <button id="kt-today" title="Jump to today" style="${ctl('padding:0 14px;font-weight:700;border:1px solid #D1D5DB;background:white;color:#475569;')}">Today</button>
             <span style="width:1px;height:22px;background:#E2E8F0;margin:0 2px;"></span>
+            <button id="kt-standing" title="Set the hours each person on this home's team works every week" style="${textBtnStyle(false)}">👥 Standing hours</button>
             <button id="kt-autofill" title="Fill the displayed week from the centre's opening hours. Closure days and days already rostered are left alone." style="${textBtnStyle(false)}">⚡ Autofill ${activeView === 'month' ? 'month' : 'week'}</button>
             <button id="kt-new-shift" style="${textBtnStyle(true)}">+ New Shift</button>
           </div>
         </div>
 
         ${activeView === 'month' ? monthGrid(month) : `
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;">
+        <div class="kt-sched-week" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;">
           ${Object.entries(week.days).map(([date, info]) => dayColumn(date, info)).join('')}
         </div>`}
 
@@ -206,6 +225,7 @@
       render(container);
     });
     $('#kt-new-shift', container).addEventListener('click', () => openShiftModal(container, staff.staff || [], null));
+    $('#kt-standing', container).addEventListener('click', () => openStandingModal(container));
 
     $('#kt-autofill', container).addEventListener('click', (e) => {
       /* Fill what is on screen. In month view this used to hand over the WEEK, so a
@@ -230,6 +250,123 @@
       try { openShiftModal(container, staff.staff || [], JSON.parse(el.dataset.shift)); }
       catch (e) { /* a chip that cannot be parsed should not break the grid */ }
     }));
+  }
+
+  /* STANDING HOURS (2026-10-21). Anthony, about Rachel Blane at Bruni Meeser's home: put
+     her on Bruni's hours, and "allow us to define her shift as well when required".
+
+     Each person on the home's team can carry their own weekly hours. The nightly fill
+     keeps anyone with hours set on the schedule; the provider without any keeps the
+     centre's hours. One day off or a late start is still done on the calendar: click
+     the shift. Backed by GET/PUT /director/schedule/standing. */
+  async function openStandingModal(container) {
+    let d;
+    try { d = await api('GET', '/director/schedule/standing?centre_id=' + activeCentreId); }
+    catch (e) {
+      if (window.KT && KT.toast) KT.toast('⚠️', 'Could not load standing hours', e.message, '#DC2626'); else alert(e.message);
+      return;
+    }
+    const c = d.centre || {};
+    const DAY = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const inp = 'height:30px;border:1px solid #CBD5E1;border-radius:7px;padding:0 8px;font-size:13px;';
+    const centreHours = (c.open_time && c.close_time) ? c.open_time + '–' + c.close_time : 'not set';
+
+    const row = (p) => {
+      const pat = p.pattern || { start: c.open_time || '09:00', end: c.close_time || '17:00', days: c.open_days || [1, 2, 3, 4, 5], role: p.is_provider ? 'lead' : 'support' };
+      const on = !!p.pattern;
+      return `
+      <div class="kt-st-row" data-uid="${p.user_id}" data-provider="${p.is_provider ? 1 : 0}" style="border:1px solid #E2E8F0;border-radius:10px;padding:10px 12px;display:grid;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <strong style="flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.name)}</strong>
+          ${p.is_provider ? '<span style="font-size:10px;font-weight:700;color:#166534;background:#DCFCE7;padding:1px 7px;border-radius:8px;">provider</span>' : '<span style="font-size:10px;font-weight:700;color:#475569;background:#F1F5F9;padding:1px 7px;border-radius:8px;">educator</span>'}
+        </div>
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" class="kt-st-keep" ${on ? 'checked' : ''} style="width:16px;height:16px;">
+          ${p.is_provider ? 'Use their own hours <span style="color:#64748B;">(otherwise the centre’s, ' + esc(centreHours) + ')</span>' : 'Keep on the schedule every week'}
+        </label>
+        <div class="kt-st-fields" style="display:${on ? 'grid' : 'none'};gap:8px;">
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:#475569;">
+            <input type="time" class="kt-st-start" value="${esc(pat.start)}" style="${inp}"> to
+            <input type="time" class="kt-st-end" value="${esc(pat.end)}" style="${inp}">
+            <select class="kt-st-role" style="${inp}">${['lead', 'support', 'floater', 'volunteer'].map(r => `<option value="${r}" ${pat.role === r ? 'selected' : ''}>${r}</option>`).join('')}</select>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;">
+            ${[1, 2, 3, 4, 5, 6, 7].map(n => `<label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;border:1px solid #CBD5E1;border-radius:999px;padding:3px 9px;cursor:pointer;"><input type="checkbox" class="kt-st-day" value="${n}" ${pat.days.indexOf(n) >= 0 ? 'checked' : ''} style="width:13px;height:13px;margin:0;">${DAY[n]}</label>`).join('')}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;cursor:pointer;flex:1;min-width:200px;">
+            <input type="checkbox" class="kt-st-apply" checked style="width:14px;height:14px;"> Also update their upcoming shifts from tomorrow
+          </label>
+          <button type="button" class="kt-st-save" style="background:#1F6080;color:#fff;border:0;border-radius:8px;height:30px;padding:0 14px;font-weight:700;font-size:12.5px;cursor:pointer;">Save</button>
+        </div>
+        <div class="kt-st-msg" style="font-size:12px;min-height:0;"></div>
+      </div>`;
+    };
+
+    const back = document.createElement('div');
+    back.setAttribute('style', 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;');
+    back.innerHTML = `
+      <div role="dialog" aria-modal="true" aria-label="Standing hours" style="background:#fff;border-radius:14px;max-width:560px;width:100%;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.28);">
+        <div style="padding:16px 18px 10px;border-bottom:1px solid #F1F5F9;">
+          <h3 style="margin:0;font-size:17px;">👥 Standing hours · ${esc(c.name || '')}</h3>
+          <p style="margin:6px 0 0;color:#6B7280;font-size:12.5px;line-height:1.5;">
+            The hours each person works here every week. ${d.auto_nightly
+              ? 'The nightly fill keeps them on the schedule four weeks ahead.'
+              : 'The nightly fill is off for this agency, so shifts are written only when you save with “upcoming shifts” ticked.'}
+            To change a single day, click that shift on the calendar.
+          </p>
+        </div>
+        <div style="padding:12px 14px;overflow:auto;flex:1;display:grid;gap:10px;">
+          ${(d.people || []).length ? d.people.map(row).join('') : '<div style="padding:16px;color:#64748B;font-size:13px;">No educators are assigned to this home.</div>'}
+        </div>
+        <div style="padding:10px 16px;border-top:1px solid #F1F5F9;display:flex;justify-content:flex-end;">
+          <button type="button" id="kt-st-close" style="background:#fff;border:1px solid #D1D5DB;height:32px;padding:0 16px;border-radius:8px;font-weight:600;cursor:pointer;">Done</button>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+
+    let changed = false;
+    function close() {
+      if (back.parentNode) back.parentNode.removeChild(back);
+      if (changed) render(container);
+    }
+    back.querySelector('#kt-st-close').addEventListener('click', close);
+    back.addEventListener('click', (ev) => { if (ev.target === back) close(); });
+
+    back.querySelectorAll('.kt-st-row').forEach((r) => {
+      const keep = r.querySelector('.kt-st-keep');
+      keep.addEventListener('change', () => { r.querySelector('.kt-st-fields').style.display = keep.checked ? 'grid' : 'none'; });
+      r.querySelector('.kt-st-save').addEventListener('click', async (ev) => {
+        const btn = ev.currentTarget;
+        const msg = r.querySelector('.kt-st-msg');
+        const body = {
+          centre_id: activeCentreId,
+          user_id: parseInt(r.getAttribute('data-uid'), 10),
+          keep: keep.checked,
+          apply: r.querySelector('.kt-st-apply').checked,
+        };
+        if (keep.checked) {
+          body.start = r.querySelector('.kt-st-start').value;
+          body.end = r.querySelector('.kt-st-end').value;
+          body.role = r.querySelector('.kt-st-role').value;
+          body.days = Array.prototype.slice.call(r.querySelectorAll('.kt-st-day:checked')).map(x => parseInt(x.value, 10));
+          if (!body.start || !body.end || body.end <= body.start || !body.days.length) {
+            msg.style.color = '#DC2626'; msg.textContent = 'Choose a start time, a later end time and at least one day.';
+            return;
+          }
+        }
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+          const res = await api('PUT', '/director/schedule/standing', body);
+          msg.style.color = '#16A34A'; msg.textContent = '✓ ' + (res.message || 'Saved.');
+          changed = true;
+        } catch (e) {
+          msg.style.color = '#DC2626'; msg.textContent = e.message || 'Could not save.';
+        }
+        btn.disabled = false; btn.textContent = 'Save';
+      });
+    });
   }
 
   /* Who to roster, stated rather than assumed.
@@ -275,6 +412,10 @@
               : 'There are no closures in this range.'}
             Days already rostered are never overwritten.
           </p>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;color:#475569;">
+            Hours <input type="time" id="kt-af-start" value="${esc(String(week.open_time || '09:00').slice(0, 5))}" style="height:30px;border:1px solid #CBD5E1;border-radius:7px;padding:0 8px;font-size:13px;">
+            to <input type="time" id="kt-af-end" value="${esc(String(week.close_time || '17:00').slice(0, 5))}" style="height:30px;border:1px solid #CBD5E1;border-radius:7px;padding:0 8px;font-size:13px;">
+          </div>
         </div>
         <div style="padding:8px 10px;overflow:auto;flex:1;">
           ${here.length ? '<div style="font-size:10.5px;font-weight:700;color:#6B7280;letter-spacing:.8px;text-transform:uppercase;padding:8px 10px 4px;">At this centre</div>' + here.map(row).join('') : ''}
@@ -318,9 +459,10 @@
       go.textContent = 'Filling\u2026';
       try {
         // The local api() helper -- this file does not import the shared Api wrapper.
-        const r = await api('POST', '/director/schedule/autofill', {
-          centre_id: activeCentreId, start: from, end: to, user_ids: ids,
-        });
+        const body = { centre_id: activeCentreId, start: from, end: to, user_ids: ids };
+        const hs = back.querySelector('#kt-af-start').value, he = back.querySelector('#kt-af-end').value;
+        if (hs && he && he > hs) { body.start_time = hs; body.end_time = he; }
+        const r = await api('POST', '/director/schedule/autofill', body);
         close();
         const msg = r.message || 'Schedule filled.';
         if (window.KT && typeof window.KT.toast === 'function') window.KT.toast(msg);
@@ -378,7 +520,7 @@
       const chips = shifts.slice(0, 3).map(sh => {
         const colour = sh.role === 'lead' ? '#1F6080' : sh.role === 'support' ? '#8EC73C'
           : sh.role === 'floater' ? '#F59E0B' : '#A78BFA';
-        return `<div class="kt-mini-shift" data-shift='${esc(JSON.stringify(sh)).replace(/&quot;/g, '"')}' title="${esc(sh.user_name + ' · ' + sh.starts_hm + '–' + sh.ends_hm + ' · ' + sh.role)}" style="background:${colour}1F;border-left:2px solid ${colour};border-radius:3px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(sh.starts_hm)} ${esc(sh.user_name)}</div>`;
+        return `<div class="kt-mini-shift" data-shift='${esc(JSON.stringify(sh)).replace(/&quot;/g, '"')}' title="${esc(sh.user_name + ' · ' + sh.starts_hm + '–' + sh.ends_hm + ' · ' + sh.role)}" style="background:${colour}1F;--kt-edge:${colour};border-radius:3px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(sh.starts_hm)} ${esc(sh.user_name)}</div>`;
       }).join('');
 
       const more = shifts.length > 3
@@ -386,7 +528,7 @@
 
       let body = chips + more;
       if (closure) {
-        body = `<div title="${esc(closure.label)}" style="background:#FFE4E6;border-left:2px solid #E11D48;border-radius:3px;padding:1px 4px;margin-bottom:2px;font-size:10px;font-weight:700;color:#9F1239;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(closure.label)}</div>` + body;
+        body = `<div title="${esc(closure.label)}" style="background:#FFE4E6;--kt-edge:#E11D48;border-radius:3px;padding:1px 4px;margin-bottom:2px;font-size:10px;font-weight:700;color:#9F1239;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(closure.label)}</div>` + body;
       } else if (!shifts.length && shut) {
         body = '<div style="font-size:10px;color:#9CA3AF;">Not open</div>';
       }
@@ -424,7 +566,7 @@
     let body;
     if (closure) {
       body = `
-        <div style="background:#FFE4E6;border-left:3px solid #E11D48;border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:11px;">
+        <div style="background:#FFE4E6;--kt-edge:#E11D48;border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:11px;">
           <div style="font-weight:700;color:#9F1239;">${esc(closure.label)}</div>
           ${closure.from !== closure.to ? `<div style="color:#9F1239;font-size:10px;margin-top:2px;">${esc(closure.from)} \u2013 ${esc(closure.to)}</div>` : ''}
           ${closure.affects_billing ? '<div style="color:#9F1239;font-size:10px;margin-top:2px;">Affects billing</div>' : ''}
@@ -441,12 +583,12 @@
     }
 
     return `
-      <div style="background:${bg};border-radius:10px;padding:10px;min-height:200px;${isToday ? 'box-shadow:inset 0 0 0 2px #1F6080;' : ''}">
+      <div class="kt-sched-day" style="background:${bg};border-radius:10px;padding:10px;min-height:200px;${isToday ? 'box-shadow:inset 0 0 0 2px #1F6080;' : ''}">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:${head};letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:6px;">
           <span>${esc(dayLabel)}</span>
           ${isToday ? '<span style="font-size:9px;font-weight:800;letter-spacing:.5px;color:#fff;background:#1F6080;border-radius:8px;padding:1px 6px;">TODAY</span>' : ''}
         </div>
-        ${body}
+        <div class="kt-sched-body">${body}</div>
       </div>
     `;
   }
@@ -454,7 +596,7 @@
   function shiftCard(s) {
     const color = s.role === 'lead' ? '#1F6080' : s.role === 'support' ? '#8EC73C' : s.role === 'floater' ? '#F59E0B' : '#A78BFA';
     return `
-      <div class="kt-shift-card" data-shift='${esc(JSON.stringify(s)).replace(/&quot;/g,'\"')}' style="background:${color}20;border-left:3px solid ${color};border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:11px;cursor:pointer;">
+      <div class="kt-shift-card" data-shift='${esc(JSON.stringify(s)).replace(/&quot;/g,'\"')}' style="background:${color}20;--kt-edge:${color};border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:11px;cursor:pointer;">
         <div style="font-weight:600;">${esc(s.starts_hm)}–${esc(s.ends_hm)}</div>
         <div style="margin-top:2px;color:#374151;">${esc(s.user_name)}</div>
         <div style="color:#6B7280;font-size:10px;">${esc(s.room_name)} · ${esc(s.role)}</div>

@@ -33,6 +33,8 @@ final class ChildNotesController extends Controller
         $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
         abort_unless($child, 404);
         abort_unless($this->canAccessChildId($request->user(), $childId), 403, 'You can only add notes for children in your care.');
+        // Staff-only notes (2026-11-05 leak sweep): a parent holding any staff role could read/write their own child's.
+        abort_unless($this->ktStaffForChild($request->user(), $childId), 403, 'You can only add notes for children in your care.');
         $family = DB::table('families')->where('id', $child->family_id)->first();
         $centre = $family ? DB::table('centres')->where('id', $family->centre_id)->first() : null;
         abort_unless($centre, 404);
@@ -171,10 +173,10 @@ final class ChildNotesController extends Controller
                 . ' <b>' . $e($childName) . '</b>\'s record at ' . $e($centre->name) . ' on ' . $e($when) . '.</p>'
                 . ($kind === 'edited' && $before !== null
                     ? '<div style="font-size:12px;font-weight:800;color:#64748B;letter-spacing:.05em;text-transform:uppercase;margin:10px 0 4px">Before</div>'
-                      . '<div style="background:#FEF2F2;border-left:4px solid #FCA5A5;border-radius:8px;padding:10px 12px;font-size:14px;color:#7F1D1D;line-height:1.55">' . nl2br($e($before)) . '</div>'
+                      . '<div style="background:#FEF2F2;--kt-edge:#FCA5A5;border-radius:8px;padding:10px 12px;font-size:14px;color:#7F1D1D;line-height:1.55">' . nl2br($e($before)) . '</div>'
                       . '<div style="font-size:12px;font-weight:800;color:#64748B;letter-spacing:.05em;text-transform:uppercase;margin:12px 0 4px">After</div>'
                     : '<div style="font-size:12px;font-weight:800;color:#64748B;letter-spacing:.05em;text-transform:uppercase;margin:10px 0 4px">Note</div>')
-                . '<div style="background:#F0FDF4;border-left:4px solid #86EFAC;border-radius:8px;padding:10px 12px;font-size:14px;color:#14532D;line-height:1.55">' . nl2br($e($body)) . '</div>'
+                . '<div style="background:#F0FDF4;--kt-edge:#86EFAC;border-radius:8px;padding:10px 12px;font-size:14px;color:#14532D;line-height:1.55">' . nl2br($e($body)) . '</div>'
                 . '<div style="margin:16px 0 0"><a href="https://app.kiddietrac.com/dashboard.html' . $e($link) . '" style="display:inline-block;padding:11px 18px;border-radius:10px;background:#1F6080;color:#fff;text-decoration:none;font-weight:700;font-size:14px">Open ' . $e($childName) . '\'s notes</a></div>'
                 . '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">Staff notes are never shown to parents.</p>',
                 ['eyebrow' => 'CHILD RECORD', 'title' => $kind === 'edited' ? 'A note was edited' : 'A new note', 'subtitle' => $childName, 'preheader' => $title]);
@@ -191,5 +193,25 @@ final class ChildNotesController extends Controller
         } catch (\Throwable $e) {
             Log::warning('child note notify failed', ['note' => $noteId, 'error' => $e->getMessage()]);
         }
+    }
+
+    /* STAFF, NOT ONLY A PARENT (2026-11-05 leak sweep). canAccessChildId() also says yes to the child's
+       own guardian, and these are staff writes: a parent who holds a staff role anywhere passed the route
+       gate and could write them for their own child. Call AFTER canAccessChildId() has passed: someone who
+       is not the child's guardian passed it as staff; a guardian passes here only if they are also staff
+       at the child's centre (or the centre of one of its open placements). */
+    private function ktStaffForChild($user, int $childId): bool
+    {
+        $child = DB::table('children')->where('id', $childId)->first(['family_id']);
+        if (! $child) return false;
+        $isGuardian = DB::table('guardians')->where('user_id', $user->id)->where('family_id', $child->family_id)->exists();
+        if (! $isGuardian) return true;
+        $centres = DB::table('enrollments as e')->join('rooms as r', 'r.id', '=', 'e.room_id')
+            ->where('e.child_id', $childId)->whereNull('e.end_date')->pluck('r.centre_id')->all();
+        $centres[] = DB::table('families')->where('id', $child->family_id)->value('centre_id');
+        foreach (array_unique(array_filter(array_map('intval', $centres))) as $cid) {
+            if ($this->authorizeCentreAccess($user, $cid)) return true;
+        }
+        return false;
     }
 }

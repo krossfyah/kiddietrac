@@ -35,15 +35,53 @@ class MedicationController extends Controller
 {
     use ResolvesCentreContext;
 
+    /* ONE CENTRE WAS NEVER THE SCOPE (2026-11-13 sweep, after Anthony's "Could not save - Child not in your centre" on
+       an immunization exemption). Every method here asked resolveCentreId(), which is ONE centre - an agency admin
+       with no centre of their own gets the agency's first. At iLearn (seven centres) the medications screen and the
+       admin's "waiting for approval" count showed centre 8 only, every other centre's order answered "not found",
+       and a dose could not be logged for a child elsewhere. Now:
+         - lists and reads: the children this person may see in the ACTIVE agency (Visibility::childIds);
+         - changes: a child at a centre they direct (directableCentre, the rule store() already had);
+         - giving a dose (/provider): the children they look after (Visibility::liveChildIds).
+       All fail closed. */
+    private function visibleMed(Request $request, int $id, bool $toChange = false): ?Medication
+    {
+        $med = Medication::find($id);
+        if (! $med || ! in_array((int) $med->child_id, $this->visibleChildIds($request), true)) {
+            return null;
+        }
+        return (! $toChange || $this->directableCentre($request, (int) $med->child_id)) ? $med : null;
+    }
+
+    /* The child's centre when this person may direct it, else 0 (2026-11-05 leak sweep, moved here from store()):
+       child_id was only checked to exist, so a director could put a medication order on any agency's child.
+       Agency-wide admins pass for any child of the active agency; a director must hold centre_director at the
+       child's own centre. */
+    private function directableCentre(Request $request, int $childId): int
+    {
+        $childCentre = (int) DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->where('ch.id', $childId)->value('f.centre_id');
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $scope = $agencyId ? \App\Support\CentreScope::ids($request, $agencyId) : [];
+        $ok = $childCentre && $this->canAccessChildScoped($request, $childId)
+            && (int) DB::table('centres')->where('id', $childCentre)->value('agency_id') === $agencyId
+            && ($scope === null || DB::table('role_assignments')->where('user_id', $request->user()->id)
+                ->where('active', true)->where('role', 'centre_director')->where('centre_id', $childCentre)->exists());
+        return $ok ? $childCentre : 0;
+    }
+
+    /** The children this person looks after in the active agency (the staff child-scope rule). */
+    private function careChildIds(Request $request): array
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        return $agencyId ? array_map('intval', \App\Support\Visibility::liveChildIds($agencyId, $request->user())) : [];
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['medications' => []]);
-        }
-
+        // Every child this person may see in the active agency, not one centre's (see visibleMed).
         $q = Medication::query()
-            ->where('centre_id', $centreId)
+            ->whereIn('child_id', $this->visibleChildIds($request) ?: [0])
             ->orderByDesc('created_at');
 
         if ($childId = (int) $request->query('child_id')) {
@@ -59,13 +97,9 @@ class MedicationController extends Controller
 
     public function activeForProvider(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['medications' => []]);
-        }
-
+        // The children this person looks after (Visibility::liveChildIds, the staff child-scope rule).
         $rows = Medication::query()
-            ->where('centre_id', $centreId)
+            ->whereIn('child_id', $this->careChildIds($request) ?: [0])
             ->where('status', 'active')
             ->orderBy('child_id')
             ->limit(200)
@@ -177,11 +211,6 @@ class MedicationController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['message' => 'No centre access'], 403);
-        }
-
         $data = $request->validate([
             'child_id'                => 'required|integer|exists:children,id',
             'name'                    => 'required|string|max:200',
@@ -199,7 +228,14 @@ class MedicationController extends Controller
             'prescribing_physician'   => 'nullable|string|max:160',
         ]);
 
-        $data['centre_id']     = $centreId;
+        $childCentre = $this->directableCentre($request, (int) $data['child_id']);
+        if (! $childCentre) {
+            return response()->json(['message' => 'You can only add medications for children at a centre you direct.'], 403);
+        }
+
+        // The CHILD's centre (2026-11-13): it was the caller's "first" centre, so an agency admin's order for a child
+        // at another centre was filed where that centre's staff never saw it.
+        $data['centre_id']     = $childCentre;
         $data['created_by_id'] = $request->user()->id;
         $data['route']         = $data['route'] ?? 'oral';
         $data['status']        = 'pending_auth';
@@ -210,8 +246,7 @@ class MedicationController extends Controller
 
     public function show(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $med = Medication::where('centre_id', $centreId)->find($id);
+        $med = $this->visibleMed($request, $id);
         if (! $med) {
             return response()->json(['message' => 'Medication not found'], 404);
         }
@@ -220,8 +255,7 @@ class MedicationController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $med = Medication::where('centre_id', $centreId)->find($id);
+        $med = $this->visibleMed($request, $id, true);
         if (! $med) {
             return response()->json(['message' => 'Medication not found'], 404);
         }
@@ -247,8 +281,7 @@ class MedicationController extends Controller
 
     public function authorize(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $med = Medication::where('centre_id', $centreId)->find($id);
+        $med = $this->visibleMed($request, $id, true);
         if (! $med) {
             return response()->json(['message' => 'Medication not found'], 404);
         }
@@ -270,8 +303,7 @@ class MedicationController extends Controller
 
     public function discontinue(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $med = Medication::where('centre_id', $centreId)->find($id);
+        $med = $this->visibleMed($request, $id, true);
         if (! $med) {
             return response()->json(['message' => 'Medication not found'], 404);
         }
@@ -285,11 +317,6 @@ class MedicationController extends Controller
      */
     public function give(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['message' => 'No centre access'], 403);
-        }
-
         $data = $request->validate([
             'medication_id' => 'required|integer|exists:medications,id',
             'dose_given'    => 'required|string|max:200',
@@ -299,8 +326,9 @@ class MedicationController extends Controller
             'administered_at' => 'nullable|date',
         ]);
 
-        $med = Medication::where('centre_id', $centreId)->find($data['medication_id']);
-        if (! $med) {
+        // A child this person looks after - at any of their centres, not the "first" one (2026-11-13).
+        $med = Medication::find($data['medication_id']);
+        if (! $med || ! in_array((int) $med->child_id, $this->careChildIds($request), true)) {
             return response()->json(['message' => 'Medication not in your centre'], 403);
         }
         if ($med->status !== 'active') {
@@ -312,7 +340,7 @@ class MedicationController extends Controller
         $log = MedicationLog::create([
             'medication_id'      => $med->id,
             'child_id'           => $med->child_id,
-            'centre_id'          => $centreId,
+            'centre_id'          => $med->centre_id,
             'administered_at'    => $data['administered_at'] ?? now(),
             'dose_given'         => $data['dose_given'],
             'outcome'            => $data['outcome'] ?? 'given',
@@ -321,13 +349,23 @@ class MedicationController extends Controller
             'witness_id'         => $data['witness_id'] ?? null,
         ]);
 
+        try {
+            $out = ['given' => 'given', 'refused' => 'refused', 'missed' => 'missed', 'partial' => 'partly given'][$data['outcome'] ?? 'given'] ?? 'given';
+            \App\Support\ChildMomentNotify::after([[
+                'child_id' => (int) $med->child_id, 'kind' => 'medication', 'emoji' => '💊',
+                'label' => 'Medication ' . $out, 'text' => trim(($med->name ?? $med->medication_name ?? '') . ' · ' . $data['dose_given'], ' ·'),
+                'link' => '#medications',
+            ]]);
+            $log->parent_notified_at = now();
+            $log->save();
+        } catch (\Throwable $e) {}
+
         return response()->json(['log' => $log], 201);
     }
 
     public function logs(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $med = Medication::where('centre_id', $centreId)->find($id);
+        $med = $this->visibleMed($request, $id);
         if (! $med) {
             return response()->json(['message' => 'Medication not found'], 404);
         }

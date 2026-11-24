@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Enter the real time</title>
+  <meta name="robots" content="noindex">
+  <!-- No icon until the brand is known: a white-label agency must not show KiddieTrac's. -->
+  <link rel="icon" id="fav" href="data:,">
+  <link rel="stylesheet" href="/css/kt-fonts.css?v=20261014net">
+  <meta name="theme-color" content="#0A1C3A">
+  <!-- "Enter the real time" from the automatic sign-out / clock-out emails (2026-10-22).
+       ?t=<token>. Backend: AutoTimeFixController + App\Support\AutoTimeFix. -->
+  <style>
+    :root { --brand: #1F6080; --ink: #0F172A; --muted: #64748B; --line: #E2E8F0; --bg: #F4F8FB; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    .wrap { max-width: 520px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px 48px; }
+    .head { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 6px 0 18px; min-height: 40px; }
+    .head img { max-height: 40px; max-width: 200px; }
+    .head b { font-size: 17px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px 22px; box-shadow: 0 18px 40px -28px rgba(15, 23, 42, .35); }
+    .eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--brand); }
+    h1 { font-size: 22px; line-height: 1.25; margin: 6px 0 6px; }
+    .sub { font-size: 14.5px; color: #334155; line-height: 1.55; margin: 0 0 14px; }
+    .facts { display: grid; gap: 8px; background: #F8FAFC; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; }
+    .facts div { display: flex; justify-content: space-between; gap: 12px; }
+    .facts span { color: var(--muted); }
+    .facts .auto { color: #B45309; font-weight: 700; }
+    label { display: block; font-size: 14px; font-weight: 800; margin: 18px 0 6px; }
+    .help { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+    input[type=time] { width: 100%; font-size: 22px; font-weight: 700; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px; font-family: inherit; color: var(--ink); background: #fff; }
+    textarea { width: 100%; min-height: 76px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; font-size: 15px; font-family: inherit; resize: vertical; }
+    input:focus, textarea:focus { outline: none; border-color: var(--brand); }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .btn { display: block; width: 100%; margin-top: 18px; border: 0; border-radius: 12px; padding: 15px; font-size: 16px; font-weight: 800; color: #fff; background: var(--brand); cursor: pointer; font-family: inherit; }
+    .btn.ghost { background: #fff; color: var(--ink); border: 1.5px solid var(--line); margin-top: 10px; }
+    .btn:disabled { opacity: .6; cursor: default; }
+    .err { color: #B91C1C; font-weight: 700; font-size: 13.5px; min-height: 18px; margin-top: 10px; }
+    .done { text-align: center; padding: 8px 0; }
+    .done .big { font-size: 52px; line-height: 1; margin-bottom: 10px; }
+    .confirm { background: #F0F9FF; border: 1px solid #BAE6FD; border-radius: 12px; padding: 12px 14px; font-size: 14.5px; color: #075985; margin-top: 14px; line-height: 1.5; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 16px; }
+    @media (min-width: 700px) { .wrap { padding-top: 48px; } .card { padding: 28px 30px; } h1 { font-size: 25px; } }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="head" id="head"></div>
+  <div class="card" id="app">Loading…</div>
+  <div class="foot" id="foot"></div>
+</main>
+<script src="/js/kt-net.js?v=20261022raw"></script>
+<script>
+(function () {
+  'use strict';
+  var API = 'https://api.kiddietrac.com/api/v1/public/time-fix/';
+  var token = String(new URLSearchParams(location.search).get('t') || '').replace(/[^A-Za-z0-9]/g, '');
+  var app = document.getElementById('app');
+  var D = null;
+
+  /* FR / ES / HI (2026-10-22). The language is the recipient's own (sent with the link by
+     the server), else this browser's KiddieTrac choice, else the browser language. */
+  var TR = {"fr": {"Enter the real time": "Indiquez l’heure réelle", "Loading…": "Chargement…", "This link can’t be used": "Ce lien ne peut pas être utilisé", "This link is not complete. Please open it again from your email.": "Ce lien est incomplet. Ouvrez-le de nouveau à partir de votre courriel.", "This link is not available.": "Ce lien n’est pas disponible.", "We could not reach the server. Please check your connection and try again.": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.", "We could not reach the server. Please try again.": "Impossible de joindre le serveur. Veuillez réessayer.", "Attendance": "Présences", "Time clock": "Pointage", "When did you pick up {1}?": "À quelle heure êtes-vous venu chercher {1}?", "When did you clock out?": "À quelle heure avez-vous pointé votre départ?", "No sign-out was recorded, so our system filled in a time automatically. Enter the time you actually picked up and the record is updated straight away.": "Aucun départ n’a été enregistré; notre système a donc inscrit une heure automatiquement. Indiquez l’heure à laquelle vous êtes réellement venu chercher votre enfant et le dossier est mis à jour immédiatement.", "No clock-out was recorded, so your shift was closed automatically. Enter the time you actually left and your timesheet is updated straight away.": "Aucun pointage de départ n’a été enregistré; votre quart a donc été fermé automatiquement. Indiquez l’heure à laquelle vous êtes réellement parti et votre feuille de temps est mise à jour immédiatement.", "Date": "Date", "Centre": "Centre", "Location": "Lieu", "Signed in": "Arrivée", "Clocked in": "Arrivée pointée", "Automatic time": "Heure automatique", "Actual pick-up time": "Heure réelle du départ", "Actual clock-out time": "Heure réelle du pointage de départ", "Between {1} and {2} on {3} (centre time).": "Entre {1} et {2} le {3} (heure du centre).", "Note": "Note", "(optional)": "(facultatif)", "Note:": "Note :", "e.g. Grandma picked up": "p. ex. Grand-maman est venue le chercher", "e.g. Forgot to clock out at the end of the day": "p. ex. J’ai oublié de pointer mon départ en fin de journée", "Continue": "Continuer", "Please choose a time.": "Veuillez choisir une heure.", "That is before the sign-in at {1}.": "C’est avant l’arrivée à {1}.", "That is before the clock-in at {1}.": "C’est avant le pointage d’arrivée à {1}.", "That is after the automatic time.": "C’est après l’heure automatique.", "Please check": "Veuillez vérifier", "Picked up at {1}?": "Départ à {1}?", "Clocked out at {1}?": "Départ pointé à {1}?", "This replaces the automatic time and the centre is told.": "Cette heure remplace l’heure automatique et le centre en est avisé.", "This replaces the automatic time on your timesheet and your director is told.": "Cette heure remplace l’heure automatique dans votre feuille de temps et votre directeur en est avisé.", "Yes, that’s right": "Oui, c’est exact", "Change it": "La modifier", "Saving…": "Enregistrement…", "That could not be saved.": "Impossible d’enregistrer.", "Thank you!": "Merci!", "You can close this page.": "Vous pouvez fermer cette page.", "Thank you — the pick-up time is now {1}. The centre has been told.": "Merci — l’heure du départ est maintenant {1}. Le centre en a été avisé.", "Thank you — your clock-out time is now {1}. Your director has been told.": "Merci — votre heure de départ est maintenant {1}. Votre directeur en a été avisé.", "That time is before the sign-in at {1}. Please choose a later time.": "Cette heure est antérieure à l’arrivée à {1}. Choisissez une heure plus tardive.", "That time is before the clock-in at {1}. Please choose a later time.": "Cette heure est antérieure au pointage d’arrivée à {1}. Choisissez une heure plus tardive.", "That time is after the automatic time ({1}). Please choose a time at or before it.": "Cette heure est postérieure à l’heure automatique ({1}). Choisissez cette heure ou une heure antérieure.", "This link is not valid.": "Ce lien n’est pas valide.", "This link has already been used — the time was entered. If it needs changing, please contact the centre.": "Ce lien a déjà été utilisé — l’heure a été inscrite. Pour la modifier, communiquez avec le centre.", "This link has expired. Please contact the centre to correct the time.": "Ce lien a expiré. Communiquez avec le centre pour corriger l’heure.", "The centre has already corrected this time, so there is nothing left to fill in.": "Le centre a déjà corrigé cette heure; il n’y a donc plus rien à remplir.", "This link is not valid. Please use the link in your most recent email, or contact the centre.": "Ce lien n’est pas valide. Utilisez le lien de votre courriel le plus récent ou communiquez avec le centre."}, "es": {"Enter the real time": "Indique la hora real", "Loading…": "Cargando…", "This link can’t be used": "Este enlace no se puede usar", "This link is not complete. Please open it again from your email.": "Este enlace está incompleto. Ábralo de nuevo desde su correo.", "This link is not available.": "Este enlace no está disponible.", "We could not reach the server. Please check your connection and try again.": "No pudimos contactar con el servidor. Compruebe su conexión e inténtelo de nuevo.", "We could not reach the server. Please try again.": "No pudimos contactar con el servidor. Inténtelo de nuevo.", "Attendance": "Asistencia", "Time clock": "Reloj de fichaje", "When did you pick up {1}?": "¿A qué hora recogió a {1}?", "When did you clock out?": "¿A qué hora fichó la salida?", "No sign-out was recorded, so our system filled in a time automatically. Enter the time you actually picked up and the record is updated straight away.": "No se registró la salida, así que nuestro sistema puso una hora automáticamente. Indique la hora real en que recogió al niño y el registro se actualiza al instante.", "No clock-out was recorded, so your shift was closed automatically. Enter the time you actually left and your timesheet is updated straight away.": "No se registró el fichaje de salida, así que su turno se cerró automáticamente. Indique la hora real en que se fue y su hoja de horas se actualiza al instante.", "Date": "Fecha", "Centre": "Centro", "Location": "Lugar", "Signed in": "Entrada", "Clocked in": "Entrada fichada", "Automatic time": "Hora automática", "Actual pick-up time": "Hora real de recogida", "Actual clock-out time": "Hora real de salida", "Between {1} and {2} on {3} (centre time).": "Entre las {1} y las {2} del {3} (hora del centro).", "Note": "Nota", "(optional)": "(opcional)", "Note:": "Nota:", "e.g. Grandma picked up": "p. ej. Lo recogió la abuela", "e.g. Forgot to clock out at the end of the day": "p. ej. Olvidé fichar la salida al final del día", "Continue": "Continuar", "Please choose a time.": "Elija una hora.", "That is before the sign-in at {1}.": "Es antes de la entrada a las {1}.", "That is before the clock-in at {1}.": "Es antes del fichaje de entrada a las {1}.", "That is after the automatic time.": "Es posterior a la hora automática.", "Please check": "Compruebe", "Picked up at {1}?": "¿Recogido a las {1}?", "Clocked out at {1}?": "¿Salida a las {1}?", "This replaces the automatic time and the centre is told.": "Esto sustituye la hora automática y se avisa al centro.", "This replaces the automatic time on your timesheet and your director is told.": "Esto sustituye la hora automática en su hoja de horas y se avisa a su director.", "Yes, that’s right": "Sí, es correcto", "Change it": "Cambiarla", "Saving…": "Guardando…", "That could not be saved.": "No se pudo guardar.", "Thank you!": "¡Gracias!", "You can close this page.": "Puede cerrar esta página.", "Thank you — the pick-up time is now {1}. The centre has been told.": "Gracias: la hora de recogida es ahora las {1}. Se ha avisado al centro.", "Thank you — your clock-out time is now {1}. Your director has been told.": "Gracias: su hora de salida es ahora las {1}. Se ha avisado a su director.", "That time is before the sign-in at {1}. Please choose a later time.": "Esa hora es anterior a la entrada a las {1}. Elija una hora posterior.", "That time is before the clock-in at {1}. Please choose a later time.": "Esa hora es anterior al fichaje de entrada a las {1}. Elija una hora posterior.", "That time is after the automatic time ({1}). Please choose a time at or before it.": "Esa hora es posterior a la hora automática ({1}). Elija esa hora o una anterior.", "This link is not valid.": "Este enlace no es válido.", "This link has already been used — the time was entered. If it needs changing, please contact the centre.": "Este enlace ya se usó: la hora se registró. Si hay que cambiarla, contacte con el centro.", "This link has expired. Please contact the centre to correct the time.": "Este enlace ha caducado. Contacte con el centro para corregir la hora.", "The centre has already corrected this time, so there is nothing left to fill in.": "El centro ya corrigió esta hora, así que no queda nada por rellenar.", "This link is not valid. Please use the link in your most recent email, or contact the centre.": "Este enlace no es válido. Use el enlace de su correo más reciente o contacte con el centro."}, "hi": {"Enter the real time": "सही समय दर्ज करें", "Loading…": "लोड हो रहा है…", "This link can’t be used": "इस लिंक का उपयोग नहीं हो सकता", "This link is not complete. Please open it again from your email.": "यह लिंक अधूरा है। कृपया इसे अपने ईमेल से फिर खोलें।", "This link is not available.": "यह लिंक उपलब्ध नहीं है।", "We could not reach the server. Please check your connection and try again.": "सर्वर से संपर्क नहीं हो सका। कृपया अपना कनेक्शन जाँचें और फिर कोशिश करें।", "We could not reach the server. Please try again.": "सर्वर से संपर्क नहीं हो सका। कृपया फिर कोशिश करें।", "Attendance": "उपस्थिति", "Time clock": "टाइम क्लॉक", "When did you pick up {1}?": "आपने {1} को कब लिया?", "When did you clock out?": "आपने कब क्लॉक आउट किया?", "No sign-out was recorded, so our system filled in a time automatically. Enter the time you actually picked up and the record is updated straight away.": "साइन-आउट दर्ज नहीं हुआ था, इसलिए हमारे सिस्टम ने अपने-आप एक समय भर दिया। जिस समय आपने वास्तव में बच्चे को लिया वह दर्ज करें, रिकॉर्ड तुरंत अपडेट हो जाएगा।", "No clock-out was recorded, so your shift was closed automatically. Enter the time you actually left and your timesheet is updated straight away.": "क्लॉक-आउट दर्ज नहीं हुआ था, इसलिए आपकी शिफ़्ट अपने-आप बंद हो गई। जिस समय आप वास्तव में गए वह दर्ज करें, आपकी टाइमशीट तुरंत अपडेट हो जाएगी।", "Date": "तारीख़", "Centre": "केंद्र", "Location": "स्थान", "Signed in": "साइन इन", "Clocked in": "क्लॉक इन", "Automatic time": "स्वचालित समय", "Actual pick-up time": "वास्तविक पिक-अप समय", "Actual clock-out time": "वास्तविक क्लॉक-आउट समय", "Between {1} and {2} on {3} (centre time).": "{3} को {1} और {2} के बीच (केंद्र का समय)।", "Note": "नोट", "(optional)": "(वैकल्पिक)", "Note:": "नोट:", "e.g. Grandma picked up": "जैसे: दादी/नानी लेने आईं", "e.g. Forgot to clock out at the end of the day": "जैसे: दिन के अंत में क्लॉक आउट करना भूल गया", "Continue": "जारी रखें", "Please choose a time.": "कृपया एक समय चुनें।", "That is before the sign-in at {1}.": "यह {1} के साइन-इन से पहले है।", "That is before the clock-in at {1}.": "यह {1} के क्लॉक-इन से पहले है।", "That is after the automatic time.": "यह स्वचालित समय के बाद है।", "Please check": "कृपया जाँचें", "Picked up at {1}?": "{1} पर लिया गया?", "Clocked out at {1}?": "{1} पर क्लॉक आउट?", "This replaces the automatic time and the centre is told.": "यह स्वचालित समय की जगह लेगा और केंद्र को बताया जाएगा।", "This replaces the automatic time on your timesheet and your director is told.": "यह आपकी टाइमशीट पर स्वचालित समय की जगह लेगा और आपके निदेशक को बताया जाएगा।", "Yes, that’s right": "हाँ, यह सही है", "Change it": "इसे बदलें", "Saving…": "सहेजा जा रहा है…", "That could not be saved.": "यह सहेजा नहीं जा सका।", "Thank you!": "धन्यवाद!", "You can close this page.": "आप यह पृष्ठ बंद कर सकते हैं।", "Thank you — the pick-up time is now {1}. The centre has been told.": "धन्यवाद — पिक-अप समय अब {1} है। केंद्र को बता दिया गया है।", "Thank you — your clock-out time is now {1}. Your director has been told.": "धन्यवाद — आपका क्लॉक-आउट समय अब {1} है। आपके निदेशक को बता दिया गया है।", "That time is before the sign-in at {1}. Please choose a later time.": "यह समय {1} के साइन-इन से पहले है। कृपया बाद का समय चुनें।", "That time is before the clock-in at {1}. Please choose a later time.": "यह समय {1} के क्लॉक-इन से पहले है। कृपया बाद का समय चुनें।", "That time is after the automatic time ({1}). Please choose a time at or before it.": "यह समय स्वचालित समय ({1}) के बाद है। कृपया वही या उससे पहले का समय चुनें।", "This link is not valid.": "यह लिंक मान्य नहीं है।", "This link has already been used — the time was entered. If it needs changing, please contact the centre.": "इस लिंक का उपयोग हो चुका है — समय दर्ज कर दिया गया। बदलना हो तो कृपया केंद्र से संपर्क करें।", "This link has expired. Please contact the centre to correct the time.": "यह लिंक समाप्त हो गया है। समय सुधारने के लिए कृपया केंद्र से संपर्क करें।", "The centre has already corrected this time, so there is nothing left to fill in.": "केंद्र ने यह समय पहले ही सुधार दिया है, इसलिए भरने को कुछ नहीं बचा।", "This link is not valid. Please use the link in your most recent email, or contact the centre.": "यह लिंक मान्य नहीं है। अपने सबसे हाल के ईमेल का लिंक उपयोग करें, या केंद्र से संपर्क करें।"}};
+  var LOC = (function () {
+    try { var l = localStorage.getItem('kt_locale'); if (TR[l]) { return l; } } catch (e) {}
+    var n = String(navigator.language || '').slice(0, 2).toLowerCase();
+    return TR[n] ? n : 'en';
+  })();
+  var BCP = { en: 'en-CA', fr: 'fr-CA', es: 'es-ES', hi: 'hi-IN' };
+  function tr(s, a, b, c) {
+    var o = (TR[LOC] && TR[LOC][s]) || s;
+    return o.replace('{1}', a == null ? '' : a).replace('{2}', b == null ? '' : b).replace('{3}', c == null ? '' : c);
+  }
+  // A message from the server: exact, or one of its templates with a time in it.
+  function trMsg(m) {
+    m = String(m || '');
+    if (LOC === 'en' || !TR[LOC]) { return m; }
+    if (TR[LOC][m]) { return TR[LOC][m]; }
+    for (var k in TR[LOC]) {
+      if (k.indexOf('{1}') === -1) { continue; }
+      var rx = new RegExp('^' + k.split('{1}').map(function (x) { return x.replace(/[.*+?^$()|[\]\\{}]/g, '\\$&'); }).join('(.+?)') + '$');
+      var hit = rx.exec(m);
+      if (hit) { return TR[LOC][k].replace('{1}', hit[1]); }
+    }
+    return m;
+  }
+  function dateLabel() {
+    if (LOC === 'en' || !D.date) { return D.date_label; }
+    try { return new Date(D.date + 'T12:00:00').toLocaleDateString(BCP[LOC], { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); } catch (e) { return D.date_label; }
+  }
+  function setLang() {
+    document.documentElement.lang = BCP[LOC] || 'en-CA';
+    var a = document.getElementById('app'); if (a && a.textContent === 'Loading…') { a.textContent = tr('Loading…'); }
+  }
+  setLang();
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fmt12(hhmm) {
+    var p = String(hhmm || '').split(':'); var h = +p[0]; var m = p[1] || '00';
+    return (((h + 11) % 12) + 1) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM');
+  }
+  function brand(b) {
+    if (!b) { return; }
+    var hex = String(b.primary || '').replace('#', '');
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+      var ch = [0, 2, 4].map(function (i) { var v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      // Only a colour dark enough to carry white button text replaces the default.
+      if (0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2] < 0.3) { document.documentElement.style.setProperty('--brand', '#' + hex); }
+      var tc = document.querySelector('meta[name=theme-color]'); if (tc) { tc.setAttribute('content', '#' + hex); }
+    }
+    var head = document.getElementById('head');
+    head.innerHTML = b.logo ? '<img alt="' + esc(b.name) + '">' : '<b>' + esc(b.name) + '</b>';
+    if (b.logo) { head.firstChild.src = b.logo; head.firstChild.onerror = function () { head.innerHTML = '<b>' + esc(b.name) + '</b>'; }; }
+    var f = document.getElementById('fav'); if (f && b.favicon) { f.href = b.favicon; }
+    document.getElementById('foot').textContent = b.name;
+    document.title = tr('Enter the real time') + ' · ' + b.name;
+  }
+  function fail(msg) {
+    app.innerHTML = '<div class="done"><div class="big">🔗</div><h1>' + esc(tr('This link can’t be used')) + '</h1><p class="sub">' + esc(trMsg(msg)) + '</p></div>';
+  }
+  function load() {
+    if (token.length < 30) { brand({ name: 'KiddieTrac' }); return fail(tr('This link is not complete. Please open it again from your email.')); }
+    fetch(API + token, { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && TR[d.locale]) { LOC = d.locale; } else if (d && d.locale === 'en') { LOC = 'en'; }
+        setLang();
+        brand(d.brand || { name: 'KiddieTrac' });
+        if (d.state !== 'ok') { return fail(d.message || tr('This link is not available.')); }
+        D = d; paint();
+      })
+      .catch(function () { brand({ name: 'KiddieTrac' }); fail(tr('We could not reach the server. Please check your connection and try again.')); });
+  }
+  function paint() {
+    var child = D.kind === 'child';
+    app.innerHTML = ''
+      + '<div class="eyebrow">' + (child ? tr('Attendance') : tr('Time clock')) + '</div>'
+      + '<h1>' + (child ? tr('When did you pick up {1}?', esc(D.who)) : tr('When did you clock out?')) + '</h1>'
+      + '<p class="sub">' + (child
+          ? tr('No sign-out was recorded, so our system filled in a time automatically. Enter the time you actually picked up and the record is updated straight away.')
+          : tr('No clock-out was recorded, so your shift was closed automatically. Enter the time you actually left and your timesheet is updated straight away.')) + '</p>'
+      + '<div class="facts">'
+      + '<div><span>' + tr('Date') + '</span><b>' + esc(dateLabel()) + '</b></div>'
+      + '<div><span>' + (child ? tr('Centre') : tr('Location')) + '</span><b>' + esc(D.centre) + '</b></div>'
+      + '<div><span>' + (child ? tr('Signed in') : tr('Clocked in')) + '</span><b>' + esc(D.in_label) + '</b></div>'
+      + '<div><span>' + tr('Automatic time') + '</span><b class="auto">' + esc(D.auto_label) + '</b></div>'
+      + '</div>'
+      + '<form id="f" novalidate>'
+      + '<label for="tm">' + (child ? tr('Actual pick-up time') : tr('Actual clock-out time')) + '</label>'
+      + '<input type="time" id="tm" required min="' + esc(D.min) + '" max="' + esc(D.max) + '" step="60">'
+      + '<div class="help">' + tr('Between {1} and {2} on {3} (centre time).', esc(fmt12(D.min)), esc(fmt12(D.max)), esc(dateLabel())) + '</div>'
+      + '<label for="nt">' + tr('Note') + ' <span style="font-weight:500;color:#64748B">' + tr('(optional)') + '</span></label>'
+      + '<textarea id="nt" maxlength="280" placeholder="' + (child ? tr('e.g. Grandma picked up') : tr('e.g. Forgot to clock out at the end of the day')) + '"></textarea>'
+      + '<div class="hp"><label>Website <input id="hp" tabindex="-1" autocomplete="off"></label></div>'
+      + '<div class="err" id="err"></div>'
+      + '<button class="btn" type="submit" id="go">' + tr('Continue') + '</button>'
+      + '</form>';
+    document.getElementById('f').onsubmit = function (ev) {
+      ev.preventDefault();
+      var t = document.getElementById('tm').value;
+      var err = document.getElementById('err');
+      if (!t) { err.textContent = tr('Please choose a time.'); return; }
+      if (t <= D.min) { err.textContent = tr(child ? 'That is before the sign-in at {1}.' : 'That is before the clock-in at {1}.', D.in_label); return; }
+      if (t > D.max) { err.textContent = tr('That is after the automatic time.'); return; }
+      confirmStep(t, document.getElementById('nt').value, document.getElementById('hp').value);
+    };
+  }
+  function confirmStep(t, note, hp) {
+    var child = D.kind === 'child';
+    app.innerHTML = '<div class="eyebrow">' + tr('Please check') + '</div><h1>' + tr(child ? 'Picked up at {1}?' : 'Clocked out at {1}?', esc(fmt12(t))) + '</h1>'
+      + '<div class="confirm">' + esc(dateLabel()) + ' · ' + esc(D.centre) + (note ? '<br>' + tr('Note:') + ' ' + esc(note) : '') + '<br><br>'
+      + (child ? tr('This replaces the automatic time and the centre is told.') : tr('This replaces the automatic time on your timesheet and your director is told.')) + '</div>'
+      + '<div class="err" id="err"></div>'
+      + '<button class="btn" type="button" id="ok">' + tr('Yes, that’s right') + '</button>'
+      + '<button class="btn ghost" type="button" id="back">' + tr('Change it') + '</button>';
+    document.getElementById('back').onclick = paint;
+    document.getElementById('ok').onclick = function () {
+      var b = this; b.disabled = true; b.textContent = tr('Saving…');
+      fetch(API + token, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ time: t, note: note || null, website: hp || null }) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (!res.ok) { b.disabled = false; b.textContent = tr('Yes, that’s right'); document.getElementById('err').textContent = trMsg((res.j && res.j.message) || tr('That could not be saved.')); return; }
+          app.innerHTML = '<div class="done"><div class="big">✅</div><h1>' + tr('Thank you!') + '</h1><p class="sub">' + esc(trMsg(res.j.message)) + '</p>'
+            + '<p class="sub" style="color:#64748B;font-size:13px">' + tr('You can close this page.') + '</p></div>';
+        })
+        .catch(function () { b.disabled = false; b.textContent = tr('Yes, that’s right'); document.getElementById('err').textContent = tr('We could not reach the server. Please try again.'); });
+    };
+  }
+  load();
+})();
+</script>
+<script src="/js/kt-date-hint.js?v=20261021dh" defer></script>
+</body>
+</html>

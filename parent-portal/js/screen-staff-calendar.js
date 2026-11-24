@@ -197,7 +197,7 @@
     container.appendChild(wrap);
 
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#1F6080 0%,#7C3AED 60%,#16637A 100%);' });
-    hero.innerHTML = '<div class="kt-hero-greet">📅 AGENCY</div><h1>Calendar</h1><div class="kt-hero-sub">Click a day to see everything on it, then any entry for its full details. Use + Add for closures, vacation holds, trips and conferences.</div>';
+    hero.innerHTML = '<div class="kt-hero-greet">📅 AGENCY</div><h1>Calendar</h1><div class="kt-hero-sub">Click a day to see everything on it, then any entry for its full details. Use + Add for meetings, closures, vacation holds, trips and conferences.</div>';
     wrap.appendChild(hero);
 
     var toolbar = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:18px 0 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;' });
@@ -211,7 +211,8 @@
     // role gate, director via the controller's role-aware myCentres().
     Api.get('/director/centres').then(function (r) {
       state.centres = r.centres || [];
-      if (!state.centreId && state.centres.length) state.centreId = state.centres[0].id;
+      // Several centres: open on the whole-agency overview, never quietly on the first centre (2026-10-24).
+      if (!state.centreId && state.centres.length) state.centreId = state.centres.length === 1 ? state.centres[0].id : 'all';
       buildToolbar(toolbar, calRoot);
       reload(calRoot);
     }).catch(function (e) {
@@ -448,7 +449,7 @@
     var type = String(r.request_type || 'time off');
     return Dom.el('div', {
       title: name + ' — ' + type + ' (approved)',
-      style: 'position:relative;z-index:1;background:#FEF3C7;border-left:3px solid #F59E0B;'
+      style: 'position:relative;z-index:1;background:#FEF3C7;--kt-edge:#F59E0B;'
         + 'border-radius:5px;padding:3px 6px;margin-bottom:3px;font-size:11px;font-weight:700;'
         + 'color:#92400E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
     }, '🌴 ' + name);
@@ -499,10 +500,11 @@
       Api.get('/director/schedule/range?' + q),
       Api.get('/director/schedule/time-off-blocks?' + tq).catch(function () { return { data: [] }; }),
       Api.get('/director/calendar/overlays?' + oq).catch(function () { return { events: [] }; }),
+      Api.get('/meetings?scope=agency&' + oq).catch(function () { return { meetings: [] }; }),
     ]).then(function (both) {
       var data = both[0];
       state.timeOff = indexTimeOff((both[1] && both[1].data) || []);
-      state.overlays = indexOverlays((both[2] && both[2].events) || []);
+      state.overlays = indexOverlays(((both[2] && both[2].events) || []).concat(meetingOverlays((both[3] && both[3].meetings) || [])));
       state.days = data.days || {};
       state.rooms = data.rooms || [];
       Dom.clear(calRoot);
@@ -655,7 +657,24 @@
     pending:   { bg: '#FEF3C7', fg: '#92400E', bar: '#F59E0B' },
     closed:    { bg: '#FEE2E2', fg: '#991B1B', bar: '#DC2626' },
   };
-  var OVERLAY_ORDER = { closure: 0, timeoff: 1, vacation: 2, absence: 3, birthday: 4 };
+  var OVERLAY_ORDER = { closure: 0, meeting: 1, timeoff: 2, vacation: 3, absence: 4, birthday: 5 };
+  OVERLAY_TONE.meet = { bg: '#EDE9FE', fg: '#5B21B6', bar: '#7C3AED' };
+
+  /* A meeting as calendar entries, one per day it covers (2026-10-25). An all-day meeting's
+     end date is exclusive (the morning after), so it stops the day before. */
+  function fmtHm12(hm) { var p = String(hm || '').split(':'); var h = +p[0]; return ((h % 12) || 12) + ':' + (p[1] || '00') + (h < 12 ? ' AM' : ' PM'); }
+  function meetingOverlays(list) {
+    var out = [];
+    (list || []).forEach(function (m) {
+      var last = m.all_day ? ymd(addDays(new Date(m.end_date + 'T12:00:00'), -1)) : m.end_date;
+      for (var dd = new Date(m.date + 'T12:00:00'), n = 0; ymd(dd) <= last && n < 31; dd = addDays(dd, 1), n++) {
+        out.push({ date: ymd(dd), kind: 'meeting', tone: 'meet', icon: '🤝', meeting_id: m.id,
+          title: (m.all_day ? '' : fmtHm12(m.start_time) + ' ') + m.title,
+          detail: m.when + (m.attendees && m.attendees.length ? ' · ' + m.attendees.length + ' invited' : '') });
+      }
+    });
+    return out;
+  }
 
   function indexOverlays(events) {
     var byDay = {};
@@ -683,7 +702,7 @@
     return attachEventClick(Dom.el('div', {
       title: [(ev.icon || '') + ' ' + (ev.title || '') + (ev.detail ? ' — ' + ev.detail : '')]
         .concat(overlayExtraLines(ev)).join('\n'),
-      style: 'position:relative;z-index:2;background:' + t.bg + ';border-left:3px solid ' + t.bar + ';'
+      style: 'position:relative;z-index:2;background:' + t.bg + ';--kt-edge:' + t.bar + ';'
         + 'border-radius:5px;padding:3px 6px;margin-bottom:3px;font-size:11px;font-weight:700;'
         + 'color:' + t.fg + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
     }, (ev.icon || '') + ' ' + (ev.title || '')), ev, calRoot);
@@ -709,7 +728,7 @@
       var list = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;' });
       evs.forEach(function (ev) {
         var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
-        var row = Dom.el('div', { style: 'background:' + t.bg + ';border-left:3px solid ' + t.bar + ';border-radius:8px;padding:7px 11px;min-width:190px;' });
+        var row = Dom.el('div', { style: 'background:' + t.bg + ';--kt-edge:' + t.bar + ';border-radius:8px;padding:7px 11px;min-width:190px;' });
         row.appendChild(Dom.el('div', { style: 'font-size:13px;font-weight:800;color:' + t.fg + ';' }, (ev.icon || '') + ' ' + (ev.title || '')));
         if (ev.detail) row.appendChild(Dom.el('div', { style: 'font-size:12px;color:' + t.fg + ';opacity:.85;margin-top:1px;' }, ev.detail));
         overlayExtraLines(ev).forEach(function (line, i) {
@@ -783,7 +802,7 @@
       var isPast = key < todayKey;
       var dayBox = Dom.el('div', {
         style: 'margin:0 0 12px;'
-          + (isToday ? 'border-left:3px solid #1F6080;padding-left:9px;margin-left:-12px;' : '')
+          + (isToday ? 'background:#EEF4FB;border-radius:8px;padding:6px 9px;margin-left:-12px;' : '')
           + (isPast ? 'opacity:.5;' : ''),
       });
       dayBox.appendChild(Dom.el('div', {
@@ -795,7 +814,7 @@
 
       evs.forEach(function (ev) {
         var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
-        var r = Dom.el('div', { style: 'background:' + t.bg + ';border-left:3px solid ' + t.bar + ';border-radius:6px;padding:5px 8px;margin-bottom:4px;' });
+        var r = Dom.el('div', { style: 'background:' + t.bg + ';--kt-edge:' + t.bar + ';border-radius:6px;padding:5px 8px;margin-bottom:4px;' });
         r.appendChild(Dom.el('div', { style: 'font-size:12.5px;font-weight:700;color:' + t.fg + ';' }, (ev.icon || '') + ' ' + (ev.title || '')));
         if (ev.detail) {
           r.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:' + t.fg + ';opacity:.85;line-height:1.4;' }, ev.detail));
@@ -828,7 +847,7 @@
   function renderShiftPill(s, calRoot) {
     var color = ROLE_COLORS[s.role] || '#1F6080';
     var pill = Dom.el('div', {
-      style: 'background:color-mix(in srgb,' + color + ' 14%, white);border-left:3px solid ' + color + ';border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;cursor:pointer;position:relative;z-index:1;',
+      style: 'background:color-mix(in srgb,' + color + ' 14%, white);--kt-edge:' + color + ';border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;cursor:pointer;position:relative;z-index:1;',
     });
     pill.appendChild(Dom.el('div', { style: 'font-weight:700;color:' + color + ';' }, s.starts_hm + '–' + s.ends_hm));
     pill.appendChild(Dom.el('div', { style: 'color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, s.user_name));
@@ -845,7 +864,7 @@
   function renderShiftChip(s, calRoot) {
     var color = ROLE_COLORS[s.role] || '#1F6080';
     var chip = Dom.el('div', {
-      style: 'background:color-mix(in srgb,' + color + ' 14%, white);border-left:3px solid ' + color + ';border-radius:4px;padding:2px 5px;margin-bottom:2px;font-size:10px;color:#374151;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:relative;z-index:1;',
+      style: 'background:color-mix(in srgb,' + color + ' 14%, white);--kt-edge:' + color + ';border-radius:4px;padding:2px 5px;margin-bottom:2px;font-size:10px;color:#374151;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:relative;z-index:1;',
       // One line only, so the centre goes in the tooltip rather than squeezing the name.
       title: s.user_name + ' · ' + s.starts_hm + '–' + s.ends_hm + ' · ' + s.role
         + (s.centre_name ? ' · ' + s.centre_name : ''),
@@ -877,7 +896,7 @@
   ];
 
   var KIND_LABEL = {
-    closure: 'Closure', timeoff: 'Staff time off', vacation: 'Family vacation',
+    closure: 'Closure', meeting: 'Meeting', timeoff: 'Staff time off', vacation: 'Family vacation',
     absence: 'Child absence', birthday: 'Birthday',
   };
 
@@ -921,6 +940,8 @@
      drawn at all. */
   var ADD_ITEMS = [
     { icon: '🧑‍🏫', label: 'Shift',            sub: 'On this calendar',   shift: true },
+    // Meetings with invitations, like Outlook (2026-10-25): staff, families or anyone by email.
+    { icon: '🤝',         label: 'Meeting',          sub: 'Invite staff, families or anyone', meeting: true },
     { icon: '🚫',         label: 'Closure',          sub: 'Closures',           nav: 'closures' },
     /* The only entry that opens its own dialog rather than handing off, because the
        Closures screen closes ONE centre and a holiday is never one centre. */
@@ -987,6 +1008,7 @@
       row.addEventListener('click', function () {
         menu.remove();
         if (it.shift) { openShiftModal(null, calRoot); return; }
+        if (it.meeting) { if (KT.Meeting) KT.Meeting.compose({ scope: 'agency', date: when, onSaved: function () { reload(calRoot); } }); return; }
         if (it.holiday) { openHolidayModal(when, calRoot); return; }
         // noDialog: a start date is edited on a child's own record, so there is no add
         // dialog to open — this is a way through to the right screen, nothing more.
@@ -1036,7 +1058,7 @@
     document.addEventListener('keydown', onEsc);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
 
-    var head = Dom.el('div', { style: 'background:#FEF3C7;border-left:5px solid #D97706;border-radius:14px 14px 0 0;padding:18px 20px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;' });
+    var head = Dom.el('div', { style: 'background:#FEF3C7;--kt-edge:#D97706;border-radius:14px 14px 0 0;padding:18px 20px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;' });
     var hcol = Dom.el('div', { style: 'min-width:0;' });
     hcol.appendChild(Dom.el('div', { style: 'font-size:17px;font-weight:800;color:#78350F;line-height:1.25;' }, '🎉 Add a holiday'));
     hcol.appendChild(Dom.el('div', { style: 'font-size:13px;color:#78350F;opacity:.85;margin-top:3px;line-height:1.4;' },
@@ -1235,6 +1257,7 @@
   }
 
   function openEventModal(ev, calRoot) {
+    if (ev.kind === 'meeting') { if (KT.Meeting) KT.Meeting.view(ev.meeting_id, { onChange: function () { reload(calRoot); } }); return; }
     var t = OVERLAY_TONE[ev.tone] || OVERLAY_TONE.away;
     var canEdit = ev.kind === 'closure' && ev.closure_id;
 
@@ -1251,7 +1274,7 @@
     overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
 
     function header(titleText, subText) {
-      var head = Dom.el('div', { style: 'background:' + t.bg + ';border-left:5px solid ' + t.bar + ';border-radius:14px 14px 0 0;padding:18px 20px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;' });
+      var head = Dom.el('div', { style: 'background:' + t.bg + ';--kt-edge:' + t.bar + ';border-radius:14px 14px 0 0;padding:18px 20px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;' });
       var col = Dom.el('div', { style: 'min-width:0;' });
       col.appendChild(Dom.el('div', { style: 'font-size:17px;font-weight:800;color:' + t.fg + ';line-height:1.25;' }, titleText));
       if (subText) {
@@ -1577,7 +1600,7 @@
     var rangeDays = hasRange ? (Math.round((new Date(prefill.dateRange.end) - new Date(prefill.dateRange.start)) / 86400000) + 1) : 1;
 
     var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px;' });
-    var modal = Dom.el('div', { style: 'background:white;border-radius:14px;max-width:520px;width:100%;padding:24px;box-shadow:0 12px 36px rgba(0,0,0,.25);max-height:calc(100vh - 48px);overflow-y:auto;' });
+    var modal = Dom.el('div', { style: 'background:white;border-radius:14px;max-width:640px;width:100%;padding:24px;box-shadow:0 12px 36px rgba(0,0,0,.25);max-height:calc(100vh - 48px);overflow-y:auto;' });
     overlay.appendChild(modal);
 
     var hdr = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;' });
@@ -1593,10 +1616,14 @@
     staffSel.appendChild(Dom.el('option', { value: '' }, 'Loading staff…'));
     roomSel.appendChild(Dom.el('option', { value: '' }, 'Loading rooms…'));
 
-    modal.appendChild(labelEl('Staff member'));
-    modal.appendChild(staffSel);
-    modal.appendChild(labelEl('Room'));
-    modal.appendChild(roomSel);
+    /* Two to a row, every field the same height (2026-10-25: "the fields are all over the
+       place in a mess"). */
+    staffSel.style.marginBottom = '0'; roomSel.style.marginBottom = '0';
+    var whoRow = Dom.el('div', { style: 'display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:10px;margin-bottom:14px;', 'data-kt-nopack': '1' });
+    var sW = Dom.el('div', {}); sW.appendChild(labelEl('Staff member')); sW.appendChild(staffSel);
+    var rW = Dom.el('div', {}); rW.appendChild(labelEl('Room')); rW.appendChild(roomSel);
+    whoRow.appendChild(sW); whoRow.appendChild(rW);
+    modal.appendChild(whoRow);
 
     // v22p42: drag-selected multi-day banner
     if (hasRange && rangeDays > 1) {
@@ -1606,24 +1633,25 @@
       modal.appendChild(rangeBanner);
     }
 
-    var dateRow = Dom.el('div', { style: 'display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:14px;' });
-    var dIn = Dom.el('input', { type: 'date', value: defaultDate, style: 'padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;' });
-    var sIn = Dom.el('input', { type: 'time', value: defaultStart, style: 'padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;' });
-    var eIn = Dom.el('input', { type: 'time', value: defaultEnd, style: 'padding:8px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;' });
+    var dateRow = Dom.el('div', { style: 'display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:10px;margin-bottom:4px;', 'data-kt-nopack': '1' });
+    var FLD = 'width:100%;box-sizing:border-box;padding:0 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:white;';
+    var dIn = Dom.el('input', { type: 'date', value: defaultDate, style: FLD });
+    var sIn = Dom.el('input', { type: 'time', value: defaultStart, style: FLD });
+    var eIn = Dom.el('input', { type: 'time', value: defaultEnd, style: FLD });
     var dWrap = Dom.el('div', {}); dWrap.appendChild(labelEl('Date')); dWrap.appendChild(dIn);
     var sWrap = Dom.el('div', {}); sWrap.appendChild(labelEl('Start')); sWrap.appendChild(sIn);
     var eWrap = Dom.el('div', {}); eWrap.appendChild(labelEl('End'));   eWrap.appendChild(eIn);
     dateRow.appendChild(dWrap); dateRow.appendChild(sWrap); dateRow.appendChild(eWrap);
     modal.appendChild(dateRow);
 
-    modal.appendChild(labelEl('Role'));
-    var roleSel = Dom.el('select', { style: inputStyle() });
+    var roleSel = Dom.el('select', { style: FLD });
+    var oWrap = Dom.el('div', {}); oWrap.appendChild(labelEl('Role')); oWrap.appendChild(roleSel);
+    dateRow.appendChild(oWrap);
     [['lead','Lead'],['support','Support'],['floater','Floater'],['volunteer','Volunteer']].forEach(function (o) {
       var op = Dom.el('option', { value: o[0] }, o[1]);
       if (prefill && prefill.role === o[0]) op.selected = true;
       roleSel.appendChild(op);
     });
-    modal.appendChild(roleSel);
 
     // Actions
     var actions = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid #E5E7EB;' });
@@ -1644,7 +1672,7 @@
     modal.appendChild(actions);
 
     save.addEventListener('click', function () {
-      if (!staffSel.value || !roomSel.value) { alert('Pick a staff member and a room.'); return; }
+      if (!staffSel.value || !roomSel.value) { if (KT.toast) KT.toast('⚠️', 'Pick a staff member and a room', '', '#B45309'); return; }
       var common = {
         user_id: parseInt(staffSel.value, 10),
         room_id: parseInt(roomSel.value, 10),
@@ -1671,7 +1699,7 @@
         });
         Api.patch('/director/schedule/shift/' + prefill.id, payload)
           .then(function () { overlay.remove(); reload(calRoot); })
-          .catch(function (e) { alert('Save failed: ' + e.message); save.disabled = false; save.textContent = 'Save changes'; });
+          .catch(function (e) { if (KT.toast) KT.toast('⚠️', 'Not saved', (e && e.message) || 'Please try again.', '#B91C1C'); save.disabled = false; save.textContent = 'Save changes'; });
         return;
       }
 
@@ -1681,7 +1709,7 @@
         if (i >= dates.length) {
           overlay.remove();
           reload(calRoot);
-          if (fail) alert(ok + ' shift(s) created, ' + fail + ' failed.');
+          if (fail && KT.toast) KT.toast('⚠️', ok + ' shift' + (ok === 1 ? '' : 's') + ' created', fail + ' could not be saved.', '#B45309');
           return;
         }
         var d = dates[i++];
@@ -1699,11 +1727,17 @@
     // Load staff + rooms in parallel
     Api.get('/director/schedule/staff?centre_id=' + state.centreId).then(function (r) {
       staffSel.innerHTML = '';
-      (r.staff || []).forEach(function (u) {
-        var o = Dom.el('option', { value: u.id }, u.first_name + ' ' + u.last_name + ' (' + (u.role || 'staff') + ')');
+      /* Real names (the list sends `name`; first/last came back undefined) and a prompt to
+         choose, never a quietly preselected person (the select-a-provider rule). */
+      var RL = { educator: 'Educator', home_visitor: 'Home visitor', centre_director: 'Director', agency_admin: 'Admin' };
+      var list = r.staff || [];
+      if (list.length !== 1 && !(prefill && prefill.user_id)) staffSel.appendChild(Dom.el('option', { value: '' }, 'Select a staff member…'));
+      list.forEach(function (u) {
+        var o = Dom.el('option', { value: u.id }, trimName(u) + (u.role ? ' · ' + (RL[u.role] || u.role) : ''));
         if (prefill && prefill.user_id === u.id) o.selected = true;
         staffSel.appendChild(o);
       });
+      if (!list.length) staffSel.innerHTML = '<option value="">No staff at this centre yet</option>';
     }).catch(function () { staffSel.innerHTML = '<option value="">No staff loaded</option>'; });
 
     // v22p37: use the rooms list bundled with the range response (avoids the
@@ -1711,6 +1745,7 @@
     // primary centre's rooms regardless of which centre the user picked).
     roomSel.innerHTML = '';
     if (state.rooms && state.rooms.length) {
+      if (state.rooms.length > 1 && !(prefill && prefill.room_id)) roomSel.appendChild(Dom.el('option', { value: '' }, 'Select a room…'));
       state.rooms.forEach(function (rm) {
         var o = Dom.el('option', { value: rm.id }, rm.name);
         if (prefill && prefill.room_id === rm.id) o.selected = true;

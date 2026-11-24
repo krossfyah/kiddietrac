@@ -9,8 +9,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Stripe\Refund;
-use Stripe\Stripe;
 
 /**
  * v22p58 — Partial + multi-refund support on a single payment.
@@ -22,7 +20,6 @@ final class RefundsController extends Controller
 
     public function __construct()
     {
-        if ($k = env('STRIPE_SECRET')) Stripe::setApiKey($k);
     }
 
     public function listForPayment(Request $request, int $paymentId): JsonResponse
@@ -229,10 +226,21 @@ final class RefundsController extends Controller
                the reference belongs to. */
             $stripeRefundId = $ref;
             $status = 'succeeded';
-        } elseif (env('STRIPE_SECRET') && !empty($payment->stripe_payment_id)) {
+        } elseif (str_starts_with((string) $payment->stripe_payment_id, 'pi_')) {
+            /* THE AGENCY'S STRIPE (2026-11-05, Stripe end-to-end): this used KiddieTrac's .env key, a placeholder, so every
+               refund of a card / Apple Pay / Google Pay payment failed with "Invalid API Key provided: sk_live_". Family
+               payments are taken on the centre's own Stripe (AgencyStripe), so the money comes back out of it. */
+            $refundAgency = \App\Support\AgencyStripe::agencyForFamily((int) $payment->family_id);
+            $stripe = \App\Support\AgencyStripe::client($refundAgency);
+            if (! $stripe) {
+                return response()->json([
+                    'error' => 'This payment was taken through Stripe, but Stripe is no longer set up for this agency, '
+                        . 'so the money cannot be returned automatically.',
+                ], 422);
+            }
             try {
                 $cents = (int) round($data['amount'] * 100);
-                $refund = Refund::create([
+                $refund = $stripe->refunds->create([
                     'payment_intent' => $payment->stripe_payment_id,
                     'amount' => $cents,
                     'reason' => match ($data['reason'] ?? '') {
@@ -401,6 +409,8 @@ final class RefundsController extends Controller
                 'created_at' => now(),
             ]);
         }
+        // ...and by email, so a family that never opens the app still hears (2026-11-06).
+        \App\Support\PaidMail::refunded((int) $payment->id, (float) $data['amount'], $reasonText !== '' ? $reasonText : null, (string) $status);
 
         /* A manual refund has moved NO money. Name who should receive it so the
            screen can offer to send it now, rather than leaving that step to whoever
@@ -446,8 +456,9 @@ final class RefundsController extends Controller
     private function assertMayRefund(Request $request): void
     {
         $u = $request->user();
+        // In the agency being worked in (2026-11-05): isAgencyAdmin()/isDirector() asked "anywhere".
         abort_unless(
-            $u && ($u->isAgencyAdmin() || $u->isDirector() || $this->isPlatformAdminUser($u)),
+            $u && array_intersect(\App\Support\AgencyRole::names($request), ['agency_admin', 'centre_director', 'platform_admin']),
             403,
             'Only an agency admin or a centre director can approve a refund.'
         );
@@ -792,5 +803,14 @@ final class RefundsController extends Controller
         // centre (or a platform_admin scoped to its agency). Route middleware
         // already keeps guardians off the refund-create action.
         abort_unless($this->canAccessFamilyScoped($request, $familyId), 403);
+        /* ...as STAFF, and a director only at their own centres (2026-11-05 leak sweep).
+           canAccessFamilyScoped() also says yes to the family's own parent and to any role at the
+           centre, so a director elsewhere who was an educator here - or a director refunding their
+           own family as its parent - passed. */
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $famCentre = (int) DB::table('families')->where('id', $familyId)->value('centre_id');
+        $famAgency = (int) DB::table('centres')->where('id', $famCentre)->value('agency_id');
+        abort_unless($agencyId > 0 && $famAgency === $agencyId
+            && \App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, $agencyId), $famCentre), 403);
     }
 }

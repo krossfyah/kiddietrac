@@ -64,6 +64,7 @@ final class AnthropicService
 
         $prompt = $this->buildDigestPrompt($context);
 
+        \App\Support\AiFresh::as('daily_digest');   // fresh writing (AiFresh); the caller may already have named the agency
         $response = Http::timeout($this->timeoutSeconds)
             ->withHeaders([
                 'x-api-key' => $apiKey,
@@ -87,7 +88,7 @@ final class AnthropicService
         }
 
         $body = $response->json();
-        $text = $body['content'][0]['text'] ?? '';
+        $text = \App\Support\AiConfig::text($body) ?? '';
 
         if (empty(trim($text))) {
             throw new RuntimeException('AI digest returned empty response.');
@@ -165,6 +166,7 @@ PROMPT;
             throw new RuntimeException('ANTHROPIC_API_KEY not configured.');
         }
 
+        \App\Support\AiFresh::as('parent_summary');
         $response = Http::timeout($this->timeoutSeconds)
             ->withHeaders([
                 'x-api-key' => $apiKey,
@@ -187,7 +189,7 @@ PROMPT;
             throw new RuntimeException('AI parent summary failed: ' . $response->status());
         }
 
-        $text = $response->json()['content'][0]['text'] ?? '';
+        $text = \App\Support\AiConfig::text($response->json()) ?? '';
         if (empty(trim($text))) {
             throw new RuntimeException('AI parent summary returned empty response.');
         }
@@ -234,6 +236,7 @@ PROMPT;
         if (!$apiKey) {
             throw new RuntimeException('ANTHROPIC_API_KEY not configured.');
         }
+        \App\Support\AiFresh::as('weekly_summary');
         $response = Http::timeout($this->timeoutSeconds)
             ->withHeaders([
                 'x-api-key' => $apiKey,
@@ -251,7 +254,7 @@ PROMPT;
             Log::error('Anthropic weekly summary failed', ['status' => $response->status(), 'body' => $response->body()]);
             throw new RuntimeException('AI weekly summary failed: ' . $response->status());
         }
-        $text = $response->json()['content'][0]['text'] ?? '';
+        $text = \App\Support\AiConfig::text($response->json()) ?? '';
         if (empty(trim($text))) {
             throw new RuntimeException('AI weekly summary returned empty response.');
         }

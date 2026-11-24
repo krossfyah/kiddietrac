@@ -270,7 +270,7 @@ class NewFamilyNotice
             .'<li style="font-size:13.5px;color:#334155;line-height:1.6;margin-bottom:7px;">'
             .'<strong>Walk them through KiddieTrac.</strong> Sit with the parent once and show them '
             .'how to sign in, where the daily log and photos appear, how to message their educator, '
-            .'how check-in and the QR code work at the door, and how to turn on notifications so '
+            .'how One-Tap check-in works at the door, and how to turn on notifications so '
             .'they actually hear from you. Ten minutes here prevents most of the questions that '
             .'come later.</li>'
             .'<li style="font-size:13.5px;color:#334155;line-height:1.6;">'

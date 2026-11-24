@@ -171,7 +171,10 @@ final class WaitlistController extends Controller
             }
 
             DB::commit();
-            return response()->json(['success' => true, 'enrollment_id' => $enrollmentId]);
+            /* A family that came from a closed provider (AgencyWaitlist) had its guardians' logins closed with the
+               centre: enrolling the child opens them again and emails each a welcome back (Anthony, 2026-11-24). */
+            $reopened = \App\Support\AgencyWaitlist::reopenGuardians($childId, (int) $request->user()->id, (string) $data['start_date']);
+            return response()->json(['success' => true, 'enrollment_id' => $enrollmentId, 'guardians_reopened' => $reopened]);
         } catch (\Throwable $e) {
             DB::rollBack();
             Log::error('Waitlist promote failed', ['error' => $e->getMessage()]);
@@ -200,10 +203,10 @@ final class WaitlistController extends Controller
         DB::transaction(function () use ($childId) {
             // Any planned placement goes too — an open enrolment is what lists a child (2026-10-09).
             DB::table('enrollments')->where('child_id', $childId)->whereNull('end_date')
-                ->update(['end_date' => now()->toDateString()]);
+                ->update(['end_date' => \App\Support\AgencyTime::today()]);
             DB::table('children')->where('id', $childId)->update([
                 'enrollment_status' => 'withdrawn',
-                'withdrawn_at' => now()->toDateString(),
+                'withdrawn_at' => \App\Support\AgencyTime::today(),
                 'waitlist_position' => null,
                 'updated_at' => now(),
             ]);
@@ -353,7 +356,7 @@ final class WaitlistController extends Controller
                 'last_name' => $data['child_last_name'],
                 'date_of_birth' => $data['date_of_birth'],
                 'enrollment_status' => 'waitlist',
-                'applied_at' => now()->toDateString(),
+                'applied_at' => \App\Support\AgencyTime::today(),
                 'waitlist_position' => $nextPosition,
                 'expected_start_date' => $data['expected_start_date'] ?? null,
                 'preferred_room_age_group' => $data['preferred_room_age_group'] ?? null,

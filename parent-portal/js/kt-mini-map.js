@@ -15,8 +15,12 @@
   var KT = w.KT || (w.KT = {});
   if (KT.MiniMap) { return; }
 
-  var LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-  var LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  /* SELF-HOSTED (2026-11-10, ticket #246): Leaflet 1.9.4 is served from our own domain (js/vendor/leaflet-1.9.4,
+     byte-identical to the npm package, checksum-verified). It used to come from unpkg.com, and when that request
+     failed on an educator's phone every map in the session was dead. A failed load is no longer cached either:
+     the next call tries again. */
+  var LEAFLET_CSS = '/js/vendor/leaflet-1.9.4/leaflet.css';
+  var LEAFLET_JS = '/js/vendor/leaflet-1.9.4/leaflet.js';
   var CACHE_KEY = 'kt_geocode_v1';
   var _leaflet = null;
 
@@ -33,7 +37,7 @@
       var s = d.createElement('script');
       s.src = LEAFLET_JS;
       s.onload = function () { resolve(w.L); };
-      s.onerror = function () { reject(new Error('Could not load the map library')); };
+      s.onerror = function () { _leaflet = null; s.remove(); reject(new Error('Could not load the map library')); };
       d.head.appendChild(s);
     });
     return _leaflet;

@@ -77,22 +77,59 @@ final class PayeeInvoiceController extends Controller
             ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])->value('agency_id');
     }
 
-    private function assertBiller(Request $request): void
+    /**
+     * Who may bill in THIS agency (2026-10-31). It used to accept an admin/director role held in any agency, so an admin
+     * elsewhere who was only an educator here could read and edit this agency's payee invoices. Now: platform admin, or
+     * agency admin of this agency (null = everything), or a centre director here, limited to their centres (array).
+     */
+    private function billerScope(Request $request, ?int $agencyId = null): ?array
     {
-        $ok = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
-            ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])->exists();
-        abort_unless($ok, 403, 'Directors and admins only');
+        $agencyId = $agencyId ?? $this->agencyId($request);
+        abort_unless($agencyId, 403, 'No agency');
+        $centres = \App\Support\AgencyRole::centreIds($agencyId);
+        $roles = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)->get(['role', 'agency_id', 'centre_id']);
+        if ($roles->contains(fn ($r) => $r->role === 'platform_admin')
+            || $roles->contains(fn ($r) => $r->role === 'agency_admin' && (int) $r->agency_id === $agencyId)) {
+            return null;
+        }
+        $isDirector = $roles->contains(fn ($r) => $r->role === 'centre_director'
+            && ((int) $r->agency_id === $agencyId || ($r->centre_id && in_array((int) $r->centre_id, $centres, true))));
+        abort_unless($isDirector, 403, 'Directors and admins only');
+        return \App\Support\Visibility::centreIds($agencyId, $request->user());
+    }
+
+    /** Is this payee invoice inside a director's centres? (null scope = agency-wide) */
+    private function inScope(?array $centres, object $row): bool
+    {
+        if ($centres === null) return true;
+        if (! empty($row->centre_id) && in_array((int) $row->centre_id, $centres, true)) return true;
+        if (! empty($row->payee_user_id) && DB::table('role_assignments')->where('user_id', (int) $row->payee_user_id)
+                ->where('active', 1)->whereIn('centre_id', $centres ?: [0])->exists()) return true;
+        if (! empty($row->payee_family_id) && DB::table('families')->where('id', (int) $row->payee_family_id)
+                ->whereIn('centre_id', $centres ?: [0])->exists()) return true;
+        return false;
+    }
+
+    /** Payee ids a director may see: staff at their centres + families at their centres. */
+    private function scopeQuery($q, ?array $centres)
+    {
+        if ($centres === null) return $q;
+        $staff = DB::table('role_assignments')->whereIn('centre_id', $centres ?: [0])->where('active', 1)->pluck('user_id')->all();
+        $fams = DB::table('families')->whereIn('centre_id', $centres ?: [0])->pluck('id')->all();
+        return $q->where(function ($w) use ($centres, $staff, $fams) {
+            $w->whereIn('centre_id', $centres ?: [0])->orWhereIn('payee_user_id', $staff ?: [0])->orWhereIn('payee_family_id', $fams ?: [0]);
+        });
     }
 
     /** GET /provider/payee-invoices?kind=&status= */
     public function index(Request $request): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $this->ensureTable();
         $agencyId = $this->agencyId($request);
         abort_unless($agencyId, 403, 'No agency');
 
-        $q = DB::table('payee_invoices')->where('agency_id', $agencyId);
+        $q = $this->scopeQuery(DB::table('payee_invoices')->where('agency_id', $agencyId), $scope);
         if (($k = strtolower((string) $request->query('kind', ''))) && in_array($k, self::KINDS, true)) {
             $q->where('kind', $k);
         }
@@ -104,7 +141,7 @@ final class PayeeInvoiceController extends Controller
 
         // Totals per status, so the section header can state where the money is without
         // the client adding up a paginated list and getting it wrong.
-        $totals = DB::table('payee_invoices')->where('agency_id', $agencyId)
+        $totals = $this->scopeQuery(DB::table('payee_invoices')->where('agency_id', $agencyId), $scope)
             ->when($k ?? null, fn ($x) => $x->where('kind', $k))
             ->selectRaw('status, COUNT(*) n, SUM(amount) total')->groupBy('status')->get()
             ->mapWithKeys(fn ($r) => [$r->status => ['count' => (int) $r->n, 'total' => (float) $r->total]]);
@@ -119,13 +156,17 @@ final class PayeeInvoiceController extends Controller
      */
     public function hours(Request $request): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $agencyId = $this->agencyId($request);
         $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
 
         $uid = (int) $request->query('user_id');
-        $from = $request->query('from') ?: Carbon::now()->startOfMonth()->toDateString();
-        $to = $request->query('to') ?: Carbon::now()->toDateString();
+        abort_unless(DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+            ->where(fn ($w) => $scope === null
+                ? $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $centreIds->all() ?: [0])
+                : $w->whereIn('centre_id', $scope ?: [0]))->exists(), 404, 'Not found');
+        $from = $request->query('from') ?: \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString();
+        $to = $request->query('to') ?: \App\Support\AgencyTime::today();
 
         $minutes = 0;
         foreach (DB::table('time_punches')->where('user_id', $uid)->whereIn('centre_id', $centreIds)
@@ -147,7 +188,7 @@ final class PayeeInvoiceController extends Controller
     /** POST /provider/payee-invoices */
     public function store(Request $request): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $this->ensureTable();
         $agencyId = $this->agencyId($request);
         abort_unless($agencyId, 403, 'No agency');
@@ -176,6 +217,18 @@ final class PayeeInvoiceController extends Controller
             'lines.*.description' => ['required_with:lines', 'string', 'max:300'],
             'lines.*.amount' => ['required_with:lines', 'numeric', 'min:-100000', 'max:100000'],
         ]);
+
+        // The payee must be OURS (2026-10-31): never bill someone in another agency into their own invoice list.
+        $agencyCentres = $scope ?? \App\Support\AgencyRole::centreIds($agencyId);
+        if (! empty($data['payee_user_id'])) {
+            abort_unless(DB::table('role_assignments')->where('user_id', (int) $data['payee_user_id'])->where('active', 1)
+                ->where(fn ($w) => $scope === null ? $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $agencyCentres ?: [0])
+                                                    : $w->whereIn('centre_id', $agencyCentres ?: [0]))->exists(), 422, 'That person is not on your staff.');
+        }
+        if (! empty($data['payee_family_id'])) {
+            abort_unless(DB::table('families')->where('id', (int) $data['payee_family_id'])->whereIn('centre_id', $agencyCentres ?: [0])->exists(),
+                422, 'That family is not at your centre.');
+        }
 
         // Hours × rate is computed here, not accepted from the client: a total that
         // disagrees with its own hours and rate is unauditable, and this is money.
@@ -299,14 +352,9 @@ final class PayeeInvoiceController extends Controller
         // A platform admin's role row carries a NULL agency_id, so matching on
         // agency_id excluded them from every invoice — including the ones they had just
         // created. They are checked by role; everyone else by membership of that agency.
-        $isBiller = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
-            ->where(function ($q) use ($row) {
-                $q->where('role', 'platform_admin')
-                  ->orWhere(function ($w) use ($row) {
-                      $w->whereIn('role', ['agency_admin', 'centre_director'])
-                        ->where('agency_id', $row->agency_id);
-                  });
-            })->exists();
+        $isBiller = false;
+        try { $isBiller = $this->inScope($this->billerScope($request, (int) $row->agency_id), $row); }
+        catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) { $isBiller = false; }
         $isMine = (int) $row->payee_user_id === $uid
             || ($row->payee_family_id && DB::table('guardians')->where('user_id', $uid)
                 ->where('family_id', $row->payee_family_id)->exists());
@@ -318,11 +366,12 @@ final class PayeeInvoiceController extends Controller
     /** POST /provider/payee-invoices/{id}/send — email it to the payee. */
     public function send(Request $request, int $id): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $this->ensureTable();
         $agencyId = $this->agencyId($request);
         $row = DB::table('payee_invoices')->where('id', $id)->where('agency_id', $agencyId)->first();
         abort_unless($row, 404, 'Not found');
+        abort_unless($this->inScope($scope, $row), 404, 'Not found');
         abort_if($row->status === 'void', 422, 'That invoice is void - sending it would tell somebody they owe a cancelled bill.');
 
         // An override is allowed: a contractor may have no account at all.
@@ -463,7 +512,7 @@ final class PayeeInvoiceController extends Controller
             return null;
         }
         try {
-            $d = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
+            $d = new \App\Support\KtDompdf(['isRemoteEnabled' => false]);
             $d->loadHtml($this->documentHtml($row));
             $d->setPaper('letter');
             $d->render();
@@ -564,10 +613,11 @@ final class PayeeInvoiceController extends Controller
     /** GET /provider/payee-invoices/{id}/lines */
     public function lines(Request $request, int $id): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $this->ensureLinesTable();
         $row = DB::table('payee_invoices')->where('id', $id)->where('agency_id', $this->agencyId($request))->first();
         abort_unless($row, 404, 'Not found');
+        abort_unless($this->inScope($scope, $row), 404, 'Not found');
 
         return response()->json([
             'lines' => DB::table('payee_invoice_lines')->where('payee_invoice_id', $id)->orderBy('id')->get(),
@@ -579,10 +629,11 @@ final class PayeeInvoiceController extends Controller
     /** POST /provider/payee-invoices/{id}/lines */
     public function addLine(Request $request, int $id): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $this->ensureLinesTable();
         $row = DB::table('payee_invoices')->where('id', $id)->where('agency_id', $this->agencyId($request))->first();
         abort_unless($row, 404, 'Not found');
+        abort_unless($this->inScope($scope, $row), 404, 'Not found');
         $this->assertEditable($row);
 
         $data = $request->validate([
@@ -608,10 +659,11 @@ final class PayeeInvoiceController extends Controller
     /** DELETE /provider/payee-invoices/{id}/lines/{line} */
     public function removeLine(Request $request, int $id, int $line): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $this->ensureLinesTable();
         $row = DB::table('payee_invoices')->where('id', $id)->where('agency_id', $this->agencyId($request))->first();
         abort_unless($row, 404, 'Not found');
+        abort_unless($this->inScope($scope, $row), 404, 'Not found');
         $this->assertEditable($row);
 
         DB::table('payee_invoice_lines')->where('id', $line)->where('payee_invoice_id', $id)->delete();
@@ -621,10 +673,11 @@ final class PayeeInvoiceController extends Controller
     /** PATCH /provider/payee-invoices/{id} — edit the invoice itself while unpaid. */
     public function update(Request $request, int $id): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $this->ensureTable();
         $row = DB::table('payee_invoices')->where('id', $id)->where('agency_id', $this->agencyId($request))->first();
         abort_unless($row, 404, 'Not found');
+        abort_unless($this->inScope($scope, $row), 404, 'Not found');
         $this->assertEditable($row);
 
         $data = $request->validate([
@@ -694,14 +747,9 @@ final class PayeeInvoiceController extends Controller
         // A platform admin's role row carries a NULL agency_id, so matching on
         // agency_id excluded them from every invoice — including the ones they had just
         // created. They are checked by role; everyone else by membership of that agency.
-        $isBiller = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
-            ->where(function ($q) use ($row) {
-                $q->where('role', 'platform_admin')
-                  ->orWhere(function ($w) use ($row) {
-                      $w->whereIn('role', ['agency_admin', 'centre_director'])
-                        ->where('agency_id', $row->agency_id);
-                  });
-            })->exists();
+        $isBiller = false;
+        try { $isBiller = $this->inScope($this->billerScope($request, (int) $row->agency_id), $row); }
+        catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) { $isBiller = false; }
         $isMine = (int) $row->payee_user_id === $uid
             || ($row->payee_family_id && DB::table('guardians')->where('user_id', $uid)
                 ->where('family_id', $row->payee_family_id)->exists());
@@ -722,13 +770,14 @@ final class PayeeInvoiceController extends Controller
     /** POST /provider/payee-invoices/{id}/status */
     public function setStatus(Request $request, int $id): JsonResponse
     {
-        $this->assertBiller($request);
+        $scope = $this->billerScope($request);
         $this->ensureTable();
         $data = $request->validate(['status' => ['required', 'in:' . implode(',', self::STATUSES)]]);
         $agencyId = $this->agencyId($request);
 
         $row = DB::table('payee_invoices')->where('id', $id)->where('agency_id', $agencyId)->first();
         abort_unless($row, 404, 'Not found');
+        abort_unless($this->inScope($scope, $row), 404, 'Not found');
 
         DB::table('payee_invoices')->where('id', $id)->update([
             'status' => $data['status'],

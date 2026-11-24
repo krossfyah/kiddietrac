@@ -104,7 +104,7 @@ class EducatorRoomsController extends Controller
            request — the client sends room ids, and a client can send anything. */
         $centreIds = array_values(array_filter(
             $this->centreIdsOf($user),
-            fn ($c) => $this->authorizeCentreAccess($request->user(), $c)
+            fn ($c) => $this->mayManageAt($request, $c)
         ));
 
         if (! $centreIds) {
@@ -206,7 +206,7 @@ class EducatorRoomsController extends Controller
         } else {
             $centreId = $this->centreOf($user);
         }
-        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+        if (! $centreId || ! $this->mayManageAt($request, $centreId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -229,17 +229,9 @@ class EducatorRoomsController extends Controller
             return response()->json(['message' => 'That shift is longer than 24 hours. Check the dates.'], 422);
         }
 
-        // Overlapping an existing punch would double-count the hours.
-        $clash = DB::table('time_punches')->where('user_id', $user)
-            ->where(function ($q) use ($in, $out) {
-                $end = $out ?: $in;
-                $q->where(function ($w) use ($in, $end) {
-                    $w->where('punched_in_at', '<=', $end->toDateTimeString())
-                      ->where(function ($x) use ($in) {
-                          $x->whereNull('punched_out_at')->orWhere('punched_out_at', '>=', $in->toDateTimeString());
-                      });
-                });
-            })->exists();
+        // Overlapping an existing punch would double-count the hours. Strict: a shift that
+        // starts the minute another ends (back from lunch) touches it, it does not overlap. (2026-11-05)
+        $clash = $this->punchClash($user, $in->toDateTimeString(), $out?->toDateTimeString());
         if ($clash) {
             return response()->json(['message' => 'That overlaps a shift already recorded for this person.'], 422);
         }
@@ -303,7 +295,7 @@ class EducatorRoomsController extends Controller
         if (! $row) return response()->json(['message' => 'Not found'], 404);
 
         $centreId = $row->centre_id ? (int) $row->centre_id : $this->centreOf($user);
-        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+        if (! $centreId || ! $this->mayManageAt($request, $centreId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -339,6 +331,18 @@ class EducatorRoomsController extends Controller
         return response()->json(['ok' => true, 'deleted' => true]);
     }
 
+    /** Does [in, out) overlap another of this person's shifts? Open shifts run to now. Touching ends do not count. */
+    private function punchClash(int $user, string $in, ?string $out, int $exceptId = 0): bool
+    {
+        $end = $out ?: now()->toDateTimeString();
+
+        return DB::table('time_punches')->where('user_id', $user)
+            ->when($exceptId, fn ($q) => $q->where('id', '<>', $exceptId))
+            ->where('punched_in_at', '<', $end)
+            ->where(fn ($x) => $x->whereNull('punched_out_at')->orWhere('punched_out_at', '>', $in))
+            ->exists();
+    }
+
     public function updatePunch(Request $request, int $user, int $punch): JsonResponse
     {
         $row = DB::table('time_punches')->where('id', $punch)->where('user_id', $user)->first();
@@ -358,7 +362,7 @@ class EducatorRoomsController extends Controller
            director has any business editing it, so that is what is checked. centreOf() is
            kept only as a fallback for the handful of legacy rows with no centre_id. */
         $centreId = $row->centre_id ? (int) $row->centre_id : $this->centreOf($user);
-        if (! $centreId || ! $this->authorizeCentreAccess($request->user(), $centreId)) {
+        if (! $centreId || ! $this->mayManageAt($request, $centreId)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -393,6 +397,12 @@ class EducatorRoomsController extends Controller
         // it puts a wrong number straight into someone's pay.
         if ($newOut && (strtotime((string) $newOut) - strtotime((string) $newIn)) > 86400) {
             return response()->json(['message' => 'That is longer than 24 hours — please check the date and time.'], 422);
+        }
+
+        /* An edit could move a shift on top of another one (two rows on a split day),
+           and the hours were then paid twice. Same rule as adding one. (2026-11-05) */
+        if ($this->punchClash($user, (string) $newIn, $newOut ? (string) $newOut : null, (int) $row->id)) {
+            return response()->json(['message' => 'Those times overlap another shift recorded for this person that day.'], 422);
         }
 
         $actor = $request->user();
@@ -538,14 +548,27 @@ class EducatorRoomsController extends Controller
        switched into rather than waved through every tenant.
 
        @return int[]|null  the reachable centres (possibly empty), or null to refuse. */
+    /** Staff access to the centre AND, for a director, one of their own centres (2026-11-05 leak sweep). */
+    private function mayManageAt(Request $request, int $centreId): bool
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        return $this->authorizeCentreAccess($request->user(), $centreId)
+            && $agencyId > 0 && \App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, $agencyId), $centreId);
+    }
+
     private function reachableCentres(Request $request, int $user): ?array
     {
         $all = $this->centreIdsOf($user);
+        $agencyId = (int) $this->resolveAgencyId($request);
+        /* A DIRECTOR'S OWN CENTRES (2026-11-05 leak sweep). authorizeCentreAccess() says yes to any
+           staff role at the centre, so a director elsewhere who is an educator here passed; and an
+           office account (no centre - an agency admin) was open to every director in the agency. */
+        $scope = $agencyId ? \App\Support\CentreScope::ids($request, $agencyId) : [];
 
         if ($all) {
             $allowed = array_values(array_filter(
                 $all,
-                fn ($c) => $this->authorizeCentreAccess($request->user(), $c)
+                fn ($c) => $this->authorizeCentreAccess($request->user(), $c) && \App\Support\CentreScope::canWrite($scope, $c)
             ));
 
             return $allowed ?: null;
@@ -556,9 +579,8 @@ class EducatorRoomsController extends Controller
             return [];                        // your own record
         }
 
-        $agencyId = $this->resolveAgencyId($request);
-
-        return ($agencyId && $this->userBelongsToAgency($user, (int) $agencyId)) ? [] : null;
+        // An office account is agency-wide: only an agency-wide caller (admin / platform admin) reaches it.
+        return ($agencyId && $scope === null && $this->userBelongsToAgency($user, $agencyId)) ? [] : null;
     }
 
     /* The zone a shift is READ in. A centre answers through its agency; an office
@@ -586,7 +608,7 @@ class EducatorRoomsController extends Controller
 
     private function centreOf(int $userId): ?int
     {
-        $id = DB::table('role_assignments')
+        $id = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
             ->where('user_id', $userId)
             ->where('active', true)
             ->whereNotNull('centre_id')
@@ -606,7 +628,7 @@ class EducatorRoomsController extends Controller
      */
     private function centreIdsOf(int $userId): array
     {
-        return DB::table('role_assignments')
+        return DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
             ->where('user_id', $userId)
             ->where('active', true)
             ->whereNotNull('centre_id')

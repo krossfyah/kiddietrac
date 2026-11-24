@@ -85,17 +85,16 @@
   }
 
   async function openContacts(container) {
-    var ov = overlay();
+    var ov = overlay('✏️ New message');
     var box = ov.querySelector('.tc-modal');
-    box.innerHTML = '<h3 style="margin:0 0 12px;font-size:18px;">✏️ New message</h3><div style="color:#64748B;font-size:13px;">Loading colleagues…</div>';
+    box.innerHTML = '<div style="color:#64748B;font-size:13px;">Loading colleagues…</div>';
     var data;
     try { data = await Api.get('/provider/team-contacts'); }
     catch (e) { box.innerHTML = '<div style="color:#B91C1C;">Could not load: ' + esc(e.message) + '</div>'; return; }
     var contacts = (data && data.contacts) || [];
-    box.innerHTML = '<h3 style="margin:0 0 4px;font-size:18px;">✏️ New message</h3>'
-      + '<div style="color:#64748B;font-size:12.5px;margin-bottom:10px;">Pick a colleague to message.</div>'
+    box.innerHTML = '<div style="color:#64748B;font-size:12.5px;margin-bottom:10px;">Pick a colleague to message.</div>'
       + '<input id="tc-search" placeholder="Search…" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #D1D5DB;border-radius:9px;font-size:14px;margin-bottom:10px;">'
-      + '<div id="tc-clist" style="max-height:52vh;overflow:auto;">' + groupedRows(contacts) + '</div>';
+      + '<div id="tc-clist">' + groupedRows(contacts) + '</div>';
     /* Seniority first, then alphabetical. Sorted purely by name, the two or three people
        somebody actually needs — the director, the admin — sat scattered among twenty
        educators, so "I can't see the directors" was true in practice even though they were
@@ -133,7 +132,8 @@
         // The role in brackets beside the name, not only as a subtitle — at a glance you
         // can tell who is who without reading a second line in grey.
         + '<div style="flex:1;min-width:0;"><div style="font-weight:600;color:#0F172A;">' + esc(c.name)
-        + ' <span style="font-weight:500;color:#64748B;">(' + esc(role) + ')</span></div></div></div>';
+        // c.account: the same person has another account here; name the one this row reaches.
+        + ' <span style="font-weight:500;color:#64748B;">(' + esc(role + (c.account ? ' · ' + c.account : '')) + ')</span></div></div></div>';
     }
     box.querySelectorAll('.tc-c').forEach(function (el) {
       el.addEventListener('mouseover', function () { el.style.background = '#F1F5F9'; });
@@ -165,10 +165,9 @@
    * onPick(ids, names) is called with the chosen colleagues.
    */
   async function pickColleagues(opts) {
-    var ov = overlay();
+    var ov = overlay(opts.title);
     var box = ov.querySelector('.tc-modal');
-    box.innerHTML = '<h3 style="margin:0 0 12px;font-size:18px;">' + esc(opts.title) + '</h3>'
-      + '<div style="color:#64748B;font-size:13px;">Loading colleagues…</div>';
+    box.innerHTML = '<div style="color:#64748B;font-size:13px;">Loading colleagues…</div>';
     var data;
     try { data = await Api.get('/provider/team-contacts'); }
     catch (e) { box.innerHTML = '<div style="color:#B91C1C;">Could not load: ' + esc(e.message) + '</div>'; return; }
@@ -178,28 +177,28 @@
       return exclude.indexOf(parseInt(c.id, 10)) === -1;
     });
     if (! contacts.length) {
-      box.innerHTML = '<h3 style="margin:0 0 10px;font-size:18px;">' + esc(opts.title) + '</h3>'
-        + '<div style="color:#64748B;font-size:13.5px;">Everyone you can message is already in this conversation.</div>'
+      box.innerHTML = '<div style="color:#64748B;font-size:13.5px;">Everyone you can message is already in this conversation.</div>'
         + '<div style="text-align:right;margin-top:14px;"><button id="tc-x" style="background:#F1F5F9;border:1px solid #D1D5DB;border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer;">Close</button></div>';
       box.querySelector('#tc-x').addEventListener('click', function () { ov.remove(); });
       return;
     }
 
-    box.innerHTML = '<h3 style="margin:0 0 4px;font-size:18px;">' + esc(opts.title) + '</h3>'
-      + '<div style="color:#64748B;font-size:12.5px;margin-bottom:10px;">' + esc(opts.sub || '') + '</div>'
+    box.innerHTML = '<div style="color:#64748B;font-size:12.5px;margin-bottom:10px;">' + esc(opts.sub || '') + '</div>'
       + (opts.needName
           ? '<input id="tc-gname" maxlength="80" placeholder="Group name (e.g. Toddler Room Team)" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #D1D5DB;border-radius:9px;font-size:14px;margin-bottom:8px;">'
           : '')
       + '<input id="tc-search" placeholder="Search colleagues…" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #D1D5DB;border-radius:9px;font-size:14px;margin-bottom:8px;">'
-      + '<div id="tc-clist" style="max-height:44vh;overflow:auto;border:1px solid #EEF2F7;border-radius:10px;padding:4px;"></div>'
+      + '<div id="tc-clist" style="border:1px solid #EEF2F7;border-radius:10px;padding:4px;"></div>'
       + '<div id="tc-picked" style="font-size:12.5px;color:#64748B;margin-top:9px;">No one selected yet.</div>'
       + (opts.historyNote
           ? '<div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E3A8A;border-radius:9px;padding:8px 11px;font-size:12.5px;margin-top:9px;">'
             + '📖 Anyone you add can read the whole conversation, including everything said before they joined.</div>'
-          : '')
-      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">'
-      + '<button id="tc-cancel" style="background:#F1F5F9;border:1px solid #D1D5DB;border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer;">Cancel</button>'
-      + '<button id="tc-ok" disabled style="background:#1F6080;color:#fff;border:0;border-radius:9px;padding:9px 18px;font-weight:700;cursor:pointer;opacity:.5;">' + esc(opts.okLabel || 'Add') + '</button></div>';
+          : '');
+    // Cancel / OK pinned under the list (the popup's footer), so they never scroll away.
+    var foot = ov.querySelector('.tc-foot');
+    foot.style.display = 'flex';
+    foot.innerHTML = '<button id="tc-cancel" type="button" style="background:#F1F5F9;border:1px solid #D1D5DB;border-radius:9px;padding:9px 16px;font-weight:600;cursor:pointer;">Cancel</button>'
+      + '<button id="tc-ok" type="button" disabled style="background:var(--kt-brand-primary,#1F6080);color:#fff;border:0;border-radius:9px;padding:9px 18px;font-weight:700;cursor:pointer;opacity:.5;">' + esc(opts.okLabel || 'Add') + '</button>';
 
     var ROLE_ORDER = { 'Admin': 0, 'Director': 1, 'Home visitor': 2, 'Educator': 3, 'Auditor': 4, 'Parent': 5, 'Staff': 6 };
     var sorted = contacts.slice().sort(function (a, b) {
@@ -214,10 +213,10 @@
         + '<input type="checkbox" value="' + c.id + '" data-name="' + esc(c.name) + '" style="width:17px;height:17px;flex-shrink:0;cursor:pointer;">'
         + avatar(c.name, c.photo_url, 34)
         + '<span style="flex:1;min-width:0;font-weight:600;color:#0F172A;">' + esc(c.name)
-        + ' <span style="font-weight:500;color:#64748B;">(' + esc(c.role || 'Staff') + ')</span></span></label>';
+        + ' <span style="font-weight:500;color:#64748B;">(' + esc((c.role || 'Staff') + (c.account ? ' · ' + c.account : '')) + ')</span></span></label>';
     }).join('');
 
-    var okBtn = box.querySelector('#tc-ok'), picked = box.querySelector('#tc-picked');
+    var okBtn = ov.querySelector('#tc-ok'), picked = box.querySelector('#tc-picked');
     var nameEl = box.querySelector('#tc-gname');
     function chosen() {
       return [].slice.call(box.querySelectorAll('#tc-clist input:checked'));
@@ -240,7 +239,7 @@
         el.style.display = hay.indexOf(q) > -1 ? '' : 'none';
       });
     });
-    box.querySelector('#tc-cancel').addEventListener('click', function () { ov.remove(); });
+    ov.querySelector('#tc-cancel').addEventListener('click', function () { ov.remove(); });
     okBtn.addEventListener('click', async function () {
       var c = chosen();
       okBtn.disabled = true; okBtn.textContent = 'Working…';
@@ -326,10 +325,11 @@
       + (threadId ? '<button id="tc-add" title="Add people to this conversation" style="background:#fff;border:1px solid #D1D5DB;border-radius:8px;padding:7px 12px;font-weight:700;cursor:pointer;white-space:nowrap;">＋ Add people</button>' : '')
       + '<div style="flex:1;"></div>'
       + '</div>'
-      + '<div id="tc-msgs" style="border:1px solid #E7EDF3;border-radius:12px;background:#F8FAFC;padding:12px;height:52vh;overflow-y:auto;"></div>'
-      + '<div style="display:flex;gap:8px;margin-top:10px;">'
-      + '<input id="tc-input" placeholder="Type a message…" style="flex:1;padding:12px 14px;border:1px solid #D1D5DB;border-radius:24px;font-size:15px;">'
-      + '<button id="tc-send" style="background:#1F6080;color:#fff;border:0;border-radius:24px;padding:0 20px;font-weight:700;cursor:pointer;">Send</button></div>';
+      + '<div id="tc-msgs" data-kt-scroll="1" style="border:1px solid #E7EDF3;border-radius:12px 12px 0 0;background:#F8FAFC;padding:12px;height:52vh;overflow-y:auto;"></div>'
+      /* THE ONE COMPOSER ROW (.kt-compose-row, kt-chat-composer.css): the bar closes the message card */
+      + '<div class="kt-compose-row kt-compose-one"' + (threadId ? ' data-kt-nudge="/provider/team-threads/' + threadId + '/nudge"' : '') + ' style="display:flex;gap:6px;align-items:center;padding:10px 12px;background:#fff;border:1px solid #E7EDF3;border-top:1px solid #E5E7EB;border-radius:0 0 12px 12px;">'
+      + '<input id="tc-input" class="kt-compose-input" placeholder="Type a message…" style="flex:1;min-width:0;">'
+      + '<button id="tc-send" type="button" class="kt-send-one" title="Send" aria-label="Send" disabled>➤</button></div>';
     paintMessages(container, data.messages || [], data.is_group);
     body.querySelector('#tc-back').addEventListener('click', function () { renderList(container); });
     var addBtn = body.querySelector('#tc-add');
@@ -341,19 +341,24 @@
     var input = body.querySelector('#tc-input'), btn = body.querySelector('#tc-send');
     // 🚨 Emergency toggle (kt-emergency.js) — on an existing thread; a brand-new one starts plain.
     var emBtn = (threadId !== null && window.KT && KT.emergency && btn) ? KT.emergency.button() : null;
-    if (emBtn) btn.parentNode.insertBefore(emBtn, btn);
+    if (emBtn) btn.parentNode.insertBefore(emBtn, input);   // with the tools; the ➤ stays beside the box
+    // The ONE send button (kt-chat-composer.css): faded until there is something to send, a spinner while sending.
+    var tcSending = false;
+    function syncSend() { btn.disabled = tcSending || !input.value.trim(); }
+    input.addEventListener('input', syncSend);
     async function doSend() {
       var text = input.value.trim();
-      if (! text) return;
+      if (! text || tcSending) return;
       var emergency = !!(emBtn && KT.emergency.isOn(emBtn));
-      input.value = ''; btn.disabled = true;
+      tcSending = true; btn.disabled = true; btn.setAttribute('aria-busy', 'true');
       try {
         var tid = await sendFn(text, emergency);
+        if (input.value.trim() === text) { input.value = ''; }   // sent: only now does the box empty
         if (emBtn) KT.emergency.reset(emBtn);
         if (threadId === null && tid) { openThread(container, tid, data.name); }   // new thread now exists
         else { var fresh = await Api.get('/provider/team-threads/' + (threadId || tid)); paintMessages(container, fresh.messages || [], fresh.is_group); }
-      } catch (e) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast(e.message || 'Send failed', 'error'); input.value = text; }
-      btn.disabled = false; input.focus();
+      } catch (e) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast(e.message || 'Send failed', 'error'); }
+      tcSending = false; btn.removeAttribute('aria-busy'); syncSend(); input.focus();
     }
     btn.addEventListener('click', doSend);
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doSend(); } });
@@ -393,13 +398,32 @@
     wrap.scrollTop = wrap.scrollHeight;
   }
 
-  function overlay() {
+  /* THE STANDARD POPUP (2026-11-06, Anthony: "the floating call and old teams - fix those too"). These were a bare
+     white box with a plain title, no close button and a colleague list that scrolled inside the box. Now: the gradient
+     header every popup has (.kt-dlg-head - kt-dialog-move.js paints it, branding-loader recolours it for white-label)
+     with the title and the close button in it, ONE scroll region (.tc-modal, the body the callers fill), and a footer
+     pinned under it for the action buttons (.tc-foot, hidden until a caller fills it). Centred on every screen. */
+  function overlay(title) {
     var ov = d.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:24px;';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    var card = d.createElement('div');
+    card.className = 'tc-card';
+    card.setAttribute('role', 'dialog'); card.setAttribute('aria-modal', 'true');
+    card.style.cssText = 'background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:min(680px,calc(100dvh - 32px));display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.3);';
+    var head = d.createElement('div');
+    head.className = 'kt-dlg-head';
+    head.style.cssText = 'display:flex;align-items:center;gap:10px;padding:13px 14px 15px 18px;flex-shrink:0;';
+    head.innerHTML = '<h3 style="margin:0;flex:1;min-width:0;font-size:17px;font-weight:800;line-height:1.25;">' + esc(title || '') + '</h3>'
+      + '<button type="button" class="tc-x" aria-label="Close" style="width:32px;height:32px;border-radius:50%;border:0;font-size:15px;line-height:1;cursor:pointer;flex-shrink:0;">\u2715</button>';
     var box = d.createElement('div');
     box.className = 'tc-modal';
-    box.style.cssText = 'background:#fff;border-radius:14px;padding:22px;max-width:460px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);';
-    ov.appendChild(box);
+    box.style.cssText = 'padding:16px 18px;overflow-y:auto;flex:1 1 auto;min-height:0;scrollbar-width:thin;';
+    var foot = d.createElement('div');
+    foot.className = 'tc-foot';
+    foot.style.cssText = 'display:none;justify-content:flex-end;gap:8px;padding:11px 18px 14px;border-top:1px solid #EEF2F7;flex-shrink:0;background:#fff;';
+    card.appendChild(head); card.appendChild(box); card.appendChild(foot);
+    ov.appendChild(card);
+    head.querySelector('.tc-x').addEventListener('click', function () { ov.remove(); });
     ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
     d.body.appendChild(ov);
     return ov;
@@ -411,9 +435,10 @@
   var STAFF = ['agency_admin', 'platform_admin', 'centre_director', 'educator', 'home_visitor', 'auditor'];
   function refreshTeamBadge() {
     var roles;
-    try { roles = (JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []; } catch (e) { return; }
+    try { roles = window.ktRoles ? window.ktRoles() : ((JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []); } catch (e) { return; }
     if (! roles.some(function (r) { return STAFF.indexOf(r) > -1; })) return;
-    Api.get('/provider/team-threads/unread-count').then(function (dd) {
+    (KT.badges ? KT.badges.get().then(function (b) { return b ? { unread: b.team_threads } : null; })
+      : Api.get('/provider/team-threads/unread-count')).then(function (dd) {
       var n = (dd && dd.unread) || 0;
       if (KT.Shell && KT.Shell.setBadge) KT.Shell.setBadge('team_unread', n);
       var el = document.getElementById('kt-pc-team-badge');
@@ -422,6 +447,7 @@
   }
   setTimeout(refreshTeamBadge, 1800);
   setInterval(refreshTeamBadge, 30000);
+  window.addEventListener('kt:badges', refreshTeamBadge);   // real time (kt-badges.js)
   KT.refreshTeamBadge = refreshTeamBadge;
 
   if (Shell && Shell.registerScreen) {

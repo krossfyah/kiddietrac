@@ -51,7 +51,7 @@ final class ExportsController extends Controller
                 'last_login' => $r->last_login_at,
                 'created' => $r->created_at,
             ]);
-        return $this->xlsx->download($agencyId, 'Users', 'users-' . now()->format('Y-m-d') . '.xlsx',
+        return $this->xlsx->download($agencyId, 'Users', 'users-' . \App\Support\AgencyTime::today() . '.xlsx',
             [
                 ['header' => 'ID', 'key' => 'id', 'width' => 8],
                 ['header' => 'Name', 'key' => 'name', 'width' => 26],
@@ -94,7 +94,7 @@ final class ExportsController extends Controller
             'cwelcc' => $r->cwelcc_enrolled ? 'Yes' : 'No',
             'balance' => (float) ($balances[$r->id] ?? 0),
         ]);
-        return $this->xlsx->download($agencyId, 'Families', 'families-' . now()->format('Y-m-d') . '.xlsx',
+        return $this->xlsx->download($agencyId, 'Families', 'families-' . \App\Support\AgencyTime::today() . '.xlsx',
             [
                 ['header' => 'ID', 'key' => 'id', 'width' => 8],
                 ['header' => 'Family name', 'key' => 'family_name', 'width' => 26],
@@ -135,7 +135,7 @@ final class ExportsController extends Controller
                 DB::raw("CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')) as actor"),
                 'u.email', 'al.ip_address', 'al.payload')
             ->get();
-        return $this->xlsx->download($agencyId, 'Audit log', 'audit-log-' . now()->format('Y-m-d') . '.xlsx',
+        return $this->xlsx->download($agencyId, 'Audit log', 'audit-log-' . \App\Support\AgencyTime::today() . '.xlsx',
             [
                 // datetime_ms: 'datetime' truncates to the second, which is the
                 // resolution this log outgrew. See XlsxExportService.
@@ -175,7 +175,7 @@ final class ExportsController extends Controller
             'allergies' => $stripJson($r->allergies),
             'dietary' => $stripJson($r->dietary_restrictions),
         ]);
-        return $this->xlsx->download($agencyId, 'Children', 'children-' . now()->format('Y-m-d') . '.xlsx',
+        return $this->xlsx->download($agencyId, 'Children', 'children-' . \App\Support\AgencyTime::today() . '.xlsx',
             [
                 ['header' => 'ID', 'key' => 'id', 'width' => 8],
                 ['header' => 'Name', 'key' => 'name', 'width' => 24],
@@ -192,8 +192,8 @@ final class ExportsController extends Controller
     public function payroll(Request $request): Response
     {
         $agencyId = $this->resolveAgencyId($request);
-        $from = Carbon::parse($request->query('from', Carbon::now()->startOfMonth()->toDateString()))->startOfDay();
-        $to = Carbon::parse($request->query('to', Carbon::now()->endOfMonth()->toDateString()))->endOfDay();
+        $from = Carbon::parse($request->query('from', \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString()))->startOfDay();
+        $to = Carbon::parse($request->query('to', \App\Support\AgencyTime::todayDate()->endOfMonth()->toDateString()))->endOfDay();
         $rows = DB::table('time_punches as tp')
             ->join('users as u', 'u.id', '=', 'tp.user_id')
             ->leftJoin('centres as c', 'c.id', '=', 'tp.centre_id')
@@ -245,7 +245,7 @@ final class ExportsController extends Controller
                 'status' => $r->expires_at && Carbon::parse($r->expires_at)->isPast() ? 'EXPIRED' : 'valid',
                 'notes' => (string) ($r->notes ?? ''),
             ]);
-        return $this->xlsx->download($agencyId, 'Background checks', 'background-checks-' . now()->format('Y-m-d') . '.xlsx',
+        return $this->xlsx->download($agencyId, 'Background checks', 'background-checks-' . \App\Support\AgencyTime::today() . '.xlsx',
             [
                 ['header' => 'Staff', 'key' => 'name', 'width' => 26],
                 ['header' => 'Email', 'key' => 'email', 'width' => 28],
@@ -266,16 +266,19 @@ final class ExportsController extends Controller
         $controller = app(\App\Http\Controllers\Api\ComplianceController::class);
         $reportJson = $controller->cwelccMonthlyReport($request);
         $body = json_decode($reportJson->getContent(), true);
+        // Ontario (base fee model since 2025): no rate; the subsidy column is the fee subsidy actually applied.
+        $onBase = ($body['model'] ?? 'rate') === 'on_base_fee';
+        $cols = [
+            ['header' => 'Child', 'key' => 'child_name', 'width' => 24],
+            ['header' => 'Family', 'key' => 'family_name', 'width' => 24],
+            ['header' => 'Centre', 'key' => 'centre_name', 'width' => 22],
+            ['header' => $onBase ? 'Base fee revenue' : 'Gross fee', 'key' => 'gross_fee', 'width' => 16, 'format' => 'money'],
+        ];
+        if (! $onBase) $cols[] = ['header' => 'Rate %', 'key' => 'subsidy_rate', 'width' => 10];
+        $cols[] = ['header' => $onBase ? 'Fee subsidy paid' : 'Subsidy', 'key' => 'subsidy_amount', 'width' => 16, 'format' => 'money'];
+        $cols[] = ['header' => $onBase ? 'Parents paid' : 'Parent', 'key' => 'parent_portion', 'width' => 14, 'format' => 'money'];
         return $this->xlsx->download($agencyId, 'CWELCC Subsidy', 'CWELCC-' . $month . '.xlsx',
-            [
-                ['header' => 'Child', 'key' => 'child_name', 'width' => 24],
-                ['header' => 'Family', 'key' => 'family_name', 'width' => 24],
-                ['header' => 'Centre', 'key' => 'centre_name', 'width' => 22],
-                ['header' => 'Gross fee', 'key' => 'gross_fee', 'width' => 14, 'format' => 'money'],
-                ['header' => 'Rate %', 'key' => 'subsidy_rate', 'width' => 10],
-                ['header' => 'Subsidy', 'key' => 'subsidy_amount', 'width' => 14, 'format' => 'money'],
-                ['header' => 'Parent', 'key' => 'parent_portion', 'width' => 14, 'format' => 'money'],
-            ], $body['data'],
+            $cols, $body['data'],
             ['period' => $month,
              'totals_row' => [
                 'child_name' => 'TOTALS (' . $body['totals']['child_count'] . ' children)',
@@ -326,7 +329,7 @@ final class ExportsController extends Controller
         });
         $slug = preg_replace('/[^A-Za-z0-9]+/', '-', strtolower($form->title));
         return $this->xlsx->download($agencyId, $form->title . ' — Responses',
-            $slug . '-responses-' . now()->format('Y-m-d') . '.xlsx', $columns, $rows);
+            $slug . '-responses-' . \App\Support\AgencyTime::today() . '.xlsx', $columns, $rows);
     }
 
     // SECURITY (v22p94): validate the header — only platform_admin (any agency)

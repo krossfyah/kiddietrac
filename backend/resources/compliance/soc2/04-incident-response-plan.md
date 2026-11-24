@@ -49,7 +49,7 @@ Response times are targets. KiddieTrac has one responder and no on-call rotation
 | Technical Responder | Anthony Hosein | Investigates, contains and fixes |
 | Communications / Privacy | Anthony Hosein (info@kiddietrac.com) | Notifies customers, the OPC and individuals |
 | Customer contact | Affected agency's administrator | Receives notices; coordinates notices to families where the agency controls that relationship |
-| External support (as needed) | GoDaddy support, sub-processor support, legal counsel | Host-level forensics, legal advice on notification |
+| External support (as needed) | Cloudways support (and DigitalOcean via Cloudways), sub-processor support, legal counsel | Host-level forensics, legal advice on notification |
 
 **Backup contact:** none today. A named backup person with emergency, break-glass access is a remediation item.
 

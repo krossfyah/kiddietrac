@@ -239,7 +239,7 @@
       '.kt-calc-fb:hover:not(:disabled){background:#F1F5F9;}',
       '.kt-calc-fb:disabled{opacity:.45;cursor:default;}',
       '.kt-calc-fb.pri:not(:disabled){color:#0E7C90;border-color:#CDEBEF;background:#F0FAFB;}',
-      '@media (max-width:600px){.kt-calc{left:8px !important;right:8px !important;top:auto !important;bottom:calc(8px + env(safe-area-inset-bottom,0px)) !important;width:auto;}',
+      '@media (max-width:600px){.kt-calc{left:8px !important;right:8px !important;top:auto !important;bottom:calc(8px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px))) !important;width:auto;}',
       '  .kt-calc-hd{cursor:default;}.kt-calc-k{height:44px;font-size:17px;}.kt-calc-tape{max-height:60px;}}'
     ].join('\n');
     document.head.appendChild(s);

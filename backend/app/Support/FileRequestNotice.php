@@ -166,7 +166,7 @@ final class FileRequestNotice
 
                 $subject = 'Files received: ' . $d['person']
                     . ($family ? ' — ' . $family->family_name : '')
-                    . ' — ' . self::prettyDate(now()->toDateString(), $agencyId);
+                    . ' — ' . self::prettyDate(\App\Support\AgencyTime::today(), $agencyId);
                 foreach ($recipients as $to) {
                     self::queue($to, $subject, $html, $agencyId);
                 }
@@ -284,6 +284,10 @@ final class FileRequestNotice
                       ->subject($subject);
                     // Whose switches govern this message. See the class comment.
                     $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId);
+                    /* FORM MAIL (2026-10-25): the receipt for something a parent just signed through a
+                       no-login link. They have often not claimed an account yet; the not-onboarded gate
+                       lets form mail through on this header (SuppressAgencyMail). */
+                    $m->getHeaders()->addTextHeader('X-KT-Form-Package', '1');
                 });
             } catch (\Throwable $e) {
                 Log::warning('File request notice failed', ['to' => $to, 'error' => $e->getMessage()]);

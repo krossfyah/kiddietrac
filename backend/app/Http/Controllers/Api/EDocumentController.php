@@ -40,13 +40,60 @@ class EDocumentController extends Controller
 
     // ----- Director side -----
 
+    /* THE CENTRE A DIRECTOR MANAGES DOCUMENTS FOR (2026-11-05 leak sweep). resolveCentreId() returns the lowest
+       centre where the person is director, admin OR EDUCATOR, so a director of centre Y who also teaches at
+       centre X got X's documents, signatures and families' emails. An agency-wide caller (admin / platform)
+       keeps resolveCentreId(); anyone else gets a centre where they are centre_director in this agency, or none. */
+    /* EVERY CENTRE, NOT THE FIRST (2026-11-13 sweep, after "Could not save - Child not in your centre" on an
+       immunization). directorCentreId() is ONE centre: for an agency admin, resolveCentreId()'s pick - the agency's
+       first - so the admin's E-documents list and dashboard count showed centre 8 only at iLearn (seven centres) and
+       every other centre's document answered "Not found"; a director of two centres saw only the lower one's. Lists
+       and per-document actions now use all of them: agency-wide callers, every centre they may see in the active
+       agency; anyone else, every centre where they are centre_director (inside CentreScope). Fails closed. A new
+       document still goes to directorCentreId(), or to the centre the request names if it is one of these. */
+    private function directorCentreIds(Request $request): array
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        if (! $agencyId) return [];
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $visible = $this->visibleCentreIds($request);
+        if ($scope === null) return $visible;
+        $dir = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
+            ->where('user_id', $request->user()->id)->where('role', 'centre_director')->where('active', true)
+            ->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->all();
+        return array_values(array_intersect($dir, $scope, $visible));
+    }
+
+    private function directorTemplate(Request $request, int $id): ?EDocumentTemplate
+    {
+        return EDocumentTemplate::whereIn('centre_id', $this->directorCentreIds($request) ?: [0])->find($id);
+    }
+
+    private function directorCentreId(Request $request): ?int
+    {
+        $want = (int) $request->input('centre_id');
+        if ($want && in_array($want, $this->directorCentreIds($request), true)) return $want;
+
+        $centreId = $this->resolveCentreId($request->user());
+        if (! $centreId) return null;
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope === null) return $centreId;
+        $dir = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
+            ->where('user_id', $request->user()->id)->where('role', 'centre_director')->where('active', true)
+            ->whereNotNull('centre_id')->orderBy('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->all();
+        $dir = array_values(array_intersect($dir, $scope));
+        if (in_array($centreId, $dir, true)) return $centreId;
+        return $dir[0] ?? null;
+    }
+
     public function index(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) return response()->json(['templates' => []]);
+        $centreIds = $this->directorCentreIds($request);
+        if (! $centreIds) return response()->json(['templates' => []]);
 
         $rows = EDocumentTemplate::query()
-            ->where('centre_id', $centreId)
+            ->whereIn('centre_id', $centreIds)
             ->whereNull('deleted_at')
             ->orderByDesc('created_at')
             ->limit(200)
@@ -56,11 +103,12 @@ class EDocumentController extends Controller
             ->whereIn('id', $rows->pluck('uploaded_by_id')->unique())
             ->pluck(DB::raw("CONCAT(first_name, ' ', last_name)"), 'id');
 
-        // For each template, count signatures and total families at centre.
+        // For each template, count signatures and total families at ITS centre.
         $totalFamilies = DB::table('families')
-            ->where('centre_id', $centreId)
+            ->whereIn('centre_id', $centreIds)
             ->whereNull('deleted_at')
-            ->count();
+            ->groupBy('centre_id')
+            ->pluck(DB::raw('COUNT(*)'), 'centre_id');
 
         $sigCounts = DB::table('edocument_signatures')
             ->select('template_id', DB::raw('COUNT(DISTINCT family_id) as families_signed'))
@@ -72,7 +120,7 @@ class EDocumentController extends Controller
             $arr = $r->toArray();
             $arr['uploaded_by_name'] = $uploaders[$r->uploaded_by_id] ?? null;
             $arr['families_signed']  = (int) ($sigCounts[$r->id] ?? 0);
-            $arr['families_total']   = $totalFamilies;
+            $arr['families_total']   = (int) ($totalFamilies[$r->centre_id] ?? 0);
             return $arr;
         });
 
@@ -81,7 +129,7 @@ class EDocumentController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
+        $centreId = $this->directorCentreId($request);
         if (! $centreId) return response()->json(['message' => 'No centre access'], 403);
 
         $request->validate([
@@ -119,8 +167,7 @@ class EDocumentController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $row = EDocumentTemplate::where('centre_id', $centreId)->find($id);
+        $row = $this->directorTemplate($request, $id);
         if (! $row) return response()->json(['message' => 'Not found'], 404);
 
         $data = $request->validate([
@@ -136,8 +183,7 @@ class EDocumentController extends Controller
 
     public function archive(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $row = EDocumentTemplate::where('centre_id', $centreId)->find($id);
+        $row = $this->directorTemplate($request, $id);
         if (! $row) return response()->json(['message' => 'Not found'], 404);
         $row->update(['status' => 'archived']);
         return response()->json(['template' => $row->fresh()]);
@@ -145,9 +191,9 @@ class EDocumentController extends Controller
 
     public function signatures(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $template = EDocumentTemplate::where('centre_id', $centreId)->find($id);
+        $template = $this->directorTemplate($request, $id);
         if (! $template) return response()->json(['message' => 'Not found'], 404);
+        $centreId = (int) $template->centre_id;
 
         $sigs = EDocumentSignature::query()
             ->where('template_id', $id)
@@ -196,8 +242,7 @@ class EDocumentController extends Controller
 
     public function directorDownload(Request $request, int $id)
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $row = EDocumentTemplate::where('centre_id', $centreId)->find($id);
+        $row = $this->directorTemplate($request, $id);
         if (! $row) return response()->json(['message' => 'Not found'], 404);
         return $this->streamPdf($row);
     }
@@ -207,9 +252,12 @@ class EDocumentController extends Controller
     public function parentIndex(Request $request): JsonResponse
     {
         $user = $request->user();
+        /* Live families only (2026-11-05 leak sweep): a closed family's documents still listed. */
         $familyIds = DB::table('guardians')
-            ->where('user_id', $user->id)
-            ->pluck('family_id')->unique();
+            ->join('families', 'families.id', '=', 'guardians.family_id')
+            ->where('guardians.user_id', $user->id)
+            ->whereNull('families.deleted_at')
+            ->pluck('guardians.family_id')->unique();
         if ($familyIds->isEmpty()) {
             return response()->json(['templates' => []]);
         }
@@ -278,9 +326,16 @@ class EDocumentController extends Controller
         if (! $template) return response()->json(['message' => 'Document not available'], 404);
 
         // Confirm template centre matches family centre
-        $family = DB::table('families')->where('id', $data['family_id'])->first();
-        if (! $family || $family->centre_id !== $template->centre_id) {
+        /* A live family at the document's own centre, and a child of THAT family (2026-11-05 leak sweep): a closed
+           family could still sign, and child_id was written unchecked, so a signature could name another family's
+           child. Ids compared as integers. */
+        $family = DB::table('families')->where('id', $data['family_id'])->whereNull('deleted_at')->first();
+        if (! $family || (int) $family->centre_id !== (int) $template->centre_id) {
             return response()->json(['message' => 'Document not for your family'], 403);
+        }
+        if (! empty($data['child_id']) && ! DB::table('children')->where('id', (int) $data['child_id'])
+                ->where('family_id', (int) $family->id)->whereNull('deleted_at')->exists()) {
+            return response()->json(['message' => 'That child is not in this family'], 422);
         }
 
         // Require the signature data to look like an image dataURL
@@ -322,6 +377,8 @@ class EDocumentController extends Controller
             ->join('families', 'families.id', '=', 'guardians.family_id')
             ->where('guardians.user_id', $user->id)
             ->where('families.centre_id', $template->centre_id)
+            // A live family only (2026-11-05 leak sweep): a closed family's former parent could still open the document.
+            ->whereNull('families.deleted_at')
             ->exists();
         if (! $allowed) return response()->json(['message' => 'Forbidden'], 403);
 
@@ -339,6 +396,8 @@ class EDocumentController extends Controller
             ->join('families', 'families.id', '=', 'guardians.family_id')
             ->where('guardians.user_id', $user->id)
             ->where('families.centre_id', $template->centre_id)
+            // A live family only (2026-11-05 leak sweep): a closed family's former parent could still open the document.
+            ->whereNull('families.deleted_at')
             ->exists();
         if (! $allowed) return response()->json(['message' => 'Forbidden'], 403);
         return response()->json([
@@ -357,13 +416,18 @@ class EDocumentController extends Controller
             ->join('families', 'families.id', '=', 'guardians.family_id')
             ->where('guardians.user_id', $uid)
             ->where('families.centre_id', $template->centre_id)
+            // A live family only (2026-11-05 leak sweep): a closed family's former parent could still open the document.
+            ->whereNull('families.deleted_at')
             ->exists();
         if (! $allowed) abort(403);
         if (! Storage::disk('local')->exists($template->storage_path)) abort(410);
-        return Storage::disk('local')->response(
+        // FileResponse, not Storage::response(): that streams with fpassthru(), which this server's PHP disables (ticket #197, 2026-11-01).
+        return \App\Support\FileResponse::download(
             $template->storage_path,
             $template->original_filename ?: 'document.pdf',
-            ['Content-Type' => 'application/pdf']
+            ['Content-Type' => 'application/pdf'],
+            'local',
+            true
         );
     }
 
@@ -372,7 +436,7 @@ class EDocumentController extends Controller
         if (! Storage::disk('local')->exists($row->storage_path)) {
             return response()->json(['message' => 'File missing on storage'], 410);
         }
-        return Storage::disk('local')->download(
+        return \App\Support\FileResponse::download(
             $row->storage_path,
             $row->original_filename ?: 'document.pdf',
             ['Content-Type' => 'application/pdf']

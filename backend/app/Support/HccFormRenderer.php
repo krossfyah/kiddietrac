@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support;
 
-use Dompdf\Dompdf;
-
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 /**
  * Renders a completed home-visitor inspection form (schema + answers) to a
  * standalone, print-ready HTML document. Used for the downloadable PDF (dompdf)
@@ -151,7 +150,7 @@ final class HccFormRenderer
             return '<div style="font-size:12px;font-weight:800;color:#111;letter-spacing:.4px;border-bottom:1px solid #111;padding-bottom:3px;margin:16px 0 8px;">' . $this->e($sec['title']) . '</div>';
         }
         // dark (monthly teal/charcoal bar)
-        return '<div style="background:#2B2F36;color:#fff;font-weight:800;font-size:11.5px;padding:6px 10px;margin:16px 0 8px;border-left:5px solid ' . $accent . ';">' . $this->e($sec['title']) . '</div>';
+        return '<div style="background:#2B2F36;color:#fff;font-weight:800;font-size:11.5px;padding:6px 10px;margin:16px 0 8px;--kt-edge:' . $accent . ';">' . $this->e($sec['title']) . '</div>';
     }
 
     private function section(array $sec, string $accent, bool $ministry): string

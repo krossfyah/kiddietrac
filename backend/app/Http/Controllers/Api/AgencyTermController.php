@@ -77,6 +77,8 @@ final class AgencyTermController extends Controller
             'country'     => $country,
             'state_label' => $lbl[0],
             'zip_label'   => $lbl[1],
+            // US agencies read "Center", not "Centre" (2026-10-28, Brightwood / California demo).
+            'spelling'    => $country === 'US' ? 'us' : 'ca',
         ]);
     }
 
@@ -84,7 +86,7 @@ final class AgencyTermController extends Controller
     public function set(Request $request): JsonResponse
     {
         $u = $request->user();
-        $ok = DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
         abort_unless($ok, 403, 'Admin only');
 

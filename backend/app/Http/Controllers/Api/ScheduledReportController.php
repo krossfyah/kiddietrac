@@ -40,6 +40,8 @@ class ScheduledReportController extends Controller
         $rows = DB::table('report_schedules as rs')
             ->leftJoin('users as u', 'u.id', '=', 'rs.recipient_user_id')
             ->leftJoin('centres as c', 'c.id', '=', 'rs.centre_id')
+            // Who set the schedule up (2026-11-01, shown on each card with when).
+            ->leftJoin('users as cb', 'cb.id', '=', 'rs.created_by')
             ->where('rs.agency_id', $agencyId)
             // A centre director: schedules for their own centres (2026-10-05).
             ->when(($sc = \App\Support\CentreScope::ids($request, (int) $agencyId)) !== null,
@@ -49,9 +51,11 @@ class ScheduledReportController extends Controller
                 'rs.*',
                 'u.first_name as ru_first', 'u.last_name as ru_last', 'u.email as ru_email',
                 'c.name as centre_name',
+                'cb.first_name as cb_first', 'cb.last_name as cb_last',
             ]);
 
-        $out = $rows->map(function ($r) {
+        $tz = \App\Support\AgencyTime::tz((int) $agencyId);
+        $out = $rows->map(function ($r) use ($tz) {
             $recipient = $r->recipient_email ?: trim(($r->ru_first ?? '') . ' ' . ($r->ru_last ?? ''));
             if (! $recipient && $r->ru_email) {
                 $recipient = $r->ru_email;
@@ -75,6 +79,9 @@ class ScheduledReportController extends Controller
                 'active' => (bool) $r->active,
                 'last_sent_on' => $r->last_sent_on,
                 'schedule_label' => $this->label($r),
+                'scheduled_by' => trim(($r->cb_first ?? '') . ' ' . ($r->cb_last ?? '')) ?: null,
+                // Agency time, never UTC or the viewer's device zone.
+                'scheduled_at' => \App\Support\AgencyTime::fmt($r->created_at, $tz, 'M j, Y g:i A'),
             ];
         });
 

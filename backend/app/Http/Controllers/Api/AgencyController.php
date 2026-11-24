@@ -38,6 +38,15 @@ final class AgencyController extends Controller
             $agency = DB::table("agencies")->where("id", $agencyId)->first();
             $centres = \App\Support\Live::centres(DB::table("centres"))->where("agency_id", $agencyId)->get();
         }
+        /* A CENTRE DIRECTOR GETS THIS SAME OVERVIEW FOR THEIR OWN CENTRES (2026-11-13, Anthony: "director view of the
+           dashboard should show the rooms just like how i see them as super admin with all of the clock in/out and
+           children", "things need to be consistent across roles"). App\Support\CentreScope: null = agency-wide
+           (admins, exactly as before); a list = only those centres, and every agency-wide figure below (revenue,
+           payroll, owner, archived centres, sign-ins of people elsewhere) is left out. Fails closed: no centres, none. */
+        $scope = $allMode ? null : \App\Support\CentreScope::ids($request, (int) $agencyId);
+        if ($scope !== null) {
+            $centres = $centres->whereIn("id", $scope)->values();
+        }
 
         $centreStats = [];
         $totalEnrolled = 0;
@@ -118,7 +127,8 @@ final class AgencyController extends Controller
         }
         $shiftsByCentre = [];
         $__addShift = function ($cid, $uid, $nm, $photo, $in, $out) use (&$shiftsByCentre) {
-            $s = $shiftsByCentre[$cid][$uid] ?? ["name" => $nm, "photo_url" => $photo, "in" => null, "out" => null, "open" => false];
+            $s = $shiftsByCentre[$cid][$uid] ?? ["name" => $nm, "photo_url" => $photo, "in" => null, "out" => null, "open" => false, "n" => 0];
+            $s["n"]++;   // how many clock-ins that day: more than one = a split day or a lunch
             if ($in && (! $s["in"] || $in < $s["in"])) $s["in"] = $in;
             if ($out === null) { $s["open"] = true; }
             elseif (! $s["out"] || $out > $s["out"]) { $s["out"] = $out; }
@@ -139,6 +149,9 @@ final class AgencyController extends Controller
                 $__addShift($__s->_cid, $__s->user_id, $__s->nm, $__s->photo_url, $__s->t_in, $__s->t_out);
             }
         }
+
+        // Everyone assigned to each home, clocked in or not (see App\Support\CentreTeam).
+        $teamByCentre = \App\Support\CentreTeam::forCentres($__cids, $today);
 
         $recByCentre = [];
         foreach (DB::table("invoices")->whereIn("centre_id", $__cids)
@@ -167,6 +180,27 @@ final class AgencyController extends Controller
         // Per-agency timezone for displaying check-in/out times (app tz is UTC; an
         // Ontario agency must read Eastern, not UTC). Map once; default Toronto.
         $agencyTz = DB::table('agencies')->pluck('timezone', 'id');
+
+        /* WHO IS SCHEDULED TODAY (2026-11-01, Anthony: "for educators and children not
+           scheduled to work - mark them as not scheduled in the your provider cards"). One
+           rule, App\Support\ScheduledToday, shared with the Daily Overview. "Today" is each
+           centre's own agency date (the all-agencies view can span zones). */
+        $__dateByCentre = [];
+        foreach ($centres as $__c) {
+            $__dateByCentre[(int) $__c->id] = Carbon::now($agencyTz[$__c->agency_id] ?? 'America/Toronto')->toDateString();
+        }
+        $__openByCentre = [];
+        $__kidSched = [];
+        foreach (array_unique($__dateByCentre) as $__d) {
+            $__ids = array_keys(array_filter($__dateByCentre, fn ($x) => $x === $__d));
+            $__open = \App\Support\ScheduledToday::centresOpen($__ids, $__d);
+            $__openByCentre += $__open;
+            $__kids = [];
+            foreach ($__ids as $__cid) {
+                $__kids[$__cid] = array_map(fn ($k) => (int) $k->id, $kidsByCentre[$__cid] ?? []);
+            }
+            $__kidSched += \App\Support\ScheduledToday::children($__kids, $__d, $__open);
+        }
 
         foreach ($centres as $c) {
             $ctz = $agencyTz[$c->agency_id] ?? 'America/Toronto';
@@ -203,34 +237,52 @@ final class AgencyController extends Controller
             // their avatar + status + check-in / check-out times.
             $enrolledKids = $kidsByCentre[$c->id] ?? [];
             $todaysEvents = $eventsByCentre[$c->id] ?? [];
-            $inAt = [];
-            $outAt = [];
-            foreach ($todaysEvents as $e) {
-                if ($e->event_type === "check_in") {
-                    if (! isset($inAt[$e->child_id]) || $e->occurred_at < $inAt[$e->child_id]) $inAt[$e->child_id] = $e->occurred_at;
-                } else {
-                    if (! isset($outAt[$e->child_id]) || $e->occurred_at > $outAt[$e->child_id]) $outAt[$e->child_id] = $e->occurred_at;
-                }
+            /* VISITS (2026-11-05). Status was "out" when the child had ANY check-out today,
+               so a child signed out at 10 and back at 1 sat in the Out column, and off the
+               present list, all afternoon. Status is the last event; the times are the
+               first arrival and the final sign-out (none while back in). */
+            $__byKid = [];
+            foreach ($todaysEvents as $e) { $__byKid[$e->child_id][] = $e; }
+            $inAt = []; $outAt = []; $visitsOf = [];
+            foreach ($__byKid as $__kid => $__list) {
+                usort($__list, fn ($a, $b) => strcmp((string) $a->occurred_at, (string) $b->occurred_at));
+                $__v = \App\Support\ChildVisits::pair($__list);
+                $__fi = \App\Support\ChildVisits::firstIn($__v);
+                $__fo = \App\Support\ChildVisits::finalOut($__v);
+                if ($__fi) $inAt[$__kid] = $__fi->occurred_at;
+                if ($__fo) $outAt[$__kid] = $__fo->occurred_at;
+                $visitsOf[$__kid] = $__v;
             }
             $roster = [];
             $checkedInCount = 0;
+            $notInCount = 0;
+            $notScheduledCount = 0;
             foreach ($enrolledKids as $k) {
                 $ci = $inAt[$k->id] ?? null;
                 $co = $outAt[$k->id] ?? null;
-                $status = ! $ci ? "absent" : ($co ? "out" : "in");
-                if ($status !== "absent") $checkedInCount++;
+                $sched = $__kidSched[(int) $c->id][(int) $k->id] ?? true;
+                // Not booked today and not here: "Not scheduled", never "Not in" / "Absent",
+                // and not in the absent tally. A child who came anyway keeps their times.
+                $status = ! $ci ? ($sched ? "absent" : "unscheduled") : ($co ? "out" : "in");
+                if ($ci) $checkedInCount++;
+                elseif ($sched) $notInCount++;
+                else $notScheduledCount++;
                 $roster[] = [
                     "id"           => $k->id,
                     "name"         => trim($k->first_name . " " . ($k->last_name ?? "")),
                     "photo_url"    => $k->photo_url,
                     "status"       => $status,
+                    "scheduled"    => $sched,
                     "check_in_at"  => $ci ? Carbon::parse($ci)->timezone($ctz)->format("g:i A") : null,
                     "check_out_at" => $co ? Carbon::parse($co)->timezone($ctz)->format("g:i A") : null,
+                    // More than one visit today: every one, for the card's tooltip / line.
+                    "visits"       => count($visitsOf[$k->id] ?? []),
+                    "visits_text"  => count($visitsOf[$k->id] ?? []) > 1 ? \App\Support\ChildVisits::text($visitsOf[$k->id], $ctz, 'now') : null,
                 ];
             }
             // Present-first, then absent; each group alphabetical (already ordered).
             usort($roster, function ($a, $b) {
-                $rank = ["in" => 0, "out" => 1, "absent" => 2];
+                $rank = ["in" => 0, "out" => 1, "absent" => 2, "unscheduled" => 3];
                 return [$rank[$a["status"]], $a["name"]] <=> [$rank[$b["status"]], $b["name"]];
             });
 
@@ -270,14 +322,38 @@ final class AgencyController extends Controller
                 $__end = DB::table('shifts as s')->join('rooms as r', 'r.id', '=', 's.room_id')
                     ->where('r.centre_id', $c->id)->where('s.user_id', $__prov->uid)->whereIn('s.status', ['scheduled', 'active'])
                     ->whereRaw('DATE(s.starts_at) = ?', [$__nowL->toDateString()])->max('s.ends_at');
+                /* The provider was always "scheduled", so on a Sunday or a closure day she
+                   read "Not clocked in" / "Absent". Now the shared rule (ScheduledToday). */
                 $staffShifts[] = ["name" => trim($__prov->first_name . ' ' . ($__prov->last_name ?? '')), "photo_url" => $__prov->photo_url,
-                    "is_provider" => true, "status" => "absent", "clock_in_at" => null, "clock_out_at" => null,
+                    "is_provider" => true, "status" => "absent",
+                    "scheduled" => \App\Support\ScheduledToday::provider((int) $c->id, (int) $__prov->uid, $__dateByCentre[(int) $c->id], ! empty($__openByCentre[(int) $c->id]), (bool) $__end),
+                    "clock_in_at" => null, "clock_out_at" => null,
                     "day_over" => $__end ? $__nowL->format('Y-m-d H:i:s') >= (string) $__end : $dayOver];
             }
+            /* The rest of the home's team, clocked in or not (2026-10-21). A second educator
+               used to appear only after clocking in, so Rachel Blane at Bruni's home was never
+               on the card at all. Someone rostered today reads "Not clocked in" / "Absent" like
+               the provider; someone with no shift today reads "Not scheduled", not absent. */
+            foreach (($teamByCentre[$c->id] ?? []) as $__uid => $__m) {
+                if (isset($__sh[$__uid]) || ($__prov && (int) $__prov->uid === (int) $__uid)) { continue; }
+                $staffShifts[] = ["name" => $__m["name"], "photo_url" => $__m["photo_url"],
+                    "is_provider" => false, "status" => "absent",
+                    "scheduled" => $__m["is_provider"]
+                        ? \App\Support\ScheduledToday::provider((int) $c->id, (int) $__uid, $__dateByCentre[(int) $c->id], ! empty($__openByCentre[(int) $c->id]), $__m["scheduled"])
+                        : $__m["scheduled"],
+                    "clock_in_at" => null, "clock_out_at" => null,
+                    "day_over" => $__m["shift_end"] ? $__nowL->format('Y-m-d H:i:s') >= $__m["shift_end"] : $dayOver];
+            }
+            // On lunch / a break: their rows are closed but the day is not over (StaffBreaks, 2026-11-05).
+            $__brk = \App\Support\StaffBreaks::currentFor(array_keys($__sh));
             foreach ($__sh as $__uid => $s) {
+                $__b = (! $s["open"] && isset($__brk[(int) $__uid])) ? $__brk[(int) $__uid] : null;
                 $staffShifts[] = ["name" => $s["name"], "photo_url" => $s["photo_url"],
                     "is_provider" => $__prov && (int) $__prov->uid === (int) $__uid,
-                    "status" => $s["open"] ? "in" : "out",
+                    "status" => $s["open"] ? "in" : ($__b ? "break" : "out"),
+                    "break_kind" => $__b ? $__b->kind : null,
+                    "break_since" => $__b ? $__fmt($__b->started_at) : null,
+                    "shifts" => (int) ($s["n"] ?? 1),
                     "clock_in_at" => $__fmt($s["in"]), "clock_out_at" => $s["open"] ? null : $__fmt($s["out"])];
             }
             usort($staffShifts, fn ($a, $b) => [! $a["is_provider"], $a["name"]] <=> [! $b["is_provider"], $b["name"]]);
@@ -298,11 +374,13 @@ final class AgencyController extends Controller
                 "present_now" => $presentNow,
                 "present_children" => $presentChildren,
                 "staff_present" => $staffPresent,
+                "team" => array_values(array_map(fn ($m) => $m["name"], $teamByCentre[$c->id] ?? [])),
                 "roster" => $roster,
                 "staff_shifts" => $staffShifts,
                 "day_over" => $dayOver,
                 "checked_in_count" => $checkedInCount,
-                "not_checked_in_count" => count($roster) - $checkedInCount,
+                "not_checked_in_count" => $notInCount,            // scheduled today and not here
+                "not_scheduled_count" => $notScheduledCount,      // not booked today and not here
                 "staff_on_floor" => $staffOnFloor,
                 "receivables" => (float) $receivables,
                 "room_count" => $roomCount,
@@ -340,14 +418,20 @@ final class AgencyController extends Controller
 
         // Recent activity — a single time-sorted feed merging user sign-ins,
         // children checking in/out, staff clocking in/out, and incidents.
-        $userIdsInAgency = DB::table("role_assignments")
+        $centreIds = $centres->pluck("id")->all();
+        $userIdsInAgency = $scope !== null
+            // A director: the people of their own centres - staff placed there, and those centres' parents.
+            ? DB::table("role_assignments")->whereIn("centre_id", $centreIds ?: [0])->pluck("user_id")
+                ->merge(DB::table("guardians as g")->join("families as f", "f.id", "=", "g.family_id")
+                    ->whereIn("f.centre_id", $centreIds ?: [0])->whereNotNull("g.user_id")->pluck("g.user_id"))
+                ->unique()->values()->all()
+            : DB::table("role_assignments")
             ->where(function ($q) use ($agencyId) {
                 $q->where("agency_id", $agencyId)
                   ->orWhereIn("centre_id", function ($qq) use ($agencyId) {
                       $qq->select("id")->from("centres")->where("agency_id", $agencyId);
                   });
             })->pluck("user_id")->unique()->all();
-        $centreIds = $centres->pluck("id")->all();
 
         $events = collect();
 
@@ -410,7 +494,8 @@ final class AgencyController extends Controller
         // Extra headline metrics for the overview stat cards.
         $totalFamilies = DB::table("families")->whereIn("centre_id", $__cids ?: [0])->whereNull("deleted_at")->count();
         $staffQ = DB::table("role_assignments")->where("active", true)->whereIn("role", ["educator", "centre_director"]);
-        if (! $allMode) { $staffQ->where(function ($q) use ($agencyId, $__cids) { $q->where("agency_id", $agencyId)->orWhereIn("centre_id", $__cids ?: [0]); }); }
+        if ($scope !== null) { $staffQ->whereIn("centre_id", $__cids ?: [0]); }
+        elseif (! $allMode) { $staffQ->where(function ($q) use ($agencyId, $__cids) { $q->where("agency_id", $agencyId)->orWhereIn("centre_id", $__cids ?: [0]); }); }
         $totalStaff = $staffQ->distinct()->count("user_id");
         $overdueInvoices = DB::table("invoices")->whereIn("centre_id", $__cids ?: [0])->where("status", "overdue")->count();
         if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
@@ -421,7 +506,7 @@ final class AgencyController extends Controller
         // Agency owner = the earliest agency_admin, reachable directly (agency_id)
         // or through one of the agency's centres. Shown in the Edit-agency window.
         $owner = null;
-        if (! $allMode) {
+        if (! $allMode && $scope === null) {
             // Prefer an agency_admin (the true owner); fall back to the earliest
             // centre_director where an agency has no admin yet. EXCLUDE platform
             // admins (super admins) — a super admin who also holds an agency_admin
@@ -487,7 +572,7 @@ final class AgencyController extends Controller
                 "brand_color" => $agency->brand_primary_color ?? null,
                 "owner" => $owner,
             ],
-            "totals" => array_merge($this->overviewExtras($allMode ? null : ($agency->id ?? null), $centres), [
+            "totals" => array_merge($this->overviewExtras($allMode ? null : ($agency->id ?? null), $centres, $scope), [
                 "enrolled" => $totalEnrolled,
                 "present_now" => $totalPresentNow,
                 "staff_on_floor" => $totalStaffOnFloor,
@@ -498,17 +583,39 @@ final class AgencyController extends Controller
             ]),
             /* The AGENCY's revenue — what families owe them — as distinct from the
                platform MRR widgets, which show what the agency pays KiddieTrac. */
-            "revenue" => (function () use ($agency) {
+            "revenue" => $scope !== null ? null : (function () use ($agency) {
                 try {
                     $aid = $agency->id ?? null;
                     if (! $aid || ! \Illuminate\Support\Facades\Schema::hasTable("external_invoices")) {
                         return null;
                     }
+                    /* NATIVE BILLING (2026-10-28). This read only external_invoices (the iLearn sync), so an agency that
+                       invoices inside KiddieTrac — Brightwood, the California demo — showed $0 collected. With no synced
+                       invoices at all, the agency's own invoices and payments answer instead. An agency that has synced
+                       ones (iLearn) is unchanged. */
+                    if (! DB::table("external_invoices")->where("agency_id", $aid)->exists()) {
+                        $mStart = \App\Support\AgencyTime::boundaryUtc(null, 'month')->toDateTimeString();
+                        $today = \App\Support\AgencyTime::todayDate()->toDateString();
+                        $inv = DB::table("invoices as i")->join("centres as c", "c.id", "=", "i.centre_id")
+                            ->where("c.agency_id", $aid)->whereNotIn("i.status", ["void", "draft", "refunded"]);
+                        $od = (clone $inv)->where("i.balance_due", ">", 0)->whereNotNull("i.due_at")->where("i.due_at", "<", $today);
+                        $paid = DB::table("payments as p")->join("families as f", "f.id", "=", "p.family_id")->join("centres as c", "c.id", "=", "f.centre_id")
+                            ->where("c.agency_id", $aid)->where("p.status", "succeeded")->where("p.paid_at", ">=", $mStart);
+
+                        return [
+                            "collected_this_month" => round((float) $paid->sum("p.amount"), 2),
+                            "outstanding"    => round((float) (clone $inv)->sum("i.balance_due"), 2),
+                            "overdue"        => round((float) (clone $od)->sum("i.balance_due"), 2),
+                            "overdue_count"  => (int) (clone $od)->count(),
+                            "billed_total"   => round((float) (clone $inv)->sum("i.total"), 2),
+                            "currency"       => DB::table("agencies")->where("id", $aid)->value("currency") ?: "CAD",
+                        ];
+                    }
                     $base = DB::table("external_invoices")->where("agency_id", $aid)
                         /* Voided invoices keep a non-zero balance_due, so counting them
                            overstates what is owed. They are cancelled, not outstanding. */
                         ->where("status", "!=", "void");
-                    $monthStart = Carbon::now()->startOfMonth()->toDateTimeString();
+                    $monthStart = \App\Support\AgencyTime::boundaryUtc(null, 'month')->toDateTimeString();
                     $overdue = (clone $base)->where("balance_due", ">", 0)
                         ->whereNotNull("due_at")->where("due_at", "<", Carbon::now());
 
@@ -527,7 +634,8 @@ final class AgencyController extends Controller
                 }
             })(),
             "centres" => $centreStats,
-            "archived_centres" => DB::table("centres")
+            "scoped" => $scope !== null,
+            "archived_centres" => $scope !== null ? [] : DB::table("centres")
                 ->whereNotNull("deleted_at")
                 ->when(! $allMode, fn ($q) => $q->where("agency_id", $agencyId))
                 ->orderByDesc("deleted_at")
@@ -579,8 +687,16 @@ final class AgencyController extends Controller
             ->where("role", "agency_admin")
             ->where("active", true)
             ->value("agency_id");
+        if ($own) return (int) $own;
 
-        return $own ? (int) $own : null;
+        /* A centre director (2026-11-13): the agency of a centre they direct - the active one when they direct a
+           centre there. dashboard() then narrows the overview to their centres (CentreScope). */
+        $dir = DB::table("role_assignments as ra")->join("centres as c", "c.id", "=", "ra.centre_id")
+            ->where("ra.user_id", $user->id)->where("ra.role", "centre_director")->where("ra.active", true)
+            ->whereNull("c.deleted_at")->pluck("c.agency_id")->map(fn ($v) => (int) $v)->unique()->values();
+        if ($activeId && $dir->contains($activeId)) return $activeId;
+
+        return $dir->first() ?: null;
     }
 
     /**
@@ -742,6 +858,53 @@ final class AgencyController extends Controller
             if ($r->event_type === "check_out") $push("checkin", "\u{1F44B}", $nm . " checked out" . $by, $r->occurred_at, "#dashboard", $r->photo_url);
         }
 
+        /* TIME OFF IN THE BELL (2026-11-04, Anthony: "time off requests should show up in the notifications bell").
+           The approvers got a Notify row, but an admin's bell opens THIS feed, and opening it marks their own alerts
+           seen - so a request was cleared without ever being shown. Scoped by the request's own agency_id. */
+        $toQ = DB::table("time_off_requests as tor")->join("users as u", "u.id", "=", "tor.user_id")
+            ->orderByDesc("tor.updated_at")->limit(15)
+            ->select("u.first_name", "u.last_name", "u.photo_url", "tor.request_type", "tor.start_at", "tor.end_at", "tor.status", "tor.created_at", "tor.decided_at");
+        if (! $unscoped) $toQ->whereIn("tor.agency_id", $agencyIds ?: [0]);
+        foreach ($toQ->get() as $r) {
+            $nm = trim(($r->first_name ?? "") . " " . ($r->last_name ?? "")) ?: "A team member";
+            $kind = ucfirst(str_replace("_", " ", (string) ($r->request_type ?: "time off")));
+            $from = $r->start_at ? date("M j", strtotime((string) $r->start_at)) : "";
+            $to = $r->end_at && substr((string) $r->end_at, 0, 10) !== substr((string) $r->start_at, 0, 10) ? date("M j", strtotime((string) $r->end_at)) : "";
+            $when = $from . ($to !== "" ? " \u{2013} " . $to : "");
+            $push("time_off", "\u{1F334}", $nm . " requested time off (" . $kind . ($when !== "" ? " \u{00B7} " . $when : "") . ")"
+                . ($r->status === "pending" ? " \u{00B7} waiting for a decision" : ($r->status === "cancelled" ? " \u{00B7} cancelled" : "")), $r->created_at, "#time-off", $r->photo_url);
+            if ($r->decided_at && in_array($r->status, ["approved", "denied", "rejected"], true)) {
+                $push("time_off", $r->status === "approved" ? "\u{2705}" : "\u{274C}", "Time off for " . $nm . ($when !== "" ? " (" . $when . ")" : "") . " " . ($r->status === "approved" ? "approved" : "declined"), $r->decided_at, "#time-off", $r->photo_url);
+            }
+        }
+
+        /* Payments in (2026-11-05, App\Support\PaymentAlerts): the bell is how an admin hears about money. An agency
+           admin sees every centre's; a director only their own centre's - money is not shared across centres. */
+        $payCentres = $centreIds;
+        if (! $isPlatformAdmin) {
+            $adminAgencies = DB::table("role_assignments")->where("user_id", $uid)->where("active", true)
+                ->whereIn("role", ["agency_admin", "admin"])->whereIn("agency_id", $agencyIds ?: [0])->pluck("agency_id")->all();
+            $dirRows = DB::table("role_assignments")->where("user_id", $uid)->where("active", true)
+                ->whereIn("role", ["centre_director", "director", "assistant_director"])->whereIn("agency_id", $agencyIds ?: [0])->get(["agency_id", "centre_id"]);
+            $wholeAgencies = array_merge($adminAgencies, $dirRows->whereNull("centre_id")->pluck("agency_id")->all());
+            $payCentres = array_values(array_unique(array_merge(
+                DB::table("centres")->whereIn("agency_id", $wholeAgencies ?: [0])->pluck("id")->all(),
+                array_intersect($dirRows->whereNotNull("centre_id")->pluck("centre_id")->map(fn ($v) => (int) $v)->all(), array_map("intval", $centreIds)))));
+        }
+        $payQ = DB::table("payments as p")->join("invoices as i", "i.id", "=", "p.invoice_id")->leftJoin("families as f", "f.id", "=", "p.family_id")
+            ->where("p.status", "succeeded")->where("p.amount", ">", 0)
+            ->orderByDesc(DB::raw("COALESCE(p.paid_at, p.created_at)"))->limit(15)
+            ->select("p.amount", "p.notes", "p.method", "p.stripe_payment_id", "f.family_name", "i.invoice_number", DB::raw("COALESCE(p.paid_at, p.created_at) as at"));
+        if (! $unscoped) $payQ->whereIn("i.centre_id", $payCentres ?: [0]);
+        foreach ($payQ->get() as $r) {
+            $how = stripos((string) $r->notes, "Apple Pay") !== false ? "Apple Pay" : (stripos((string) $r->notes, "Google Pay") !== false ? "Google Pay"
+                : ($r->stripe_payment_id ? "card" : str_replace("_", " ", (string) ($r->method ?: "payment"))));
+            $fam = trim((string) $r->family_name);
+            $push("payment", "\u{1F4B3}", "\$" . number_format((float) $r->amount, 2) . " received from "
+                . ($fam === "" ? "a family" : "the " . $fam . (stripos($fam, "family") === false ? " family" : ""))
+                . " \u{00B7} invoice " . $r->invoice_number . " \u{00B7} " . $how, $r->at, "#admin-billing");
+        }
+
         $feed = $events->filter(fn ($e) => ! empty($e["when"]))->sortByDesc("when")->take(40)->values()->all();
         return response()->json(["events" => $feed, "scope" => $unscoped ? "all" : "agency"]);
     }
@@ -774,11 +937,20 @@ final class AgencyController extends Controller
         }
         $agencyId  = (int) $agencyId;
         $centreIds = DB::table("centres")->where("agency_id", $agencyId)->pluck("id")->all();
+        /* A centre director sees the people of their own centres only (2026-11-13: the director now has the admin
+           overview, which shows this card). CentreScope: null = agency-wide, as before; fails closed. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope !== null) {
+            $centreIds = array_values(array_intersect(array_map("intval", $centreIds), $scope));
+        }
 
         // Everyone attached to the agency: staff (role_assignments agency_id OR a
         // centre in the agency) + guardians (families in the agency's centres).
         $staffIds = DB::table("role_assignments")->where("active", true)
-            ->where(function ($q) use ($agencyId, $centreIds) { $q->where("agency_id", $agencyId)->orWhereIn("centre_id", $centreIds ?: [0]); })
+            ->where(function ($q) use ($agencyId, $centreIds, $scope) {
+                if ($scope !== null) { $q->whereIn("centre_id", $centreIds ?: [0]); return; }
+                $q->where("agency_id", $agencyId)->orWhereIn("centre_id", $centreIds ?: [0]);
+            })
             ->pluck("user_id");
         $guardIds = DB::table("guardians as g")->join("families as f", "f.id", "=", "g.family_id")
             ->whereIn("f.centre_id", $centreIds ?: [0])->whereNotNull("g.user_id")->pluck("g.user_id");
@@ -808,6 +980,8 @@ final class AgencyController extends Controller
             "reported"  => $reported,       // how many gave an ethnicity
             "ethnicity" => $shape($ethCounts),
             "devices"   => $shape($devCounts),
+            // The app actually on their phones (registered for push), not what they told us.
+            "apps"      => \App\Support\AppInstalls::counts($userIds),
             "scope"     => "agency",
         ]);
     }
@@ -822,7 +996,7 @@ final class AgencyController extends Controller
      * there is no single pay schedule to speak of, so the payday is simply omitted
      * rather than picking one arbitrarily.
      */
-    private function overviewExtras(?int $agencyId, $centres): array
+    private function overviewExtras(?int $agencyId, $centres, ?array $scope = null): array
     {
         $centreIds = collect($centres)->pluck("id")->filter()->all();
         $out = [
@@ -856,6 +1030,17 @@ final class AgencyController extends Controller
             $paid = DB::table("payroll_documents")->where("agency_id", $agencyId)
                 ->where("status", "paid")
                 ->whereYear(DB::raw("COALESCE(paid_at, issued_at, created_at)"), now()->year);
+            /* A DIRECTOR'S OWN CENTRES (2026-11-13). The scoped dashboard passed no agency here, so a director's
+               "Payroll paid out" read $0.00 and "Next payroll" Not set - while their Payroll screen shows the same
+               money. Same reach as PayrollDocumentController::index: documents filed to their centres, or belonging
+               to staff who work there. The pay schedule is the agency's, and it is their staff's payday too. */
+            if ($scope !== null) {
+                $staff = DB::table("role_assignments")->whereIn("centre_id", $scope ?: [0])->where("active", 1)
+                    ->pluck("user_id")->map(fn ($v) => (int) $v)->unique()->all();
+                $paid->where(function ($w) use ($scope, $staff) {
+                    $w->whereIn("centre_id", $scope ?: [0])->orWhereIn("user_id", $staff ?: [0]);
+                });
+            }
             $out["payroll_paid_ytd"] = (float) (clone $paid)->sum("net");
             $out["payroll_paid_count"] = (clone $paid)->count();
 

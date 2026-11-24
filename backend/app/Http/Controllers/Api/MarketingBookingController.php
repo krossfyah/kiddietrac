@@ -24,6 +24,12 @@ use Illuminate\Support\Facades\Mail;
  * a "meeting" activity on that date), and emails sales@kiddietrac.com (Anthony's choice)
  * and the visitor (with an .ics). Mail results are recorded on the row: "sent" means the
  * mailer accepted it, "failed" is logged -- the booking itself never fails on mail.
+ *
+ * A REQUEST, NOT A BOOKING (2026-10-23, Anthony: "i need the bookings to come to sales to
+ * accept, modify or decline before sending out the confirmation email ... with a teams
+ * link"). store() now saves status 'requested' (the time is held), tells the visitor
+ * "we received your request", and sends sales@ a review notice; SalesBookingController
+ * accepts (Teams link + full confirmation), modifies or declines. App\Support\BookingMail.
  */
 class MarketingBookingController extends Controller
 {
@@ -119,7 +125,7 @@ class MarketingBookingController extends Controller
         $email = strtolower(trim($data['email']));
         $id = DB::transaction(function () use ($data, $start, $end, $type, $email, $request) {
             // Serialise bookings so two visitors cannot take the same time.
-            DB::table('marketing_bookings')->lockForUpdate()->where('status', 'booked')
+            DB::table('marketing_bookings')->lockForUpdate()->whereIn('status', ['booked', 'requested'])
                 ->where('starts_at', '<', $start->copy()->endOfDay()->utc())->where('ends_at', '>', $start->copy()->startOfDay()->utc())->get(['id']);
             if (! $this->slotFree($data['date'], $data['time'], $type['min'], $this->busy($start->copy()->startOfDay(), $start->copy()->endOfDay()))) {
                 return null;
@@ -132,7 +138,7 @@ class MarketingBookingController extends Controller
                 'phone' => trim((string) ($data['phone'] ?? '')) ?: null, 'meet_via' => $data['meet_via'],
                 'children' => trim((string) ($data['children'] ?? '')) ?: null, 'notes' => trim((string) ($data['notes'] ?? '')) ?: null,
                 'visitor_tz' => $data['visitor_tz'] ?? null, 'lang' => $data['lang'] ?? 'en',
-                'status' => 'booked', 'ip' => substr((string) $request->ip(), 0, 45),
+                'status' => 'requested', 'requested_starts_at' => $start->copy()->utc(), 'ip' => substr((string) $request->ip(), 0, 45),
                 'created_at' => now(), 'updated_at' => now(),
             ]);
         });
@@ -142,8 +148,9 @@ class MarketingBookingController extends Controller
         $b = DB::table('marketing_bookings')->where('id', $id)->first();
 
         $leadId = $this->pipeline($b, $type['name']);
-        $salesOk = $this->mailSales($b, $type['name']);
-        $visitorOk = $this->mailVisitor($b, $type['name']);
+        $salesOk = \App\Support\BookingMail::salesRequest($b);
+        $visitorOk = \App\Support\BookingMail::visitor($b, 'requested');
+        \App\Http\Controllers\Api\SalesBookingController::alertSales($b);
         DB::table('marketing_bookings')->where('id', $id)->update([
             'sales_lead_id' => $leadId, 'sales_mail' => $salesOk ? 'sent' : 'failed',
             'visitor_mail' => $visitorOk ? 'sent' : 'failed', 'updated_at' => now(),
@@ -152,7 +159,28 @@ class MarketingBookingController extends Controller
         return response()->json([
             'ok' => true, 'id' => $id, 'type' => $type['name'], 'duration_min' => $type['min'],
             'starts_at' => $start->toIso8601String(), 'tz' => self::TZ, 'confirmation_sent' => $visitorOk,
+            'status' => 'requested', 'request_ack_sent' => $visitorOk,
         ], 201);
+    }
+
+    /**
+     * GET /marketing-site/booking/{id}/calendar.ics?v=&s= — the meeting as a calendar file,
+     * for Apple Calendar and anything without a web "add" link (2026-10-23). Signed per
+     * version, so an old link never shows a moved time as current.
+     */
+    public function calendar(Request $request, int $id)
+    {
+        $b = DB::table('marketing_bookings')->where('id', $id)->first();
+        $v = (int) $request->query('v', -1);
+        $want = $b ? substr(hash_hmac('sha256', 'booking-ics|' . $id . '|' . $v, (string) config('app.key')), 0, 24) : '';
+        if (! $b || $v !== (int) $b->sequence || ! hash_equals($want, (string) $request->query('s', '')) || ! in_array($b->status, ['booked', 'cancelled'], true)) {
+            return response('This calendar link has expired. Please use the latest email from KiddieTrac.', 404)->header('Content-Type', 'text/plain');
+        }
+        return response(\App\Support\BookingMail::ics($b, $b->status === 'cancelled', null, true), 200, [
+            'Content-Type' => 'text/calendar; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="kiddietrac-meeting.ics"',
+            'Cache-Control' => 'private, no-store',
+        ]);
     }
 
     /* ── helpers ── */
@@ -167,7 +195,8 @@ class MarketingBookingController extends Controller
     /** Booked meetings overlapping the range, as [startUtcTs, endUtcTs]. */
     private function busy(Carbon $from, Carbon $to): array
     {
-        return DB::table('marketing_bookings')->where('status', 'booked')
+        // A request holds its time too, until Sales declines it.
+        return DB::table('marketing_bookings')->whereIn('status', ['booked', 'requested'])
             ->where('starts_at', '<', $to->copy()->utc())->where('ends_at', '>', $from->copy()->utc())
             ->get(['starts_at', 'ends_at'])
             ->map(fn ($r) => [Carbon::parse($r->starts_at, 'UTC')->timestamp, Carbon::parse($r->ends_at, 'UTC')->timestamp])->all();
@@ -181,7 +210,10 @@ class MarketingBookingController extends Controller
         foreach ($busy as [$bs, $be]) {
             if ($s->timestamp < $be && $e->timestamp > $bs) return false;
         }
-        return true;
+        /* SOMEONE HAS TO BE THERE (2026-10-23, Sales → Calendar): once the sales team has
+           set working hours, a time is offered only when at least one person is working and
+           has no time off, blocked time or meeting then. */
+        return \App\Support\SalesCalendar::someoneFree($s, $e);
     }
 
     private function when(object $b): string
@@ -205,8 +237,8 @@ class MarketingBookingController extends Controller
             }
             \App\Models\SalesActivity::create([
                 'lead_id' => $lead->id, 'type' => 'meeting', 'due_date' => $b->local_date, 'done' => false,
-                'body' => $typeName . ' booked on the website — ' . $this->when($b) . ' (' . $b->duration_min . ' min, '
-                    . ($b->meet_via === 'phone' ? 'phone call to ' . $b->phone : 'video call — send the link') . ')'
+                'body' => $typeName . ' requested on the website — ' . $this->when($b) . ' (' . $b->duration_min . ' min, '
+                    . ($b->meet_via === 'phone' ? 'phone call to ' . $b->phone : 'Teams video call') . '). Accept, modify or decline in Sales → Bookings.'
                     . ($b->notes ? "\nThey wrote: " . $b->notes : ''),
             ]);
             return (int) $lead->id;
@@ -254,6 +286,7 @@ class MarketingBookingController extends Controller
         try {
             $ics = $this->ics($b, $typeName);
             Mail::html($html, function ($m) use ($b, $typeName, $ics) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $m->to(self::SALES_TO)->subject('Booked: ' . $typeName . ' with ' . $b->name . ' — ' . Carbon::parse($b->starts_at, 'UTC')->tz(self::TZ)->format('M j, g:i A'))
                   ->replyTo($b->email, $b->name)
                   ->attachData($ics, 'kiddietrac-booking.ics', ['mime' => 'text/calendar; charset=utf-8; method=PUBLISH']);
@@ -278,11 +311,13 @@ class MarketingBookingController extends Controller
             . '<p style="margin:14px 0;font-size:15px;color:#334155;line-height:1.6">' . $how
             . ' A calendar file is attached so you can add it to your calendar.</p>'
             . '<p style="margin:0 0 14px;font-size:15px;color:#334155;line-height:1.6">Need a different time? Just reply to this email or call us at <strong>1-855-400-9996</strong>.</p>'
-            . '<p style="margin:0;font-size:15px;color:#334155;line-height:1.6">See you soon,<br>The KiddieTrac team</p>';
+            . '<p style="margin:0;font-size:15px;color:#334155;line-height:1.6">See you soon,<br>The KiddieTrac team</p>'
+            . '<div style="margin-top:22px">' . \App\Support\PlayBadge::card() . '</div>';   // now on Google Play (2026-10-25)
         try {
             $html = \App\Services\EmailTemplate::wrap(null, $body, ['title' => 'You’re booked in', 'preheader' => $typeName . ' — ' . $this->when($b)]);
             $ics = $this->ics($b, $typeName);
             Mail::html($html, function ($m) use ($b, $typeName, $ics) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $m->to($b->email, $b->name)->subject('Confirmed: your KiddieTrac ' . strtolower($typeName))
                   ->replyTo(self::SALES_TO, 'KiddieTrac')
                   ->attachData($ics, 'kiddietrac-booking.ics', ['mime' => 'text/calendar; charset=utf-8; method=PUBLISH']);

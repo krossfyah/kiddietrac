@@ -336,7 +336,7 @@ final class PaymentPlanController extends Controller
             if ($issueNow && $invoiceId) {
                 DB::table('invoices')->where('id', $invoiceId)->where('status', 'draft')->update([
                     'status' => 'sent',
-                    'issued_at' => now()->toDateString(),
+                    'issued_at' => \App\Support\AgencyTime::today(),
                     'issued_by_user_id' => $request->user()->id,
                     'updated_at' => now(),
                 ]);
@@ -472,7 +472,9 @@ final class PaymentPlanController extends Controller
                    the ledger's isOpen() excludes it — so the family's balance does not
                    move until the invoice is actually issued. */
                 'status' => 'draft',
-                'notes' => 'Payment schedule #' . $planId . ' — instalment ' . $n . ' of ' . $of,
+                /* No "Payment schedule #12 — instalment 3 of 7" on the invoice any more (2026-10-31): the notes print on
+                   the family's invoice, and the schedule ↔ invoice link already lives in payment_plan_installments. */
+                'notes' => null,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
@@ -480,10 +482,13 @@ final class PaymentPlanController extends Controller
             /* The description somebody typed, not this method's own words. Blank falls
                back to the old wording so a schedule created before the field existed,
                or by a caller that does not send one, still reads sensibly. */
+            /* THE CHILD AND THE SERVICE (2026-10-31, Anthony): the schedule's description is a template -
+               {child} {service} {month} {period}; blank = "{child} — {service}"; plain wording gets the child's
+               name in front unless it already names one. Never "instalment n of N" (App\Support\InvoiceLineText). */
             DB::table('invoice_lines')->insert([
                 'invoice_id' => $invoiceId,
-                'description' => $description !== '' ? $description
-                    : ('Payment schedule instalment ' . $n . ' of ' . $of),
+                'description' => \App\Support\InvoiceLineText::resolve($description, $familyId,
+                    $billedMonth->toDateString(), $billedMonth->toDateString(), $due->copy()->endOfMonth()->toDateString()),
                 'line_type' => 'tuition',
                 'quantity' => 1,
                 'unit_amount' => $base,
@@ -531,6 +536,21 @@ final class PaymentPlanController extends Controller
        keep their numbers, so the sequence continues past them rather than reusing one.
 
        The family is told, because what they owe has changed. */
+    /** GET /payment-plans/description-default?family_id= - "{child} — {service}" filled for this family (builder prefill). */
+    public function descriptionDefault(Request $request): JsonResponse
+    {
+        $data = $request->validate(['family_id' => 'required|integer']);
+        $this->assertStaff($request);
+        $this->assertFamily((int) $request->user()->id, (int) $data['family_id']);
+
+        return response()->json([
+            'template' => \App\Support\InvoiceLineText::DEFAULT,
+            'text' => \App\Support\InvoiceLineText::resolve(null, (int) $data['family_id']),
+            'child' => \App\Support\InvoiceLineText::childText((int) $data['family_id']),
+            'service' => \App\Support\InvoiceLineText::serviceText((int) $data['family_id']),
+        ]);
+    }
+
     public function update(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
@@ -538,6 +558,7 @@ final class PaymentPlanController extends Controller
             'installments.*.due_date' => 'required|date_format:Y-m-d',
             'installments.*.amount' => 'required|numeric|min:0.01',
             'notes' => 'nullable|string|max:1000',
+            'description' => 'nullable|string|max:200',
         ]);
         $this->assertStaff($request);
 
@@ -576,6 +597,13 @@ final class PaymentPlanController extends Controller
             ];
         }
         usort($lines, fn ($a, $b) => strcmp($a['due_date'], $b['due_date']));
+
+        // An edit may also change the line description (2026-10-31); it applies to the instalments re-raised below.
+        if (array_key_exists('description', $data)) {
+            $nd = trim((string) ($data['description'] ?? ''));
+            DB::table('payment_plans')->where('id', $id)->update(['description' => $nd !== '' ? $nd : null, 'updated_at' => now()]);
+            $plan->description = $nd !== '' ? $nd : null;
+        }
 
         DB::transaction(function () use ($id, $editable, $locked, $lines, $family, $existing, $data, $plan, $planExtras) {
             // Withdraw the tail. Only drafts, and only this schedule's own.
@@ -867,6 +895,13 @@ final class PaymentPlanController extends Controller
     {
         $this->assertStaff($request);
 
+        /* The schedule must belong to a family you serve (2026-11-05 leak sweep): cancel took
+           any plan id and cancelled it (and voided its drafts) with no check on the family,
+           so a director could cancel another centre's or agency's payment schedule. */
+        $plan = DB::table('payment_plans')->where('id', $id)->first();
+        abort_unless($plan, 404, 'No such payment schedule.');
+        $this->assertFamily((int) $request->user()->id, (int) $plan->family_id);
+
         /* WHICH invoices to withdraw is the caller's decision, not this method's.
 
            It used to void every unissued invoice on the schedule. A family who has
@@ -957,7 +992,7 @@ final class PaymentPlanController extends Controller
     private function assertStaff(Request $request): void
     {
         $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
+        $isStaff = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->whereIn('role', ['centre_director', 'agency_admin', 'platform_admin'])
             ->where('active', 1)->exists();
         abort_unless($isStaff, 403);

@@ -38,6 +38,8 @@ final class ManagedFormCountersign
      * @param  string  $sigDataUrl  the counter-signer's signature, a base64 PNG data URL
      * @return string|null          absolute path of the new PDF, or null if it could not be made
      */
+    private static string $when = '';
+
     public static function append(
         string $filledAbs,
         string $formTitle,
@@ -48,11 +50,23 @@ final class ManagedFormCountersign
         string $sigDataUrl,
         ?string $note,
         string $agencyName,
-        ?array $annotations = null
+        ?array $annotations = null,
+        ?string $counterSignedAt = null
     ): ?string {
         if (! is_file($filledAbs)) {
             return null;
         }
+        /* Only a PDF. Ghostscript reads anything else as PostScript and happily "stamps" a
+           blank page - an approved copy with the parent's form missing from it. */
+        $head = (string) @file_get_contents($filledAbs, false, null, 0, 1024);
+        if (strpos($head, '%PDF') === false) {
+            \Illuminate\Support\Facades\Log::warning('countersign stamp refused: not a PDF', ['file' => basename($filledAbs)]);
+            return null;
+        }
+        /* The page states when it was counter-signed. The stamp is now made by the queue
+           worker after the fact (and sometimes much later, for a rebuilt copy), so it
+           takes that time from the record, not the clock. */
+        self::$when = $counterSignedAt ?: now()->toDateTimeString();
 
         $tmpDir = sys_get_temp_dir();
         $flat = $tmpDir . '/cs-' . bin2hex(random_bytes(6)) . '.pdf';
@@ -245,7 +259,7 @@ final class ManagedFormCountersign
         $pdf->SetX($m);
         $pdf->SetFont('Helvetica', '', 8.5);
         $pdf->SetTextColor(90, 100, 115);
-        $pdf->Cell(230, 11, self::t('Counter-signed ' . self::stamp(now()->toDateTimeString())), 0, 1);
+        $pdf->Cell(230, 11, self::t('Counter-signed ' . self::stamp(self::$when)), 0, 1);
 
         /* A short note rides along; a long one would not fit the band that was measured,
            and silently clipping a reviewer's words is worse than putting them overleaf. */
@@ -305,7 +319,7 @@ final class ManagedFormCountersign
         $line('Completed by', $signerName !== '' ? $signerName : 'Not recorded');
         $line('Completed on', $signerSignedAt ? self::stamp($signerSignedAt) : 'Not recorded');
         $line('Reviewed by', trim($counterName . ($counterRole ? ' (' . $counterRole . ')' : '')));
-        $line('Reviewed on', self::stamp(now()->toDateTimeString()));
+        $line('Reviewed on', self::stamp(self::$when));
 
         /* WHAT THE AGENCY WROTE ONTO THE FORM, LISTED IN FULL.
  

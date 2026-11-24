@@ -105,6 +105,8 @@ final class Telnyx
      */
     public static function smsConfig(int $agencyId): ?array
     {
+        if (\App\Support\PublicDemo::isAgency($agencyId)) return null;   // public website demo (2026-10-31)
+        if (\App\Support\TestAgency::isAgency($agencyId)) return null;    // test agency: nothing leaves (2026-11-24)
         $c = self::readConfig($agencyId);
         $key = self::apiKey($agencyId);
         $from = trim((string) ($c['sms_from'] ?? ''));
@@ -132,6 +134,8 @@ final class Telnyx
     /** Everything needed to place a call, or null. */
     public static function voiceConfig(int $agencyId): ?array
     {
+        if (\App\Support\PublicDemo::isAgency($agencyId)) return null;   // public website demo (2026-10-31)
+        if (\App\Support\TestAgency::isAgency($agencyId)) return null;    // test agency: no calls, Safe Arrival included (2026-11-24)
         $c = self::readConfig($agencyId);
         $key = self::apiKey($agencyId);
         $conn = trim((string) ($c['voice_connection_id'] ?? ''));
@@ -213,6 +217,12 @@ final class Telnyx
      */
     public static function sendSms(array $cfg, string $to, string $body, ?string $mediaUrl = null): array
     {
+        if (\App\Support\TestAgency::isSession()) {
+            return ['ok' => false, 'body' => [], 'id' => null, 'status' => 403, 'error' => 'Test agency: calls and texts are not sent.'];
+        }
+        if (\App\Support\PublicDemo::isSession()) {
+            return ['ok' => false, 'body' => [], 'id' => null, 'status' => 403, 'error' => 'Public website demo: calls and texts are switched off.'];
+        }
         $e164 = self::e164($to);
         if ($e164 === '') {
             return ['ok' => false, 'body' => [], 'id' => null, 'status' => 400,
@@ -253,6 +263,12 @@ final class Telnyx
      */
     public static function dial(array $cfg, string $to, string $clientState, array $extra = []): array
     {
+        if (\App\Support\TestAgency::isSession()) {
+            return ['ok' => false, 'body' => [], 'id' => null, 'status' => 403, 'error' => 'Test agency: calls and texts are not sent.'];
+        }
+        if (\App\Support\PublicDemo::isSession()) {
+            return ['ok' => false, 'body' => [], 'id' => null, 'status' => 403, 'error' => 'Public website demo: calls and texts are switched off.'];
+        }
         $e164 = self::e164($to);
         if ($e164 === '') {
             return ['ok' => false, 'body' => [], 'id' => null, 'status' => 400,

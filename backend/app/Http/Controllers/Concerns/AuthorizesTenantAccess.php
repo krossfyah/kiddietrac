@@ -108,7 +108,10 @@ trait AuthorizesTenantAccess
            Checking the platform rule first made the header mandatory for them and
            refused access to their own agency's families; a differential test over
            13,238 real pairs caught it as 82 lockouts. */
+        // Staff roles only: a guardian role row carries its family's centre_id and must not
+        // read as "staff at that centre" (2026-11-05 leak sweep, see ResolvesCentreContext).
         $member = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+            ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
             ->where(function ($q) use ($centreId, $agencyId) {
                 $q->where('centre_id', $centreId)
                   ->orWhere(function ($w) use ($agencyId) {

@@ -1,0 +1,71 @@
+/* ── ONE HEIGHT FOR EVERY FIELD (2026-10-25) ──
+   Anthony: "under chat conversations ... the search, type fields are not the same size as the
+   active from and started by - make this consistent across the entire platform".
+   Measured there: dropdown 30px, search 28px, dates 34px. Each kind of control was compacted
+   by a different rule ([data-kt-pretty] select / input lists that never named type=date, a
+   search clear-button padding), so a filter bar mixed three heights. This sets the height
+   itself, not the padding, for every single-line control in the app and its dialogs:
+   32px on a computer (the compact size Anthony asked for), 38px on a phone (finger-sized).
+   Big-on-purpose fields opt out with data-kt-tall (PIN / code boxes, the dialer, kiosk).
+   Loaded last so no screen's own padding can make one field taller than its neighbours. */
+:is(#appMain, .kt-modal, [role="dialog"], .kt-sheet, .kt-drawer)
+  :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+      select:not([multiple]):not([size])):not([data-kt-tall]):not([data-kt-tall] *):not(.kt-pin *):not(.kt-otp *):not(.kt-tx-rp *):not(#kt-dialer *):not([maxlength="1"]) {
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  box-sizing: border-box !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: normal;
+}
+@media (max-width: 768px) {
+  :is(#appMain, .kt-modal, [role="dialog"], .kt-sheet, .kt-drawer)
+    :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
+        select:not([multiple]):not([size])):not([data-kt-tall]):not([data-kt-tall] *):not(.kt-pin *):not(.kt-otp *):not(.kt-tx-rp *):not(#kt-dialer *):not([maxlength="1"]) {
+    height: 38px !important;
+    min-height: 38px !important;
+    max-height: 38px !important;
+  }
+}
+
+/* ── THE TABLE FILTER BAR ON A PHONE (2026-10-25) ──
+   Anthony, from Safia's phone: "look at the filter and sort by ... doesnt look good". The bar was a
+   column (kt-design-v22p66): a 2px-bordered search box on one line, then "Sort by" and the arrow
+   button stranded on the next, each a different shape. One row now: search takes the room, the sort
+   select and the arrow sit beside it, all 38px with the same 1px border and radius. The row counter
+   is dropped on a phone; the search placeholder already says how many rows there are. */
+@media (max-width: 600px) {
+  #appMain .kt-table-filter, .kt-modal .kt-table-filter, [role="dialog"] .kt-table-filter {
+    flex-direction: row !important; flex-wrap: wrap !important; align-items: center !important; gap: 6px !important; margin: 8px 0 8px !important;
+  }
+  #appMain .kt-table-filter > div:first-child, .kt-modal .kt-table-filter > div:first-child, [role="dialog"] .kt-table-filter > div:first-child {
+    flex: 1 1 140px !important; min-width: 0 !important; max-width: none !important;
+  }
+  #appMain .kt-table-filter .kt-table-filter-input, .kt-modal .kt-table-filter .kt-table-filter-input, [role="dialog"] .kt-table-filter .kt-table-filter-input {
+    border: 1px solid #CBD5E1 !important; border-radius: 10px !important; padding-left: 32px !important; padding-right: 10px !important;
+    background-position: 10px center !important; font-size: 16px !important; box-shadow: none !important;
+  }
+  #appMain .kt-tf-sortwrap, .kt-modal .kt-tf-sortwrap, [role="dialog"] .kt-tf-sortwrap { flex: 0 0 auto !important; gap: 6px !important; }
+  #appMain .kt-tf-sortwrap .kt-tf-sort, .kt-modal .kt-tf-sortwrap .kt-tf-sort, [role="dialog"] .kt-tf-sortwrap .kt-tf-sort {
+    width: 112px !important; max-width: 112px !important; border: 1px solid #CBD5E1 !important; border-radius: 10px !important; font-size: 14px !important; background-color: #fff !important;
+  }
+  /* Out-specifies #appMain [data-kt-compact] button:not(..):not(..), which held it at 32px. */
+  #appMain .kt-table-filter .kt-tf-sortwrap button.kt-tf-dir.kt-tf-dir, .kt-modal .kt-tf-sortwrap button.kt-tf-dir.kt-tf-dir, [role="dialog"] .kt-tf-sortwrap button.kt-tf-dir.kt-tf-dir {
+    height: 38px !important; min-height: 38px !important; width: 38px !important; min-width: 38px !important; padding: 0 !important;
+    border: 1px solid #CBD5E1 !important; border-radius: 10px !important; background: #fff !important; font-size: 14px !important;
+  }
+  #appMain .kt-table-filter .kt-table-filter-count, .kt-modal .kt-table-filter .kt-table-filter-count, [role="dialog"] .kt-table-filter .kt-table-filter-count { display: none !important; }
+  #appMain .kt-table-filter > div:last-child:empty { display: none !important; }
+}
+
+/* ── ARROW ROOM ONLY FOR DROPDOWNS (2026-10-25) ──
+   Anthony: "billing plans and the table where it shows Taxes the values are being cut off - full sweep". A 2026 rule in
+   kt-polish-v22.css pads EVERY text field 26px on the right - the room a <select> needs for its arrow - so a 58px tax
+   box kept 20px for "13.00". Text fields and text areas go back to 10px; selects keep the arrow room; search boxes
+   and fields with their own clear button are left alone. :is(#appMain, ...) out-specifies that rule's long :not() chain. */
+:is(#appMain, #modalRoot, .kt-modal, [role="dialog"], [role="alertdialog"], body)
+  :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="search"]):not(.kt-table-filter-input):not([data-kt-has-clear]),
+      textarea) {
+  padding-right: 10px !important;
+}

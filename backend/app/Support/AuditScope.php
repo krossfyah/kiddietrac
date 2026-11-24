@@ -42,7 +42,13 @@ class AuditScope
             return null; // platform-level action with no agency context
         }
 
-        // Non-platform: their own agency wins over any client-supplied header.
+        /* Someone who genuinely belongs to SEVERAL agencies (a reseller, 2026-10-21) acts in
+           the one they switched into. Before this every row went to their first agency, so a
+           reseller working in agency B filed B's history under A. The header is honoured only
+           when they hold an active role in that agency; anyone else gets their own, as before. */
+        if ($header && self::belongs($userId, $header)) {
+            return $header;
+        }
         return self::ownAgency($userId);
     }
 
@@ -59,6 +65,14 @@ class AuditScope
         return (bool) Cache::remember('auditscope.agx.' . $agencyId, 300, function () use ($agencyId) {
             return DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->exists();
         });
+    }
+
+    private static function belongs(int $userId, int $agencyId): bool
+    {
+        return DB::table('role_assignments as ra')->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
+            ->where('ra.user_id', $userId)->where('ra.active', true)
+            ->where(function ($q) use ($agencyId) { $q->where('ra.agency_id', $agencyId)->orWhere('c.agency_id', $agencyId); })
+            ->exists();
     }
 
     /** A user's single owning agency (via role assignment agency_id, or its centre). */

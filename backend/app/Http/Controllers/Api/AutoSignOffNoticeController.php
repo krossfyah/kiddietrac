@@ -53,7 +53,7 @@ final class AutoSignOffNoticeController extends Controller
                does not care about four hours at the far edge, but the comparison is an
                instant one either way — see AgencyTime::dayRange. */
             ->where('punched_in_at', '>=', \App\Support\AgencyTime::dayRange(
-                null, Carbon::now()->subDays(30)->toDateString()
+                null, \App\Support\AgencyTime::todayDate()->subDays(30)->toDateString()
             )[0])
             ->orderByDesc('id')->limit(10)
             ->get(['id', 'centre_id', 'punched_in_at', 'punched_out_at']);

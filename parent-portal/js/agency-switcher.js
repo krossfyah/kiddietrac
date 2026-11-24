@@ -20,9 +20,14 @@
     if (!agencies || !agencies.length) return null;
     try {
       var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
-      var want = u.default_agency_id;
-      if (want && agencies.some(function (a) { return String(a.id) === String(want); })) {
-        return want;
+      // landing_agency_id (/auth/me, 2026-10-21) is the same rule worked out by the server;
+      // the splash and brand cache use it too, so all three open the same agency.
+      var picks = [u.landing_agency_id, u.default_agency_id];
+      for (var i = 0; i < picks.length; i++) {
+        var want = picks[i];
+        if (want && agencies.some(function (a) { return String(a.id) === String(want); })) {
+          return want;
+        }
       }
     } catch (e) {}
     return agencies[0].id;
@@ -53,19 +58,62 @@
       var res = await fetch(apiBase() + '/auth/agencies', {
         headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' },
       });
-      if (!res.ok) return { agencies: [], is_platform_admin: false };
+      // 401/403 is an answer (signed out / no access). Anything else is a failure to ask, not a "no".
+      if (!res.ok) return { agencies: [], is_platform_admin: false, failed: res.status !== 401 && res.status !== 403 };
       var data = await res.json();
       return { agencies: data.agencies || [], is_platform_admin: !!data.is_platform_admin };
-    } catch (e) { return { agencies: [], is_platform_admin: false }; }
+    } catch (e) { return { agencies: [], is_platform_admin: false, failed: true }; }
   }
+
+  /* THE BLOCK MUST NOT GO MISSING (2026-10-26). The signed-in account's own roles say whether it is a platform
+     admin - not while impersonating someone (kt_user is then the other person) and not while previewing a role
+     with View as. The server still guards every Platform/Sales route; this only decides whether the links show. */
+  function ownPlatformAdmin() {
+    try {
+      if (sessionStorage.getItem('kt_impersonating') || sessionStorage.getItem('kt_view_as')) return false;
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return !!(u && Array.isArray(u.roles) && u.roles.indexOf('platform_admin') !== -1);
+    } catch (e) { return false; }
+  }
+  /* BOTH SECTIONS, CHECKED APART (2026-10-27, Anthony: "when the portal refreshes i lose access
+     to the sales and platform views"). Platform and Sales both carried data-platform-section, and
+     this check asked only whether ANY such section existed - so when a sidebar rebuild left
+     Platform and dropped Sales, Sales never came back (his phone's ROLEVIEW reading: Platform
+     shown, Sales not, no View as). Each section now has its own marker; if either is missing,
+     whatever is left is removed and both are put back. */
+  function bothThere(nl) { return !!(nl.querySelector('[data-kt-sec="platform"]') && nl.querySelector('[data-kt-sec="sales"]')); }
+  function ensurePlatformNav() {
+    try {
+      if (!token() || !ownPlatformAdmin()) return;
+      var nl = document.getElementById('navLinks');
+      if (!nl) return;
+      if (!bothThere(nl)) {
+        [].forEach.call(nl.querySelectorAll('[data-platform-section]'), function (n) { n.remove(); });
+        injectPlatformNav();
+      }
+      // Watch the list itself too (a rebuilt sidebar is a new node, so re-attach when it changes).
+      if (nl !== ensurePlatformNav.watched && window.MutationObserver) {
+        ensurePlatformNav.watched = nl;
+        new MutationObserver(function () {
+          if (!bothThere(nl)) setTimeout(ensurePlatformNav, 0);
+        }).observe(nl, { childList: true });
+      }
+    } catch (e) {}
+  }
+  window.addEventListener('hashchange', ensurePlatformNav);
+  // A rebuilt sidebar is a NEW #navLinks the watcher above never saw: check every few seconds too.
+  setInterval(ensurePlatformNav, 5000);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) ensurePlatformNav(); });
 
   // v22p22: inject a "Platform" sidebar section for platform_admin.
   function injectPlatformNav() {
     var navLinks = document.getElementById('navLinks');
-    if (! navLinks || navLinks.querySelector('[data-platform-section]')) return;
+    if (! navLinks || bothThere(navLinks)) return;
+    [].forEach.call(navLinks.querySelectorAll('[data-platform-section]'), function (n) { n.remove(); });   // a partial set
     var section = document.createElement('div');
     section.className = 'sidebar-section';
     section.setAttribute('data-platform-section', '1');
+    section.setAttribute('data-kt-sec', 'platform');
     section.style.marginTop = '12px';
     section.innerHTML =
       '<div class="sidebar-section-label" style="color:#7C3AED;">🌐 Platform</div>' +
@@ -74,6 +122,69 @@
       '</a>' +
       '<a href="#platform-agencies" class="nav-link" data-hash="platform-agencies">' +
         '<span class="nav-icon">🏢</span><span class="nav-label">All agencies</span>' +
+      '</a>' +
+      // Server health (2026-10-22): the machine, database, jobs, errors, certificates, backups.
+      '<a href="#server-health" class="nav-link" data-hash="server-health">' +
+        '<span class="nav-icon">🖥️</span><span class="nav-label">Server health</span>' +
+      '</a>' +
+      // Licences (2026-10-24): plans and add-ons per agency, expiry, renewal, sales by part #.
+      '<a href="#licences" class="nav-link" data-hash="licences">' +
+        '<span class="nav-icon">🔑</span><span class="nav-label">Licences</span>' +
+      '</a>' +
+      // Careers (2026-10-30): job applications from the website, CVs and cover letters.
+      '<a href="#platform-careers" class="nav-link" data-hash="platform-careers">' +
+        '<span class="nav-icon">📨</span><span class="nav-label">Careers</span>' +
+      '</a>' +
+      // KiddieTrac's own invoices, beside the licences they bill (2026-10-25; was under Reseller).
+      '<a href="#sales-invoices" class="nav-link" data-hash="sales-invoices">' +
+        '<span class="nav-icon">🏦</span><span class="nav-label">Accounting AR/AP</span>' +
+      '</a>' +
+      // Money & usage, moved from Reseller (2026-10-25).
+      '<a href="#admin-mrr" class="nav-link" data-hash="admin-mrr">' +
+        '<span class="nav-icon">💰</span><span class="nav-label">MRR dashboard</span>' +
+      '</a>' +
+      '<a href="#usage-spend" class="nav-link" data-hash="usage-spend">' +
+        '<span class="nav-icon">📶</span><span class="nav-label">Usage &amp; spend</span>' +
+      '</a>' +
+      // Claude key + model, live state, credits estimate, full AI stats (2026-10-28).
+      '<a href="#ai-usage" class="nav-link" data-hash="ai-usage">' +
+        '<span class="nav-icon">🤖</span><span class="nav-label">AI usage</span>' +
+      '</a>' +
+      // KiddieTrac's own sales figures (2026-10-24): by part number, kind, month, customer.
+      '<a href="#platform-sales" class="nav-link" data-hash="platform-sales">' +
+        '<span class="nav-icon">💹</span><span class="nav-label">Sales reports</span>' +
+      '</a>' +
+      // Platform controls + security & data, moved from Reseller and Settings (2026-10-25).
+      '<a href="#admin-features" class="nav-link" data-hash="admin-features">' +
+        '<span class="nav-icon">🚩</span><span class="nav-label">Feature flags</span>' +
+      '</a>' +
+      '<a href="#admin-branding" class="nav-link" data-hash="admin-branding">' +
+        '<span class="nav-icon">🎨</span><span class="nav-label">Branding</span>' +
+      '</a>' +
+      '<a href="#maintenance" class="nav-link" data-hash="maintenance">' +
+        '<span class="nav-icon">🛠️</span><span class="nav-label">Maintenance</span>' +
+      '</a>' +
+      '<a href="#mail-settings" class="nav-link" data-hash="mail-settings">' +
+        '<span class="nav-icon">📬</span><span class="nav-label">Mail settings</span>' +
+      '</a>' +
+      '<a href="#digest-status" class="nav-link" data-hash="digest-status">' +
+        '<span class="nav-icon">📰</span><span class="nav-label">AI digest status</span>' +
+      '</a>' +
+      '<a href="#backups" class="nav-link" data-hash="backups">' +
+        '<span class="nav-icon">🗄️</span><span class="nav-label">Backups</span>' +
+      '</a>' +
+      '<a href="#compliance-evidence" class="nav-link" data-hash="compliance-evidence">' +
+        '<span class="nav-icon">🛡️</span><span class="nav-label">Compliance evidence</span>' +
+      '</a>' +
+      '<a href="#social-settings" class="nav-link" data-hash="social-settings">' +
+        '<span class="nav-icon">🔏</span><span class="nav-label">Sign-in methods</span>' +
+      '</a>' +
+      '<a href="#security-alerts" class="nav-link" data-hash="security-alerts">' +
+        '<span class="nav-icon">🚨</span><span class="nav-label">Security alerts</span>' +
+      '</a>' +
+      // Website (2026-10-23, Anthony: "move website into platform overview on the sidebar").
+      '<a href="#marketing-site" class="nav-link" data-hash="marketing-site">' +
+        '<span class="nav-icon">🌍</span><span class="nav-label">Website</span>' +
       '</a>';
     navLinks.insertBefore(section, navLinks.firstChild);
 
@@ -82,19 +193,31 @@
     var sales = document.createElement('div');
     sales.className = 'sidebar-section';
     sales.setAttribute('data-platform-section', '1');
+    sales.setAttribute('data-kt-sec', 'sales');
     sales.style.marginTop = '12px';
     sales.innerHTML =
       '<div class="sidebar-section-label" style="color:#0C6070;">💼 Sales</div>' +
       '<a href="#sales" class="nav-link" data-hash="sales">' +
         '<span class="nav-icon">📊</span><span class="nav-label">Pipeline</span></a>' +
       '<a href="#sales-webchat" class="nav-link" data-hash="sales-webchat">' +
-        '<span class="nav-icon">💬</span><span class="nav-label">Website chat</span></a>' +
+        '<span class="nav-icon">🗨️</span><span class="nav-label">Website chat</span></a>' +
       '<a href="#sales-leads" class="nav-link" data-hash="sales-leads">' +
         '<span class="nav-icon">🎯</span><span class="nav-label">Leads</span></a>' +
-      '<a href="#sales-new" class="nav-link nav-link--sub" data-hash="sales-new" style="padding-left:30px">' +
-        '<span class="nav-icon">➕</span><span class="nav-label">New lead</span></a>' +
-      '<a href="#sales-followups" class="nav-link" data-hash="sales-followups">' +
-        '<span class="nav-icon">⏰</span><span class="nav-label">Follow-ups</span></a>' +
+      '<a href="#sales-quotes" class="nav-link" data-hash="sales-quotes">' +
+        '<span class="nav-icon">📄</span><span class="nav-label">Proposals</span></a>' +
+      // Every won lead, its services and AR (2026-11-10).
+      '<a href="#sales-customers" class="nav-link" data-hash="sales-customers">' +
+        '<span class="nav-icon">🏆</span><span class="nav-label">Customers</span></a>' +
+      '<a href="#sales-expenses" class="nav-link" data-hash="sales-expenses">' +
+        '<span class="nav-icon">🪙</span><span class="nav-label">Expenses</span></a>' +
+      '<a href="#sales-campaigns" class="nav-link" data-hash="sales-campaigns">' +
+        '<span class="nav-icon">📣</span><span class="nav-label">Campaigns</span></a>' +
+      '<a href="#sales-email" class="nav-link" data-hash="sales-email">' +
+        '<span class="nav-icon">📮</span><span class="nav-label">Sales email</span></a>' +
+      '<a href="#sales-bookings" class="nav-link" data-hash="sales-bookings">' +
+        '<span class="nav-icon">📌</span><span class="nav-label">Bookings</span></a>' +
+      '<a href="#sales-calendar" class="nav-link" data-hash="sales-calendar">' +
+        '<span class="nav-icon">📆</span><span class="nav-label">Calendar</span></a>' +
       '<a href="#sales-plans" class="nav-link" data-hash="sales-plans">' +
         '<span class="nav-icon">💲</span><span class="nav-label">Plans &amp; pricing</span></a>' +
       '<a href="#sales-demo" class="nav-link" data-hash="sales-demo">' +
@@ -107,6 +230,7 @@
       '<a href="#sales-library" class="nav-link" data-hash="sales-library">' +
         '<span class="nav-icon">📁</span><span class="nav-label">Files repository</span></a>';
     navLinks.insertBefore(sales, section.nextSibling);
+    try { window.dispatchEvent(new CustomEvent('kt:platform-nav')); } catch (e) {}
   }
 
   async function setActiveServer(agencyId) {
@@ -251,9 +375,10 @@
         closeMenu();
       }
     });
-    document.addEventListener('click', function (e) {
-      if (!wrap.contains(e.target) && !dropdown.contains(e.target)) closeMenu();
-    });
+    // Capture-phase pointerdown (2026-11-05): a bubbling click never arrived from a button that stops its click.
+    document.addEventListener('pointerdown', function (e) {
+      if (dropdown.style.display !== 'none' && !wrap.contains(e.target) && !dropdown.contains(e.target)) closeMenu();
+    }, true);
     /* A fixed menu does not travel with its button, so anything that moves the button
        must close it rather than leave it stranded mid-screen. */
     window.addEventListener('resize', closeMenu);
@@ -312,6 +437,18 @@
     if (document.getElementById('kt-agency-switcher')) return; // already mounted
 
     var resp = await fetchAgencies();
+    if (resp.failed) {
+      /* The request did not get an answer. Do not decide "not an admin" from that: show the block from the
+         account's own roles now, and ask again (2s, 4s, 8s ... up to 60s apart, and when the network returns). */
+      ensurePlatformNav();
+      MOUNT_ATTEMPTS = 0;
+      tryMount.backoff = Math.min(60000, (tryMount.backoff || 1000) * 2);
+      clearTimeout(tryMount.retry);
+      tryMount.retry = setTimeout(tryMount, tryMount.backoff);
+      if (!tryMount.onlineHooked) { tryMount.onlineHooked = true; window.addEventListener('online', function () { clearTimeout(tryMount.retry); tryMount(); }); }
+      return;
+    }
+    tryMount.backoff = 0;
     var agencies = resp.agencies || [];
     var isPlatformAdmin = !!resp.is_platform_admin;
     sessionStorage.setItem('kt_is_platform_admin', isPlatformAdmin ? '1' : '0');
@@ -322,7 +459,9 @@
     // section there overflows and breaks the dashboard. Hiding it also makes the
     // "View as" preview faithful — those roles never see platform nav.
     var _viewingAs = ''; try { _viewingAs = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
-    if (isPlatformAdmin && !_viewingAs) injectPlatformNav();
+    // ...and watch it from here on (the watcher used to start only at the first navigation, so a
+    // sidebar rebuild straight after a refresh could drop Sales for good - 2026-10-27).
+    if (isPlatformAdmin && !_viewingAs) { injectPlatformNav(); ensurePlatformNav(); }
 
     if (! agencies.length || (! isPlatformAdmin && agencies.length < 2)) return;
 
@@ -350,7 +489,14 @@
 
     var widget = buildWidget(agencies, activeId, isPlatformAdmin);
     var navHidden = /\brole-(guardian|educator|auditor)\b/.test(document.body.className);
-    if (navHidden) {
+    /* PARENT / EDUCATOR VIEW (2026-11-04): into the header's admin strip beside "View as", opening downward
+       (.kt-agency-inbar). The floating bottom-left pill below is only for a screen with no strip. */
+    var _inFoot = navHidden && window.KT && KT.sidebarFoot && document.getElementById('appSidebar') && KT.sidebarFoot(10, widget);
+    if (_inFoot) {
+      widget.classList.add('kt-agency-inbar');
+      var _dd = widget.querySelector('div[style*="absolute"]');
+      if (_dd) { _dd.style.top = 'calc(100% + 4px)'; _dd.style.bottom = 'auto'; }
+    } else if (navHidden) {
       // The top nav is hidden for these roles and the header is at the very top,
       // so the pill's upward dropdown would be clipped off-screen. Mount it
       // bottom-left, just above the "Viewing as" pill, where it opens into view.

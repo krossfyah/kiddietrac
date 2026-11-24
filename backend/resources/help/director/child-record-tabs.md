@@ -46,7 +46,7 @@ anyone's timezone.
   **Download** a copy, or remove it. Signed agreements are a legal record and show a
   padlock instead of a delete button.
 - **🗄️ Full history** — every record held about this child, from across the whole
-  system: attendance, care logs, observations, incidents, medications, immunisations,
+  system: attendance, care logs, observations, incidents, medications, immunizations,
   photos, chats, documents, report cards, awards, invoices, and the lesson and meal
   plans for the rooms they were in. Sections start collapsed with a count beside each;
   open one to page through it 25 at a time. This works for archived children too — see

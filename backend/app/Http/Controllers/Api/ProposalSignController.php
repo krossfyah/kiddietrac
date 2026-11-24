@@ -169,6 +169,7 @@ class ProposalSignController extends Controller
     {
         $q = $this->byToken($token);
         abort_unless($q, 404);
+        \App\Support\ProposalTracking::pdfDownloaded((int) $q->id);   // tracked (2026-10-23)
         if ($q->signed_pdf_path && Storage::disk('local')->exists($q->signed_pdf_path)) {
             $bytes = Storage::disk('local')->get($q->signed_pdf_path);
             $name = ($q->number ?: 'proposal') . '-signed.pdf';

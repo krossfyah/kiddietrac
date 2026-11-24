@@ -281,7 +281,7 @@ final class SmsConsentController extends Controller
 
         DB::table('sms_messages')->insert([
             'agency_id' => $agency,
-            'to_user_id' => $this->userByPhone($from)->id ?? null,
+            'to_user_id' => ($u = $this->userByPhone($from)) && $this->inAgency((int) $u->id, (int) $agency) ? $u->id : null,
             'to_phone' => $from,
             'body' => $reply,
             'category' => 'keyword_reply',
@@ -317,7 +317,14 @@ final class SmsConsentController extends Controller
 
         /* ALL of them for a keyword, ONE of them for a message. */
         $onThisPhone = $this->usersByPhone($from);
-        $user = $this->primaryOf($onThisPhone);
+        /* The message belongs to the agency whose number was texted (2026-11-05 leak sweep). Telnyx
+           names it in the route; a text to agency 2's number was filed in agency 2 under an agency-6
+           person (#154, #172) - their name in another tenant's inbox, and a signed webhook from one
+           agency's own key could drop a text "from" anyone into its threads. STOP still opts out
+           every account on the handset (above): over-honouring a STOP is the safe side. */
+        $user = $this->primaryOf($agencyId
+            ? $onThisPhone->filter(fn ($u) => $this->inAgency((int) $u->id, (int) $agencyId))->values()
+            : $onThisPhone);
         $reply = null;
 
         if (in_array($word, self::STOP_WORDS, true)) {
@@ -462,6 +469,16 @@ final class SmsConsentController extends Controller
      *
      * @return \Illuminate\Support\Collection
      */
+    /** An active role in the agency (direct or at one of its centres), or a parent of one of its families. */
+    private function inAgency(int $userId, int $agencyId): bool
+    {
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        return DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+                ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $centres ?: [0]))->exists()
+            || DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                ->where('g.user_id', $userId)->whereIn('f.centre_id', $centres ?: [0])->exists();
+    }
+
     private function usersByPhone(string $from)
     {
         $digits = preg_replace('/\D/', '', $from) ?? '';

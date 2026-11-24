@@ -63,7 +63,7 @@ final class WalkController extends Controller
 
     private function staffCentreIds(int $userId): array
     {
-        return DB::table('role_assignments')->where('user_id', $userId)
+        return DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $userId)
             ->where('active', 1)->whereNotNull('centre_id')
             ->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
     }
@@ -79,6 +79,19 @@ final class WalkController extends Controller
     }
 
     /** Children currently checked in (today, not yet checked out) in these centres. */
+    /* Checked in now AND looked after by this person (2026-11-09): an educator was offered every checked-in child at
+       the centre, other rooms included. The picker and start() read this one list so they cannot disagree. */
+    private function walkableChildIds(Request $request): array
+    {
+        $u = $request->user();
+        $present = $this->presentChildIds($this->staffCentreIds($u->id));
+        if (! $present) {
+            return [];
+        }
+
+        return array_values(array_intersect($present, \App\Support\Visibility::liveChildIds((int) $this->resolveAgencyId($request), $u)));
+    }
+
     private function presentChildIds(array $centreIds): array
     {
         if (empty($centreIds)) {
@@ -187,6 +200,10 @@ final class WalkController extends Controller
         $pings = DB::table('field_trip_pings')->where('field_trip_id', $trip->id)->count();
         $sum = self::walkSummary((int) $trip->id);
 
+        // When the phone last reported, so the app can tell "still sharing" from "lost the connection" (2026-10-28).
+        $lastPing = DB::table('field_trip_pings')->where('field_trip_id', $trip->id)->max('recorded_at');
+        $since = \Illuminate\Support\Carbon::parse((string) ($lastPing ?: $trip->created_at));
+
         return response()->json(['active' => array_merge([
             'id' => $trip->id,
             'title' => $trip->title,
@@ -194,6 +211,10 @@ final class WalkController extends Controller
             'children' => $children,
             'pings' => $pings,
             'started_at' => $trip->depart_time,
+            'started_iso' => \Illuminate\Support\Carbon::parse((string) $trip->created_at)->toIso8601String(),
+            'minutes_out' => (int) \Illuminate\Support\Carbon::parse((string) $trip->created_at)->diffInMinutes(now()),
+            'last_ping_iso' => $lastPing ? \Illuminate\Support\Carbon::parse((string) $lastPing)->toIso8601String() : null,
+            'minutes_since_ping' => (int) $since->diffInMinutes(now()),
         ], $sum)]);
     }
 
@@ -360,7 +381,7 @@ final class WalkController extends Controller
     {
         $userId = (int) $request->user()->id;
 
-        $centreId = DB::table('role_assignments')->where('user_id', $userId)
+        $centreId = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $userId)
             ->where('active', 1)->whereNotNull('centre_id')->value('centre_id');
         if (! $centreId) {
             return response()->json(['enabled' => false, 'reason' => 'no_centre']);
@@ -376,11 +397,21 @@ final class WalkController extends Controller
 
         /* Already out? Then there is nothing to offer. Matches active() exactly —
            this user's own trip, today, still running. */
-        $activeWalk = DB::table('field_trips')
+        $activeWalkId = DB::table('field_trips')
             ->where('staff_lead_id', $userId)
             ->where('status', 'active')
             ->whereDate('trip_date', \Illuminate\Support\Carbon::now($this->staffTz($userId))->toDateString())
-            ->exists();
+            ->orderByDesc('id')->value('id');
+        $activeWalk = (bool) $activeWalkId;
+
+        /* BACKGROUND DETECTION IS THE AGENCY'S CHOICE (2026-10-21). The Android app ships a
+           background-location plugin; using it means every educator's phone asks for
+           all-the-time location and shows a permanent notification. That is a staff-privacy
+           decision, so it is off unless the agency turns on settings.walks.background_detect.
+           Foreground detection (app open / brought back) needs no such choice. */
+        $agencyId = (int) (DB::table('centres')->where('id', $centreId)->value('agency_id') ?? 0);
+        $agencySettings = json_decode((string) (DB::table('agencies')->where('id', $agencyId)->value('settings') ?? ''), true) ?: [];
+        $background = ! empty($agencySettings['walks']['background_detect']);
 
         /* Children actually here. Prompting to take nobody for a walk is how a feature
            teaches people to dismiss it. */
@@ -420,14 +451,91 @@ final class WalkController extends Controller
             'radius_m' => 200,
             'children_present' => $present,
             'walk_in_progress' => $activeWalk,
+            // So the app can offer "back at the centre? end your walk" for THIS walk.
+            'walk_id' => $activeWalkId ? (int) $activeWalkId : null,
+            /* How long it has been out (2026-10-28). The "back at the centre?" prompt needed to have SEEN the phone
+               leave the fence; after the app restarted mid-walk it never had, so it never asked. A walk out for a
+               while that is now inside the fence is a walk that has come back. */
+            'walk_minutes' => $activeWalkId ? (int) \Illuminate\Support\Carbon::parse((string) DB::table('field_trips')->where('id', $activeWalkId)->value('created_at'))->diffInMinutes(now()) : null,
+            'background' => $background,
         ]);
+    }
+
+    /* ── Room Controls → Walks (2026-10-21) ──────────────────────────────────────
+       Anthony: "Yes, add a per-agency switch" for background walk detection. Agency admins
+       edit; directors read. Stored in agencies.settings.walks. */
+    private function walkSettingsAgency(Request $request): int
+    {
+        $uid = (int) $request->user()->id;
+        $active = (int) $request->header('X-Active-Agency-Id');
+        $roles = DB::table('role_assignments')->where('user_id', $uid)->where('active', true);
+        if ((clone $roles)->where('role', 'platform_admin')->exists()) {
+            abort_unless($active && DB::table('agencies')->where('id', $active)->whereNull('deleted_at')->exists(), 400, 'Select an agency first.');
+            return $active;
+        }
+        if ($active && (clone $roles)->where(function ($w) use ($active) {
+                $w->where('agency_id', $active)->orWhereIn('centre_id', DB::table('centres')->where('agency_id', $active)->pluck('id'));
+            })->exists()) {
+            return $active;
+        }
+        $id = (int) ((clone $roles)->whereNotNull('agency_id')->value('agency_id')
+            ?: DB::table('centres')->whereIn('id', (clone $roles)->whereNotNull('centre_id')->pluck('centre_id'))->value('agency_id'));
+        abort_unless($id, 403, 'No agency access.');
+        return $id;
+    }
+
+    private function walkSettingsCanEdit(Request $request, int $agencyId): bool
+    {
+        return DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+            ->where(fn ($w) => $w->where('role', 'platform_admin')->orWhere(fn ($x) => $x->where('role', 'agency_admin')->where('agency_id', $agencyId)))
+            ->exists();
+    }
+
+    /** GET /admin/walk-settings */
+    public function walkSettings(Request $request): JsonResponse
+    {
+        $agencyId = $this->walkSettingsAgency($request);
+        $s = json_decode((string) (DB::table('agencies')->where('id', $agencyId)->value('settings') ?? ''), true) ?: [];
+        $live = \App\Support\Live::centreIds($agencyId);
+        $missing = DB::table('centres')->whereIn('id', $live ?: [0])
+            ->where(fn ($q) => $q->whereNull('latitude')->orWhereNull('longitude'))->pluck('name');
+
+        return response()->json([
+            'settings' => ['background_detect' => ! empty($s['walks']['background_detect'])],
+            'can_edit' => $this->walkSettingsCanEdit($request, $agencyId),
+            // Detection needs a centre's coordinates; say which centres have none.
+            'centres_missing_coordinates' => $missing,
+        ]);
+    }
+
+    /** POST /admin/walk-settings { background_detect } */
+    public function updateWalkSettings(Request $request): JsonResponse
+    {
+        $agencyId = $this->walkSettingsAgency($request);
+        abort_unless($this->walkSettingsCanEdit($request, $agencyId), 403, 'Only an agency administrator can change this.');
+        $on = $request->boolean('background_detect');
+        $s = json_decode((string) (DB::table('agencies')->where('id', $agencyId)->value('settings') ?? ''), true) ?: [];
+        $was = ! empty($s['walks']['background_detect']);
+        $s['walks'] = array_merge(is_array($s['walks'] ?? null) ? $s['walks'] : [], ['background_detect' => $on]);
+        DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($s), 'updated_at' => now()]);
+        if ($was !== $on) {
+            try {
+                \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => $agencyId,
+                    'action' => 'settings.walks_background', 'entity_type' => 'agency', 'entity_id' => $agencyId,
+                    'payload' => json_encode(['summary' => 'Turned background walk detection ' . ($on ? 'ON' : 'OFF')
+                        . ' for the Android app.', 'background_detect' => $on]),
+                    'ip_address' => $request->ip(), 'created_at' => now()]);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return response()->json(['ok' => true, 'settings' => ['background_detect' => $on]]);
     }
 
     public function eligibleChildren(Request $request): JsonResponse
     {
         $u = $request->user();
-        $centreIds = $this->staffCentreIds($u->id);
-        $ids = $this->presentChildIds($centreIds);
+        $ids = $this->walkableChildIds($request);
         if (empty($ids)) {
             return response()->json(['children' => []]);
         }
@@ -453,7 +561,7 @@ final class WalkController extends Controller
         ]);
         $u = $request->user();
         // Only children currently checked in to this educator's centre may be added.
-        $present = $this->presentChildIds($this->staffCentreIds($u->id));
+        $present = $this->walkableChildIds($request);
         $selected = array_values(array_intersect(array_map('intval', $data['child_ids']), $present));
         if (empty($selected)) {
             return response()->json(['message' => 'Pick at least one child who is checked in right now.'], 422);
@@ -539,10 +647,21 @@ final class WalkController extends Controller
         $u = $request->user();
         $trip = DB::table('field_trips')->where('id', $id)->first();
         abort_unless($trip, 404);
+        /* Staff at the walk's centre only (2026-11-05 leak sweep): userBelongsToAgency said yes to anyone in the
+           agency, parents included, so any member could end any centre's walk and send its parents the
+           "back from the walk" message. Now: the walk's lead, staff of that centre, or an admin overseeing it. */
         abort_unless(
-            $trip->staff_lead_id === $u->id || $this->userBelongsToAgency($u->id, (int) $trip->agency_id),
+            (int) $trip->staff_lead_id === (int) $u->id
+                || ($trip->centre_id && in_array((int) $trip->centre_id, $this->overseenCentreIds($request), true)),
             403
         );
+        /* ALREADY ENDED: say so, change nothing (2026-10-28). A phone that ends a walk while its connection is
+           flaky retries - and a second end used to log the walk into every child's day again and tell the parents
+           a second time. */
+        if (($trip->status ?? 'active') !== 'active') {
+            return response()->json(['status' => (string) $trip->status, 'already' => true,
+                'distance_km' => (float) ($trip->distance_km ?? 0)]);
+        }
         // Measured through walkSummary so the Daily Overview, the daily log and the
         // parent's email can never disagree about the same walk.
         $km = round(self::walkSummary($id)['distance_m'] / 1000, 2);
@@ -711,7 +830,7 @@ final class WalkController extends Controller
                         . ($km ? ' They covered about ' . number_format($km, 1) . ' km.' : '')
                         . ' It is on their daily log.')
                     : ('Off to ' . $where . ($lead ? ' with ' . $lead : '') . ', from ' . $stamp
-                        . '. Tap to follow along on the map.');
+                        . '. Tap to follow along live on Walk Watch.');
 
                 $guardians = DB::table('guardians as g')
                     ->join('users as u', 'u.id', '=', 'g.user_id')
@@ -786,13 +905,13 @@ final class WalkController extends Controller
                     ? '<tr><td style="font-size:15px;line-height:1.6;color:#334155;">Everyone is back, and the '
                         . 'walk has been added to ' . $esc($child) . '&rsquo;s daily log.</td></tr>'
                     : '<tr><td style="font-size:15px;line-height:1.6;color:#334155;">They have gone to '
-                        . $esc($where) . '. You can follow along on the live map in the app while they are out, '
+                        . $esc($where) . '. You can follow along live on Walk Watch in the app while they are out, '
                         . 'and we will let you know as soon as they are back.</td></tr>')
                 . '</table>';
 
             try {
                 $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
-                    'eyebrow' => $ended ? 'BACK FROM THE WALK' : 'OUT ON A WALK',
+                    'eyebrow' => $ended ? 'WALK WATCH · BACK FROM THE WALK' : 'WALK WATCH · OUT ON A WALK',
                     'title' => $subject,
                 ]);
                 $copyTo = \App\Support\MailOversight::firstOnly($bcc, $i++);

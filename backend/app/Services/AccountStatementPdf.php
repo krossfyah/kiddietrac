@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Dompdf\Options;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;

@@ -148,29 +148,54 @@ final class AttendanceCorrectionController extends Controller
             ->orderBy('occurred_at')
             ->get(['id', 'event_type', 'occurred_at']);
 
-        if ($in && $existing->firstWhere('event_type', 'check_in')) {
-            return response()->json([
-                'message' => 'An arrival is already recorded for that day. Remove it first if it is wrong.',
-            ], 422);
-        }
-        if ($out && $existing->firstWhere('event_type', 'check_out')) {
-            return response()->json([
-                'message' => 'A departure is already recorded for that day. Remove it first if it is wrong.',
-            ], 422);
-        }
-        // Adding only a departure, against an arrival already on file.
-        if ($out && ! $in) {
-            $priorIn = $existing->firstWhere('event_type', 'check_in');
-            if (! $priorIn) {
+        /* MORE THAN ONE VISIT A DAY (2026-11-05). This refused a second arrival or
+           departure outright, so a child who left at 10 and came back at 1 could not have
+           the missing half recorded. Now the existing events are paired into visits and
+           what is added has to fit between them:
+             arrival + departure  a whole visit, overlapping none on file;
+             departure only       closes the visit still open (arrival with no departure);
+             arrival only         a departure on file with no arrival before it, or a new
+                                  visit after the last departure. */
+        $visits = \App\Support\ChildVisits::pair($existing);
+        $at = fn ($e) => Carbon::parse($e->occurred_at, 'UTC');
+        $fmt = fn ($e) => AgencyTime::fmt($e->occurred_at, $tz);
+        if ($in && $out) {
+            foreach ($visits as $v) {
+                $vIn = $v['in'] ? $at($v['in']) : null;
+                $vOut = $v['out'] ? $at($v['out']) : Carbon::now('UTC');
+                if ($vIn && $in->copy()->utc()->lt($vOut) && $out->copy()->utc()->gt($vIn)) {
+                    return response()->json([
+                        'message' => 'That overlaps a visit already recorded (' . $fmt($v['in']) . ' – ' . ($v['out'] ? $fmt($v['out']) : 'still here') . ').',
+                    ], 422);
+                }
+            }
+        } elseif ($out) {
+            $openV = null;
+            foreach ($visits as $v) if ($v['in'] && ! $v['out']) $openV = $v;
+            if (! $openV) {
                 return response()->json([
-                    'message' => 'There is no arrival recorded for that day to close off.',
+                    'message' => $visits ? 'Every arrival that day already has a departure. Add the arrival too, as a new visit.' : 'There is no arrival recorded for that day to close off.',
                 ], 422);
             }
-            if ($out->utc()->lessThanOrEqualTo(Carbon::parse($priorIn->occurred_at))) {
+            if ($out->copy()->utc()->lessThanOrEqualTo($at($openV['in']))) {
                 return response()->json([
-                    'message' => 'The departure has to be after the recorded arrival of '
-                        . AgencyTime::fmt($priorIn->occurred_at, $tz) . '.',
+                    'message' => 'The departure has to be after the recorded arrival of ' . $fmt($openV['in']) . '.',
                 ], 422);
+            }
+        } elseif ($in) {
+            $inU = $in->copy()->utc();
+            $fits = false;
+            $prevOut = null;
+            foreach ($visits as $v) {
+                if (! $v['in'] && $v['out'] && $inU->lt($at($v['out'])) && (! $prevOut || $inU->gt($prevOut))) $fits = true;
+                if ($v['out']) $prevOut = $at($v['out']);
+            }
+            $last = end($visits);
+            if (! $fits && $last && $last['in'] && ! $last['out']) {
+                return response()->json(['message' => 'The child is already signed in from ' . $fmt($last['in']) . ' with no departure. Add the departure first.'], 422);
+            }
+            if (! $fits && $prevOut && $inU->lte($prevOut)) {
+                return response()->json(['message' => 'An arrival on its own has to come after the last departure (' . AgencyTime::fmt($prevOut, $tz) . '). To add an earlier visit, enter its departure too.'], 422);
             }
         }
 
@@ -528,7 +553,7 @@ final class AttendanceCorrectionController extends Controller
      */
     private function assertStaff(Request $request): void
     {
-        $ok = DB::table('role_assignments')
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $request->user()->id)->where('active', 1)
             ->whereIn('role', ['centre_director', 'agency_admin', 'platform_admin'])
             ->exists();

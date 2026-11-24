@@ -230,7 +230,7 @@ final class BioReminders
                 } catch (\Throwable $ex) { Log::warning('bio reminder email failed', ['agency' => $agencyId, 'user' => $p->user_id, 'error' => $ex->getMessage()]); }
             }
             if (! empty($s['in_app'])) {
-                Notify::write(['user_id' => $p->user_id, 'type' => 'bio_reminder', 'title' => '✍️ Add your bio for families',
+                Notify::write(['agency_id' => $agencyId, 'user_id' => $p->user_id, 'type' => 'bio_reminder', 'title' => '✍️ Add your bio for families',
                     'body' => 'New families read it in their welcome email and on your provider card. Settings → Profile → Your bio — about 2 minutes.',
                     'data' => json_encode(['link' => '#settings?tab=profile&focus=bio']), 'created_at' => now()]);
                 $res['in_app']++;

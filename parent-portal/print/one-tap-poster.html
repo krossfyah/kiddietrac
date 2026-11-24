@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>One-Tap poster</title>
+<link rel="icon" href="/favicon.ico">
+<!--
+  ONE-TAP POSTER (2026-10-21). Anthony: "when educator uses QR and wants to print from
+  desktop or phone, it doesnt just only print the QR it prints the entire page".
+
+  The poster used to be an overlay laid over the portal, printed with window.print() and a
+  print stylesheet that tried to hide everything else. Whatever the portal's own print
+  rules showed came along with it, a phone browser printed the page behind, and in the
+  app's web view window.print() does nothing at all. This page holds the poster and
+  nothing else, so whatever prints it (a hidden frame on a desktop, the phone's own
+  browser) prints only the poster.
+
+  Everything it shows arrives in the URL FRAGMENT (#…), which a browser never sends to a
+  server: the day's code is not written into anybody's access log. It is drawn here with
+  the same QR library and the same error-correction level as the in-app code (kt-qr.js).
+  Text only ever goes in through textContent; the steps are one of two fixed sets.
+-->
+<style>
+  :root { --brand: #1F6080; --ink: #0F172A; --muted: #475569; --line: #E2E8F0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .bar { position: sticky; top: 0; display: flex; gap: 8px; justify-content: flex-end; padding: 10px 16px;
+    background: #F8FAFC; border-bottom: 1px solid var(--line); }
+  .bar button { font: 700 14px/1 inherit; padding: 9px 16px; border-radius: 9px; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  .bar button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .sheet { max-width: 720px; margin: 0 auto; padding: 32px 24px 28px; text-align: center; }
+  .agency { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .agency img { max-height: 84px; max-width: 260px; object-fit: contain; }
+  .agency .name { font-size: 26px; font-weight: 800; letter-spacing: -.01em; }
+  .centre { font-size: 17px; color: var(--muted); font-weight: 600; margin-top: -8px; }
+  .rule { width: 72px; height: 4px; border-radius: 4px; background: var(--brand); margin: 20px auto; }
+  h1 { font-size: 30px; margin: 0 0 6px; color: var(--brand); }
+  .sub { font-size: 16px; color: var(--muted); margin: 0 0 22px; }
+  .qr { display: inline-block; padding: 14px; border: 2px solid var(--line); border-radius: 18px; }
+  .qr img { display: block; width: 300px; height: 300px; image-rendering: pixelated; }
+  .code { margin: 16px auto 0; font-size: 14px; color: var(--muted); }
+  .code b { display: inline-block; margin-left: 6px; font: 800 22px/1.2 ui-monospace, Menlo, Consolas, monospace;
+    letter-spacing: 4px; color: var(--ink); border: 1px dashed #94A3B8; border-radius: 8px; padding: 6px 10px; }
+  ol { text-align: left; max-width: 430px; margin: 24px auto 0; padding-left: 22px; font-size: 16px; line-height: 1.7; }
+  .foot { margin-top: 26px; font-size: 12.5px; color: #64748B; }
+  .err { padding: 60px 20px; text-align: center; color: #B91C1C; font-weight: 600; }
+  @media (max-width: 480px) {
+    .sheet { padding: 22px 16px; }
+    .qr img { width: 240px; height: 240px; }
+    h1 { font-size: 25px; }
+    .agency .name { font-size: 22px; }
+  }
+  @page { size: auto; margin: 12mm; }
+  @media print {
+    .bar { display: none !important; }
+    .sheet { padding: 0; max-width: none; }
+    .qr img { width: 92mm; height: 92mm; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="bar" id="bar">
+  <button type="button" id="close">Close</button>
+  <button type="button" class="primary" id="print">🖨️ Print</button>
+</div>
+<div class="sheet" id="sheet"></div>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+(function () {
+  'use strict';
+  var STEPS = {
+    app: ['Open the KiddieTrac app.', 'Tap One-Tap in the bottom bar.', 'Point your camera at this code.'],
+    kiosk: ['Scan this code with your phone camera.', 'Tap your child’s name.', 'Enter your 4–6 digit PIN to sign in or out.']
+  };
+  var sheet = document.getElementById('sheet');
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = String(text);
+    return e;
+  }
+  function fail(msg) { sheet.innerHTML = ''; sheet.appendChild(el('div', 'err', msg)); }
+
+  var cfg = null;
+  try {
+    var raw = (location.hash || '').replace(/^#/, '');
+    var auto = /(^|&)auto=1(&|$)/.test(raw);
+    raw = raw.split('&')[0].replace(/-/g, '+').replace(/_/g, '/');
+    cfg = JSON.parse(decodeURIComponent(escape(atob(raw))));
+    cfg.__auto = auto;
+  } catch (e) { cfg = null; }
+  if (!cfg || !cfg.d) { fail('This poster link is incomplete. Close it and press Print again.'); return; }
+
+  if (cfg.c && /^#[0-9a-f]{3,8}$/i.test(cfg.c)) document.documentElement.style.setProperty('--brand', cfg.c);
+  document.title = (cfg.a ? cfg.a + ' — ' : '') + 'One-Tap';
+
+  var ag = el('div', 'agency');
+  if (cfg.l && /^https:\/\//i.test(cfg.l)) {
+    var lg = el('img'); lg.alt = ''; lg.src = cfg.l;
+    lg.onerror = function () { lg.remove(); };
+    ag.appendChild(lg);
+  }
+  if (cfg.a) ag.appendChild(el('div', 'name', cfg.a));
+  sheet.appendChild(ag);
+  if (cfg.t) sheet.appendChild(el('div', 'centre', cfg.t));
+  sheet.appendChild(el('div', 'rule'));
+  sheet.appendChild(el('h1', null, 'One-Tap'));
+  sheet.appendChild(el('p', 'sub', 'Scan to check your child in or out — contactless'));
+
+  var box = el('div', 'qr');
+  try {
+    var qr = null;
+    for (var v = 2; v <= 40 && !qr; v++) {
+      try { var q = window.qrcode(v, 'M'); q.addData(String(cfg.d)); q.make(); qr = q; } catch (e) {}
+    }
+    if (!qr) throw new Error('too long');
+    var img = el('img'); img.alt = 'One-Tap QR code'; img.src = qr.createDataURL(10, 2);
+    box.appendChild(img);
+  } catch (e) { fail('Could not draw the QR code. Check your connection and try again.'); return; }
+  sheet.appendChild(box);
+
+  if (cfg.s && /^[A-Z0-9]{4,10}$/.test(cfg.s)) {
+    var code = el('div', 'code', 'No camera? Enter this code in the app:');
+    code.appendChild(el('b', null, cfg.s));
+    sheet.appendChild(code);
+  }
+  var ol = el('ol');
+  (STEPS[cfg.k] || STEPS.app).forEach(function (s) { ol.appendChild(el('li', null, s)); });
+  sheet.appendChild(ol);
+  var foot = [];
+  if (cfg.v) foot.push('Valid ' + cfg.v + ' only — a new code is issued each day');
+  if (cfg.p !== 0) foot.push('Powered by KiddieTrac');
+  if (foot.length) sheet.appendChild(el('div', 'foot', foot.join(' · ')));
+
+  function doPrint() { try { window.focus(); window.print(); } catch (e) {} }
+  document.getElementById('print').addEventListener('click', doPrint);
+  document.getElementById('close').addEventListener('click', function () {
+    try { window.close(); } catch (e) {}
+    setTimeout(function () { if (history.length > 1) history.back(); }, 150);
+  });
+
+  // Ready once the logo has loaded (or failed), so a print never catches it half-drawn.
+  function ready() {
+    window.__ktPosterReady = true;
+    try { if (window.parent !== window) window.parent.postMessage({ ktPoster: 'ready' }, location.origin); } catch (e) {}
+    if (cfg.__auto) setTimeout(doPrint, 300);
+  }
+  var pending = Array.prototype.filter.call(document.images, function (i) { return !i.complete; });
+  if (!pending.length) { ready(); return; }
+  var left = pending.length, done = function () { if (--left === 0) ready(); };
+  pending.forEach(function (i) { i.addEventListener('load', done); i.addEventListener('error', done); });
+  setTimeout(function () { if (!window.__ktPosterReady) ready(); }, 4000);
+})();
+</script>
+  <script src="/js/kt-i18n.js?v=20261022pages2" defer></script>
+</body>
+</html>

@@ -22,7 +22,7 @@ class SalesFollowupReminders extends Command
 
     public function handle(): int
     {
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
 
         $due = SalesActivity::where('type', 'followup')
             ->where('done', false)
@@ -57,7 +57,7 @@ class SalesFollowupReminders extends Command
                 continue;
             }
 
-            $overdue = $act->due_date->lt(now()->startOfDay());
+            $overdue = $act->due_date->lt(\App\Support\AgencyTime::todayDate());
             $when = $overdue ? ('overdue since ' . $act->due_date->format('M j')) : 'due today';
 
             if ($this->option('dry')) {

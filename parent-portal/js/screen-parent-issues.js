@@ -91,7 +91,7 @@
     m.setAttribute('role', 'dialog');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;z-index:10000;padding:12px;';
     var thread = (d.messages || []).map(function (x) {
-      var bg = x.internal ? 'background:#FFFBEB;border-left:3px solid #F59E0B;' : (x.side === 'parent' ? 'background:#F1F5F9;' : 'background:#EFF6FF;border-left:3px solid #1F6080;');
+      var bg = x.internal ? 'background:#FFFBEB;--kt-edge:#F59E0B;' : (x.side === 'parent' ? 'background:#F1F5F9;' : 'background:#EFF6FF;--kt-edge:#1F6080;');
       return '<div style="margin-top:8px;padding:8px 11px;border-radius:10px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;' + bg + '">'
         + '<div style="font-size:11.5px;font-weight:800;color:#475569;margin-bottom:2px;">' + esc(x.who) + (x.side === 'parent' ? ' (parent)' : '') + (x.internal ? ' · 🔒 internal note' : '') + ' · ' + esc(x.at) + '</div>' + esc(x.body) + '</div>';
     }).join('');

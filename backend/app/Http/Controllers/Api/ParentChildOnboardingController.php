@@ -13,10 +13,10 @@ use Illuminate\Support\Str;
 /**
  * What a parent tells us about their own child during onboarding.
  *
- * A photo, what the child is allergic to, and which immunisations they have had. All
+ * A photo, what the child is allergic to, and which immunizations they have had. All
  * three already have somewhere to live and somebody reading them — children.photo_url is
  * the face on every roster, children.allergies drives the allergy alerts an educator sees
- * at snack time, and the immunizations table is what the immunisation report measures
+ * at snack time, and the immunizations table is what the immunization report measures
  * against the agency's schedule. None of it was ever asked for at the point the parent
  * actually knows the answers.
  *
@@ -123,7 +123,7 @@ class ParentChildOnboardingController extends Controller
      *
      * Onboarding runs once. A parent who finished it before their centre linked any
      * children was told "your centre will add them" and was never asked again — so a
-     * child added afterwards never got the required photo, allergies or immunisations
+     * child added afterwards never got the required photo, allergies or immunizations
      * (Anthony, 2026-10-06: family 139, Alessia and Adriana). The portal asks this on
      * every sign-in and, while it lists anyone, shows the same children step as
      * onboarding until each has a photo.
@@ -244,7 +244,7 @@ class ParentChildOnboardingController extends Controller
         return response()->json(['photo_url' => $url]);
     }
 
-    /** POST /parent/onboarding/children/{child} — health details and immunisations. */
+    /** POST /parent/onboarding/children/{child} — health details and immunizations. */
     public function save(Request $request, int $child): JsonResponse
     {
         abort_unless(in_array($child, $this->ownChildIds((int) $request->user()->id), true), 403, 'Not your child.');

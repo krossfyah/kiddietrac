@@ -5,7 +5,7 @@ namespace App\Console\Commands;
 
 use App\Services\AgencyMailer;
 use App\Services\EmailTemplate;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;

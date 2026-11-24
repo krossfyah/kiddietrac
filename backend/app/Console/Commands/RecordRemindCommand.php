@@ -107,7 +107,7 @@ final class RecordRemindCommand extends Command
                 } catch (\Throwable $e) {
                     Log::warning('Record reminder failed', ['user' => $ed->id, 'error' => $e->getMessage()]);
                 }
-                Notify::write(['user_id' => (int) $ed->id, 'type' => 'records_reminder',
+                Notify::write(['agency_id' => (int) $a->id, 'user_id' => (int) $ed->id, 'type' => 'records_reminder',
                     'title' => ($escalated ? 'Escalated: ' : '') . 'Daily records for ' . $date->format('D j M'),
                     'body' => 'Not completed: ' . implode(', ', array_map(fn ($m) => $m['label'], $ev['missing'])) . '. ' . $hist['days'] . ' day(s) in the last ' . $cfg['window_days'] . '.',
                     'data' => json_encode(['link' => '#care-log'])]);

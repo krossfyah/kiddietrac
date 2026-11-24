@@ -54,8 +54,21 @@ final class ImmunizationScheduleController extends Controller
         ['DTaP', '5th dose', 48], ['IPV (polio)', '4th dose', 48], ['MMR', '2nd dose', 48], ['Varicella', '2nd dose', 48],
     ];
 
+    /* CALIFORNIA child care entry (CDPH IMM-230, rev. 5/24; 17 CCR 6025 Table A), 2026-10-28. Each dose is due at the
+       age checkpoint where it becomes required (2, 4, 6, 15 and 18 months); parents have 30 days after a checkpoint.
+       Hib and MMR at 15 months must be on or after the first birthday. Combination vaccines count for their parts.
+       Only the REQUIRED doses: agencies can add ACIP-recommended ones (rotavirus, PCV, flu, hep A) themselves. */
+    private const CDPH_CHILD_CARE = [
+        ['IPV (polio)', '1st dose', 2], ['DTaP', '1st dose', 2], ['Hepatitis B', '1st dose', 2], ['Hib', '1st dose', 2],
+        ['IPV (polio)', '2nd dose', 4], ['DTaP', '2nd dose', 4], ['Hepatitis B', '2nd dose', 4], ['Hib', '2nd dose', 4],
+        ['DTaP', '3rd dose', 6],
+        ['IPV (polio)', '3rd dose', 15], ['Hib', 'dose on/after 1st birthday', 15], ['MMR', '1st dose (on/after 1st birthday)', 15], ['Varicella', '1st dose', 15],
+        ['DTaP', '4th dose', 18], ['Hepatitis B', '3rd dose', 18],
+    ];
+
     private static function presetRows(string $key): array
     {
+        if ($key === 'cdph_child_care') return self::CDPH_CHILD_CARE;
         return $key === 'acip' || $key === 'acip_ohio' ? self::ACIP : self::DEFAULTS;
     }
 
@@ -66,7 +79,7 @@ final class ImmunizationScheduleController extends Controller
      */
     public function loadPreset(Request $request): JsonResponse
     {
-        $data = $request->validate(['preset' => 'required|in:naci,acip']);
+        $data = $request->validate(['preset' => 'required|in:naci,acip,cdph_child_care']);
         $agencyId = $this->resolveAgencyId($request);
         /* A row per (vaccine, dose) is unique, so a preset that shares a row with the old
            schedule must switch THAT row back on rather than insert a twin (insertOrIgnore
@@ -82,7 +95,7 @@ final class ImmunizationScheduleController extends Controller
         });
         try {
             \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => $agencyId, 'action' => 'immunization.schedule_preset', 'entity_type' => 'agency', 'entity_id' => $agencyId,
-                'payload' => json_encode(['summary' => 'Immunization schedule replaced with the ' . strtoupper($data['preset']) . ' preset']), 'ip_address' => substr((string) $request->ip(), 0, 45), 'created_at' => now()]);
+                'payload' => json_encode(['summary' => 'Immunization schedule replaced with the ' . ($data['preset'] === 'cdph_child_care' ? 'California (CDPH)' : strtoupper($data['preset'])) . ' preset']), 'ip_address' => substr((string) $request->ip(), 0, 45), 'created_at' => now()]);
         } catch (\Throwable $e) {}
 
         return response()->json(['ok' => true, 'preset' => $data['preset']]);
@@ -182,46 +195,16 @@ final class ImmunizationScheduleController extends Controller
         $schedule = DB::table('immunization_schedule')->where('agency_id', $agencyId)
             ->where('active', 1)->orderBy('due_at_age_months')->get();
         if ($schedule->isEmpty()) {
-            $this->seedDefaults($agencyId);
+            $this->seedDefaults($agencyId, (string) (\App\Support\Jurisdictions::forAgency($agencyId)['immunization_schedule'] ?? 'naci'));
             $schedule = DB::table('immunization_schedule')->where('agency_id', $agencyId)->where('active', 1)->get();
         }
         $records = DB::table('immunizations')->where('child_id', $childId)
             ->select('vaccine', 'dose_label', 'administered_on', 'exempt', 'exemption_reason')
             ->get();
-        $recordKey = fn ($v, $d) => strtolower(trim($v . '|' . $d));
-        $byKey = $records->keyBy(fn ($r) => $recordKey($r->vaccine, $r->dose_label));
 
         $dob = Carbon::parse($child->date_of_birth);
         $ageMonths = (int) $dob->diffInMonths(Carbon::now());
-
-        $items = $schedule->map(function ($s) use ($byKey, $recordKey, $dob, $ageMonths) {
-            $key = $recordKey($s->vaccine, $s->dose_label);
-            $rec = $byKey->get($key);
-            $dueAt = $dob->copy()->addMonths((int) $s->due_at_age_months);
-            $today = Carbon::now()->startOfDay();
-            $monthsUntil = (int) $today->diffInMonths($dueAt, false);
-            $status = 'pending';
-            if ($rec) {
-                $status = $rec->exempt ? 'exempt' : 'done';
-            } elseif ($monthsUntil < 0) {
-                $status = 'overdue';
-            } elseif ($monthsUntil < 2) {
-                $status = 'due_soon';
-            }
-            return [
-                'vaccine' => $s->vaccine,
-                'dose_label' => $s->dose_label,
-                'due_at_age_months' => (int) $s->due_at_age_months,
-                'due_date' => $dueAt->toDateString(),
-                'months_until_due' => $monthsUntil,
-                'status' => $status,
-                'administered_on' => $rec->administered_on ?? null,
-                // WHY it is exempt, not just that it is. "Exempt" on its own invites the
-                // next person to ask, and the answer is the point of recording it.
-                'exemption_reason' => ($rec && $rec->exempt) ? ($rec->exemption_reason ?: null) : null,
-                'is_required' => (bool) $s->is_required,
-            ];
-        });
+        $items = self::statusItems($schedule, $records, $dob);
 
         $overdue = $items->where('status', 'overdue')->count();
         $dueSoon = $items->where('status', 'due_soon')->count();
@@ -293,32 +276,71 @@ final class ImmunizationScheduleController extends Controller
             ->select('ch.id', 'ch.first_name', 'ch.last_name', 'ch.date_of_birth',
                 'f.family_name', 'c.name as centre_name')
             ->get();
-        $rows = $children->map(function ($ch) use ($request) {
-            $resp = $this->childStatus($request, (int) $ch->id);
-            $payload = json_decode($resp->getContent(), true);
+        $ids = $children->pluck('id')->map(fn ($i) => (int) $i)->all();
+        $schedule = DB::table('immunization_schedule')->where('agency_id', $agencyId)
+            ->where('active', 1)->orderBy('due_at_age_months')->get();
+        if ($schedule->isEmpty() && $ids) {
+            $this->seedDefaults($agencyId, (string) (\App\Support\Jurisdictions::forAgency($agencyId)['immunization_schedule'] ?? 'naci'));
+            $schedule = DB::table('immunization_schedule')->where('agency_id', $agencyId)->where('active', 1)->get();
+        }
+        $records = DB::table('immunizations')->whereIn('child_id', $ids ?: [0])
+            ->select('child_id', 'vaccine', 'dose_label', 'administered_on', 'exempt', 'exemption_reason')
+            ->get()->groupBy('child_id');
+        $filed = collect(\App\Http\Controllers\Api\ParentImmunizationRecordController::recordsFor($ids))->groupBy('child_id');
+        $rows = $children->map(function ($ch) use ($schedule, $records, $filed) {
+            $items = self::statusItems($schedule, collect($records->get($ch->id, [])), Carbon::parse($ch->date_of_birth));
+            $latest = collect($filed->get((int) $ch->id, []))->first();   // recordsFor() orders newest first
             return [
                 'child_id' => $ch->id,
                 'child_name' => $ch->first_name . ' ' . $ch->last_name,
                 'family_name' => $ch->family_name,
                 'centre_name' => $ch->centre_name,
-                'overdue' => $payload['summary']['overdue'],
-                'due_soon' => $payload['summary']['due_soon'],
+                'overdue' => $items->where('status', 'overdue')->count(),
+                'due_soon' => $items->where('status', 'due_soon')->count(),
                 /* So the agency list can tell "nothing has ever arrived" from "it arrived
-                   and still needs typing up" — two different jobs for two different
-                   people, and they looked identical here. */
-                'record_on_file' => ! empty($payload['record_on_file']),
-                'record_filed_at' => $payload['record_on_file']['uploaded_at'] ?? null,
-                /* Who sent it, and whether anybody has read it yet. The roster column
-                   needs both: "a card arrived last Tuesday" and "a card arrived last
-                   Tuesday and is still nobody's job done" are different rows to act on,
-                   and the second is the one worth chasing. `doses` on the latest record
-                   is the same test the records list and the digest use. */
-                'record_filed_by' => $payload['record_on_file']['uploaded_by'] ?? null,
-                'record_pending' => ! empty($payload['record_on_file'])
-                    && empty($payload['record_on_file']['doses']),
+                   and still needs typing up" - two different jobs for two different people.
+                   Who sent it, and whether anybody has read it yet: `doses` on the latest
+                   record is the same test the records list and the digest use. */
+                'record_on_file' => (bool) $latest,
+                'record_filed_at' => $latest['uploaded_at'] ?? null,
+                'record_filed_by' => $latest['uploaded_by'] ?? null,
+                'record_pending' => $latest && empty($latest['doses']),
             ];
         })->sortByDesc('overdue')->values();
         return response()->json(['data' => $rows]);
+    }
+
+    /** Each scheduled dose for one child: due date, months until due, and done / exempt / overdue / due_soon / pending. */
+    private static function statusItems($schedule, $records, Carbon $dob)
+    {
+        $recordKey = fn ($v, $d) => strtolower(trim($v . '|' . $d));
+        $byKey = collect($records)->keyBy(fn ($r) => $recordKey($r->vaccine, $r->dose_label));
+        $today = \App\Support\AgencyTime::todayDate();   // the agency's date; $dueAt is a date too
+        return collect($schedule)->map(function ($s) use ($byKey, $recordKey, $dob, $today) {
+            $rec = $byKey->get($recordKey($s->vaccine, $s->dose_label));
+            $dueAt = $dob->copy()->addMonths((int) $s->due_at_age_months);
+            $monthsUntil = (int) $today->diffInMonths($dueAt, false);
+            $status = 'pending';
+            if ($rec) {
+                $status = $rec->exempt ? 'exempt' : 'done';
+            } elseif ($monthsUntil < 0) {
+                $status = 'overdue';
+            } elseif ($monthsUntil < 2) {
+                $status = 'due_soon';
+            }
+            return [
+                'vaccine' => $s->vaccine,
+                'dose_label' => $s->dose_label,
+                'due_at_age_months' => (int) $s->due_at_age_months,
+                'due_date' => $dueAt->toDateString(),
+                'months_until_due' => $monthsUntil,
+                'status' => $status,
+                'administered_on' => $rec->administered_on ?? null,
+                // WHY it is exempt, not just that it is.
+                'exemption_reason' => ($rec && $rec->exempt) ? ($rec->exemption_reason ?: null) : null,
+                'is_required' => (bool) $s->is_required,
+            ];
+        });
     }
 
     private function seedDefaults(int $agencyId, string $preset = 'naci'): void

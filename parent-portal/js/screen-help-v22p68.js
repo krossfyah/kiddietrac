@@ -834,7 +834,16 @@
         var cs = getComputedStyle(el);
         return cs.visibility !== 'hidden' && cs.display !== 'none' && parseFloat(cs.opacity || '1') > 0.05;
       }
+      // A translated screen shows the translated label (2026-11-05 i18n sweep): look for that first.
       function locate(text) {
+        try {
+          var I = window.KT && window.KT.i18n;
+          var tr = I && I.locale() !== 'en' ? I.t(text) : text;
+          if (tr && tr !== text) { var hit = locateText(tr); if (hit) return hit; }
+        } catch (e) {}
+        return locateText(text);
+      }
+      function locateText(text) {
         var t = text.toLowerCase(), best = null, bestLen = 1e9;
         var scope = document.getElementById('appMain') || document.body;
         var nodes = scope.querySelectorAll('button,a,[role="tab"],label,th,h1,h2,h3,h4,summary,input,select,textarea,span,div,td,li');
@@ -926,9 +935,14 @@
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
     html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-    html = html.replace(/<blockquote>\*\*(Tip|Note|Important):\*\*/g, function (m, kind) {
+    // Translated articles name the callout in their own language (2026-11-05 i18n sweep).
+    var CALLOUT_WORDS = { Tip: 'Tip', Note: 'Note', Important: 'Important', Astuce: 'Tip', Remarque: 'Note',
+      Consejo: 'Tip', Nota: 'Note', Importante: 'Important', '\u0938\u0941\u091d\u093e\u0935': 'Tip',
+      '\u091f\u093f\u092a\u094d\u092a\u0923\u0940': 'Note', '\u092e\u0939\u0924\u094d\u0935\u092a\u0942\u0930\u094d\u0923': 'Important' };
+    html = html.replace(/<blockquote>\*\*(Tip|Note|Important|Astuce|Remarque|Consejo|Nota|Importante|\u0938\u0941\u091d\u093e\u0935|\u091f\u093f\u092a\u094d\u092a\u0923\u0940|\u092e\u0939\u0924\u094d\u0935\u092a\u0942\u0930\u094d\u0923)(\s*):\*\*/g, function (m, word, sp) {
+      var kind = CALLOUT_WORDS[word];
       var ic = { Tip: '💡', Note: 'ℹ️', Important: '⚠️' }[kind];
-      return '<blockquote class="kt-help-callout kt-help-callout-' + kind.toLowerCase() + '"><strong>' + ic + ' ' + kind + ':</strong>';
+      return '<blockquote class="kt-help-callout kt-help-callout-' + kind.toLowerCase() + '"><strong>' + ic + ' ' + word + sp + ':</strong>';
     });
     html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -1000,59 +1014,188 @@
 
   // ─── AI Ask Modal (compact) ─────────────────────────────────
 
-  function showAskModal(prefill) {
-    // NOTE: styles are inlined (not just classes) because this modal opens from
-    // the floating button WITHOUT the help screen — whose <style> block carries
-    // the .kt-ask-* rules — so the classes alone rendered a tiny, cramped input.
-    const body = Dom.el('div', { style: 'min-width:min(520px,80vw);' });
-    body.appendChild(Dom.el('p', { class: 'kt-ask-intro', style: 'color:#64748B;margin:0 0 14px;font-size:14px;line-height:1.5;' },
-      'Ask in plain English. The AI reads every help article + your role.'));
-    const input = Dom.el('textarea', { class: 'kt-ask-input', rows: '3', placeholder: 'e.g. "How do I refund a payment?"',
-      style: 'width:100%;min-height:96px;height:96px;box-sizing:border-box;padding:13px 15px;border:1.5px solid #D1D5DB;border-radius:12px;font-family:inherit;font-size:15px;line-height:1.5;resize:vertical;outline:none;color:#0F172A;' });
-    if (prefill) input.value = prefill;
-    input.addEventListener('focus', function () { input.style.borderColor = '#1F6080'; input.style.boxShadow = '0 0 0 3px rgba(31,96,128,.12)'; });
-    input.addEventListener('blur', function () { input.style.borderColor = '#D1D5DB'; input.style.boxShadow = 'none'; });
-    body.appendChild(input);
-    setTimeout(() => input.focus(), 100);
-    const askBtn = Dom.el('button', { class: 'kt-ask-go',
-      style: 'width:100%;background:linear-gradient(135deg,#1F6080,#2D7BA8);color:#fff;border:0;padding:13px 20px;border-radius:12px;font-weight:800;cursor:pointer;margin-top:14px;font-size:15px;box-shadow:0 4px 12px rgba(31,96,128,.22);' }, '✨ Ask');
-    body.appendChild(askBtn);
-    const answerArea = Dom.el('div', { class: 'kt-ask-answer-area', style: 'margin-top:16px;' });
-    body.appendChild(answerArea);
-    askBtn.addEventListener('click', async () => {
-      const q = input.value.trim();
-      if (!q) return;
-      askBtn.disabled = true; askBtn.textContent = 'Thinking...';
-      Dom.clear(answerArea);
-      answerArea.appendChild(Dom.el('div', { class: 'kt-ask-pending', style: 'background:#F8FAFC;padding:14px 16px;border-radius:10px;color:#64748B;font-size:14px;' }, 'Searching the help docs…'));
-      try {
-        const res = await Api.post('/help/ask', { question: q });
-        Dom.clear(answerArea);
-        const box = Dom.el('div', { class: 'kt-ask-answer', style: 'background:linear-gradient(135deg,#1F6080,#2D7BA8);color:#fff;padding:18px;border-radius:12px;' });
-        box.appendChild(Dom.el('div', { class: 'kt-ask-answer-l', style: 'font-size:11px;font-weight:800;letter-spacing:1px;opacity:.8;margin-bottom:8px;' }, '✨ ANSWER'));
-        const b = Dom.el('div', { class: 'kt-ask-answer-body', style: 'font-size:14.5px;line-height:1.6;white-space:pre-wrap;' });
-        b.textContent = res.answer || '(empty response)';
-        box.appendChild(b);
-        if (res.sources && res.sources.length) {
-          const src = Dom.el('div', { class: 'kt-ask-sources' });
-          src.appendChild(Dom.el('div', { class: 'kt-ask-sources-l' }, 'Sources:'));
-          res.sources.forEach(s => {
-            const a = Dom.el('a', { href: '#help/' + s, class: 'kt-ask-source-link' }, s);
-            a.addEventListener('click', () => Shell.Modal.close());
-            src.appendChild(a);
-          });
-          box.appendChild(src);
-        }
-        answerArea.appendChild(box);
-        askBtn.disabled = false; askBtn.textContent = '✨ Ask again';
-      } catch (e) {
-        Dom.clear(answerArea);
-        answerArea.appendChild(Dom.el('div', { class: 'kt-ask-error' }, 'Could not get an answer. ' + (e.message || 'Try again later.')));
-        askBtn.disabled = false; askBtn.textContent = '✨ Try again';
-      }
+  /* ─── THE ASSISTANT (2026-10-28, Anthony: "ai assistance popup in the top bar of the portal the pop up doesnt look
+     good - can you redesign?"). Was a wide generic modal: one textarea, one purple button, one answer box. Now a
+     panel - docked on the right on a computer, a full-height sheet on a phone - that reads like a conversation:
+     a greeting, questions to tap for this person's role, the answers as chat bubbles with simple formatting and
+     links to the help articles they came from, a typing indicator, Enter to send. Same server (POST /help/ask:
+     every help article + the person's role), same entry point (KT.showAskModal(prefill)) for the top bar 🤖, the
+     floating ✨ and Help search. The conversation stays while the page is open. ─── */
+  var askLog = [];   // [{who:'me'|'ai', text, sources?}] kept while the page is open
+  function askRole() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {};
+      var r = (Array.isArray(u.roles) ? u.roles : []).concat(u.primary_role ? [u.primary_role] : []);
+      if (r.indexOf('guardian') > -1 && !r.some(function (x) { return /admin|director|educator|home_visitor/.test(x); })) return 'parent';
+      return 'staff';
+    } catch (e) { return 'staff'; }
+  }
+  var ASK_SUGGEST = {
+    staff: ['How do I add a new family?', 'How do I check a child in or out?', 'How do I send an announcement?', 'How do I record an incident?', 'How do I fix a missed clock-out?'],
+    parent: ['How do I report an absence?', 'How do I pay an invoice?', 'How do I message my child’s educator?', 'Where do I see today’s photos?'],
+  };
+  function askEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  /* Just enough markdown for the answers: **bold**, bullet and numbered lists, paragraphs. Escaped first. */
+  function askFormat(t) {
+    var lines = askEsc(t).split(/\n/), out = '', list = null;
+    var inline = function (s) { return s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>'); };
+    var close = function () { if (list) { out += '</' + list + '>'; list = null; } };
+    lines.forEach(function (ln) {
+      var m;
+      if ((m = /^\s*[-*•]\s+(.*)$/.exec(ln))) { if (list !== 'ul') { close(); out += '<ul>'; list = 'ul'; } out += '<li>' + inline(m[1]) + '</li>'; }
+      else if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(ln))) { if (list !== 'ol') { close(); out += '<ol>'; list = 'ol'; } out += '<li>' + inline(m[1]) + '</li>'; }
+      else if (!ln.trim()) { close(); }
+      else { close(); out += '<p>' + inline(ln) + '</p>'; }
     });
-    Shell.Modal.open({ title: 'Ask a question', body: body, large: true });
-    if (prefill) setTimeout(() => askBtn.click(), 100);
+    close();
+    return out;
+  }
+  function askCss() {
+    if (document.getElementById('kt-ask-css')) return;
+    var s = document.createElement('style');
+    s.id = 'kt-ask-css';
+    s.textContent = ''
+      + '#kt-ask{position:fixed;z-index:100040;top:12px;right:12px;bottom:12px;width:min(430px,calc(100vw - 24px));display:flex;flex-direction:column;'
+      +   'background:#fff;border-radius:20px;box-shadow:0 24px 60px -18px rgba(15,23,42,.45),0 0 0 1px rgba(15,23,42,.06);overflow:hidden;'
+      +   'transform:translateX(24px);opacity:0;transition:transform .22s ease,opacity .22s ease;font-family:inherit;}'
+      + '#kt-ask.kt-ask-in{transform:none;opacity:1;}'
+      + '#kt-ask-scrim{position:fixed;inset:0;z-index:100039;background:rgba(15,23,42,.18);opacity:0;transition:opacity .2s;}'
+      + '#kt-ask-scrim.kt-ask-in{opacity:1;}'
+      + '.kt-ask-head{padding:16px 16px 14px;color:#fff;background:linear-gradient(135deg,#0B2545 0%,#1F6080 55%,#7C3AED 100%);display:flex;align-items:center;gap:12px;}'
+      + '.kt-ask-av{width:42px;height:42px;border-radius:14px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:22px;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25);}'
+      + '.kt-ask-t{font-weight:800;font-size:16px;line-height:1.2;}'
+      + '.kt-ask-s{font-size:12px;opacity:.85;margin-top:2px;display:flex;align-items:center;gap:6px;}'
+      + '.kt-ask-dot{width:7px;height:7px;border-radius:50%;background:#4ADE80;box-shadow:0 0 0 3px rgba(74,222,128,.25);}'
+      + '.kt-ask-x{margin-left:auto;width:34px;height:34px;border-radius:10px;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:18px;cursor:pointer;}'
+      + '.kt-ask-x:hover{background:rgba(255,255,255,.26);}'
+      + '.kt-ask-feed{flex:1;overflow:auto;padding:16px;background:#F8FAFC;display:flex;flex-direction:column;gap:10px;overscroll-behavior:contain;}'
+      + '.kt-ask-b{max-width:88%;padding:10px 13px;border-radius:16px;font-size:14px;line-height:1.55;word-wrap:break-word;}'
+      + '.kt-ask-b p{margin:0 0 6px;}.kt-ask-b p:last-child{margin:0;}.kt-ask-b ul,.kt-ask-b ol{margin:4px 0 6px;padding-left:20px;}.kt-ask-b li{margin:2px 0;}'
+      + '.kt-ask-b code{background:rgba(15,23,42,.06);padding:1px 5px;border-radius:5px;font-size:12.5px;}'
+      + '.kt-ask-ai{align-self:flex-start;background:#fff;color:#1E293B;border:1px solid #E2E8F0;border-bottom-left-radius:6px;box-shadow:0 2px 6px -4px rgba(15,23,42,.2);}'
+      + '.kt-ask-me{align-self:flex-end;background:linear-gradient(135deg,#1F6080,#2D7BA8);color:#fff;border-bottom-right-radius:6px;}'
+      + '.kt-ask-src{margin-top:8px;padding-top:8px;border-top:1px dashed #E2E8F0;display:flex;flex-wrap:wrap;gap:6px;}'
+      + '.kt-ask-src a{font-size:12px;font-weight:700;color:#1F6080;background:#EFF6FB;border-radius:999px;padding:3px 10px;text-decoration:none;}'
+      + '.kt-ask-src a:hover{background:#DCEEF7;}'
+      + '.kt-ask-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;}'
+      + '.kt-ask-chip{border:1px solid #DDD6FE;background:#fff;color:#5B21B6;border-radius:999px;padding:6px 11px;font-size:12.5px;font-weight:600;cursor:pointer;text-align:left;}'
+      + '.kt-ask-chip:hover{background:#F5F3FF;}'
+      + '.kt-ask-typing{align-self:flex-start;display:flex;gap:4px;padding:12px 14px;background:#fff;border:1px solid #E2E8F0;border-radius:16px;border-bottom-left-radius:6px;}'
+      + '.kt-ask-typing i{width:7px;height:7px;border-radius:50%;background:#94A3B8;animation:ktAskDot 1s infinite ease-in-out;}'
+      + '.kt-ask-typing i:nth-child(2){animation-delay:.15s}.kt-ask-typing i:nth-child(3){animation-delay:.3s}'
+      + '@keyframes ktAskDot{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}'
+      + '.kt-ask-foot{padding:10px 12px 12px;border-top:1px solid #EEF2F6;background:#fff;}'
+      + '.kt-ask-row{display:flex;align-items:flex-end;gap:8px;background:#F1F5F9;border-radius:16px;padding:6px 6px 6px 12px;}'
+      + '.kt-ask-row:focus-within{box-shadow:0 0 0 2px #C7D2FE;background:#fff;}'
+      + '.kt-ask-field{flex:1;border:0 !important;background:transparent !important;resize:none;font:inherit;font-size:14.5px;line-height:1.45;max-height:120px;min-height:22px !important;height:auto !important;padding:6px 0 !important;outline:none;color:#0F172A;box-shadow:none !important;}'
+      + '.kt-ask-go{width:38px;height:38px;flex:0 0 auto;border-radius:12px;border:0;background:linear-gradient(135deg,#7C3AED,#1F6080);color:#fff;font-size:17px;cursor:pointer;}'
+      + '.kt-ask-go:disabled{opacity:.45;cursor:default;}'
+      + '.kt-ask-note{font-size:11px;color:#94A3B8;margin:7px 4px 0;display:flex;justify-content:space-between;gap:8px;}'
+      + '.kt-ask-note a{color:#64748B;font-weight:700;text-decoration:none;cursor:pointer;}'
+      + '@media (max-width:600px){#kt-ask{top:0;right:0;bottom:0;left:0;width:100%;border-radius:0;transform:translateY(16px);}'
+      +   '#kt-ask .kt-ask-head{padding-top:calc(14px + var(--kt-safe-top, env(safe-area-inset-top,0px)));}'
+      +   '#kt-ask .kt-ask-foot{padding-bottom:calc(12px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));}'
+      +   '#kt-ask .kt-ask-field{font-size:16px;}}';
+    document.head.appendChild(s);
+  }
+  function closeAsk() {
+    var p = document.getElementById('kt-ask'), sc = document.getElementById('kt-ask-scrim');
+    if (p) { p.classList.remove('kt-ask-in'); setTimeout(function () { if (p.parentNode) p.parentNode.removeChild(p); }, 220); }
+    if (sc) { sc.classList.remove('kt-ask-in'); setTimeout(function () { if (sc.parentNode) sc.parentNode.removeChild(sc); }, 220); }
+    document.removeEventListener('keydown', askKey, true);
+  }
+  function askKey(e) { if (e.key === 'Escape') { e.stopPropagation(); closeAsk(); } }
+
+  function showAskModal(prefill) {
+    askCss();
+    var open0 = document.getElementById('kt-ask');
+    if (open0) { var ex = open0.querySelector('.kt-ask-field'); if (ex) ex.focus(); if (typeof prefill === 'string' && prefill.trim() && open0.__ask) open0.__ask(prefill.trim()); return; }
+    var role = askRole();
+    var scrim = document.createElement('div'); scrim.id = 'kt-ask-scrim';
+    scrim.addEventListener('click', closeAsk);
+    var p = document.createElement('div');
+    p.id = 'kt-ask';
+    p.setAttribute('role', 'dialog'); p.setAttribute('aria-label', 'KiddieTrac Assistant');
+    p.setAttribute('data-no-modal-guard', '1'); p.setAttribute('data-kt-own-head', '1');
+    p.innerHTML = '<div class="kt-ask-head"><div class="kt-ask-av">🤖</div><div><div class="kt-ask-t">KiddieTrac Assistant</div>'
+      + '<div class="kt-ask-s"><span class="kt-ask-dot"></span>Answers from the KiddieTrac help guides</div></div>'
+      + '<button type="button" class="kt-ask-x" aria-label="Close" data-kt-iconized="1" data-kt-btn-free="1">✕</button></div>'
+      + '<div class="kt-ask-feed" aria-live="polite"></div>'
+      + '<div class="kt-ask-foot"><div class="kt-ask-row"><textarea class="kt-ask-field" rows="1" placeholder="Ask anything about KiddieTrac…" data-kt-tall="1" data-kt-nofit="1"></textarea>'
+      + '<button type="button" class="kt-ask-go" aria-label="Send" data-kt-iconized="1" data-kt-btn-free="1">➤</button></div>'
+      + '<div class="kt-ask-note"><span>AI can make mistakes — check the linked guide.</span><a data-ask-clear>New chat</a></div></div>';
+    document.body.appendChild(scrim);
+    document.body.appendChild(p);
+    requestAnimationFrame(function () { p.classList.add('kt-ask-in'); scrim.classList.add('kt-ask-in'); });
+    document.addEventListener('keydown', askKey, true);
+
+    var feed = p.querySelector('.kt-ask-feed'), input = p.querySelector('.kt-ask-field'), go = p.querySelector('.kt-ask-go');
+    var busy = false;
+    var scroll = function () { feed.scrollTop = feed.scrollHeight; };
+    var bubble = function (m) {
+      var b = document.createElement('div');
+      b.className = 'kt-ask-b ' + (m.who === 'me' ? 'kt-ask-me' : 'kt-ask-ai');
+      b.innerHTML = m.who === 'me' ? askEsc(m.text).replace(/\n/g, '<br>') : askFormat(m.text);
+      if (m.sources && m.sources.length) {
+        var src = document.createElement('div'); src.className = 'kt-ask-src';
+        m.sources.slice(0, 4).forEach(function (sl) {
+          /* {slug, title} from /help/ask (a bare slug is still accepted). */
+          var slug = (sl && typeof sl === 'object') ? sl.slug : sl;
+          var title = (sl && typeof sl === 'object' && sl.title) ? sl.title : String(slug || '').replace(/[-_]+/g, ' ').replace(/^\w/, function (c) { return c.toUpperCase(); });
+          if (!slug) return;
+          var a = document.createElement('a'); a.href = '#help/' + slug;
+          a.textContent = '📖 ' + title;
+          a.addEventListener('click', closeAsk);
+          src.appendChild(a);
+        });
+        b.appendChild(src);
+      }
+      feed.appendChild(b);
+    };
+    var greet = function () {
+      feed.innerHTML = '';
+      bubble({ who: 'ai', text: 'Hi! I can help you find your way around KiddieTrac. Ask me how to do something, or pick a question below.' });
+      var chips = document.createElement('div'); chips.className = 'kt-ask-chips';
+      ASK_SUGGEST[role].forEach(function (q) {
+        var c = document.createElement('button'); c.type = 'button'; c.className = 'kt-ask-chip';
+        c.setAttribute('data-kt-iconized', '1'); c.setAttribute('data-kt-btn-free', '1');
+        c.textContent = q; c.addEventListener('click', function () { ask(q); });
+        chips.appendChild(c);
+      });
+      feed.appendChild(chips);
+    };
+    var render = function () { greet(); askLog.forEach(bubble); scroll(); };
+    var grow = function () { input.style.setProperty('height', 'auto', 'important'); input.style.setProperty('height', Math.min(120, input.scrollHeight) + 'px', 'important'); go.disabled = busy || !input.value.trim(); };
+
+    async function ask(q) {
+      if (busy || !q) return;
+      busy = true; go.disabled = true;
+      var chips = feed.querySelector('.kt-ask-chips'); if (chips) chips.remove();
+      askLog.push({ who: 'me', text: q }); bubble({ who: 'me', text: q });
+      input.value = ''; grow();
+      var typing = document.createElement('div'); typing.className = 'kt-ask-typing'; typing.innerHTML = '<i></i><i></i><i></i>';
+      feed.appendChild(typing); scroll();
+      var m;
+      try {
+        var r = await Api.post('/help/ask', { question: q.slice(0, 500) });
+        m = { who: 'ai', text: (r && r.answer) || 'I couldn’t find an answer to that. Try asking it another way, or browse Help & guides.', sources: (r && !r.error && r.sources) || [] };
+      } catch (e) {
+        m = { who: 'ai', text: 'I can’t answer right now. You can still browse **Help & guides** from the menu.' };
+      }
+      typing.remove();
+      askLog.push(m); bubble(m); scroll();
+      busy = false; grow(); input.focus();
+    }
+    p.__ask = ask;
+
+    p.querySelector('.kt-ask-x').addEventListener('click', closeAsk);
+    p.querySelector('[data-ask-clear]').addEventListener('click', function () { askLog = []; render(); input.focus(); });
+    go.addEventListener('click', function () { ask(input.value.trim()); });
+    input.addEventListener('input', grow);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value.trim()); } });
+    render(); grow();
+    setTimeout(function () { input.focus(); }, 120);
+    if (typeof prefill === 'string' && prefill.trim()) ask(prefill.trim());
   }
 
   // ─── Floating help button ──────────────────────────────────
@@ -1153,7 +1296,7 @@
       .kt-help-markdown ul, .kt-help-markdown ol { padding-left: 24px; margin: 0 0 14px; }
       .kt-help-markdown li { margin: 6px 0; }
       .kt-help-markdown code { background: #F3F4F6; padding: 2px 8px; border-radius: 5px; font-size: 13px; font-family: Menlo, Consolas, monospace; color: #1F6080; }
-      .kt-help-markdown blockquote { border-left: 3px solid #8EC73C; padding: 8px 16px; margin: 14px 0; background: #F9FAFB; color: #4B5563; font-style: italic; border-radius: 0 8px 8px 0; }
+      .kt-help-markdown blockquote { --kt-edge:#8EC73C; padding: 8px 16px; margin: 14px 0; background: #F9FAFB; color: #4B5563; font-style: italic; border-radius: 0 8px 8px 0; }
       .kt-help-markdown table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
       .kt-help-markdown th { background: #F9FAFB; padding: 10px 14px; text-align: left; border-bottom: 2px solid #E5E7EB; font-weight: 700; color: #1F2937; }
       .kt-help-markdown td { padding: 10px 14px; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
@@ -1165,7 +1308,7 @@
       .kt-help-zoom { position: fixed; inset: 0; z-index: 2147483600; background: rgba(15,23,42,.82); display: flex; align-items: center; justify-content: center; padding: 24px; cursor: zoom-out; }
       .kt-help-zoom img { max-width: 100%; max-height: 100%; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.4); background: #fff; }
       .kt-help-zoom-x { position: absolute; top: 14px; right: 18px; color: #fff; font-size: 22px; font-weight: 800; }
-      .kt-help-markdown blockquote.kt-help-callout { font-style: normal; color: #1F2937; border-radius: 10px; padding: 12px 16px; border-left-width: 4px; }
+      .kt-help-markdown blockquote.kt-help-callout { font-style: normal; color: #1F2937; border-radius: 10px; padding: 12px 16px; }
       .kt-help-markdown .kt-help-callout-tip { background: #F0FDF4; border-left-color: #16A34A; }
       .kt-help-markdown .kt-help-callout-note { background: #EFF6FF; border-left-color: #2563EB; }
       .kt-help-markdown .kt-help-callout-important { background: #FFFBEB; border-left-color: #D97706; }
@@ -1329,4 +1472,6 @@
   Shell.registerScreen("agency_admin:help", renderHelp);
   Shell.registerScreen("agency_admin:help", renderHelp);
   Shell.registerScreen("platform_admin:help", renderHelp);
+  // Resellers' menu has Help too (2026-11-13 role audit): it drew their hub instead.
+  Shell.registerScreen("reseller_admin:help", renderHelp);
 })(window);

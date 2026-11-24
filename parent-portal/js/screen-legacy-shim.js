@@ -121,8 +121,9 @@
 
 // v22p51 — paste BEFORE the closing })(window) in screen-legacy-shim.js
 
-  // v22p51: time off (every staff role + parent submits / staff approve)
-  ['agency_admin','centre_director','educator','guardian','platform_admin'].forEach(function (r) {
+  // v22p51: time off - staff ask, directors/admins approve. Not parents (2026-11-06 role sweep: a parent's
+  // request landed in the staff approval queue; a child's days away are vacation holds / absences).
+  ['agency_admin','centre_director','educator','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':time-off', bridge('KT.V22p51', 'renderTimeOff'));
   });
   // background checks, payroll, agency-billing config, SMS, AI tools — admin+director
@@ -223,8 +224,11 @@
     Shell.registerScreen(r + ':referrals',   bridge('KT.V22p57', 'renderReferrals'));
     Shell.registerScreen(r + ':ach-pay',     bridge('KT.V22p57', 'renderAch'));
   });
-  ['agency_admin','centre_director','platform_admin','educator'].forEach(function (r) {
+  /* Drip campaigns: directors/admins only - /marketing/drip refuses educators (2026-11-06 role sweep). */
+  ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':drip-campaigns', bridge('KT.V22p57', 'renderDrip'));
+  });
+  ['agency_admin','centre_director','platform_admin','educator'].forEach(function (r) {
     Shell.registerScreen(r + ':curriculum',     bridge('KT.V22p57', 'renderCurriculum'));
     Shell.registerScreen(r + ':hdlh-gaps',      bridge('KT.V22p57', 'renderHdlhGaps'));
     Shell.registerScreen(r + ':trends',         bridge('KT.V22p57', 'renderTrends'));
@@ -237,13 +241,16 @@
     Shell.registerScreen(r + ':ledger', bridge('KT.V22p58', 'renderLedger'));
     Shell.registerScreen(r + ':videos', bridge('KT.V22p58', 'renderVideoFeed'));
   });
-  ['agency_admin','centre_director','platform_admin','educator'].forEach(function (r) {
+  /* Refunds and the billing schedule: directors/admins only - their APIs refuse educators (2026-11-06 role sweep). */
+  ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':refunds',         bridge('KT.V22p58', 'renderRefunds'));
+    Shell.registerScreen(r + ':billing-schedule',bridge('KT.V22p58', 'renderBillingSchedule'));
+  });
+  ['agency_admin','centre_director','platform_admin','educator'].forEach(function (r) {
     Shell.registerScreen(r + ':reports',         bridge('KT.V22p58', 'renderReports'));
     Shell.registerScreen(r + ':videos',          bridge('KT.V22p58', 'renderVideoFeed'));
     Shell.registerScreen(r + ':immun-schedule',  bridge('KT.V22p58', 'renderImmunSchedule'));
     Shell.registerScreen(r + ':cacfp',           bridge('KT.V22p58', 'renderCacfp'));
-    Shell.registerScreen(r + ':billing-schedule',bridge('KT.V22p58', 'renderBillingSchedule'));
   });
 
 
@@ -272,9 +279,12 @@
     Shell.registerScreen(r + ':payment-plans', bridge('KT.V22p63', 'renderPaymentPlans'));
     Shell.registerScreen(r + ':doc-workflows', bridge('KT.V22p63', 'renderDocWorkflows'));
   });
+  /* Payment plans (staff): directors/admins only - every staff /payment-plans API refuses educators (2026-11-06). */
+  ['agency_admin','centre_director','platform_admin'].forEach(function (r) {
+    Shell.registerScreen(r + ':payment-plans',   bridge('KT.V22p63', 'renderPaymentPlans'));
+  });
   ['agency_admin','centre_director','educator','platform_admin'].forEach(function (r) {
     Shell.registerScreen(r + ':wellness-digest', bridge('KT.V22p63', 'renderWellnessDigest'));
-    Shell.registerScreen(r + ':payment-plans',   bridge('KT.V22p63', 'renderPaymentPlans'));
     Shell.registerScreen(r + ':doc-workflows',   bridge('KT.V22p63', 'renderDocWorkflows'));
   });
 

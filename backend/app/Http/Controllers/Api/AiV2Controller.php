@@ -29,7 +29,7 @@ final class AiV2Controller extends Controller
     // =========================================================
     public function tagObservation(Request $request): JsonResponse
     {
-        $key = env('ANTHROPIC_API_KEY');
+        $key = config('services.anthropic.key');
         abort_unless($key, 503, 'AI not configured');
         $data = $request->validate([
             'text' => 'required|string|min:10|max:5000',
@@ -44,12 +44,12 @@ final class AiV2Controller extends Controller
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(45)->post('https://api.anthropic.com/v1/messages', [
-                'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+                'model' => config('services.anthropic.model'),
                 'max_tokens' => 600,
                 'messages' => [['role' => 'user', 'content' => $prompt]],
             ]);
             if (!$res->ok()) return response()->json(['error' => 'AI failed', 'status' => $res->status()], 502);
-            $raw = $res->json('content.0.text') ?? '';
+            $raw = \App\Support\AiConfig::text($res->json()) ?? '';
             $jsonStart = strpos($raw, '{');
             $jsonEnd = strrpos($raw, '}');
             if ($jsonStart === false) return response()->json(['error' => 'no JSON in response', 'raw' => $raw], 502);
@@ -65,7 +65,7 @@ final class AiV2Controller extends Controller
     // =========================================================
     public function translateMessage(Request $request): JsonResponse
     {
-        $key = env('ANTHROPIC_API_KEY');
+        $key = config('services.anthropic.key');
         abort_unless($key, 503);
         $data = $request->validate([
             'message_id' => 'required|integer',
@@ -85,6 +85,7 @@ final class AiV2Controller extends Controller
                 || ($this->isPlatformAdminUser($u)
                     && (int) DB::table('centres')->where('id', $conv->centre_id)->value('agency_id') === (int) $this->resolveAgencyId($request))));
         abort_unless($allowed, 403);
+        abort_if(\App\Support\MessagingRules::officeHiddenFrom((int) $u->id, $conv), 403);   // office thread: directors/admins only
         // cached?
         $cached = DB::table('message_translations')
             ->where('message_id', $data['message_id'])
@@ -102,12 +103,12 @@ final class AiV2Controller extends Controller
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(30)->post('https://api.anthropic.com/v1/messages', [
-                'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+                'model' => config('services.anthropic.model'),
                 'max_tokens' => 1000,
                 'messages' => [['role' => 'user', 'content' => $prompt]],
             ]);
             if (!$res->ok()) return response()->json(['error' => 'translate failed'], 502);
-            $t = trim($res->json('content.0.text') ?? '');
+            $t = trim(\App\Support\AiConfig::text($res->json()) ?? '');
             DB::table('message_translations')->insert([
                 'message_id' => $data['message_id'],
                 'source_lang' => 'auto',
@@ -137,11 +138,19 @@ final class AiV2Controller extends Controller
         abort_unless($this->isPlatformAdminUser($u)
             ? (int) $ext->agency_id === (int) $this->resolveAgencyId($request)
             : $this->userBelongsToAgency($u->id, (int) $ext->agency_id), 403);
-        $agencyCentreIds = DB::table('centres')->where('agency_id', $ext->agency_id)->pluck('id');
+        /* An admin or director OF THIS AGENCY, acting in it (2026-11-05 leak sweep): userBelongsToAgency said yes to
+           any member, parents and educators included, and to an admin of another agency who is only an educator
+           here. A director's matches are limited to their own centres, so a record is never filed against another
+           centre's staff. */
+        abort_unless((int) $ext->agency_id === (int) $this->resolveAgencyId($request)
+            && array_intersect(\App\Support\AgencyRole::names($request), ['platform_admin', 'agency_admin', 'centre_director']), 403);
+        $linkScope = \App\Support\CentreScope::ids($request, (int) $ext->agency_id);
+        $agencyCentreIds = DB::table('centres')->where('agency_id', $ext->agency_id)
+            ->when($linkScope !== null, fn ($q) => $q->whereIn('id', $linkScope ?: [0]))->pluck('id');
         $agencyUserIds = DB::table('role_assignments')->where('active', true)
-            ->where(function ($q) use ($ext, $agencyCentreIds) {
-                $q->where('agency_id', $ext->agency_id)
-                  ->orWhereIn('centre_id', $agencyCentreIds->all() ?: [0]);
+            ->where(function ($q) use ($ext, $agencyCentreIds, $linkScope) {
+                if ($linkScope === null) $q->where('agency_id', $ext->agency_id);
+                $q->orWhereIn('centre_id', $agencyCentreIds->all() ?: [0]);
             })->pluck('user_id')->unique();
         $fields = json_decode($ext->extracted_fields, true);
         $type = $ext->doc_type;
@@ -160,33 +169,44 @@ final class AiV2Controller extends Controller
                 if ($matches->count() === 1) {
                     $userId = $matches->first()->id;
                     if ($type === 'background_check') {
-                        DB::table('background_checks')->insert([
+                        $rowId = DB::table('background_checks')->insertGetId([
                             'agency_id' => $ext->agency_id,
                             'user_id' => $userId,
                             'check_type' => $fields['check_type'] ?? 'vss',
                             'reference' => $fields['reference'] ?? null,
                             'issued_at' => $fields['issued_date'] ?? null,
-                            'expires_at' => $fields['expiry_date'] ?? Carbon::now()->addYear()->toDateString(),
+                            'expires_at' => $fields['expiry_date'] ?? \App\Support\AgencyTime::todayDate()->addYear()->toDateString(),
                             'document_url' => $ext->document_url,
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
                         $result['action'] = 'inserted background_check';
                     } else {
-                        DB::table('certifications')->insert([
+                        /* INTO staff_certifications (2026-11-05). This wrote to `certifications`, a table that does
+                           not exist, so linking any AI-read certificate failed with a database error. The real table
+                           is the one Staff > Certifications and the expiry alerts read; its cert_type is a fixed list,
+                           so the name on the certificate is mapped onto it and kept word for word in the title. */
+                        $certName = trim((string) ($fields['cert_name'] ?? ''));
+                        $rowId = DB::table('staff_certifications')->insertGetId([
                             'user_id' => $userId,
-                            'cert_type' => $fields['cert_name'] ?? 'first_aid',
+                            'agency_id' => $ext->agency_id,
+                            'cert_type' => $this->certTypeFor($certName),
+                            'title' => $certName !== '' ? mb_substr($certName, 0, 160) : null,
+                            'certifier' => isset($fields['issuing_body']) ? mb_substr((string) $fields['issuing_body'], 0, 160) : null,
                             'issued_at' => $fields['issued_date'] ?? null,
-                            'expires_at' => $fields['expiry_date'] ?? Carbon::now()->addYear()->toDateString(),
+                            'expires_at' => $fields['expiry_date'] ?? \App\Support\AgencyTime::todayDate()->addYear()->toDateString(),
                             'document_url' => $ext->document_url,
+                            'active' => 1,
+                            'added_by' => $request->user()->id,
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
                         $result['action'] = 'inserted certification';
                     }
+                    // target_id is the record made, not the person (it held the user id before).
                     DB::table('ai_doc_extractions')->where('id', $extractionId)->update([
-                        'target_table' => $type === 'background_check' ? 'background_checks' : 'certifications',
-                        'target_id' => $userId,
+                        'target_table' => $type === 'background_check' ? 'background_checks' : 'staff_certifications',
+                        'target_id' => $rowId,
                         'status' => 'linked',
                         'updated_at' => now(),
                     ]);
@@ -382,11 +402,16 @@ final class AiV2Controller extends Controller
             $t = $local($ev->occurred_at);
             $d = $t->toDateString();
             $a = &$att[$ev->child_id][$d];
+            /* Per visit too (2026-11-05): 'mins' is time actually in care (a mid-day gap is
+               not part of a long day), 'last' says whether the day ended signed in. */
             if ($ev->event_type === 'check_in') {
                 $a['in'] = $a['in'] ?? $t;
+                $a['open'] = $a['open'] ?? $t;
             } else {
                 $a['out'] = $t;
+                if (isset($a['open'])) { $a['mins'] = ($a['mins'] ?? 0) + $a['open']->diffInMinutes($t); unset($a['open']); }
             }
+            $a['last'] = $ev->event_type;
             unset($a);
         }
         $logDays = [];
@@ -439,15 +464,14 @@ final class AiV2Controller extends Controller
                 }
             }
             if ($on('long_days')) {
-                $long = count(array_filter($inWin, fn ($v) => isset($v['out']) && $v['out']->gt($v['in'])
-                    && $v['in']->diffInMinutes($v['out']) > $P('long_days', 'hours') * 60));
+                $long = count(array_filter($inWin, fn ($v) => ($v['mins'] ?? 0) > $P('long_days', 'hours') * 60));
                 if ($long >= $P('long_days', 'min_days')) {
                     $signals[] = ['rule' => 'long_days', 'text' => "In care over {$P('long_days', 'hours')} hours on {$long} days"];
                 }
             }
             if ($on('missing_check_out')) {
                 $today = $now->toDateString();
-                $open = count(array_filter($inWin, fn ($v, $d) => $d < $today && (! isset($v['out']) || $v['out']->lt($v['in'])), ARRAY_FILTER_USE_BOTH));
+                $open = count(array_filter($inWin, fn ($v, $d) => $d < $today && ($v['last'] ?? null) === 'check_in', ARRAY_FILTER_USE_BOTH));
                 if ($open >= $P('missing_check_out', 'min_days')) {
                     $signals[] = ['rule' => 'missing_check_out', 'text' => "Not checked out on {$open} days"];
                 }
@@ -478,6 +502,23 @@ final class AiV2Controller extends Controller
 
         return response()->json(['data' => $out, 'window_days' => $days, 'rules' => array_values($rules),
             'centres' => array_values($byCentre), 'children_checked' => $children->count(), 'can_edit_rules' => $canEdit]);
+    }
+
+    /** The staff_certifications.cert_type for a certificate's own name; anything unrecognised is Other (name kept in title). */
+    private function certTypeFor(string $name): string
+    {
+        $n = strtolower($name);
+        $map = [
+            'vulnerable' => 'Vulnerable_Sector_Check', 'police' => 'VSC', 'first aid' => 'First_Aid', 'first-aid' => 'First_Aid',
+            'cpr' => 'CPR', 'food' => 'Food_Handler', 'whmis' => 'WHMIS', 'mandated reporter' => 'Mandated_Reporter',
+            'child abuse' => 'Child_Abuse_Training', 'communicable' => 'Communicable_Disease', 'tuberculosis' => 'TB_Clearance',
+            ' tb ' => 'TB_Clearance', 'orientation' => 'Orientation', 'health card' => 'Health_Card', 'assistant' => 'ECE_Assistant',
+            'registered early childhood' => 'RECE', ' rece ' => 'RECE', 'ece unit' => 'ECE_Units', 'cd permit' => 'CD_Permit',
+        ];
+        foreach ($map as $needle => $type) {
+            if (str_contains(' ' . $n . ' ', $needle)) return $type;
+        }
+        return 'Other';
     }
 
     private function splitName(string $full): array

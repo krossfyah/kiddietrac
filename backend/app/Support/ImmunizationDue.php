@@ -158,7 +158,7 @@ final class ImmunizationDue
             $byKey[$key($r->vaccine, $r->dose_label)] = $r;
         }
 
-        $today = Carbon::now()->startOfDay();
+        $today = \App\Support\AgencyTime::todayDate();   // the agency's date; due dates are dates too
         $ageMonths = (int) $dob->diffInMonths(Carbon::now());
 
         $items = [];

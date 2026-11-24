@@ -89,18 +89,28 @@
   /* staff-on-floor removed: it duplicated the "Team on the floor" card already on
      this screen. Revenue answers something nothing else here does. */
   const DEFAULT_WIDGETS = ['attendance-today', 'agency-revenue', 'centre-occupancy', 'users-by-role'];
+  /* A CENTRE DIRECTOR HAS THIS SAME OVERVIEW for their own centres (2026-11-13, Anthony: "director view of the
+     dashboard should show the rooms just like how i see them as super admin", "things need to be consistent
+     across roles"). /agency/dashboard answers scoped:true for them and leaves out every agency-wide figure, so
+     the agency-wide cards are not offered. Their own saved layout, so an admin who also directs keeps theirs. */
+  const AGENCY_ONLY_WIDGETS = ['mrr-sparkline', 'arr-agencies', 'users-by-role', 'enrollment-delta', 'agency-revenue', 'receivables'];
+  const SCOPED_DEFAULT_WIDGETS = ['attendance-today', 'centre-occupancy', 'capacity-utilization', 'pending-tasks'];
+  let _dashScoped = false;
+  function widgetAllowed(id) { return !!WIDGET_DEFS[id] && !(_dashScoped && AGENCY_ONLY_WIDGETS.indexOf(id) !== -1); }
+  function widgetKey() { return _dashScoped ? 'kt_director_widgets' : 'kt_agency_widgets'; }
 
   function getEnabledWidgets() {
+    const defaults = _dashScoped ? SCOPED_DEFAULT_WIDGETS : DEFAULT_WIDGETS;
     try {
-      const raw = localStorage.getItem('kt_agency_widgets');
-      if (!raw) return DEFAULT_WIDGETS.slice();
+      const raw = localStorage.getItem(widgetKey());
+      if (!raw) return defaults.slice();
       const arr = JSON.parse(raw);
-      // Drop ids that no longer exist
-      return arr.filter(id => WIDGET_DEFS[id]);
-    } catch (e) { return DEFAULT_WIDGETS.slice(); }
+      // Drop ids that no longer exist (or are not this viewer's)
+      return arr.filter(widgetAllowed);
+    } catch (e) { return defaults.slice(); }
   }
   function saveEnabledWidgets(arr) {
-    try { localStorage.setItem('kt_agency_widgets', JSON.stringify(arr)); } catch (e) {}
+    try { localStorage.setItem(widgetKey(), JSON.stringify(arr)); } catch (e) {}
   }
   function renderWidgetsGrid(section, ctx) {
     const grid = section.querySelector('#kt-widgets-grid');
@@ -151,7 +161,7 @@
 
     function paint() {
       const enabled = getEnabledWidgets();
-      const available = Object.keys(WIDGET_DEFS).filter(id => !enabled.includes(id));
+      const available = Object.keys(WIDGET_DEFS).filter(id => widgetAllowed(id) && !enabled.includes(id));
       body.innerHTML = '';
 
       body.appendChild(hdr('On your dashboard — drag to arrange'));
@@ -342,7 +352,8 @@
     const cur = r.currency || 'CAD';
     const money = (v) => {
       try {
-        return new Intl.NumberFormat('en-CA', { style: 'currency', currency: cur, maximumFractionDigits: 0 })
+        // US dollars read "$67,050", not en-CA's "US$67,050" (2026-10-28, Brightwood).
+        return new Intl.NumberFormat(cur === 'USD' ? 'en-US' : 'en-CA', { style: 'currency', currency: cur, maximumFractionDigits: 0 })
           .format(Number(v) || 0);
       } catch (e) { return '$' + (Number(v) || 0).toFixed(0); }
     };
@@ -443,51 +454,52 @@
     return widgetCard('Annualised revenue', 'By status', html);
   }
 
+  /* Every role the agency has - built-in and its own - from GET analytics `roles` (2026-11-09): a role created
+     tomorrow appears here with no change to this file. Known roles keep their colours; any other gets the next one. */
   function widgetUsersByRole(an) {
-    if (!an || !an.users_by_role) {
+    if (!an || !(an.roles || an.users_by_role)) {
       return widgetCard('Users by role', '', '<div style="color:#64748B;flex:1;display:flex;align-items:center;">No data.</div>');
     }
-    const roles = an.users_by_role;
-    const labels = { agency_admin: 'Admins', centre_director: 'Directors', educator: 'Educators', guardian: 'Parents', auditor: 'Auditors' };
-    const colors = { agency_admin: '#1F6080', centre_director: '#0891B2', educator: '#8EC73C', guardian: '#F59E0B', auditor: '#7C3AED' };
-    const total = Object.values(roles).reduce((a, b) => a + b, 0);
-    if (!total) return widgetCard('Users by role', '', '<div style="color:#64748B;flex:1;display:flex;align-items:center;">No users yet.</div>');
-    // Donut chart
+    const fixed = { agency_admin: '#1F6080', centre_director: '#0891B2', educator: '#8EC73C', guardian: '#F59E0B', auditor: '#7C3AED', home_visitor: '#DB2777', sales_rep: '#0D9488' };
+    const spare = ['#EA580C', '#4F46E5', '#65A30D', '#BE123C', '#0369A1', '#A16207', '#9333EA', '#15803D', '#B91C1C', '#475569'];
+    const list = an.roles || Object.keys(an.users_by_role).map((k) => ({ key: k, label: k.replace(/_/g, ' '), count: an.users_by_role[k] }));
+    let si = 0;
+    list.forEach((r) => { r.color = fixed[r.key] || spare[si++ % spare.length]; });
+    const sum = list.reduce((a, r) => a + (r.count || 0), 0);
+    const total = an.users_total != null ? an.users_total : sum;
+    if (!sum) return widgetCard('Users by role', '', '<div style="color:#64748B;flex:1;display:flex;align-items:center;">No users yet.</div>');
+    // Donut: each role's share of the role assignments (someone with two roles is in both slices; the middle is people).
     const R = 36, INNER = 22, CX = 50, CY = 50;
     let acc = 0;
     const arcs = [];
-    Object.keys(labels).forEach(k => {
-      const v = roles[k] || 0; if (!v) return;
-      const start = (acc / total) * 2 * Math.PI - Math.PI / 2;
+    list.forEach((r) => {
+      const v = r.count || 0; if (!v) return;
+      if (v === sum) {   // one role only: a full ring (an arc from a point to itself draws nothing)
+        arcs.push('<circle cx="50" cy="50" r="' + ((R + INNER) / 2) + '" fill="none" stroke="' + r.color + '" stroke-width="' + (R - INNER) + '"/>');
+        return;
+      }
+      const start = (acc / sum) * 2 * Math.PI - Math.PI / 2;
       acc += v;
-      const end   = (acc / total) * 2 * Math.PI - Math.PI / 2;
+      const end = (acc / sum) * 2 * Math.PI - Math.PI / 2;
       const large = (end - start) > Math.PI ? 1 : 0;
       const x1 = CX + R * Math.cos(start), y1 = CY + R * Math.sin(start);
-      const x2 = CX + R * Math.cos(end),   y2 = CY + R * Math.sin(end);
+      const x2 = CX + R * Math.cos(end), y2 = CY + R * Math.sin(end);
       const ix2 = CX + INNER * Math.cos(end), iy2 = CY + INNER * Math.sin(end);
       const ix1 = CX + INNER * Math.cos(start), iy1 = CY + INNER * Math.sin(start);
-      arcs.push(
-        '<path fill="' + (colors[k] || '#94A3B8') + '" d="' +
-          'M ' + x1 + ' ' + y1 +
-          ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2 +
-          ' L ' + ix2 + ' ' + iy2 +
-          ' A ' + INNER + ' ' + INNER + ' 0 ' + large + ' 0 ' + ix1 + ' ' + iy1 +
-          ' Z"/>'
-      );
+      arcs.push('<path fill="' + r.color + '" d="M ' + x1 + ' ' + y1 + ' A ' + R + ' ' + R + ' 0 ' + large + ' 1 ' + x2 + ' ' + y2
+        + ' L ' + ix2 + ' ' + iy2 + ' A ' + INNER + ' ' + INNER + ' 0 ' + large + ' 0 ' + ix1 + ' ' + iy1 + ' Z"><title>' + esc(r.label) + ': ' + v + '</title></path>');
     });
     const svg = '<svg viewBox="0 0 100 100" style="width:96px;height:96px;flex-shrink:0;">' + arcs.join('') +
       '<text x="50" y="48" text-anchor="middle" font-size="22" font-weight="800" fill="#0F172A">' + total + '</text>' +
       '<text x="50" y="62" text-anchor="middle" font-size="9" fill="#94A3B8" letter-spacing="1">USERS</text>' +
       '</svg>';
-    const legend = Object.keys(labels).map(k => {
-      const v = roles[k] || 0;
-      return '<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:3px;">' +
-        '<span style="width:10px;height:10px;border-radius:2px;background:' + (colors[k] || '#94A3B8') + ';"></span>' +
-        '<span style="color:#475569;flex:1;">' + labels[k] + '</span>' +
-        '<span style="font-weight:700;color:#0F172A;">' + v + '</span></div>';
-    }).join('');
+    const legend = list.map((r) =>
+      '<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:3px;' + (r.count ? '' : 'opacity:.6;') + '">' +
+        '<span style="width:10px;height:10px;border-radius:2px;flex:none;background:' + r.color + ';"></span>' +
+        '<span style="color:#475569;flex:1;min-width:0;overflow-wrap:anywhere;">' + esc(r.label) + (r.custom ? ' <span style="color:#94A3B8;font-size:10.5px;">custom</span>' : '') + '</span>' +
+        '<span style="font-weight:700;color:#0F172A;">' + (r.count || 0) + '</span></div>').join('');
     return widgetCard('Users by role', null,
-      '<div style="display:flex;gap:14px;align-items:center;flex:1;">' + svg + '<div style="flex:1;">' + legend + '</div></div>');
+      '<div style="display:flex;gap:14px;align-items:center;flex:1;">' + svg + '<div style="flex:1;min-width:0;max-height:150px;overflow:auto;scrollbar-width:thin;">' + legend + '</div></div>');
   }
 
   function widgetEnrollmentDelta(an, mrr) {
@@ -530,7 +542,7 @@
     const _payday = t.next_payday || null;
     return [
       { key: 'enrolled', icon: '👶', value: t.enrolled ?? 0, label: 'Total enrolled', sub: capacityPct + '% of capacity', c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
-      { key: 'present', icon: '📍', value: t.present_now ?? 0, label: 'Here right now', sub: presentPct + '% of enrolled', c1: '#93C5FD', c2: '#2563EB', tint: '#EFF6FF', ink: '#1D4ED8' },
+      { key: 'present', icon: '📍', value: t.present_now ?? 0, label: 'At Centre now', sub: presentPct + '% of enrolled', c1: '#93C5FD', c2: '#2563EB', tint: '#EFF6FF', ink: '#1D4ED8' },
       { key: 'staff_floor', icon: '🧑‍🏫', value: t.staff_on_floor ?? 0, label: 'Staff on floor', sub: _noStaff ? 'No one clocked in' : 'Active', c1: _noStaff ? '#FCA5A5' : '#FCD34D', c2: _noStaff ? '#DC2626' : '#D97706', tint: _noStaff ? '#FEF2F2' : '#FFFBEB', ink: _noStaff ? '#B91C1C' : '#B45309' },
       { key: 'receivables', icon: '💳', value: '$' + Number(t.receivables || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), label: 'Receivables', sub: _owed ? 'Outstanding' : 'All collected', c1: _owed ? '#FCA5A5' : '#86EFAC', c2: _owed ? '#DC2626' : '#16A34A', tint: _owed ? '#FEF2F2' : '#F0FDF4', ink: _owed ? '#B91C1C' : '#15803D' },
       { key: 'centres', icon: '🏫', value: _centresCount, label: 'Centres', sub: _roomsSum + ' room' + (_roomsSum === 1 ? '' : 's'), c1: '#C4B5FD', c2: '#7C3AED', tint: '#F5F3FF', ink: '#6D28D9' },
@@ -590,6 +602,7 @@
     let data;
     try {
       data = await Api.get('/agency/dashboard');
+      _dashScoped = !!(data && data.scoped);
     } catch (e) {
       Dom.clear(main);
       main.appendChild(emptyState('⚠️', 'Could not load', e.message || 'Server error'));
@@ -598,7 +611,7 @@
 
     // Email delivery state (master + per-centre) for the on/off badges. Non-fatal.
     const emailInfo = { master_enabled: true, byCentre: {} };
-    try {
+    if (!_dashScoped) try {   // agency setting; a director would only collect a 403
       const ed = await Api.get('/admin/email-delivery');
       emailInfo.master_enabled = ed.master_enabled !== false;
       (ed.centres || []).forEach(c => { emailInfo.byCentre[c.id] = c.email_enabled !== false; });
@@ -640,22 +653,15 @@
           <strong>${centreCount}</strong> centre${centreCount === 1 ? '' : 's'} ·
           <strong>${totalEnrolled}</strong> children enrolled ·
           last updated just now
-          <div style="margin-top:9px;">
+          ${_dashScoped ? '' : `<div style="margin-top:9px;">
             <a href="#email-settings" title="Manage email delivery" style="text-decoration:none;">
               ${emailPillHtml(emailInfo.master_enabled, emailInfo.master_enabled ? 'Agency email ON' : 'Agency email OFF')}
             </a>
-          </div>
-        </div>
-        <div class="kt-hero-actions">
-
-          <button class="kt-hero-btn" id="kt-edit-agency-btn">✏️ Edit agency</button>
-          <button class="kt-hero-btn" id="kt-refresh-btn" title="Refresh">↻ Refresh</button>
+          </div>`}
         </div>
         <div class="kt-hero-svg">${cloudsSvg}</div>
       </div>
     `);
-
-    wrap.querySelector('#kt-refresh-btn')?.addEventListener('click', () => renderAgencyDashboard(main));
 
     // Country & compliance is NOT rendered here. It is an agency SETTING, so it
     // belongs inside Edit agency (and Branding & settings) rather than sitting on
@@ -665,7 +671,6 @@
        could not set the owner's name, opening hours, open days or country — so which of
        the two you happened to use decided how complete the record was. Adding a provider
        now happens in one place. */
-    wrap.querySelector('#kt-edit-agency-btn')?.addEventListener('click', () => openEditAgency(main, data.agency || {}));
 
     // This screen re-renders itself (the ↻ Refresh button rebuilds the hero with the
     // action buttons back INSIDE it). The shell only lifts banner buttons into the
@@ -690,7 +695,7 @@
           <div style="width:44px;height:44px;flex:0 0 auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:21px;background:linear-gradient(135deg,${k.c1},${k.c2});box-shadow:0 6px 13px -6px ${k.c2};">${k.icon}</div>
           <div style="min-width:0;flex:1;">
             <div data-kpi="${k.key}" style="font-size:${_vfs};font-weight:900;line-height:1.05;color:${k.ink};overflow-wrap:anywhere;transition:color .3s ease;">${k.value}</div>
-            <div style="font-size:10.5px;font-weight:800;letter-spacing:.6px;color:${k.ink};opacity:.72;margin-top:3px;text-transform:uppercase;">${k.label}</div>
+            <div style="font-size:10.5px;font-weight:800;letter-spacing:.6px;color:${k.ink};opacity:.72;margin-top:3px;text-transform:uppercase;">${(window.KT && KT.termText) ? KT.termText(k.label) : k.label}</div>
             <div data-kpi-sub="${k.key}" style="font-size:11.5px;color:#64748b;margin-top:1px;">${k.sub}</div>
           </div>
         </div>`;
@@ -727,6 +732,13 @@
     // 8 widget options, user chooses which to display via localStorage.
     // Defaults to the 4 original widgets. Each card has a × button to hide;
     // a "+ Add widget" button shows a picker of disabled widgets.
+    /* Edit agency and Refresh live on this line beside + Add widget (2026-10-28, Anthony: "move those to where
+       the add widget line is and make these the same size"), not in the banner - one style for all three. */
+    /* The portal's standard white pill (kt-icon-buttons applyAddStyle), at one fixed height. data-kt-iconized keeps the
+       icon engine from turning "Edit agency" / "Refresh" into bare glyphs and from re-styling + Add widget. */
+    const _ovBtn = 'height:32px !important;min-height:32px !important;box-sizing:border-box !important;padding:0 14px !important;display:inline-flex !important;align-items:center !important;gap:6px;white-space:nowrap;'
+      + 'width:auto !important;min-width:0 !important;background:#fff !important;background-image:none !important;color:#475569 !important;border:1px solid #CBD5E1 !important;border-radius:8px !important;'
+      + 'font-weight:600 !important;font-size:12px !important;line-height:1 !important;box-shadow:none !important;cursor:pointer;';
     const widgetsSection = document.createElement('div');
     widgetsSection.style.marginBottom = '32px';
     widgetsSection.innerHTML = `
@@ -735,13 +747,19 @@
           <h2 style="font-family:var(--kt-font-display);font-weight:700;font-size:20px;margin:0;">Business insights</h2>
           <div style="font-size:12px;color:var(--kt-text-faint);margin-top:2px;">Live · pick what you want, drag to reorder</div>
         </div>
-        <button id="kt-add-widget" style="padding:8px 14px;background:white;color:#1F6080;border:1.5px solid #1F6080;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;">+ Add widget</button>
+        <div class="kt-ov-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          ${_dashScoped ? '' : `<button id="kt-edit-agency-btn" data-kt-iconized="1" style="${_ovBtn}">✏️ Edit agency</button>`}
+          <button id="kt-refresh-btn" data-kt-iconized="1" title="Refresh" style="${_ovBtn}">↻ Refresh</button>
+          <button id="kt-add-widget" data-kt-iconized="1" style="${_ovBtn}">+ Add widget</button>
+        </div>
       </div>
       <div id="kt-widgets-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;">
         ${'<div style="height:160px;background:var(--kt-bg);border-radius:14px;opacity:.5;"></div>'.repeat(4)}
       </div>
     `;
     wrap.appendChild(widgetsSection);
+    widgetsSection.querySelector('#kt-refresh-btn')?.addEventListener('click', () => renderAgencyDashboard(main));
+    widgetsSection.querySelector('#kt-edit-agency-btn')?.addEventListener('click', () => openEditAgency(main, data.agency || {}));
 
     // Render widgets asynchronously. Pull both endpoints once and pass results
     // to every widget builder — each ignores what it doesn't need.
@@ -761,7 +779,7 @@
 
     Promise.all([
       _isPlat ? Api.get('/admin/mrr/overview').catch(() => null) : Promise.resolve(null),
-      Api.get('/admin/analytics').catch(() => null),
+      _dashScoped ? Promise.resolve(null) : Api.get('/admin/analytics').catch(() => null),   // agency_admin route
     ]).then(([mrr, an]) => {
       renderWidgetsGrid(widgetsSection, { mrr: mrr, analytics: an, data: data });
     });
@@ -784,7 +802,7 @@
           <div style="font-size:36px; margin-bottom:8px;">🏢</div>
           <div style="font-weight:600; color:var(--kt-text); margin-bottom:4px;">No centres yet</div>
           <div style="color:var(--kt-text-muted); font-size:14px; margin-bottom:16px;">Get started by onboarding your first childcare centre.</div>
-          <button class="btn btn-primary" id="kt-add-centre-empty">+ Add your first centre</button>
+          ${_dashScoped ? '' : '<button class="btn btn-primary" id="kt-add-centre-empty">+ Add your first centre</button>'}
         </div>
       `);
       // The empty state keeps a button, but it sends people to the real form.
@@ -852,57 +870,95 @@
           `<text x="28" y="32" text-anchor="middle" font-size="13" font-weight="800" fill="#0D1B2A">${_centerTxt}</text>` +
           `</svg>`;
         // Hover lists for the Present + Staff counters.
-        const _presentTip = (c.present_children || []).length ? 'Present now:\n• ' + c.present_children.join('\n• ') : 'No children checked in right now';
-        const _staffTip = (c.staff_present || []).length ? 'On the floor:\n• ' + c.staff_present.join('\n• ') : 'No staff clocked in';
+        const _presentTip = (c.present_children || []).length ? 'At Centre now:\n• ' + c.present_children.join('\n• ') : 'No children at Centre right now';
+        const _staffTip = ((c.staff_present || []).length ? 'On the floor:\n• ' + c.staff_present.join('\n• ') : 'No staff clocked in')
+          + ((c.team || []).length > 1 ? '\n\nAssigned here:\n• ' + c.team.join('\n• ') : '');
         // Today's attendance roster (per centre): every enrolled child with
         // avatar + status + check-in/out times, present-first.
         const _roster = c.roster || [];
         const _av = (r) => r.photo_url
           ? `<img decoding="sync" src="${esc(absUrl(r.photo_url))}" alt="" style="width:26px;height:26px;border-radius:50%;object-fit:cover;flex-shrink:0;background:#EEF2F7;">`
           : `<div style="width:26px;height:26px;border-radius:50%;background:${cardColour(r.name)};color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${esc((r.name || '?').charAt(0).toUpperCase())}</div>`;
+        /* Signed in more than once today: "×2" with every visit in the tooltip (2026-11-05). */
+        const _visits = (r) => (r.visits > 1 ? ` <span data-kttip="${esc('Visits today: ' + (r.visits_text || ''))}" style="font-size:10.5px;font-weight:800;color:#0E7C90;background:#E0F2F1;padding:0 6px;border-radius:20px;">×${r.visits}</span>` : '');
         const _statusHtml = (r) => {
-          if (r.status === 'in') return `<span style="color:#16A34A;font-weight:700;white-space:nowrap;">✓ In ${esc(r.check_in_at || '')}</span>`;
-          if (r.status === 'out') return `<span style="color:#64748B;white-space:nowrap;">${esc(r.check_in_at || '')} → ${esc(r.check_out_at || '')}</span>`;
+          if (r.status === 'in') return `<span style="color:#16A34A;font-weight:700;white-space:nowrap;">✓ At Centre ${esc(r.check_in_at || '')}${_visits(r)}</span>`;
+          if (r.status === 'out') return `<span style="color:#64748B;white-space:nowrap;">Not at Centre · ${esc(r.check_in_at || '')} → ${esc(r.check_out_at || '')}${_visits(r)}</span>`;
+          /* Not booked today (a day off, a weekend, a closure): never "Not in" / "Absent"
+             (2026-11-01, Anthony). The server decides, App\Support\ScheduledToday. */
+          if (r.status === 'unscheduled' || r.scheduled === false) return `<span title="Not on today's schedule" style="color:#64748B;background:#F1F5F9;font-weight:600;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Not scheduled</span>`;
           /* During the day "Not in"; once the centre's day is over, "Absent" (2026-10-15). */
           if (c.day_over) return `<span style="color:#B91C1C;background:#FEE2E2;font-weight:700;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Absent</span>`;
-          return `<span style="color:#B45309;background:#FEF3C7;font-weight:600;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Not in</span>`;
+          return `<span style="color:#B45309;background:#FEF3C7;font-weight:600;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Not arrived</span>`;
         };
         const _rosterRows = _roster.map((r, i) => `
-              <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:12px;border-radius:6px;background:${i % 2 ? '#F4F8FC' : '#FFFFFF'};${r.status === 'absent' ? 'opacity:.72;' : ''}">
+              <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:12px;border-radius:6px;background:${i % 2 ? '#F4F8FC' : '#FFFFFF'};${(r.status === 'absent' || r.status === 'unscheduled') ? 'opacity:.72;' : ''}">
                 ${_av(r)}
                 <span style="flex:1;font-weight:600;color:var(--kt-text,#0D1B2A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.name)}</span>
                 ${_statusHtml(r)}
               </div>`).join('');
         /* Provider clock in / out, in the same row style as the children below. The
-           provider leads (and reads "Not in" until they clock in); anyone else who
-           clocked at this centre today follows. */
+           provider leads (and reads "Not in" until they clock in); everyone else assigned
+           to this home follows, clocked in or not (2026-10-21), plus anyone who clocked
+           here today. */
         const _shifts = c.staff_shifts || [];
         const _shiftStatus = (s) => {
           if (s.status === 'in') return `<span style="color:#16A34A;font-weight:700;white-space:nowrap;">✓ Clocked in ${esc(s.clock_in_at || '')}</span>`;
+          /* On lunch / a break (2026-11-05): off the floor, day not over. */
+          if (s.status === 'break') return `<span style="color:#6D28D9;background:#EDE9FE;font-weight:700;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">${s.break_kind === 'lunch' ? '🍽️ On lunch' : '☕ On break'} ${esc(s.break_since ? 'since ' + s.break_since : '')}</span>`;
           if (s.status === 'out') return `<span style="color:#64748B;white-space:nowrap;">${esc(s.clock_in_at || '')} → ${esc(s.clock_out_at || '')}</span>`;
+          // Assigned here but not rostered today: not absent, just not working.
+          if (s.scheduled === false) return `<span title="Not on today's schedule" style="color:#64748B;background:#F1F5F9;font-weight:600;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Not scheduled</span>`;
           if (s.day_over) return `<span style="color:#B91C1C;background:#FEE2E2;font-weight:700;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Absent</span>`;   // past their rostered end / closing time
           return `<span style="color:#B45309;background:#FEF3C7;font-weight:600;font-size:11px;padding:1px 7px;border-radius:20px;white-space:nowrap;">Not clocked in</span>`;
         };
         const providerHtml = _shifts.length === 0 ? '' : `
             <div style="border-top:1px dashed var(--kt-border,#E5E9F0); padding:8px 16px 4px;">
-              <div style="font-size:12px; font-weight:700; color:var(--kt-text-muted,#64748B); margin-bottom:4px;">${_shifts.length === 1 && _shifts[0].is_provider ? 'Provider' : 'Provider &amp; staff'} · today</div>
-              <div style="max-height:132px; overflow-y:auto; margin:0 -2px;">${_shifts.map((s, i) => `
+              <div style="font-size:12px; font-weight:800; color:#334155; margin:0 -6px 5px; padding:4px 8px; border-radius:7px; background:linear-gradient(90deg, ${brand}29 0%, ${brand}0F 55%, ${brand}00 100%);">${_shifts.length === 1 && _shifts[0].is_provider ? 'Provider' : 'Provider &amp; educators'} · today</div>
+              <div class="cc-scroll" style="max-height:132px; overflow-y:auto; margin:0 -2px;">${_shifts.map((s, i) => `
               <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;font-size:12px;border-radius:6px;background:${i % 2 ? '#F4F8FC' : '#FFFFFF'};${s.status === 'absent' ? 'opacity:.72;' : ''}">
                 ${_av(s)}
-                <span style="flex:1;font-weight:600;color:var(--kt-text,#0D1B2A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.name)}${s.is_provider ? '' : ' <span style="font-weight:500;color:#94A3B8;">· staff</span>'}</span>
+                <span style="flex:1;font-weight:600;color:var(--kt-text,#0D1B2A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(s.name)}${s.is_provider ? '' : ' <span style="font-weight:500;color:#94A3B8;">· educator</span>'}</span>
                 ${_shiftStatus(s)}
               </div>`).join('')}</div>
             </div>`;
         const checkinHtml = providerHtml + (_roster.length === 0 ? '' : `
             <div style="border-top:1px dashed var(--kt-border,#E5E9F0); padding:8px 16px 6px;">
+              <div style="font-size:12px; font-weight:800; color:#334155; margin:0 -6px 5px; padding:4px 8px; border-radius:7px; background:linear-gradient(90deg, ${brand}29 0%, ${brand}0F 55%, ${brand}00 100%);">${_roster.length === 1 ? 'Child' : 'Children'} · today</div>
               <div style="display:flex; gap:16px; font-size:12px; font-weight:700; margin-bottom:4px;">
                 <span style="color:#16A34A;">● ${c.checked_in_count || 0} checked in</span>
                 <span style="color:${c.day_over ? '#B91C1C' : '#B45309'};">● ${c.not_checked_in_count || 0} ${c.day_over ? 'absent' : 'not in'}</span>
+                ${c.not_scheduled_count ? `<span style="color:#64748B;">● ${c.not_scheduled_count} not scheduled</span>` : ''}
               </div>
-              <div style="max-height:196px; overflow-y:auto; margin:0 -2px;">${_rosterRows}</div>
+              <div class="cc-scroll" style="max-height:196px; overflow-y:auto; margin:0 -2px;">${_rosterRows}</div>
             </div>`);
+        /* PROVIDER CARD FIGURES (2026-10-30, Anthony: "the your provider cards where it shows enrolled,
+           present and staff - can you change this design to make this look better"). Were three boxes
+           in three different fills that a 769-1500px rule folded two-and-one. Now one even row of
+           white tiles: a tinted icon, the number, a small label; the icon steps aside on a narrow
+           card (container query), so the row always fits. */
+        if (!document.getElementById('cc-stats-css')) {
+          const _st = document.createElement('style'); _st.id = 'cc-stats-css';
+          _st.textContent = '.centre-card-v17{container-type:inline-size;}'
+            + '.cc-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px 16px 14px;}'
+            + '.cc-stat{display:flex;align-items:center;gap:9px;min-width:0;padding:9px 10px;border-radius:12px;background:#fff;border:1px solid #E6ECF2;box-shadow:0 1px 2px rgba(15,23,42,.04);}'
+            + '.cc-ico{flex:0 0 32px;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;}'
+            + '.cc-txt{display:flex;flex-direction:column;min-width:0;}'
+            + '.cc-num{font-family:var(--kt-font-display,inherit);font-size:19px;font-weight:800;line-height:1.1;color:#0F172A;letter-spacing:-.3px;white-space:nowrap;}'
+            + '.cc-num small{font-size:12px;font-weight:600;color:#94A3B8;letter-spacing:0;}'
+            + '.cc-lab{margin-top:2px;font-size:10.5px;font-weight:700;letter-spacing:.45px;text-transform:uppercase;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+            + '.cc-stat.cc-warn{border-color:#FECACA;background:#FFFBFB;}.cc-stat.cc-warn .cc-num{color:#B91C1C;}'
+            + '@container (max-width:430px){.cc-ico{display:none;}.cc-stat{justify-content:center;text-align:center;padding:9px 6px;}.cc-txt{align-items:center;}.cc-lab{letter-spacing:.2px;font-size:10px;}}'
+            /* The lists inside a card scroll with the sidebar's thin, faint bar (Anthony: 'the scroll bar under your providers should be subtle like the side bar'). */
+            /* Standard scrollbar-width/-color make Chrome ignore the ::-webkit-scrollbar styling below, so they are for Firefox only. */
+            + '@supports not selector(::-webkit-scrollbar){.cc-scroll{scrollbar-width:thin;scrollbar-color:rgba(31,96,128,.22) transparent;}}'
+            + '.cc-scroll::-webkit-scrollbar{width:6px;}.cc-scroll::-webkit-scrollbar-track{background:transparent;}.cc-scroll::-webkit-scrollbar-button{display:none;height:0;}'
+            + '.cc-scroll::-webkit-scrollbar-thumb{background:rgba(31,96,128,.22);border-radius:3px;}.cc-scroll::-webkit-scrollbar-thumb:hover{background:rgba(31,96,128,.38);}'
+            + '@container (max-width:300px){.cc-stats{gap:6px;padding:10px 12px;}.cc-num{font-size:17px;}}';
+          document.head.appendChild(_st);
+        }
         grid.insertAdjacentHTML('beforeend', `
-          <div class="centre-card-v17" style="border-left:6px solid ${brand};box-shadow:inset 0 3px 0 ${brand}22;">
+          <div class="centre-card-v17" style="--kt-edge:${brand};--kt-edge-line:${brand}22;">
             <div class="head">
               <div style="display:flex;align-items:center;gap:12px;">
                 ${logoBlock}
@@ -921,26 +977,26 @@
                   : '<span class="tag-v17 success">Compliant</span>'}
               </div>
             </div>
-            <div class="stats">
-              <div class="item" style="background:#EFF6FF;border-radius:10px;padding:8px 10px;">
-                <div class="ilabel" style="color:#1D4ED8;">Enrolled</div>
-                <div class="ivalue" style="color:#1D4ED8;">${c.enrolled || 0}${c.license_capacity ? ` <span style="font-size:13px; color:#60A5FA; font-weight:500;">/ ${c.license_capacity}</span>` : ''}</div>
+            <div class="cc-stats">
+              <div class="cc-stat">
+                <span class="cc-ico" style="background:#EFF6FF;">👶</span>
+                <span class="cc-txt"><span class="cc-num">${c.enrolled || 0}${c.license_capacity ? `<small> / ${c.license_capacity}</small>` : ''}</span><span class="cc-lab">Enrolled</span></span>
               </div>
-              <div class="item" title="${esc(_presentTip)}" style="cursor:help;background:#F0FDF4;border-radius:10px;padding:8px 10px;">
-                <div class="ilabel" style="color:#15803D;">Present ⓘ</div>
-                <div class="ivalue" style="color:#16A34A;">${c.present_now ?? 0}</div>
+              <div class="cc-stat" title="${esc(_presentTip)}" style="cursor:help;">
+                <span class="cc-ico" style="background:#ECFDF5;">✅</span>
+                <span class="cc-txt"><span class="cc-num" style="color:#15803D;">${c.present_now ?? 0}</span><span class="cc-lab">At Centre</span></span>
               </div>
-              <div class="item" title="${esc(_staffTip)}" style="cursor:help;background:${(c.staff_on_floor ?? 0) === 0 ? '#FEF2F2' : '#FFFBEB'};border-radius:10px;padding:8px 10px;">
-                <div class="ilabel" style="color:${(c.staff_on_floor ?? 0) === 0 ? '#B91C1C' : '#B45309'};">Staff ⓘ</div>
-                <div class="ivalue" style="color:${(c.staff_on_floor ?? 0) === 0 ? '#B91C1C' : '#B45309'};">${c.staff_on_floor ?? 0}</div>
+              <div class="cc-stat${(c.staff_on_floor ?? 0) === 0 ? ' cc-warn' : ''}" title="${esc(_staffTip)}" style="cursor:help;">
+                <span class="cc-ico" style="background:${(c.staff_on_floor ?? 0) === 0 ? '#FEF2F2' : '#FFFBEB'};">🧑‍🏫</span>
+                <span class="cc-txt"><span class="cc-num">${c.staff_on_floor ?? 0}</span><span class="cc-lab">Staff</span></span>
               </div>
             </div>
             ${checkinHtml}
             <div class="footer" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-              ${emailPillHtml(emailInfo.byCentre[c.id] !== false, emailInfo.byCentre[c.id] !== false ? 'Email on' : 'Email off')}
+              ${_dashScoped ? '' : emailPillHtml(emailInfo.byCentre[c.id] !== false, emailInfo.byCentre[c.id] !== false ? 'Email on' : 'Email off')}
               <div style="display:flex;align-items:center;gap:10px;margin-left:auto;">
                 <button class="review-day-btn" data-centre-id="${c.id}" title="Open this provider's daily overview" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#13B7CC,#1F6080);color:#fff;border:0;border-radius:10px;padding:8px 15px;font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:0 4px 10px -4px rgba(31,96,128,.6);white-space:nowrap;">📅 Review day</button>
-                <button class="manage-btn" data-centre-id="${c.id}" type="button" data-kt-iconized="1" title="Manage this centre" aria-label="Manage this centre" style="width:32px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid #E2E8F0;border-radius:8px;background:#fff;color:#475569;font-size:15px;line-height:1;cursor:pointer;">⚙️</button>
+                ${_dashScoped ? '' : `<button class="manage-btn" data-centre-id="${c.id}" type="button" data-kt-iconized="1" title="Manage this centre" aria-label="Manage this centre" style="width:32px;height:28px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:1px solid #E2E8F0;border-radius:8px;background:#fff;color:#475569;font-size:15px;line-height:1;cursor:pointer;">⚙️</button>`}
                 <span class="kt-live-kebab" data-centre-id="${c.id}" data-kt-no-tips="1"></span>
               </div>
             </div>
@@ -969,7 +1025,12 @@
               window.location.hash = 'provider-day';
             },
           },
-          {
+          // Sign-in lock for this provider and the families only they serve (kt-signin-locks.js, 2026-11-10).
+          _dashScoped ? null : {
+            label: '🚷  Sign-in lock…',
+            run: function () { if (window.KT && KT.signinLock) KT.signinLock.openLock({ scope: 'centre', targetId: c.id, label: c.name }); },
+          },
+          _dashScoped ? null : {
             label: '🗄  Archive',
             danger: true,
             run: async function () {
@@ -1176,6 +1237,91 @@
        it, and removing a field from a shared payload to tidy a screen is how something
        unrelated breaks. */
 
+    // ─── Educator points this month (2026-10-30) ────
+    // Anthony: "add a new card that shows educator points who has what listed by alphabetically ordered for
+    // the month". Same numbers as Educator rewards (/educator-points, computed live, agency month); A-Z by name.
+    // Hidden quietly when points are off for the agency or the viewer cannot see them (403).
+    const ptsSection = document.createElement('div');
+    ptsSection.style.cssText = 'margin-bottom:26px;';
+    ptsSection.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+        <h2 style="font-family:var(--kt-font-display); font-weight:700; font-size:20px; margin:0;">🏆 Educator points <span class="kt-pts-month" style="font-weight:600; color:var(--kt-text-muted); font-size:15px;"></span></h2>
+        <a href="#educator-rewards" style="font-size:12.5px; font-weight:700; color:#0E7C90; text-decoration:none;">Open Educator rewards →</a>
+      </div>
+      <div class="kt-pts-body" style="background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:var(--kt-radius); padding:6px 0; color:var(--kt-text-muted); font-size:13px;"><div style="padding:12px 16px;">Loading…</div></div>
+    `;
+    wrap.appendChild(ptsSection);
+    (async () => {
+      const body = ptsSection.querySelector('.kt-pts-body');
+      let d;
+      try { d = await Api.get('/educator-points'); } catch (e) { ptsSection.style.display = 'none'; return; }
+      if (!d || (d.settings && d.settings.enabled === false)) { ptsSection.style.display = 'none'; return; }
+      const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      const m = String(d.month || '').split('-');
+      if (m.length === 2) ptsSection.querySelector('.kt-pts-month').textContent = '· ' + new Date(Date.UTC(+m[0], +m[1] - 1, 15)).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+      const acts = d.activities || [];
+      const rows = (d.rows || []).slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' }));
+      if (!rows.length) { body.innerHTML = '<div style="padding:12px 16px;">No educators to show yet.</div>'; return; }
+      const max = Math.max(1, ...rows.map((r) => +r.total || 0));
+      const fmt = (n) => Number(n || 0).toLocaleString();
+      if (!document.getElementById('kt-pts-css')) {
+        const st = document.createElement('style'); st.id = 'kt-pts-css';
+        st.textContent = '.kt-pts-list{max-height:360px;overflow:auto;}'
+          + '.kt-pts-row{display:grid;grid-template-columns:minmax(150px,1.3fr) minmax(0,2fr) 150px 40px;align-items:center;gap:12px;padding:7px 16px;border-top:1px solid var(--kt-border);}'
+          + '.kt-pts-act{display:flex;justify-content:flex-end;gap:4px;}'
+          + '.kt-pts-row:first-child{border-top:0;}'
+          + '.kt-pts-n{font-weight:700;color:var(--kt-text);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+          + '.kt-pts-c{font-size:11.5px;color:var(--kt-text-faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+          + '.kt-pts-by{display:flex;flex-wrap:wrap;gap:4px;}'
+          + '.kt-pts-by span{font-size:11px;font-weight:600;color:#334155;background:#F1F5F9;border-radius:999px;padding:1px 7px;white-space:nowrap;}'
+          + '.kt-pts-t{display:flex;align-items:center;gap:8px;justify-content:flex-end;}'
+          + '.kt-pts-bar{flex:1;height:6px;border-radius:99px;background:#EEF2F7;overflow:hidden;}'
+          + '.kt-pts-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#2F8C86,#0E7C90);}'
+          + '.kt-pts-v{font-weight:800;color:var(--kt-text);font-size:13px;min-width:48px;text-align:right;font-variant-numeric:tabular-nums;}'
+          + '@media(max-width:640px){.kt-pts-row{grid-template-columns:minmax(0,1fr) 110px;}.kt-pts-by{grid-column:1 / -1;order:3;}.kt-pts-act{order:4;}}';
+        // No grid-column on .kt-pts-act (2026-11-02 phone sweep): kt-row-actions makes it the row's absolute ⋮, and an
+        // absolute grid child WITH a grid-column is placed inside that grid area, not the row's 50px right gutter - the ⋮
+        // sat on top of the points total ("24" read "4").
+        document.head.appendChild(st);
+      }
+      // Each row ends in a pure action bar; kt-row-actions turns it into the row's ⋮ (2026-10-30: "add kebab to issue
+      // giftcard, send email with an award thanking the educator"). The dialogs live in screen-educator-points.js.
+      const canAct = !!(window.KT && KT.educatorAward);
+      body.innerHTML = '<div class="kt-pts-list" data-kt-list="1">' + rows.map((r) => {
+        const by = acts.map((a) => { const b = (r.by || {})[a.key]; return b && b.count ? '<span title="' + esc(a.label) + ' · ' + fmt(b.points) + ' pts">' + a.icon + ' ' + fmt(b.count) + '</span>' : ''; }).join('');
+        return '<div class="kt-pts-row">'
+          + '<div style="min-width:0;"><div class="kt-pts-n">' + esc(r.name) + '</div><div class="kt-pts-c">' + esc((r.centres || []).join(', ')) + '</div></div>'
+          + '<div class="kt-pts-by">' + (by || '<span style="background:none;color:var(--kt-text-faint);font-weight:500;">No activity yet</span>') + '</div>'
+          + '<div class="kt-pts-t"><div class="kt-pts-bar"><i style="width:' + Math.round(((+r.total || 0) / max) * 100) + '%"></i></div><div class="kt-pts-v">' + fmt(r.total) + '</div></div>'
+          + (canAct && r.can_award ? '<div class="kt-pts-act"><button type="button" data-pts-gift="' + r.user_id + '">🎁 Issue gift card</button>'
+              + '<button type="button" data-pts-thanks="' + r.user_id + '">🏅 Send a thank-you award</button></div>' : '<div></div>')
+          + '</div>';
+      }).join('') + '</div>';
+      body.addEventListener('click', (e) => {
+        const g = e.target.closest && e.target.closest('[data-pts-gift]');
+        const t = e.target.closest && e.target.closest('[data-pts-thanks]');
+        if (g) KT.educatorAward.giftCard(g.getAttribute('data-pts-gift'), d.month);
+        else if (t) KT.educatorAward.thanks(t.getAttribute('data-pts-thanks'), d.month);
+      });
+    })();
+
+    // ─── Staff notifications readiness (2026-10-31) ────
+    // Anthony: "turn on app notifications for all educators as part of their duties". Who can actually receive
+    // app notifications right now (KT.notifyReadiness, App\\Support\\StaffNotifyRequirement). Hidden on error (403).
+    const nrSection = document.createElement('div');
+    nrSection.style.cssText = 'margin-bottom:26px;';
+    nrSection.setAttribute('data-kt-nr-section', '1');
+    nrSection.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+        <h2 style="font-family:var(--kt-font-display); font-weight:700; font-size:20px; margin:0;">📲 Staff notifications</h2>
+        <a href="#notification-settings?tab=staffnotify" style="font-size:12.5px; font-weight:700; color:#0E7C90; text-decoration:none;">Settings →</a>
+      </div>
+      <div class="kt-nr-body" style="background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:var(--kt-radius); padding:14px 16px;"></div>
+    `;
+    wrap.appendChild(nrSection);
+    if (window.KT && KT.notifyReadiness) KT.notifyReadiness.mount(nrSection.querySelector('.kt-nr-body'), { hideOnError: true });
+    else nrSection.style.display = 'none';
+
     // ─── Team & family demographics (onboarding analytics) ────
     // Self-reported race/ethnicity + auto-detected device type, captured at
     // onboarding into profile_extras. Loaded async so it never delays the board.
@@ -1194,7 +1340,7 @@
       let d;
       try { d = await Api.get('/admin/analytics/demographics'); }
       catch (e) { demoSection.style.display = 'none'; return; }   // endpoint absent → hide quietly
-      if (!d || ((d.ethnicity || []).length === 0 && (d.devices || []).length === 0)) {
+      if (!d || ((d.ethnicity || []).length === 0 && (d.devices || []).length === 0 && !(d.apps && d.apps.with_app))) {
         body.innerHTML = '<div style="text-align:center; padding:14px 8px;"><span style="font-size:24px;">📊</span><div style="margin-top:6px;">No demographic data yet — it fills in as your people complete onboarding'
           + (d && d.total ? ` (0 of ${d.total} reported so far)` : '') + '.</div></div>';
         return;
@@ -1258,6 +1404,25 @@
           </div>`;
         }).join('') + '</div>';
       };
+      /* THE APP ACTUALLY ON THEIR PHONES (2026-10-23, App\Support\AppInstalls): signed in
+         and registered for notifications - not the device type they reported. */
+      const appTiles = (a) => {
+        if (!a || !a.total) return '';
+        const tile = (glyph, color, n, label) => `<div style="min-width:0; display:flex; align-items:center; gap:11px; padding:10px 13px; border:1px solid var(--kt-border); border-radius:12px; background:var(--kt-surface); box-sizing:border-box;">
+            <span style="color:${color}; display:flex; align-items:center; font-size:19px; line-height:1;">${glyph}</span>
+            <div style="min-width:0; flex:1 1 auto;">
+              <div style="font-size:19px; font-weight:800; line-height:1; color:var(--kt-text); font-variant-numeric:tabular-nums;">${n}</div>
+              <div style="font-size:11px; line-height:1.3; color:var(--kt-text-muted); margin-top:3px; overflow-wrap:anywhere;">${label} · ${Math.round(n / a.total * 100)}%</div>
+            </div></div>`;
+        return `<div>
+            <div style="font-weight:700; font-size:12.5px; color:var(--kt-text); margin-bottom:10px;">📲 KiddieTrac app installed <span style="font-weight:500; color:var(--kt-text-faint);">· ${a.with_app}/${a.total} people</span></div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px;">
+              ${tile(ANDROID, '#3DDC84', a.android, 'Android app')}
+              ${tile(APPLE, '#111827', a.ios, 'iPhone app')}
+              ${tile('🌐', '#94A3B8', a.none, 'No app (browser only)')}
+            </div>
+          </div>`;
+      };
       const cover = d.total ? ` · ${d.reported}/${d.total} shared` : '';
       body.style.color = 'inherit';
       body.innerHTML = `
@@ -1267,9 +1432,10 @@
             ${bars(d.ethnicity)}
           </div>
           <div>
-            <div style="font-weight:700; font-size:12.5px; color:var(--kt-text); margin-bottom:10px;">📱 Device type</div>
+            <div style="font-weight:700; font-size:12.5px; color:var(--kt-text); margin-bottom:10px;">📱 Device type <span style="font-weight:500; color:var(--kt-text-faint);">· what they told us</span></div>
             ${deviceTiles(d.devices)}
           </div>
+          ${appTiles(d.apps)}
         </div>`;
     })();
 
@@ -1724,4 +1890,6 @@
   window.KT.renderAgencyDashboard = renderAgencyDashboard;
   Shell.registerScreen('agency_admin:dashboard', renderAgencyDashboard);
   Shell.registerScreen('agency_admin:centres',   renderAgencyDashboard);
+  // The same overview for a centre director, scoped to their centres by the server (2026-11-13).
+  Shell.registerScreen('centre_director:dashboard', renderAgencyDashboard);
 })(window);

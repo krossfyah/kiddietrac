@@ -41,10 +41,10 @@ class EducatorSelfController extends Controller
         $user = $request->user();
         $from = $request->filled('from')
             ? Carbon::parse((string) $request->input('from'))->startOfDay()
-            : Carbon::now()->startOfWeek();
+            : \App\Support\AgencyTime::boundaryUtc(null, 'week');
         $to = $request->filled('to')
             ? Carbon::parse((string) $request->input('to'))->endOfDay()
-            : Carbon::now()->addWeeks(4)->endOfDay();
+            : \App\Support\AgencyTime::boundaryUtc(null, 'day', 29)->subSecond();
 
         $shifts = DB::table('shifts as s')
             ->leftJoin('rooms as r', 'r.id', '=', 's.room_id')
@@ -80,27 +80,20 @@ class EducatorSelfController extends Controller
      */
     public function children(Request $request): JsonResponse
     {
-        $userId = (int) $request->user()->id;
-
-        $centreIds = DB::table('role_assignments')
-            ->where('user_id', $userId)->where('active', 1)->whereNotNull('centre_id')
-            ->pluck('centre_id')->map(fn ($v) => (int) $v)->all();
-        $roomCentreIds = DB::table('educator_rooms as er')
-            ->join('rooms as r', 'r.id', '=', 'er.room_id')
-            ->where('er.user_id', $userId)
-            ->pluck('r.centre_id')->map(fn ($v) => (int) $v)->all();
-        // Open centres only (2026-10-09).
-        $centreIds = \App\Support\Live::onlyOpenCentres(array_merge($centreIds, $roomCentreIds));
-        if (empty($centreIds)) {
+        /* EVERY CHILD THEY LOOK AFTER, ANY DAY (2026-11-09). This filtered to the children booked in TODAY, so the
+           incident and report-card pickers that read it lost part-time children on their days off, and it took the
+           whole centre where the roster takes the educator's own rooms. One rule now: Visibility::liveChildIds. */
+        $ids = \App\Support\Visibility::liveChildIds($this->resolveAgencyIdStrict($request), $request->user());
+        if (empty($ids)) {
             return response()->json(['children' => []]);
         }
 
         $rows = DB::table('children as c')
             ->join('enrollments as e', 'e.child_id', '=', 'c.id')
             ->join('rooms as r', 'r.id', '=', 'e.room_id')
-            ->tap(fn ($q) => \App\Support\CareSchedule::constrain($q, 'e'))
             ->leftJoin('centres as ce', 'ce.id', '=', 'r.centre_id')
-            ->whereIn('r.centre_id', $centreIds)
+            ->whereIn('c.id', $ids)
+            ->whereIn('e.room_id', \App\Support\Visibility::roomIds($this->resolveAgencyIdStrict($request), $request->user()) ?: [0])
             // A suspended family is hidden from the people delivering care, not just
             // from its own login.
             ->whereNotExists(fn ($q) => $q->from('families')
@@ -190,7 +183,7 @@ class EducatorSelfController extends Controller
             ->where('child_id', $child)
             ->where('active', 1)
             ->where(function ($q) {
-                $q->whereNull('expires_at')->orWhere('expires_at', '>=', Carbon::now()->toDateString());
+                $q->whereNull('expires_at')->orWhere('expires_at', '>=', \App\Support\AgencyTime::today());
             })
             ->select(['id', 'full_name', 'relationship', 'phone', 'photo_id_url', 'expires_at', 'notes'])
             ->get();
@@ -428,7 +421,7 @@ class EducatorSelfController extends Controller
             ->where('agency_id', $targetAgencyId)
             ->where('active', 1)
             ->orderBy('title')
-            ->get(['id', 'title', 'audiences', 'fillable']);
+            ->get(['id', 'title', 'audiences', 'fillable', 'named_extends_audience']);
         $forms = \App\Support\FormAudience::filter($allForms, $targetId, $roleNames);
 
         $expected = [];
@@ -596,23 +589,23 @@ class EducatorSelfController extends Controller
            Falls back to everyone if no user matches, rather than rendering an empty
            card: a centre whose email does not line up with an account is a data problem
            to notice, not a reason to show nothing. */
+        /* 2026-10-21: "just the provider" became "this home's own team". Anthony asked
+           that a second educator at a home (Rachel Blane at Bruni's) show on the Daily
+           Overview; the extra people the filter above was written to hide were the
+           agency's office accounts, and App\Support\CentreTeam leaves exactly those out
+           (anyone holding an agency-wide role on any account with the same email). */
         $providerOnly = filter_var($request->query('provider_only', false), FILTER_VALIDATE_BOOLEAN);
         if ($providerOnly && $requestedCentre) {
-            $centreEmail = strtolower(trim((string) DB::table('centres')
-                ->where('id', $requestedCentre)->value('email')));
-            if ($centreEmail !== '') {
-                $justProvider = $staffRows->filter(
-                    fn ($u) => strtolower(trim((string) $u->email)) === $centreEmail
-                )->values();
-                if ($justProvider->count()) {
-                    $staffRows = $justProvider;
-                }
+            $team = \App\Support\CentreTeam::forCentres([$requestedCentre])[$requestedCentre] ?? [];
+            $ownTeam = $staffRows->filter(fn ($u) => isset($team[(int) $u->id]))->values();
+            if ($ownTeam->count()) {
+                $staffRows = $ownTeam;
             }
         }
 
         $forms = DB::table('managed_forms')
             ->where('agency_id', $agencyId)->where('active', 1)
-            ->orderBy('title')->get(['id', 'title', 'audiences']);
+            ->orderBy('title')->get(['id', 'title', 'audiences', 'named_extends_audience', 'centre_id']);
 
         /* Only the forms an educator is actually asked for.
 
@@ -623,7 +616,8 @@ class EducatorSelfController extends Controller
            per-person view above — see App\Support\FormAudience. */
         $namedAnywhere = \App\Support\FormAudience::namedMap($forms->pluck('id')->all());
         $forEducators = $forms->filter(function ($f) use ($namedAnywhere) {
-            if (! empty($namedAnywhere[(int) $f->id])) {
+            // Named people narrow it - unless the form keeps its audience as well.
+            if (! empty($namedAnywhere[(int) $f->id]) && ! \App\Support\FormAudience::extendsAudience($f)) {
                 return false;
             }
 
@@ -648,6 +642,10 @@ class EducatorSelfController extends Controller
         foreach ($staffRows->unique('id') as $u) {
             $items = [];
             foreach ($forEducators as $f) {
+                // A form tied to one centre (2026-11-13) is expected only of that centre's educators.
+                if ($f->centre_id && (int) $f->centre_id !== (int) $u->centre_id) {
+                    continue;
+                }
                 $row = optional($signoffs->get($u->id.':'.$f->id))->last();
                 $state = 'not_started';
                 $at = null;
@@ -694,7 +692,7 @@ class EducatorSelfController extends Controller
     public function dayScore(Request $request): JsonResponse
     {
         $user = $request->user();
-        $centreId = DB::table('role_assignments')->where('user_id', $user->id)
+        $centreId = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $user->id)
             ->where('active', true)->whereNotNull('centre_id')->value('centre_id');
         $tz = \App\Support\AgencyTime::tzForCentre($centreId ? (int) $centreId : null);
         $date = \Illuminate\Support\Carbon::now($tz);

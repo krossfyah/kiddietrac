@@ -269,7 +269,7 @@
     if ((sec.bar || 'none') === 'none') return sec.title ? el('div', { style: 'font-size:14px;font-weight:800;color:#0f172a;margin:14px 0 6px;' }, [sec.title]) : null;
     if (sec.bar === 'cat') return el('div', { style: 'background:#D9EAD3;border:1px solid #B7CCA9;font-weight:800;font-size:13px;color:#274E13;padding:7px 11px;margin:16px 0 2px;border-radius:6px;' }, [sec.title]);
     if (sec.bar === 'catplain') return el('div', { style: 'font-size:14px;font-weight:800;color:#0f172a;border-bottom:2px solid #111;padding-bottom:4px;margin:18px 0 8px;' }, [sec.title]);
-    return el('div', { style: 'background:#2B2F36;color:#fff;font-weight:800;font-size:13px;padding:8px 12px;margin:18px 0 8px;border-radius:8px;border-left:5px solid ' + (brand === 'ministry' ? '#111' : '#159FB4') + ';' }, [sec.title]);
+    return el('div', { style: 'background:#2B2F36;color:#fff;font-weight:800;font-size:13px;padding:8px 12px;margin:18px 0 8px;border-radius:8px;--kt-edge:' + (brand === 'ministry' ? '#111' : '#159FB4') + ';' }, [sec.title]);
   }
 
   // Read the DOM back into an answers object, keyed exactly like the schema ids.

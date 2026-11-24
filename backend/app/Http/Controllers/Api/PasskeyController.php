@@ -259,6 +259,9 @@ class PasskeyController extends Controller
         } catch (Throwable $e) {
             $this->audit((int) $cred->user_id, 'passkey.login_failed', [
                 'summary' => 'A passkey sign-in failed verification: ' . $e->getMessage(),
+                // WHICH origin, so a new app signing key shows up by name (2026-10-22: the
+                // Play build's key was refused for a day as a bare "invalid origin").
+                'origin' => (string) ((json_decode((string) Passkeys::unb64u($data['client_data']), true) ?: [])['origin'] ?? ''),
             ], $request);
 
             return response()->json(['message' => 'That passkey could not be verified.'], 422);
@@ -322,6 +325,12 @@ class PasskeyController extends Controller
      */
     private function issueSession(Request $request, $user, array $data, $cred): JsonResponse
     {
+        if (! \App\Support\BrandLock::allows($request, (int) $user->id, 'passkey')) {
+            return response()->json(['message' => 'Invalid credentials.'], 422);
+        }
+        if ($locked = \App\Support\SignInLocks::refusal((int) $user->id, $request, 'passkey')) {   // sign-in locks (2026-11-10)
+            return $locked;
+        }
         $model = \App\Models\User::find($user->id);
         $tokenObj = $model->createToken($data['device_name'], ['*'], now()->addDays(30));
 

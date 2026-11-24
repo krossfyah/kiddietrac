@@ -25,7 +25,7 @@ The policy covers:
 
 ### 3.1 Capacity (A1.1)
 
-- The platform runs on GoDaddy shared cPanel hosting in North America.
+- The platform runs on a dedicated Cloudways-managed server (DigitalOcean infrastructure) in Toronto, Canada, since 2026-10-26. Nightly database backups are encrypted (GPG, `.sql.gz.gpg`) and kept 14 days, **but they are stored on the same server** - an off-site copy is required (RM-26).
 - Known limits: in the 8 to 9 a.m. peak, the shared plan's process and entry limits cause some requests to fail with HTTP 508 or take about 10 seconds.
 - Capacity is reviewed at the quarterly security review, using the slow and failed request logs.
 - The decision on whether to move to a dedicated host or VPS is tracked as risk R-02.
@@ -73,7 +73,7 @@ Once off-site backups exist and a restore test has been timed, the targets will 
 | Scenario | Response | Readiness |
 |---|---|---|
 | Database corruption or bad migration | Restore the latest nightly dump; replay changes from `audit_logs` where practical | Partial: restore not tested |
-| Host outage (GoDaddy) | Wait for the provider, and post status to customers by email | Partial: no status page and no external uptime monitor |
+| Host outage (Cloudways / DigitalOcean) | Wait for the provider, and post status to customers by email | Partial: no status page and no external uptime monitor |
 | Host loss or account compromise | Rebuild on a new host from GitHub and an off-site backup | **Gap:** no off-site backup, and production code differs from git |
 | TLS certificate failure | acme.sh renews automatically every day, and an expiry email is sent when fewer than 21 days remain | Implemented |
 | Sub-processor outage (email, SMS, payments) | Fallback email transports exist; SMS can go through Twilio or Telnyx | Partial |

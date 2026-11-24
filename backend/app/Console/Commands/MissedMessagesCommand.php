@@ -52,7 +52,12 @@ final class MissedMessagesCommand extends Command
 
             // A guardian's message → notify the centre team; otherwise (staff) → notify the family.
             $senderIsGuardian = DB::table('guardians')->where('user_id', $m->sender_id)->where('family_id', $convo->family_id)->exists();
-            if ($senderIsGuardian) {
+            if ($senderIsGuardian && \App\Support\MessagingRules::isOffice($convo)) {
+                // To the centre office: its directors and the agency's admins only (App\Support\ChatAudience).
+                $recips = DB::table('users as u')->whereIn('u.id', \App\Support\ChatAudience::staffIds($convo) ?: [0])
+                    ->where('u.id', '!=', $m->sender_id)->whereNotNull('u.email')
+                    ->distinct()->get(['u.id', 'u.first_name', 'u.last_name', 'u.email']);
+            } elseif ($senderIsGuardian) {
                 $recips = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
                     ->where('ra.centre_id', $convo->centre_id)->where('ra.active', true)
                     ->whereIn('ra.role', ['educator', 'centre_director', 'agency_admin'])
@@ -99,7 +104,7 @@ final class MissedMessagesCommand extends Command
             . '<div style="background:#081C41;color:#fff;padding:20px 24px;border-radius:14px 14px 0 0;font-weight:800;font-size:18px;">KiddieTrac · New message</div>'
             . '<div style="border:1px solid #E5E7EB;border-top:none;border-radius:0 0 14px 14px;padding:22px 24px;">'
             . '<p style="margin:0 0 12px;font-size:15px;">You have an unread message from <b>' . e($senderName) . '</b>:</p>'
-            . '<blockquote style="margin:0 0 18px;padding:12px 16px;background:#F1F5F9;border-left:4px solid #0E7C90;border-radius:8px;font-size:15px;line-height:1.5;">' . $preview . '</blockquote>'
+            . '<blockquote style="margin:0 0 18px;padding:12px 16px;background:#F1F5F9;--kt-edge:#0E7C90;border-radius:8px;font-size:15px;line-height:1.5;">' . $preview . '</blockquote>'
             . '<a href="' . $portal . '" style="display:inline-block;background:#0E7C90;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:700;font-size:15px;">Open KiddieTrac</a>'
             . '<p style="margin:18px 0 0;font-size:12px;color:#94A3B8;">You’re receiving this because a message went unread. Open the app to reply.</p>'
             . '</div></div>';

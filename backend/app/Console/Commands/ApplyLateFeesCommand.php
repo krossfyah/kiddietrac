@@ -20,7 +20,7 @@ final class ApplyLateFeesCommand extends Command
 
     public function handle(): int
     {
-        $today = Carbon::now()->startOfDay();
+        $today = \App\Support\AgencyTime::todayDate();
         $month = $today->format('Y-m');
 
         // join centres so we can read agency settings per-invoice
@@ -39,6 +39,8 @@ final class ApplyLateFeesCommand extends Command
 
         $applied = 0; $skipped = 0; $promoted = 0;
         foreach ($candidates as $inv) {
+            // The family says they paid it by e-Transfer and a person has not confirmed it yet (2026-11-11): no late fee meanwhile.
+            if (\App\Support\EtransferPending::has((int) $inv->agency_id, 'inv', (int) $inv->id)) { $skipped++; continue; }
             $pct = (float) ($inv->late_fee_percent ?? 1.50);
             $cap = (float) ($inv->late_fee_cap ?? 25.00);
             $grace = (int) ($inv->late_fee_grace_days ?? 0);
@@ -55,6 +57,18 @@ final class ApplyLateFeesCommand extends Command
             if ($exists) { $skipped++; continue; }
 
             $fee = round(min($cap, ((float) $inv->balance_due) * ($pct / 100)), 2);
+            /* SPLIT BILLING (2026-10-30): the fee is charged on each guardian's own unpaid share and is theirs alone
+               (invoice_lines.payer_guardian_id) - a parent who paid on time is never charged for the other's lateness. */
+            $perPayer = [];
+            $full = DB::table('invoices')->where('id', $inv->id)->first();
+            if ($full && ($sh = \App\Support\BillingSplit::shares($full))) {
+                foreach ($sh as $s) {
+                    if ($s['balance'] <= 0.004) continue;
+                    $f = round(min($cap, $s['balance'] * ($pct / 100)), 2);
+                    if ($f >= 0.01) $perPayer[] = ['guardian_id' => $s['guardian_id'], 'name' => $s['name'], 'fee' => $f];
+                }
+                $fee = round(array_sum(array_column($perPayer, 'fee')), 2);
+            }
             if ($fee < 0.01) { $skipped++; continue; }
 
             if ($this->option('dry-run')) {
@@ -63,15 +77,18 @@ final class ApplyLateFeesCommand extends Command
                 continue;
             }
 
-            DB::transaction(function () use ($inv, $fee, $month, &$applied, &$promoted) {
-                DB::table('invoice_lines')->insert([
-                    'invoice_id' => $inv->id,
-                    'description' => "Late fee · {$month}",
-                    'line_type' => 'late_fee',
-                    'quantity' => 1,
-                    'unit_amount' => $fee,
-                    'amount' => $fee,
-                ]);
+            DB::transaction(function () use ($inv, $fee, $month, $perPayer, &$applied, &$promoted) {
+                foreach (($perPayer ?: [null]) as $pp) {
+                    DB::table('invoice_lines')->insert([
+                        'invoice_id' => $inv->id,
+                        'description' => "Late fee · {$month}" . ($pp ? ' · ' . explode(' ', (string) $pp['name'])[0] : ''),
+                        'line_type' => 'late_fee',
+                        'quantity' => 1,
+                        'unit_amount' => $pp ? $pp['fee'] : $fee,
+                        'amount' => $pp ? $pp['fee'] : $fee,
+                        'payer_guardian_id' => $pp ? $pp['guardian_id'] : null,
+                    ]);
+                }
                 $update = [
                     'total' => (float) $inv->total + $fee,
                     'balance_due' => (float) $inv->balance_due + $fee,

@@ -44,7 +44,7 @@ class DigestStatusController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
-        $date     = $request->query('date', today()->toDateString());
+        $date     = $request->query('date', \App\Support\AgencyTime::today());
         $centreId = $request->query('centre_id');
 
         // Validate date format
@@ -173,7 +173,7 @@ class DigestStatusController extends Controller
         ]);
 
         $childId = (int) $request->input('child_id');
-        $date    = $request->input('date') ?: today()->toDateString();
+        $date    = $request->input('date') ?: \App\Support\AgencyTime::today();
 
         $child = Child::find($childId);
         if (! $child) {

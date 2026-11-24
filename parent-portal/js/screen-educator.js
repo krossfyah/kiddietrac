@@ -23,6 +23,22 @@
     } catch (e) { return false; }
   }
 
+  /* TODAY OPENS ON WHAT IT LAST SHOWED (2026-11-03, Anthony's iPhone recording: opening Today blanked the screen,
+     the banner went and the cards popped in one by one). Every tile waited for its own request before it drew
+     anything. Now each tile paints at once from its last answer in this tab and refreshes quietly; with no answer
+     yet the banner still draws in the first frame and the score card keeps its place. Memory only, keyed on the
+     signed-in token, the active agency and the view-as role (and the room where the data is per room), 10 minutes
+     at most - nothing crosses a person, an agency or a preview. */
+  const MEMO = new Map();
+  let lastHeaderLabel = '';
+  function memoScope() {
+    try { return [String(sessionStorage.getItem('kt_token') || '').slice(-16), sessionStorage.getItem('kt_active_agency_id') || '', sessionStorage.getItem('kt_view_as') || ''].join('|'); }
+    catch (e) { return '?'; }
+  }
+  function memoGet(key) { const e = MEMO.get(memoScope() + '|' + key); return (e && Date.now() - e.at < 600000) ? e.d : null; }
+  function memoPut(key, d) { MEMO.set(memoScope() + '|' + key, { at: Date.now(), d: d }); while (MEMO.size > 40) MEMO.delete(MEMO.keys().next().value); }
+  function same(a, b) { try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; } }
+
   // ──────────────────────────────────────────────────────────────
   async function renderEducatorScreen(main, ctx) {
     Dom.clear(main);
@@ -35,6 +51,10 @@
     // the attribute synchronously here, before the first await, closes that race.
     shell.setAttribute('data-kt-no-autohero', '1');
     main.appendChild(shell);
+    // The "Today at a glance" banner is the page's header: drawn now, before any request, from what is known.
+    const briefBox = Dom.el('div', { id: 'kt-day-brief' });
+    shell.appendChild(briefBox);
+    paintDayBrief(briefBox, { label: lastHeaderLabel }, null, memoGet('brief'));
 
     try {
       let rooms = [];
@@ -109,14 +129,19 @@
 
       // "Today at a glance" brief FIRST — the day's headline + chips (Attendance,
       // Lesson plan, Meals logged …) sit at the very top where the old hero was.
-      const briefBox = Dom.el('div', { id: 'kt-day-brief' });
-      shell.appendChild(briefBox);
-      renderDayBrief(briefBox, header);
+      renderDayBrief(briefBox, header, ratioWrap);   // the ratio is a card among the day's chips (2026-10-23)
+
+      /* SECTION HEADERS (2026-11-06, Anthony: "add a header for Children ... above that add Score card as a header -
+         just to separate things to make it easier to read"). The portal's own section header (kt-tile-sectionhead,
+         as "Quick access" on the parent home). Score card hides with its card on a day that is not scored. */
+      const scoreHead = sectionHead('📊', 'Score card');
+      scoreHead.hidden = true;
+      shell.appendChild(scoreHead);
 
       // How the day is going — the same score the evening email sends, but live.
       const scoreBox = Dom.el('div', { id: 'kt-day-score' });
       shell.appendChild(scoreBox);
-      renderDayScore(scoreBox, ratioWrap);
+      Promise.resolve(renderDayScore(scoreBox, null)).then(function () { scoreHead.hidden = !scoreBox.firstElementChild; }, function () {});
       refreshRatio(ratioWrap);
 
       /* The daily forms. Submitting one used to leave no trace anywhere an educator
@@ -129,9 +154,13 @@
       /* HEADCOUNT (2026-10-13; Ontario O. Reg. 137/15 s.11 as amended by O. Reg. 197/26):
          a name-to-face count of the children signed in to this room, one tap away above
          the roster. The checklist lives in screen-headcounts.js (KT.Headcount). */
+      shell.appendChild(sectionHead('🧒', 'Children'));
       if (window.KT && KT.Headcount && KT.Headcount.todayBar) {
         try { shell.appendChild(KT.Headcount.todayBar(() => currentRoomId)); } catch (_) {}
       }
+
+      // (The room-wide 🧺 Request supplies button was removed 2026-10-23 at Anthony's request: each
+      // child's card has its own 🧺 Supplies, and the daily log's tile covers several children.)
 
       // Roster
       const rosterContainer = Dom.el('div', { id: 'educatorRoster' });
@@ -152,6 +181,12 @@
     }
   }
 
+  function sectionHead(icon, text) {
+    return Dom.el('div', { class: 'kt-tile-sectionhead kt-ed-sect', role: 'heading', 'aria-level': '2',
+      style: 'margin:18px 4px 10px;font-size:12.5px;color:#475569;' }, [
+      Dom.el('span', { 'aria-hidden': 'true', style: 'font-size:15px;letter-spacing:0;' }, icon), text]);
+  }
+
   // Label a room for the agency-wide picker: home providers each have one
   // "Main room", so the provider name is the meaningful label; only append the
   // room name when a provider has more than the single default room.
@@ -169,19 +204,83 @@
      Deliberately quiet when there is nothing to say: an educator who has just walked in
      does not need a 0 out of 100 in red, and a day the centre does not run should not be
      scored at all. In both cases the card simply is not there. */
+  /* THIS MONTH'S POINTS beside today's score (2026-10-23, Anthony: "for educators in today next
+     to the graph that shows today add the points for the educators how many they have for the
+     month based on performance"). The same numbers as My points (EducatorPoints); a tap opens
+     them. Hidden when points are off for the agency or the person does not earn them. */
+  function paintPoints(slot) {
+    if (!slot) return;
+    // On a phone the two rings sit centred across the card (2026-10-23: "the ring is not centred").
+    if (!document.getElementById('kt-ring-pair-css')) {
+      const st = document.createElement('style'); st.id = 'kt-ring-pair-css';
+      st.textContent = '@media (max-width:768px){.kt-ring-pair{flex:1 1 100% !important;justify-content:center !important;}}';
+      document.head.appendChild(st);
+    }
+    (memoGet('points') ? Promise.resolve(memoGet('points')) : Api.get('/educator-points/me?agency=1').then(function (x) { memoPut('points', x); return x; })).then(function (d) {
+      if (!d || !d.enabled || !d.me || !document.body.contains(slot)) { slot.remove(); return; }
+      const total = Number(d.me.total) || 0;
+      const board = d.leaderboard || null, mine = board ? board.filter(function (r) { return r.me; })[0] : null;
+      let monthName = '';
+      try { monthName = new Date(String(d.month) + '-01T12:00:00').toLocaleDateString(undefined, { month: 'long' }); } catch (e) {}
+      /* A RING, NOT A CARD (2026-10-23, Anthony: "dont make the points a card but into a star or
+         ring like visual"). Gold, the same size as Today's ring beside it. It fills by how close
+         you are to the top earner at your centre (full when you are #1); with no leaderboard,
+         it fills as the month goes by. The number counts up like Today's. */
+      // The whole agency (2026-10-23): fill against the agency's top earner, rank across every centre.
+      const ar = d.agency_rank || null;
+      const top = ar ? (Number(ar.top) || 0) : (board && board.length ? Math.max.apply(null, board.map(function (r) { return Number(r.points) || 0; })) : 0);
+      let frac;
+      if (top > 0) frac = Math.min(1, total / top);
+      else { const n = new Date(); frac = n.getDate() / new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate(); if (!total) frac = 0; }
+      const R2 = 52, C2 = 2 * Math.PI * R2;
+      const sub = (ar && ar.of > 1) ? ('#' + ar.rank + ' of ' + ar.of) : ((mine && board.length > 1) ? ('#' + mine.rank + ' of ' + board.length) : '');
+      slot.innerHTML = '<a href="#my-points" title="Your points in ' + (monthName || 'this month') + (sub ? ' — ' + sub + ' in the agency' : '') + '. Tap for what earned them." style="display:block;text-decoration:none;">'
+        + '<span style="position:relative;width:120px;height:120px;display:block;">'
+        + '<svg width="120" height="120" viewBox="0 0 120 120" style="transform:rotate(-90deg);display:block;">'
+        // Violet (2026-10-23, Anthony: "make the points ring a different colour").
+        + '<defs><linearGradient id="kt-pts-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#A78BFA"/><stop offset="1" stop-color="#6D28D9"/></linearGradient></defs>'
+        + '<circle cx="60" cy="60" r="' + R2 + '" fill="none" stroke="#EDE9FE" stroke-width="11"></circle>'
+        + '<circle cx="60" cy="60" r="' + R2 + '" fill="none" stroke="url(#kt-pts-g)" stroke-width="11" stroke-linecap="round" stroke-dasharray="' + C2.toFixed(1) + '" stroke-dashoffset="' + C2.toFixed(1) + '" style="transition:stroke-dashoffset 1.1s cubic-bezier(.22,1,.36,1);" data-parc></circle>'
+        + '</svg>'
+        + '<span style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">'
+        // Everything inside the ring, so it is the same size as Today's and the two line up.
+        + '<span style="font-size:13px;line-height:1;">⭐</span>'
+        + '<span style="font-size:26px;font-weight:800;color:#6D28D9;line-height:1.05;" data-pnum>0</span>'
+        + '<span style="font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:.08em;">POINTS</span>'
+        + (sub ? '<span style="font-size:10.5px;color:#7C3AED;font-weight:800;margin-top:1px;white-space:nowrap;">' + sub + '</span>' : '')
+        + '</span></span>'
+        + '</a>';
+      const parc = slot.querySelector('[data-parc]'), pnum = slot.querySelector('[data-pnum]');
+      requestAnimationFrame(function () {
+        if (parc) parc.style.strokeDashoffset = (C2 * (1 - frac)).toFixed(1);
+        const t0 = Date.now(), dur = 1100;
+        (function step() { const p = Math.min(1, (Date.now() - t0) / dur); if (pnum) pnum.textContent = Math.round(total * (1 - Math.pow(1 - p, 3))).toLocaleString(); if (p < 1) requestAnimationFrame(step); })();
+      });
+    }).catch(function () { slot.remove(); });
+  }
+
   async function renderDayScore(container, ratioWrap) {
     // No score card today (not an operating day, or it failed): the ratio must still show.
     function ratioAlone() {
       container.innerHTML = '';
       if (ratioWrap) {
-        const row = Dom.el('div', { style: 'display:flex;justify-content:flex-end;margin:0 0 14px;' });
+        const row = Dom.el('div', { style: 'display:flex;justify-content:flex-end;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 14px;' });
+        const ps = Dom.el('div', {}); row.appendChild(ps); paintPoints(ps);
         row.appendChild(ratioWrap);
         container.appendChild(row);
       }
     }
-    let d;
-    try { d = await Api.get('/educator/day-score'); }
-    catch (e) { ratioAlone(); return; }      // never break Today for a tile
+    const c0 = memoGet('score');
+    if (c0) paintScore(c0, true);
+    // No answer yet: the card's place is kept (an empty card the ring's height), so nothing jumps when it lands.
+    else container.innerHTML = '<div data-kt-skel style="background:#fff;border:1px solid #E7EBF0;border-radius:16px;min-height:152px;margin:0 0 14px;"></div>';
+    let d0;
+    try { d0 = await Api.get('/educator/day-score'); memoPut('score', d0); }
+    catch (e) { if (!c0) ratioAlone(); return; }      // never break Today for a tile
+    if (!document.body.contains(container) || (c0 && same(c0, d0))) return;
+    paintScore(d0, false);
+
+    function paintScore(d, still) {
     if (!d || d.operating_day === false) { ratioAlone(); return; }
 
     const score = Math.max(0, Math.min(100, parseInt(d.score, 10) || 0));
@@ -204,6 +303,9 @@
     container.innerHTML =
       '<div style="background:#fff;border:1px solid #E7EBF0;border-radius:16px;padding:16px 18px;margin:0 0 14px;' +
         'display:flex;align-items:center;gap:18px;flex-wrap:wrap;">' +
+        // The ring and this month's points side by side (2026-10-23: "next to the graph").
+        // One line even on a phone: the tile gives way, never wraps under the ring.
+        '<div class="kt-ring-pair" style="display:flex;align-items:center;gap:16px;flex:0 0 auto;min-width:0;max-width:100%;flex-wrap:nowrap;">' +
         '<div style="position:relative;width:120px;height:120px;flex:0 0 auto;">' +
           '<svg width="120" height="120" viewBox="0 0 120 120" style="transform:rotate(-90deg);">' +
             '<circle cx="60" cy="60" r="' + R + '" fill="none" stroke="#EEF2F7" stroke-width="11"></circle>' +
@@ -217,6 +319,8 @@
             '<div style="font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:.08em;margin-top:2px;">TODAY</div>' +
           '</div>' +
         '</div>' +
+        '<div data-points-slot style="flex:0 1 auto;min-width:0;"></div>' +
+        '</div>' +
         '<div style="flex:1;min-width:190px;">' +
           '<div style="font-size:17px;font-weight:800;color:#0F172A;">' + esc(d.label || '') + '</div>' +
           '<div style="font-size:13px;color:#64748B;line-height:1.5;margin:3px 0 11px;">' + esc(d.blurb || '') + '</div>' +
@@ -229,6 +333,7 @@
         '</div>' +
         '<div data-ratio-slot style="margin-left:auto;flex:0 0 auto;"></div>' +
       '</div>';
+    paintPoints(container.querySelector('[data-points-slot]'));
     if (ratioWrap) {
       const slot = container.querySelector('[data-ratio-slot]');
       if (slot) { slot.replaceWith(ratioWrap); } else { container.appendChild(ratioWrap); }
@@ -239,6 +344,8 @@
     // static badge.
     const arc = container.querySelector('[data-arc]');
     const num = container.querySelector('[data-num]');
+    // Repainted from the last answer: the finished ring, not the fill again.
+    if (still) { if (arc) { arc.style.transition = 'none'; arc.style.strokeDashoffset = (C * (1 - score / 100)).toFixed(1); } if (num) num.textContent = score; return; }
     requestAnimationFrame(function () {
       if (arc) { arc.style.strokeDashoffset = (C * (1 - score / 100)).toFixed(1); }
       if (!num) { return; }
@@ -250,6 +357,7 @@
         if (p < 1) { requestAnimationFrame(step); }
       })();
     });
+    }
   }
 
   /**
@@ -262,9 +370,15 @@
    * than showing nothing.
    */
   async function renderFormsToday(container) {
-    let d;
-    try { d = await Api.get('/educator/forms-today'); }
-    catch (e) { container.innerHTML = ''; return; }   // never break Today for a tile
+    const c0 = memoGet('forms');
+    if (c0) paintForms(c0);
+    let d0;
+    try { d0 = await Api.get('/educator/forms-today'); memoPut('forms', d0); }
+    catch (e) { if (!c0) container.innerHTML = ''; return; }   // never break Today for a tile
+    if (!document.body.contains(container) || (c0 && same(c0, d0))) return;
+    paintForms(d0);
+
+    function paintForms(d) {
     if (!d || !d.expected) { container.innerHTML = ''; return; }
 
     const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) =>
@@ -317,11 +431,20 @@
         + (allDone ? 'View forms' : 'Open forms') + ' →</a>'
       + '</div>'
       + '</div>';
+    }
   }
 
-  async function renderDayBrief(container, header) {
+  async function renderDayBrief(container, header, ratioWrap) {
+    if (header && header.label) lastHeaderLabel = header.label;
+    const c0 = memoGet('brief');
+    paintDayBrief(container, header, ratioWrap, c0);    // the banner now carries the name and the picker
     let b = null;
-    try { b = await Api.get('/provider/day-brief'); } catch (e) { b = null; }
+    try { b = await Api.get('/provider/day-brief'); memoPut('brief', b); } catch (e) { return; }
+    if (!document.body.contains(container) || (c0 && same(c0, b))) return;
+    paintDayBrief(container, header, ratioWrap, b);
+  }
+
+  function paintDayBrief(container, header, ratioWrap, b) {
     try {
       const items = (b && b.items) || [];
       const TONE = { good: ['#15803D', '#F0FDF4', '#BBF7D0'], warn: ['#B45309', '#FFFBEB', '#FDE68A'], info: ['#334155', '#F8FAFC', '#E2E8F0'] };
@@ -337,25 +460,57 @@
           '</span></button>';
       }).join('');
       const name = (header && header.label) || '';
+      /* THE SAME LIVE BANNER AS EVERY OTHER SCREEN (2026-11-09, Anthony: "hero under today does not have the animated
+         image and shimmer"). This brief is drawn by hand, so the banner normalizer never decorated it: no
+         .kt-banner-fx shimmer, no floating art. It carries both itself now - the art is this screen's own icon
+         (one icon per screen), behind the words and the provider picker. */
+      let briefArt = '';
+      try { briefArt = (window.KT && KT.Shell && KT.Shell.screenIcon) ? (KT.Shell.screenIcon() || '') : ''; } catch (e) { briefArt = ''; }
+      if (!briefArt || /</.test(briefArt)) briefArt = '☀️';
       container.innerHTML =
-        '<div style="background:linear-gradient(135deg,#1F6080,#2c7894);border-radius:16px;padding:15px 18px;margin:2px 0 14px;color:#fff;box-shadow:0 2px 10px rgba(31,96,128,.18);'
+        '<div class="kt-banner-fx" data-kt-brief-banner style="position:relative;overflow:hidden;background:linear-gradient(135deg,#1F6080,#2c7894);border-radius:16px;padding:15px 18px;margin:2px 0 14px;color:#fff;box-shadow:0 2px 10px rgba(31,96,128,.18);'
           + 'display:flex;align-items:center;gap:14px;flex-wrap:wrap;">' +
-          '<div style="flex:1;min-width:220px;">' +
+          '<span class="kt-hero-emoji" aria-hidden="true">' + _briefEsc(briefArt) + '</span>' +
+          '<div style="flex:1;min-width:220px;position:relative;z-index:1;">' +
             '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;opacity:.82;">☀️ Today at a glance</div>' +
             (name ? '<div style="font-size:21px;font-weight:800;margin-top:3px;line-height:1.2;">' + _briefEsc(name) + '</div>' : '') +
             ((b && b.headline) ? '<div style="font-size:' + (name ? '14.5px;font-weight:700;opacity:.92;margin-top:2px' : '18px;font-weight:800;margin-top:3px') + ';">' + _briefEsc(b.headline) + '</div>' : '') +
           '</div>' +
-          '<div data-picker-slot style="flex:0 0 auto;"></div>' +
+          '<div data-picker-slot style="flex:0 0 auto;position:relative;z-index:1;"></div>' +
         '</div>' +
-        (items.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:18px;">' + chips + '</div>' : '');
+        /* THE RATIO IS ONE OF THE CARDS (2026-10-23, Anthony: "the ratio under today should be a card
+           next to the news card in that section"). It sat at the right of the day-score card. */
+        '';
+      /* THE CARDS SIT OUTSIDE THE BANNER (2026-10-23). #kt-day-brief is the page's banner, and
+         the clock strip always goes directly under the banner; with the cards inside it, the
+         strip landed below every card. Now: banner, clock strip, cards (as on Home). */
+      let cards = document.getElementById('kt-day-cards');
+      if (cards && cards.previousElementSibling !== container && cards.parentElement !== container.parentElement) { cards.remove(); cards = null; }
+      if (!cards) { cards = document.createElement('div'); cards.id = 'kt-day-cards'; }
+      if (!document.getElementById('kt-day-cards-css')) {
+        const st = document.createElement('style'); st.id = 'kt-day-cards-css';
+        st.textContent = '#kt-day-cards [data-ratio-card]{grid-column:span 2;}@media (max-width:340px){#kt-day-cards [data-ratio-card]{grid-column:auto;}}';
+        document.head.appendChild(st);
+      }
+      cards.innerHTML = (items.length || ratioWrap) ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:18px;">' + chips
+          + (ratioWrap ? '<div data-ratio-card style="min-width:0;display:flex;"></div>' : '') + '</div>' : '';
+      // After the clock strip when it is already there, else straight after the banner.
+      const pill = container.parentElement && container.parentElement.querySelector(':scope > #kt-clockpill');
+      const after = (pill && pill.previousElementSibling === container) ? pill : container;
+      after.insertAdjacentElement('afterend', cards);
+      if (ratioWrap) {
+        const rc = cards.querySelector('[data-ratio-card]');
+        ratioWrap.style.cssText = 'min-width:0;flex:1 1 auto;display:flex;';
+        if (rc) rc.appendChild(ratioWrap);
+      }
       if (header && header.picker) {
         const slot = container.querySelector('[data-picker-slot]');
         if (slot) { slot.appendChild(header.picker); }
       }
-      container.querySelectorAll('.kt-brief-chip[data-hash]').forEach(function (btn) {
+      cards.querySelectorAll('.kt-brief-chip[data-hash]').forEach(function (btn) {
         btn.addEventListener('click', function () { const h = btn.getAttribute('data-hash'); if (h) location.hash = h; });
       });
-    } catch (e) { container.innerHTML = ''; }
+    } catch (e) { container.innerHTML = ''; if (ratioWrap) container.appendChild(ratioWrap); }
   }
 
   function buildHeaderBits(rooms, centreLabel, providerMode) {
@@ -453,8 +608,18 @@
   // full-width, colour-coded banner: green when staffed, amber when it's tight,
   // red when the room is over ratio.
   async function refreshRatio(container) {
+    const key = 'ratio|' + currentRoomId, c0 = memoGet(key);
+    if (c0) paintRatio(container, c0);
     try {
-      const ratio = await Api.get(`/provider/rooms/${currentRoomId}/ratio?t=${Date.now()}`);
+      const fresh = await Api.get(`/provider/rooms/${currentRoomId}/ratio?t=${Date.now()}`);
+      memoPut(key, fresh);
+      if (c0 && same(c0, fresh)) return;
+      paintRatio(container, fresh);
+    } catch (e) { /* silent - a missing ratio shouldn't blank the roster */ }
+  }
+
+  function paintRatio(container, ratio) {
+    try {
       Dom.clear(container);
 
       const kids = ratio.children_present || 0;
@@ -493,7 +658,11 @@
             ? ((ratio.warnings && ratio.warnings[0]) || 'Over the group size limit')
           : attention
             ? issueText
-          : `${kids} ${kids === 1 ? 'child' : 'children'} · ${have}/${need || 1} educator${(need || 1) === 1 ? '' : 's'}`;
+          /* Was `${have}/${need || 1} educator` - "2/1 educator" with nobody in the room, because a
+             need of 0 was shown as 1 and "have/need" read as a fraction. Say each number plainly
+             (2026-11-03). Children = signed in to this room; educators = clocked in for it. */
+          : `${kids} ${kids === 1 ? 'child' : 'children'} here · ${have} educator${have === 1 ? '' : 's'} on`
+            + (need > 0 ? ` · ${need} needed` : '');
 
       // Always surface BOTH limits so an educator sees at a glance which is at risk.
       const pct = cap > 0 ? Math.round((kids / cap) * 100) : 0;
@@ -503,7 +672,7 @@
       const bar = Dom.el('div', {
         class: 'kt-ratio-bar' + (breached ? ' breached' : ''),
         style: `display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;`
-          + `background:${theme.bg};border:2px solid ${theme.border};border-left:7px solid ${theme.border};`
+          + `background:${theme.bg};border:2px solid ${theme.border};--kt-edge:${theme.border};`
           + `border-radius:12px;padding:11px 13px;`,
       });
       bar.appendChild(Dom.el('div', { style: 'font-size:22px;line-height:1;' }, theme.icon));
@@ -630,11 +799,7 @@
          drifted apart in the first place. openBulkLog() is left in place for the
          roster path that still calls it. */
 
-      data.roster.forEach(child => {
-        grid.appendChild(buildChildCard(child));
-      });
-
-      container.appendChild(grid);
+      paintCircles(container, data);
     } catch (e) {
       Dom.clear(container);
       container.appendChild(emptyState('⚠️', 'Could not load roster', e.message));
@@ -690,7 +855,6 @@
     card.classList.add('child-status-' + _st);
     card.style.background = _TH[1];
     card.style.border = '1px solid ' + _TH[2];
-    card.style.borderLeft = '7px solid ' + _TH[0];
 
     // Header: avatar + name. Photo when present; otherwise ALWAYS a boy/girl
     // silhouette — known gender, else a deterministic guess (self-corrects when
@@ -715,12 +879,14 @@
     // Prominent presence pill — the at-a-glance "is this child here?" signal, with
     // the time of the last check-in / check-out. Colour-matched to the card edge.
     const PILL = {
-      in:   ['#15803D', 'rgba(22,163,74,.14)',  '#16A34A', '✓ IN',    child.arrived_at || ''],
-      out:  ['#B45309', 'rgba(245,158,11,.16)', '#F59E0B', '← OUT',   child.departed_at || ''],
-      away: ['#475569', 'rgba(148,163,184,.18)', '#94A3B8', 'NOT IN', ''],
+      in:   ['#15803D', 'rgba(22,163,74,.14)',  '#16A34A', '✓ AT CENTRE', child.arrived_at || ''],
+      out:  ['#B45309', 'rgba(245,158,11,.16)', '#F59E0B', '← NOT AT CENTRE', child.departed_at || ''],
+      away: ['#475569', 'rgba(148,163,184,.18)', '#94A3B8', 'NOT ARRIVED', ''],
       absent: ['#9A3412', 'rgba(251,146,60,.18)', '#F97316', '🏠 ABSENT', ''],
     };
-    const _p = _abs ? PILL.absent : (PILL[_st] || PILL.away);
+    // Late drop-off (2026-11-06): the family said they'll be in later; Safe Arrival waits until then.
+    PILL.late = ['#3730A3', 'rgba(99,102,241,.14)', '#6366F1', '⏰ LATE DROP-OFF', child.running_late ? 'by ' + child.running_late.by : ''];
+    const _p = _abs ? PILL.absent : (_st === 'away' && child.running_late ? PILL.late : (PILL[_st] || PILL.away));
     const statusPill = Dom.el('div', {
       class: 'child-card-pill',
       style: 'display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;background:' + _p[1] + ';color:' + _p[0] + ';font-weight:800;font-size:11.5px;letter-spacing:.3px;white-space:nowrap;',
@@ -745,6 +911,20 @@
       const who = _abs.by_parent ? 'reported by parent' : ('reported by ' + (_abs.by_name || 'staff'));
       card.appendChild(Dom.el('div', { class: 'child-card-absence', style: 'margin-top:7px;font-size:12.5px;color:#9A3412;line-height:1.4;' },
         'Absent · ' + who + (why ? ' — ' + why.charAt(0).toUpperCase() + why.slice(1) : '') + (_abs.note ? ': “' + _abs.note + '”' : '')));
+    }
+
+    // Late drop-off / late pickup notice, and who it came from (staff or a parent).
+    const _lateRow = (_st === 'away' && !_abs) ? child.running_late : (_st === 'in' ? child.late_pickup : null);
+    if (_lateRow) {
+      card.appendChild(Dom.el('div', { class: 'child-card-late', style: 'margin-top:7px;font-size:12.5px;color:#3730A3;line-height:1.4;font-weight:600;' },
+        (_st === 'in' ? '⏰ Late pickup · by ' : '⏰ Late drop-off · by ') + _lateRow.by + (_lateRow.note ? ': “' + _lateRow.note + '”' : '')
+        + ' — no Safe Arrival alerts before then'));
+    }
+
+    // Photo permission (2026-11-06)
+    if (PHOTO_MARK[child.photo_consent]) {
+      card.appendChild(Dom.el('div', { class: 'child-card-photo', style: 'margin-top:6px;font-size:12px;color:' + (child.photo_consent === 'none' ? '#B91C1C' : '#92400E') + ';' },
+        PHOTO_MARK[child.photo_consent][0] + ' ' + (child.photo_consent === 'none' ? 'No photos' : 'Family-only photos')));
     }
 
     // Health flags
@@ -787,6 +967,11 @@
         style: bigBtn + 'flex:1 1 60%;background:linear-gradient(135deg,#F59E0B,#D97706);color:#fff;box-shadow:0 6px 14px -7px rgba(217,119,6,.7);',
         onClick: (e) => { e.stopPropagation(); confirmCheckOut(child, card); },
       }, '← Check out'));
+      actions.appendChild(Dom.el('button', {
+        style: bigBtn + 'flex:1 1 auto;padding:8px 12px;font-size:13px;background:#EEF2FF;color:#3730A3;border:1.5px solid #C7D2FE;',
+        title: (child.display_name || 'This child') + '\u2019s family will pick up late today: the end-of-day alerts wait for that time',
+        onClick: (e) => { e.stopPropagation(); openLate(child, 'departure'); },
+      }, child.late_pickup ? '⏰ Pickup · ' + child.late_pickup.by : '⏰ Late pickup'));
     } else if (_abs) {
       // Absent today: no primary button, and no second "Absent" (it already is).
       actions.appendChild(Dom.el('button', {
@@ -809,10 +994,457 @@
         title: 'Report ' + (child.display_name || 'this child') + ' absent today',
         onClick: (e) => { e.stopPropagation(); markAbsent(child, card); },
       }, '🏠 Absent'));
+      // Late drop-off (2026-11-06, Anthony: "there should be a Late drop off on the child to allow educators to
+      // select this to reduce the safe arrival checking"). Not arrived yet today only.
+      if (_st === 'away') {
+        actions.appendChild(Dom.el('button', {
+          style: bigBtn + 'flex:1 1 100%;background:#EEF2FF;color:#3730A3;border:1.5px solid #C7D2FE;',
+          title: (child.display_name || 'This child') + '\u2019s family will drop off late today: Safe Arrival waits for that time',
+          onClick: (e) => { e.stopPropagation(); openLate(child, 'arrival'); },
+        }, child.running_late ? '⏰ Late drop-off · ' + child.running_late.by : '⏰ Late drop-off'));
+      }
+    }
+    // Supplies from home (2026-10-23): what is outstanding, and asking for more.
+    card.appendChild(Dom.el('div', { 'data-kt-sup-child': String(child.id) }));
+    if (window.KT && KT.Supplies) {
+      actions.appendChild(Dom.el('button', {
+        style: bigBtn + 'flex:0 1 auto;padding:8px 11px;font-size:13px;background:#fff;color:#0E7490;border:1.5px solid #A5F3FC;',
+        title: 'Ask ' + (child.display_name || 'this child') + '\u2019s family to bring supplies',
+        onClick: (e) => { e.stopPropagation(); KT.Supplies.request([{ id: child.id, name: child.display_name }], () => { const g = card.closest('.educator-roster'); if (g) KT.Supplies.decorate(g, currentRoomId); }); },
+      }, '🧺 Supplies'));
     }
     card.appendChild(actions);
 
     return card;
+  }
+
+
+  /* ═══ TODAY AS A RING OF FACES (2026-10-31, Anthony: "can we just have the kids display pic in a cool circular
+     form and when you click it it pops up quick actions to check in, request supplies, log and check out - the
+     circle should keep the time clocked in and turn glowing green").
+     One circle per child: a soft breathing green glow while they are here (with the check-in time and how long),
+     a calm slate ring once picked up, amber when reported absent, grey when not in yet. A tap opens the quick
+     actions, which call the SAME check-in / check-out / log / supplies flows the old cards used. */
+  let kidFilter = (function () { try { return sessionStorage.getItem('kt_today_filter') || 'all'; } catch (e) { return 'all'; } })();
+
+  /* Late drop-off / late pickup from the card list (the ring of faces has the same thing as a tile). */
+  function openLate(c, kind) {
+    if (!(window.KT && KT.runningLate)) return;
+    const first = c.display_name || c.first_name || 'This child';
+    KT.runningLate({ child_id: c.id, name: [first, c.last_name].filter(Boolean).join(' '), first_name: first,
+      late: kind === 'departure' ? c.late_pickup : c.running_late },
+      { kind: kind, onDone: function () { if (KT.Shell && KT.Shell.renderScreen) KT.Shell.renderScreen(); } });
+  }
+  function kidStatus(c) {
+    if (c.is_at_centre) return 'in';
+    if (c.status === 'in') return 'out';              // just checked out: the cached status lags a moment
+    if (c.absence && c.status !== 'out') return 'absent';
+    return c.status === 'out' ? 'out' : 'away';
+  }
+  function kidShort(c) {
+    const first = c.display_name || c.first_name || 'Child';
+    const li = (c.last_name || '').trim().charAt(0);
+    return first + (li ? ' ' + li + '.' : '');
+  }
+  function sinceText(iso) {
+    if (!iso) return '';
+    const t = Date.parse(iso);
+    if (!isFinite(t)) return '';
+    const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+    return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h' + (m % 60 ? ' ' + (m % 60) + 'm' : '');
+  }
+  function kidPhoto(c, px) {
+    const sex = (window.KT && KT.normSex) ? (KT.normSex(c.gender) || (KT.guessSex ? KT.guessSex(c.display_name || c.first_name || '') : 'male')) : '';
+    const emoji = (window.KT && KT.emojiFor) ? KT.emojiFor(sex, true) : '🧒';
+    const ph = Dom.el('span', { class: 'kt-kr-ph', 'aria-hidden': 'true', 'data-kt-noface': '1', style: 'font-size:' + Math.round(px * 0.5) + 'px;' }, emoji);
+    if (c.photo_url) {
+      const img = Dom.el('img', { src: ktAbsUrl(c.photo_url), alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' });
+      img.addEventListener('error', function () { img.remove(); });
+      ph.appendChild(img);
+    }
+    return ph;
+  }
+
+  function ensureCircleCss() {
+    if (document.getElementById('kt-kr-css')) return;
+    const st = document.createElement('style'); st.id = 'kt-kr-css';
+    st.textContent = ''
+      + '.kt-kr{margin:4px 0 8px;}'
+      + '.kt-kr-top{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #E6EBF1;border-radius:16px;padding:12px 14px;margin-bottom:10px;}'
+      + '.kt-kr-top svg{flex:0 0 auto;display:block;}'
+      + '.kt-kr-sum b{display:block;font-size:17px;font-weight:800;color:#0F172A;line-height:1.2;}'
+      + '.kt-kr-sum span{display:block;font-size:12.5px;color:#64748B;margin-top:2px;line-height:1.35;}'
+      + '.kt-kr-tabs{display:flex;gap:4px;margin:0 0 12px;}'
+      + '.kt-kr-tabs>button{border:0;background:transparent;font-size:13px;font-weight:700;color:#475569;padding:7px 12px;border-radius:9px;cursor:pointer;white-space:nowrap;}'
+      + '.kt-kr-tabs>button .kt-kr-n{margin-left:5px;font-variant-numeric:tabular-nums;opacity:.75;}'
+      + '.kt-kr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:18px 10px;padding:6px 2px 4px;}'
+      + '.kt-kr-kid{appearance:none;border:0;background:transparent;padding:6px 2px;margin:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0;border-radius:16px;font:inherit;color:inherit;-webkit-tap-highlight-color:transparent;}'
+      + '.kt-kr-kid:focus-visible{outline:3px solid #2F8C86;outline-offset:2px;}'
+      + '.kt-kr-kid:active .kt-kr-ring{transform:scale(.96);}'
+      + '.kt-kr-ring{position:relative;width:84px;height:84px;border-radius:50%;padding:3px;background:#CBD5E1;transition:transform .15s ease;flex:0 0 auto;}'
+      + '.kt-kr-ph{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;overflow:hidden;background:#F1F5F9;border:3px solid #fff;box-sizing:border-box;line-height:1;}'
+      + '.kt-kr-ph img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}'
+      + '.kt-kr-kid[data-st="away"] .kt-kr-ph{filter:grayscale(.55) opacity(.82);}'
+      + '.kt-kr-kid[data-st="in"] .kt-kr-ring{background:linear-gradient(135deg,#4ADE80,#16A34A);}'
+      + '.kt-kr-kid[data-st="in"] .kt-kr-ring::before{content:"";position:absolute;inset:-4px;border-radius:50%;box-shadow:0 0 0 2px rgba(34,197,94,.35),0 0 18px 5px rgba(34,197,94,.55);opacity:.55;animation:ktKrGlow 2.8s ease-in-out infinite;pointer-events:none;will-change:opacity;}'
+      + '@keyframes ktKrGlow{0%,100%{opacity:.35}50%{opacity:1}}'
+      + '@media (prefers-reduced-motion:reduce){.kt-kr-kid[data-st="in"] .kt-kr-ring::before{animation:none;opacity:.8;}}'
+      + '.kt-kr-kid[data-st="out"] .kt-kr-ring{background:linear-gradient(135deg,#94A3B8,#64748B);}'
+      + '.kt-kr-kid[data-st="absent"] .kt-kr-ring{background:linear-gradient(135deg,#FBBF24,#F59E0B);}'
+      + '.kt-kr-dot{position:absolute;top:1px;right:1px;min-width:20px;height:20px;border-radius:999px;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;line-height:1;box-sizing:border-box;}'
+      + '.kt-kr-dot.alert{background:#DC2626;color:#fff;}'
+      + '.kt-kr-dot.sup{top:auto;bottom:1px;right:auto;left:1px;background:#FEF3C7;}'
+      + '.kt-kr-name{font-size:13.5px;font-weight:800;color:#0F172A;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      + '.kt-kr-pill{display:inline-flex;align-items:center;justify-content:center;gap:4px;font-size:11px;font-weight:800;line-height:1.2;padding:3px 8px;border-radius:999px;white-space:normal;text-align:center;max-width:100%;box-sizing:border-box;}'
+      + '.kt-kr-kid[data-st="in"] .kt-kr-pill{background:#DCFCE7;color:#166534;}'
+      + '.kt-kr-kid[data-st="out"] .kt-kr-pill{background:#E2E8F0;color:#334155;}'
+      + '.kt-kr-kid[data-st="absent"] .kt-kr-pill{background:#FEF3C7;color:#92400E;}'
+      + '.kt-kr-kid[data-st="away"] .kt-kr-pill{background:#F1F5F9;color:#64748B;}'
+      + '.kt-kr-since{font-size:11px;font-weight:700;color:#15803D;margin-top:-3px;font-variant-numeric:tabular-nums;white-space:nowrap;}'
+      + '.kt-kr-kid[data-st="out"] .kt-kr-since{color:#64748B;}'
+      /* The "+" on every child (2026-11-04): tells an educator the circle opens more. Bottom-right; the supplies 🧺 sits
+         bottom-left. */
+      + '.kt-kr-plus{position:absolute;right:0;bottom:0;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:#0F6E80;color:#fff;display:flex;align-items:center;justify-content:center;font:700 17px/1 system-ui,-apple-system,sans-serif;box-sizing:border-box;box-shadow:0 2px 6px rgba(15,23,42,.25);pointer-events:none;transition:transform .15s ease;}'
+      + '.kt-kr-kid:hover .kt-kr-plus{transform:scale(1.12);}'
+      + '.kt-kr-empty{grid-column:1/-1;text-align:center;color:#64748B;font-size:13.5px;padding:22px 8px;}'
+      + '.kt-kr-pop-head{display:flex;align-items:center;gap:14px;margin:0 0 14px;}'
+      + '.kt-kr-pop-head .kt-kr-ring{width:72px;height:72px;}'
+      + '.kt-kr-pop-head b{display:block;font-size:18px;font-weight:800;color:#0F172A;line-height:1.2;}'
+      + '.kt-kr-pop-head span.sub{display:block;font-size:13px;color:#64748B;margin-top:3px;}'
+      /* FLOATING SHORTCUTS (2026-11-04): the card opens beside the child tapped, like the chat's + shortcuts -
+         a compact head, then round tiles (tinted circle + a short name), four across. */
+      + '.kt-kr-float{position:fixed;z-index:2147483500;width:218px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow-y:auto;box-sizing:border-box;background:rgba(15,23,42,.58);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6);border:1px solid rgba(255,255,255,.16);border-radius:20px;box-shadow:0 20px 48px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.12);color:#fff;padding:10px 6px 6px;animation:kt-kr-float-in .16s cubic-bezier(.2,.9,.3,1.2);}'
+      + '@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){.kt-kr-float{background:rgba(15,23,42,.92);}}'
+      + '.kt-kr-scrim{position:fixed;inset:0;z-index:2147483499;background:rgba(15,23,42,.32);animation:kt-kr-scrim-in .16s ease-out;}'
+      + '@keyframes kt-kr-scrim-in{from{opacity:0;}to{opacity:1;}}'
+      + '.kt-kr-float .kt-kr-pop-head b{color:#fff;}'
+      + '@keyframes kt-kr-float-in{from{opacity:0;transform:translateY(6px) scale(.94);}to{opacity:1;transform:none;}}'
+      + '.kt-kr-float .kt-kr-pop-head{gap:8px;margin:0 4px 6px;padding-right:28px;position:relative;}'
+      + '.kt-kr-float .kt-kr-pop-head .kt-kr-ring{width:36px;height:36px;}'
+      + '.kt-kr-float .kt-kr-pop-head b{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      + '.kt-kr-pm{display:inline-block;margin-top:3px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:800;line-height:1.5;white-space:nowrap;}'
+      + '.kt-kr-pm.family{background:rgba(253,230,138,.95);color:#78350F;}'
+      + '.kt-kr-pm.none{background:rgba(254,202,202,.95);color:#7F1D1D;}'
+      + '.kt-kr-float .kt-kr-pop-head span.sub{font-size:12px;margin-top:1px;}'
+      + '.kt-kr-float .kt-kr-x{position:absolute;top:-2px;right:-2px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:16px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}'
+      + '.kt-kr-float .kt-kr-flags{margin:0 4px 8px;}'
+      + '.kt-kr-float .kt-kr-last{margin:0 4px 8px;padding:6px 9px;font-size:12px;background:rgba(248,250,252,.7);}'
+      + '.kt-kr-float .kt-kr-tiles{display:flex;flex-direction:column;gap:2px;}'
+      + '.kt-kr-float .kt-kr-tile{display:grid;grid-template-columns:32px minmax(0,1fr);column-gap:10px;align-items:center;justify-items:start;text-align:left;border:0;background:none;border-radius:10px;padding:4px 6px;min-height:0;font-size:13.5px;font-weight:700;color:#fff;transition:background .12s ease;}'
+      + '.kt-kr-float .kt-kr-tile:hover,.kt-kr-float .kt-kr-tile:focus-visible{background:rgba(255,255,255,.12);outline:none;}'
+      + '.kt-kr-float .kt-kr-tile .ico{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:16px;background:var(--kt-kr-tint,#F1F5F9);transition:transform .12s ease;}'
+      + '.kt-kr-float .kt-kr-tile:hover .ico,.kt-kr-float .kt-kr-tile:focus-visible .ico{transform:scale(1.06);}'
+      + '.kt-kr-float .kt-kr-tile.go,.kt-kr-float .kt-kr-tile.out{background:none;color:#fff;}'
+      + '.kt-kr-float .kt-kr-tile.go:hover,.kt-kr-float .kt-kr-tile.out:hover{background:rgba(255,255,255,.12);}'
+      + '.kt-kr-float .kt-kr-tile.go .ico{background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;}'
+      + '.kt-kr-float .kt-kr-tile.out .ico{background:linear-gradient(135deg,#F59E0B,#D97706);color:#fff;}'
+      + '.kt-kr-float .kt-kr-tile .lbl{line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+      + '.kt-kr-float .kt-kr-tile small{display:block;align-self:start;font-size:11.5px;font-weight:600;color:#64748B;line-height:1.25;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'
+      + '.kt-kr-float .kt-kr-tile.go small,.kt-kr-float .kt-kr-tile.out small{color:#64748B;}'
+      + '.kt-kr-float .kt-kr-tile[disabled]{opacity:.4;}'
+      + '.kt-kr-float [data-kt-sup-child]:not(:empty){margin:8px 2px 0;padding:8px;border-radius:12px;background:rgba(255,255,255,.94);color:#0F172A;}'
+      + '.kt-kr-tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;}'
+      + '.kt-kr-tile{appearance:none;border:1.5px solid #E2E8F0;background:#fff;border-radius:14px;padding:14px 10px;min-height:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;font:inherit;font-size:14px;font-weight:800;color:#0F172A;text-align:center;}'
+      + '.kt-kr-tile .ico{font-size:24px;line-height:1;}'
+      + '.kt-kr-tile small{font-size:11.5px;font-weight:600;color:#64748B;}'
+      + '.kt-kr-tile:focus-visible{outline:3px solid #2F8C86;outline-offset:2px;}'
+      + '.kt-kr-tile.go{background:linear-gradient(135deg,#16A34A,#15803D);border-color:transparent;color:#fff;}'
+      + '.kt-kr-tile.go small{color:rgba(255,255,255,.85);}'
+      + '.kt-kr-tile.out{background:linear-gradient(135deg,#F59E0B,#D97706);border-color:transparent;color:#fff;}'
+      + '.kt-kr-tile.out small{color:rgba(255,255,255,.88);}'
+      + '.kt-kr-tile[disabled]{opacity:.5;cursor:default;}'
+      + '.kt-kr-flags{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 12px;}'
+      + '.kt-kr-last{font-size:12.5px;color:#475569;background:#F8FAFC;border-radius:10px;padding:8px 10px;margin:0 0 12px;}'
+      + '@media (max-width:600px){'
+      + '.kt-kr-grid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:14px 6px;}'
+      + '.kt-kr-ring{width:72px;height:72px;}'
+      + '.kt-kr-name{font-size:12.5px;}'
+      + '.kt-kr-tabs{overflow-x:auto;flex-wrap:nowrap;}'
+      + '}';
+    document.head.appendChild(st);
+  }
+
+  /* PHOTO PERMISSION ON THE ROSTER (2026-11-06, App\Support\MediaConsent): the roster carries photo_consent
+     (none | family | group). 🚫 = the family asked that they not be photographed; 👪 = family-only photos, keep them
+     out of group photos. Nothing for group. Shown before the camera comes out, not only in the tag picker. */
+  const PHOTO_MARK = {
+    none: ['🚫', 'No photos: their family asked that they not be photographed'],
+    family: ['👪', 'Family-only photos: keep them out of group photos other families see'],
+  };
+  function photoMark(c) {
+    const m = PHOTO_MARK[c && c.photo_consent];
+    return m ? Dom.el('span', { class: 'kt-kr-photo', 'data-kttip': m[1], 'aria-label': m[1], style: 'margin-left:3px;font-size:.9em;' }, m[0]) : null;
+  }
+
+  // "· 2h" after the arrival time, "2h here" when there is no time to follow.
+  function sinceLine(since, sep) { const t = sinceText(since); return t ? (sep ? ' · ' + t : t + ' here') : ''; }
+  function circleFor(c) {
+    const st = kidStatus(c);
+    const name = kidShort(c);
+    let pillTxt, aria;
+    if (st === 'in') { pillTxt = 'At Centre'; aria = name + ', at Centre' + (c.arrived_at ? ' at ' + c.arrived_at : ''); }
+    else if (st === 'out') { pillTxt = 'Not at Centre'; aria = name + ', not at Centre, left' + (c.departed_at ? ' at ' + c.departed_at : ''); }
+    else if (st === 'absent') { pillTxt = 'Absent'; aria = name + ', reported absent'; }
+    else if (c.running_late) { pillTxt = 'Late drop-off'; aria = name + ', late drop-off, expected by ' + c.running_late.by; }
+    else { pillTxt = 'Not arrived'; aria = name + ', not arrived yet'; }
+    const b = Dom.el('button', { type: 'button', class: 'kt-kr-kid', 'data-kt-no-tips': '1', 'data-kt-iconized': '1', 'data-kt-btn-free': '1', 'data-st': st, 'data-kid': String(c.id), 'aria-label': aria + '. Open quick actions', title: (c.display_name || name) + ' — tap for quick actions' });
+    const ring = Dom.el('span', { class: 'kt-kr-ring' });
+    ring.appendChild(kidPhoto(c, 84));
+    if (c.urgent_flags && c.urgent_flags.length) {
+      ring.appendChild(Dom.el('span', { class: 'kt-kr-dot alert', title: c.urgent_flags.map(function (f) { return f.category; }).join(', '), 'aria-hidden': 'true' }, '!'));
+    }
+    ring.appendChild(Dom.el('span', { class: 'kt-kr-plus', 'aria-hidden': 'true' }, '+'));
+    b.appendChild(ring);
+    const nameEl = Dom.el('span', { class: 'kt-kr-name' }, name);
+    const pm = photoMark(c); if (pm) nameEl.appendChild(pm);
+    b.appendChild(nameEl);
+    const pill = Dom.el('span', { class: 'kt-kr-pill' }, pillTxt);
+    b.appendChild(pill);
+    // The time (and how long they have been here) on its own small line, so the pill never truncates in a 4-up phone grid.
+    if (st === 'in') {
+      const ln = Dom.el('span', { class: 'kt-kr-since' }, c.arrived_at || '');
+      if (c.in_since) ln.appendChild(Dom.el('span', { 'data-kr-since': c.in_since, 'data-kr-sep': c.arrived_at ? '1' : '' }, sinceLine(c.in_since, !!c.arrived_at)));
+      if (ln.textContent) b.appendChild(ln);
+    } else if (st === 'out' && c.departed_at) {
+      b.appendChild(Dom.el('span', { class: 'kt-kr-since' }, 'Left ' + c.departed_at));
+    } else if (st === 'away' && c.running_late) {
+      b.appendChild(Dom.el('span', { class: 'kt-kr-since' }, 'By ' + c.running_late.by));
+    }
+    b.addEventListener('click', function () { openKidActions(c, b); });
+    return b;
+  }
+
+  function paintCircles(container, data) {
+    ensureCircleCss();
+    const kids = data.roster || [];
+    const counts = { all: kids.length, in: 0, away: 0, out: 0, absent: 0 };
+    kids.forEach(function (c) { counts[kidStatus(c)]++; });
+    const wrap = Dom.el('div', { class: 'kt-kr' });   // no data-kt-noband: the filter row must become the standard tab band
+
+    // Summary: "8 of 12 in" with a progress ring.
+    const R = 22, C = 2 * Math.PI * R, frac = kids.length ? counts.in / kids.length : 0;
+    const top = Dom.el('div', { class: 'kt-kr-top' });
+    top.innerHTML = '<svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true" style="transform:rotate(-90deg)">'
+      + '<circle cx="28" cy="28" r="' + R + '" fill="none" stroke="#E2E8F0" stroke-width="7"></circle>'
+      + '<circle cx="28" cy="28" r="' + R + '" fill="none" stroke="#16A34A" stroke-width="7" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(1) + '" style="transition:stroke-dashoffset .8s cubic-bezier(.22,1,.36,1)"></circle></svg>';
+    const bits = [];
+    if (counts.out) bits.push(counts.out + ' picked up');
+    if (counts.absent) bits.push(counts.absent + ' absent');
+    if (counts.away) bits.push(counts.away + ' not arrived yet');
+    /* Name the room (2026-11-03): this sat under a centre-wide "at the centre" tile and beside
+       Home's room count, and nothing said which children "of 2" were. Children enrolled here
+       but not booked today are named too, so "of 1" can be squared with Home's "2". */
+    const notBooked = Math.max(0, (Number(data.enrolled_total) || 0) - kids.length);
+    if (notBooked) bits.push(notBooked + ' not booked today');
+    const roomName = (data.room && data.room.name) || '';
+    const sum = Dom.el('div', { class: 'kt-kr-sum' });
+    sum.appendChild(Dom.el('b', {}, counts.in + ' of ' + kids.length + ' at Centre'));
+    const sub = bits.length ? bits.join(' · ') : (counts.in === kids.length && kids.length ? 'Everyone is here' : 'Tap a child for quick actions');
+    sum.appendChild(Dom.el('span', {}, roomName ? roomName + ' · ' + sub : sub));
+    top.appendChild(sum);
+    wrap.appendChild(top);
+
+    // Filters: the portal's standard sub-tab band.
+    const TABS = [['all', 'All', counts.all], ['in', 'At Centre', counts.in], ['away', 'Not arrived', counts.away + counts.absent], ['out', 'Not at Centre', counts.out]];
+    if (!TABS.some(function (t) { return t[0] === kidFilter; })) kidFilter = 'all';
+    const tabs = Dom.el('div', { class: 'kt-kr-tabs', role: 'tablist', 'aria-label': 'Show children' });
+    const grid = Dom.el('div', { class: 'kt-kr-grid', role: 'list' });
+    function paintGrid() {
+      Dom.clear(grid);
+      const shown = kids.filter(function (c) {
+        const s = kidStatus(c);
+        return kidFilter === 'all' || s === kidFilter || (kidFilter === 'away' && s === 'absent');
+      });
+      if (!shown.length) { grid.appendChild(Dom.el('div', { class: 'kt-kr-empty' }, 'No children here.')); return; }
+      shown.forEach(function (c) { const cell = Dom.el('div', { role: 'listitem', style: 'min-width:0;display:flex;justify-content:center;' }); cell.appendChild(circleFor(c)); grid.appendChild(cell); });
+      paintSupplyDots(grid);
+    }
+    TABS.forEach(function (t) {
+      const on = t[0] === kidFilter;
+      const tb = Dom.el('button', { type: 'button', role: 'tab', 'data-kt-iconized': '1', 'aria-selected': on ? 'true' : 'false', class: on ? 'active' : '', 'data-tab': t[0] }, t[1]);
+      tb.appendChild(Dom.el('span', { class: 'kt-kr-n' }, String(t[2])));
+      tb.addEventListener('click', function () {
+        kidFilter = t[0];
+        try { sessionStorage.setItem('kt_today_filter', kidFilter); } catch (e) {}
+        [].forEach.call(tabs.children, function (x) { const yes = x === tb; x.setAttribute('aria-selected', yes ? 'true' : 'false'); x.classList.toggle('active', yes); });
+        paintGrid();
+      });
+      tabs.appendChild(tb);
+    });
+    wrap.appendChild(tabs);
+    wrap.appendChild(grid);
+    paintGrid();
+    container.appendChild(wrap);
+
+    // "In · 8:42 AM · 2h 10m" keeps counting while the screen is open.
+    if (container.__krTick) clearInterval(container.__krTick);
+    container.__krTick = setInterval(function () {
+      if (!document.body.contains(container)) { clearInterval(container.__krTick); return; }
+      container.querySelectorAll('[data-kr-since]').forEach(function (n) { n.textContent = sinceLine(n.getAttribute('data-kr-since'), n.getAttribute('data-kr-sep') === '1'); });
+    }, 60000);
+  }
+
+  // A small 🧺 on a circle when that family has been asked to bring something.
+  let supplyCache = { room: null, at: 0, by: {} };
+  function paintSupplyDots(grid) {
+    if (!(window.KT && KT.Supplies) || !currentRoomId) return;
+    const apply = function () {
+      grid.querySelectorAll('.kt-kr-kid').forEach(function (b) {
+        const n = supplyCache.by[b.getAttribute('data-kid')] || 0;
+        const old = b.querySelector('.kt-kr-dot.sup'); if (old) old.remove();
+        if (n) b.querySelector('.kt-kr-ring').appendChild(Dom.el('span', { class: 'kt-kr-dot sup', title: n + ' supplies request' + (n === 1 ? '' : 's') + ' open', 'aria-hidden': 'true' }, '🧺'));
+      });
+    };
+    if (supplyCache.room === currentRoomId && Date.now() - supplyCache.at < 60000) { apply(); return; }
+    Api.get('/provider/supplies?room_id=' + encodeURIComponent(currentRoomId)).then(function (r) {
+      const by = {};
+      ((r && r.requests) || []).forEach(function (q) { if (['open', 'coming', 'cant'].indexOf(q.status) !== -1) by[q.child_id] = (by[q.child_id] || 0) + 1; });
+      supplyCache = { room: currentRoomId, at: Date.now(), by: by };
+      if (document.body.contains(grid)) apply();
+    }).catch(function () {});
+  }
+
+  function openKidActions(c, circleEl) {
+    const st = kidStatus(c);
+    const body = Dom.el('div', { 'data-kt-noband': '1' });
+    const head = Dom.el('div', { class: 'kt-kr-pop-head' });
+    const fake = Dom.el('span', { class: 'kt-kr-kid', 'data-st': st, style: 'padding:0;cursor:default;' });
+    const ring = Dom.el('span', { class: 'kt-kr-ring' }); ring.appendChild(kidPhoto(c, 72)); fake.appendChild(ring);
+    head.appendChild(fake);
+    const txt = Dom.el('div', { style: 'min-width:0;' });
+    txt.appendChild(Dom.el('b', {}, [c.display_name || c.first_name, c.last_name].filter(Boolean).join(' ')));
+    /* Short and readable on the dark card (2026-11-06, Anthony: "the orange writing is very hard to read ... reduce
+       the text"): a light pill, the full sentence in its tooltip. */
+    if (PHOTO_MARK[c.photo_consent]) {
+      txt.appendChild(Dom.el('span', { class: 'kt-kr-pm ' + c.photo_consent, 'data-kttip': PHOTO_MARK[c.photo_consent][1], 'aria-label': PHOTO_MARK[c.photo_consent][1] },
+        PHOTO_MARK[c.photo_consent][0] + ' ' + (c.photo_consent === 'none' ? 'No photos' : 'Family-only photos')));
+    }
+    head.appendChild(txt);
+    body.appendChild(head);
+
+    if (c.urgent_flags && c.urgent_flags.length) {
+      const fl = Dom.el('div', { class: 'kt-kr-flags' });
+      c.urgent_flags.forEach(function (f) { fl.appendChild(Dom.el('span', { class: 'health-flag severity-' + f.severity, title: f.category }, f.short_label)); });
+      body.appendChild(fl);
+    }
+
+    const tiles = Dom.el('div', { class: 'kt-kr-tiles', role: 'menu', 'aria-label': 'Shortcuts' });
+    const TINT = ['#EDE9FE', '#FCE7F3', '#FEF3C7', '#DBEAFE', '#E0F2FE', '#DCFCE7'];
+    function tile(cls, ico, label, small, fn, disabled) {
+      const t = Dom.el('button', { type: 'button', class: 'kt-kr-tile ' + cls, role: 'menuitem', 'aria-label': label + (small ? ' — ' + small : ''), 'data-kt-iconized': '1' });
+      if (!cls) t.style.setProperty('--kt-kr-tint', TINT[tiles.children.length % TINT.length]);
+      t.appendChild(Dom.el('span', { class: 'ico', 'aria-hidden': 'true' }, ico));
+      t.appendChild(Dom.el('span', { class: 'lbl' }, label));
+      if (disabled) t.disabled = true;
+      t.addEventListener('click', function () { closeFloat(); setTimeout(fn, 60); });
+      tiles.appendChild(t);
+    }
+    if (st === 'in') tile('out', '⏹', 'Check out', 'Pickup', function () { confirmCheckOut(c, circleEl); });
+    else if (st === 'absent') tile('go', '✅', 'Check in', 'Arrived after all', function () { doCheckIn(c, circleEl); });
+    else tile('go', '✅', 'Check in', st === 'out' ? 'Back again' : 'Arrival', function () { doCheckIn(c, circleEl); });
+    tile('', '📝', 'Log moment', st === 'in' ? 'Meal, nap, photo…' : 'When they are here', function () { openQuickLog(c); }, st !== 'in');
+    // The observation form with this child already chosen (screen-observations reads ?child=).
+    tile('', '👀', 'Observation', 'Learning & skills', function () { if (window.KT && window.KT.openObservation) window.KT.openObservation({ childId: c.id }); else location.hash = '#observation-new?child=' + c.id; });   // a popup (2026-11-09)
+    if (window.KT && KT.Supplies) {
+      tile('', '🧺', 'Supplies', 'Ask the family', function () {
+        KT.Supplies.request([{ id: c.id, name: c.display_name }], function () { supplyCache.at = 0; const g = document.querySelector('#educatorRoster .kt-kr-grid'); if (g) paintSupplyDots(g); });
+      });
+    }
+    /* RUNNING LATE (2026-11-06): the family said they will be in later. Safe Arrival (screen-safe-arrival.js,
+       KT.runningLate) waits for that time before asking or alerting anyone. */
+    /* Always on the card, so people know where it is (2026-11-06, Anthony: "i dont see the running late when tapping
+       the child"). It is for a child who has not arrived yet; on anyone else a tap says why instead (a greyed tile
+       could not say why on a phone). */
+    /* A child who is here: the same tile logs a LATE PICKUP (2026-11-06, Anthony: "the late function should apply for
+       parents dropping and picking up late"); the end-of-day check waits for that time. */
+    const pickup = st === 'in';
+    const lateWhy = st === 'out' ? ' has already gone home today.' : st === 'absent' ? ' is reported absent today. Check them in if they arrive after all.' : '';
+    const lateNow = pickup ? c.late_pickup : c.running_late;
+    tile('', '⏰', lateNow ? (pickup ? 'Pickup · ' : 'Drop-off · ') + lateNow.by : (pickup ? 'Late pickup' : 'Late drop-off'),
+      pickup ? 'Picked up later today' : 'Dropped off later today', function () {
+      const first = c.display_name || c.first_name || 'This child';
+      if (lateWhy) { if (KT.toast) KT.toast('⏰', 'Late drop-off', first + lateWhy, '#4338CA'); return; }
+      KT.runningLate({ child_id: c.id, name: [first, c.last_name].filter(Boolean).join(' '), first_name: first, late: lateNow },
+        { kind: pickup ? 'departure' : 'arrival', onDone: function () { if (KT.Shell && KT.Shell.renderScreen) KT.Shell.renderScreen(); } });
+    });
+    if (lateWhy) tiles.lastElementChild.style.opacity = '.6';
+    if (st === 'away') tile('', '🏠', 'Mark absent', 'Not coming today', function () { markAbsent(c, circleEl); });
+    else tile('', '👤', 'Profile', 'Record & contacts', function () {
+      location.hash = (isAgencyScope() ? '#child-detail?id=' : '#child-record?id=') + c.id;
+    });
+    body.appendChild(tiles);
+
+    // What the family has already been asked to bring, with Received / Cancel.
+    const sup = Dom.el('div', { 'data-kt-sup-child': String(c.id) });
+    body.appendChild(sup);
+    if (window.KT && KT.Supplies && currentRoomId) KT.Supplies.decorate(body, currentRoomId);
+
+    openFloat(body, circleEl, [c.display_name || c.first_name, c.last_name].filter(Boolean).join(' '));
+  }
+
+  /* The floating shortcuts card: beside (below, else above) the child tapped, kept inside the window; closes on ✕,
+     a tap outside, Escape, scrolling the page or a tile. One open at a time. */
+  /* One card for both screens (2026-11-06): kt-kid-float.js holds this same card, and the parent's Today "+" opens it
+     too. The copy below stays only as the fallback if that file is missing. */
+  let _float = null;
+  function closeFloat() {
+    if (window.KT && KT.kidFloat) KT.kidFloat.close();
+    if (!_float) return;
+    const f = _float; _float = null;
+    f.el.remove();
+    if (f.scrim) f.scrim.remove();
+    document.removeEventListener('pointerdown', f.outside, true);
+    document.removeEventListener('keydown', f.key, true);
+    window.removeEventListener('resize', closeFloat);
+    window.removeEventListener('scroll', f.scroll, true);
+    if (f.anchor && f.anchor.isConnected && f.focusBack) { try { f.anchor.focus({ preventScroll: true }); } catch (e) {} }
+  }
+  function openFloat(body, anchor, name) {
+    if (window.KT && KT.kidFloat) { KT.kidFloat.open(body, anchor, name); return; }
+    closeFloat();
+    const el = Dom.el('div', { class: 'kt-kr-float', role: 'dialog', 'aria-label': 'Shortcuts for ' + name, 'data-no-modal-guard': '1', 'data-kt-nochrome': '1', 'data-kt-no-tips': '1' });   // short tile names, no glossary "?"
+    const head = body.querySelector('.kt-kr-pop-head');
+    const x = Dom.el('button', { type: 'button', class: 'kt-kr-x', 'aria-label': 'Close', 'data-kt-iconized': '1' }, '✕');
+    x.addEventListener('click', function () { closeFloat(); });
+    if (head) head.appendChild(x); else el.appendChild(x);
+    el.appendChild(body);
+    const scrim = Dom.el('div', { class: 'kt-kr-scrim', 'aria-hidden': 'true' });
+    document.body.appendChild(scrim);
+    document.body.appendChild(el);
+    const r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: innerWidth / 2, right: innerWidth / 2, top: innerHeight / 2, bottom: innerHeight / 2, width: 0 };
+    const w = el.offsetWidth, h = el.offsetHeight, vw = window.innerWidth, vh = window.innerHeight;
+    let left = r.left + r.width / 2 - w / 2;
+    left = Math.min(Math.max(8, left), vw - w - 8);
+    let top = r.bottom + 8;
+    if (top + h > vh - 8) top = r.top - h - 8;
+    if (top < 8) top = Math.max(8, vh - h - 8);
+    el.style.left = Math.round(left) + 'px';
+    el.style.top = Math.round(top) + 'px';
+    el.style.transformOrigin = (top < r.top ? 'bottom' : 'top') + ' center';
+    const st = { el: el, scrim: scrim, anchor: anchor, focusBack: false };
+    st.outside = function (e) { if (!el.contains(e.target)) { if (e.target === scrim) { e.preventDefault(); e.stopPropagation(); } closeFloat(); } };
+    st.key = function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); st.focusBack = true; closeFloat(); return; }
+      const items = Array.prototype.slice.call(el.querySelectorAll('.kt-kr-tile:not([disabled])'));
+      const i = items.indexOf(document.activeElement);
+      if (i === -1) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); (items[i + 1] || items[0]).focus(); }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); (items[i - 1] || items[items.length - 1]).focus(); }
+    };
+    // The page scrolling away from the child closes it; scrolling inside the card does not.
+    st.scroll = function (e) { if (!el.contains(e.target)) closeFloat(); };
+    _float = st;
+    setTimeout(function () {
+      if (_float !== st) return;
+      document.addEventListener('pointerdown', st.outside, true);
+      document.addEventListener('keydown', st.key, true);
+      window.addEventListener('resize', closeFloat);
+      window.addEventListener('scroll', st.scroll, true);
+    }, 0);
+    if (!(window.matchMedia && matchMedia('(pointer: coarse)').matches)) {
+      const first = el.querySelector('.kt-kr-tile:not([disabled])');
+      if (first) first.focus({ preventScroll: true });
+    }
   }
 
   // ─── Actions ─────────────────────────────────────────────────
@@ -896,38 +1528,51 @@
     });
   }
 
+  /* Checking a child in or out here is the backup for a parent who cannot use One-Tap: a centred yellow ⚠ warning
+     (KT.warnManualCheck, kt-polish.js) asks first (2026-11-06). The old wording stays as the fallback. */
+  function askManualCheck(child, going, run) {
+    if (window.KT && typeof KT.warnManualCheck === 'function') {
+      KT.warnManualCheck({ name: child.display_name, going: going }).then(function (ok) { if (ok) run(); });
+      return;
+    }
+    Modal.confirm({
+      title: going === 'in' ? `Check ${child.display_name} in?` : `Check ${child.display_name} out?`,
+      message: going === 'in'
+        ? `Parents should check in with One-Tap (the centre’s QR code). Use this only if they can’t. ${child.display_name} will be marked at the centre and the family notified.`
+        : `Parents should check out with One-Tap (the centre’s QR code). Use this only if they can’t. ${child.display_name} will be marked as picked up.`,
+      confirmLabel: going === 'in' ? 'Yes, check in' : 'Yes, check out',
+      onConfirm: run,
+    });
+  }
+
   function doCheckIn(child, cardEl) {
     // An educator must be clocked in before checking children in/out.
     if (window.KT && KT.requireClockedIn && !KT.requireClockedIn()) return;
-    Modal.confirm({
-      title: `Check ${child.display_name} in?`,
-      message: `The proper way to sign ${child.display_name} in is for their parent to scan the centre QR from their own KiddieTrac app at drop-off — it keeps attendance accurate and clearly records who signed them in. This button is only a temporary backup for the rare times a parent genuinely can't (dead phone, forgotten device); please don't make it the routine. Continue? ${child.display_name} will be marked as here and their parents notified.`,
-      confirmLabel: 'Yes, check in',
-      onConfirm: async () => {
-        if (!currentRoomId) { Dom.toast('Pick a room first', 'error'); return; }
-        // Dimmed spinner over the card while the sign-in records — so a tap never feels
-        // like nothing happened, and a double-tap can't fire a second request.
-        const done = (window.KT && KT.busy) ? KT.busy(cardEl) : function () {};
-        try {
-          await Api.post('/provider/check-in', {
-            child_id: child.id,
-            room_id: currentRoomId,
-          });
-          // Flip the status OPTIMISTICALLY so the card updates immediately instead of
-          // depending on the re-fetch (the "sometimes doesn't change the status" fix).
-          // `child` is the same object held in rosterCache, so the cache updates too;
-          // renderRoster repaints from it instantly, then reconciles quietly in the bg.
-          child.is_at_centre = true;
-          try { child.arrived_at = child.arrived_at || new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
-          Dom.toast(`${child.display_name} checked in ✓`, 'success');
-          await renderRoster(Dom.$('#educatorRoster'));
-          const ri = Dom.$('#ratioIndicator'); if (ri) refreshRatio(ri);   // also update the "present" stat banner
-        } catch (e) {
-          Dom.toast(e.message || 'Could not check in', 'error');
-        } finally {
-          done();
-        }
-      },
+    askManualCheck(child, 'in', async () => {
+      if (!currentRoomId) { Dom.toast('Pick a room first', 'error'); return; }
+      // Dimmed spinner over the card while the sign-in records — so a tap never feels
+      // like nothing happened, and a double-tap can't fire a second request.
+      const done = (window.KT && KT.busy) ? KT.busy(cardEl) : function () {};
+      try {
+        await Api.post('/provider/check-in', {
+          child_id: child.id,
+          room_id: currentRoomId,
+        });
+        // Flip the status OPTIMISTICALLY so the card updates immediately instead of
+        // depending on the re-fetch (the "sometimes doesn't change the status" fix).
+        // `child` is the same object held in rosterCache, so the cache updates too;
+        // renderRoster repaints from it instantly, then reconciles quietly in the bg.
+        child.is_at_centre = true;
+        child.status = 'in'; child.absence = null; child.in_since = new Date().toISOString();
+        try { child.arrived_at = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
+        Dom.toast(`${child.display_name} checked in ✓`, 'success');
+        await renderRoster(Dom.$('#educatorRoster'));
+        const ri = Dom.$('#ratioIndicator'); if (ri) refreshRatio(ri);   // also update the "present" stat banner
+      } catch (e) {
+        Dom.toast(e.message || 'Could not check in', 'error');
+      } finally {
+        done();
+      }
     });
   }
 
@@ -940,28 +1585,25 @@
   function confirmCheckOut(child, cardEl) {
     // An educator must be clocked in before checking children in/out.
     if (window.KT && KT.requireClockedIn && !KT.requireClockedIn()) return;
-    Modal.confirm({
-      title: `Check ${child.display_name} out?`,
-      message: `The proper way to sign ${child.display_name} out is for the parent to scan out from their own KiddieTrac app at pickup — that's the accurate record. Use this button only as a temporary backup when they can't. Confirm pickup? ${child.display_name} will be marked as gone for today.`,
-      confirmLabel: 'Yes, check out',
-      onConfirm: async () => {
-        if (!currentRoomId) { Dom.toast('Pick a room first', 'error'); return; }
-        const done = (window.KT && KT.busy) ? KT.busy(cardEl) : function () {};
-        try {
-          await Api.post('/provider/check-out', {
-            child_id: child.id,
-            room_id: currentRoomId,
-          });
-          child.is_at_centre = false;   // optimistic — see doCheckIn
-          Dom.toast(`${child.display_name} checked out ✓`, 'success');
-          await renderRoster(Dom.$('#educatorRoster'));
-          const ri = Dom.$('#ratioIndicator'); if (ri) refreshRatio(ri);   // also update the "present" stat banner
-        } catch (e) {
-          Dom.toast(e.message || 'Could not check out', 'error');
-        } finally {
-          done();
-        }
-      },
+    askManualCheck(child, 'out', async () => {
+      if (!currentRoomId) { Dom.toast('Pick a room first', 'error'); return; }
+      const done = (window.KT && KT.busy) ? KT.busy(cardEl) : function () {};
+      try {
+        await Api.post('/provider/check-out', {
+          child_id: child.id,
+          room_id: currentRoomId,
+        });
+        child.is_at_centre = false;   // optimistic — see doCheckIn
+        child.status = 'out'; child.in_since = null;
+        try { child.departed_at = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) {}
+        Dom.toast(`${child.display_name} checked out ✓`, 'success');
+        await renderRoster(Dom.$('#educatorRoster'));
+        const ri = Dom.$('#ratioIndicator'); if (ri) refreshRatio(ri);   // also update the "present" stat banner
+      } catch (e) {
+        Dom.toast(e.message || 'Could not check out', 'error');
+      } finally {
+        done();
+      }
     });
   }
 
@@ -1360,9 +2002,13 @@
           ['both', 'Both'],
           ['dry', 'Dry (changed anyway)'],
         ]);
-        payloadBuilder = () => ({ type: fields.type.input.value });
+        // Cream applied (2026-10-23): on top of the type, not one of them.
+        fields.cream = Dom.el('label', { class: 'form-row full-width', style: 'display:flex;align-items:center;gap:9px;font-weight:700;cursor:pointer;' },
+          Dom.el('input', { type: 'checkbox', style: 'width:18px;height:18px;' }), Dom.el('span', {}, '🧴 Cream applied'));
+        payloadBuilder = () => Object.assign({ type: fields.type.input.value }, fields.cream.querySelector('input').checked ? { cream: true } : {});
         fields.type.row.classList.add('full-width');
         body.appendChild(fields.type.row);
+        body.appendChild(fields.cream);
         break;
 
       case 'mood':
@@ -1479,6 +2125,39 @@
   ['today', 'dashboard'].forEach(hash => {
     Shell.registerScreen(`educator:${hash}`, renderEducatorScreen);
   });
+
+  /* THE FIRST VISIT TOO (2026-11-03). An educator's Home has a Today tile, and the first tap of the visit still
+     waited on six requests. Once Home has been quiet for a few seconds, Today's answers are fetched once into the
+     same memory (an educator who is not an admin; visible tab only), so even the first visit opens drawn. */
+  (function warmToday() {
+    let done = false;
+    function educator() {
+      try {
+        const va = sessionStorage.getItem('kt_view_as') || '';
+        if (va) return va === 'educator';
+        const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
+        return (u.roles || []).indexOf('educator') !== -1 && !isAgencyScope();
+      } catch (e) { return false; }
+    }
+    async function warm() {
+      if (done || document.hidden || !educator() || !sessionStorage.getItem('kt_token')) return;
+      if (!/^#?(home)?$/.test(location.hash || '')) return;
+      done = true;
+      try {
+        if (!bootstrapCache) bootstrapCache = await Api.get('/provider/bootstrap');
+        const rooms = (bootstrapCache && bootstrapCache.rooms) || [];
+        const rid = (currentRoomId && rooms.find(r => r.id === currentRoomId)) ? currentRoomId : (rooms[0] && rooms[0].id);
+        const jobs = [['brief', '/provider/day-brief'], ['score', '/educator/day-score'], ['forms', '/educator/forms-today']];
+        if (rid) jobs.push(['ratio|' + rid, `/provider/rooms/${rid}/ratio?t=${Date.now()}`]);
+        jobs.forEach(function (j) { if (!memoGet(j[0])) Api.get(j[1]).then(function (d) { memoPut(j[0], d); }, function () {}); });
+        if (rid && !rosterCache[rid]) Api.get(`/provider/rooms/${rid}/roster?t=${Date.now()}`).then(function (d) { rosterCache[rid] = d; }, function () {});
+      } catch (e) { done = false; }
+    }
+    function arm() { setTimeout(warm, 5000); }
+    // Fetched later by Home's idle preload (screen-role-home.js): Home has already been quiet - warm almost at once.
+    if (document.readyState === 'complete') setTimeout(warm, 600); else window.addEventListener('load', arm);
+    window.addEventListener('hashchange', function () { if (!done) arm(); });
+  })();
 
   // Directors can also visit /today which shows this same view
   // (already wired in screen-director.js via renderTodayDirector)

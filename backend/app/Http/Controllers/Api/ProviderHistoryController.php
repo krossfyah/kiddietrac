@@ -157,7 +157,7 @@ final class ProviderHistoryController extends Controller
                 'e.start_date', 'e.end_date', 'e.monthly_fee', 'e.cwelcc_eligible',
             ]);
 
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
 
         return $rows->map(function ($r) use ($today) {
             $left = $r->end_date && $r->end_date < $today;

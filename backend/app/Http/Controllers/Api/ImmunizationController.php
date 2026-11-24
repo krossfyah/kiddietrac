@@ -30,21 +30,9 @@ class ImmunizationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['immunizations' => []]);
-        }
-
-        // Scope to children enrolled at this centre. enrollments has room_id, not centre_id,
-        // so go through rooms.
-        $roomIds = DB::table('rooms')->where('centre_id', $centreId)->pluck('id');
-        $centreChildIds = DB::table('enrollments')
-            ->whereIn('room_id', $roomIds)
-            ->pluck('child_id')
-            ->unique();
-
+        // Every child this person may see (see mayActOn), not one centre's.
         $q = Immunization::query()
-            ->whereIn('child_id', $centreChildIds)
+            ->whereIn('child_id', $this->visibleChildIds($request) ?: [0])
             ->orderByDesc('administered_on');
 
         if ($childId = (int) $request->query('child_id')) {
@@ -52,7 +40,7 @@ class ImmunizationController extends Controller
         }
         if ($request->boolean('overdue')) {
             $q->whereNotNull('next_due_on')
-              ->where('next_due_on', '<', now()->toDateString())
+              ->where('next_due_on', '<', \App\Support\AgencyTime::today())
               ->where('exempt', false);
         }
 
@@ -72,10 +60,6 @@ class ImmunizationController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['message' => 'No centre access'], 403);
-        }
 
         $data = $request->validate([
             'child_id'         => 'required|integer|exists:children,id',
@@ -97,24 +81,29 @@ class ImmunizationController extends Controller
            proves a child exists, not that they are in your centre, so any director could
            write a dose - or an exemption - onto any child in the platform by id. Noticed
            while adding the exemption endpoint below, which needed the same guard. */
-        if (! $this->childIsInCentre((int) $data['child_id'], $centreId)) {
+        if (! $this->mayActOn($request, (int) $data['child_id'])) {
             return response()->json(['message' => 'Child not in your centre'], 403);
         }
 
+        if (! empty($data['exempt']) && ($why = \App\Support\ImmunizationExemption::refusal((int) $data['child_id'], (string) ($data['exemption_reason'] ?? '')))) {
+            return response()->json(['message' => $why, 'errors' => ['exemption_reason' => [$why]]], 422);
+        }
         $data['recorded_by_id'] = $request->user()->id;
         $row = Immunization::create($data);
 
         return response()->json(['immunization' => $row], 201);
     }
 
-    /** Is this child enrolled at that centre? enrollments carries room_id, so go via rooms. */
-    private function childIsInCentre(int $childId, int $centreId): bool
+    /* MAY THIS PERSON RECORD AGAINST THIS CHILD? (2026-11-13, Anthony: exempting a dose for a child at iLearn's second
+       centre answered "Could not save - Child not in your centre".) The check was "enrolled in a room at
+       resolveCentreId()", and resolveCentreId() is ONE centre - for an agency admin with no centre of their own, the
+       agency's first (iLearn: centre 8). Every child at the agency's other six centres was refused, and index() showed
+       none of their records ("Records on file (0)"). The rule every child-shaped screen uses instead: the children of
+       the centres this person may see in the ACTIVE agency (Visibility::childIds) - all of them for an agency admin,
+       auditor or platform admin there; a centre director's own centres only. Fails closed. */
+    private function mayActOn(Request $request, int $childId): bool
     {
-        return DB::table('enrollments')
-            ->join('rooms', 'rooms.id', '=', 'enrollments.room_id')
-            ->where('enrollments.child_id', $childId)
-            ->where('rooms.centre_id', $centreId)
-            ->exists();
+        return $childId > 0 && in_array($childId, $this->visibleChildIds($request), true);
     }
 
     /**
@@ -152,11 +141,7 @@ class ImmunizationController extends Controller
      */
     public function setExemption(Request $request, int $childId): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['message' => 'No centre access'], 403);
-        }
-        if (! $this->childIsInCentre($childId, $centreId)) {
+        if (! $this->mayActOn($request, $childId)) {
             return response()->json(['message' => 'Child not in your centre'], 403);
         }
 
@@ -181,6 +166,9 @@ class ImmunizationController extends Controller
                 'message' => 'Give the reason for the exemption - it is what makes it a record.',
                 'errors' => ['exemption_reason' => ['A reason is required.']],
             ], 422);
+        }
+        if ($wantExempt && ($why = \App\Support\ImmunizationExemption::refusal($childId, $reason))) {
+            return response()->json(['message' => $why, 'errors' => ['exemption_reason' => [$why]]], 422);
         }
 
         /* The matching and the write both live in ImmunizationExemption, because the
@@ -253,22 +241,11 @@ class ImmunizationController extends Controller
 
     public function update(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['message' => 'No centre access'], 403);
-        }
         $row = Immunization::find($id);
         if (! $row) {
             return response()->json(['message' => 'Not found'], 404);
         }
-        // Soft scope check: the child must be enrolled at the user's centre.
-        // enrollments has room_id, not centre_id — join through rooms.
-        $childEnrolled = DB::table('enrollments')
-            ->join('rooms', 'rooms.id', '=', 'enrollments.room_id')
-            ->where('enrollments.child_id', $row->child_id)
-            ->where('rooms.centre_id', $centreId)
-            ->exists();
-        if (! $childEnrolled) {
+        if (! $this->mayActOn($request, (int) $row->child_id)) {
             return response()->json(['message' => 'Child not in your centre'], 403);
         }
 
@@ -284,23 +261,21 @@ class ImmunizationController extends Controller
             'exempt'           => 'nullable|boolean',
             'exemption_reason' => 'nullable|string|max:200',
         ]);
+        if (! empty($data['exempt'] ?? $row->exempt) && array_key_exists('exemption_reason', $data)
+            && ($why = \App\Support\ImmunizationExemption::refusal((int) $row->child_id, (string) $data['exemption_reason']))) {
+            return response()->json(['message' => $why, 'errors' => ['exemption_reason' => [$why]]], 422);
+        }
         $row->update($data);
         return response()->json(['immunization' => $row->fresh()]);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
         $row = Immunization::find($id);
         if (! $row) {
             return response()->json(['message' => 'Not found'], 404);
         }
-        $childEnrolled = DB::table('enrollments')
-            ->join('rooms', 'rooms.id', '=', 'enrollments.room_id')
-            ->where('enrollments.child_id', $row->child_id)
-            ->where('rooms.centre_id', $centreId)
-            ->exists();
-        if (! $childEnrolled) {
+        if (! $this->mayActOn($request, (int) $row->child_id)) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $row->delete();

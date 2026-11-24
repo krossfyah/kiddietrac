@@ -143,7 +143,7 @@ class IntegrationController extends Controller
                 \Illuminate\Support\Facades\DB::table('enrollments')->insert([
                     'child_id'        => $cid,
                     'room_id'         => $roomId,
-                    'start_date'      => now()->toDateString(),
+                    'start_date'      => \App\Support\AgencyTime::today(),
                     'schedule'        => json_encode(['mon', 'tue', 'wed', 'thu', 'fri']),
                     'monthly_fee'     => 0,
                     'cwelcc_eligible' => 1,

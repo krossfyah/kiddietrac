@@ -20,7 +20,8 @@
 
   function btn(label, styles, onClick) {
     var b = Dom.el('button', {
-      style: 'border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;' + (styles || ''),
+      // Never squeezed below its label in a row with a field (2026-11-08: "Disable MFA" split over two lines on a phone).
+      style: 'border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;flex-shrink:0;white-space:nowrap;' + (styles || ''),
     }, label);
     if (onClick) b.addEventListener('click', onClick);
     return b;
@@ -227,7 +228,7 @@
     var codeInput = Dom.el('input', {
       type: 'text', inputmode: 'numeric', maxlength: '14',
       placeholder: '000000 or recovery code',
-      style: 'width:240px;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;font-family:ui-monospace,monospace;',
+      style: 'width:240px;flex:0 1 240px;min-width:0;padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;font-family:ui-monospace,monospace;',
     });
     var disableBtn = btn('🛑 Disable MFA', danger(), async function () {
       var code = (codeInput.value || '').trim().toUpperCase();

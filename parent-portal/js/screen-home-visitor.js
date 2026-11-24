@@ -45,7 +45,72 @@
   }
 
   // ── Home: tile launcher (inherits the circular colour tiles) ─────────
-  function renderHome(container) {
+  /* ONE HOME FOR EVERY ROLE (2026-11-06, Anthony: "look at home visitor mobile view - its all messed up to what we
+     have consistent with other mobile views"). Home is the shared launcher (screen-role-home.js, TILES.home_visitor):
+     the same banner and Quick access tiles as the educator. The visit numbers sit under the banner as the parent
+     Today stat strip: one compact row of five on a phone, tinted cards on a wider screen. The hand-built page below
+     (renderHomeLegacy) is only the fallback for a cached build without KT.roleHomeRender. */
+  function renderHome(container, ctx) {
+    if (!(window.KT && KT.roleHomeRender)) return renderHomeLegacy(container);
+    clear(container);
+    KT.roleHomeRender(container, { role: 'home_visitor', user: (ctx && ctx.user) || user() });
+    if (!document.getElementById('kt-hv-stats-css')) {
+      var css = document.createElement('style'); css.id = 'kt-hv-stats-css';
+      css.textContent = '.kt-hv-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 16px;}'
+        + '.kt-hv-stat{display:block;text-decoration:none;background:var(--t);border:1px solid color-mix(in srgb,var(--k) 14%,transparent);border-radius:16px;padding:14px 15px;box-shadow:0 1px 3px rgba(15,23,42,.05);color:var(--k);}'
+        + '.kt-hv-stat .i{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:9px;background:linear-gradient(135deg,var(--c1),var(--c2));box-shadow:0 6px 13px -6px var(--c2);}'
+        + '.kt-hv-stat .kt-hv-val{font-size:22px;font-weight:800;line-height:1;white-space:nowrap;}'
+        + '.kt-hv-stat .l{font-size:12px;font-weight:600;opacity:.82;margin-top:4px;}.kt-hv-stat .s{display:none;}'
+        + '@media(max-width:768px){.kt-hv-stats{display:flex;gap:6px;margin:0 0 12px;}'
+        + '.kt-hv-stat{flex:1 1 0;min-width:0;border:1.5px solid transparent;border-radius:13px;padding:7px 2px 6px;text-align:center;box-shadow:none;}'
+        + '.kt-hv-stat .i{width:26px;height:26px;margin:0 auto 4px;font-size:13px;box-shadow:0 4px 9px -5px var(--c2);}'
+        + '.kt-hv-stat .kt-hv-val{font-size:16px;font-weight:900;}'
+        + '.kt-hv-stat .l{display:none;}.kt-hv-stat .s{display:block;font-size:8.5px;font-weight:800;text-transform:uppercase;white-space:nowrap;overflow:hidden;opacity:.72;margin-top:3px;}}';
+      document.head.appendChild(css);
+    }
+    var stats = el('div', { class: 'kt-hv-stats' });
+    var statCard = function (icon, c1, c2, tint, ink, label, short, href) {
+      return el('a', { class: 'kt-hv-stat', href: '#' + href, 'data-kttip': label, style: '--c1:' + c1 + ';--c2:' + c2 + ';--t:' + tint + ';--k:' + ink + ';' }, [
+        el('div', { class: 'i', 'aria-hidden': 'true' }, [icon]),
+        el('div', { class: 'kt-hv-val' }, ['—']),
+        el('div', { class: 'l' }, [label]),
+        el('div', { class: 's' }, [short]),
+      ]);
+    };
+    var cDone = statCard('📋', '#0FA3B1', '#1F6080', '#ECFAFC', '#0E6E7D', 'Reports completed', 'Reports', 'home-visits');
+    var cTasks = statCard('✅', '#F59E0B', '#D97706', '#FEF7E8', '#B45309', 'Follow-ups due', 'Follow-ups', 'home-visits');
+    var cMonth = statCard('🏡', '#7C3AED', '#9333EA', '#F5F1FE', '#6D28D9', 'Visits this month', 'Month', 'home-visits');
+    var cOpen = statCard('☑️', '#0E9BAF', '#0B7C8C', '#E8FAFC', '#0B6F7E', 'Open tasks', 'Tasks', 'my-tasks');
+    var cPay = statCard('💵', '#10B981', '#059669', '#ECFDF5', '#047857', "This week's pay", 'Pay', 'my-pay');
+    [cDone, cTasks, cMonth, cOpen, cPay].forEach(function (c) { stats.appendChild(c); });
+    var hero = container.querySelector('.kt-hero-tiles');
+    if (hero && hero.parentNode) hero.parentNode.insertBefore(stats, hero.nextSibling); else container.insertBefore(stats, container.firstChild);
+    fillHomeStats(cDone, cTasks, cMonth, cOpen, cPay);
+    // Inspection forms are limited to specific agencies - the tile shows only when enabled.
+    var insp = container.querySelector('a.kt-tile[href="#inspection-forms"]');
+    if (insp) {
+      insp.style.display = 'none';
+      Api.get('/inspection-forms/schemas').then(function (d) { if (d && d.enabled) insp.style.display = ''; }).catch(function () {});
+    }
+  }
+  function fillHomeStats(cDone, cTasks, cMonth, cOpen, cPay) {
+    var setv = function (cardEl, v) { var e = cardEl.querySelector('.kt-hv-val'); if (e) e.textContent = String(v); };
+    Api.get('/tasks/mine').then(function (d) { setv(cOpen, (d && d.open_count) || 0); }).catch(function () { setv(cOpen, 0); });
+    Api.get('/home-visits').then(function (d) {
+      var reps = (d && d.reports) || [];
+      var today = ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
+      var ym = today.slice(0, 7);
+      setv(cDone, reps.length);
+      setv(cTasks, reps.filter(function (r) { return r.follow_up_date && String(r.follow_up_date).slice(0, 10) <= today; }).length);
+      setv(cMonth, reps.filter(function (r) { return String(r.visit_date || '').slice(0, 7) === ym; }).length);
+    }).catch(function () { setv(cDone, 0); setv(cTasks, 0); setv(cMonth, 0); });
+    Api.get('/me/payslips').then(function (d) {
+      var slips = (d && d.payslips) || [];
+      setv(cPay, '$' + (slips.length ? (Number(slips[0].gross) || 0) : 0).toFixed(0));
+    }).catch(function () { setv(cPay, '$0'); });
+  }
+
+  function renderHomeLegacy(container) {
     clear(container);
     var u = user();
     var wrap = el('div', { class: 'kt-tilehome', style: 'max-width:760px;margin:0 auto;padding:14px 14px 90px;' });
@@ -79,7 +144,7 @@
     Api.get('/tasks/mine').then(function (d) { setv(cOpen, (d && d.open_count) || 0); }).catch(function () { setv(cOpen, 0); });
     Api.get('/home-visits').then(function (d) {
       var reps = (d && d.reports) || [];
-      var today = new Date().toISOString().slice(0, 10);
+      var today = ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
       var mo = new Date(); var ym = mo.getFullYear() + '-' + ('0' + (mo.getMonth() + 1)).slice(-2);
       setv(cDone, reps.length);
       setv(cTasks, reps.filter(function (r) { return r.follow_up_date && String(r.follow_up_date).slice(0, 10) <= today; }).length);
@@ -155,41 +220,53 @@
     var box = el('div', { 'data-kt-guard-unsaved': '1', style: 'max-width:640px;margin:0 auto;padding:16px 16px 90px;' });
     box.appendChild(el('h1', { style: 'margin:6px 2px 4px;font-size:22px;font-weight:800;color:#0f172a;' }, [ex ? 'Edit home visit report' : 'New home visit report']));
     box.appendChild(el('div', { style: 'color:#64748b;font-size:13.5px;margin:0 2px 18px;' }, [ex ? 'Update the visit details. Every change is logged with your name and the time.' : 'Choose the centre this family belongs to, then record the visit.']));
-    var card = el('div', { style: 'background:#fff;border:1px solid #E7EDF3;border-radius:16px;padding:18px 18px 20px;' });
+    var card = el('div', { id: 'hv-form', 'data-kt-nofit': '1', style: 'background:#fff;border:1px solid #E7EDF3;border-radius:16px;padding:18px 18px 20px;' });
+    if (!document.getElementById('hv-form-css')) {
+      var hvCss = document.createElement('style'); hvCss.id = 'hv-form-css';
+      hvCss.textContent = '#appMain #hv-form .hv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0 14px}'
+        + '#appMain #hv-form .hv-grid > div{min-width:0}'
+        + '#appMain #hv-form .hv-grid input,#appMain #hv-form .hv-grid select,#appMain #hv-form .hv-grid textarea{width:100% !important;max-width:none !important}'
+        + '@media(max-width:700px){#appMain #hv-form .hv-grid > div{grid-column:auto !important}}';
+      document.head.appendChild(hvCss);
+    }
+    /* One grid for the whole form: [field, how many cells it takes]. */
+    var grid = function (items) {
+      var g = el('div', { class: 'hv-grid' });
+      items.forEach(function (it) { if (it[1]) it[0].style.gridColumn = it[1]; g.appendChild(it[0]); });
+      return g;
+    };
 
     var section = function (title) { return el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#0FA3B1;margin:4px 2px 12px;' }, [title]); };
     var grid2 = function (a, b) { var g = el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:12px;' }); g.appendChild(a); g.appendChild(b); return g; };
     var divider = function () { return el('div', { style: 'height:1px;background:#EEF2F6;margin:4px 0 16px;' }); };
-    var dateVal = ex ? String(ex.visit_date || '').slice(0, 10) : new Date().toISOString().slice(0, 10);
+    var dateVal = ex ? String(ex.visit_date || '').slice(0, 10) : ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
 
     card.appendChild(section('Visit details'));
-    card.appendChild(field('Centre', '<select id="hv-centre" style="' + IN + 'background:#fff;"><option value="">Loading centres…</option></select>', true));
-    card.appendChild(grid2(
-      field('Visit date', '<input id="hv-date" type="date" value="' + dateVal + '" style="' + IN + '">', true),
-      field('Visit type', '<select id="hv-type" style="' + IN + 'background:#fff;">' + VISIT_TYPES.map(function (t) { var s = ex ? xsel('visit_type', t[0]) : (t[0] === 'routine' ? ' selected' : ''); return '<option value="' + t[0] + '"' + s + '>' + t[1] + '</option>'; }).join('') + '</select>')
-    ));
-    card.appendChild(grid2(
-      field('Location', '<select id="hv-loc" style="' + IN + 'background:#fff;"><option value="">—</option>' + LOCATIONS.map(function (l) { return '<option value="' + l[0] + '"' + xsel('location', l[0]) + '>' + l[1] + '</option>'; }).join('') + '</select>'),
-      field('Duration (minutes)', '<input id="hv-dur" type="number" min="0" max="1440" placeholder="e.g. 45" value="' + xv('duration_minutes') + '" style="' + IN + '">')
-    ));
+    card.appendChild(grid([
+      [field('Centre', '<select id="hv-centre" style="' + IN + 'background:#fff;"><option value="">Loading centres…</option></select>', true), 'span 2'],
+      [field('Visit date', '<input id="hv-date" type="date" value="' + dateVal + '" style="' + IN + '">', true)],
+      [field('Visit type', '<select id="hv-type" style="' + IN + 'background:#fff;">' + VISIT_TYPES.map(function (t) { var s = ex ? xsel('visit_type', t[0]) : (t[0] === 'routine' ? ' selected' : ''); return '<option value="' + t[0] + '"' + s + '>' + t[1] + '</option>'; }).join('') + '</select>')],
+      [field('Location', '<select id="hv-loc" style="' + IN + 'background:#fff;"><option value="">—</option>' + LOCATIONS.map(function (l) { return '<option value="' + l[0] + '"' + xsel('location', l[0]) + '>' + l[1] + '</option>'; }).join('') + '</select>')],
+      [field('Duration (minutes)', '<input id="hv-dur" type="number" min="0" max="1440" placeholder="e.g. 45" value="' + xv('duration_minutes') + '" style="' + IN + '">')]
+    ]));
 
     card.appendChild(divider());
     card.appendChild(section('Family'));
-    card.appendChild(grid2(
-      field('Family name', '<input id="hv-family" type="text" placeholder="e.g. The Baer family" value="' + xv('family_name') + '" style="' + IN + '">'),
-      field('Child name (optional)', '<input id="hv-child" type="text" value="' + xv('child_name') + '" style="' + IN + '">')
-    ));
-    card.appendChild(field('Who was present', '<input id="hv-present" type="text" placeholder="e.g. Mother, child" value="' + xv('present') + '" style="' + IN + '">'));
+    card.appendChild(grid([
+      [field('Family name', '<input id="hv-family" type="text" placeholder="e.g. The Baer family" value="' + xv('family_name') + '" style="' + IN + '">'), 'span 2'],
+      [field('Child name (optional)', '<input id="hv-child" type="text" value="' + xv('child_name') + '" style="' + IN + '">'), 'span 2'],
+      [field('Who was present', '<input id="hv-present" type="text" placeholder="e.g. Mother, child" value="' + xv('present') + '" style="' + IN + '">'), 'span 2']
+    ]));
 
     card.appendChild(divider());
     card.appendChild(section('Observations'));
-    card.appendChild(field('Visit summary', '<textarea id="hv-summary" rows="4" placeholder="What happened during the visit…" style="' + IN + 'resize:vertical;">' + xv('summary') + '</textarea>', true));
-    card.appendChild(grid2(
-      field('Strengths observed', '<textarea id="hv-strengths" rows="3" style="' + IN + 'resize:vertical;">' + xv('strengths') + '</textarea>'),
-      field('Concerns', '<textarea id="hv-concerns" rows="3" style="' + IN + 'resize:vertical;">' + xv('concerns') + '</textarea>')
-    ));
-    card.appendChild(field('Next steps', '<textarea id="hv-next" rows="2" style="' + IN + 'resize:vertical;">' + xv('next_steps') + '</textarea>'));
-    card.appendChild(el('div', { style: 'max-width:220px;' }, [field('Follow-up date (optional)', '<input id="hv-followup" type="date" value="' + (ex ? String(ex.follow_up_date || '').slice(0, 10) : '') + '" style="' + IN + '">')]));
+    card.appendChild(grid([
+      [field('Visit summary', '<textarea id="hv-summary" rows="4" placeholder="What happened during the visit…" style="' + IN + 'resize:vertical;">' + xv('summary') + '</textarea>', true), '1 / -1'],
+      [field('Strengths observed', '<textarea id="hv-strengths" rows="3" style="' + IN + 'resize:vertical;">' + xv('strengths') + '</textarea>'), 'span 3'],
+      [field('Concerns', '<textarea id="hv-concerns" rows="3" style="' + IN + 'resize:vertical;">' + xv('concerns') + '</textarea>'), 'span 3'],
+      [field('Next steps', '<textarea id="hv-next" rows="2" style="' + IN + 'resize:vertical;">' + xv('next_steps') + '</textarea>'), '1 / -1'],
+      [field('Follow-up date (optional)', '<input id="hv-followup" type="date" value="' + (ex ? String(ex.follow_up_date || '').slice(0, 10) : '') + '" style="' + IN + '">')]
+    ]));
 
     // Edit mode: a note field that gets stamped into the audit trail.
     if (ex) {
@@ -514,7 +591,7 @@
 
       // Report-style card
       var card = el('div', { style: 'background:#fff;border:1px solid #E7EDF3;border-radius:16px;padding:24px;box-shadow:0 1px 3px rgba(15,23,42,.05);' });
-      card.appendChild(el('div', { style: 'border-left:5px solid #1F6080;padding:2px 0 2px 12px;margin-bottom:14px;' }, [
+      card.appendChild(el('div', { style: '--kt-edge:#1F6080;padding:2px 0 2px 12px;margin-bottom:14px;' }, [
         el('div', { style: 'font-size:21px;font-weight:800;color:#0f172a;' }, ['Home Visit Report']),
         el('div', { style: 'font-size:13px;color:#64748b;margin-top:2px;' }, [(typeLabel[r.visit_type] || r.visit_type || 'Visit') + ' · ' + fmtDate(r.visit_date)]),
       ]));

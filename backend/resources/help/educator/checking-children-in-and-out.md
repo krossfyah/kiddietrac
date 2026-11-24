@@ -26,7 +26,7 @@ When a child arrives:
 2. Tap the green **Check in** button.
 3. Confirm — the card flips to green **IN** with the time, and the parents are notified automatically.
 
-The preferred path is actually the **parent** scanning the centre QR at drop-off — it's clearly them. Your **Check in** button is the backup for when a parent's hands are full or their phone is dead. Either way, the record is the same.
+The preferred path is actually the **parent** using **One-Tap** (scanning the centre's QR code) at drop-off — it's clearly them. Your **Check in** button is the backup for when a parent's hands are full or their phone is dead. Either way, the record is the same.
 
 ## Checking a child out
 
@@ -41,9 +41,9 @@ Always confirm the person collecting is a **guardian or an authorised pickup per
 
 Checking children in or out usually requires you to be clocked in first — it ties the action to an on-shift educator. If a button doesn't respond, check your own clock.
 
-## The QR check-in poster
+## The One-Tap poster
 
-Your centre has a check-in QR poster (by the door or sign-in desk) that parents scan. The code **rotates daily**, so a screenshot from yesterday won't work. If a parent can't scan, you can always check the child in from the roster.
+Your centre has a One-Tap QR poster (by the door or sign-in desk) that parents scan. You can also show the day's code yourself: tap **📷 One-Tap** in the bottom bar. The code **rotates daily**, so a screenshot from yesterday won't work. If a parent can't scan, you can always check the child in from the roster.
 
 ## Multiple check-ins
 

@@ -32,7 +32,7 @@ final class PlatformInvoiceRaiser
      */
     public function plan(?string $asOf = null, ?int $onlyAgencyId = null): array
     {
-        $today = $asOf ? Carbon::parse($asOf)->startOfDay() : Carbon::now()->startOfDay();
+        $today = $asOf ? Carbon::parse($asOf)->startOfDay() : \App\Support\AgencyTime::todayDate();
         $todayStr = $today->toDateString();
 
         $q = DB::table('agencies')->orderBy('id');
@@ -42,14 +42,40 @@ final class PlatformInvoiceRaiser
 
         $plan = [];
         foreach ($q->get() as $a) {
+            /* LICENCE-MANAGED AGENCIES (2026-10-24, App\Support\Licences) are billed from their
+               licences coming due within a week: one itemised invoice with part numbers, and each
+               billed licence renews for another term when the invoice is written. */
+            if (\App\Support\Licences::managed((int) $a->id)) {
+                $bpsL = (int) ($a->tax_rate_bps ?? 0);
+                $dueL = \App\Support\Licences::dueForInvoice((int) $a->id, $todayStr);
+                // $0 lines are invoiced too (2026-10-25): an itemised $0 invoice per term, settled on its due date.
+                $L = $dueL ? \App\Support\Licences::invoiceLines($dueL) : ['lines' => [], 'subtotal_cents' => 0, 'period_start' => $todayStr, 'period_end' => $todayStr];
+                $skipL = PlatformBilling::recurringSkip($a, $todayStr);
+                if ($skipL !== null) { /* off for this agency, or outside its issuing window */ }
+                elseif ((string) $a->billing_status !== 'active') $skipL = 'not active (' . ($a->billing_status ?: 'unset') . ')';
+                elseif (empty($a->next_invoice_at)) $skipL = 'not on recurring billing (no next invoice date)';
+                elseif (! $dueL) $skipL = 'no licence term starting today (terms start on the 1st)';
+                elseif (DB::table('platform_invoices')->where('agency_id', $a->id)->where('period_start', $L['period_start'])->exists()) $skipL = 'already billed for the period starting ' . $L['period_start'];
+                $plan[] = [
+                    'agency_id' => $a->id, 'agency_name' => $a->name,
+                    'subtotal_cents' => $L['subtotal_cents'], 'tax_cents' => PlatformBilling::taxCents($L['subtotal_cents'], $bpsL),
+                    'tax_rate_bps' => $bpsL, 'tax_label' => $a->tax_label, 'amount_cents' => PlatformBilling::totalCents($L['subtotal_cents'], $bpsL),
+                    'currency' => PlatformBilling::normaliseCurrency($a->plan_currency ?? null), 'interval' => 'licence', 'plan_code' => $a->plan_code,
+                    'period_start' => $L['period_start'], 'period_end' => $L['period_end'], 'next_invoice_at' => $a->next_invoice_at,
+                    'lines' => $L['lines'], 'skip_reason' => $skipL,
+                ];
+                continue;
+            }
             $subtotal = (int) ($a->plan_amount_cents ?? 0);
             $bps = (int) ($a->tax_rate_bps ?? 0);
             $interval = PlatformBilling::normaliseInterval($a->billing_interval ?? null);
             $currency = PlatformBilling::normaliseCurrency($a->plan_currency ?? null);
             $due = $a->next_invoice_at ? (string) $a->next_invoice_at : null;
 
-            $skip = null;
-            if ((string) $a->billing_status !== 'active') {
+            $skip = PlatformBilling::recurringSkip($a, $todayStr);
+            if ($skip !== null) {
+                // Recurring invoices are off for this agency, or today is outside its issuing window.
+            } elseif ((string) $a->billing_status !== 'active') {
                 $skip = 'not active (' . ($a->billing_status ?: 'unset') . ')';
             } elseif ($subtotal <= 0) {
                 $skip = 'no plan amount set';
@@ -105,7 +131,7 @@ final class PlatformInvoiceRaiser
      *
      * @return array{raised: array<int, string>, failed: array<int, string>}
      */
-    public function commit(array $billable, ?int $userId = null, int $dueDays = 14, array $edits = []): array
+    public function commit(array $billable, ?int $userId = null, ?int $dueDays = null, array $edits = []): array
     {
         /* Edits from the review popup (2026-09-29), keyed by agency id: subtotal_cents,
            tax_rate_bps, tax_label, due_at, notes. Tax and total are recomputed here, never
@@ -131,11 +157,11 @@ final class PlatformInvoiceRaiser
             /* A weekly or two-weekly plan bills more than once a month, so its number
                carries the day; monthly and longer keep the KT-YYYYMM-agency form. */
             $number = sprintf('KT-%s-%04d',
-                Carbon::parse($p['period_start'])->format(in_array($p['interval'], ['weekly', 'biweekly'], true) ? 'Ymd' : 'Ym'), $p['agency_id']);
+                Carbon::parse($p['period_start'])->format(in_array($p['interval'], ['weekly', 'biweekly', 'licence'], true) ? 'Ymd' : 'Ym'), $p['agency_id']);
 
             try {
                 DB::transaction(function () use ($p, $number, $userId, $dueDays) {
-                    DB::table('platform_invoices')->insert([
+                    $invId = DB::table('platform_invoices')->insertGetId([
                         'agency_id' => $p['agency_id'],
                         'number' => $number,
                         'period_start' => $p['period_start'],
@@ -151,7 +177,9 @@ final class PlatformInvoiceRaiser
                         'amount_paid_cents' => 0,
                         'currency' => $p['currency'],
                         'status' => 'draft',
-                        'due_at' => ! empty($p['due_at']) ? Carbon::parse($p['due_at'])->toDateString() : Carbon::now()->addDays($dueDays)->toDateString(),
+                        // The platform due-date rule (default: end of the month) unless a number of days or a date was given.
+                        'due_at' => ! empty($p['due_at']) ? Carbon::parse($p['due_at'])->toDateString()
+                            : ($dueDays !== null ? \App\Support\AgencyTime::todayDate()->addDays($dueDays)->toDateString() : PlatformBilling::dueDate(\App\Support\AgencyTime::todayDate()->toDateString())),
                         'notes' => $p['notes'] ?? null,
                         'created_by_id' => $userId,
                         'created_at' => now(),
@@ -161,11 +189,20 @@ final class PlatformInvoiceRaiser
                     /* Advanced in the SAME transaction as the insert. If these could
                        diverge, a failure between them would either bill the agency twice
                        on the next run or skip them entirely. */
-                    DB::table('agencies')->where('id', $p['agency_id'])->update([
-                        'next_invoice_at' => PlatformBilling::advance($p['next_invoice_at'], $p['interval']),
-                        'updated_at' => now(),
-                    ]);
+                    if (! empty($p['lines'])) {
+                        // Licences: the lines (with part numbers) go on the invoice and each licence renews.
+                        \App\Support\Licences::renewBilled((int) $invId, $p['lines']);
+                    } else {
+                        DB::table('agencies')->where('id', $p['agency_id'])->update([
+                            'next_invoice_at' => PlatformBilling::advance($p['next_invoice_at'], $p['interval']),
+                            'updated_at' => now(),
+                        ]);
+                    }
+                    /* EXTRA LINE ITEMS (2026-10-25): whatever Sales -> Invoices -> Extra line items holds
+                       for this agency - on every invoice, or just this one - in the same transaction. */
+                    \App\Support\PlatformAccounts::applyExtras((int) $invId, (int) $p['agency_id']);
                 });
+                if (! empty($p['lines'])) \App\Support\Licences::sync((int) $p['agency_id']);
 
                 $raised[] = $number;
             } catch (Throwable $e) {

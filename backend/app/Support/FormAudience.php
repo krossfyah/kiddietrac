@@ -92,9 +92,15 @@ final class FormAudience
      */
     public static function allows(object $form, array $roles, array $namedUserIds, int $userId): bool
     {
-        // 1. Named beats everything, in both directions.
+        // 1. Named beats everything, in both directions - unless the form says its named
+        //    people come IN ADDITION to its audience (see extendsAudience()).
         if ($namedUserIds) {
-            return in_array($userId, array_map('intval', $namedUserIds), true);
+            if (in_array($userId, array_map('intval', $namedUserIds), true)) {
+                return true;
+            }
+            if (! self::extendsAudience($form)) {
+                return false;
+            }
         }
 
         $aud = self::audiencesOf($form);
@@ -104,8 +110,85 @@ final class FormAudience
             return false;
         }
 
-        // 2. By role.
-        return (bool) array_intersect($aud, $roles);
+        // 2. By role - and a form tied to one centre (a director's, 2026-11-13) only to that centre's people.
+        if (! array_intersect($aud, $roles)) {
+            return false;
+        }
+
+        return self::atFormCentre($form, $userId);
+    }
+
+    /* Memo for one request/job tick. Expires after 30 s so a long-running queue worker never trusts an old
+       answer about who works where. */
+    private static array $centreOfForm = [];
+    private static array $centrePeople = [];
+    private static int $memoAt = 0;
+
+    private static function fresh(): void
+    {
+        if (time() - self::$memoAt > 30) {
+            self::$centreOfForm = [];
+            self::$centrePeople = [];
+            self::$memoAt = time();
+        }
+    }
+
+    /** The centre a form belongs to; null = agency-wide. Looked up when the row was selected without it. */
+    public static function centreOf(object $form): ?int
+    {
+        if (property_exists($form, 'centre_id')) {
+            return $form->centre_id ? (int) $form->centre_id : null;
+        }
+        $id = (int) ($form->id ?? 0);
+        if (! $id) {
+            return null;
+        }
+        self::fresh();
+        if (! array_key_exists($id, self::$centreOfForm)) {
+            $c = DB::table('managed_forms')->where('id', $id)->value('centre_id');
+            self::$centreOfForm[$id] = $c ? (int) $c : null;
+        }
+
+        return self::$centreOfForm[$id];
+    }
+
+    /**
+     * Is this person at the form's centre? Always true for an agency-wide form. Otherwise the centre's people
+     * (CentreScope::peopleIds) and the agency admins of the centre's agency - a centre form is still the
+     * agency's business.
+     */
+    public static function atFormCentre(object $form, int $userId): bool
+    {
+        $centreId = self::centreOf($form);
+        if (! $centreId) {
+            return true;
+        }
+        self::fresh();
+        if (! isset(self::$centrePeople[$centreId])) {
+            $people = CentreScope::peopleIds([$centreId]);
+            $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+            $admins = $agencyId ? DB::table('role_assignments')->where('active', 1)->where('role', 'agency_admin')
+                ->where('agency_id', $agencyId)->pluck('user_id')->map(fn ($v) => (int) $v)->all() : [];
+            self::$centrePeople[$centreId] = array_flip(array_merge($people, $admins));
+        }
+
+        return isset(self::$centrePeople[$centreId][$userId]);
+    }
+
+    /**
+     * NAMED PEOPLE AS WELL AS THE AUDIENCE, by choice, per form (2026-10-20).
+     *
+     * Rule 1 stays the default: naming people means only them. But it bit the other way on
+     * 2026-10-20: an admin bulk-sent iLearn's parent paperwork to one parent, Daily Sleep
+     * Chart and Daily Supervision Check (audience: educator) were in the batch, and naming
+     * that one parent made both staff forms hers alone - every provider's save came back
+     * 403 mid-draft. Anthony: keep her on them AND give the educators back. A form with
+     * managed_forms.named_extends_audience = 1 is open to its audience PLUS the named people.
+     * Bulk assign now asks which one the admin means before it narrows a role-wide form.
+     */
+    public static function extendsAudience(object $form): bool
+    {
+        return ! empty($form->named_extends_audience);
     }
 
     /** The audience list off a form row, whatever shape it was stored in. */

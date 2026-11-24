@@ -31,13 +31,11 @@ class InvitationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (! $centreId) {
-            return response()->json(['invitation_codes' => []]);
-        }
-
+        /* EVERY CENTRE THIS PERSON MAY SEE (2026-11-13 sweep): resolveCentreId() is ONE centre - an agency admin's is
+           the agency's first - so codes made at the other centres never appeared here or on the admin dashboard, and
+           revoking or deleting one answered "Not found". Fails closed. */
         $rows = InvitationCode::query()
-            ->where('centre_id', $centreId)
+            ->whereIn('centre_id', $this->visibleCentreIds($request) ?: [0])
             ->orderByDesc('created_at')
             ->limit(200)
             ->get();
@@ -97,8 +95,7 @@ class InvitationController extends Controller
 
     public function revoke(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $row = InvitationCode::where('centre_id', $centreId)->find($id);
+        $row = InvitationCode::whereIn('centre_id', $this->visibleCentreIds($request) ?: [0])->find($id);
         if (! $row) return response()->json(['message' => 'Not found'], 404);
         $row->update(['status' => 'revoked']);
         return response()->json(['invitation_code' => $row->fresh()]);
@@ -106,8 +103,7 @@ class InvitationController extends Controller
 
     public function destroy(Request $request, int $id): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-        $row = InvitationCode::where('centre_id', $centreId)->find($id);
+        $row = InvitationCode::whereIn('centre_id', $this->visibleCentreIds($request) ?: [0])->find($id);
         if (! $row) return response()->json(['message' => 'Not found'], 404);
         // Only allow hard-delete of UNUSED codes; used codes stay as audit trail.
         if ($row->used_count > 0) {

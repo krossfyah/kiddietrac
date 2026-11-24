@@ -77,6 +77,7 @@ final class TemplatedEmails
         $body = self::p($T('greeting') ?? ('Hello ' . e($d['name']) . ','))
             . self::p($T('intro') ?? 'Thank you — your payment has gone through. Here are the details for your records.')
             . $rows
+            . (! empty($d['attach_note']) ? self::p($d['attach_note']) : '')
             . ($balance !== null && $balance > 0.005
                 ? self::p('<span style="color:#92400E;">This was a part payment, so '
                     . $d['balance_text'] . ' is still outstanding on this invoice.</span>')
@@ -91,6 +92,11 @@ final class TemplatedEmails
             'title' => EmailTemplates::subjectPiece($agencyId, $K, 'title', $d, $draft) ?? 'Thank you — payment received',
             'subtitle' => $d['amount'] . ' · ' . $d['how'],
             'preheader' => 'Your payment of ' . $d['amount'] . ' has gone through.',
+            // The invoice header, same as the invoice emails (2026-10-31, App\Support\InvoiceMail).
+            'invoice_hero' => InvoiceMail::hero('receipt', (string) ($d['invoice_number'] ?? ''), (string) $d['amount'],
+                ($balance !== null && $balance > 0.005) ? 'received · ' . strip_tags((string) ($d['balance_text'] ?? '')) . ' still owing'
+                    : (! empty($d['paid_in_full']) ? 'received · invoice paid in full' : 'received · thank you'),
+                isset($d['centre_id']) && $d['centre_id'] ? (int) $d['centre_id'] : null),
         ]);
 
         return [

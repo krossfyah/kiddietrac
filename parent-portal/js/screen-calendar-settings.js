@@ -33,7 +33,7 @@
   }
 
   var KEYS = ['show_closures', 'show_birthdays', 'show_child_birthdays', 'show_staff_birthdays',
-              'show_absences', 'show_timeoff', 'show_vacations', 'show_pending'];
+              'show_absences', 'show_timeoff', 'show_vacations', 'show_pending', 'sync_enabled'];   // sync_enabled: cal1103
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
@@ -69,6 +69,11 @@
           + toggle('show_timeoff', 'Staff time off', 'Approved leave and vacation.', c.show_timeoff)
           + toggle('show_pending', 'Include requests that are still pending', 'Off means only settled leave is shown. On is useful when planning cover.', c.show_pending))
 
+      // CALENDAR SYNC (2026-11-03, cal1103): the agency switch for families' and staff's private calendar links.
+      + group('Calendar sync', 'Families and staff can add a private link to Apple, Google or Outlook calendar, from Settings → Calendar in their app.',
+          toggle('sync_enabled', 'Allow calendar sync', 'Off: every link in your agency stops showing your dates (closures, events, trips, absences, shifts). Turn it back on and they return; nobody has to add the link again.'
+            + (data.can_change_sync === false ? ' Only an agency admin can change this.' : ''), c.sync_enabled !== false))
+
       + '<div style="display:flex;align-items:center;gap:14px;justify-content:flex-end;margin-top:16px;">'
       + '<span id="c-status" style="font-size:13px;color:#1E8E60;"></span>'
       + '<button id="c-save" style="font-size:14px;font-weight:700;padding:10px 20px;border:0;border-radius:10px;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;cursor:pointer;">Save changes</button></div>'
@@ -88,11 +93,20 @@
     master.addEventListener('change', syncSubs);
     syncSubs();
 
+    // A director sees the sync switch but cannot flip it (the server refuses that too).
+    var syncBox = main.querySelector('#c_sync_enabled');
+    if (syncBox && data.can_change_sync === false) {
+      syncBox.disabled = true;
+      var syncRow = syncBox.closest('label');
+      if (syncRow) { syncRow.style.opacity = '.6'; syncRow.style.cursor = 'default'; }
+    }
+
     var btn = main.querySelector('#c-save');
     btn.onclick = function () {
       var body = {};
       KEYS.forEach(function (k) {
         var el = main.querySelector('#c_' + k);
+        if (k === 'sync_enabled' && data.can_change_sync === false) { return; }   // not theirs to send
         body[k] = el ? el.checked : true;
       });
       var st = main.querySelector('#c-status');

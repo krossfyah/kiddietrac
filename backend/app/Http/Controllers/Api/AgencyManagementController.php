@@ -263,7 +263,7 @@ final class AgencyManagementController extends Controller
                 'agency_id' => $result['agency_id'],
                 'centre_id' => $result['centre_id'],
                 'admin_user_id' => $result['user_id'],
-                'trial_ends' => Carbon::now()->addDays($trialDays)->toDateString(),
+                'trial_ends' => \App\Support\AgencyTime::todayDate()->addDays($trialDays)->toDateString(),
             ], 201);
 
         } catch (\Throwable $e) {
@@ -329,6 +329,21 @@ final class AgencyManagementController extends Controller
 
         // Read BEFORE the write, so the audit can say what each field changed from.
         $before = DB::table('agencies')->where('id', $id)->first();
+
+        /* Billing status, trial end and plan are KiddieTrac's to set, not the agency's (2026-11-05 leak sweep):
+           an agency admin could PATCH their own agency to billing_status=active, push trial_ends_at out, or
+           pick a bigger plan. A non-platform caller who tries to CHANGE one is refused; the same value sent
+           back unchanged by the edit form (or empty) is just dropped, so ordinary saves keep working. */
+        if (! $this->isPlatformAdmin($user->id)) {
+            $curPlan = (json_decode($before->settings ?? '{}', true) ?: [])['plan'] ?? null;
+            $day = fn ($v) => $v ? Carbon::parse($v)->toDateString() : null;
+            if ((($data['billing_status'] ?? null) !== null && (string) $data['billing_status'] !== (string) ($before->billing_status ?? ''))
+                || (($data['trial_ends_at'] ?? null) !== null && $day($data['trial_ends_at']) !== $day($before->trial_ends_at ?? null))
+                || (($data['plan'] ?? null) !== null && (string) $data['plan'] !== (string) $curPlan)) {
+                return response()->json(['message' => 'Only KiddieTrac can change an agency\'s plan, trial or billing status.'], 403);
+            }
+            unset($data['billing_status'], $data['trial_ends_at'], $data['plan']);
+        }
 
         $columns = [
             'name', 'subdomain', 'custom_domain', 'contact_email', 'contact_phone',
@@ -462,10 +477,12 @@ final class AgencyManagementController extends Controller
 
     private function isPlatformAdmin(int $userId): bool
     {
+        /* The real platform_admin role (2026-11-05 leak sweep). This used to be "agency_admin of agency 1",
+           so anyone given agency_admin in agency 1 (a tenant with its own staff admins) could list, create,
+           edit (plan, billing, trial) and delete every other agency. */
         return DB::table('role_assignments')
             ->where('user_id', $userId)
-            ->where('role', 'agency_admin')
-            ->where('agency_id', 1)
+            ->where('role', 'platform_admin')
             ->where('active', true)
             ->exists();
     }

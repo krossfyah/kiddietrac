@@ -47,18 +47,79 @@
     } catch (e) { return false; }
   }
 
+  /* PAGES DRAWN BY pdf.js ON A TOUCH PHONE TOO (2026-10-20), not only in the app. A phone
+     browser's PDF frame shows one flat page (iOS) or nothing at all (Android Chrome), and
+     either way nothing inside it can be pinched. Drawn pages zoom like everything else. */
+  function touchPhone() {
+    try {
+      return !!(w.matchMedia && w.matchMedia('(pointer:coarse)').matches)
+        && Math.min(w.screen.width || 9999, w.screen.height || 9999) < 820;
+    } catch (e) { return false; }
+  }
+  function canvasPdf() { return nativePrintUnavailable() || touchPhone(); }
+
+  /* PINCH TO ZOOM (2026-10-20, Anthony: "have ability to pinch zoom when opening up
+     forms/documents etc in the popup - full sweep"). kt-pinch-zoom.js does the gesture;
+     these attach it to a pane of drawn pages or to a single picture. */
+  function zoomPages(host) {
+    if (!w.KT || !w.KT.pinchZoom) { return; }
+    w.KT.pinchZoom(host, { mode: 'zoom', onSettle: function (z) { if (host.__ktSharpen) { host.__ktSharpen(z); } } });
+  }
+  function zoomPicture(host) {
+    if (!w.KT || !w.KT.pinchZoom) { return; }
+    w.KT.pinchZoom(host, { mode: 'size', target: function () { return host.querySelector('img'); } });
+  }
+
   // Open a URL the old way — a real new tab, or the in-app browser on the APK.
-  // Used only by the panel's own "Open in new tab" button.
+  // The panel's "Open in new tab" button, and every link in an email frame (frameLinks below).
   function openExternally(url) {
+    // mailto:/tel:/sms: are the phone's (or the computer's mail app) - navigating to one never leaves the portal.
+    var phone = /^(mailto|tel|sms|geo):/i.test(String(url || ''));
     try {
       var C = w.Capacitor;
       var native = C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative);
       var B = C && C.Plugins && C.Plugins.Browser;
-      if (native && B && B.open) { B.open({ url: url }); return; }
-      if (native) { w.location.href = url; return; }
-      var t = w.open(url, '_blank', 'noopener');
-      if (!t) w.location.href = url;
-    } catch (e) { try { w.location.href = url; } catch (_e) {} }
+      if (native && !phone && B && B.open) { B.open({ url: url }); return; }
+      // In the app without the Browser plugin, and mailto:/tel: anywhere: the app hands it to the phone
+      // (Capacitor launchIntent / UIApplication.open), a computer to its mail or phone app.
+      if (native || phone) { w.location.href = url; return; }
+      /* A NEW TAB, NEVER THIS ONE (2026-11-13). window.open with 'noopener' returns null even when the tab opened, so
+         the old "if (!t) location.href = url" replaced the portal with the link every time. A link with rel=noopener
+         opens the tab and leaves the portal where it is. */
+      var a = w.document.createElement('a');
+      a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      w.document.body.appendChild(a); a.click();
+      setTimeout(function () { try { a.remove(); } catch (e) {} }, 300);
+    } catch (e) { try { w.open(url, '_blank', 'noopener'); } catch (_e) {} }
+  }
+
+  /* LINKS IN AN EMAIL OPEN IN THE BROWSER (2026-11-13, Anthony: "click in on links on the email client doesn't trigger
+     my browser to view the links"). An email is drawn in a sandboxed srcdoc frame with <base target="_blank">, so each
+     link asks for a NEW WINDOW. A desktop browser opens a tab; the KiddieTrac app has nowhere to put one - the Android
+     WebView never enables multiple windows, so the tap went nowhere or loaded the site inside the little frame (where
+     most sites refuse to be framed and it stays blank). Every link in such a frame is now caught in the frame and
+     opened the one way above: the phone's browser in the app, a new tab on a computer. Same-page #anchors still scroll
+     the email; javascript: and anything else is dropped. Re-attached on every load (a srcdoc change is a new document). */
+  function frameLinks(frame) {
+    if (!frame || frame.__ktLinks) { return; }
+    frame.__ktLinks = true;
+    var hook = function () {
+      var doc; try { doc = frame.contentDocument; } catch (e) { return; }
+      if (!doc || doc.__ktLinks) { return; }
+      doc.__ktLinks = true;
+      doc.addEventListener('click', function (e) {
+        if (e.defaultPrevented || e.button > 1) { return; }
+        var a = e.target && e.target.closest ? e.target.closest('a[href], area[href]') : null;
+        if (!a) { return; }
+        var raw = (a.getAttribute('href') || '').trim();
+        if (/^#/.test(raw)) { return; }
+        e.preventDefault();
+        var url = a.href;
+        if (/^(https?|mailto|tel|sms):/i.test(url)) { openExternally(url); }
+      }, true);
+    };
+    frame.addEventListener('load', hook);
+    hook();
   }
 
   /* ANDROID'S WEBVIEW CANNOT RENDER A PDF. AT ALL.
@@ -94,8 +155,26 @@
   /* Generous: a health-unit printout on a slow phone is a real case, and cutting a
      working render short to show an error would be its own bug. */
   var RENDER_WATCHDOG_MS = 12000;
-  var PDFJS_URL = '/js/vendor/pdf.min.js';
-  var PDFJS_WORKER = '/js/vendor/pdf.worker.min.js';
+
+  /* WHERE THIS FILE CAME FROM, not where the page is. The no-login sign page lives on the API
+     host and loads this script from the app host; a bare '/js/vendor/...' asked the API host
+     for the PDF worker, got a 404, and pdf.js put "Setting up fake worker failed: Cannot load
+     script at ..." in front of a parent (2026-10-25). */
+  var ASSET = (function () {
+    try { var cs = document.currentScript; if (cs && cs.src) return new URL(cs.src, location.href).origin; } catch (e) {}
+    return '';
+  })();
+
+  /* An error for a person. Library and loading failures (a script that would not load, the
+     PDF worker, a damaged file) are never shown word for word: they name files and URLs. */
+  var LIB_RX = /fake worker|Cannot load script|Could not load\b|failed to load|importScripts|Invalid PDF|PDF header|PDFException|Unexpected server response|NetworkError|Failed to fetch|Worker/i;
+  function ktSaid(e, fallback) {
+    var m = (e && e.message) || (typeof e === 'string' ? e : '');
+    if (!m || LIB_RX.test(m)) return fallback;
+    return w.__ktCleanError ? w.__ktCleanError(m) : m;
+  }
+  var PDFJS_URL = ASSET + '/js/vendor/pdf.min.js';
+  var PDFJS_WORKER = ASSET + '/js/vendor/pdf.worker.compat.js?v=20261025';   // shims for older WebViews (tickets #175/#176)
 
   function loadScript(src) {
     return new Promise(function (res, rej) {
@@ -133,6 +212,31 @@
       host.innerHTML = '';
       var width = Math.max(280, Math.min(900, host.clientWidth - 24));
       var chain = Promise.resolve();
+      var drawn = [];
+      zoomPages(host);
+      /* Zoomed in, the pages are re-drawn at the new resolution once the fingers stop, so
+         text is crisp rather than a stretched bitmap. Capped by area: a 5x page on a 3x
+         screen would be a canvas larger than a phone will allocate. */
+      host.__ktSharpen = function (z) {
+        var dpr0 = Math.min(2, w.devicePixelRatio || 1);
+        drawn.forEach(function (pg) {
+          var k = Math.min(4, dpr0 * Math.max(1, z));
+          var area = pg.vp.width * pg.vp.height;
+          if (area * k * k > 16e6) { k = Math.sqrt(16e6 / area); }
+          k = Math.round(k * 4) / 4;
+          if (pg.k === k) { return; }
+          pg.k = k;
+          var off = d.createElement('canvas');
+          off.width = Math.floor(pg.vp.width * k); off.height = Math.floor(pg.vp.height * k);
+          var oc = off.getContext('2d'); oc.scale(k, k);
+          var AM2 = w.pdfjsLib && w.pdfjsLib.AnnotationMode;
+          pg.page.render({ canvasContext: oc, viewport: pg.vp, annotationMode: AM2 ? AM2.ENABLE : undefined }).promise.then(function () {
+            if (pg.k !== k) { return; }               // a newer zoom already asked for another size
+            pg.canvas.width = off.width; pg.canvas.height = off.height;
+            pg.canvas.getContext('2d').drawImage(off, 0, 0);
+          }).catch(function () {});
+        });
+      };
       for (var i = 1; i <= doc.numPages; i++) {
         (function (n) {
           chain = chain.then(function () {
@@ -146,9 +250,11 @@
               var dpr = Math.min(2, w.devicePixelRatio || 1);
               canvas.width = Math.floor(viewport.width * dpr);
               canvas.height = Math.floor(viewport.height * dpr);
+              // No max-width: the page is already drawn to fit, and pinch-zoom scales it up.
               canvas.style.cssText = 'display:block;margin:0 auto 12px;width:'
-                + Math.floor(viewport.width) + 'px;max-width:100%;border-radius:6px;background:#fff;'
+                + Math.floor(viewport.width) + 'px;border-radius:6px;background:#fff;'
                 + 'box-shadow:0 2px 10px rgba(8,20,40,.25);';
+              drawn.push({ page: page, vp: viewport, canvas: canvas, k: dpr });
               host.appendChild(canvas);
               var ctx = canvas.getContext('2d');
               ctx.scale(dpr, dpr);
@@ -166,6 +272,228 @@
     });
   }
 
+  /* ── PRINTING, ONE WAY (2026-11-06) ──────────────────────────────────────
+     Anthony: "for some reason the print function on the mobile isn't working - fully sweep". Every Print on a phone
+     printed an IFRAME: a hidden one, or the panel's frame. A phone browser ignores that or prints the page behind it,
+     and the apps' web views ignore print() altogether. So:
+       - the apps:   the document goes to the app's own print plugin (KtPrint, Android PrintManager / iOS AirPrint),
+                     as HTML or as the PDF's bytes. An app built before it says to update, unless the screen has a
+                     session-less link for the device's browser (externalPrint), which it still uses;
+       - a phone:    the top page is printed, with everything but a print-only copy of the document hidden;
+       - a desktop:  the frame is printed, as it always was.
+     KT.printDoc({ html } | { url, mime } | { blob }, { title }) is the entry point; the viewer's Print buttons, docWindow's
+     print(), window.print() inside a printout and window.print() in the apps all come here. */
+  function printPlugin() {
+    try { var P = w.Capacitor && w.Capacitor.Plugins && w.Capacitor.Plugins.KtPrint; return (P && P.print) ? P : null; }
+    catch (e) { return null; }
+  }
+  function printSaid(head, body) {
+    if (w.KT && w.KT.toast) { w.KT.toast('🖨️', head, body, '#B45309'); }
+  }
+  function needAppUpdate() {
+    printSaid('Update the app to print', 'Printing needs the latest KiddieTrac app from the App Store or Google Play.');
+    return Promise.resolve(false);
+  }
+  function printFailed(e) {
+    printSaid('Could not print', ktSaid(e, 'Please try again.'));
+    return false;
+  }
+  function blobToBase64(blob) {
+    return new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload = function () { var s = String(r.result || ''); res(s.slice(s.indexOf(',') + 1)); };
+      r.onerror = function () { rej(new Error('The document could not be read.')); };
+      r.readAsDataURL(blob);
+    });
+  }
+  function blobToDataUrl(blob) {
+    return new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload = function () { res(String(r.result || '')); };
+      r.onerror = function () { rej(new Error('The document could not be read.')); };
+      r.readAsDataURL(blob);
+    });
+  }
+  // A protected /api file needs the session; a blob:, a signed link or a public file does not.
+  function blobForPrint(url) {
+    var u = String(url || '');
+    if (/^(blob|data):/i.test(u)) { return w.fetch(u).then(function (r) { return r.blob(); }); }
+    var abs; try { abs = new URL(u, w.location.href); } catch (e) { abs = null; }
+    if (abs && abs.origin === w.location.origin && /\/api\//.test(abs.pathname) && !/[?&](signature|expires)=/.test(abs.search)) {
+      return fetchFileBlob(abs.href);
+    }
+    return w.fetch(u, { credentials: 'omit' }).then(function (r) {
+      if (!r.ok) { throw new Error('That file is no longer available.'); }
+      return r.blob();
+    });
+  }
+  function sheetsDoc(sheets, title) {
+    return '<!doctype html><meta charset="utf-8"><title>' + esc(title) + '</title>'
+      + '<style>@page{margin:10mm}body{margin:0}img{display:block;width:100%;page-break-after:always;break-after:page}'
+      + 'img:last-child{page-break-after:auto;break-after:auto}</style>'
+      + sheets.map(function (src) { return '<img src="' + src + '">'; }).join('');
+  }
+  function textDoc(txt, title) {
+    return '<!doctype html><meta charset="utf-8"><title>' + esc(title) + '</title><pre style="margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:12.5px/1.5 ui-monospace,Consolas,monospace;">' + esc(txt) + '</pre>';
+  }
+
+  /* The phone browser: a print-only copy of the document in a shadow root, so its styles and the portal's stay apart,
+     and the top page printed - the one print() a phone browser honours. Synchronous when it can be, so it stays inside
+     the tap. */
+  var PRINT_CSS_ID = 'kt-printdoc-css';   // not kt-print-css: kt-polish-v2's print rules own that id
+  function printTop(html, title) {
+    if (!d.getElementById(PRINT_CSS_ID)) {
+      var st = d.createElement('style');
+      st.id = PRINT_CSS_ID;
+      st.textContent = '@media screen{#kt-print-host{display:none !important}}'
+        + '@media print{html.kt-printing,html.kt-printing body{height:auto !important;min-height:0 !important;overflow:visible !important;background:#fff !important}'
+        + 'html.kt-printing body>*:not(#kt-print-host){display:none !important}'
+        + 'html.kt-printing #kt-print-host{display:block !important;position:static !important}}';
+      d.head.appendChild(st);
+    }
+    var old = d.getElementById('kt-print-host'); if (old) { old.remove(); }
+    var host = d.createElement('div');
+    host.id = 'kt-print-host';
+    var root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
+    // The document's own html/body rules would match nothing in a shadow root: they move onto its wrapper.
+    var body = String(html).replace(/<style([^>]*)>([\s\S]*?)<\/style>/gi, function (m, a, css) {
+      return '<style' + a + '>' + css.replace(/(^|[\s,{}>+~])(html|body)(?![\w-])/g, '$1.kt-pb') + '</style>';
+    }).replace(/<script[\s\S]*?<\/script>/gi, '');
+    root.innerHTML = '<style>:host{display:block;background:#fff;color:#000}</style><div class="kt-pb">' + body + '</div>';
+    d.body.appendChild(host);
+    var was = d.title;
+    if (title) { d.title = title; }
+    d.documentElement.classList.add('kt-printing');
+    function done() {
+      w.removeEventListener('afterprint', done);
+      d.documentElement.classList.remove('kt-printing');
+      d.title = was;
+      try { host.remove(); } catch (e) {}
+    }
+    function go() {
+      w.addEventListener('afterprint', done);
+      try { w.print(); } catch (e) { done(); }
+    }
+    // Pictures must be decoded first or they print blank; plain documents print inside the tap.
+    var imgs = Array.prototype.slice.call(root.querySelectorAll('img')).filter(function (i) { return !i.complete; });
+    if (!imgs.length) { go(); return Promise.resolve(true); }
+    return new Promise(function (res) {
+      var left = imgs.length;
+      function one() { if (--left === 0) { go(); res(true); } }
+      imgs.forEach(function (i) { i.addEventListener('load', one); i.addEventListener('error', one); });
+    });
+  }
+
+  // The desktop: a hidden frame, printed on its own so the dashboard does not come out with it.
+  function printInFrame(html) {
+    var pf = d.createElement('iframe');
+    pf.setAttribute('aria-hidden', 'true');
+    pf.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;height:600px;border:0;';
+    d.body.appendChild(pf);
+    return new Promise(function (res) {
+      pf.addEventListener('load', function () {
+        w.setTimeout(function () {
+          try { pf.contentWindow.focus(); pf.contentWindow.print(); } catch (e) {}
+          // Removing it during print cancels the job in some browsers.
+          w.setTimeout(function () { try { pf.remove(); } catch (e) {} }, 60000);
+          res(true);
+        }, 150);
+      });
+      pf.srcdoc = String(html);
+    });
+  }
+
+  function printHtml(html, title, opts) {
+    opts = opts || {};
+    if (nativePrintUnavailable()) {
+      var P = printPlugin();
+      if (!P) {
+        if (opts.externalPrint) { return legacyExternal(opts.externalPrint); }
+        return needAppUpdate();
+      }
+      return Promise.resolve(P.print({ html: String(html), baseUrl: w.location.origin + '/', name: title || 'KiddieTrac' }))
+        .then(function () { return true; }, printFailed);
+    }
+    if (touchPhone()) { return printTop(html, title); }
+    return printInFrame(html);
+  }
+
+  // An app built before KtPrint: the device's own browser, given a link that needs no session.
+  function legacyExternal(getUrl) {
+    return Promise.resolve().then(getUrl).then(function (u) {
+      if (!u) { throw new Error('no link'); }
+      openExternally(u);
+      return true;
+    }).catch(function () { return needAppUpdate(); });
+  }
+
+  // A file, in the apps: its bytes go to the plugin - a PDF as itself, a picture or text in a page.
+  function nativePrintFile(url, mime, title, opts) {
+    var P = printPlugin();
+    if (!P) {
+      if (opts && opts.externalPrint) { return legacyExternal(opts.externalPrint); }
+      if (!/^(blob|data):/i.test(String(url))) { return legacyExternal(function () { return url; }); }
+      return needAppUpdate();
+    }
+    var name = title || 'KiddieTrac';
+    return blobForPrint(url).then(function (blob) {
+      return blob.slice(0, 5).text().then(function (head) {
+        var type = blob.type || mime || '';
+        if (head === '%PDF-' || /pdf/i.test(type)) {
+          return blobToBase64(blob).then(function (b64) { return P.print({ pdf: b64, name: name }); });
+        }
+        if (/^image\//i.test(type)) {
+          return blobToDataUrl(blob).then(function (du) { return P.print({ html: sheetsDoc([du], name), name: name }); });
+        }
+        return blob.text().then(function (txt) {
+          var html = /html/i.test(type) || /^\s*</.test(txt) ? txt : textDoc(txt, name);
+          return P.print({ html: html, baseUrl: w.location.origin + '/', name: name });
+        });
+      });
+    }).then(function () { return true; }, printFailed);
+  }
+
+  /* KT.printDoc(src, { title, filename, mime, externalPrint }) -> Promise
+       src: an HTML string or { html }   - a printout built by the screen (an invoice, a certificate, a summary)
+            { blob } or { url, mime }    - a file; it opens in the viewer and its Print runs once the pages are drawn
+     Call it inside the tap where possible: a phone browser keeps the print in the gesture. */
+  function printDoc(src, opts) {
+    opts = opts || {};
+    var title = opts.title || 'KiddieTrac';
+    if (typeof src === 'string') { src = { html: src }; }
+    if (!src) { return Promise.resolve(false); }
+    if (src.html != null) { return printHtml(src.html, title, opts); }
+    var vo = Object.assign({}, opts, { mime: src.mime || opts.mime });
+    var h = src.blob ? viewBlob(src.blob, vo) : (src.url ? view(String(src.url), vo) : null);
+    return h && h.print ? h.print() : Promise.resolve(false);
+  }
+
+  /* window.print() IN THE APPS (Reports' 🖨, anything that prints the page itself): the app's print service, with the
+     page's own print rules. */
+  if (nativePrintUnavailable()) {
+    w.print = function () {
+      var P = printPlugin();
+      if (!P) { needAppUpdate(); return; }
+      Promise.resolve(P.print({ name: d.title || 'KiddieTrac' })).catch(printFailed);
+    };
+  }
+
+  /* A printout in the panel's frame that prints itself (an onload print(), a "Print" button inside the document)
+     comes here on a phone and in the apps, instead of printing the frame. */
+  var framePrints = {};
+  var framePrintSeq = 0;
+  function framePrintShim(html, title) {
+    if (!nativePrintUnavailable() && !touchPhone()) { return ''; }
+    var id = 'p' + (++framePrintSeq);
+    framePrints[id] = { html: html, title: title };
+    return '<script>window.print=function(){try{parent.KT.__framePrint(' + JSON.stringify(id) + ');}catch(e){}};<\/script>';
+  }
+  function withShim(html, shim) {
+    if (!shim) { return html; }
+    var m = /<head[^>]*>/i.exec(html);
+    return m ? html.slice(0, m.index + m[0].length) + shim + html.slice(m.index + m[0].length) : html + shim;
+  }
+
   function view(url, opts) {
     if (!url) return null;
     opts = opts || {};
@@ -177,7 +505,7 @@
     // dims like every other overlay in the portal and the modal guard leaves it be.
     ov.setAttribute('data-no-modal-guard', '1');
     ov.className = 'kt-scrim kt-doc-viewer';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;display:flex;align-items:center;justify-content:center;padding:18px;';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;display:flex;align-items:center;justify-content:center;padding:calc(18px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 18px calc(18px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));box-sizing:border-box;';
 
     /* A blob: URL carries no file extension, so isImage() cannot tell a photo from a
        PDF and everything fetched through an authorised request landed in the iframe.
@@ -204,7 +532,13 @@
     var plainImage = !/pdf/i.test(mime) && (isImage(url) || opts.image || /^image\//i.test(mime) || isImage(fname));
     var office = !opts.image && !/pdf|^image\//i.test(mime)
       && (OFFICE_RE.test(String(url)) || OFFICE_RE.test(fname) || OFFICE_MIME_RE.test(mime));
-    var usePdfJs = native && !plainImage && !office;
+    /* TEXT AND WEB PAGES ARE READ, NOT FRAMED (2026-10-30). A .txt / .html file opened from a signed link showed a
+       broken-page icon: the media endpoint answers every file with X-Frame-Options: DENY (no file of ours may be framed
+       by another site), and that applies to our own viewer too. So a text or HTML file is fetched and shown through
+       srcdoc in a sandboxed frame with no scripts - plain text as a <pre>, HTML as the page itself. */
+    var textual = !plainImage && !office && !/pdf|^image\//i.test(mime)
+      && (/^text\/(plain|html|csv|markdown)/i.test(mime) || /\.(txt|log|md|csv|html?)$/i.test(fname));
+    var usePdfJs = canvasPdf() && !plainImage && !office && !textual;
     /* DOWNLOAD IN THE PANEL (2026-10-09, Anthony: viewing a file "should be a popup and not a
        new window"). The panel is now where every file opens, so saving it starts here too.
        Not in the app: its WebView has nowhere to save, and the app's own net turns a
@@ -228,16 +562,18 @@
       ? '<div class="ktdv-pdf" data-kt-scroll="1" style="flex:1;overflow:auto;background:#0B1220;padding:14px 12px;">'
         + '<div style="color:#94A3B8;font-size:13px;text-align:center;padding:18px;">Opening the document…</div>'
         + '</div>'
+      : textual
+      ? '<iframe class="ktdv-text" sandbox="allow-same-origin allow-modals" title="' + esc(title) + '" style="flex:1;width:100%;border:0;background:#fff;"></iframe>'
       : plainImage
-      ? '<div style="flex:1;overflow:auto;background:#0B1220;display:flex;align-items:center;justify-content:center;padding:16px;">'
+      ? '<div class="ktdv-img" style="flex:1;overflow:auto;background:#0B1220;display:flex;align-items:center;justify-content:center;padding:16px;">'
         + '<img src="' + esc(url) + '" alt="' + esc(title) + '" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:#fff;">'
         + '</div>'
       : '<iframe src="' + esc(url) + '" title="' + esc(title) + '" style="flex:1;width:100%;border:0;background:#fff;"></iframe>';
 
     ov.innerHTML =
-      '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);'
+      '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);max-height:100%;'
       + 'display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
-      + '<div style="background:#0B2545;color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
+      + '<div style="background:' + HEAD_BG + ';color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
       +   '<div style="min-width:0;flex:1;">'
       +     '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">' + esc(label) + '</div>'
       +     '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
@@ -250,6 +586,21 @@
       + '</div>';
 
     d.body.appendChild(ov);
+    // Settles once the document is on screen, so print() can wait for the pages.
+    var ready = Promise.resolve();
+    if (ov.querySelector('.ktdv-img')) { zoomPicture(ov.querySelector('.ktdv-img')); }
+    if (textual) {
+      var tf = ov.querySelector('.ktdv-text');
+      var isHtml = /html/i.test(mime) || /\.html?$/i.test(fname);
+      tf.srcdoc = '<p style="font:14px system-ui,sans-serif;color:#64748B;padding:18px;">Opening…</p>';
+      ready = w.fetch(url, { credentials: 'omit' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); }).then(function (txt) {
+        tf.__ktPrintHtml = isHtml ? txt : textDoc(txt, title);
+        tf.srcdoc = isHtml ? txt
+          : '<!doctype html><meta charset="utf-8"><title>' + esc(title) + '</title><pre style="margin:0;padding:18px 20px;font:13.5px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#0F172A;">' + esc(txt) + '</pre>';
+      }).catch(function () {
+        tf.srcdoc = '<p style="font:14px system-ui,sans-serif;color:#B91C1C;padding:18px;">This file could not be opened here. Use Download to open it.</p>';
+      });
+    }
     function close() {
       if (ov.parentNode) ov.parentNode.removeChild(ov);
       d.removeEventListener('keydown', onKey, true);
@@ -278,7 +629,7 @@
           if (!settled) { rej(new Error('The document viewer did not finish loading.')); }
         }, RENDER_WATCHDOG_MS);
       });
-      Promise.race([
+      ready = Promise.race([
         w.fetch(url)
           .then(function (r) {
             if (!r.ok) { throw new Error('HTTP ' + r.status); }
@@ -292,6 +643,7 @@
               var iu = w.URL.createObjectURL(new Blob([x.buf], { type: x.ct }));
               pdfHost.style.cssText = 'flex:1;overflow:auto;background:#0B1220;display:flex;align-items:center;justify-content:center;padding:16px;';
               pdfHost.innerHTML = '<img src="' + esc(iu) + '" alt="' + esc(title) + '" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:#fff;">';
+              zoomPicture(pdfHost);
               return;
             }
             // Not a PDF and not an image (generated HTML, text): a frame shows it in the web view.
@@ -313,7 +665,7 @@
             + '<div style="font-weight:800;color:#0F172A;margin-bottom:6px;">'
             + 'This document could not be shown here</div>'
             + '<div style="color:#64748B;margin-bottom:14px;">'
-            + esc((e && e.message) || 'The viewer could not load.')
+            + esc(ktSaid(e, 'The viewer could not load.'))
             + ' You can still open it outside the app.</div>';
           var b2 = d.createElement('button');
           b2.type = 'button';
@@ -345,32 +697,37 @@
        so it prints on its own page instead of dragging the dashboard along with it.
        (Anthony, 2026-09-15: "no print button in mobile apk, replace the open in new tab
        with print".) */
-    ov.querySelector('.ktdv-fprint').addEventListener('click', function (ev) {
-      var btn = ev.currentTarget;
-
+    /* 2026-11-06: in the apps the file's bytes go to the app's print plugin (printDoc above); on a phone the drawn
+       pages are printed from the top page, never from a hidden frame. */
+    var fprintBtn = ov.querySelector('.ktdv-fprint');
+    function printNow() {
       if (nativePrintUnavailable()) {
-        var was = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Opening…';
-        Promise.resolve()
-          .then(function () {
-            if (opts.externalPrint) { return opts.externalPrint(); }
-            // A plain http(s) URL can go straight out; a blob cannot.
-            return /^blob:/i.test(String(url)) ? null : url;
-          })
-          .then(function (out) {
-            if (!out) { throw new Error('no printable link'); }
-            openExternally(out);
-            btn.textContent = was; btn.disabled = false;
-          })
-          .catch(function () {
-            // Say so rather than appear to have worked.
-            btn.textContent = 'Cannot print';
-            w.setTimeout(function () { btn.textContent = was; btn.disabled = false; }, 2200);
-          });
-        return;
+        var was = fprintBtn.textContent;
+        fprintBtn.disabled = true;
+        fprintBtn.textContent = 'Preparing…';
+        return nativePrintFile(url, mime, title, opts).then(function (ok) {
+          fprintBtn.textContent = was; fprintBtn.disabled = false;
+          return ok;
+        });
       }
+      if (touchPhone()) {
+        var tfr = ov.querySelector('.ktdv-text');
+        if (tfr && tfr.__ktPrintHtml) { return printTop(tfr.__ktPrintHtml, title); }
+        var pages = [];
+        var pim = ov.querySelector('img');
+        if (pim) { pages.push(pim.src); }
+        Array.prototype.forEach.call(ov.querySelectorAll('.ktdv-pdf canvas'), function (c) {
+          try { pages.push(c.toDataURL('image/png')); } catch (e) {}
+        });
+        if (pages.length) { return printTop(sheetsDoc(pages, title), title); }
+        // A framed file (rare on a phone): its frame is all there is.
+      }
+      printDesktop();
+      return Promise.resolve(true);
+    }
+    fprintBtn.addEventListener('click', function () { printNow(); });
 
+    function printDesktop() {
       var f = ov.querySelector('iframe');
       if (f) {
         try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) {}
@@ -408,10 +765,11 @@
         i2.addEventListener('load', function () { if (--left === 0) { go(); } });
         i2.addEventListener('error', function () { if (--left === 0) { go(); } });
       });
-    });
+    }
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     d.addEventListener('keydown', onKey, true);
-    return { close: close, el: ov };
+    // print(): what the panel's Print does, once the document has finished drawing (a ⋮ "Print" opens and prints).
+    return { close: close, el: ov, ready: ready, print: function () { return ready.then(printNow); } };
   }
 
   /* ── generated HTML, shown in the same panel ─────────────────────────────
@@ -435,6 +793,32 @@
      The document goes in an iframe, so its styles cannot leak into the portal and
      the portal's cannot leak into what gets printed.
      ──────────────────────────────────────────────────────────────────────── */
+  /* THE PORTAL'S POPUP HEADER (2026-10-28, Anthony: "the popup top bar is not gradient (like how we have the rest of
+     the portal - needs to be consistent here)"). The same gradient kt-modal-guard gives every dialog (its HEAD), for
+     both document panels - files (view) and printouts/statements (viewHtml). */
+  var HEAD_BG = 'linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%)';
+
+  /* A short document does not need a 92%-high panel ("a lot of white space at the popup (bottom area)"). Once the
+     frame has laid out, the panel shrinks to the document's height - never taller than before, never below 280px -
+     and re-checks once late images (a logo) have loaded. Same-origin (srcdoc), so its height can be read. */
+  function fitToContent(panel, frame) {
+    if (!panel || !frame) { return; }
+    function fit() {
+      try {
+        var doc = frame.contentDocument; if (!doc || !doc.documentElement) { return; }
+        var head = panel.firstElementChild ? panel.firstElementChild.getBoundingClientRect().height : 60;
+        // The body's real bottom, not scrollHeight: a frame's document is never "shorter" than the frame itself, so
+        // scrollHeight always read as full height and the panel never shrank.
+        if (!doc.body) { return; }
+        var br = doc.body.getBoundingClientRect(), cs = frame.contentWindow.getComputedStyle(doc.body);
+        var h = Math.ceil(br.bottom + (parseFloat(cs.marginBottom) || 0) + (frame.contentWindow.scrollY || 0));
+        var max = Math.min(window.innerHeight * 0.92, 1100);
+        panel.style.height = Math.max(280, Math.min(max, Math.ceil(head + h + 4))) + 'px';
+      } catch (e) { /* cross-origin or gone: keep the default height */ }
+    }
+    frame.addEventListener('load', function () { fit(); setTimeout(fit, 400); setTimeout(fit, 1500); });
+  }
+
   function viewHtml(html, opts) {
     if (!html) return null;
     opts = opts || {};
@@ -452,12 +836,12 @@
     var ov = d.createElement('div');
     ov.setAttribute('data-no-modal-guard', '1');
     ov.className = 'kt-scrim kt-doc-viewer';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;display:flex;align-items:center;justify-content:center;padding:18px;';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147481200;display:flex;align-items:center;justify-content:center;padding:calc(18px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 18px calc(18px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));box-sizing:border-box;';
 
     ov.innerHTML =
-      '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);'
+      '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);max-height:100%;'
       + 'display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
-      + '<div style="background:#0B2545;color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
+      + '<div style="background:' + HEAD_BG + ';color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
       +   '<div style="min-width:0;flex:1;">'
       +     '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">' + esc(label) + '</div>'
       +     '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
@@ -465,21 +849,24 @@
       // No "Open in new tab": there is no URL to open, and a new tab is the thing
       // being moved away from.
       +   '<button class="ktdv-print" type="button" data-kt-iconized="1" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">'
-      +     (nativePrintUnavailable() && opts.externalPrint ? '🖨 Print in browser' : '🖨 Print') + '</button>'
+      +     (nativePrintUnavailable() && opts.externalPrint && !printPlugin() ? '🖨 Print in browser' : '🖨 Print') + '</button>'
       +   '<button class="ktdv-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
       + '</div>'
       + '<iframe class="ktdv-frame" title="' + esc(title) + '" style="flex:1;width:100%;border:0;background:#fff;"></iframe>'
       + '</div>';
 
     d.body.appendChild(ov);
+    try { fitToContent(ov.querySelector('.ktdv-frame').parentNode, ov.querySelector('.ktdv-frame')); } catch (e) {}
 
     /* srcdoc rather than document.write into the frame: one assignment, no open/close
        dance, and the frame keeps its own origin-less sandbox for styling purposes. */
     var frame = ov.querySelector('.ktdv-frame');
-    try { frame.srcdoc = doc; } catch (e) {
+    frame.__ktPrintHtml = doc;
+    var shown = withShim(doc, framePrintShim(doc, title));
+    try { frame.srcdoc = shown; } catch (e) {
       try {
         var fd = frame.contentWindow.document;
-        fd.open(); fd.write(doc); fd.close();
+        fd.open(); fd.write(shown); fd.close();
       } catch (e2) {}
     }
 
@@ -490,45 +877,27 @@
     function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(); } }
 
     ov.querySelector('.ktdv-close').addEventListener('click', close);
-    ov.querySelector('.ktdv-print').addEventListener('click', function (ev) {
-      /* IN THE APP, window.print() DOES NOTHING.
-
-         Neither Android's web view nor iOS's implements it — a host app has to drive
-         the platform's own print service, which needs a native rebuild this one cannot
-         have. Calling it there is a button that silently fails, which is worse than no
-         button. So on a native platform the document is handed to the device's real
-         browser through the Capacitor Browser plugin, where Print works normally; the
-         caller supplies `externalPrint`, a function returning a promise of a URL that
-         browser can open without a session. */
-      if (nativePrintUnavailable() && opts.externalPrint) {
-        var btn = ev.currentTarget;
-        var was = btn.textContent;
-        btn.disabled = true;
-        btn.textContent = 'Opening…';
-        Promise.resolve()
-          .then(function () { return opts.externalPrint(); })
-          .then(function (url) {
-            if (url) { openExternally(url); }
-            else { throw new Error('no link'); }
-          })
-          .catch(function (e) {
-            // Say so rather than appear to have worked.
-            btn.textContent = 'Could not open';
-            setTimeout(function () { btn.textContent = was; btn.disabled = false; }, 2200);
-            return;
-          })
-          .then(function () {
-            if (btn.textContent === 'Opening…') { btn.textContent = was; btn.disabled = false; }
-          });
-        return;
+    /* IN THE APP, window.print() DOES NOTHING, and on a phone a frame's print() is ignored or prints the page behind
+       it. Both go through printHtml (the app's print plugin / the top page); an app built before the plugin uses the
+       caller's session-less link (`externalPrint`) in the device's browser. The desktop prints the frame. */
+    function printNow() {
+      if (nativePrintUnavailable() || touchPhone()) {
+        return printHtml(frame.__ktPrintHtml || doc, title, opts);
       }
       // Printing the FRAME prints the document, not the portal behind it.
       try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch (e) {}
+      return Promise.resolve(true);
+    }
+    ov.querySelector('.ktdv-print').addEventListener('click', function (ev) {
+      var btn = ev.currentTarget;
+      var was = btn.textContent;
+      btn.disabled = true;
+      Promise.resolve(printNow()).then(function () { btn.disabled = false; btn.textContent = was; });
     });
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     d.addEventListener('keydown', onKey, true);
 
-    return { close: close, el: ov, frame: frame };
+    return { close: close, el: ov, frame: frame, print: printNow };
   }
 
   /* A stand-in for `window.open('', '_blank')`.
@@ -555,7 +924,12 @@
       queued = false;
       var html = buf || '<p style="font-family:sans-serif;padding:20px;color:#64748B;">Loading…</p>';
       if (handle && handle.frame) {
-        try { handle.frame.srcdoc = html + (opts.hide ? '<style>' + opts.hide + '{display:none !important;}</style>' : ''); return; }
+        try {
+          var full = html + (opts.hide ? '<style>' + opts.hide + '{display:none !important;}</style>' : '');
+          handle.frame.__ktPrintHtml = full;
+          handle.frame.srcdoc = withShim(full, framePrintShim(full, opts.title));
+          return;
+        }
         catch (e) { /* fall through and rebuild */ }
       }
       handle = viewHtml(html, opts);
@@ -583,7 +957,9 @@
       },
       focus: function () { try { handle && handle.frame && handle.frame.contentWindow.focus(); } catch (e) {} },
       print: function () {
-        try { handle.frame.contentWindow.focus(); handle.frame.contentWindow.print(); } catch (e) {}
+        // Printed straight after a write: paint now rather than on the microtask.
+        if (queued || !handle) { paint(); }
+        if (handle && handle.print) { handle.print(); }
       },
       close: function () { try { handle && handle.close(); } catch (e) {} },
       get closed() { return !handle || !handle.el || !handle.el.parentNode; },
@@ -676,7 +1052,7 @@
     function frame(u) {
       host.innerHTML = '<iframe src="' + esc(u) + '" title="' + esc(title) + '" style="flex:1;width:100%;height:100%;border:0;background:#fff;"></iframe>';
     }
-    if (typeof src === 'string' && !nativePrintUnavailable()) { frame(src); return Promise.resolve(); }
+    if (typeof src === 'string' && !canvasPdf()) { frame(src); return Promise.resolve(); }
     host.innerHTML = '<div style="color:#94A3B8;font-size:13px;text-align:center;padding:18px;">Opening the document…</div>';
     var got = (typeof src === 'string')
       ? w.fetch(src).then(function (r) {
@@ -691,13 +1067,14 @@
       if (/^image\//i.test(x.ct)) {
         var iu = w.URL.createObjectURL(new Blob([x.buf], { type: x.ct }));
         host.innerHTML = '<img src="' + esc(iu) + '" alt="' + esc(title) + '" style="display:block;margin:0 auto;max-width:100%;border-radius:8px;background:#fff;">';
+        zoomPicture(host);
         return;
       }
       if (typeof src === 'string') { frame(src); }
     }).catch(function (e) {
       host.innerHTML = '<div style="max-width:420px;margin:40px auto;background:#fff;border-radius:12px;padding:20px;text-align:center;font-size:13.5px;color:#334155;">'
         + '<div style="font-weight:800;color:#0F172A;margin-bottom:6px;">This document could not be shown here</div>'
-        + '<div style="color:#64748B;">' + esc((e && e.message) || 'The viewer could not load.') + '</div></div>';
+        + '<div style="color:#64748B;">' + esc(ktSaid(e, 'The viewer could not load.')) + '</div></div>';
     });
   }
 
@@ -842,7 +1219,7 @@
   function openFile(src, opts) {
     opts = opts || {};
     function fail(e) {
-      if (w.KT && w.KT.toast) { w.KT.toast('⚠️', 'Could not open the file', (e && e.message) || '', '#DC2626'); }
+      if (w.KT && w.KT.toast) { w.KT.toast('⚠️', 'Could not open the file', ktSaid(e, 'Please try again.'), '#DC2626'); }
       return null;
     }
     try {
@@ -862,5 +1239,12 @@
   w.KT.viewBlob = viewBlob;
   w.KT.viewHtml = viewHtml;
   w.KT.docWindow = docWindow;
+  w.KT.printDoc = printDoc;
+  w.KT.__framePrint = function (id) {
+    var p = framePrints[id];
+    if (p) { printHtml(p.html, p.title); }
+  };
   w.KT.openDocumentExternally = openExternally;
+  w.KT.openExternal = openExternally;
+  w.KT.frameLinks = frameLinks;
 })(window);

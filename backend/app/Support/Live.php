@@ -51,7 +51,7 @@ final class Live
     /** Constrain a query on `enrollments` (aliased $as) to enrolments open today (agency date). */
     public static function enrolments($q, string $as = 'enrollments', ?string $today = null)
     {
-        $today = $today ?: now()->toDateString();
+        $today = $today ?: \App\Support\AgencyTime::today();
         return $q->where(fn ($w) => $w->whereNull($as . '.end_date')->orWhere($as . '.end_date', '>=', $today));
     }
 

@@ -263,6 +263,11 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
 #appMain .kt-page-hero h1, #appMain .kt-page-hero h2 { font-size: 19px !important; margin: 1px 0 !important; line-height: 1.14 !important; }
 #appMain .kt-page-hero .kt-hero-sub, #appMain .kt-page-hero > p { font-size: 12px !important; margin-top: 2px !important; }
 #appMain .kt-page-hero .kt-hero-greet { font-size: 10.5px !important; letter-spacing: 1px !important; margin-bottom: 2px !important; }
+/* 9b) HERO SWEEP (2026-10-30): every banner the same shape and type. Accounting AR/AP and MRR used an <h2> at 24px
+   with a 16px <p>; Phone a 26px title; Immunizations a 24px <h2>; page heroes a 20px (or 16px) corner. */
+#appMain .kt-hero, #appMain .kt-page-hero, #appMain .page-header-v17 { border-radius: 18px !important; }
+#appMain .kt-hero h1, #appMain .kt-hero h2 { font-size: 19px !important; margin: 1px 0 !important; line-height: 1.14 !important; }
+#appMain .kt-hero > p, #appMain .kt-hero .kt-hero-sub, #appMain .kt-hero .kp-sub { font-size: 12px !important; margin: 2px 0 0 !important; line-height: 1.35 !important; }
 
 /* One consistent floating art size on EVERY banner, sized to sit within the 100px box. */
 #appMain .kt-banner-art, #appMain .kt-banner-fx .kt-hero-emoji { font-size: 56px !important; right: 26px !important; }
@@ -376,33 +381,75 @@ body.kt-sidebar-collapsed #kt-view-as { display: none !important; }
    opts in explicitly. */
 input[type="checkbox"]:not(.kt-nosw):not([role="switch"]),
 input.kt-switchified {
+  /* TOGGLE v3 (2026-10-30, Anthony: "i dont like how the toggles are designed ... redesign this", then
+     of a gradient/glow/check version: "make this much better and professional"). Quiet and precise:
+     a compact 38x22 track (44x26 on touch), flat cool grey off, flat brand teal on, a plain white
+     knob with a hairline shadow, a short ease-out slide, the knob stretching slightly while pressed,
+     and a soft focus ring. Same control everywhere: this
+     checkbox, the button toggles (.kt-sw-btn, below) and .kt-switch all draw from these values.
+     min-HEIGHT !important stays (see the 2026-08-25 / 10-20 notes in history: callers write inline
+     width/height on what they think is a checkbox). */
   -webkit-appearance: none; appearance: none; box-sizing: border-box;
-  /* min-HEIGHT matters as much as min-width, and its absence was the bug.
-     Callers write inline `width:16px;height:16px` on what they still think is a
-     checkbox. `min-width:48px` quietly clamped the width back, so the track stayed
-     48px wide — but nothing defended the height, so it collapsed to 16px while the
-     ::after knob stayed 22px and bulged out top and bottom. Measured in the live
-     page: 48x16 track, 22px knob. One property fixes every such caller at once,
-     which is why this is here and not in ~30 call sites. (2026-08-25) */
-  width: 48px; height: 28px; min-width: 48px;
-  min-height: 28px; /* see note above */ border-radius: 999px; background: #CBD5E1;
+  width: 38px !important; height: 22px !important; min-width: 38px !important; max-width: none !important;
+  min-height: 22px !important; border-radius: 999px; background: #D3DAE3;
+  box-shadow: none;
   position: relative; cursor: pointer; vertical-align: middle; flex-shrink: 0;
-  margin: 0; border: none; display: inline-block; transition: background .16s ease;
+  margin: 0; border: none; display: inline-block;
+  transition: background .2s ease, box-shadow .2s ease;
 }
 input[type="checkbox"]:not(.kt-nosw):not([role="switch"])::after,
 input.kt-switchified::after {
-  content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
-  border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.35);
-  transition: transform .16s ease;
+  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.22), 0 0 0 .5px rgba(15,23,42,.06);
+  transition: transform .18s ease-out;
 }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):hover:not(:disabled),
+input.kt-switchified:hover:not(:disabled) { background: #C5CDD8; }
 input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):checked,
-input.kt-switchified:checked { background: #159FB4; }
+input.kt-switchified:checked { background: #0E7C90; box-shadow: none; }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):checked:hover:not(:disabled),
+input.kt-switchified:checked:hover:not(:disabled) { background: #0B6B7C; }
 input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):checked::after,
-input.kt-switchified:checked::after { transform: translateX(20px); }
+input.kt-switchified:checked::after { transform: translateX(16px); }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):active:not(:disabled)::after,
+input.kt-switchified:active:not(:disabled)::after { width: 21px; }
+input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):checked:active:not(:disabled)::after,
+input.kt-switchified:checked:active:not(:disabled)::after { width: 21px; transform: translateX(13px); }
 input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):disabled,
-input.kt-switchified:disabled { opacity: .5; cursor: not-allowed; }
+input.kt-switchified:disabled { opacity: .45; cursor: not-allowed; }
 input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):focus-visible,
-input.kt-switchified:focus-visible { outline: 2px solid #1F6080; outline-offset: 2px; }
+input.kt-switchified:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(14,124,144,.22); }
+
+/* The button-built toggles (Settings' mkSwitch, Autopay) wear the same design. Their own inline
+   geometry and colours are overridden here; state comes from aria-pressed / aria-checked. */
+button.kt-sw-btn {
+  width: 38px !important; height: 22px !important; min-height: 22px !important; max-height: 22px !important;
+  border-radius: 999px !important; background: #D3DAE3 !important; box-shadow: none !important;
+  transition: background .2s ease, box-shadow .2s ease !important;
+}
+button.kt-sw-btn > span {
+  top: 2px !important; left: 2px !important; width: 18px !important; height: 18px !important;
+  background: #fff !important; box-shadow: 0 1px 2px rgba(15,23,42,.22), 0 0 0 .5px rgba(15,23,42,.06) !important;
+  transform: none !important; transition: transform .18s ease-out !important;
+}
+/* Hover only where a real pointer hovers, and never over an ON switch (2026-11-02): on a phone the tapped switch kept
+   :hover, and this rule outranked the ON colour, so a switch just turned on stayed grey and looked off. */
+@media (hover: hover) { button.kt-sw-btn:hover:not(:disabled):not([aria-pressed="true"]):not([aria-checked="true"]) { background: #C5CDD8 !important; } }
+button.kt-sw-btn[aria-pressed="true"], button.kt-sw-btn[aria-checked="true"] { background: #0E7C90 !important; box-shadow: none !important; }
+button.kt-sw-btn[aria-pressed="true"] > span, button.kt-sw-btn[aria-checked="true"] > span { transform: translateX(16px) !important; }
+button.kt-sw-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(14,124,144,.22) !important; }
+button.kt-sw-btn:disabled { opacity: .45 !important; }
+
+/* Touch screens: a larger toggle, easier to hit. */
+@media (pointer: coarse) {
+  input[type="checkbox"]:not(.kt-nosw):not([role="switch"]), input.kt-switchified, button.kt-sw-btn {
+    width: 44px !important; min-width: 44px !important; height: 26px !important; min-height: 26px !important; max-height: 26px !important;
+  }
+  input[type="checkbox"]:not(.kt-nosw):not([role="switch"])::after, input.kt-switchified::after { width: 22px; height: 22px; }
+  input[type="checkbox"]:not(.kt-nosw):not([role="switch"]):checked::after, input.kt-switchified:checked::after { transform: translateX(18px); }
+  button.kt-sw-btn > span { width: 22px !important; height: 22px !important; }
+  button.kt-sw-btn[aria-pressed="true"] > span, button.kt-sw-btn[aria-checked="true"] > span { transform: translateX(18px) !important; }
+}
 
 /* ── Hand-rolled switches: opt them OUT of native button chrome ──────────
    The toggle above is a restyled <input type=checkbox>, and the FIRST thing it does is
@@ -515,11 +562,11 @@ input[type="checkbox"].kt-nosw::after { content: none; }
 #appMain input.kt-switchified,
 [data-kt-pretty] input.kt-switchified,
 input.kt-switchified.kt-switchified {
-  height: 28px !important;
-  min-height: 28px !important;
-  max-height: 28px !important;
-  width: 48px !important;
-  min-width: 48px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
+  width: 38px !important;
+  min-width: 38px !important;
   padding: 0 !important;
   box-sizing: border-box !important;
 }
@@ -590,16 +637,17 @@ input.kt-switchified.kt-switchified {
    pointer. The sibling .kt-switch rules only survive that by being later in
    their own file, which is luck rather than intent. These say it outright. */
 input.kt-switchified {
-  width: 48px !important; height: 28px !important; min-width: 48px !important;
+  width: 38px !important; height: 22px !important; min-width: 38px !important;
   padding: 0 !important; border: none !important; border-radius: 999px !important;
-  background: #CBD5E1 !important;
+  background: #D3DAE3 !important;
 }
 input.kt-switchified:hover,
-input.kt-switchified:focus { background: #CBD5E1 !important; }
+input.kt-switchified:focus { background: #C5CDD8 !important; }
 input.kt-switchified:checked,
-input.kt-switchified:checked:hover,
-input.kt-switchified:checked:focus { background: #159FB4 !important; }
-input.kt-switchified:disabled { opacity: .5 !important; }
+input.kt-switchified:checked:focus { background: #0E7C90 !important; }
+input.kt-switchified:checked:hover { background: #0B6B7C !important; }
+input.kt-switchified:disabled { opacity: .45 !important; }
+@media (pointer: coarse) { input.kt-switchified { width: 44px !important; min-width: 44px !important; height: 26px !important; } }
 
 /* ══ Buttons in dialogs ══════════════════════════════════════════════════════
    Every .kt-btn rule in this portal is written as `[data-kt-pretty] .kt-btn`, and
@@ -703,7 +751,7 @@ table thead th.kt-today-cell {
 /* A block/card rather than a table row. */
 .kt-today-block {
   background: var(--kt-today-bg) !important;
-  border-left: 3px solid var(--kt-today-edge) !important;
+  --kt-edge:var(--kt-today-edge) !important;
 }
 
 /* The little "TODAY" tag, so it reads the same wherever it appears. */
@@ -781,3 +829,98 @@ html { scrollbar-gutter: stable; }
    happens to any other pills and sections". A pill can be as wide as its row, never wider;
    js/kt-overflow-guard.js handles text that still runs past a bordered box at runtime. */
 #appMain :is([class*="pill"], [class*="badge"], [class*="chip"]) { max-width: 100%; box-sizing: border-box; }
+
+/* ── A screen's leading .kt-page-hero is a page banner wherever it renders (2026-10-21).
+      The gradient lived only under [data-kt-pretty], set by each screen itself; Resellers
+      (and its reseller-admin screens) never set it, so their banner was a white card while
+      every other banner is the brand gradient. The shell marks the leading one
+      (.kt-hero-lead, app-v2-shell.js ownBanner); size/padding come from section 9 above. ── */
+#appMain .kt-page-hero.kt-hero-lead {
+  background: linear-gradient(135deg, var(--kt-brand, #1F6080) 0%, var(--kt-brand-light, #4A90B8) 100%);
+  border-radius: 16px;
+  color: #fff;
+  box-shadow: var(--kt-shadow-lg, 0 20px 40px -12px rgba(15, 23, 42, .12));
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 18px;
+  border: 0;
+}
+#appMain .kt-page-hero.kt-hero-lead h1,
+#appMain .kt-page-hero.kt-hero-lead h2 { color: #fff !important; font-weight: 700; letter-spacing: -0.02em; }
+#appMain .kt-page-hero.kt-hero-lead p,
+#appMain .kt-page-hero.kt-hero-lead .kt-hero-sub { color: rgba(255, 255, 255, 0.92) !important; margin-bottom: 0; max-width: 760px; }
+
+/* ── The standard section wrapper (2026-10-21). One class for "a section's content":
+      24px in from the shell's own padding (44px from the edge of #appMain on desktop),
+      full width up to 1800px, left-aligned - the same box as Families, Admin, Reports,
+      Maintenance. Phones: kt-phone-gutter.js removes the side padding (one 10px gutter).
+      New screens use <div class="kt-section">; never a private max-width/centring. ── */
+#appMain .kt-section {
+  padding: 24px;
+  max-width: 1800px;
+  margin-left: 0;
+  margin-right: 0;
+  box-sizing: border-box;
+}
+
+/* ── Banner text stays legible on the light end of a gradient (2026-10-21). Several
+      per-screen banners start on a light colour (Daily log's light green, Campaigns' coral),
+      so white text over the left of the banner measured about 2:1. A soft shadow lifts it
+      without changing any banner's colours; banners with dark text on a light surface do
+      not use these classes for their titles, and the shadow is too soft to blur them. ── */
+#appMain .kt-hero h1, #appMain .kt-hero h2, #appMain .kt-hero .kt-hero-sub, #appMain .kt-hero .kt-hero-greet,
+#appMain .kt-page-hero.kt-hero-lead h1, #appMain .kt-page-hero.kt-hero-lead h2, #appMain .kt-page-hero.kt-hero-lead p {
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.32), 0 0 1px rgba(15, 23, 42, 0.2);
+}
+@media (pointer: coarse) {
+  #appMain input.kt-switchified, [data-kt-pretty] input.kt-switchified, input.kt-switchified.kt-switchified {
+    height: 26px !important; min-height: 26px !important; max-height: 26px !important; width: 44px !important; min-width: 44px !important;
+  }
+}
+
+/* ── ONE GAP UNDER EVERY BANNER (2026-11-01). Anthony: "closures section, just below the hero
+      banner there is a lot of white space before it meets the stats cards - tighten this up -
+      full sweep with other sections as well". Measured on all 156 screens (desktop 1400 / phone
+      390): the space under a banner ran 8-50px, from three stacked sources:
+      (a) kt-design-v22p64.css:55 `[data-kt-pretty] .kt-page-hero { margin-bottom: 28px !important }`
+          out-ranks section 3's 14px (0,2,0 beats 0,1,0), so every data-kt-pretty screen
+          (Closures, Billing schedule, Reports, the settings screens ...) got double the gap;
+      (b) the shell's automatic banner (.kt-hero-auto, app-v2-shell.js buildAutoHero) sits directly
+          in #appMain ABOVE the screen's own wrapper, so that wrapper's padding-top (12-24px) and its
+          first block's margin-top (6-18px) were added on top of the banner's own margin;
+      (c) the .kt-page-actions toolbar (-6px top) left 22px over the buttons on desktop and 2px on
+          a phone (buttons touching the banner).
+      The gap is now one value: 14px desktop, 8px phone (each the existing majority), with the
+      action toolbar spaced the same above and below. `body #appMain` out-ranks both the
+      [data-kt-pretty] rule and kt-mobile-app.css (#appMain .kt-hero, loaded later).
+      Sub-tab bands keep their own margins (kt-tab-band.js / .kt-tabband are owned elsewhere). ── */
+:root { --kt-hero-gap: 14px; }
+@media (max-width: 768px) { :root { --kt-hero-gap: 8px; } }
+
+body #appMain :is(.kt-hero, .kt-page-hero, .page-header-v17) { margin-bottom: var(--kt-hero-gap) !important; }
+
+/* (c) the action toolbar lifted out of a banner: the same gap above and below it. */
+body #appMain :is(.kt-hero, .kt-page-hero, .page-header-v17) + .kt-page-actions {
+  margin-top: 0 !important;
+  margin-bottom: var(--kt-hero-gap) !important;
+}
+
+/* (b) the first content block after a banner (skipping the toolbar, the top bar and non-visual
+   tags) starts flush: the banner's margin is the gap. "The first such sibling" is written as
+   :not(... ~ *), so later blocks keep their own spacing.
+   - Any banner: that block's top margin goes.
+   - A banner directly in #appMain (the shell's automatic banner): that block is the screen's
+     own wrapper, so its top padding goes too, and so does the top margin of the wrapper's
+     first child. A painted box (card / tile / kpi) keeps its padding - that is its inside. */
+body #appMain :is(.kt-hero, .kt-page-hero, .page-header-v17)
+  ~ :not(.kt-page-actions, #kt-topbar, style, script, link, template, [hidden], .kt-tabband):not(:is(.kt-hero, .kt-page-hero, .page-header-v17) ~ :not(.kt-page-actions, #kt-topbar, style, script, link, template, [hidden]) ~ *) {
+  margin-top: 0 !important;
+}
+body #appMain > :is(.kt-hero, .kt-page-hero, .page-header-v17)
+  ~ :is(div, section, main, article):not(.kt-page-actions, #kt-topbar, [hidden], [class*="card"], [class*="tile"], [class*="kpi"], .kt-tabband):not(:is(.kt-hero, .kt-page-hero, .page-header-v17) ~ :not(.kt-page-actions, #kt-topbar, style, script, link, template, [hidden]) ~ *) {
+  padding-top: 0 !important;
+}
+body #appMain > :is(.kt-hero, .kt-page-hero, .page-header-v17)
+  ~ :is(div, section, main, article):not(.kt-page-actions, #kt-topbar, [hidden], [class*="card"], [class*="tile"], [class*="kpi"], .kt-tabband):not(:is(.kt-hero, .kt-page-hero, .page-header-v17) ~ :not(.kt-page-actions, #kt-topbar, style, script, link, template, [hidden]) ~ *) > :not(style, script, link, template, .kt-tabband):not(:not(style, script, link, template) ~ *) {
+  margin-top: 0 !important;
+}

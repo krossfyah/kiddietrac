@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Dompdf\Options;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -30,7 +30,7 @@ use Throwable;
 final class PlatformInvoicePdf
 {
     /** Issuer fields, read from platform_settings with sensible fallbacks where honest. */
-    private function issuer(): array
+    public function issuer(): array
     {
         $get = function (string $key, ?string $default = null) {
             try {
@@ -45,7 +45,8 @@ final class PlatformInvoicePdf
         return [
             /* Name and email are safe to default: they are already what the platform
                sends mail as, so they are facts, not guesses. */
-            'name' => $get('invoice.issuer.name', $get('mail.from_name', 'KiddieTrac')),
+            // The legal name, from the one place it is kept (App\Support\Company, 2026-11-04).
+            'name' => \App\Support\Company::legalName(),
             'email' => $get('invoice.issuer.email', $get('mail.from', 'noreply@kiddietrac.com')),
             /* These have no honest default. Blank until someone sets them. */
             'address' => $get('invoice.issuer.address'),
@@ -55,6 +56,7 @@ final class PlatformInvoicePdf
             /* Invoice queries go to sales@, not the noreply@ the mail is sent from —
                replying to noreply reaches nobody. */
             'reference_email' => $get('invoice.issuer.reference_email', 'sales@kiddietrac.com'),
+            'phone' => $get('invoice.issuer.phone', '1-855-400-9996'),
             /* The portal's own primary, so the invoice matches the product. */
             'brand' => $get('invoice.issuer.brand_color', '#1F6080'),
         ];
@@ -69,7 +71,9 @@ final class PlatformInvoicePdf
      */
     private function logoDataUri(): ?string
     {
-        /* The BRAND WORDMARK, not the PWA app icon.
+        /* (2026-10-25) The invoice prints this on its NAVY header band: login-wordmark.png is the
+           white + teal wordmark made for navy, so it is right there and invisible on white paper.
+           The BRAND WORDMARK, not the PWA app icon.
            MEASURED, not ordered by filename. This is printed at ~190px wide, so what
            matters is pixel width: the widest source gives the highest effective DPI on
            paper. logo-wordmark@2x.png is only 232px across (~117dpi in that box, which
@@ -115,7 +119,17 @@ final class PlatformInvoicePdf
         return null;
     }
 
-    /** The invoice as HTML. Kept separate so it can be previewed without rendering a PDF. */
+    /**
+     * The invoice as HTML. Kept separate so it can be previewed without rendering a PDF.
+     *
+     * REDESIGNED (2026-10-25, Anthony: "the invoice attached does not appear professional and logo
+     * not showing up correctly again - full sweep"). The logo picker chose the widest file, which
+     * is the white + teal wordmark made for navy grounds, so "Kiddie" vanished on white paper. Now
+     * the wordmark sits on a navy band (where it belongs, as on the sales sheets), with the invoice
+     * identity beside it; From / Billed to / Details in three columns; an amount-due panel; an
+     * itemised table with a navy header; totals with the tax line named and rated; notes; payment;
+     * and a quiet footer. Helvetica (a core PDF font) instead of DejaVu.
+     */
     public function renderHtml(string $number): ?string
     {
         $inv = DB::table('platform_invoices as pi')
@@ -127,9 +141,7 @@ final class PlatformInvoicePdf
                 'a.legal_name as agency_legal_name', 'a.address_line1', 'a.address_line2',
                 'a.city', 'a.province', 'a.postal_code', 'a.country',
                 'a.contact_phone as agency_phone', 'a.tax_registration as agency_tax_registration',
-                'a.contact_phone as agency_phone',
             ]);
-
         if (! $inv) {
             return null;
         }
@@ -138,162 +150,176 @@ final class PlatformInvoicePdf
         $logo = $this->logoDataUri();
         $cur = $inv->currency ?: 'CAD';
         $money = fn ($cents) => \App\Support\PlatformBilling::money((int) $cents, $cur);
-        $date = fn ($d) => $d ? Carbon::parse($d)->format('j M Y') : '—';
+        // A credit (complimentary, discount, refund credit) reads "− CAD $x" on one line (2026-10-25).
+        $signed = fn ($cents) => (int) $cents < 0 ? '-' . \App\Support\PlatformBilling::money(abs((int) $cents), $cur) : \App\Support\PlatformBilling::money((int) $cents, $cur);
+        $date = fn ($d) => $d ? Carbon::parse($d)->format('M j, Y') : '—';
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        // (416) 570-2747 rather than 4165702747; anything else is printed as entered.
+        $tel = function ($v) { $d = preg_replace('/\D/', '', (string) $v); if (strlen($d) === 11 && $d[0] === '1') $d = substr($d, 1);
+            return strlen($d) === 10 ? '(' . substr($d, 0, 3) . ') ' . substr($d, 3, 3) . '-' . substr($d, 6) : (string) $v; };
+        $navy = '#0A1E55'; $teal = '#1DB9C3'; $ink = '#0F172A'; $muted = '#64748B'; $line = '#E2E8F0';
 
-        $period = Carbon::parse($inv->period_start)->format('F Y');
-        $due = (int) $inv->amount_cents - (int) $inv->amount_paid_cents;
         $taxCents = (int) ($inv->tax_cents ?? 0);
-        /* Invoices raised before tax existed have no subtotal stored; their total
-           IS the subtotal, so fall back rather than printing 0.00. */
         $lineAmount = (int) ($inv->subtotal_cents ?: ((int) $inv->amount_cents - $taxCents));
+        $due = max(0, (int) $inv->amount_cents - (int) $inv->amount_paid_cents);
+        $rateBps = (int) ($inv->tax_rate_bps ?? 0);
 
-        /* Says so on the face of the document when issuer details are missing. An
-           incomplete invoice must not look finished. */
+        /* Incomplete only where it matters: no business address, or tax charged with no tax number
+           to show beside it. Says so on the face of the document rather than looking finished. */
         $missing = [];
         if (! $iss['address']) { $missing[] = 'business address'; }
-        if (! $iss['tax_id']) { $missing[] = strtolower($iss['tax_label']); }
-        $banner = $missing
-            ? '<div style="background:#FEF3C7;border:1px solid #F59E0B;color:#92400E;padding:9px 12px;'
-              . 'border-radius:6px;font-size:10px;margin-bottom:16px;">INCOMPLETE — no '
-              . $e(implode(' or ', $missing)) . ' configured. Set invoice.issuer.* in platform settings '
-              . 'before sending this to a customer.</div>'
-            : '';
+        if ($taxCents > 0 && ! $iss['tax_id']) { $missing[] = strtolower($iss['tax_label']) . ' number'; }
+        /* NOT ON THE CUSTOMER'S COPY (2026-10-25, Anthony: "with the physical invoice remove the HST warning -
+           customers don't need to see that!"). Sales -> Invoices shows it to platform admins instead. */
+        $banner = '';
 
-        $statusColour = ['paid' => '#166534', 'void' => '#6B7280', 'issued' => '#1F6080'][$inv->status] ?? '#B45309';
+        $status = (string) $inv->status;
+        $stCol = ['paid' => '#16A34A', 'void' => '#64748B', 'issued' => $teal, 'sent' => $teal, 'overdue' => '#DC2626'][$status] ?? '#D97706';
+        $stWord = ['paid' => 'PAID', 'void' => 'VOID', 'issued' => 'ISSUED', 'sent' => 'SENT', 'overdue' => 'OVERDUE', 'draft' => 'DRAFT'][$status] ?? strtoupper($status);
 
-        $row = fn ($label, $value, $bold = false) =>
-            '<tr><td style="padding:7px 0;color:#64748B;font-size:11px;">' . $e($label) . '</td>'
-            . '<td style="padding:7px 0;text-align:right;font-size:' . ($bold ? '15px;font-weight:700' : '12px')
-            . ';color:#0F172A;">' . $e($value) . '</td></tr>';
+        // ── items ──
+        $items = [];
+        if (\Illuminate\Support\Facades\Schema::hasTable('platform_invoice_lines')) {
+            foreach (DB::table('platform_invoice_lines')->where('invoice_id', $inv->id)->orderBy('id')->get() as $ln) {
+                $items[] = ['desc' => (string) $ln->description, 'part' => $ln->part_number,
+                    'period' => $ln->period_start ? $date($ln->period_start) . ' – ' . $date($ln->period_end) : '',
+                    'qty' => (float) $ln->qty, 'unit' => (int) $ln->unit_cents, 'amount' => (int) $ln->amount_cents];
+            }
+        }
+        if (! $items) {
+            $items[] = ['desc' => 'KiddieTrac subscription' . ($inv->plan_code ? ' — ' . ucfirst((string) $inv->plan_code) . ' plan' : ''), 'part' => null,
+                'period' => $date($inv->period_start) . ' – ' . $date($inv->period_end), 'qty' => 1.0, 'unit' => $lineAmount, 'amount' => $lineAmount];
+        }
+        $rows = '';
+        foreach ($items as $i => $it) {
+            $qty = rtrim(rtrim(number_format($it['qty'], 2), '0'), '.');
+            $bg = $i % 2 ? '#F8FAFC' : '#FFFFFF';
+            $rows .= '<tr style="background:' . $bg . ';">'
+                . '<td style="padding:7px 10px;border-bottom:1px solid ' . $line . ';color:' . $muted . ';width:22px;">' . ($i + 1) . '</td>'
+                . '<td style="padding:7px 10px;border-bottom:1px solid ' . $line . ';">'
+                . '<div style="font-weight:bold;color:' . $ink . ';font-size:11px;">' . $e($it['desc']) . '</div>'
+                . '<div style="color:' . $muted . ';font-size:9px;margin-top:2px;">' . ($it['part'] ? 'Part # ' . $e($it['part']) : '') . ($it['part'] && $it['period'] ? ' &nbsp;·&nbsp; ' : '') . $e($it['period']) . '</div></td>'
+                . '<td style="padding:7px 10px;border-bottom:1px solid ' . $line . ';text-align:center;">' . $e($qty) . '</td>'
+                . '<td style="padding:7px 10px;border-bottom:1px solid ' . $line . ';text-align:right;white-space:nowrap;">' . $e($signed($it['unit'])) . '</td>'
+                . '<td style="padding:7px 10px;border-bottom:1px solid ' . $line . ';text-align:right;white-space:nowrap;font-weight:bold;color:' . ((int) $it['amount'] < 0 ? '#047857' : $ink) . ';">' . $e($signed($it['amount'])) . '</td></tr>';
+        }
+
+        $tot = fn ($l, $v, $strong = false) => '<tr><td style="padding:5px 10px;color:' . ($strong ? '#FFFFFF' : $muted) . ';font-size:' . ($strong ? '11px;font-weight:bold' : '10px') . ';">' . $e($l) . '</td>'
+            . '<td style="padding:5px 10px;text-align:right;color:' . ($strong ? '#FFFFFF' : $ink) . ';font-size:' . ($strong ? '14px;font-weight:bold' : '11px') . ';">' . $e($v) . '</td></tr>';
+        $totals = $tot('Subtotal', $money($lineAmount))
+            . ($rateBps > 0 || $taxCents > 0 ? $tot(($inv->tax_label ?: 'Tax') . ' (' . \App\Support\PlatformBilling::ratePercent($rateBps) . ')', $money($taxCents)) : '')
+            . $tot('Total', $money((int) $inv->amount_cents))
+            . ((int) $inv->amount_paid_cents > 0 ? $tot('Paid', '-' . $money((int) $inv->amount_paid_cents)) : '');
+
+        $addr = collect([$inv->address_line1, $inv->address_line2,
+                trim(implode(', ', array_filter([$inv->city, $inv->province])) . ' ' . (string) $inv->postal_code), $inv->country])
+            ->map(fn ($l) => trim((string) $l))->filter()->unique()->values()->all();
+        $billTo = '<div style="font-size:12px;font-weight:bold;color:' . $ink . ';margin-bottom:3px;">' . $e($inv->agency_legal_name ?: $inv->agency_name) . '</div>'
+            . implode('', array_map(fn ($l) => '<div>' . $e($l) . '</div>', $addr))
+            . ($inv->agency_email ? '<div>' . $e($inv->agency_email) . '</div>' : '')
+            . ($inv->agency_phone ? '<div>' . $e($tel($inv->agency_phone)) . '</div>' : '')
+            . ($inv->agency_tax_registration ? '<div>' . $e($inv->tax_label ?: 'Tax') . ' # ' . $e($inv->agency_tax_registration) . '</div>' : '');
+        $from = '<div style="font-size:12px;font-weight:bold;color:' . $ink . ';margin-bottom:3px;">' . $e($iss['name']) . '</div>'
+            . ($iss['address'] ? '<div>' . nl2br($e((string) $iss['address'])) . '</div>' : '')
+            . ($iss['phone'] ? '<div>' . $e($iss['phone']) . '</div>' : '')
+            . '<div>' . $e($iss['reference_email']) . '</div>'
+            . ($iss['tax_id'] ? '<div>' . $e($iss['tax_label']) . ' # ' . $e($iss['tax_id']) . '</div>' : '');
+        $kv = fn ($k, $v) => '<tr><td style="padding:3px 0;color:' . $muted . ';">' . $e($k) . '</td><td style="padding:3px 0;text-align:right;color:' . $ink . ';font-weight:bold;">' . $e($v) . '</td></tr>';
+        $cusNo = \App\Support\SalesCustomers::numberForAgency($inv->agency_id ? (int) $inv->agency_id : null);   // KT-CUS-0002 (2026-11-11)
+        $details = '<table style="width:100%;">' . $kv('Invoice #', $inv->number) . ($cusNo ? $kv('Customer #', $cusNo) : '') . $kv('Invoice date', $date($inv->issued_at ?: $inv->created_at))
+            . $kv('Due date', $date($inv->due_at)) . $kv('Billing period', $date($inv->period_start) . ' – ' . $date($inv->period_end)) . $kv('Currency', $cur) . '</table>';
+        $label = fn ($t) => '<div style="font-size:8.5px;font-weight:bold;letter-spacing:1.4px;color:' . $teal . ';text-transform:uppercase;margin-bottom:6px;">' . $t . '</div>';
+
+        $acct = \App\Support\PlatformAccounts::settings();
+        $paidRows = '';
+        if (\Illuminate\Support\Facades\Schema::hasTable('platform_invoice_payments')) {
+            $plist = DB::table('platform_invoice_payments')->where('invoice_id', $inv->id)->where('status', 'confirmed')->orderBy('paid_on')->get();
+            if ($plist->count()) {
+                $paidRows = '<div style="margin-top:10px;font-size:8.5px;font-weight:bold;letter-spacing:1.2px;color:' . $muted . ';">PAYMENTS RECEIVED</div><table style="width:100%;">';
+                foreach ($plist as $pp) {
+                    $paidRows .= '<tr><td style="padding:3px 10px;font-size:9.5px;color:' . $muted . ';">' . $e($date($pp->paid_on)) . ' · ' . $e(\App\Support\PlatformAccounts::METHODS[$pp->method] ?? $pp->method) . ($pp->receipt_number ? ' · ' . $e($pp->receipt_number) : '') . '</td>'
+                        . '<td style="padding:3px 10px;text-align:right;font-size:10px;color:#16A34A;font-weight:bold;">' . $e($money((int) $pp->amount_cents)) . '</td></tr>';
+                }
+                $paidRows .= '</table>';
+            }
+        }
+        $free = (int) $inv->amount_cents === 0;
+        $payBox = $status === 'paid' && ! $free
+            ? '<b style="color:#16A34A;">Paid in full' . ($inv->paid_at ? ' on ' . $e($date($inv->paid_at)) : '') . '.</b> Thank you. Your receipts list each payment received.'
+            : ($free
+            ? '<b style="color:' . $ink . ';">No payment required.</b> This invoice is for $0.00 and settles automatically on its due date. It is your record of the KiddieTrac services provided for the period.'
+            : ($iss['terms'] ? nl2br($e((string) $iss['terms'])) : 'Payment is due by <b>' . $e($date($inv->due_at)) . '</b>. Please quote <b>' . $e($inv->number) . '</b> with your payment.')
+              . '<br><br><b style="color:' . $ink . ';">How to pay</b><br>' . nl2br($e($acct['payment_instructions']))
+              . '<br><br>You can pay early, pay in part, or prepay the full year from the Licence page in your portal.');
 
         return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-            . 'body{font-family:DejaVu Sans,Helvetica,Arial,sans-serif;color:#0F172A;font-size:12px;margin:0;padding:34px 38px;}'
-            . 'h1{font-size:26px;margin:0 0 2px;letter-spacing:-0.5px;}'
-            . 'table{width:100%;border-collapse:collapse;}'
-            . '.muted{color:#64748B;font-size:11px;line-height:1.5;}'
-            . '.box{border:1px solid #E2E8F0;border-radius:8px;padding:14px 16px;}'
+            . '@page{margin:0;}'
+            . 'body{font-family:Helvetica,Arial,sans-serif;color:#334155;font-size:10px;line-height:1.5;margin:0;padding:0;}'
+            . 'table{border-collapse:collapse;}'
+            . '.wrap{padding:0 40px 46px;}'
             . '</style></head><body>'
-            // A brand bar across the head of the page, so the document is
-            // recognisably KiddieTrac's before anything is read.
-            . '<div style="height:6px;background:' . $e($iss['brand']) . ';margin:-34px -38px 22px;"></div>'
+            // ── navy band: the wordmark where it belongs, and the invoice identity ──
+            . '<div style="background:' . $navy . ';padding:20px 40px 16px;">'
+            . '<table style="width:100%;"><tr>'
+            . '<td style="vertical-align:middle;">' . ($logo ? '<img src="' . $logo . '" style="height:54px;">' : '<div style="font-size:26px;font-weight:bold;color:#fff;">' . $e($iss['name']) . '</div>')
+            . '<div style="color:#9FB3D9;font-size:9px;letter-spacing:.4px;margin-top:4px;">Smart Childcare Management Platform</div></td>'
+            . '<td style="vertical-align:middle;text-align:right;">'
+            . '<div style="color:#FFFFFF;font-size:26px;font-weight:bold;letter-spacing:5px;">INVOICE</div>'
+            . '<div style="color:#CFE0F5;font-size:11px;margin-top:2px;">' . $e($inv->number) . '</div>'
+            . '<div style="display:inline-block;margin-top:8px;padding:3px 10px;border-radius:10px;font-size:8.5px;font-weight:bold;letter-spacing:1.2px;color:#fff;background:' . $stCol . ';">' . $e($stWord) . '</div>'
+            . '</td></tr></table></div>'
+            // The brand gradient underline, as on the marketing material and emails (2026-10-25).
+            . (($grad = \App\Support\PlatformAccounts::dataUri(base_path('public/email/brand-gradient.png'))) ? '<img src="' . $grad . '" style="display:block;width:100%;height:6px;">' : '<div style="height:6px;background:' . $teal . ';"></div>')
+            . '<div class="wrap" style="padding-top:16px;">'
             . $banner
-            // ── header: who is billing, and the invoice identity ──
-            . '<table><tr>'
-            . '<td style="vertical-align:top;">'
-            /* A wordmark is wide. Constrained by width so it sits properly in the
-               header — 40px of height sized for a square icon renders it tiny. */
-            . ($logo ? '<img src="' . $logo . '" style="width:190px;margin-bottom:9px;">' : '')
-            /* The wordmark already says the name; repeating it as a heading is
-               redundant. Shown only when no logo could be loaded. */
-            . ($logo ? '' : '<h1 style="color:' . $e($iss['brand']) . ';">' . $e($iss['name']) . '</h1>')
-            . '<div class="muted">' . nl2br($e((string) $iss['address'])) . '</div>'
-            . '<div class="muted">' . $e($iss['email']) . '</div>'
-            . ($iss['tax_id'] ? '<div class="muted">' . $e($iss['tax_label']) . ': ' . $e($iss['tax_id']) . '</div>' : '')
-            . '</td>'
-            . '<td style="vertical-align:top;text-align:right;">'
-            . '<div style="font-size:19px;font-weight:700;letter-spacing:2px;color:#64748B;">INVOICE</div>'
-            . '<div style="font-size:13px;font-weight:700;margin-top:3px;">' . $e($inv->number) . '</div>'
-            . '<div style="display:inline-block;margin-top:7px;padding:2px 9px;border-radius:9px;font-size:9px;'
-            . 'font-weight:700;letter-spacing:1px;color:#fff;background:' . $statusColour . ';">'
-            . strtoupper($e($inv->status)) . '</div>'
-            . '</td></tr></table>'
-            . '<hr style="border:0;border-top:2px solid ' . $e($iss['brand']) . ';margin:16px 0 18px;">'
-            // ── bill-to and dates ──
-            . '<table><tr>'
-            . '<td style="width:55%;vertical-align:top;">'
-            . '<div class="muted" style="text-transform:uppercase;letter-spacing:1px;font-weight:700;">Billed to</div>'
-            /* The registered entity where one is recorded, otherwise the display name.
-               Every line below is conditional: an unfilled field prints nothing, so a
-               partial profile degrades quietly instead of showing gaps. */
-            . '<div style="font-size:14px;font-weight:700;margin-top:4px;">'
-                . $e($inv->agency_legal_name ?: $inv->agency_name) . '</div>'
-            . collect([
-                $inv->address_line1,
-                $inv->address_line2,
-                trim(implode(', ', array_filter([$inv->city, $inv->province]))
-                    . ' ' . (string) $inv->postal_code),
-                $inv->country,
-            ])->map(fn ($l) => trim((string) $l))->filter()
-              ->map(fn ($l) => '<div class="muted">' . $e($l) . '</div>')->implode('')
-            . ($inv->agency_email ? '<div class="muted">' . $e($inv->agency_email) . '</div>' : '')
-            . ($inv->agency_phone ? '<div class="muted">' . $e($inv->agency_phone) . '</div>' : '')
-            . ($inv->agency_tax_registration
-                ? '<div class="muted">' . $e($inv->tax_label ?: 'Tax ID') . ': '
-                    . $e($inv->agency_tax_registration) . '</div>' : '')
-            . ($inv->agency_email ? '<div class="muted">' . $e($inv->agency_email) . '</div>' : '')
-            . ($inv->agency_phone ? '<div class="muted">' . $e($inv->agency_phone) . '</div>' : '')
-            . '</td>'
-            . '<td style="vertical-align:top;">'
-            . '<table>'
-            . $row('Invoice date', $date($inv->issued_at ?: $inv->created_at))
-            . $row('Due date', $date($inv->due_at))
-            . $row('Billing period', $date($inv->period_start) . ' – ' . $date($inv->period_end))
-            . '</table></td></tr></table>'
-            // ── the line ──
-            . '<table style="margin-top:22px;">'
-            . '<tr style="background:#F8FAFC;">'
-            . '<th style="text-align:left;padding:9px 12px;font-size:10px;letter-spacing:1px;color:#64748B;">DESCRIPTION</th>'
-            . '<th style="text-align:right;padding:9px 12px;font-size:10px;letter-spacing:1px;color:#64748B;">AMOUNT</th>'
-            . '</tr>'
-            . '<tr><td style="padding:13px 12px;border-bottom:1px solid #E2E8F0;">'
-            . '<div style="font-weight:700;">KiddieTrac subscription — ' . $e($period) . '</div>'
-            . '<div class="muted">'
-            . ($inv->plan_code ? ucfirst($e($inv->plan_code)) . ' plan · ' : '')
-            . $e($date($inv->period_start) . ' to ' . $date($inv->period_end)) . '</div></td>'
-            . '<td style="padding:13px 12px;text-align:right;border-bottom:1px solid #E2E8F0;font-size:13px;">'
-            . $e($money($lineAmount)) . '</td></tr>'
-            . '</table>'
+            // ── from / billed to / details, and the amount due ──
+            . '<table style="width:100%;"><tr>'
+            . '<td style="width:30%;vertical-align:top;padding-right:14px;">' . $label('From') . $from . '</td>'
+            . '<td style="width:30%;vertical-align:top;padding-right:14px;">' . $label('Billed to') . $billTo . '</td>'
+            . '<td style="width:40%;vertical-align:top;">' . $label('Invoice details') . $details . '</td>'
+            . '</tr></table>'
+            . '<table style="width:100%;margin-top:12px;"><tr>'
+            . '<td style="background:#F1F7FB;--kt-edge:' . $teal . ';padding:9px 16px;">'
+            . '<div style="font-size:8.5px;font-weight:bold;letter-spacing:1.4px;color:' . $muted . ';text-transform:uppercase;">' . ($status === 'paid' ? 'Paid in full' : 'Amount due') . '</div>'
+            . '<div style="font-size:24px;font-weight:bold;color:' . ($status === 'paid' ? '#16A34A' : $navy) . ';margin-top:2px;">' . $e($money($status === 'paid' ? (int) $inv->amount_paid_cents : $due)) . '</div></td>'
+            . '<td style="background:#F1F7FB;padding:9px 16px;text-align:right;vertical-align:middle;">'
+            . '<div style="font-size:8.5px;font-weight:bold;letter-spacing:1.4px;color:' . $muted . ';text-transform:uppercase;">Due date</div>'
+            . '<div style="font-size:15px;font-weight:bold;color:' . $ink . ';margin-top:2px;">' . $e($date($inv->due_at)) . '</div></td>'
+            . '</tr></table>'
+            // ── items ──
+            . '<table style="width:100%;margin-top:14px;">'
+            . '<tr style="background:' . $navy . ';">'
+            . '<th style="padding:8px 10px;color:#fff;font-size:8.5px;letter-spacing:1px;text-align:left;">#</th>'
+            . '<th style="padding:8px 10px;color:#fff;font-size:8.5px;letter-spacing:1px;text-align:left;">DESCRIPTION</th>'
+            . '<th style="padding:8px 10px;color:#fff;font-size:8.5px;letter-spacing:1px;text-align:center;">QTY</th>'
+            . '<th style="padding:8px 10px;color:#fff;font-size:8.5px;letter-spacing:1px;text-align:right;">UNIT PRICE</th>'
+            . '<th style="padding:8px 10px;color:#fff;font-size:8.5px;letter-spacing:1px;text-align:right;">AMOUNT</th></tr>'
+            . $rows . '</table>'
             // ── totals ──
-            . '<table style="margin-top:14px;"><tr><td style="width:58%;"></td><td>'
-            . '<table>'
-            . $row('Subtotal', $money($lineAmount))
-            /* The tax line is NAMED and carries its rate. "Tax" alone is not
-               acceptable on an invoice in a jurisdiction that requires HST/GST/VAT
-               to be identified, and the rate is what lets the customer check it. */
-            . ($taxCents > 0
-                ? $row(($inv->tax_label ?: 'Tax')
-                    . ' (' . \App\Support\PlatformBilling::ratePercent((int) $inv->tax_rate_bps) . ')',
-                    $money($taxCents))
-                : '')
-            . ($taxCents > 0 ? $row('Total', $money((int) $inv->amount_cents)) : '')
-            . ((int) $inv->amount_paid_cents > 0 ? $row('Paid', '-' . $money($inv->amount_paid_cents)) : '')
-            . '<tr><td colspan="2"><hr style="border:0;border-top:1px solid #E2E8F0;margin:5px 0;"></td></tr>'
-            . $row($inv->status === 'paid' ? 'Paid in full' : 'Amount due', $money(max(0, $due)), true)
-            . '</table></td></tr></table>'
-            // ── footer ──
-            // Payment terms. Defaults are derived from this invoice's own due date so
-            // the wording can never contradict the date printed above it.
-            . '<div style="margin-top:26px;border:1px solid #E2E8F0;border-left:3px solid '
-                . $e($iss['brand']) . ';border-radius:6px;padding:12px 14px;">'
-            . '<div style="font-size:10px;font-weight:700;letter-spacing:1px;color:#64748B;'
-                . 'text-transform:uppercase;margin-bottom:6px;">Payment terms</div>'
-            . '<div class="muted">'
-            . ($iss['terms']
-                ? nl2br($e((string) $iss['terms']))
-                : 'Payment is due by ' . $e($date($inv->due_at)) . '. '
-                  . 'Please quote invoice number ' . $e($inv->number) . ' with your payment. '
-                  . 'Accounts unpaid after the due date may have platform access suspended '
-                  . 'until the balance is settled.')
-            . '</div></div>'
-            /* How to actually pay. An invoice that states terms but never says which
-               methods are accepted invites an email asking exactly that. */
-            . '<div style="margin-top:10px;border:1px solid #E2E8F0;border-radius:6px;padding:12px 14px;">'
-            . '<div style="font-size:10px;font-weight:700;letter-spacing:1px;color:#64748B;'
-                . 'text-transform:uppercase;margin-bottom:6px;">How to pay</div>'
-            . '<div class="muted">'
-            . '<strong>All major cards accepted</strong> — Visa, Mastercard, American Express, '
-            . 'Discover, plus Visa Debit and Debit Mastercard.<br>'
-            . '<strong>EFT / bank transfer</strong> — electronic funds transfer, pre-authorised '
-            . 'debit and Interac e-Transfer are also accepted.<br>'
-            . 'To arrange payment or set up automatic billing, email '
-            . $e($iss['reference_email']) . '.'
-            . '</div></div>'
-            . ($inv->payment_reference ? '<div class="muted" style="margin-top:8px;">Payment reference: '
-                . $e($inv->payment_reference) . '</div>' : '')
-            . '<div class="muted" style="margin-top:26px;border-top:1px solid #E2E8F0;padding-top:9px;">'
-            . 'Questions about this invoice? Email ' . $e($iss['reference_email'])
-            . ' quoting ' . $e($inv->number) . '.</div>'
+            . '<table style="width:100%;margin-top:10px;"><tr><td style="width:55%;vertical-align:top;padding-right:18px;">'
+            . ($inv->notes ? $label('Notes') . '<div style="color:#334155;">' . nl2br($e(preg_replace('/\s*\[voided[^\]]*\]/', '', (string) $inv->notes))) . '</div>' : '')
+            . '</td><td style="width:45%;vertical-align:top;">'
+            . '<table style="width:100%;">' . $totals . '</table>'
+            . '<table style="width:100%;margin-top:4px;background:' . $navy . ';">' . $tot($status === 'paid' ? 'Paid in full' : 'Amount due', $money($due), true) . '</table>'
+            . $paidRows
+            . '</td></tr></table>'
+            // ── payment ──
+            . '<table style="width:100%;margin-top:14px;"><tr>'
+            . '<td style="width:50%;vertical-align:top;border:1px solid ' . $line . ';--kt-edge:' . $navy . ';padding:12px 14px;">' . $label('Payment') . '<div>' . $payBox . '</div></td>'
+            . '<td style="width:2%;"></td>'
+            . '<td style="width:48%;vertical-align:top;border:1px solid ' . $line . ';--kt-edge:' . $teal . ';padding:12px 14px;">' . $label('Terms &amp; conditions') . '<div style="font-size:9px;line-height:1.55;">' . nl2br($e($acct['terms_full'])) . '</div></td>'
+            . '</tr></table>'
+            . '<div style="display:none;">'
+            . ($inv->payment_reference ? '<div style="margin-top:6px;color:' . $muted . ';">Payment reference: ' . $e($inv->payment_reference) . '</div>' : '')
+            . '</div>'
+            . '<div style="margin-top:10px;text-align:center;color:' . $muted . ';font-size:9px;"><b style="color:' . $navy . ';font-size:11px;">Thank you for choosing KiddieTrac.</b> &nbsp;Questions? Email ' . $e($iss['reference_email']) . ($iss['phone'] ? ' or call ' . $e($iss['phone']) : '') . ', quoting ' . $e($inv->number) . '.</div>'
+            . '</div>'
+            // ── footer, on the page ──
+            . '<div style="position:fixed;bottom:0;left:0;right:0;padding:10px 40px;border-top:1px solid ' . $line . ';color:#94A3B8;font-size:8px;">'
+            . '<table style="width:100%;"><tr><td>' . $e($iss['name']) . ($iss['address'] ? ' · ' . $e(preg_replace('/\s*\n\s*/', ', ', (string) $iss['address'])) : '') . '</td>'
+            . '<td style="text-align:right;">kiddietrac.com · ' . $e($inv->number) . '</td></tr></table></div>'
+            // The watermark goes LAST so it is drawn over everything else, centred on the page.
+            . ($status === 'paid' ? '<div style="position:fixed;top:0;left:0;width:100%;height:100%;"><div style="position:absolute;top:400px;left:0;width:100%;text-align:center;"><span style="display:inline-block;font-size:150px;font-weight:bold;letter-spacing:12px;color:#16A34A;opacity:.20;border:9px solid #16A34A;border-radius:26px;padding:0 34px;transform:rotate(-28deg);">PAID</span></div></div>' : '')
             . '</body></html>';
     }
 
@@ -307,7 +333,7 @@ final class PlatformInvoicePdf
 
         $options = new Options();
         $options->set('isRemoteEnabled', false);   // no network fetches from invoice HTML
-        $options->set('defaultFont', 'DejaVu Sans');
+        $options->set('defaultFont', 'Helvetica');
 
         $dompdf = new Dompdf($options);
         $dompdf->loadHtml($html, 'UTF-8');

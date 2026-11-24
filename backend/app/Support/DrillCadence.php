@@ -70,6 +70,21 @@ final class DrillCadence
         return isset(self::FIRE_CADENCES[$v]) ? $v : 'monthly';
     }
 
+    /**
+     * REQUIRED DRILLS SWITCHED OFF FOR ONE CENTRE (2026-11-10, Anthony: "each educator has a fire drill and missing child
+     * drill - I want to be able to remove any of those that may or may not be applicable"). centres.settings drill_off =
+     * {type: {reason, by, at}}, set by an admin or that centre's director (POST /drills/requirement). status() here and
+     * DrillRules::status() leave these out, so the Drills tab, the cadence and monthly reminders and the educator
+     * schedule's missed-drill notices all stop for it together.
+     */
+    public static function off(int $centreId): array
+    {
+        $raw = DB::table('centres')->where('id', $centreId)->value('settings');
+        $s = $raw ? (json_decode((string) $raw, true) ?: []) : [];
+
+        return is_array($s['drill_off'] ?? null) ? $s['drill_off'] : [];
+    }
+
     /** @return array<string, array> empty when the agency is not in Ontario. */
     public static function status(int $agencyId, int $centreId, ?Carbon $now = null): array
     {
@@ -78,12 +93,14 @@ final class DrillCadence
         $now = ($now ?: now())->copy()->setTimezone($tz);
         $today = $now->copy()->startOfDay();
 
-        return [
-            'missing_child' => self::missingChild($centreId, $tz, $today),
-            'fire' => self::fireCadence($centreId) === 'school_term' && $today->month !== 7 && $today->month !== 8
-                ? self::fireTerm($centreId, $tz, $today)
-                : self::fireMonthly($centreId, $tz, $today),
-        ];
+        $off = self::off($centreId);
+        $out = [];
+        if (! isset($off['missing_child'])) $out['missing_child'] = self::missingChild($centreId, $tz, $today);
+        if (! isset($off['fire'])) $out['fire'] = self::fireCadence($centreId) === 'school_term' && $today->month !== 7 && $today->month !== 8
+            ? self::fireTerm($centreId, $tz, $today)
+            : self::fireMonthly($centreId, $tz, $today);
+
+        return $out;
     }
 
     private static function lastAt(int $centreId, string $type, ?Carbon $from = null, ?Carbon $to = null): ?Carbon

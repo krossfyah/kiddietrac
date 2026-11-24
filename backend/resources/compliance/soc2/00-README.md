@@ -18,7 +18,7 @@ A **Type I** report gives an opinion on whether controls are suitably **designed
 | Processing Integrity (PI1) | Light coverage only | 11 |
 | Privacy (P1 to P8) | Light coverage only | 08, 11 |
 
-**The system in scope:** the KiddieTrac platform. That covers the Laravel API, the web single-page app (portal), the Android app (a WebView wrapper around the portal), the MySQL database, scheduled jobs, and the marketing site at kiddietrac.com where it handles security reporting, privacy notices and consent. Hosting is GoDaddy shared cPanel in North America, and source code is on GitHub (github.com/krossfyah/kiddietrac, private).
+**The system in scope:** the KiddieTrac platform. That covers the Laravel API, the web single-page app (portal), the Android app (a WebView wrapper around the portal), the MySQL database, scheduled jobs, and the marketing site at kiddietrac.com where it handles security reporting, privacy notices and consent. Hosting is a dedicated Cloudways-managed server (DigitalOcean infrastructure) in Toronto, Canada (moved from GoDaddy shared hosting on 2026-10-26), and source code is on GitHub (github.com/krossfyah/kiddietrac, private).
 
 ## Documents
 

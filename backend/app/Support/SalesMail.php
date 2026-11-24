@@ -53,7 +53,8 @@ final class SalesMail
             $val = self::e($v);
             if (filter_var((string) $v, FILTER_VALIDATE_EMAIL)) {
                 $val = '<a href="mailto:' . $val . '" style="color:' . self::TEAL . ';text-decoration:none">' . $val . '</a>';
-            } elseif (preg_match('/^\+?[0-9 ().-]{7,}$/', (string) $v)) {
+            } elseif (preg_match('/^\+?[0-9 ().-]{7,}$/', (string) $v) && ! filter_var((string) $v, FILTER_VALIDATE_IP)) {
+                // (Not an IP: 24.114.52.6 matched and was dialled as tel:24114526.)
                 $val = '<a href="tel:' . self::e(preg_replace('/[^0-9+]/', '', (string) $v)) . '" style="color:' . self::TEAL . ';text-decoration:none">' . $val . '</a>';
             } else {
                 $val = nl2br($val);
@@ -101,7 +102,7 @@ final class SalesMail
         if (isset($o['message']) && trim((string) $o['message']) !== '') {
             $body .= '<tr><td class="kt-pad" style="padding:16px 34px 0">'
                 . (! empty($o['message_label']) ? '<div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;font-weight:bold;color:' . $muted . ';margin:0 0 7px">' . $e($o['message_label']) . '</div>' : '')
-                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-left:4px solid #2C8AAC;background:#F4F9FB;border-radius:0 10px 10px 0"><tr><td style="padding:14px 16px;font-size:14.5px;line-height:1.6;color:#0D1B2A">'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="--kt-edge:#2C8AAC;background:#F4F9FB;border-radius:0 10px 10px 0"><tr><td style="padding:14px 16px;font-size:14.5px;line-height:1.6;color:#0D1B2A">'
                 . nl2br($e($o['message'])) . '</td></tr></table></td></tr>';
         }
         if (! empty($o['alert'])) {
@@ -141,12 +142,14 @@ final class SalesMail
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF3F6"><tr><td align="center" style="padding:24px 10px">'
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="kt-card" style="width:100%;max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#0D1B2A">'
             . '<tr><td bgcolor="' . self::BAND . '" class="kt-band" style="background:' . self::BAND . ';padding:20px 24px;text-align:center"><img src="https://api.kiddietrac.com/email/wordmark-tagline-navy.png" width="220" alt="KiddieTrac - Smart Childcare Management Platform" style="display:block;margin:0 auto;border:0;width:220px;max-width:70%;height:auto"></td></tr>'
-            . '<tr><td style="font-size:0;line-height:0"><img src="https://api.kiddietrac.com/email/brand-gradient.png" width="600" height="6" alt="" style="display:block;border:0;width:100%;max-width:600px;height:6px"></td></tr>'
+            . '<tr><td bgcolor="#1FA2A6" style="font-size:0;line-height:0;background:#1FA2A6"><img src="https://api.kiddietrac.com/email/brand-gradient.png" width="600" height="6" alt="" style="display:block;border:0;width:100%;height:6px"></td></tr>'
             . $head . $body
             . '<tr><td style="padding:28px 0 0"></td></tr>'
             . '<tr><td class="kt-pad" style="background:#F6F9FB;border-top:1px solid #E5ECF1;padding:16px 34px;font-size:12px;line-height:1.55;color:#7A8B9A;text-align:center">'
             . '<strong style="color:' . $navy . '">KiddieTrac</strong> &middot; Smart Childcare Management Platform<br>'
             . 'Sales team notification &middot; <a href="https://app.kiddietrac.com/dashboard.html#sales" style="color:' . $teal . ';text-decoration:none">Open the pipeline</a>'
+            // KiddieTrac's pages, quietly, inside the footer band (2026-11-03; App\Support\SocialLinks).
+            . '<div style="margin-top:10px">' . SocialLinks::block(SocialLinks::row()) . '</div>'
             . '</td></tr></table></td></tr></table></body></html>';
     }
 }

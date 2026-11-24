@@ -39,21 +39,74 @@
     st.id = 'kt-fm-ro-css';
     st.textContent = 'body.kt-fm-ro #pk-open,body.kt-fm-ro #fr-open,body.kt-fm-ro #fm-upload,body.kt-fm-ro #pk-upload,'
       + 'body.kt-fm-ro #pk-send,body.kt-fm-ro #fr-send,body.kt-fm-ro #fm-sync,body.kt-fm-ro .fm-edit,body.kt-fm-ro .fm-toggle,'
-      + 'body.kt-fm-ro .fm-del,body.kt-fm-ro .pkv-again,body.kt-fm-ro .fm-upload-open,body.kt-fm-ro #cs-annotate,body.kt-fm-ro #cs-sign{display:none !important}';
+      + 'body.kt-fm-ro .fm-del,body.kt-fm-ro .pkv-again,body.kt-fm-ro .fm-upload-open,body.kt-fm-ro #cs-annotate,body.kt-fm-ro #cs-sign{display:none !important}'
+      + 'body.kt-fm-dir #fm-sync,body.kt-fm-dir #pk-narrow button[data-c="narrow"]{display:none !important}';
     document.head.appendChild(st);
+  }
+  /* A CENTRE DIRECTOR'S FORMS MANAGER (2026-11-13, Anthony: "directors should have access to forms manager",
+     scoped to their centres). The server (ManagedFormController + CentreScope::people) shows them their centres'
+     people only and ties what they upload to their centre. Here: no Sync (agency-wide), no "Only the people you
+     picked" on an agency-wide form (it would take the form away from other centres), no Edit/Activate/Delete on a
+     form they cannot manage (f.can_manage), and - only when they direct several centres - one picker saying which
+     centre a new form or a new parent belongs to. */
+  var FM_DIR = false, FM_CENTRE = null;
+  function fmIsDirector() {
+    try {
+      var u = (KT.Auth && KT.Auth.user && KT.Auth.user()) || JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || 'null');
+      return !!(u && KT.Shell && KT.Shell.Roles && KT.Shell.Roles.primaryRoleOf && KT.Shell.Roles.primaryRoleOf(u) === 'centre_director');
+    } catch (e) { return false; }
+  }
+  function fmDirectorCentrePicker(container) {
+    if (!FM_DIR) { return; }
+    Api.get('/admin/centres').then(function (r) {
+      var cs = (r && r.centres) || [];
+      if (cs.length < 2) { FM_CENTRE = cs.length ? cs[0].id : null; return; }
+      var wrap = container.querySelector('.fm-wrap');
+      if (!wrap || wrap.querySelector('#fm-centre')) { return; }
+      var bar = document.createElement('div');
+      bar.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 0 0;font-size:13px;color:#334155;';
+      bar.innerHTML = '<label for="fm-centre" style="font-weight:700;">\uD83C\uDFEB Centre for new forms and new parents</label>'
+        + '<select id="fm-centre" style="height:30px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font:inherit;">'
+        + cs.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('') + '</select>';
+      wrap.insertBefore(bar, wrap.firstChild);
+      var sel = bar.querySelector('select');
+      FM_CENTRE = Number(sel.value);
+      sel.addEventListener('change', function () { FM_CENTRE = Number(sel.value); });
+    }).catch(function () {});
   }
   function fmMenuAllowed(label) {
     return !FM_RO || /^\s*(view|download|open)\b/i.test(String(label || ''));
   }
 
-  function render(container) {
+  /* THE NDA IS A TAB, NOT A WAY OUT (2026-10-20). Anthony: "forms manager and send nda to a
+     prospect doesnt retain the top bar with all of the other sections". "Send NDA to a
+     prospect" was a link to #prospect-ndas, a separate screen, so the row of tabs
+     (Library, Multiple forms, Request files, Completed) vanished the moment it was
+     clicked. It now opens in this screen's body like every other tab. #prospect-ndas
+     still works: for a role that has Forms Manager it lands here on the NDA tab
+     (screen-prospect-nda.js), and a sales rep, who has no Forms Manager, keeps the page. */
+  var FM_START = null;
+  function render(container, startTab) {
     FM_RO = fmReadOnly();
     fmReadOnlyStyle();
-    try { document.body.classList.toggle('kt-fm-ro', FM_RO); } catch (e) {}
+    /* PHONE (2026-10-25, Anthony: "the send multiple forms button - doesnt look good"): the action
+       buttons were a heavy pill pushed to the right under the heading. Full width, 40px, on a phone;
+       the page's side padding drops from 24px to 12px so the cards get the width. */
+    if (!document.getElementById('fm-phone-css')) {
+      var _fmc = document.createElement('style');
+      _fmc.id = 'fm-phone-css';
+      _fmc.textContent = '@media (max-width:600px){'
+        + '#pk-open,#fr-open{width:100% !important;margin-left:0 !important;height:40px !important;min-height:40px !important;padding:0 16px !important;font-size:14px !important;border-radius:10px !important;}'
+        + '.fm-wrap{padding:0 12px 16px !important;}'
+        + '}';
+      document.head.appendChild(_fmc);
+    }
+    FM_DIR = fmIsDirector();
+    try { document.body.classList.toggle('kt-fm-ro', FM_RO); document.body.classList.toggle('kt-fm-dir', FM_DIR); } catch (e) {}
     container.innerHTML =
-      (FM_RO ? '<div style="max-width:1080px;margin:12px auto 0;padding:0 24px;"><div style="display:inline-flex;align-items:center;gap:6px;background:#F1F5F9;border:1px solid #E2E8F0;color:#334155;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;">🔒 Read-only (auditor) — you can view and download, not change</div></div>' : '')
-      + '<div style="padding:0 24px 24px;max-width:1080px;margin:0 auto;color:#0F172A;">'
-      + '<div style="display:flex;gap:8px;margin:16px 0 16px;">'
+      (FM_RO ? '<div style="margin:12px 0 0;padding:0 24px;"><div style="display:inline-flex;align-items:center;gap:6px;background:#F1F5F9;border:1px solid #E2E8F0;color:#334155;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700;">🔒 Read-only (auditor) — you can view and download, not change</div></div>' : '')
+      + '<div class="fm-wrap" style="padding:0 24px 24px;color:#0F172A;">'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 16px;">'
       + '<button class="fm-tab" data-t="library" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📚 Library</button>'
       + '<button class="fm-tab" data-t="package" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📦 Multiple forms</button>'
       + '<button class="fm-tab" data-t="files" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">📥 Request files</button>'
@@ -62,19 +115,24 @@
          and sales reps. It opens its own screen, because a prospect is not in any agency. */
       + ((function () { try { var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
             return sessionStorage.getItem('kt_is_platform_admin') === '1' || (u.roles || []).indexOf('sales_rep') !== -1; } catch (e) { return false; } })()
-          ? '<a href="#prospect-ndas" style="margin-left:auto;align-self:center;border:1px solid #1F6080;color:#1F6080;border-radius:9px;padding:8px 14px;font-size:13.5px;font-weight:700;text-decoration:none;">🤝 Send NDA to a prospect</a>' : '')
+          ? '<button class="fm-tab" data-t="nda" type="button" style="border:1px solid #E2E8F0;border-radius:9px;padding:8px 16px;font-size:13.5px;font-weight:700;cursor:pointer;">🤝 Prospect NDAs</button>' : '')
       + '</div><div id="fm-body"></div></div>';
     var body = container.querySelector('#fm-body');
     var tabs = container.querySelectorAll('.fm-tab');
     function activate(t) {
       tabs.forEach(function (b) { var on = b.getAttribute('data-t') === t; b.style.background = on ? '#1F6080' : '#fff'; b.style.color = on ? '#fff' : '#334155'; });
-      if (t === 'completed') renderCompleted(body);
+      if (t === 'nda' && KT.ProspectNda) KT.ProspectNda.render(body, { embedded: true });
+      else if (t === 'completed') renderCompleted(body);
       else if (t === 'files') renderFileRequests(body);
       else if (t === 'package') renderPackage(body);
       else renderLibrary(body);
     }
     tabs.forEach(function (b) { b.addEventListener('click', function () { activate(b.getAttribute('data-t')); }); });
-    activate('library');
+    var start = (typeof startTab === 'string' && startTab) || FM_START || 'library';
+    FM_START = null;
+    if (!container.querySelector('.fm-tab[data-t="' + start + '"]')) start = 'library';
+    activate(start);
+    fmDirectorCentrePicker(container);
   }
 
   /* ───────── PACKAGE: several forms, several people, one email ─────────
@@ -267,6 +325,11 @@
             if (!r.notified) {
               readCell = '<span style="color:#CBD5E1;">—</span>';
               kRead = '0';
+            } else if ((r.delivered_count || 0) === 0 && r.undelivered_count === 0) {
+              /* No email record matched (2026-10-25). Unknown is not the same as undelivered:
+                 saying "Not delivered" here sent Safia chasing a send that had arrived. */
+              readCell = '<span style="color:#94A3B8;font-size:12px;" title="No email record was found for this send.">No record</span>';
+              kRead = '1';
             } else if ((r.delivered_count || 0) === 0) {
               readCell = '<span style="font-size:11px;font-weight:800;color:#B91C1C;background:#FEE2E2;'
                 + 'border:1px solid #FCA5A5;border-radius:999px;padding:2px 9px;white-space:nowrap;"'
@@ -524,19 +587,22 @@
       /* Printed from a hidden iframe rather than a popup window: a blocker kills
          window.open() that is not a direct click, and the click here is on a menu item
          that has already closed by the time the fetch resolves. */
-      var f = document.createElement('iframe');
-      f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
-      document.body.appendChild(f);
-      var doc = f.contentDocument;
-      doc.open();
-      doc.write('<!doctype html><html><head><meta charset="utf-8"><title>Package sent '
+      var html = '<!doctype html><html><head><meta charset="utf-8"><title>Package sent '
         + esc(fmtStamp(d.sent_at)) + '</title>'
         + '<style>body{font:13px/1.5 system-ui,-apple-system,sans-serif;color:#0F172A;padding:24px;}'
         + 'table{width:100%;border-collapse:collapse;} th,td{text-align:left;}'
         + '@page{margin:14mm;}</style></head><body>'
         + '<h1 style="font-size:19px;margin:0 0 14px;">📦 Package sent</h1>'
         + packageSheetHtml(d)
-        + '</body></html>');
+        + '</body></html>';
+      // One print path for phones, the apps and desktop (kt-doc-viewer.js, 2026-11-06).
+      if (window.KT && KT.printDoc) { KT.printDoc({ html: html }, { title: 'Package sent' }); return; }
+      var f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+      document.body.appendChild(f);
+      var doc = f.contentDocument;
+      doc.open();
+      doc.write(html);
       doc.close();
       f.contentWindow.focus();
       f.contentWindow.print();
@@ -701,7 +767,7 @@
   /* ───────── REQUEST FILES: the other direction ─────────
 
      A form package sends a document out for somebody to fill in. This asks for documents
-     they already have — an immunisation card, both sides of an ID, last year's tax slip —
+     they already have — an immunization card, both sides of an ID, last year's tax slip —
      which until now happened over email, so "what did we ask for and what is still
      missing" could only be answered by reading a thread.
 
@@ -738,13 +804,18 @@
   function loadFileRequests(el) {
     Api.get('/admin/file-requests').then(function (d) {
       var rows = (d && d.requests) || [];
-      if (!rows.length) {
-        el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">Nothing requested yet. Use <strong>+ Request files</strong> above.</div>';
-        return;
-      }
       var th = function (t) {
         return '<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;">' + t + '</th>';
       };
+      /* Empty, it is still the table with its search box, like every other tab here (2026-11-06, sub-tab filter
+         sweep): a plain "nothing yet" panel made this the one tab without the filter field. */
+      if (!rows.length) {
+        el.innerHTML = '<div style="overflow-x:auto;background:#fff;border:1px solid #E5E7EB;border-radius:12px;">'
+          + '<table data-kt-no-kebab="1" data-kt-filter-always="1" style="width:100%;border-collapse:collapse;font-size:13px;">'
+          + '<thead><tr style="background:#F9FAFB;">' + th('Requested') + th('From') + th('What') + th('Received') + th('Priority') + th('Due') + th('By') + th('') + '</tr></thead>'
+          + '<tbody><tr><td colspan="8" style="padding:30px;text-align:center;color:#64748B;">Nothing requested yet. Use <strong>+ Request files</strong> above.</td></tr></tbody></table></div>';
+        return;
+      }
       el.innerHTML = '<div style="overflow-x:auto;background:#fff;border:1px solid #E5E7EB;border-radius:12px;">'
         + '<table data-kt-no-kebab="1" data-kt-paginate="25" data-kt-filter-always="1" style="width:100%;border-collapse:collapse;font-size:13px;">'
         + '<thead><tr style="background:#F9FAFB;">'
@@ -759,7 +830,7 @@
                   : '<span style="font-size:11px;font-weight:800;color:' + (r.received ? '#B45309' : '#64748B') + ';background:' + (r.received ? '#FEF3C7' : '#F1F5F9') + ';border:1px solid ' + (r.received ? '#FDE68A' : '#E2E8F0') + ';border-radius:999px;padding:2px 9px;white-space:nowrap;">' + r.received + ' of ' + r.asked + '</span>');
             /* An overdue request says so. A due date that has passed and looks like every
                other due date is a due date nobody acts on. */
-            var overdue = r.due_on && r.status !== 'complete' && String(r.due_on).slice(0, 10) < new Date().toISOString().slice(0, 10);
+            var overdue = r.due_on && r.status !== 'complete' && String(r.due_on).slice(0, 10) < ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
             return '<tr style="border-top:1px solid #F3F4F6;vertical-align:top;">'
               + '<td data-kt-sort="' + esc(String(r.created_at || '')) + '" style="padding:11px 14px;white-space:nowrap;color:#374151;">' + esc(fmtStamp(r.created_at)) + '</td>'
               + '<td data-kt-sort="' + esc(String(r.person || '').toLowerCase()) + '" style="padding:11px 14px;"><div style="font-weight:600;color:#111827;">' + esc(r.person) + '</div>'
@@ -831,7 +902,7 @@
                      made the second person right-click and save from a PDF viewer.
 
                      Both go through /admin/file-requests/{id}/files/{doc}/download rather
-                     than the raw /storage path: these are ID documents and immunisation
+                     than the raw /storage path: these are ID documents and immunization
                      cards, and possession of a URL is not authorisation to read one. */
                   return '<div style="display:flex;align-items:center;gap:9px;font-size:12.5px;">'
                     + '<span>' + (/pdf/i.test(f.file_type || '') ? '📄' : /image/i.test(f.file_type || '') ? '🖼️' : '📎') + '</span>'
@@ -1077,7 +1148,7 @@
     function paintItems() {
       itemsEl.innerHTML = items.map(function (it, i) {
         return '<div style="display:grid;grid-template-columns:1fr 130px 78px 34px;gap:8px;align-items:center;margin-bottom:8px;">'
-          + '<input class="fri-d" data-i="' + i + '" placeholder="e.g. Immunisation card" value="' + esc(it.description) + '" style="' + IN + '">'
+          + '<input class="fri-d" data-i="' + i + '" placeholder="e.g. Immunization card" value="' + esc(it.description) + '" style="' + IN + '">'
           + '<select class="fri-k" data-i="' + i + '" style="' + IN + 'background:#fff;">'
           +   ['any:Any file', 'pdf:PDF', 'image:Photo/scan', 'document:Word doc'].map(function (o) {
                 var p = o.split(':');
@@ -1320,10 +1391,15 @@
       if (!userIds.length && !emails.length) { say('Choose people, or type an email address.', true); return; }
 
       btn.disabled = true; say('Sending…', false);
+      var choice = btn.getAttribute('data-aud') || null;
+      btn.removeAttribute('data-aud');
+      var oldAsk = ov.querySelector('#pk-narrow'); if (oldAsk) oldAsk.remove();
       Api.post('/admin/managed-forms/bulk-assign', {
         form_ids: formIds, user_ids: userIds, emails: emails,
         notify: !notifyBox || notifyBox.checked,
-        note: (ov.querySelector('#pk-note').value || '').trim() || null
+        note: (ov.querySelector('#pk-note').value || '').trim() || null,
+        audience_choice: choice,
+        centre_id: (FM_DIR && FM_CENTRE) ? FM_CENTRE : undefined
       }).then(function (r) {
         btn.disabled = false;
         var un = (r && r.unmatched) || [];
@@ -1339,6 +1415,36 @@
         if (hostBody) loadPackageHistory(hostBody.querySelector('#pk-history'));
       }).catch(function (e) {
         btn.disabled = false;
+        /* ASK BEFORE NARROWING (2026-10-20). Naming people on a form that is open to a
+           role makes it theirs alone - that took the daily sleep chart away from every
+           provider. The server stops and lists those forms; the admin picks. */
+        if (e && e.status === 409 && e.data && e.data.code === 'would_narrow') {
+          say('', false);
+          var roleWord = function (r) { return ({ educator: 'educators', guardian: 'parents', centre_director: 'directors', agency_admin: 'admins' })[r] || (String(r).replace(/_/g, ' ') + 's'); };
+          var rows = (e.data.forms || []).map(function (f) {
+            var who = (f.audiences || []).map(roleWord).join(' & ');
+            return '<li style="margin:2px 0;"><b>' + esc(f.title) + '</b> - open to all ' + esc(who) + (f.people != null ? ' (' + f.people + ' people)' : '') + '</li>';
+          }).join('');
+          var ask = document.createElement('div');
+          ask.id = 'pk-narrow';
+          ask.setAttribute('role', 'alert');
+          ask.style.cssText = 'margin:10px 0;padding:12px 14px;border:1.5px solid #F59E0B;background:#FFFBEB;border-radius:12px;color:#78350F;font-size:13px;line-height:1.45;';
+          ask.innerHTML = '<div style="font-weight:800;margin-bottom:4px;">⚠️ These forms are open to everyone in a role</div>'
+            + '<ul style="margin:4px 0 8px 18px;padding:0;">' + rows + '</ul>'
+            + '<div style="margin-bottom:10px;">Sending them to the people you picked can make them <b>only</b> theirs, and everyone else loses access.</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:8px;">'
+            + '<button type="button" data-c="keep" style="border:0;border-radius:9px;padding:8px 12px;font-weight:800;cursor:pointer;background:#0F766E;color:#fff;">Keep everyone + add these people</button>'
+            + '<button type="button" data-c="narrow" style="border:1.5px solid #B45309;border-radius:9px;padding:8px 12px;font-weight:800;cursor:pointer;background:#fff;color:#92400E;">Only the people I picked</button>'
+            + '</div>';
+          btn.parentNode.insertBefore(ask, btn);
+          [].forEach.call(ask.querySelectorAll('button[data-c]'), function (b) {
+            b.addEventListener('click', function () {
+              btn.setAttribute('data-aud', b.getAttribute('data-c'));
+              btn.click();
+            });
+          });
+          return;
+        }
         /* The server's message already NAMES the addresses it could not place, so
            appending the list again read as "ghost@nowhere.test ... (ghost@nowhere.test)".
            Only add it when the message did not say it. */
@@ -1510,6 +1616,7 @@
       if (notify) fd.append('notify_email', notify);
       if (people.length) fd.append('recipient_ids', JSON.stringify(people.map(Number)));
       auds.forEach(function (a) { fd.append('audiences[]', a); });
+      if (FM_DIR && FM_CENTRE) fd.append('centre_id', String(FM_CENTRE));
       fd.append('file', file);
       Api.post('/admin/managed-forms', fd).then(function () {
         out.style.color = '#047857'; out.textContent = '✓ Uploaded.';
@@ -1584,7 +1691,7 @@
       card.style.cssText = 'background:#fff;border-radius:16px;max-width:640px;width:100%;margin:auto;'
         + 'box-shadow:0 30px 80px -20px rgba(8,20,40,.6);overflow:hidden;';
       var head = document.createElement('div');
-      head.style.cssText = 'background:#0B2545;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px;';
+      head.style.cssText = 'background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px;';
       head.innerHTML = '<div style="flex:1;min-width:0;">'
         + '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FORMS MANAGER</div>'
         + '<div style="font-size:17px;font-weight:800;margin-top:2px;">Upload a form</div></div>';
@@ -1816,7 +1923,7 @@
     ov.innerHTML =
       '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);'
       + 'display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
-      + '<div style="background:#0B2545;color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
+      + '<div style="background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
       +   '<div style="min-width:0;flex:1;">'
       +     '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FORM</div>'
       +     '<div style="font-size:15.5px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title || 'Form') + '</div>'
@@ -1840,7 +1947,7 @@
     ov.className = 'kt-scrim';
     ov.style.cssText = 'position:fixed;inset:0;z-index:2147479500;display:flex;align-items:flex-start;justify-content:center;padding:18px;overflow-y:auto;';
     ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);margin:auto;">'
-      + '<div style="background:#0B2545;color:#fff;padding:14px 18px;font-size:16px;font-weight:800;">Edit form</div>'
+      + '<div style="background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;padding:14px 18px;font-size:16px;font-weight:800;">Edit form</div>'
       + '<div style="padding:18px;">'
       + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Title</div>'
       + '<input id="fe-title" type="text" style="width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;">'
@@ -1969,9 +2076,9 @@
             + '<div style="font-size:11.5px;color:#94A3B8;">' + esc(fmtStamp(f.created_at)) + '</div></td>'
             + '<td style="padding:9px 14px;font-weight:700;color:#0F172A;">' + (f.signoff_count || 0) + '</td>'
             + '<td style="padding:9px 14px;">' + (f.active ? '<span style="color:#16A34A;font-weight:700;">● Active</span>' : '<span style="color:#94A3B8;">Off</span>') + '</td>'
-            + '<td style="padding:9px 8px;text-align:right;white-space:nowrap;">' + (FM_RO ? '' : (''
+            + '<td style="padding:9px 8px;text-align:right;white-space:nowrap;">' + ((FM_RO || f.can_manage === false) ? '' : (''
             + '<button class="fm-edit kt-act-icon" data-id="' + f.id + '" data-t="' + esc(f.title) + '" data-d="' + esc(f.description || '') + '" title="Edit details" style="border:1px solid #BFDBFE;background:#EFF6FF;color:#1E40AF;">✏️</button>'
-            + '<button class="fm-toggle kt-act-icon" data-id="' + f.id + '" data-active="' + (f.active ? 1 : 0) + '" title="' + (f.active ? 'Deactivate' : 'Activate') + '" style="border:1px solid #E5E7EB;background:#fff;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">' + (f.active ? '⏸' : '▶️') + '</button> '
+            + '<button class="fm-toggle kt-act-icon" data-kt-autosave="1" data-id="' + f.id + '" data-active="' + (f.active ? 1 : 0) + '" title="' + (f.active ? 'Deactivate' : 'Activate') + '" style="border:1px solid #E5E7EB;background:#fff;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">' + (f.active ? '⏸' : '▶️') + '</button> '
             + '<button class="fm-del kt-act-icon" data-id="' + f.id + '" data-t="' + esc(f.title) + '" title="Delete" style="border:1px solid #FECACA;background:#FEF2F2;color:#B91C1C;border-radius:8px;padding:5px 9px;cursor:pointer;font-size:13px;">🗑️</button>'))
             + '</td></tr>';
         }).join('') + '</tbody></table>';
@@ -2061,6 +2168,7 @@
                 r.countersigned_at
                   ? '<span style="color:#16A34A;font-weight:700;">\u2713 ' + esc(fmtStamp(r.countersigned_at)) + '</span>'
                     + (r.countersigner_name ? '<div style="font-size:11px;color:#94A3B8;">' + esc(r.countersigner_name) + '</div>' : '')
+                    + (r.shared_to ? '<div title="' + esc('Shared with ' + r.shared_to) + '" style="font-size:11px;color:#0E7490;max-width:200px;overflow:hidden;text-overflow:ellipsis;">\uD83D\uDCE8 Shared with ' + esc(r.shared_to) + '</div>' : '')
                   : (r.requires_countersign !== undefined && r.requires_countersign !== null && !Number(r.requires_countersign))
                     ? '<span style="font-size:11.5px;color:#94A3B8;">Not required</span>'
                     : '<span style="font-size:11px;font-weight:800;color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:999px;padding:2px 9px;">Awaiting review</span>'
@@ -2206,6 +2314,14 @@
             }
             openPdfPopup(fileUrl(r.countersigned_file_url), (r.form_title || 'Form') + ' (counter-signed)');
           }));
+          if (r.countersigned_at) {
+            menu.appendChild(item('\uD83D\uDCE8', 'Share with staff or email\u2026', false, function () {
+              openShareDialog(r, function () {
+                var host = document.querySelector('#fm-comp');
+                if (host) { renderCompleted(host.parentNode || host); }
+              });
+            }));
+          }
         }
         // Send the completed copy to the address configured ON THE FORM: for
         // submissions signed before that address was set, and to re-send one that
@@ -2307,7 +2423,7 @@
     ov.setAttribute('data-no-modal-guard', '1');
     ov.style.cssText = 'position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:20px;';
     ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.35);">'
-      + '<div style="background:#0B2545;color:#fff;padding:14px 18px;">'
+      + '<div style="background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;padding:14px 18px;">'
         + '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">SEND BACK FOR CORRECTION</div>'
         + '<div style="font-size:16px;font-weight:800;margin-top:2px;">' + esc(r.form_title || 'Form') + '</div>'
         + '<div style="font-size:12px;opacity:.85;margin-top:2px;">Completed by ' + esc(who) + ' \u00B7 ' + esc(fmtStamp(r.signed_at)) + '</div>'
@@ -2360,6 +2476,153 @@
     };
   }
 
+  /* SHARE A COUNTER-SIGNED FORM (2026-10-20). Anthony: "with counter signing a form under
+     forms manager add option to send form to a staff member/educator or to a specific
+     email. If sent to staff such as educator send a brief email indicating new counter
+     signed documents available under documents".
+
+     Staff picked here get the counter-signed copy FILED to their own Documents, plus a
+     short email and a bell notice saying it is there (no attachment). A typed address has
+     no account, so it gets the PDF attached. The list comes from the server and is
+     re-checked there: this agency's educators, home visitors, directors and admins
+     (a director: their own centres). Used in step 2 of counter-signing and from the ⋮
+     menu of a form already counter-signed. */
+  var shareStaffCache = null;
+  var SHARE_ROLE = { educator: 'Educator', home_visitor: 'Home visitor', centre_director: 'Director', agency_admin: 'Admin' };
+  function loadShareStaff() {
+    if (shareStaffCache) { return Promise.resolve(shareStaffCache); }
+    return Api.get('/admin/managed-forms/share-recipients').then(function (d) {
+      shareStaffCache = (d && d.staff) || [];
+      return shareStaffCache;
+    });
+  }
+  function sharePickerHtml(px, open) {
+    var L = 'font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;';
+    var F = 'width:100%;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:9px;padding:7px 10px;font-size:13px;font-family:inherit;';
+    return '<details id="' + px + '-share"' + (open ? ' open' : '') + ' style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:12px 16px;margin-top:12px;">'
+      + '<summary style="cursor:pointer;font-size:13px;font-weight:800;color:#0F172A;list-style-position:inside;">'
+        + '📨 Share with staff or another email' + (open ? '' : ' <span style="font-weight:600;color:#94A3B8;font-size:12px;">optional</span>')
+        + '<span id="' + px + '-count" style="margin-left:6px;font-size:11px;font-weight:800;color:#0E7490;"></span></summary>'
+      + '<div style="margin-top:10px;">'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><span style="' + L + '">Staff</span>'
+          + '<span style="font-size:11.5px;color:#94A3B8;">filed to their Documents, with a short email</span></div>'
+        + '<input id="' + px + '-find" type="search" data-kt-nofit="1" placeholder="Search staff by name or email…" style="' + F + 'margin-bottom:6px;">'
+        + '<div id="' + px + '-list" data-kt-scroll="1" style="max-height:176px;overflow:auto;border:1px solid #E5E7EB;border-radius:9px;">'
+          + '<div style="padding:10px 12px;font-size:12.5px;color:#94A3B8;">Loading staff…</div></div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin:12px 0 6px;"><span style="' + L + '">Other email addresses</span>'
+          + '<span style="font-size:11.5px;color:#94A3B8;">the PDF is attached</span></div>'
+        + '<input id="' + px + '-emails" type="text" data-kt-nofit="1" inputmode="email" autocomplete="off" placeholder="name@example.com, another@example.com" style="' + F + '">'
+        + '<div style="' + L + 'margin:12px 0 6px;">Message <span style="text-transform:none;font-weight:600;color:#94A3B8;letter-spacing:0;">optional, included in the email</span></div>'
+        + '<textarea id="' + px + '-msg" rows="2" maxlength="1000" placeholder="e.g. FYI, Ava’s allergy plan is now approved." style="' + F + 'resize:vertical;"></textarea>'
+      + '</div></details>';
+  }
+  function wireSharePicker(root, px) {
+    var $ = function (id) { return root.querySelector('#' + px + '-' + id); };
+    var picked = {};
+    var staff = [];
+    function count() {
+      var n = Object.keys(picked).length;
+      var e = parseEmails().list.length;
+      var parts = [];
+      if (n) { parts.push(n + ' staff'); }
+      if (e) { parts.push(e + ' email' + (e === 1 ? '' : 's')); }
+      $('count').textContent = parts.length ? '· ' + parts.join(', ') : '';
+    }
+    function paint() {
+      var q = ($('find').value || '').trim().toLowerCase();
+      var rows = staff.filter(function (u) {
+        return !q || (u.name || '').toLowerCase().indexOf(q) !== -1 || (u.email || '').toLowerCase().indexOf(q) !== -1;
+      });
+      $('list').innerHTML = rows.length ? rows.map(function (u) {
+        return '<label style="display:flex;align-items:center;gap:9px;padding:7px 11px;border-bottom:1px solid #F1F5F9;cursor:pointer;font-size:13px;">'
+          + '<input type="checkbox" data-uid="' + u.id + '"' + (picked[u.id] ? ' checked' : '') + ' style="width:15px;height:15px;flex:0 0 auto;margin:0;">'
+          + '<span style="min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><strong style="color:#0F172A;">' + esc(u.name) + '</strong>'
+          + (u.email ? ' <span style="color:#94A3B8;">' + esc(u.email) + '</span>' : ' <span style="color:#B45309;">no email, Documents only</span>') + '</span>'
+          + '<span style="flex:0 0 auto;font-size:10.5px;font-weight:800;color:#475569;background:#F1F5F9;border-radius:999px;padding:2px 8px;">' + esc(SHARE_ROLE[u.role] || 'Staff') + '</span>'
+          + '</label>';
+      }).join('') : '<div style="padding:10px 12px;font-size:12.5px;color:#94A3B8;">' + (staff.length ? 'No one matches.' : 'No staff to share with.') + '</div>';
+    }
+    function parseEmails() {
+      var raw = ($('emails').value || '').split(/[\s,;]+/).filter(Boolean);
+      var bad = raw.filter(function (e) { return !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e); });
+      return { list: raw.filter(function (e) { return bad.indexOf(e) === -1; }), bad: bad };
+    }
+    $('list').addEventListener('change', function (e) {
+      var uid = e.target && e.target.getAttribute('data-uid');
+      if (!uid) { return; }
+      if (e.target.checked) { picked[uid] = true; } else { delete picked[uid]; }
+      count();
+    });
+    $('find').addEventListener('input', paint);
+    $('emails').addEventListener('input', count);
+    loadShareStaff().then(function (list) { staff = list; paint(); })
+      .catch(function () { $('list').innerHTML = '<div style="padding:10px 12px;font-size:12.5px;color:#B91C1C;">Could not load staff. You can still type an email address.</div>'; });
+    return {
+      /* null when nothing is chosen; {error} when an address does not parse. */
+      value: function () {
+        var em = parseEmails();
+        if (em.bad.length) { return { error: '"' + em.bad[0] + '" does not look like an email address.' }; }
+        var ids = Object.keys(picked).map(Number);
+        if (!ids.length && !em.list.length) { return null; }
+        return { share_user_ids: ids, share_emails: em.list, share_message: ($('msg').value || '').trim() || null };
+      }
+    };
+  }
+  /* "Filed to the Documents of A and B · emailed c@d" — what actually happened, not what was asked. */
+  function sharedSummary(sh) {
+    if (!sh) { return ''; }
+    var bits = [];
+    if (sh.filed && sh.filed.length) { bits.push('In the Documents of ' + sh.filed.join(', ')); }
+    if (sh.emailed && sh.emailed.length) { bits.push('PDF emailed to ' + sh.emailed.join(', ')); }
+    if (sh.skipped && sh.skipped.length) { bits.push('Not emailed: ' + sh.skipped.join('; ')); }
+    return bits.join('. ') + (bits.length ? '.' : '');
+  }
+
+  function openShareDialog(r, onDone) {
+    if (document.getElementById('sh-share')) { return; }
+    var ov = document.createElement('div');
+    ov.className = 'kt-scrim';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483001;display:flex;align-items:center;justify-content:center;padding:18px;';
+    ov.innerHTML = '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:12px;">'
+        + '<div style="min-width:0;flex:1;"><div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">SHARE COUNTER-SIGNED FORM</div>'
+        + '<div style="font-size:15px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(r.form_title || 'Form') + '</div>'
+        + (r.shared_to ? '<div style="font-size:11.5px;opacity:.8;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Already shared with ' + esc(r.shared_to) + '</div>' : '')
+        + '</div>'
+        + '<button id="sh-x" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:32px;height:32px;font-size:16px;cursor:pointer;">✕</button>'
+      + '</div>'
+      + '<div style="flex:1;overflow:auto;padding:4px 16px 14px;">' + sharePickerHtml('sh', true)
+        + '<div id="sh-err" style="display:none;margin-top:12px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;border-radius:10px;padding:9px 12px;font-size:12.5px;"></div></div>'
+      + '<div style="background:#fff;border-top:1px solid #E5E7EB;padding:11px 16px;display:flex;gap:10px;justify-content:flex-end;">'
+        + '<button id="sh-cancel" type="button" style="background:#F1F5F9;color:#334155;border:0;border-radius:10px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>'
+        + '<button id="sh-go" type="button" style="background:#1F6080;color:#fff;border:0;border-radius:10px;padding:9px 18px;font-weight:800;font-size:13px;cursor:pointer;">Share</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    var picker = wireSharePicker(ov, 'sh');
+    var err = ov.querySelector('#sh-err');
+    function close() { if (ov.parentNode) { ov.parentNode.removeChild(ov); } }
+    ov.querySelector('#sh-x').onclick = close;
+    ov.querySelector('#sh-cancel').onclick = close;
+    ov.querySelector('#sh-go').onclick = function () {
+      var v = picker.value();
+      if (!v) { err.textContent = 'Choose a staff member or type an email address.'; err.style.display = ''; return; }
+      if (v.error) { err.textContent = v.error; err.style.display = ''; return; }
+      err.style.display = 'none';
+      var btn = ov.querySelector('#sh-go');
+      btn.disabled = true; btn.textContent = 'Sharing…';
+      Api.post('/admin/managed-forms/signoffs/' + r.id + '/share', v).then(function (d) {
+        close();
+        var sh = d && d.shared;
+        toast('📨', 'Shared', sharedSummary(sh) || 'Shared.', sh && sh.skipped && sh.skipped.length ? '#B45309' : '#16A34A');
+        if (onDone) { onDone(); }
+      }).catch(function (e) {
+        btn.disabled = false; btn.textContent = 'Share';
+        err.textContent = (e && e.message) || 'Could not share it.'; err.style.display = '';
+      });
+    };
+  }
+
   /* REVIEW, THEN COUNTER-SIGN. TWO STEPS, IN THAT ORDER.
 
      Counter-signing asserts that somebody READ the thing. A flow that offers the pen
@@ -2406,7 +2669,7 @@
     ov.innerHTML = '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:960px;height:min(92vh,1100px);'
         + 'display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
       /* header */
-      + '<div style="background:#0B2545;color:#fff;padding:13px 16px;display:flex;align-items:center;gap:14px;flex:0 0 auto;flex-wrap:wrap;">'
+      + '<div style="background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;padding:13px 16px;display:flex;align-items:center;gap:14px;flex:0 0 auto;flex-wrap:wrap;">'
         /* flex-basis, so on a phone the title keeps a usable width and the step pills
            wrap underneath instead of squeezing it to one word per line. */
         + '<div style="min-width:0;flex:1 1 220px;">'
@@ -2481,6 +2744,7 @@
                 + ' &amp; ' + (agencyTo ? esc(agencyTo) : '<em>no address set on the form</em>')
               + '</span></span>'
           + '</label>'
+          + sharePickerHtml('cs', false)
           + '<div id="cs-err" style="display:none;margin-top:12px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;'
             + 'border-radius:10px;padding:10px 12px;font-size:12.5px;"></div>'
         + '</div>'
@@ -2517,6 +2781,7 @@
 
     var $ = function (id) { return ov.querySelector(id); };
     var err = $('#cs-err');
+    var csShare = wireSharePicker(ov, 'cs');
     function fail(m) { err.textContent = m; err.style.display = ''; }
     function close() { if (ov.parentNode) { ov.parentNode.removeChild(ov); } }
 
@@ -2658,14 +2923,14 @@
         ? '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 4px;">'
           + (r.fillable ? 'Changed on the form itself' : 'Added to the form itself') + '</div>'
           + adds.map(function (a) {
-              return '<div style="background:#ECFEFF;border-left:3px solid #0E7490;border-radius:8px;padding:8px 11px;'
+              return '<div style="background:#ECFEFF;--kt-edge:#0E7490;border-radius:8px;padding:8px 11px;'
                 + 'font-size:12.5px;color:#155E75;line-height:1.5;margin-bottom:6px;white-space:pre-wrap;">'
                 + '<strong>Page ' + a.page + ':</strong> ' + esc(a.text) + '</div>';
             }).join('')
         : '';
       $('#cs-noteview').innerHTML = note
         ? '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Information you added</div>'
-          + '<div style="background:#F8FAFC;border-left:3px solid #22B1B3;border-radius:8px;padding:9px 11px;font-size:13px;color:#334155;line-height:1.55;white-space:pre-wrap;">'
+          + '<div style="background:#F8FAFC;--kt-edge:#22B1B3;border-radius:8px;padding:9px 11px;font-size:13px;color:#334155;line-height:1.55;white-space:pre-wrap;">'
           + esc(note) + '</div>'
         : '<div style="font-size:12.5px;color:#94A3B8;">No extra information added.</div>';
       show(2);
@@ -2704,26 +2969,49 @@
 
     $('#cs-done').onclick = function () {
       if (!signature) { fail('Please add your signature first.'); return; }
+      var shareV = csShare.value();
+      if (shareV && shareV.error) { fail(shareV.error); return; }
       err.style.display = 'none';
       var btn = $('#cs-done');
       btn.disabled = true; btn.textContent = 'Counter-signing…';
+      var sendOn = !!$('#cs-send').checked;   // read now: close() takes the dialog away
       Api.post('/admin/managed-forms/signoffs/' + r.id + '/countersign', {
         signature: signature,
         note: ($('#cs-note').value || '').trim() || null,
         send: !!$('#cs-send').checked,
         annotated_pdf: annotated ? annotated.base64 : null,
-        annotations: annotated ? annotated.notes : null
+        annotations: annotated ? annotated.notes : null,
+        share_user_ids: shareV ? shareV.share_user_ids : null,
+        share_emails: shareV ? shareV.share_emails : null,
+        share_message: shareV ? shareV.share_message : null
       }).then(function (d) {
         close();
         /* Say who it actually reached, not who it was aimed at. A suppressed parent is a
            silent non-delivery otherwise, and the admin carries on believing the family
            has their copy. */
         var sent = (d && d.sent_to) || [];
+        var shareMsg = sharedSummary(d && d.shared);
+        /* The stamped copy is made by the server's worker a minute later (2026-11-06), so
+           say what is true now - recorded, on its way - not "sent". */
+        if (d && d.pending) {
+          var will = d.will_send_to || [];
+          var willShare = d.will_share || [];
+          toast('✍️', 'Counter-signed',
+            'The counter-signed copy is being prepared'
+              + (will.length ? ' and will be emailed to ' + will.join(' and ')
+                             : (!sendOn ? '. No email will be sent' : '. Nobody can be emailed for this form'))
+              + (willShare.length ? '. It will also be shared with ' + willShare.join(', ') : '')
+              + '. This takes a minute or two.',
+            (will.length || !sendOn) ? '#16A34A' : '#B45309');
+          if (onDone) { onDone(); }
+          return;
+        }
         toast('✍️', 'Counter-signed',
-          sent.length ? ('Sent to ' + sent.join(' and ') + '.')
+          (sent.length ? ('Sent to ' + sent.join(' and ') + '.')
                       : (($('#cs-send') && !$('#cs-send').checked)
                           ? 'Recorded. No email was sent.'
-                          : 'Recorded, but nothing could be emailed — check the delivery settings for this agency.'),
+                          : 'Recorded, but nothing could be emailed — check the delivery settings for this agency.'))
+            + (shareMsg ? ' ' + shareMsg : ''),
           sent.length ? '#16A34A' : '#B45309');
         if (onDone) { onDone(); }
       }).catch(function (e) {
@@ -2765,4 +3053,6 @@
     });
   } catch (e) {}
   KT.renderFormsManager = render;
+  /* Open Forms Manager on a given tab (used by #prospect-ndas). */
+  KT.openFormsManagerTab = function (tab) { FM_START = tab; location.replace('#forms-manager'); };
 })();

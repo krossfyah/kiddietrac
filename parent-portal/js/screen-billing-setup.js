@@ -130,6 +130,16 @@
         'Each instalment stays a pending draft until this many days before its due date, '
         + 'then issues on its own and the family owes it. Set 0 to issue on the due date '
         + 'itself. Due dates never change \u2014 only how much notice the family gets.'));
+      /* Due-now window (2026-10-28): what a family sees on their Billing screen. */
+      var winW = Dom.el('div', { style: 'max-width:260px;margin-top:14px;' });
+      winW.appendChild(label('Show unpaid invoices to families this many days before they are due'));
+      var winIn = Dom.el('input', { type: 'number', min: '0', max: '120', step: '1',
+        value: (d.due_window_days == null ? 14 : d.due_window_days), style: inputStyle() });
+      winW.appendChild(winIn); inputs.due_window_days = winIn;
+      c1b.appendChild(winW);
+      c1b.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#6B7280;margin-top:8px;line-height:1.5;' },
+        'A family’s Billing screen and “due now” total only include invoices due within this many days. '
+        + 'Overdue invoices always show. Later ones appear on their own when they come up.'));
       wrap.appendChild(c1b);
 
       var c2 = card('Late fees', 'Charged on overdue balances.');
@@ -154,7 +164,32 @@
         l.appendChild(cb); l.appendChild(Dom.el('span', {}, m[1]));
         methodWrap.appendChild(l);
       });
-      c3.appendChild(methodWrap); wrap.appendChild(c3);
+      c3.appendChild(methodWrap);
+      /* Interac e-Transfer details (2026-11-11) live in Payment providers -> Interac e-Transfer: the address, the
+         recipient name, Autodeposit or the security question, the agency's instructions and e-Transfer requests. */
+      var ieW = Dom.el('div', { style: 'margin-top:14px;font-size:13px;color:#334155;display:flex;align-items:center;gap:10px;flex-wrap:wrap;' });
+      ieW.appendChild(Dom.el('img', { src: '/img/interac-logo.svg', alt: 'Interac', width: '28', height: '28', style: 'width:28px;height:28px;border-radius:6px;' }));
+      ieW.appendChild(Dom.el('span', {}, d.interac_email ? 'Interac e-Transfers go to ' + d.interac_email + '.' : 'Interac e-Transfer is not set up yet.'));
+      var ieA = Dom.el('a', { href: '#payment-providers?tab=interac', style: 'color:#1F6080;font-weight:700;' }, 'Set up in Payment providers →');
+      ieW.appendChild(ieA);
+      c3.appendChild(ieW);
+      /* Card on invoices (2026-10-31, Anthony: "only add the interac for now - if we enable credit/debit add this as a
+         configuration setting"). Off by default; shows only once a card processor is live for the agency. */
+      var ccCb = Dom.el('input', { type: 'checkbox' }); if (d.invoice_show_card === true) ccCb.checked = true;
+      var ccL = Dom.el('label', { style: 'display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#111827;cursor:pointer;margin-top:14px;line-height:1.4;max-width:520px;' });
+      ccL.appendChild(ccCb);
+      ccL.appendChild(Dom.el('span', {}, [Dom.el('span', {}, 'Credit/debit card (shown on invoices)'),
+        Dom.el('span', { style: 'display:block;font-size:12.5px;color:#6B7280;margin-top:2px;' }, 'Adds “Pay by credit or debit card in the app” to the How to pay section of invoices and invoice emails. It only appears once your card payments are live. Interac e-Transfer shows once it is set up in Payment providers.')]));
+      c3.appendChild(ccL); inputs.invoice_show_card = ccCb;
+      /* New invoices as announcements (2026-10-31, Anthony: "when there is a new invoice or payroll make this an
+         announcement for each user"). On unless switched off. */
+      var anCb = Dom.el('input', { type: 'checkbox' }); if (d.announce_invoices !== false) anCb.checked = true;
+      var anL = Dom.el('label', { style: 'display:flex;align-items:flex-start;gap:10px;font-size:14px;color:#111827;cursor:pointer;margin-top:14px;line-height:1.4;max-width:520px;' });
+      anL.appendChild(anCb);
+      anL.appendChild(Dom.el('span', {}, [Dom.el('span', {}, 'Announce new invoices to families'),
+        Dom.el('span', { style: 'display:block;font-size:12.5px;color:#6B7280;margin-top:2px;' }, 'Each new invoice also appears in the paying parent’s News, just for them, with their amount (their share when the bill is split) and View invoice / Pay buttons.')]));
+      c3.appendChild(anL); inputs.announce_invoices = anCb;
+      wrap.appendChild(c3);
 
       var c4 = card('Autopay', 'Automatically charge saved cards when invoices are due.');
       var apDef = Dom.el('input', { type: 'checkbox' }); if (d.autopay_default) apDef.checked = true;
@@ -240,6 +275,9 @@
           card_surcharge_percent: parseFloat(inputs.card_surcharge_percent.value) || 0,
           eft_surcharge_percent: parseFloat(inputs.eft_surcharge_percent.value) || 0,
           accepted_payment_methods: Object.keys(methodChecks).filter(function (k) { return methodChecks[k].checked; }),
+          invoice_show_card: !!inputs.invoice_show_card.checked,
+          announce_invoices: !!inputs.announce_invoices.checked,
+          due_window_days: (function (v) { var n = parseInt(v, 10); return isNaN(n) ? 14 : Math.max(0, Math.min(120, n)); })(inputs.due_window_days.value),
         };
         saveBtn.disabled = true; msg.style.color = '#1F6080'; msg.textContent = 'Saving…';
         Api.patch('/admin/billing-setup', payload).then(function () {
@@ -329,43 +367,95 @@
         ins[key] = i; d.appendChild(i); return d;
       }
 
+      /* HOW OFTEN, WHO IS COPIED, HOW MANY TIMES (2026-10-31, Anthony: "when invoice reminders are send cc admin/directors
+         for that agency and wire this up in settings where you can setup how often, who gets notified and how many times.
+         When invoices are overdue the emails should be sent everyday until paid"). */
       wrap.appendChild(Dom.el('div', { style: 'font-size:13px;color:#6B7280;margin-bottom:14px;' },
-        'Schedule automatic reminders to families. Reminders stay off until you enable them. Days count from each invoice’s due date.'));
+        'Automatic payment reminders to families. Each guardian gets their own email with what they owe (their share when the bill is split). At most one reminder per invoice per person per day.'));
+      function sel(key, lbl, val, opts, w) {
+        var d = Dom.el('div', { style: 'max-width:' + (w || '260px') + ';margin-bottom:12px;' });
+        d.appendChild(label(lbl));
+        var x = Dom.el('select', { style: inputStyle() });
+        opts.forEach(function (o) { var op = Dom.el('option', { value: o[0] }, o[1]); if (String(val) === String(o[0])) op.selected = true; x.appendChild(op); });
+        ins[key] = x; d.appendChild(x); return d;
+      }
+      function num(key, lbl, val, min, max, w) {
+        var d = Dom.el('div', { style: 'max-width:' + (w || '200px') + ';margin-bottom:12px;' });
+        d.appendChild(label(lbl));
+        var x = Dom.el('input', { type: 'number', min: String(min), max: String(max), value: String(val == null ? '' : val), style: inputStyle() });
+        ins[key] = x; d.appendChild(x); return d;
+      }
 
-      var c1 = card('Invoice reminders', 'Remind families before an invoice is due.');
-      c1.appendChild(toggleRow('invoice_enabled', 'Send upcoming-invoice reminders', r.invoice_enabled));
-      c1.appendChild(textRow('invoice_days_before', 'Days before due date (comma-separated)', r.invoice_days_before, 'e.g. 7,3,1', '320px'));
+      var c1 = card('Before the due date', 'A friendly heads-up before an invoice is due.');
+      c1.appendChild(toggleRow('invoice_enabled', 'Send reminders before the due date', r.invoice_enabled));
+      c1.appendChild(textRow('invoice_days_before', 'Days before the due date (comma-separated)', r.invoice_days_before, 'e.g. 7,3,1', '320px'));
+      c1.appendChild(toggleRow('due_today', 'Also remind on the due date itself', r.due_today !== false));
       wrap.appendChild(c1);
 
-      var c2 = card('Overdue payment reminders', 'Remind families after an invoice becomes overdue.');
-      c2.appendChild(toggleRow('overdue_enabled', 'Send overdue-payment reminders', r.overdue_enabled));
-      c2.appendChild(textRow('overdue_days_after', 'Days after due date (comma-separated)', r.overdue_days_after, 'e.g. 1,7,14', '320px'));
+      var c2 = card('Overdue', 'Keep reminding until the invoice (or that guardian’s share) is paid.');
+      c2.appendChild(toggleRow('overdue_enabled', 'Send overdue reminders', r.overdue_enabled));
+      var modeW = sel('overdue_mode', 'How often', r.overdue_mode || 'daily', [
+        ['daily', 'Every day until paid'], ['every', 'Every few days'], ['weekly', 'Once a week'], ['days', 'On set days after the due date']]);
+      c2.appendChild(modeW);
+      var everyW = num('overdue_every', 'Every how many days', r.overdue_every || 3, 1, 60);
+      var daysW = textRow('overdue_days_after', 'Days after the due date (comma-separated)', r.overdue_days_after, 'e.g. 1,7,14', '320px');
+      c2.appendChild(everyW); c2.appendChild(daysW);
+      c2.appendChild(num('overdue_max', 'Stop after this many overdue reminders (0 = until paid)', r.overdue_max || 0, 0, 365, '360px'));
+      function showMode() { var m = ins.overdue_mode.value; everyW.style.display = m === 'every' ? '' : 'none'; daysW.style.display = m === 'days' ? '' : 'none'; }
+      ins.overdue_mode.addEventListener('change', showMode); showMode();
       wrap.appendChild(c2);
 
-      var c3 = card('Delivery', '');
+      var c3 = card('Who gets a copy', 'Copies are hidden from the family (BCC), so they never see the office’s addresses.');
+      c3.appendChild(toggleRow('cc_admins', 'Agency admins', r.cc_admins !== false));
+      c3.appendChild(toggleRow('cc_directors', 'Directors of the invoice’s centre', r.cc_directors !== false));
+      c3.appendChild(toggleRow('cc_admin', 'The agency billing contact address', r.cc_admin));
+      var staff = (res && res.staff) || [];
+      var pickedStaff = (r.cc_staff || []).map(Number);
+      var others = staff.filter(function (x) { return x.role === 'Staff'; });
+      var staffBoxes = [];
+      if (others.length) {
+        c3.appendChild(label('Also copy these staff'));
+        var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;margin-top:4px;' });
+        others.forEach(function (x) {
+          var l = Dom.el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;color:#111827;cursor:pointer;padding:5px 8px;border:1px solid #E2E8F0;border-radius:8px;' });
+          var cb = Dom.el('input', { type: 'checkbox' }); if (pickedStaff.indexOf(Number(x.user_id)) !== -1) cb.checked = true;
+          staffBoxes.push([cb, x.user_id]); l.appendChild(cb); l.appendChild(Dom.el('span', {}, x.name));
+          grid.appendChild(l);
+        });
+        c3.appendChild(grid);
+      }
+      wrap.appendChild(c3);
+
+      var c4 = card('Delivery', '');
       var stW = Dom.el('div', { style: 'max-width:200px;margin-bottom:14px;' });
       stW.appendChild(label('Daily send time'));
       var stIn = Dom.el('input', { type: 'time', value: r.send_time || '09:00', style: inputStyle() });
-      ins.send_time = stIn; stW.appendChild(stIn); c3.appendChild(stW);
-      c3.appendChild(toggleRow('channel_email', '✉️ Send by email', r.channel_email !== false));
-      c3.appendChild(toggleRow('cc_admin', 'Also copy the agency billing contact', r.cc_admin));
+      ins.send_time = stIn; stW.appendChild(stIn); c4.appendChild(stW);
+      c4.appendChild(toggleRow('channel_email', '✉️ Send by email', r.channel_email !== false));
       var mW = Dom.el('div', {}); mW.appendChild(label('Custom note added to each reminder (optional)'));
       var mIn = Dom.el('textarea', { rows: '2', style: inputStyle() + 'resize:vertical;font-family:inherit;' });
-      mIn.value = r.custom_message || ''; ins.custom_message = mIn; mW.appendChild(mIn); c3.appendChild(mW);
-      wrap.appendChild(c3);
+      mIn.value = r.custom_message || ''; ins.custom_message = mIn; mW.appendChild(mIn); c4.appendChild(mW);
+      wrap.appendChild(c4);
 
       var msg = Dom.el('div', { style: 'min-height:20px;font-size:13px;margin:6px 0;' });
       wrap.appendChild(msg);
-      var saveBtn = Dom.el('button', { style: 'background:#1F6080;color:white;border:none;padding:11px 26px;border-radius:9px;font-weight:700;cursor:pointer;font-size:15px;' }, 'Save reminders');
+      var saveBtn = Dom.el('button', { style: 'background:#1F6080;color:white;border:none;padding:9px 22px;border-radius:9px;font-weight:700;cursor:pointer;font-size:14px;' }, 'Save reminders');
       saveBtn.addEventListener('click', function () {
         var payload = {
           invoice_enabled: ins.invoice_enabled.checked,
           invoice_days_before: ins.invoice_days_before.value,
+          due_today: ins.due_today.checked,
           overdue_enabled: ins.overdue_enabled.checked,
+          overdue_mode: ins.overdue_mode.value,
+          overdue_every: Math.max(1, parseInt(ins.overdue_every.value, 10) || 3),
           overdue_days_after: ins.overdue_days_after.value,
+          overdue_max: Math.max(0, parseInt(ins.overdue_max.value, 10) || 0),
+          cc_admins: ins.cc_admins.checked,
+          cc_directors: ins.cc_directors.checked,
+          cc_admin: ins.cc_admin.checked,
+          cc_staff: staffBoxes.filter(function (x) { return x[0].checked; }).map(function (x) { return Number(x[1]); }),
           send_time: ins.send_time.value || '09:00',
           channel_email: ins.channel_email.checked,
-          cc_admin: ins.cc_admin.checked,
           custom_message: ins.custom_message.value || '',
         };
         saveBtn.disabled = true; msg.style.color = '#1F6080'; msg.textContent = 'Saving…';
@@ -377,6 +467,49 @@
         }).finally(function () { saveBtn.disabled = false; });
       });
       wrap.appendChild(saveBtn);
+
+      /* WHO IS DUE NOW - read-only: what today's reminders would do with the settings above (as if they were on). */
+      var c5 = card('Who is due now', 'Unpaid invoices due in the next 7 days or overdue, and who today’s reminder would go to. Nothing is sent from here.');
+      c5.style.marginTop = '18px';
+      var pvBtn = Dom.el('button', { style: 'background:#fff;color:#1F6080;border:1px solid #1F6080;padding:7px 14px;border-radius:9px;font-weight:700;cursor:pointer;font-size:13px;' }, '👀 Show who is due now');
+      var pvOut = Dom.el('div', { style: 'margin-top:10px;' });
+      c5.appendChild(pvBtn); c5.appendChild(pvOut); wrap.appendChild(c5);
+      function money(n) { return '$' + Number(n || 0).toFixed(2); }
+      function todayLbl(t) { if (!t) return 'nothing today'; var q = t.split(' '); return q[0] === 'before' ? 'reminder (' + q[1] + ' before)' : q[0] === 'due' ? 'due-today reminder' : 'overdue reminder (' + q[1] + ')'; }
+      pvBtn.addEventListener('click', function () {
+        pvBtn.disabled = true; pvOut.textContent = 'Loading…';
+        Api.get('/admin/billing-reminders/preview').then(function (p) {
+          pvBtn.disabled = false; Dom.clear(pvOut);
+          var rows = (p && p.rows) || [];
+          if (!rows.length) { pvOut.appendChild(Dom.el('div', { style: 'color:#16A34A;font-weight:700;' }, '✓ Nothing is due in the next 7 days and nothing is overdue.')); return; }
+          var over = rows.filter(function (x) { return x.days_overdue > 0; });
+          pvOut.appendChild(Dom.el('div', { style: 'font-size:13px;color:#334155;margin-bottom:8px;' },
+            rows.length + ' invoice' + (rows.length === 1 ? '' : 's') + ' · ' + over.length + ' overdue · ' + money(rows.reduce(function (t, x) { return t + x.balance; }, 0)) + ' outstanding'));
+          var t = Dom.el('table', { style: 'width:100%;border-collapse:collapse;font-size:13px;' });
+          var hd = Dom.el('tr', {});
+          ['Family', 'Invoice', 'Balance', 'Due', 'Status', 'Guardians · today’s reminder', 'Last reminder'].forEach(function (h) {
+            hd.appendChild(Dom.el('th', { style: 'text-align:left;padding:7px 8px;border-bottom:1px solid #E2E8F0;color:#64748B;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;' }, h));
+          });
+          t.appendChild(hd);
+          rows.forEach(function (x) {
+            var tr = Dom.el('tr', {});
+            var g = (x.guardians || []).map(function (y) {
+              return y.name + (y.pct != null && y.pct < 99.99 ? ' (' + money(y.balance) + ')' : '') + ' · ' + todayLbl(y.today);
+            }).join('\n') || (x.no_email ? 'No guardian email on file' : '—');
+            var last = (x.guardians || []).map(function (y) { return y.last_reminder; }).filter(Boolean).sort().pop() || 'Never';
+            [x.family || '—', x.number || ('#' + x.id), money(x.balance), x.due,
+              x.days_overdue > 0 ? x.days_overdue + ' day' + (x.days_overdue === 1 ? '' : 's') + ' overdue' : (x.due_in === 0 ? 'Due today' : 'Due in ' + x.due_in + ' day' + (x.due_in === 1 ? '' : 's')),
+              g, last].forEach(function (v, i) {
+              tr.appendChild(Dom.el('td', { style: 'padding:7px 8px;border-bottom:1px solid #F1F5F9;vertical-align:top;white-space:' + (i === 5 ? 'pre-line' : 'normal') + ';' + (i === 4 && x.days_overdue > 0 ? 'color:#B91C1C;font-weight:700;' : '') }, String(v)));
+            });
+            t.appendChild(tr);
+          });
+          var scroller = Dom.el('div', { style: 'overflow-x:auto;' }); scroller.appendChild(t); pvOut.appendChild(scroller);
+          var cc = rows[0] && rows[0].copies && rows[0].copies.length;
+          pvOut.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:6px;' },
+            (cc ? 'Each reminder is copied (hidden) to ' + cc + ' staff address' + (cc === 1 ? '' : 'es') + '. ' : '') + (globalOn ? '' : 'Reminders are not being sent yet — they are off platform-wide.')));
+        }).catch(function (e) { pvBtn.disabled = false; pvOut.textContent = 'Could not load: ' + (e.message || 'error'); });
+      });
     }).catch(function (e) {
       loadingEl.textContent = 'Could not load reminders: ' + (e.message || 'error');
       loadingEl.style.color = '#DC2626';

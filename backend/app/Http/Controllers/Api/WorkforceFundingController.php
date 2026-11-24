@@ -8,7 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Support\AgencyTime;
 use App\Support\Audit;
 use App\Support\WorkforceFunding as WF;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;

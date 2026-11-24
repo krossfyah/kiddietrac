@@ -121,7 +121,7 @@
 
       var lead = document.createElement('button');
       lead.type = 'button';
-      lead.style.cssText = 'flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:none;cursor:default;'
+      lead.style.cssText = 'flex:0 0 auto;width:28px;height:28px;min-height:0;max-height:28px;min-width:28px;border-radius:50%;border:none;cursor:default;'
         + 'background:#FEE2E2;color:#DC2626;font-size:13px;line-height:1;display:inline-flex;'
         + 'align-items:center;justify-content:center;padding:0;';
       lead.textContent = '●';
@@ -149,7 +149,7 @@
         el.type = 'button';
         el.title = title;
         el.setAttribute('aria-label', title);
-        el.style.cssText = 'flex:0 0 auto;width:32px;height:32px;border-radius:50%;border:none;cursor:pointer;'
+        el.style.cssText = 'flex:0 0 auto;width:32px;height:32px;min-height:0;max-height:32px;min-width:32px;border-radius:50%;border:none;cursor:pointer;'
           + 'background:transparent;color:' + (colour || '#64748B') + ';font-size:16px;line-height:1;'
           + 'display:inline-flex;align-items:center;justify-content:center;padding:0;';
         el.textContent = glyph;
@@ -161,8 +161,10 @@
 
       var sendBtn = document.createElement('button');
       sendBtn.type = 'button';
-      sendBtn.style.cssText = 'flex:0 0 auto;height:32px;padding:0 14px;border-radius:16px;border:none;'
-        + 'background:#159FB4;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:none;';
+      // Centred label (it sat at the top of the pill, 2026-11-03); min-height/line-height pinned so global button rules cannot stretch it.
+      sendBtn.style.cssText = 'flex:0 0 auto;height:32px;min-height:0;padding:0 16px;border-radius:16px;border:none;'
+        + 'background:#159FB4;color:#fff;font-size:13px;font-weight:700;line-height:1;cursor:pointer;display:none;'
+        + 'align-items:center;justify-content:center;gap:6px;box-shadow:0 1px 2px rgba(15,23,42,.12);';
       sendBtn.textContent = acceptLabel;
 
       bar.appendChild(lead);

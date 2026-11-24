@@ -30,7 +30,8 @@ class TaskController extends Controller
 
     private function hasRole(Request $request, array $roles): bool
     {
-        return DB::table('role_assignments')->where('user_id', $request->user()->id)
+        // Roles in the active agency only (2026-11-05): a role held in another agency gave reviewer powers here.
+        return \App\Support\AgencyRole::constrain(DB::table('role_assignments'), $request)->where('user_id', $request->user()->id)
             ->where('active', true)->whereIn('role', $roles)->exists();
     }
 
@@ -111,6 +112,11 @@ class TaskController extends Controller
 
         $uid = (int) $request->user()->id;
         abort_unless((int) $row->assigned_to === $uid || $this->isReviewer($request), 403, 'This task is not assigned to you.');
+        /* Not your task: it must be in your agency/centres (2026-11-05 leak sweep): any reviewer
+           could change the status of any task id, including another agency's or centre's. */
+        if ((int) $row->assigned_to !== $uid) {
+            $this->assertSameScope($request, $row);
+        }
 
         $data = $request->validate(['status' => 'required|in:open,in_progress,done']);
         DB::table('tasks')->where('id', $id)->update([
@@ -118,6 +124,10 @@ class TaskController extends Controller
             'completed_at' => $data['status'] === 'done' ? now() : null,
             'updated_at'   => now(),
         ]);
+        // Supplies from home (2026-10-23): the parent's "done" means they dropped it off.
+        if ($data['status'] === 'done' && ($row->source ?? null) === 'supplies' && $row->source_id) {
+            try { \App\Support\Supplies::doneByParent((int) $row->source_id, $uid); } catch (\Throwable $e) {}
+        }
 
         return response()->json(['ok' => true]);
     }
@@ -219,7 +229,15 @@ class TaskController extends Controller
             'description' => 'nullable|string|max:4000',
             'priority'    => 'nullable|in:low,normal,high',
             'due_date'    => 'nullable|date',
+            'remind_at_local' => 'nullable|string|max:20',
+            'remind_channels' => 'nullable|array',
+            'remind_channels.*' => 'string|in:app,email,sms,voice',
+            'notify_channels' => 'nullable|array',
+            'notify_channels.*' => 'string|in:app,email,sms,voice',
         ]);
+        $remindAt = \App\Support\TaskReminders::toUtc($data['remind_at_local'] ?? null, $agencyId);
+        $remindCh = \App\Support\TaskReminders::channels($data['remind_channels'] ?? []);
+        abort_if($remindAt && ! $remindCh, 422, 'Choose how to send the reminder (app, email, text or voice).');
 
         // The assignee must be an educator / home visitor / parent in this agency
         // (and, for a director, an educator in their centre).
@@ -241,11 +259,20 @@ class TaskController extends Controller
             'priority'    => $data['priority'] ?? 'normal',
             'due_date'    => $data['due_date'] ?? null,
             'status'      => 'open',
+            'remind_at'   => $remindAt && $remindCh ? $remindAt : null,
+            'remind_channels' => $remindAt && $remindCh ? json_encode($remindCh) : null,
             'created_at'  => now(),
             'updated_at'  => now(),
         ]);
 
-        return response()->json(['ok' => true, 'id' => $id], 201);
+        // "Let them know now" (2026-10-27): the new-task notice on the channels picked on the form.
+        $notified = null;
+        $nc = \App\Support\TaskReminders::channels($data['notify_channels'] ?? []);
+        if ($nc) {
+            $notified = \App\Support\TaskReminders::send(DB::table('tasks')->where('id', $id)->first(), false, 'assigned', $nc);
+        }
+
+        return response()->json(['ok' => true, 'id' => $id, 'notified' => $notified], 201);
     }
 
     /** PATCH /tasks/{id} — reviewer edits a task. */
@@ -263,9 +290,25 @@ class TaskController extends Controller
             'due_date'    => 'nullable|date',
             'status'      => 'sometimes|in:open,in_progress,done',
             'assigned_to' => 'sometimes|integer',
+            'remind_at_local' => 'nullable|string|max:20',
+            'remind_channels' => 'nullable|array',
+            'remind_channels.*' => 'string|in:app,email,sms,voice',
         ]);
 
         $update = [];
+        // A reminder changed: a new moment (or new channels) is sent again; cleared = none.
+        if (array_key_exists('remind_at_local', $data) || array_key_exists('remind_channels', $data)) {
+            $ra = \App\Support\TaskReminders::toUtc($data['remind_at_local'] ?? null, (int) $row->agency_id);
+            $rc = \App\Support\TaskReminders::channels($data['remind_channels'] ?? []);
+            abort_if($ra && ! $rc, 422, 'Choose how to send the reminder (app, email, text or voice).');
+            $newAt = $ra && $rc ? $ra->format('Y-m-d H:i:s') : null;
+            $newCh = $ra && $rc ? json_encode($rc) : null;
+            $oldAt = $row->remind_at ? \Carbon\Carbon::parse((string) $row->remind_at)->format('Y-m-d H:i:s') : null;
+            if ($newAt !== $oldAt || $newCh !== ($row->remind_channels ?? null)) {
+                $update['remind_at'] = $newAt; $update['remind_channels'] = $newCh;
+                $update['reminded_at'] = null; $update['remind_result'] = null;
+            }
+        }
         foreach (['title', 'description', 'priority', 'due_date', 'assigned_to'] as $f) {
             if (array_key_exists($f, $data)) $update[$f] = $data[$f];
         }
@@ -322,6 +365,13 @@ class TaskController extends Controller
             'centre_name'     => $r->centre_name ?? null,
             'assigned_by_name'=> $this->name((object) ['first_name' => $r->ab_first ?? null, 'last_name' => $r->ab_last ?? null, 'email' => $r->ab_email ?? null]),
             'created_at'      => $r->created_at,
+            // Stored in UTC; the table's "Created" date is the agency's (AgencyTime).
+            'created_local'   => $r->created_at ? \App\Support\TaskReminders::toLocal($r->created_at, (int) $r->agency_id) : null,
+            // The reminder, in the agency's time zone for the form; what each channel did once sent.
+            'remind_at_local' => isset($r->remind_at) && $r->remind_at ? \App\Support\TaskReminders::toLocal($r->remind_at, (int) $r->agency_id) : null,
+            'remind_channels' => isset($r->remind_channels) ? \App\Support\TaskReminders::channels($r->remind_channels) : [],
+            'reminded_at'     => $r->reminded_at ?? null,
+            'remind_result'   => isset($r->remind_result) && $r->remind_result ? json_decode((string) $r->remind_result, true) : null,
         ];
     }
 }

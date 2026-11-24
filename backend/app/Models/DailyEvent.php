@@ -87,7 +87,7 @@ class DailyEvent extends Model
             ],
             'diaper' => [
                 'title' => 'Diaper change',
-                'detail' => ucfirst($p['type'] ?? 'changed'),
+                'detail' => ucfirst($p['type'] ?? 'changed') . (! empty($p['cream']) ? ' · cream applied' : ''),
                 'icon' => 'droplet', 'color' => '#3DB6A0',
             ],
             'bathroom' => [

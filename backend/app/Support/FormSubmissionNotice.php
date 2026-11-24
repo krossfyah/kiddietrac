@@ -115,7 +115,7 @@ final class FormSubmissionNotice
            "still outstanding" section of an email that the reader could not open. */
         $forms = collect(\App\Support\FormAudience::filter(
             DB::table('managed_forms')->where('agency_id', $agencyId)->where('active', 1)
-                ->get(['id', 'title', 'audiences']),
+                ->get(['id', 'title', 'audiences', 'named_extends_audience']),
             $userId,
             $roles
         ));
@@ -333,6 +333,10 @@ final class FormSubmissionNotice
                        to its own admin never left the building. Every sender stamps it;
                        this one now does too. */
                     $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId);
+                    /* FORM MAIL (2026-10-25): the receipt for something a parent just signed through a
+                       no-login link. They have often not claimed an account yet; the not-onboarded gate
+                       lets form mail through on this header (SuppressAgencyMail). */
+                    $m->getHeaders()->addTextHeader('X-KT-Form-Package', '1');
                 });
             } catch (\Throwable $e) {
                 Log::warning('Form submission notice failed', ['to' => $to, 'error' => $e->getMessage()]);

@@ -70,10 +70,10 @@
       '.kt-obs-head{display:grid;grid-template-columns:' + OBS_COLS + ';gap:12px;align-items:center;' +
         /* 19px = the row's 18px padding + its 1px border, so column one starts level. */
         'padding:0 19px 8px;font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;' +
-        'color:var(--kt-text-faint);}' +
+        'color:#64748B;}' +   /* was --kt-text-faint: 2.8:1, too light to read (2026-11-06) */
       '.kt-obs-head button{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;' +
         'display:inline-flex;align-items:center;gap:4px;text-align:left;}' +
-      '.kt-obs-head button:hover{color:var(--kt-text-muted);}' +
+      '.kt-obs-head button:hover{color:#334155;}' +
       '.kt-obs-head .on{color:var(--kt-primary,#1F6080);}' +
       '.kt-obs-row{display:grid;grid-template-columns:' + OBS_COLS + ';gap:12px;align-items:center;' +
         'background:var(--kt-surface);border:1px solid var(--kt-border);border-radius:14px;' +
@@ -370,23 +370,24 @@
     if (!document.getElementById('kt-mic-css')) {
       var st = document.createElement('style');
       st.id = 'kt-mic-css';
-      // #appMain button[aria-pressed] styles every pressed-state button as a toggle switch
+      // #appMain button[aria-pressed] styles every pressed-state button as a toggle switch (the popup body,
+      // .kt-obs-pop, takes the same rules)
       // (padding 0 !important), so these rules out-rank it: id + classes + attribute.
       st.textContent =
-        '#appMain button.kt-mic.kt-mic[aria-pressed]{display:inline-flex!important;align-items:center;gap:7px;height:32px!important;min-height:0!important;padding:0 14px 0 11px!important;' +
+        ':is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed]{display:inline-flex!important;align-items:center;gap:7px;height:32px!important;min-height:0!important;padding:0 14px 0 11px!important;' +
         'border-radius:999px!important;border:1.5px solid #1F6080!important;background:#fff!important;color:#1F6080!important;font:inherit;font-size:13px!important;' +
         'font-weight:700!important;cursor:pointer;line-height:1!important;white-space:nowrap;box-shadow:0 1px 2px rgba(15,23,42,.06)!important;' +
         'transition:background .15s,color .15s,border-color .15s,box-shadow .15s;width:auto!important;margin:0!important}' +
-        '#appMain button.kt-mic.kt-mic[aria-pressed]:hover{background:#EEF6FA!important}' +
-        '#appMain button.kt-mic.kt-mic[aria-pressed]:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(31,96,128,.25)!important}' +
-        '#appMain button.kt-mic.kt-mic[aria-pressed] svg{width:16px;height:16px;flex:0 0 16px}' +
-        '#appMain button.kt-mic.kt-mic[aria-pressed] .kt-mic-dot{display:none;width:8px;height:8px;border-radius:50%;background:#fff;animation:ktMicPulse 1.1s ease-in-out infinite}' +
-        '#appMain button.kt-mic.kt-mic[aria-pressed].on{background:#DC2626!important;border-color:#DC2626!important;color:#fff!important;box-shadow:0 0 0 4px rgba(220,38,38,.15)!important}' +
-        '#appMain button.kt-mic.kt-mic[aria-pressed].on:hover{background:#B91C1C!important;border-color:#B91C1C!important}' +
-        '#appMain button.kt-mic.kt-mic[aria-pressed].on svg{display:none}#appMain button.kt-mic.kt-mic[aria-pressed].on .kt-mic-dot{display:inline-block}' +
+        ':is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed]:hover{background:#EEF6FA!important}' +
+        ':is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed]:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(31,96,128,.25)!important}' +
+        ':is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed] svg{width:16px;height:16px;flex:0 0 16px}' +
+        ':is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed] .kt-mic-dot{display:none;width:8px;height:8px;border-radius:50%;background:#fff;animation:ktMicPulse 1.1s ease-in-out infinite}' +
+        ':is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed].on{background:#DC2626!important;border-color:#DC2626!important;color:#fff!important;box-shadow:0 0 0 4px rgba(220,38,38,.15)!important}' +
+        ':is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed].on:hover{background:#B91C1C!important;border-color:#B91C1C!important}' +
+        ':is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed].on svg{display:none}:is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed].on .kt-mic-dot{display:inline-block}' +
         '.kt-mic-state{font-size:12px;color:#64748B}.kt-mic-state.on{color:#DC2626;font-weight:600}.kt-mic-state.warn{color:#B45309}' +
         '@keyframes ktMicPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}' +
-        '@media (prefers-reduced-motion:reduce){#appMain button.kt-mic.kt-mic[aria-pressed] .kt-mic-dot{animation:none}}';
+        '@media (prefers-reduced-motion:reduce){:is(#appMain,.kt-obs-pop) button.kt-mic.kt-mic[aria-pressed] .kt-mic-dot{animation:none}}';
       document.head.appendChild(st);
     }
     box.innerHTML =
@@ -395,7 +396,43 @@
         '<span class="kt-mic-dot" aria-hidden="true"></span><span class="kt-mic-label">Speak it</span></button>' +
       '<span id="kt-mic-state" class="kt-mic-state" aria-live="polite">Talk instead of typing — the words appear in the box for you to check.</span>';
     var btn = box.querySelector('#kt-mic'), state = box.querySelector('#kt-mic-state');
-    var rec = null, on = false, base = '', finalText = '';
+    /* NO REPEATS (2026-11-06, Anthony: "using the mic - its repeating what it picks up"). Chrome on Android sends
+       each result again as the phrase grows ("the", "the boy", "the boy stacked"), often all marked final, and
+       restarts after every pause; the words were appended once per result, so the box filled with repeats. Now the
+       text of this listening run is rebuilt from the WHOLE result list on every event (never added to), and a
+       segment that repeats or extends the one before replaces it instead of being added. On Android the
+       recogniser listens one phrase at a time (continuous is what repeats there) and is restarted until Stop. */
+    var rec = null, on = false, base = '', kept = '', runText = '';
+    var ANDROID = /Android/i.test(navigator.userAgent || '');
+    function norm(s) { return String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim(); }
+    function join(a, b) {
+      a = String(a || '').trim(); b = String(b || '').trim();
+      if (!a) return b;
+      if (!b) return a;
+      var na = norm(a), nb = norm(b);
+      if (!nb || na === nb || na.endsWith(' ' + nb) ) return a;           // the same words again
+      if (nb.indexOf(na) === 0) return b;                                    // the phrase grew: keep the longer one
+      // The new piece starts with the end of what we have ("...stacked the blocks" + "the blocks and laughed").
+      var wa = na.split(' '), wb = nb.split(' ');
+      for (var k = Math.min(wa.length, wb.length); k >= 1; k--) {
+        if (wa.slice(-k).join(' ') === wb.slice(0, k).join(' ')) {
+          return a + ' ' + b.split(/\s+/).slice(k).join(' ');
+        }
+      }
+      return a + ' ' + b;
+    }
+    function compose(results) {
+      var text = '', interim = '';
+      for (var i = 0; i < results.length; i++) {
+        var t = results[i][0] && results[i][0].transcript;
+        if (results[i].isFinal) text = join(text, t); else interim = join(interim, t);
+      }
+      return { fin: text, all: join(text, interim) };
+    }
+    function show(extra) {
+      ta.value = (base + join(kept, extra)).slice(0, 3000);
+      if (onChange) { onChange(); }
+    }
     function setOn(v) {
       on = v;
       btn.setAttribute('aria-pressed', v ? 'true' : 'false');
@@ -407,19 +444,17 @@
     function start() {
       rec = new SR();
       rec.lang = langs[ui] || 'en-CA';
-      rec.continuous = true;
+      rec.continuous = !ANDROID;
       rec.interimResults = true;
       base = ta.value && !/\s$/.test(ta.value) ? ta.value + ' ' : ta.value;
-      finalText = '';
+      kept = ''; runText = '';
       rec.onresult = function (ev) {
-        var interim = '';
-        for (var i = ev.resultIndex; i < ev.results.length; i++) {
-          var t = ev.results[i][0].transcript;
-          if (ev.results[i].isFinal) { finalText += t.replace(/^\s+/, '') + ' '; } else { interim += t; }
-        }
-        ta.value = (base + finalText + interim).slice(0, 3000);
-        if (onChange) { onChange(); }
+        var c = compose(ev.results);
+        runText = c.fin;
+        show(c.all);
       };
+      // A new listening run (after a pause) starts with an empty result list: keep what the last run heard.
+      rec.onstart = function () { if (runText) { kept = join(kept, runText); runText = ''; } };
       rec.onerror = function (ev) {
         var why = ev && ev.error;
         setOn(false);
@@ -429,7 +464,10 @@
           : (why === 'no-speech' ? 'We didn\u2019t hear anything. Try again a little closer to the microphone.' : 'Speech recognition stopped. You can press Speak it again.');
       };
       rec.onend = function () {
-        if (on) { try { rec.start(); return; } catch (e) {} }   // browsers stop after a pause; keep going until Stop
+        // The run is over: only its final words stay (an unfinished guess is dropped, never left in the box).
+        if (runText) { kept = join(kept, runText); runText = ''; }
+        show('');
+        if (on && btn.isConnected) { try { rec.start(); return; } catch (e) {} }   // browsers stop after a pause; keep going until Stop
         setOn(false);
         ta.value = ta.value.replace(/\s+$/, '');
         if (onChange) { onChange(); }
@@ -438,11 +476,49 @@
     }
     function stop() { on = false; try { rec && rec.stop(); } catch (e) {} setOn(false); }
     btn.addEventListener('click', function () { if (on) { stop(); } else { start(); } });
-    // Leaving the form stops the microphone.
+    // Leaving the form stops the microphone: a page change, or closing the popup (KT.openObservation).
     window.addEventListener('hashchange', stop, { once: true });
+    document.addEventListener('kt:obs-close', stop, { once: true });
   }
 
-  async function renderObservationNew(main, ctx) {
+  /* The New observation buttons. #appMain + id-free classes out-rank the portal's generic button rules (kt-buttons,
+     the pressed-toggle rule), so every button here is the same 38px height and radius as the Speak it pill's row. */
+  function obsActCss() {
+    if (document.getElementById('kt-obs-act-css')) { return; }
+    var st = document.createElement('style');
+    st.id = 'kt-obs-act-css';
+    var B = ':is(#appMain,.kt-obs-pop) .kt-obs-act button.kt-ob';
+    st.textContent =
+      '.kt-obs-act{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:18px;padding-top:16px;border-top:1px solid #EEF2F7;}' +
+      B + '{display:inline-flex !important;align-items:center;justify-content:center;gap:8px;height:38px !important;min-height:0 !important;' +
+        'padding:0 16px !important;border-radius:10px !important;font:inherit;font-size:14px !important;font-weight:700 !important;line-height:1 !important;' +
+        'width:auto !important;margin:0 !important;white-space:nowrap;cursor:pointer;transition:background .15s,box-shadow .15s,border-color .15s,filter .15s;}' +
+      B + ':focus-visible{outline:none;box-shadow:0 0 0 3px rgba(124,58,237,.3) !important;}' +
+      B + '.ai{background:linear-gradient(135deg,#7C3AED,#4F46E5) !important;color:#fff !important;border:0 !important;box-shadow:0 2px 8px rgba(79,70,229,.28) !important;}' +
+      B + '.ai::before{content:"\\2728";font-size:15px;}' +
+      B + '.ai:hover{filter:brightness(1.08);}' +
+      B + '.save{background:#1F6080 !important;color:#fff !important;border:0 !important;box-shadow:0 2px 8px rgba(31,96,128,.25) !important;}' +
+      B + '.save::before{content:"\\2713";font-size:15px;font-weight:900;}' +
+      B + '.save:hover{background:#174C66 !important;}' +
+      B + '.sec{background:#fff !important;color:#334155 !important;border:1.5px solid #CBD5E1 !important;box-shadow:none !important;}' +
+      B + '.sec::before{content:"\\270E";font-size:15px;color:#64748B;}' +
+      B + '.sec.redo::before{content:"\\21BA";}' +
+      B + '.sec:hover{background:#F8FAFC !important;border-color:#94A3B8 !important;}' +
+      B + '.ghost{background:none !important;border:0 !important;color:#64748B !important;box-shadow:none !important;margin-left:auto !important;padding:0 10px !important;}' +
+      B + '.ghost:hover{color:#0F172A !important;background:#F1F5F9 !important;}' +
+      B + ':disabled{opacity:1 !important;cursor:progress !important;}' +
+      B + '.ai:disabled{filter:saturate(.7) brightness(1.05);}' +
+      '.kt-obs-hint{font-size:12px;color:#64748B;margin-top:10px;line-height:1.45;}' +
+      '@media (max-width:600px){.kt-obs-act{gap:8px;}' + B + '.ai,' + B + '.save,' + B + '.sec{flex:1 1 100%;height:44px !important;}' +
+        B + '.ghost{margin:0 auto !important;}}';
+    document.head.appendChild(st);
+  }
+
+  /* opts (2026-11-09, Anthony: "log a moment and observation should be a popup"): { popup, childId, onDone(saved) }.
+     As a popup (KT.openObservation) the page header is left out, the child comes from childId, and Cancel / Save
+     call onDone instead of changing the page. */
+  async function renderObservationNew(main, ctx, opts) {
+    opts = opts || {};
     Dom.clear(main);
 
     // Load the children the educator can actually see.
@@ -463,7 +539,7 @@
        rosters, which respect room assignment. If the admin list is refused or empty we
        fall through to the rosters rather than show nothing. */
     let _roles = [];
-    try { _roles = (JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}').roles) || []; } catch (e) {}
+    try { _roles = window.ktRoles ? window.ktRoles() : ((JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}').roles) || []); } catch (e) {}
     const _isAdmin = ['platform_admin', 'agency_admin', 'centre_director'].some(function (r) { return _roles.indexOf(r) !== -1; });
     if (_isAdmin) {
       try {
@@ -514,7 +590,7 @@
     const wrap = document.createElement('div');
     main.appendChild(wrap);
     wrap.insertAdjacentHTML('beforeend',
-      '<div class="page-header-v17">' +
+      (opts.popup ? '' : '<div class="page-header-v17">' +
         '<div>' +
           '<div class="crumbs">' +
             '<a href="#observations" style="color:var(--kt-text-muted);">Observations</a>' +
@@ -524,9 +600,9 @@
           '<h1>New observation</h1>' +
           '<div class="sub">Step 1: type what you observed. Step 2: AI structures it. Step 3: review and save.</div>' +
         '</div>' +
-      '</div>' +
+      '</div>') +
 
-      '<div id="kt-step-1" style="background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:24px; max-width:760px;">' +
+      '<div id="kt-step-1" style="' + (opts.popup ? '' : 'background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:24px; max-width:760px;') + '">' +
         '<h2 style="font-family:var(--kt-font-display); font-size:18px; margin-bottom:14px;">Step 1: Capture the moment</h2>' +
 
         '<div class="form-row">' +
@@ -537,7 +613,7 @@
               // Say where they are and whether they're here — an educator covering
               // two rooms needs to tell two Aidans apart.
               var label = esc(c.display_name || ((c.first_name || '') + ' ' + (c.last_name || '')).trim());
-              if (c.is_at_centre) label += ' · here now';
+              if (c.is_at_centre) label += ' · at Centre';
               if (c.room_name) label += ' · ' + esc(c.room_name);
               return '<option value="' + c.id + '">' + label + '</option>';
             }).join('') +
@@ -558,11 +634,14 @@
           '<div style="font-size:11px; color:var(--kt-text-faint); margin-top:6px;">Tip: write what you saw, not how you felt about it. The AI will surface skills.</div>' +
         '</div>' +
 
-        '<div style="margin-top:18px; display:flex; gap:10px; flex-wrap:wrap;">' +
-          '<button class="btn btn-primary" id="kt-structure">Structure with AI</button>' +
-          '<button class="btn btn-secondary" id="kt-manual">Write manually (no AI)</button>' +
-          '<button class="btn btn-ghost" id="kt-cancel">Cancel</button>' +
+        /* ONE ACTION ROW (2026-11-06, Anthony: "the buttons make these look better for structure with AI and etc"):
+           the AI step leads (✨, violet), writing it yourself is the plain second choice, Cancel steps aside. */
+        '<div class="kt-obs-act">' +
+          '<button type="button" class="kt-ob ai" id="kt-structure">Structure with AI</button>' +
+          '<button type="button" class="kt-ob sec" id="kt-manual">Write it myself</button>' +
+          '<button type="button" class="kt-ob ghost" id="kt-cancel">Cancel</button>' +
         '</div>' +
+        '<div class="kt-obs-hint">AI turns your notes into a family summary and links them to learning goals. You check it before anything is saved.</div>' +
 
         '<div id="kt-status" style="margin-top:14px; font-size:13px;"></div>' +
       '</div>' +
@@ -574,6 +653,14 @@
     // observation and losing it to an idle sign-out.
     var rawEl = wrap.querySelector('#kt-raw');
     var childEl = wrap.querySelector('#kt-child');
+    /* #observation-new?child=ID (2026-11-04): opened from a child's quick actions on the educator's Today screen -
+       that child is chosen and the cursor waits in the text box on a desktop (never pops a phone keyboard). Only a child already in the list is picked. */
+    (function () {
+      var m = opts.childId ? [0, String(opts.childId)] : (opts.popup ? null : /[?&]child=(\d+)/.exec(location.hash || ''));
+      if (!m || !childEl || !childEl.querySelector('option[value="' + m[1] + '"]')) return;
+      childEl.value = m[1];
+      if (rawEl && !(window.matchMedia && matchMedia('(pointer: coarse)').matches)) setTimeout(function () { try { rawEl.focus({ preventScroll: true }); } catch (e) {} }, 50);
+    })();
     if (rawEl) {
       rawEl.addEventListener('input', function () {
         saveDraft(childEl ? childEl.value : '', rawEl.value);
@@ -585,6 +672,7 @@
       });
     }
 
+    obsActCss();
     mountDictation(wrap.querySelector('#kt-dictate'), rawEl, function () {
       saveDraft(childEl ? childEl.value : '', rawEl.value);
     });
@@ -612,9 +700,10 @@
       });
     })();
 
-    wrap.querySelector('#kt-cancel').addEventListener('click', function () {
-      window.location.hash = '#observations';
-    });
+    // Opened from Daily log → Log a moment (?from=care, 2026-11-09): Cancel and Save go back there, not to the list.
+    var backTo = /[?&]from=care(?:&|$)/.test(location.hash || '') ? '#care-log' : '#observations';
+    var done = function (saved) { if (opts.onDone) opts.onDone(!!saved); else window.location.hash = backTo; };
+    wrap.querySelector('#kt-cancel').addEventListener('click', function () { done(false); });
 
     /* v22p72: manual fallback — save a moment without the AI structure step
        (works even when Anthropic credits are exhausted) */
@@ -734,9 +823,11 @@
           '</label>' +
         '</div>' +
 
-        '<div style="margin-top:14px; display:flex; gap:10px;">' +
-          '<button class="btn btn-primary" id="kt-save">Save observation</button>' +
-          '<button class="btn btn-secondary" id="kt-redo">Restart</button>' +
+        /* data-kt-always-save: what the AI wrote is new and unsaved, so Save is ready at once - the "no changes" rule
+           (kt-dirty-save) greyed it out until something was edited (2026-11-06). */
+        '<div class="kt-obs-act" data-kt-always-save>' +
+          '<button type="button" class="kt-ob save" id="kt-save">Save observation</button>' +
+          '<button type="button" class="kt-ob sec redo" id="kt-redo">Start over</button>' +
         '</div>' +
 
         '<div id="kt-save-status" style="margin-top:12px; font-size:13px;"></div>' +
@@ -785,7 +876,7 @@
         });
         clearDraft();   // it is a record now, not an unfinished note
         Dom.toast('Observation saved', 'success');
-        setTimeout(function () { window.location.hash = '#observations'; }, 500);
+        setTimeout(function () { done(true); }, opts.popup ? 0 : 500);
       } catch (e) {
         status.innerHTML = '<span style="color:#DC2626;">' + esc((e && e.message) || 'Could not save') + '</span>';
         btn.disabled = false; btn.textContent = 'Save observation';
@@ -799,6 +890,24 @@
   window.KT = window.KT || {};
   window.KT.renderObservations    = renderObservations;
   window.KT.renderObservationNew  = renderObservationNew;
+  /* KT.openObservation({ childId, onSaved }) - the New observation form in a popup (Daily log → Log a moment, the
+     ✨ Log a moment quick action). Same form, same AI help, same save as the #observation-new page. */
+  window.KT.openObservation = function (o) {
+    o = o || {};
+    if (!Shell || !Shell.Modal) { location.hash = '#observation-new' + (o.childId ? '?child=' + o.childId : ''); return; }
+    var body = document.createElement('div');
+    body.setAttribute('data-kt-nospin', '');
+    body.className = 'kt-obs-pop';
+    body.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">Loading…</div>';
+    var closed = function () { document.dispatchEvent(new CustomEvent('kt:obs-close')); };
+    var h = Shell.Modal.open({ title: '🌱 New observation', body: body, large: true, onClose: closed });
+    renderObservationNew(body, null, { popup: true, childId: o.childId, onDone: function (saved) {
+      try { h && h.close && h.close(); } catch (e) {}
+      closed();
+      if (saved && typeof o.onSaved === 'function') o.onSaved();
+    } });
+  };
+
   if (Shell && Shell.registerScreen) {
     ['educator', 'centre_director', 'agency_admin'].forEach(function (r) {
       Shell.registerScreen(r + ':observations',     renderObservations);

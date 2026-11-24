@@ -1,9 +1,20 @@
 {
-  "android": {
-    "versionCode": 1,
-    "versionName": "1.0",
-    "apkUrl": "https://app.kiddietrac.com/dl/kiddietrac-test-9865891c2d.apk",
-    "notes": "Latest KiddieTrac app build.",
-    "mandatory": false
-  }
+    "android": {
+        "versionCode": 1,
+        "versionName": "1.0",
+        "apkUrl": "https://app.kiddietrac.com/dl/kiddietrac-test-9865891c2d.apk",
+        "notes": "Latest KiddieTrac app build.",
+        "mandatory": false
+    },
+    "play": {
+        "versionName": "3.12.17",
+        "versionCode": 73,
+        "url": "https://play.google.com/store/apps/details?id=com.kiddietrac.app",
+        "note": "What is live on Google Play. Update with every Play release (About shows it)."
+    },
+    "ios": {
+        "versionName": "3.12.4",
+        "published": false,
+        "note": "Not on the App Store yet; iPhone users use app.kiddietrac.com."
+    }
 }

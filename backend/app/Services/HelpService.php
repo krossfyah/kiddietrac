@@ -17,10 +17,20 @@ use Illuminate\Support\Str;
  *   ---
  *   # How to add a new child
  *   ...
+ *
+ * Translations (2026-10-22): `slug.fr.md`, `slug.es.md`, `slug.hi.md` beside `slug.md`.
+ * The reader's own language (users.locale) is used when that file exists, otherwise the
+ * English article. A translation carries its own title and body; the category, order and
+ * `roles:` always come from the English file, so who can read what never differs by
+ * language. The slug is the English one, so links, training and analytics are unchanged.
  */
 final class HelpService
 {
     private string $basePath;
+
+    private const LOCALES = ['fr', 'es', 'hi'];
+
+    private ?string $locale = null;
 
     public function __construct()
     {
@@ -37,7 +47,7 @@ final class HelpService
         // content lives there) — NOT to 'parent' as the old default did, which
         // showed auditors irrelevant family articles.
         $roleFolder = match ($role) {
-            'agency_admin', 'centre_director', 'auditor' => 'director',
+            'agency_admin', 'centre_director', 'auditor', 'reseller_admin' => 'director',
             'educator' => 'educator',
             'home_visitor' => 'home_visitor',
             'sales_rep' => 'sales',
@@ -100,6 +110,68 @@ final class HelpService
     }
 
     /**
+     * THE FEW ARTICLES THAT MATTER, not the whole library (2026-10-28, Anthony: "how do we lower the AI usage as its
+     * chewing up like crazy"). Measured: every "Ask AI" question sent all 183 articles - 522,531 characters, ~181,000
+     * input tokens - which was 98% of all AI tokens used. Now each question is matched against the role's articles
+     * (title and slug count most, then category, then the body) and only the best $max go, each capped, plus a
+     * one-line-per-article INDEX so the assistant can still point at any guide.
+     *
+     * @return array{index:string, articles:array}
+     */
+    public function relevantForRole(string $role, string $question, int $max = 6, int $capChars = 8000): array
+    {
+        $all = $this->listForRole($role);
+        $stop = array_flip(['how', 'do', 'does', 'did', 'can', 'could', 'should', 'would', 'what', 'where', 'when', 'why', 'who',
+            'the', 'and', 'for', 'with', 'from', 'into', 'this', 'that', 'there', 'their', 'they', 'you', 'your', 'our', 'are',
+            'was', 'were', 'is', 'it', 'its', 'my', 'me', 'i', 'a', 'an', 'to', 'of', 'in', 'on', 'or', 'be', 'if', 'not', 'any',
+            'kiddietrac', 'please', 'want', 'need', 'get', 'use', 'using', 'make', 'way', 'help', 'about', 'some', 'have', 'has']);
+        $stem = function (string $w): string {
+            foreach (['ing', 'ies', 'ed', 'es', 's'] as $suf) {
+                if (strlen($w) > strlen($suf) + 3 && str_ends_with($w, $suf)) {
+                    return $suf === 'ies' ? substr($w, 0, -3) . 'y' : substr($w, 0, -strlen($suf));
+                }
+            }
+            return $w;
+        };
+        $words = [];
+        foreach (preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($question)) as $w) {
+            if (mb_strlen($w) >= 3 && ! isset($stop[$w])) {
+                $words[$stem($w)] = true;
+            }
+        }
+        $words = array_keys($words);
+        $scored = [];
+        foreach ($all as $a) {
+            $title = mb_strtolower($a['title'] . ' ' . str_replace('-', ' ', $a['slug']));
+            $cat = mb_strtolower((string) $a['category']);
+            $body = mb_strtolower((string) $a['body']);
+            $sc = 0;
+            foreach ($words as $w) {
+                if ($w === '') continue;
+                if (str_contains($title, $w)) $sc += 6;
+                if (str_contains($cat, $w)) $sc += 2;
+                $sc += min(4, substr_count($body, $w));
+            }
+            if ($sc > 0) $scored[] = [$sc, $a];
+        }
+        usort($scored, fn ($x, $y) => $y[0] <=> $x[0]);
+        $pick = array_map(fn ($x) => $x[1], array_slice($scored, 0, $max));
+
+        $index = [];
+        foreach ($all as $a) {
+            $index[] = '- ' . $a['title'] . ' [' . $a['slug'] . ']';
+        }
+        $articles = [];
+        foreach ($pick as $a) {
+            $b = (string) $a['body'];
+            if (mb_strlen($b) > $capChars) $b = mb_substr($b, 0, $capChars) . "\n…";
+            $articles[] = "## ARTICLE: {$a['title']}\nCATEGORY: {$a['category']}\nSLUG: {$a['slug']}\n\n{$b}\n\n---\n";
+        }
+
+        return ['index' => implode("\n", $index), 'articles' => $articles];
+    }
+
+    /**
      * Get all articles' content as one searchable corpus for the AI assistant.
      * Returns string with each article's title + body separated by markers.
      */
@@ -125,7 +197,10 @@ final class HelpService
     private function filterForRole(array $articles, string $role): array
     {
         $articles = array_filter($articles, function ($a) use ($role) {
-            return empty($a['roles']) || in_array($role, $a['roles'], true);
+            // A reseller works as agency admin inside its own agencies (2026-10-22), so it
+            // also reads the guides tagged for agency admins.
+            return empty($a['roles']) || in_array($role, $a['roles'], true)
+                || ($role === 'reseller_admin' && in_array('agency_admin', $a['roles'], true));
         });
 
         if ($role === 'auditor') {
@@ -150,20 +225,39 @@ final class HelpService
 
         $files = glob($path.'/*.md');
         $articles = [];
+        $loc = $this->locale();
 
         foreach ($files as $file) {
+            // slug.fr.md and friends are translations of slug.md, not articles of their own.
+            if (preg_match('/\.(' . implode('|', self::LOCALES) . ')\.md$/', $file)) continue;
+
             $raw = file_get_contents($file);
             if ($raw === false) continue;
 
             $parsed = $this->parseFrontMatter($raw);
             $slug = Str::slug(pathinfo($file, PATHINFO_FILENAME));
 
+            $text = $parsed;
+            $lang = 'en';
+            if ($loc !== 'en') {
+                $tFile = substr($file, 0, -3) . '.' . $loc . '.md';
+                $tRaw = is_file($tFile) ? file_get_contents($tFile) : false;
+                if ($tRaw !== false) {
+                    $tParsed = $this->parseFrontMatter(str_replace("\r\n", "\n", $tRaw));
+                    if (trim($tParsed['body']) !== '') {
+                        $text = $tParsed;
+                        $lang = $loc;
+                    }
+                }
+            }
+
             $articles[] = [
                 'slug' => $slug,
-                'title' => $parsed['meta']['title'] ?? Str::title(str_replace('-', ' ', $slug)),
+                'title' => $text['meta']['title'] ?? $parsed['meta']['title'] ?? Str::title(str_replace('-', ' ', $slug)),
                 'category' => $parsed['meta']['category'] ?? 'General',
                 'order' => isset($parsed['meta']['order']) ? (int) $parsed['meta']['order'] : 999,
-                'body' => $parsed['body'],
+                'body' => $text['body'],
+                'lang' => $lang,
                 'audience' => $folder, // 'director', 'educator', 'parent', 'shared'
                 // v22p98: optional per-article role targeting — `roles: a, b` in the
                 // front-matter restricts the article to those roles.
@@ -174,6 +268,23 @@ final class HelpService
         }
 
         return $articles;
+    }
+
+    /** The reader's language: users.locale of the signed-in user, English otherwise. */
+    private function locale(): string
+    {
+        if ($this->locale === null) {
+            $l = '';
+            try {
+                $u = request()->user();
+                $l = strtolower((string) ($u->locale ?? ''));
+            } catch (\Throwable $e) {
+                $l = '';
+            }
+            $this->locale = in_array($l, self::LOCALES, true) ? $l : 'en';
+        }
+
+        return $this->locale;
     }
 
     /**

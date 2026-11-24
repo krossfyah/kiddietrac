@@ -19,7 +19,7 @@ class ApplyWithdrawals extends Command
             ->where('status', 'approved')
             ->whereNull('applied_at')
             ->whereNotNull('effective_date')
-            ->whereDate('effective_date', '<=', now()->toDateString())
+            ->whereDate('effective_date', '<=', \App\Support\AgencyTime::today())
             ->pluck('id');
 
         $ctl = app(\App\Http\Controllers\Api\WithdrawalController::class);

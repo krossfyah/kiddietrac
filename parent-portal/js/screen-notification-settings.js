@@ -60,13 +60,21 @@
   }
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;max-width:900px;"><div id="ns-host"></div></div>';
+    /* data-kt-self-live (2026-11-04): a Preview / Send test POST told the live refresh that data changed, and it
+       redrew this screen from the saved settings - unsaved edits (certificate reminder days) and the preview vanished.
+       Each tab here re-reads its own settings when opened. */
+    main.innerHTML = '<div data-kt-self-live="1" style="padding:14px 24px;max-width:900px;"><div id="ns-host"></div></div>';
     KT.settingsTabs(main.querySelector('#ns-host'), 'notification-settings', [
       { key: 'countersign', label: '✍️ Counter-signature', paint: section(paintCountersign) },
       { key: 'formparents', label: '🧾 Forms-only parents', paint: section(paintTempParents) },
       { key: 'bios', label: '🧑‍🏫 Provider bios', paint: section(paintBio) },
       { key: 'files', label: '📎 Shared files', paint: section(paintFiles) },
       { key: 'messaging', label: '💬 Message Centre', paint: section(paintMessaging) },
+      { key: 'summaries', label: '📨 Daily summaries', paint: section(paintSummaryTiming) },
+      { key: 'moments', label: '🌈 Instant moments', paint: section(paintMoments) },
+      { key: 'staffnotify', label: '📲 Required for staff', paint: section(paintStaffNotify) },
+      { key: 'topics', label: '💉 Immunizations & drills', paint: section(paintTopics) },
+      { key: 'certs', label: '🎓 Staff certifications', paint: section(paintCerts) },
       // Sleep checks moved to Settings → Room Controls → Sleep checks (2026-10-15).
     ]);
   }
@@ -80,6 +88,16 @@
     var res;
     try { res = await Api.get('/admin/messaging-rules'); } catch (e) { return; }
     var s = res.settings || {};
+    /* 👋 NUDGES (2026-11-04, App\\Support\\ChatNudge). Anthony: "wire up settings to control the nudge and any other
+       chat seetings in the settings section". Saved with the rules below, in the same POST. */
+    var nd = res.nudge || { enabled: true, families: true, cooldown: 60, break_through: true };
+    var cl = res.calls || { enabled: true, families: true };   // 📞 App\\Support\\ChatCall, saved in the same POST
+    var cds = (res.nudge_cooldowns || [30, 60, 120, 300, 600, 1800, 3600]).map(function (n) {
+      return [String(n), n < 60 ? n + ' seconds' : n === 60 ? '1 minute' : n < 3600 ? (n / 60) + ' minutes' : '1 hour'];
+    });
+    function sw(id, on) {
+      return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;white-space:nowrap;"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '> On</label>';
+    }
     var STAFF = [['agency_admin', 'Agency admins'], ['centre_director', 'Directors'], ['platform_admin', 'Super admin'], ['educator', 'Other educators'], ['home_visitor', 'Home visitors']];
     function block(role, title) {
       var r = s[role] || { families: 'rooms', staff: {} };
@@ -100,19 +118,34 @@
         + '</div>';
     }
     body.innerHTML = '<div class="kt-card" style="max-width:680px;">'
-      + '<div class="kt-card-header"><h3 class="kt-card-title">💬 Message Centre — who staff can message</h3></div>'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">💬 Message Centre — who can message, nudges and calls</h3></div>'
       + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">Limits who <b>educators</b> and <b>home visitors</b> can message in the Message Centre. '
       + 'Directors and admins can always message everyone. Parents can always reply to the people messaging them.</div>'
       + block('educator', 'Educators')
       + block('home_visitor', 'Home visitors')
       + row('Conversations these rules no longer allow', 'Read-only keeps the history visible; nothing new can be sent.',
           sel('mr-existing', [['read_only', 'Keep as read-only history'], ['hidden', 'Hide them']], s.existing || 'read_only'))
+      + '<div style="padding:14px 0 4px;"><div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:2px;">👋 Nudges</div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;">The 👋 beside the ＋ in every chat rings the other person\'s phone, shakes their screen and plays the nudge sound.'
+      + ' Each person picks their nudge sound in Settings › Notifications › Sounds &amp; vibration.</div></div>'
+      + row('Nudges', 'Off removes the 👋 button for everyone at the agency.', sw('nd-enabled', nd.enabled !== false))
+      + row('Families can nudge staff', 'Off: only staff can nudge. Families can still message.', sw('nd-families', nd.families !== false))
+      + row('Time between nudges', 'Per conversation, per person. Stops a nudge turning into an alarm.', sel('nd-cooldown', cds, String(nd.cooldown || 60)))
+      + row('Ring through Do Not Disturb', 'On: a nudge rings like an urgent alert, even in quiet hours. Off: an ordinary notification.', sw('nd-break', nd.break_through !== false))
+      + '<div style="padding:14px 0 4px;"><div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:2px;">📞 Calls</div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;">The 📞 beside the 👋 in every chat starts a voice call inside KiddieTrac. No phone numbers are shared, and calls are not recorded.'
+      + ' It rings on computers and Android phones; on an iPhone with the app closed it arrives as a notification to tap.</div></div>'
+      + row('Calls', 'Off removes the 📞 button for everyone at the agency.', sw('cl-enabled', cl.enabled !== false))
+      + row('Families can call staff', 'Off: only staff can call. Families can still message.', sw('cl-families', cl.families !== false))
       + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;">'
       + '<button id="mr-save" class="kt-btn kt-btn-primary">Save</button><span id="mr-msg" style="font-size:13px;"></span></div>'
       + '</div>';
     var msg = body.querySelector('#mr-msg');
     body.querySelector('#mr-save').addEventListener('click', function () {
-      var out = { existing: body.querySelector('#mr-existing').value };
+      var out = { existing: body.querySelector('#mr-existing').value,
+        nudge: { enabled: body.querySelector('#nd-enabled').checked, families: body.querySelector('#nd-families').checked,
+          cooldown: parseInt(body.querySelector('#nd-cooldown').value, 10) || 60, break_through: body.querySelector('#nd-break').checked },
+        calls: { enabled: body.querySelector('#cl-enabled').checked, families: body.querySelector('#cl-families').checked } };
       ['educator', 'home_visitor'].forEach(function (role) {
         var staff = {};
         body.querySelectorAll('[data-mr="' + role + '"]').forEach(function (cb) { staff[cb.getAttribute('data-staff')] = cb.checked; });
@@ -122,6 +155,248 @@
       Api.post('/admin/messaging-rules', out)
         .then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved — applies straight away'; })
         .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
+  }
+
+  /* ── Daily summaries: when they go (2026-10-29) ──
+     Anthony: "send it out after 1 hour after the child has clocked out or can be changed via a
+     setting ... this includes the educator summary". Sent by the scheduler every 10 minutes
+     (App\\Support\\SummaryTiming); this only edits the setting. */
+  async function paintSummaryTiming(body) {
+    var res;
+    try { res = await Api.get('/admin/summary-timing'); } catch (e) { return; }
+    var s = res.settings || {};
+    var delays = (res.delays || [0, 15, 30, 45, 60, 90, 120, 180, 240]).map(function (m) {
+      return [m, m === 0 ? 'Straight away' : m < 60 ? m + ' minutes after' : (m % 60 ? (m / 60).toFixed(1) : m / 60) + (m === 60 ? ' hour after' : ' hours after')];
+    });
+    body.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">📨 Daily summaries — when they are sent</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">Each summary goes once a day. '
+      + 'If nobody checks the child out (or the educator never clocks out), it goes at the end-of-day time instead. '
+      + 'Times are on the agency\'s clock' + (res.timezone ? ' (' + esc(res.timezone) + ')' : '') + '.</div>'
+      + row('Parents', 'After the child is checked out', sel('st-pd', delays, s.parent_delay_min))
+      + row('Parents — end of day', 'If the child was never checked out', timeInput('st-pf', s.parent_fallback))
+      + row('Educators', 'After they clock out', sel('st-ed', delays, s.educator_delay_min))
+      + row('Educators — end of day', 'If they never clocked out', timeInput('st-ef', s.educator_fallback))
+      + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;">'
+      + '<button id="st-save" class="kt-btn kt-btn-primary">Save</button><span id="st-msg" style="font-size:13px;"></span></div>'
+      + '</div>';
+    var msg = body.querySelector('#st-msg');
+    body.querySelector('#st-save').addEventListener('click', function () {
+      var out = {
+        parent_delay_min: parseInt(body.querySelector('#st-pd').value, 10),
+        educator_delay_min: parseInt(body.querySelector('#st-ed').value, 10),
+        parent_fallback: body.querySelector('#st-pf').value,
+        educator_fallback: body.querySelector('#st-ef').value,
+      };
+      msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+      Api.post('/admin/summary-timing', out)
+        .then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved — applies from the next check'; })
+        .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
+  }
+
+  /* ── Instant moments to families (2026-10-31, Anthony: "daily moments, observation logged etc should all be
+     instant notifications in the app for the parent"). App\\Support\\ChildMomentNotify. ── */
+  async function paintMoments(body) {
+    var res;
+    try { res = await Api.get('/admin/moment-notify-settings'); } catch (e) { return; }
+    var s = res.settings || {};
+    body.innerHTML = '<div class="kt-card" style="max-width:680px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">🌈 Instant moments — tell families straight away</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">When staff log something for a child, '
+      + 'that child\'s parents get a notification in the app and on their phone right away. Several logs within two minutes are grouped '
+      + 'into one ("3 new moments for Evelyn"). Each parent can still switch a category off in their own Settings → Notifications. '
+      + 'Photos and sign in/out have their own notifications.</div>'
+      + row('Instant moment notifications', 'Off: families only see these in the end-of-day summary.', toggle('im-on', s.enabled))
+      + row('Daily moments', 'Meals, snacks, bottles, naps, diapers, moods, activities, outdoor play, sunscreen.', toggle('im-mo', s.moments))
+      + row('Learning observations', 'Observations shared with the family.', toggle('im-ob', s.observations))
+      + row('Medication doses', 'Each dose given, refused or missed.', toggle('im-me', s.medication))
+      + row('Milestones', 'A milestone emerging, in progress or achieved.', toggle('im-mi', s.milestones))
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;"><button id="im-save" class="kt-btn kt-btn-primary">Save</button><span id="im-msg" style="font-size:13px;"></span></div></div>';
+    body.querySelector('#im-save').addEventListener('click', function () {
+      var msg = body.querySelector('#im-msg'); msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+      Api.post('/admin/moment-notify-settings', {
+        enabled: body.querySelector('#im-on').checked, moments: body.querySelector('#im-mo').checked,
+        observations: body.querySelector('#im-ob').checked, medication: body.querySelector('#im-me').checked,
+        milestones: body.querySelector('#im-mi').checked,
+      }).then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved'; })
+        .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
+  }
+
+  /* ── Required app notifications for staff (2026-10-31, Anthony: "turn on app notifications for all educators
+     as part of their duties"). App\\Support\\StaffNotifyRequirement; the in-app step is kt-notify-gate.js. ── */
+  async function paintStaffNotify(body) {
+    var res;
+    try { res = await Api.get('/admin/staff-notify-settings'); } catch (e) { return; }
+    var s = res.settings || {}, roles = res.roles || {};
+    body.innerHTML = '<div class="kt-card" style="max-width:900px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">📲 Required app notifications for staff</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">When this is on, staff in the roles below must have KiddieTrac notifications '
+      + 'switched on on their phone as part of their role. Until they do, the app shows them a step that turns them on (or, if they refused before, '
+      + 'shows exactly where the switch is). Their headcount, Safe Arrival, staff, message and announcement notifications are shown as required in their settings. '
+      + 'On a computer it is only a daily reminder. No email or text is sent unless you choose "Send setup instructions" below.</div>'
+      + row('Require app notifications', 'Off: notifications stay each person\'s own choice.', toggle('sn-on', s.required))
+      + '<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;"><div style="font-size:14px;color:#334155;font-weight:600;margin-bottom:8px;">For these roles</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;">' + Object.keys(roles).map(function (k) {
+          return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;white-space:nowrap;"><input type="checkbox" data-sn-role="' + k + '"'
+            + ((s.roles || []).indexOf(k) >= 0 ? ' checked' : '') + '> ' + esc(roles[k]) + '</label>';
+        }).join('') + '</div></div>'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;"><button id="sn-save" class="kt-btn kt-btn-primary">Save</button><span id="sn-msg" style="font-size:13px;"></span></div>'
+      + '<div style="margin-top:22px;font-size:14px;font-weight:800;color:#0F172A;">Who can receive notifications now</div>'
+      + '<div id="sn-ready" style="margin-top:8px;"></div></div>';
+    function readiness() { if (window.KT && KT.notifyReadiness) KT.notifyReadiness.mount(body.querySelector('#sn-ready')); }
+    readiness();
+    body.querySelector('#sn-save').addEventListener('click', function () {
+      var msg = body.querySelector('#sn-msg'); msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+      var picked = [].map.call(body.querySelectorAll('[data-sn-role]:checked'), function (c) { return c.getAttribute('data-sn-role'); });
+      Api.post('/admin/staff-notify-settings', { required: body.querySelector('#sn-on').checked, roles: picked })
+        .then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved'; readiness(); })
+        .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
+  }
+
+  /* ── Immunizations & drills: which staff roles hear about them (2026-11-09) ──
+     Anthony: "add to settings to turn off immunization notifications for educators and directors/admins ... also for
+     fire drills same thing". Off for a role = no bell, no phone notification and no email about that topic.
+     Enforced on the server (App\\Support\\StaffTopicNotify, in Notify::write and every email sender). */
+  async function paintTopics(body) {
+    var res;
+    try { res = await Api.get('/admin/topic-notifications'); } catch (e) { return; }
+    var s = res.settings || {}, topics = res.topics || {}, roles = res.roles || {};
+    var hints = {
+      immunization: 'A parent or the office files an immunization record, and the immunization reminder email to the office. '
+        + 'Who gets that reminder email is also set on the Immunizations settings screen; a role switched off here never gets it.',
+      drills: 'A drill is recorded, a drill is due or overdue, and the weekday "drills still owed" email.',
+    };
+    body.innerHTML = '<div class="kt-card" style="max-width:760px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">💉 Immunization &amp; drill notifications</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">Choose which staff roles are told. '
+      + 'Switching a role off stops every notice about that topic for people in that role: the bell, the phone notification and the email. '
+      + 'Someone with two roles is told if either role is on. Nothing is deleted, and the records stay on the child and in the Drill log.</div>'
+      + Object.keys(topics).map(function (t) {
+          return '<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;">'
+            + '<div style="font-size:14px;color:#334155;font-weight:600;">' + esc(topics[t]) + '</div>'
+            + '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + esc(hints[t] || '') + '</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px;">' + Object.keys(roles).map(function (r) {
+                return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;white-space:nowrap;"><input type="checkbox" data-tp="' + t + '" data-tr="' + r + '"'
+                  + ((s[t] || {})[r] !== false ? ' checked' : '') + '> ' + esc(roles[r]) + '</label>';
+              }).join('') + '</div></div>';
+        }).join('')
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;"><button id="tp-save" class="kt-btn kt-btn-primary">Save</button><span id="tp-msg" style="font-size:13px;"></span></div></div>';
+    body.querySelector('#tp-save').addEventListener('click', function () {
+      var msg = body.querySelector('#tp-msg'); msg.style.color = '#64748B'; msg.textContent = 'Saving…';
+      var out = {};
+      [].forEach.call(body.querySelectorAll('[data-tp]'), function (c) {
+        var t = c.getAttribute('data-tp');
+        (out[t] = out[t] || {})[c.getAttribute('data-tr')] = c.checked;
+      });
+      Api.post('/admin/topic-notifications', { settings: out })
+        .then(function () { msg.style.color = '#1E8E60'; msg.textContent = '✓ Saved'; })
+        .catch(function (e) { msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not save'; });
+    });
+  }
+
+  /* ── Staff certificate expiry alerts (2026-11-03, Anthony: "send emails out as well with options with days in
+     advance leading up to the expiry date configurable in the settings"). App\\Support\\CertExpiryAlerts, run daily
+     at 8:00 AM by expiry:warn. Each step goes out once per certificate; a renewed certificate is never chased. ── */
+  async function paintCerts(body) {
+    var res;
+    try { res = await Api.get('/admin/cert-alerts'); } catch (e) { return; }
+    var s = res.settings || {};
+    var steps = (s.steps || []).slice();
+    var chk = function (id, label, on) {
+      return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#334155;white-space:nowrap;"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '> ' + label + '</label>';
+    };
+    body.innerHTML = '<div class="kt-card" style="max-width:760px;">'
+      + '<div class="kt-card-header"><h3 class="kt-card-title">🎓 Staff certifications — expiry alerts</h3></div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 6px;">When a staff certificate (First Aid, CPR, a police check and so on) is about to run out, '
+      + 'KiddieTrac tells the people you choose below — a bell and phone notification, and an email if that is on. Each reminder goes out once per certificate. '
+      + 'Once someone adds their renewed certificate, the reminders for the old one stop. Sent each morning at 8:00 AM.</div>'
+      + row('Expiry alerts', 'Off: nobody is told about expiring certificates.', toggle('ca-on', s.enabled))
+      + '<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;">'
+      +   '<div style="font-size:14px;color:#334155;font-weight:600;">Remind this many days before it expires</div>'
+      +   '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">Up to 8 reminders, 1 to 365 days ahead. A certificate added late gets the reminder it is due, not every one it missed.</div>'
+      +   '<div id="ca-steps" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;align-items:center;"></div>'
+      +   '<input type="hidden" id="ca-steps-val" value="' + esc(steps.slice().sort(function (a, b) { return b - a; }).join(',')) + '">'
+      + '</div>'
+      + row('On the day it expires', 'One more reminder the day it runs out.', toggle('ca-day', s.on_day))
+      + row('Every week after it expires', 'Keeps reminding weekly until the renewed certificate is added.', toggle('ca-weekly', s.weekly_after))
+      + '<div style="padding:12px 0;border-bottom:1px solid #F1F5F9;"><div style="font-size:14px;color:#334155;font-weight:600;margin-bottom:8px;">Who is told</div>'
+      +   '<div style="display:flex;flex-wrap:wrap;gap:8px 18px;">'
+      +     chk('ca-holder', 'The staff member', s.holder)
+      +     chk('ca-dir', 'Their centre directors', s.directors)
+      +     chk('ca-admin', 'Agency admins', s.admins)
+      +   '</div>'
+      +   '<div style="font-size:12.5px;color:#64748B;margin-top:6px;">Directors and admins get one summary per morning listing every certificate that is due a reminder, not one message each.</div></div>'
+      + row('Email as well', 'Off: the bell and phone notification only.', toggle('ca-email', s.email))
+      + '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;flex-wrap:wrap;">'
+      +   '<button id="ca-save" class="kt-btn kt-btn-primary">Save</button>'
+      +   '<button id="ca-preview" class="kt-btn" style="border:1px solid #CBD5E1;background:#fff;">Preview the next reminders</button>'
+      +   '<span id="ca-msg" style="font-size:13px;"></span></div>'
+      + '<div id="ca-out" style="margin-top:12px;"></div></div>';
+
+    var stepsEl = body.querySelector('#ca-steps');
+    function paintSteps() {
+      steps.sort(function (a, b) { return b - a; });
+      /* The chips are not fields, so the Save guard (kt-dirty-save.js) reads the list from this hidden one. */
+      var hv = body.querySelector('#ca-steps-val');
+      if (hv && hv.value !== steps.join(',')) { hv.value = steps.join(','); hv.dispatchEvent(new Event('change', { bubbles: true })); }
+      stepsEl.innerHTML = steps.map(function (d, i) {
+        return '<span style="display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 4px 0 10px;border-radius:999px;background:#EEF6FA;border:1px solid #CFE3EC;font-size:13px;color:#1F6080;font-weight:600;">'
+          + d + ' day' + (d === 1 ? '' : 's')
+          + '<button type="button" data-ca-del="' + i + '" aria-label="Remove ' + d + ' days" style="border:0;background:none;cursor:pointer;color:#64748B;font-size:15px;line-height:1;padding:0 4px;">×</button></span>';
+      }).join('')
+        + (steps.length < 8 ? '<span style="display:inline-flex;align-items:center;gap:4px;">' + num('ca-add', '', 1, 365)
+          + '<button type="button" id="ca-addbtn" class="kt-btn" style="height:30px;border:1px solid #CBD5E1;background:#fff;">Add</button></span>' : '');
+      stepsEl.querySelectorAll('[data-ca-del]').forEach(function (b) {
+        b.addEventListener('click', function () { steps.splice(+b.getAttribute('data-ca-del'), 1); paintSteps(); });
+      });
+      var add = stepsEl.querySelector('#ca-addbtn');
+      if (add) {
+        var addIt = function () {
+          var inp = stepsEl.querySelector('#ca-add'), v = parseInt(inp.value, 10);
+          if (!(v >= 1 && v <= 365)) { say('Enter a number of days from 1 to 365.', '#B45309'); return; }
+          if (steps.indexOf(v) < 0) steps.push(v);
+          paintSteps(); say('', '');
+        };
+        add.addEventListener('click', addIt);
+        stepsEl.querySelector('#ca-add').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); addIt(); } });
+      }
+    }
+    paintSteps();
+
+    function say(t, c) { var m = body.querySelector('#ca-msg'); m.style.color = c || '#64748B'; m.textContent = t; }
+    function vals() {
+      var q = function (id) { return body.querySelector('#' + id).checked; };
+      return { enabled: q('ca-on'), steps: steps.slice(), on_day: q('ca-day'), weekly_after: q('ca-weekly'),
+        holder: q('ca-holder'), directors: q('ca-dir'), admins: q('ca-admin'), email: q('ca-email') };
+    }
+    body.querySelector('#ca-save').addEventListener('click', function () {
+      say('Saving…');
+      Api.post('/admin/cert-alerts', vals()).then(function (r) {
+        steps = ((r && r.settings && r.settings.steps) || steps).slice(); paintSteps(); say('✓ Saved', '#1E8E60');
+        try { if (KT.dirtySave) KT.dirtySave.saved(body.querySelector('#ca-save')); } catch (e) {}
+      }).catch(function (e) { say((e && e.message) || 'Could not save', '#B91C1C'); });
+    });
+    body.querySelector('#ca-preview').addEventListener('click', function () {
+      var out = body.querySelector('#ca-out');
+      say('Checking…');
+      Api.post('/admin/cert-alerts/preview', vals()).then(function (r) {
+        say('', '');
+        var items = (r && r.items) || [];
+        if (!items.length) { out.innerHTML = '<div style="font-size:13px;color:#64748B;">Nothing is due a reminder with these settings. No messages would go out.</div>'; return; }
+        out.innerHTML = '<div style="font-size:13px;color:#334155;margin-bottom:6px;"><b>' + items.length + '</b> certificate' + (items.length === 1 ? '' : 's') + ' would get a reminder: '
+          + (r.holders ? r.holders + ' staff member' + (r.holders === 1 ? '' : 's') : 'no staff') + ' and '
+          + (r.managers ? r.managers + ' director' + (r.managers === 1 ? '' : 's') + '/admin' + (r.managers === 1 ? '' : 's') : 'no directors or admins') + ' told'
+          + (r.email ? ', by bell and email.' : ', by bell only.') + ' Nothing has been sent.</div>'
+          + '<div style="border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;">' + items.map(function (i) {
+            var col = i.days < 0 ? '#B91C1C' : (i.days <= 14 ? '#B45309' : '#334155');
+            return '<div style="display:flex;gap:10px;justify-content:space-between;padding:8px 12px;border-top:1px solid #F1F5F9;font-size:13px;flex-wrap:wrap;">'
+              + '<span style="color:#0F172A;font-weight:600;">' + esc(i.name) + ' · ' + esc(i.label) + '</span><span style="color:' + col + ';">' + esc(i.phrase) + '</span></div>';
+          }).join('') + '</div>';
+      }).catch(function (e) { say((e && e.message) || 'Could not check', '#B91C1C'); });
     });
   }
 

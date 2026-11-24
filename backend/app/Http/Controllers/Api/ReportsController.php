@@ -30,6 +30,13 @@ final class ReportsController extends Controller
         'tour_bookings' => 'Tour bookings',
     ];
 
+    /** Builder sources that are also canned reports (money, the family directory) follow REPORT_ROLES. */
+    private function builderAllowed(Request $request, string $type): bool
+    {
+        return ! isset(self::REPORT_ROLES[$type]) || ! in_array($type, ['invoices', 'payments', 'families'], true)
+            || $this->mayRun($request, $type);
+    }
+
     public function listMine(Request $request): JsonResponse
     {
         $u = $request->user();
@@ -45,13 +52,14 @@ final class ReportsController extends Controller
             ->orderByDesc('last_run_at')
             ->orderByDesc('created_at')
             ->get();
+        $rows = $rows->filter(fn ($r) => $this->builderAllowed($request, (string) $r->report_type))->values();
         $favourites = $rows->where('is_favorite', 1)->take(10)->values();
         $recent = $rows->whereNotNull('last_run_at')->sortByDesc('last_run_at')->take(10)->values();
         return response()->json([
             'data' => $rows,
             'favorites' => $favourites,
             'recent' => $recent,
-            'report_types' => self::REPORT_TYPES,
+            'report_types' => array_filter(self::REPORT_TYPES, fn ($k) => $this->builderAllowed($request, $k), ARRAY_FILTER_USE_KEY),
         ]);
     }
 
@@ -67,6 +75,7 @@ final class ReportsController extends Controller
             'sort_direction' => 'nullable|in:asc,desc',
             'is_shared' => 'nullable|boolean',
         ]);
+        abort_unless($this->builderAllowed($request, $data['report_type']), 403, 'That report is not available for your role.');
         $u = $request->user();
         $agencyId = $this->resolveAgencyId($request);
         $id = DB::table('saved_reports')->insertGetId([
@@ -128,6 +137,7 @@ final class ReportsController extends Controller
                   ->orWhere('is_shared', 1);
             })->first();
         abort_unless($row, 404);
+        abort_unless($this->builderAllowed($request, (string) $row->report_type), 403, 'That report is not available for your role.');
         DB::table('saved_reports')->where('id', $id)->update([
             'last_run_at' => now(),
             'run_count' => DB::raw('run_count + 1'),
@@ -156,6 +166,7 @@ final class ReportsController extends Controller
             'sort_direction' => 'nullable|in:asc,desc',
             'limit' => 'nullable|integer|min:1|max:1000',
         ]);
+        abort_unless($this->builderAllowed($request, $data['report_type']), 403, 'That report is not available for your role.');
         $agencyId = $this->resolveAgencyId($request);
         $rows = $this->execute(
             $data['report_type'],
@@ -279,7 +290,59 @@ final class ReportsController extends Controller
      * enrolment, the waitlist, tours - is agency business, not classroom business,
      * and stays out of reach whatever the caller asks for.
      */
-    private const EDUCATOR_TYPES = ['attendance', 'staff_hours', 'observations', 'incidents', 'headcounts'];
+    private const EDUCATOR_TYPES = ['attendance', 'staff_hours', 'observations', 'incidents', 'headcounts', 'provider_daily'];
+
+    /* WHO MAY RUN WHICH REPORT (2026-11-04). Anthony: "balances by payer report should only be accessible by
+       admins/directors - make sure reports section is audited to what the user role can see or run".
+       Money and the family directory (contact + billing details) are agency admin and centre director only - not
+       auditors (his choice) and never educators. Every other report: admins, directors, auditors, and educators for
+       EDUCATOR_TYPES (room-scoped by educatorScope()). A type missing from this map is admin/director only, so a
+       report added later is closed until someone decides who sees it. */
+    private const ADMIN_DIRECTOR = ['platform_admin', 'agency_admin', 'centre_director'];
+    private const REPORT_ROLES = [
+        'payments'          => self::ADMIN_DIRECTOR,
+        'invoices'          => self::ADMIN_DIRECTOR,
+        'balances_by_payer' => self::ADMIN_DIRECTOR,
+        'families'          => self::ADMIN_DIRECTOR,
+        'attendance'        => ['platform_admin', 'agency_admin', 'centre_director', 'auditor', 'educator'],
+        'provider_daily'    => ['platform_admin', 'agency_admin', 'centre_director', 'auditor', 'educator'],
+        'staff_hours'       => ['platform_admin', 'agency_admin', 'centre_director', 'auditor', 'educator'],
+        'observations'      => ['platform_admin', 'agency_admin', 'centre_director', 'auditor', 'educator'],
+        'incidents'         => ['platform_admin', 'agency_admin', 'centre_director', 'auditor', 'educator'],
+        'headcounts'        => ['platform_admin', 'agency_admin', 'centre_director', 'auditor', 'educator'],
+        'enrollment'        => ['platform_admin', 'agency_admin', 'centre_director', 'auditor'],
+        'waitlist'          => ['platform_admin', 'agency_admin', 'centre_director', 'auditor'],
+        'immunizations'     => ['platform_admin', 'agency_admin', 'centre_director', 'auditor'],
+        'tours'             => ['platform_admin', 'agency_admin', 'centre_director', 'auditor'],
+        'compliance'        => ['platform_admin', 'agency_admin', 'centre_director', 'auditor'],
+        'attendance_fees'   => self::ADMIN_DIRECTOR,   // fees: money
+        'attendance_fees_family' => self::ADMIN_DIRECTOR,
+        'occms_roa'         => self::ADMIN_DIRECTOR,   // OCCMS reporting: Ontario agencies only (occmsRows)
+        'occms_cwelcc'      => self::ADMIN_DIRECTOR,
+        'occms_capacity'    => self::ADMIN_DIRECTOR,
+    ];
+
+    /** The roles this request acts as. A platform admin previewing a role ("View as", X-View-As-Role) gets that
+     *  role's reports, so the preview shows what the role really can run. It only ever narrows. */
+    private function reportRoles(Request $request): array
+    {
+        $roles = \App\Support\AgencyRole::names($request);
+        $view = (string) $request->header('X-View-As-Role', '');
+        if ($view !== '' && in_array('platform_admin', $roles, true)) {
+            return [$view];
+        }
+        return $roles;
+    }
+
+    private function mayRun(Request $request, string $type): bool
+    {
+        return (bool) array_intersect($this->reportRoles($request), self::REPORT_ROLES[$type] ?? self::ADMIN_DIRECTOR);
+    }
+
+    private function guardRole(Request $request, string $type): void
+    {
+        abort_unless($this->mayRun($request, $type), 403, 'That report is not available for your role.');
+    }
 
     /**
      * How far a caller may see inside their own agency - null means "the whole
@@ -311,7 +374,7 @@ final class ReportsController extends Controller
      */
     private function educatorScope(Request $request, int $agencyId): ?array
     {
-        $roles = \App\Support\UserRoles::names($request);
+        $roles = \App\Support\AgencyRole::names($request);
 
         foreach (['platform_admin', 'agency_admin', 'centre_director', 'auditor'] as $full) {
             if (in_array($full, $roles, true)) {
@@ -371,7 +434,7 @@ final class ReportsController extends Controller
      */
     private function centreScopedCentre(Request $request, int $agencyId, ?int $centreId): ?int
     {
-        $roles = \App\Support\UserRoles::names($request);
+        $roles = \App\Support\AgencyRole::names($request);
         foreach (['platform_admin', 'agency_admin', 'auditor'] as $wide) {
             if (in_array($wide, $roles, true)) {
                 return $centreId;
@@ -394,15 +457,31 @@ final class ReportsController extends Controller
     private static function cannedDefs(): array
     {
         return [
+            /* MONTHLY ATTENDANCE & FEES (2026-11-13): the same sheet as OCCMS reporting's tab (App\Support\MonthlyAttendance),
+               for every agency. The month is the one the From date falls in (this month when none is picked). */
+            'attendance_fees' => ['title' => 'Monthly attendance & fees', 'icon' => '📅', 'desc' => 'One row per child: hours in care each day of the month, total hours, parent, government and total fees, space type and a parent signature column.', 'dated' => true],
+            /* BY FAMILY (2026-11-13, Anthony: "we need the report to be able to be produced per family/parent vs a whole
+               holistic view"). The same sheet, one family at a time (family_id) or every family in turn with its own total
+               line and parent signature - the page a parent signs. The whole-centre sheet above stays as it was. */
+            'attendance_fees_family' => ['title' => 'Monthly attendance & fees by family', 'icon' => '👪', 'desc' => 'The monthly attendance & fees sheet for one family, or every family in turn with a family total and the parent to sign.', 'dated' => true],
+            /* OCCMS REPORTING AS REPORTS (2026-11-13, Anthony: "can the OCCMS reporting have its own screen vs redirecting
+               to produce the data like how other reports are being produced?"). The OCCMS screen's sheets, run here like
+               every other report, from the same builders (App\Support\OccmsRoa) - so the numbers match that screen,
+               including a month already signed off (its frozen copy). Ontario agencies only; their own section on the
+               Reports screen. Correcting a code, operating capacity and sign-off stay on the OCCMS reporting screen. */
+            'occms_roa' => ['title' => 'Record of Attendance', 'icon' => '🧾', 'section' => 'occms', 'desc' => 'The fee subsidy ROA for the month: each subsidized child with case number, a code for every day, code totals and absences against the allowance.', 'dated' => true],
+            'occms_cwelcc' => ['title' => 'CWELCC monthly summary', 'icon' => '💵', 'section' => 'occms', 'desc' => 'Children enrolled by age group for the month: CWELCC eligible, not eligible, date of birth missing and families enrolled in CWELCC.', 'dated' => true],
+            'occms_capacity' => ['title' => 'Capacity & vacancies', 'icon' => '🪑', 'section' => 'occms', 'desc' => 'Licensed and operating capacity, enrolment, fee subsidy spaces and vacancies by age group, as OCCMS asks for them.', 'dated' => true],
             'attendance'  => ['title' => 'Attendance log',        'icon' => '🕘', 'desc' => 'Daily child check-in / check-out for the period.',  'dated' => true],
             'provider_daily' => ['title' => 'Daily overview', 'icon' => '🗓️', 'desc' => 'Per-child daily summary: attendance + meals, naps, diapers, activities.', 'dated' => true],
             'enrollment'  => ['title' => 'Enrollment roster',     'icon' => '👶', 'desc' => 'Every child with status, family and centre.',       'dated' => false],
             'payments'    => ['title' => 'Payments received',     'icon' => '💳', 'desc' => 'Payments collected in the period.',                 'dated' => true],
             'invoices'    => ['title' => 'Invoices & balances',   'icon' => '🧾', 'desc' => 'Invoices issued, amounts paid and owing.',          'dated' => true],
+            'balances_by_payer' => ['title' => 'Balances by payer (aging)', 'icon' => '⏳', 'desc' => 'What each payer owes - each guardian of a split family on their own line - by how overdue it is.', 'dated' => true],
             'families'    => ['title' => 'Family directory',      'icon' => '👪', 'desc' => 'Families with contact and billing details.',        'dated' => false],
             'staff_hours' => ['title' => 'Staff hours',           'icon' => '⏱️', 'desc' => 'Educator clock-in / clock-out hours worked.',       'dated' => true],
             'waitlist'    => ['title' => 'Waitlist',              'icon' => '📝', 'desc' => 'Children waiting for a spot, oldest first.',         'dated' => false],
-            'immunizations' => ['title' => 'Immunisations',       'icon' => '💉', 'desc' => 'What each child has on file and what is due.',    'dated' => false],
+            'immunizations' => ['title' => 'Immunizations',       'icon' => '💉', 'desc' => 'What each child has on file and what is due.',    'dated' => false],
             'incidents'   => ['title' => 'Incidents & injuries',  'icon' => '🩹', 'desc' => 'Logged incidents / injuries in the period.',        'dated' => true],
             'observations'=> ['title' => 'Observations',          'icon' => '🔭', 'desc' => 'Learning-story observations recorded.',            'dated' => true],
             'tours'       => ['title' => 'Tour bookings',         'icon' => '🚪', 'desc' => 'Prospective-family tour requests.',                 'dated' => true],
@@ -442,7 +521,7 @@ final class ReportsController extends Controller
 
             $reports = [];
             foreach (self::cannedDefs() as $k => $d) {
-                if (in_array($k, self::EDUCATOR_TYPES, true)) {
+                if (in_array($k, self::EDUCATOR_TYPES, true) && $this->mayRun($request, $k)) {
                     $reports[] = ['type' => $k] + $d;
                 }
             }
@@ -466,14 +545,18 @@ final class ReportsController extends Controller
         $centres = DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')
             ->orderBy('name')->get(['id', 'name', 'logo_url', 'brand_color']);
         // A centre director picks from their own centres only. See centreScopedCentre().
-        $wide = (bool) array_intersect(\App\Support\UserRoles::names($request), ['platform_admin', 'agency_admin', 'auditor']);
+        $wide = (bool) array_intersect(\App\Support\AgencyRole::names($request), ['platform_admin', 'agency_admin', 'auditor']);
         if (! $wide) {
             $mine = \App\Support\Visibility::centreIds((int) $agencyId, $request->user());
             $centres = $centres->filter(fn ($c) => in_array((int) $c->id, $mine, true))->values();
         }
 
         $reports = [];
+        $occms = \App\Support\OccmsRoa::applies((int) $agencyId);
         foreach (self::cannedDefs() as $k => $d) {
+            if (! $this->mayRun($request, $k)) continue;
+            if (str_starts_with($k, 'occms_') && ! $occms) continue;   // Ontario agencies only
+            if ($occms && str_starts_with($k, 'attendance_fees')) $d['section'] = 'occms';   // the OCCMS screen's third sheet
             $reports[] = ['type' => $k] + $d;
         }
 
@@ -492,6 +575,7 @@ final class ReportsController extends Controller
         $type = (string) $request->query('type', '');
         $defs = self::cannedDefs();
         abort_unless(isset($defs[$type]), 404, 'Unknown report type.');
+        $this->guardRole($request, $type);
         $from = $request->query('from') ?: null;
         $to   = $request->query('to') ?: null;
         $agencyId = $this->resolveAgencyId($request);
@@ -534,6 +618,7 @@ final class ReportsController extends Controller
             'available_range' => (empty($rows) && $scope === null) ? $this->availableRange($type, $agencyId, $centreId) : null,
             'rows'      => $rows,
             'count'     => count($rows),
+            'family_options' => $type === 'attendance_fees_family' ? $this->familyOptions : null,
         ]);
     }
 
@@ -888,6 +973,13 @@ final class ReportsController extends Controller
         [$fromUtc, $toUtc] = $this->utcBounds($from, $to, $tz);
 
         switch ($type) {
+            case 'attendance_fees':
+            case 'attendance_fees_family':
+                return $this->attendanceFeesRows($type === 'attendance_fees_family', $agencyId, $centreId, $from);
+            case 'occms_roa':
+            case 'occms_cwelcc':
+            case 'occms_capacity':
+                return $this->occmsRows($type, $agencyId, $centreId, $from);
             case 'attendance':
                 $q = DB::table('check_events as ce')
                     ->join('rooms as r', 'r.id', '=', 'ce.room_id')
@@ -907,24 +999,39 @@ final class ReportsController extends Controller
                         DB::raw("TRIM(CONCAT(COALESCE(bu.first_name,''),' ',COALESCE(bu.last_name,''))) as by_user"),
                         'ap.full_name as by_pickup', 'ce.notes')
                     ->orderBy('ce.occurred_at')->limit(4000)->get();
-                $byDay = [];
+                /* ONE ROW PER VISIT (2026-11-05). A child signed in and out twice in a
+                   day showed the first in and the LAST out on one row, so the time away
+                   in the middle vanished from the attendance record. Events are paired
+                   into visits (ChildVisits); the first visit keeps the child|date key the
+                   absence merge below looks for, later ones are noted "Visit 2 of 2". */
+                $evDay = [];
                 foreach ($events as $e) {
                     $d = $this->localDate($e->occurred_at, $tz);
-                    $key = $e->child_id . '|' . $d;
-                    if (! isset($byDay[$key])) $byDay[$key] = ['_child_id' => (int) $e->child_id, 'Date' => $d, 'Child' => $e->child, 'Room' => $e->room, 'Centre' => $e->centre, 'Status' => 'Present', 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—', 'Absence reason' => '—', 'Reported by' => '—', 'Note' => ''];
-                    $t = $this->localTime($e->occurred_at, $tz);
-                    /* An automatic overnight close is not a person. by_user_id holds
-                       a borrowed id, so without this the report attributes the
-                       sign-out to an educator who had already gone home. */
-                    $isAuto = \App\Support\SystemAction::isAuto($e->notes ?? null);
-                    if ($isAuto) { $t .= ' (auto)'; }
-                    $who = $isAuto
-                        ? 'System (auto sign-off)'
-                        : (trim((string) $e->by_user) ?: (trim((string) $e->by_pickup) ?: ($e->kiosk_source ? 'Kiosk' : '—')));
-                    if ($e->event_type === 'check_in') {
-                        if ($byDay[$key]['Check in'] === '—') { $byDay[$key]['Check in'] = $t; $byDay[$key]['Checked in by'] = $who; }
-                    } else {
-                        $byDay[$key]['Check out'] = $t; $byDay[$key]['Checked out by'] = $who;
+                    $evDay[$e->child_id . '|' . $d][] = $e;
+                }
+                $byDay = [];
+                foreach ($evDay as $key => $list) {
+                    $f = $list[0];
+                    $d = substr($key, strpos($key, '|') + 1);
+                    $visits = \App\Support\ChildVisits::pair($list);
+                    $n = count($visits);
+                    foreach ($visits as $i => $v) {
+                        $row = ['_child_id' => (int) $f->child_id, 'Date' => $d, 'Child' => $f->child, 'Room' => ($v['in'] ?? $v['out'])->room, 'Centre' => $f->centre, 'Status' => 'Present', 'Check in' => '—', 'Checked in by' => '—', 'Check out' => '—', 'Checked out by' => '—', 'Absence reason' => '—', 'Reported by' => '—', 'Note' => $n > 1 ? 'Visit ' . ($i + 1) . ' of ' . $n : ''];
+                        foreach (['in' => ['Check in', 'Checked in by'], 'out' => ['Check out', 'Checked out by']] as $side => [$tc, $wc]) {
+                            $e = $v[$side];
+                            if (! $e) continue;
+                            $t = $this->localTime($e->occurred_at, $tz);
+                            /* An automatic overnight close is not a person. by_user_id holds
+                               a borrowed id, so without this the report attributes the
+                               sign-out to an educator who had already gone home. */
+                            $isAuto = \App\Support\SystemAction::isAuto($e->notes ?? null);
+                            if ($isAuto) { $t .= ' (auto)'; }
+                            $row[$tc] = $t;
+                            $row[$wc] = $isAuto
+                                ? 'System (auto sign-off)'
+                                : (trim((string) $e->by_user) ?: (trim((string) $e->by_pickup) ?: ($e->kiosk_source ? 'Kiosk' : '—')));
+                        }
+                        $byDay[$i === 0 ? $key : $key . '|' . ($i + 1)] = $row;
                     }
                 }
                 // Who was NOT there, and why. Built from check_events alone, this report
@@ -974,7 +1081,7 @@ final class ReportsController extends Controller
                     }
                     $byDay[$key]['Absence reason'] = $reason;
                     $byDay[$key]['Reported by'] = $by;
-                    $byDay[$key]['Note'] = trim((string) ($a->note ?? ''));
+                    $byDay[$key]['Note'] = implode(' · ', array_filter([trim((string) ($a->note ?? '')), (string) ($byDay[$key]['Note'] ?? '')]));
                 }
 
                 $rows = array_values($byDay);
@@ -1001,11 +1108,14 @@ final class ReportsController extends Controller
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->where('p.paid_at', '>=', $fromUtc);
                 if ($to) $q->where('p.paid_at', '<=', $toUtc);
-                $data = $q->select('f.id as family_id', 'p.paid_at', 'p.amount', 'p.method', 'p.reference_number', 'f.family_name', 'c.name as centre')
+                $data = $q->select('f.id as family_id', 'p.paid_at', 'p.amount', 'p.method', 'p.reference_number', 'f.family_name', 'c.name as centre', 'p.payer_guardian_id')
                     ->orderByDesc('p.paid_at')->limit(5000)->get();
+                // Split billing: who paid (the guardian), or the family as one.
+                $payerNames = \App\Support\BillingSplit::names($data->pluck('payer_guardian_id')->filter()->map(fn ($v) => (int) $v)->unique()->values()->all());
                 $rows = array_map(fn ($r) => [
                     '_family_id' => (int) $r->family_id, 'Date' => $this->localDate($r->paid_at, $tz), 'Family' => $r->family_name, 'Centre' => $r->centre,
                     'Amount' => '$' . number_format((float) $r->amount, 2), 'Method' => ucfirst((string) $r->method), 'Reference' => $r->reference_number ?: '—',
+                    'Paid by' => $r->payer_guardian_id ? ($payerNames[(int) $r->payer_guardian_id] ?? 'Guardian') : 'Family',
                     'Source' => 'KiddieTrac',
                 ], $data->all());
 
@@ -1049,6 +1159,7 @@ final class ReportsController extends Controller
                             'Amount' => '$' . number_format((float) $r->amount_paid, 2),
                             '_family_id' => (int) ($r->family_id ?? 0),
                             'Method' => 'Invoice settled',
+                            'Paid by' => 'Family',
                             'Reference' => $r->number ?: '—',
                             'Source' => $r->source_label ?: ucfirst((string) ($r->external_source ?: 'External')),
                         ];
@@ -1058,7 +1169,48 @@ final class ReportsController extends Controller
                     usort($rows, fn ($a, $b) => strcmp((string) $b['Date'], (string) $a['Date']));
                 }
 
-                return [['Date', 'Family', 'Centre', 'Amount', 'Method', 'Reference', 'Source'], $rows];
+                return [['Date', 'Family', 'Centre', 'Amount', 'Method', 'Reference', 'Paid by', 'Source'], $rows];
+
+            case 'balances_by_payer':
+                /* AR AGING BY PAYER (2026-10-30, split billing): each guardian of a split family is their own line with their own
+                   balance; everyone else is the family as one payer. Aged on the due date as of the end of the period. */
+                $todayStr = \App\Support\AgencyTime::todayDate($agencyId)->toDateString();
+                $asOf = ($to && $to < $todayStr) ? $to : $todayStr;
+                $B = ['Current', '1–30 days', '31–60 days', '61–90 days', '90+ days'];
+                $bucket = function ($due) use ($asOf, $B) {
+                    if (! $due) return $B[0];
+                    $days = (int) \Illuminate\Support\Carbon::parse(substr((string) $due, 0, 10))->diffInDays(\Illuminate\Support\Carbon::parse($asOf), false);
+                    return $days <= 0 ? $B[0] : ($days <= 30 ? $B[1] : ($days <= 60 ? $B[2] : ($days <= 90 ? $B[3] : $B[4])));
+                };
+                $acc = [];
+                $add = function ($famId, $fam, $centre, $payer, $key, $due, $amt) use (&$acc, $bucket, $B) {
+                    if ($amt <= 0.004) return;
+                    $k = $famId . ':' . $key;
+                    if (! isset($acc[$k])) $acc[$k] = ['_family_id' => (int) $famId, 'Family' => $fam ?: '—', 'Payer' => $payer, 'Centre' => $centre ?: '—'] + array_fill_keys($B, 0.0) + ['Total' => 0.0, 'Invoices' => 0];
+                    $acc[$k][$bucket($due)] += $amt; $acc[$k]['Total'] += $amt; $acc[$k]['Invoices']++;
+                };
+                $q = DB::table('invoices as i')->join('families as f', 'f.id', '=', 'i.family_id')->join('centres as c', 'c.id', '=', 'i.centre_id')
+                    ->where('c.agency_id', $agencyId)->whereNotIn('i.status', ['void', 'draft', 'paid'])->where('i.balance_due', '>', 0.004);
+                if ($centreId) $q->where('c.id', $centreId);
+                if ($to) $q->whereDate('i.issued_at', '<=', $to);
+                foreach ($q->select('i.*', 'f.family_name', 'c.name as centre_name')->limit(5000)->get() as $inv) {
+                    $sh = \App\Support\BillingSplit::shares($inv);
+                    if ($sh) foreach ($sh as $s) $add($inv->family_id, $inv->family_name, $inv->centre_name, $s['name'], 'g' . $s['guardian_id'], $inv->due_at, (float) $s['balance']);
+                    else $add($inv->family_id, $inv->family_name, $inv->centre_name, 'Family (one payer)', 'f', $inv->due_at, (float) $inv->balance_due);
+                }
+                if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
+                    $xq = DB::table('external_invoices as x')->leftJoin('families as f', 'f.id', '=', 'x.family_id')->leftJoin('centres as c', 'c.id', '=', 'f.centre_id')
+                        ->where('x.agency_id', $agencyId)->whereNotIn('x.status', ['void', 'cancelled', 'draft', 'paid'])->where('x.balance_due', '>', 0.004);
+                    if ($centreId) $xq->where('c.id', $centreId);
+                    if ($to) $xq->whereDate('x.issued_at', '<=', $to);
+                    foreach ($xq->select('x.family_id', 'x.due_at', 'x.balance_due', 'f.family_name', 'c.name as centre_name')->limit(5000)->get() as $x)
+                        $add($x->family_id ?: 0, $x->family_name, $x->centre_name, 'Family (one payer)', 'f', $x->due_at, (float) $x->balance_due);
+                }
+                $rows = array_values($acc);
+                usort($rows, fn ($a, $b) => [$b['Total'], $a['Family']] <=> [$a['Total'], $b['Family']]);
+                foreach ($rows as &$r) { foreach (array_merge($B, ['Total']) as $c) $r[$c] = '$' . number_format($r[$c], 2); }
+                unset($r);
+                return [array_merge(['Family', 'Payer', 'Centre'], $B, ['Total', 'Invoices']), $rows];
 
             case 'invoices':
                 // Invoices raised IN KiddieTrac.
@@ -1169,7 +1321,7 @@ final class ReportsController extends Controller
                 if ($centreId) $q->where('c.id', $centreId);
                 if ($from) $q->where('t.punched_in_at', '>=', $fromUtc);
                 if ($to) $q->where('t.punched_in_at', '<=', $toUtc);
-                $data = $q->select('t.user_id', 't.punched_in_at', 't.punched_out_at', 'c.name as centre',
+                $data = $q->select('t.user_id', 't.punched_in_at', 't.punched_out_at', 't.out_reason', 'c.name as centre',
                         DB::raw("TRIM(CONCAT(u.first_name,' ',COALESCE(u.last_name,''))) as staff"))
                     ->orderByDesc('t.punched_in_at')->limit(5000)->get();
                 $rows = array_map(function ($r) use ($tz) {
@@ -1182,7 +1334,8 @@ final class ReportsController extends Controller
                     return [
                         '_user_id' => (int) $r->user_id, 'Staff' => $r->staff, 'Centre' => $r->centre, 'Date' => $this->localDate($r->punched_in_at, $tz),
                         'Clock in' => $this->localTime($r->punched_in_at, $tz),
-                        'Clock out' => $this->localTime($r->punched_out_at, $tz),
+                        // " (lunch)" / " (break)": the row closed for a break, the day went on (StaffBreaks, 2026-11-05).
+                        'Clock out' => $this->localTime($r->punched_out_at, $tz) . (in_array($r->out_reason ?? null, ['lunch', 'break'], true) ? ' (' . $r->out_reason . ')' : ''),
                         'Hours' => $hrs,
                     ];
                 }, $data->all());
@@ -1197,6 +1350,7 @@ final class ReportsController extends Controller
                     ->join('children as ch', 'ch.id', '=', 'ce.child_id')
                     ->where('c.agency_id', $agencyId);
                 if ($centreId) $ceq->where('c.id', $centreId);
+                if ($scopeRooms !== null) $ceq->whereIn('ce.room_id', $scopeRooms);   // an educator's rooms only
                 if ($from) $ceq->where('ce.occurred_at', '>=', $fromUtc);
                 if ($to) $ceq->where('ce.occurred_at', '<=', $toUtc);
                 $ceRows = $ceq->select('ce.child_id', 'ce.event_type', 'ce.occurred_at', 'c.name as centre',
@@ -1212,14 +1366,22 @@ final class ReportsController extends Controller
                         $days[$key] = ['Date' => $d, 'Child' => $e->child, 'Centre' => $e->centre, '_cid' => $e->child_id,
                             'Check in' => '—', 'Check out' => '—', 'Meals' => 0, 'Naps' => 0, 'Diapers' => 0, 'Activities' => 0];
                     }
-                    $t = $this->localTime($e->occurred_at, $tz);
-                    if ($e->event_type === 'check_in') { if ($days[$key]['Check in'] === '—') $days[$key]['Check in'] = $t; }
-                    else {
+                    $days[$key]['_ev'][] = $e;
+                }
+                /* Every visit, not first in / last out (2026-11-05): "8:02 AM, 1:10 PM" in
+                   one cell and "10:15 AM, 5:30 PM" in the other, a pair per visit. */
+                foreach ($days as $key => $row) {
+                    $v = \App\Support\ChildVisits::pair($row['_ev']);
+                    $ins = []; $outs = [];
+                    foreach ($v as $one) {
+                        $ins[] = $one['in'] ? $this->localTime($one['in']->occurred_at, $tz) : '—';
                         /* Mark it, or a midnight row reads as though the child was
                            collected at 12:00 AM rather than closed by the nightly job. */
-                        $days[$key]['Check out'] = $t
-                            . \App\Support\SystemAction::label($e->notes ?? null);
+                        $outs[] = $one['out'] ? $this->localTime($one['out']->occurred_at, $tz) . \App\Support\SystemAction::label($one['out']->notes ?? null) : '—';
                     }
+                    $days[$key]['Check in'] = $ins ? implode(', ', $ins) : '—';
+                    $days[$key]['Check out'] = $outs ? implode(', ', $outs) : '—';
+                    unset($days[$key]['_ev']);
                 }
                 // Tally care events (daily_events) for the same child-days.
                 $deq = DB::table('daily_events as de')
@@ -1520,11 +1682,144 @@ final class ReportsController extends Controller
         return [[], []];
     }
 
+    /** Families on a by-family sheet, for the screen's picker: [{id, name}]. Set by attendanceFeesRows(). */
+    private array $familyOptions = [];
+
+    /** "2 Mo" - a day column of the monthly attendance sheets. Printed as the day over its weekday. */
+    private const DAY_COL = '/^(\d{1,2}) ([A-Z][a-z])$/';
+
+    /**
+     * Monthly attendance & fees (App\Support\MonthlyAttendance) as report rows: the whole sheet, or by family.
+     * The month is the one $from falls in (this month without one). No centre: every open centre, with a Centre column.
+     * By family: rows grouped family by family, each closed by a "Family total" line naming the parent who signs; a
+     * family_id on the request narrows it to that family.
+     */
+    private function attendanceFeesRows(bool $byFamily, int $agencyId, ?int $centreId, ?string $from): array
+    {
+        $today = \Illuminate\Support\Carbon::parse(\App\Support\AgencyTime::today($agencyId))->format('Y-m');
+        $month = $from && preg_match('/^\d{4}-\d{2}/', $from) ? substr($from, 0, 7) : $today;
+        abort_if($month > $today, 422, 'That month has not started yet.');
+        $familyId = $byFamily ? (int) request()->query('family_id', 0) : 0;
+        // One centre, or every open centre of the agency (centreScopedCentre() already narrowed a director).
+        $cids = $centreId ? [$centreId] : \App\Support\Live::centreIds($agencyId);
+        $names = DB::table('centres')->whereIn('id', $cids ?: [0])->orderBy('name')->pluck('name', 'id')->all();
+        $many = count($names) > 1;
+        $dayCols = []; $kids = [];
+        foreach ($names as $cid => $cname) {
+            $b = \App\Support\MonthlyAttendance::build($agencyId, (int) $cid, $month);
+            $cols = array_map(fn ($x) => $x['d'] . ' ' . $x['dow'], $b['days']);
+            if (count($cols) > count($dayCols)) $dayCols = $cols;
+            foreach ($b['children'] as $c) { $c['_centre'] = $cname; $c['_cols'] = $cols; $kids[] = $c; }
+        }
+        $row = function (array $c) use ($many) {
+            $r = ($many ? ['Centre' => $c['_centre']] : []) + ['Parent signature' => '', 'Last' => $c['last_name'], 'First' => $c['first_name']];
+            foreach ($c['_cols'] as $i => $col) $r[$col] = $c['cells'][$i];
+            return $r + ['Hours' => $c['hours'], 'Parent fees' => number_format($c['parent_fees'], 2, '.', ''),
+                'Gov. fees' => number_format($c['gov_fees'], 2, '.', ''), 'Total fees' => number_format($c['total_fees'], 2, '.', ''), 'Space type' => $c['space_type']];
+        };
+        $tail = ['Hours', 'Parent fees', 'Gov. fees', 'Total fees', 'Space type'];
+
+        if (! $byFamily) {
+            return [array_merge($many ? ['Centre'] : [], ['Parent signature', 'Last', 'First'], $dayCols, $tail), array_map($row, $kids)];
+        }
+
+        // Family name and the parent who signs (the primary guardian, else the first one on file).
+        $famIds = array_values(array_unique(array_map(fn ($c) => (int) $c['family_id'], $kids)));
+        $fams = DB::table('families')->whereIn('id', $famIds ?: [0])->pluck('family_name', 'id')->all();
+        $parents = [];
+        foreach (DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')->whereIn('g.family_id', $famIds ?: [0])
+            ->orderByDesc('g.is_primary')->orderBy('g.id')->get(['g.family_id', 'u.first_name', 'u.last_name']) as $g) {
+            $parents[(int) $g->family_id] ??= trim($g->first_name . ' ' . $g->last_name);
+        }
+        $refs = \App\Support\RefCode::families($famIds);
+        $label = fn ($f) => trim((string) ($fams[$f] ?? '')) ?: ('Family ' . ($refs[$f] ?? ''));
+        $this->familyOptions = collect($famIds)->map(fn ($f) => ['id' => $f, 'name' => $label($f) . (isset($parents[$f]) ? ' (' . $parents[$f] . ')' : '')])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
+        if ($familyId) {
+            abort_unless(in_array($familyId, $famIds, true), 404, 'That family has no children on this sheet for the month.');
+            $kids = array_values(array_filter($kids, fn ($c) => (int) $c['family_id'] === $familyId));
+        }
+        $byFam = [];
+        foreach ($kids as $c) $byFam[(int) $c['family_id']][] = $c;
+        uksort($byFam, fn ($a, $b) => strnatcasecmp($label($a), $label($b)));
+        $rows = [];
+        foreach ($byFam as $f => $list) {
+            foreach ($list as $c) $rows[] = ['Family' => $label($f), 'Parent / guardian' => $parents[$f] ?? ''] + $row($c);
+            $sum = fn ($k) => array_sum(array_map(fn ($c) => (float) $c[$k], $list));
+            $rows[] = ['Family' => $label($f), 'Parent / guardian' => $parents[$f] ?? '', 'Parent signature' => '', 'Last' => 'Family total',
+                'Hours' => round($sum('hours'), 2), 'Parent fees' => number_format($sum('parent_fees'), 2, '.', ''),
+                'Gov. fees' => number_format($sum('gov_fees'), 2, '.', ''), 'Total fees' => number_format($sum('total_fees'), 2, '.', '')];
+        }
+
+        return [array_merge(['Family', 'Parent / guardian'], $many ? ['Centre'] : [], ['Parent signature', 'Last', 'First'], $dayCols, $tail), $rows];
+    }
+
+    /**
+     * OCCMS reporting's sheets as report rows (see cannedDefs): the month $from falls in (this month without one); one
+     * centre, or every open centre with a Centre column (centreScopedCentre() already narrowed a director). The same
+     * App\Support\OccmsRoa builders as the OCCMS screen and its CSVs, so the two never disagree.
+     */
+    private function occmsRows(string $type, int $agencyId, ?int $centreId, ?string $from): array
+    {
+        abort_unless(\App\Support\OccmsRoa::applies($agencyId), 404, 'OCCMS reporting is for Ontario agencies.');
+        $today = \Illuminate\Support\Carbon::parse(\App\Support\AgencyTime::today($agencyId))->format('Y-m');
+        $month = $from && preg_match('/^\d{4}-\d{2}/', $from) ? substr($from, 0, 7) : $today;
+        abort_if($month > $today, 422, 'That month has not started yet.');
+        $cids = $centreId ? [$centreId] : \App\Support\Live::centreIds($agencyId);
+        $names = DB::table('centres')->whereIn('id', $cids ?: [0])->orderBy('name')->pluck('name', 'id')->all();
+        $many = count($names) > 1;
+        $lead = fn ($cname) => $many ? ['Centre' => $cname] : [];
+        $cols = []; $rows = [];
+
+        if ($type === 'occms_cwelcc') {
+            $cols = array_merge($many ? ['Centre'] : [], ['Age group', 'Enrolled', 'CWELCC eligible', 'Not eligible', 'Date of birth missing', 'Family enrolled in CWELCC']);
+            foreach ($names as $cid => $cname) {
+                $c = \App\Support\OccmsRoa::cwelcc($agencyId, (int) $cid, $month);
+                $line = fn ($label, $r) => $lead($cname) + ['Age group' => $label, 'Enrolled' => $r['enrolled'], 'CWELCC eligible' => $r['eligible'],
+                    'Not eligible' => $r['not_eligible'], 'Date of birth missing' => $r['unknown'], 'Family enrolled in CWELCC' => $r['family_enrolled']];
+                foreach ($c['rows'] as $r) $rows[] = $line($r['label'], $r);
+                if ($c['rows']) $rows[] = $line('Total', $c['totals']);
+            }
+
+            return [$cols, $rows];
+        }
+
+        $codes = array_keys(\App\Support\OccmsRoa::CODES);
+        foreach ($names as $cid => $cname) {
+            $b = \App\Support\OccmsRoa::build($agencyId, (int) $cid, $month);
+            if ($type === 'occms_capacity') {
+                foreach ($b['capacity']['rows'] as $r) {
+                    $rows[] = $lead($cname) + ['Age group' => $r['label'], 'Licensed capacity' => $r['licensed'], 'Operating capacity' => $r['operating'],
+                        'Enrolled' => $r['enrolled'], 'Fee subsidy' => $r['subsidized'], 'Vacancies' => $r['vacancies'], 'As of' => $b['capacity']['as_of']];
+                }
+                continue;
+            }
+            $dayCols = array_map(fn ($x) => $x['d'] . ' ' . $x['dow'], $b['days']);
+            if (count($dayCols) > count($cols)) $cols = $dayCols;
+            $refs = \App\Support\RefCode::children(array_column($b['children'] ?? [], 'child_id'));
+            foreach ($b['children'] as $c) {
+                $r = $lead($cname) + ['Child' => $c['name'], 'Child ID' => $refs[(int) ($c['child_id'] ?? 0)] ?? '', 'Case / subsidy number' => (string) $c['case_number'],
+                    'Date of birth' => (string) $c['dob'], 'Age group' => \App\Support\OccmsRoa::AGE_GROUPS[$c['age_group']] ?? ''];
+                foreach ($dayCols as $i => $col) $r[$col] = $c['codes'][$i] ?? '';
+                foreach ($codes as $k) $r[$k] = (int) ($c['totals'][$k] ?? 0);
+                $rows[] = $r + ['Absences this month' => $c['absences_month'], 'Absences year to date' => $c['ytd_used'],
+                    'Allowance' => $c['allowance'] ?? '', 'Remaining' => $c['remaining'] ?? ''];
+            }
+        }
+        if ($type === 'occms_capacity') {
+            return [array_merge($many ? ['Centre'] : [], ['Age group', 'Licensed capacity', 'Operating capacity', 'Enrolled', 'Fee subsidy', 'Vacancies', 'As of']), $rows];
+        }
+
+        return [array_merge($many ? ['Centre'] : [], ['Child', 'Child ID', 'Case / subsidy number', 'Date of birth', 'Age group'], $cols, $codes,
+            ['Absences this month', 'Absences year to date', 'Allowance', 'Remaining']), $rows];
+    }
+
     public function cannedPdf(Request $request)
     {
         $type = (string) $request->query('type', '');
         $defs = self::cannedDefs();
         abort_unless(isset($defs[$type]), 404, 'Unknown report type.');
+        $this->guardRole($request, $type);
         $from = $request->query('from') ?: null;
         $to   = $request->query('to') ?: null;
         $agencyId = $this->resolveAgencyId($request);
@@ -1550,15 +1845,10 @@ final class ReportsController extends Controller
             $request->query('status'), $request->query('balance'), $scope);
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
-        $html = $this->cannedHtml($defs[$type], $columns, $rows, $agency, $centre, $from, $to, $this->producedBy($request));
-
-        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true, 'defaultFont' => 'DejaVu Sans']);
-        $dompdf->setPaper('letter', 'landscape');
-        $dompdf->loadHtml($html);
-        $dompdf->render();
-        return response($dompdf->output(), 200, [
+        $pdf = $this->reportPdf($defs[$type], $columns, $rows, $agency, $centre, $from, $to, $this->producedBy($request));
+        return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $type . '-' . date('Y-m-d') . '.pdf"',
+            'Content-Disposition' => 'attachment; filename="' . $type . '-' . \App\Support\AgencyTime::today() . '.pdf"',
         ]);
     }
 
@@ -1567,6 +1857,7 @@ final class ReportsController extends Controller
         $type = (string) $request->query('type', '');
         $defs = self::cannedDefs();
         abort_unless(isset($defs[$type]), 404, 'Unknown report type.');
+        $this->guardRole($request, $type);
         $from = $request->query('from') ?: null;
         $to   = $request->query('to') ?: null;
         $agencyId = $this->resolveAgencyId($request);
@@ -1593,11 +1884,12 @@ final class ReportsController extends Controller
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
 
         // Column headers double as row keys (cannedRows keys rows by display header).
-        $cols = array_map(fn ($c) => ['header' => $c, 'key' => $c], $columns);
+        // A monthly sheet's day column ("2 Mo") is headed by its day number, as on a hand-kept sheet.
+        $cols = array_map(fn ($c) => ['header' => preg_match(self::DAY_COL, (string) $c, $dm) ? $dm[1] : $c, 'key' => $c], $columns);
         $title = $defs[$type]['title']
             . ($centre ? ' — ' . $centre->name : '')
             . (($from || $to) ? ' (' . ($from ?: '…') . ' to ' . ($to ?: '…') . ')' : '');
-        $filename = $type . '-' . date('Y-m-d') . '.xlsx';
+        $filename = $type . '-' . \App\Support\AgencyTime::today() . '.xlsx';
 
         return $xlsx->download($agencyId, $title, $filename, $cols, $rows, ['generated_by' => $this->producedBy($request)]);
     }
@@ -1615,8 +1907,16 @@ final class ReportsController extends Controller
             'format'  => 'required|in:xlsx,pdf',
             'columns' => 'required|array|min:1|max:40',
             'rows'    => 'nullable|array|max:5000',
+            'brand'   => 'nullable|in:platform',
         ]);
         $agencyId = $this->resolveAgencyId($request);
+        /* KIDDIETRAC'S OWN FIGURES CARRY KIDDIETRAC'S BRAND (2026-11-01, Anthony: "the superadmin reports - why is
+           it being produced with the ilearn logo as this is a kiddietrac report? - full sweep"). An export was
+           always branded with the ACTIVE agency, so a superadmin working inside iLearn got iLearn's logo on the
+           sales, leads, MRR and every other platform table. Platform and Sales screens now ask for the platform
+           brand; it is honoured only for an active platform_admin (anyone else keeps their agency's). */
+        $platform = ($data['brand'] ?? '') === 'platform' && $request->user()
+            && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', 1)->exists();
         $columns  = array_values(array_map(fn ($h) => (string) $h, $data['columns']));
         $title    = trim($data['title'] ?? '') ?: 'Report';
         $keyed = [];
@@ -1630,18 +1930,16 @@ final class ReportsController extends Controller
 
         if ($data['format'] === 'xlsx') {
             $cols = array_map(fn ($h) => ['header' => $h, 'key' => $h], $columns);
-            return $xlsx->download($agencyId, $title, $base . '-' . date('Y-m-d') . '.xlsx', $cols, $keyed, ['generated_by' => $this->producedBy($request)]);
+            return $xlsx->download($agencyId, $title, $base . '-' . \App\Support\AgencyTime::today() . '.xlsx', $cols, $keyed, ['generated_by' => $this->producedBy($request), 'platform' => $platform]);
         }
 
-        $agency = DB::table('agencies')->where('id', $agencyId)->first();
-        $html = $this->cannedHtml(['title' => $title, 'icon' => '📄'], $columns, $keyed, $agency, null, null, null, $this->producedBy($request));
-        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true, 'defaultFont' => 'DejaVu Sans']);
-        $dompdf->setPaper('letter', 'landscape');
-        $dompdf->loadHtml($html);
-        $dompdf->render();
-        return response($dompdf->output(), 200, [
+        $agency = $platform
+            ? (object) ['name' => 'KiddieTrac', 'brand_primary_color' => '#1F6080', 'brand_logo_url' => '/storage/logo-wordmark.png', 'logo_url' => null]
+            : DB::table('agencies')->where('id', $agencyId)->first();
+        $pdf = $this->reportPdf(['title' => $title, 'icon' => '📄'], $columns, $keyed, $agency, null, null, null, $this->producedBy($request));
+        return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="' . $base . '-' . date('Y-m-d') . '.pdf"',
+            'Content-Disposition' => 'attachment; filename="' . $base . '-' . \App\Support\AgencyTime::today() . '.pdf"',
         ]);
     }
 
@@ -1670,13 +1968,8 @@ final class ReportsController extends Controller
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $centre = $centreId ? DB::table('centres')->where('id', $centreId)->first() : null;
 
-        // PDF (same HTML + dompdf as cannedPdf)
-        $html = $this->cannedHtml($defs[$type], $columns, $rows, $agency, $centre, $from, $to, $by);
-        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true, 'defaultFont' => 'DejaVu Sans']);
-        $dompdf->setPaper('letter', 'landscape');
-        $dompdf->loadHtml($html);
-        $dompdf->render();
-        $pdf = $dompdf->output();
+        // PDF (same renderer as cannedPdf)
+        $pdf = $this->reportPdf($defs[$type], $columns, $rows, $agency, $centre, $from, $to, $by);
 
         // CSV (rows are keyed by display header)
         $enc = fn ($v) => '"' . str_replace('"', '""', (string) $v) . '"';
@@ -1691,7 +1984,7 @@ final class ReportsController extends Controller
             'count' => count($rows),
             'pdf' => $pdf,
             'csv' => $csv,
-            'filename_base' => $type . '-' . date('Y-m-d'),
+            'filename_base' => $type . '-' . \App\Support\AgencyTime::today(),
         ];
     }
 
@@ -1703,8 +1996,66 @@ final class ReportsController extends Controller
         return $name !== '' ? $name : ($u->email ?? 'a signed-in user');
     }
 
-    private function cannedHtml(array $def, array $columns, array $rows, $agency, $centre, ?string $from, ?string $to, string $by = ''): string
+    /**
+     * A REPORT PDF OF ANY LENGTH (2026-11-02, support ticket #209: iLearn's 30-day Attendance PDF - 482 rows, 29
+     * pages - died four times with "Allowed memory size of 268435456 bytes exhausted").
+     *
+     * dompdf keeps every frame of the document in memory until output: measured ~0.3 MB per row here (482 rows =
+     * 329 MB as one table, 191 MB split into short tables), so any report of a few months crossed the 256 MB limit
+     * however the HTML was written. Now: up to PDF_BATCH rows render as before (one dompdf); more are rendered
+     * PDF_BATCH rows at a time - each batch its own dompdf, freed before the next - and the parts are joined with
+     * FPDI. Memory stays flat whatever the length. The header (logo, title, range, total rows) is on the first part,
+     * the confidential footer on the last; every page repeats the column headings.
+     */
+    private const PDF_BATCH = 150;
+
+    private function reportPdf(array $def, array $columns, array $rows, $agency, $centre, ?string $from, ?string $to, string $by = ''): string
     {
+        $render = function (string $html): string {
+            $dompdf = new \App\Support\KtDompdf(['isRemoteEnabled' => true, 'defaultFont' => 'DejaVu Sans']);
+            $dompdf->setPaper('letter', 'landscape');
+            $dompdf->loadHtml($html);
+            $dompdf->render();
+            $out = $dompdf->output();
+            unset($dompdf);
+            gc_collect_cycles();
+            return $out;
+        };
+        $total = count($rows);
+        if ($total <= self::PDF_BATCH) {
+            return $render($this->cannedHtml($def, $columns, $rows, $agency, $centre, $from, $to, $by));
+        }
+
+        $chunks = array_chunk($rows, self::PDF_BATCH);
+        $last = count($chunks) - 1;
+        $merged = new \setasign\Fpdi\Fpdi();
+        $tmp = [];
+        try {
+            foreach ($chunks as $i => $chunk) {
+                $f = tempnam(sys_get_temp_dir(), 'ktrpt');
+                $tmp[] = $f;
+                file_put_contents($f, $render($this->cannedHtml($def, $columns, $chunk, $agency, $centre, $from, $to, $by,
+                    ['first' => $i === 0, 'last' => $i === $last, 'total' => $total])));
+                $pages = $merged->setSourceFile($f);
+                for ($p = 1; $p <= $pages; $p++) {
+                    $tpl = $merged->importPage($p);
+                    $size = $merged->getTemplateSize($tpl);
+                    $merged->AddPage($size['orientation'], [$size['width'], $size['height']]);
+                    $merged->useTemplate($tpl);
+                }
+            }
+            return $merged->Output('S');
+        } finally {
+            foreach ($tmp as $f) @unlink($f);
+        }
+    }
+
+    /** $part (reportPdf batches): ['first' => bool, 'last' => bool, 'total' => int]; null = the whole report. */
+    private function cannedHtml(array $def, array $columns, array $rows, $agency, $centre, ?string $from, ?string $to, string $by = '', ?array $part = null): string
+    {
+        $first = $part === null || ! empty($part['first']);
+        $lastPart = $part === null || ! empty($part['last']);
+        $totalRows = $part['total'] ?? count($rows);
         $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES);
         $color = ($agency && $agency->brand_primary_color) ? $agency->brand_primary_color : '#1F6080';
         $range = ($from || $to) ? (($from ?: '…') . ' to ' . ($to ?: '…')) : 'All dates';
@@ -1753,27 +2104,32 @@ final class ReportsController extends Controller
         };
 
         $th = '';
-        foreach ($columns as $c) $th .= '<th>' . $e($c) . '</th>';
+        foreach ($columns as $c) $th .= preg_match(self::DAY_COL, (string) $c, $dm) ? '<th class="dc">' . $dm[1] . '<br>' . $dm[2] . '</th>' : '<th>' . $e($c) . '</th>';
         $tr = '';
         if ($rows) {
             $i = 0;
             foreach ($rows as $row) {
                 $bg = ($i % 2) ? '#F5F8FB' : '#FFFFFF';
                 $i++;
+                $famTotal = ($row['Last'] ?? null) === 'Family total';   // the by-family sheet's closing line for a family
+                if ($famTotal) $bg = '#EEF4F8';
                 $tds = '';
                 foreach ($columns as $c) {
                     $v = $row[$c] ?? '';
                     // Dompdf handles inline background on a span, so the pill survives
                     // into the PDF rather than flattening to plain text.
                     if ($v !== '' && preg_match('/status/i', (string) $c)) {
-                        [$bg, $fg] = $tint($v);
+                        // Own names: reusing $bg here painted the whole ROW in the pill's colour.
+                        [$pillBg, $pillFg] = $tint($v);
                         $tds .= '<td><span style="display:inline-block;padding:1px 6px;border-radius:9px;'
-                            . 'font-weight:bold;background:' . $bg . ';color:' . $fg . ';">' . $e($v) . '</span></td>';
+                            . 'font-weight:bold;background:' . $pillBg . ';color:' . $pillFg . ';">' . $e($v) . '</span></td>';
+                    } elseif (preg_match(self::DAY_COL, (string) $c)) {
+                        $tds .= '<td style="text-align:center;' . ($v === 'A' ? 'color:#B91C1C;font-weight:bold;' : '') . '">' . $e($v) . '</td>';
                     } else {
                         $tds .= '<td>' . $e($v) . '</td>';
                     }
                 }
-                $tr .= '<tr style="background:' . $bg . ';">' . $tds . '</tr>';
+                $tr .= '<tr style="background:' . $bg . ';' . ($famTotal ? 'font-weight:bold;' : '') . '">' . $tds . '</tr>';
             }
         } else {
             $tr = '<tr><td colspan="' . count($columns) . '" style="text-align:center;padding:18px;color:#888;">No records for this selection.</td></tr>';
@@ -1786,18 +2142,20 @@ final class ReportsController extends Controller
             . 'table.data{width:100%;border-collapse:collapse;}'
             . 'table.data th{background:' . $color . ';color:#fff;text-align:left;padding:5px 7px;font-size:8.5px;text-transform:uppercase;}'
             . 'table.data td{padding:4px 7px;border-bottom:1px solid #E9EEF3;font-size:9px;}'
+            // A monthly sheet is 30+ columns: tighter cells so it fits a landscape page (2026-11-13).
+            . (count($columns) > 18 ? 'table.data th,table.data td{padding:3px 2px;font-size:7px;}table.data th.dc{text-align:center;}' : '')
             . '</style></head><body>'
-            . '<table style="width:100%;border:0;" class="hd"><tr>'
+            . (! $first ? '' : '<table style="width:100%;border:0;" class="hd"><tr>'
             . '<td style="border:0;">' . $logoHtml . '<span class="name">' . $e($agency->name ?? 'Agency') . '</span>'
             . '<div class="sub">' . $e($def['icon'] . ' ' . $def['title']) . '</div></td>'
             . '<td style="border:0;text-align:right;" class="sub">' . $e($centre ? $centre->name : 'All centres')
-            . '<br>' . $e($range) . '<br>Generated ' . date('Y-m-d') . ' &middot; ' . count($rows) . ' rows</td>'
-            . '</tr></table>'
+            . '<br>' . $e($range) . '<br>Generated ' . \App\Support\AgencyTime::today() . ' &middot; ' . $totalRows . ' rows</td>'
+            . '</tr></table>')
             . '<table class="data"><thead><tr>' . $th . '</tr></thead><tbody>' . $tr . '</tbody></table>'
-            . '<div style="margin-top:10px;border-top:1px solid #E5E9F0;padding-top:6px;font-size:8.5px;color:#64748B;">'
+            . (! $lastPart ? '' : '<div style="margin-top:10px;border-top:1px solid #E5E9F0;padding-top:6px;font-size:8.5px;color:#64748B;">'
             . 'Generated ' . date('F j, Y \\a\\t g:i A') . ($by ? ' by ' . $e($by) : '') . ' &middot; ' . $e($agency->name ?? '')
             . '<br><span style="color:#B91C1C;font-weight:bold;">PRIVATE &amp; CONFIDENTIAL</span> — Contains sensitive information. Handle securely and do not distribute without authorisation.'
-            . '</div>'
+            . '</div>')
             . '</body></html>';
     }
 

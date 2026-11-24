@@ -164,6 +164,9 @@ final class Helcim
             /* Helcim shows its own receipt screen; ours follows immediately afterwards and
                would be the second one in a row. */
             'confirmationScreen' => false,
+            /* Google Pay in the checkout (2026-11-03, Anthony: Apple and Google wallets for invoice payments).
+               HelcimPay.js has Google Pay only; card stays. Off again per agency in Helcim's own settings. */
+            'digitalWallet' => ['google-pay' => 1],
         ], fn ($v) => $v !== null);
 
         return self::call($agencyId, 'POST', '/helcim-pay/initialize', $body);

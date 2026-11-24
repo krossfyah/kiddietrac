@@ -65,6 +65,7 @@ final class SafeArrivalCall
         'tries' => 2,          // times the question is asked when no key is pressed
         'wait_secs' => 10,     // seconds to wait for a key after the question
         'who' => 'all',        // all | primary
+        'gap_secs' => 60,      // wait after one guardian's call ends before ringing the next (0 = right away)
     ];
 
     public const TEXT_KEYS = ['intro', 'prompt_absent', 'prompt_late', 'prompt_dropped', 'reply_absent', 'reply_late',
@@ -95,6 +96,7 @@ final class SafeArrivalCall
         if (isset($in['tries'])) $out['tries'] = max(1, min(3, (int) $in['tries']));
         if (isset($in['wait_secs'])) $out['wait_secs'] = max(5, min(30, (int) $in['wait_secs']));
         if (isset($in['who'])) $out['who'] = $in['who'] === 'primary' ? 'primary' : 'all';
+        if (isset($in['gap_secs'])) $out['gap_secs'] = max(0, min(300, (int) $in['gap_secs']));
 
         return $out;
     }
@@ -174,7 +176,11 @@ final class SafeArrivalCall
     public static function callNext(object $check, ?int $startedBy = null): bool
     {
         if ($check->resolved_at || ($check->parent_response ?? null)) return false;
-        $child = DB::table('children')->where('id', $check->child_id)->first(['id', 'family_id']);
+        // An educator counted the child in a headcount since (2026-11-03): no automatic call.
+        if ($startedBy === null && SafeArrival::checkCounted($check)) return false;
+        // Withdrawn or taken off today's list since (2026-11-11): no automatic call; SafeArrivalCommand closes the check.
+        if ($startedBy === null && ! SafeArrival::stillExpected($check)) return false;
+        $child =DB::table('children')->where('id', $check->child_id)->first(['id', 'family_id']);
         if (! $child) return false;
         $agencyId = (int) $check->agency_id;
         $cfg = self::config($agencyId);
@@ -185,6 +191,17 @@ final class SafeArrivalCall
         $live = DB::table('voice_calls')->where('ref_type', 'safe_arrival_check')->where('ref_id', $check->id)
             ->whereIn('status', ['queued', 'ringing', 'answered'])->where('created_at', '>=', now()->subMinutes(5))->exists();
         if ($live) return false;
+
+        /* A MINUTE BETWEEN GUARDIANS (2026-10-23, Anthony: "give it a min or so each to call
+           the next one"). The first guardian is rung at once; after a call ends without an
+           answer the next one waits gap_secs, so the first parent has a moment to call back
+           or open the app before the other is woken. The hang-up webhook then finds it too
+           early and does nothing; kiddietrac:safe-arrival-next (every minute) rings them. */
+        if ($called && (int) $cfg['gap_secs'] > 0) {
+            $lastEnd = DB::table('voice_calls')->where('ref_type', 'safe_arrival_check')->where('ref_id', $check->id)
+                ->max(DB::raw('COALESCE(ended_at, updated_at)'));
+            if ($lastEnd && Carbon::parse($lastEnd)->addSeconds((int) $cfg['gap_secs'])->isFuture()) return false;
+        }
 
         $guardians = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
             ->where('g.family_id', $child->family_id)->whereNull('u.deleted_at')
@@ -267,6 +284,15 @@ final class SafeArrivalCall
             ]);
         } catch (\Throwable $e) {
         }
+        /* Key 1 CLOSES the check (2026-11-02): the staff alerts for it are read now, so the badges clear. The notice
+           tellStaff sends next is the update - no separate all-clear on top of it. Read BEFORE it is written, so the
+           notice itself stays unread. */
+        if ($resp === 'absent') {
+            try {
+                SafeArrivalAllClear::markRead(SafeArrivalAllClear::alertRows('arrival', $check));
+            } catch (\Throwable $e) {
+            }
+        }
         self::tellStaff($check, $full, $who, $resp);
 
         return self::reply($cfg, $resp, $vars);
@@ -287,12 +313,10 @@ final class SafeArrivalCall
     {
         try {
             $agencyId = (int) $check->agency_id;
-            $ids = DB::table('educator_rooms as er')->join('users as u', 'u.id', '=', 'er.user_id')
-                ->where('er.room_id', $check->room_id)->whereNull('u.deleted_at')->where('u.status', 'active')->pluck('u.id')->all();
-            $ids = array_merge($ids,
-                DB::table('role_assignments')->where('active', 1)->where('role', 'centre_director')->where('centre_id', $check->centre_id)->pluck('user_id')->all(),
-                DB::table('role_assignments')->where('active', 1)->where('role', 'agency_admin')->where('agency_id', $agencyId)->pluck('user_id')->all());
-            $ids = array_values(array_unique(array_map('intval', $ids)));
+            // The room's educators and the directors/admins the agency chose in Safe Arrival settings (2026-10-30;
+            // this used to tell every director and every admin whatever the switches said).
+            $ids = \App\Support\SafeArrival::recipients($agencyId, (int) $check->centre_id, $check->room_id ? (int) $check->room_id : null,
+                \App\Support\SafeArrival::settings($agencyId), true, true);
             if (! $ids) return;
 
             $urgent = $resp === 'dropped_off';
@@ -311,7 +335,7 @@ final class SafeArrivalCall
                 $res = [];
                 try {
                     Notify::write(['user_id' => $uid, 'type' => 'safe_arrival', 'title' => $title, 'body' => $body,
-                        'data' => json_encode(['link' => '#safe-arrival', 'child_id' => $check->child_id]), 'created_at' => now()]);
+                        'data' => json_encode(['link' => '#safe-arrival', 'child_id' => (int) $check->child_id, 'sa_kind' => 'arrival']), 'created_at' => now()]);
                     $res = app(FcmService::class)->sendToUser($uid, $title, $body, '#safe-arrival');
                 } catch (\Throwable $e) {
                 }
@@ -321,8 +345,8 @@ final class SafeArrivalCall
                 if (! $u || ! $u->email) continue;
                 $html = \App\Services\EmailTemplate::wrap($agencyId,
                     '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($body) . '</p>',
-                    ['eyebrow' => 'SAFE ARRIVAL', 'title' => $title, 'subtitle' => 'Attendance', 'preheader' => $body]);
-                $to = (string) $u->email; $toName = trim($u->first_name . ' ' . $u->last_name);
+                    ['eyebrow_icon' => \App\Support\SafeArrival::EMAIL_ICON, 'eyebrow' => 'SAFE ARRIVAL', 'title' => $title, 'subtitle' => 'Attendance', 'preheader' => $body]);
+                $to = (string) $u->email; $toName = trim((string) $u->first_name);   // first name only in email
                 dispatch(function () use ($agencyId, $to, $toName, $html, $title) {
                     \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title) {
                         $m->to($to, $toName ?: null)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($title);

@@ -41,7 +41,7 @@ final class InvoicePdfRenderer
         'logo_url'        => 'https://app.kiddietrac.com/logo-wordmark@2x.png',
         'primary_color'   => '#081C41',
         'support_email'   => 'support@kiddietrac.com',
-        'bank_info'       => 'Payment instructions available on request.',
+        'bank_info'       => '',   // the How to pay block (InvoicePayInfo) says it properly
         'powered_by'      => 'Powered by KiddieTrac — The Smart Childcare Management Platform',
     ];
 
@@ -68,10 +68,11 @@ final class InvoicePdfRenderer
         $issuerAddressBlock = $issuerAddress ? "<div class=\"detail\">{$issuerAddress}</div>" : '';
         $issuerPhoneBlock   = $issuerPhone ? "<div class=\"detail\">☎ {$issuerPhone}</div>" : '';
         $bankInfo     = nl2br(htmlspecialchars($brand['bank_info']));
+        $bankBlock    = $bankInfo !== '' ? '<strong>Payment instructions</strong>' . $bankInfo : '';
         $poweredBy    = $brand['powered_by'];
 
         $invoiceNumber = htmlspecialchars((string) ($inv->number ?? $inv->id ?? '—'));
-        $issueDate     = htmlspecialchars((string) ($inv->issued_at ?? $inv->created_at ?? date('Y-m-d')));
+        $issueDate     = htmlspecialchars((string) ($inv->issued_at ?? $inv->created_at ?? \App\Support\AgencyTime::today()));
         $dueDate       = htmlspecialchars((string) ($inv->due_at ?? $inv->due_date ?? ''));
         $billToName    = htmlspecialchars((string) ($inv->bill_to_name ?? $inv->family_name ?? ''));
         $billToEmail   = htmlspecialchars((string) ($inv->bill_to_email ?? ''));
@@ -84,10 +85,12 @@ final class InvoicePdfRenderer
         $statusRaw     = (string) ($inv->status ?? 'unpaid');
         $status        = htmlspecialchars($statusRaw);
         $statusBadge = match (strtolower($statusRaw)) {
-            'paid'        => '<span class="badge paid">PAID</span>',
-            'past_due'    => '<span class="badge overdue">OVERDUE</span>',
-            'cancelled'   => '<span class="badge cancelled">CANCELLED</span>',
-            default       => '<span class="badge unpaid">UNPAID</span>',
+            'paid'                         => '<span class="badge paid">PAID</span>',
+            'partial', 'partially_paid'    => '<span class="badge unpaid">PARTIALLY PAID</span>',
+            'past_due', 'overdue'          => '<span class="badge overdue">OVERDUE</span>',
+            'cancelled', 'void'            => '<span class="badge cancelled">VOID</span>',
+            'draft'                        => '<span class="badge cancelled">DRAFT</span>',
+            default                        => '<span class="badge unpaid">UNPAID</span>',
         };
 
         $itemRows = '';
@@ -99,9 +102,10 @@ final class InvoicePdfRenderer
             $unit  = (int)    ($r->unit_cents ?? $r->amount_cents ?? 0);
             $line  = (int)    ($r->total_cents ?? round($qty * $unit));
             $subtotal += $line;
+            $sub   = trim((string) ($r->sub ?? ''));
             $itemRows .= sprintf(
                 '<tr><td>%s</td><td class="num">%s</td><td class="num">%s</td><td class="num">%s</td></tr>',
-                $desc,
+                $desc . ($sub !== '' ? '<div class="sub">' . htmlspecialchars($sub) . '</div>' : ''),
                 $this->fmtQty($qty),
                 $this->fmtMoney($unit, $currency),
                 $this->fmtMoney($line, $currency)
@@ -121,6 +125,28 @@ final class InvoicePdfRenderer
         $taxCents = max(0, $totalCents - $subtotal);
         $hasTax = $taxCents > 0;
 
+        $totalRows = [];
+        if (isset($inv->totals) && is_array($inv->totals) && $inv->totals) {
+            $totalRows = $inv->totals;
+        } else {
+            $totalRows[] = ['Subtotal', $subtotal, false];
+            if ($hasTax) $totalRows[] = ['Tax', $taxCents, false];
+            $totalRows[] = ['Total', $totalCents, true];
+        }
+        $totalsHtml = '';
+        foreach ($totalRows as $t) {
+            [$tl, $tc, $tb] = [(string) $t[0], (int) $t[1], ! empty($t[2])];
+            $totalsHtml .= '<tr' . ($tb ? ' class="total"' : '') . '><td class="label">' . htmlspecialchars($tl) . '</td><td class="value">'
+                . ($tc < 0 ? '−' . $this->fmtMoney(-$tc, $currency) : $this->fmtMoney($tc, $currency)) . '</td></tr>';
+        }
+        $billToExtra = '';
+        foreach ((array) ($inv->bill_to_lines ?? []) as $bl) {
+            if (trim((string) $bl) !== '') $billToExtra .= '<div class="detail">' . nl2br(htmlspecialchars((string) $bl)) . '</div>';
+        }
+        $logoHtml = $logoUrl !== ''
+            ? '<img src="' . $logoUrl . '" alt="' . $issuerName . '">'
+            : '<div class="wordmark">' . $issuerName . '</div>';
+
         $footerPoweredBy = $brand['show_powered_by']
             ? "<div class='powered-by'>" . htmlspecialchars($poweredBy) . "</div>"
             : '';
@@ -132,54 +158,49 @@ final class InvoicePdfRenderer
 <meta charset="UTF-8">
 <title>Invoice #{$invoiceNumber}</title>
 <style>
-  :root {
-    --primary: {$primaryColor};
-    --text: #1f2937;
-    --muted: #6b7280;
-    --border: #e5e7eb;
-    --bg: #ffffff;
-  }
   * { box-sizing: border-box; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    color: var(--text);
-    background: var(--bg);
+    font-family: 'DejaVu Sans', -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: #1f2937;
+    background: #ffffff;
     margin: 0;
-    padding: 40px;
-    font-size: 14px;
-    line-height: 1.5;
+    padding: 26px 30px;
+    font-size: 12px;
+    line-height: 1.45;
   }
   .invoice {
     max-width: 720px;
     margin: 0 auto;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    border-bottom: 3px solid var(--primary);
-    padding-bottom: 24px;
-    margin-bottom: 32px;
-  }
-  .logo img { max-height: 60px; max-width: 240px; }
+  table.head { width: 100%; border-collapse: collapse; border-bottom: 3px solid {$primaryColor}; margin-bottom: 18px; }
+  table.head td { vertical-align: top; padding: 0 0 14px 0; }
+  .wordmark { font-size: 22px; font-weight: 700; color: {$primaryColor}; }
+  table.parties { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  table.parties td { width: 50%; vertical-align: top; padding: 0 16px 0 0; }
+  table.items td .sub { font-size: 12px; color: #6b7280; margin-top: 2px; }
+  table.totals { margin-left: 52%; width: 48%; border-collapse: collapse; }
+  table.totals td { padding: 5px 0; font-size: 14px; }
+  table.totals td.value { text-align: right; }
+  table.totals tr.total td { border-top: 2px solid {$primaryColor}; padding-top: 10px; font-weight: 700; font-size: 16px; color: {$primaryColor}; }
+  .logo img { max-height: 52px; max-width: 220px; }
   .invoice-meta { text-align: right; }
   .invoice-meta h1 {
     margin: 0 0 8px 0;
-    font-size: 32px;
+    font-size: 26px;
     font-weight: 700;
-    color: var(--primary);
+    color: {$primaryColor};
     letter-spacing: -0.5px;
   }
-  .invoice-meta .number { font-size: 14px; color: var(--muted); }
+  .invoice-meta .number { font-size: 14px; color: #6b7280; }
   .invoice-meta .dates { margin-top: 16px; font-size: 13px; }
   .invoice-meta .dates div { margin-bottom: 4px; }
-  .invoice-meta .dates label { color: var(--muted); margin-right: 8px; }
+  .invoice-meta .dates label { color: #6b7280; margin-right: 8px; }
   .badge {
     display: inline-block;
     padding: 4px 10px;
     border-radius: 4px;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.5px;
     margin-top: 8px;
   }
@@ -187,18 +208,16 @@ final class InvoicePdfRenderer
   .badge.unpaid { background: #fef3c7; color: #92400e; }
   .badge.overdue { background: #fee2e2; color: #991b1b; }
   .badge.cancelled { background: #f3f4f6; color: #6b7280; }
-  .parties { display: flex; justify-content: space-between; gap: 32px; margin-bottom: 32px; }
-  .party { flex: 1; }
   .party h3 {
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: var(--muted);
+    color: #6b7280;
     margin: 0 0 8px 0;
-    font-weight: 600;
+    font-weight: 700;
   }
-  .party .name { font-weight: 600; font-size: 16px; }
-  .party .detail { color: var(--muted); font-size: 13px; }
+  .party .name { font-weight: 700; font-size: 14px; }
+  .party .detail { color: #6b7280; font-size: 11.5px; }
   table.items {
     width: 100%;
     border-collapse: collapse;
@@ -206,17 +225,17 @@ final class InvoicePdfRenderer
   }
   table.items thead th {
     text-align: left;
-    border-bottom: 2px solid var(--border);
+    border-bottom: 2px solid #e5e7eb;
     padding: 10px 8px;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 1px;
-    color: var(--muted);
+    color: #6b7280;
   }
   table.items thead th.num { text-align: right; }
   table.items tbody td {
-    padding: 12px 8px;
-    border-bottom: 1px solid var(--border);
+    padding: 7px 6px;
+    border-bottom: 1px solid #e5e7eb;
     vertical-align: top;
   }
   table.items tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -231,38 +250,35 @@ final class InvoicePdfRenderer
     font-size: 14px;
   }
   .totals .row.total {
-    border-top: 2px solid var(--primary);
+    border-top: 2px solid {$primaryColor};
     padding-top: 12px;
     margin-top: 8px;
     font-weight: 700;
     font-size: 18px;
-    color: var(--primary);
+    color: {$primaryColor};
   }
-  .totals .label { color: var(--muted); }
+  .totals .label { color: #6b7280; }
   .totals .value { font-variant-numeric: tabular-nums; }
   .notes {
-    margin-top: 32px;
-    padding: 16px;
+    margin-top: 14px;
+    padding: 10px 12px;
     background: #f9fafb;
-    border-left: 3px solid var(--primary);
+    --kt-edge:{$primaryColor};
     font-size: 13px;
-    color: var(--muted);
+    color: #6b7280;
   }
-  .notes strong { color: var(--text); }
-  footer {
-    margin-top: 48px;
-    padding-top: 24px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
+  .notes strong { color: #1f2937; }
+  .foot {
+    margin-top: 18px;
+    padding-top: 10px;
+    border-top: 1px solid #e5e7eb;
     font-size: 12px;
-    color: var(--muted);
+    color: #6b7280;
   }
-  footer .bank { flex: 1; padding-right: 32px; }
-  footer .bank strong { color: var(--text); display: block; margin-bottom: 4px; }
+  footer .bank strong { color: #1f2937; display: block; margin-bottom: 4px; }
   .powered-by {
     text-align: right;
+    margin-top: 6px;
     font-size: 11px;
     opacity: 0.7;
   }
@@ -274,9 +290,9 @@ final class InvoicePdfRenderer
 </head>
 <body>
 <div class="invoice">
-  <header>
-    <div class="logo"><img src="{$logoUrl}" alt="{$issuerName}"></div>
-    <div class="invoice-meta">
+  <table class="head"><tr>
+    <td class="logo">{$logoHtml}</td>
+    <td class="invoice-meta">
       <h1>INVOICE</h1>
       <div class="number">#{$invoiceNumber}</div>
       {$statusBadge}
@@ -286,27 +302,28 @@ HTML
         . ($dueDate ? "<div><label>Due:</label>{$dueDate}</div>" : '')
         . <<<HTML
       </div>
-    </div>
-  </header>
+    </td>
+  </tr></table>
 
-  <div class="parties">
-    <div class="party">
+  <table class="parties"><tr>
+    <td class="party">
       <h3>From</h3>
       <div class="name">{$issuerName}</div>
       {$issuerAddressBlock}
       {$issuerPhoneBlock}
-      <div class="detail">Support: {$supportEmail}</div>
-    </div>
-    <div class="party">
+      <div class="detail">{$supportEmail}</div>
+    </td>
+    <td class="party">
       <h3>Bill To</h3>
       <div class="name">{$billToName}</div>
 HTML
         . ($billToRef ? "<div class='detail'>Account ID: {$billToRef}</div>" : '')
         . ($billToEmail ? "<div class='detail'>{$billToEmail}</div>" : '')
         . ($childName ? "<div class='detail'>For: {$childName}</div>" : '')
+        . $billToExtra
         . <<<HTML
-    </div>
-  </div>
+    </td>
+  </tr></table>
 
   <table class="items">
     <thead>
@@ -322,32 +339,15 @@ HTML
     </tbody>
   </table>
 
-  <div class="totals">
-    <div class="row">
-      <span class="label">Subtotal</span>
-      <span class="value">{$this->fmtMoney($subtotal, $currency)}</span>
-    </div>
-HTML
-        . ($hasTax
-            ? "<div class='row'><span class='label'>Tax</span><span class='value'>{$this->fmtMoney($taxCents, $currency)}</span></div>"
-            : '')
-        . <<<HTML
-    <div class="row total">
-      <span class="label">Total</span>
-      <span class="value">{$this->fmtMoney($totalCents, $currency)}</span>
-    </div>
-  </div>
+  <table class="totals">{$totalsHtml}</table>
 HTML
         . ($notes ? "<div class='notes'><strong>Notes:</strong> {$notes}</div>" : '')
         . <<<HTML
 
-  <footer>
-    <div class="bank">
-      <strong>Payment instructions</strong>
-      {$bankInfo}
-    </div>
+  <div class="foot">
+    {$bankBlock}
     {$footerPoweredBy}
-  </footer>
+  </div>
 </div>
 </body>
 </html>
@@ -366,7 +366,7 @@ HTML;
                 'primary_color'    => $this->kt_defaults['primary_color'],
                 'support_email'    => $this->kt_defaults['support_email'],
                 'bank_info'        => $this->kt_defaults['bank_info'],
-                'issuer_name'      => 'Kiddietrac',
+                'issuer_name'      => \App\Support\Company::legalName(),
                 'powered_by'       => $this->kt_defaults['powered_by'],
                 'show_powered_by'  => true,
             ];
@@ -385,8 +385,17 @@ HTML;
             if (is_array($s) && !empty($s['brand_address'])) $address = (string) $s['brand_address'];
         }
 
+        $logo = (string) ($get('brand_logo_url') ?: '');
+        if ($logo !== '' && str_starts_with($logo, '/')) {
+            $logo = 'https://api.kiddietrac.com' . $logo;
+        }
+        $showPowered = (int) ($get('powered_by_visible') ?? 1) === 1;
+        if ($logo === '') {
+            $logo = $showPowered ? $this->kt_defaults['logo_url'] : '';
+        }
+
         return [
-            'logo_url'         => $get('brand_logo_url')      ?: $this->kt_defaults['logo_url'],
+            'logo_url'         => $logo,
             'primary_color'    => $get('brand_primary_color') ?: $this->kt_defaults['primary_color'],
             'support_email'    => $get('brand_support_email') ?: $get('contact_email') ?: $this->kt_defaults['support_email'],
             'bank_info'        => $get('brand_bank_info')     ?: $this->kt_defaults['bank_info'],
@@ -417,7 +426,87 @@ HTML;
             }
         }
 
-        return $this->renderHtml($invoice, $agency);
+        return $this->renderHtml($this->fromNative($invoice, $agency), $agency);
+    }
+
+    /**
+     * A row of `invoices` (+ its invoice_lines, family, guardians, children) as the document renderHtml() draws:
+     * number, dates, Bill To, every line with its child, subsidy / discount / tax, total, paid and balance due.
+     */
+    private function fromNative(object $inv, ?object $agency): object
+    {
+        $cents = fn ($v) => (int) round(((float) $v) * 100);
+        $date = function ($v) {
+            if (! $v) return '';
+            try { return \Illuminate\Support\Carbon::parse(substr((string) $v, 0, 10))->format('F j, Y'); } catch (\Throwable $e) { return (string) $v; }
+        };
+        $family = $inv->family_id ? DB::table('families')->where('id', $inv->family_id)->first() : null;
+        $guardians = $inv->family_id
+            ? DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+                ->where('g.family_id', $inv->family_id)->whereNull('u.deleted_at')
+                ->orderByDesc('g.is_primary')->orderBy('g.id')
+                ->get(['u.first_name', 'u.last_name', 'u.email'])
+            : collect();
+        $lines = DB::table('invoice_lines')->where('invoice_id', $inv->id)->orderBy('id')->get();
+        $childIds = $lines->pluck('child_id')->filter()->unique()->values()->all();
+        $kids = $childIds
+            ? DB::table('children')->whereIn('id', $childIds)->get(['id', 'first_name', 'last_name'])->keyBy('id')
+            : collect();
+
+        $items = [];
+        foreach ($lines as $l) {
+            $desc = trim((string) ($l->description ?? '')) ?: 'Child care';
+            $kid = $l->child_id && isset($kids[$l->child_id]) ? $kids[$l->child_id] : null;
+            $sub = '';
+            if ($kid && stripos($desc, (string) $kid->first_name) === false) {
+                $sub = trim($kid->first_name . ' ' . $kid->last_name);
+            }
+            $qty = (float) ($l->quantity ?? 1) ?: 1.0;
+            $amount = isset($l->amount) ? (float) $l->amount : $qty * (float) ($l->unit_amount ?? 0);
+            $unit = isset($l->unit_amount) && $l->unit_amount !== null ? (float) $l->unit_amount : ($qty ? $amount / $qty : $amount);
+            $items[] = ['description' => $desc, 'sub' => $sub, 'quantity' => $qty, 'unit_cents' => $cents($unit), 'total_cents' => $cents($amount)];
+        }
+        if (! $items) {
+            $items[] = ['description' => 'Child care' . ($inv->period_start ? ' — ' . $date($inv->period_start) . ' to ' . $date($inv->period_end) : ''),
+                'quantity' => 1, 'unit_cents' => $cents($inv->subtotal ?: $inv->total), 'total_cents' => $cents($inv->subtotal ?: $inv->total)];
+        }
+
+        $sumLines = array_sum(array_column($items, 'total_cents'));
+        $totals = [['Subtotal', $inv->subtotal !== null && (float) $inv->subtotal > 0 ? $cents($inv->subtotal) : $sumLines, false]];
+        if ((float) ($inv->subsidy_amount ?? 0) > 0)  $totals[] = ['Subsidy',  -$cents($inv->subsidy_amount), false];
+        if ((float) ($inv->discount_amount ?? 0) > 0) $totals[] = ['Discount', -$cents($inv->discount_amount), false];
+        if ((float) ($inv->tax_amount ?? 0) > 0)      $totals[] = ['Tax',       $cents($inv->tax_amount), false];
+        $totals[] = ['Total', $cents($inv->total), true];
+        if ((float) ($inv->amount_paid ?? 0) > 0) {
+            $totals[] = ['Paid to date', -$cents($inv->amount_paid), false];
+            $totals[] = ['Balance due', $cents($inv->balance_due ?? max(0, (float) $inv->total - (float) $inv->amount_paid)), true];
+        }
+
+        $names = $guardians->map(fn ($g) => trim($g->first_name . ' ' . $g->last_name))->filter()->values()->all();
+        $addr = $family ? trim(implode("\n", array_filter([
+            trim((string) ($family->address_line1 ?? '')),
+            trim((string) ($family->address_line2 ?? '')),
+            trim(implode(' ', array_filter([(string) ($family->city ?? ''), (string) ($family->province ?? ''), strtoupper((string) ($family->postal_code ?? ''))]))),
+        ]))) : '';
+        $period = $inv->period_start ? 'Period: ' . $date($inv->period_start) . ($inv->period_end ? ' – ' . $date($inv->period_end) : '') : '';
+
+        return (object) [
+            'id' => $inv->id,
+            'number' => (string) ($inv->invoice_number ?: ('INV-' . $inv->id)),
+            'issued_at' => $date($inv->issued_at ?: $inv->created_at),
+            'due_at' => $date($inv->due_at),
+            'status' => (string) ($inv->status ?: 'draft'),
+            'family_id' => $inv->family_id,
+            'bill_to_name' => (string) ($family->family_name ?? ($names[0] ?? 'Family')),
+            'bill_to_email' => (string) ($guardians->first()->email ?? ($family->primary_email ?? '')),
+            'bill_to_lines' => array_values(array_filter([$names ? implode(', ', $names) : '', $addr, $period])),
+            'currency' => (string) ($agency->currency ?? 'CAD') ?: 'CAD',
+            'items' => $items,
+            'total_cents' => $cents($inv->total),
+            'totals' => $totals,
+            // Staff notes print as before; the old internal "Payment schedule #N - instalment n of N" line never does.
+            'notes' => trim((string) preg_replace('/Payment schedule\s*#?\d*\s*[-—–]?\s*instalment\s*\d+\s*of\s*\d+\.?/i', '', (string) ($inv->notes ?? ''))),
+        ];
     }
 
     private function fmtMoney(int $cents, string $currency = 'CAD'): string

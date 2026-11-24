@@ -68,7 +68,7 @@
     }
     ov.innerHTML =
       '<div class="kt-agree-card">'
-      + '<div style="background:#0B2545;color:#fff;padding:16px 18px;flex:0 0 auto;">'
+      + '<div style="background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;padding:calc(16px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 18px 16px;flex:0 0 auto;">'
       + '  <div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">BEFORE YOU START</div>'
       + '  <div style="font-size:19px;font-weight:800;margin-top:2px;">Terms, Privacy &amp; NDA</div>'
       + '  <div style="font-size:12.5px;opacity:.85;margin-top:3px;">Please read this and sign it. You must accept it to use KiddieTrac.</div>'
@@ -85,7 +85,7 @@
       + '        <span style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;">Signature</span>'
       + '        <button id="kt-agree-clear" type="button" style="background:none;border:none;color:#159FB4;font-size:12px;font-weight:700;cursor:pointer;">Clear</button>'
       + '      </div>'
-      + '      <canvas id="kt-agree-pad" style="width:100%;height:170px;border:1.5px dashed #CBD5E1;border-radius:12px;background:#FCFDFE;touch-action:none;display:block;"></canvas>'
+      + '      <div id="kt-agree-pad"></div>'
       + '      <div style="font-size:11.5px;color:#64748B;margin-top:6px;">Sign with your finger or mouse.</div>'
       + '      <div id="kt-agree-date" style="font-size:12.5px;color:#475569;margin-top:10px;font-weight:700;"></div>'
       + '      <label style="display:flex;gap:9px;align-items:flex-start;margin-top:12px;font-size:13.5px;color:#0F172A;line-height:1.45;">'
@@ -101,7 +101,7 @@
       + '    color:#fff;background:#159FB4;opacity:.5;cursor:not-allowed;">Agree &amp; continue</button>'
       + '  <button id="kt-agree-decline" type="button" style="width:100%;background:none;border:1.5px solid #FCA5A5;color:#B91C1C;border-radius:12px;'
       + '    font-size:13.5px;font-weight:800;padding:12px;margin-top:9px;cursor:pointer;">Decline</button>'
-      + '  <div style="text-align:center;font-size:11px;color:#64748B;margin-top:7px;line-height:1.4;">If you decline you will not be onboarded, and your centre will be notified.</div>'
+      + '  <div style="text-align:center;font-size:11px;color:#64748B;margin-top:7px;line-height:1.4;">If you decline you will not be onboarded, and ' + ((function(){try{var u=JSON.parse(sessionStorage.getItem('kt_user')||localStorage.getItem('kt_user')||'{}'),r=u.roles||[];return r.indexOf('reseller_admin')!==-1&&r.indexOf('platform_admin')===-1;}catch(e){return false;}})() ? 'the platform team' : 'your centre') + ' will be notified.</div>'
       + '</div>'
       + '</div>';
     document.body.appendChild(ov);
@@ -192,45 +192,13 @@
     scroller.addEventListener('scroll', checkScroll);
     setTimeout(checkScroll, 400);   // short agreements may already be fully visible
 
-    // ── Signature pad ──
-    var canvas = ov.querySelector('#kt-agree-pad');
-    var ctx = canvas.getContext('2d');
-    var drawn = false, drawing = false;
-    function sizeCanvas() {
-      var ratio = window.devicePixelRatio || 1;
-      var r = canvas.getBoundingClientRect();
-      var data = drawn ? canvas.toDataURL() : null;
-      canvas.width = Math.round(r.width * ratio);
-      canvas.height = Math.round(r.height * ratio);
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0F172A';
-      if (data) { var img = new Image(); img.onload = function () { ctx.drawImage(img, 0, 0, r.width, r.height); }; img.src = data; }
-    }
-    sizeCanvas();
-    window.addEventListener('resize', sizeCanvas);
-
-    function pos(e) {
-      var r = canvas.getBoundingClientRect();
-      var p = e.touches ? e.touches[0] : e;
-      return { x: p.clientX - r.left, y: p.clientY - r.top };
-    }
-    function start(e) { e.preventDefault(); drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }
-    function move(e) {
-      if (!drawing) return;
-      e.preventDefault();
-      var p = pos(e);
-      ctx.lineTo(p.x, p.y); ctx.stroke();
-      if (!drawn) { drawn = true; paint(); }
-    }
-    function end() { drawing = false; }
-    canvas.addEventListener('pointerdown', start);
-    canvas.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', end);
-
-    ov.querySelector('#kt-agree-clear').addEventListener('click', function () {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      drawn = false; paint();
+    // ── Signature pad ── the shared one (kt-signature-pad.js) since 2026-11-06, so a saved
+    // signature can be used - or saved here for next time - like on every other document.
+    var drawn = false;
+    var pad = KT.signaturePadInline(ov.querySelector('#kt-agree-pad'), {
+      height: 170, context: 'agreement', onChange: function (empty) { drawn = !empty; paint(); },
     });
+    ov.querySelector('#kt-agree-clear').addEventListener('click', function () { pad.clear(); });
 
     // ── Submit gating ──
     var nameIn = ov.querySelector('#kt-agree-name');
@@ -253,7 +221,7 @@
       submit.disabled = true; submit.textContent = 'Filing your signature…'; err.textContent = '';
       api('POST', '/auth/agreement/sign', {
         full_name: nameIn.value.trim(),
-        signature: canvas.toDataURL('image/png'),
+        signature: pad.toDataURL(),
         agreed: true,
       }).then(function () {
         if (ov.__ktUnseal) ov.__ktUnseal();
@@ -278,7 +246,7 @@
         + '<div style="font-weight:800;font-size:18px;color:#0F172A;margin-top:8px;">Decline the agreement?</div>'
         + '<div style="font-size:13.5px;color:#475569;line-height:1.55;margin-top:7px;">'
         + 'You will <strong>not be onboarded</strong> onto KiddieTrac and you will be signed out. '
-        + 'Your centre and KiddieTrac will be notified. You can only get access by accepting the agreement.</div>'
+        + ((function(){try{var u=JSON.parse(sessionStorage.getItem('kt_user')||localStorage.getItem('kt_user')||'{}'),r=u.roles||[];return r.indexOf('reseller_admin')!==-1&&r.indexOf('platform_admin')===-1;}catch(e){return false;}})() ? 'The platform team will be notified.' : 'Your centre and KiddieTrac will be notified.') + ' You can only get access by accepting the agreement.</div>'
         + '<textarea id="kt-decl-why" placeholder="Reason (optional)" style="width:100%;box-sizing:border-box;margin-top:12px;padding:10px;'
         + 'border:1.5px solid #E3EAF1;border-radius:10px;font-size:15px;min-height:64px;font-family:inherit;"></textarea>'
         + '<div id="kt-decl-err" style="color:#B91C1C;font-size:12.5px;min-height:16px;margin-top:4px;"></div>'

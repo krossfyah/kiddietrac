@@ -96,6 +96,7 @@
   var LABEL = {
     incident_report: 'Incident report',
     signed_form: 'Signed form',
+    shared_form: 'Shared with you',
     requested_file: 'File you sent in',
     agreement: 'Terms, Privacy & NDA',
     contract: 'Contract',
@@ -104,7 +105,7 @@
     file: 'File',
   };
   var ICON = {
-    incident_report: '🩹', signed_form: '📝', agreement: '🔏', requested_file: '📥',
+    incident_report: '🩹', signed_form: '📝', shared_form: '📨', agreement: '🔏', requested_file: '📥',
     contract: '📃', certificate: '🎓', id: '🪪', file: '📎',
   };
 
@@ -149,17 +150,14 @@
         return;
       }
       if (inPanel) {
-        KT.viewBlob(blob, { title: doc.title || LABEL[doc.category] || 'Document', label: LABEL[doc.category] || 'Document' });
+        var vh = KT.viewBlob(blob, { title: doc.title || LABEL[doc.category] || 'Document', label: LABEL[doc.category] || 'Document' });
         /* PRINT FROM THE ⋮ (2026-10-09: "add a print button in the kebab for the parents,
            educator, staff for the documents"). Opens the document in the shared viewer and
            presses ITS Print, which already knows how to print in the phone app (where
            window.print() does nothing) and prints just the document, not the portal. */
         if (wantPrint === true || wantPrint === 'print') {
-          setTimeout(function () {
-            var all = document.querySelectorAll('.ktdv-fprint, .ktdv-print');
-            var p = all[all.length - 1];
-            if (p) { p.click(); }
-          }, 700);
+          // Once the pages are drawn (2026-11-06; a click at 700ms fired before pdf.js had drawn on phones).
+          if (vh && vh.print) { vh.print(); }
         }
         return;
       }
@@ -361,6 +359,8 @@
         d.title || (LABEL[d.category] || 'Document')));
       var sub = [kid, LABEL[d.category] || null, kb(d.file_size)].filter(Boolean).join('  ·  ');
       if (sub) { nm.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--kt-text-muted);margin-top:1px;' }, sub)); }
+      // A form the office shared with you says who shared it and whose form it is (2026-10-20).
+      if (d.category === 'shared_form' && d.notes) { nm.appendChild(Dom.el('div', { style: 'font-size:12px;color:#0E7490;margin-top:2px;line-height:1.4;white-space:normal;' }, d.notes)); }
       line.appendChild(nm);
       c1.appendChild(line);
       tr.appendChild(c1);
@@ -418,6 +418,11 @@
       + (staff ? ',a[href="#forms"].kt-tile' : ''));
     Array.prototype.forEach.call(document.querySelectorAll('a[href="#signed-docs"] .kt-doc-count'), function (p) { p.remove(); });
     Array.prototype.forEach.call(links, function (a) {
+      if (a.classList.contains('kt-tile')) {   // a home tile: the one tile badge (kt-badges.js)
+        var oldPill = a.querySelector('.kt-doc-count'); if (oldPill) { oldPill.remove(); }
+        if (KT.tileBadge) { KT.tileBadge(a, docCount); }
+        return;
+      }
       if (a.querySelector('[data-badge-key="my_documents"]')) { return; }   // the sidebar's own badge
       var pill = a.querySelector('.kt-doc-count');
       if (!docCount) { if (pill) { pill.remove(); } return; }

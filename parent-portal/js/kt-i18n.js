@@ -23,1164 +23,11 @@
   // ── Dictionary ─────────────────────────────────────────────────────────────
   // key = the exact English string as it appears in the UI (emoji prefixes are handled
   // separately, so write the words only).
-  var DICT = {
-    // ── Top bar / shell ──
-    'Good morning': { fr: 'Bonjour', es: 'Buenos días', hi: 'सुप्रभात' },
-    'Good afternoon': { fr: 'Bon après-midi', es: 'Buenas tardes', hi: 'नमस्कार' },
-    'Good evening': { fr: 'Bonsoir', es: 'Buenas noches', hi: 'शुभ संध्या' },
-    'View as': { fr: 'Afficher en tant que', es: 'Ver como', hi: 'इस रूप में देखें' },
-    'Super admin': { fr: 'Super administrateur', es: 'Superadministrador', hi: 'सुपर एडमिन' },
-    'Super admin (default)': { fr: 'Super administrateur (défaut)', es: 'Superadministrador (predeterminado)', hi: 'सुपर एडमिन (डिफ़ॉल्ट)' },
-    'Platform Admin': { fr: 'Administrateur de la plateforme', es: 'Administrador de la plataforma', hi: 'प्लेटफ़ॉर्म एडमिन' },
-    'Agency admin': { fr: 'Administrateur de l’agence', es: 'Administrador de la agencia', hi: 'एजेंसी एडमिन' },
-    'Centre director': { fr: 'Directeur du centre', es: 'Director del centro', hi: 'केंद्र निदेशक' },
-    'Educator': { fr: 'Éducateur', es: 'Educador', hi: 'शिक्षक' },
-    'Educators': { fr: 'Éducateurs', es: 'Educadores', hi: 'शिक्षक' },
-    'Parent / guardian': { fr: 'Parent / tuteur', es: 'Padre / tutor', hi: 'अभिभावक' },
-    'Auditor': { fr: 'Auditeur', es: 'Auditor', hi: 'ऑडिटर' },
-    'Directors': { fr: 'Directeurs', es: 'Directores', hi: 'निदेशक' },
-    'Parents': { fr: 'Parents', es: 'Padres', hi: 'अभिभावक' },
-    'Admins': { fr: 'Administrateurs', es: 'Administradores', hi: 'एडमिन' },
-    'Home': { fr: 'Accueil', es: 'Inicio', hi: 'होम' },
-    'Quick add': { fr: 'Ajout rapide', es: 'Añadir rápido', hi: 'त्वरित जोड़ें' },
-    'QUICK ADD': { fr: 'AJOUT RAPIDE', es: 'AÑADIR RÁPIDO', hi: 'त्वरित जोड़ें' },
-    'Search...': { fr: 'Rechercher…', es: 'Buscar…', hi: 'खोजें…' },
-    'Search…': { fr: 'Rechercher…', es: 'Buscar…', hi: 'खोजें…' },
-    'Collapse all': { fr: 'Tout réduire', es: 'Contraer todo', hi: 'सब समेटें' },
-    'Sign out': { fr: 'Se déconnecter', es: 'Cerrar sesión', hi: 'साइन आउट' },
-    'Settings': { fr: 'Paramètres', es: 'Ajustes', hi: 'सेटिंग्स' },
-    'All agencies': { fr: 'Toutes les agences', es: 'Todas las agencias', hi: 'सभी एजेंसियाँ' },
-    'Language': { fr: 'Langue', es: 'Idioma', hi: 'भाषा' },
-    'AI assistant': { fr: 'Assistant IA', es: 'Asistente de IA', hi: 'एआई सहायक' },
-
-    // ── Sidebar sections ──
-    'PLATFORM': { fr: 'PLATEFORME', es: 'PLATAFORMA', hi: 'प्लेटफ़ॉर्म' },
-    'OVERVIEW': { fr: 'APERÇU', es: 'RESUMEN', hi: 'अवलोकन' },
-    'OPERATIONS': { fr: 'OPÉRATIONS', es: 'OPERACIONES', hi: 'संचालन' },
-    'ENGAGEMENT': { fr: 'ENGAGEMENT', es: 'PARTICIPACIÓN', hi: 'सहभागिता' },
-    'ADMINISTRATION': { fr: 'ADMINISTRATION', es: 'ADMINISTRACIÓN', hi: 'प्रशासन' },
-    'BILLING': { fr: 'FACTURATION', es: 'FACTURACIÓN', hi: 'बिलिंग' },
-    'COMPLIANCE': { fr: 'CONFORMITÉ', es: 'CUMPLIMIENTO', hi: 'अनुपालन' },
-    'STAFF': { fr: 'PERSONNEL', es: 'PERSONAL', hi: 'स्टाफ़' },
-    'GROWTH': { fr: 'CROISSANCE', es: 'CRECIMIENTO', hi: 'विकास' },
-    'SETTINGS': { fr: 'PARAMÈTRES', es: 'AJUSTES', hi: 'सेटिंग्स' },
-
-    // ── Navigation labels ──
-    'Platform overview': { fr: 'Aperçu de la plateforme', es: 'Resumen de la plataforma', hi: 'प्लेटफ़ॉर्म अवलोकन' },
-    'Agency overview': { fr: 'Aperçu de l’agence', es: 'Resumen de la agencia', hi: 'एजेंसी अवलोकन' },
-    'Dashboard': { fr: 'Tableau de bord', es: 'Panel', hi: 'डैशबोर्ड' },
-    'Provider map': { fr: 'Carte des prestataires', es: 'Mapa de proveedores', hi: 'प्रदाता मानचित्र' },
-    'Daily log': { fr: 'Journal quotidien', es: 'Registro diario', hi: 'दैनिक लॉग' },
-    'Messages': { fr: 'Messages', es: 'Mensajes', hi: 'संदेश' },
-    'Messenger': { fr: 'Messagerie', es: 'Mensajería', hi: 'संदेशवाहक' },
-    'Message Centre': { fr: 'Centre de messages', es: 'Centro de mensajes', hi: 'संदेश केंद्र' },
-    'Announcements': { fr: 'Annonces', es: 'Anuncios', hi: 'घोषणाएँ' },
-    'Lesson plans': { fr: 'Plans de leçon', es: 'Planes de clase', hi: 'पाठ योजनाएँ' },
-    'AI Lesson Plans': { fr: 'Plans de leçon IA', es: 'Planes de clase con IA', hi: 'एआई पाठ योजनाएँ' },
-    'Observations': { fr: 'Observations', es: 'Observaciones', hi: 'अवलोकन' },
-    'Learning Observations': { fr: 'Observations d’apprentissage', es: 'Observaciones de aprendizaje', hi: 'सीखने के अवलोकन' },
-    'Schedule': { fr: 'Horaire', es: 'Horario', hi: 'शेड्यूल' },
-    'Certifications': { fr: 'Certifications', es: 'Certificaciones', hi: 'प्रमाणपत्र' },
-    'Timesheets': { fr: 'Feuilles de temps', es: 'Hojas de horas', hi: 'टाइमशीट' },
-    'Waitlist': { fr: 'Liste d’attente', es: 'Lista de espera', hi: 'प्रतीक्षा सूची' },
-    'Incidents': { fr: 'Incidents', es: 'Incidentes', hi: 'घटनाएँ' },
-    'Medications': { fr: 'Médicaments', es: 'Medicamentos', hi: 'दवाइयाँ' },
-    'Health': { fr: 'Santé', es: 'Salud', hi: 'स्वास्थ्य' },
-    'Immunizations': { fr: 'Vaccinations', es: 'Vacunas', hi: 'टीकाकरण' },
-    'Immunization due': { fr: 'Vaccination à faire', es: 'Vacuna pendiente', hi: 'टीकाकरण देय' },
-    'Allergy alerts': { fr: 'Alertes allergies', es: 'Alertas de alergia', hi: 'एलर्जी अलर्ट' },
-    'Room ratios': { fr: 'Ratios par salle', es: 'Proporciones por sala', hi: 'कक्ष अनुपात' },
-    'Room rotations': { fr: 'Rotations des salles', es: 'Rotaciones de salas', hi: 'कक्ष रोटेशन' },
-    'Closures': { fr: 'Fermetures', es: 'Cierres', hi: 'बंद दिवस' },
-    'Late pickups': { fr: 'Retards de départ', es: 'Recogidas tardías', hi: 'देर से पिकअप' },
-    'Field trips': { fr: 'Sorties éducatives', es: 'Excursiones', hi: 'फ़ील्ड ट्रिप' },
-    'Field trip GPS': { fr: 'GPS des sorties', es: 'GPS de excursiones', hi: 'फ़ील्ड ट्रिप जीपीएस' },
-    'Bus routes': { fr: 'Circuits d’autobus', es: 'Rutas de autobús', hi: 'बस मार्ग' },
-    'Activity zones': { fr: 'Zones d’activité', es: 'Zonas de actividad', hi: 'गतिविधि क्षेत्र' },
-    'Weekly menu': { fr: 'Menu de la semaine', es: 'Menú semanal', hi: 'साप्ताहिक मेन्यू' },
-    'CACFP meals': { fr: 'Repas CACFP', es: 'Comidas CACFP', hi: 'CACFP भोजन' },
-    'Attendance': { fr: 'Présences', es: 'Asistencia', hi: 'उपस्थिति' },
-    'Attendance days': { fr: 'Jours de présence', es: 'Días de asistencia', hi: 'उपस्थिति दिवस' },
-    'Photos': { fr: 'Photos', es: 'Fotos', hi: 'तस्वीरें' },
-    'Video feed': { fr: 'Fil vidéo', es: 'Vídeos', hi: 'वीडियो फ़ीड' },
-    'Photo AI tagging': { fr: 'Étiquetage photo IA', es: 'Etiquetado de fotos con IA', hi: 'एआई फ़ोटो टैगिंग' },
-    'Conferences': { fr: 'Rencontres', es: 'Conferencias', hi: 'बैठकें' },
-    'Report cards': { fr: 'Bulletins', es: 'Boletines', hi: 'रिपोर्ट कार्ड' },
-    'Wellness digest': { fr: 'Bilan bien-être', es: 'Resumen de bienestar', hi: 'कल्याण सारांश' },
-    'Curriculum': { fr: 'Programme', es: 'Currículo', hi: 'पाठ्यक्रम' },
-    'Curriculum library': { fr: 'Bibliothèque de programmes', es: 'Biblioteca de currículo', hi: 'पाठ्यक्रम पुस्तकालय' },
-    'HDLH gaps': { fr: 'Écarts HDLH', es: 'Brechas HDLH', hi: 'HDLH अंतराल' },
-    'Calendar': { fr: 'Calendrier', es: 'Calendario', hi: 'कैलेंडर' },
-    'Time off': { fr: 'Congés', es: 'Tiempo libre', hi: 'छुट्टी' },
-    'Time off requests': { fr: 'Demandes de congé', es: 'Solicitudes de tiempo libre', hi: 'छुट्टी अनुरोध' },
-    'Background checks': { fr: 'Vérifications d’antécédents', es: 'Verificación de antecedentes', hi: 'पृष्ठभूमि जाँच' },
-    'Payroll': { fr: 'Paie', es: 'Nómina', hi: 'वेतन' },
-    'Substitutes': { fr: 'Remplaçants', es: 'Suplentes', hi: 'स्थानापन्न' },
-    'Clock in/out': { fr: 'Pointage', es: 'Fichar', hi: 'क्लॉक इन/आउट' },
-    'Time clock': { fr: 'Pointeuse', es: 'Reloj de fichaje', hi: 'टाइम क्लॉक' },
-    'Inspection checklist': { fr: 'Liste d’inspection', es: 'Lista de inspección', hi: 'निरीक्षण सूची' },
-    'Renewals calendar': { fr: 'Calendrier des renouvellements', es: 'Calendario de renovaciones', hi: 'नवीनीकरण कैलेंडर' },
-    'CWELCC subsidies': { fr: 'Subventions CWELCC', es: 'Subsidios CWELCC', hi: 'CWELCC सब्सिडी' },
-    'Subsidies': { fr: 'Subventions', es: 'Subsidios', hi: 'सब्सिडी' },
-    'Provincial subsidy': { fr: 'Subvention provinciale', es: 'Subsidio provincial', hi: 'प्रांतीय सब्सिडी' },
-    'Provincial fee subsidy': { fr: 'Subvention provinciale pour frais de garde', es: 'Subsidio provincial de cuotas', hi: 'प्रांतीय शुल्क सब्सिडी' },
-    'CWELCC and provincial fee subsidies.': { fr: 'Subventions CWELCC et subventions provinciales pour frais de garde.', es: 'Subsidios CWELCC y subsidios provinciales de cuotas.', hi: 'CWELCC और प्रांतीय शुल्क सब्सिडी।' },
-    'Retention': { fr: 'Rétention', es: 'Retención', hi: 'प्रतिधारण' },
-    'Anomalies': { fr: 'Anomalies', es: 'Anomalías', hi: 'विसंगतियाँ' },
-    'MRR dashboard': { fr: 'Tableau de bord MRR', es: 'Panel de MRR', hi: 'MRR डैशबोर्ड' },
-    'Feature flags': { fr: 'Indicateurs de fonctionnalité', es: 'Indicadores de función', hi: 'फ़ीचर फ़्लैग' },
-    'Branding': { fr: 'Image de marque', es: 'Marca', hi: 'ब्रांडिंग' },
-    'AI digest status': { fr: 'État des résumés IA', es: 'Estado de resúmenes de IA', hi: 'एआई सारांश स्थिति' },
-    'Website': { fr: 'Site web', es: 'Sitio web', hi: 'वेबसाइट' },
-    'Invitation codes': { fr: 'Codes d’invitation', es: 'Códigos de invitación', hi: 'आमंत्रण कोड' },
-    'eDocuments': { fr: 'Documents électroniques', es: 'Documentos electrónicos', hi: 'ई-दस्तावेज़' },
-    'Expenses': { fr: 'Dépenses', es: 'Gastos', hi: 'व्यय' },
-    'User management': { fr: 'Gestion des utilisateurs', es: 'Gestión de usuarios', hi: 'उपयोगकर्ता प्रबंधन' },
-    'Centres / Rooms': { fr: 'Centres / Salles', es: 'Centros / Salas', hi: 'केंद्र / कक्ष' },
-    'Centres': { fr: 'Centres', es: 'Centros', hi: 'केंद्र' },
-    'Children': { fr: 'Enfants', es: 'Niños', hi: 'बच्चे' },
-    'Families': { fr: 'Familles', es: 'Familias', hi: 'परिवार' },
-    'Roles & permissions': { fr: 'Rôles et permissions', es: 'Roles y permisos', hi: 'भूमिकाएँ और अनुमतियाँ' },
-    'Custom forms': { fr: 'Formulaires personnalisés', es: 'Formularios personalizados', hi: 'कस्टम फ़ॉर्म' },
-    'Forms': { fr: 'Formulaires', es: 'Formularios', hi: 'फ़ॉर्म' },
-    'Compliance': { fr: 'Conformité', es: 'Cumplimiento', hi: 'अनुपालन' },
-    'Audit log': { fr: 'Journal d’audit', es: 'Registro de auditoría', hi: 'ऑडिट लॉग' },
-    'Audit logs': { fr: 'Journaux d’audit', es: 'Registros de auditoría', hi: 'ऑडिट लॉग' },
-    'Security alerts': { fr: 'Alertes de sécurité', es: 'Alertas de seguridad', hi: 'सुरक्षा अलर्ट' },
-    'Data retention & compliance': { fr: 'Conservation des données et conformité', es: 'Retención de datos y cumplimiento', hi: 'डेटा प्रतिधारण और अनुपालन' },
-    'Billing (Stripe)': { fr: 'Facturation (Stripe)', es: 'Facturación (Stripe)', hi: 'बिलिंग (Stripe)' },
-    'Billing schedule': { fr: 'Calendrier de facturation', es: 'Calendario de facturación', hi: 'बिलिंग शेड्यूल' },
-    'Billing reminders': { fr: 'Rappels de facturation', es: 'Recordatorios de facturación', hi: 'बिलिंग अनुस्मारक' },
-    'Bulk invoice run': { fr: 'Facturation en lot', es: 'Facturación masiva', hi: 'सामूहिक चालान' },
-    'Refunds': { fr: 'Remboursements', es: 'Reembolsos', hi: 'रिफ़ंड' },
-    'Payment schedules': { fr: 'Plans de paiement', es: 'Planes de pago', hi: 'भुगतान योजनाएँ' },
-    'Tuition plans': { fr: 'Forfaits de frais', es: 'Planes de matrícula', hi: 'शुल्क योजनाएँ' },
-    'Tuition increases': { fr: 'Hausses de frais', es: 'Aumentos de matrícula', hi: 'शुल्क वृद्धि' },
-    'Sibling discounts': { fr: 'Rabais fratrie', es: 'Descuentos para hermanos', hi: 'सहोदर छूट' },
-    'Vacation holds': { fr: 'Places réservées (vacances)', es: 'Reservas por vacaciones', hi: 'अवकाश होल्ड' },
-    'QuickBooks (Intuit)': { fr: 'QuickBooks (Intuit)', es: 'QuickBooks (Intuit)', hi: 'QuickBooks (Intuit)' },
-    'Enrolment forecast': { fr: 'Prévision des inscriptions', es: 'Previsión de matrícula', hi: 'नामांकन पूर्वानुमान' },
-    'Reports': { fr: 'Rapports', es: 'Informes', hi: 'रिपोर्ट' },
-    'Re-enrollment': { fr: 'Réinscription', es: 'Rematriculación', hi: 'पुनः नामांकन' },
-    'Engagement score': { fr: 'Score d’engagement', es: 'Puntuación de participación', hi: 'सहभागिता स्कोर' },
-    'NPS': { fr: 'NPS', es: 'NPS', hi: 'NPS' },
-    'Churn risk': { fr: 'Risque d’attrition', es: 'Riesgo de abandono', hi: 'ग्राहक-हानि जोखिम' },
-    'AI doc extract': { fr: 'Extraction de documents IA', es: 'Extracción de documentos con IA', hi: 'एआई दस्तावेज़ निष्कर्षण' },
-    'Marketing': { fr: 'Marketing', es: 'Marketing', hi: 'मार्केटिंग' },
-    'Drip campaigns': { fr: 'Campagnes automatisées', es: 'Campañas automatizadas', hi: 'ड्रिप अभियान' },
-    'SMS broadcast': { fr: 'Diffusion SMS', es: 'Difusión por SMS', hi: 'एसएमएस प्रसारण' },
-    'Email settings': { fr: 'Paramètres de messagerie', es: 'Ajustes de correo', hi: 'ईमेल सेटिंग्स' },
-    'Notifications': { fr: 'Notifications', es: 'Notificaciones', hi: 'सूचनाएँ' },
-    'Support tickets': { fr: 'Tickets d’assistance', es: 'Tickets de soporte', hi: 'सहायता टिकट' },
-    'Sign-in methods': { fr: 'Méthodes de connexion', es: 'Métodos de inicio de sesión', hi: 'साइन-इन विधियाँ' },
-    'Two-factor': { fr: 'Double authentification', es: 'Doble factor', hi: 'दो-कारक' },
-    'Two-factor (MFA)': { fr: 'Double authentification (MFA)', es: 'Doble factor (MFA)', hi: 'दो-कारक (MFA)' },
-    'Help': { fr: 'Aide', es: 'Ayuda', hi: 'सहायता' },
-    'Help & guides': { fr: 'Aide et guides', es: 'Ayuda y guías', hi: 'सहायता और गाइड' },
-    'Doc workflows': { fr: 'Flux de documents', es: 'Flujos de documentos', hi: 'दस्तावेज़ प्रवाह' },
-    'Signed documents': { fr: 'Documents signés', es: 'Documentos firmados', hi: 'हस्ताक्षरित दस्तावेज़' },
-    'Tours': { fr: 'Visites', es: 'Visitas', hi: 'दौरे' },
-    'Agencies': { fr: 'Agences', es: 'Agencias', hi: 'एजेंसियाँ' },
-
-    // ── Buttons / actions ──
-    'Save': { fr: 'Enregistrer', es: 'Guardar', hi: 'सहेजें' },
-    'Save changes': { fr: 'Enregistrer les modifications', es: 'Guardar cambios', hi: 'परिवर्तन सहेजें' },
-    'Cancel': { fr: 'Annuler', es: 'Cancelar', hi: 'रद्द करें' },
-    'Delete': { fr: 'Supprimer', es: 'Eliminar', hi: 'हटाएँ' },
-    'Edit': { fr: 'Modifier', es: 'Editar', hi: 'संपादित करें' },
-    'Close': { fr: 'Fermer', es: 'Cerrar', hi: 'बंद करें' },
-    'Clear': { fr: 'Effacer', es: 'Limpiar', hi: 'साफ़ करें' },
-    'Refresh': { fr: 'Actualiser', es: 'Actualizar', hi: 'रिफ़्रेश' },
-    'Export': { fr: 'Exporter', es: 'Exportar', hi: 'निर्यात' },
-    'Print': { fr: 'Imprimer', es: 'Imprimir', hi: 'प्रिंट' },
-    'Send': { fr: 'Envoyer', es: 'Enviar', hi: 'भेजें' },
-    'Send broadcast': { fr: 'Envoyer la diffusion', es: 'Enviar difusión', hi: 'प्रसारण भेजें' },
-    'Use template': { fr: 'Utiliser le modèle', es: 'Usar plantilla', hi: 'टेम्पलेट उपयोग करें' },
-    'Add': { fr: 'Ajouter', es: 'Añadir', hi: 'जोड़ें' },
-    'Approve': { fr: 'Approuver', es: 'Aprobar', hi: 'स्वीकृत करें' },
-    'Decline': { fr: 'Refuser', es: 'Rechazar', hi: 'अस्वीकार करें' },
-    'Confirm': { fr: 'Confirmer', es: 'Confirmar', hi: 'पुष्टि करें' },
-    'Back': { fr: 'Retour', es: 'Atrás', hi: 'वापस' },
-    'Next': { fr: 'Suivant', es: 'Siguiente', hi: 'अगला' },
-    'Take the tour': { fr: 'Faire la visite', es: 'Hacer el recorrido', hi: 'टूर लें' },
-    'Ask AI': { fr: 'Demander à l’IA', es: 'Preguntar a la IA', hi: 'एआई से पूछें' },
-    '+ Add centre': { fr: '+ Ajouter un centre', es: '+ Añadir centro', hi: '+ केंद्र जोड़ें' },
-    '+ Add widget': { fr: '+ Ajouter un widget', es: '+ Añadir widget', hi: '+ विजेट जोड़ें' },
-    '+ Invite user': { fr: '+ Inviter un utilisateur', es: '+ Invitar usuario', hi: '+ उपयोगकर्ता आमंत्रित करें' },
-    '+ New chat': { fr: '+ Nouvelle conversation', es: '+ Nuevo chat', hi: '+ नई चैट' },
-    '+ New Announcement': { fr: '+ Nouvelle annonce', es: '+ Nuevo anuncio', hi: '+ नई घोषणा' },
-    '+ New medication': { fr: '+ Nouveau médicament', es: '+ Nuevo medicamento', hi: '+ नई दवा' },
-    '+ New observation': { fr: '+ Nouvelle observation', es: '+ Nueva observación', hi: '+ नया अवलोकन' },
-    '+ New payment schedule': { fr: '+ Nouveau plan de paiement', es: '+ Nuevo plan de pago', hi: '+ नई भुगतान योजना' },
-    '+ New report': { fr: '+ Nouveau rapport', es: '+ Nuevo informe', hi: '+ नई रिपोर्ट' },
-    '+ New template': { fr: '+ Nouveau modèle', es: '+ Nueva plantilla', hi: '+ नया टेम्पलेट' },
-    '+ Raise ticket': { fr: '+ Ouvrir un ticket', es: '+ Abrir ticket', hi: '+ टिकट खोलें' },
-    'Edit agency': { fr: 'Modifier l’agence', es: 'Editar agencia', hi: 'एजेंसी संपादित करें' },
-    'Create family': { fr: 'Créer une famille', es: 'Crear familia', hi: 'परिवार बनाएँ' },
-
-    // ── Table headers / filters ──
-    'Name': { fr: 'Nom', es: 'Nombre', hi: 'नाम' },
-    'Status': { fr: 'Statut', es: 'Estado', hi: 'स्थिति' },
-    'Date': { fr: 'Date', es: 'Fecha', hi: 'तारीख़' },
-    'Actions': { fr: 'Actions', es: 'Acciones', hi: 'कार्रवाइयाँ' },
-    'Action': { fr: 'Action', es: 'Acción', hi: 'कार्रवाई' },
-    'Actor': { fr: 'Auteur', es: 'Autor', hi: 'कर्ता' },
-    'Entity': { fr: 'Entité', es: 'Entidad', hi: 'इकाई' },
-    'Child': { fr: 'Enfant', es: 'Niño', hi: 'बच्चा' },
-    'Family': { fr: 'Famille', es: 'Familia', hi: 'परिवार' },
-    'Staff': { fr: 'Personnel', es: 'Personal', hi: 'स्टाफ़' },
-    'Email': { fr: 'Courriel', es: 'Correo', hi: 'ईमेल' },
-    'Phone': { fr: 'Téléphone', es: 'Teléfono', hi: 'फ़ोन' },
-    'Role': { fr: 'Rôle', es: 'Rol', hi: 'भूमिका' },
-    'Centre': { fr: 'Centre', es: 'Centro', hi: 'केंद्र' },
-    'Room': { fr: 'Salle', es: 'Sala', hi: 'कक्ष' },
-    'Amount': { fr: 'Montant', es: 'Importe', hi: 'राशि' },
-    'Category': { fr: 'Catégorie', es: 'Categoría', hi: 'श्रेणी' },
-    'Created': { fr: 'Créé', es: 'Creado', hi: 'बनाया गया' },
-    'Expires': { fr: 'Expire', es: 'Caduca', hi: 'समाप्ति' },
-    'Issued': { fr: 'Délivré', es: 'Emitido', hi: 'जारी' },
-    'Cert': { fr: 'Certificat', es: 'Certificado', hi: 'प्रमाणपत्र' },
-    'Sent': { fr: 'Envoyé', es: 'Enviado', hi: 'भेजा गया' },
-    'To': { fr: 'À', es: 'Para', hi: 'को' },
-    'From': { fr: 'De', es: 'De', hi: 'से' },
-    'Message': { fr: 'Message', es: 'Mensaje', hi: 'संदेश' },
-    'Audience': { fr: 'Destinataires', es: 'Audiencia', hi: 'दर्शक' },
-    'Last login': { fr: 'Dernière connexion', es: 'Último acceso', hi: 'अंतिम लॉगिन' },
-    'Location': { fr: 'Lieu', es: 'Ubicación', hi: 'स्थान' },
-    'Notes': { fr: 'Notes', es: 'Notas', hi: 'टिप्पणियाँ' },
-    'All': { fr: 'Tous', es: 'Todos', hi: 'सभी' },
-    'All centres': { fr: 'Tous les centres', es: 'Todos los centros', hi: 'सभी केंद्र' },
-    'All statuses': { fr: 'Tous les statuts', es: 'Todos los estados', hi: 'सभी स्थितियाँ' },
-    'By role': { fr: 'Par rôle', es: 'Por rol', hi: 'भूमिका के अनुसार' },
-    'By centre': { fr: 'Par centre', es: 'Por centro', hi: 'केंद्र के अनुसार' },
-    'Whole agency': { fr: 'Toute l’agence', es: 'Toda la agencia', hi: 'पूरी एजेंसी' },
-    'Sort…': { fr: 'Trier…', es: 'Ordenar…', hi: 'क्रमबद्ध करें…' },
-    'Sort...': { fr: 'Trier…', es: 'Ordenar…', hi: 'क्रमबद्ध करें…' },
-    'records': { fr: 'enregistrements', es: 'registros', hi: 'रिकॉर्ड' },
-    'record': { fr: 'enregistrement', es: 'registro', hi: 'रिकॉर्ड' },
-    'Recent broadcasts': { fr: 'Diffusions récentes', es: 'Difusiones recientes', hi: 'हाल के प्रसारण' },
-
-    // ── Statuses ──
-    'Active': { fr: 'Actif', es: 'Activo', hi: 'सक्रिय' },
-    'Inactive': { fr: 'Inactif', es: 'Inactivo', hi: 'निष्क्रिय' },
-    'Enrolled': { fr: 'Inscrit', es: 'Matriculado', hi: 'नामांकित' },
-    'Pending': { fr: 'En attente', es: 'Pendiente', hi: 'लंबित' },
-    'Draft': { fr: 'Brouillon', es: 'Borrador', hi: 'ड्राफ़्ट' },
-    'Closed': { fr: 'Fermé', es: 'Cerrado', hi: 'बंद' },
-    'Open': { fr: 'Ouvert', es: 'Abierto', hi: 'खुला' },
-    'Acknowledged': { fr: 'Confirmé', es: 'Confirmado', hi: 'स्वीकृत' },
-    'Awaiting parent': { fr: 'En attente du parent', es: 'Esperando al padre', hi: 'अभिभावक की प्रतीक्षा' },
-    'Awaiting review': { fr: 'En attente de révision', es: 'Esperando revisión', hi: 'समीक्षा की प्रतीक्षा' },
-    'Overdue': { fr: 'En retard', es: 'Vencido', hi: 'अतिदेय' },
-    'Paid': { fr: 'Payé', es: 'Pagado', hi: 'भुगतान किया' },
-    'Unpaid': { fr: 'Impayé', es: 'Sin pagar', hi: 'अवैतनिक' },
-    'Sent': { fr: 'Envoyé', es: 'Enviado', hi: 'भेजा गया' },
-    'Failed': { fr: 'Échec', es: 'Fallido', hi: 'विफल' },
-    'Skipped': { fr: 'Ignoré', es: 'Omitido', hi: 'छोड़ा गया' },
-    'Delivered': { fr: 'Livré', es: 'Entregado', hi: 'वितरित' },
-
-    // ── Dashboard / empty states ──
-    'Business insights': { fr: 'Analyses d’activité', es: 'Información del negocio', hi: 'व्यावसायिक अंतर्दृष्टि' },
-    'Total enrolled': { fr: 'Total inscrits', es: 'Total matriculados', hi: 'कुल नामांकित' },
-    'Here right now': { fr: 'Présents en ce moment', es: 'Presentes ahora', hi: 'अभी उपस्थित' },
-    'Staff on floor': { fr: 'Personnel sur place', es: 'Personal presente', hi: 'मौजूद स्टाफ़' },
-    'Receivables': { fr: 'Créances', es: 'Cuentas por cobrar', hi: 'प्राप्य राशि' },
-    'Outstanding': { fr: 'En souffrance', es: 'Pendiente', hi: 'बकाया' },
-    'Activity feed': { fr: 'Fil d’activité', es: 'Actividad reciente', hi: 'गतिविधि फ़ीड' },
-    'No data yet.': { fr: 'Aucune donnée pour l’instant.', es: 'Aún no hay datos.', hi: 'अभी कोई डेटा नहीं।' },
-    'No messages yet.': { fr: 'Aucun message pour l’instant.', es: 'Aún no hay mensajes.', hi: 'अभी कोई संदेश नहीं।' },
-    'No broadcasts sent yet.': { fr: 'Aucune diffusion envoyée.', es: 'Aún no se han enviado difusiones.', hi: 'अभी कोई प्रसारण नहीं भेजा गया।' },
-    'No payment schedules on file.': { fr: 'Aucun plan de paiement au dossier.', es: 'No hay planes de pago registrados.', hi: 'कोई भुगतान योजना दर्ज नहीं है।' },
-    'Loading…': { fr: 'Chargement…', es: 'Cargando…', hi: 'लोड हो रहा है…' },
-    'Loading your workspace…': { fr: 'Chargement de votre espace…', es: 'Cargando su espacio…', hi: 'आपका कार्यक्षेत्र लोड हो रहा है…' },
-
-    // ── Banner descriptions (kept in step with SCREEN_DESC in app-v2-shell.js) ──
-    'Today at a glance: enrolment, attendance, staffing and receivables.': { fr: 'La journée en un coup d’œil : inscriptions, présences, personnel et créances.', es: 'El día de un vistazo: matrícula, asistencia, personal y cobros.', hi: 'आज एक नज़र में: नामांकन, उपस्थिति, स्टाफ़ और प्राप्य राशि।' },
-    'Meals, naps, nappies and notes for each child, as the day happens.': { fr: 'Repas, siestes, couches et notes pour chaque enfant, au fil de la journée.', es: 'Comidas, siestas, pañales y notas de cada niño, a lo largo del día.', hi: 'दिन भर हर बच्चे के भोजन, झपकी, डायपर और टिप्पणियाँ।' },
-    'Conversations with families and staff.': { fr: 'Échanges avec les familles et le personnel.', es: 'Conversaciones con familias y personal.', hi: 'परिवारों और स्टाफ़ से बातचीत।' },
-    'Broadcast news to a centre, a room, or the whole agency.': { fr: 'Diffusez des nouvelles à un centre, une salle ou toute l’agence.', es: 'Envíe noticias a un centro, una sala o toda la agencia.', hi: 'किसी केंद्र, कक्ष या पूरी एजेंसी को समाचार भेजें।' },
-    'Staff qualifications and their expiry dates.': { fr: 'Qualifications du personnel et dates d’expiration.', es: 'Cualificaciones del personal y sus fechas de caducidad.', hi: 'स्टाफ़ की योग्यताएँ और उनकी समाप्ति तिथियाँ।' },
-    'Hours worked, ready for payroll.': { fr: 'Heures travaillées, prêtes pour la paie.', es: 'Horas trabajadas, listas para la nómina.', hi: 'काम किए गए घंटे, वेतन के लिए तैयार।' },
-    'Families waiting for a space.': { fr: 'Familles en attente d’une place.', es: 'Familias en espera de una plaza.', hi: 'स्थान की प्रतीक्षा कर रहे परिवार।' },
-    'Injuries, behaviour and safeguarding reports.': { fr: 'Blessures, comportement et signalements de protection.', es: 'Lesiones, conducta e informes de protección.', hi: 'चोटें, व्यवहार और सुरक्षा रिपोर्ट।' },
-    'Medication authorised, given and outstanding.': { fr: 'Médicaments autorisés, administrés et en attente.', es: 'Medicación autorizada, administrada y pendiente.', hi: 'अधिकृत, दी गई और शेष दवाइयाँ।' },
-    'Every change made in the portal, and by whom.': { fr: 'Chaque modification effectuée dans le portail, et par qui.', es: 'Cada cambio realizado en el portal, y por quién.', hi: 'पोर्टल में किया गया हर परिवर्तन, और किसके द्वारा।' },
-    'Staff accounts, roles and access.': { fr: 'Comptes du personnel, rôles et accès.', es: 'Cuentas del personal, roles y acceso.', hi: 'स्टाफ़ खाते, भूमिकाएँ और पहुँच।' },
-    'Send a one-off text to staff or families.': { fr: 'Envoyez un SMS ponctuel au personnel ou aux familles.', es: 'Envíe un SMS puntual al personal o a las familias.', hi: 'स्टाफ़ या परिवारों को एक बार का संदेश भेजें।' },
-    'Operational issues, tracked to resolution.': { fr: 'Problèmes opérationnels, suivis jusqu’à leur résolution.', es: 'Incidencias operativas, seguidas hasta su resolución.', hi: 'परिचालन समस्याएँ, समाधान तक ट्रैक की गईं।' },
-    'Suppliers, purchase orders and bills.': { fr: 'Fournisseurs, bons de commande et factures.', es: 'Proveedores, órdenes de compra y facturas.', hi: 'आपूर्तिकर्ता, क्रय आदेश और बिल।' },
-    'Ready-made reports you can print or export.': { fr: 'Rapports prêts à imprimer ou à exporter.', es: 'Informes listos para imprimir o exportar.', hi: 'तैयार रिपोर्ट, जिन्हें प्रिंट या निर्यात किया जा सकता है।' },
-    'Licensing obligations and the evidence for them.': { fr: 'Obligations réglementaires et les preuves correspondantes.', es: 'Obligaciones de licencia y sus evidencias.', hi: 'लाइसेंस दायित्व और उनके प्रमाण।' },
-    'Split a large balance into instalments.': { fr: 'Étalez un solde important en versements.', es: 'Divida un saldo grande en cuotas.', hi: 'बड़ी राशि को किश्तों में बाँटें।' },
-    'Learning stories and developmental observations for each child.': { fr: 'Récits d’apprentissage et observations du développement de chaque enfant.', es: 'Historias de aprendizaje y observaciones del desarrollo de cada niño.', hi: 'हर बच्चे की सीखने की कहानियाँ और विकास संबंधी अवलोकन।' },
-    'Guides for every part of KiddieTrac.': { fr: 'Guides pour chaque partie de KiddieTrac.', es: 'Guías para cada parte de KiddieTrac.', hi: 'KiddieTrac के हर हिस्से के लिए गाइड।' },
-
-    // ── Added after checking the rendered DOM (these are the exact strings the app
-    //    prints, which differ from what you would guess: the sidebar headers are Title
-    //    Case and CSS upper-cases them, the greeting is its own text node ending in a
-    //    comma, and so on). ──
-    'Log a moment': { fr: 'Consigner un moment', es: 'Registrar un momento', hi: 'एक पल दर्ज करें' },
-    'Daily log': { fr: 'Journal quotidien', es: 'Registro diario', hi: 'दैनिक लॉग' },
-    'Quick-tap diaper / bathroom / nap / meal / bottle entries. They roll up into the parent’s Today screen instantly.': { fr: 'Saisie rapide : couche, toilettes, sieste, repas, biberon. Tout apparaît aussitôt dans l’écran Aujourd’hui du parent.', es: 'Registro rápido: pañal, baño, siesta, comida, biberón. Aparece al instante en la pantalla Hoy del padre.', hi: 'त्वरित प्रविष्टि: डायपर, बाथरूम, झपकी, भोजन, बोतल। ये तुरंत अभिभावक की आज स्क्रीन पर दिखते हैं।' },
-    'Child': { fr: 'Enfant', es: 'Niño', hi: 'बच्चा' },
-    'Diaper': { fr: 'Couche', es: 'Pañal', hi: 'डायपर' },
-    'Bathroom': { fr: 'Toilettes', es: 'Baño', hi: 'बाथरूम' },
-    'Nap': { fr: 'Sieste', es: 'Siesta', hi: 'झपकी' },
-    'Meal': { fr: 'Repas', es: 'Comida', hi: 'भोजन' },
-    'Snack': { fr: 'Collation', es: 'Merienda', hi: 'नाश्ता' },
-    'Bottle': { fr: 'Biberon', es: 'Biberón', hi: 'बोतल' },
-    'Sunscreen': { fr: 'Écran solaire', es: 'Protector solar', hi: 'सनस्क्रीन' },
-    'Mood': { fr: 'Humeur', es: 'Ánimo', hi: 'मनोदशा' },
-    'Other': { fr: 'Autre', es: 'Otro', hi: 'अन्य' },
-    "Today's log": { fr: 'Journal du jour', es: 'Registro de hoy', hi: 'आज का लॉग' },
-    'Nothing logged today yet.': { fr: 'Rien de consigné aujourd’hui.', es: 'Aún no hay registros de hoy.', hi: 'आज अभी कुछ दर्ज नहीं हुआ।' },
-    'Check-in': { fr: 'Arrivée', es: 'Entrada', hi: 'चेक-इन' },
-    'Check-out': { fr: 'Départ', es: 'Salida', hi: 'चेक-आउट' },
-    'Signed in': { fr: 'Arrivé', es: 'Ingresó', hi: 'साइन इन' },
-    'Signed out': { fr: 'Parti', es: 'Salió', hi: 'साइन आउट' },
-    // ── Batch 2: swept from every screen ──
-    '+ Add family': { fr: '+ Ajouter une famille', es: '+ Añadir familia', hi: '+ परिवार जोड़ें' },
-    '+ Add record': { fr: '+ Ajouter un enregistrement', es: '+ Añadir registro', hi: '+ रिकॉर्ड जोड़ें' },
-    '+ Add shift': { fr: '+ Ajouter un quart', es: '+ Añadir turno', hi: '+ शिफ़्ट जोड़ें' },
-    '+ Add tier': { fr: '+ Ajouter un palier', es: '+ Añadir nivel', hi: '+ स्तर जोड़ें' },
-    '+ Create agency': { fr: '+ Créer une agence', es: '+ Crear agencia', hi: '+ एजेंसी बनाएँ' },
-    '+ Create slots': { fr: '+ Créer des créneaux', es: '+ Crear franjas', hi: '+ स्लॉट बनाएँ' },
-    '+ Generate plan': { fr: '+ Générer un plan', es: '+ Generar plan', hi: '+ योजना बनाएँ' },
-    '+ Launch campaign': { fr: '+ Lancer une campagne', es: '+ Lanzar campaña', hi: '+ अभियान शुरू करें' },
-    '+ Log late pickup': { fr: '+ Consigner un retard', es: '+ Registrar recogida tardía', hi: '+ देर से पिकअप दर्ज करें' },
-    '+ New': { fr: '+ Nouveau', es: '+ Nuevo', hi: '+ नया' },
-    '+ New campaign': { fr: '+ Nouvelle campagne', es: '+ Nueva campaña', hi: '+ नया अभियान' },
-    '+ New closure': { fr: '+ Nouvelle fermeture', es: '+ Nuevo cierre', hi: '+ नया अवकाश' },
-    '+ New code': { fr: '+ Nouveau code', es: '+ Nuevo código', hi: '+ नया कोड' },
-    '+ New drip campaign': { fr: '+ Nouvelle campagne automatisée', es: '+ Nueva campaña automatizada', hi: '+ नया ड्रिप अभियान' },
-    '+ New form': { fr: '+ Nouveau formulaire', es: '+ Nuevo formulario', hi: '+ नया फ़ॉर्म' },
-    '+ New plan': { fr: '+ Nouveau plan', es: '+ Nuevo plan', hi: '+ नई योजना' },
-    '+ New workflow': { fr: '+ Nouveau flux', es: '+ Nuevo flujo', hi: '+ नया वर्कफ़्लो' },
-    '+ New zone': { fr: '+ Nouvelle zone', es: '+ Nueva zona', hi: '+ नया क्षेत्र' },
-    '+ Plan trip': { fr: '+ Planifier une sortie', es: '+ Planificar excursión', hi: '+ यात्रा योजना बनाएँ' },
-    '+ Post open shift': { fr: '+ Publier un quart ouvert', es: '+ Publicar turno libre', hi: '+ खुली शिफ़्ट पोस्ट करें' },
-    '+ Request time off': { fr: '+ Demander un congé', es: '+ Solicitar tiempo libre', hi: '+ छुट्टी का अनुरोध करें' },
-    '+ Schedule increase': { fr: '+ Planifier une hausse', es: '+ Programar aumento', hi: '+ वृद्धि निर्धारित करें' },
-    '+ Sign a new document': { fr: '+ Signer un nouveau document', es: '+ Firmar un nuevo documento', hi: '+ नया दस्तावेज़ हस्ताक्षरित करें' },
-    '+ Upload template': { fr: '+ Téléverser un modèle', es: '+ Subir plantilla', hi: '+ टेम्पलेट अपलोड करें' },
-    '+ Upload photo': { fr: '+ Téléverser une photo', es: '+ Subir foto', hi: '+ फ़ोटो अपलोड करें' },
-    '+ Upload video': { fr: '+ Téléverser une vidéo', es: '+ Subir vídeo', hi: '+ वीडियो अपलोड करें' },
-    '+ Add': { fr: '+ Ajouter', es: '+ Añadir', hi: '+ जोड़ें' },
-    'Menu': { fr: 'Menu', es: 'Menú', hi: 'मेन्यू' },
-    'More': { fr: 'Plus', es: 'Más', hi: 'और' },
-    'Note': { fr: 'Note', es: 'Nota', hi: 'टिप्पणी' },
-    'News': { fr: 'Nouvelles', es: 'Noticias', hi: 'समाचार' },
-    'Naps': { fr: 'Siestes', es: 'Siestas', hi: 'झपकियाँ' },
-    'Meals': { fr: 'Repas', es: 'Comidas', hi: 'भोजन' },
-    'Lunch': { fr: 'Dîner', es: 'Almuerzo', hi: 'दोपहर का भोजन' },
-    'Breakfast': { fr: 'Déjeuner', es: 'Desayuno', hi: 'नाश्ता' },
-    'Plan': { fr: 'Plan', es: 'Plan', hi: 'योजना' },
-    'Play': { fr: 'Jeu', es: 'Juego', hi: 'खेल' },
-    'Sick': { fr: 'Malade', es: 'Enfermo', hi: 'बीमार' },
-    'Skip': { fr: 'Ignorer', es: 'Omitir', hi: 'छोड़ें' },
-    'Step': { fr: 'Étape', es: 'Paso', hi: 'चरण' },
-    'Term': { fr: 'Terme', es: 'Término', hi: 'अवधि' },
-    'Tier': { fr: 'Palier', es: 'Nivel', hi: 'स्तर' },
-    'Time': { fr: 'Heure', es: 'Hora', hi: 'समय' },
-    'Trip': { fr: 'Sortie', es: 'Excursión', hi: 'यात्रा' },
-    'Type': { fr: 'Type', es: 'Tipo', hi: 'प्रकार' },
-    'When': { fr: 'Quand', es: 'Cuándo', hi: 'कब' },
-    'Who': { fr: 'Qui', es: 'Quién', hi: 'कौन' },
-    'Alert': { fr: 'Alerte', es: 'Alerta', hi: 'अलर्ट' },
-    'Apply': { fr: 'Appliquer', es: 'Aplicar', hi: 'लागू करें' },
-    'Block': { fr: 'Bloquer', es: 'Bloquear', hi: 'ब्लॉक करें' },
-    'Break': { fr: 'Pause', es: 'Descanso', hi: 'विराम' },
-    'Count': { fr: 'Nombre', es: 'Recuento', hi: 'गिनती' },
-    'Dates': { fr: 'Dates', es: 'Fechas', hi: 'तिथियाँ' },
-    'Delay': { fr: 'Délai', es: 'Retraso', hi: 'विलंब' },
-    'Error': { fr: 'Erreur', es: 'Error', hi: 'त्रुटि' },
-    'Given': { fr: 'Administré', es: 'Administrado', hi: 'दी गई' },
-    'Hours': { fr: 'Heures', es: 'Horas', hi: 'घंटे' },
-    'Inbox': { fr: 'Boîte de réception', es: 'Bandeja de entrada', hi: 'इनबॉक्स' },
-    'Trash': { fr: 'Corbeille', es: 'Papelera', hi: 'ट्रैश' },
-    'Label': { fr: 'Étiquette', es: 'Etiqueta', hi: 'लेबल' },
-    'Leads': { fr: 'Prospects', es: 'Clientes potenciales', hi: 'संभावित ग्राहक' },
-    'Month': { fr: 'Mois', es: 'Mes', hi: 'महीना' },
-    'Reply': { fr: 'Répondre', es: 'Responder', hi: 'उत्तर दें' },
-    'Rooms': { fr: 'Salles', es: 'Salas', hi: 'कक्ष' },
-    'Route': { fr: 'Circuit', es: 'Ruta', hi: 'मार्ग' },
-    'Score': { fr: 'Score', es: 'Puntuación', hi: 'स्कोर' },
-    'Share': { fr: 'Partager', es: 'Compartir', hi: 'साझा करें' },
-    'Start': { fr: 'Début', es: 'Inicio', hi: 'प्रारंभ' },
-    'End': { fr: 'Fin', es: 'Fin', hi: 'समाप्त' },
-    'Title': { fr: 'Titre', es: 'Título', hi: 'शीर्षक' },
-    'Trial': { fr: 'Essai', es: 'Prueba', hi: 'ट्रायल' },
-    'Users': { fr: 'Utilisateurs', es: 'Usuarios', hi: 'उपयोगकर्ता' },
-    'Value': { fr: 'Valeur', es: 'Valor', hi: 'मूल्य' },
-    'Views': { fr: 'Vues', es: 'Vistas', hi: 'दृश्य' },
-    'Age': { fr: 'Âge', es: 'Edad', hi: 'आयु' },
-    'Fee': { fr: 'Frais', es: 'Tarifa', hi: 'शुल्क' },
-    'Dose': { fr: 'Dose', es: 'Dosis', hi: 'खुराक' },
-    'Code': { fr: 'Code', es: 'Código', hi: 'कोड' },
-    'City': { fr: 'Ville', es: 'Ciudad', hi: 'शहर' },
-    'Address': { fr: 'Adresse', es: 'Dirección', hi: 'पता' },
-    'Copy': { fr: 'Copier', es: 'Copiar', hi: 'कॉपी करें' },
-    'Done': { fr: 'Terminé', es: 'Hecho', hi: 'पूर्ण' },
-    'Deny': { fr: 'Refuser', es: 'Denegar', hi: 'अस्वीकार करें' },
-    'Mark': { fr: 'Marquer', es: 'Marcar', hi: 'चिह्नित करें' },
-    'Book': { fr: 'Réserver', es: 'Reservar', hi: 'बुक करें' },
-    'Call': { fr: 'Appeler', es: 'Llamar', hi: 'कॉल करें' },
-    'Chat': { fr: 'Discussion', es: 'Chat', hi: 'चैट' },
-    'Yes': { fr: 'Oui', es: 'Sí', hi: 'हाँ' },
-    'No': { fr: 'Non', es: 'No', hi: 'नहीं' },
-    'Low': { fr: 'Faible', es: 'Bajo', hi: 'कम' },
-    'High': { fr: 'Élevé', es: 'Alto', hi: 'उच्च' },
-    'Male': { fr: 'Masculin', es: 'Masculino', hi: 'पुरुष' },
-    'Female': { fr: 'Féminin', es: 'Femenino', hi: 'महिला' },
-    'Run': { fr: 'Exécuter', es: 'Ejecutar', hi: 'चलाएँ' },
-    'Now': { fr: 'Maintenant', es: 'Ahora', hi: 'अभी' },
-    'Free': { fr: 'Gratuit', es: 'Gratis', hi: 'निःशुल्क' },
-    'Gaps': { fr: 'Écarts', es: 'Brechas', hi: 'अंतराल' },
-    'Item': { fr: 'Article', es: 'Artículo', hi: 'आइटम' },
-    'Live': { fr: 'En direct', es: 'En vivo', hi: 'लाइव' },
-    'Load': { fr: 'Charger', es: 'Cargar', hi: 'लोड करें' },
-    'Archived': { fr: 'Archivé', es: 'Archivado', hi: 'संग्रहीत' },
-    'Cancelled': { fr: 'Annulé', es: 'Cancelado', hi: 'रद्द' },
-    'Anonymised': { fr: 'Anonymisé', es: 'Anonimizado', hi: 'अनाम' },
-    'Autopay': { fr: 'Prélèvement automatique', es: 'Pago automático', hi: 'स्वतः भुगतान' },
-    'Bi-weekly': { fr: 'Aux deux semaines', es: 'Quincenal', hi: 'पाक्षिक' },
-    'Weekly': { fr: 'Hebdomadaire', es: 'Semanal', hi: 'साप्ताहिक' },
-    'Monthly': { fr: 'Mensuel', es: 'Mensual', hi: 'मासिक' },
-    'Daily': { fr: 'Quotidien', es: 'Diario', hi: 'दैनिक' },
-    'At/over capacity': { fr: 'À/au-delà de la capacité', es: 'En/por encima de la capacidad', hi: 'क्षमता पर/से अधिक' },
-    'Booked by': { fr: 'Réservé par', es: 'Reservado por', hi: 'द्वारा बुक' },
-    'Billing period': { fr: 'Période de facturation', es: 'Período de facturación', hi: 'बिलिंग अवधि' },
-    'Billing status': { fr: 'Statut de facturation', es: 'Estado de facturación', hi: 'बिलिंग स्थिति' },
-    'Billing defaults': { fr: 'Paramètres de facturation par défaut', es: 'Valores de facturación predeterminados', hi: 'बिलिंग डिफ़ॉल्ट' },
-    'Brand settings': { fr: 'Paramètres de marque', es: 'Ajustes de marca', hi: 'ब्रांड सेटिंग्स' },
-    'Accepted payment methods': { fr: 'Modes de paiement acceptés', es: 'Métodos de pago aceptados', hi: 'स्वीकृत भुगतान विधियाँ' },
-    'Agency growth': { fr: 'Croissance de l’agence', es: 'Crecimiento de la agencia', hi: 'एजेंसी वृद्धि' },
-    'Agency analytics dashboard': { fr: 'Tableau de bord analytique de l’agence', es: 'Panel de analítica de la agencia', hi: 'एजेंसी विश्लेषण डैशबोर्ड' },
-    'All accounts in your agency': { fr: 'Tous les comptes de votre agence', es: 'Todas las cuentas de su agencia', hi: 'आपकी एजेंसी के सभी खाते' },
-    'All enrolled families': { fr: 'Toutes les familles inscrites', es: 'Todas las familias matriculadas', hi: 'सभी नामांकित परिवार' },
-    'All families by risk': { fr: 'Toutes les familles par risque', es: 'Todas las familias por riesgo', hi: 'जोखिम के अनुसार सभी परिवार' },
-    'All reports': { fr: 'Tous les rapports', es: 'Todos los informes', hi: 'सभी रिपोर्ट' },
-    'All roles': { fr: 'Tous les rôles', es: 'Todos los roles', hi: 'सभी भूमिकाएँ' },
-    'All your locations': { fr: 'Tous vos emplacements', es: 'Todas sus ubicaciones', hi: 'आपके सभी स्थान' },
-    'Attendance & daily logs': { fr: 'Présences et journaux quotidiens', es: 'Asistencia y registros diarios', hi: 'उपस्थिति और दैनिक लॉग' },
-    'Attendance anomalies': { fr: 'Anomalies de présence', es: 'Anomalías de asistencia', hi: 'उपस्थिति विसंगतियाँ' },
-    'Attendance log': { fr: 'Journal de présence', es: 'Registro de asistencia', hi: 'उपस्थिति लॉग' },
-    'Active drip campaigns': { fr: 'Campagnes automatisées actives', es: 'Campañas automatizadas activas', hi: 'सक्रिय ड्रिप अभियान' },
-    'Age band': { fr: 'Tranche d’âge', es: 'Franja de edad', hi: 'आयु वर्ग' },
-    'Automatic enforcement': { fr: 'Application automatique', es: 'Aplicación automática', hi: 'स्वचालित प्रवर्तन' },
-    'Automatically enforce retention': { fr: 'Appliquer automatiquement la conservation', es: 'Aplicar la retención automáticamente', hi: 'प्रतिधारण स्वतः लागू करें' },
-    'Applies the periods above every night.': { fr: 'Applique les périodes ci-dessus chaque nuit.', es: 'Aplica los períodos anteriores cada noche.', hi: 'उपरोक्त अवधियाँ हर रात लागू करता है।' },
-    'Automatically charge saved cards when invoices are due.': { fr: 'Débite automatiquement les cartes enregistrées à l’échéance des factures.', es: 'Cobra automáticamente las tarjetas guardadas cuando vencen las facturas.', hi: 'चालान देय होने पर सहेजे गए कार्ड स्वतः चार्ज करें।' },
-    'AM snack': { fr: 'Collation du matin', es: 'Merienda de la mañana', hi: 'सुबह का नाश्ता' },
-    'PM snack': { fr: 'Collation de l’après-midi', es: 'Merienda de la tarde', hi: 'दोपहर का नाश्ता' },
-    'Campaigns': { fr: 'Campagnes', es: 'Campañas', hi: 'अभियान' },
-    'Analytics': { fr: 'Analytique', es: 'Analítica', hi: 'विश्लेषण' },
-    'Channels': { fr: 'Canaux', es: 'Canales', hi: 'चैनल' },
-    'Bucket': { fr: 'Groupe', es: 'Grupo', hi: 'समूह' },
-    'Agency': { fr: 'Agence', es: 'Agencia', hi: 'एजेंसी' },
-    'Agency / centre': { fr: 'Agence / centre', es: 'Agencia / centro', hi: 'एजेंसी / केंद्र' },
-    'Agency (optional)': { fr: 'Agence (facultatif)', es: 'Agencia (opcional)', hi: 'एजेंसी (वैकल्पिक)' },
-    'Admin': { fr: 'Admin', es: 'Admin', hi: 'एडमिन' },
-    'January': { fr: 'Janvier', es: 'Enero', hi: 'जनवरी' },
-    'February': { fr: 'Février', es: 'Febrero', hi: 'फ़रवरी' },
-    'March': { fr: 'Mars', es: 'Marzo', hi: 'मार्च' },
-    'April': { fr: 'Avril', es: 'Abril', hi: 'अप्रैल' },
-    'May': { fr: 'Mai', es: 'Mayo', hi: 'मई' },
-    'June': { fr: 'Juin', es: 'Junio', hi: 'जून' },
-    'July': { fr: 'Juillet', es: 'Julio', hi: 'जुलाई' },
-    'August': { fr: 'Août', es: 'Agosto', hi: 'अगस्त' },
-    'September': { fr: 'Septembre', es: 'Septiembre', hi: 'सितंबर' },
-    'October': { fr: 'Octobre', es: 'Octubre', hi: 'अक्तूबर' },
-    'November': { fr: 'Novembre', es: 'Noviembre', hi: 'नवंबर' },
-    'December': { fr: 'Décembre', es: 'Diciembre', hi: 'दिसंबर' },
-    'Monday': { fr: 'Lundi', es: 'Lunes', hi: 'सोमवार' },
-    'Tuesday': { fr: 'Mardi', es: 'Martes', hi: 'मंगलवार' },
-    'Wednesday': { fr: 'Mercredi', es: 'Miércoles', hi: 'बुधवार' },
-    'Thursday': { fr: 'Jeudi', es: 'Jueves', hi: 'गुरुवार' },
-    'Friday': { fr: 'Vendredi', es: 'Viernes', hi: 'शुक्रवार' },
-    'Saturday': { fr: 'Samedi', es: 'Sábado', hi: 'शनिवार' },
-    'Sunday': { fr: 'Dimanche', es: 'Domingo', hi: 'रविवार' },
-    'Announcement sent': { fr: 'Annonce envoyée', es: 'Anuncio enviado', hi: 'घोषणा भेजी गई' },
-    'Campaign email sent': { fr: 'Courriel de campagne envoyé', es: 'Correo de campaña enviado', hi: 'अभियान ईमेल भेजा गया' },
-    'Centre deleted': { fr: 'Centre supprimé', es: 'Centro eliminado', hi: 'केंद्र हटाया गया' },
-    'Changed email settings': { fr: 'Paramètres de messagerie modifiés', es: 'Ajustes de correo modificados', hi: 'ईमेल सेटिंग्स बदली गईं' },
-    'Invite re-sent': { fr: 'Invitation renvoyée', es: 'Invitación reenviada', hi: 'आमंत्रण पुनः भेजा गया' },
-    'Lesson plan saved': { fr: 'Plan de leçon enregistré', es: 'Plan de clase guardado', hi: 'पाठ योजना सहेजी गई' },
-    'Email sent': { fr: 'Courriel envoyé', es: 'Correo enviado', hi: 'ईमेल भेजा गया' },
-    'Daily digest sent': { fr: 'Résumé quotidien envoyé', es: 'Resumen diario enviado', hi: 'दैनिक सारांश भेजा गया' },
-    'Failed sign-in': { fr: 'Échec de connexion', es: 'Inicio de sesión fallido', hi: 'साइन-इन विफल' },
-    'Clocked in / out': { fr: 'Pointage entrée / sortie', es: 'Fichaje entrada / salida', hi: 'क्लॉक इन / आउट' },
-    // ── Batch 3: dashboard widgets, reports catalogue, expenses ──
-    'Recent activity': { fr: 'Activité récente', es: 'Actividad reciente', hi: 'हाल की गतिविधि' },
-    'Enrolled vs licensed seats': { fr: 'Inscrits vs places autorisées', es: 'Matriculados frente a plazas autorizadas', hi: 'नामांकित बनाम लाइसेंस स्थान' },
-    'Enrollment roster': { fr: 'Liste des inscriptions', es: 'Lista de matrícula', hi: 'नामांकन सूची' },
-    'Centre capacity': { fr: 'Capacité du centre', es: 'Capacidad del centro', hi: 'केंद्र क्षमता' },
-    'Manage centres, users, families, and branding': { fr: 'Gérez les centres, les utilisateurs, les familles et l’image de marque', es: 'Gestione centros, usuarios, familias y marca', hi: 'केंद्र, उपयोगकर्ता, परिवार और ब्रांडिंग प्रबंधित करें' },
-    'No staff active right now.': { fr: 'Aucun membre du personnel actif pour l’instant.', es: 'Ningún miembro del personal activo ahora.', hi: 'अभी कोई स्टाफ़ सक्रिय नहीं है।' },
-    'Not in': { fr: 'Absent', es: 'Ausente', hi: 'अनुपस्थित' },
-    'Compliant': { fr: 'Conforme', es: 'Conforme', hi: 'अनुपालक' },
-    'Expired certs': { fr: 'Certificats expirés', es: 'Certificados vencidos', hi: 'समाप्त प्रमाणपत्र' },
-    'Staff certifications': { fr: 'Certifications du personnel', es: 'Certificaciones del personal', hi: 'स्टाफ़ प्रमाणपत्र' },
-    'MFA not enrolled': { fr: 'MFA non activé', es: 'MFA no activado', hi: 'MFA सक्षम नहीं' },
-    'Directors + agency admins missing two-factor': { fr: 'Directeurs et administrateurs sans double authentification', es: 'Directores y administradores sin doble factor', hi: 'दो-कारक रहित निदेशक और एडमिन' },
-    'By status': { fr: 'Par statut', es: 'Por estado', hi: 'स्थिति के अनुसार' },
-    'Date range applies to dated reports (attendance, payments, invoices, staff hours).': { fr: 'La plage de dates s’applique aux rapports datés (présences, paiements, factures, heures du personnel).', es: 'El rango de fechas se aplica a los informes con fecha (asistencia, pagos, facturas, horas del personal).', hi: 'तिथि सीमा दिनांकित रिपोर्ट पर लागू होती है (उपस्थिति, भुगतान, चालान, स्टाफ़ घंटे)।' },
-    'Every child with status, family and centre.': { fr: 'Chaque enfant avec son statut, sa famille et son centre.', es: 'Cada niño con su estado, familia y centro.', hi: 'स्थिति, परिवार और केंद्र सहित हर बच्चा।' },
-    'Families with contact and billing details.': { fr: 'Familles avec coordonnées et détails de facturation.', es: 'Familias con datos de contacto y facturación.', hi: 'संपर्क और बिलिंग विवरण सहित परिवार।' },
-    'Daily child check-in / check-out for the period.': { fr: 'Arrivées / départs quotidiens des enfants pour la période.', es: 'Entrada / salida diaria de los niños del período.', hi: 'अवधि के लिए दैनिक बच्चा चेक-इन / चेक-आउट।' },
-    'Educator clock-in / clock-out hours worked.': { fr: 'Heures travaillées (pointage) des éducateurs.', es: 'Horas trabajadas (fichaje) de los educadores.', hi: 'शिक्षक के काम किए गए क्लॉक-इन / क्लॉक-आउट घंटे।' },
-    'Staff hours': { fr: 'Heures du personnel', es: 'Horas del personal', hi: 'स्टाफ़ घंटे' },
-    'Invoices issued, amounts paid and owing.': { fr: 'Factures émises, montants payés et dus.', es: 'Facturas emitidas, importes pagados y adeudados.', hi: 'जारी चालान, भुगतान और बकाया राशि।' },
-    'Invoices & balances': { fr: 'Factures et soldes', es: 'Facturas y saldos', hi: 'चालान और शेष राशि' },
-    'Payments collected in the period.': { fr: 'Paiements perçus durant la période.', es: 'Pagos cobrados en el período.', hi: 'अवधि में एकत्र भुगतान।' },
-    'Payments received': { fr: 'Paiements reçus', es: 'Pagos recibidos', hi: 'प्राप्त भुगतान' },
-    'Paid this month': { fr: 'Payé ce mois-ci', es: 'Pagado este mes', hi: 'इस महीने भुगतान किया' },
-    'Logged incidents / injuries in the period.': { fr: 'Incidents / blessures consignés durant la période.', es: 'Incidentes / lesiones registrados en el período.', hi: 'अवधि में दर्ज घटनाएँ / चोटें।' },
-    'Incidents & injuries': { fr: 'Incidents et blessures', es: 'Incidentes y lesiones', hi: 'घटनाएँ और चोटें' },
-    'Learning-story observations recorded.': { fr: 'Observations (récits d’apprentissage) enregistrées.', es: 'Observaciones (historias de aprendizaje) registradas.', hi: 'दर्ज सीखने-कहानी अवलोकन।' },
-    'Prospective-family tour requests.': { fr: 'Demandes de visite des familles potentielles.', es: 'Solicitudes de visita de familias potenciales.', hi: 'संभावित परिवारों के दौरे के अनुरोध।' },
-    'Children waiting for a spot, oldest first.': { fr: 'Enfants en attente d’une place, du plus ancien au plus récent.', es: 'Niños esperando una plaza, del más antiguo al más reciente.', hi: 'स्थान की प्रतीक्षा कर रहे बच्चे, सबसे पुराने पहले।' },
-    'Spend by category': { fr: 'Dépenses par catégorie', es: 'Gasto por categoría', hi: 'श्रेणी के अनुसार व्यय' },
-    'Open POs': { fr: 'Bons de commande ouverts', es: 'Órdenes de compra abiertas', hi: 'खुले क्रय आदेश' },
-    'Draft or ordered': { fr: 'Brouillon ou commandé', es: 'Borrador o pedido', hi: 'ड्राफ़्ट या ऑर्डर किया गया' },
-    'No bills yet.': { fr: 'Aucune facture pour l’instant.', es: 'Aún no hay facturas.', hi: 'अभी कोई बिल नहीं।' },
-    'No spend recorded.': { fr: 'Aucune dépense enregistrée.', es: 'No hay gastos registrados.', hi: 'कोई व्यय दर्ज नहीं।' },
-    'Priority': { fr: 'Priorité', es: 'Prioridad', hi: 'प्राथमिकता' },
-    'Subject': { fr: 'Sujet', es: 'Asunto', hi: 'विषय' },
-    'Raised by': { fr: 'Ouvert par', es: 'Abierto por', hi: 'द्वारा उठाया गया' },
-    'Roles': { fr: 'Rôles', es: 'Roles', hi: 'भूमिकाएँ' },
-    'Resend welcome': { fr: 'Renvoyer le message de bienvenue', es: 'Reenviar la bienvenida', hi: 'स्वागत पुनः भेजें' },
-    // ── Batch 4: full-app sweep (widgets, forms, audit phrases, statuses) ──
-    'Capacity utilisation': { fr: 'Utilisation de la capacité', es: 'Uso de la capacidad', hi: 'क्षमता उपयोग' },
-    'Enrolled vs. licensed spaces': { fr: 'Inscrits vs places autorisées', es: 'Matriculados frente a plazas autorizadas', hi: 'नामांकित बनाम लाइसेंस स्थान' },
-    'Attendance today': { fr: 'Présences aujourd’hui', es: 'Asistencia de hoy', hi: 'आज की उपस्थिति' },
-    'Children currently checked in': { fr: 'Enfants actuellement présents', es: 'Niños actualmente presentes', hi: 'अभी उपस्थित बच्चे' },
-    'Users by role': { fr: 'Utilisateurs par rôle', es: 'Usuarios por rol', hi: 'भूमिका के अनुसार उपयोगकर्ता' },
-    'Auditors': { fr: 'Auditeurs', es: 'Auditores', hi: 'ऑडिटर' },
-    'Recurring revenue': { fr: 'Revenus récurrents', es: 'Ingresos recurrentes', hi: 'आवर्ती राजस्व' },
-    'Annualised revenue': { fr: 'Revenus annualisés', es: 'Ingresos anualizados', hi: 'वार्षिकीकृत राजस्व' },
-    'Annualised recurring revenue': { fr: 'Revenus récurrents annualisés', es: 'Ingresos recurrentes anualizados', hi: 'वार्षिकीकृत आवर्ती राजस्व' },
-    'Enrollment & revenue': { fr: 'Inscriptions et revenus', es: 'Matrícula e ingresos', hi: 'नामांकन और राजस्व' },
-    'Enrollment': { fr: 'Inscriptions', es: 'Matrícula', hi: 'नामांकन' },
-    'Compliance snapshot': { fr: 'Aperçu de la conformité', es: 'Resumen de cumplimiento', hi: 'अनुपालन झलक' },
-    'CCEYA ratios in real time': { fr: 'Ratios CCEYA en temps réel', es: 'Proporciones CCEYA en tiempo real', hi: 'वास्तविक समय में CCEYA अनुपात' },
-    'ALL CLEAR': { fr: 'TOUT EST EN ORDRE', es: 'TODO EN ORDEN', hi: 'सब ठीक है' },
-    'All clear — no active alerts.': { fr: 'Tout est en ordre — aucune alerte active.', es: 'Todo en orden: sin alertas activas.', hi: 'सब ठीक है — कोई सक्रिय अलर्ट नहीं।' },
-    'Educators clocked in now': { fr: 'Éducateurs pointés maintenant', es: 'Educadores fichados ahora', hi: 'अभी क्लॉक-इन शिक्षक' },
-    'Team on the floor': { fr: 'Équipe sur le plancher', es: 'Equipo en la sala', hi: 'फ़्लोर पर टीम' },
-    'Present': { fr: 'Présent', es: 'Presente', hi: 'उपस्थित' },
-    'Staff': { fr: 'Personnel', es: 'Personal', hi: 'स्टाफ़' },
-    'Your centres': { fr: 'Vos centres', es: 'Sus centros', hi: 'आपके केंद्र' },
-    'Upcoming birthdays': { fr: 'Anniversaires à venir', es: 'Próximos cumpleaños', hi: 'आगामी जन्मदिन' },
-    'Upcoming': { fr: 'À venir', es: 'Próximo', hi: 'आगामी' },
-    'Recent activity': { fr: 'Activité récente', es: 'Actividad reciente', hi: 'हाल की गतिविधि' },
-    'Recent platform activity': { fr: 'Activité récente de la plateforme', es: 'Actividad reciente de la plataforma', hi: 'हाल की प्लेटफ़ॉर्म गतिविधि' },
-    'Recent comments': { fr: 'Commentaires récents', es: 'Comentarios recientes', hi: 'हाल की टिप्पणियाँ' },
-    'See all activity': { fr: 'Voir toute l’activité', es: 'Ver toda la actividad', hi: 'सभी गतिविधि देखें' },
-    'Manage this centre': { fr: 'Gérer ce centre', es: 'Gestionar este centro', hi: 'यह केंद्र प्रबंधित करें' },
-    'Past due': { fr: 'En souffrance', es: 'Vencido', hi: 'अतिदेय' },
-    'Newer': { fr: 'Plus récent', es: 'Más reciente', hi: 'नया' },
-    'Older': { fr: 'Plus ancien', es: 'Más antiguo', hi: 'पुराना' },
-    'What needs attention': { fr: 'Ce qui requiert votre attention', es: 'Lo que necesita atención', hi: 'किस पर ध्यान चाहिए' },
-    'Expired certs': { fr: 'Certificats expirés', es: 'Certificados vencidos', hi: 'समाप्त प्रमाणपत्र' },
-    'Agencies lost vs starting count': { fr: 'Agences perdues vs nombre de départ', es: 'Agencias perdidas frente al recuento inicial', hi: 'प्रारंभिक संख्या बनाम खोई एजेंसियाँ' },
-    'Five largest by children on roll': { fr: 'Les cinq plus grands selon les inscrits', es: 'Los cinco mayores por niños inscritos', hi: 'नामांकित बच्चों के अनुसार पाँच सबसे बड़े' },
-    'Per-child visits today': { fr: 'Visites par enfant aujourd’hui', es: 'Visitas por niño hoy', hi: 'आज प्रति-बच्चा दौरे' },
-    'Every centre, every family, every dollar — across the entire platform.': { fr: 'Chaque centre, chaque famille, chaque dollar — sur toute la plateforme.', es: 'Cada centro, cada familia, cada dólar, en toda la plataforma.', hi: 'हर केंद्र, हर परिवार, हर डॉलर — पूरे प्लेटफ़ॉर्म पर।' },
-    'Save settings': { fr: 'Enregistrer les paramètres', es: 'Guardar ajustes', hi: 'सेटिंग्स सहेजें' },
-    'Save billing setup': { fr: 'Enregistrer la configuration de facturation', es: 'Guardar configuración de facturación', hi: 'बिलिंग सेटअप सहेजें' },
-    'Save credentials': { fr: 'Enregistrer les identifiants', es: 'Guardar credenciales', hi: 'क्रेडेंशियल सहेजें' },
-    'Save menu': { fr: 'Enregistrer le menu', es: 'Guardar menú', hi: 'मेन्यू सहेजें' },
-    'Save pattern': { fr: 'Enregistrer le modèle', es: 'Guardar patrón', hi: 'पैटर्न सहेजें' },
-    'Generate invoices': { fr: 'Générer les factures', es: 'Generar facturas', hi: 'चालान बनाएँ' },
-    'Generate via AI': { fr: 'Générer avec l’IA', es: 'Generar con IA', hi: 'एआई से बनाएँ' },
-    'Extract fields': { fr: 'Extraire les champs', es: 'Extraer campos', hi: 'फ़ील्ड निकालें' },
-    'Reset': { fr: 'Réinitialiser', es: 'Restablecer', hi: 'रीसेट' },
-    'Reload': { fr: 'Recharger', es: 'Recargar', hi: 'पुनः लोड करें' },
-    'Review': { fr: 'Réviser', es: 'Revisar', hi: 'समीक्षा करें' },
-    'Preview': { fr: 'Aperçu', es: 'Vista previa', hi: 'पूर्वावलोकन' },
-    'Go to': { fr: 'Aller à', es: 'Ir a', hi: 'यहाँ जाएँ' },
-    'Required': { fr: 'Requis', es: 'Obligatorio', hi: 'आवश्यक' },
-    'Read only': { fr: 'Lecture seule', es: 'Solo lectura', hi: 'केवल पढ़ने के लिए' },
-    'Password': { fr: 'Mot de passe', es: 'Contraseña', hi: 'पासवर्ड' },
-    'Reason': { fr: 'Motif', es: 'Motivo', hi: 'कारण' },
-    'Result': { fr: 'Résultat', es: 'Resultado', hi: 'परिणाम' },
-    'Environment': { fr: 'Environnement', es: 'Entorno', hi: 'पर्यावरण' },
-    'Documentation': { fr: 'Documentation', es: 'Documentación', hi: 'दस्तावेज़ीकरण' },
-    'Document type': { fr: 'Type de document', es: 'Tipo de documento', hi: 'दस्तावेज़ प्रकार' },
-    'Effective': { fr: 'En vigueur', es: 'Vigente', hi: 'प्रभावी' },
-    'Effective from': { fr: 'En vigueur à partir du', es: 'Vigente desde', hi: 'से प्रभावी' },
-    'Due soon': { fr: 'Bientôt dû', es: 'Vence pronto', hi: 'जल्द देय' },
-    'Due at age': { fr: 'Dû à l’âge de', es: 'Debido a la edad de', hi: 'आयु पर देय' },
-    'Business address (shown on invoices)': { fr: 'Adresse professionnelle (affichée sur les factures)', es: 'Dirección comercial (mostrada en las facturas)', hi: 'व्यावसायिक पता (चालान पर दिखता है)' },
-    'Bank info / payment details': { fr: 'Coordonnées bancaires / détails de paiement', es: 'Datos bancarios / detalles de pago', hi: 'बैंक जानकारी / भुगतान विवरण' },
-    'Accepted payment methods': { fr: 'Modes de paiement acceptés', es: 'Métodos de pago aceptados', hi: 'स्वीकृत भुगतान विधियाँ' },
-    'Which ways families may pay.': { fr: 'Les façons dont les familles peuvent payer.', es: 'Las formas en que las familias pueden pagar.', hi: 'परिवार किन तरीकों से भुगतान कर सकते हैं।' },
-    'Registration fee (CAD)': { fr: 'Frais d’inscription (CAD)', es: 'Cuota de inscripción (CAD)', hi: 'पंजीकरण शुल्क (CAD)' },
-    'Grace (days)': { fr: 'Délai de grâce (jours)', es: 'Período de gracia (días)', hi: 'छूट अवधि (दिन)' },
-    'Retention periods': { fr: 'Périodes de conservation', es: 'Períodos de retención', hi: 'प्रतिधारण अवधियाँ' },
-    'Primary colour': { fr: 'Couleur principale', es: 'Color principal', hi: 'प्राथमिक रंग' },
-    'Badge text': { fr: 'Texte du badge', es: 'Texto de la insignia', hi: 'बैज पाठ' },
-    'Button text': { fr: 'Texte du bouton', es: 'Texto del botón', hi: 'बटन पाठ' },
-    'Button links to page': { fr: 'Le bouton mène à la page', es: 'El botón enlaza a la página', hi: 'बटन पृष्ठ से लिंक करता है' },
-    'Announcement bar': { fr: 'Barre d’annonce', es: 'Barra de anuncios', hi: 'घोषणा पट्टी' },
-    'From address': { fr: 'Adresse d’expéditeur', es: 'Dirección de remitente', hi: 'प्रेषक पता' },
-    'From name': { fr: 'Nom d’expéditeur', es: 'Nombre de remitente', hi: 'प्रेषक नाम' },
-    'Privacy & consent': { fr: 'Confidentialité et consentement', es: 'Privacidad y consentimiento', hi: 'गोपनीयता और सहमति' },
-    'Privacy policy URL': { fr: 'URL de la politique de confidentialité', es: 'URL de la política de privacidad', hi: 'गोपनीयता नीति URL' },
-    'Parents must acknowledge your privacy terms before a child is enrolled.': { fr: 'Les parents doivent accepter vos conditions de confidentialité avant l’inscription d’un enfant.', es: 'Los padres deben aceptar sus términos de privacidad antes de matricular a un niño.', hi: 'बच्चे के नामांकन से पहले अभिभावकों को आपकी गोपनीयता शर्तें स्वीकार करनी होंगी।' },
-    'Require parent consent at enrolment': { fr: 'Exiger le consentement parental à l’inscription', es: 'Requerir consentimiento de los padres al matricular', hi: 'नामांकन पर अभिभावक सहमति आवश्यक करें' },
-    'Require autopay (families must keep a card on file)': { fr: 'Exiger le prélèvement automatique (les familles doivent garder une carte au dossier)', es: 'Requerir pago automático (las familias deben mantener una tarjeta registrada)', hi: 'स्वतः भुगतान आवश्यक करें (परिवारों को कार्ड दर्ज रखना होगा)' },
-    'Enrol new families in autopay by default': { fr: 'Inscrire les nouvelles familles au prélèvement automatique par défaut', es: 'Inscribir a las nuevas familias en pago automático por defecto', hi: 'नए परिवारों को डिफ़ॉल्ट रूप से स्वतः भुगतान में नामांकित करें' },
-    'Pick weekly, biweekly, or monthly billing per family.': { fr: 'Choisissez une facturation hebdomadaire, aux deux semaines ou mensuelle par famille.', es: 'Elija facturación semanal, quincenal o mensual por familia.', hi: 'प्रति परिवार साप्ताहिक, पाक्षिक या मासिक बिलिंग चुनें।' },
-    'Pre-selected when you create invoices and fee plans.': { fr: 'Présélectionné lors de la création de factures et de forfaits.', es: 'Preseleccionado al crear facturas y planes de tarifas.', hi: 'चालान और शुल्क योजनाएँ बनाते समय पूर्व-चयनित।' },
-    'Guardians': { fr: 'Tuteurs', es: 'Tutores', hi: 'अभिभावक' },
-    'Payments': { fr: 'Paiements', es: 'Pagos', hi: 'भुगतान' },
-    'Payroll report': { fr: 'Rapport de paie', es: 'Informe de nómina', hi: 'वेतन रिपोर्ट' },
-    'Reporting': { fr: 'Rapports', es: 'Informes', hi: 'रिपोर्टिंग' },
-    'Programs': { fr: 'Programmes', es: 'Programas', hi: 'कार्यक्रम' },
-    'Programming': { fr: 'Programmation', es: 'Programación', hi: 'प्रोग्रामिंग' },
-    'Events': { fr: 'Événements', es: 'Eventos', hi: 'कार्यक्रम' },
-    'Encryption': { fr: 'Chiffrement', es: 'Cifrado', hi: 'एन्क्रिप्शन' },
-    'Health & safety': { fr: 'Santé et sécurité', es: 'Salud y seguridad', hi: 'स्वास्थ्य और सुरक्षा' },
-    'Food & nutrition': { fr: 'Alimentation et nutrition', es: 'Alimentación y nutrición', hi: 'भोजन और पोषण' },
-    'Indoor environment': { fr: 'Environnement intérieur', es: 'Entorno interior', hi: 'आंतरिक वातावरण' },
-    'Parent invitation codes': { fr: 'Codes d’invitation pour parents', es: 'Códigos de invitación para padres', hi: 'अभिभावक आमंत्रण कोड' },
-    'Parent–educator messages': { fr: 'Messages parent–éducateur', es: 'Mensajes padre–educador', hi: 'अभिभावक–शिक्षक संदेश' },
-    'Pending team requests': { fr: 'Demandes d’équipe en attente', es: 'Solicitudes de equipo pendientes', hi: 'लंबित टीम अनुरोध' },
-    'Your requests': { fr: 'Vos demandes', es: 'Sus solicitudes', hi: 'आपके अनुरोध' },
-    'Renewal calendar': { fr: 'Calendrier des renouvellements', es: 'Calendario de renovaciones', hi: 'नवीनीकरण कैलेंडर' },
-    'Inspection prep checklist': { fr: 'Liste de préparation à l’inspection', es: 'Lista de preparación para la inspección', hi: 'निरीक्षण तैयारी सूची' },
-    'Reusable plans for this agency': { fr: 'Plans réutilisables pour cette agence', es: 'Planes reutilizables para esta agencia', hi: 'इस एजेंसी के लिए पुन: प्रयोज्य योजनाएँ' },
-    'Drafts, scheduled, and recently sent': { fr: 'Brouillons, planifiés et récemment envoyés', es: 'Borradores, programados y enviados recientemente', hi: 'ड्राफ़्ट, निर्धारित और हाल में भेजे गए' },
-    'Rooms tracked': { fr: 'Salles suivies', es: 'Salas rastreadas', hi: 'ट्रैक किए गए कक्ष' },
-    'Homepage hero statistics': { fr: 'Statistiques principales de la page d’accueil', es: 'Estadísticas destacadas de la página de inicio', hi: 'होमपेज हीरो आँकड़े' },
-    'AI Daily Digest': { fr: 'Résumé quotidien IA', es: 'Resumen diario de IA', hi: 'एआई दैनिक सारांश' },
-    'AI document extraction': { fr: 'Extraction de documents IA', es: 'Extracción de documentos con IA', hi: 'एआई दस्तावेज़ निष्कर्षण' },
-    'High risk': { fr: 'Risque élevé', es: 'Riesgo alto', hi: 'उच्च जोखिम' },
-    'Documents on file, and what is still outstanding.': { fr: 'Documents au dossier, et ce qui reste en attente.', es: 'Documentos en archivo y lo que aún está pendiente.', hi: 'फ़ाइल में दस्तावेज़, और जो अभी शेष है।' },
-    'Fees, schedules and automatic reminders.': { fr: 'Frais, calendriers et rappels automatiques.', es: 'Tarifas, calendarios y recordatorios automáticos.', hi: 'शुल्क, कार्यक्रम और स्वचालित अनुस्मारक।' },
-    'Pay runs and hours.': { fr: 'Cycles de paie et heures.', es: 'Ciclos de nómina y horas.', hi: 'वेतन चक्र और घंटे।' },
-    'Police checks and vulnerable-sector screening.': { fr: 'Vérifications policières et du secteur vulnérable.', es: 'Verificaciones policiales y del sector vulnerable.', hi: 'पुलिस जाँच और सुभेद्य-क्षेत्र स्क्रीनिंग।' },
-    'Who is working, and where.': { fr: 'Qui travaille, et où.', es: 'Quién trabaja y dónde.', hi: 'कौन काम कर रहा है, और कहाँ।' },
-    'What each role is allowed to do.': { fr: 'Ce que chaque rôle est autorisé à faire.', es: 'Lo que cada rol puede hacer.', hi: 'प्रत्येक भूमिका को क्या करने की अनुमति है।' },
-    'Your logo, colours and the name families see.': { fr: 'Votre logo, vos couleurs et le nom que voient les familles.', es: 'Su logotipo, colores y el nombre que ven las familias.', hi: 'आपका लोगो, रंग और वह नाम जो परिवार देखते हैं।' },
-    'Your public website.': { fr: 'Votre site web public.', es: 'Su sitio web público.', hi: 'आपकी सार्वजनिक वेबसाइट।' },
-    'Pull the details out of an uploaded document.': { fr: 'Extrayez les détails d’un document téléversé.', es: 'Extraiga los detalles de un documento subido.', hi: 'अपलोड किए गए दस्तावेज़ से विवरण निकालें।' },
-    'Recurring revenue across the platform.': { fr: 'Revenus récurrents sur toute la plateforme.', es: 'Ingresos recurrentes en toda la plataforma.', hi: 'पूरे प्लेटफ़ॉर्म पर आवर्ती राजस्व।' },
-    'Whether the daily AI summaries went out.': { fr: 'Indique si les résumés IA quotidiens ont été envoyés.', es: 'Si los resúmenes diarios de IA se enviaron.', hi: 'क्या दैनिक एआई सारांश भेजे गए।' },
-    'Every enrolled child across your centres. Filter by centre or status to narrow down.': { fr: 'Chaque enfant inscrit dans vos centres. Filtrez par centre ou statut pour affiner.', es: 'Cada niño matriculado en sus centros. Filtre por centro o estado para acotar.', hi: 'आपके केंद्रों में हर नामांकित बच्चा। सीमित करने के लिए केंद्र या स्थिति से फ़िल्टर करें।' },
-    'Every provider (centre) in your agency, plotted by address.': { fr: 'Chaque prestataire (centre) de votre agence, situé par adresse.', es: 'Cada proveedor (centro) de su agencia, ubicado por dirección.', hi: 'आपकी एजेंसी का हर प्रदाता (केंद्र), पते के अनुसार दर्शाया गया।' },
-    'HDLH-aware weekly plans, drafted in seconds.': { fr: 'Plans hebdomadaires conformes à HDLH, rédigés en quelques secondes.', es: 'Planes semanales conformes a HDLH, redactados en segundos.', hi: 'HDLH-अनुरूप साप्ताहिक योजनाएँ, सेकंडों में तैयार।' },
-    'Where every day is an adventure': { fr: 'Où chaque jour est une aventure', es: 'Donde cada día es una aventura', hi: 'जहाँ हर दिन एक साहसिक कार्य है' },
-    'Parent reported an absence': { fr: 'Le parent a signalé une absence', es: 'El padre reportó una ausencia', hi: 'अभिभावक ने अनुपस्थिति दर्ज की' },
-    'Parent scanned the check-in QR': { fr: 'Le parent a scanné le code QR d’arrivée', es: 'El padre escaneó el QR de entrada', hi: 'अभिभावक ने चेक-इन QR स्कैन किया' },
-    'Parent sent a message': { fr: 'Le parent a envoyé un message', es: 'El padre envió un mensaje', hi: 'अभिभावक ने संदेश भेजा' },
-    'Parent nudged the centre': { fr: 'Le parent a relancé le centre', es: 'El padre contactó al centro', hi: 'अभिभावक ने केंद्र को याद दिलाया' },
-    'Replied to a family': { fr: 'A répondu à une famille', es: 'Respondió a una familia', hi: 'परिवार को उत्तर दिया' },
-    'Password reset completed': { fr: 'Réinitialisation du mot de passe terminée', es: 'Restablecimiento de contraseña completado', hi: 'पासवर्ड रीसेट पूर्ण' },
-    'Password reset requested': { fr: 'Réinitialisation du mot de passe demandée', es: 'Restablecimiento de contraseña solicitado', hi: 'पासवर्ड रीसेट अनुरोधित' },
-    'Password set from invite': { fr: 'Mot de passe défini depuis l’invitation', es: 'Contraseña establecida desde la invitación', hi: 'आमंत्रण से पासवर्ड सेट किया' },
-    'Enabled push notifications': { fr: 'Notifications push activées', es: 'Notificaciones push activadas', hi: 'पुश सूचनाएँ सक्षम कीं' },
-    'Registered a device for push': { fr: 'Appareil enregistré pour les notifications push', es: 'Dispositivo registrado para push', hi: 'पुश के लिए डिवाइस पंजीकृत किया' },
-    'Weekly digest sent': { fr: 'Résumé hebdomadaire envoyé', es: 'Resumen semanal enviado', hi: 'साप्ताहिक सारांश भेजा गया' },
-    'Fee plan invoices generated': { fr: 'Factures de forfait générées', es: 'Facturas del plan de tarifas generadas', hi: 'शुल्क योजना चालान बनाए गए' },
-    'Permanently deleted': { fr: 'Supprimé définitivement', es: 'Eliminado permanentemente', hi: 'स्थायी रूप से हटाया गया' },
-    'Your time-off request was approved': { fr: 'Votre demande de congé a été approuvée', es: 'Su solicitud de tiempo libre fue aprobada', hi: 'आपका छुट्टी अनुरोध स्वीकृत हुआ' },
-    'Published': { fr: 'Publié', es: 'Publicado', hi: 'प्रकाशित' },
-    'Queued': { fr: 'En file d’attente', es: 'En cola', hi: 'कतार में' },
-    'Generated': { fr: 'Généré', es: 'Generado', hi: 'बनाया गया' },
-    'Invited': { fr: 'Invité', es: 'Invitado', hi: 'आमंत्रित' },
-    'Withdrawn': { fr: 'Retiré', es: 'Retirado', hi: 'वापस लिया गया' },
-    'Renewed': { fr: 'Renouvelé', es: 'Renovado', hi: 'नवीनीकृत' },
-    'Responded': { fr: 'Répondu', es: 'Respondió', hi: 'उत्तर दिया' },
-    'Reduced': { fr: 'Réduit', es: 'Reducido', hi: 'घटाया गया' },
-    'Engaged': { fr: 'Engagé', es: 'Comprometido', hi: 'संलग्न' },
-    'Projected': { fr: 'Prévu', es: 'Proyectado', hi: 'अनुमानित' },
-    'Had cancellations': { fr: 'A eu des annulations', es: 'Tuvo cancelaciones', hi: 'रद्दीकरण हुए' },
-    'Reaches threshold': { fr: 'Atteint le seuil', es: 'Alcanza el umbral', hi: 'सीमा तक पहुँचता है' },
-    'Pick a category…': { fr: 'Choisir une catégorie…', es: 'Elija una categoría…', hi: 'श्रेणी चुनें…' },
-    'Select a country': { fr: 'Sélectionner un pays', es: 'Seleccionar un país', hi: 'देश चुनें' },
-    'Select a payment': { fr: 'Sélectionner un paiement', es: 'Seleccionar un pago', hi: 'भुगतान चुनें' },
-    'Filter': { fr: 'Filtrer', es: 'Filtrar', hi: 'फ़िल्टर' },
-    // ── Batch 5: dashboard KPI subtitle labels ──
-    'Trailing 12 months': { fr: '12 derniers mois', es: 'Últimos 12 meses', hi: 'पिछले 12 महीने' },
-    'Trailing 30 days': { fr: '30 derniers jours', es: 'Últimos 30 días', hi: 'पिछले 30 दिन' },
-    'Latest 5 events': { fr: '5 derniers événements', es: 'Últimos 5 eventos', hi: 'अंतिम 5 घटनाएँ' },
-    'NET ENROLLMENT': { fr: 'INSCRIPTIONS NETTES', es: 'MATRÍCULA NETA', hi: 'शुद्ध नामांकन' },
-    'NEW ENROLLMENTS': { fr: 'NOUVELLES INSCRIPTIONS', es: 'NUEVAS MATRÍCULAS', hi: 'नए नामांकन' },
-    'REVENUE THIS MONTH': { fr: 'REVENUS CE MOIS-CI', es: 'INGRESOS ESTE MES', hi: 'इस महीने का राजस्व' },
-    'WITHDRAWALS': { fr: 'RETRAITS', es: 'BAJAS', hi: 'निकासी' },
-    'Live - pick what you want, drag to reorder': { fr: 'En direct — choisissez ce que vous voulez, glissez pour réorganiser', es: 'En vivo: elija lo que quiera, arrastre para reordenar', hi: 'लाइव — जो चाहें चुनें, पुनः क्रम के लिए खींचें' },
-    'of capacity': { fr: 'de la capacité', es: 'de la capacidad', hi: 'क्षमता का' },
-    'of enrolled': { fr: 'des inscrits', es: 'de los matriculados', hi: 'नामांकित में से' },
-    // ── Batch 6: banner subtitle + activity header ──
-    'Live · pick what you want, drag to reorder': { fr: 'En direct · choisissez ce que vous voulez, glissez pour réorganiser', es: 'En vivo · elija lo que quiera, arrastre para reordenar', hi: 'लाइव · जो चाहें चुनें, पुनः क्रम के लिए खींचें' },
-    'children enrolled · last updated just now': { fr: 'enfants inscrits · mis à jour à l’instant', es: 'niños matriculados · actualizado hace un momento', hi: 'बच्चे नामांकित · अभी अद्यतन किया गया' },
-    'centres': { fr: 'centres', es: 'centros', hi: 'केंद्र' },
-    'children enrolled': { fr: 'enfants inscrits', es: 'niños matriculados', hi: 'बच्चे नामांकित' },
-    'last updated just now': { fr: 'mis à jour à l’instant', es: 'actualizado hace un momento', hi: 'अभी अद्यतन किया गया' },
-    // ── Batch 7: settings/admin screens ──
-    'Contact details': { fr: 'Coordonnées', es: 'Datos de contacto', hi: 'संपर्क विवरण' },
-    'Contact email': { fr: 'Courriel de contact', es: 'Correo de contacto', hi: 'संपर्क ईमेल' },
-    'Support email': { fr: 'Courriel d’assistance', es: 'Correo de soporte', hi: 'सहायता ईमेल' },
-    'Data-protection contact email': { fr: 'Courriel du responsable de la protection des données', es: 'Correo del responsable de protección de datos', hi: 'डेटा-सुरक्षा संपर्क ईमेल' },
-    'Content': { fr: 'Contenu', es: 'Contenido', hi: 'सामग्री' },
-    'Country': { fr: 'Pays', es: 'País', hi: 'देश' },
-    'Custom': { fr: 'Personnalisé', es: 'Personalizado', hi: 'कस्टम' },
-    'Detail': { fr: 'Détail', es: 'Detalle', hi: 'विवरण' },
-    'Document': { fr: 'Document', es: 'Documento', hi: 'दस्तावेज़' },
-    'Username': { fr: 'Nom d’utilisateur', es: 'Nombre de usuario', hi: 'उपयोगकर्ता नाम' },
-    'Tenant': { fr: 'Locataire', es: 'Inquilino', hi: 'टेनेंट' },
-    'Manage': { fr: 'Gérer', es: 'Gestionar', hi: 'प्रबंधित करें' },
-    'Disable': { fr: 'Désactiver', es: 'Desactivar', hi: 'अक्षम करें' },
-    'Enable': { fr: 'Activer', es: 'Activar', hi: 'सक्षम करें' },
-    'Enabled': { fr: 'Activé', es: 'Activado', hi: 'सक्षम' },
-    'Disabled': { fr: 'Désactivé', es: 'Desactivado', hi: 'अक्षम' },
-    'Disable MFA': { fr: 'Désactiver la MFA', es: 'Desactivar MFA', hi: 'MFA अक्षम करें' },
-    'Current step': { fr: 'Étape actuelle', es: 'Paso actual', hi: 'वर्तमान चरण' },
-    'Step 2': { fr: 'Étape 2', es: 'Paso 2', hi: 'चरण 2' },
-    'Default frequency': { fr: 'Fréquence par défaut', es: 'Frecuencia predeterminada', hi: 'डिफ़ॉल्ट आवृत्ति' },
-    'Late fees': { fr: 'Frais de retard', es: 'Cargos por mora', hi: 'विलंब शुल्क' },
-    'Late fee (%)': { fr: 'Frais de retard (%)', es: 'Cargo por mora (%)', hi: 'विलंब शुल्क (%)' },
-    'Cap (CAD)': { fr: 'Plafond (CAD)', es: 'Tope (CAD)', hi: 'अधिकतम सीमा (CAD)' },
-    'Deposit (CAD)': { fr: 'Dépôt (CAD)', es: 'Depósito (CAD)', hi: 'जमा (CAD)' },
-    'Card surcharge (%) — optional': { fr: 'Frais de carte (%) — facultatif', es: 'Recargo por tarjeta (%) — opcional', hi: 'कार्ड अधिभार (%) — वैकल्पिक' },
-    'Charged on overdue balances.': { fr: 'Facturé sur les soldes en souffrance.', es: 'Se cobra sobre saldos vencidos.', hi: 'अतिदेय शेष पर लगाया गया।' },
-    'Checklist item': { fr: 'Élément de la liste', es: 'Elemento de la lista', hi: 'सूची आइटम' },
-    'Logo URL': { fr: 'URL du logo', es: 'URL del logotipo', hi: 'लोगो URL' },
-    'Terms & conditions URL': { fr: 'URL des conditions générales', es: 'URL de términos y condiciones', hi: 'नियम और शर्तें URL' },
-    'Month': { fr: 'Mois', es: 'Mes', hi: 'महीना' },
-    'Not set': { fr: 'Non défini', es: 'Sin definir', hi: 'सेट नहीं' },
-    'Not set up': { fr: 'Non configuré', es: 'Sin configurar', hi: 'सेटअप नहीं' },
-    'None': { fr: 'Aucun', es: 'Ninguno', hi: 'कोई नहीं' },
-    'Subscribers': { fr: 'Abonnés', es: 'Suscriptores', hi: 'सदस्य' },
-    'Subscribers / leads': { fr: 'Abonnés / prospects', es: 'Suscriptores / clientes potenciales', hi: 'सदस्य / संभावित ग्राहक' },
-    'Subsidy': { fr: 'Subvention', es: 'Subsidio', hi: 'सब्सिडी' },
-    'Uploaded documents': { fr: 'Documents téléversés', es: 'Documentos subidos', hi: 'अपलोड किए गए दस्तावेज़' },
-    'Web application': { fr: 'Application web', es: 'Aplicación web', hi: 'वेब अनुप्रयोग' },
-    'Supported account types': { fr: 'Types de comptes pris en charge', es: 'Tipos de cuenta admitidos', hi: 'समर्थित खाता प्रकार' },
-    'Outdoor environment': { fr: 'Environnement extérieur', es: 'Entorno exterior', hi: 'बाहरी वातावरण' },
-    'Top pages': { fr: 'Pages les plus visitées', es: 'Páginas principales', hi: 'शीर्ष पृष्ठ' },
-    'Top countries (by visitor timezone)': { fr: 'Pays principaux (selon le fuseau des visiteurs)', es: 'Países principales (por zona horaria del visitante)', hi: 'शीर्ष देश (आगंतुक समय-क्षेत्र के अनुसार)' },
-    'Total recorded': { fr: 'Total enregistré', es: 'Total registrado', hi: 'कुल दर्ज' },
-    'Leads by source': { fr: 'Prospects par source', es: 'Clientes potenciales por fuente', hi: 'स्रोत के अनुसार संभावित ग्राहक' },
-    'Live invoice preview': { fr: 'Aperçu de la facture en direct', es: 'Vista previa de factura en vivo', hi: 'लाइव चालान पूर्वावलोकन' },
-    'Unread only': { fr: 'Non lus seulement', es: 'Solo no leídos', hi: 'केवल अपठित' },
-    'Open alerts': { fr: 'Alertes ouvertes', es: 'Alertas abiertas', hi: 'खुले अलर्ट' },
-    'Mark all read': { fr: 'Tout marquer comme lu', es: 'Marcar todo como leído', hi: 'सभी को पढ़ा हुआ चिह्नित करें' },
-    'MFA ENABLED': { fr: 'MFA ACTIVÉE', es: 'MFA ACTIVADO', hi: 'MFA सक्षम' },
-    'NO EVENTS': { fr: 'AUCUN ÉVÉNEMENT', es: 'SIN EVENTOS', hi: 'कोई घटना नहीं' },
-    'No events': { fr: 'Aucun événement', es: 'Sin eventos', hi: 'कोई घटना नहीं' },
-    'Codes that let a family or educator join.': { fr: 'Codes permettant à une famille ou à un éducateur de s’inscrire.', es: 'Códigos que permiten unirse a una familia o educador.', hi: 'कोड जो परिवार या शिक्षक को शामिल होने देते हैं।' },
-    'CWELCC subsidy funding and claims.': { fr: 'Financement et demandes de subvention CWELCC.', es: 'Financiación y solicitudes de subsidio CWELCC.', hi: 'CWELCC सब्सिडी वित्तपोषण और दावे।' },
-    'Customize how invoices and parent-facing screens appear to your families.': { fr: 'Personnalisez l’apparence des factures et des écrans destinés aux parents.', es: 'Personalice cómo aparecen las facturas y las pantallas para los padres.', hi: 'अनुकूलित करें कि चालान और अभिभावक-सामने स्क्रीन आपके परिवारों को कैसे दिखते हैं।' },
-    'Defaults, late fees, payment methods, autopay and communication settings — all in one place.': { fr: 'Valeurs par défaut, frais de retard, modes de paiement, prélèvement automatique et communications — tout au même endroit.', es: 'Valores predeterminados, cargos por mora, métodos de pago, pago automático y comunicaciones, todo en un solo lugar.', hi: 'डिफ़ॉल्ट, विलंब शुल्क, भुगतान विधियाँ, स्वतः भुगतान और संचार सेटिंग्स — सब एक जगह।' },
-    'Certifications + background checks. Combines all sources into a single timeline.': { fr: 'Certifications et vérifications d’antécédents. Regroupe toutes les sources en une seule chronologie.', es: 'Certificaciones y verificaciones de antecedentes. Combina todas las fuentes en una sola cronología.', hi: 'प्रमाणपत्र और पृष्ठभूमि जाँच। सभी स्रोतों को एक ही समयरेखा में जोड़ता है।' },
-    'Licences and certificates coming up for renewal.': { fr: 'Licences et certificats à renouveler prochainement.', es: 'Licencias y certificados próximos a renovarse.', hi: 'नवीनीकरण के लिए आने वाले लाइसेंस और प्रमाणपत्र।' },
-    'Two-factor authentication for your team.': { fr: 'Authentification à deux facteurs pour votre équipe.', es: 'Autenticación de dos factores para su equipo.', hi: 'आपकी टीम के लिए दो-कारक प्रमाणीकरण।' },
-    'Walk the licensing checklist before an inspector does.': { fr: 'Parcourez la liste de conformité avant qu’un inspecteur ne le fasse.', es: 'Recorra la lista de licencias antes de que lo haga un inspector.', hi: 'किसी निरीक्षक से पहले लाइसेंस सूची स्वयं जाँचें।' },
-    'Where parents send data-access or deletion requests.': { fr: 'Où les parents envoient leurs demandes d’accès ou de suppression de données.', es: 'Dónde los padres envían solicitudes de acceso o eliminación de datos.', hi: 'जहाँ अभिभावक डेटा-एक्सेस या हटाने के अनुरोध भेजते हैं।' },
-    'Internal notes on your retention/compliance obligations (visible to your admins only).': { fr: 'Notes internes sur vos obligations de conservation/conformité (visibles par vos administrateurs seulement).', es: 'Notas internas sobre sus obligaciones de retención/cumplimiento (visibles solo para sus administradores).', hi: 'आपके प्रतिधारण/अनुपालन दायित्वों पर आंतरिक टिप्पणियाँ (केवल आपके एडमिन को दिखती हैं)।' },
-    'Uncheck to fully white-label. Plan must support this.': { fr: 'Décochez pour une marque entièrement personnalisée. Votre forfait doit le permettre.', es: 'Desmarque para marca totalmente blanca. Su plan debe permitirlo.', hi: 'पूर्ण व्हाइट-लेबल के लिए अनचेक करें। योजना को इसका समर्थन करना चाहिए।' },
-    'To turn off two-factor sign-in, enter your current code or one of your recovery codes.': { fr: 'Pour désactiver la connexion à deux facteurs, saisissez votre code actuel ou l’un de vos codes de secours.', es: 'Para desactivar el inicio de sesión de dos factores, ingrese su código actual o uno de recuperación.', hi: 'दो-कारक साइन-इन बंद करने के लिए, अपना वर्तमान कोड या रिकवरी कोड दर्ज करें।' },
-    'Multi-step signoff — parent signs, admin reviews, director countersigns. Full audit trail.': { fr: 'Validation en plusieurs étapes — le parent signe, l’administrateur révise, le directeur contresigne. Piste d’audit complète.', es: 'Aprobación en varios pasos: el padre firma, el administrador revisa, el director refrenda. Registro de auditoría completo.', hi: 'बहु-चरणीय स्वीकृति — अभिभावक हस्ताक्षर करता है, एडमिन समीक्षा करता है, निदेशक प्रतिहस्ताक्षर करता है। पूर्ण ऑडिट ट्रेल।' },
-    'No leads yet.': { fr: 'Aucun prospect pour l’instant.', es: 'Aún no hay clientes potenciales.', hi: 'अभी कोई संभावित ग्राहक नहीं।' },
-    'No forms yet. Click + New form to build one.': { fr: 'Aucun formulaire pour l’instant. Cliquez sur + Nouveau formulaire pour en créer un.', es: 'Aún no hay formularios. Haga clic en + Nuevo formulario para crear uno.', hi: 'अभी कोई फ़ॉर्म नहीं। बनाने के लिए + नया फ़ॉर्म क्लिक करें।' },
-    'No templates yet. Upload your first PDF to get parents signing electronically.': { fr: 'Aucun modèle pour l’instant. Téléversez votre premier PDF pour que les parents signent électroniquement.', es: 'Aún no hay plantillas. Suba su primer PDF para que los padres firmen electrónicamente.', hi: 'अभी कोई टेम्पलेट नहीं। अभिभावकों को इलेक्ट्रॉनिक रूप से हस्ताक्षर कराने के लिए अपना पहला PDF अपलोड करें।' },
-    'No subscribers yet. They appear here as visitors download the checklist or sign up — or add one above.': { fr: 'Aucun abonné pour l’instant. Ils apparaissent ici lorsque des visiteurs téléchargent la liste ou s’inscrivent — ou ajoutez-en un ci-dessus.', es: 'Aún no hay suscriptores. Aparecen aquí cuando los visitantes descargan la lista o se registran, o agregue uno arriba.', hi: 'अभी कोई सदस्य नहीं। जब आगंतुक सूची डाउनलोड करते हैं या साइन अप करते हैं तो वे यहाँ दिखते हैं — या ऊपर एक जोड़ें।' },
-    'Every cert is current.': { fr: 'Tous les certificats sont à jour.', es: 'Todos los certificados están vigentes.', hi: 'सभी प्रमाणपत्र वर्तमान हैं।' },
-    'No security alerts — no anomalous authentication activity detected.': { fr: 'Aucune alerte de sécurité — aucune activité d’authentification anormale détectée.', es: 'Sin alertas de seguridad: no se detectó actividad de autenticación anómala.', hi: 'कोई सुरक्षा अलर्ट नहीं — कोई असामान्य प्रमाणीकरण गतिविधि नहीं मिली।' },
-    'Loading agency settings…': { fr: 'Chargement des paramètres de l’agence…', es: 'Cargando ajustes de la agencia…', hi: 'एजेंसी सेटिंग्स लोड हो रही हैं…' },
-    // ── Batch 8: common tab/section labels ──
-    'Setup': { fr: 'Configuration', es: 'Configuración', hi: 'सेटअप' },
-    'Reminders': { fr: 'Rappels', es: 'Recordatorios', hi: 'अनुस्मारक' },
-    'Settings': { fr: 'Paramètres', es: 'Ajustes', hi: 'सेटिंग्स' },
-    'Overview': { fr: 'Aperçu', es: 'Resumen', hi: 'अवलोकन' },
-    'Details': { fr: 'Détails', es: 'Detalles', hi: 'विवरण' },
-    'History': { fr: 'Historique', es: 'Historial', hi: 'इतिहास' },
-    'Summary': { fr: 'Résumé', es: 'Resumen', hi: 'सारांश' },
-    'Activity': { fr: 'Activité', es: 'Actividad', hi: 'गतिविधि' },
-    'General': { fr: 'Général', es: 'General', hi: 'सामान्य' },
-    'Security': { fr: 'Sécurité', es: 'Seguridad', hi: 'सुरक्षा' },
-    'Advanced': { fr: 'Avancé', es: 'Avanzado', hi: 'उन्नत' },
-    'Preferences': { fr: 'Préférences', es: 'Preferencias', hi: 'प्राथमिकताएँ' },
-    'Profile': { fr: 'Profil', es: 'Perfil', hi: 'प्रोफ़ाइल' },
-    'Members': { fr: 'Membres', es: 'Miembros', hi: 'सदस्य' },
-    'Integrations': { fr: 'Intégrations', es: 'Integraciones', hi: 'एकीकरण' },
-    // ── Batch 9: parent + educator views ──
-    'Your child\'s day': { fr: 'La journée de votre enfant', es: 'El día de su hijo', hi: 'आपके बच्चे का दिन' },
-    'Everything in one place': { fr: 'Tout au même endroit', es: 'Todo en un solo lugar', hi: 'सब कुछ एक जगह' },
-    'Every moment logged by the educators': { fr: 'Chaque moment consigné par les éducateurs', es: 'Cada momento registrado por los educadores', hi: 'शिक्षकों द्वारा दर्ज हर पल' },
-    'Recent observations': { fr: 'Observations récentes', es: 'Observaciones recientes', hi: 'हाल के अवलोकन' },
-    'Logged today': { fr: 'Consigné aujourd’hui', es: 'Registrado hoy', hi: 'आज दर्ज' },
-    'Medication today': { fr: 'Médicaments aujourd’hui', es: 'Medicación de hoy', hi: 'आज की दवा' },
-    'Total today': { fr: 'Total du jour', es: 'Total de hoy', hi: 'आज कुल' },
-    'Timeline': { fr: 'Chronologie', es: 'Cronología', hi: 'समयरेखा' },
-    'Trends': { fr: 'Tendances', es: 'Tendencias', hi: 'रुझान' },
-    'Videos': { fr: 'Vidéos', es: 'Vídeos', hi: 'वीडियो' },
-    'Wellness check': { fr: 'Bilan de bien-être', es: 'Control de bienestar', hi: 'कल्याण जाँच' },
-    'My family': { fr: 'Ma famille', es: 'Mi familia', hi: 'मेरा परिवार' },
-    'Support': { fr: 'Assistance', es: 'Soporte', hi: 'सहायता' },
-    'Refer a friend': { fr: 'Parrainer un ami', es: 'Recomendar a un amigo', hi: 'मित्र को रेफ़र करें' },
-    'Select': { fr: 'Sélectionner', es: 'Seleccionar', hi: 'चुनें' },
-    'Select all': { fr: 'Tout sélectionner', es: 'Seleccionar todo', hi: 'सभी चुनें' },
-    'Completed': { fr: 'Terminé', es: 'Completado', hi: 'पूर्ण' },
-    'Reviewed': { fr: 'Révisé', es: 'Revisado', hi: 'समीक्षित' },
-    'Recorded by': { fr: 'Consigné par', es: 'Registrado por', hi: 'द्वारा दर्ज' },
-    'Severity': { fr: 'Gravité', es: 'Gravedad', hi: 'गंभीरता' },
-    'Rooms & children': { fr: 'Salles et enfants', es: 'Salas y niños', hi: 'कक्ष और बच्चे' },
-    'Export selected': { fr: 'Exporter la sélection', es: 'Exportar selección', hi: 'चयनित निर्यात करें' },
-    'ACTIVITIES': { fr: 'ACTIVITÉS', es: 'ACTIVIDADES', hi: 'गतिविधियाँ' },
-    'AT HOME': { fr: 'À LA MAISON', es: 'EN CASA', hi: 'घर पर' },
-    'DIAPER / BATHROOM': { fr: 'COUCHE / TOILETTES', es: 'PAÑAL / BAÑO', hi: 'डायपर / बाथरूम' },
-    'MEALS & SNACKS': { fr: 'REPAS ET COLLATIONS', es: 'COMIDAS Y MERIENDAS', hi: 'भोजन और नाश्ता' },
-    'YOUR DAILY DIGEST': { fr: 'VOTRE RÉSUMÉ QUOTIDIEN', es: 'SU RESUMEN DIARIO', hi: 'आपका दैनिक सारांश' },
-    'SHARED': { fr: 'PARTAGÉ', es: 'COMPARTIDO', hi: 'साझा' },
-    'RATIO OK': { fr: 'RATIO CONFORME', es: 'PROPORCIÓN OK', hi: 'अनुपात ठीक' },
-    'Ate breakfast?': { fr: 'A déjeuné ?', es: '¿Desayunó?', hi: 'नाश्ता किया?' },
-    'Mood this morning': { fr: 'Humeur ce matin', es: 'Ánimo esta mañana', hi: 'आज सुबह का मिज़ाज' },
-    'Sleep last night': { fr: 'Sommeil la nuit dernière', es: 'Sueño anoche', hi: 'पिछली रात की नींद' },
-    'Started nap': { fr: 'Début de la sieste', es: 'Comenzó la siesta', hi: 'झपकी शुरू की' },
-    'Woke from nap': { fr: 'Réveil de la sieste', es: 'Despertó de la siesta', hi: 'झपकी से जागा' },
-    'Notes for staff': { fr: 'Notes pour le personnel', es: 'Notas para el personal', hi: 'स्टाफ़ के लिए टिप्पणियाँ' },
-    'Pickup people': { fr: 'Personnes autorisées', es: 'Personas de recogida', hi: 'पिकअप व्यक्ति' },
-    'Pickup change today': { fr: 'Changement de départ aujourd’hui', es: 'Cambio de recogida hoy', hi: 'आज पिकअप बदलाव' },
-    'Quick drop-off survey. Staff see this on the Today screen so they know what to expect.': { fr: 'Court sondage de dépôt. Le personnel le voit sur l’écran Aujourd’hui pour savoir à quoi s’attendre.', es: 'Breve encuesta de entrega. El personal la ve en la pantalla Hoy para saber qué esperar.', hi: 'त्वरित ड्रॉप-ऑफ सर्वेक्षण। स्टाफ़ इसे आज स्क्रीन पर देखता है ताकि वे जान सकें कि क्या अपेक्षा करनी है।' },
-    'happy 😊': { fr: 'content 😊', es: 'feliz 😊', hi: 'खुश 😊' },
-    'okay 🌒': { fr: 'correct 🌒', es: 'bien 🌒', hi: 'ठीक 🌒' },
-    'fussy 😩': { fr: 'grognon 😩', es: 'inquieto 😩', hi: 'चिड़चिड़ा 😩' },
-    'quiet 😶': { fr: 'calme 😶', es: 'callado 😶', hi: 'शांत 😶' },
-    'sleepy 😴': { fr: 'somnolent 😴', es: 'soñoliento 😴', hi: 'नींद में 😴' },
-    'sick 🤒': { fr: 'malade 🤒', es: 'enfermo 🤒', hi: 'बीमार 🤒' },
-    'great 🌙': { fr: 'excellent 🌙', es: 'excelente 🌙', hi: 'बढ़िया 🌙' },
-    'poor 🌘': { fr: 'mauvais 🌘', es: 'malo 🌘', hi: 'खराब 🌘' },
-    'restless 🌖': { fr: 'agité 🌖', es: 'inquieto 🌖', hi: 'बेचैन 🌖' },
-    'Mood: —': { fr: 'Humeur : —', es: 'Ánimo: —', hi: 'मिज़ाज: —' },
-    'Account ledger': { fr: 'Grand livre du compte', es: 'Libro mayor de la cuenta', hi: 'खाता बही' },
-    'Wallet': { fr: 'Portefeuille', es: 'Cartera', hi: 'वॉलेट' },
-    'Subtotal': { fr: 'Sous-total', es: 'Subtotal', hi: 'उप-योग' },
-    'Your portion': { fr: 'Votre part', es: 'Su parte', hi: 'आपका हिस्सा' },
-    'This month\'s billing': { fr: 'Facturation de ce mois-ci', es: 'Facturación de este mes', hi: 'इस महीने की बिलिंग' },
-    'View billing': { fr: 'Voir la facturation', es: 'Ver facturación', hi: 'बिलिंग देखें' },
-    'balance due': { fr: 'solde dû', es: 'saldo pendiente', hi: 'देय शेष' },
-    'CWELCC subsidy': { fr: 'Subvention CWELCC', es: 'Subsidio CWELCC', hi: 'CWELCC सब्सिडी' },
-    'Invoices, payments and balances.': { fr: 'Factures, paiements et soldes.', es: 'Facturas, pagos y saldos.', hi: 'चालान, भुगतान और शेष।' },
-    'Check in / out': { fr: 'Arrivée / départ', es: 'Entrada / salida', hi: 'चेक-इन / आउट' },
-    'Daily check-in': { fr: 'Arrivée quotidienne', es: 'Registro diario', hi: 'दैनिक चेक-इन' },
-    'Submit check-in': { fr: 'Envoyer l’arrivée', es: 'Enviar registro', hi: 'चेक-इन भेजें' },
-    'Scan the QR': { fr: 'Scanner le code QR', es: 'Escanear el QR', hi: 'QR स्कैन करें' },
-    'Not checked in': { fr: 'Non arrivé', es: 'Sin registrar', hi: 'चेक-इन नहीं' },
-    'Documents to sign': { fr: 'Documents à signer', es: 'Documentos por firmar', hi: 'हस्ताक्षर के लिए दस्तावेज़' },
-    'Forms to fill in': { fr: 'Formulaires à remplir', es: 'Formularios por completar', hi: 'भरने के लिए फ़ॉर्म' },
-    'No forms waiting for you right now.': { fr: 'Aucun formulaire en attente pour l’instant.', es: 'No hay formularios esperándole ahora.', hi: 'अभी आपके लिए कोई फ़ॉर्म प्रतीक्षा में नहीं।' },
-    'Field trip permission': { fr: 'Autorisation de sortie', es: 'Permiso de excursión', hi: 'फ़ील्ड ट्रिप अनुमति' },
-    'Incident Reports': { fr: 'Rapports d’incident', es: 'Informes de incidentes', hi: 'घटना रिपोर्ट' },
-    'Multi-day attendance pattern': { fr: 'Modèle de présence sur plusieurs jours', es: 'Patrón de asistencia de varios días', hi: 'बहु-दिवसीय उपस्थिति पैटर्न' },
-    'Parent–Educator Conferences': { fr: 'Rencontres parent–éducateur', es: 'Conferencias padre–educador', hi: 'अभिभावक–शिक्षक बैठकें' },
-    'Active medications recorded at the centre for your children.': { fr: 'Médicaments actifs enregistrés au centre pour vos enfants.', es: 'Medicamentos activos registrados en el centro para sus hijos.', hi: 'आपके बच्चों के लिए केंद्र पर दर्ज सक्रिय दवाइयाँ।' },
-    'Declare which days each child normally attends. Used for ratios + tuition projections.': { fr: 'Indiquez les jours de présence habituels de chaque enfant. Sert aux ratios et aux prévisions de frais.', es: 'Indique qué días asiste normalmente cada niño. Se usa para proporciones y proyecciones de matrícula.', hi: 'बताएँ कि हर बच्चा सामान्यतः किन दिनों में आता है। अनुपात और शुल्क अनुमान के लिए उपयोग किया जाता है।' },
-    'Every alert from Kiddietrac for your account, newest first. Tap one to mark it read.': { fr: 'Chaque alerte de Kiddietrac pour votre compte, la plus récente en premier. Touchez-en une pour la marquer comme lue.', es: 'Cada alerta de Kiddietrac para su cuenta, la más reciente primero. Toque una para marcarla como leída.', hi: 'आपके खाते के लिए Kiddietrac से हर अलर्ट, नवीनतम पहले। पढ़ा हुआ चिह्नित करने के लिए एक पर टैप करें।' },
-    '(Generated from logged events — AI summary unavailable)': { fr: '(Généré à partir des événements consignés — résumé IA indisponible)', es: '(Generado a partir de los eventos registrados — resumen de IA no disponible)', hi: '(दर्ज घटनाओं से बनाया गया — एआई सारांश अनुपलब्ध)' },
-    'Mon': { fr: 'lun', es: 'lun', hi: 'सोम' },
-    'Tue': { fr: 'mar', es: 'mar', hi: 'मंगल' },
-    'Wed': { fr: 'mer', es: 'mié', hi: 'बुध' },
-    'Thu': { fr: 'jeu', es: 'jue', hi: 'गुरु' },
-    'Fri': { fr: 'ven', es: 'vie', hi: 'शुक्र' },
-    'Sat': { fr: 'sam', es: 'sáb', hi: 'शनि' },
-    'Sun': { fr: 'dim', es: 'dom', hi: 'रवि' },
-    // ── Batch 10: parent-view chrome ──
-    'Viewing as': { fr: 'Afficher en tant que', es: 'Ver como', hi: 'इस रूप में देखें' },
-    'Learning moments': { fr: 'Moments d’apprentissage', es: 'Momentos de aprendizaje', hi: 'सीखने के पल' },
-    'Parent': { fr: 'Parent', es: 'Padre/Madre', hi: 'अभिभावक' },
-    'View billing': { fr: 'Voir la facturation', es: 'Ver facturación', hi: 'बिलिंग देखें' },
-    'Back': { fr: 'Retour', es: 'Atrás', hi: 'वापस' },
-    'Naps': { fr: 'Siestes', es: 'Siestas', hi: 'झपकियाँ' },
-    // ── Batch 11: login / index page ──
-    "Welcome back": { fr: "Bon retour", es: "Bienvenido de nuevo", hi: "वापसी पर स्वागत है" },
-    "Sign in": { fr: "Se connecter", es: "Iniciar sesión", hi: "साइन इन" },
-    "Sign in to see how your little one's day is going.": { fr: "Connectez-vous pour voir comment se passe la journée de votre tout-petit.", es: "Inicie sesión para ver cómo va el día de su pequeño.", hi: "अपने नन्हे का दिन कैसा जा रहा है, यह देखने के लिए साइन इन करें।" },
-    "Email": { fr: "Courriel", es: "Correo", hi: "ईमेल" },
-    "Password": { fr: "Mot de passe", es: "Contraseña", hi: "पासवर्ड" },
-    "Forgot?": { fr: "Oublié ?", es: "¿Olvidó?", hi: "भूल गए?" },
-    "Authenticator code (6 digits, or a 10-char recovery code)": { fr: "Code d'authentification (6 chiffres, ou un code de secours à 10 caractères)", es: "Código de autenticación (6 dígitos, o un código de recuperación de 10 caracteres)", hi: "प्रमाणक कोड (6 अंक, या 10-अक्षर का रिकवरी कोड)" },
-    "Every moment, beautifully captured.": { fr: "Chaque instant, magnifiquement capturé.", es: "Cada momento, bellamente capturado.", hi: "हर पल, खूबसूरती से कैद।" },
-    "beautifully captured.": { fr: "magnifiquement capturé.", es: "bellamente capturado.", hi: "खूबसूरती से कैद।" },
-    "See what your child is doing, eating, and learning — as it happens.": { fr: "Voyez ce que fait, mange et apprend votre enfant — en temps réel.", es: "Vea lo que su hijo hace, come y aprende, en tiempo real.", hi: "देखें कि आपका बच्चा क्या कर रहा, खा रहा और सीख रहा है — जैसे ही होता है।" },
-    "Real-time photos & updates": { fr: "Photos et mises à jour en temps réel", es: "Fotos y actualizaciones en tiempo real", hi: "वास्तविक समय की तस्वीरें और अपडेट" },
-    "Direct line to educators": { fr: "Ligne directe avec les éducateurs", es: "Línea directa con los educadores", hi: "शिक्षकों से सीधा संपर्क" },
-    "Simple billing with CWELCC": { fr: "Facturation simple avec CWELCC", es: "Facturación sencilla con CWELCC", hi: "CWELCC के साथ सरल बिलिंग" },
-    "AI Augmented": { fr: "Augmenté par l'IA", es: "Potenciado por IA", hi: "एआई संवर्धित" },
-    "CCEYA Compliant": { fr: "Conforme à la CCEYA", es: "Conforme con CCEYA", hi: "CCEYA अनुपालक" },
-    "HDLH Aligned": { fr: "Aligné sur HDLH", es: "Alineado con HDLH", hi: "HDLH संरेखित" },
-    "Your $10/day fee, applied automatically. Tax receipts every January.": { fr: "Vos frais de 10 $/jour, appliqués automatiquement. Reçus fiscaux chaque janvier.", es: "Su tarifa de $10/día, aplicada automáticamente. Recibos fiscales cada enero.", hi: "आपका $10/दिन शुल्क, स्वतः लागू। हर जनवरी कर रसीदें।" },
-    "Contact us": { fr: "Contactez-nous", es: "Contáctenos", hi: "हमसे संपर्क करें" },
-    // ── Batch 12: login page (SSO, hero, footer) ──
-    "Continue with Google": { fr: "Continuer avec Google", es: "Continuar con Google", hi: "Google से जारी रखें" },
-    "Continue with Microsoft": { fr: "Continuer avec Microsoft", es: "Continuar con Microsoft", hi: "Microsoft से जारी रखें" },
-    "Continue with Facebook": { fr: "Continuer avec Facebook", es: "Continuar con Facebook", hi: "Facebook से जारी रखें" },
-    "or sign in with email": { fr: "ou connectez-vous avec un courriel", es: "o inicie sesión con correo", hi: "या ईमेल से साइन इन करें" },
-    "Every moment,": { fr: "Chaque instant,", es: "Cada momento,", hi: "हर पल," },
-    "every milestone —": { fr: "chaque étape —", es: "cada hito —", hi: "हर पड़ाव —" },
-    "Message your child's room teacher anytime. Replies usually within an hour.": { fr: "Écrivez à l'éducateur de votre enfant à tout moment. Réponse généralement en moins d'une heure.", es: "Escriba al educador de su hijo en cualquier momento. Respuesta normalmente en menos de una hora.", hi: "किसी भी समय अपने बच्चे के कक्ष शिक्षक को संदेश भेजें। आमतौर पर एक घंटे के भीतर उत्तर।" },
-    "No account yet? Your childcare centre will send you an invitation email.": { fr: "Pas encore de compte ? Votre centre vous enverra un courriel d'invitation.", es: "¿Aún no tiene cuenta? Su centro le enviará un correo de invitación.", hi: "अभी तक खाता नहीं? आपका केंद्र आपको आमंत्रण ईमेल भेजेगा।" },
-    "if you need help.": { fr: "si vous avez besoin d'aide.", es: "si necesita ayuda.", hi: "यदि आपको सहायता चाहिए।" },
-    "Authenticator code": { fr: "Code d'authentification", es: "Código de autenticación", hi: "प्रमाणक कोड" },
-    "(6 digits, or a 10-char recovery code)": { fr: "(6 chiffres, ou un code de secours à 10 caractères)", es: "(6 dígitos, o un código de recuperación de 10 caracteres)", hi: "(6 अंक, या 10-अक्षर का रिकवरी कोड)" },
-    // ── Batch 13: login hero subtitle + badge ──
-    "AI-AUGMENTED · CANADA-FIRST": { fr: "AUGMENTÉ PAR L'IA · CONÇU AU CANADA", es: "POTENCIADO POR IA · HECHO EN CANADÁ", hi: "एआई-संवर्धित · कनाडा-प्रथम" },
-    "From morning check-in to your AI-summarized day at 6 pm, KiddieTrac brings your child's day to you with the warmth and clarity you deserve.": { fr: "De l'arrivée du matin au résumé de la journée par l'IA à 18 h, KiddieTrac vous transmet la journée de votre enfant avec toute la chaleur et la clarté que vous méritez.", es: "Desde el registro de la mañana hasta el resumen de IA del día a las 6 p. m., KiddieTrac le trae el día de su hijo con la calidez y claridad que merece.", hi: "सुबह के चेक-इन से लेकर शाम 6 बजे आपके एआई-सारांशित दिन तक, KiddieTrac आपके बच्चे का दिन उस गर्मजोशी और स्पष्टता के साथ लाता है जिसके आप हकदार हैं।" },
-    // ── Batch 14: settings screen (language card + profile/security labels) ──
-    "Choose the language for the app. Saved for your next sign-in, on any device.": { fr: "Choisissez la langue de l'application. Enregistrée pour votre prochaine connexion, sur n'importe quel appareil.", es: "Elija el idioma de la aplicación. Se guarda para su próximo inicio de sesión, en cualquier dispositivo.", hi: "ऐप की भाषा चुनें। किसी भी डिवाइस पर आपके अगले साइन-इन के लिए सहेजी जाती है।" },
-    "Saved. Applying…": { fr: "Enregistré. Application…", es: "Guardado. Aplicando…", hi: "सहेजा गया। लागू किया जा रहा है…" },
-    "Profile": { fr: "Profil", es: "Perfil", hi: "प्रोफ़ाइल" },
-    "Change photo": { fr: "Changer la photo", es: "Cambiar foto", hi: "फ़ोटो बदलें" },
-    "First name": { fr: "Prénom", es: "Nombre", hi: "पहला नाम" },
-    "Last name": { fr: "Nom", es: "Apellido", hi: "अंतिम नाम" },
-    "Phone": { fr: "Téléphone", es: "Teléfono", hi: "फ़ोन" },
-    "Date of birth": { fr: "Date de naissance", es: "Fecha de nacimiento", hi: "जन्म तिथि" },
-    "Save profile": { fr: "Enregistrer le profil", es: "Guardar perfil", hi: "प्रोफ़ाइल सहेजें" },
-    "Change password": { fr: "Changer le mot de passe", es: "Cambiar contraseña", hi: "पासवर्ड बदलें" },
-    "Current password": { fr: "Mot de passe actuel", es: "Contraseña actual", hi: "वर्तमान पासवर्ड" },
-    "New password": { fr: "Nouveau mot de passe", es: "Nueva contraseña", hi: "नया पासवर्ड" },
-    "Quick-unlock PIN": { fr: "NIP de déverrouillage rapide", es: "PIN de desbloqueo rápido", hi: "त्वरित-अनलॉक पिन" },
-    // ── Batch 15: user reactivation ──
-    "Deactivated": { fr: "Désactivés", es: "Desactivados", hi: "निष्क्रिय" },
-    "Deactivated users": { fr: "Utilisateurs désactivés", es: "Usuarios desactivados", hi: "निष्क्रिय उपयोगकर्ता" },
-    "Reactivate": { fr: "Réactiver", es: "Reactivar", hi: "पुनः सक्रिय करें" },
-    "Active users": { fr: "Utilisateurs actifs", es: "Usuarios activos", hi: "सक्रिय उपयोगकर्ता" },
-    "Reactivating…": { fr: "Réactivation…", es: "Reactivando…", hi: "पुनः सक्रिय किया जा रहा है…" },
-    "No deactivated users. Everyone in your agency is active.": { fr: "Aucun utilisateur désactivé. Tout le monde dans votre agence est actif.", es: "No hay usuarios desactivados. Todos en su agencia están activos.", hi: "कोई निष्क्रिय उपयोगकर्ता नहीं। आपकी एजेंसी में सभी सक्रिय हैं।" },
-    "Manage": { fr: "Gérer", es: "Gestionar", hi: "प्रबंधित करें" },
-    "Never": { fr: "Jamais", es: "Nunca", hi: "कभी नहीं" },
-    'Platform': { fr: 'Plateforme', es: 'Plataforma', hi: 'प्लेटफ़ॉर्म' },
-    'Overview': { fr: 'Aperçu', es: 'Resumen', hi: 'अवलोकन' },
-    'Operations': { fr: 'Opérations', es: 'Operaciones', hi: 'संचालन' },
-    'Engagement': { fr: 'Engagement', es: 'Participación', hi: 'सहभागिता' },
-    'Administration': { fr: 'Administration', es: 'Administración', hi: 'प्रशासन' },
-    'Growth': { fr: 'Croissance', es: 'Crecimiento', hi: 'विकास' },
-    'Billing': { fr: 'Facturation', es: 'Facturación', hi: 'बिलिंग' },
-    'Platform admin': { fr: 'Admin de la plateforme', es: 'Admin de la plataforma', hi: 'प्लेटफ़ॉर्म एडमिन' },
-    'Platform admin (overview)': { fr: 'Admin de la plateforme (aperçu)', es: 'Admin de la plataforma (resumen)', hi: 'प्लेटफ़ॉर्म एडमिन (अवलोकन)' },
-    'No medications recorded yet.': { fr: 'Aucun médicament enregistré.', es: 'Aún no hay medicamentos registrados.', hi: 'अभी कोई दवा दर्ज नहीं है।' },
-    'Standing orders for children in your centre. Parent authorization required before any dose can be logged.': { fr: 'Ordonnances permanentes pour les enfants de votre centre. L’autorisation du parent est requise avant d’enregistrer une dose.', es: 'Órdenes permanentes para los niños de su centro. Se requiere autorización del padre antes de registrar una dosis.', hi: 'आपके केंद्र के बच्चों के स्थायी आदेश। कोई भी खुराक दर्ज करने से पहले अभिभावक की अनुमति आवश्यक है।' },
-    'No children enrolled': { fr: 'Aucun enfant inscrit', es: 'Ningún niño matriculado', hi: 'कोई बच्चा नामांकित नहीं' },
-    'No records found': { fr: 'Aucun enregistrement trouvé', es: 'No se encontraron registros', hi: 'कोई रिकॉर्ड नहीं मिला' },
-    'No results': { fr: 'Aucun résultat', es: 'Sin resultados', hi: 'कोई परिणाम नहीं' },
-    'Nothing to show yet.': { fr: 'Rien à afficher pour l’instant.', es: 'Nada que mostrar todavía.', hi: 'अभी दिखाने के लिए कुछ नहीं है।' },
-    'Something went wrong': { fr: 'Une erreur est survenue', es: 'Algo salió mal', hi: 'कुछ गड़बड़ हो गई' },
-    'Please refresh the page.': { fr: 'Veuillez actualiser la page.', es: 'Actualice la página.', hi: 'कृपया पृष्ठ रिफ़्रेश करें।' },
-    'Shared lesson plans across your agency. Click "Use" to copy a template into your centre.': { fr: 'Plans de leçon partagés dans votre agence. Cliquez sur « Utiliser » pour copier un modèle dans votre centre.', es: 'Planes de clase compartidos en su agencia. Haga clic en «Usar» para copiar una plantilla en su centro.', hi: 'आपकी एजेंसी में साझा पाठ योजनाएँ। किसी टेम्पलेट को अपने केंद्र में कॉपी करने के लिए "उपयोग करें" पर क्लिक करें।' },
-    'Choose a family to see their payment schedules.': { fr: 'Choisissez une famille pour voir ses plans de paiement.', es: 'Elija una familia para ver sus planes de pago.', hi: 'भुगतान योजनाएँ देखने के लिए परिवार चुनें।' },
-    'Select a family…': { fr: 'Sélectionner une famille…', es: 'Seleccione una familia…', hi: 'एक परिवार चुनें…' },
-    'Select a family above to view their payment schedules.': { fr: 'Sélectionnez une famille ci-dessus pour voir ses plans de paiement.', es: 'Seleccione una familia arriba para ver sus planes de pago.', hi: 'भुगतान योजनाएँ देखने के लिए ऊपर एक परिवार चुनें।' },
-    'Only recipients who opted in to SMS and have a phone number on file will receive it.': { fr: 'Seuls les destinataires ayant accepté les SMS et dont le numéro est au dossier le recevront.', es: 'Solo lo recibirán los destinatarios que aceptaron los SMS y tienen un teléfono registrado.', hi: 'केवल वे प्राप्तकर्ता जिन्होंने एसएमएस के लिए सहमति दी है और जिनका फ़ोन नंबर दर्ज है, इसे प्राप्त करेंगे।' },
-    'Sort': { fr: 'Trier', es: 'Ordenar', hi: 'क्रमबद्ध करें' },
-    'Filter': { fr: 'Filtrer', es: 'Filtrar', hi: 'फ़िल्टर' },
-    'Today': { fr: 'Aujourd’hui', es: 'Hoy', hi: 'आज' },
-    'Yesterday': { fr: 'Hier', es: 'Ayer', hi: 'कल' },
-    'This week': { fr: 'Cette semaine', es: 'Esta semana', hi: 'इस सप्ताह' },
-    'Total': { fr: 'Total', es: 'Total', hi: 'कुल' },
-
-    // ── Sidebar sections and nav labels that were still English (2026-09-01) ──
-    // Audited: section headers were 12/17 and nav labels 106/134. These are the
-    // remainder. They sit on screen permanently, in every role, so they are the half
-    // of the dictionary worth completing first.
-    'Account': { fr: 'Compte', es: 'Cuenta', hi: 'खाता' },
-    'Finance': { fr: 'Finances', es: 'Finanzas', hi: 'वित्त' },
-    'Home Visitors': { fr: 'Visiteurs à domicile', es: 'Visitadores a domicilio', hi: 'गृह भ्रमणकर्ता' },
-    'Reseller': { fr: 'Revendeur', es: 'Distribuidor', hi: 'रीसेलर' },
-    'Sales': { fr: 'Ventes', es: 'Ventas', hi: 'बिक्री' },
-
-    'Accounting': { fr: 'Comptabilité', es: 'Contabilidad', hi: 'लेखांकन' },
-    'Awards': { fr: 'Récompenses', es: 'Reconocimientos', hi: 'पुरस्कार' },
-    'Calendar settings': { fr: 'Paramètres du calendrier', es: 'Ajustes del calendario', hi: 'कैलेंडर सेटिंग्स' },
-    'Daily Overview': { fr: 'Aperçu quotidien', es: 'Resumen diario', hi: 'दैनिक अवलोकन' },
-    'Document templates': { fr: 'Modèles de documents', es: 'Plantillas de documentos', hi: 'दस्तावेज़ टेम्पलेट' },
-    // 'Messagerie' is already Messenger — an email client that shared the label would be
-    // two different screens with one name in the sidebar.
-    'Email Client': { fr: 'Client de messagerie', es: 'Cliente de correo', hi: 'ईमेल क्लाइंट' },
-    'Email templates': { fr: 'Modèles d’e-mail', es: 'Plantillas de correo', hi: 'ईमेल टेम्पलेट' },
-    'Follow-ups': { fr: 'Relances', es: 'Seguimientos', hi: 'फ़ॉलो-अप' },
-    'Forms Manager': { fr: 'Gestionnaire de formulaires', es: 'Gestor de formularios', hi: 'फ़ॉर्म प्रबंधक' },
-    'Home visit reports': { fr: 'Rapports de visite à domicile', es: 'Informes de visita domiciliaria', hi: 'गृह भ्रमण रिपोर्ट' },
-    'Immunization': { fr: 'Vaccinations', es: 'Vacunas', hi: 'टीकाकरण' },
-    'Inspection forms': { fr: 'Formulaires d’inspection', es: 'Formularios de inspección', hi: 'निरीक्षण फ़ॉर्म' },
-    'Invoices': { fr: 'Factures', es: 'Facturas', hi: 'चालान' },
-    'Late pick-ups': { fr: 'Retards de récupération', es: 'Recogidas tardías', hi: 'देर से पिकअप' },
-    'Launch demo': { fr: 'Lancer la démo', es: 'Iniciar demo', hi: 'डेमो शुरू करें' },
-    'Maintenance': { fr: 'Maintenance', es: 'Mantenimiento', hi: 'रखरखाव' },
-    'My profile & security': { fr: 'Mon profil et sécurité', es: 'Mi perfil y seguridad', hi: 'मेरी प्रोफ़ाइल और सुरक्षा' },
-    'My reports': { fr: 'Mes rapports', es: 'Mis informes', hi: 'मेरी रिपोर्ट' },
-    'My tasks': { fr: 'Mes tâches', es: 'Mis tareas', hi: 'मेरे कार्य' },
-    'New lead': { fr: 'Nouveau prospect', es: 'Nuevo prospecto', hi: 'नया लीड' },
-    'New visit report': { fr: 'Nouveau rapport de visite', es: 'Nuevo informe de visita', hi: 'नई भ्रमण रिपोर्ट' },
-    'Parent Feedback': { fr: 'Retours des parents', es: 'Comentarios de los padres', hi: 'अभिभावक प्रतिक्रिया' },
-    'Payment providers': { fr: 'Prestataires de paiement', es: 'Proveedores de pago', hi: 'भुगतान प्रदाता' },
-    'Photos & video': { fr: 'Photos et vidéos', es: 'Fotos y vídeos', hi: 'तस्वीरें और वीडियो' },
-    'Pipeline': { fr: 'Pipeline', es: 'Embudo de ventas', hi: 'पाइपलाइन' },
-    'Room assignments': { fr: 'Affectations de salle', es: 'Asignaciones de sala', hi: 'कक्ष आवंटन' },
-    'Room Controls': { fr: 'Gestion des salles', es: 'Control de salas', hi: 'कक्ष नियंत्रण' },
-    'Tasks': { fr: 'Tâches', es: 'Tareas', hi: 'कार्य' },
-    // A child leaving care, not money leaving an account.
-    'Withdrawals': { fr: 'Départs', es: 'Bajas', hi: 'नाम वापसी' },
-
-    // ── Screen subtitles — the line under each banner (2026-09-01). Coverage was
-    //    36 of 115; these are the other 79. With the sidebar fully translated, a
-    //    French reader navigated in French and then met an English sentence on
-    //    every screen they opened.
-    'A weekly wellbeing summary for each child.': { fr: 'Un résumé hebdomadaire du bien-être de chaque enfant.', es: 'Un resumen semanal del bienestar de cada niño.', hi: 'प्रत्येक बच्चे के कल्याण का साप्ताहिक सारांश।' },
-    'Activity zones within each room.': { fr: 'Zones d’activité dans chaque salle.', es: 'Zonas de actividad en cada sala.', hi: 'प्रत्येक कक्ष में गतिविधि क्षेत्र।' },
-    'Agreements that have been signed.': { fr: 'Les accords qui ont été signés.', es: 'Acuerdos que han sido firmados.', hi: 'हस्ताक्षरित समझौते।' },
-    'Allergies and dietary requirements, by room.': { fr: 'Allergies et régimes alimentaires, par salle.', es: 'Alergias y requisitos alimentarios, por sala.', hi: 'एलर्जी और आहार आवश्यकताएँ, कक्ष अनुसार।' },
-    'Assign tasks to educators and track them to completion.': { fr: 'Attribuez des tâches aux éducateurs et suivez-les jusqu’à leur achèvement.', es: 'Asigne tareas a los educadores y sígalas hasta completarlas.', hi: 'शिक्षकों को कार्य सौंपें और उन्हें पूरा होने तक ट्रैक करें।' },
-    'Attendance patterns and days booked.': { fr: 'Habitudes de présence et jours réservés.', es: 'Patrones de asistencia y días reservados.', hi: 'उपस्थिति पैटर्न और बुक किए गए दिन।' },
-    'Automated follow-up with prospective families.': { fr: 'Relances automatiques auprès des familles potentielles.', es: 'Seguimiento automático con familias potenciales.', hi: 'संभावित परिवारों के साथ स्वचालित फ़ॉलो-अप।' },
-    'CACFP meal counts and claims.': { fr: 'Comptages de repas et demandes CACFP.', es: 'Recuentos de comidas y reclamaciones CACFP.', hi: 'CACFP भोजन गणना और दावे।' },
-    'Campaigns to fill your empty spaces.': { fr: 'Campagnes pour combler vos places libres.', es: 'Campañas para llenar sus plazas libres.', hi: 'आपकी खाली जगहें भरने के लिए अभियान।' },
-    'Celebrate a child’s effort — daily, weekly or monthly. Parents see it too, and you can print a certificate.': { fr: 'Célébrez les efforts d’un enfant — chaque jour, chaque semaine ou chaque mois. Les parents le voient aussi, et vous pouvez imprimer un certificat.', es: 'Celebre el esfuerzo de un niño: a diario, semanal o mensualmente. Los padres también lo ven y usted puede imprimir un certificado.', hi: 'बच्चे के प्रयास का जश्न मनाएँ — दैनिक, साप्ताहिक या मासिक। अभिभावक भी इसे देखते हैं, और आप प्रमाणपत्र प्रिंट कर सकते हैं।' },
-    'Centres and the rooms inside them.': { fr: 'Les centres et les salles qu’ils contiennent.', es: 'Los centros y las salas que contienen.', hi: 'केंद्र और उनके भीतर के कक्ष।' },
-    'Children with an immunisation due.': { fr: 'Enfants dont une vaccination est due.', es: 'Niños con una vacuna pendiente.', hi: 'जिन बच्चों का टीकाकरण देय है।' },
-    'Choose which layers the calendar draws.': { fr: 'Choisissez les couches affichées par le calendrier.', es: 'Elija qué capas dibuja el calendario.', hi: 'चुनें कि कैलेंडर कौन-सी परतें दिखाए।' },
-    'Clock in and out.': { fr: 'Pointer à l’arrivée et au départ.', es: 'Fichar la entrada y la salida.', hi: 'क्लॉक इन और आउट करें।' },
-    'Close shifts and days somebody forgot to close.': { fr: 'Clôturez les quarts et les journées que quelqu’un a oublié de fermer.', es: 'Cierre turnos y días que alguien olvidó cerrar.', hi: 'वे शिफ़्ट और दिन बंद करें जिन्हें कोई बंद करना भूल गया।' },
-    'Closures, trips, conferences, time off, birthdays and shifts across the agency.': { fr: 'Fermetures, sorties, rencontres, congés, anniversaires et quarts dans toute l’agence.', es: 'Cierres, salidas, reuniones, ausencias, cumpleaños y turnos en toda la agencia.', hi: 'पूरी एजेंसी में बंद दिन, भ्रमण, बैठकें, छुट्टियाँ, जन्मदिन और शिफ़्ट।' },
-    'Cover for absent staff.': { fr: 'Remplacement du personnel absent.', es: 'Sustitución del personal ausente.', hi: 'अनुपस्थित स्टाफ़ के लिए कवर।' },
-    'Create, configure and suspend agencies.': { fr: 'Créez, configurez et suspendez des agences.', es: 'Cree, configure y suspenda agencias.', hi: 'एजेंसियाँ बनाएँ, कॉन्फ़िगर करें और निलंबित करें।' },
-    'Curriculum framework and coverage.': { fr: 'Cadre pédagogique et couverture.', es: 'Marco curricular y cobertura.', hi: 'पाठ्यक्रम ढाँचा और कवरेज।' },
-    'Discounts for second and subsequent children.': { fr: 'Réductions pour le deuxième enfant et les suivants.', es: 'Descuentos para el segundo hijo y siguientes.', hi: 'दूसरे और उसके बाद के बच्चों के लिए छूट।' },
-    'Every agency on the platform, with usage and revenue.': { fr: 'Toutes les agences de la plateforme, avec l’utilisation et les revenus.', es: 'Todas las agencias de la plataforma, con uso e ingresos.', hi: 'प्लेटफ़ॉर्म की सभी एजेंसियाँ, उपयोग और राजस्व सहित।' },
-    'Every child enrolled, and their records.': { fr: 'Tous les enfants inscrits et leurs dossiers.', es: 'Todos los niños inscritos y sus expedientes.', hi: 'सभी नामांकित बच्चे और उनके रिकॉर्ड।' },
-    'Every email the system sent — preview the exact message + open tracking.': { fr: 'Tous les courriels envoyés par le système — aperçu du message exact + suivi des ouvertures.', es: 'Todos los correos que envió el sistema: vista previa del mensaje exacto + seguimiento de aperturas.', hi: 'सिस्टम द्वारा भेजे गए सभी ईमेल — सटीक संदेश का पूर्वावलोकन + ओपन ट्रैकिंग।' },
-    'Faces suggested by AI, for you to confirm.': { fr: 'Visages suggérés par l’IA, à confirmer.', es: 'Rostros sugeridos por la IA, para que los confirme.', hi: 'एआई द्वारा सुझाए गए चेहरे, आपकी पुष्टि के लिए।' },
-    'Families at risk of leaving.': { fr: 'Familles susceptibles de partir.', es: 'Familias en riesgo de irse.', hi: 'छोड़ने के जोखिम वाले परिवार।' },
-    'Families due to re-enrol for next term.': { fr: 'Familles devant se réinscrire pour la prochaine session.', es: 'Familias que deben volver a matricularse el próximo período.', hi: 'अगले सत्र के लिए पुनः नामांकन हेतु देय परिवार।' },
-    'Families, guardians and contact details.': { fr: 'Familles, tuteurs et coordonnées.', es: 'Familias, tutores y datos de contacto.', hi: 'परिवार, अभिभावक और संपर्क विवरण।' },
-    'Forms families and staff are asked to complete.': { fr: 'Formulaires que les familles et le personnel doivent remplir.', es: 'Formularios que se pide completar a familias y personal.', hi: 'वे फ़ॉर्म जिन्हें परिवार और स्टाफ़ भरते हैं।' },
-    'Google, Microsoft and Facebook sign-in.': { fr: 'Connexion Google, Microsoft et Facebook.', es: 'Inicio de sesión con Google, Microsoft y Facebook.', hi: 'Google, Microsoft और Facebook साइन-इन।' },
-    'Holidays and unplanned closures.': { fr: 'Jours fériés et fermetures imprévues.', es: 'Días festivos y cierres imprevistos.', hi: 'अवकाश और अनियोजित बंदी।' },
-    'Home-visit reports filed by your home visitors, with edit history.': { fr: 'Rapports de visite à domicile déposés par vos visiteurs, avec l’historique des modifications.', es: 'Informes de visita domiciliaria presentados por sus visitadores, con historial de cambios.', hi: 'आपके गृह भ्रमणकर्ताओं द्वारा दर्ज गृह भ्रमण रिपोर्ट, संपादन इतिहास सहित।' },
-    'How engaged each family is with the app.': { fr: 'Le degré d’engagement de chaque famille avec l’application.', es: 'El grado de participación de cada familia con la aplicación.', hi: 'प्रत्येक परिवार ऐप से कितना जुड़ा है।' },
-    'How long records are kept before deletion.': { fr: 'Durée de conservation des dossiers avant suppression.', es: 'Cuánto tiempo se conservan los registros antes de eliminarlos.', hi: 'हटाने से पहले रिकॉर्ड कितने समय रखे जाते हैं।' },
-    'Immunisation records and what is missing.': { fr: 'Dossiers de vaccination et ce qui manque.', es: 'Registros de vacunación y lo que falta.', hi: 'टीकाकरण रिकॉर्ड और क्या अनुपलब्ध है।' },
-    'Invoices and balances for the agency.': { fr: 'Factures et soldes de l’agence.', es: 'Facturas y saldos de la agencia.', hi: 'एजेंसी के चालान और शेष राशि।' },
-    'Late arrivals and pick-ups awaiting a decision.': { fr: 'Arrivées et départs tardifs en attente d’une décision.', es: 'Llegadas y recogidas tardías pendientes de decisión.', hi: 'निर्णय की प्रतीक्षा में देर से आगमन और पिकअप।' },
-    'Late collections and the fees they attract.': { fr: 'Récupérations tardives et les frais associés.', es: 'Recogidas tardías y las tarifas que generan.', hi: 'देर से लेना और उस पर लगने वाले शुल्क।' },
-    'Leave requests awaiting a decision.': { fr: 'Demandes de congé en attente d’une décision.', es: 'Solicitudes de ausencia pendientes de decisión.', hi: 'निर्णय की प्रतीक्षा में छुट्टी अनुरोध।' },
-    'Live child-to-educator ratios against licensing.': { fr: 'Ratios enfants-éducateurs en direct par rapport aux normes.', es: 'Ratios niño-educador en vivo frente a la licencia.', hi: 'लाइसेंस के सापेक्ष लाइव बच्चा-शिक्षक अनुपात।' },
-    'Live location of a bus or a trip in progress.': { fr: 'Position en direct d’un autobus ou d’une sortie en cours.', es: 'Ubicación en vivo de un autobús o una salida en curso.', hi: 'बस या चल रहे भ्रमण का लाइव स्थान।' },
-    'Money returned to families.': { fr: 'Sommes remboursées aux familles.', es: 'Dinero devuelto a las familias.', hi: 'परिवारों को लौटाया गया धन।' },
-    'Monitoring & quarterly inspection forms submitted by home visitors.': { fr: 'Formulaires de suivi et d’inspection trimestrielle soumis par les visiteurs à domicile.', es: 'Formularios de seguimiento e inspección trimestral enviados por los visitadores.', hi: 'गृह भ्रमणकर्ताओं द्वारा जमा निगरानी और त्रैमासिक निरीक्षण फ़ॉर्म।' },
-    'Outings, consent and headcounts.': { fr: 'Sorties, consentements et comptages.', es: 'Salidas, consentimientos y recuentos.', hi: 'भ्रमण, सहमति और गिनती।' },
-    'Parent-teacher conferences.': { fr: 'Rencontres parents-éducateurs.', es: 'Reuniones de padres y educadores.', hi: 'अभिभावक-शिक्षक बैठकें।' },
-    'Photos and clips shared with families.': { fr: 'Photos et clips partagés avec les familles.', es: 'Fotos y clips compartidos con las familias.', hi: 'परिवारों के साथ साझा तस्वीरें और क्लिप।' },
-    'Places held while a family is away.': { fr: 'Places réservées pendant l’absence d’une famille.', es: 'Plazas reservadas mientras una familia está ausente.', hi: 'परिवार की अनुपस्थिति के दौरान रखी गई जगहें।' },
-    'Plan and communicate a fee increase.': { fr: 'Planifiez et annoncez une hausse des frais.', es: 'Planifique y comunique un aumento de tarifas.', hi: 'शुल्क वृद्धि की योजना बनाएँ और सूचित करें।' },
-    'Progress reports for each child.': { fr: 'Bulletins de progrès pour chaque enfant.', es: 'Informes de progreso de cada niño.', hi: 'प्रत्येक बच्चे की प्रगति रिपोर्ट।' },
-    'Projected enrolment and revenue.': { fr: 'Inscriptions et revenus prévus.', es: 'Matrículas e ingresos previstos.', hi: 'अनुमानित नामांकन और राजस्व।' },
-    'Prospective families who booked a centre tour.': { fr: 'Familles potentielles ayant réservé une visite du centre.', es: 'Familias potenciales que reservaron una visita al centro.', hi: 'केंद्र भ्रमण बुक करने वाले संभावित परिवार।' },
-    'Raise invoices for everyone in one run.': { fr: 'Émettez les factures de tout le monde en une seule fois.', es: 'Emita las facturas de todos de una sola vez.', hi: 'सभी के चालान एक साथ जारी करें।' },
-    'Reminders about the time clock, and closing what somebody forgot.': { fr: 'Rappels concernant le pointage et la clôture de ce qui a été oublié.', es: 'Recordatorios sobre el reloj de fichaje y el cierre de lo olvidado.', hi: 'टाइम क्लॉक के अनुस्मारक, और भूली हुई प्रविष्टियाँ बंद करना।' },
-    'Routes, stops and riders.': { fr: 'Trajets, arrêts et passagers.', es: 'Rutas, paradas y pasajeros.', hi: 'मार्ग, ठहराव और यात्री।' },
-    'Schedule downtime and notify users by email.': { fr: 'Planifiez une interruption et prévenez les utilisateurs par courriel.', es: 'Programe una interrupción y avise a los usuarios por correo.', hi: 'डाउनटाइम शेड्यूल करें और उपयोगकर्ताओं को ईमेल से सूचित करें।' },
-    'Sign-in anomalies and security events.': { fr: 'Anomalies de connexion et événements de sécurité.', es: 'Anomalías de inicio de sesión y eventos de seguridad.', hi: 'साइन-इन विसंगतियाँ और सुरक्षा घटनाएँ।' },
-    'Sync invoices and payments with QuickBooks.': { fr: 'Synchronisez factures et paiements avec QuickBooks.', es: 'Sincronice facturas y pagos con QuickBooks.', hi: 'QuickBooks के साथ चालान और भुगतान सिंक करें।' },
-    'Tasks assigned to you — mark them in progress or done.': { fr: 'Tâches qui vous sont attribuées — indiquez-les en cours ou terminées.', es: 'Tareas asignadas a usted: márquelas en curso o completadas.', hi: 'आपको सौंपे गए कार्य — उन्हें प्रगति में या पूर्ण चिह्नित करें।' },
-    'Tax rate and other invoicing defaults.': { fr: 'Taux de taxe et autres valeurs par défaut de facturation.', es: 'Tipo impositivo y otros valores predeterminados de facturación.', hi: 'कर दर और अन्य चालान डिफ़ॉल्ट।' },
-    'The fee plans a family can be placed on.': { fr: 'Les plans tarifaires auxquels une famille peut être rattachée.', es: 'Los planes de tarifas en los que se puede colocar a una familia.', hi: 'वे शुल्क योजनाएँ जिन पर परिवार रखा जा सकता है।' },
-    'The mailbox your agency sends from.': { fr: 'La boîte courriel depuis laquelle votre agence envoie.', es: 'El buzón desde el que envía su agencia.', hi: 'वह मेलबॉक्स जिससे आपकी एजेंसी भेजती है।' },
-    'This week on the menu.': { fr: 'Au menu cette semaine.', es: 'Esta semana en el menú.', hi: 'इस सप्ताह के मेन्यू में।' },
-    'Turn features on and off per agency.': { fr: 'Activez ou désactivez des fonctionnalités par agence.', es: 'Active o desactive funciones por agencia.', hi: 'प्रति एजेंसी सुविधाएँ चालू/बंद करें।' },
-    'Unusual activity worth a second look.': { fr: 'Activité inhabituelle méritant un second regard.', es: 'Actividad inusual que merece una segunda mirada.', hi: 'असामान्य गतिविधि जिस पर दोबारा नज़र डालें।' },
-    'Upload a form, assign it to parents, educators or home visitors, and track who has signed it.': { fr: 'Téléversez un formulaire, attribuez-le aux parents, aux éducateurs ou aux visiteurs à domicile, et suivez qui l’a signé.', es: 'Suba un formulario, asígnelo a padres, educadores o visitadores, y controle quién lo ha firmado.', hi: 'फ़ॉर्म अपलोड करें, उसे अभिभावकों, शिक्षकों या गृह भ्रमणकर्ताओं को सौंपें, और देखें किसने हस्ताक्षर किए।' },
-    'Video clips shared with families.': { fr: 'Clips vidéo partagés avec les familles.', es: 'Clips de vídeo compartidos con las familias.', hi: 'परिवारों के साथ साझा वीडियो क्लिप।' },
-    'Waitlist leads and enquiries.': { fr: 'Demandes et prospects de la liste d’attente.', es: 'Solicitudes y consultas de la lista de espera.', hi: 'प्रतीक्षा सूची के लीड और पूछताछ।' },
-    'Warm notes when a child or colleague has a birthday coming up.': { fr: 'Petits mots chaleureux à l’approche de l’anniversaire d’un enfant ou d’un collègue.', es: 'Notas cálidas cuando se acerca el cumpleaños de un niño o de un compañero.', hi: 'जब किसी बच्चे या सहकर्मी का जन्मदिन आ रहा हो तो स्नेह भरे संदेश।' },
-    'Weekly plans for each room.': { fr: 'Plans hebdomadaires pour chaque salle.', es: 'Planes semanales para cada sala.', hi: 'प्रत्येक कक्ष की साप्ताहिक योजनाएँ।' },
-    'What families said about their child’s day.': { fr: 'Ce que les familles ont dit de la journée de leur enfant.', es: 'Lo que las familias dijeron sobre el día de su hijo.', hi: 'परिवारों ने अपने बच्चे के दिन के बारे में क्या कहा।' },
-    'What families think of you.': { fr: 'Ce que les familles pensent de vous.', es: 'Lo que las familias piensan de usted.', hi: 'परिवार आपके बारे में क्या सोचते हैं।' },
-    'What the app tells people about, and how.': { fr: 'Ce dont l’application informe les gens, et comment.', es: 'Sobre qué informa la aplicación, y cómo.', hi: 'ऐप लोगों को किस बारे में बताता है, और कैसे।' },
-    'When invoices go out, and when payment is due.': { fr: 'Quand les factures partent et quand le paiement est dû.', es: 'Cuándo salen las facturas y cuándo vence el pago.', hi: 'चालान कब जाते हैं, और भुगतान कब देय है।' },
-    'When payroll is next due, so the overview can count down to it.': { fr: 'Quand la prochaine paie est due, pour que l’aperçu puisse en faire le compte à rebours.', es: 'Cuándo vence la próxima nómina, para que el resumen pueda contar atrás.', hi: 'अगला वेतन कब देय है, ताकि अवलोकन उलटी गिनती कर सके।' },
-    'Where your centres are, and who is on the floor.': { fr: 'Où se trouvent vos centres et qui est sur place.', es: 'Dónde están sus centros y quién está en el sitio.', hi: 'आपके केंद्र कहाँ हैं, और कौन मौजूद है।' },
-    'Where your programme is light against How Does Learning Happen.': { fr: 'Où votre programme est léger par rapport à How Does Learning Happen.', es: 'Dónde su programa es escaso frente a How Does Learning Happen.', hi: 'How Does Learning Happen की तुलना में आपका कार्यक्रम कहाँ कमज़ोर है।' },
-    'Which educator is in which room.': { fr: 'Quel éducateur est dans quelle salle.', es: 'Qué educador está en qué sala.', hi: 'कौन-सा शिक्षक किस कक्ष में है।' },
-    'Which families stay, and which leave.': { fr: 'Quelles familles restent et lesquelles partent.', es: 'Qué familias se quedan y cuáles se van.', hi: 'कौन-से परिवार रहते हैं, और कौन-से चले जाते हैं।' },
-    'Who has to sign what, and in which order.': { fr: 'Qui doit signer quoi, et dans quel ordre.', es: 'Quién debe firmar qué, y en qué orden.', hi: 'किसे क्या हस्ताक्षर करना है, और किस क्रम में।' },
-    'Your own Zum Rails and Stripe accounts, per agency.': { fr: 'Vos propres comptes Zum Rails et Stripe, par agence.', es: 'Sus propias cuentas de Zum Rails y Stripe, por agencia.', hi: 'प्रति एजेंसी आपके अपने Zum Rails और Stripe खाते।' },
-    // ── 2026-09-29: donations, learning framework, compliance evidence, speak-it ──
-    'Donations': { fr: 'Dons', es: 'Donaciones', hi: 'दान' },
-    'Learning framework': { fr: 'Cadre d’apprentissage', es: 'Marco de aprendizaje', hi: 'शिक्षण फ़्रेमवर्क' },
-    'Compliance evidence': { fr: 'Preuves de conformité', es: 'Evidencia de cumplimiento', hi: 'अनुपालन साक्ष्य' },
-    'Framework gaps': { fr: 'Lacunes du cadre', es: 'Brechas del marco', hi: 'फ़्रेमवर्क में कमियाँ' },
-    'Fundraising campaigns, gifts and donation receipts.': { fr: 'Campagnes de collecte de fonds, dons et reçus de don.', es: 'Campañas de recaudación de fondos, donativos y recibos de donación.', hi: 'धन-संग्रहण अभियान, दान और दान रसीदें।' },
-    'The framework you plan and report against: HDLH, ELECT, BC ELF, Flight, EYFS and more.': { fr: 'Le cadre selon lequel vous planifiez et faites vos rapports : HDLH, ELECT, BC ELF, Flight, EYFS et plus encore.', es: 'El marco con el que usted planifica e informa: HDLH, ELECT, BC ELF, Flight, EYFS y más.', hi: 'वह फ़्रेमवर्क जिसके अनुसार आप योजना बनाते और रिपोर्ट करते हैं: HDLH, ELECT, BC ELF, Flight, EYFS और अधिक।' },
-    'Where your programme is light against your learning framework.': { fr: 'Où votre programme est insuffisant par rapport à votre cadre d’apprentissage.', es: 'Dónde su programa es insuficiente en relación con su marco de aprendizaje.', hi: 'जहाँ आपका प्रोग्राम आपके शिक्षण फ़्रेमवर्क की तुलना में कमज़ोर है।' },
-    'SOC 2 readiness: policies, the control matrix and live evidence exports.': { fr: 'Préparation SOC 2 : politiques, matrice de contrôles et exportations de preuves en direct.', es: 'Preparación para SOC 2: políticas, matriz de controles y exportaciones de evidencia en vivo.', hi: 'SOC 2 तैयारी: नीतियाँ, नियंत्रण मैट्रिक्स और लाइव साक्ष्य निर्यात।' },
-    'Speak it': { fr: 'Dites-le', es: 'Dígalo', hi: 'बोलकर बताएँ' },
-    'Stop': { fr: 'Arrêter', es: 'Detener', hi: 'रोकें' },
-    'Talk instead of typing — the words appear in the box for you to check.': { fr: 'Parlez au lieu de taper — les mots apparaissent dans la zone pour que vous puissiez les vérifier.', es: 'Hable en lugar de escribir — las palabras aparecerán en el cuadro para que usted las revise.', hi: 'टाइप करने के बजाय बोलें — शब्द बॉक्स में दिखाई देंगे ताकि आप उन्हें जाँच सकें।' },
-    '● Listening… speak naturally, then press Stop.': { fr: '● Écoute en cours… parlez naturellement, puis appuyez sur Arrêter.', es: '● Escuchando… hable con naturalidad y luego presione Detener.', hi: '● सुन रहा है… स्वाभाविक रूप से बोलें, फिर रोकें दबाएँ।' },
-    '🎤 Prefer to talk? Tap the microphone on your keyboard and speak, then check the text.': { fr: '🎤 Vous préférez parler? Touchez le microphone de votre clavier et parlez, puis vérifiez le texte.', es: '🎤 ¿Prefiere hablar? Toque el micrófono de su teclado y hable, luego revise el texto.', hi: '🎤 बोलना पसंद करेंगे? अपने कीबोर्ड पर माइक्रोफ़ोन टैप करें और बोलें, फिर टेक्स्ट जाँचें।' },
-    'Microphone access was blocked. Allow the microphone for this site, or use the mic on your keyboard.': { fr: 'L’accès au microphone a été bloqué. Autorisez le microphone pour ce site, ou utilisez le micro de votre clavier.', es: 'Se bloqueó el acceso al micrófono. Permita el micrófono para este sitio, o use el micrófono de su teclado.', hi: 'माइक्रोफ़ोन एक्सेस अवरुद्ध कर दिया गया था। इस साइट के लिए माइक्रोफ़ोन की अनुमति दें, या अपने कीबोर्ड के माइक का उपयोग करें।' },
-    'Speech recognition stopped. You can press Speak it again.': { fr: 'La reconnaissance vocale s’est arrêtée. Vous pouvez appuyer de nouveau sur Dites-le.', es: 'El reconocimiento de voz se detuvo. Usted puede presionar Dígalo nuevamente.', hi: 'वाक् पहचान रुक गई। आप फिर से बोलकर बताएँ दबा सकते हैं।' },
-    'Self-care': { fr: 'Soins personnels', es: 'Cuidado personal', hi: 'आत्म-देखभाल' },
-    'Outdoor': { fr: 'Extérieur', es: 'Exterior', hi: 'बाहरी' },
-    'Save framework': { fr: 'Enregistrer le cadre', es: 'Guardar marco', hi: 'फ़्रेमवर्क सहेजें' },
-    'Our own framework': { fr: 'Notre propre cadre', es: 'Nuestro propio marco', hi: 'हमारा अपना फ़्रेमवर्क' },
-    'Add an area': { fr: 'Ajouter un domaine', es: 'Agregar un área', hi: 'एक क्षेत्र जोड़ें' },
-    'Donations & fundraising': { fr: 'Dons et collecte de fonds', es: 'Donaciones y recaudación de fondos', hi: 'दान और धन-संग्रहण' },
-    'Run campaigns with a shareable giving page, record gifts, and issue receipts.': { fr: 'Gérez des campagnes avec une page de don partageable, enregistrez les dons et émettez des reçus.', es: 'Gestione campañas con una página de donación que se puede compartir, registre donativos y emita recibos.', hi: 'साझा करने योग्य दान पृष्ठ के साथ अभियान चलाएँ, दान दर्ज करें और रसीदें जारी करें।' },
-    'Gifts': { fr: 'Dons', es: 'Donativos', hi: 'दान' },
-    'Receipts & settings': { fr: 'Reçus et paramètres', es: 'Recibos y configuración', hi: 'रसीदें और सेटिंग्स' },
-    'Received': { fr: 'Reçu', es: 'Recibido', hi: 'प्राप्त' },
-    'Pledged, not yet received': { fr: 'Promis, pas encore reçu', es: 'Comprometido, aún no recibido', hi: 'प्रतिज्ञा की गई, अभी प्राप्त नहीं हुआ' },
-    'Receipts issued': { fr: 'Reçus émis', es: 'Recibos emitidos', hi: 'जारी की गई रसीदें' },
-    'All campaigns': { fr: 'Toutes les campagnes', es: 'Todas las campañas', hi: 'सभी अभियान' },
-    'Any status': { fr: 'Tout statut', es: 'Cualquier estado', hi: 'कोई भी स्थिति' },
-    'Pledged': { fr: 'Promis', es: 'Comprometido', hi: 'प्रतिज्ञा की गई' },
-    'Export CSV': { fr: 'Exporter en CSV', es: 'Exportar CSV', hi: 'CSV निर्यात करें' },
-    '+ Record a gift': { fr: '+ Enregistrer un don', es: '+ Registrar un donativo', hi: '+ दान दर्ज करें' },
-    'Record a gift': { fr: 'Enregistrer un don', es: 'Registrar un donativo', hi: 'दान दर्ज करें' },
-    'Edit gift': { fr: 'Modifier le don', es: 'Editar donativo', hi: 'दान संपादित करें' },
-    'Mark received': { fr: 'Marquer comme reçu', es: 'Marcar como recibido', hi: 'प्राप्त के रूप में चिह्नित करें' },
-    'Issue receipt': { fr: 'Émettre un reçu', es: 'Emitir recibo', hi: 'रसीद जारी करें' },
-    'Issue acknowledgement': { fr: 'Émettre un accusé de réception', es: 'Emitir acuse de recibo', hi: 'पावती जारी करें' },
-    'Void': { fr: 'Annuler', es: 'Anular', hi: 'रद्द करें' },
-    'New campaign': { fr: 'Nouvelle campagne', es: 'Nueva campaña', hi: 'नया अभियान' },
-    'Edit campaign': { fr: 'Modifier la campagne', es: 'Editar campaña', hi: 'अभियान संपादित करें' },
-    'Copy link': { fr: 'Copier le lien', es: 'Copiar enlace', hi: 'लिंक कॉपी करें' },
-    'Open page': { fr: 'Ouvrir la page', es: 'Abrir página', hi: 'पृष्ठ खोलें' },
-    'Link copied': { fr: 'Lien copié', es: 'Enlace copiado', hi: 'लिंक कॉपी किया गया' },
-    'Donation settings saved': { fr: 'Paramètres de don enregistrés', es: 'Configuración de donaciones guardada', hi: 'दान सेटिंग्स सहेजी गईं' },
-    'Gift saved': { fr: 'Don enregistré', es: 'Donativo guardado', hi: 'दान सहेजा गया' },
-    'Campaign saved': { fr: 'Campagne enregistrée', es: 'Campaña guardada', hi: 'अभियान सहेजा गया' },
-    'Take donations (show campaigns and giving pages)': { fr: 'Accepter les dons (afficher les campagnes et les pages de don)', es: 'Aceptar donaciones (mostrar campañas y páginas de donación)', hi: 'दान स्वीकार करें (अभियान और दान पृष्ठ दिखाएँ)' },
-    'CRA charity registration number': { fr: 'Numéro d’enregistrement d’organisme de bienfaisance de l’ARC (CRA)', es: 'Número de registro de organización benéfica ante la CRA', hi: 'CRA चैरिटी पंजीकरण संख्या' },
-    'Legal name (as registered)': { fr: 'Raison sociale (telle qu’enregistrée)', es: 'Nombre legal (según registrado)', hi: 'कानूनी नाम (जैसा पंजीकृत है)' },
-    'Charity address (as registered)': { fr: 'Adresse de l’organisme (telle qu’enregistrée)', es: 'Dirección de la organización benéfica (según registrada)', hi: 'चैरिटी का पता (जैसा पंजीकृत है)' },
-    'Place receipts are issued': { fr: 'Lieu d’émission des reçus', es: 'Lugar donde se emiten los recibos', hi: 'वह स्थान जहाँ रसीदें जारी की जाती हैं' },
-    'Authorised signatory': { fr: 'Signataire autorisé', es: 'Firmante autorizado', hi: 'अधिकृत हस्ताक्षरकर्ता' },
-    'Signatory title': { fr: 'Titre du signataire', es: 'Cargo del firmante', hi: 'हस्ताक्षरकर्ता का पद' },
-    'Signature on receipts': { fr: 'Signature sur les reçus', es: 'Firma en los recibos', hi: 'रसीदों पर हस्ताक्षर' },
-    '✓ Ready to issue official receipts.': { fr: '✓ Prêt à émettre des reçus officiels.', es: '✓ Listo para emitir recibos oficiales.', hi: '✓ आधिकारिक रसीदें जारी करने के लिए तैयार।' },
-    'Giving page': { fr: 'Page de don', es: 'Página de donación', hi: 'दान पृष्ठ' },
-    'How donors complete a pledge (shown on the page and in the thank-you email)': { fr: 'Comment les donateurs complètent une promesse de don (affiché sur la page et dans le courriel de remerciement)', es: 'Cómo los donantes completan una promesa de donación (se muestra en la página y en el correo de agradecimiento)', hi: 'दानकर्ता प्रतिज्ञा कैसे पूरी करते हैं (पृष्ठ पर और धन्यवाद ईमेल में दिखाया जाता है)' },
-    'Email new pledges to (optional)': { fr: 'Envoyer les nouvelles promesses de don par courriel à (facultatif)', es: 'Enviar por correo electrónico las nuevas promesas a (opcional)', hi: 'नई प्रतिज्ञाओं का ईमेल भेजें (वैकल्पिक)' },
-    'First name *': { fr: 'Prénom *', es: 'Nombre *', hi: 'पहला नाम *' },
-    'Last name': { fr: 'Nom de famille', es: 'Apellido', hi: 'अंतिम नाम' },
-    'Street address': { fr: 'Adresse', es: 'Dirección', hi: 'सड़क का पता' },
-    'Province / state': { fr: 'Province / État', es: 'Provincia / estado', hi: 'प्रांत / राज्य' },
-    'Postal code': { fr: 'Code postal', es: 'Código postal', hi: 'डाक कोड' },
-    'Campaign': { fr: 'Campagne', es: 'Campaña', hi: 'अभियान' },
-    'Amount *': { fr: 'Montant *', es: 'Monto *', hi: 'राशि *' },
-    'Method': { fr: 'Méthode', es: 'Método', hi: 'विधि' },
-    'Date received': { fr: 'Date de réception', es: 'Fecha de recepción', hi: 'प्राप्ति की तारीख़' },
-    'Reference (cheque #, e-Transfer ID)': { fr: 'Référence (n° de chèque, ID de virement Interac)', es: 'Referencia (n.º de cheque, ID de e-Transfer)', hi: 'संदर्भ (चेक नंबर, ई-ट्रांसफर आईडी)' },
-    'Internal notes': { fr: 'Notes internes', es: 'Notas internas', hi: 'आंतरिक टिप्पणियाँ' },
-    'Framework: ': { fr: 'Cadre : ', es: 'Marco: ', hi: 'फ़्रेमवर्क: ' },
-    'Next steps': { fr: 'Prochaines étapes', es: 'Próximos pasos', hi: 'अगले कदम' }
-  };
+  /* THE DICTIONARY LOADS ONLY FOR ANOTHER LANGUAGE (2026-11-13, Anthony: "when the portal refreshes or saves that
+     process moves very slow - full sweep"). It lives in js/kt-i18n-base.js (590 KB), fetched when a language other
+     than English is on, ahead of that language's pack (KT_I18N_BASE below). Until it arrives KT.i18n.t() answers in
+     English and the page stays English; the sweep runs again the moment it lands. */
+  var DICT = {};
 
   var LOCALES = ['en', 'fr', 'es', 'hi'];
 
@@ -1207,8 +54,87 @@
     return DICT[words] || CI[String(words).toLowerCase()] || null;
   }
 
+  /* TRANSLATION PACKS (2026-11-05, Anthony: "update help and guides and portal with translations to all
+     language types that we support - full sweep"). The ~12,000 strings that sweep added live in one file per
+     language, js/kt-i18n-pack-<lang>.js = KT_I18N_PACK('<lang>', { English: translation, ... }), fetched only
+     while that language is on, so an English session downloads nothing extra. A pack fills gaps only: an
+     entry written in DICT above always wins. New UI text can still go straight into DICT. */
+  var PACK_V = '20261113imz';
+  var BASE_V = '20261113imz';
+  var packAsked = {};
+  var baseState = 0, afterBase = [];   // 0 not asked, 1 on its way, 2 in
+  window.KT_I18N_BASE = function (map) {
+    for (var k in map) {
+      if (!Object.prototype.hasOwnProperty.call(map, k)) continue;
+      var e = DICT[k] || (DICT[k] = {});
+      for (var l in map[k]) if (Object.prototype.hasOwnProperty.call(map[k], l)) e[l] = map[k][l];   // the dictionary wins
+    }
+    CI = {};
+    for (var c in DICT) if (DICT.hasOwnProperty(c)) CI[c.toLowerCase()] = DICT[c];
+    baseState = 2;
+    var q = afterBase; afterBase = [];
+    q.forEach(function (fn) { try { fn(); } catch (x) {} });
+    done = new WeakSet();
+    try { apply(); } catch (x) {}
+  };
+  function loadBase(then) {
+    if (baseState === 2) return then();
+    afterBase.push(then);
+    if (baseState === 1) return;
+    baseState = 1;
+    try {
+      var sc = document.createElement('script');
+      sc.src = '/js/kt-i18n-base.js?v=' + BASE_V;
+      sc.async = true;
+      sc.onerror = function () { baseState = 0; afterBase = []; packAsked = {}; };
+      (document.head || document.documentElement).appendChild(sc);
+    } catch (e) { baseState = 0; afterBase = []; packAsked = {}; }
+  }
+  window.KT_I18N_PACK = function (lang, map) {
+    if (LOCALES.indexOf(lang) === -1 || !map) return;
+    for (var k in map) {
+      if (!Object.prototype.hasOwnProperty.call(map, k) || !map[k]) continue;
+      var lk = k.toLowerCase();
+      var e = DICT[k] || CI[lk];
+      if (!e) { e = {}; DICT[k] = e; }
+      if (!CI[lk]) CI[lk] = e;
+      if (!e[lang]) e[lang] = map[k];
+    }
+    // Nodes swept before the pack arrived were marked done; look at everything once more.
+    done = new WeakSet();
+    try { apply(); } catch (x) {}
+  };
+  function loadPack(loc) {
+    if (loc === 'en' || packAsked[loc]) return;
+    packAsked[loc] = 1;
+    loadBase(function () {   // the dictionary first, so its entries win over the pack's
+      try {
+        var sc = document.createElement('script');
+        sc.src = '/js/kt-i18n-pack-' + loc + '.js?v=' + PACK_V;
+        sc.async = true;
+        sc.onerror = function () { packAsked[loc] = 0; };
+        (document.head || document.documentElement).appendChild(sc);
+      } catch (e) { packAsked[loc] = 0; }
+    });
+  }
+
   // Number-glued templates. § marks a number run; numbers are reinserted positionally.
   var PATTERNS = {
+    // 2026-11-03 educator figures say what they count
+    '§ in · § picked up · § not in yet': { fr: '§ présents · § partis · § pas encore arrivés', es: '§ dentro · § recogidos · § aún sin llegar', hi: '§ अंदर · § ले जाए गए · § अभी नहीं आए' },
+    '§ in · § picked up · § not in': { fr: '§ présents · § partis · § absents', es: '§ dentro · § recogidos · § no vinieron', hi: '§ अंदर · § ले जाए गए · § नहीं आए' },
+    '§ enrolled at centre': { fr: '§ inscrits au centre', es: '§ matriculados en el centro', hi: 'केंद्र में § नामांकित' },
+    '§ enrolled at centre · § not booked today': { fr: '§ inscrits au centre · § non prévus aujourd’hui', es: '§ matriculados en el centro · § sin reserva hoy', hi: 'केंद्र में § नामांकित · आज § निर्धारित नहीं' },
+    '§ enrolled at your centres': { fr: '§ inscrits dans vos centres', es: '§ matriculados en sus centros', hi: 'आपके केंद्रों में § नामांकित' },
+    '§ enrolled at your centres · § not booked today': { fr: '§ inscrits dans vos centres · § non prévus aujourd’hui', es: '§ matriculados en sus centros · § sin reserva hoy', hi: 'आपके केंद्रों में § नामांकित · आज § निर्धारित नहीं' },
+    '§ children here · § educators on': { fr: '§ enfants présents · § éducateurs en poste', es: '§ niños aquí · § educadores de turno', hi: '§ बच्चे यहाँ · § शिक्षक ड्यूटी पर' },
+    '§ child here · § educators on': { fr: '§ enfant présent · § éducateurs en poste', es: '§ niño aquí · § educadores de turno', hi: '§ बच्चा यहाँ · § शिक्षक ड्यूटी पर' },
+    '§ children here · § educator on': { fr: '§ enfants présents · § éducateur en poste', es: '§ niños aquí · § educador de turno', hi: '§ बच्चे यहाँ · § शिक्षक ड्यूटी पर' },
+    '§ child here · § educator on': { fr: '§ enfant présent · § éducateur en poste', es: '§ niño aquí · § educador de turno', hi: '§ बच्चा यहाँ · § शिक्षक ड्यूटी पर' },
+    '§ children here · § educators on · § needed': { fr: '§ enfants présents · § éducateurs en poste · § requis', es: '§ niños aquí · § educadores de turno · § necesarios', hi: '§ बच्चे यहाँ · § शिक्षक ड्यूटी पर · § आवश्यक' },
+    '§ child here · § educators on · § needed': { fr: '§ enfant présent · § éducateurs en poste · § requis', es: '§ niño aquí · § educadores de turno · § necesarios', hi: '§ बच्चा यहाँ · § शिक्षक ड्यूटी पर · § आवश्यक' },
+    '§ children here · § educator on · § needed': { fr: '§ enfants présents · § éducateur en poste · § requis', es: '§ niños aquí · § educador de turno · § necesarios', hi: '§ बच्चे यहाँ · § शिक्षक ड्यूटी पर · § आवश्यक' },
+    '§ child here · § educator on · § needed': { fr: '§ enfant présent · § éducateur en poste · § requis', es: '§ niño aquí · § educador de turno · § necesarios', hi: '§ बच्चा यहाँ · § शिक्षक ड्यूटी पर · § आवश्यक' },
     'in § days': { fr: 'dans § jours', es: 'en § días', hi: '§ दिनों में' },
     'Waiting: § days': { fr: 'En attente : § jours', es: 'Esperando: § días', hi: 'प्रतीक्षा: § दिन' },
     '§ families': { fr: '§ familles', es: '§ familias', hi: '§ परिवार' },
@@ -1264,6 +190,42 @@
     '§-month enrolment trajectory': { fr: 'Trajectoire d’inscription sur § mois', es: 'Trayectoria de matrícula de § meses', hi: '§-महीने का नामांकन प्रक्षेप' },
     'Expired or expiring within § days': { fr: 'Expirés ou expirant dans § jours', es: 'Vencidos o por vencer en § días', hi: '§ दिनों में समाप्त या समाप्त होने वाले' },
     '§ hours across § staff': { fr: '§ heures pour § membres du personnel', es: '§ horas entre § miembros del personal', hi: '§ स्टाफ़ में § घंटे' },
+    // 2026-10-22 sweep
+    'Showing §–§ of §': { fr: 'Affichage de § à § sur §', es: 'Mostrando §–§ de §', hi: '§–§ दिखाए जा रहे हैं (कुल §)' },
+    'Ratio §:§ · Capacity §/§ (§)': { fr: 'Ratio §:§ · Capacité §/§ (§)', es: 'Proporción §:§ · Capacidad §/§ (§)', hi: 'अनुपात §:§ · क्षमता §/§ (§)' },
+    'Centres (§)': { fr: 'Centres (§)', es: 'Centros (§)', hi: 'केंद्र (§)' },
+    '● § absent': { fr: '● § absents', es: '● § ausentes', hi: '● § अनुपस्थित' },
+    '§ absent': { fr: '§ absents', es: '§ ausentes', hi: '§ अनुपस्थित' },
+    'Absent: §': { fr: 'Absents : §', es: 'Ausentes: §', hi: 'अनुपस्थित: §' },
+    'turns §': { fr: 'aura §', es: 'cumple §', hi: '§ का होगा' },
+    'In the last § days': { fr: 'Au cours des § derniers jours', es: 'En los últimos § días', hi: 'पिछले § दिनों में' },
+    '§ shift(s) this week': { fr: '§ quart(s) cette semaine', es: '§ turno(s) esta semana', hi: 'इस सप्ताह § शिफ़्ट' },
+    '§ agencies · active': { fr: '§ agences · actives', es: '§ agencias · activas', hi: '§ एजेंसियाँ · सक्रिय' },
+    '§ children · §/§ educator': { fr: '§ enfants · §/§ éducateur', es: '§ niños · §/§ educador', hi: '§ बच्चे · §/§ शिक्षक' },
+    '§ in · § not in yet · § left': { fr: '§ présents · § pas encore arrivés · § partis', es: '§ dentro · § aún sin llegar · § se fueron', hi: '§ अंदर · § अभी नहीं आए · § चले गए' },
+    '§ of § submitted': { fr: '§ sur § remis', es: '§ de § enviados', hi: 'जमा: §/§' },
+    '§ today': { fr: '§ aujourd’hui', es: '§ hoy', hi: 'आज §' },
+    '§ new': { fr: '§ nouveaux', es: '§ nuevos', hi: '§ नए' },
+    '§ enrolled today': { fr: '§ inscrits aujourd’hui', es: '§ matriculados hoy', hi: 'आज § नामांकित' },
+    '§ things need your attention today': { fr: '§ éléments demandent votre attention aujourd’hui', es: '§ cosas requieren su atención hoy', hi: 'आज § बातों पर आपका ध्यान चाहिए' },
+    '§ this month': { fr: '§ ce mois-ci', es: '§ este mes', hi: 'इस महीने §' },
+    '§ payments this year': { fr: '§ paiements cette année', es: '§ pagos este año', hi: 'इस वर्ष § भुगतान' },
+    '§ filled': { fr: '§ occupé', es: '§ ocupado', hi: '§ भरा' },
+    '§ rooms': { fr: '§ salles', es: '§ salas', hi: '§ कक्ष' },
+    '§ still in': { fr: '§ encore présents', es: '§ aún dentro', hi: '§ अभी अंदर' },
+    '§ went home': { fr: '§ partis à la maison', es: '§ se fueron a casa', hi: '§ घर गए' },
+    '§ of § spaces filled right now': { fr: '§ places sur § occupées en ce moment', es: '§ de § plazas ocupadas ahora', hi: 'अभी §/§ स्थान भरे' },
+    'No demographic data yet — it fills in as your people complete onboarding (§ of § reported so far).': { fr: 'Aucune donnée démographique pour l’instant — elle se remplit à mesure que votre monde termine son inscription (§ sur § déclarés jusqu’ici).', es: 'Aún no hay datos demográficos: se completan a medida que su gente termina el alta (§ de § informados hasta ahora).', hi: 'अभी कोई जनसांख्यिकी डेटा नहीं — आपके लोग ऑनबोर्डिंग पूरी करते जाएँगे तो यह भरता जाएगा (अब तक §/§ ने बताया)।' },
+    'Request #§ sent': { fr: 'Demande n° § envoyée', es: 'Solicitud n.º § enviada', hi: 'अनुरोध #§ भेजा गया' },
+    'Open §': { fr: 'Ouverts §', es: 'Abiertos §', hi: 'खुले §' },
+    '🔍  Filter § rows…': { fr: '🔍  Filtrer § lignes…', es: '🔍  Filtrar § filas…', hi: '🔍  § पंक्तियाँ फ़िल्टर करें…' },
+    '🔍  Filter § items…': { fr: '🔍  Filtrer § éléments…', es: '🔍  Filtrar § elementos…', hi: '🔍  § आइटम फ़िल्टर करें…' },
+    'Filter § rows…': { fr: 'Filtrer § lignes…', es: 'Filtrar § filas…', hi: '§ पंक्तियाँ फ़िल्टर करें…' },
+    '© § KiddieTrac Inc. All Rights Reserved.': { fr: '© § KiddieTrac Inc. Tous droits réservés.', es: '© § KiddieTrac Inc. Todos los derechos reservados.', hi: '© § KiddieTrac Inc. सर्वाधिकार सुरक्षित।' },
+    '© §–§ KiddieTrac. All rights reserved. ·': { fr: '© §–§ KiddieTrac. Tous droits réservés. ·', es: '© §–§ KiddieTrac. Todos los derechos reservados. ·', hi: '© §–§ KiddieTrac. सर्वाधिकार सुरक्षित। ·' },
+    '§ min ago': { fr: 'il y a § min', es: 'hace § min', hi: '§ मिनट पहले' },
+    '§/mo': { fr: '§/mois', es: '§/mes', hi: '§/माह' }
+
   };
 
   // Match a string against a number-glued template: blank the numbers to form a key,
@@ -1284,6 +246,88 @@
     var i = 0;
     var out = hit[loc].replace(/\u00a7/g, function () { return i < nums.length ? nums[i++] : ''; });
     return lead + out + tail;
+  }
+
+
+  // Templates with a name or other free text in them ("Good night, Anthony", "🔴 Sam
+  // clocked out"). {1}, {2} stand for the free text and are carried into the translation
+  // unchanged. Tried only after the dictionary and the number templates miss. (2026-10-22)
+  var NAMED = [
+    ['Good morning, {1}', { fr: 'Bonjour, {1}', es: 'Buenos días, {1}', hi: 'सुप्रभात, {1}' }],
+    ['Good afternoon, {1}', { fr: 'Bon après-midi, {1}', es: 'Buenas tardes, {1}', hi: 'नमस्कार, {1}' }],
+    ['Good evening, {1}', { fr: 'Bonsoir, {1}', es: 'Buenas tardes, {1}', hi: 'शुभ संध्या, {1}' }],
+    ['Good night, {1}', { fr: 'Bonne nuit, {1}', es: 'Buenas noches, {1}', hi: 'शुभ रात्रि, {1}' }],
+    ['{1} clocked in', { fr: '{1} a pointé son arrivée', es: '{1} fichó la entrada', hi: '{1} ने क्लॉक इन किया' }],
+    ['{1} clocked out', { fr: '{1} a pointé son départ', es: '{1} fichó la salida', hi: '{1} ने क्लॉक आउट किया' }],
+    ['{1} (Child) checked in', { fr: '{1} (enfant) est arrivé', es: '{1} (niño) entró', hi: '{1} (बच्चा) का चेक-इन हुआ' }],
+    ['{1} (Child) checked out', { fr: '{1} (enfant) est parti', es: '{1} (niño) salió', hi: '{1} (बच्चा) का चेक-आउट हुआ' }],
+    ['Auto clock-out — {1}', { fr: 'Départ pointé automatiquement — {1}', es: 'Salida fichada automáticamente — {1}', hi: 'स्वतः क्लॉक-आउट — {1}' }],
+    ['Repeated missed clock-outs — {1}', { fr: 'Oublis de pointage de départ répétés — {1}', es: 'Salidas sin fichar repetidas — {1}', hi: 'बार-बार छूटे क्लॉक-आउट — {1}' }],
+    ['Signed out automatically — {1}', { fr: 'Départ enregistré automatiquement — {1}', es: 'Salida registrada automáticamente — {1}', hi: 'स्वतः साइन आउट — {1}' }],
+    ['{1}: no sign-out recorded. Correct the times in Attendance.', { fr: '{1} : aucun départ enregistré. Corrigez les heures dans Présences.', es: '{1}: no se registró la salida. Corrija las horas en Asistencia.', hi: '{1}: कोई साइन-आउट दर्ज नहीं। उपस्थिति में समय सुधारें।' }],
+    ['Standing hours · {1}', { fr: 'Heures habituelles · {1}', es: 'Horario fijo · {1}', hi: 'नियमित घंटे · {1}' }],
+    ['Autofill {1}', { fr: 'Remplissage automatique {1}', es: 'Relleno automático {1}', hi: 'स्वतः भरें {1}' }],
+    ['Report {1} absent today', { fr: 'Signaler une absence aujourd’hui : {1}', es: 'Informar de la ausencia de {1} hoy', hi: 'आज {1} की अनुपस्थिति बताएँ' }],
+    ['{1} — not started', { fr: '{1} — non commencé', es: '{1} — sin empezar', hi: '{1} — शुरू नहीं हुआ' }],
+    ['About {1}, build and diagnostics', { fr: 'À propos de {1}, version et diagnostics', es: 'Acerca de {1}, versión y diagnóstico', hi: '{1} के बारे में, बिल्ड और निदान' }],
+    ['No menu published for the week of {1}.', { fr: 'Aucun menu publié pour la semaine du {1}.', es: 'No se publicó ningún menú para la semana del {1}.', hi: '{1} वाले सप्ताह के लिए कोई मेनू प्रकाशित नहीं।' }],
+    ['Nothing logged on {1}.', { fr: 'Rien de consigné le {1}.', es: 'No se registró nada el {1}.', hi: '{1} को कुछ भी दर्ज नहीं।' }],
+    ['Welcome to {1}', { fr: 'Bienvenue sur {1}', es: 'Bienvenido a {1}', hi: '{1} में आपका स्वागत है' }],
+    ['Welcome to {1}!', { fr: 'Bienvenue sur {1}!', es: '¡Bienvenido a {1}!', hi: '{1} में आपका स्वागत है!' }],
+    ['Viewing as {1}', { fr: 'Affiché comme {1}', es: 'Viendo como {1}', hi: '{1} के रूप में देख रहे हैं' }],
+    ['No staff clocked in\n\nAssigned here:{1}', { fr: 'Aucun membre du personnel n’a pointé\n\nAffectés ici :{1}', es: 'Nadie del personal ha fichado\n\nAsignados aquí:{1}', hi: 'किसी स्टाफ़ ने क्लॉक इन नहीं किया\n\nयहाँ नियुक्त:{1}' }],
+    ['(otherwise the centre’s, {1})', { fr: '(sinon celles du centre, {1})', es: '(si no, el del centro, {1})', hi: '(नहीं तो केंद्र के, {1})' }],
+    ['Entered by the parent from the automatic sign-out email — the automatic time was {1}', { fr: 'Saisi par le parent à partir du courriel de départ automatique — l’heure automatique était {1}', es: 'Introducida por el padre desde el correo de salida automática; la hora automática era {1}', hi: 'स्वचालित साइन-आउट ईमेल से अभिभावक द्वारा दर्ज — स्वचालित समय {1} था' }],
+    ['Entered by the educator from the automatic sign-out email — the automatic time was {1}', { fr: 'Saisi par l’éducateur à partir du courriel de départ automatique — l’heure automatique était {1}', es: 'Introducida por el educador desde el correo de salida automática; la hora automática era {1}', hi: 'स्वचालित साइन-आउट ईमेल से शिक्षक द्वारा दर्ज — स्वचालित समय {1} था' }],
+    ['Uploading {1} files…', { fr: 'Téléversement de {1} fichiers…', es: 'Subiendo {1} archivos…', hi: '{1} फ़ाइलें अपलोड हो रही हैं…' }],
+    ['Welcome back to {1}.', { fr: 'Bon retour sur {1}.', es: 'Bienvenido de nuevo a {1}.', hi: '{1} में फिर से स्वागत है।' }],
+    ['Good night, {1}!', { fr: 'Bonne nuit, {1}!', es: '¡Buenas noches, {1}!', hi: 'शुभ रात्रि, {1}!' }],
+    ['Good morning, {1}!', { fr: 'Bonjour, {1}!', es: '¡Buenos días, {1}!', hi: 'सुप्रभात, {1}!' }],
+    ['Good afternoon, {1}!', { fr: 'Bon après-midi, {1}!', es: '¡Buenas tardes, {1}!', hi: 'नमस्कार, {1}!' }],
+    ['Good evening, {1}!', { fr: 'Bonsoir, {1}!', es: '¡Buenas tardes, {1}!', hi: 'शुभ संध्या, {1}!' }]
+  ];
+  var NAMED_RX = NAMED.map(function (n) {
+    var rx = n[0].replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\{(\d)\}/g, '([\\s\\S]+?)');
+    return [new RegExp('^' + rx + '$'), n[1], (n[0].match(/\{(\d)\}/g) || []).map(function (t) { return +t.charAt(1); })];
+  });
+  function translateNamed(text, loc) {
+    var raw = String(text), body = raw.trim();
+    if (!body) return null;
+    var lead = raw.match(/^\s*/)[0], tail = raw.match(/\s*$/)[0];
+    for (var i = 0; i < NAMED_RX.length; i++) {
+      var m = NAMED_RX[i][0].exec(body);
+      if (!m || !NAMED_RX[i][1][loc]) continue;
+      var vals = {};
+      NAMED_RX[i][2].forEach(function (slot, k) { vals[slot] = m[k + 1]; });
+      return lead + NAMED_RX[i][1][loc].replace(/\{(\d)\}/g, function (_, d) { return vals[d] != null ? vals[d] : ''; }) + tail;
+    }
+    return null;
+  }
+
+  // "Attendance — Your child's attendance history", "Daily overview · 2026-10-21": translate
+  // each side of a " — " / " · " join on its own. Parts that are names or dates stay as
+  // they are. Returns null unless at least one part was translated.
+  function translateComposite(text, loc) {
+    var raw = String(text);
+    if (!/ (—|·) /.test(raw)) return null;
+    var parts = raw.split(/( — | · )/), any = false;
+    for (var i = 0; i < parts.length; i += 2) {
+      if (!parts[i] || !/\p{L}/u.test(parts[i])) continue;
+      var t = translate(parts[i], loc);
+      if (t === null) t = translatePattern(parts[i], loc);
+      if (t === null) t = translateNamed(parts[i], loc);
+      if (t !== null) { parts[i] = t; any = true; }
+    }
+    return any ? parts.join('') : null;
+  }
+
+  // Every strategy, in order. null when nothing knows the string.
+  function translateAny(text, loc) {
+    var out = translate(text, loc);
+    if (out === null) out = translatePattern(text, loc);
+    if (out === null) out = translateNamed(text, loc);
+    if (out === null) out = translateComposite(text, loc);
+    return out;
   }
 
   function translate(text, loc) {
@@ -1334,8 +378,7 @@
     var n, hits = [];
     while ((n = it.nextNode())) hits.push(n);
     for (var i = 0; i < hits.length; i++) {
-      var out = translate(hits[i].nodeValue, loc);
-      if (out === null) out = translatePattern(hits[i].nodeValue, loc);
+      var out = translateAny(hits[i].nodeValue, loc);
       done.add(hits[i]);                    // mark either way: never reconsider this node
       if (out !== null && out !== hits[i].nodeValue) hits[i].nodeValue = out;
     }
@@ -1349,7 +392,7 @@
       ['placeholder', 'title', 'aria-label'].forEach(function (a) {
         var v = el.getAttribute(a);
         if (!v) return;
-        var t = translate(v, loc);
+        var t = translateAny(v, loc);
         if (t !== null && t !== v) el.setAttribute(a, t);
       });
     }
@@ -1372,7 +415,36 @@
     } catch (e) {}
   }
 
-  function injectLoginPicker() { return; /* removed: language set at onboarding/settings */
+  /* Pre-account pages (enroll, set-password) opt in with <body data-kt-lang-picker>:
+     a new parent has no account to save a language on yet, so they need a menu here.
+     The sign-in page still has none (language is set at onboarding / in Settings). */
+  function injectPagePicker() {
+    try {
+      if (!document.body || !document.body.hasAttribute('data-kt-lang-picker')) return;
+      if (document.getElementById('kt-page-locale')) return;
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;top:12px;right:14px;z-index:2147480000;';
+      var sel = document.createElement('select');
+      sel.id = 'kt-page-locale';
+      sel.setAttribute('aria-label', 'Language');
+      sel.style.cssText = 'border:1px solid rgba(15,23,42,.18);border-radius:8px;background:rgba(255,255,255,.95);'
+        + 'padding:6px 10px;font-size:13px;font-weight:600;color:#334155;cursor:pointer;box-shadow:0 1px 3px rgba(16,40,64,.12);';
+      [['en', '🌐 English'], ['fr', '🌐 Français'], ['es', '🌐 Español'], ['hi', '🌐 हिन्दी']].forEach(function (o) {
+        var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1];
+        if (o[0] === locale()) op.selected = true;
+        sel.appendChild(op);
+      });
+      sel.setAttribute('data-kt-no-translate', '1');
+      sel.addEventListener('change', function () {
+        try { localStorage.setItem('kt_locale', sel.value); } catch (e) {}
+        window.location.reload();
+      });
+      wrap.appendChild(sel);
+      document.body.appendChild(wrap);
+    } catch (e) {}
+  }
+
+  function injectLoginPicker() { injectPagePicker(); return; /* removed: language set at onboarding/settings */
     try {
       if (document.getElementById('kt-tb-locale')) return;      // the app top bar owns it
       if (document.getElementById('kt-login-locale')) return;   // already injected
@@ -1407,6 +479,7 @@
     injectLoginPicker();
     var loc = locale();
     if (loc === 'en') return;               // nothing to do
+    loadPack(loc);
     try { walk(document.body, loc); } catch (e) {}
   }
 
@@ -1431,14 +504,30 @@
   }
   function pick(loc) { return wantsDefault(loc) ? dateTag() : loc; }
 
+  /* US AGENCIES READ "3:27 PM" (2026-10-28, Brightwood / California). English always meant en-CA here, so every
+     time in a US agency said "3:27 p.m.". For a US agency (kt-term.js -> kt_spelling = 'us') a displayed 12-hour
+     TIME is formatted en-US. Never a 24-hour request (hour12:false / hourCycle — time inputs) and never a numeric
+     2-digit date (en-CA's YYYY-MM-DD is used as a key in places), so nothing that is data changes shape. */
+  function usTime(opts) {
+    try { if (locale() !== 'en' || sessionStorage.getItem('kt_spelling') !== 'us') return false; } catch (e) { return false; }
+    opts = opts || {};
+    if (opts.hour12 === false || opts.hourCycle) return false;
+    if (opts.month === '2-digit' || opts.day === '2-digit') return false;
+    return true;
+  }
+
   ['toLocaleDateString', 'toLocaleTimeString', 'toLocaleString'].forEach(function (fn) {
     var orig = Date.prototype[fn];
-    Date.prototype[fn] = function (loc, opts) { return orig.call(this, pick(loc), opts); };
+    Date.prototype[fn] = function (loc, opts) {
+      if (fn === 'toLocaleTimeString' && wantsDefault(loc) && usTime(opts)) return orig.call(this, 'en-US', opts);
+      return orig.call(this, pick(loc), opts);
+    };
   });
 
   if (window.Intl && Intl.DateTimeFormat) {
     var OrigDTF = Intl.DateTimeFormat;
     var Patched = function (loc, opts) {
+      if (opts && (opts.hour || opts.timeStyle) && wantsDefault(loc) && usTime(opts)) return new OrigDTF('en-US', opts);
       return new OrigDTF(pick(loc), opts);   // works with and without `new`
     };
     Patched.supportedLocalesOf = OrigDTF.supportedLocalesOf.bind(OrigDTF);
@@ -1451,7 +540,8 @@
     apply: apply,
     locale: locale,
     locales: LOCALES,
-    t: function (s) { var out = translate(s, locale()); if (out === null) out = translatePattern(s, locale()); return out === null ? s : out; },
+    t: function (s) { var out = translateAny(s, locale()); return out === null ? s : out; },
+    packVersion: PACK_V,
     dict: DICT
   };
 

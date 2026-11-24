@@ -26,11 +26,21 @@ final class SubscriberWelcome extends Mailable
         public readonly string $unsubscribeUrl,
         public readonly string $privacyUrl,
         public readonly string $termsUrl,
+        // Which form they used (site_subscribers.source). A webinar sign-up is told about
+        // the webinar, not welcomed to a newsletter it never asked for (2026-10-22).
+        public readonly string $source = '',
     ) {}
+
+    public function isWebinar(): bool
+    {
+        return str_starts_with(strtolower($this->source), 'webinar');
+    }
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: "You're subscribed to KiddieTrac updates");
+        return new Envelope(subject: $this->isWebinar()
+            ? "You're on the KiddieTrac webinar list"
+            : "You're subscribed to KiddieTrac updates");
     }
 
     public function headers(): Headers
@@ -41,6 +51,7 @@ final class SubscriberWelcome extends Mailable
             // Sent only because this person just asked to subscribe: an agency's mail switch
             // (their address may also belong to a family or staff account) must not cancel it.
             'X-KT-Bypass-Suppression' => '1',
+            'X-KT-Platform' => '1',   // KiddieTrac's own website mail: Platform in the email log
         ]);
     }
 
@@ -53,6 +64,7 @@ final class SubscriberWelcome extends Mailable
                 'unsubscribeUrl' => $this->unsubscribeUrl,
                 'privacyUrl'     => $this->privacyUrl,
                 'termsUrl'       => $this->termsUrl,
+                'webinar'        => $this->isWebinar(),
                 'appUrl'         => config('app.url', 'https://app.kiddietrac.com'),
             ],
         );

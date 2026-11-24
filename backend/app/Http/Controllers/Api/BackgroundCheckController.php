@@ -43,13 +43,20 @@ final class BackgroundCheckController extends Controller
             ->join('users as u', 'u.id', '=', 'bgc.user_id')
             ->where('bgc.agency_id', $agencyId)
             ->whereIn('bgc.user_id', $staffIds ?: [0])
-            ->orderBy('bgc.expires_at')
+            ->orderByRaw('bgc.expires_at IS NULL')->orderBy('bgc.expires_at')
             ->select('bgc.*', DB::raw("CONCAT(u.first_name, ' ', u.last_name) as user_name"), 'u.email as user_email', 'u.photo_url as user_photo')
             ->get();
 
         $ref = $rows->count() ? RefCode::users($rows->pluck('user_id')->unique()->all(), $agencyId, 'S') : [];
-        $now = Carbon::now()->startOfDay();
+        $now = \App\Support\AgencyTime::todayDate();
         $rows->transform(function ($r) use ($now, $ref) {
+            $r->staff_ref = $ref[(int) $r->user_id] ?? null;
+            if (! $r->expires_at) {   // a clearance that never expires (California)
+                $r->status_bucket = 'valid';
+                $r->days_until_expiry = null;
+                $r->no_expiry = true;
+                return $r;
+            }
             $exp = Carbon::parse($r->expires_at);
             $days = (int) $exp->diffInDays($now, false);
             $r->status_bucket = $exp->isPast()
@@ -85,7 +92,7 @@ final class BackgroundCheckController extends Controller
             'check_type'   => 'required|string|in:' . implode(',', array_unique(array_merge(['vss', 'criminal', 'driver', 'reference', 'other', 'vulnerable_sector'], \App\Support\Jurisdictions::allBackgroundCheckCodes()))),
             'reference'    => 'nullable|string|max:120',
             'issued_at'    => 'nullable|date',
-            'expires_at'   => 'required|date',
+            'expires_at'   => 'nullable|date',
             'document_url' => 'nullable|string|max:500',
             'notes'        => 'nullable|string|max:2000',
         ]);
@@ -93,6 +100,14 @@ final class BackgroundCheckController extends Controller
         $this->assertAgencyAccess($request, $agencyId);
         $staffIds = $this->staffIds($request, $agencyId);
         abort_unless(in_array((int) $data['user_id'], $staffIds, true), 422, 'Choose a staff member of this agency.');
+        /* An expiry is required unless the agency's catalogue says this check never needs renewing (2026-10-28:
+           California clearances — Live Scan, CACI — do not expire; the state reports later arrests itself). */
+        if (empty($data['expires_at'])) {
+            $cat = collect(\App\Support\Jurisdictions::forAgency($agencyId)['background_checks'] ?? [])->firstWhere('code', $data['check_type']);
+            if (! $cat || ! empty($cat['renew_years'])) {
+                return response()->json(['message' => 'Enter the expiry date.', 'errors' => ['expires_at' => ['Enter the expiry date.']]], 422);
+            }
+        }
 
         $payload = [
             'agency_id'    => $agencyId,
@@ -176,7 +191,7 @@ final class BackgroundCheckController extends Controller
 
     private function csv(int $agencyId, array $staffIds): StreamedResponse
     {
-        $name = 'background-checks-' . now()->format('Y-m-d') . '.csv';
+        $name = 'background-checks-' . \App\Support\AgencyTime::today() . '.csv';
         return response()->streamDownload(function () use ($agencyId, $staffIds) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
@@ -190,7 +205,7 @@ final class BackgroundCheckController extends Controller
                 ->chunk(200, function ($rows) use ($h, $agencyId) {
                     $ref = RefCode::users($rows->pluck('user_id')->all(), $agencyId, 'S');   // 2026-10-14
                     foreach ($rows as $r) {
-                        $status = Carbon::parse($r->expires_at)->isPast() ? 'expired' : 'valid';
+                        $status = ! $r->expires_at ? 'valid (no expiry)' : (Carbon::parse($r->expires_at)->isPast() ? 'expired' : 'valid');
                         fputcsv($h, [
                             $r->user_name, $ref[(int) $r->user_id] ?? '', $r->user_email, $r->check_type, $r->reference,
                             $r->issued_at, $r->expires_at, $status, (string) ($r->notes ?? ''),

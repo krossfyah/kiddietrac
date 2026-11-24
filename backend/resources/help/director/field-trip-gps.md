@@ -1,58 +1,54 @@
 ---
-roles: agency_admin, platform_admin
-title: Field-trip live GPS tracker
+roles: agency_admin, platform_admin, centre_director
+title: Walk Watch — live GPS walks & outings
 category: Daily Operations
 order: 45
 ---
-# Field-trip GPS
+# Walk Watch
 
-Live location of staff lead on each field trip. Parents can see where their child's bus / group is in real time.
+**Walk Watch** is KiddieTrac's live GPS for walks and outings. An educator starts a walk on their
+phone, the children's parents are told straight away and can follow along on a live map, and you can
+see every group that is out — who has them, and where they are.
 
-## Staff setup
+## Starting a walk (educator)
 
-1. The staff lead opens the field trip on their phone (web browser, must be HTTPS).
-2. Tap **Start GPS sharing**.
-3. Browser prompts for location permission — accept.
-4. Phone reports lat/lon every 30 seconds to `/field-trips/{id}/ping` for the duration of the trip.
+1. Open **Walk Watch** (the 🚶 / Walk Watch tile) and fill in **Where to?** (and, optionally, what it is).
+2. Tick the children who are coming. Only children who are **checked in right now** can be added.
+3. Tap **▶ Start walk & share location** and allow location when the phone asks.
+4. A floating **Live** bar stays on screen while the walk is shared: **Map**, **👀 Count** for a
+   headcount of the children on the walk, and **Stop**.
 
-## Parent view
+The phone sends its location about every 12 seconds while the walk is live.
 
-1. Sidebar → **Field trip GPS**.
-2. Enter the trip ID and tap **Load**.
-3. See:
-   - Latest lat/lon + timestamp of last ping
-   - 100-ping trail rendered on an OpenStreetMap embed
-   - Trip metadata (title, destination, depart/return times)
-4. Only guardians with an **approved** field-trip permission slip can view their trip's location.
+## What parents get
 
-## Privacy + safety
+- When the walk starts: a notification in the app (bell), a push to the KiddieTrac app and an email —
+  *"Ava is out on a walk"*, where to and with whom.
+- A **live walk** banner in the app opens the map, refreshed about every 12 seconds, with distance,
+  steps and time so far.
+- When the walk ends: *"Ava is back from the walk"* by bell, push and email.
+- The walk goes on the child's daily log, and the evening summary shows where they went with the route map.
 
-- Location tracking stops when the trip ends.
-- Pings stored in `field_trip_pings` for the trip duration only.
-- Trail trimmed to 100 most-recent pings on display.
+## Headcounts on a walk
 
-## Requires
+Tap **👀 Count** on the Live bar and tick each child as you see them. If someone is not accounted for,
+the screen offers to alert the director straight away.
 
-- Modern browser with Geolocation API (Chrome 90+, Safari 14+, Firefox 80+)
-- HTTPS (Geolocation won't work over HTTP)
-- Active internet connection on the lead's device
+## For directors and admins
 
+**Walk Watch** in the sidebar shows the day's walks and outings: who is out now, who is with the group,
+where they set off from, where they are now and which children are on it. Pick another day to see past
+walks and their routes. Starting and ending a walk are in the audit log.
 
-## When a walk ends
+## Ending a walk
 
-Ending a walk now does three things beyond stopping the tracker:
+- The educator taps **Stop** (or **End walk**). Parents are told the children are back.
+- With the KiddieTrac app open and location allowed, the app can notice the group is back at the centre
+  and ask **"Back at …?"** — one tap ends the walk. Detection in the background is an agency setting and
+  is off unless you switch it on.
+- A walk nobody ended is closed automatically once the day is over (no parent notification is sent then).
 
-1. **The distance is worked out** from the GPS trail and stored against the walk.
-2. **Each child gets a daily-log entry** — where they went, the start and end time, how
-   long, and how far. Parents see it in their child's day.
-3. **The route map is kept.** It stays on the Daily Overview after the walk finishes,
-   which is when you are usually writing the day up, and the same picture is emailed to
-   parents in the daily summary.
+## Privacy
 
-The distance ignores GPS noise: a fix accurate to worse than 100 m is skipped, and so is
-any jump over 250 m between two fixes, which is a receiver relocating itself rather than
-a toddler sprinting. Once a walk has ended its distance is fixed, so the figure a parent
-was emailed does not drift afterwards.
-
-The **Daily Overview** also totals the day's distance in a **Walked** card, beside Meals
-and Naps.
+- Location is shared only while a walk is live. Parents can follow only the walks their own child is on.
+- Parents see their own child's walks for the last 30 days.

@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Services\AgencyMailer;
 use App\Services\EmailTemplate;
 use App\Support\BirthdayGreetings;
+use App\Support\BirthdayVideo;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -110,6 +111,10 @@ class BirthdayEmailCommand extends Command
                 $turning = (int) Carbon::parse($ch->date_of_birth)->diffInYears($target);
                 $seed = BirthdayGreetings::seed((int) $ch->id, $year);
                 $name = trim($ch->first_name . ' ' . $ch->last_name);
+                /* The birthday sing-along (2026-10-21): one generic cartoon for every birthday;
+                   the name is only in the wording and the greeting above the player. The link
+                   lasts through the day and the week after. */
+                $video = $this->videoUrl(fn () => BirthdayVideo::childUrl((int) $ch->id, $turning, max(14, (int) $cfg['days_ahead'] + 7)));
 
                 if ($cfg['children_notify_guardians']) {
                     $to = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
@@ -119,7 +124,8 @@ class BirthdayEmailCommand extends Command
                         $sent += $this->deliver($agency, $r, 'child_guardian', (int) $ch->id, $year,
                             '🎂 ' . $ch->first_name . ' turns ' . $turning . ' ' . $when,
                             BirthdayGreetings::forGuardian($seed, $ch->first_name, $turning, $when),
-                            $name . "'s " . BirthdayGreetings::ordinal($turning) . ' birthday');
+                            $name . "'s " . BirthdayGreetings::ordinal($turning) . ' birthday',
+                            $this->videoBlock('child_guardian', (string) $ch->first_name, $video));
                     }
                 }
 
@@ -133,7 +139,8 @@ class BirthdayEmailCommand extends Command
                         $sent += $this->deliver($agency, $r, 'child_educator', (int) $ch->id, $year,
                             '🎂 ' . $ch->first_name . "'s birthday is " . $when,
                             BirthdayGreetings::forEducator($seed, $ch->first_name, $turning, $when),
-                            $name . "'s " . BirthdayGreetings::ordinal($turning) . ' birthday');
+                            $name . "'s " . BirthdayGreetings::ordinal($turning) . ' birthday',
+                            $this->videoBlock('child_educator', (string) $ch->first_name, $video));
                     }
                 }
             }
@@ -154,12 +161,14 @@ class BirthdayEmailCommand extends Command
             foreach ($staff as $p) {
                 $seed = BirthdayGreetings::seed((int) $p->id, $year);
                 $name = trim($p->first_name . ' ' . $p->last_name);
+                $video = $this->videoUrl(fn () => BirthdayVideo::staffUrl((int) $p->id, max(14, (int) $cfg['days_ahead'] + 7)));
 
                 if ($cfg['staff_notify_person']) {
                     $sent += $this->deliver($agency, $p, 'staff_person', (int) $p->id, $year,
                         '🎉 Happy birthday, ' . $p->first_name . '!',
                         BirthdayGreetings::forPerson($seed, $p->first_name, $when),
-                        'Happy birthday');
+                        'Happy birthday',
+                        $this->videoBlock('staff_person', (string) $p->first_name, $video, ['centre' => (string) $agency->name]));
                 }
 
                 if ($cfg['staff_notify_leads']) {
@@ -174,7 +183,8 @@ class BirthdayEmailCommand extends Command
                     foreach ($leads as $r) {
                         $sent += $this->deliver($agency, $r, 'staff_lead', (int) $p->id, $year,
                             $name . "'s birthday is " . $when,
-                            BirthdayGreetings::forLead($seed, $name, $when), 'A birthday coming up');
+                            BirthdayGreetings::forLead($seed, $name, $when), 'A birthday coming up',
+                            $this->videoBlock('staff_lead', (string) $p->first_name, $video));
                     }
                 }
             }
@@ -185,7 +195,7 @@ class BirthdayEmailCommand extends Command
 
     /** One email, sent once. */
     private function deliver(object $agency, object $recipient, string $kind, int $subjectId, int $year,
-                             string $subject, string $message, string $heading): int
+                             string $subject, string $message, string $heading, string $extraHtml = ''): int
     {
         if (DB::table('birthday_email_log')
             ->where(['recipient_user_id' => $recipient->id, 'kind' => $kind, 'subject_id' => $subjectId, 'birthday_year' => $year])
@@ -198,7 +208,7 @@ class BirthdayEmailCommand extends Command
             return 1;
         }
 
-        $html = EmailTemplate::wrap((int) $agency->id, $this->bodyHtml($heading, $message), [
+        $html = EmailTemplate::wrap((int) $agency->id, $this->bodyHtml($heading, $message, $extraHtml), [
             'preheader' => $subject, 'eyebrow' => 'Birthday',
         ]);
 
@@ -219,14 +229,40 @@ class BirthdayEmailCommand extends Command
         return 1;
     }
 
-    private function bodyHtml(string $heading, string $message): string
+    private function bodyHtml(string $heading, string $message, string $extraHtml = ''): string
     {
         return '<div style="text-align:center;font-size:44px;line-height:1;margin:0 0 14px;">🎂</div>'
             . '<div style="font-size:21px;font-weight:800;color:#0B2545;text-align:center;margin:0 0 14px;">'
             . e($heading) . '</div>'
             . '<div style="font-size:16px;line-height:1.65;color:#334155;text-align:center;margin:0 0 22px;">'
             . e($message) . '</div>'
+            . $extraHtml
             . EmailTemplate::button('Open KiddieTrac', 'https://app.kiddietrac.com');
+    }
+
+    /* The sing-along link and card. A birthday email never waits on them: if a link cannot
+       be made the email goes out without the card. */
+    private function videoUrl(callable $make): ?string
+    {
+        try {
+            return (string) $make();
+        } catch (\Throwable $e) {
+            report($e);
+            return null;
+        }
+    }
+
+    private function videoBlock(string $kind, string $firstName, ?string $url, array $opts = []): string
+    {
+        if (! $url) {
+            return '';
+        }
+        try {
+            return BirthdayVideo::emailBlock($kind, $firstName, $url, $opts);
+        } catch (\Throwable $e) {
+            report($e);
+            return '';
+        }
     }
 
     /** One sample of each message type, so the wording can be judged before it goes out. */
@@ -235,16 +271,20 @@ class BirthdayEmailCommand extends Command
         $agencyId = (int) ($this->option('agency') ?: 6);
         $when = BirthdayGreetings::whenPhrase(1, Carbon::tomorrow());
         $samples = [
-            ['To a parent', '🎂 Amara turns 4 tomorrow', BirthdayGreetings::forGuardian(3, 'Amara', 4, $when), "Amara's 4th birthday"],
-            ['To an educator', "🎂 Amara's birthday is tomorrow", BirthdayGreetings::forEducator(2, 'Amara', 4, $when), "Amara's 4th birthday"],
-            ['To the birthday person', '🎉 Happy birthday, Chearstine!', BirthdayGreetings::forPerson(1, 'Chearstine', $when), 'Happy birthday'],
-            ['To a director', "Chearstine Fitzpatrick's birthday is tomorrow", BirthdayGreetings::forLead(4, 'Chearstine Fitzpatrick', $when), 'A birthday coming up'],
+            ['To a parent', '🎂 Amara turns 4 tomorrow', BirthdayGreetings::forGuardian(3, 'Amara', 4, $when), "Amara's 4th birthday",
+                BirthdayVideo::emailBlock('child_guardian', 'Amara', BirthdayVideo::demoUrl())],
+            ['To an educator', "🎂 Amara's birthday is tomorrow", BirthdayGreetings::forEducator(2, 'Amara', 4, $when), "Amara's 4th birthday",
+                BirthdayVideo::emailBlock('child_educator', 'Amara', BirthdayVideo::demoUrl())],
+            ['To the birthday person', '🎉 Happy birthday, Chearstine!', BirthdayGreetings::forPerson(1, 'Chearstine', $when), 'Happy birthday',
+                BirthdayVideo::emailBlock('staff_person', 'Chearstine', BirthdayVideo::PAGE, ['centre' => 'Sunny Meadows Childcare'])],
+            ['To a director', "Chearstine Fitzpatrick's birthday is tomorrow", BirthdayGreetings::forLead(4, 'Chearstine Fitzpatrick', $when), 'A birthday coming up',
+                BirthdayVideo::emailBlock('staff_lead', 'Chearstine', BirthdayVideo::PAGE)],
         ];
 
-        foreach ($samples as [$label, $subject, $message, $heading]) {
+        foreach ($samples as [$label, $subject, $message, $heading, $video]) {
             $html = EmailTemplate::wrap($agencyId,
                 '<div style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;text-align:center;margin:0 0 18px;">SAMPLE — ' . e($label) . '</div>'
-                . $this->bodyHtml($heading, $message),
+                . $this->bodyHtml($heading, $message, $video),
                 ['preheader' => $subject, 'eyebrow' => 'Birthday']);
 
             AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $subject, $label) {

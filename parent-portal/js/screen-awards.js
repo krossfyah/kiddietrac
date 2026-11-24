@@ -63,7 +63,7 @@
   }
 
   function awardCard(a) {
-    return '<div style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #E7EDF3;border-left:5px solid #F59E0B;border-radius:14px;padding:13px 15px;">' +
+    return '<div style="display:flex;align-items:center;gap:14px;background:#fff;border:1px solid #E7EDF3;--kt-edge:#F59E0B;border-radius:14px;padding:13px 15px;">' +
       '<div style="flex:0 0 auto;width:52px;height:52px;border-radius:14px;background:#FEF3C7;display:flex;align-items:center;justify-content:center;font-size:28px;">' + (a.badge || '🏆') + '</div>' +
       '<div style="flex:1;min-width:0;">' +
         '<div style="font-weight:800;font-size:15.5px;color:#0F172A;">' + esc(a.title) + (a.period ? ' <span style="font-size:11px;font-weight:800;color:#92400E;background:#FEF3C7;padding:2px 8px;border-radius:20px;margin-left:4px;">' + esc(periodLabel(a.period)) + '</span>' : '') + '</div>' +
@@ -105,7 +105,7 @@
         '<div><div style="font-size:13px;font-weight:700;margin-bottom:6px;">Badge</div><div id="aw-badges" style="display:flex;flex-wrap:wrap;gap:6px;">' + BADGES.map(function (b, i) { return '<button type="button" class="aw-badge" data-badge="' + b + '" style="font-size:22px;width:40px;height:40px;line-height:1;border:2px solid ' + (i === 0 ? '#F59E0B' : '#E2E8F0') + ';border-radius:11px;background:' + (i === 0 ? '#FEF3C7' : '#fff') + ';cursor:pointer;">' + b + '</button>'; }).join('') + '</div></div>' +
         '<div class="aw-2col" style="display:grid;gap:12px;">' +
           '<label style="font-size:13px;font-weight:700;">Period<select id="aw-period" style="' + inp + '"><option value="">—</option><option value="daily">Daily</option><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option></select></label>' +
-          '<label style="font-size:13px;font-weight:700;">Date<input id="aw-date" type="date" value="' + new Date().toISOString().slice(0, 10) + '" style="' + inp + '"></label>' +
+          '<label style="font-size:13px;font-weight:700;">Date<input id="aw-date" type="date" value="' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '" style="' + inp + '"></label>' +
         '</div>' +
         '<label style="font-size:13px;font-weight:700;">Message (optional)<textarea id="aw-note" rows="2" maxlength="1000" placeholder="A note for the child / parents" style="' + inp + ';resize:vertical;"></textarea></label>' +
       '</div>' +
@@ -170,7 +170,7 @@
   }
 
   function parentAwardCard(a) {
-    return '<div style="background:#fff;border:1px solid #F1E5C8;border-left:6px solid #F59E0B;border-radius:16px;padding:16px 18px;box-shadow:0 2px 10px -6px rgba(245,158,11,.4);display:flex;gap:14px;align-items:center;">' +
+    return '<div style="background:#fff;border:1px solid #F1E5C8;--kt-edge:#F59E0B;border-radius:16px;padding:16px 18px;box-shadow:0 2px 10px -6px rgba(245,158,11,.4);display:flex;gap:14px;align-items:center;">' +
       '<div style="flex:0 0 auto;width:58px;height:58px;border-radius:16px;background:#FEF3C7;display:flex;align-items:center;justify-content:center;font-size:32px;">' + (a.badge || '🏆') + '</div>' +
       '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:16px;color:#0F172A;">' + esc(a.title) + '</div>' +
       '<div style="font-size:13px;color:#475569;margin-top:2px;">' + esc(childName(a)) + ' · ' + esc(fmtDate(a.awarded_on)) + (a.period ? ' · ' + esc(periodLabel(a.period)) : '') + '</div>' +
@@ -357,6 +357,11 @@
     closeBtn.addEventListener('click', close);
     document.addEventListener('keydown', onKey, true);
     printBtn.addEventListener('click', function () {
+      /* A phone or the apps: the shared print path (kt-doc-viewer.js, 2026-11-06) - a frame's print() is ignored there. */
+      if (KT.printDoc && ((KT.isNativeApp && KT.isNativeApp()) || window.matchMedia('(pointer:coarse)').matches)) {
+        KT.printDoc({ html: html }, { title: 'Certificate' });
+        return;
+      }
       /* Print the IFRAME, not the page — otherwise the portal behind it comes out too.
          focus() first: Safari prints the top document if the frame is not focused. */
       try {

@@ -122,6 +122,18 @@
       + '<div style="font-size:12px;color:#94A3B8;margin-top:12px;line-height:1.5;">'
       + 'Reminders are checked once an hour, so they go out during the hour you choose '
       + 'rather than at the exact minute.</div>'
+      /* STILL CLOCKED IN, ROOM EMPTY (2026-11-07, Anthony: "with educators who have no kids checked in and are still
+         clocked in - send app reminders that they are still clocked in and to clock out - wire this up as a setting").
+         staff:empty-room-clock-out, every five minutes; an app reminder, never email. */
+      + '<div style="font-size:13px;font-weight:700;color:#0F2540;margin:20px 0 2px;">⏱️ Room empty, still clocked in</div>'
+      + row('Remind educators to clock out when their room is empty',
+            'An app notification once every child has gone from their room and they are still on the clock. '
+            + 'Never before the first child arrives. Directors and admins are not reminded.',
+            toggle('cr-empty', s.empty_enabled))
+      + row('After the last child leaves', 'How long the room is empty before the first reminder.',
+            num('cr-empty-after', s.empty_after == null ? 15 : s.empty_after, 5, 240) + '<span style="font-size:13px;color:#64748B;">min</span>')
+      + row('Remind again every', 'Up to 3 reminders. 0 sends just one. Children coming back starts over.',
+            num('cr-empty-repeat', s.empty_repeat == null ? 30 : s.empty_repeat, 0, 240) + '<span style="font-size:13px;color:#64748B;">min</span>')
       + '<div style="display:flex;align-items:center;gap:12px;margin-top:16px;">'
       + '<button id="cr-save" class="kt-btn kt-btn-primary">Save reminders</button>'
       + '<span id="cr-msg" style="font-size:13px;"></span></div>'
@@ -142,6 +154,9 @@
         weekdays_only: body.querySelector('#cr-wd').checked,
         email: body.querySelector('#cr-email').checked,
         push: body.querySelector('#cr-push').checked,
+        empty_enabled: body.querySelector('#cr-empty').checked,
+        empty_after: Math.max(5, parseInt(body.querySelector('#cr-empty-after').value, 10) || 15),
+        empty_repeat: Math.max(0, parseInt(body.querySelector('#cr-empty-repeat').value, 10) || 0),
       }).then(function () {
         btn.disabled = false;
         msg.style.color = '#1E8E60';

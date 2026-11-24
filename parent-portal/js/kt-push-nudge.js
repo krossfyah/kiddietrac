@@ -40,6 +40,7 @@
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
+  var HOWTO = 'How to fix';
   function show(text, action) {
     if (document.getElementById(ID)) return;
     var el = document.createElement('div');
@@ -54,7 +55,13 @@
 
     el.querySelector('.kt-pn-x').addEventListener('click', function () { snooze(7); el.remove(); });
     var go = el.querySelector('.kt-pn-go');
-    if (go) {
+    if (go && action === HOWTO) {
+      // Blocked: the browser will not ask again, so this opens the steps instead.
+      go.addEventListener('click', function () {
+        snooze(7); el.remove();
+        if (window.KT && KT.Push && KT.Push.helpBlocked) KT.Push.helpBlocked();
+      });
+    } else if (go) {
       go.addEventListener('click', async function () {
         go.disabled = true; go.textContent = 'Asking…';
         var r = { status: 'error' };
@@ -72,6 +79,7 @@
   }
 
   async function check() {
+    if (window.KT_PUBLIC_DEMO) return;   // website demo person: no set-up nudges (2026-10-31)
     if (!token() || isNative() || snoozed()) return;
     if (!document.getElementById('appMain')) return;            // not on the portal shell
 
@@ -85,7 +93,14 @@
       return;
     }
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') return;
-    if (Notification.permission !== 'default') return;          // granted = push-client subscribes; denied = respect it
+    /* Blocked (2026-10-22): it used to say nothing, and a blocked educator misses Safe
+       Arrival alerts without ever knowing why. Now it says so and shows where the switch
+       is — once a week at most, like the rest of this nudge. */
+    if (Notification.permission === 'denied') {
+      show('<b>Notifications are blocked</b> in this browser, so messages and Safe Arrival alerts cannot reach you here.', HOWTO);
+      return;
+    }
+    if (Notification.permission !== 'default') return;          // granted = push-client subscribes
     var st = 'unknown';
     try { st = (window.KT && KT.Push && KT.Push.status) ? await KT.Push.status() : 'unknown'; } catch (e) {}
     if (st !== 'unsubscribed') return;

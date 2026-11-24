@@ -30,9 +30,12 @@
 #kt-chat-dock input.kt-compose-input.kt-compose-input,
 #appMain input.kt-compose-input.kt-compose-input,
 #kt-chat-dock textarea#kt-st-input,
-#appMain textarea#kt-st-input {
+#appMain textarea#kt-st-input,
+#kt-chat-dock textarea.kt-compose-input.kt-compose-input,
+#appMain textarea.kt-compose-input.kt-compose-input {
   flex: 1 1 auto !important;
   min-width: 0 !important;
+  max-width: none !important;          /* the portal's form-field rule caps inputs at 480px; a typing box takes the row */
   box-sizing: border-box !important;
   min-height: 46px !important;
   padding: 12px 18px !important;
@@ -50,7 +53,9 @@
 #appMain input.kt-compose-input.kt-compose-input { height: 46px !important; }
 /* The staff box is a textarea: one line to start, growing to six as you type (kt-chat-dock.js). */
 #kt-chat-dock textarea#kt-st-input,
-#appMain textarea#kt-st-input {
+#appMain textarea#kt-st-input,
+#kt-chat-dock textarea.kt-compose-input.kt-compose-input,
+#appMain textarea.kt-compose-input.kt-compose-input {
   height: 46px;
   max-height: 156px !important;
   resize: none !important;
@@ -59,7 +64,9 @@
 #kt-chat-dock input.kt-compose-input.kt-compose-input:focus,
 #appMain input.kt-compose-input.kt-compose-input:focus,
 #kt-chat-dock textarea#kt-st-input:focus,
-#appMain textarea#kt-st-input:focus {
+#appMain textarea#kt-st-input:focus,
+#kt-chat-dock textarea.kt-compose-input.kt-compose-input:focus,
+#appMain textarea.kt-compose-input.kt-compose-input:focus {
   outline: none !important;
   background: #fff !important;
   border-color: #159FB4 !important;
@@ -92,13 +99,7 @@
 
 /* ── send ── */
 #kt-chat-dock .kt-thread-compose .kt-send-btn { width: 46px !important; height: 46px !important; min-height: 0 !important; flex: 0 0 auto !important; }
-#kt-chat-dock #kt-st-send, #appMain #kt-st-send {
-  flex: 0 0 auto !important;
-  height: 46px !important; min-height: 0 !important;
-  padding: 0 18px !important;
-  border-radius: 23px !important;
-  font-size: 14px !important; font-weight: 800 !important;
-}
+/* #kt-st-send is the ONE send button (.kt-send-one, end of this file) since 2026-11-02. */
 /* The staff row lines its buttons up with the bottom line of a grown box. */
 #kt-chat-dock #kt-st-input, #appMain #kt-st-input { align-self: flex-end; }
 
@@ -139,56 +140,519 @@
     border-radius: 22px !important;
   }
   #appMain input.kt-compose-input.kt-compose-input { height: 44px !important; }
-  #appMain #kt-st-send { height: 44px !important; border-radius: 22px !important; padding: 0 16px !important; }
   #appMain #kt-st-emoji-btn, #appMain #kt-st-photo-btn, #appMain #kt-st-mic-btn { width: 36px !important; height: 36px !important; font-size: 18px !important; }
 }
 
-/* ── TWO LINES WHERE SPACE IS TIGHT: the popout, and phones ──
-   In the popout the thread shares ~420px with the conversation list, and three tool
-   buttons plus 🚨 left the box 228px: a sentence was cut off after five words. Same on a
-   phone. So the box takes its own full-width line, and the tools sit on a slim row under
-   it with Send at the right — the layout Teams/Slack use in a narrow pane. */
-#kt-chat-dock .kt-thread-compose,
-#kt-chat-dock .kt-thread-compose > div:has(> #kt-st-input) {
-  flex-wrap: wrap !important;
-  row-gap: 6px !important;
-}
-#kt-chat-dock .kt-thread-compose > .kt-compose-input,
-#kt-chat-dock .kt-thread-compose #kt-st-input {
-  order: -1 !important;
-  flex: 1 1 100% !important;
-  width: 100% !important;
-}
-#kt-chat-dock .kt-thread-compose > button:last-of-type,
-#kt-chat-dock .kt-thread-compose #kt-st-send { margin-left: auto !important; }
-#kt-chat-dock .kt-thread-compose > .kt-em-btn { margin-left: auto !important; }
-#kt-chat-dock .kt-thread-compose > .kt-em-btn ~ button { margin-left: 0 !important; }
-/* The emoji tray opens above the whole two-line bar, not over the text box. */
+/* ── The two-line layout for tight spaces now lives in THE ONE COMPOSER ROW (.kt-compose-row, end of this file):
+   box + send on the first line, the tools on a slim line under it. Only the emoji tray position stays here. ── */
 #kt-chat-dock .kt-thread-compose .kt-emoji-panel,
 #kt-chat-dock .kt-thread-compose #kt-st-emoji { bottom: calc(100% + 6px) !important; }
-
 @media (max-width: 768px) {
-  #appMain .kt-thread-compose.kt-thread-compose,
-  #appMain .kt-thread-compose > div:has(> #kt-st-input) {
-    flex-wrap: wrap !important;
-    row-gap: 6px !important;
-  }
-  #appMain .kt-thread-compose > input.kt-compose-input.kt-compose-input,
-  #appMain .kt-thread-compose textarea#kt-st-input {
-    order: -1 !important;
-    flex: 1 1 100% !important;
-    width: 100% !important;
-  }
-  #appMain .kt-thread-compose > button:last-of-type,
-  #appMain .kt-thread-compose #kt-st-send { margin-left: auto !important; }
-  #appMain .kt-thread-compose > .kt-em-btn { margin-left: auto !important; }
-  #appMain .kt-thread-compose > .kt-em-btn ~ button { margin-left: 0 !important; }
   #appMain .kt-thread-compose .kt-emoji-panel,
   #appMain .kt-thread-compose #kt-st-emoji { bottom: calc(100% + 6px) !important; }
   /* The tool row is slimmer on a phone so the conversation keeps its height. */
   #appMain .kt-thread-compose .kt-attach-btn,
   #appMain .kt-thread-compose .kt-emoji-btn,
   #appMain .kt-thread-compose .kt-mic-btn { width: 36px !important; height: 36px !important; }
-  /* Send matches the popout: a round 44px arrow (display is left to the script). */
-  #appMain .kt-thread-compose .kt-send-btn.kt-send-btn { width: 44px !important; height: 44px !important; padding: 0 !important; border-radius: 50% !important; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE ONE SEND BUTTON — .kt-send-one (2026-11-02)
+
+   Anthony: "use the send button you created for text messages in the popup for the other message types to keep
+   this consistent and clean for both desktop and mobile". Every typing bar's send is this one round teal ➤:
+   family chat (staff + parent, desktop + phone), colleague / group threads, Team messages, website chat, text
+   replies, and the chat dock's "new chat" box. Each screen only adds the class — the look lives here, once.
+
+   STATES (set by each composer's own script; nothing else to wire):
+     [disabled]           nothing to send yet (empty box, no photo / voice note waiting) — faded, not clickable
+     [aria-busy="true"]   sending — the arrow becomes a spinner; the draft stays in the box until the server
+                          says yes, so a failure keeps what was typed
+   Composers that swap the arrow for a 🎤 while the box is empty (family thread, the parent's phone thread) keep
+   doing that: the same button, showing the mic.
+
+   WHY THE ODD SELECTOR. Older rules size these buttons by ID inside #kt-chat-dock / #appMain (#kt-st-send was a
+   46px "Send" pill, the phone sheet made .kt-send-btn a 38px rounded rectangle) and the portal's button polish
+   stacks :not()s. `:is(#a#b#c, html)` counts as three IDs whichever argument matches, so this one rule outranks
+   all of them without touching any of them. The IDs never exist on the page.
+   ═══════════════════════════════════════════════════════════════════════ */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) button.kt-send-one {
+  flex: 0 0 auto !important;
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  width: 44px !important; min-width: 44px !important; max-width: 44px !important;
+  height: 44px !important; min-height: 44px !important; max-height: 44px !important;
+  /* no margin here: each bar places its arrow (pushed to the right on the dock's / phone's tool row) */
+  padding: 0 0 0 2px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: #159FB4 !important;
+  color: #FFFFFF !important;
+  font: 700 17px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  text-indent: 0 !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .14) !important;
+  opacity: 1 !important;
+  transition: background-color .15s ease, opacity .15s ease, transform .08s ease !important;
+  -webkit-tap-highlight-color: transparent;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) button.kt-send-one:hover:not([disabled]) { background: #1289A0 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) button.kt-send-one:active:not([disabled]) { transform: scale(.94) !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) button.kt-send-one:focus { outline: none !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) button.kt-send-one:focus-visible { box-shadow: 0 0 0 3px rgba(21, 159, 180, .32) !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) button.kt-send-one[disabled] { opacity: .45 !important; cursor: default !important; box-shadow: none !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) button.kt-send-one[aria-busy="true"] { opacity: 1 !important; color: transparent !important; cursor: progress !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) button.kt-send-one[aria-busy="true"]::after {
+  content: "" !important;
+  position: absolute !important;
+  left: 50% !important; top: 50% !important;
+  width: 18px !important; height: 18px !important;
+  margin: -9px 0 0 -9px !important;
+  box-sizing: border-box !important;
+  border: 2px solid rgba(255, 255, 255, .45) !important;
+  border-top-color: #FFFFFF !important;
+  border-radius: 50% !important;
+  animation: kt-send-one-spin .7s linear infinite !important;
+}
+@keyframes kt-send-one-spin { to { transform: rotate(360deg); } }
+/* The typing box takes the rest of its row. kt-fullwidth.css caps every #appMain input at 480px with a ten-:not()
+   selector; a typing box is not a form field, and the same three-ID :is() outranks it. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(input, textarea).kt-compose-input { max-width: none !important; }
+/* A one-line textarea box (website chat) shows no scroll arrows beside the text; it still scrolls when it grows. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) textarea.kt-compose-input { scrollbar-width: none !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) textarea.kt-compose-input::-webkit-scrollbar { display: none !important; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE ONE COMPOSER ROW — .kt-compose-row (2026-11-02, 20261102sr)
+
+   Anthony: "make the send button next to type a message for the other chats desktop and mobile just like how u
+   have it for text message". The text-reply popup (kt-sms-replies.js) is the pattern: the typing box and the round
+   ➤ (.kt-send-one) sit side by side, the arrow straight after the box. Every chat's typing row carries this class —
+   family thread, colleague / group thread, website chat, Team messages, the parent's chat (desktop + phone), the
+   chat dock's "new chat" box — so the placement lives here, once.
+
+   WIDE (a full-screen chat on a desktop): one line — [😊 📷 🎤 🚨] [ box ........ ] [➤]
+   TIGHT (the chat dock, and phones):      [ box ............. ] [➤]
+                                           [😊 📷 🎤 🚨]
+   The box and the arrow keep the first line; the tools wrap onto a slim line under them, so the box keeps its width
+   (in the dock three tools left it 228px, and a sentence was cut off after five words).
+
+   Done with `order`, not by moving elements, so each screen's buttons and handlers stay where they are. Same
+   three-ID :is() as the send button: it outranks the older wrap rules (kt-emergency.js forces nowrap with :has()).
+   ═══════════════════════════════════════════════════════════════════════ */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  column-gap: 6px !important;
+  row-gap: 6px !important;
+  box-sizing: border-box !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > * { order: 0 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > :is(input.kt-compose-input, textarea.kt-compose-input, textarea#kt-st-input) {
+  order: 1 !important;
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  align-self: center !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-send-one { order: 2 !important; margin: 0 !important; align-self: center !important; }
+/* A box that grows (a textarea) keeps the arrow on its last line. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > textarea ~ button.kt-send-one { align-self: flex-end !important; margin-bottom: 1px !important; }
+/* No tool is pushed away from the others (older rules gave the 🚨 / the last button margin-left:auto). */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button:not(.kt-send-one) { margin-left: 0 !important; margin-right: 0 !important; }
+
+/* TIGHT: box + arrow on the first line, tools under them. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) #kt-chat-dock .kt-compose-row > :is(input.kt-compose-input, textarea.kt-compose-input, textarea#kt-st-input) {
+  order: -2 !important;
+  flex: 1 1 calc(100% - 50px) !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) #kt-chat-dock .kt-compose-row > button.kt-send-one { order: -1 !important; }
+@media (max-width: 768px) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) #appMain .kt-compose-row > :is(input.kt-compose-input, textarea.kt-compose-input, textarea#kt-st-input) {
+    order: -2 !important;
+    flex: 1 1 calc(100% - 50px) !important;
+  }
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) #appMain .kt-compose-row > button.kt-send-one { order: -1 !important; }
+}
+
+/* The bar: white, a hairline on top, the text popup's padding. A row inside a bar that already pads itself (the
+   colleague thread's .kt-compose-wrap, the dock's "new chat" box) adds none of its own. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) #kt-chat-dock .kt-compose-row { padding: 10px 12px !important; background: #fff !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) #kt-chat-dock .kt-compose-wrap > .kt-compose-row,
+:is(#kt-so-x#kt-so-y#kt-so-z, html) #kt-chat-dock .kt-cd-compose .kt-compose-row { padding: 0 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) #kt-chat-dock .kt-thread-compose.kt-compose-wrap { padding: 10px 12px !important; }
+@media (max-width: 768px) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) #appMain .kt-compose-wrap > .kt-compose-row { padding: 0 !important; }
+}
+
+/* THE BOX'S OWN SIZE. kt-field-height.css (2026-10-25) sets every single-line field inside #appMain / dialogs to
+   32px (38px on a phone) with height, min- AND max-height !important, and its #kt-dialer :not() makes it worth two
+   IDs — so on full-screen chats (Team messages, the phone threads, the parent's chat) the round typing box was a
+   32-38px slit beside a 44px arrow. A typing box is not a form field: 46px (44px on a phone), like the dock's. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(input.kt-compose-input, textarea.kt-compose-input, textarea#kt-st-input) {
+  min-height: 46px !important;
+  padding: 12px 18px !important;
+  font-size: 15px !important;
+  line-height: 1.4 !important;
+  border-radius: 23px !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) input.kt-compose-input { height: 46px !important; max-height: 46px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(textarea.kt-compose-input, textarea#kt-st-input) { max-height: 156px !important; }
+@media (max-width: 768px) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) #appMain :is(input.kt-compose-input, textarea.kt-compose-input, textarea#kt-st-input) {
+    min-height: 44px !important;
+    padding: 11px 16px !important;
+    font-size: 16px !important;          /* 16px = no iOS zoom-on-focus */
+    border-radius: 22px !important;
+  }
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) #appMain input.kt-compose-input { height: 44px !important; max-height: 44px !important; }
+}
+
+/* A row whose only tool is the 🚨 (Team messages) stays ONE line everywhere: [🚨] [ box ] [➤]. A second line for a
+   single small button only cost the conversation height. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row.kt-compose-one { flex-wrap: nowrap !important; }
+/* The tight rules put the box at order -2 and the arrow at -1 (with an extra ID), so the tool goes before both. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row.kt-compose-one > :not(input):not(textarea):not(.kt-send-one) { order: -3 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row.kt-compose-one > :is(input.kt-compose-input, textarea.kt-compose-input) { flex: 1 1 0 !important; }
+/* The phone's growing staff box starts at the phone height; a long placeholder stays on one line. */
+@media (max-width: 768px) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) #appMain :is(textarea.kt-compose-input, textarea#kt-st-input) { height: 44px; }
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) textarea.kt-compose-input::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE ＋ BESIDE ➤ (2026-11-04, kt-compose-plus.js). Anthony: "for chat system where it shows the emoji, microphone
+   etc, add a + next to the send to be able to select these actions with a small popup - full sweep".
+   The row's tools (.kt-plus-tool) are tucked away and a round ＋ sits between the box and the ➤, with the arrow's
+   order everywhere, so every chat is one line: [ box ........ ] [＋] [➤]. The ＋ opens .kt-plus-menu.
+   ═══════════════════════════════════════════════════════════════════════ */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row.kt-plus-on > .kt-plus-tool { display: none !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row.kt-plus-on { flex-wrap: nowrap !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-plus-btn.kt-plus-btn.kt-plus-btn {
+  order: 2 !important;
+  flex: 0 0 auto !important;
+  width: 40px !important; height: 40px !important; min-width: 40px !important; min-height: 40px !important;
+  margin: 0 !important; padding: 0 !important;
+  border-radius: 50% !important;
+  border: 1px solid #CFE3E8 !important;
+  background: #EEF7F9 !important;
+  color: #0F6E80 !important;
+  font: 400 26px/1 system-ui, -apple-system, sans-serif !important;
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  cursor: pointer !important;
+  align-self: center !important;
+  box-shadow: none !important;
+  transition: transform .15s ease, background .15s ease !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > textarea ~ button.kt-plus-btn.kt-plus-btn.kt-plus-btn { align-self: flex-end !important; margin-bottom: 3px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-plus-btn.kt-plus-btn.kt-plus-btn:hover { background: #E0F1F5 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-plus-btn.kt-plus-btn.kt-plus-open { transform: rotate(45deg) !important; background: #D7EDF2 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-plus-btn.kt-plus-btn[disabled] { opacity: .45 !important; cursor: default !important; }
+/* TIGHT (the dock, phones): the box is -2 and the ➤ -1, so the ＋ takes -1 too and sits just before the arrow. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) #kt-chat-dock .kt-compose-row > button.kt-plus-btn.kt-plus-btn { order: -1 !important; }
+@media (max-width: 768px) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) #appMain .kt-compose-row > button.kt-plus-btn.kt-plus-btn { order: -1 !important; }
+}
+/* The one-line Team messages row: its "tools first" rule must not pull the ＋ to the front. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row.kt-compose-one > button.kt-plus-btn.kt-plus-btn.kt-plus-btn { order: 2 !important; }
+@media (max-width: 768px) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) #appMain .kt-compose-row.kt-compose-one > button.kt-plus-btn.kt-plus-btn.kt-plus-btn { order: -1 !important; }
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) #kt-chat-dock .kt-compose-row.kt-compose-one > button.kt-plus-btn.kt-plus-btn.kt-plus-btn { order: -1 !important; }
+
+/* The floating shortcuts: a small card above the ＋ holding round tiles (icon in a tinted circle, a short name under
+   it), up to four across. COMPACT (2026-11-05, Anthony: "the pop up to access the shortcuts to the emoji picker is
+   too big"): 64px tiles and 36px circles, was 80 / 48 - the card is ~270 x 100 down to ~270 x 74 for four. */
+.kt-plus-menu {
+  position: fixed; z-index: 2147483600;
+  display: grid; grid-template-columns: repeat(var(--kt-plus-cols, 4), 62px); gap: 2px;
+  max-width: calc(100vw - 16px);
+  background: #fff; border: 1px solid #E2E8F0; border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .18), 0 2px 6px rgba(15, 23, 42, .08);
+  padding: 6px; box-sizing: border-box;
+  transform-origin: bottom right;
+  animation: kt-plus-in .16s cubic-bezier(.2, .9, .3, 1.2);
+}
+@keyframes kt-plus-in { from { opacity: 0; transform: translateY(8px) scale(.92); } to { opacity: 1; transform: none; } }
+/* min-height 0: the phones' 42px button floor (#appMain button, kt-mobile-app.css) must not stretch a tile. */
+.kt-plus-menu .kt-plus-item.kt-plus-item {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
+  width: 62px; min-width: 0; min-height: 0; height: auto; padding: 4px 1px 3px; margin: 0; box-sizing: border-box;
+  border: 0; border-radius: 10px; background: none;
+  /* font-size / line-height spelled out: "font: 600 11.5px/1.2 inherit" was invalid (a shorthand cannot end in
+     inherit), so the whole line was dropped and the labels came out at the page's full text size. */
+  font-family: inherit; font-weight: 600; font-size: 10.5px; line-height: 1.15; color: #334155; text-align: center; cursor: pointer;
+}
+.kt-plus-menu .kt-plus-item:hover .kt-plus-ico, .kt-plus-menu .kt-plus-item:focus-visible .kt-plus-ico { transform: scale(1.08); box-shadow: 0 4px 12px rgba(15, 23, 42, .14); }
+.kt-plus-menu .kt-plus-item:focus-visible { outline: 2px solid #159FB4; outline-offset: 1px; }
+.kt-plus-menu .kt-plus-item[disabled] { opacity: .45; cursor: default; }
+.kt-plus-menu .kt-plus-ico {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 18px; line-height: 1; flex: 0 0 auto;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.kt-plus-menu .kt-plus-ico svg { width: 18px; height: 18px; }
+.kt-plus-menu .kt-plus-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60px; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE EMOJI PICKER, ONE GRID (2026-11-05, Anthony's phone video: "you will see the emoji resize issue ... full sweep").
+   Every picker (staff thread #kt-st-emoji, family thread .kt-emoji-panel, the parent app's bar .kt-emoji-bar) was a
+   loose run of inline buttons, and on a phone each one took the 42px floor meant for form buttons (#appMain button,
+   kt-mobile-app.css) - so the panel opened 8 across, then re-wrapped to 6 and 5 across with tall gaps as the page's
+   styles settled. Now: fixed 32px cells in a grid, 8 across in the popovers (as many as fit in the parent bar), four
+   rows showing and the rest scrolls. Shown = any display but none (the screens toggle block / flex / none inline).
+   ═══════════════════════════════════════════════════════════════════════ */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-st-emoji, .kt-emoji-panel):not([style*="display: none"]):not([style*="display:none"]) {
+  display: grid !important;
+  grid-template-columns: repeat(8, 32px) !important;
+  grid-auto-rows: 32px !important;
+  gap: 2px !important;
+  width: max-content !important; max-width: calc(100vw - 16px) !important;
+  max-height: 148px !important; overflow-y: auto !important; overscroll-behavior: contain;
+  padding: 6px !important; box-sizing: border-box !important;
+  line-height: 1 !important; font-size: 20px !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-emoji-panel.kt-emoji-bar:not([style*="display: none"]):not([style*="display:none"]) {
+  grid-template-columns: repeat(auto-fill, 32px) !important; justify-content: space-between !important;
+  width: auto !important; max-width: none !important; padding: 6px 10px !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-st-emoji, .kt-emoji-panel) > * {
+  width: 32px !important; height: 32px !important; min-width: 0 !important; min-height: 0 !important;
+  margin: 0 !important; padding: 0 !important;
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  font-size: 20px !important; line-height: 1 !important;
+  border: 0 !important; border-radius: 8px !important; background: none !important; box-shadow: none !important;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-st-emoji, .kt-emoji-panel) > *:hover,
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-st-emoji, .kt-emoji-panel) > *:active { background: #F1F5F9 !important; }
+
+/* AN EMOJI ON ITS OWN SHOWS BIG (2026-11-05, same video: a lone 😀 sat tiny in a full-size bubble). The screens mark
+   a message of one to three emoji (emojiOnly in screen-chat.js / screen-parent.js): no fill, no border, the emoji at
+   34px - like every phone's messages app. The time and reactions under it keep their place. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-emo-bubble.kt-emo-bubble {
+  background: transparent !important; border-color: transparent !important; box-shadow: none !important;
+  padding: 0 2px !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-emo-bubble .kt-emo-big {
+  font-size: 34px !important; line-height: 1.15 !important; letter-spacing: 1px;
+  white-space: nowrap !important; display: inline-block;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   👋 NUDGE BESIDE THE ＋ (2026-11-04, kt-compose-plus.js + App\Support\ChatNudge). Anthony: "add this to next to the +
+   and it should shake the screen, mobile app and make a sound". A row whose screen names a nudge endpoint
+   (data-kt-nudge) gets a round 👋 just before the ＋; the script copies the ＋'s order onto it, so it sits beside the ＋
+   in every layout. Cooling down = faded with the seconds left.
+   ═══════════════════════════════════════════════════════════════════════ */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-nudge-btn.kt-nudge-btn.kt-nudge-btn {
+  flex: 0 0 auto !important;
+  width: 40px !important; height: 40px !important; min-width: 40px !important; min-height: 40px !important;
+  margin: 0 !important; padding: 0 !important;
+  border-radius: 50% !important;
+  border: 1px solid #F5D9A8 !important;
+  background: #FFF7E6 !important;
+  color: #92400E !important;
+  font: 400 20px/1 system-ui, -apple-system, "Segoe UI Emoji", sans-serif !important;
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  cursor: pointer !important; align-self: center !important; box-shadow: none !important; position: relative !important;
+  transition: transform .15s ease, background .15s ease !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > textarea ~ button.kt-nudge-btn.kt-nudge-btn.kt-nudge-btn { align-self: flex-end !important; margin-bottom: 3px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-nudge-btn.kt-nudge-btn.kt-nudge-btn:hover { background: #FDEBC8 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-nudge-btn.kt-nudge-btn.kt-nudge-btn[disabled] { opacity: .5 !important; cursor: default !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-nudge-btn.kt-nudge-btn.kt-nudge-wave { animation: kt-nudge-wave .6s ease !important; }
+.kt-nudge-btn .kt-nudge-left { position: absolute; bottom: -4px; right: -6px; background: #92400E; color: #fff; font: 700 9.5px/1 system-ui, sans-serif; padding: 2px 4px; border-radius: 8px; }
+@keyframes kt-nudge-wave { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-22deg); } 40% { transform: rotate(18deg); } 60% { transform: rotate(-14deg); } 80% { transform: rotate(8deg); } }
+
+/* Receiving one: the whole screen shakes, and a banner says who, with Open. */
+@keyframes kt-nudge-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  10%, 50%, 90% { transform: translate3d(-9px, 0, 0) rotate(-.4deg); }
+  30%, 70% { transform: translate3d(9px, 0, 0) rotate(.4deg); }
+}
+body.kt-nudge-shaking { animation: kt-nudge-shake .55s cubic-bezier(.36,.07,.19,.97) 2 both; }
+@media (prefers-reduced-motion: reduce) { body.kt-nudge-shaking { animation: none; } }
+.kt-nudge-banner {
+  position: fixed; left: 50%; top: calc(14px + env(safe-area-inset-top, 0px)); transform: translateX(-50%);
+  z-index: 2147483000; display: flex; align-items: center; gap: 10px;
+  width: min(420px, calc(100vw - 24px)); box-sizing: border-box; padding: 10px 10px 10px 14px;
+  background: linear-gradient(135deg, #0D3B66, #159FB4); color: #fff; border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(13, 59, 102, .35); font: 600 14px/1.3 system-ui, -apple-system, sans-serif;
+  animation: kt-nudge-in .25s ease both;
+}
+.kt-nudge-banner .kt-nb-hand { font-size: 26px; line-height: 1; animation: kt-nudge-wave .6s ease 3; }
+.kt-nudge-banner .kt-nb-txt { flex: 1; min-width: 0; }
+.kt-nudge-banner .kt-nb-txt small { display: block; font-weight: 500; opacity: .85; font-size: 12px; }
+.kt-nudge-banner button { flex: 0 0 auto; height: 32px; padding: 0 14px; border-radius: 16px; border: none; background: #fff; color: #0D3B66; font: 800 13px/1 system-ui, sans-serif; cursor: pointer; }
+.kt-nudge-banner button.kt-nb-x { background: transparent; color: #fff; padding: 0 8px; font-size: 16px; }
+@keyframes kt-nudge-in { from { opacity: 0; transform: translate(-50%, -12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* 📞 CALL (2026-11-04, App\Support\ChatCall): the same round button as the 👋, in green, just before it. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-nudge-btn.kt-call-btn.kt-call-btn { border-color: #BBE5C8 !important; background: #ECFDF3 !important; color: #166534 !important; font-size: 18px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) .kt-compose-row > button.kt-nudge-btn.kt-call-btn.kt-call-btn:hover { background: #D1FADF !important; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   THE TYPING BAR — .kt-compose-row.kt-bar (2026-11-13, kt-compose-plus.js + kt-line-icons.js)
+
+   Anthony, with a photo of a clean typing bar: "for the chat bar mimic to make this cleaner with kiddietrac - full
+   sweep for desktop and mobile". Every chat's row is now ONE rounded bar with a hairline border:
+
+       ╭──────────────────────────────────────────────────────────╮
+       │ ＋  📎  Type a message…                        📞  👋  ➤ │
+       ╰──────────────────────────────────────────────────────────╯
+         Enter to send · Shift+Enter for a new line            (computers only)
+
+   Thin outline icons, grey until hovered; the box has no border of its own (the bar is the field, and it takes the
+   teal focus ring); the ➤ is a smaller teal circle, grey while there is nothing to send. Phones get the same bar,
+   no hint line. The extra :is(#…, body) makes these rules one ID stronger than the TIGHT and ＋ rules above, which
+   still apply to a row opted out with data-kt-no-bar.
+   ═══════════════════════════════════════════════════════════════════════ */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar {
+  flex-wrap: nowrap !important;
+  align-items: flex-end !important;
+  column-gap: 2px !important;
+  row-gap: 0 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  min-height: 48px !important;
+  margin: 10px 12px 12px !important;
+  padding: 4px 5px 4px 6px !important;
+  border: 1.5px solid #CBD5E1 !important;
+  border-radius: 24px !important;
+  background: #FFFFFF !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, .06) !important;
+  transition: border-color .15s ease, box-shadow .15s ease !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar:focus-within {
+  border-color: #159FB4 !important;
+  box-shadow: 0 0 0 3px rgba(21, 159, 180, .14) !important;
+}
+/* A bar inside a footer that already pads itself (the colleague thread, the dock's "new chat", the assistant). */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) :is(.kt-compose-wrap, .kt-cd-compose, .kt-ask-foot) > .kt-compose-row.kt-bar { margin: 0 !important; }
+
+/* The box: borderless inside the bar. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > :is(input.kt-compose-input, textarea.kt-compose-input, textarea#kt-st-input) {
+  order: 0 !important;
+  flex: 1 1 0 !important;
+  width: auto !important; min-width: 0 !important; max-width: none !important;
+  align-self: center !important;
+  margin: 0 !important;
+  padding: 9px 6px !important;
+  min-height: 38px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  font-size: 15px !important;
+  line-height: 1.4 !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > input.kt-compose-input { height: 38px !important; max-height: 38px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > :is(textarea.kt-compose-input, textarea#kt-st-input) { max-height: 150px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > :is(input, textarea).kt-compose-input::placeholder { color: #94A3B8 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > :is(input, textarea).kt-compose-input:disabled { background: transparent !important; }
+
+/* The icon buttons: ＋, 📎, 📞, 👋 (and any tool a screen leaves on the bar). */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button:not(.kt-send-one) {
+  flex: 0 0 auto !important;
+  position: relative !important;
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  width: 36px !important; min-width: 36px !important; max-width: 36px !important;
+  height: 36px !important; min-height: 36px !important; max-height: 36px !important;
+  margin: 1px 0 !important; padding: 0 !important;
+  align-self: flex-end !important;
+  border: 0 !important; border-radius: 50% !important;
+  background: transparent !important;
+  color: #64748B !important;
+  box-shadow: none !important;
+  font: 400 20px/1 system-ui, -apple-system, "Segoe UI", sans-serif !important;
+  cursor: pointer !important;
+  transform: none;
+  transition: background-color .12s ease, color .12s ease, transform .15s ease !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button:not(.kt-send-one):hover:not([disabled]) { background: #F1F5F9 !important; color: #0F172A !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button:not(.kt-send-one)[disabled] { opacity: .45 !important; cursor: default !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button .kt-li { width: 20px !important; height: 20px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-plus-btn { order: -10 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-plus-btn.kt-plus-open { transform: rotate(45deg) !important; background: #E0F2F5 !important; color: #0F6E80 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-plus-inline { order: -9 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-nudge-btn:hover:not([disabled]) { background: #FEF3C7 !important; color: #92400E !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-call-btn:hover:not([disabled]) { background: #DCFCE7 !important; color: #166534 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-nudge-btn.kt-nudge-wave { animation: kt-nudge-wave .6s ease !important; }
+
+/* Tools that live in the ＋ menu stay off the bar (the rule above would show them again). */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar.kt-plus-on > .kt-plus-tool.kt-plus-tool { display: none !important; }
+/* A tool the screen hides itself stays hidden. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button:is([hidden], [style*="display: none"], [style*="display:none"]) { display: none !important; }
+
+/* The ➤: a 36px teal circle at the bar's end; grey while there is nothing to send. */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-send-one {
+  order: 3 !important;
+  align-self: flex-end !important;
+  width: 36px !important; min-width: 36px !important; max-width: 36px !important;
+  height: 36px !important; min-height: 36px !important; max-height: 36px !important;
+  margin: 1px 0 1px 2px !important;
+  padding: 0 !important;
+  font-size: 16px !important;
+}
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-send-one .kt-li { width: 18px !important; height: 18px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-send-one[data-li-btn="send"] .kt-li { margin-left: 2px; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-send-one[disabled] { opacity: 1 !important; background: #E2E8F0 !important; color: #94A3B8 !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-send-one[aria-busy="true"] .kt-li { visibility: hidden; }
+
+/* The hint under the bar - computers only (a phone keyboard's return key does its own thing). */
+@media (hover: hover) and (pointer: fine) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar[data-kt-hint] { margin-bottom: 26px !important; }
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) :is(.kt-compose-wrap, .kt-cd-compose, .kt-ask-foot) > .kt-compose-row.kt-bar[data-kt-hint] { margin-bottom: 18px !important; }
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar[data-kt-hint]::after {
+    content: attr(data-kt-hint) !important;
+    position: absolute !important; left: 16px !important; top: calc(100% + 4px) !important;
+    display: block !important; width: auto !important; height: auto !important; order: 99 !important;
+    font: 400 11.5px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif !important;
+    color: #94A3B8 !important; white-space: nowrap !important; pointer-events: none !important;
+    background: none !important; border: 0 !important;
+  }
+}
+/* Phones: the same bar, a touch tighter. */
+@media (max-width: 768px) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar { margin: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)) !important; }
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > :is(input.kt-compose-input, textarea.kt-compose-input, textarea#kt-st-input) { font-size: 16px !important; }
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button:not(.kt-send-one) { width: 34px !important; min-width: 34px !important; max-width: 34px !important; }
+}
+/* A phone's bar is ＋ 📎 [box] ➤ - 📞 and 👋 are in the ＋ menu there (kt-compose-plus.js). */
+@media (max-width: 480px) {
+  :is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > button.kt-nudge-btn { display: none !important; }
+}
+/* One line of text fills the 38px box exactly (no scroll arrows on a one-line textarea). */
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > :is(input.kt-compose-input, textarea.kt-compose-input, textarea#kt-st-input) { line-height: 20px !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > :is(textarea.kt-compose-input, textarea#kt-st-input) { scrollbar-width: none !important; resize: none !important; }
+:is(#kt-so-x#kt-so-y#kt-so-z, html) :is(#kt-chat-dock, #appMain, #kt-ask-ov, body) .kt-compose-row.kt-bar > :is(textarea.kt-compose-input, textarea#kt-st-input)::-webkit-scrollbar { display: none !important; }
+
+/* The ＋ menu opens from the bar's left now. */
+.kt-plus-menu { transform-origin: bottom left; }
+
+/* Suggestion chips (the assistant): pills with a small line icon, like the photo. */
+html body .kt-ask-chips .kt-ask-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid #E2E8F0; background: #FFFFFF; color: #334155;
+  border-radius: 999px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; line-height: 1.3;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+html body .kt-ask-chips .kt-ask-chip:hover { background: #F0FAFB; border-color: #9BD8DE; color: #0F4C5C; }
+html body .kt-ask-chips .kt-ask-chip:not(.kt-ask-link)::before {
+  content: ""; flex: 0 0 auto; width: 13px; height: 13px; background: currentColor; opacity: .75;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z'/%3E%3C/svg%3E") center / contain no-repeat;
 }

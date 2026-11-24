@@ -65,7 +65,7 @@
     const r = await Api.get('/conferences/slots').catch(() => ({ data: [] }));
     const slots = r.data || [];
     const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
-    const isStaff = Array.isArray(u.roles) && u.roles.some(r => ['educator', 'centre_director', 'agency_admin', 'platform_admin'].includes(r));
+    const isStaff = (window.ktRoles ? window.ktRoles(u) : (u.roles || [])).some(r => ['educator', 'centre_director', 'agency_admin', 'platform_admin'].includes(r));
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🗣 Parent-teacher conferences</h2>
@@ -249,9 +249,13 @@
         '#appMain table#ap-grid.kt-mcards td{display:block !important;width:100% !important;}',
         '#appMain table#ap-grid.kt-mcards td:not([data-label=""])::before{display:block;margin-bottom:5px;}',
         '#appMain table#ap-grid.kt-mcards td select{width:100% !important;min-width:0 !important;box-sizing:border-box;}',
-        '#appMain table#ap-grid.kt-mcards td[data-label*="TODAY"]{background:#E8F4FA !important;',
-        'border-left:3px solid #1F6080 !important;border-radius:8px;padding-left:9px !important;}',
-        '#appMain table#ap-grid.kt-mcards td[data-label*="TODAY"]::before{color:#0B4A63;}',
+        /* TODAY COULD NOT BE SEEN ON A PHONE (2026-11-06, Anthony: "the highlight for today is not highlighted
+           properly or can be seen"). The pale #E8F4FA cell was lost on the white card and the card label rule
+           kept its grey over the plain colour. Now: a stronger tint, a 2px navy frame and a bold navy label. */
+        '#appMain table#ap-grid.kt-mcards td[data-label*="TODAY"]{background:#D6ECF6 !important;',
+        'box-shadow:inset 0 0 0 2px #1F6080 !important;border:none !important;',
+        '--kt-edge:#1F6080 !important;border-radius:9px !important;padding:7px 9px !important;}',
+        '#appMain table#ap-grid.kt-mcards td[data-label*="TODAY"]::before{color:#0B4A63 !important;font-weight:800 !important;}',
         /* Beats [data-kt-pretty] table thead th, which is !important and was silently
            discarding today's header colour on every render. */
         '#appMain table#ap-grid thead th.ap-today{background:#1F6080 !important;}',
@@ -309,17 +313,17 @@
       +   'Drives ratios, room planning and tuition projections.</div></div>'
       + '<div class="kt-card" style="margin-top:16px;">'
       +   '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
-      +     '<div style="flex:2 1 220px;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Search</label>'
+      +     '<div style="flex:0 1 280px;min-width:0;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Search</label>'
       +       '<input id="ap-q" type="search" placeholder="Name, centre or room" autocomplete="off" '
       +       'style="width:100%;height:32px;padding:0 10px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;box-sizing:border-box;"></div>'
-      +     '<div style="flex:1 1 170px;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Show</label>'
+      +     '<div style="flex:0 1 190px;min-width:0;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Show</label>'
       +       '<select id="ap-filter" style="width:100%;height:32px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;padding:0 8px;">'
       +         '<option value="enrolled">Enrolled only</option>'
       +         '<option value="missing">Missing a pattern</option>'
       +         '<option value="all">Everyone</option>'
       +       '</select></div>'
-      +     '<div style="flex:1 1 150px;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Changes apply from</label>'
-      +       '<input id="ap-from" type="date" value="' + (new Date().toISOString().slice(0, 10)) + '" '
+      +     '<div style="flex:0 1 180px;min-width:0;"><label style="font-size:11.5px;font-weight:800;color:#64748B;">Changes apply from</label>'
+      +       '<input id="ap-from" type="date" value="' + (((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10))) + '" '
       +       'style="width:100%;height:32px;border:1px solid #E2E8F0;border-radius:8px;margin-top:4px;padding:0 8px;box-sizing:border-box;"></div>'
       +     (_isGuardianOnly
             /* data-kt-iconized: kt-icon-buttons.js rewrote this to a bare "✏️". That is
@@ -487,7 +491,7 @@
          is now tinted properly and fenced by the same accent as its header, so the eye
          lands on it. An unsaved row keeps its amber; it still gets the fence. */
       const todayBand = (i === _todayIdx)
-        ? 'background:' + (dirty[c.id] ? '#FBF0D9' : '#E8F4FA')
+        ? 'background:' + (dirty[c.id] ? '#FBF0D9' : '#D6ECF6')
           + ';border-left:2px solid #1F6080;border-right:2px solid #1F6080;'
         : '';
       let html = '<td style="padding:4px;text-align:center;border-bottom:1px solid #F1F5F9;' + todayBand + '">'
@@ -625,7 +629,7 @@
     saveBtn.addEventListener('click', async () => {
       const ids = Object.keys(dirty);
       if (!ids.length) return;
-      const from = document.getElementById('ap-from').value || new Date().toISOString().slice(0, 10);
+      const from = document.getElementById('ap-from').value || ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
       saveBtn.disabled = true; saveBtn.style.opacity = '.45';
       let done = 0, failed = 0;
       for (const id of ids) {
@@ -707,14 +711,15 @@
         <h2>📑 Report cards</h2>
         <p>Generate AI-drafted narratives for each area of your learning framework. Educators sign &amp; submit; a director/admin signs &amp; approves before it reaches the family.</p>
       </div>
+      <div id="rc-requests"></div>
       <div id="rc-pending"></div>
       <div class="kt-card">
         <div style="max-width:920px;">
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:620px;">
             <div>
               <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Child</label>
-              <style>#rc-cid,#rc-cid option{background:#fff !important;color:#0F172A !important;}</style>
-              <select id="rc-cid" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;color:#0F172A;color-scheme:light;font-size:14px;">
+              <style>#rc-cid,#rc-cid option,#rc-term,#rc-term option{background-color:#fff !important;color:#0F172A !important;}</style>
+              <select id="rc-cid" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background-color:#fff;color:#0F172A;color-scheme:light;font-size:14px;">
                 <option value="">Select a child…</option>
                 ${kidOptions}
               </select>
@@ -722,7 +727,10 @@
             </div>
             <div>
               <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Term</label>
-              <input id="rc-term" placeholder="e.g. 2026 Year-End" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;">
+              <select id="rc-term" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background-color:#fff;color:#0F172A;color-scheme:light;font-size:14px;">
+                <option value="">Loading terms…</option>
+              </select>
+              <input id="rc-term-other" placeholder="Type the term, e.g. Summer 2027" maxlength="60" style="display:none;width:100%;margin-top:8px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;">
             </div>
           </div>
           <button id="rc-gen" class="kt-btn kt-btn-primary" style="margin-top:18px;">Generate via AI</button>
@@ -744,9 +752,44 @@
     };
     const rcFwNote = (fw) => fw && fw.name ? `<div style="font-size:12.5px;color:#64748B;margin-top:6px;">Framework: <strong>${esc(fw.name)}</strong></div>` : '';
 
+    /* TERM IS A DROPDOWN (2026-11-06, Anthony: "selecting the term is also not showing up correctly"). It was a text box
+       with suggestions, pre-filled with this quarter - and a suggestion list only offers what matches the text already
+       in the box, so the other quarters never showed (and phones barely show the list at all). Now a plain list of the
+       quarters the server knows, this one picked, plus "Another term…" for a name of your own. */
+    const OTHER_TERM = '__other';
+    const rcTerm = () => {
+      const sel = document.getElementById('rc-term'), other = document.getElementById('rc-term-other');
+      if (!sel) return '';
+      return sel.value === OTHER_TERM ? ((other && other.value) || '').trim() : sel.value;
+    };
+    const rcSetTerms = (quarters, current) => {
+      const sel = document.getElementById('rc-term'); if (!sel) return;
+      const keep = sel.value && sel.value !== OTHER_TERM ? sel.value : '';
+      const labels = (quarters || []).map(q => q && q.label).filter(Boolean);
+      sel.innerHTML = (labels.length ? '' : '<option value="">Choose a term…</option>')
+        + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('')
+        + `<option value="${OTHER_TERM}">Another term…</option>`;
+      const want = keep || (current && current.label) || labels[0] || '';
+      if (want) rcPickTerm(want);
+    };
+    // Choose a term by name; one not in the list goes in as its own option (a parent's request can name any term).
+    const rcPickTerm = (label) => {
+      const sel = document.getElementById('rc-term'); if (!sel || !label) return;
+      if (!Array.prototype.some.call(sel.options, o => o.value === label)) {
+        const o = document.createElement('option'); o.value = label; o.textContent = label;
+        sel.insertBefore(o, sel.querySelector(`option[value="${OTHER_TERM}"]`));
+      }
+      sel.value = label;
+      const other = document.getElementById('rc-term-other'); if (other) other.style.display = 'none';
+    };
+    document.getElementById('rc-term').addEventListener('change', (e) => {
+      const other = document.getElementById('rc-term-other');
+      if (other) { const show = e.target.value === OTHER_TERM; other.style.display = show ? 'block' : 'none'; if (show) other.focus(); }
+    });
+
     document.getElementById('rc-gen').onclick = async () => {
       const cid = +document.getElementById('rc-cid').value;
-      const term = document.getElementById('rc-term').value;
+      const term = rcTerm();
       if (!cid || !term) { (window.KT && window.KT.toast) ? KT.toast('Select a child and enter a term', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Select a child and enter a term') ? 'success' : 'info') : alert('Select a child and enter a term'); return; }
       const btn = document.getElementById('rc-gen');
       btn.disabled = true; btn.textContent = 'Generating… (15-30 sec)';
@@ -836,14 +879,43 @@
       };
     }
 
+    /* PARENTS' REQUESTS (2026-11-04). A parent asks for this quarter's card from the Report cards screen; the room's
+       educators and the director get a bell. Here: the open requests for the children this person can write for,
+       each with "Write it" (child + quarter filled in). Sending the approved card closes the request. The term box
+       starts on this quarter - the quarter label is how a card, a request and the quarter-end reminder match. */
     (async () => {
-      let roles = []; try { roles = (JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []; } catch (e) {}
+      let r; try { r = await Api.get('/report-cards/requests'); } catch (e) { rcSetTerms([], null); return; }
+      rcSetTerms(r && Array.isArray(r.quarters) ? r.quarters : [], r && r.current);
+      const host = document.getElementById('rc-requests'); if (!host) return;
+      const asks = (r && r.data) || [];
+      if (!asks.length) return;
+      const day = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''; };
+      host.innerHTML = '<div class="kt-card" style="--kt-edge:#1F6080;margin-bottom:16px;">' +
+        `<h3 style="margin:0 0 4px;">📨 Requested by parents <span style="background:#E0F2FE;color:#075985;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${asks.length}</span></h3>` +
+        '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Families asked for these report cards. Write and submit each one; it reaches the family once a director or admin approves it.</p>' +
+        asks.map(a => `<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid #BAE6FD;background:#F0F9FF;border-radius:12px;padding:10px 14px;margin-bottom:8px;">
+          <div><b>${esc(((a.first_name || '') + ' ' + (a.last_name || '')).trim())}</b>${a.room ? ' · ' + esc(a.room) : ''} — ${esc(a.term)}<div style="font-size:12px;color:#075985;">Asked by ${esc(a.parent_first_name || 'a parent')} on ${esc(day(a.created_at))}</div></div>
+          <button type="button" class="kt-btn kt-btn-primary rc-write" data-kt-iconized="1" data-cid="${a.child_id}" data-term="${esc(a.term)}" data-name="${esc(((a.first_name || '') + ' ' + (a.last_name || '')).trim())}">✍️ Write it</button></div>`).join('') + '</div>';
+      host.querySelectorAll('.rc-write').forEach(b => {
+        b.onclick = () => {
+          const sel = document.getElementById('rc-cid'), cid = b.getAttribute('data-cid');
+          if (sel && !sel.querySelector('option[value="' + cid + '"]')) { const o = document.createElement('option'); o.value = cid; o.textContent = b.getAttribute('data-name'); sel.appendChild(o); }
+          if (sel) sel.value = cid;
+          rcPickTerm(b.getAttribute('data-term'));
+          const gen = document.getElementById('rc-gen');
+          if (gen) { gen.scrollIntoView({ behavior: 'smooth', block: 'center' }); gen.focus(); }
+        };
+      });
+    })();
+
+    (async () => {
+      let roles = []; try { roles = window.ktRoles ? window.ktRoles() : ((JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []); } catch (e) {}
       if (!['centre_director', 'agency_admin', 'platform_admin'].some(x => roles.indexOf(x) !== -1)) return;
       const host = document.getElementById('rc-pending'); if (!host) return;
       let r; try { r = await Api.get('/report-cards/pending'); } catch (e) { return; }
       const pend = (r && r.data) || [];
       if (!pend.length) return;
-      host.innerHTML = '<div class="kt-card" style="border-left:4px solid #F59E0B;margin-bottom:16px;">' +
+      host.innerHTML = '<div class="kt-card" style="--kt-edge:#F59E0B;margin-bottom:16px;">' +
         `<h3 style="margin:0 0 4px;">✍️ Awaiting your approval <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${pend.length}</span></h3>` +
         '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Educators submitted these report cards for your review, signature and approval.</p>' +
         pend.map(p => `<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:12px 14px;margin-bottom:8px;">
@@ -911,7 +983,10 @@
     }
     zState.opts = opts;
     const isEd = opts.role === 'educator';
-    if (!zState.centreId || !opts.centres.some(c => c.id === zState.centreId)) zState.centreId = opts.centres[0].id;
+    if (zState.centreId && !opts.centres.some(c => c.id === zState.centreId)) zState.centreId = null;
+    if (!zState.centreId && opts.centres.length === 1) zState.centreId = opts.centres[0].id;
+    // Select a provider first (2026-10-24) — never the first one in the list.
+    if (!zState.centreId && window.KT && KT.selectFirst) { KT.selectFirst(main, { items: opts.centres, onPick: function (id) { zState.centreId = id; renderZones(main); } }); return; }
     const roomsHere = (opts.rooms || []).filter(r => r.centre_id === zState.centreId);
     if (zState.roomId && !roomsHere.some(r => String(r.id) === String(zState.roomId))) zState.roomId = '';
     const cid = zState.centreId;
@@ -1037,145 +1112,531 @@
   async function renderTickets(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const r = await Api.get('/tickets').catch(() => ({ data: [] }));
+    /* The numbers alongside the list (2026-10-28, Anthony: "for support tickets add some graphs and sla's"):
+       GET /tickets/stats, scoped exactly like the list. */
+    const [r, st] = await Promise.all([
+      Api.get('/tickets').catch(() => ({ data: [] })),
+      Api.get('/tickets/stats').catch(() => null),
+    ]);
+    if (!main.isConnected) { return; }
+    const all = r.data || [];
+    const slaOf = (st && st.open_sla) || {};
+    const me = (tkUser() || {}).id;
+    /* All by default (2026-10-23, Anthony: "not showing all of the tickets as default"). */
+    let view = 'all';
+    let q = '';
+    let mine = false;
+    const counts = {
+      open: all.filter(t => t.status === 'open' || t.status === 'awaiting_user').length,
+      done: all.filter(t => t.status === 'resolved' || t.status === 'closed').length,
+      all: all.length,
+    };
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🎫 Support tickets</h2>
-        <p>Operational issues that aren't chat-style conversations. Track to resolution with audit trail.</p>
+        <p>Ask for help, report a problem or request a change. Track every request to its answer.</p>
         <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="tk-new">+ Raise ticket</button></div>
+      </div>
+      ${tkDashboard(st)}
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;">
+        <div id="tk-tabs" role="tablist" aria-label="Show" style="display:inline-flex;border:1px solid #CBD5E1;border-radius:9px;overflow:hidden;min-height:32px;">
+          ${[['all', 'All', counts.all], ['open', 'Open', counts.open], ['done', 'Resolved', counts.done]].map(v =>
+            `<button type="button" role="tab" data-v="${v[0]}" style="border:0;padding:0 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">${v[1]} <span style="opacity:.6;">${v[2]}</span></button>`).join('')}
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#475569;cursor:pointer;">
+          <input type="checkbox" id="tk-mine" style="width:15px;height:15px;"> Raised by me</label>
+        <input id="tk-q" type="search" placeholder="Search tickets…" style="margin-left:auto;height:32px;min-width:220px;padding:0 11px;border:1px solid #CBD5E1;border-radius:9px;font:inherit;font-size:13.5px;">
       </div>
       <div class="kt-card">
         <table>
-          <thead><tr><th>Ticket</th><th>Subject</th><th>Category</th><th>Severity</th><th>Status</th><th>Raised by</th><th>Created</th></tr></thead>
-          <tbody>${(r.data || []).map(t => `<tr style="cursor:pointer;" data-open="${t.id}"><td style="font-weight:800;color:#475569;white-space:nowrap;">#${t.id}</td>
-            <td><strong>${esc(t.subject)}</strong></td>
-            <td><span class="kt-pill kt-pill-info">${esc(tkCat(t.category))}</span></td>
-            <td><span class="kt-pill ${tkSev(t.priority).cls}">${esc(tkSev(t.priority).label)}</span></td>
-            <td><span class="kt-pill ${tkStatus(t.status).cls}">${esc(tkStatus(t.status).label)}</span></td>
-            <td>${esc(t.raised_by_name)}</td>
-            <td>${fmtStamp(t.created_at)}</td></tr>`).join('') || '<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">No tickets yet.</td></tr>'}</tbody>
+          <thead><tr><th>Ticket</th><th>Summary</th><th>Request</th><th>Severity</th><th>Status</th><th>Raised by</th><th>Updated</th></tr></thead>
+          <tbody id="tk-rows"></tbody>
         </table>
       </div>
     </div>`;
-    document.getElementById('tk-new').onclick = () => openTicketModal();
-    main.querySelectorAll('tr[data-open]').forEach(tr => tr.onclick = () => openTicket(+tr.dataset.open));
-  }
-  function openTicketModal() {
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
-
-    // Severity says what each level MEANS. "High" and "urgent" are indistinguishable
-    // to somebody who is already having a bad morning, so everything lands as urgent.
-    m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:560px;width:100%;max-height:calc(100vh - 40px);overflow-y:auto;">
-      <h3 style="margin:0 0 16px;">Raise a ticket</h3>
-
-      <label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Category</label>
-      <select id="tk-cat" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-        <option value="billing">Billing question</option><option value="enrollment">Enrollment</option>
-        <option value="maintenance">Maintenance / repair</option><option value="technical">Technical / app issue</option>
-        <option value="policy">Policy question</option><option value="other">Other</option>
-      </select>
-
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Severity</label>
-      <select id="tk-pri" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-        <option value="low">Low — a question, no rush</option>
-        <option value="normal" selected>Normal — needs sorting, but we can work</option>
-        <option value="high">High — something is broken and it is slowing us down</option>
-        <option value="urgent">Urgent — we cannot run the day, or a child is affected</option>
-      </select>
-
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Subject</label>
-      <input id="tk-sub" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;box-sizing:border-box;">
-
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">What happened?</label>
-      <textarea id="tk-body" rows="5" placeholder="What you were doing, what you expected, and what happened instead."
-        style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;box-sizing:border-box;"></textarea>
-
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Screenshots or logs</label>
-      <div style="font-size:12.5px;color:#64748B;margin-bottom:6px;">
-        A screenshot usually explains it faster than a paragraph. Images, PDFs, logs, CSV or a zip — up to 10&nbsp;MB each.</div>
-      <input id="tk-files" type="file" multiple accept="image/*,.pdf,.txt,.log,.csv,.json,.xml,.zip"
-        style="width:100%;padding:9px;border:1px dashed #CBD5E1;border-radius:8px;font-size:13px;background:#F8FAFC;box-sizing:border-box;">
-      <div id="tk-file-list" style="font-size:12.5px;color:#475569;margin-top:6px;"></div>
-
-      <div id="tk-msg" style="font-size:13px;margin-top:12px;min-height:18px;"></div>
-
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
-        <button id="tk-cancel" class="kt-btn kt-btn-secondary" type="button">Cancel</button>
-        <button id="tk-save" class="kt-btn kt-btn-primary" type="button">Raise ticket</button>
-      </div></div>`;
-
-    document.body.appendChild(m);
-
-    const files = m.querySelector('#tk-files');
-    const list = m.querySelector('#tk-file-list');
-    const msg = m.querySelector('#tk-msg');
-
-    files.addEventListener('change', function () {
-      const names = Array.prototype.map.call(files.files || [], function (f) {
-        return f.name + ' (' + Math.max(1, Math.round(f.size / 1024)) + ' KB)';
+    const rowsEl = main.querySelector('#tk-rows');
+    function paint() {
+      main.querySelectorAll('#tk-tabs button').forEach(b => {
+        const on = b.dataset.v === view;
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+        b.style.background = on ? '#1F6080' : '#fff';
+        b.style.color = on ? '#fff' : '#475569';
       });
-      list.textContent = names.length ? '📎 ' + names.join(', ') : '';
+      const needle = q.toLowerCase();
+      const rows = all.filter(t => {
+        const isDone = t.status === 'resolved' || t.status === 'closed';
+        if (view === 'open' && isDone) return false;
+        if (view === 'done' && !isDone) return false;
+        if (mine && +t.raised_by_user_id !== +me) return false;
+        if (!needle) return true;
+        return ('#' + t.id + ' ' + (t.subject || '') + ' ' + (t.body || '') + ' ' + (t.raised_by_name || '') + ' ' + tkCat(t.category, t.request_type))
+          .toLowerCase().indexOf(needle) !== -1;
+      });
+      rowsEl.innerHTML = rows.map(t => `<tr style="cursor:pointer;" data-open="${t.id}"><td style="font-weight:800;color:#475569;white-space:nowrap;">#${t.id}</td>
+            <td><strong>${esc(t.subject)}</strong></td>
+            <td style="white-space:nowrap;"><span class="kt-pill kt-pill-info">${tkIcon(t.request_type, t.category)} ${esc(tkCat(t.category, t.request_type))}</span></td>
+            <td><span class="kt-pill ${tkSev(t.priority).cls}">${esc(tkSev(t.priority).label)}</span></td>
+            <td><span class="kt-pill ${tkStatus(t.status).cls}">${esc(tkStatus(t.status).label)}</span>${tkSlaChip(slaOf[t.id])}</td>
+            <td>${esc(t.raised_by_name || '—')}</td>
+            <td style="white-space:nowrap;">${fmtStamp(t.updated_at || t.created_at)}</td></tr>`).join('')
+        || `<tr><td colspan="7" style="text-align:center;padding:40px;color:#64748B;">${all.length ? 'No tickets match.' : 'No tickets yet. Use “Raise ticket” whenever you need a hand.'}</td></tr>`;
+      rowsEl.querySelectorAll('tr[data-open]').forEach(tr => tr.onclick = () => openTicket(+tr.dataset.open));
+    }
+    main.querySelectorAll('#tk-tabs button').forEach(b => b.onclick = () => { view = b.dataset.v; paint(); });
+    main.querySelector('#tk-mine').onchange = (e) => { mine = e.target.checked; paint(); };
+    main.querySelector('#tk-q').oninput = (e) => { q = e.target.value.trim(); paint(); };
+    paint();
+    document.getElementById('tk-new').onclick = () => openTicketModal();
+  }
+  /* ── TICKET DASHBOARD + SLAs (2026-10-28) ────────────────────────────────────────
+     Anthony: "for support tickets add some graphs and sla's and etc to the support tickets view - full sweep".
+     Five figures (open, breaching SLA, first response, resolution, SLA met), created-vs-resolved by week, the
+     commonest requests, how old the open ones are, and the SLA targets themselves - so "breaching" is never a
+     mystery. Each open ticket in the list carries its own SLA chip. */
+  function tkHrs(h) {
+    if (h == null) { return '—'; }
+    if (h < 1) { return Math.max(1, Math.round(h * 60)) + 'm'; }
+    if (h < 48) { return (Math.round(h * 10) / 10) + 'h'; }
+    return Math.round(h / 24) + 'd';
+  }
+  function tkSlaChip(x) {
+    if (!x) { return ''; }
+    const m = { breached: ['#FEE2E2', '#B91C1C', 'SLA breached'], soon: ['#FEF3C7', '#92400E', 'SLA due soon'], ok: ['#DCFCE7', '#166534', 'Within SLA'] }[x.state] || null;
+    if (!m) { return ''; }
+    const due = new Date(x.responded ? x.resolve_due : x.respond_due);
+    const tip = (x.responded ? 'Resolve by ' : 'First reply by ') + due.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return '<span title="' + esc(tip) + '" style="display:inline-block;margin-left:6px;font-size:10.5px;font-weight:800;border-radius:999px;padding:2px 8px;background:' + m[0] + ';color:' + m[1] + ';white-space:nowrap;">' + m[2] + '</span>';
+  }
+  function tkBars(series, ca, cb) {
+    let max = 0; series.forEach(function (x) { max = Math.max(max, x.a || 0, x.b || 0); });
+    if (!max) { return '<div style="font-size:13px;color:#64748B;padding:14px 0;">Nothing in this period.</div>'; }
+    const W = 600, H = 130, n = series.length, gw = W / n, bw = Math.min(14, gw * 0.3);
+    const y = function (v) { return 6 + (H - 8) * (1 - v / max); };
+    let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" preserveAspectRatio="none" style="display:block">';
+    [0.5, 1].forEach(function (f) { svg += '<line x1="0" x2="' + W + '" y1="' + y(max * f) + '" y2="' + y(max * f) + '" stroke="#EEF2F7"/>'; });
+    series.forEach(function (x, i) {
+      const cx = gw * i + gw / 2;
+      svg += '<g><title>' + esc(x.tip || '') + '</title><rect x="' + (cx - gw / 2) + '" y="0" width="' + gw + '" height="' + H + '" fill="transparent"/>';
+      if (x.a) { svg += '<rect x="' + (cx - bw - 1) + '" y="' + y(x.a) + '" width="' + bw + '" height="' + (H - 2 - y(x.a)) + '" rx="3" fill="' + ca + '"/>'; }
+      if (x.b) { svg += '<rect x="' + (cx + 1) + '" y="' + y(x.b) + '" width="' + bw + '" height="' + (H - 2 - y(x.b)) + '" rx="3" fill="' + cb + '"/>'; }
+      svg += '</g>';
     });
-
-    m.querySelector('#tk-cancel').onclick = () => m.remove();
-
-    m.querySelector('#tk-save').onclick = async () => {
-      const btn = m.querySelector('#tk-save');
-      const subject = m.querySelector('#tk-sub').value.trim();
-      if (!subject) {
-        msg.style.color = '#B91C1C';
-        msg.textContent = 'Please give it a subject so it can be found again.';
-        return;
-      }
-
-      btn.disabled = true;
-      msg.style.color = '#64748B';
-      msg.textContent = 'Raising…';
-
-      try {
-        const res = await Api.post('/tickets', {
-          category: m.querySelector('#tk-cat').value,
-          priority: m.querySelector('#tk-pri').value,
-          subject: subject,
-          body: m.querySelector('#tk-body').value,
-        });
-
-        // Files go up AFTER the ticket exists — one needs the other to hang off. A
-        // failed upload therefore costs the attachment, never the ticket itself.
-        const id = (res && (res.id || res.ticket_id)) || null;
-        const chosen = Array.prototype.slice.call(files.files || []);
-        let failed = 0;
-
-        if (id && chosen.length) {
-          msg.textContent = 'Uploading ' + chosen.length + ' file' + (chosen.length === 1 ? '' : 's') + '…';
-          for (const f of chosen) {
-            const fd = new FormData();
-            fd.append('file', f, f.name);
-            try {
-              // Api.post detects FormData, leaves Content-Type to the browser so the
-              // multipart boundary is right, and carries the active-agency header.
-              await Api.post('/tickets/' + id + '/files', fd);
-            } catch (e) { failed++; }
-          }
-        }
-
-        if (failed) {
-          msg.style.color = '#B45309';
-          msg.textContent = 'Ticket raised, but ' + failed + ' file' + (failed === 1 ? '' : 's')
-            + ' could not be attached. You can add them from the ticket.';
-          setTimeout(function () { m.remove(); refreshTickets(); }, 2600);
-          return;
-        }
-
-        m.remove();
-        refreshTickets();
-      } catch (e) {
-        btn.disabled = false;
-        msg.style.color = '#B91C1C';
-        msg.textContent = (e && e.message) || 'Could not raise the ticket.';
-      }
+    svg += '<line x1="0" x2="' + W + '" y1="' + (H - 2) + '" y2="' + (H - 2) + '" stroke="#CBD5E1"/></svg>';
+    return svg + '<div style="display:flex;margin-top:4px;">' + series.map(function (x) { return '<div style="flex:1;text-align:center;font-size:10px;color:#64748B;font-weight:600;white-space:nowrap;overflow:hidden;">' + esc(x.label) + '</div>'; }).join('') + '</div>';
+  }
+  function tkDashboard(st) {
+    if (!st || !st.tiles) { return ''; }
+    const t = st.tiles;
+    const tile = function (icon, label, value, sub, tint, ink) {
+      return '<div style="background:' + tint + ';border:1px solid rgba(15,23,42,.06);border-radius:14px;padding:12px 14px;min-width:0;">'
+        + '<div style="font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + ink + ';opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + icon + ' ' + esc(label) + '</div>'
+        + '<div style="font-size:22px;font-weight:900;color:' + ink + ';margin-top:6px;line-height:1.1;">' + value + '</div>'
+        + '<div style="font-size:11.5px;color:#64748B;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(sub) + '</div></div>';
     };
+    const pct = function (v) { return v == null ? '—' : v + '%'; };
+    const tiles = '<div class="tk-dash-tiles" style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:0 0 12px;" data-kt-nosechead="1">'
+      + tile('📬', 'Open', t.open, t.new_30 + ' new · ' + t.resolved_30 + ' resolved in 30 days', '#EFF6FF', '#1D4ED8')
+      + tile('⏰', 'Breaching SLA', t.breaching, t.breaching ? 'Open tickets past their target' : 'Every open ticket is on time', t.breaching ? '#FEF2F2' : '#F0FDF4', t.breaching ? '#B91C1C' : '#15803D')
+      + tile('💬', 'First response', tkHrs(t.median_first_response_h), 'Median · ' + pct(t.response_sla_pct) + ' within SLA', '#F5F3FF', '#6D28D9')
+      + tile('✅', 'Resolution', tkHrs(t.median_resolution_h), 'Median · ' + pct(t.resolve_sla_pct) + ' within SLA', '#ECFDF5', '#047857')
+      + tile('🎯', 'SLA met', pct(t.resolve_sla_pct == null ? t.response_sla_pct : Math.round(((t.response_sla_pct || 0) + (t.resolve_sla_pct || 0)) / 2)), t.measured_on || '', '#FFFBEB', '#B45309')
+      + '</div>';
+    const weekly = (st.weekly || []).map(function (w) { return { label: w.label, a: w.created, b: w.resolved, tip: 'Week of ' + w.label + ': ' + w.created + ' raised, ' + w.resolved + ' resolved' }; });
+    const catMax = Math.max.apply(null, (st.categories || []).map(function (c) { return c.count; }).concat([1]));
+    const cats = (st.categories || []).map(function (c) {
+      return '<div style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:12.5px;"><span style="flex:0 0 120px;color:#334155;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + tkIcon(c.key, c.key) + ' ' + esc(tkCat(c.key, c.key)) + '</span>'
+        + '<span style="flex:1;background:#EEF2F7;border-radius:999px;height:9px;overflow:hidden;"><span style="display:block;height:100%;width:' + Math.round(100 * c.count / catMax) + '%;background:linear-gradient(90deg,#38BDF8,#6366F1);border-radius:999px;"></span></span>'
+        + '<span style="flex:0 0 auto;font-weight:800;color:#0F172A;min-width:24px;text-align:right;">' + c.count + '</span></div>';
+    }).join('') || '<div style="font-size:13px;color:#64748B;">No tickets yet.</div>';
+    const ag = st.aging || {}, agTotal = Object.keys(ag).reduce(function (a, k) { return a + ag[k]; }, 0) || 1;
+    const agCols = ['#22C55E', '#F59E0B', '#F97316', '#DC2626'];
+    const aging = '<div style="display:flex;height:12px;border-radius:999px;overflow:hidden;background:#EEF2F7;margin:6px 0 8px;">' + Object.keys(ag).map(function (k, i) { return ag[k] ? '<span title="' + esc(k + ': ' + ag[k]) + '" style="width:' + (100 * ag[k] / agTotal) + '%;background:' + agCols[i] + ';"></span>' : ''; }).join('') + '</div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:#475569;">' + Object.keys(ag).map(function (k, i) { return '<span style="display:inline-flex;align-items:center;gap:4px;"><i style="width:8px;height:8px;border-radius:2px;background:' + agCols[i] + ';display:inline-block;"></i>' + esc(k) + ' <b>' + ag[k] + '</b></span>'; }).join('') + '</div>';
+    const tg = st.targets || {};
+    const targets = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px;" data-kt-no-filter data-kt-no-export><tr style="color:#64748B;"><td style="padding:3px 0;font-weight:800;">Priority</td><td style="font-weight:800;">First reply</td><td style="font-weight:800;">Resolve</td></tr>'
+      + Object.keys(tg).map(function (k) { return '<tr><td style="padding:3px 0;font-weight:700;color:#0F172A;">' + esc(tg[k].label) + '</td><td>' + tkHrs(tg[k].respond_h) + '</td><td>' + tkHrs(tg[k].resolve_h) + '</td></tr>'; }).join('') + '</table>';
+    const card = function (title, sub, body) { return '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:12px 14px;min-width:0;"><div style="font-weight:800;font-size:13.5px;color:#0F172A;">' + title + '</div><div style="font-size:11.5px;color:#64748B;margin:1px 0 6px;">' + sub + '</div>' + body + '</div>'; };
+    return '<div data-kt-nosechead="1">' + tiles
+      + '<div class="tk-dash-row" style="display:grid;grid-template-columns:2fr 1.2fr 1fr;gap:10px;margin:0 0 14px;">'
+      + card('Raised vs resolved', 'Last 12 weeks <span style="margin-left:8px;"><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#6366F1;"></i> Raised <i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#22C55E;margin-left:6px;"></i> Resolved</span>', tkBars(weekly, '#6366F1', '#22C55E'))
+      + card('Most common requests', 'Last 12 months', cats)
+      + card('Open tickets by age', 'How long they have been waiting', aging) + '</div>'
+      + '<details style="margin:-6px 0 14px;"><summary style="cursor:pointer;font-size:12.5px;font-weight:700;color:#1F6080;">🎯 SLA targets (clock hours, from when a ticket is raised)</summary><div style="max-width:360px;background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:8px 12px;margin-top:6px;">' + targets + '</div></details>'
+      + '<style>@media(max-width:1000px){.tk-dash-tiles{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}.tk-dash-row{grid-template-columns:1fr !important;}}</style>'
+      + '</div>';
+  }
+
+  /* ── SERVICE DESK (2026-10-21) ───────────────────────────────────────────────────
+     Anthony: "raise a ticket should have categories and better input to allowing the user
+     to enter in information - mimic jira service desk". Step 1 asks WHAT the person needs,
+     as cards; step 2 asks that request type's own questions, then how much it is hurting
+     (which sets the priority), takes screenshots by drag, paste or picker, and quietly
+     records where they came from. The server keeps the answers as [{label, value}] so the
+     ticket reads back exactly as it was asked. */
+  const TK_TYPES = [
+    { id: 'problem', icon: '🐞', title: 'Report a problem', blurb: 'Something in KiddieTrac is not working the way it should.', group: 'app',
+      summary: 'e.g. Photos will not upload on the Today screen',
+      fields: [
+        { key: 'where', label: 'Where did it happen?', type: 'screen' },
+        { key: 'doing', label: 'What were you trying to do?', type: 'textarea', rows: 2, ph: 'e.g. Sign Mila in at drop-off' },
+        { key: 'happened', label: 'What happened instead?', type: 'textarea', rows: 3, req: true, ph: 'Any message on screen, exactly as it read, helps most.' },
+        { key: 'steps', label: 'Steps to make it happen again (if you know them)', type: 'textarea', rows: 2, ph: '1. Open Today  2. Tap a child  3. …' },
+        { key: 'freq', label: 'How often?', type: 'chips', opts: ['Just once', 'Sometimes', 'Every time'] },
+        { key: 'who', label: 'Who is affected?', type: 'chips', opts: ['Just me', 'A few people', 'Everyone at our agency'] },
+      ] },
+    { id: 'question', icon: '❓', title: 'How do I…?', blurb: 'Ask how to do something in KiddieTrac.', group: 'app',
+      summary: 'e.g. How do I send an invoice to two parents?',
+      fields: [
+        { key: 'area', label: 'Which part of KiddieTrac?', type: 'screen' },
+        { key: 'question', label: 'Your question', type: 'textarea', rows: 4, req: true },
+      ] },
+    { id: 'idea', icon: '💡', title: 'Suggest an improvement', blurb: 'An idea that would make your day easier.', group: 'app',
+      summary: 'e.g. Let parents choose a pick-up person for the day',
+      fields: [
+        { key: 'area', label: 'Which part of KiddieTrac?', type: 'screen' },
+        { key: 'idea', label: 'What would you like?', type: 'textarea', rows: 3, req: true },
+        { key: 'why', label: 'How would it help?', type: 'textarea', rows: 2, ph: 'Who would use it, and what would it save?' },
+      ] },
+    { id: 'account', icon: '🔐', title: 'Account & sign-in', blurb: 'Signing in, passwords, or who can see what.', group: 'agency',
+      summary: 'e.g. New educator needs access to our home',
+      fields: [
+        { key: 'issue', label: 'What do you need?', type: 'select', req: true, opts: ['I cannot sign in', 'Reset a password', 'Someone needs access', 'Remove someone’s access', 'Wrong role or permissions', 'Change an email or phone number', 'Something else'] },
+        { key: 'person', label: 'Who is it for? (leave blank if it is you)', type: 'text', ph: 'Name and email' },
+        { key: 'details', label: 'Anything else we should know?', type: 'textarea', rows: 3 },
+      ] },
+    { id: 'billing', icon: '💳', title: 'Billing & payments', blurb: 'Invoices, payments, refunds, fees and subsidy.', group: 'agency',
+      summary: 'e.g. October invoice charged twice',
+      fields: [
+        { key: 'issue', label: 'What is it about?', type: 'select', req: true, opts: ['A question about an invoice', 'A payment did not go through', 'A refund', 'Fees, CWELCC or subsidy', 'Setting up autopay', 'Something else'] },
+        { key: 'ref', label: 'Family, child or invoice number', type: 'text', ph: 'e.g. Hosein family · INV-0042' },
+        { key: 'amount', label: 'Amount involved (if any)', type: 'text', ph: '$' },
+        { key: 'details', label: 'What happened?', type: 'textarea', rows: 3, req: true },
+      ] },
+    { id: 'enrollment', icon: '📝', title: 'Enrollment & families', blurb: 'New children, schedule changes, moves and withdrawals.', group: 'agency',
+      summary: 'e.g. Change Aria to three days a week from November',
+      fields: [
+        { key: 'issue', label: 'What do you need?', type: 'select', req: true, opts: ['A new enrollment', 'A change of schedule', 'A move to another provider', 'A withdrawal', 'The waitlist', 'Something else'] },
+        { key: 'child', label: 'Child or family', type: 'text', ph: 'Name' },
+        { key: 'when', label: 'From when?', type: 'date' },
+        { key: 'details', label: 'Details', type: 'textarea', rows: 3, req: true },
+      ] },
+    { id: 'maintenance', icon: '🛠️', title: 'Maintenance / repair', blurb: 'Something at a home or centre needs fixing.', group: 'agency', staffOnly: true,
+      summary: 'e.g. Back gate latch is broken',
+      fields: [
+        { key: 'centre', label: 'Which home or centre?', type: 'centre' },
+        { key: 'location', label: 'Where exactly?', type: 'text', ph: 'e.g. Backyard gate' },
+        { key: 'hazard', label: 'Could someone get hurt?', type: 'chips', opts: ['No', 'Yes — it is a hazard now'] },
+        { key: 'details', label: 'What needs fixing?', type: 'textarea', rows: 3, req: true },
+      ] },
+    { id: 'policy', icon: '📋', title: 'Policy & compliance', blurb: 'Licensing, ratios, forms and agency rules.', group: 'agency', staffOnly: true,
+      summary: 'e.g. Which form do we need for an off-site walk?',
+      fields: [
+        { key: 'topic', label: 'Topic', type: 'text', ph: 'e.g. Sleep checks, medication, ratios' },
+        { key: 'question', label: 'Your question', type: 'textarea', rows: 4, req: true },
+      ] },
+    { id: 'other', icon: '💬', title: 'Something else', blurb: 'Anything that does not fit above.', group: 'agency',
+      summary: 'A short summary',
+      fields: [
+        { key: 'details', label: 'How can we help?', type: 'textarea', rows: 5, req: true },
+      ] },
+  ];
+  const TK_IMPACT = [
+    { id: 'question', icon: '💬', label: 'Just a question or idea' },
+    { id: 'minor', icon: '🙂', label: 'Annoying, but we can work around it' },
+    { id: 'slowing', icon: '🐢', label: 'It is slowing us down' },
+    { id: 'blocked', icon: '⛔', label: 'We cannot run the day' },
+    { id: 'safety', icon: '🚨', label: 'A child’s safety or care is affected' },
+  ];
+
+  // The screen somebody was on before opening Support — the most useful thing a problem
+  // report can carry, and the thing people least often think to mention.
+  try {
+    window.addEventListener('hashchange', function (e) {
+      const old = String(e.oldURL || '').split('#')[1] || '';
+      if (old && !/^tickets/.test(old)) { sessionStorage.setItem('kt_tk_from', old.split('?')[0]); }
+    });
+  } catch (e) { /* storage blocked: the form just asks */ }
+
+  function tkScreens() {
+    const out = [];
+    const seen = {};
+    document.querySelectorAll('#navLinks a[href^="#"], #appSidebar a[href^="#"]').forEach(function (a) {
+      const h = (a.getAttribute('href') || '').slice(1);
+      const t = (a.textContent || '').replace(/\s+/g, ' ').trim();
+      if (h && t && !seen[h] && h !== 'tickets') { seen[h] = 1; out.push({ hash: h, label: t }); }
+    });
+    return out;
+  }
+  function tkUser() { try { return (window.KT && KT.Auth && KT.Auth.user()) || JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
+  function tkIsStaff(u) {
+    const roles = window.ktRoles ? window.ktRoles(u) : ((u && u.roles) || []);
+    return ['platform_admin', 'agency_admin', 'centre_director', 'educator', 'home_visitor'].some(function (r) { return roles.indexOf(r) !== -1; });
+  }
+  function tkContext() {
+    const ua = navigator.userAgent || '';
+    const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+    const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '';
+    const native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    let from = '';
+    try { from = sessionStorage.getItem('kt_tk_from') || ''; } catch (e) {}
+    const scr = tkScreens().filter(function (s) { return s.hash === from; })[0];
+    return {
+      'Screen': scr ? scr.label + ' (#' + from + ')' : (from ? '#' + from : ''),
+      'Device': (native ? 'KiddieTrac app · ' : '') + browser + (os ? ' on ' + os : ''),
+      'Window': window.innerWidth + '×' + window.innerHeight,
+      'Time zone': (Intl.DateTimeFormat().resolvedOptions().timeZone || ''),
+    };
+  }
+
+  function openTicketModal(preType) {
+    const user = tkUser();
+    const staff = tkIsStaff(user);
+    const types = TK_TYPES.filter(function (t) { return staff || !t.staffOnly; });
+    const m = document.createElement('div');
+    m.setAttribute('data-no-modal-guard', '1');
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    m.innerHTML = '<div class="tk-sd" style="background:#fff;border-radius:16px;max-width:760px;width:100%;max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(15,23,42,.5);"></div>';
+    document.body.appendChild(m);
+    const box = m.querySelector('.tk-sd');
+    const close = function () { m.remove(); document.removeEventListener('paste', onPaste); };
+    m.addEventListener('click', function (e) { if (e.target === m) close(); });
+    let files = [];
+    let onPaste = function () {};
+
+    const css = '<style>'
+      + '.tk-sd .tk-card{display:flex;gap:12px;align-items:flex-start;text-align:left;padding:13px 14px;border:1.5px solid #E2E8F0;border-radius:12px;background:#fff;cursor:pointer;font-family:inherit;transition:border-color .12s,box-shadow .12s}'
+      + '.tk-sd .tk-card:hover,.tk-sd .tk-card:focus-visible{border-color:#13B7CC;box-shadow:0 4px 14px -8px rgba(19,183,204,.7);outline:none}'
+      + '.tk-sd .tk-lbl{display:block;font-size:13px;font-weight:700;color:#0F172A;margin:14px 0 5px}'
+      + '.tk-sd .tk-lbl i{font-style:normal;color:#DC2626}'
+      + '.tk-sd input[type=text],.tk-sd input[type=date],.tk-sd select,.tk-sd textarea{width:100%;padding:9px 11px;border:1px solid #CBD5E1;border-radius:9px;font:inherit;font-size:14px;box-sizing:border-box;background:#fff}'
+      + '.tk-sd textarea{resize:vertical}'
+      + '.tk-sd input:focus,.tk-sd select:focus,.tk-sd textarea:focus{outline:2px solid #13B7CC33;border-color:#13B7CC}'
+      // !important: the portal's global button polish otherwise strips the padding.
+      + '.tk-sd .tk-chip{padding:6px 13px !important;min-height:32px !important;border:1.5px solid #CBD5E1 !important;border-radius:999px !important;background:#fff !important;font:inherit;font-size:13px !important;cursor:pointer;line-height:1.2 !important}'
+      + '.tk-sd .tk-chip[aria-pressed=true]{border-color:#1F6080 !important;background:#E0F2FE !important;color:#0C4A6E;font-weight:700}'
+      + '.tk-sd .tk-imp{display:flex;gap:9px;align-items:center;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:10px;background:#fff;font:inherit;font-size:13.5px;cursor:pointer;text-align:left}'
+      + '.tk-sd .tk-imp[aria-pressed=true]{border-color:#1F6080;background:#F0F9FF;font-weight:700}'
+      + '.tk-sd .tk-drop{border:1.5px dashed #94A3B8;border-radius:12px;padding:14px;text-align:center;color:#475569;font-size:13px;background:#F8FAFC;cursor:pointer}'
+      + '.tk-sd .tk-drop.over{border-color:#13B7CC;background:#ECFEFF}'
+      + '</style>';
+
+    function step1() {
+      const groups = [
+        { id: 'app', title: 'Get help with KiddieTrac', note: 'Answered by the KiddieTrac team' },
+        { id: 'agency', title: 'Ask your agency', note: 'Answered by your agency’s administrators' },
+      ];
+      box.innerHTML = css
+        + '<div style="padding:20px 22px 12px;border-bottom:1px solid #F1F5F9;display:flex;align-items:flex-start;gap:12px;">'
+        + '<div style="flex:1;"><div style="font-size:12px;font-weight:800;letter-spacing:.5px;color:#13B7CC;">SUPPORT</div>'
+        + '<h3 style="margin:2px 0 0;font-size:20px;color:#0F172A;">What can we help you with?</h3></div>'
+        + '<button type="button" class="kt-btn kt-btn-secondary kt-btn-sm tk-x" aria-label="Close">✕</button></div>'
+        + '<div style="overflow-y:auto;padding:6px 22px 20px;">'
+        + groups.map(function (g) {
+          const list = types.filter(function (t) { return t.group === g.id; });
+          if (!list.length) return '';
+          return '<div style="margin-top:14px;"><div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">'
+            + '<div style="font-size:13px;font-weight:800;color:#334155;">' + esc(g.title) + '</div>'
+            + '<div style="font-size:12px;color:#94A3B8;">' + esc(g.note) + '</div></div>'
+            + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;">'
+            + list.map(function (t) {
+              return '<button type="button" class="tk-card" data-type="' + t.id + '">'
+                + '<span style="font-size:24px;line-height:1;flex:0 0 auto;">' + t.icon + '</span>'
+                + '<span><span style="display:block;font-weight:800;font-size:14px;color:#0F172A;">' + esc(t.title) + '</span>'
+                + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:2px;line-height:1.35;">' + esc(t.blurb) + '</span></span></button>';
+            }).join('') + '</div></div>';
+        }).join('')
+        + '</div>';
+      box.querySelector('.tk-x').onclick = close;
+      box.querySelectorAll('.tk-card').forEach(function (b) { b.onclick = function () { step2(b.dataset.type); }; });
+    }
+
+    async function step2(typeId) {
+      const t = TK_TYPES.filter(function (x) { return x.id === typeId; })[0];
+      if (!t) return step1();
+      files = [];
+      const screens = tkScreens();
+      let from = '';
+      try { from = sessionStorage.getItem('kt_tk_from') || ''; } catch (e) {}
+      let centres = [];
+      if (t.fields.some(function (f) { return f.type === 'centre'; })) {
+        try { centres = ((await Api.get('/admin/centres')) || {}).centres || []; } catch (e) {}
+        if (!centres.length) { try { centres = ((await Api.get('/director/centres')) || {}).centres || []; } catch (e) {} }
+        if (!centres.length && user.centre) { centres = [user.centre]; }
+      }
+      const field = function (f) {
+        const lbl = '<label class="tk-lbl" for="tkf-' + f.key + '">' + esc(f.label) + (f.req ? ' <i>*</i>' : '') + '</label>';
+        if (f.type === 'textarea') return lbl + '<textarea id="tkf-' + f.key + '" data-k="' + f.key + '" rows="' + (f.rows || 3) + '" placeholder="' + esc(f.ph || '') + '"></textarea>';
+        if (f.type === 'text') return lbl + '<input type="text" id="tkf-' + f.key + '" data-k="' + f.key + '" placeholder="' + esc(f.ph || '') + '">';
+        if (f.type === 'date') return lbl + '<input type="date" id="tkf-' + f.key + '" data-k="' + f.key + '" style="max-width:220px;">';
+        if (f.type === 'select') return lbl + '<select id="tkf-' + f.key + '" data-k="' + f.key + '"><option value="">Choose…</option>'
+          + f.opts.map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select>';
+        if (f.type === 'screen') return lbl + '<select id="tkf-' + f.key + '" data-k="' + f.key + '"><option value="">Not sure / somewhere else</option>'
+          + screens.map(function (s) { return '<option value="' + esc(s.label) + '"' + (s.hash === from ? ' selected' : '') + '>' + esc(s.label) + '</option>'; }).join('') + '</select>';
+        if (f.type === 'centre') return lbl + (centres.length
+          ? '<select id="tkf-' + f.key + '" data-k="' + f.key + '" data-centre="1">' + (centres.length > 1 ? '<option value="">Choose…</option>' : '')
+            + centres.map(function (c) { return '<option value="' + (+c.id) + '">' + esc(c.name) + '</option>'; }).join('') + '</select>'
+          : '<input type="text" id="tkf-' + f.key + '" data-k="' + f.key + '" placeholder="Name of the home or centre">');
+        if (f.type === 'chips') return '<div class="tk-lbl">' + esc(f.label) + '</div><div style="display:flex;flex-wrap:wrap;gap:7px;" data-chips="' + f.key + '">'
+          + f.opts.map(function (o) { return '<button type="button" class="tk-chip" aria-pressed="false">' + esc(o) + '</button>'; }).join('') + '</div>';
+        return '';
+      };
+      const ctx = tkContext();
+      box.innerHTML = css
+        + '<div style="padding:18px 22px 12px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;gap:12px;">'
+        + '<button type="button" class="kt-btn kt-btn-secondary kt-btn-sm tk-back" aria-label="Back">←</button>'
+        + '<span style="font-size:24px;">' + t.icon + '</span>'
+        + '<div style="flex:1;min-width:0;"><h3 style="margin:0;font-size:18px;color:#0F172A;">' + esc(t.title) + '</h3>'
+        + '<div style="font-size:12.5px;color:#64748B;">' + (t.group === 'app' ? 'Goes to the KiddieTrac team' : 'Goes to your agency’s administrators') + '</div></div>'
+        + '<button type="button" class="kt-btn kt-btn-secondary kt-btn-sm tk-x" aria-label="Close">✕</button></div>'
+        + '<div style="overflow-y:auto;padding:4px 22px 18px;">'
+        + '<label class="tk-lbl" for="tk-sub">Summary <i>*</i></label>'
+        + '<input type="text" id="tk-sub" maxlength="200" placeholder="' + esc(t.summary) + '">'
+        + t.fields.map(field).join('')
+        + '<div class="tk-lbl">How is this affecting you?</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:7px;" id="tk-impact">'
+        + TK_IMPACT.map(function (i) { return '<button type="button" class="tk-imp" data-imp="' + i.id + '" aria-pressed="' + ((t.group === 'app' && t.id !== 'problem' ? 'question' : 'minor') === i.id) + '"><span style="font-size:17px;">' + i.icon + '</span>' + esc(i.label) + '</button>'; }).join('')
+        + '</div>'
+        + '<div class="tk-lbl">Screenshots or files</div>'
+        + '<div class="tk-drop" tabindex="0" role="button">📎 <strong>Drop files here</strong>, paste a screenshot (Ctrl+V), or <u>choose files</u>'
+        + '<div style="font-size:11.5px;color:#94A3B8;margin-top:3px;">Images, PDFs, logs, CSV or zip · up to 10 MB each</div></div>'
+        + '<input type="file" id="tk-files" multiple accept="image/*,.pdf,.txt,.log,.csv,.json,.xml,.zip" style="display:none;">'
+        + '<div id="tk-file-list" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;"></div>'
+        + '<label class="tk-lbl" for="tk-contact">Best way to reach you</label>'
+        + '<input type="text" id="tk-contact" value="' + esc([user.email, user.phone].filter(Boolean).join(' · ')) + '">'
+        + '<details style="margin-top:14px;font-size:12.5px;color:#64748B;"><summary style="cursor:pointer;">Sent automatically with your request</summary>'
+        + '<div style="margin-top:6px;line-height:1.6;">' + Object.keys(ctx).filter(function (k) { return ctx[k]; }).map(function (k) { return '<b>' + esc(k) + ':</b> ' + esc(ctx[k]); }).join('<br>') + '</div></details>'
+        + '</div>'
+        + '<div style="border-top:1px solid #F1F5F9;padding:12px 22px;display:flex;align-items:center;gap:8px;background:#FCFDFE;">'
+        + '<div id="tk-msg" style="flex:1;font-size:13px;min-width:0;"></div>'
+        + '<button type="button" class="kt-btn kt-btn-secondary tk-x2">Cancel</button>'
+        + '<button type="button" class="kt-btn kt-btn-primary" id="tk-save">Send request</button></div>';
+
+      box.querySelector('.tk-x').onclick = close;
+      box.querySelector('.tk-x2').onclick = close;
+      box.querySelector('.tk-back').onclick = function () { document.removeEventListener('paste', onPaste); step1(); };
+      box.querySelectorAll('[data-chips]').forEach(function (g) {
+        g.querySelectorAll('.tk-chip').forEach(function (c) {
+          c.onclick = function () { g.querySelectorAll('.tk-chip').forEach(function (x) { x.setAttribute('aria-pressed', x === c && c.getAttribute('aria-pressed') !== 'true' ? 'true' : 'false'); }); };
+        });
+      });
+      box.querySelectorAll('.tk-imp').forEach(function (b) {
+        b.onclick = function () { box.querySelectorAll('.tk-imp').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); }); };
+      });
+      // A hazard at a home is a safety matter whatever the impact says.
+      const hz = box.querySelector('[data-chips="hazard"]');
+      if (hz) {
+        hz.addEventListener('click', function () {
+          const yes = hz.querySelector('.tk-chip[aria-pressed="true"]');
+          if (yes && /Yes/.test(yes.textContent)) { box.querySelector('.tk-imp[data-imp="safety"]').click(); }
+        });
+      }
+
+      const input = box.querySelector('#tk-files');
+      const drop = box.querySelector('.tk-drop');
+      const listEl = box.querySelector('#tk-file-list');
+      const addFiles = function (list) {
+        Array.prototype.forEach.call(list || [], function (f) {
+          if (f.size > 10 * 1024 * 1024) { say('“' + f.name + '” is over 10 MB, so it was left out.', '#B45309'); return; }
+          files.push(f);
+        });
+        paintFiles();
+      };
+      const paintFiles = function () {
+        listEl.innerHTML = '';
+        files.forEach(function (f, i) {
+          const chip = document.createElement('div');
+          chip.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #E2E8F0;border-radius:10px;background:#fff;max-width:100%;';
+          const isImg = /^image\//.test(f.type || '');
+          chip.innerHTML = (isImg ? '<img alt="" style="width:40px;height:40px;object-fit:cover;border-radius:6px;">' : '<span style="font-size:20px;">📄</span>')
+            + '<span style="font-size:12.5px;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(f.name) + '</span>'
+            + '<button type="button" aria-label="Remove" style="border:0;background:none;cursor:pointer;color:#94A3B8;font-size:15px;">✕</button>';
+          if (isImg) { try { chip.querySelector('img').src = URL.createObjectURL(f); } catch (e) {} }
+          chip.querySelector('button').onclick = function () { files.splice(i, 1); paintFiles(); };
+          listEl.appendChild(chip);
+        });
+      };
+      drop.onclick = function () { input.click(); };
+      drop.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } };
+      input.onchange = function () { addFiles(input.files); input.value = ''; };
+      ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+      ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+      drop.addEventListener('drop', function (e) { addFiles(e.dataTransfer && e.dataTransfer.files); });
+      onPaste = function (e) {
+        const items = (e.clipboardData && e.clipboardData.files) || [];
+        if (items.length) {
+          const named = Array.prototype.map.call(items, function (f, n) {
+            try { return new File([f], f.name && f.name !== 'image.png' ? f.name : ('screenshot-' + (files.length + n + 1) + '.png'), { type: f.type }); } catch (x) { return f; }
+          });
+          addFiles(named);
+        }
+      };
+      document.addEventListener('paste', onPaste);
+
+      const msg = box.querySelector('#tk-msg');
+      function say(text, color) { msg.style.color = color || '#B91C1C'; msg.textContent = text || ''; }
+      setTimeout(function () { const s = box.querySelector('#tk-sub'); if (s) s.focus(); }, 30);
+
+      box.querySelector('#tk-save').onclick = async function () {
+        const btn = this;
+        const subject = box.querySelector('#tk-sub').value.trim();
+        if (!subject) { say('Add a short summary so it can be found again.'); box.querySelector('#tk-sub').focus(); return; }
+        const details = [];
+        let centreId = null;
+        for (const f of t.fields) {
+          let v = '';
+          if (f.type === 'chips') {
+            const on = box.querySelector('[data-chips="' + f.key + '"] .tk-chip[aria-pressed="true"]');
+            v = on ? on.textContent : '';
+          } else {
+            const el = box.querySelector('[data-k="' + f.key + '"]');
+            if (!el) continue;
+            v = (el.value || '').trim();
+            if (el.dataset.centre === '1' && v) { centreId = +v; v = el.options[el.selectedIndex].textContent; }
+          }
+          if (f.req && !v) { say('Please fill in “' + f.label + '”.'); const el2 = box.querySelector('[data-k="' + f.key + '"]'); if (el2) el2.focus(); return; }
+          if (v) details.push({ label: f.label.replace(/\s*\(.*\)\s*$/, '').replace(/\?$/, ''), value: v });
+        }
+        const contact = box.querySelector('#tk-contact').value.trim();
+        if (contact) details.push({ label: 'Reach me at', value: contact });
+        const imp = box.querySelector('.tk-imp[aria-pressed="true"]');
+
+        btn.disabled = true; say('Sending…', '#64748B');
+        try {
+          const res = await Api.post('/tickets', {
+            request_type: t.id, subject: subject, details: details, context: tkContext(),
+            impact: imp ? imp.dataset.imp : 'minor', centre_id: centreId,
+          });
+          const id = (res && (res.id || res.ticket_id)) || null;
+          let failed = 0;
+          if (id && files.length) {
+            say('Uploading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…', '#64748B');
+            for (const f of files) {
+              const fd = new FormData();
+              fd.append('file', f, f.name);
+              try { await Api.post('/tickets/' + id + '/files', fd); } catch (e) { failed++; }
+            }
+          }
+          document.removeEventListener('paste', onPaste);
+          box.innerHTML = css + '<div style="padding:36px 26px;text-align:center;">'
+            + '<div style="font-size:44px;">✅</div>'
+            + '<h3 style="margin:8px 0 4px;font-size:20px;color:#0F172A;">Request #' + id + ' sent</h3>'
+            + '<p style="margin:0 auto;max-width:440px;color:#475569;font-size:14px;line-height:1.55;">'
+            + (res && res.routed_to === 'kiddietrac' ? 'The KiddieTrac team has it' : 'Your agency’s administrators have it')
+            + ' and you will be emailed when someone replies. You can follow it under Support tickets.'
+            + (failed ? '<br><span style="color:#B45309;">' + failed + ' file' + (failed === 1 ? '' : 's') + ' could not be attached — add them from the ticket.</span>' : '') + '</p>'
+            + '<div style="display:flex;gap:8px;justify-content:center;margin-top:18px;">'
+            + '<button type="button" class="kt-btn kt-btn-secondary tk-done">Done</button>'
+            + '<button type="button" class="kt-btn kt-btn-primary tk-view">View request</button></div></div>';
+          box.querySelector('.tk-done').onclick = function () { close(); refreshTickets(); };
+          box.querySelector('.tk-view').onclick = function () { close(); refreshTickets(); if (id) openTicket(id); };
+        } catch (e) {
+          btn.disabled = false;
+          say((e && e.message) || 'Could not send that. Please try again.');
+        }
+      };
+    }
+
+    if (preType) { step2(preType); } else { step1(); }
   }
 
   /* Repaint the list after a change, without assuming which element is "main" — the
@@ -1200,7 +1661,8 @@
     maintenance: 'Maintenance / repair', technical: 'Technical / app issue',
     policy: 'Policy question', crash: 'App crash',
     /* Raised by the help screen, not by the ticket form. */
-    documentation: 'Help guide feedback', other: 'Other',
+    documentation: 'Help guide feedback', other: 'Something else',
+    question: 'How do I…?', feature: 'Suggestion', account: 'Account & sign-in',
   };
   const TK_SEV = {
     low: { label: 'Low', cls: 'kt-pill-info' },
@@ -1211,8 +1673,32 @@
   function tkStatus(v) {
     return TK_STATUS[v] || { label: String(v || '—').replace(/_/g, ' '), cls: 'kt-pill-info', dot: '#94A3B8' };
   }
-  function tkCat(v) { return TK_CAT[v] || String(v || '—').replace(/_/g, ' '); }
+  function tkCat(v, type) {
+    if (type === 'enhancement') return 'Enhancement request (Agency plan)';   // from the Licence page, 2026-10-24
+    const t = type && TK_TYPES.filter(x => x.id === type)[0];
+    return t ? t.title : (TK_CAT[v] || String(v || '—').replace(/_/g, ' '));
+  }
+  function tkIcon(type, cat) {
+    if (type === 'enhancement') return '✨';
+    const t = type && TK_TYPES.filter(x => x.id === type)[0];
+    if (t) return t.icon;
+    return { technical: '🐞', crash: '💥', billing: '💳', enrollment: '📝', maintenance: '🛠️', policy: '📋', documentation: '📖' }[cat] || '💬';
+  }
   function tkSev(v) { return TK_SEV[v] || { label: String(v || '—'), cls: 'kt-pill-info' }; }
+  // A pill for the ticket popup. The popup hangs off <body>, outside [data-kt-pretty], where the
+  // .kt-pill-* colours live (kt-design-v22p65.css) - so the same tones, inline.
+  const TK_POP_TONE = {
+    'kt-pill-success': ['#DCFCE7', '#BBF7D0', '#15803D', 'rgba(21,128,61,.16)'],
+    'kt-pill-warning': ['#FEF3C7', '#FDE68A', '#92400E', 'rgba(146,64,14,.16)'],
+    'kt-pill-danger': ['#FEE2E2', '#FECACA', '#B91C1C', 'rgba(185,28,28,.16)'],
+    'kt-pill-info': ['#DBEAFE', '#BFDBFE', '#1E40AF', 'rgba(30,64,175,.16)'],
+  };
+  function tkPopPill(o) {
+    const c = TK_POP_TONE[o.cls] || TK_POP_TONE['kt-pill-info'];
+    return '<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12.5px;font-weight:700;'
+      + 'background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ');color:' + c[2] + ';border:1px solid ' + c[3] + ';">'
+      + esc(o.label) + '</span>';
+  }
 
   function tkSize(b) {
     b = +b || 0;
@@ -1234,6 +1720,26 @@
     const r = await fetch(base + '/tickets/' + ticketId + '/files/' + fileId, { headers });
     if (!r.ok) { throw new Error('Could not load that file.'); }
     return URL.createObjectURL(await r.blob());
+  }
+
+  /* Structured answers as a labelled list; plain body for older tickets. The body of a
+     new ticket repeats the answers as text for email and search, so it is not shown twice. */
+  function tkBodyHtml(t) {
+    let details = [];
+    let ctx = {};
+    try { details = JSON.parse(t.details || '[]') || []; } catch (e) {}
+    try { ctx = JSON.parse(t.context || '{}') || {}; } catch (e) {}
+    if (!details.length) {
+      return t.body ? esc(t.body) : '<em style="color:#94A3B8;">Nothing was written in the description.</em>';
+    }
+    const imp = TK_IMPACT.filter(i => i.id === t.impact)[0];
+    return '<div style="white-space:normal;display:grid;gap:10px;">'
+      + details.map(d => '<div><div style="font-size:12px;font-weight:800;color:#64748B;">' + esc(d.label) + '</div>'
+        + '<div style="white-space:pre-wrap;">' + esc(d.value) + '</div></div>').join('')
+      + (imp ? '<div><div style="font-size:12px;font-weight:800;color:#64748B;">Impact</div><div>' + imp.icon + ' ' + esc(imp.label) + '</div></div>' : '')
+      + (Object.keys(ctx).length ? '<div style="font-size:12px;color:#94A3B8;border-top:1px dashed #E2E8F0;padding-top:8px;">Sent from: '
+        + Object.keys(ctx).map(k => esc(k) + ' ' + esc(ctx[k])).join(' · ') + '</div>' : '')
+      + '</div>';
   }
 
   async function openTicket(id) {
@@ -1288,10 +1794,15 @@
 
     // The facts, as a labelled list. They were a row of pills, which is fine for a
     // table and useless when you are trying to find out who raised something.
+    // Ticket number, status and severity lead the facts (2026-11-01, Anthony: the popup header is the issue
+    // title only; the rest stays visible, here).
     const facts = [
+      ['Ticket', '#' + esc(String(t.id))],
+      ['Status', tkPopPill(st)],
+      ['Severity', tkPopPill(sev)],
       ['Raised by', esc(t.raised_by_name || '—')],
       ['Raised', esc(fmtStamp(t.created_at))],
-      ['Category', esc(tkCat(t.category))],
+      ['Request', tkIcon(t.request_type, t.category) + ' ' + esc(tkCat(t.category, t.request_type))],
       ['Centre', esc(t.centre_name || '—')],
       ['Assigned to', esc(t.assigned_name || 'Nobody yet')],
       ['Last activity', esc(fmtStamp(t.updated_at || t.created_at))],
@@ -1309,12 +1820,7 @@
 
       <div style="padding:20px 24px 16px;border-bottom:1px solid #E2E8F0;flex:0 0 auto;">
         <div style="display:flex;align-items:flex-start;gap:12px;">
-          <div style="flex:1;min-width:0;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-              <span style="font-size:12.5px;font-weight:800;color:#94A3B8;">TICKET #${t.id}</span>
-              <span class="kt-pill ${st.cls}">${esc(st.label)}</span>
-              <span class="kt-pill ${sev.cls}">${esc(sev.label)} severity</span>
-            </div>
+          <div style="flex:1;min-width:0;align-self:center;">
             <h3 style="margin:0;font-size:19px;line-height:1.3;color:#0F172A;">${esc(t.subject)}</h3>
           </div>
           <button id="tk-x" class="kt-btn kt-btn-secondary kt-btn-sm" type="button"
@@ -1325,7 +1831,7 @@
       <div style="overflow-y:auto;flex:1 1 auto;padding:0 24px 4px;">
 
         ${done ? `<div style="margin:18px 0 0;padding:14px 16px;background:#ECFDF5;
-          border:1px solid #A7F3D0;border-left:4px solid #10B981;border-radius:10px;">
+          border:1px solid #A7F3D0;--kt-edge:#10B981;border-radius:10px;">
           <div style="font-size:13px;font-weight:800;color:#065F46;margin-bottom:4px;">
             ✅ ${esc(st.label)}${t.resolved_by_name ? ' by ' + esc(t.resolved_by_name) : ''}
             ${t.resolved_at ? ' · ' + esc(fmtStamp(t.resolved_at)) : ''}</div>
@@ -1343,7 +1849,7 @@ ${t.resolution ? esc(t.resolution) : '<em style="opacity:.75;">No note was left 
             color:#94A3B8;margin-bottom:8px;">What happened</div>
           <div style="background:#F8FAFC;border:1px solid #E2E8F0;padding:14px 16px;border-radius:10px;
             font-size:14.5px;line-height:1.6;color:#1E293B;white-space:pre-wrap;word-break:break-word;">
-${t.body ? esc(t.body) : '<em style="color:#94A3B8;">Nothing was written in the description.</em>'}</div>
+${tkBodyHtml(t)}</div>
         </div>
 
         ${files.length ? `<div style="margin:18px 0 0;">
@@ -1367,7 +1873,7 @@ ${t.body ? esc(t.body) : '<em style="color:#94A3B8;">Nothing was written in the 
         <div style="margin:20px 0 0;">
           <div style="font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
             color:#94A3B8;margin-bottom:10px;">History</div>
-          <div style="border-left:2px solid #E2E8F0;padding-left:16px;margin-left:5px;">
+          <div style="background:#F8FAFC;border-radius:8px;padding-left:16px;margin-left:5px;">
 
             <div style="position:relative;padding-bottom:16px;">
               <span style="position:absolute;left:-23px;top:3px;width:10px;height:10px;border-radius:50%;
@@ -1398,7 +1904,7 @@ ${t.body ? esc(t.body) : '<em style="color:#94A3B8;">Nothing was written in the 
                   ${item.d.actor_name ? ' by ' + esc(item.d.actor_name) : ''}
                   · <span style="color:#94A3B8;">${esc(fmtStamp(item.d.created_at))}</span></div>
                 ${item.d.note ? `<div style="margin-top:5px;font-size:13px;color:#475569;
-                  white-space:pre-wrap;border-left:2px solid #E2E8F0;padding-left:10px;">${esc(item.d.note)}</div>` : ''}
+                  white-space:pre-wrap;background:#F8FAFC;border-radius:8px;padding-left:10px;">${esc(item.d.note)}</div>` : ''}
               </div>`).join('')}
 
           </div>

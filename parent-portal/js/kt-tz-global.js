@@ -101,6 +101,14 @@
           opts = Object.assign({}, opts, { timeZone: agencyTz() });
         } catch (e) { opts = options; }
       }
+      /* US AGENCIES READ "3:27 PM" (2026-10-28). Dozens of screens pass 'en-CA' (or nothing) and got "3:27 p.m." in
+         a California agency. For a US agency (kt-term.js -> kt_spelling) a 12-hour TIME asked for in en-CA / the
+         default locale is shown en-US. Only toLocaleTimeString, and never a 24-hour request (hour12:false /
+         hourCycle), which screens use to fill time inputs. */
+      if (method === 'toLocaleTimeString' && opts.hour12 !== false && !opts.hourCycle
+          && (locales === undefined || locales === 'en-CA' || locales === 'en')) {
+        try { if (window.sessionStorage.getItem('kt_spelling') === 'us') { locales = 'en-US'; } } catch (e) {}
+      }
       return native.call(this, locales, opts);
     };
     patched.__ktTz = true;

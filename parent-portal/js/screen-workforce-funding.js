@@ -105,10 +105,14 @@
     main.setAttribute('data-kt-pretty', '1');
     var tabFromHash = hashParam('tab');
     if (tabFromHash) state.tab = tabFromHash;
-    main.innerHTML = '<div class="wf-wrap"><div class="wf-card"><div class="wf-m">Loading…</div></div></div>';
+    /* THE BANNER STAYS (2026-10-21): this screen draws into its own root, created once, so a
+       tab switch or refresh never wipes #appMain and the banner the shell put above it. */
+    var root = main.querySelector('#wf-root');
+    if (!root) { main.innerHTML = '<div id="wf-root"></div>'; root = main.querySelector('#wf-root'); }
+    root.innerHTML = '<div class="wf-wrap"><div class="wf-card"><div class="wf-m">Loading…</div></div></div>';
     var st = await Api().get('/workforce-funding/settings').catch(function (e) { return { __err: e }; });
     if (st.__err) {
-      main.innerHTML = '<div class="wf-wrap"><div class="wf-card"><b>Ontario workforce funding</b><div class="wf-m" style="margin-top:6px;">'
+      root.innerHTML = '<div class="wf-wrap"><div class="wf-card"><b>Ontario workforce funding</b><div class="wf-m" style="margin-top:6px;">'
         + esc(errMsg(st.__err)) + '</div></div></div>';
       return;
     }
@@ -127,15 +131,23 @@
       + [['staff', 'Staff wages'], ['period', 'Pay period'], ['receipts', 'Funding received'], ['year', 'Year-end report']].map(function (t) {
         return '<button type="button" class="wf-tab' + (state.tab === t[0] ? ' on' : '') + '" data-tab="' + t[0] + '">' + t[1] + '</button>';
       }).join('') + '</div><div id="wf-pane" style="margin-top:10px;"></div></div>';
-    main.innerHTML = '<div class="wf-wrap">' + head + '</div>';
-    main.querySelectorAll('[data-tab]').forEach(function (b) {
-      b.addEventListener('click', function () { state.tab = b.getAttribute('data-tab'); render(main); });
+    root.innerHTML = '<div class="wf-wrap">' + head + '</div>';
+    var paintTab = function () {
+      var pane = root.querySelector('#wf-pane');
+      if (state.tab === 'period') return paintPeriod(pane);
+      if (state.tab === 'receipts') return paintReceipts(pane);
+      if (state.tab === 'year') return paintYear(pane);
+      return paintStaff(pane);
+    };
+    // A tab switch repaints the pane under the tabs, nothing above it.
+    root.querySelectorAll('[data-tab]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        state.tab = b.getAttribute('data-tab');
+        root.querySelectorAll('[data-tab]').forEach(function (x) { x.classList.toggle('on', x === b); });
+        paintTab();
+      });
     });
-    var pane = main.querySelector('#wf-pane');
-    if (state.tab === 'period') return paintPeriod(pane);
-    if (state.tab === 'receipts') return paintReceipts(pane);
-    if (state.tab === 'year') return paintYear(pane);
-    return paintStaff(pane);
+    return paintTab();
   }
 
   /* ───────────── Staff wages ───────────── */

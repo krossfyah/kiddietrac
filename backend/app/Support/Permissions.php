@@ -102,9 +102,10 @@ final class Permissions
                 $names[] = (string) $r->role;
             }
         }
-        // EnsureRole is agency-agnostic today, so a role held elsewhere still opens routes.
+        // Centre-level rows (a director, an educator) carry no agency_id: take the roles held in the
+        // ACTIVE agency, never a role held in some other agency (2026-11-05 leak sweep).
         if (! $names) {
-            $names = UserRoles::names($request);
+            $names = AgencyRole::names($request);
         }
         return array_values(array_intersect(array_unique($names), array_keys(PermissionMap::DEFAULTS)));
     }

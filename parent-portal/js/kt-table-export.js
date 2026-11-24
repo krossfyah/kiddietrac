@@ -18,8 +18,7 @@
     st.textContent =
       '.kt-export-btn.kt-export-icon{width:36px;height:36px;padding:0;display:inline-flex;align-items:center;justify-content:center;font-size:17px;line-height:1;border-radius:9px;position:relative;}' +
       '.kt-export-btn.kt-export-icon.kt-export-import{background:#EDE9FE;border-color:#DDD6FE;}' +
-      '.kt-export-btn.kt-export-icon[data-kttip]:hover::after{content:attr(data-kttip);position:absolute;bottom:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#0F172A;color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:4px 9px;border-radius:6px;z-index:10001;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.28);}' +
-      '.kt-export-btn.kt-export-icon[data-kttip]:hover::before{content:"";position:absolute;bottom:calc(100% + 2px);left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#0F172A;z-index:10001;pointer-events:none;}';
+      '';   // hover label: kt-tooltip-global.js (a local ::after bubble here doubled it, 2026-11-04)
     document.head.appendChild(st);
   }
 
@@ -41,6 +40,9 @@
   function sane(s) { return (s || 'report').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-+|-+$/g, '') || 'report'; }
 
   function extract(table) {
+    if (typeof table.__ktExportAll === 'function') {
+      try { var all = table.__ktExportAll(); if (all && all.headers && all.rows) return all; } catch (e) {}
+    }
     var thead = table.querySelector('thead'), tbody = table.querySelector('tbody');
     if (!thead || !tbody) return null;
     var ths = Array.prototype.slice.call(thead.querySelectorAll('th'));
@@ -90,6 +92,14 @@
     save(new Blob(['﻿' + s], { type: 'text/csv' }), sane(titleFor(table)) + '.csv');
   }
 
+  /* KiddieTrac's own screens (Platform, Sales, the superadmin reports) export with KiddieTrac's brand, not the
+     active agency's - a superadmin working inside iLearn got iLearn's logo on KiddieTrac's sales figures
+     (2026-11-01). The server honours it for platform admins only. A table can also opt in with
+     data-kt-export-brand="platform". */
+  var PLATFORM_SCREENS = /^(platform-|sales|kt-reports$|admin-mrr$|ai-usage$|usage-spend$|server-health$|backups$|compliance-evidence$|digest-status$|security-alerts$|licences$|marketing-site$|mail-settings$|maintenance$|admin-features$|social-settings$)/;
+  function platformBrand(table) {
+    return !!((table && table.closest && table.closest('[data-kt-export-brand="platform"]')) || PLATFORM_SCREENS.test(hash()));
+  }
   async function serverExport(table, fmt, btn) {
     var mt = mapType();
     if (fmt === 'xlsx' && mt && mt.path && KT.V22p54 && KT.V22p54.downloadAuthed) {
@@ -107,7 +117,7 @@
       var res = await fetch(base + '/exports/table', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + token, 'X-Active-Agency-Id': agency, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: titleFor(table), format: fmt, columns: d.headers, rows: d.rows }),
+        body: JSON.stringify({ title: titleFor(table), format: fmt, columns: d.headers, rows: d.rows, brand: platformBrand(table) ? 'platform' : undefined }),
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       save(await res.blob(), sane(titleFor(table)) + '.' + fmt);
@@ -122,11 +132,15 @@
     var slot = barEl.querySelector('.kt-export-count');
     if (!slot) return;
 
+    // A page of a longer list in memory (table.__ktRecordTotal): the filter's "25 / 25" counts the page, not the list.
+    var paged = table.__ktRecordTotal != null;
+    if (paged) { Array.prototype.forEach.call(slot.querySelectorAll('.kt-table-filter-count'), function (c) { c.style.display = 'none'; }); }
+
     // Already holding the filter's live counter? Then we are done. This check has to come
     // FIRST: once the counter has been moved into the slot it is no longer in the
     // toolbar, so the lookup below finds nothing, concludes there is no filter, and adds
     // a second count — which is why the bar read "10 / 1010 records".
-    if (slot.querySelector('.kt-table-filter-count')) {
+    if (!paged && slot.querySelector('.kt-table-filter-count')) {
       var dupe = slot.querySelector('.kt-export-own-count');
       if (dupe) dupe.parentNode.removeChild(dupe);
       return;
@@ -134,10 +148,13 @@
 
     var sc = table.closest('.kt-tbl-scroll');
     var toolbar = sc ? sc.previousElementSibling : table.previousElementSibling;
+    // A docked search bar (kt-table-filter, 2026-10-20) lives in the screen's filter row.
+    if (!(toolbar && toolbar.classList && toolbar.classList.contains('kt-table-filter')) && table.__ktFilterBar) toolbar = table.__ktFilterBar;
     var cnt = (toolbar && toolbar.classList && toolbar.classList.contains('kt-table-filter'))
       ? toolbar.querySelector('.kt-table-filter-count') : null;
 
-    if (cnt) {                                   // the filter owns a live "N / N" counter
+    if (cnt && paged) cnt.style.display = 'none';
+    if (cnt && !paged) {                         // the filter owns a live "N / N" counter
       // The filter attaches AFTER the first sweep, so our fallback count may already be
       // sitting there — drop it, or the bar reads "20 records20 / 20".
       var stale = slot.querySelector('.kt-export-own-count');
@@ -157,8 +174,10 @@
     var rows = table.querySelectorAll('tbody tr');
     var shown = 0;
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].offsetParent !== null || rows[i].style.display !== 'none') shown++;
+      // The inline display first: it answers almost every row without a layout (phone speed sweep 2026-10-30).
+      if (rows[i].style.display !== 'none' || rows[i].offsetParent !== null) shown++;
     }
+    if (table.__ktRecordTotal != null) shown = +table.__ktRecordTotal || 0;   // a page of a longer list in memory
     var label = shown === 1 ? '1 record' : (shown + ' records');
     if (own.textContent !== label) own.textContent = label;
   }
@@ -188,8 +207,35 @@
     // move the record count to the bottom for consistency.
     if (table.closest('.kt-report-doc')) { relocateReportCount(table); return; }
     var sc = table.closest('.kt-tbl-scroll'), anchor = sc || table;
-    var nxt = anchor.nextElementSibling;
-    if (nxt && nxt.classList && nxt.classList.contains('kt-export-bar')) { relocateCount(table, nxt); return; }
+    /* ONE BAR PER TABLE, WHEREVER IT HAS BEEN PUSHED (2026-10-20). Anthony: "leads section
+       has double up on the pdf, excel etc buttons". This only recognised a bar sitting
+       DIRECTLY after the table. The rows-per-page pagers (kt-table-filter, kt-polish-v2,
+       kt-card-pager) also insert themselves directly after the table, so whenever one
+       arrived after the bar it pushed the bar one sibling down, the next sweep saw no bar
+       and added a second (and a third, after the next pager redraw). The bar is now
+       tied to its table and found by that link, or by looking a few siblings ahead; any
+       extra bars for the same table are removed. */
+    var own = table.__ktExportBar && table.__ktExportBar.isConnected ? table.__ktExportBar : null;
+    var s = anchor.nextElementSibling, hop = 0, found = [];
+    while (s && hop++ < 5) {
+      if (s.classList && s.classList.contains('kt-export-bar') && !s.classList.contains('kt-cardcount')) {
+        /* A bar left by a table the screen has since redrawn goes: its buttons would
+           export the old table. A fresh one is built for this table below. */
+        if (s.__ktExportFor && s.__ktExportFor !== table && !s.__ktExportFor.isConnected) {
+          var dead = s; s = s.nextElementSibling; if (dead.parentNode) { dead.parentNode.removeChild(dead); } continue;
+        }
+        if (!s.__ktExportFor || s.__ktExportFor === table) { found.push(s); }
+      } else if (s.tagName === 'TABLE' || (s.classList && s.classList.contains('kt-tbl-scroll'))) { break; }   // the next table's territory
+      s = s.nextElementSibling;
+    }
+    if (own && found.indexOf(own) === -1) { found.unshift(own); }
+    if (found.length) {
+      var keep = own || found[0];
+      found.forEach(function (b) { if (b !== keep && b.parentNode) { b.parentNode.removeChild(b); } });
+      keep.__ktExportFor = table; table.__ktExportBar = keep;
+      relocateCount(table, keep);
+      return;
+    }
     var tbody = table.querySelector('tbody');
     if (!tbody || tbody.children.length < 1) return;
     if (!table.querySelector('thead')) return;
@@ -225,6 +271,7 @@
     count.className = 'kt-export-count';   // record-count slot (bottom-right)
     barEl.appendChild(count);
     anchor.parentNode.insertBefore(barEl, anchor.nextSibling);
+    barEl.__ktExportFor = table; table.__ktExportBar = barEl;
     relocateCount(table, barEl);
   }
 
@@ -240,7 +287,13 @@
       if (m) return parseInt(m[2] || m[1], 10);
     }
     var n = 0;
-    for (var i = 0; i < list.children.length; i++) { var ch = list.children[i]; if (ch.nodeType === 1 && !ch.classList.contains('kt-export-bar')) n++; }
+    /* An empty-state or loading message is not a record (2026-10-30: an empty Suppliers list read
+       '1 record'). Skipped when marked .kt-list-empty / [data-kt-empty], and a list whose only child
+       is a plain 'No ...' / 'Nothing ...' / 'Loading...' line with no controls counts as none. */
+    var kids = [];
+    for (var i = 0; i < list.children.length; i++) { var ch = list.children[i]; if (ch.nodeType === 1 && !ch.classList.contains('kt-export-bar') && !ch.classList.contains('kt-list-empty') && !ch.hasAttribute('data-kt-empty')) kids.push(ch); }
+    if (kids.length === 1 && !kids[0].querySelector('button,a,input,select') && /^(no |nothing|loading)/i.test((kids[0].textContent || '').trim())) return 0;
+    n = kids.length;
     return n;
   }
 

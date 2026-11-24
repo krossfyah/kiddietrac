@@ -40,6 +40,8 @@
       if (document.querySelector('.modal-backdrop, [role="dialog"], .kt-scrim,'
         + ' .kt-doc-viewer, .kt-av-zoom, .kt-lightbox, [data-kt-open-menu],'
         + ' .kt-sheet-open, .kt-modal, .kt-modal-overlay')) return true;
+      // A video or audio clip is playing, full screen or just used (ticket #223, see dashboard.html).
+      if (window.KT_mediaBusy && window.KT_mediaBusy()) return true;
       // Somebody is typing. Reloading mid-entry loses what they wrote.
       var a = document.activeElement;
       if (a) {
@@ -66,6 +68,19 @@
      point where a repaint costs nothing and reads as the app opening rather than as the
      app randomly refreshing. If neither happens, the deferred loop below still gets there
      eventually. (Anthony, 2026-09-08) */
+  var bootAt = Date.now();
+  function isNative() {
+    try { var C = window.Capacitor; return !!(C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative)); } catch (e) { return false; }
+  }
+  /* The boot cover is still up: a reload now is invisible (the splash / reload gate is all anyone sees). */
+  function bootCovered() {
+    try {
+      var h = document.documentElement;
+      if (h.classList.contains('kt-booting') || h.classList.contains('kt-gating')) return true;
+      var sp = document.getElementById('kt-splash');
+      return !!(sp && sp.isConnected && !sp.classList.contains('kt-hide') && getComputedStyle(sp).display !== 'none');
+    } catch (e) { return false; }
+  }
   var armed = false;
   function transitionSoon() {
     if (armed) { return; }
@@ -80,8 +95,10 @@
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) { setTimeout(fire, 60); }
     });
-    // Moving to another screen: the content is being replaced regardless.
-    window.addEventListener('hashchange', function () { setTimeout(fire, 60); });
+    /* Moving to another screen: the content is being replaced regardless - on the WEB. In the installed apps this
+       was the login flash (2026-10-31): the first tap after signing in rebooted the whole app behind a dark cover.
+       The apps take the new build when they come back to the front (above), or on the next launch. */
+    if (!isNative()) { window.addEventListener('hashchange', function () { setTimeout(fire, 60); }); }
   }
 
   function go() {
@@ -92,8 +109,17 @@
        looking is the one moment a full reload costs nothing at all. Checking it after
        busy() also made this branch unreachable, which is how a deferred update stopped
        landing entirely. */
-    if (document.hidden) {
+    /* ...unless the page is hidden because an iPhone's full-screen video player is covering it (ticket #223). */
+    if (document.hidden && !(window.KT_mediaBusy && window.KT_mediaBusy())) {
       mark();
+      try { location.reload(); } catch (e) {}
+      return;
+    }
+    /* Still behind the boot splash (an update that arrived while the app was opening): reload now, unseen, and
+       tell the next page to keep showing the splash rather than the dark reload cover. */
+    if (bootCovered() && Date.now() - bootAt < 20000) {
+      mark();
+      try { sessionStorage.setItem('kt_boot_reload', '1'); } catch (e) {}
       try { location.reload(); } catch (e) {}
       return;
     }
@@ -169,6 +195,8 @@
               if (document.querySelector('.modal-backdrop, [role="dialog"], .kt-scrim,'
                 + ' .kt-doc-viewer, .kt-av-zoom, .kt-lightbox, [data-kt-open-menu],'
                 + ' .kt-sheet-open')) return true;
+              // A clip is playing, full screen or just used (ticket #223).
+              if (window.KT_mediaBusy && window.KT_mediaBusy()) return true;
               // The user is typing. Reloading mid-entry loses what they wrote.
               var a = document.activeElement;
               if (a) {
@@ -286,6 +314,22 @@
       var App2 = C.Plugins && C.Plugins.App;
       if (App2 && App2.addListener) {
         App2.addListener('appStateChange', function (s) { if (s && s.isActive) paintStatusBar(); });
+      }
+    } catch (e) {}
+    /* iOS: THE SHELL TAKES THE STATUS BAR BACK AFTER EVERY FULL-SCREEN NATIVE SCREEN (2026-10-30 iOS sweep).
+       capacitor.config.json says overlaysWebView:false; this file sets it true at boot and on resume. But Capacitor
+       posts viewDidAppear again whenever a full-screen native screen closes - the Browser (documents, forms to
+       sign, e-documents) and the One-Tap scanner - and the StatusBar plugin then re-applies the CONFIG value: the
+       web view drops 59pt below the clock while our own 59pt navy strip stays, a double band, until the app is next
+       backgrounded. Each of those moves resizes the web view, so re-assert on resize (a no-op natively when it is
+       already overlaid, so it cannot loop), when the Browser closes, and when the page is shown again. */
+    try {
+      if (C.getPlatform && C.getPlatform() === 'ios') {
+        var _sbT = null;
+        window.addEventListener('resize', function () { clearTimeout(_sbT); _sbT = setTimeout(paintStatusBar, 120); });
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) paintStatusBar(); });
+        var Br = C.Plugins && C.Plugins.Browser;
+        if (Br && Br.addListener) { Br.addListener('browserFinished', function () { setTimeout(paintStatusBar, 60); }); }
       }
     } catch (e) {}
   } catch (e) {}

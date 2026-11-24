@@ -309,12 +309,18 @@
             }));
           } catch (e) {
             // Could not build a Response — do not strand the caller.
-            reject(new TypeError('Failed to fetch'));
+            reject(netError());
           }
         };
-        xhr.onerror = function () { finish(id, false); reject(new TypeError('Failed to fetch')); };
-        xhr.onabort = function () { finish(id, false); reject(new TypeError('Failed to fetch')); };
-        xhr.ontimeout = function () { finish(id, false); reject(new TypeError('Failed to fetch')); };
+        /* Still a TypeError, as fetch() would reject, but in words (2026-10-22): the
+           caller shows err.message, and "Failed to fetch" told nobody anything. */
+        function netError() {
+          var m = (window.KT && KT.net) ? KT.net.message(new TypeError('x')) : 'We couldn’t reach KiddieTrac. Check your internet connection, then try again.';
+          var e = new TypeError(m); e.__ktNet = true; return e;
+        }
+        xhr.onerror = function () { finish(id, false); reject(netError()); };
+        xhr.onabort = function () { finish(id, false); reject(netError()); };
+        xhr.ontimeout = function () { finish(id, false); reject(netError()); };
 
         xhr.send(body);
       });

@@ -69,13 +69,18 @@ class AccountLedgerController extends Controller
             return response()->json(['accounts' => [], 'totals' => [], 'meta' => ['page' => 1, 'pages' => 1, 'total' => 0]]);
         }
 
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
+        /* A director sees only their own centres' accounts (2026-11-05 leak sweep): the list was the whole agency,
+           every family's balance and every staff member's pay, for a director of one centre. Admins unchanged. */
+        $ledgerScope = \App\Support\CentreScope::ids($request, $agencyId);
+        $centreIds = DB::table('centres')->where('agency_id', $agencyId)
+            ->when($ledgerScope !== null, fn ($q) => $q->whereIn('id', $ledgerScope ?: [0]))->pluck('id');
 
         /* Who belongs to this agency. Two routes in, because they are recorded
            differently: staff carry agency_id on the role assignment, while a guardian
            may only be reachable through their family's centre. Taking one and not the
            other is how an account goes missing from a finance list. */
         $byRole = DB::table('role_assignments')->where('agency_id', $agencyId)
+            ->when($ledgerScope !== null, fn ($q) => $q->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->whereIn('centre_id', $ledgerScope ?: [0]))
             ->where('active', 1)->pluck('user_id');
         $byFamily = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
             ->whereIn('f.centre_id', $centreIds)->pluck('g.user_id');
@@ -305,7 +310,7 @@ class AccountLedgerController extends Controller
 
         $w = $this->window($request);
 
-        return response()->json($this->statement($agencyId, $userId, $w['from'], $w['to']));
+        return response()->json($this->statement($agencyId, $userId, $w['from'], $w['to'], \App\Support\CentreScope::ids($request, $agencyId)));
     }
 
     /**
@@ -339,7 +344,7 @@ class AccountLedgerController extends Controller
         abort_unless($agencyId, 403);
 
         $w = $this->window($request);
-        $st = $this->statement($agencyId, $userId, $w['from'], $w['to']);
+        $st = $this->statement($agencyId, $userId, $w['from'], $w['to'], \App\Support\CentreScope::ids($request, $agencyId));
         $pdf = app(\App\Services\AccountStatementPdf::class);
 
         return response($pdf->render($st), 200, [
@@ -369,7 +374,7 @@ class AccountLedgerController extends Controller
        agree), and the credit line is whatever the difference is, described honestly
        as settled at source when that is what happened.
        ═══════════════════════════════════════════════════════════════════════ */
-    private function statement(int $agencyId, int $userId, ?string $from = null, ?string $to = null): array
+    private function statement(int $agencyId, int $userId, ?string $from = null, ?string $to = null, ?array $centreScope = null): array
     {
         $user = DB::table('users')->where('id', $userId)
             ->first(['id', 'first_name', 'last_name', 'email', 'phone', 'status', 'created_at']);
@@ -377,9 +382,14 @@ class AccountLedgerController extends Controller
 
         /* The account must belong to the agency being viewed. Checked here rather than
            trusted from the list that produced the id — a client can ask for any id. */
-        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
+        /* And, for a director, to one of their centres (2026-11-05 leak sweep): any account in the agency could be
+           opened, printed and emailed by a director of one centre. $centreScope null = agency-wide (admins). */
+        $centreIds = DB::table('centres')->where('agency_id', $agencyId)
+            ->when($centreScope !== null, fn ($q) => $q->whereIn('id', $centreScope ?: [0]))->pluck('id');
         $inAgency = DB::table('role_assignments')->where('user_id', $userId)
-                ->where('agency_id', $agencyId)->where('active', 1)->exists()
+                ->where('agency_id', $agencyId)->where('active', 1)
+                ->when($centreScope !== null, fn ($q) => $q->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->whereIn('centre_id', $centreScope ?: [0]))
+                ->exists()
             || DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
                 ->where('g.user_id', $userId)->whereIn('f.centre_id', $centreIds)->exists();
         abort_unless($inAgency, 404, 'No such account in this agency.');
@@ -391,7 +401,7 @@ class AccountLedgerController extends Controller
             ->where('g.user_id', $userId)->whereIn('f.centre_id', $centreIds)
             ->pluck('g.family_id')->unique()->values()->all() ?: [0];
 
-        $today = Carbon::today();
+        $today = \App\Support\AgencyTime::todayDate();
         $entries = [];
         $openItems = [];
         $billed = $credited = $refunded = $voidedTotal = $balance = $overdue = 0.0;
@@ -426,7 +436,10 @@ class AccountLedgerController extends Controller
         }
         foreach (DB::table('external_invoices')->whereIn('family_id', $famIds)
             ->get(['id', 'number', 'issued_at', 'due_at', 'total', 'amount_paid', 'balance_due',
-                   'status', 'source_label', 'description', 'pdf_url', 'external_updated_at']) as $r) {
+                   'status', 'source_label', 'description', 'pdf_url', 'external_updated_at',
+                   DB::raw(\Illuminate\Support\Facades\Schema::hasColumn('external_invoices', 'applied_to_invoice_id')
+                       ? '(SELECT n.invoice_number FROM invoices n WHERE n.id = external_invoices.applied_to_invoice_id) AS applied_to'
+                       : 'NULL AS applied_to')]) as $r) {
             $invoiceRows[] = ['row' => $r, 'label' => trim(($r->source_label ?: 'External') . ' invoice ' . $r->number),
                 'ref' => $r->number, 'doc' => $r->pdf_url,
                 'source' => 'external_invoice', 'entity_id' => (int) $r->id];
@@ -448,7 +461,11 @@ class AccountLedgerController extends Controller
                     'status' => $status, 'debit' => 0.0, 'credit' => 0.0,
                     'original' => $total, 'voided' => true, 'doc_url' => $iv['doc'],
                     'source' => $iv['source'], 'entity_id' => $iv['entity_id'],
-                    'note' => 'Issued then voided. Carries no balance.',
+                    /* A partner's receipt shell (2026-11-02): its money was applied to our own invoice, which the
+                       family actually paid - say where it went rather than "voided". */
+                    'note' => ! empty($r->applied_to)
+                        ? 'Receipt for the e-Transfer applied to ' . $r->applied_to . ' — not a separate bill.'
+                        : 'Issued then voided. Carries no balance.',
                 ];
                 continue;
             }
@@ -640,6 +657,10 @@ class AccountLedgerController extends Controller
             ->leftJoin('invoices as inv', 'inv.id', '=', 'i.invoice_id')
             ->whereIn('p.family_id', $famIds)
             ->whereNotIn(DB::raw('LOWER(i.status)'), ['paid', 'cancelled', 'void'])
+            /* Paid is the INVOICE's word, not the instalment row's: no payment path (Record payment, a partner payment
+               mirrored by ExternalPaymentSync) writes payment_plan_installments.status, so a settled instalment read
+               "missed" here (Helm iL-INV-202610-0136-01, paid in iLearn 2026-10-09). */
+            ->where(fn ($q) => $q->whereNull('inv.id')->orWhereNotIn(DB::raw('LOWER(inv.status)'), ['paid']))
             ->orderBy('i.due_date')
             ->get(['i.id', 'i.due_date', 'i.amount', 'i.status', 'i.invoice_id',
                    'inv.invoice_number', 'inv.pdf_url as invoice_pdf_url', 'inv.total as invoice_total',
@@ -896,6 +917,37 @@ class AccountLedgerController extends Controller
         return null;
     }
 
+    /** GET /admin/invoices/{kind}/{id}/email-recipients - the resend popup's guardians and staff (2026-10-31). */
+    public function emailRecipients(Request $request, string $kind, int $id): JsonResponse
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        abort_unless($agencyId, 403);
+        abort_unless(in_array($kind, ['native', 'external'], true), 422, 'Unknown invoice kind.');
+        $inv = $kind === 'external'
+            ? DB::table('external_invoices')->where('id', $id)->first()
+            : DB::table('invoices')->where('id', $id)->first();
+        abort_unless($inv, 404, 'That invoice no longer exists.');
+        $fam = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('f.id', $inv->family_id)->first(['c.agency_id', 'f.centre_id', 'f.family_name']);
+        abort_unless($fam && (int) $fam->agency_id === $agencyId, 404, 'That invoice no longer exists.');
+        $centreId = $kind === 'native' && ! empty($inv->centre_id) ? (int) $inv->centre_id : ((int) $fam->centre_id ?: null);
+        /* A director only for their own centres' families (2026-11-05 leak sweep): any invoice in the agency, with its
+           guardians' emails and balances, was open to a director of one centre. */
+        abort_unless(\App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, $agencyId), $fam->centre_id), 404, 'That invoice no longer exists.');
+        $g = \App\Support\InvoiceReminders::guardians($inv, $kind);
+
+        return response()->json([
+            'number' => $kind === 'external' ? ($inv->number ?: '#' . $inv->id) : $inv->invoice_number,
+            'family' => $fam->family_name,
+            'total' => round((float) $inv->total, 2),
+            'balance' => round((float) ($inv->balance_due ?? $inv->total), 2),
+            'guardians' => array_map(fn ($x) => ['name' => $x['name'], 'email' => $x['email'], 'balance' => round($x['balance'], 2), 'pct' => $x['pct'], 'bounced' => \App\Support\InvoiceReminders::bounced($x['email'])], $g),
+            'staff' => array_map(fn ($x) => ['user_id' => $x['user_id'], 'name' => $x['name'], 'email' => $x['email'], 'role' => $x['role'], 'default' => $x['default']],
+                \App\Support\InvoiceReminders::staffChoices($agencyId, $centreId)),
+            'enabled' => \App\Support\Suppression::agencyNotificationsEnabled($agencyId),
+        ]);
+    }
+
     /**
      * Email one invoice to a named address, with the document attached.
      *
@@ -911,9 +963,20 @@ class AccountLedgerController extends Controller
         abort_unless(in_array($kind, ['native', 'external'], true), 422, 'Unknown invoice kind.');
 
         $data = $request->validate([
-            'to' => 'required|email|max:180',
+            'to' => 'nullable|email|max:180',
+            'to_list' => 'nullable|array|max:8',
+            'to_list.*' => 'email|max:180',
+            'cc_users' => 'nullable|array|max:40',
+            'cc_users.*' => 'integer',
             'message' => 'nullable|string|max:800',
         ]);
+        /* WHO IT GOES TO (2026-10-31, Anthony: "the resend invoices should allow to cc admins/director as default in the
+           popup or can untick"). The popup sends the guardians it ticked (to_list) and the staff it ticked (cc_users);
+           the old single `to` still works. Staff are copied BLIND, and only people with an active staff role in this
+           agency can be - an id from anywhere else is dropped, never mailed. */
+        $toList = array_values(array_unique(array_filter(array_map(fn ($e) => mb_strtolower(trim((string) $e)),
+            array_merge((array) ($data['to_list'] ?? []), [$data['to'] ?? ''])))));
+        abort_if(! $toList, 422, 'Choose at least one person to send it to.');
 
         $inv = $kind === 'external'
             ? DB::table('external_invoices')->where('id', $id)->first()
@@ -924,8 +987,14 @@ class AccountLedgerController extends Controller
         $famAgency = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('f.id', $inv->family_id)->value('c.agency_id');
         abort_unless((int) $famAgency === $agencyId, 404, 'That invoice no longer exists.');
+        /* A director only for their own centres' families (2026-11-05 leak sweep): a director of one centre could
+           email any family's invoice in the agency. */
+        abort_unless(\App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, $agencyId),
+            DB::table('families')->where('id', $inv->family_id)->value('centre_id')), 404, 'That invoice no longer exists.');
 
-        if (! \App\Support\Suppression::agencyNotificationsEnabled($agencyId)) {
+        /* The public demo agencies keep email switched off, yet their invoice email still goes to the mail layer: it is never
+           delivered there (SuppressAgencyMail cancels every demo send) and the demo phone's Mail app shows the copy (2026-10-31). */
+        if (! \App\Support\PublicDemo::isAgency($agencyId) && ! \App\Support\Suppression::agencyNotificationsEnabled($agencyId)) {
             return response()->json([
                 'sent' => false,
                 'reason' => 'Email is switched off for this agency (Settings → "Send notifications and emails").',
@@ -980,48 +1049,93 @@ class AccountLedgerController extends Controller
             $pdfBytes = null;
         }
 
-        $note = trim((string) ($data['message'] ?? ''));
-        $body = '<p>Hello' . ($family ? ' ' . e($family) : '') . ',</p>'
-            . '<p>Invoice <strong>' . e($number) . '</strong> for <strong>$' . number_format($total, 2)
-            . '</strong>' . ($due ? ', due ' . e($due) : '') . ', is attached.</p>'
-            . ($note !== '' ? '<p>' . nl2br(e($note)) . '</p>' : '')
-            . ($pdfBytes === null
-                ? '<p style="color:#92400e;font-size:13px;">The document could not be attached — please ask us for a copy.</p>'
-                : '');
+        /* KiddieTrac's invoice header with the agency's logo and centre (2026-10-31) - the same letter as every other
+           "here is your invoice" email (App\Support\InvoiceMail::issued). */
+        $payInfo = [];
+        try { $payInfo = \App\Support\ParentBilling::payInfo($agencyId); } catch (\Throwable $e) {}
+        /* Greet the person each letter goes to by THEIR first name (2026-10-31: it said "Hi Gonzalez" - the family name). */
+        $firstByEmail = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $inv->family_id)->whereNotNull('u.email')
+            ->get(['u.email', 'u.first_name'])
+            ->mapWithKeys(fn ($r) => [mb_strtolower(trim((string) $r->email)) => trim((string) $r->first_name)])->all();
+        $mailOpts = [
+            'number' => $number, 'total' => $total, 'balance' => isset($inv->balance_due) ? (float) $inv->balance_due : null,
+            'due' => $inv->due_at ? substr((string) $inv->due_at, 0, 10) : null, 'first_name' => null,
+            'agency_name' => $agencyName, 'note' => trim((string) ($data['message'] ?? '')), 'attached' => $pdfBytes !== null,
+            'centre_id' => DB::table('families')->where('id', $inv->family_id)->value('centre_id'),
+            'interac' => $payInfo['interac']['email'] ?? null, 'kind' => 'resend',
+        ];
 
-        $html = \App\Services\EmailTemplate::wrap($agencyId, $body, [
-            'eyebrow' => 'INVOICE',
-            'title' => $agencyName,
-            'subtitle' => 'Invoice ' . $number . ($due ? ' — due ' . $due : ''),
-            'preheader' => 'Invoice ' . $number . ' for $' . number_format($total, 2) . ' from ' . $agencyName,
-        ]);
-
-        $to = $data['to'];
+        $copies = [];
+        $ccIds = array_values(array_unique(array_map('intval', (array) ($data['cc_users'] ?? []))));
+        if ($ccIds) {
+            $copies = DB::table('role_assignments as r')->join('users as u', 'u.id', '=', 'r.user_id')
+                ->where('r.agency_id', $agencyId)->where('r.active', 1)->where('r.role', '!=', 'guardian')
+                ->whereIn('u.id', $ccIds)->whereNull('u.deleted_at')->whereNotNull('u.email')
+                ->distinct()->pluck('u.email')->map(fn ($e) => mb_strtolower(trim((string) $e)))->filter()->values()->all();
+            $copies = array_values(array_diff($copies, $toList));
+        }
         $subject = 'Invoice ' . $number . ' — ' . $agencyName;
         $sentAt = now();
+        $to = implode(', ', $toList);
 
-        try {
-            \App\Services\AgencyMailer::forAgency($agencyId)->html($html,
-                function ($m) use ($to, $family, $subject, $pdfBytes, $number) {
-                    $m->to($to, $family ?: null)->subject($subject);
-                    if ($pdfBytes !== null) {
-                        $m->attachData($pdfBytes, 'invoice-' . preg_replace('/[^A-Za-z0-9._-]/', '-', $number) . '.pdf',
-                            ['mime' => 'application/pdf']);
-                    }
-                });
-        } catch (\Throwable $e) {
-            report($e);
+        /* SPLIT FAMILIES (2026-10-31): each ticked guardian gets their OWN copy - INV-1234-A / -B with their share -
+           through SplitInvoiceCopy; any other address (typed in) gets the family invoice as before. */
+        $splitG = [];
+        if ($kind === 'native' && class_exists(\App\Support\SplitInvoiceCopy::class) && \App\Support\SplitInvoiceCopy::isSplitInvoice($id)) {
+            foreach (\App\Support\InvoiceReminders::guardians($inv, 'native') as $gg) { $splitG[$gg['email']] = (int) $gg['guardian_id']; }
+        }
+        $copiesSent = false;
+        foreach ($toList as $i => $addr) {
+            if (isset($splitG[$addr])) {
+                $res = \App\Support\SplitInvoiceCopy::send($id, $splitG[$addr], $addr, (int) $request->user()->id, [], $copiesSent ? [] : $copies);
+                if (empty($res['sent'])) {
+                    return response()->json(['sent' => false, 'reason' => $res['reason'] ?? 'Not sent.'], 409);
+                }
+                \App\Support\InvoiceReminders::log($agencyId, $kind, $id, $addr, $splitG[$addr], 'resend', 0, now()->toDateString(),
+                    $copiesSent ? [] : $copies, (int) $request->user()->id);
+                $copiesSent = true;
+                continue;
+            }
+            try {
+                [, $html] = \App\Support\InvoiceMail::issued($agencyId, ['first_name' => ($firstByEmail[mb_strtolower(trim((string) $addr))] ?? '') ?: null] + $mailOpts);
+                \App\Services\AgencyMailer::forAgency($agencyId)->html($html,
+                    function ($m) use ($addr, $family, $subject, $pdfBytes, $number, $copies, $i, $copiesSent) {
+                        \App\Support\MailScope::billing($m);   // reaches a billing guardian whose invite is not accepted yet (2026-11-06)
+                        $m->to($addr, $family ?: null)->subject($subject);
+                        // The office copy rides on the first email only - one copy per resend, not one per guardian.
+                        if (! $copiesSent) { foreach ($copies as $c) { $m->bcc($c); } }
+                        if ($pdfBytes !== null) {
+                            $m->attachData($pdfBytes, 'invoice-' . preg_replace('/[^A-Za-z0-9._-]/', '-', $number) . '.pdf',
+                                ['mime' => 'application/pdf']);
+                        }
+                    });
+                \App\Support\InvoiceReminders::log($agencyId, $kind, $id, $addr, null, 'resend', 0, now()->toDateString(),
+                    $copiesSent ? [] : $copies, (int) $request->user()->id);
+                $copiesSent = true;
+            } catch (\Throwable $e) {
+                report($e);
 
-            return response()->json(['sent' => false, 'reason' => 'The mail server refused it: ' . $e->getMessage()], 502);
+                return response()->json(['sent' => false, 'reason' => 'The mail server refused it: ' . $e->getMessage()], 502);
+            }
         }
 
         /* What happened, not what was attempted — the suppression listener can hold this
            back after the mailer has accepted it. */
         $verdict = DB::table('email_logs')
-            ->whereRaw('LOWER(to_email) = ?', [mb_strtolower($to)])
+            ->whereRaw('LOWER(to_email) = ?', [mb_strtolower($toList[0])])
             ->where('created_at', '>=', $sentAt->copy()->subMinutes(2))
             ->orderByDesc('id')->first(['status', 'error']);
         $blocked = $verdict && strtolower((string) $verdict->status) === 'suppressed';
+        /* The public demo never delivers mail: a copy captured for the demo phone's Mail app is the delivery there. */
+        $demoInbox = null;
+        if ($blocked && \App\Support\PublicDemo::isAgency($agencyId)) {
+            $demoUid = (int) DB::table('users')->whereRaw('LOWER(email) = ?', [mb_strtolower($toList[0])])->value('id');
+            if ($demoUid && DB::table('web_demo_mail')->where('user_id', $demoUid)->where('created_at', '>=', $sentAt->copy()->subMinutes(2))->exists()) {
+                $blocked = false;
+                $demoInbox = (string) (DB::table('users')->where('id', $demoUid)->value('first_name') ?: 'the parent');
+            }
+        }
 
         \App\Support\Audit::write([
             'user_id' => $request->user()->id,
@@ -1034,16 +1148,19 @@ class AccountLedgerController extends Controller
                     . ' for $' . number_format($total, 2) . ' to ' . $to
                     . ($blocked ? ' — held back by a mail switch' : ''),
                 'to' => $to, 'invoice' => $number, 'kind' => $kind, 'total' => $total,
-                'attachment' => $pdfBytes !== null, 'delivered' => ! $blocked,
+                'attachment' => $pdfBytes !== null, 'delivered' => ! $blocked, 'copies' => $copies,
             ]),
         ]);
 
         return response()->json([
             'sent' => ! $blocked,
+            'to' => $toList,
+            'copies' => count($copies),
             'attachment' => $pdfBytes !== null,
             'reason' => $blocked
                 ? 'The mail layer held it back: ' . ($verdict->error ?: 'a delivery switch is off for this recipient.')
                 : null,
+            'message' => $demoInbox !== null ? 'Sent to ' . $demoInbox . "'s inbox" : null,
         ]);
     }
 
@@ -1116,11 +1233,13 @@ class AccountLedgerController extends Controller
         $wTo   = $data['to_date'] ?? null;
         if ($wFrom && $wTo && $wFrom > $wTo) { [$wFrom, $wTo] = [$wTo, $wFrom]; }
 
-        $st = $this->statement($agencyId, $userId, $wFrom, $wTo);
+        $st = $this->statement($agencyId, $userId, $wFrom, $wTo, \App\Support\CentreScope::ids($request, $agencyId));
         $acct = $st['account'];
         $to = $data['to'];
 
-        if (! \App\Support\Suppression::agencyNotificationsEnabled($agencyId)) {
+        /* The public demo agencies keep email switched off, yet their invoice email still goes to the mail layer: it is never
+           delivered there (SuppressAgencyMail cancels every demo send) and the demo phone's Mail app shows the copy (2026-10-31). */
+        if (! \App\Support\PublicDemo::isAgency($agencyId) && ! \App\Support\Suppression::agencyNotificationsEnabled($agencyId)) {
             return response()->json([
                 'sent' => false,
                 'reason' => 'Email is switched off for ' . ($acct['agency'] ?: 'this agency')
@@ -1169,6 +1288,7 @@ class AccountLedgerController extends Controller
         try {
             \App\Services\AgencyMailer::forAgency($agencyId)->html($html,
                 function ($m) use ($to, $acct, $subject, $copyTo, $pdfBytes, $pdfName) {
+                    \App\Support\MailScope::billing($m);   // reaches a billing guardian whose invite is not accepted yet (2026-11-06)
                     $m->to($to, $acct['name'] !== '(no name)' ? $acct['name'] : null)->subject($subject);
                     if ($copyTo && strcasecmp($copyTo, $to) !== 0) {
                         $m->cc($copyTo);
@@ -1303,7 +1423,7 @@ class AccountLedgerController extends Controller
 
         if ($note !== '') {
             $h .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
-                . 'style="margin:0 0 20px;"><tr><td style="background:#F1F5F9;border-left:3px solid #64748B;'
+                . 'style="margin:0 0 20px;"><tr><td style="background:#F1F5F9;--kt-edge:#64748B;'
                 . 'padding:14px 16px;border-radius:6px;color:#334155;font-size:14px;line-height:1.6;">'
                 . nl2br($e($note)) . '</td></tr></table>';
         }

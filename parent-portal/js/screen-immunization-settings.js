@@ -134,8 +134,10 @@
       + '<div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#1F6080;margin-bottom:8px;">Also tell the family</div>'
       + check('imm-parents', !!r.notify_parents, 'Email parents about their own child',
           'Sent on the same schedule as above. A family with two children gets one email.')
-      + check('imm-parent-bcc', r.parent_bcc_staff !== false, 'Blind-copy the office on it',
-          'So whoever chases this can see what the family was told.')
+      /* One summary, not a copy of each family's email (2026-11-04): the families reminded are listed in the
+         office email above, filtered to the centres each person covers. Same setting (parent_bcc_staff). */
+      + check('imm-parent-bcc', r.parent_bcc_staff !== false, 'List them in the office email',
+          'One email to the office naming each child and what the family was asked for - not a copy of every email.')
       + check('imm-parent-push', r.parent_push !== false, 'Send an app notification too')
       + check('imm-parent-req', r.parent_required_only !== false, 'Required vaccines only',
           'An optional vaccine is a conversation, not a compliance chase.')
@@ -147,7 +149,7 @@
       + '</select>'
       /* The one thing somebody switching this on has to know, said where they are
          switching it on — not in a release note they will never read. */
-      + '<div style="margin-top:10px;padding:10px 12px;border-left:3px solid #B45309;background:#FFF8EC;'
+      + '<div style="margin-top:10px;padding:10px 12px;--kt-edge:#B45309;background:#FFF8EC;'
       + 'font-size:12.5px;line-height:1.6;color:#7C4A11;">'
       + '<strong>A child with nothing recorded is not told they are overdue.</strong> '
       + 'The schedule says what a child of that age owes; the record says what this centre '

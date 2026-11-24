@@ -15,12 +15,13 @@
 (function (w) {
   'use strict';
 
-  var GATED = ['agency_admin', 'centre_director'];
+  /* 2026-11-10 (PIPEDA review): platform admins and resellers are covered too, after a 14-day grace - the server
+     (App\Support\StrongSignIn, via /auth/mfa/status `blocked`) decides; these roles only say whether to ask it. */
+  var GATED = ['agency_admin', 'centre_director', 'platform_admin', 'reseller'];
 
   function user() { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function isGatedRole(u) {
     var r = (u && u.roles) || [];
-    if (r.indexOf('platform_admin') !== -1) return false;             // superadmin exempt
     return GATED.some(function (x) { return r.indexOf(x) !== -1; });
   }
 
@@ -64,7 +65,7 @@
       '<div style="background:#fff;max-width:460px;width:100%;border-radius:18px;padding:30px 28px;box-shadow:0 30px 70px rgba(0,0,0,.4);text-align:center;font-family:inherit;">'
       + '<div style="font-size:44px;line-height:1;margin-bottom:10px;">🛡️</div>'
       + '<h2 style="margin:0 0 8px;font-size:22px;font-weight:800;color:#0f172a;">Two-factor is required</h2>'
-      + '<p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;">For the security of the children and families in your care, administrators and directors must protect their account with two-factor authentication before continuing. It takes about a minute with any authenticator app.</p>'
+      + '<p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;">For the security of the children and families in your care, accounts that can see children’s and families’ records must use two-factor sign-in. It takes about a minute with an authenticator app or a passkey.</p>'
       + '<button id="kt-mfa-gate-go" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:11px;padding:13px 26px;font-weight:800;font-size:14.5px;cursor:pointer;width:100%;">Set up two-factor now →</button>'
       + '<button id="kt-mfa-gate-out" style="margin-top:12px;background:transparent;border:0;color:#94a3b8;font-size:12.5px;cursor:pointer;">Sign out instead</button>'
       + '</div>';
@@ -102,7 +103,7 @@
   function checkStatus() {
     if (!(w.KT && KT.Api)) return;
     KT.Api.get('/auth/mfa/status').then(function (s) {
-      if (s && s.enabled) {
+      if (s && (s.enabled || s.strong || s.blocked === false)) {
         disengage();
         if (w.KT && KT.Dom && KT.Dom.toast) KT.Dom.toast('✓ Two-factor enabled — thank you', 'success');
       }
@@ -118,14 +119,20 @@
   }
 
   function boot() {
+    if (window.KT_PUBLIC_DEMO) return;   // website demo person: no set-up nudges (2026-10-31)
     var u = user();
     if (!u || !u.id || !isGatedRole(u)) return;
     if (!(w.KT && KT.Api)) { setTimeout(boot, 500); return; }        // wait for the app shell
     KT.Api.get('/auth/mfa/status').then(function (s) {
+      if (s && 'blocked' in s) { if (s.blocked) engage(); return; }  // the server's answer (StrongSignIn)
       if (s && s.enabled) return;                                    // already protected → no gate
+      if (s && s.demo_exempt) return;                                // demo agency only (MfaController::demoExempt)
       engage();
     }).catch(function () { /* status unreachable → fail open, never trap the user */ });
   }
+
+  // app.js calls this when the API answers 403 {mfa_setup_required} mid-session.
+  w.__ktMfaGateShow = function () { engage(); };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

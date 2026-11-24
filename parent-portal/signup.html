@@ -28,14 +28,14 @@
   .terms a { color: #1F6080; }
   .btn { width: 100%; background: #1F6080; color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 8px; }
   .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-  .err { background: #FEF2F2; border-left: 3px solid #DC2626; color: #991B1B; padding: 10px 14px; border-radius: 4px; font-size: 14px; margin-bottom: 16px; }
+  .err { background: #FEF2F2; --kt-edge:#DC2626; color: #991B1B; padding: 10px 14px; border-radius: 4px; font-size: 14px; margin-bottom: 16px; }
   .login-link { text-align: center; color: #6B7280; font-size: 14px; }
   .login-link a { color: #1F6080; }
   .trial-info { background: linear-gradient(135deg, #1F6080 0%, #2c7894 100%); color: white; padding: 16px; border-radius: 12px; margin-bottom: 16px; }
   .trial-info strong { display: block; font-size: 18px; margin-bottom: 4px; }
   .trial-info span { opacity: 0.9; font-size: 14px; }
 </style>
-  <script src="/js/kt-net.js?v=20261014net"></script>
+  <script src="/js/kt-net.js?v=20261022raw"></script>
 </head>
 <body>
 <div class="wrap">
@@ -242,7 +242,7 @@
        signed-out page, the password-reset dialog on this one included, still closed on a
        stray click and lost whatever had been typed. Both files are standalone (no shell,
        no Api, no Dom), so they load anywhere. -->
-  <script src="/js/kt-modal-guard.js?v=20260921ms" defer></script>
+  <script src="/js/kt-modal-guard.js?v=20261026g" defer></script>
   <script src="/js/kt-modal-safety.js?v=20260921ms" defer></script>
 <script src="/js/kt-phone.js?v=20261013ph1"></script>
 <script>

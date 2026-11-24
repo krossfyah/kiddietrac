@@ -40,6 +40,25 @@ final class ImmunizationExemption
     public const CLEARED = 'cleared';
     public const NOTHING = 'nothing';
 
+    /**
+     * CALIFORNIA (2026-10-28): SB 277 ended personal-belief exemptions for child care entry, so a jurisdiction whose
+     * profile lists only medical exemptions refuses a religious / belief / personal reason. Returns the message to
+     * show, or null when the reason is acceptable. Jurisdictions without the key accept any documented reason.
+     */
+    public static function refusal(int $childId, string $reason): ?string
+    {
+        $agencyId = (int) (DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+            ->join('centres as ce', 'ce.id', '=', 'f.centre_id')->where('c.id', $childId)->value('ce.agency_id') ?: 0);
+        $p = \App\Support\Jurisdictions::forAgency($agencyId ?: null);
+        $allowed = $p['immunization_exemptions'] ?? null;
+        if (! is_array($allowed) || in_array('belief', $allowed, true)) return null;
+        if (preg_match('/relig|belief|conscien|personal|philosoph/i', $reason)) {
+            return $p['label'] . ' accepts medical exemptions only (no religious or personal-belief exemptions for child care).';
+        }
+
+        return null;
+    }
+
     /** vaccine|dose, lowercased and trimmed — the schedule's own matching rule. */
     public static function key(?string $vaccine, ?string $doseLabel): string
     {

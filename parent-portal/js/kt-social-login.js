@@ -29,14 +29,14 @@
     if (m) {
       var token = decodeURIComponent(m[1]);
       try { history.replaceState(null, '', location.pathname); } catch (e) { location.hash = ''; }
-      sessionStorage.setItem('kt_token', token);
+      sessionStorage.setItem('kt_token', token); try { sessionStorage.removeItem('kt_force_password_change'); sessionStorage.removeItem('kt_force_password_reason'); } catch (e) {}
       var now = String(Date.now());
       sessionStorage.setItem('kt_login_at', now);
       sessionStorage.setItem('kt_last_activity', now);
       fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + token } })
         .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (u) { if (u) sessionStorage.setItem('kt_user', JSON.stringify(u.user || u)); location.replace('/dashboard.html'); })
-        .catch(function () { location.replace('/dashboard.html'); });
+        .then(function (u) { if (u) sessionStorage.setItem('kt_user', JSON.stringify(u.user || u)); (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html', true); })
+        .catch(function () { (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html', true); });
       return true;
     }
     var err = (location.search || '').match(/social_error=([^&]+)/);
@@ -74,7 +74,8 @@
     var v = b64url(crypto.getRandomValues(new Uint8Array(32)));
     try { sessionStorage.setItem('kt_social_v', v); } catch (e) {}
     return crypto.subtle.digest('SHA-256', new TextEncoder().encode(v)).then(function (h) {
-      var url = API + '/auth/social/' + provider + '/redirect?app=1&cc=' + b64url(new Uint8Array(h));
+      var url = API + '/auth/social/' + provider + '/redirect?app=1&cc=' + b64url(new Uint8Array(h))
+        + '&brand=' + encodeURIComponent(window.KT_BRAND ? window.KT_BRAND() : 'kiddietrac');   // BrandLock: the app signing in
       return capPlugins().Browser.open({ url: url });
     });
   }
@@ -103,11 +104,11 @@
             var user = u ? (u.user || u) : null;
             // The same finish as the password and passkey sign-ins on this page.
             if (typeof window.ktFinishSignIn === 'function' && user) return window.ktFinishSignIn({ token: token, user: user }, 'social');
-            sessionStorage.setItem('kt_token', token);
+            sessionStorage.setItem('kt_token', token); try { sessionStorage.removeItem('kt_force_password_change'); sessionStorage.removeItem('kt_force_password_reason'); } catch (e) {}
             if (user) sessionStorage.setItem('kt_user', JSON.stringify(user));
             var now = String(Date.now());
             sessionStorage.setItem('kt_login_at', now); sessionStorage.setItem('kt_last_activity', now);
-            location.replace('/dashboard.html');
+            (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html', true);
           });
       })
       .catch(function () { _appBusy = false; showError('Could not reach KiddieTrac. Check your connection and try again.'); });
@@ -124,7 +125,12 @@
 
   function injectButtons() {
     var form = document.getElementById('loginForm') || document.querySelector('.auth-form');
-    if (!form || document.getElementById('kt-social')) return;
+    // __ktSocialDone: the row is in (or will not come) - the sign-out fade waits for it.
+    if (!form || document.getElementById('kt-social')) { window.__ktSocialDone = true; return; }
+    // iPhone app (v1): no Google/Microsoft buttons. The in-app return leg is Android-only, Google
+    // refuses embedded WebViews, and offering them would require Sign in with Apple (App Review 4.8).
+    var Cap = window.Capacitor;
+    if (Cap && Cap.isNativePlatform && Cap.isNativePlatform() && Cap.getPlatform && Cap.getPlatform() === 'ios') { window.__ktSocialDone = true; return; }
     fetch(API + '/auth/social/providers')
       .then(function (r) { return r.ok ? r.json() : { providers: [] }; })
       .then(function (d) {
@@ -143,7 +149,7 @@
         ps.forEach(function (p) {
           var name = p.charAt(0).toUpperCase() + p.slice(1);
           var a = document.createElement('a');
-          a.href = API + '/auth/social/' + p + '/redirect';
+          a.href = API + '/auth/social/' + p + '/redirect?brand=' + encodeURIComponent(window.KT_BRAND ? window.KT_BRAND() : 'kiddietrac');
           a.title = 'Continue with ' + name;
           a.setAttribute('aria-label', 'Continue with ' + name);
           a.style.cssText = 'display:flex;align-items:center;justify-content:center;width:58px;height:58px;border-radius:15px;border:1px solid #E2E8F0;background:#fff;text-decoration:none;box-shadow:0 1px 3px rgba(15,23,42,.06);transition:transform .12s ease, box-shadow .12s ease;';
@@ -169,7 +175,8 @@
         wrap.appendChild(sep);
         form.parentNode.insertBefore(wrap, form);
       })
-      .catch(function () {});
+      .catch(function () {})
+      .then(function () { window.__ktSocialDone = true; });
   }
 
   if (handleCallback()) return;                     // redirecting away — skip button injection

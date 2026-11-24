@@ -122,8 +122,8 @@
 
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
-        <h2>📍 Walks &amp; outings</h2>
-        <p>Who is out, who has them, and where they are.</p>
+        <h2>📍 Walk Watch</h2>
+        <p>Live GPS walks &amp; outings: who is out, who has them, and where they are.</p>
       </div>
       <div class="kt-card" style="margin-top:16px;">
         <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
@@ -201,8 +201,8 @@
         var age = ftAge(t.current ? t.current.age_min : null);
         var live = String(t.status || '').toLowerCase() === 'active';
         var km = (t.distance_km != null && t.distance_km !== '')
-          ? Number(t.distance_km).toFixed(2) + ' km'
-          : (t.distance_m != null ? (t.distance_m >= 1000 ? (t.distance_m / 1000).toFixed(2) + ' km' : Math.round(t.distance_m) + ' m') : '—');
+          ? ((Number(t.distance_km) * 1000) / 1000).toFixed(2) + ' km (' + Math.round(Number(t.distance_km) * 1000).toLocaleString() + ' m)'
+          : (t.distance_m != null ? ((t.distance_m) / 1000).toFixed(2) + ' km (' + Math.round(t.distance_m).toLocaleString() + ' m)' : '—');
 
         return `<div class="kt-card" style="margin-bottom:14px;">
           <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">

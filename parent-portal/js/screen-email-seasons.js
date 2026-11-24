@@ -26,8 +26,12 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;max-width:1000px;"><div id="es-body" style="color:#64748B;">Loading…</div></div>';
-    var body = main.querySelector('#es-body');
+    /* THE BANNER STAYS (2026-10-21): this screen draws into its own root, created once, so a
+       tab switch or refresh never wipes #appMain and the banner the shell put above it. */
+    var root = main.querySelector('#es-root');
+    if (!root) { main.innerHTML = '<div id="es-root" style="padding:14px 24px;max-width:1000px;"></div>'; root = main.querySelector('#es-root'); }
+    root.innerHTML = '<div id="es-body" style="color:#64748B;">Loading…</div>';
+    var body = root.querySelector('#es-body');
     var d;
     try { d = await Api.get('/admin/email-header-seasons'); }
     catch (e) { body.innerHTML = '<div class="kt-card">' + esc((e && e.message) || 'Could not load') + '</div>'; return; }

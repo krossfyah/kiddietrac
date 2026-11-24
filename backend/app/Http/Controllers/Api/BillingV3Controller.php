@@ -4,44 +4,48 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\AgencyStripe;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Stripe\Stripe;
-use Stripe\Customer;
-use Stripe\SetupIntent;
-use Stripe\PaymentMethod;
 
 /**
  * v22p57 — ACH / acss_debit (Canadian Pre-Authorized Debit) payment
  * method for families. Lives alongside the credit-card autopay from
  * v22p51.
+ *
+ * On the centre's own Stripe account (2026-11-05, App\Support\AgencyStripe), like every other family payment.
  */
 final class BillingV3Controller extends Controller
 {
-    public function __construct()
+    private function stripe(object $family): array
     {
-        if ($k = \App\Support\StripeConfig::secret()) Stripe::setApiKey($k);
+        $aid = AgencyStripe::agencyForFamily((int) $family->id);
+        $client = AgencyStripe::client($aid);
+        abort_unless($client, 503, AgencyStripe::NOT_SET);
+
+        return [$client, $aid];
+    }
+
+    private function customer(\Stripe\StripeClient $client, object $family, string $email): string
+    {
+        $id = (string) ($family->stripe_customer_id ?? '');
+        if ($id !== '') {
+            try { $c = $client->customers->retrieve($id); if (empty($c->deleted)) return $id; } catch (\Throwable $e) {}
+        }
+        $c = $client->customers->create(['name' => (string) $family->family_name, 'email' => $email, 'metadata' => ['family_id' => (string) $family->id]]);
+        DB::table('families')->where('id', $family->id)->update(['stripe_customer_id' => $c->id, 'updated_at' => now()]);
+        $family->stripe_customer_id = $c->id;
+
+        return $c->id;
     }
 
     public function achSetupIntent(Request $request): JsonResponse
     {
-        abort_unless(\App\Support\StripeConfig::secret(), 503, 'Stripe not configured');
         $family = $this->parentFamily($request);
-        // Ensure Stripe customer exists
-        $customerId = $family->stripe_customer_id;
-        if (!$customerId) {
-            $customer = Customer::create([
-                'name' => (string) $family->family_name,
-                'email' => (string) $request->user()->email,
-                'metadata' => ['family_id' => (string) $family->id],
-            ]);
-            $customerId = $customer->id;
-            DB::table('families')->where('id', $family->id)
-                ->update(['stripe_customer_id' => $customerId, 'updated_at' => now()]);
-        }
-        $si = SetupIntent::create([
+        [$client, $aid] = $this->stripe($family);
+        $customerId = $this->customer($client, $family, (string) $request->user()->email);
+        $si = $client->setupIntents->create([
             'customer' => $customerId,
             'payment_method_types' => ['acss_debit'],
             'payment_method_options' => [
@@ -57,19 +61,24 @@ final class BillingV3Controller extends Controller
         ]);
         return response()->json([
             'client_secret' => $si->client_secret,
-            'publishable_key' => \App\Support\StripeConfig::publishable(),
+            'publishable_key' => AgencyStripe::publishable($aid),
         ]);
     }
 
     public function saveAch(Request $request): JsonResponse
     {
-        abort_unless(\App\Support\StripeConfig::secret(), 503, \App\Support\StripeConfig::NOT_CONFIGURED);
-        $data = $request->validate(['payment_method' => 'required|string']);
+        $data = $request->validate(['payment_method' => 'required|string|max:120']);
         $family = $this->parentFamily($request);
+        [$client] = $this->stripe($family);
+        $customerId = $this->customer($client, $family, (string) $request->user()->email);
 
-        $pm = PaymentMethod::retrieve($data['payment_method']);
-        if (($pm->customer ?? null) !== $family->stripe_customer_id) {
-            $pm->attach(['customer' => $family->stripe_customer_id]);
+        try {
+            $pm = $client->paymentMethods->retrieve($data['payment_method']);
+        } catch (\Throwable $e) {
+            abort(422, 'That bank account could not be found. Please add it again.');
+        }
+        if (($pm->customer ?? null) !== $customerId) {
+            $pm = $client->paymentMethods->attach($pm->id, ['customer' => $customerId]);
         }
         $bank = $pm->acss_debit ?? null;
         DB::table('families')->where('id', $family->id)->update([
@@ -81,7 +90,7 @@ final class BillingV3Controller extends Controller
         ]);
         // Also set as default for autopay if no card on file
         if (empty($family->autopay_payment_method_id)) {
-            Customer::update($family->stripe_customer_id, [
+            $client->customers->update($customerId, [
                 'invoice_settings' => ['default_payment_method' => $pm->id],
             ]);
             DB::table('families')->where('id', $family->id)->update([

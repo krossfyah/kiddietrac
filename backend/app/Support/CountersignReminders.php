@@ -133,13 +133,13 @@ final class CountersignReminders
             ->where('s.signed_at', '<=', $cut)
             ->whereNull('u.deleted_at')
             ->orderBy('s.signed_at')
-            ->get(['s.id', 's.user_id', 's.signed_at', 's.signer_name', 'f.id as form_id', 'f.title', 'u.first_name', 'u.last_name']);
+            ->get(['s.id', 's.user_id', 's.signed_at', 's.signer_name', 'f.id as form_id', 'f.title', 'f.centre_id as form_centre_id', 'u.first_name', 'u.last_name']);
 
         $out = collect();
         foreach ($rows as $r) {
             $fam = Live::families(DB::table('families as fa')->join('guardians as g', 'g.family_id', '=', 'fa.id'), 'fa')
                 ->where('g.user_id', $r->user_id)->pluck('fa.centre_id')->all();
-            $staff = DB::table('role_assignments')->where('user_id', $r->user_id)->where('agency_id', $agencyId)
+            $staff = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $r->user_id)->where('agency_id', $agencyId)
                 ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
             $isStaff = DB::table('role_assignments')->where('user_id', $r->user_id)->where('active', true)
                 ->whereIn('role', ['educator', 'home_visitor', 'centre_director', 'agency_admin'])->exists();
@@ -173,7 +173,12 @@ final class CountersignReminders
             $out[$p->user_id]['items'][$it->id] = $it;
         };
         foreach ($items as $it) {
-            $dirs = $directors->filter(fn ($d) => $d->centre_id && in_array((int) $d->centre_id, $it->centre_ids, true));
+            /* A form that belongs to one centre (managed_forms.centre_id, 2026-11-13) is that centre's director's
+               only: Forms Manager shows another centre's director neither the form nor its sign-offs, so a parent with
+               children at two centres must not put it in the other director's digest. */
+            $fc = $it->form_centre_id ? (int) $it->form_centre_id : null;
+            $dirs = $directors->filter(fn ($d) => $d->centre_id && in_array((int) $d->centre_id, $it->centre_ids, true)
+                && ($fc === null || (int) $d->centre_id === $fc));
             $useAdmins = $mode !== 'directors' || $dirs->filter(fn ($d) => (int) $d->user_id !== (int) $it->user_id)->isEmpty();
             if ($mode !== 'admins') foreach ($dirs as $d) $add($d, $it);
             if ($useAdmins) foreach ($admins as $a) $add($a, $it);
@@ -246,6 +251,8 @@ final class CountersignReminders
                     $name = trim(($p->first_name ?? '') . ' ' . ($p->last_name ?? ''));
                     AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($p, $name, $subject) {
                         $m->to($p->email, $name ?: null)->subject($subject);
+                        // Named form mail (SuppressAgencyMail): signing mail, not left to the subject guard.
+                        $m->getHeaders()->addTextHeader('X-KT-Form-Package', '1');
                     });
                     $res['emails']++;
                 } catch (\Throwable $ex) {
@@ -253,7 +260,7 @@ final class CountersignReminders
                 }
             }
             if (! empty($s['in_app'])) {
-                Notify::write(['user_id' => (int) $uid, 'type' => 'countersign_reminder', 'title' => $subject,
+                Notify::write(['agency_id' => $agencyId, 'user_id' => (int) $uid, 'type' => 'countersign_reminder', 'title' => $subject,
                     'body' => implode(' · ', array_map(fn ($it) => $it->title . ' (' . $it->person . ')', array_slice($list, 0, 3))) . (count($list) > 3 ? ' …' : ''),
                     'data' => json_encode(['link' => '#forms-manager']), 'created_at' => now()]);
                 $res['in_app']++;

@@ -65,7 +65,7 @@ final class RoomController extends Controller
            ACTIVE role, which is the same set Visibility::centreIds() already grants
            them everywhere else in the portal; someone with a role at one centre sees
            precisely what they saw before. */
-        $roleCentreIds = DB::table('role_assignments')
+        $roleCentreIds = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
             ->where('user_id', $user->id)->where('active', true)
             ->whereNotNull('centre_id')
             ->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
@@ -227,7 +227,16 @@ final class RoomController extends Controller
             ->whereIn('c.id', $absences->keys()->all())
             ->get(['c.id as child_id', 'g.user_id'])->groupBy('child_id');
 
-        $roster = $children->map(function ($child) use ($checkEvents, $allFlags, $lastEvents, $tz, $absences, $guardianOf) {
+        // Running late (2026-11-06): "here by …" (arrival) / "picked up by …" (departure) today, from staff or a parent.
+        $lateBy = collect();
+        $lateOut = collect();
+        if (! empty($childIds) && \Illuminate\Support\Facades\Schema::hasTable('safe_arrival_late')) {
+            $lateDay = Carbon::now($tz)->toDateString();
+            $lateBy = \App\Support\SafeArrival::lateQuery($childIds, $lateDay, 'arrival')->get(['child_id', 'arrive_by', 'note'])->keyBy('child_id');
+            $lateOut = \App\Support\SafeArrival::lateQuery($childIds, $lateDay, 'departure')->get(['child_id', 'arrive_by', 'note'])->keyBy('child_id');
+        }
+
+        $roster = $children->map(function ($child) use ($checkEvents, $allFlags, $lastEvents, $tz, $absences, $guardianOf, $lateBy, $lateOut) {
             $checks = $checkEvents->get($child->id, collect());
             $lastCheck = $checks->last();
             $isAtCentre = $lastCheck && $lastCheck->event_type === 'check_in';
@@ -254,6 +263,8 @@ final class RoomController extends Controller
                 'status' => $status,
                 'arrived_at' => AgencyTime::fmt($arrivedAt, $tz),
                 'departed_at' => AgencyTime::fmt($departedAt, $tz),
+                // ISO (UTC) arrival, so the Today circles can count "2h 10m" live (2026-10-31).
+                'in_since' => $arrivedAt ? \Carbon\Carbon::parse($arrivedAt, 'UTC')->toIso8601String() : null,
                 'urgent_flags' => $flags->map(fn ($f) => [
                     'short_label' => strtoupper(substr($f->category, 0, 8)),
                     'severity' => $f->severity,
@@ -266,6 +277,16 @@ final class RoomController extends Controller
                     'note' => $a->note,
                     'by_parent' => $guardianOf->get($child->id, collect())->pluck('user_id')->map(fn ($v) => (int) $v)->contains((int) $a->reported_by_id),
                     'by_name' => trim(($a->first_name ?? '') . ' ' . ($a->last_name ?? '')) ?: null,
+                ] : null,
+                'running_late' => ($status === 'away' && ($l = $lateBy->get($child->id))) ? [
+                    'by' => Carbon::parse(substr((string) $l->arrive_by, 0, 5), $tz)->format('g:i A'),
+                    'by_hm' => substr((string) $l->arrive_by, 0, 5),
+                    'note' => $l->note,
+                ] : null,
+                'late_pickup' => ($status !== 'out' && ($l = $lateOut->get($child->id))) ? [
+                    'by' => Carbon::parse(substr((string) $l->arrive_by, 0, 5), $tz)->format('g:i A'),
+                    'by_hm' => substr((string) $l->arrive_by, 0, 5),
+                    'note' => $l->note,
                 ] : null,
             ];
         });
@@ -286,9 +307,11 @@ final class RoomController extends Controller
                 // Each child's reference ID (2026-10-14), so the roster can be searched by it.
                 $r = collect($r);
                 $codes = \App\Support\RefCode::children($r->map(fn ($x) => is_array($x) ? ($x['id'] ?? 0) : ($x->id ?? 0))->all());
-                return $r->map(function ($x) use ($codes) {
-                    if (is_array($x)) { $x['ref_code'] = $codes[$x['id'] ?? 0] ?? null; }
-                    elseif (is_object($x)) { $x->ref_code = $codes[$x->id ?? 0] ?? null; }
+                // Each child's photo permission (none | family | group), shown on the room's circles (2026-11-06).
+                $consent = \App\Support\MediaConsent::forChildren($r->map(fn ($x) => is_array($x) ? ($x['id'] ?? 0) : ($x->id ?? 0))->all());
+                return $r->map(function ($x) use ($codes, $consent) {
+                    if (is_array($x)) { $x['ref_code'] = $codes[$x['id'] ?? 0] ?? null; $x['photo_consent'] = $consent[(int) ($x['id'] ?? 0)]['level'] ?? null; }
+                    elseif (is_object($x)) { $x->ref_code = $codes[$x->id ?? 0] ?? null; $x->photo_consent = $consent[(int) ($x->id ?? 0)]['level'] ?? null; }
                     return $x;
                 })->values();
             })($roster),
@@ -403,7 +426,7 @@ final class RoomController extends Controller
     public function presentCount(Request $request): JsonResponse
     {
         $user = $request->user();
-        $centreIds = DB::table('role_assignments')
+        $centreIds = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
             ->where('user_id', $user->id)
             ->where('active', 1)
             ->whereNotNull('centre_id')

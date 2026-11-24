@@ -374,7 +374,7 @@
     /* min-width:0 — a grid child defaults to min-width:auto, so anything wide inside
        widens the TRACK instead of scrolling in its own box. That is the bug that once
        widened the whole portal from one screen. */
-    return '<div class="kt-card" style="min-width:0;padding:14px 16px;border-left:3px solid ' + tint + ';">'
+    return '<div class="kt-card" style="min-width:0;padding:14px 16px;--kt-edge:' + tint + ';">'
       + '<div style="font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:' + C.muted + ';">' + esc(label) + '</div>'
       + '<div style="font-size:20px;font-weight:800;margin-top:5px;color:' + tint + ';font-variant-numeric:tabular-nums;">' + esc(value) + '</div>'
       + (sub ? '<div style="font-size:11.5px;color:' + C.muted + ';margin-top:3px;">' + sub + '</div>' : '')
@@ -843,6 +843,7 @@
     if (state.busy) return;
     state.busy = true;
     var body = container.querySelector('#al-body');
+    state.per_page = ((window.KT && KT.rowsPerPage && KT.rowsPerPage.get('account-ledgers:list')) || state.per_page);   // rows per page (2026-10-20)
     var qs = '?page=' + state.page + '&per_page=' + state.per_page
       + '&sort=' + encodeURIComponent(state.sort) + '&dir=' + state.dir
       + (state.search ? '&search=' + encodeURIComponent(state.search) : '')
@@ -983,7 +984,8 @@
     if (o) o.addEventListener('change', function () { state.only = o.value; state.page = 1; load(container); });
 
     var pg = body.querySelector('#al-pager');
-    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); });
+    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); },
+      { size: state.per_page, total: meta.total, max: 200, onSize: function (n) { KT.rowsPerPage.set('account-ledgers:list', n); state.per_page = n; state.page = 1; load(container); } });
 
     body.querySelectorAll('th[data-sort]').forEach(function (thEl) {
       var k = thEl.getAttribute('data-sort');
@@ -1092,14 +1094,14 @@
     var identity = card('Account details', null,
       '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;">'
       + idBits.map(function (b) {
-        return '<div><div style="font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:'
+        return '<div style="min-width:0;"><div style="font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:'
           + C.faint + ';margin-bottom:3px;">' + b[0] + '</div>'
-          + '<div style="font-size:13px;color:#334155;line-height:1.6;">' + b[1] + '</div></div>';
+          + '<div style="font-size:13px;color:#334155;line-height:1.6;overflow-wrap:anywhere;">' + b[1] + '</div></div>';   // a long email ran into the phone column (2026-10-25)
       }).join('')
       + '</div>');
 
     // ── the position, then every figure behind it ─────────────────────
-    var position = '<div class="kt-card" style="min-width:0;padding:18px 20px;border-left:4px solid ' + balTint + ';">'
+    var position = '<div class="kt-card" style="min-width:0;padding:18px 20px;--kt-edge:' + balTint + ';">'
       + '<div style="font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:' + C.muted + ';">' + balWord + '</div>'
       + '<div style="font-size:34px;font-weight:800;color:' + balTint + ';margin-top:2px;font-variant-numeric:tabular-nums;">'
       + money(Math.abs(bal)) + '</div>'
@@ -1170,7 +1172,7 @@
     /* An overpayment is the one figure here nobody can act on without being told what
        it means, so it says so rather than sitting as an unexplained tile. */
     var overpaidNote = Number(sm.overpaid) > 0.005
-      ? '<div class="kt-card" style="padding:12px 16px;border-left:3px solid ' + C.warn + ';font-size:12.5px;color:#475569;line-height:1.6;">'
+      ? '<div class="kt-card" style="padding:12px 16px;--kt-edge:' + C.warn + ';font-size:12.5px;color:#475569;line-height:1.6;">'
         + '<strong style="color:' + C.ink + ';">' + money(sm.overpaid) + ' more was received than was invoiced.</strong> '
         + 'Shown on the receipt lines below and never netted into the balance — whether that is a credit this '
         + 'account can draw on or a payment recorded twice at source is an accounting decision, not one this screen makes.'
@@ -1370,6 +1372,11 @@
     var say = function (m, k) { if (Dom && Dom.toast) { Dom.toast(m, k || 'info'); } else { alert(m); } };
     var label = b.textContent;
 
+    if (act === 'email' && window.KT && window.KT.resendInvoice) {
+      // The one resend popup: the family's guardians ticked, admins/directors copied by default (2026-10-31).
+      window.KT.resendInvoice({ kind: kind, id: id });
+      return;
+    }
     if (act === 'email') {
       /* Prefilled by nobody: the endpoint requires an address for the same reason this
          asks for one — a default recipient means a lost field emails a real family. */

@@ -6,7 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\EmailTemplate;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Dompdf\Options;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -201,6 +201,20 @@ class AgreementController extends Controller
             'created_at' => now(),
         ]);
 
+        /* APP REVIEW DEMO ACCOUNTS ARE ONLY SIGNED OUT (2026-10-29, Anthony's choice). Apple's
+           reviewer declined as the demo educator on 28 Oct: the account was suspended, every later
+           sign-in was refused, and the nightly demo refresh failed. For the fictional
+           @appreview.kiddietrac.com accounts a decline is recorded (above) and the session ends,
+           nothing more - they can sign in again and accept. Every real account is unchanged. */
+        if (str_ends_with(strtolower((string) $user->email), '@appreview.kiddietrac.com')) {
+            try { $user->tokens()->delete(); } catch (\Throwable $e) {}
+            return response()->json([
+                'ok' => true,
+                'declined' => true,
+                'message' => 'You have declined the agreement and have been signed out. Sign in again to accept it.',
+            ]);
+        }
+
         // Block the account. users.status is an enum — 'suspended' is the existing
         // state meaning "cannot use the platform"; the signed_documents row above
         // records WHY. (An invented value would be silently rejected by MySQL.)
@@ -264,6 +278,8 @@ class AgreementController extends Controller
                   ->from('noreply@kiddietrac.com', 'KiddieTrac')
                   ->replyTo('support@kiddietrac.com', 'Kiddietrac Support')
                   ->subject($subject);
+                // Named form mail (SuppressAgencyMail): signing mail, not left to the subject guard.
+                $m->getHeaders()->addTextHeader('X-KT-Form-Package', '1');
                 if (is_file($absPdf)) {
                     $m->attach($absPdf, ['as' => $attachName, 'mime' => 'application/pdf']);
                 }
@@ -319,7 +335,8 @@ class AgreementController extends Controller
         $subject = 'Agreement declined — ' . $name . ' was not onboarded';
         $to = $recipients;
 
-        dispatch(function () use ($to, $html, $subject) {
+        // $agencyId passed in (2026-10-28): it was used inside without being captured, so every decline notice failed (ticket 190).
+        dispatch(function () use ($to, $html, $subject, $agencyId) {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $subject, $agencyId) {
                 \App\Support\MailScope::agency($m, $agencyId);
                 if ($to) $m->to($to);
@@ -411,7 +428,26 @@ class AgreementController extends Controller
         return (new self())->agreementHtml();
     }
 
+    /* A RESELLER HAS NO CENTRE (2026-10-21). Same agreement, but the closing line said "your
+       centre will be notified" - a Reseller is told the platform team is. The variant is what
+       they see, sign (documentHash) and receive as the PDF, all from this one function. */
     private function agreementHtml(): string
+    {
+        $html = $this->agreementHtmlStandard();
+        try {
+            $u = request()->user();
+            if ($u) {
+                $roles = \Illuminate\Support\Facades\DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->pluck('role')->all();
+                if (in_array('reseller_admin', $roles, true) && ! in_array('platform_admin', $roles, true)) {
+                    $html = str_replace("and your centre will be\nnotified.", "and the platform team will be\nnotified.", $html);
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+        return $html;
+    }
+
+    private function agreementHtmlStandard(): string
     {
         return <<<'HTML'
 <h2>Part A — Terms of Use</h2>

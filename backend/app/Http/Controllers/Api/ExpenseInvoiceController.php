@@ -382,10 +382,10 @@ final class ExpenseInvoiceController extends Controller
         $outstanding = (float) (clone $base())->whereNotIn('status', ['paid', 'void'])->sum(DB::raw('total - amount_paid'));
         $overdue = (clone $base())->where('status', '!=', 'void')
             ->whereNotIn('status', ['paid'])
-            ->whereNotNull('due_date')->whereDate('due_date', '<', now()->toDateString())
+            ->whereNotNull('due_date')->whereDate('due_date', '<', \App\Support\AgencyTime::today())
             ->selectRaw('COUNT(*) c, ROUND(SUM(total - amount_paid),2) amt')->first();
 
-        $monthStart = now()->startOfMonth()->toDateString();
+        $monthStart = \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString();
         $paidThisMonth = (float) DB::table('expense_payments')
             ->where('agency_id', $agencyId)
             ->when($centreFilter, function ($q) use ($centreFilter) {

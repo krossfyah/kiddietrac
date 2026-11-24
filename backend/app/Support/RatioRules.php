@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+/* The moment a ratio is evaluated at is any Carbon (2026-11-10): RatioEngine passes Carbon\Carbon, and the old
+   ?Illuminate\Support\Carbon type refused it, so every attendance correction's ratio recheck failed - not one
+   ratio.recalculated row had ever been written. CarbonInterface takes both. */
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -47,7 +51,7 @@ final class RatioRules
     }
 
     /** Children present in the room now ($at null) or at a past moment. Distinct child ids. */
-    public static function childIdsPresent(object $room, ?Carbon $at = null): array
+    public static function childIdsPresent(object $room, ?CarbonInterface $at = null): array
     {
         $day = $at ? $at->copy()->setTimezone(AgencyTime::tzForCentre((int) $room->centre_id))->toDateString() : null;
         [$from, $to] = AgencyTime::dayRangeForCentre((int) $room->centre_id, $day);
@@ -69,7 +73,7 @@ final class RatioRules
     }
 
     /** People clocked in at the centre at the moment (open punches on that agency day). */
-    private static function openPunchUserIds(object $room, ?Carbon $at): array
+    private static function openPunchUserIds(object $room, ?CarbonInterface $at): array
     {
         $day = $at ? $at->copy()->setTimezone(AgencyTime::tzForCentre((int) $room->centre_id))->toDateString() : null;
         [$from, $to] = AgencyTime::dayRangeForCentre((int) $room->centre_id, $day);
@@ -88,7 +92,7 @@ final class RatioRules
      * Educators present in this room. Active shifts win; otherwise clock-ins.
      * Returns [count, source] where source says how it was counted.
      */
-    public static function educatorsPresent(object $room, ?Carbon $at = null, ?string $mode = null): array
+    public static function educatorsPresent(object $room, ?CarbonInterface $at = null, ?string $mode = null): array
     {
         $when = $at ?: now();
         $shifts = DB::table('shifts')->where('room_id', $room->id)
@@ -159,7 +163,7 @@ final class RatioRules
      * group-size / home-composition / second-adult findings. $educators may be passed in to
      * evaluate a hypothetical (tests, forecasts).
      */
-    public static function evaluate(object $room, ?Carbon $at = null, ?array $childIds = null, ?array $educators = null): array
+    public static function evaluate(object $room, ?CarbonInterface $at = null, ?array $childIds = null, ?array $educators = null): array
     {
         $centre = DB::table('centres')->where('id', $room->centre_id)->first(['id', 'agency_id', 'license_type', 'email']);
         $agencyId = (int) ($centre->agency_id ?? 0);
@@ -202,7 +206,9 @@ final class RatioRules
 
         $home = $profile['ratios']['home'] ?? null;
         $lt = (string) ($centre->license_type ?? '');
-        $isHome = is_array($home) && preg_match('/type_a|type_b|_home$/', $lt);
+        $isHome = is_array($home) && preg_match('/type_a|type_b|_home$|_fcch$/', $lt);
+
+        if ($isHome && ($home['engine'] ?? null) === 'ca_fcch') return self::californiaHome($out, $profile, $home, $lt, $n, $known, $ages, $have);
 
         if ($isHome) {
             $under2 = count(array_filter($known, fn ($a) => $a['months'] < 24));
@@ -246,7 +252,7 @@ final class RatioRules
                     $out['nap'] = ($nap['no_infants'] ?? false) && $infants
                         ? ['allowed' => false, 'note' => 'Nap-time relief does not apply: infants present']
                         : ['allowed' => true, 'required' => (int) ceil($n / ($ratio * max(1, (int) ($nap['factor'] ?? 2)))),
-                           'note' => 'During nap time (up to ' . ($nap['max_hours'] ?? 2) . ' h) ' . (int) ceil($n / ($ratio * max(1, (int) ($nap['factor'] ?? 2)))) . ' educator(s) may supervise'];
+                           'note' => 'During nap time' . (! empty($nap['max_hours']) ? ' (up to ' . $nap['max_hours'] . ' h)' : '') . ' ' . (int) ceil($n / ($ratio * max(1, (int) ($nap['factor'] ?? 2)))) . ' educator(s) may supervise'];
                 }
                 $second = $profile['ratios']['second_adult_at'] ?? null;
                 if ($second && $n >= (int) $second) {
@@ -257,6 +263,36 @@ final class RatioRules
                 if (count($known) < $n) $out['warnings'][] = ($n - count($known)) . ' child(ren) have no date of birth — the youngest-child rule may be wrong';
             }
         }
+
+        return $out;
+    }
+
+    /**
+     * California family child care homes (H&SC 1597.44 / 1597.465): not a per-caregiver ratio but a capacity table —
+     * the smallest tier that fits both the head count and the infants (under 2) present decides how many adults are
+     * needed (1, or 2 = provider + assistant in a large home). Nothing fits = over the licence. Own children under 10 count.
+     */
+    private static function californiaHome(array $out, array $profile, array $home, string $lt, int $n, array $known, array $ages, $have): array
+    {
+        $tiers = $home['tiers'][$lt] ?? null;
+        if (! is_array($tiers) || ! $tiers) return $out;   // a licence type with no table: the room's own ratio, as before
+        $under = (int) ($home['infant_under_months'] ?? 24);
+        $infants = count(array_filter($known, fn ($a) => $a['months'] < $under));
+        $fit = null;
+        foreach ($tiers as $t) if ($n <= (int) $t['max'] && $infants <= (int) $t['max_infants']) { $fit = $t; break; }
+        $cap = max(array_map(fn ($t) => (int) $t['max'], $tiers));
+        $large = str_contains($lt, 'large');
+        $out['rule'] = 'jurisdiction_home';
+        $out['required_educators'] = $fit ? (int) $fit['staff'] : (int) max(array_map(fn ($t) => (int) $t['staff'], $tiers));
+        $out['ratio_target'] = $fit ? ('up to ' . $fit['max'] . ', max ' . $fit['max_infants'] . ' infants') : ('max ' . $cap);
+        $out['reason'] = $profile['label'] . ' ' . ($large ? 'large' : 'small') . ' family child care home: ' . $n . ' children, ' . $infants . ' under 2'
+            . ($fit ? ' — fits "up to ' . $fit['max'] . ' with no more than ' . $fit['max_infants'] . ' infants"' . ((int) $fit['staff'] > 1 ? ' with an assistant provider' : '') : ' — over every limit for this licence');
+        $out['home'] = ['under_2' => $infants, 'cap' => $cap, 'over_cap' => $fit === null,
+            'tier_note' => $fit['note'] ?? null,
+            'own_children_note' => ! empty($home['counts_own_under']) ? 'Your own children under ' . $home['counts_own_under'] . ' count toward these limits — sign them in too.' : null];
+        if ($fit === null) $out['warnings'][] = $n . ' children (' . $infants . ' under 2) — over this home\'s licensed limits';
+        elseif (! empty($fit['note'])) $out['warnings'][] = 'Allowed only if: ' . $fit['note'];
+        if (count($known) < $n) $out['warnings'][] = (count($ages) - count($known)) . ' child(ren) have no date of birth — the infant limit cannot be checked for them';
 
         return $out;
     }

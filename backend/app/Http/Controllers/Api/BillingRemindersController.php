@@ -38,7 +38,7 @@ final class BillingRemindersController extends Controller
         // The header is a request, not a fact. Honour it only for a platform_admin (who
         // may target any agency) or someone who actually holds an active role in the
         // agency named. Otherwise fall back to their own — never trust it blindly.
-        $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)
+        $isPlatform = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->where('role', 'platform_admin')->where('active', 1)->exists();
         if ($header && $isPlatform) {
             return $header;
@@ -57,7 +57,7 @@ final class BillingRemindersController extends Controller
     private function assertAccess(Request $request): void
     {
         $u = $request->user();
-        $ok = DB::table('role_assignments')
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $u->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])
             ->exists();
@@ -76,10 +76,7 @@ final class BillingRemindersController extends Controller
 
     private function read(int $agencyId): array
     {
-        $row = DB::table('agencies')->where('id', $agencyId)->select('settings')->first();
-        $settings = ($row && $row->settings) ? (json_decode($row->settings, true) ?: []) : [];
-        $r = (isset($settings['billing_reminders']) && is_array($settings['billing_reminders'])) ? $settings['billing_reminders'] : [];
-        return array_merge(self::DEFAULTS, $r);
+        return \App\Support\InvoiceReminders::cfg($agencyId);
     }
 
     /** GET /admin/billing-reminders */
@@ -95,7 +92,27 @@ final class BillingRemindersController extends Controller
             'agency_name'    => $row->name,
             'reminders'      => $this->read($agencyId),
             'global_enabled' => (bool) config('billing.reminders_enabled'),
+            // Who can be copied: agency admins, directors and other staff of THIS agency (2026-10-31).
+            'staff'          => $this->staffList($agencyId),
         ]);
+    }
+
+    /** Admins and directors (default copies) plus every other active staff member, for the "also copy" picker. */
+    private function staffList(int $agencyId): array
+    {
+        $cfg = $this->read($agencyId);
+        $all = \App\Support\InvoiceReminders::staffChoices($agencyId, null, array_merge($cfg, ['cc_staff' => DB::table('role_assignments')
+            ->where('agency_id', $agencyId)->where('active', 1)->whereIn('role', ['educator', 'home_visitor'])->pluck('user_id')->map(fn ($v) => (int) $v)->all()]));
+        return array_map(fn ($s) => ['user_id' => $s['user_id'], 'name' => $s['name'], 'email' => $s['email'], 'role' => $s['role']], $all);
+    }
+
+    /** GET /admin/billing-reminders/preview - who is due now and who today's reminders would go to (read-only). */
+    public function preview(Request $request): JsonResponse
+    {
+        $this->assertAccess($request);
+        $agencyId = $this->resolveAgencyId($request);
+        abort_unless($agencyId, 404, 'Agency not found');
+        return response()->json(\App\Support\InvoiceReminders::preview($agencyId, 7, true));
     }
 
     /** POST /admin/billing-reminders */
@@ -113,16 +130,32 @@ final class BillingRemindersController extends Controller
             'channel_email'       => ['nullable', 'boolean'],
             'cc_admin'            => ['nullable', 'boolean'],
             'custom_message'      => ['nullable', 'string', 'max:500'],
+            'due_today'           => ['nullable', 'boolean'],
+            'overdue_mode'        => ['nullable', 'in:daily,every,weekly,days'],
+            'overdue_every'       => ['nullable', 'integer', 'min:1', 'max:60'],
+            'overdue_max'         => ['nullable', 'integer', 'min:0', 'max:365'],
+            'cc_admins'           => ['nullable', 'boolean'],
+            'cc_directors'        => ['nullable', 'boolean'],
+            'cc_staff'            => ['nullable', 'array', 'max:50'],
+            'cc_staff.*'          => ['integer'],
         ]);
 
         $current = $this->read($agencyId);
-        foreach (self::DEFAULTS as $k => $def) {
+        $before = $current;
+        foreach (\App\Support\InvoiceReminders::DEFAULTS as $k => $def) {
             if (is_bool($def)) {
                 if ($request->has($k)) {
                     $current[$k] = $request->boolean($k);
                 }
+            } elseif ($k === 'cc_staff') {
+                if (array_key_exists('cc_staff', $data)) {
+                    // Only people with an active role in THIS agency can be copied.
+                    $ids = array_values(array_unique(array_map('intval', (array) ($data['cc_staff'] ?? []))));
+                    $current['cc_staff'] = $ids ? DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)
+                        ->whereIn('user_id', $ids)->where('role', '!=', 'guardian')->distinct()->pluck('user_id')->map(fn ($v) => (int) $v)->values()->all() : [];
+                }
             } elseif (array_key_exists($k, $data) && $data[$k] !== null) {
-                $current[$k] = $data[$k];
+                $current[$k] = is_int($def) ? (int) $data[$k] : $data[$k];
             }
         }
         $current['invoice_days_before'] = $this->normDays($current['invoice_days_before']) ?: '7,3';
@@ -144,7 +177,17 @@ final class BillingRemindersController extends Controller
                 'action'      => 'billing_reminders_updated',
                 'entity_type' => 'agency',
                 'entity_id'   => $agencyId,
-                'payload'     => json_encode(['fields' => array_keys($data)]),
+                'payload'     => json_encode((function () use ($before, $current, $data) {
+                    $changes = [];
+                    foreach ($current as $k => $v) {
+                        if (($before[$k] ?? null) !== $v) $changes[$k] = ['from' => $before[$k] ?? null, 'to' => $v];
+                    }
+                    $f = fn ($v) => is_bool($v) ? ($v ? 'on' : 'off') : (is_array($v) ? count($v) . ' people' : ((string) $v === '' ? '(none)' : (string) $v));
+                    $bits = [];
+                    foreach ($changes as $k => $c) $bits[] = str_replace('_', ' ', $k) . ': ' . $f($c['from']) . ' → ' . $f($c['to']);
+                    return ['summary' => $changes ? 'Changed invoice reminder settings — ' . implode('; ', $bits) : 'Saved invoice reminder settings (no changes)',
+                        'changes' => $changes, 'fields' => array_keys($data)];
+                })()),
                 'ip_address'  => $request->ip(),
                 'user_agent'  => substr((string) $request->userAgent(), 0, 500),
                 'created_at'  => now(),

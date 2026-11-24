@@ -23,7 +23,7 @@ final class AnalyticsController extends Controller
     {
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
         $days = (int) $request->query('days', 30);
-        $start = Carbon::now()->subDays($days)->startOfDay();
+        $start = \App\Support\AgencyTime::boundaryUtc(null, 'day', -$days);
 
         $logs = DB::table('daily_care_logs')
             ->where('child_id', $childId)
@@ -45,7 +45,7 @@ final class AnalyticsController extends Controller
 
         $checkins = DB::table('daily_checkins')
             ->where('child_id', $childId)
-            ->where('checkin_date', '>=', Carbon::now()->subDays($days)->toDateString())
+            ->where('checkin_date', '>=', \App\Support\AgencyTime::todayDate()->subDays($days)->toDateString())
             ->orderBy('checkin_date')
             ->get();
         $moodCounts = $checkins->countBy('mood');
@@ -79,9 +79,14 @@ final class AnalyticsController extends Controller
                     foreach (\App\Support\LearningFrameworks::areasOf($fw, (string) $o->domain, $o->hdlh_milestones) as $k) $counts[$k]++;
                 }
             });
-        $rows = collect($fw['areas'])->map(function ($a) use ($counts) {
+        $planned = $this->plannedAreas($childId, $fw, $agencyId ? (int) $agencyId : null);
+        $rows = collect($fw['areas'])->map(function ($a) use ($counts, $planned) {
             $c = (int) ($counts[$a['key']] ?? 0);
-            return ['key' => $a['key'], 'domain' => $a['label'], 'count' => $c, 'status' => $c >= 5 ? 'strong' : ($c >= 2 ? 'moderate' : 'gap')];
+            return ['key' => $a['key'], 'domain' => $a['label'], 'count' => $c, 'status' => $c >= 5 ? 'strong' : ($c >= 2 ? 'moderate' : 'gap'),
+                // Planned activities tagged with this area in the child's room (2026-11-03). Shown beside the
+                // observation count; the gap status itself stays about what was OBSERVED.
+                'planned' => (int) ($planned['published'][$a['key']] ?? 0),
+                'planned_draft' => (int) ($planned['draft'][$a['key']] ?? 0)];
         })->values();
         $gaps = $rows->where('status', 'gap')->count();
         $milestones = DB::table('milestone_records')
@@ -94,6 +99,52 @@ final class AnalyticsController extends Controller
             'framework' => ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']],
             'gaps_count' => $gaps,
             'milestones_by_domain' => $milestones,
+            'planned_window' => $planned['window'],
         ]);
+    }
+
+    /**
+     * Planned activities per framework area for the child's CURRENT room, over the last 8 weeks
+     * and the next 4 (agency weeks). A room's own plan wins over its centre-wide plan for the
+     * same week, the way the planner shows it. An activity counts toward the areas its HDLH
+     * foundations name (curriculum units tag every activity), else toward its domain's area.
+     * Drafts are counted apart: they have not happened, and families cannot see them yet.
+     */
+    private function plannedAreas(int $childId, array $fw, ?int $agencyId): array
+    {
+        $out = ['published' => [], 'draft' => [], 'window' => null];
+        $enr = \App\Support\Live::enrolments(DB::table('enrollments'))->where('child_id', $childId)
+            ->where('start_date', '<=', \App\Support\AgencyTime::today())->orderByDesc('start_date')->first();
+        $roomId = $enr->room_id ?? null;
+        if (! $roomId) return $out;
+        $centreId = DB::table('rooms')->where('id', $roomId)->value('centre_id');
+        $monday = \App\Support\AgencyTime::todayDate()->startOfWeek(Carbon::MONDAY);
+        $from = $monday->copy()->subWeeks(8)->toDateString();
+        $to = $monday->copy()->addWeeks(4)->toDateString();
+        $out['window'] = ['from' => $from, 'to' => $to];
+        $plans = DB::table('lesson_plans')->whereBetween('week_starting', [$from, $to])
+            ->where(fn ($w) => $w->where('room_id', $roomId)
+                ->orWhere(fn ($c) => $c->where('centre_id', $centreId ?: 0)->whereNull('room_id')))
+            ->get(['week_starting', 'room_id', 'status', 'plan_data']);
+        $byWeek = [];
+        foreach ($plans as $p) {
+            $k = (string) $p->week_starting;
+            if (! isset($byWeek[$k]) || $p->room_id) $byWeek[$k] = $p;     // the room's own plan wins
+        }
+        foreach ($byWeek as $p) {
+            $bucket = ($p->status === 'draft') ? 'draft' : 'published';
+            $pd = json_decode((string) $p->plan_data, true) ?: [];
+            foreach ((array) ($pd['days'] ?? []) as $acts) {
+                foreach ((array) $acts as $a) {
+                    if (! is_array($a) || trim((string) ($a['title'] ?? '')) === '') continue;
+                    $links = array_map(fn ($k) => ['foundation' => (string) $k], (array) ($a['foundations'] ?? []));
+                    foreach (\App\Support\LearningFrameworks::areasOf($fw, (string) ($a['domain'] ?? ''), $links) as $k) {
+                        $out[$bucket][$k] = ($out[$bucket][$k] ?? 0) + 1;
+                    }
+                }
+            }
+        }
+
+        return $out;
     }
 }

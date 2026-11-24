@@ -25,7 +25,7 @@ final class CacfpController extends Controller
         // by centre_id — any caller could enumerate any centre's roster + tier.
         $centreAgency = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
         abort_unless($centreAgency && $centreAgency === (int) $this->resolveAgencyId($request), 403);
-        $date = Carbon::parse($request->query('date', Carbon::today()->toDateString()))->toDateString();
+        $date = Carbon::parse($request->query('date', \App\Support\AgencyTime::today()))->toDateString();
 
         /* Who is at THIS centre on THIS date — resolved through the enrolment, not
            through the family.
@@ -83,8 +83,27 @@ final class CacfpController extends Controller
             'meal_type' => 'required|in:breakfast,morning_snack,lunch,afternoon_snack,dinner',
             'served' => 'required|boolean',
         ]);
-        $family = DB::table('families')->where('id',
-            DB::table('children')->where('id', $data['child_id'])->value('family_id'))->first();
+        /* The centre must be one you work at, and the child must be at that centre (2026-11-05 leak sweep):
+           child_id and centre_id were written unchecked, so any staff member could file meal claims for
+           another agency's child, or into another agency's claim sheet. "At that centre" is what the roster
+           shows: the family's centre, or an open enrolment in one of the centre's rooms (split-week care). */
+        $agencyId = $this->resolveAgencyId($request);
+        $centreAgency = (int) DB::table('centres')->where('id', $data['centre_id'])->value('agency_id');
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if (! $centreAgency || $centreAgency !== $agencyId || ! \App\Support\CentreScope::canWrite($scope, (int) $data['centre_id'])) {
+            return response()->json(['message' => 'You can only record meals at a centre you work at.'], 403);
+        }
+        $familyId = DB::table('children')->where('id', $data['child_id'])->whereNull('deleted_at')->value('family_id');
+        $atCentre = $familyId && (
+            (int) DB::table('families')->where('id', $familyId)->value('centre_id') === (int) $data['centre_id']
+            || DB::table('enrollments as e')->join('rooms as r', 'r.id', '=', 'e.room_id')
+                ->where('e.child_id', $data['child_id'])->whereNull('e.end_date')
+                ->where('r.centre_id', $data['centre_id'])->exists()
+        );
+        if (! $atCentre) {
+            return response()->json(['message' => 'That child is not enrolled at this centre.'], 403);
+        }
+        $family = DB::table('families')->where('id', $familyId)->first();
         DB::table('cacfp_meals')->updateOrInsert(
             [
                 'child_id' => $data['child_id'],
@@ -122,7 +141,7 @@ final class CacfpController extends Controller
         abort_unless($isPlatform || (int) $fam->agency_id === (int) $agencyId, 403);
         DB::table('families')->where('id', $familyId)->update([
             'cacfp_tier' => $data['cacfp_tier'],
-            'cacfp_eligibility_date' => $data['eligibility_date'] ?? now()->toDateString(),
+            'cacfp_eligibility_date' => $data['eligibility_date'] ?? \App\Support\AgencyTime::today(),
             'updated_at' => now(),
         ]);
         return response()->json(['status' => 'updated']);

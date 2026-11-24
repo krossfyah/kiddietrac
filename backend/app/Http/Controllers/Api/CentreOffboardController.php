@@ -78,6 +78,7 @@ final class CentreOffboardController extends Controller
 
             $moved = count($report['transferred'] ?? []);
             $left = count($report['withdrawn'] ?? []);
+            $waitlisted = array_sum(array_map(fn ($w) => (int) ($w['children'] ?? 0), $report['waitlisted'] ?? []));
             $staff = count($report['staff_closed'] ?? []);
             $errors = $report['errors'] ?? [];
 
@@ -117,6 +118,7 @@ final class CentreOffboardController extends Controller
                 .$line('Last operating day', $effective)
                 .$line('Children transferred', (string) $moved)
                 .$line('Children withdrawn', (string) $left)
+                .($waitlisted ? $line('Put on the agency waitlist', (string) $waitlisted) : '')
                 .$line('Staff accounts closed', (string) $staff)
                 .$line('Archived', ! empty($data['archive']) ? 'yes' : 'no')
                 .'</table>'
@@ -125,7 +127,7 @@ final class CentreOffboardController extends Controller
                    clear", and the one case worth emailing about is the one where it is
                    not. */
                 .($stillEnrolledAfter > 0
-                    ? '<div style="background:#FEF2F2;border:1px solid #FECACA;border-left:4px solid #DC2626;'
+                    ? '<div style="background:#FEF2F2;border:1px solid #FECACA;--kt-edge:#DC2626;'
                         .'border-radius:12px;padding:14px 16px;margin:0 0 16px;">'
                         .'<div style="font-weight:800;color:#991B1B;font-size:14.5px;">'
                         .$stillEnrolledAfter.' child'.($stillEnrolledAfter === 1 ? ' is' : 'ren are')
@@ -200,6 +202,7 @@ final class CentreOffboardController extends Controller
         $actor = $request->user();
         $userId = (int) $actor->id;
         $this->assertCentre($userId, $centreId);
+        $this->assertOffboarder($request, $centreId);
 
         $data = $request->validate([
             'last_day' => ['required', 'date'],
@@ -221,7 +224,7 @@ final class CentreOffboardController extends Controller
                only ever failed the case where there was nothing to enforce. */
             'decisions' => ['present', 'array'],
             'decisions.*.family_id' => ['required', 'integer'],
-            'decisions.*.action' => ['required', 'in:transfer,withdraw'],
+            'decisions.*.action' => ['required', 'in:transfer,withdraw,waitlist'],   // waitlist = withdraw + agency waitlist (#251)
             'decisions.*.to_room_id' => ['nullable', 'integer'],
             'decisions.*.reason' => ['nullable', 'string', 'max:300'],
             'close_staff' => ['nullable', 'boolean'],
@@ -242,13 +245,26 @@ final class CentreOffboardController extends Controller
             ->whereNull('ch.deleted_at')->distinct()->pluck('f.id')->map(fn ($v) => (int) $v)->all();
 
         $decided = array_map(fn ($d) => (int) $d['family_id'], $data['decisions']);
+
+        /* Every decision must be a family AT THIS CENTRE (2026-11-05 leak sweep): family_id was
+           taken from the request unchecked, so closing your own centre could withdraw or move a
+           family at any other centre or agency, as long as this centre's own families were
+           also listed. */
+        $foreign = array_values(array_diff($decided, DB::table('families')->where('centre_id', $centreId)
+            ->whereIn('id', $decided ?: [0])->pluck('id')->map(fn ($v) => (int) $v)->all()));
+        if ($foreign) {
+            return response()->json([
+                'message' => 'Some of these families are not at this centre, so nothing was changed.',
+                'foreign_family_ids' => $foreign,
+            ], 422);
+        }
         $missing = array_values(array_diff($liveFamilies, $decided));
         if ($missing) {
             $names = DB::table('families')->whereIn('id', $missing)->pluck('family_name')->all();
 
             return response()->json([
                 'message' => count($missing).' '.(count($missing) === 1 ? 'family has' : 'families have')
-                    .' no decision. Every family must be transferred or withdrawn before this provider closes.',
+                    .' no decision. Every family must be transferred, withdrawn or put on the waitlist before this provider closes.',
                 'undecided_family_ids' => $missing,
                 'undecided_families' => $names,
             ], 422);
@@ -271,6 +287,7 @@ final class CentreOffboardController extends Controller
                 'families' => count($data['decisions']),
                 'transfers' => count(array_filter($data['decisions'], fn ($d) => $d['action'] === 'transfer')),
                 'withdrawals' => count(array_filter($data['decisions'], fn ($d) => $d['action'] === 'withdraw')),
+                'waitlisted' => count(array_filter($data['decisions'], fn ($d) => $d['action'] === 'waitlist')),
                 'will_close_staff' => (bool) ($data['close_staff'] ?? false),
                 'will_archive' => (bool) ($data['archive'] ?? false),
                 'message' => $data['decisions']
@@ -280,7 +297,8 @@ final class CentreOffboardController extends Controller
             ]);
         }
 
-        $report = ['transferred' => [], 'withdrawn' => [], 'staff_closed' => [], 'errors' => []];
+        $report = ['transferred' => [], 'withdrawn' => [], 'waitlisted' => [], 'staff_closed' => [], 'errors' => []];
+        $waitlistAdds = [];   // AgencyWaitlist::addFamily() results, for the one notice after the loop
 
         foreach ($data['decisions'] as $d) {
             $familyId = (int) $d['family_id'];
@@ -313,6 +331,14 @@ final class CentreOffboardController extends Controller
                             'to' => $payload['to_centre'] ?? null];
                     }
                 } else {
+                    /* Waitlist first (2026-11-24): applyWithdrawal() sees the open waitlist row and leaves the child
+                       Waitlisted with the guardians' logins open, instead of withdrawing and closing them. */
+                    $added = null;
+                    if ($d['action'] === 'waitlist') {
+                        $added = \App\Support\AgencyWaitlist::addFamily($familyId,
+                            'Their provider, '.$centre->name.', closed (last day '.$effective.').', $userId,
+                            \Illuminate\Support\Carbon::parse($effective)->addDay()->toDateString());
+                    }
                     foreach ($kids as $cid) {
                         $wid = DB::table('withdrawal_requests')->insertGetId([
                             'child_id' => $cid,
@@ -336,16 +362,26 @@ final class CentreOffboardController extends Controller
                            applyWithdrawal() unconditionally, as this first did, would
                            have ended care weeks early. */
                         if (\Illuminate\Support\Carbon::parse($effective)->startOfDay()
-                                ->lte(now()->startOfDay())) {
+                                ->lte(\App\Support\AgencyTime::todayDate())) {
                             app(WithdrawalController::class)->applyWithdrawal($wid);
                             $appliedNow = true;
                         } else {
                             $appliedNow = false;
                         }
                     }
-                    $report['withdrawn'][] = ['family_id' => $familyId, 'children' => count($kids),
+                    $entry = ['family_id' => $familyId, 'children' => count($kids),
                         'applied' => $appliedNow ?? false,
                         'note' => ($appliedNow ?? false) ? 'applied now' : 'scheduled for '.$effective];
+                    if ($d['action'] === 'waitlist') {
+                        /* Withdrawn from the closing provider exactly as above, THEN held on the
+                           agency waitlist so an admin or director can place them with a new
+                           educator / centre (Anthony, 2026-11-24, ticket #251). */
+                        $waitlistAdds[] = $added;
+                        $entry['waitlist_entries'] = count($added['entries']);
+                        $report['waitlisted'][] = $entry;
+                    } else {
+                        $report['withdrawn'][] = $entry;
+                    }
                 }
             } catch (\Throwable $e) {
                 $report['errors'][] = ['family_id' => $familyId, 'stage' => $d['action'],
@@ -384,6 +420,10 @@ final class CentreOffboardController extends Controller
            reports what was ACTUALLY done — including anything that failed — rather than
            what was asked for. */
         $this->notifyClosure($centre, $effective, $report, $data);
+        if ($waitlistAdds) {
+            \App\Support\AgencyWaitlist::notify((int) $centre->agency_id, $waitlistAdds, $userId,
+                $centre->name.' is closing (last day '.$effective.'), so they need to be placed with another educator or centre.');
+        }
 
         // ── archive LAST, and only if it is genuinely empty ─────────────────
         $archived = false;
@@ -416,6 +456,7 @@ final class CentreOffboardController extends Controller
                 'summary' => $centre->name.' off-boarded effective '.$effective.' — '
                     .count($report['transferred']).' family transfer(s), '
                     .count($report['withdrawn']).' withdrawal(s), '
+                    .count($report['waitlisted']).' to the agency waitlist, '
                     .count($report['staff_closed']).' staff closed'
                     .($archived ? ', centre archived' : ''),
                 'effective_date' => $effective,
@@ -432,17 +473,31 @@ final class CentreOffboardController extends Controller
             'effective_date' => $effective,
             'transferred_families' => count($report['transferred']),
             'withdrawn_families' => count($report['withdrawn']),
+            'waitlisted_families' => count($report['waitlisted']),
             'staff_closed' => count($report['staff_closed']),
             'archived' => $archived,
             'archive_message' => $archiveMessage,
             /* Said plainly because the two halves behave differently and it matters:
                a withdrawal can be dated and the cron honours it, a transfer cannot be -
                there is no scheduler for moves, so they take effect the moment this runs. */
-            'timing' => \Illuminate\Support\Carbon::parse($effective)->startOfDay()->lte(now()->startOfDay())
+            'timing' => \Illuminate\Support\Carbon::parse($effective)->startOfDay()->lte(\App\Support\AgencyTime::todayDate())
                 ? 'Everything took effect now.'
                 : 'Transfers took effect NOW; withdrawals are scheduled for '.$effective.'.',
             'report' => $report,
         ]);
+    }
+
+    /**
+     * Only an agency-wide admin of THIS centre's agency closes it (2026-11-05 leak sweep).
+     * assertCentre() says yes to any staff role at the centre, so an agency admin elsewhere
+     * who is an educator here could plan and carry out its closure.
+     */
+    private function assertOffboarder(Request $request, int $centreId): void
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $centreAgency = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        abort_unless($agencyId > 0 && $centreAgency === $agencyId
+            && \App\Support\CentreScope::ids($request, $agencyId) === null, 403);
     }
 
     /** GET /admin/centres/{centre}/offboard-plan */
@@ -450,6 +505,7 @@ final class CentreOffboardController extends Controller
     {
         $userId = (int) $request->user()->id;
         $this->assertCentre($userId, $centreId);
+        $this->assertOffboarder($request, $centreId);
 
         $centre = DB::table('centres')->where('id', $centreId)->first();
         if (! $centre) {

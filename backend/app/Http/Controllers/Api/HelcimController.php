@@ -77,6 +77,13 @@ class HelcimController extends Controller
             ->where('status', 'succeeded')->sum('amount');
         $due = round((float) $invoice->total - $paid, 2);
         abort_if($due <= 0, 422, 'This invoice is already paid.');
+        // Split billing: a parent who pays a share is charged their own balance, not the family's.
+        if ($gid = \App\Support\BillingSplit::guardianFor((int) $request->user()->id, (int) $invoice->family_id)) {
+            if ($mine = \App\Support\BillingSplit::shareFor($invoice, $gid)) {
+                abort_if($mine['balance'] <= 0.004, 422, 'Your share of this invoice is already paid.');
+                $due = round(min($due, (float) $mine['balance']), 2);
+            }
+        }
 
         [$ok, $res, $err] = Helcim::initializeCheckout(
             $agencyId,
@@ -203,6 +210,8 @@ class HelcimController extends Controller
         });
 
         $this->applyToInvoice((int) $sess->invoice_id);
+        \App\Support\PaidMail::afterPayment((int) $paymentId);
+        \App\Support\PaymentAlerts::received((int) $paymentId);   // the office, once (2026-11-05)
 
         return response()->json(['payment_id' => $paymentId, 'amount' => $amount]);
     }
@@ -249,7 +258,7 @@ class HelcimController extends Controller
      */
     public function test(Request $request): JsonResponse
     {
-        $ok = DB::table('role_assignments')->where('user_id', $request->user()->id)
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)
             ->where('active', true)->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
         abort_unless($ok, 403, 'Only an agency administrator can test payment settings.');
 

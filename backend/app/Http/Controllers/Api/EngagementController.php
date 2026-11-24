@@ -42,6 +42,18 @@ final class EngagementController extends Controller
             'deadline' => 'required|date|after:today',
         ]);
         $agencyId = $this->resolveAgencyId($request);
+        /* The centre must be one you run, in this agency; only an agency-wide admin may send to
+           the whole agency (2026-11-05 leak sweep). centre_id was written unchecked and a
+           director who left it blank invited - and notified - every family in the agency. */
+        $scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
+        if (! empty($data['centre_id'])) {
+            $inAgency = (int) DB::table('centres')->where('id', $data['centre_id'])->value('agency_id') === (int) $agencyId;
+            if (! $inAgency || ! \App\Support\CentreScope::canWrite($scope, $data['centre_id'])) {
+                return response()->json(['message' => 'That centre is not one you manage.'], 403);
+            }
+        } elseif ($scope !== null) {
+            return response()->json(['message' => 'Choose one of your centres for this campaign.'], 422);
+        }
         // Find all currently-enrolled children at this centre/agency
         $q = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
@@ -336,7 +348,7 @@ final class EngagementController extends Controller
         $sd = DB::table('signed_documents')->where('id', $id)->first();
         abort_unless($sd, 404);
         // Same access as the list: the signer, or any admin/director/platform_admin.
-        $isAdmin = DB::table('role_assignments')->where('user_id', $u->id)
+        $isAdmin = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
             ->where('active', 1)->exists();
         abort_unless((int) $sd->signer_user_id === (int) $u->id || $isAdmin, 403);
@@ -378,7 +390,7 @@ final class EngagementController extends Controller
         // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
         // fall through to their first role's agency (iLearn) — require an explicit
         // choice, else agency-scoped data leaked to a super-admin on a header-less call.
-        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
+        if (\App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)

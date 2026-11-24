@@ -226,7 +226,7 @@ class AutoSignOffCommand extends Command
                        check_events for the person who actually did this. */
                     'attributed_to_user_id' => $by,
                 ]);
-                DB::table('check_events')->insert([
+                $eventId = DB::table('check_events')->insertGetId([
                     'child_id' => $childId,
                     'room_id' => $e->room_id,
                     'event_type' => 'check_out',
@@ -253,7 +253,17 @@ class AutoSignOffCommand extends Command
                         . ' — no sign-out was recorded. Please sign children out at pickup so the day is accurate.'
                 );
                 $closed[(int) $e->centre_id][] = ['child_id' => (int) $childId, 'family_id' => (int) $e->family_id,
-                    'name' => $name, 'in' => $in, 'out' => $cutoff];
+                    'name' => $name, 'in' => $in, 'out' => $cutoff, 'event_id' => (int) $eventId];
+
+                /* An end-of-day Safe Arrival alert still open for this child: the pickup was
+                   never confirmed. The day still closes (Anthony, 2026-10-22), but the record
+                   says "not confirmed", the alert stays on the board, and the directors/admins
+                   are alerted again. See App\Support\SafeDeparture::autoSignedOut. */
+                try {
+                    \App\Support\SafeDeparture::autoSignedOut($agencyId, (int) $childId, $cutoff->copy(), (int) $eventId);
+                } catch (\Throwable $x) {
+                    $this->warn('  Safe Departure follow-up failed for child ' . $childId . ': ' . $x->getMessage());
+                }
             }
             $n++;
         }

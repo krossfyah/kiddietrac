@@ -54,6 +54,7 @@ class AiLessonPlanService
         }
 
         try {
+            \App\Support\AiFresh::as('lesson_plan');   // fresh writing (AiFresh): the agency is the signed-in user's
             $response = Http::withHeaders([
                 'x-api-key'         => $this->apiKey,
                 'anthropic-version' => '2023-06-01',
@@ -76,7 +77,7 @@ class AiLessonPlanService
             }
 
             $body = $response->json();
-            $text = $body['content'][0]['text'] ?? '';
+            $text = \App\Support\AiConfig::text($body) ?? '';
             $tokens = ($body['usage']['input_tokens'] ?? 0) + ($body['usage']['output_tokens'] ?? 0);
 
             $plan = $this->parsePlan($text);

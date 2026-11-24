@@ -71,7 +71,20 @@
       // name the person, show their role and link to their record.
       var idAttr = opts.userId ? ' data-kt-user-id="' + String(opts.userId).replace(/"/g, '') + '"' : '';
       var roleAttr = opts.role ? ' data-kt-role="' + String(opts.role).replace(/"/g, '') + '"' : '';
-      if (p) return '<span class="kt-avatar" title="' + nm.replace(/"/g, '') + '" data-kt-name="' + nm.replace(/"/g, '') + '"' + idAttr + roleAttr + ' style="' + base + 'background-image:url(' + p + ');background-size:cover;background-position:center;"></span>';
+      /* THE INITIALS UNTIL THE PHOTO HAS ARRIVED (2026-11-03, Anthony's iPhone recording of Message Centre: "the
+         avatar first shows a red circle, then the photo pops in"). The photo was the circle's background-image,
+         so until it downloaded the circle was an empty disc in its name colour (red for some names), and then
+         the photo replaced it in one frame. Now the circle carries the person's initials, and the photo is an
+         <img> laid over them that fades in once it has loaded (onload: it fires even when the markup is built
+         off-page and inserted later). A photo that fails to load is removed, leaving the initials. The round
+         span with an <img> inside is a shape kt-avatar-zoom already opens (shape B), and kt-emoji-avatars only
+         converts leaf circles, so the initials stay initials. */
+      var pq = String(p).replace(/"/g, '%22');
+      if (p) return '<span class="kt-avatar" title="' + nm.replace(/"/g, '') + '" data-kt-name="' + nm.replace(/"/g, '') + '"' + idAttr + roleAttr + ' style="' + base + 'position:relative;">'
+        + initials
+        + '<img src="' + pq + '" alt="" draggable="false" decoding="async"'
+        + ' onload="this.style.opacity=1" onerror="this.remove()"'
+        + ' style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;opacity:0;transition:opacity .18s ease-out;"></span>';
       // No photo → an emoji face avatar (never initials). Known sex when given,
       // else assumed by name. Pass opts.kind:'child' for a child face. Set
       // opts.initials:true to force the old initials look for a specific caller.
@@ -84,22 +97,25 @@
   // revealed by the "More" tile.
   var TILES = {
     guardian: {
-      title: 'My family',
+      // "My Dashboard" (2026-11-06, Anthony: "guardian view on the home page hero rename my family to My Dashboard")
+      title: 'My Dashboard',
       sub: 'Everything in one place',
       primary: [
-        { hash: 'today',              icon: '✨', label: 'Today',        sub: "Your child's day" },
+        { hash: 'today',              icon: '🌈', label: 'Today',        sub: "Your child's day" },
         { hash: 'photos',             icon: '📸', label: 'Photos & video', sub: 'Shared by educators' },
-        { hash: 'walks',              icon: '🚶', label: 'Walks',        sub: 'Live location' },
+        { hash: 'walks',              icon: '<img src="/img/walk-watch.svg" alt="" style="width:1em;height:1em;display:block;border-radius:24%;">', label: 'Walk Watch',   sub: 'Live location' },
         { hash: 'awards',             icon: '🏆', label: 'Awards' },
+        { hash: 'report-cards',       icon: '📑', label: 'Report cards', sub: 'Each quarter' },
         { hash: 'my-forms',           icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
         { hash: 'messages',           icon: '💬', label: 'Message Centre' },
         { hash: 'files',              icon: '📎', label: 'Files' },
         { hash: 'my-tasks',           icon: '📋', label: 'My tasks' },
         { hash: 'menu',               icon: '🍽️', label: 'Menu' },
         { hash: 'notifications',      icon: '🔔', label: 'Inbox' },
-        { hash: 'scan',               icon: '📷', label: 'Check in / out', sub: 'Scan the QR' },
+        { hash: 'scan',               icon: '📷', label: 'Check in / out', sub: 'One-Tap' },
+        { hash: 'running-late',       icon: '⏰', label: 'Running late', sub: 'Drop-off or pickup' },
         { hash: 'billing',            icon: '💳', label: 'Billing' },
-        { hash: 'attendance-pattern', icon: '📅', label: 'Attendance' },
+        { hash: 'attendance-pattern', icon: '📍', label: 'Attendance' },
         { hash: 'medications',        icon: '💊', label: 'Health' },
         { hash: 'immunizations',      icon: '🩹', label: 'Immunization', sub: 'Send in your records' },
         { hash: 'announcements',      icon: '📢', label: 'News' },
@@ -107,14 +123,14 @@
         { hash: 'help',               icon: '📖', label: 'Help' },
       ],
       more: [
-        { hash: 'directory',      icon: '👪', label: 'Family directory' },
-        { hash: 'conferences',    icon: '🗣', label: 'Conferences' },
-        { hash: 'my-documents',   icon: '✍️', label: 'Documents' },   // ONE Documents screen for a parent (2026-10-09)
+        { hash: 'directory',      icon: '📇', label: 'Family directory' },
+        { hash: 'conferences',    icon: '🪑', label: 'Conferences' },
+        { hash: 'my-documents',   icon: '📄', label: 'Documents' },   // ONE Documents screen for a parent (2026-10-09)
         { hash: 'immunizations',  icon: '🩹', label: 'Immunizations' },
         { hash: 'wellness',       icon: '🩺', label: 'Wellness check' },
-        { hash: 'pickup-auth',    icon: '🪪', label: 'Pickup people' },
+        { hash: 'pickup-auth',    icon: '🔐', label: 'Pickup people' },
         { hash: 'trends',         icon: '📊', label: 'Trends' },
-        { hash: 'payment-plans',  icon: '🗓️', label: 'Payment schedules' },
+        { hash: 'payment-plans',  icon: '🏧', label: 'Payment schedules' },
         { hash: 'ledger',         icon: '📒', label: 'Account ledger' },
         { hash: 'referrals',      icon: '🎁', label: 'Refer a friend' },
         { hash: 'withdraw',       icon: '🚸', label: 'Withdraw from care' },
@@ -124,12 +140,12 @@
       title: 'My classroom',
       sub: 'Everything in one place',
       primary: [
-        { hash: 'today',         icon: '✨', label: 'Today',        sub: 'Rooms & children' },
+        { hash: 'today',         icon: '🌤️', label: 'Today',        sub: 'Rooms & children' },
         { hash: 'my-tasks',      icon: '📋', label: 'My tasks' },
         { hash: 'children',      icon: '🧒', label: 'Child records' },
         { hash: 'files',         icon: '📎', label: 'Files',        sub: 'To & from families' },
-        { hash: 'care-log',      icon: '✅', label: 'Daily log' },
-        { hash: 'walk',          icon: '🚶', label: 'Walk / outing', sub: 'Share live GPS' },
+        { hash: 'care-log',      icon: '📝', label: 'Daily log' },
+        { hash: 'walk',          icon: '<img src="/img/walk-watch.svg" alt="" style="width:1em;height:1em;display:block;border-radius:24%;">', label: 'Walk Watch',    sub: 'Start a walk · live GPS' },
         { hash: 'observations',  icon: '👀', label: 'Observations' },
         { hash: 'awards',        icon: '🏆', label: 'Awards',       sub: 'Celebrate a child' },
         { hash: 'lesson-plans',  icon: '📚', label: 'Lesson plans' },
@@ -137,14 +153,16 @@
         { hash: 'my-forms',      icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
         { hash: 'menu',          icon: '🍽️', label: 'Weekly menu' },
         { hash: 'chat',          icon: '💬', label: 'Message Centre' },
-        { hash: 'forms',         icon: '📄', label: 'Documents' },   // their filed documents (+ any staff forms) — 2026-10-09
+        { hash: 'forms',         icon: '🗂️', label: 'Documents' },   // their filed documents (+ any staff forms) — 2026-10-09
         { hash: 'incidents',     icon: '⚠️', label: 'Incidents' },
+        { hash: 'drills',        icon: '🚒', label: 'Drill log',    sub: 'Record a drill' },   // was Menu-only (2026-11-06)
+        { hash: 'safe-arrival',  icon: '🛡️', label: 'Safe Arrival', sub: 'Who is due in' },
         { hash: 'hazards',       icon: '🚧', label: 'Report a hazard' },
-        { hash: 'late-pickups',  icon: '⏰', label: 'Late pickup' },
+        { hash: 'late-pickups',  icon: '🌙', label: 'Late pickup' },
         { hash: 'medications',   icon: '💊', label: 'Medications' },
         { hash: 'time-clock',    icon: '⏱', label: 'Clock in/out' },
         { hash: 'my-schedule',   icon: '📅', label: 'My calendar' },
-        { hash: 'my-hours',      icon: '💰', label: 'Payroll' },
+        { hash: 'my-hours',      icon: '💵', label: 'Payroll' },
         { hash: 'reports',       icon: '📊', label: 'Reports',      sub: 'Your rooms & hours' },
         { hash: 'time-off',      icon: '🌴', label: 'Time off' },
         { hash: 'announcements', icon: '📢', label: 'News' },
@@ -155,12 +173,38 @@
       ],
       more: [],
     },
+    /* HOME VISITOR ON THE SHARED LAUNCHER (2026-11-06, Anthony: "look at home visitor mobile view - its all messed up
+       to what we have consistent with other mobile views"). Their Home was hand-built in screen-home-visitor.js: its
+       own tall banner, five full-size stat cards and a plain tile grid. It now renders here like every other role;
+       screen-home-visitor.js adds the visit numbers as the parent-style stat strip under the banner. */
+    home_visitor: {
+      title: 'Home visits',
+      sub: 'Log a visit or review your reports',
+      emoji: '🏡',
+      primary: [
+        { hash: 'new-home-visit',   icon: '📝', label: 'New visit',      sub: 'Log a home visit' },
+        { hash: 'home-visits',      icon: '📋', label: 'My reports',     sub: 'Past visits' },
+        { hash: 'my-tasks',         icon: '✅', label: 'My tasks' },
+        { hash: 'hazards',          icon: '🚧', label: 'Report a hazard' },
+        { hash: 'inspection-forms', icon: '🗂️', label: 'Inspection forms', sub: 'Monthly & quarterly' },
+        { hash: 'my-forms',         icon: '✍️', label: 'Forms to sign', sub: 'Review & sign' },
+        { hash: 'chat',             icon: '💬', label: 'Message Centre' },
+        { hash: 'forms',            icon: '📄', label: 'Documents' },
+        { hash: 'my-pay',           icon: '💵', label: 'My pay' },
+        { hash: 'time-off',         icon: '🌴', label: 'Time off' },
+        { hash: 'announcements',    icon: '📢', label: 'News' },
+        { hash: 'notifications',    icon: '🔔', label: 'Inbox' },
+        { hash: 'settings',         icon: '⚙️', label: 'Settings' },
+        { hash: 'help',             icon: '📖', label: 'Help' },
+      ],
+      more: [],
+    },
     auditor: {
       title: 'Audit & compliance',
       sub: 'Read-only · tap to open',
       primary: [
         { hash: 'compliance',  icon: '✅', label: 'Compliance' },
-        { hash: 'audit-logs',  icon: '📋', label: 'Audit logs' },
+        { hash: 'audit-logs',  icon: '📜', label: 'Audit logs' },
         { hash: 'children',    icon: '🧒', label: 'Children' },
         { hash: 'forms',       icon: '📝', label: 'Forms' },
         { hash: 'help',        icon: '📖', label: 'Help' },
@@ -174,7 +218,6 @@
         { hash: 'sales',           icon: '📊', label: 'Pipeline',        sub: 'Track your deals' },
         { hash: 'sales-leads',     icon: '🎯', label: 'Leads' },
         { hash: 'sales-new',       icon: '➕', label: 'New lead' },
-        { hash: 'sales-followups', icon: '⏰', label: 'Follow-ups' },
         { hash: 'sales-plans',     icon: '💲', label: 'Plans & pricing' },
         { hash: 'sales-demo',      icon: '🚀', label: 'Launch demo' },
         { hash: 'notifications',   icon: '🔔', label: 'Inbox' },
@@ -196,7 +239,7 @@
   var TILE_DESC = {
     today: "Your child's day at a glance", photos: 'Photos & videos shared by the centre',
     messages: 'Message your centre team', chat: 'Message families and staff',
-    notifications: 'Your alerts and inbox', scan: 'Scan the QR to check your child in or out',
+    notifications: 'Your alerts and inbox', scan: 'One-Tap: scan the centre’s QR code to check your child in or out',
     'parent-forms': 'Forms to review and sign', forms: 'Forms and documents',
     billing: 'Invoices and payments', 'attendance-pattern': "Your child's attendance history",
     attendance: 'Attendance records', medications: 'Medications & health info',
@@ -206,6 +249,7 @@
     'my-tasks': 'Tasks assigned to you', tasks: 'Assign and track educator tasks',
     'care-log': 'Log daily care moments', walk: 'Start a walk & share your live location', observations: 'Learning observations',
     'lesson-plans': 'Weekly lesson plans', menu: "This week's meals", incidents: 'Report & view incidents', hazards: 'Something unsafe? Tell your director',
+    drills: 'Record a fire, weather, lockdown or missing-child drill', 'safe-arrival': 'Who is due in, who is running late, who is overdue',
     'time-clock': 'Clock in and out', 'my-schedule': 'Your work schedule',
     reports: 'Attendance and hours for your room(s)',
     'my-hours': 'Your pay, payslips and payout details', 'time-off': 'Request time off',
@@ -225,7 +269,7 @@
   function tileHtml(t) {
     var desc = t.sub || TILE_DESC[t.hash] || t.label;
     return '<a class="kt-tile" href="#' + esc(t.hash) + '" title="' + esc(desc) + '" aria-label="' + esc(t.label + ' — ' + desc) + '">' +
-      '<span class="kt-tile-icon" aria-hidden="true">' + t.icon + '</span>' +
+      '<span class="kt-tile-icon" aria-hidden="true">' + (t.hash === 'safe-arrival' ? '<img src="/img/safe-arrival.svg" alt="" style="width:1em;height:1em;display:block;">' : t.icon) + '</span>' +
       '<span class="kt-tile-label">' + esc(t.label) + '</span>' +
       (t.sub ? '<span class="kt-tile-sub">' + esc(t.sub) + '</span>' : '') +
       '</a>';
@@ -245,6 +289,11 @@
    * signing the user straight back in — the "sign out twice" bug.
    */
   function signOutNow() {
+    // Fade the portal out first (window.KT_out); the wipe below runs once it is covered.
+    if (window.KT_out && !signOutNow._fading) { signOutNow._fading = true; window.KT_out.cover(signOutWipe); return; }
+    signOutWipe();
+  }
+  function signOutWipe() {
     // Sign-out ends the session and purges the token from BOTH stores, but
     // KEEPS biometric enrolment (the kt_bio_* vault) so relaunching prompts
     // for fingerprint/Face ID to get back in — the whole point of biometric
@@ -264,7 +313,7 @@
       localStorage.removeItem('kt_bio_unlocked_at');
       localStorage.setItem('kt_signed_out', '1');
     } catch (e) {}
-    location.href = '/index.html';
+    if (window.KT_out) window.KT_out.go('/index.html'); else location.href = '/index.html';
   }
   KT.signOut = signOutNow;
 
@@ -290,8 +339,9 @@
           // Explicit floating hero icon so the banner isn't a generic sparkle:
           // "My family" → family, "My classroom" → teacher. Pre-seeding a
           // .kt-hero-emoji makes kt-hero-emoji.js leave it alone (it dedupes).
-          (/family/i.test(set.title) ? '<span class="kt-hero-emoji" aria-hidden="true">👨‍👩‍👧‍👦</span>'
-            : /classroom/i.test(set.title) ? '<span class="kt-hero-emoji" aria-hidden="true">🧑‍🏫</span>' : '') +
+          (role === 'guardian' || /family/i.test(set.title) ? '<span class="kt-hero-emoji" aria-hidden="true">👨‍👩‍👧‍👦</span>'
+            : /classroom/i.test(set.title) ? '<span class="kt-hero-emoji" aria-hidden="true">🧑‍🏫</span>'
+            : set.emoji ? '<span class="kt-hero-emoji" aria-hidden="true">' + set.emoji + '</span>' : '') +
         '</div>' +
         '<div class="kt-quickaccess">' +
         '<div class="kt-tile-sectionhead">Quick access</div>' +
@@ -336,8 +386,23 @@
         if (!moreWrap.hidden) moreWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       });
     });
+
+    /* TODAY READY BEFORE THE TAP (2026-11-03, Anthony's iPhone recording: the first tap on Today blanked the
+       screen while its file and six requests loaded). An educator's Home has the Today tile; once Home has sat
+       for a few seconds, Today's screen file is fetched (the loader's own ensure), and that file then fills its
+       in-memory answers for this person and agency (screen-educator.js warmToday). Visible tab only, once. */
+    if (main.querySelector('a.kt-tile[href="#today"]') && /\brole-educator\b/.test(document.body.className)) {
+      setTimeout(function () {
+        try {
+          if (document.hidden || !document.body.contains(main) || !main.querySelector('a.kt-tile[href="#today"]')) return;
+          if (window.KT && KT.screenLoader && KT.screenLoader.ensure) KT.screenLoader.ensure('educator', 'today');
+        } catch (e) {}
+      }, 3000);
+    }
   }
 
+  // The launcher itself, for roles whose screen file adds to it (home_visitor: screen-home-visitor.js).
+  KT.roleHomeRender = renderHome;
   Shell.registerScreen('guardian:home', renderHome);
   Shell.registerScreen('educator:home', renderHome);
   Shell.registerScreen('auditor:home', renderHome);

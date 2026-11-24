@@ -45,7 +45,7 @@
       /* the checklist layer */
       + '.hc-ov{position:fixed;inset:0;z-index:2147480000;background:#F8FAFC;display:flex;flex-direction:column;font-family:inherit;color:#0F172A;}'
       + '.hc-ov *{box-sizing:border-box;}'
-      + '.hc-top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;background:#0F172A;color:#fff;}'
+      + '.hc-top{display:flex;align-items:center;gap:10px;padding:calc(10px + var(--kt-safe-top, env(safe-area-inset-top,0px))) 14px 10px;background:#0F172A;color:#fff;}'
       + '.hc-top .t{flex:1;min-width:0;}.hc-top .t b{display:block;font-size:16px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.hc-top .t span{font-size:12px;opacity:.75;}'
       + '.hc-x{height:32px;padding:0 12px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;font-weight:700;font-size:13px;cursor:pointer;}'
       + '.hc-count{padding:12px 14px 8px;background:#fff;border-bottom:1px solid #E2E8F0;}'
@@ -61,10 +61,17 @@
       + '.hc-row .tk{width:32px;height:32px;border-radius:50%;border:2px solid #CBD5E1;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:transparent;flex:0 0 auto;}'
       + '.hc-row.on{border-color:#16A34A;background:#F0FDF4;}.hc-row.on .tk{background:#16A34A;border-color:#16A34A;color:#fff;}'
       + '.hc-row.new{border-color:#F59E0B;}'
+      /* "Not signed in yet" (2026-11-03): ticking one tells Safe Arrival the child is here. */
+      + '.hc-sub{margin:14px 2px 8px;font-size:12px;font-weight:800;color:#92400E;text-transform:uppercase;letter-spacing:.4px;}'
+      + '.hc-sub span{display:block;text-transform:none;letter-spacing:0;font-weight:600;color:#64748B;margin-top:2px;}'
+      + '.hc-row.us{border-style:dashed;border-color:#FCD34D;background:#FFFDF5;}'
+      + '.hc-row.us.on{border-style:solid;border-color:#16A34A;background:#F0FDF4;}'
+      + '.hc-row .ns{display:block;font-size:11.5px;font-weight:700;color:#B45309;}'
+      + '.hc-sign{background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:12px;margin-top:12px;font-size:13.5px;color:#78350F;text-align:left;}'
       + '.hc-more{background:#fff;border-top:1px solid #E2E8F0;padding:8px 14px;}'
       + '.hc-more summary{font-size:13px;font-weight:700;color:#475569;cursor:pointer;}'
       + '.hc-in{width:100%;height:36px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:16px;margin-top:6px;background:#fff;}'
-      + '.hc-foot{padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid #E2E8F0;}'
+      + '.hc-foot{padding:10px 14px calc(10px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));background:#fff;border-top:1px solid #E2E8F0;}'
       + '.hc-save{width:100%;height:48px;border-radius:12px;border:0;font-size:16px;font-weight:800;color:#fff;background:#16A34A;cursor:pointer;}'
       + '.hc-save.warn{background:#B91C1C;}.hc-save:disabled{opacity:.6;}'
       + '.hc-res{flex:1;overflow-y:auto;padding:16px;}'
@@ -118,7 +125,8 @@
     try { d = await Api.get('/headcounts/start?' + q + '&t=' + Date.now()); }
     catch (e) { ov.querySelector('.hc-res').innerHTML = '<div style="color:#B91C1C;font-weight:700;">' + esc(errMsg(e)) + '</div>'; return; }
     if (_open !== ov) return;
-    var st = { seen: {}, ctx: opts.context || d.default_context || 'routine', children: d.children || [], fresh: {}, location: '', note: '' };
+    var st = { seen: {}, ctx: opts.context || d.default_context || 'routine', children: d.children || [], fresh: {}, location: '', note: '',
+      unsigned: d.not_signed_in || [], useen: {} };
     paintList(ov, d, st, opts);
   }
 
@@ -126,7 +134,8 @@
     var total = st.children.length;
     var h = '<div class="hc-top"><div class="t"><b>👀 Headcount · ' + esc(d.label) + '</b><span>' + esc(d.centre_name || '')
       + (d.last ? ' · last count ' + esc(ago(d.last.minutes_ago)) : '') + '</span></div><button class="hc-x" data-x>Close</button></div>';
-    if (!total) {
+    var uTotal = st.unsigned.length;
+    if (!total && !uTotal) {
       h += '<div class="hc-res"><div class="hc-ok"><div class="big">🫥</div><h2 style="color:#334155;">No children ' + (d.kind === 'trip' ? 'on this walk' : 'signed in to this room') + '</h2>'
         + '<p style="color:#64748B;">A headcount lists the children who are signed in right now.</p></div></div>';
       ov.innerHTML = h; ov.querySelector('[data-x]').onclick = close; return;
@@ -136,27 +145,39 @@
       + '<div class="hc-list">' + st.children.map(function (c) {
           return '<button type="button" class="hc-row' + (st.seen[c.id] ? ' on' : '') + (st.fresh[c.id] ? ' new' : '') + '" data-id="' + c.id + '">' + face(c, 44)
             + '<span class="nm">' + esc(c.name) + (st.fresh[c.id] ? ' <span style="font-size:11px;color:#B45309;">just signed in</span>' : '') + '</span><span class="tk">✓</span></button>';
-        }).join('') + '</div>'
+        }).join('')
+      + (uTotal ? '<div class="hc-sub">Not signed in yet<span>Tick anyone who is here. They count as arrived for Safe Arrival, so their parents aren\'t messaged. Sign them in afterwards.</span></div>'
+          + st.unsigned.map(function (c) {
+            return '<button type="button" class="hc-row us' + (st.useen[c.id] ? ' on' : '') + '" data-uid="' + c.id + '">' + face(c, 44)
+              + '<span class="nm">' + esc(c.name) + '<span class="ns">Not signed in</span></span><span class="tk">✓</span></button>';
+          }).join('') : '')
+      + '</div>'
       + '<details class="hc-more"' + (st.location || st.note ? ' open' : '') + '><summary>Where / note (optional)</summary>'
       + '<input class="hc-in" data-loc maxlength="200" placeholder="Where, e.g. playground gate, washroom, parking lot" value="' + esc(st.location) + '">'
       + '<input class="hc-in" data-note maxlength="2000" placeholder="Note" value="' + esc(st.note) + '"></details>'
-      + '<div class="hc-foot"><button class="hc-save" data-save></button></div>';
+      + '<div class="hc-foot" data-kt-always-save><button class="hc-save" data-save></button></div>';
     ov.innerHTML = h;
     var $ = function (sel) { return ov.querySelector(sel); };
     $('[data-x]').onclick = close;
+    function uCount() { return st.unsigned.filter(function (c) { return st.useen[c.id]; }).length; }
     function refresh() {
       var n = st.children.filter(function (c) { return st.seen[c.id]; }).length;
-      $('[data-n]').innerHTML = n + ' <small>of ' + total + ' accounted for</small>';
-      $('[data-bar]').style.width = Math.round(n * 100 / total) + '%';
+      var u = uCount();
+      $('[data-n]').innerHTML = n + ' <small>of ' + total + ' signed in accounted for' + (u ? ' · ' + u + ' here, not signed in' : '') + '</small>';
+      $('[data-bar]').style.width = (total ? Math.round(n * 100 / total) : (u ? 100 : 0)) + '%';
       var b = $('[data-save]'); var miss = total - n;
       b.className = 'hc-save' + (miss ? ' warn' : '');
-      b.textContent = miss ? 'Save — ' + miss + ' not seen' : 'Save — all ' + total + ' accounted for';
+      b.textContent = miss ? 'Save — ' + miss + ' not seen'
+        : (total ? 'Save — all ' + total + ' accounted for' : 'Save — ' + u + ' here, not signed in');
     }
     ov.querySelectorAll('[data-ctx]').forEach(function (b) {
       b.onclick = function () { st.ctx = b.getAttribute('data-ctx'); ov.querySelectorAll('[data-ctx]').forEach(function (x) { x.classList.toggle('on', x === b); }); };
     });
-    ov.querySelectorAll('.hc-row').forEach(function (r) {
+    ov.querySelectorAll('.hc-row[data-id]').forEach(function (r) {
       r.onclick = function () { var id = +r.getAttribute('data-id'); st.seen[id] = !st.seen[id]; r.classList.toggle('on', !!st.seen[id]); refresh(); };
+    });
+    ov.querySelectorAll('.hc-row[data-uid]').forEach(function (r) {
+      r.onclick = function () { var id = +r.getAttribute('data-uid'); st.useen[id] = !st.useen[id]; r.classList.toggle('on', !!st.useen[id]); refresh(); };
     });
     refresh();
     $('[data-save]').onclick = async function () {
@@ -165,9 +186,9 @@
          missing and corrected to 3 of 3 twenty-four seconds later: saved before ticking.
          A zero count now asks once, on the button itself, before it is filed. */
       var ticked = st.children.filter(function (c) { return st.seen[c.id]; }).length;
-      if (!ticked && total > 0 && !btn._ktZeroOk) {
+      if (!ticked && !uCount() && (total > 0 || uTotal > 0) && !btn._ktZeroOk) {
         btn._ktZeroOk = true;
-        btn.textContent = 'Nobody ticked — tap again to save as ' + total + ' not seen';
+        btn.textContent = total ? 'Nobody ticked — tap again to save as ' + total + ' not seen' : 'Nobody ticked — tap again to save';
         setTimeout(function () { btn._ktZeroOk = false; if (!btn.disabled) refresh(); }, 5000);
         return;
       }
@@ -176,20 +197,23 @@
       btn.disabled = true; btn.textContent = 'Saving…';
       var body = { context: st.ctx, location: st.location || null, note: st.note || null,
         seen_ids: Object.keys(st.seen).filter(function (k) { return st.seen[k]; }).map(Number),
-        shown_ids: st.children.map(function (c) { return c.id; }) };
+        unsigned_seen_ids: st.unsigned.filter(function (c) { return st.useen[c.id]; }).map(function (c) { return c.id; }),
+        shown_ids: st.children.map(function (c) { return c.id; }).concat(st.unsigned.map(function (c) { return c.id; })) };
       if (d.trip_id) body.trip_id = d.trip_id; else body.room_id = d.room_id;
       var r;
       try { r = await Api.post('/headcounts', body); }
       catch (e) {
         var data = e && (e.data || e.body || e.response);
         if (data && data.refresh && data.added) {
-          data.added.forEach(function (c) { if (!st.children.some(function (x) { return x.id === c.id; })) { st.children.push(c); st.fresh[c.id] = 1; } });
+          data.added.forEach(function (c) { if (!st.children.some(function (x) { return x.id === c.id; })) { st.children.push(c); st.fresh[c.id] = 1; if (st.useen[c.id]) st.seen[c.id] = 1; } });
+          st.unsigned = st.unsigned.filter(function (c) { return !st.children.some(function (x) { return x.id === c.id; }); });
           toast('👀', 'More children signed in', data.message || '', '#D97706');
           paintList(ov, d, st, opts); return;
         }
         if (e && e.status === 409) {   // the API helper may not expose the body: reload the list, keep the ticks
           try { var again = await Api.get('/headcounts/start?' + (d.trip_id ? 'trip_id=' + d.trip_id : 'room_id=' + d.room_id) + '&t=' + Date.now());
-            (again.children || []).forEach(function (c) { if (!st.children.some(function (x) { return x.id === c.id; })) { st.children.push(c); st.fresh[c.id] = 1; } });
+            (again.children || []).forEach(function (c) { if (!st.children.some(function (x) { return x.id === c.id; })) { st.children.push(c); st.fresh[c.id] = 1; if (st.useen[c.id]) st.seen[c.id] = 1; } });
+            st.unsigned = st.unsigned.filter(function (c) { return !st.children.some(function (x) { return x.id === c.id; }); });
             toast('👀', 'More children signed in', 'Find them too, then save.', '#D97706'); paintList(ov, d, st, opts); return;
           } catch (e2) {}
         }
@@ -203,11 +227,17 @@
 
   function paintResult(ov, d, st, r, opts) {
     var head = '<div class="hc-top"><div class="t"><b>👀 Headcount · ' + esc(d.label) + '</b><span>' + esc(d.centre_name || '') + '</span></div><button class="hc-x" data-x>Close</button></div>';
+    /* Counted but not signed in (2026-11-03): ask for the sign-in now, while the educator is looking at them.
+       Safe Arrival already treats them as here; the sign-in is what makes attendance, ratios and the parent's day right. */
+    var uSeen = r.not_signed_in_seen || [];
+    var signBox = uSeen.length ? '<div class="hc-sign"><b>Please sign ' + (uSeen.length === 1 ? 'this child' : 'these children') + ' in:</b> '
+      + esc(uSeen.map(function (c) { return c.name; }).join(', '))
+      + '<div style="margin-top:4px;">You counted them here, so Safe Arrival won\'t message the parents. Sign them in on your roster so attendance and ratios are right.</div></div>' : '';
     if (r.all_accounted) {
-      ov.innerHTML = head + '<div class="hc-res"><div class="hc-ok"><div class="big">✅</div><h2>All ' + r.expected + ' accounted for</h2>'
-        + '<p style="color:#475569;">' + esc(r.context_label) + ' · saved</p><button class="hc-b2" data-x2 style="margin-top:18px;">Done</button></div></div>';
+      ov.innerHTML = head + '<div class="hc-res"><div class="hc-ok"><div class="big">✅</div><h2>' + (r.expected ? 'All ' + r.expected + ' accounted for' : 'Headcount saved') + '</h2>'
+        + '<p style="color:#475569;">' + esc(r.context_label) + ' · saved</p>' + signBox + '<button class="hc-b2" data-x2 style="margin-top:18px;">Done</button></div></div>';
       ov.querySelector('[data-x]').onclick = close; ov.querySelector('[data-x2]').onclick = close;
-      var me = ov; setTimeout(function () { if (_open === me) close(); }, 2200);
+      var me = ov; if (!uSeen.length) setTimeout(function () { if (_open === me) close(); }, 2200);
       return;
     }
     var missN = (r.missing || []).length;
@@ -222,6 +252,7 @@
         }).join('')
       + '<button class="hc-alert" data-alert>🚨 Alert director now</button>'
       + '<div data-alerted style="font-size:13px;margin-top:8px;font-weight:700;"></div></div>'
+      + signBox
       + '<div class="hc-box" data-acting>' + actingHtml(r.acting) + '</div>'
       + '<div class="hcs-row" style="margin-top:14px;gap:10px;">'
       + '<button class="hc-b2 g" data-found>✅ Found — all accounted for</button>'
@@ -309,7 +340,7 @@
       var rid = getRoomId(); if (!rid) return;
       Api.get('/headcounts/start?room_id=' + rid + '&t=' + Date.now()).then(function (d) {
         var m = el.querySelector('.meta'); if (!m) return;
-        m.innerHTML = '<b>' + (d.children || []).length + '</b> signed in · '
+        m.innerHTML = '<b>' + (d.children || []).length + '</b> at Centre · '
           + (d.last ? 'last count ' + esc(ago(d.last.minutes_ago)) + (d.last.all_accounted ? ' ✓' : ' <b style="color:#B91C1C;">(' + d.last.counted + '/' + d.last.expected + ')</b>') : 'no count yet today');
       }).catch(function () {});
     }
@@ -385,6 +416,9 @@
           + '<button class="hcs-b p" data-take="' + r.id + '"' + (r.present ? '' : ' disabled title="Nobody is signed in"') + '>👀 Headcount</button></div>';
       });
       if (!(c.rooms || []).length) h += '<div style="font-size:12.5px;color:#64748B;padding:6px 0;">No rooms.</div>';
+      /* Close the centre's block (2026-11-04). It was left open, so every later card - the whole Logs tab - sat
+         inside the hidden "Rooms now" card: Logs showed nothing though the rows were loaded. */
+      h += '</div>';
     });
     h += '</div>';
 
@@ -479,22 +513,51 @@
     var mins = [15, 20, 30, 45, 60, 90, 120];
     var ed = !!ov.is_admin, dis = ed ? '' : ' disabled';
     pane.innerHTML = '<div class="kt-card" style="max-width:760px;"><div class="kt-card-header"><h3 class="kt-card-title">👀 Routine headcount reminders</h3></div>'
-      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 10px;">When a room has gone this long without a headcount, its clocked-in educators get a bell and a push. Applies to every centre in the agency. Off by default.</div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 10px;">Head counts start when each educator or provider clocks in: with children in their room they are asked for a first count straight away, then reminded (bell + push) whenever the room goes this long without a count, until their shift ends. A child signing in does not trigger a reminder. Off by default.</div>'
       + '<div class="hcs-row" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">'
       + '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;"><input type="checkbox" data-rem' + (r.enabled ? ' checked' : '') + dis + '> Remind educators after</label>'
       + '<select class="hcs-i" data-rem-min' + dis + '>' + mins.map(function (m) { return '<option value="' + m + '"' + (r.minutes === m ? ' selected' : '') + '>' + m + ' minutes</option>'; }).join('') + '</select>'
       + '<span style="font-size:13.5px;">without a count.</span></div>'
       + (ed ? '' : '<div style="font-size:12.5px;color:#64748B;margin-top:12px;">Only agency administrators can change this.</div>')
-      + '<div style="font-size:12.5px;margin-top:12px;"><a href="#headcounts">Open Headcounts →</a></div></div>';
+      + '<div style="font-size:12.5px;margin-top:12px;"><a href="#headcounts">Open Headcounts →</a></div></div>'
+      + (ed ? '<div class="kt-card" style="max-width:760px;margin-top:14px;" data-off-card></div>' : '');
     if (!ed) return;
+    /* SWITCH OFF FOR CHOSEN CENTRES AND PEOPLE (2026-10-23, Anthony: "have ability to turn off
+       for certain educators/centres"). Ticked = reminded. Saved with the same setting. */
+    var offC = (r.off_centres || []).slice(), offU = (r.off_users || []).slice();
+    var people = r.people || [], cents = (ov.centres || []);
+    var offCard = pane.querySelector('[data-off-card]');
+    function paintOff() {
+      var q = (offCard.querySelector('[data-pq]') || {}).value || '';
+      var ql = q.toLowerCase();
+      offCard.innerHTML = '<div class="kt-card-header"><h3 class="kt-card-title">Who gets head count reminders</h3></div>'
+        + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:-4px 0 10px;">Untick a centre or a person to stop their reminders. They can still take head counts.</div>'
+        + '<div style="font-weight:700;font-size:13px;margin:6px 0;">Centres</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:6px 14px;">'
+        + cents.map(function (c) { return '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;min-width:0;"><input type="checkbox" data-oc="' + c.id + '"' + (offC.indexOf(c.id) < 0 ? ' checked' : '') + '><span style="overflow-wrap:anywhere;">' + esc(c.name) + '</span></label>'; }).join('')
+        + '</div>'
+        + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 6px;"><div style="font-weight:700;font-size:13px;">Educators &amp; providers</div>'
+        + '<input class="hcs-i" data-pq type="search" placeholder="🔍 Find someone" value="' + esc(q) + '" style="flex:1;min-width:160px;max-width:260px;">'
+        + '<span style="font-size:12.5px;color:#64748B;">' + (people.length - offU.filter(function (id) { return people.some(function (p) { return p.id === id; }); }).length) + ' of ' + people.length + ' reminded</span></div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:6px 14px;max-height:min(46vh,420px);overflow-y:auto;">'
+        + people.filter(function (p) { return !ql || (p.name + ' ' + (p.centres || []).join(' ')).toLowerCase().indexOf(ql) >= 0; }).map(function (p) {
+            return '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13.5px;cursor:pointer;min-width:0;"><input type="checkbox" data-ou="' + p.id + '"' + (offU.indexOf(p.id) < 0 ? ' checked' : '') + ' style="margin-top:3px;"><span style="min-width:0;overflow-wrap:anywhere;">' + esc(p.name) + (p.centres && p.centres.length ? '<br><span style="font-size:11.5px;color:#64748B;">' + esc(p.centres.join(', ')) + '</span>' : '') + '</span></label>';
+          }).join('')
+        + '</div>';
+      var pq = offCard.querySelector('[data-pq]');
+      pq.addEventListener('input', function () { var pos = pq.selectionStart; paintOff(); var n = offCard.querySelector('[data-pq]'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} });
+      [].forEach.call(offCard.querySelectorAll('[data-oc]'), function (cb) { cb.addEventListener('change', function () { var id = +cb.getAttribute('data-oc'); offC = offC.filter(function (x) { return x !== id; }); if (!cb.checked) offC.push(id); save2(); }); });
+      [].forEach.call(offCard.querySelectorAll('[data-ou]'), function (cb) { cb.addEventListener('change', function () { var id = +cb.getAttribute('data-ou'); offU = offU.filter(function (x) { return x !== id; }); if (!cb.checked) offU.push(id); save2(); paintOff(); }); });
+    }
     var rem2 = pane.querySelector('[data-rem]'), min2 = pane.querySelector('[data-rem-min]');
     function save2() {
-      Api.post('/headcounts/settings', { enabled: rem2.checked, minutes: +min2.value })
+      Api.post('/headcounts/settings', { enabled: rem2.checked, minutes: +min2.value, off_centres: offC, off_users: offU })
         .then(function () { toast('🔔', rem2.checked ? 'Headcount reminders on' : 'Headcount reminders off', rem2.checked ? 'Every ' + min2.value + ' minutes without a count' : '', '#16A34A'); })
         .catch(function (e) { toast('⚠️', 'Could not save', errMsg(e), '#DC2626'); });
     }
     rem2.addEventListener('change', save2);
     min2.addEventListener('change', function () { if (rem2.checked) save2(); });
+    paintOff();
   }
 
   KT.Headcount = { open: open, close: close, editActing: editActing, dashboardCard: dashboardCard, todayBar: todayBar, paintSettings: paintSettings };

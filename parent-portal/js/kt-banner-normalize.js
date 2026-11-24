@@ -111,9 +111,149 @@
     return findBanner(main) || main.querySelector('[data-kt-hero], #kt-day-brief');
   }
 
+  /* THE BANNER STAYS FOR AS LONG AS THE SCREEN DOES (2026-10-21).
+
+     Anthony: "educator rewards the hero banner disappears when navigating to the subtabs
+     within that section - full sweep to ensure this never happens again with the entire
+     portal". The shell guarantees a banner only in the ~9s after a navigation. A subtab
+     that re-renders IN PLACE later (main.innerHTML = …, or a screen rebuilding itself
+     without its header) took the banner with it, and nothing ever put it back.
+
+     So this remembers the page-level banner of the screen on display (same render
+     generation, same address) and, when a re-render leaves the page with none at all,
+     puts THAT element back under the top bar, before the frame is painted. Never a
+     banner from another screen: the generation token (window.__ktRenderGen, bumped by
+     every renderScreen) has to match, which is the stale-banner rule. If the screen then
+     draws a banner of its own again, the restored one steps aside, so there is never two.
+     Rate-capped (3 within 2s) so a screen that re-renders on every mutation can't loop.
+     Opt out by putting data-kt-hero-off anywhere in the screen. */
+  var kept = null, putBack = [];
+  function screenKey() { return String(location.hash || '').replace(/^#/, '').split('?')[0]; }
+  function depthIn(main, el) { var d = 0; for (var n = el; n && n !== main; n = n.parentElement) d++; return n === main ? d : 99; }
+  function pageBanners(main) {
+    return [].slice.call(main.querySelectorAll('.kt-hero, .kt-page-hero, .page-header-v17, [data-kt-hero], #kt-day-brief'))
+      .filter(function (b) { return depthIn(main, b) <= 3; });
+  }
+  function keepHero(main) {
+    if (main.querySelector('[data-kt-hero-off]')) { kept = null; return; }
+    var gen = w.__ktRenderGen || 0, key = screenKey();
+    var page = pageBanners(main);
+    // The screen drew its own banner again: the one we put back steps aside.
+    if (kept && kept.restored && kept.node.isConnected && page.length > 1) {
+      var other = page.filter(function (b) { return b !== kept.node && !kept.node.contains(b); })[0];
+      if (other) { kept.node.parentNode.removeChild(kept.node); kept = { gen: gen, key: key, node: other, restored: false }; return; }
+    }
+    if (page.length) {
+      if (!kept || kept.node !== page[0] || kept.gen !== gen) kept = { gen: gen, key: key, node: page[0], restored: false };
+      return;
+    }
+    if (!kept || kept.gen !== gen || kept.key !== key || kept.node.isConnected) return;
+    if (!main.firstElementChild) return;                    // emptied mid-render: wait for content
+    var now = Date.now();
+    putBack = putBack.filter(function (t) { return now - t < 2000; });
+    if (putBack.length >= 3) return;
+    putBack.push(now);
+    var bar = null;
+    for (var i = 0; i < main.children.length; i++) { if (main.children[i].id === 'kt-topbar') { bar = main.children[i]; break; } }
+    main.insertBefore(kept.node, bar ? bar.nextSibling : main.firstChild);
+    kept.restored = true;
+  }
+
+  /* A CLEAN BANNER ON A PHONE (2026-10-27).
+
+     Anthony: "the hero banner in mobile view has too much text and needs to be clean and
+     simple - full sweep here". Banners carried a kicker ("📜 ADMIN", "DAILY LOG") above
+     the title and a two-to-four line explanation under it, which on a phone pushed the
+     page a third of a screen down - and tabs whose banners differ in length made the tab
+     strip jump on every switch. On a phone (600px and under) a banner is now its title,
+     plus its sub-line only when that is a short one-liner (Leads: "Every prospect in the
+     pipeline."). Long text blocks and the kicker are hidden; nothing is removed, so the
+     desktop banner is unchanged. Buttons, inputs, links, chips and figures in a banner are
+     never touched (only blocks of plain text over 70 characters). data-kt-hero-full on a
+     banner keeps it whole. */
+  /* Title only (2026-10-27, same day): a short sub-line was kept at first, but tabs that
+     swap it (Families: "Archived families - records kept after...") changed the banner's
+     height and moved the tab strip under your finger. So on a phone every text block is
+     hidden; buttons, links and inputs still show. */
+  var HERO_LONG = 0;
+  var HERO_FONT = '"DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', HERO_SIZE = '17px';
+  /* The watcher's guard: on a phone, the banner title must compute to the locked style. A
+     screen that sets its own inline !important font beats the stylesheet, so the guard puts
+     the locked values inline (once per element) and records which screen did it, readable as
+     KT.heroGuard.offenders() - so the next one is found, not shipped. */
+  var heroOffenders = {};
+  function heroTitleGuard(banner) {
+    if (!w.matchMedia || !w.matchMedia('(max-width:600px)').matches) return;
+    var t = banner.querySelector('h1, h2');
+    if (!t) return;
+    var cs = getComputedStyle(t);
+    if (cs.fontSize === HERO_SIZE && String(cs.fontWeight) === '800' && /DM Sans/i.test(cs.fontFamily)) return;
+    var key = String(location.hash || '#').split('?')[0];
+    heroOffenders[key] = cs.fontSize + ' ' + cs.fontWeight + ' ' + cs.fontFamily.split(',')[0];
+    t.style.setProperty('font-family', HERO_FONT, 'important');
+    t.style.setProperty('font-size', HERO_SIZE, 'important');
+    t.style.setProperty('font-weight', '800', 'important');
+    t.style.setProperty('line-height', '1.25', 'important');
+    t.style.setProperty('letter-spacing', '-0.3px', 'important');
+    try { console.warn('[hero-guard] banner title on ' + key + ' was ' + heroOffenders[key] + ' - locked'); } catch (e) {}
+  }
+  w.KT = w.KT || {};
+  w.KT.heroGuard = { offenders: function () { return heroOffenders; } };
+  /* For kt-smooth-tabs: shape a banner the moment it is inserted, before anything measures it (2026-10-28). */
+  w.KT.heroPhone = function (b) { try { simplifyForPhone(b); } catch (e) {} };
+  (function () {
+    if (document.getElementById('kt-hero-phone-css')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-hero-phone-css';
+    st.textContent = '@media (max-width:600px){'
+      + '#appMain .kt-hero-long,#appMain .kt-hero-kicker{display:none !important;}'
+      + '#appMain [data-kt-hero-phone] h1,#appMain [data-kt-hero-phone] h2{margin-top:0 !important;margin-bottom:2px !important;'
+      /* ONE TITLE STYLE (2026-10-27, Anthony: "the font size and type needs to be consistent").
+         Measured on ~70 screens: all DM Sans but weights 700/800/900, letter-spacing -0.5 to
+         normal, and 16, 18 or 22px (Phone, Sales invoices). Locked here; heroTitleGuard()
+         below re-applies it inline if a screen's own !important style wins. */
+      +   'font-family:' + HERO_FONT + ' !important;font-size:' + HERO_SIZE + ' !important;font-weight:800 !important;'
+      +   'line-height:1.25 !important;letter-spacing:-0.3px !important;font-style:normal !important;text-transform:none !important;}'
+      + '}';
+    (document.head || document.documentElement).appendChild(st);
+  })();
+  function simplifyForPhone(banner) {
+    if (!banner || banner.hasAttribute('data-kt-hero-full')) return;
+    /* Once per banner content, not once per DOM change: every pass toggled classes and then read the title's
+       computed style, a forced style recalculation each time anything on the page moved (PERF 2026-10-28). */
+    var sig = (banner.textContent || '').length + '|' + banner.childElementCount + '|' + (w.matchMedia && w.matchMedia('(max-width:600px)').matches ? 1 : 0);
+    if (banner.__ktPhoneSig === sig) return;
+    banner.__ktPhoneSig = sig;
+    var title = banner.querySelector('h1, h2');
+    if (!title) return;                       // no title to fall back on: leave it whole
+    var blocks = banner.querySelectorAll('.kt-hero-greet, .kt-hero-sub, p, div, span');
+    for (var i = 0; i < blocks.length && i < 80; i++) {
+      var b = blocks[i];
+      if (b === title || (title && (b.contains(title) || title.contains(b)))) continue;
+      if (/kt-banner-art|kt-hero-emoji|kt-hero-svg/.test(b.className || '')) continue;
+      if (b.querySelector('button, a, input, select, textarea, h1, h2, img, svg, canvas')) continue;
+      var t = (b.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!t) continue;
+      // The kicker: the small label line ABOVE the title.
+      var above = title && (b.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING);
+      if (above && t.length <= 60) { b.classList.add('kt-hero-kicker'); continue; }
+      if (t.length > HERO_LONG) b.classList.add('kt-hero-long');
+      else b.classList.remove('kt-hero-long');
+    }
+    banner.setAttribute('data-kt-hero-phone', '1');
+    try { heroTitleGuard(banner); } catch (e) {}
+  }
+
   function normalize() {
     var main = document.getElementById('appMain');
     if (!main) return;
+    /* EVERY BANNER ON THE SCREEN, not only the first (2026-10-28). The Audit log builds its next tab in a
+       hidden pane beside the shown one; findBanner() returns the first banner - the old one - so the new
+       banner kept its kicker and explanation while hidden, was measured at full height by kt-smooth-tabs,
+       and that height was then held on every banner after it (104-121px instead of 41px). */
+    try { simplifyForPhone(findBanner(main)); } catch (e) {}
+    try { [].forEach.call(main.querySelectorAll('.kt-hero, .kt-page-hero'), function (b, i) { if (i < 6) simplifyForPhone(b); }); } catch (e) {}
+    try { keepHero(main); } catch (e) {}
     var banner = findBanner(main);
     try { restoreMoved(); } catch (e) {}
     try { heroLeads(main, findLead(main)); } catch (e) {}
@@ -128,7 +268,8 @@
     //    the banner — known classes, real illustrations, and stray custom
     //    absolutely-positioned emoji — then keep one (preferring an illustration)
     //    and hide the rest. This fixes banners that showed DOUBLE floating art.
-    var illus = [].slice.call(banner.querySelectorAll('.kt-hero-svg, img, svg'));
+    var illus = [].slice.call(banner.querySelectorAll('.kt-hero-svg, img:not(.kt-hero-brandmark), svg'))
+      .filter(function (el) { return !(el.closest && el.closest('[data-kt-brandart]')); });
     var emojiArt = [].slice.call(banner.querySelectorAll('.kt-hero-emoji, .kt-banner-art'));
     var nodes = banner.querySelectorAll('div, span');
     for (var i = 0; i < nodes.length && i < 60; i++) {
@@ -148,12 +289,24 @@
     var hasIllustration = illus.length > 0;
     var iconEmoji = null;
     if (art.length > 0) {
-      var keeper = illus[0] || emojiArt[0];
+      var keeper = banner.querySelector('[data-kt-brandart]') || illus[0] || emojiArt[0];
       art.forEach(function (el) { if (el !== keeper && el.style) el.style.display = 'none'; });
-      if (!hasIllustration) iconEmoji = firstEmoji(keeper.textContent);
+      if (!hasIllustration) {
+        /* A screen that draws its own emoji art still goes by its sidebar icon (2026-11-03 sweep): Pipeline drew 💼
+           beside 📊 in the sidebar, Substitutes 🧑 beside 🔄, and the hard-coded ones clashed across screens. */
+        var ownArt = '';
+        try { ownArt = (window.KT && KT.Shell && KT.Shell.screenIcon) ? KT.Shell.screenIcon() : ''; } catch (e) { ownArt = ''; }
+        if (ownArt && firstEmoji(keeper.textContent) && firstEmoji(keeper.textContent) !== firstEmoji(ownArt) && !keeper.querySelector('img,svg')) { keeper.textContent = ownArt; }
+        iconEmoji = firstEmoji(keeper.textContent);
+      }
     } else {
       var navActive = document.querySelector('#appSidebar .active, #appSidebar [aria-current="page"], .nav-item.active');
-      var emoji = firstEmoji(banner.textContent) || firstEmoji(navActive && navActive.textContent) || '✨';
+      /* The screen's OWN icon first (2026-10-28 sweep). Phones and the educator/parent apps have no sidebar to read,
+         so a screen whose title carried no emoji fell to ✨, and screens that hard-code an emoji in their title clashed
+         (two 🗣, two 👀, two 🎓). KT.Shell.screenIcon is the sidebar icon for this role, or the shell's own table. */
+      var own = '';
+      try { own = (window.KT && KT.Shell && KT.Shell.screenIcon) ? KT.Shell.screenIcon() : ''; } catch (e) { own = ''; }
+      var emoji = own || firstEmoji(banner.textContent) || firstEmoji(navActive && navActive.textContent) || '✨';
       var el2 = document.createElement('div');
       el2.className = 'kt-banner-art';
       el2.setAttribute('aria-hidden', 'true');
@@ -170,13 +323,59 @@
     //    title's own child nodes (breadcrumbs, <strong>, etc.).
     if (iconEmoji && !hasIllustration) {
       var titleEl = banner.querySelector('h1, h2');
+      // A title that hard-codes a DIFFERENT emoji takes the screen's own, so the title icon and the art agree.
+      if (titleEl && iconEmoji && startsWithEmoji((titleEl.textContent || '').replace(/^\s+/, ''))) {
+        try {
+          var tn = titleEl.firstChild;
+          while (tn && tn.nodeType !== 3) { tn = tn.firstChild; }
+          if (tn && firstEmoji(tn.nodeValue) && tn.nodeValue.replace(/^\s+/, '').indexOf(iconEmoji) !== 0) {
+            tn.nodeValue = tn.nodeValue.replace(/^\s*\p{Extended_Pictographic}[\u{FE0F}\u{200D}\p{Extended_Pictographic}]*\s*/u, iconEmoji + ' ');
+          }
+        } catch (e) { /* leave the title as it was */ }
+      }
       if (titleEl && !startsWithEmoji((titleEl.textContent || '').replace(/^\s+/, ''))) {
         titleEl.insertBefore(document.createTextNode(iconEmoji + ' '), titleEl.firstChild);
       }
     }
   }
 
-  function sweep() { try { normalize(); } catch (e) {} }
+  /* PHONE ART FOR DRAWING-ONLY BANNERS (2026-10-28, Anthony: "check all hero banners in mobile view as some do
+     not have the animating image floating - full sweep"). Swept all 156 screens at 392px: six banners (Agency
+     overview, Centres, Users, Families, Children, Phone) carry only the cloud/bear drawing (.kt-hero-svg), which
+     every phone stylesheet hides at <=768px - and kt-hero-emoji.js skips a banner that has a drawing - so they
+     were the only bare banners on a phone. They now get the same floating .kt-banner-art as the rest, marked
+     data-kt-art-phone: hidden on a desktop (the drawing shows there), shown by the phone rule
+     (#appMain .kt-banner-art{display:block !important}) exactly where the drawing is hidden. */
+  (function () {
+    if (document.getElementById('kt-art-phone-css')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-art-phone-css';
+    st.textContent = '#appMain .kt-banner-art[data-kt-art-phone]{display:none;}'
+      + '@media (max-width:768px){#appMain .kt-banner-art[data-kt-art-phone]{display:block !important;}}';
+    (document.head || document.documentElement).appendChild(st);
+  })();
+  function phoneArt(main) {
+    var bs = main.querySelectorAll('.kt-hero, .kt-page-hero');
+    for (var i = 0; i < bs.length && i < 6; i++) {
+      var b = bs[i];
+      if (b.hasAttribute('data-kt-art-checked')) continue;
+      if (!b.querySelector('.kt-hero-svg')) continue;
+      b.setAttribute('data-kt-art-checked', '1');
+      if (b.querySelector('.kt-hero-emoji, .kt-banner-art, [data-kt-brandart]')) continue;
+      var t = b.querySelector('h1, h2');
+      var nav = document.querySelector('#appSidebar .active, #appSidebar [aria-current="page"], .nav-item.active');
+      var emoji = firstEmoji(t && t.textContent) || firstEmoji(nav && nav.textContent) || '🏢';
+      var el = document.createElement('div');
+      el.className = 'kt-banner-art';
+      el.setAttribute('aria-hidden', 'true');
+      el.setAttribute('data-kt-art-phone', '1');
+      el.textContent = emoji;
+      if (getComputedStyle(b).position === 'static') b.style.position = 'relative';
+      b.appendChild(el);
+    }
+  }
+
+  function sweep() { try { normalize(); } catch (e) {} try { var m = document.getElementById('appMain'); if (m) phoneArt(m); } catch (e) {} }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sweep);
   else sweep();

@@ -170,12 +170,15 @@
 
     // Dismiss on click outside or after 8 seconds
     setTimeout(() => bubble.remove(), 8000);
-    document.addEventListener('click', function onClick(e) {
-      if (e.target !== anchor && !bubble.contains(e.target)) {
+    // Capture-phase pointerdown (2026-11-05): a bubbling click never arrived from a button that stops its click.
+    // The listener also goes once the bubble has gone (the 8 s timer).
+    document.addEventListener('pointerdown', function onDown(e) {
+      if (!bubble.isConnected) { document.removeEventListener('pointerdown', onDown, true); return; }
+      if (!anchor.contains(e.target) && !bubble.contains(e.target)) {
         bubble.remove();
-        document.removeEventListener('click', onClick);
+        document.removeEventListener('pointerdown', onDown, true);
       }
-    });
+    }, true);
   }
 
   const TIP_SEL = 'div, span, h1, h2, h3, h4, label, button, a, p';
@@ -199,6 +202,8 @@
       // Other people's words (a visitor's chat line, a message) are not labels: a
       // glossary "?" inside someone's sentence is noise. Opt out with data-kt-no-tips.
       if (el.closest && el.closest('[data-kt-no-tips]')) return;
+      // Nor the refresh cover: it is a copy of a screen that already has its icons (2026-10-26).
+      if (el.closest && el.closest('[data-kt-refresh-snap]')) return;
       // Only inject on leaf-ish elements (don't add to containers with many children)
       const directText = Array.from(el.childNodes)
         .filter(n => n.nodeType === 3)

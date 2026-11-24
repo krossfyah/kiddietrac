@@ -33,6 +33,9 @@ class ImmunizationRemindersCommand extends Command
 
     protected $description = 'Email admins/directors/educators about immunization records needing an update';
 
+    /** What the parent pass sent this run, for the office email: one entry per child. Reset for each agency. */
+    private array $parentSent = [];
+
     public function handle(): int
     {
         $agencies = DB::table('agencies')
@@ -42,6 +45,7 @@ class ImmunizationRemindersCommand extends Command
         $sent = 0;
         foreach ($agencies as $agency) {
             $cfg = Cfg::read((int) $agency->id);
+            $this->parentSent = [];
 
             if (! $cfg['enabled'] && ! $this->option('force')) {
                 continue;
@@ -62,7 +66,7 @@ class ImmunizationRemindersCommand extends Command
             }
 
             $outstanding = self::onlyLive(Cfg::outstanding((int) $agency->id, $cfg));
-            if ($outstanding['count'] === 0) {
+            if ($outstanding['count'] === 0 && ! $this->parentSent) {
                 /* Nothing outstanding means nothing to say. A reminder that arrives
                    every week to report zero is the fastest way to teach a team to
                    filter the sender. */
@@ -156,11 +160,12 @@ class ImmunizationRemindersCommand extends Command
         }
 
         $testTo = (string) ($this->option('test-parent') ?? '');
-        /* A SAMPLE GOES TO THE PERSON WHO ASKED FOR IT AND NOBODY ELSE. The real send
-           blind-copies the office; a test that did the same would put a made-up
-           reminder about a real child in front of real staff. */
-        $bccStaff = ! $testTo && ($cfg['parent_bcc_staff'] ?? true);
-        $audience = $bccStaff ? $this->audience($agencyId, $cfg) : [];
+        /* ONE SUMMARY, NOT A COPY OF EVERY EMAIL (2026-11-04, Anthony: "summarize in one email vs sending out emails
+           individually for all children"). The office used to be blind-copied on each family's email - 17 to 22
+           separate emails every reminder day at iLearn. Now each child the families were told about is recorded here
+           and listed in the office email below ("Reminders sent to parents"), to the same people, filtered to the
+           centres they cover. A sample (--test-parent) is never recorded: it is not something a family received. */
+        $summarise = ! $testTo && ($cfg['parent_bcc_staff'] ?? true);
         /* WHERE EACH CHILD ACTUALLY IS, so the copy goes to the people who see them
            every morning. Read from the live ENROLLMENT rather than families.centre_id,
            which names the family's centre and not the room the child was placed in. */
@@ -176,21 +181,6 @@ class ImmunizationRemindersCommand extends Command
                 continue;
             }
 
-            /* THE COPY FOLLOWS THE CHILD. Siblings can sit with different providers, so
-               the list is the union across the children this one email is about - and
-               only those. An educator is blind-copied so they can chase the record with
-               the parent at pick-up, which only works for a family they actually see. */
-            $staffBcc = [];
-            foreach ($children as $kid) {
-                $centreId = $childCentre[$kid['child_id']] ?? 0;
-                foreach ($audience as $r) {
-                    if ($centreId && in_array($centreId, $r->centreIds, true)) {
-                        $staffBcc[$r->email] = true;
-                    }
-                }
-            }
-            $staffBcc = array_keys($staffBcc);
-
             $subject = count($children) === 1
                 ? 'Immunization record for ' . $children[0]['child_name']
                 : 'Immunization records for your children';
@@ -204,20 +194,20 @@ class ImmunizationRemindersCommand extends Command
 
             if ($this->option('dry')) {
                 $this->line('    [dry] ' . $subject . ' -> ' . implode(', ', array_column($guardians, 'email')));
+                if ($summarise) { $this->noteParentSent($children, $childCentre, array_column($guardians, 'name')); }
                 continue;
             }
 
+            $reached = [];
             foreach ($guardians as $g) {
                 try {
-                    AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($g, $subject, $staffBcc, $agencyId) {
+                    AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($g, $subject, $agencyId) {
                         $m->to($g->email)->subject($subject);
-                        if ($staffBcc) {
-                            $m->bcc($staffBcc);
-                        }
                         try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); }
                         catch (Throwable $e) {}
                     });
                     $sent++;
+                    $reached[] = (string) $g->name;
                 } catch (Throwable $e) {
                     Log::warning('Immunization parent reminder failed', ['to' => $g->email, 'e' => $e->getMessage()]);
                 }
@@ -232,11 +222,11 @@ class ImmunizationRemindersCommand extends Command
                             'type' => 'immunization_reminder',
                             'title' => $subject,
                             'body' => $this->parentPushLine($children),
-                            'data' => json_encode(['link' => '#my-children']),
+                            'data' => json_encode(['link' => '#immunizations']),
                             'created_at' => now(),
                         ]);
                         app(\App\Services\FcmService::class)->sendToUser(
-                            (int) $g->user_id, $subject, $this->parentPushLine($children), '#my-children'
+                            (int) $g->user_id, $subject, $this->parentPushLine($children), '#immunizations'
                         );
                     } catch (Throwable $e) {
                         Log::warning('Immunization parent push failed', ['user' => $g->user_id, 'e' => $e->getMessage()]);
@@ -247,11 +237,40 @@ class ImmunizationRemindersCommand extends Command
             if ($testTo) {
                 break;                          // one sample is a sample
             }
+            // Only what a family actually received goes in the office summary.
+            if ($summarise && $reached) { $this->noteParentSent($children, $childCentre, $reached); }
         }
 
         $this->line("  {$agencyName}: {$sent} parent reminder(s)");
 
         return $sent;
+    }
+
+    /** @param array<int,array<string,mixed>> $children  @param array<int,int> $childCentre  @param string[] $to */
+    private function noteParentSent(array $children, array $childCentre, array $to): void
+    {
+        foreach ($children as $c) {
+            $this->parentSent[] = [
+                'child_name' => (string) $c['child_name'],
+                'centre_id' => (int) ($childCentre[$c['child_id']] ?? 0),
+                'asked' => $this->askedLine($c),
+                'to' => implode(', ', array_unique(array_filter($to))),
+            ];
+        }
+    }
+
+    /** What the family was asked for, in a line: the record, or the doses by name. */
+    private function askedLine(array $c): string
+    {
+        if (($c['ask'] ?? '') === 'record') {
+            return 'Immunization record (none on file)';
+        }
+        $names = fn (array $items) => implode(', ', array_map(fn ($i) => trim($i['vaccine'] . ' ' . $i['dose_label']), $items));
+        $bits = [];
+        if (! empty($c['overdue'])) { $bits[] = 'Overdue: ' . $names($c['overdue']); }
+        if (! empty($c['due_soon'])) { $bits[] = 'Coming up: ' . $names($c['due_soon']); }
+
+        return implode(' · ', $bits) ?: 'Immunization update';
     }
 
     /** One line for a notification tray, where there is no room for a table. */
@@ -477,6 +496,10 @@ class ImmunizationRemindersCommand extends Command
             if (! $theirs) {
                 continue;             // fails closed: no assignment, no reminder
             }
+            // Their role switched off for immunization notices (Settings → Notification settings, 2026-11-09).
+            if (! \App\Support\StaffTopicNotify::allows($agencyId, 'immunization', (int) $u->id)) {
+                continue;
+            }
             $out[mb_strtolower(trim((string) $u->email))] = (object) [
                 'email' => (string) $u->email,
                 'user_id' => (int) $u->id,
@@ -547,8 +570,12 @@ class ImmunizationRemindersCommand extends Command
                 $outstanding['children'],
                 fn ($c) => in_array((int) ($c['centre_id'] ?? 0), $group['centreIds'], true)
             ));
-            if (! $mine) {
-                continue;                 // nothing of theirs is outstanding
+            $told = array_values(array_filter(
+                $this->parentSent,
+                fn ($p) => in_array((int) $p['centre_id'], $group['centreIds'], true)
+            ));
+            if (! $mine && ! $told) {
+                continue;                 // nothing of theirs is outstanding, no family of theirs was written to
             }
 
             $to = $this->option('test')
@@ -556,15 +583,18 @@ class ImmunizationRemindersCommand extends Command
                 : $group['emails'];
 
             if ($this->option('dry')) {
-                $this->line('    [dry] ' . count($mine) . ' child(ren) -> ' . implode(', ', $to));
+                $this->line('    [dry] ' . count($mine) . ' child(ren) + ' . count($told) . ' parent reminder(s) -> ' . implode(', ', $to));
                 foreach ($mine as $c) {
                     $this->line('        ' . $c['name'] . ' (' . $c['reason'] . ')');
+                }
+                foreach ($told as $p) {
+                    $this->line('        told ' . $p['to'] . ' about ' . $p['child_name'] . ': ' . $p['asked']);
                 }
                 $sent++;
                 continue;
             }
 
-            if ($this->sendOne($agencyId, $agencyName, $to, $mine, $cfg)) {
+            if ($this->sendOne($agencyId, $agencyName, $to, $mine, $cfg, $told)) {
                 $sent++;
             }
 
@@ -580,47 +610,9 @@ class ImmunizationRemindersCommand extends Command
      * @param  list<string>  $to
      * @param  array<int,array<string,mixed>>  $children  already filtered to these readers
      */
-    private function sendOne(int $agencyId, string $agencyName, array $to, array $children, array $cfg): bool
+    private function sendOne(int $agencyId, string $agencyName, array $to, array $children, array $cfg, array $told = []): bool
     {
-        $rows = '';
-        foreach ($children as $c) {
-            $rows .= '<tr>'
-                . '<td style="padding:9px 12px;border-bottom:1px solid #E6EAF2;font-weight:600;">' . e($c['name']) . '</td>'
-                . '<td style="padding:9px 12px;border-bottom:1px solid #E6EAF2;color:#475569;">'
-                . e(trim(($c['centre_name'] ?? '') . ($c['room_name'] ? ' · ' . $c['room_name'] : ''))) . '</td>'
-                . '<td style="padding:9px 12px;border-bottom:1px solid #E6EAF2;color:#B45309;">' . e($c['reason']) . '</td>'
-                . '</tr>';
-        }
-
-        $n = count($children);
-        $body = '<p style="margin:0 0 14px;">'
-            . '<strong>' . $n . '</strong> ' . ($n === 1 ? 'child needs' : 'children need')
-            . ' an immunization record from a parent.</p>';
-
-        if (trim((string) ($cfg['custom_message'] ?? '')) !== '') {
-            $body .= '<p style="margin:0 0 14px;color:#334155;">' . e((string) $cfg['custom_message']) . '</p>';
-        }
-
-        $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-            . 'style="border-collapse:collapse;font-size:14px;margin:0 0 16px;">'
-            . '<tr>'
-            . '<th align="left" style="padding:9px 12px;border-bottom:2px solid #CBD5E1;font-size:12px;text-transform:uppercase;color:#64748B;">Child</th>'
-            . '<th align="left" style="padding:9px 12px;border-bottom:2px solid #CBD5E1;font-size:12px;text-transform:uppercase;color:#64748B;">Where</th>'
-            . '<th align="left" style="padding:9px 12px;border-bottom:2px solid #CBD5E1;font-size:12px;text-transform:uppercase;color:#64748B;">Why</th>'
-            . '</tr>' . $rows . '</table>'
-            . '<p style="margin:0 0 14px;">Parents can upload a record themselves from the app — '
-            . 'it files straight onto the child\'s Documents tab.</p>'
-            . '<p style="margin:0;font-size:12.5px;color:#64748B;">'
-            . 'This covers the children in your care. You are receiving it because '
-            . 'immunization reminders are switched on for '
-            . e($agencyName) . '. Change or stop them in Settings → Email.</p>';
-
-        $subject = $n . ' immunization ' . ($n === 1 ? 'record' : 'records') . ' need updating';
-        $html = EmailTemplate::wrap($agencyId, $body, [
-            'eyebrow' => 'Immunization records',
-            'title' => $subject,
-            'preheader' => $subject,
-        ]);
+        [$subject, $html] = $this->officeEmail($agencyId, $agencyName, $children, $cfg, $told);
 
         try {
             AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $subject, $agencyId) {
@@ -643,5 +635,85 @@ class ImmunizationRemindersCommand extends Command
 
             return false;
         }
+    }
+
+    /**
+     * The office email: children who still need a record, then the families reminded today.
+     *
+     * @return array{0:string,1:string}  [subject, html]
+     */
+    private function officeEmail(int $agencyId, string $agencyName, array $children, array $cfg, array $told): array
+    {
+        $th = 'padding:9px 12px;border-bottom:2px solid #CBD5E1;font-size:12px;text-transform:uppercase;color:#64748B;';
+        $td = 'padding:9px 12px;border-bottom:1px solid #E6EAF2;';
+        $rows = '';
+        foreach ($children as $c) {
+            $rows .= '<tr>'
+                . '<td style="padding:9px 12px;border-bottom:1px solid #E6EAF2;font-weight:600;">' . e($c['name']) . '</td>'
+                . '<td style="padding:9px 12px;border-bottom:1px solid #E6EAF2;color:#475569;">'
+                // A home provider's room is usually named after them: "Bruni Meeser · Bruni Meeser" says it once.
+                . e(trim(($c['centre_name'] ?? '') . ($c['room_name'] && $c['room_name'] !== ($c['centre_name'] ?? '') ? ' · ' . $c['room_name'] : ''))) . '</td>'
+                . '<td style="padding:9px 12px;border-bottom:1px solid #E6EAF2;color:#B45309;">' . e($c['reason']) . '</td>'
+                . '</tr>';
+        }
+
+        $n = count($children);
+        $body = '';
+        if (trim((string) ($cfg['custom_message'] ?? '')) !== '') {
+            $body .= '<p style="margin:0 0 14px;color:#334155;">' . e((string) $cfg['custom_message']) . '</p>';
+        }
+        if ($n) {
+        $body .= '<p style="margin:0 0 14px;">'
+            . '<strong>' . $n . '</strong> ' . ($n === 1 ? 'child needs' : 'children need')
+            . ' an immunization record from a parent.</p>';
+
+        $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+            . 'style="border-collapse:collapse;font-size:14px;margin:0 0 16px;">'
+            . '<tr>'
+            . '<th align="left" style="padding:9px 12px;border-bottom:2px solid #CBD5E1;font-size:12px;text-transform:uppercase;color:#64748B;">Child</th>'
+            . '<th align="left" style="padding:9px 12px;border-bottom:2px solid #CBD5E1;font-size:12px;text-transform:uppercase;color:#64748B;">Where</th>'
+            . '<th align="left" style="padding:9px 12px;border-bottom:2px solid #CBD5E1;font-size:12px;text-transform:uppercase;color:#64748B;">Why</th>'
+            . '</tr>' . $rows . '</table>'
+            . '<p style="margin:0 0 14px;">Parents can upload a record themselves from the app — '
+            . 'it files straight onto the child\'s Documents tab.</p>';
+        }
+
+        /* REMINDERS SENT TO PARENTS - in place of a blind copy of each one (2026-11-04). */
+        if ($told) {
+            $tr = '';
+            foreach ($told as $p) {
+                $tr .= '<tr>'
+                    . '<td style="' . $td . 'font-weight:600;vertical-align:top;">' . e($p['child_name']) . '</td>'
+                    . '<td style="' . $td . 'color:#334155;vertical-align:top;">' . e($p['asked']) . '</td>'
+                    . '<td style="' . $td . 'color:#475569;vertical-align:top;">' . e($p['to']) . '</td>'
+                    . '</tr>';
+            }
+            $families = count(array_unique(array_column($told, 'to')));
+            $body .= '<p style="margin:' . ($n ? '22px' : '0') . ' 0 10px;"><strong>Reminders sent to parents today</strong> - '
+                . count($told) . ' ' . (count($told) === 1 ? 'child' : 'children') . ', ' . $families . ' '
+                . ($families === 1 ? 'family' : 'families') . '. Each family got one email about their own children.</p>'
+                . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+                . 'style="border-collapse:collapse;font-size:14px;margin:0 0 16px;">'
+                . '<tr><th align="left" style="' . $th . '">Child</th><th align="left" style="' . $th . '">Asked for</th>'
+                . '<th align="left" style="' . $th . '">Sent to</th></tr>' . $tr . '</table>';
+        }
+
+        $body .= '<p style="margin:0;font-size:12.5px;color:#64748B;">'
+            . 'This covers the children in your care. You are receiving it because '
+            . 'immunization reminders are switched on for '
+            . e($agencyName) . '. Change or stop them in Settings → Email.</p>';
+
+        $k = count($told);
+        $subject = $n
+            ? $n . ' immunization ' . ($n === 1 ? 'record' : 'records') . ' need updating'
+                . ($k ? ' + ' . $k . ' parent reminder' . ($k === 1 ? '' : 's') . ' sent' : '')
+            : 'Immunization reminders sent to parents (' . $k . ')';
+        $html = EmailTemplate::wrap($agencyId, $body, [
+            'eyebrow' => 'Immunization records',
+            'title' => $subject,
+            'preheader' => $subject,
+        ]);
+
+        return [$subject, $html];
     }
 }

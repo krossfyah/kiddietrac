@@ -52,7 +52,7 @@ final class PayrollSettingsController extends Controller
 
     private function assertAdmin(Request $request): void
     {
-        $ok = DB::table('role_assignments')
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $request->user()->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin'])
             ->exists();
@@ -65,7 +65,12 @@ final class PayrollSettingsController extends Controller
         $settings = ($row && $row->settings) ? (json_decode($row->settings, true) ?: []) : [];
         $p = (isset($settings['payroll']) && is_array($settings['payroll'])) ? $settings['payroll'] : [];
 
-        return array_merge(self::DEFAULTS, $p);
+        $out = array_merge(self::DEFAULTS, $p);
+        // Each new payslip is also an announcement for its staff member (2026-10-31). On unless switched off.
+        $out['announce_payslips'] = (($p['announce_payslips'] ?? true) !== false);
+        // Payslip emails (2026-10-31): App\Support\PayslipNotices reads the same defaults.
+        $out = array_merge($out, \App\Support\PayslipNotices::settings($agencyId));
+        return $out;
     }
 
     /**
@@ -170,6 +175,8 @@ final class PayrollSettingsController extends Controller
             'agency_name' => $row->name,
             'payroll' => self::read($agencyId),
             'next_payday' => self::nextPayday($agencyId),
+            // Who may be copied on payslip emails: this agency's admins and centre directors.
+            'bcc_choices' => array_values(\App\Support\PayslipNotices::bccChoices($agencyId)),
         ]);
     }
 
@@ -185,11 +192,34 @@ final class PayrollSettingsController extends Controller
             'anchor_date' => ['nullable', 'date'],
             'semimonthly_days' => ['nullable', 'array', 'max:2'],
             'semimonthly_days.*' => ['integer', 'min:1', 'max:31'],
+            'announce_payslips' => ['nullable', 'boolean'],
+            'email_payslips' => ['nullable', 'boolean'],
+            'email_attach_pdf' => ['nullable', 'boolean'],
+            'email_updated_notices' => ['nullable', 'boolean'],
+            'email_timing' => ['nullable', 'in:immediate,batch'],
+            'email_batch_time' => ['nullable', 'regex:/^\d{2}:\d{2}$/'],
+            'email_bcc_user_ids' => ['nullable', 'array', 'max:20'],
+            'email_bcc_user_ids.*' => ['integer'],
         ]);
 
         $current = self::read($agencyId);
         if ($request->has('enabled')) {
             $current['enabled'] = $request->boolean('enabled');
+        }
+        if ($request->has('announce_payslips')) {
+            $current['announce_payslips'] = $request->boolean('announce_payslips');
+        }
+        foreach (['email_payslips', 'email_attach_pdf', 'email_updated_notices'] as $k) {
+            if ($request->has($k)) $current[$k] = $request->boolean($k);
+        }
+        foreach (['email_timing', 'email_batch_time'] as $k) {
+            if (! empty($data[$k])) $current[$k] = $data[$k];
+        }
+        if ($request->has('email_bcc_user_ids')) {
+            // Only this agency's admins and centre directors can be copied - never a typed address, never anyone else.
+            $ok = \App\Support\PayslipNotices::bccChoices($agencyId);
+            $current['email_bcc_user_ids'] = array_values(array_filter(array_map('intval', (array) ($data['email_bcc_user_ids'] ?? [])),
+                fn ($id) => isset($ok[$id])));
         }
         foreach (['cadence', 'anchor_date', 'semimonthly_days'] as $k) {
             if (array_key_exists($k, $data) && $data[$k] !== null) {

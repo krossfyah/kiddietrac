@@ -89,9 +89,11 @@
 
     var bar = document.createElement('div');
     bar.className = 'kt-list-controls';
-    bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;margin:14px 0 12px;flex-wrap:wrap;';
+    // Sort and the count sit beside the filter, not at the far edge of a wide window.
+    bar.style.cssText = 'display:flex;justify-content:flex-start;align-items:center;gap:12px;margin:14px 0 12px;flex-wrap:wrap;';
 
     var left = document.createElement('div');
+    left.className = 'kt-lc-filter';
     left.style.cssText = 'position:relative;flex:1;min-width:220px;max-width:360px;';
     var input = document.createElement('input');
     input.type = 'search';
@@ -102,13 +104,21 @@
     left.appendChild(input);
 
     var right = document.createElement('div');
+    right.className = 'kt-lc-right';   // phones: kt-mobile-app.css stacks it under the filter
     // width:max-content — the group was sizing to the Sort control alone, so the
     // "51 / 51" count spilled past its right edge and got clipped by the page.
     right.style.cssText = 'display:flex;align-items:center;gap:10px;color:#64748B;font-size:13px;font-weight:600;'
       + 'flex:0 0 auto;white-space:nowrap;width:max-content;justify-content:flex-end;';
     var sortSel = document.createElement('select');
+    sortSel.className = 'kt-lc-sort';
+    sortSel.setAttribute('aria-label', 'Sort');
     sortSel.style.cssText = 'padding:8px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;background:#fff;cursor:pointer;color:#334155;'
-      + 'min-width:130px;flex:0 0 auto;';   // was shrinking until "Sort…" was clipped
+      + 'min-width:130px;flex:0 0 auto;'   // was shrinking until "Sort…" was clipped
+      /* width:auto, inline so it beats the form styling's `[data-kt-pretty] select { width:100% }` (2026-10-28,
+         Anthony's Families screenshot). 100% of this shrink-to-fit group made the select fill the whole group, so
+         the "1 / 28" count overflowed and, with justify-content:flex-end, pushed the select LEFT under the
+         search box - the "t..." half-hidden Sort control. Every card list's filter bar had it. */
+      + 'width:auto;';
     var opts = [['', 'Sort…'], ['__az', 'A → Z'], ['__za', 'Z → A']];
     sortOpts.forEach(function (o) { opts.push([o.key + ':asc', o.label + ' ↑']); opts.push([o.key + ':desc', o.label + ' ↓']); });
     opts.forEach(function (o) { var op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; sortSel.appendChild(op); });

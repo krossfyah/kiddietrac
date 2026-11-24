@@ -23,7 +23,7 @@ final class WellnessController extends Controller
     public function todayForChild(Request $request, int $childId): JsonResponse
     {
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
-        $today = Carbon::today()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $row = DB::table('wellness_screenings')
             ->where('child_id', $childId)
             ->where('screening_date', $today)
@@ -54,7 +54,7 @@ final class WellnessController extends Controller
         $review = $data['cough'] || $data['runny_nose'] || $data['rash'];
         $result = $block ? 'block' : ($review ? 'review' : 'cleared');
 
-        $today = Carbon::today()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         DB::table('wellness_screenings')->updateOrInsert(
             ['child_id' => $data['child_id'], 'screening_date' => $today],
             [
@@ -114,7 +114,7 @@ final class WellnessController extends Controller
         } else {
             abort_unless($this->authorizeCentreAccess($u, $centreId), 403);
         }
-        $today = Carbon::today()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $rows = DB::table('wellness_screenings as ws')
             ->join('children as ch', 'ch.id', '=', 'ws.child_id')
             ->join('families as f', 'f.id', '=', 'ch.family_id')

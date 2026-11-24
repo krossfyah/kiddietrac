@@ -44,6 +44,9 @@ final class PaymentProviders
             'publishable_key' => ['label' => 'Publishable key', 'secret' => false],
             'secret_key' => ['label' => 'Secret key', 'secret' => true],
             'webhook_secret' => ['label' => 'Webhook signing secret', 'secret' => true],
+            /* Apple Pay inside the iPhone app (2026-11-03): the Apple merchant ID this Stripe account holds the
+               payment processing certificate for. Blank = merchant.com.kiddietrac.app. Browsers do not need it. */
+            'apple_merchant_id' => ['label' => 'Apple Pay merchant ID (iPhone app, optional)', 'secret' => false],
         ],
         /* HELCIM (2026-09-21).
            One token does everything: Helcim authenticates every call with `api-token`,
@@ -115,6 +118,7 @@ final class PaymentProviders
 
     public static function configured(int $agencyId, string $provider): bool
     {
+        if (\App\Support\PublicDemo::isAgency($agencyId)) return false;   // public website demo: no real money (2026-10-31)
         $c = self::config($agencyId, $provider);
 
         return match ($provider) {

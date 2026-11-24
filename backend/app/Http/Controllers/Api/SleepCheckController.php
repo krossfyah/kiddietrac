@@ -47,12 +47,12 @@ final class SleepCheckController extends Controller
 
     private function isManager(Request $request): bool
     {
-        return (bool) array_intersect(UserRoles::names($request), self::MANAGERS);
+        return (bool) array_intersect(\App\Support\AgencyRole::names($request), self::MANAGERS);
     }
 
     private function isAdmin(Request $request): bool
     {
-        return (bool) array_intersect(UserRoles::names($request), ['agency_admin', 'platform_admin']);
+        return (bool) array_intersect(\App\Support\AgencyRole::names($request), ['agency_admin', 'platform_admin']);
     }
 
     /** Open centres the caller may see, [id => name]. */
@@ -522,7 +522,7 @@ final class SleepCheckController extends Controller
             $h .= '</table>';
         }
         $h .= '</body></html>';
-        $dompdf = new \Dompdf\Dompdf();
+        $dompdf = new \App\Support\KtDompdf();
         $dompdf->loadHtml($h, 'UTF-8');
         $dompdf->setPaper('letter', 'portrait');
         $dompdf->render();

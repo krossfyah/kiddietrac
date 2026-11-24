@@ -106,6 +106,10 @@ final class BiometricController extends Controller
      */
     public function report(Request $request): JsonResponse
     {
+        /* ADMINS ONLY (2026-11-06 role sweep). This had no role check: any signed-in parent or educator got the
+           name, email, role, device and IP of everyone in the agency who unlocks with a fingerprint or face. */
+        abort_unless((bool) array_intersect(\App\Support\AgencyRole::names($request), ['agency_admin', 'platform_admin']), 403,
+            'Only an agency admin can see this report.');
         $agencyId = $this->resolveAgencyId($request);
 
         $rows = DB::table('biometric_enrolments as b')
@@ -177,7 +181,7 @@ final class BiometricController extends Controller
             . $row('When', $stamp)
             . '</table></td></tr></table>'
             . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px">'
-            . '<tr><td style="background:#FEF2F2;border-left:4px solid #EF4444;border-radius:10px;padding:14px 16px;'
+            . '<tr><td style="background:#FEF2F2;--kt-edge:#EF4444;border-radius:10px;padding:14px 16px;'
             . 'font-size:14px;line-height:1.6;color:#7F1D1D;"><strong>Was this not you?</strong> Turn biometric unlock off '
             . 'under Settings, change your password, and tell your centre straight away.</td></tr></table>'
             . '<p style="margin:0;font-size:13px;line-height:1.6;color:#64748B;">If this was you, no action is needed. '

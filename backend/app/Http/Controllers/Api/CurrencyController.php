@@ -102,7 +102,7 @@ final class CurrencyController extends Controller
 
     private function assertAdmin(Request $request): void
     {
-        $ok = DB::table('role_assignments')->where('user_id', $request->user()->id)
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)
             ->where('active', 1)->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
         abort_unless($ok, 403, 'Admin only');
     }
@@ -202,7 +202,11 @@ final class CurrencyController extends Controller
             // A jurisdiction with no verified catalogue offers Ontario's (the product's original list).
             'certifications' => $p['certifications'] ?? null ?: $on['certifications'],
             'background_checks' => $p['background_checks'] ?? null ?: $on['background_checks'],
-            'pd_hours' => $p['pd_hours'] ?? null]);
+            'pd_hours' => $p['pd_hours'] ?? null,
+            // California and later profiles (2026-10-28): wording/rules screens show when present.
+            'immunization_exemptions' => $p['immunization_exemptions'] ?? null, 'immunization_note' => $p['immunization_note'] ?? null,
+            'sign_in' => $p['sign_in'] ?? null, 'drill_note' => $p['drill_note'] ?? null, 'facility_checks' => $p['facility_checks'] ?? [],
+            'background_check_note' => $p['background_check_note'] ?? null, 'terms' => $p['terms'] ?? null]);
     }
 
     /**

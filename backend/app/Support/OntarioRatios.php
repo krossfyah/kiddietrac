@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
+/* The moment a ratio is evaluated at is any Carbon (2026-11-10): RatioEngine passes Carbon\Carbon, and the old
+   ?Illuminate\Support\Carbon type refused it, so every attendance correction's ratio recheck failed - not one
+   ratio.recalculated row had ever been written. CarbonInterface takes both. */
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -286,7 +290,7 @@ final class OntarioRatios
     }
 
     /** Months of age for each child id, at $when (null when no date of birth). */
-    private static function monthsFor(array $ids, Carbon $when): array
+    private static function monthsFor(array $ids, CarbonInterface $when): array
     {
         if (! $ids) return [];
         $rows = DB::table('children')->whereIn('id', $ids)->get(['id', 'date_of_birth'])->keyBy('id');
@@ -300,7 +304,7 @@ final class OntarioRatios
     }
 
     /** Everything centre-wide one evaluation needs, built once per centre and moment. */
-    private static function context(object $centre, ?Carbon $at): array
+    private static function context(object $centre, ?CarbonInterface $at): array
     {
         $key = $centre->id . '|' . ($at ? $at->timestamp : 'now:' . now()->format('YmdHi'));
         if (isset(self::$ctx[$key])) return self::$ctx[$key];
@@ -353,7 +357,7 @@ final class OntarioRatios
     }
 
     /** Called by RatioRules::evaluate for Ontario licensed centres. $out is RatioRules' base shape. */
-    public static function evaluate(object $room, ?Carbon $at, array $ids, ?array $educators, array $out, object $centre, bool $hypothetical = false): array
+    public static function evaluate(object $room, ?CarbonInterface $at, array $ids, ?array $educators, array $out, object $centre, bool $hypothetical = false): array
     {
         $full = DB::table('centres')->where('id', $centre->id)->first(['id', 'agency_id', 'license_type', 'settings', 'open_time', 'close_time']);
         $c = self::context($full ?: $centre, $at);

@@ -44,7 +44,7 @@
   .btn:hover { background: #142A57; }
 
   /* ── Credentials box ── */
-  .creds { background: #EEF1F8; border-left: 3px solid #3BBBBE; padding: 16px 18px; border-radius: 6px; font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 14px; margin: 16px 0; color: #0B1A33; }
+  .creds { background: #EEF1F8; --kt-edge:#3BBBBE; padding: 16px 18px; border-radius: 6px; font-family: 'SF Mono', 'Menlo', 'Consolas', monospace; font-size: 14px; margin: 16px 0; color: #0B1A33; }
   .creds strong { color: #081C41; font-family: 'Plus Jakarta Sans', sans-serif; }
 
   /* ── Totals table ── */
@@ -142,14 +142,23 @@
   {!! $slot ?? $content ?? '' !!}
 
   <div class="footer">
+    {{-- footerLine (2026-10-22): mail to someone who is NOT a centre's family or staff
+         (a website subscriber) said "on behalf of your childcare centre". Trusted HTML,
+         set only by our own templates. --}}
+    @if (! empty($footerLine))
+    <p style="margin:0 0 10px;color:inherit;font-size:12px;">{!! $footerLine !!}</p>
+    @else
     <p style="margin:0 0 10px;color:inherit;font-size:12px;">This email was sent by <strong style="color:inherit;">KiddieTrac</strong> on behalf of {{ $centreName ?? $agencyName ?? 'your childcare centre' }}. Visit <a href="{{ $appUrl ?? 'https://app.kiddietrac.com' }}">app.kiddietrac.com</a> to manage your account.</p>
+    @endif
     <p style="margin:0 0 6px;">
       <a href="https://www.kiddietrac.com/privacy" style="margin-right:14px;">Privacy policy</a>
       <a href="https://www.kiddietrac.com/terms"   style="margin-right:14px;">Terms of service</a>
       <a href="mailto:info@kiddietrac.com">Contact us</a>
     </p>
+    {{-- KiddieTrac's pages, one quiet line (App\Support\SocialLinks; SocialLinksMail removes it for white-label mail). --}}
+    <div style="margin:4px 0 8px;">{!! \App\Support\SocialLinks::block(\App\Support\SocialLinks::row('#8693A8', 'font-family:Arial,Helvetica,sans-serif;', 'Follow us', '#8693A8', 'left')) !!}</div>
     <p style="margin:0;color:#8693A8;font-size:11px;">
-      &copy; 2021&ndash;{{ date('Y') }} KiddieTrac. All rights reserved.<br>
+      {{ \App\Support\Company::copyright() }}<br>
       Powered by KiddieTrac &mdash; The Smart Childcare Management Platform<br>
       <span style="color:#9AA6B8;">noreply@kiddietrac.com is not monitored — contact your site administrator or info@kiddietrac.com</span>
     </p>

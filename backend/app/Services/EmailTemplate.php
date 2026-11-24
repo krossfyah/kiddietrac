@@ -59,8 +59,17 @@ final class EmailTemplate
         // force_brand ('kt' | 'agency') overrides white-label detection — used to
         // preview both looks. Omit for the normal per-agency behaviour.
         $brand = self::brand($agency, $opts['force_brand'] ?? null);
+        // Tells App\Listeners\WhiteLabelMail whose brand the words belong to (2026-10-21).
+        $__brandMarker = ($brand['is_white_label'] && $agency && ! empty($agency->id)) ? '<!--kt-brand-agency:' . (int) $agency->id . '-->' : '';
 
         $eyebrow   = htmlspecialchars($opts['eyebrow']   ?? '');
+        /* A FEATURE'S OWN MARK beside its eyebrow (2026-10-28, Anthony: "safe arrival email sent out doesnt use the
+           safe arrival icon we designed"). An absolute PNG URL - email clients will not draw SVG - shown at 20px
+           before the label, in both the KiddieTrac and the white-label header. */
+        if (! empty($opts['eyebrow_icon']) && $eyebrow !== '') {
+            $eyebrow = '<img src="' . htmlspecialchars((string) $opts['eyebrow_icon'], ENT_QUOTES) . '" width="20" height="20" alt="" '
+                . 'style="display:inline-block;width:20px;height:20px;border:0;vertical-align:-5px;margin-right:7px;">' . $eyebrow;
+        }
         $title     = htmlspecialchars($opts['title']     ?? $brand['product_name']);
         $subtitle  = htmlspecialchars($opts['subtitle']  ?? '');
         $preheader = htmlspecialchars($opts['preheader'] ?? '');
@@ -101,13 +110,29 @@ final class EmailTemplate
                 . ($subtitle ? '<div style="font-size:14px;color:#64748B;margin-top:4px;">' . $subtitle . '</div>' : '')
                 . '<div style="height:18px;line-height:18px;">&nbsp;</div>';
         } else {
-            $headerRow = '<tr><td class="kt-banner" bgcolor="' . $brand['primary'] . '" style="background-color:' . $brand['primary'] . ';background:linear-gradient(135deg,' . $brand['primary'] . ' 0%, ' . $brand['secondary'] . ' 100%); padding:26px 30px; border-radius:16px 16px 0 0; color:#FFFFFF;">'
+            /* A white-label brand's banner gradient (2026-10-21) colours the band, with dark
+               text when its colours are too light for white. */
+            $hero = $brand['hero'] ?? null;
+            $bandBg = $hero ? $hero['from'] : $brand['primary'];
+            $bandCss = $hero ? $hero['css'] : 'linear-gradient(135deg,' . $brand['primary'] . ' 0%, ' . $brand['secondary'] . ' 100%)';
+            $darkBand = $hero && $hero['text'] === 'dark';
+            [$tMain, $tEyebrow, $tSub] = $darkBand ? ['#0F172A', '#1E293B', '#334155'] : ['#FFFFFF', '#E6EEF3', '#EAF2F7'];
+            $headerRow = '<tr><td class="kt-banner" bgcolor="' . $bandBg . '" style="background-color:' . $bandBg . ';background:' . $bandCss . '; padding:26px 30px; border-radius:16px 16px 0 0; color:' . $tMain . ';">'
                 . '<table cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td align="left" valign="middle">' . $logoBlock . '</td></tr>'
                 . '<tr><td align="left" style="padding-top:14px;">'
-                . ($eyebrow ? '<div style="font-size:11px;font-weight:700;letter-spacing:2px;color:#E6EEF3;">' . $eyebrow . '</div>' : '')
-                . '<div class="kt-title" style="font-size:22px;font-weight:800;margin-top:4px;line-height:1.15;color:#FFFFFF;">' . $title . '</div>'
-                . ($subtitle ? '<div style="font-size:13px;color:#EAF2F7;margin-top:4px;">' . $subtitle . '</div>' : '')
+                . ($eyebrow ? '<div style="font-size:11px;font-weight:700;letter-spacing:2px;color:' . $tEyebrow . ';">' . $eyebrow . '</div>' : '')
+                . '<div class="kt-title" style="font-size:22px;font-weight:800;margin-top:4px;line-height:1.15;color:' . $tMain . ';">' . $title . '</div>'
+                . ($subtitle ? '<div style="font-size:13px;color:' . $tSub . ';margin-top:4px;">' . $subtitle . '</div>' : '')
                 . '</td></tr></table></td></tr>';
+        }
+
+        /* THE INVOICE HEADER (2026-10-31, Anthony: "when invoices are sent out include agency logo and info in the email like
+           how we have it for other emails ... use the invoice header that we created for kiddietrac and not our standard
+           header"). KiddieTrac's billing hero (PlatformAccounts::heroHtml), carrying the SENDING agency's logo, name and
+           centre contact; the card, footer, dark palette and wording overrides below are unchanged. App\Support\InvoiceMail. */
+        if (! empty($opts['invoice_hero']) && is_array($opts['invoice_hero'])) {
+            $headerRow = self::invoiceHeroRow($agency, $brand, $opts['invoice_hero']);
+            $titleBlock = '';
         }
 
         $ktHtml = ''
@@ -119,7 +144,9 @@ final class EmailTemplate
             . '@media (max-width:620px){.kt-card{padding:18px !important;}.kt-title{font-size:20px !important;}.kt-banner{padding:20px 22px !important;}'
             // the fixed 620 is for the desktop clients that need an attribute; a phone
             // takes the width it actually has
-            . '.kt-shell{width:100% !important;}}'
+            . '.kt-shell{width:100% !important;}'
+            . '.kh-pad{padding-left:20px !important;padding-right:20px !important;}.kh-title{font-size:22px !important;}.kh-amt{font-size:21px !important;}'
+            . '.kh-logo img{height:38px !important;max-height:38px !important;}}'
             // Dark-mode: render a proper dark palette instead of a broken auto-invert.
             . '@media (prefers-color-scheme: dark){'
             . 'body,.kt-bg{background:#0E1726 !important;}'
@@ -149,11 +176,39 @@ final class EmailTemplate
             // Light info panels (#F8FAFC boxes and the like) opt in with .kt-panel.
             . '.kt-panel{background:#1B2740 !important;border-color:#2C3B54 !important;}'
             . '.kt-panel td,.kt-panel div,.kt-panel span,.kt-panel p{color:#D6DEE9 !important;}'
+            // Row rules inside a panel (the parent summary's menu, 2026-11-02) were near-white lines on the dark fill.
+            . '.kt-panel td{border-color:#2C3B54 !important;}'
             . '.kt-footer{background:#101A2B !important;color:#94A3B8 !important;border-color:#26344A !important;}'
             . '.kt-footer a{color:#7CC3E8 !important;}'
             . '.kt-footer strong{color:#CBD5E1 !important;}'
+            // The agency block sets its colours inline (dark slate), which beat .kt-footer: the agency name
+            // and address were near-invisible in dark mode (2026-10-27). Reclaimed like the card text.
+            . '.kt-footer div,.kt-footer span{color:#9AA8BC !important;}.kt-footer .kt-fname{color:#E2E8F0 !important;}'
+            // The footer's hairlines (border-top on its divs) stayed #E2E8F0 = bright white lines on navy (2026-11-02).
+            . '.kt-footer div{border-color:#26344A !important;}'
+            // KiddieTrac's LinkedIn / YouTube / Facebook row (App\Support\SocialLinks, 2026-11-02).
+            . '.kt-footer .kt-social a,.kt-footer .kt-social span{color:#7CC3E8 !important;}'
             . '.kt-logobox{background:#FFFFFF !important;}'
             . '}'
+            /* OUTLOOK.COM / OUTLOOK APPS IN DARK MODE (2026-10-31). They ignore prefers-color-scheme and instead mark
+               what they recolour with [data-ogsc] (text) / [data-ogsb] (backgrounds). The same palette as above, so a
+               reminder reads the same there as in Apple Mail (memory: emails must be dark-mode friendly). */
+            . '[data-ogsb] .kt-bg,[data-ogsb] body{background:#0E1726 !important;}'
+            . '[data-ogsb] .kt-card{background:#152033 !important;}'
+            . '[data-ogsc] .kt-card,[data-ogsc] .kt-card p,[data-ogsc] .kt-card div,[data-ogsc] .kt-card span,[data-ogsc] .kt-card td{color:#D6DEE9 !important;}'
+            . '[data-ogsc] .kt-card strong,[data-ogsc] .kt-card .kt-h{color:#F1F5F9 !important;}'
+            . '[data-ogsc] .kt-card a{color:#7CC3E8 !important;}'
+            . '[data-ogsb] .kt-panel,[data-ogsb] td.kt-callout{background:#1B2740 !important;}'
+            . '[data-ogsb] .kt-panel td{border-color:#2C3B54 !important;}'
+            . '[data-ogsc] .kt-muted{color:#9AA8BC !important;}'
+            . '[data-ogsc] .kt-btn,[data-ogsc] .kt-btn *{color:#FFFFFF !important;}'
+            . '[data-ogsb] .kt-footer{background:#101A2B !important;}[data-ogsb] .kt-footer div{border-color:#26344A !important;}'
+            . '[data-ogsc] .kt-footer,[data-ogsc] .kt-footer div,[data-ogsc] .kt-footer span{color:#9AA8BC !important;}'
+            . '[data-ogsc] .kt-footer .kt-social a,[data-ogsc] .kt-footer .kt-social span{color:#7CC3E8 !important;}'
+            // Outlook dark (2026-11-02): bold text and links in the footer kept their inline dark colours (the product
+            // name in "You're receiving this from", the agency phone) - same palette as the prefers-color-scheme rules.
+            . '[data-ogsc] .kt-footer strong{color:#CBD5E1 !important;}[data-ogsc] .kt-footer a{color:#7CC3E8 !important;}'
+            . '[data-ogsc] .kt-footer .kt-fname{color:#E2E8F0 !important;}'
             . '</style>'
             . '</head>'
             . '<body class="kt-bg" style="margin:0;padding:24px 12px;background:#F4F6F9;' . $css . '">'
@@ -206,7 +261,130 @@ final class EmailTemplate
         // A preview in progress records what was built; a real send ignores this.
         \App\Support\EmailOverrides::built($ktEmailKey, $ktHtml, $ktIn);
 
-        return $ktHtml;
+        return $ktHtml . $__brandMarker;
+    }
+
+    /** The colours an agency's email uses: primary, its banner gradient, and whether it is white-label. */
+    public static function brandColours(?int $agencyId): array
+    {
+        $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
+        $b = self::brand($agency);
+        return ['primary' => $b['primary'], 'hero_css' => $b['hero']['css'] ?? null, 'white_label' => (bool) $b['is_white_label']];
+    }
+
+    /**
+     * The invoice header (see wrap). $h: chip, chip_col, doc_title, number, amount, amount_sub, centre_id (optional).
+     * KiddieTrac-branded agencies get KiddieTrac's billing gradient artwork; a white-label agency gets its own banner
+     * gradient. The logo is the agency's own (the white-label brand's for a white label), on a white tile so it reads
+     * in dark mode too; no logo -> its initial. Text stays inline-coloured on the band, which dark mode leaves alone.
+     */
+    private static function invoiceHeroRow(?object $agency, array $brand, array $h): string
+    {
+        $F = "font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;";
+        $x = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $wl = ! empty($brand['is_white_label']);
+
+        // Who is billing: the agency's name and logo.
+        $name = trim((string) ($agency->name ?? '')) ?: (string) $brand['product_name'];
+        $logo = null;
+        if ($wl) {
+            $logo = $brand['logo_url'] ?? null;
+            if (! $logo && $agency && ! empty($agency->id)) {
+                try {
+                    $t = \App\Support\Brand::forAgency((int) $agency->id);
+                    $sq = (string) ($t['logo_square_url'] ?? '');
+                    if ($sq !== '' && ! str_contains($sq, 'app.kiddietrac.com/icon-') && ! str_contains($sq, 'app.kiddietrac.com/logo-')) $logo = $sq;
+                } catch (\Throwable $e) {
+                }
+            }
+        } elseif ($agency) {
+            $logo = ($agency->brand_logo_url ?? null) ?: ($agency->logo_url ?? null);
+        }
+        if ($logo) $logo = self::absoluteUrl((string) $logo);
+
+        /* No centre/provider address in the header (2026-10-31, Anthony: "why are you adding the provider's address at
+           the top"). For a home-childcare agency the "centre" is a provider's own home; the bill comes from the agency,
+           whose details are in the footer. */
+        $centreLine = '';
+        $contact = [];
+        if (false && ! empty($h['centre_id'])) {
+            $c = DB::table('centres')->where('id', (int) $h['centre_id'])->first(['name', 'address_line1', 'city', 'province', 'postal_code', 'phone', 'email']);
+            if ($c) {
+                $cn = trim((string) $c->name);
+                $addr = trim(implode(', ', array_filter([trim((string) $c->address_line1), trim(trim((string) $c->city) . ' ' . trim((string) $c->province)), trim((string) $c->postal_code)])), ', ');
+                $centreLine = trim(($cn !== '' && strcasecmp($cn, $name) !== 0 ? $cn : '') . ($addr !== '' ? ($cn !== '' && strcasecmp($cn, $name) !== 0 ? ' · ' : '') . $addr : ''));
+            }
+        }
+        // Questions about a bill go to the agency's billing contact - never a home provider's personal phone or email.
+        if ($agency) {
+            if (trim((string) ($agency->contact_phone ?? '')) !== '') $contact[] = trim((string) $agency->contact_phone);
+            $am = trim((string) ($agency->contact_email ?? '')) ?: trim((string) ($agency->brand_support_email ?? ''));
+            if ($am !== '') $contact[] = $am;
+        }
+        foreach ($contact as $i => $v) {
+            $d = preg_replace('/\D/', '', $v);
+            if (! str_contains($v, '@') && strlen($d) === 10) $contact[$i] = '(' . substr($d, 0, 3) . ') ' . substr($d, 3, 3) . '-' . substr($d, 6);
+            elseif (! str_contains($v, '@') && strlen($d) === 11 && $d[0] === '1') $contact[$i] = '1-' . substr($d, 1, 3) . '-' . substr($d, 4, 3) . '-' . substr($d, 7);
+        }
+
+        // The band: KiddieTrac's billing artwork, or the white-label agency's own gradient.
+        if ($wl) {
+            $hero = $brand['hero'] ?? null;
+            $bg = $hero['from'] ?? $brand['primary'];
+            $bgCss = 'background:' . $bg . ';background-image:' . ($hero['css'] ?? ('linear-gradient(135deg,' . $brand['primary'] . ' 0%,' . $brand['secondary'] . ' 100%)')) . ';';
+            $bgAttr = '';
+            $tc = (($hero['text'] ?? 'light') === 'dark') ? '#0F172A' : '#FFFFFF';
+            $line = '<tr><td bgcolor="' . $bg . '" style="font-size:0;line-height:0;height:5px;' . $bgCss . 'opacity:.85;">&nbsp;</td></tr>';
+        } else {
+            $bg = '#2563EB';
+            $bgCss = 'background:#2563EB url(https://api.kiddietrac.com/email/billing-hero.png) center/cover no-repeat;';
+            $bgAttr = ' background="https://api.kiddietrac.com/email/billing-hero.png"';
+            $tc = '#FFFFFF';
+            $line = '<tr><td style="font-size:0;line-height:0;padding:0;"><img src="https://api.kiddietrac.com/email/billing-line.png" width="620" height="5" alt="" style="display:block;width:100%;height:5px;border:0;"></td></tr>';
+        }
+        $soft = $tc === '#FFFFFF' ? 'rgba(255,255,255,.16)' : 'rgba(15,23,42,.08)';
+        $edge = $tc === '#FFFFFF' ? 'rgba(255,255,255,.45)' : 'rgba(15,23,42,.25)';
+
+        $tile = $logo
+            ? '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="kt-logobox kh-logo" bgcolor="#FFFFFF" style="background:#FFFFFF;padding:8px 12px;border-radius:12px;">'
+                . '<img src="' . $x($logo) . '" alt="' . $x($name) . '" height="44" style="display:block;height:44px;max-height:44px;width:auto;border:0;"></td></tr></table>'
+            : '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="kt-logobox" bgcolor="#FFFFFF" align="center" style="background:#FFFFFF;width:48px;height:48px;border-radius:12px;'
+                . $F . 'font-size:22px;font-weight:800;color:' . $brand['primary'] . ';">' . $x(mb_strtoupper(mb_substr($name, 0, 1))) . '</td></tr></table>';
+
+        $who = '<div style="' . $F . 'font-size:15.5px;font-weight:800;color:' . $tc . ';line-height:1.25;">' . $x($name) . '</div>'
+            . ($centreLine !== '' ? '<div style="' . $F . 'font-size:12px;color:' . $tc . ';opacity:.9;margin-top:2px;line-height:1.4;">' . $x($centreLine) . '</div>' : '')
+            . ($contact ? '<div style="' . $F . 'font-size:11.5px;color:' . $tc . ';opacity:.85;margin-top:2px;line-height:1.4;">' . $x(implode('  ·  ', $contact)) . '</div>' : '');
+
+        $chipCol = preg_match('/^#[0-9A-Fa-f]{3,8}$/', (string) ($h['chip_col'] ?? '')) ? $h['chip_col'] : '#5EEAD4';
+        $sub = trim((string) ($h['amount_sub'] ?? ''));
+
+        return '<tr><td class="kh-pad" bgcolor="' . $bg . '"' . $bgAttr . ' style="' . $bgCss . 'padding:22px 30px 26px;border-radius:16px 16px 0 0;' . $F . '">'
+            /* KIDDIETRAC KEEPS THE TOP (2026-10-31, Anthony: "the kiddietrac logo should stay at the top and ilearn is
+               already at the bottom which is fine"). A KiddieTrac-branded agency's invoice carries KiddieTrac's own billing
+               header - the white wordmark straight on the gradient, as on KiddieTrac's invoices (the band is dark in both
+               light and dark mode, so the white logo needs no swap); the agency's logo and details stay in the footer.
+               A white-label agency keeps its own logo, name and centre at the top, with no KiddieTrac mark. */
+            . ($wl
+                ? '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+                    . '<td valign="middle" width="1" style="padding-right:14px;">' . $tile . '</td>'
+                    . '<td valign="middle">' . $who . '</td>'
+                    . '<td valign="top" align="right" style="' . $F . 'font-size:10.5px;font-weight:800;letter-spacing:2.5px;color:' . $tc . ';opacity:.9;white-space:nowrap;padding-left:8px;">' . $x($h['label'] ?? 'BILLING') . '</td>'
+                    . '</tr></table>'
+                : '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+                    . '<td valign="middle"><img src="https://api.kiddietrac.com/email/logo-white.png" width="136" alt="KiddieTrac" style="display:block;width:136px;height:auto;border:0;color:#FFFFFF;font-size:18px;font-weight:800;">'
+                    . '<div style="' . $F . 'font-size:11px;letter-spacing:.4px;color:#FFFFFF;opacity:.88;margin-top:4px;">Smart Childcare Management Platform</div></td>'
+                    . '<td valign="middle" align="right" style="' . $F . 'font-size:11px;font-weight:700;letter-spacing:2.5px;color:#FFFFFF;opacity:.9;white-space:nowrap;">' . $x($h['label'] ?? 'BILLING') . '</td>'
+                    . '</tr></table>')
+            . '<div style="margin-top:20px;"><span style="display:inline-block;' . $F . 'font-size:11px;font-weight:800;letter-spacing:1.4px;color:' . $tc . ';background:' . $soft . ';border:1px solid ' . $edge . ';padding:4px 10px;border-radius:999px;">'
+            . '<span style="color:' . $chipCol . ';">&#9679;</span>&nbsp;' . $x($h['chip'] ?? 'INVOICE') . '</span></div>'
+            . '<div class="kh-title" style="' . $F . 'font-size:26px;line-height:1.2;font-weight:800;color:' . $tc . ';margin-top:10px;">' . $x($h['doc_title'] ?? 'Invoice')
+            . (trim((string) ($h['number'] ?? '')) !== '' ? ' <span style="font-weight:600;opacity:.9;">' . $x($h['number']) . '</span>' : '') . '</div>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:16px;"><tr>'
+            . '<td style="background:' . $soft . ';border:1px solid ' . $edge . ';border-radius:14px;padding:9px 18px;"><span class="kh-amt" style="' . $F . 'font-size:25px;font-weight:800;color:' . $tc . ';">' . $x($h['amount'] ?? '') . '</span></td>'
+            . ($sub !== '' ? '<td style="' . $F . 'padding-left:14px;font-size:14px;color:' . $tc . ';font-weight:600;">' . $x($sub) . '</td>' : '')
+            . '</tr></table>'
+            . '</td></tr>'
+            . $line;
     }
 
     /**
@@ -215,7 +393,7 @@ final class EmailTemplate
      */
     public static function statTile(string $label, string $value, string $hint = '', string $accent = '#1F6080'): string
     {
-        return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="background:#F8FAFC;border-radius:12px;border-left:4px solid ' . $accent . ';margin-bottom:10px;">'
+        return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="background:#F8FAFC;border-radius:12px;--kt-edge:' . $accent . ';margin-bottom:10px;">'
             . '<tr><td style="padding:14px 16px;">'
             . '<div style="font-size:11px;font-weight:700;color:#64748B;letter-spacing:1px;text-transform:uppercase;">' . htmlspecialchars($label) . '</div>'
             . '<div style="font-size:24px;font-weight:800;color:#0F172A;margin-top:4px;letter-spacing:-.3px;">' . htmlspecialchars($value) . '</div>'
@@ -249,7 +427,7 @@ final class EmailTemplate
         ];
         $p = $palette[$tone] ?? $palette['info'];
         return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="margin:18px 0;">'
-            . '<tr><td class="kt-callout" style="background:' . $p['bg'] . ';border-left:4px solid ' . $p['border'] . ';border-radius:8px;padding:12px 14px;font-size:13px;color:' . $p['fg'] . ';line-height:1.4;">'
+            . '<tr><td class="kt-callout" style="background:' . $p['bg'] . ';--kt-edge:' . $p['border'] . ';border-radius:8px;padding:12px 14px;font-size:13px;color:' . $p['fg'] . ';line-height:1.4;">'
             . $message
             . '</td></tr></table>';
     }
@@ -279,7 +457,22 @@ final class EmailTemplate
         $ktLogo = 'https://app.kiddietrac.com/logo-wordmark.png';
         $primary = ($whiteLabel ? ($agency->brand_primary_color ?? null) : null) ?: '#1F6080';
 
-        if ($whiteLabel) {
+        /* RESELLERS (2026-10-21): an agency under a reseller that hides KiddieTrac is
+           white-label too, and shows the RESELLER's name, logo and colour unless the
+           reseller lets the agency use its own (App\Support\Brand resolves which). */
+        $theme = ($agency && ! empty($agency->id)) ? \App\Support\Brand::forAgency((int) $agency->id) : null;
+        if ($theme && $theme['white_label'] && $force !== 'kt') {
+            $whiteLabel = true;
+        }
+        if ($whiteLabel && $theme && $theme['white_label']) {
+            $wm = (string) $theme['logo_wordmark_url'];
+            // KiddieTrac's own wordmark is never a white-label logo: no logo -> initial avatar.
+            $logo = $wm !== '' && ! str_contains($wm, 'app.kiddietrac.com/logo-wordmark') ? $wm : null;
+            $name = $theme['name'];
+            $support = $theme['support_email'] ?: 'noreply@kiddietrac.com';
+            $primary = $theme['primary_color'] ?: $primary;
+            $hero = $theme['hero'] ?? null;
+        } elseif ($whiteLabel) {
             // White-label with no logo on file → the agency's initial avatar, never
             // the KiddieTrac mark (that would break the white-label illusion).
             $logo = $agency->brand_logo_url ?? null;
@@ -301,6 +494,7 @@ final class EmailTemplate
             'support_email' => $support,
             'powered_by_visible' => !$whiteLabel,
             'is_white_label' => $whiteLabel,
+            'hero' => $hero ?? null,   // the white-label banner gradient (Brand::hero), else null
         ];
     }
 
@@ -355,7 +549,7 @@ final class EmailTemplate
         $seed = $seed ?? (int) date('Ymd');
         $q = $quotes[abs($seed) % count($quotes)];
         return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="margin:22px 0 6px;">'
-            . '<tr><td style="background:linear-gradient(135deg,#F0F7FB 0%,#F6F1FB 100%);border-left:4px solid #7C3AED;border-radius:12px;padding:16px 20px;">'
+            . '<tr><td bgcolor="#F3F4FB" style="background-color:#F3F4FB;background-image:linear-gradient(135deg,#F0F7FB 0%,#F6F1FB 100%);--kt-edge:#7C3AED;border-radius:12px;padding:16px 20px;">'
             . '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#8B5CF6;margin-bottom:6px;">✨ A thought for today</div>'
             . '<div style="font-size:15.5px;font-style:italic;color:#334155;line-height:1.55;">“' . htmlspecialchars($q[0]) . '”</div>'
             . '<div style="font-size:12.5px;color:#7A8AA3;margin-top:8px;font-weight:700;">— ' . htmlspecialchars($q[1]) . '</div>'
@@ -437,7 +631,7 @@ final class EmailTemplate
                         . '" height="34" style="max-height:34px;width:auto;display:block;margin:0 0 8px;border:0;">';
                 }
                 if ($agencyName !== '') {
-                    $html .= '<div style="font-weight:800;color:#0F172A;font-size:13.5px;margin-bottom:3px;">' . $agencyName . '</div>';
+                    $html .= '<div class="kt-fname" style="font-weight:800;color:#0F172A;font-size:13.5px;margin-bottom:3px;">' . $agencyName . '</div>';
                 }
                 if ($lines) {
                     $html .= '<div style="color:#475569;font-size:12px;line-height:1.65;">' . implode('<br>', $lines) . '</div>';
@@ -473,10 +667,17 @@ final class EmailTemplate
                 . 'Powered by <a href="https://www.kiddietrac.com" style="color:#94A3B8;text-decoration:none;font-weight:700;">KiddieTrac</a> — The Smart Childcare Management Platform.<br>'
                 . '🌐 <a href="https://www.kiddietrac.com" style="color:#94A3B8;text-decoration:none;">www.kiddietrac.com</a>'
                 . ' &nbsp;·&nbsp; ✉️ <a href="https://www.kiddietrac.com/#subscribe" style="color:#94A3B8;text-decoration:none;">Subscribe for updates</a>'
+                /* KiddieTrac's LinkedIn, YouTube and Facebook (2026-11-02, App\Support\SocialLinks). Only when this
+                   agency mails under KiddieTrac's own brand (same rule as PlayBadge::forAgency); App\Listeners\
+                   SocialLinksMail re-checks at send time and removes it for a white-label recipient. */
+                . (\App\Support\SocialLinks::allowedFor($agency && ! empty($agency->id) ? (int) $agency->id : null)
+                    ? '<div style="margin:10px 0 8px;text-align:center;">'
+                        . \App\Support\SocialLinks::block(\App\Support\SocialLinks::row('#64748B', 'font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;', 'Follow us', '#94A3B8', 'center')) . '</div>'
+                    : '<br>')
                 /* Inside the powered_by block on purpose: a white-label agency's mail
                    carries their branding, not ours, so it must not assert our copyright
                    either. The year is the sending year, not a constant to go stale. */
-                . '<br>&copy; ' . date('Y') . ' KiddieTrac. All Rights Reserved.'
+                . e(\App\Support\Company::copyright())
                 . '</div>';
         }
         return $html;
@@ -512,7 +713,7 @@ final class EmailTemplate
             . 'Powered by <a href="https://www.kiddietrac.com" style="' . $muted . 'font-weight:700;">KiddieTrac</a> — The Smart Childcare Management Platform.<br>'
             . '🌐 <a href="https://www.kiddietrac.com" style="' . $muted . '">www.kiddietrac.com</a>'
             . ' &nbsp;·&nbsp; ✉️ <a href="https://www.kiddietrac.com/#subscribe" style="' . $muted . '">Subscribe for updates</a>'
-            . '<br>&copy; ' . date('Y') . ' KiddieTrac. All Rights Reserved.'
+            . '<br>' . e(\App\Support\Company::copyright())
             . '</div></div>';
     }
 

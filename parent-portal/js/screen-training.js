@@ -194,12 +194,16 @@
   var view = 'mine';     // mine | team
 
   async function render(main) {
-    main.innerHTML = '';
-    main.appendChild(tabs('training'));
+    /* THE BANNER STAYS (2026-10-21): this screen draws into its own root, created once, so a
+       tab switch or refresh never wipes #appMain and the banner the shell put above it. */
+    var root = main.querySelector('#tr-root');
+    if (!root) { main.innerHTML = ''; root = document.createElement('div'); root.id = 'tr-root'; main.appendChild(root); }
+    root.innerHTML = '';
+    root.appendChild(tabs('training'));
     var body = document.createElement('div');
     body.id = 'tr-body';
     body.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;">Loading…</div>';
-    main.appendChild(body);
+    root.appendChild(body);
 
     var d;
     try { d = await Api.get('/training'); } catch (e) {

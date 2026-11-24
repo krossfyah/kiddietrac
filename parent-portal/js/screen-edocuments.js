@@ -335,7 +335,7 @@
   }
 
   function parentCard(d) {
-    return '<div style="background:white;border-radius:14px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.05);' + (d.signed ? '' : 'border-left:4px solid #DC2626;') + '">' +
+    return '<div style="background:white;border-radius:14px;padding:16px 18px;box-shadow:0 1px 4px rgba(0,0,0,.05);' + (d.signed ? '' : '--kt-edge:#DC2626;') + '">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
         '<div style="flex:1;">' +
           '<div style="font-size:16px;font-weight:700;color:#111827;">' + esc(d.name) +
@@ -366,16 +366,15 @@
       '<label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:6px;">Type your full name (legal acknowledgement)</label>' +
       '<input id="kt-typed" placeholder="e.g. Anthony Hosein" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-bottom:14px;box-sizing:border-box;">' +
       '<label style="font-size:12px;font-weight:700;color:#6B7280;display:block;margin-bottom:6px;">Draw your signature</label>' +
-      '<div style="border:1.5px dashed #94A3B8;border-radius:10px;background:#FBFCFE;padding:6px;">' +
-        '<canvas id="kt-sig" width="560" height="200" style="display:block;width:100%;height:200px;cursor:crosshair;background:white;border-radius:6px;touch-action:none;"></canvas>' +
-      '</div>' +
+      '<div id="kt-sig"></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:8px;align-items:center;">' +
         '<button id="kt-sig-clear" type="button" style="padding:6px 12px;background:#E5E7EB;color:#374151;border:none;border-radius:6px;font-size:12px;cursor:pointer;">Clear</button>' +
         '<span style="font-size:11px;color:#64748B;">Use mouse or finger</span>' +
       '</div>' +
       '<div id="kt-msg" style="font-size:13px;min-height:20px;margin-top:10px;"></div>';
 
-    var sig = makeSignaturePad(body.querySelector('#kt-sig'));
+    // The shared pad (kt-signature-pad.js) since 2026-11-06: saved signatures included.
+    var sig = KT.signaturePadInline(body.querySelector('#kt-sig'), { height: 200, context: 'edocument:' + id });
     body.querySelector('#kt-sig-clear').addEventListener('click', function () { sig.clear(); });
 
     Modal.open({
@@ -408,74 +407,6 @@
     });
   }
 
-  // Lightweight signature pad (mouse + touch).
-  function makeSignaturePad(canvas) {
-    var ctx = canvas.getContext('2d');
-    var drawing = false;
-    var dirty = false;
-    var lastX = 0, lastY = 0;
-
-    // Match drawing buffer to displayed size for crisp lines on HiDPI.
-    function resize() {
-      var ratio = window.devicePixelRatio || 1;
-      var rect = canvas.getBoundingClientRect();
-      canvas.width  = rect.width  * ratio;
-      canvas.height = rect.height * ratio;
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = '#0F172A';
-    }
-    setTimeout(resize, 0);
-
-    function getXY(e) {
-      var rect = canvas.getBoundingClientRect();
-      var x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-      var y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
-      return { x: x, y: y };
-    }
-
-    function start(e) {
-      e.preventDefault();
-      drawing = true;
-      var p = getXY(e);
-      lastX = p.x; lastY = p.y;
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y);
-    }
-    function move(e) {
-      if (!drawing) return;
-      e.preventDefault();
-      var p = getXY(e);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-      lastX = p.x; lastY = p.y;
-      dirty = true;
-    }
-    function end(e) {
-      if (!drawing) return;
-      if (e && e.preventDefault) e.preventDefault();
-      drawing = false;
-    }
-
-    canvas.addEventListener('mousedown', start);
-    canvas.addEventListener('mousemove', move);
-    canvas.addEventListener('mouseup',   end);
-    canvas.addEventListener('mouseleave', end);
-    canvas.addEventListener('touchstart', start, { passive: false });
-    canvas.addEventListener('touchmove',  move,  { passive: false });
-    canvas.addEventListener('touchend',   end);
-
-    return {
-      clear: function () {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        dirty = false;
-      },
-      isEmpty: function () { return !dirty; },
-      toDataURL: function () { return canvas.toDataURL('image/png'); },
-    };
-  }
 
   // ============================================================
   //  Shell registration

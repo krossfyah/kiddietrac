@@ -203,9 +203,9 @@
       +   '.kt-et2-page{padding:12px 12px 32px;}'
       +   '.kt-et2-layer{padding:0;align-items:stretch;}'
       +   '.kt-et2-card{max-width:none !important;height:100%;max-height:none;border-radius:0;}'
-      +   '.kt-et2-head{padding:calc(10px + env(safe-area-inset-top)) 12px 10px;}'
+      +   '.kt-et2-head{padding:calc(10px + var(--kt-safe-top, env(safe-area-inset-top))) 12px 10px;}'
       +   '.kt-et2-body{padding:12px;}'
-      +   '.kt-et2-foot{padding:8px 12px calc(8px + env(safe-area-inset-bottom));}'
+      +   '.kt-et2-foot{padding:8px 12px calc(8px + var(--kt-safe-bottom, env(safe-area-inset-bottom)));}'
       + '}';
     d.head.appendChild(s);
   }

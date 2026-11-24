@@ -46,6 +46,10 @@ The phone app gives you push notifications, faster loading, and a camera check-i
 
 ### iPhone and iPad
 
+**Install KiddieTrac from the [App Store](https://apps.apple.com/app/kiddietrac/id6827700968)** (search "KiddieTrac"), then sign in. If your centre uses its own branded app, install that one instead.
+
+Prefer not to install an app? Add the portal to your Home Screen instead:
+
 1. **Open the portal in Safari itself.** This is the step people miss. If you tapped
    the link inside your email app, Facebook or Messages, you are in that app's own
    little browser — it looks like Safari but it is not, and it has no way to add
@@ -74,7 +78,7 @@ The phone app gives you push notifications, faster loading, and a camera check-i
 
 ### Android
 
-Install the KiddieTrac app your centre shared, or open the portal in Chrome and choose
+Install the KiddieTrac app from [Google Play](https://play.google.com/store/apps/details?id=com.kiddietrac.app) (or the app your centre shared), or open the portal in Chrome and choose
 **⋮ → Add to Home screen** (some phones call it *Install app*).
 
 Either way this is optional — everything works in the browser too. The Home Screen icon
@@ -88,7 +92,7 @@ Along the bottom of the phone app you'll see:
 |---|---|
 | Home | Your child's day at a glance |
 | Photos | Pictures and videos shared by the centre |
-| Check in | Scan the centre's QR code to sign your child in or out |
+| One-Tap | Scan the centre's One-Tap QR code to check your child in or out |
 | Messages | Chat with your child's educators |
 | Billing | Invoices and payments |
 

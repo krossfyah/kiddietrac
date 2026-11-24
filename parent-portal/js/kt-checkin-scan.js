@@ -96,7 +96,7 @@
     close.setAttribute('aria-label', 'Back');
     close.addEventListener('click', function () { stopCamera(); location.hash = '#home'; });
     head.appendChild(close);
-    head.appendChild(el('div', 'font-weight:800;font-size:16px;', 'Scan to check in / out'));
+    head.appendChild(el('div', 'font-weight:800;font-size:16px;', 'One-Tap check-in / out'));
     ov.appendChild(head);
 
     // Camera area
@@ -125,7 +125,7 @@
 
     // Status / footer
     var foot = el('div', 'position:absolute;left:0;right:0;bottom:0;z-index:3;padding:20px 20px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 24px);text-align:center;color:#fff;');
-    var status = el('div', 'font-size:15px;font-weight:600;line-height:1.5;text-shadow:0 1px 6px rgba(0,0,0,.6);min-height:44px;', 'Point your camera at the centre’s check-in QR code.');
+    var status = el('div', 'font-size:15px;font-weight:600;line-height:1.5;text-shadow:0 1px 6px rgba(0,0,0,.6);min-height:44px;', 'Point your camera at the centre’s One-Tap QR code.');
     foot.appendChild(status);
     ov.appendChild(foot);
 
@@ -156,14 +156,14 @@
     plugin.scanBarcode({
       hint: 0,
       cameraDirection: 1,
-      scanInstructions: 'Point your camera at the centre’s check-in QR code.'
+      scanInstructions: 'Point your camera at the centre’s One-Tap QR code.'
     }).then(function (res) {
       var v = (res && res.ScanResult) || '';
       if (/^KTCHK\./.test(v)) { submit(v, status, foot); return; }
       if (!v) { location.hash = '#home'; return; }  // dismissed without scanning
       fail(status, 'That isn’t a KiddieTrac check-in code.', foot);
       retryBtn(foot);
-      manualFallback(status, foot, 'Or enter the code shown under the centre’s QR:');
+      manualFallback(status, foot, 'Or enter the code shown under the centre’s One-Tap QR:');
     }).catch(function (err) {
       // Cancelling rejects rather than resolving empty on some platforms.
       if (/cancel/i.test(String((err && (err.message || err.errorMessage)) || ''))) {
@@ -171,7 +171,7 @@
       }
       fail(status, 'Could not start the camera.', foot);
       retryBtn(foot);
-      manualFallback(status, foot, 'Or enter the code shown under the centre’s QR:');
+      manualFallback(status, foot, 'Or enter the code shown under the centre’s One-Tap QR:');
     });
   }
 
@@ -192,7 +192,7 @@
         return video.play().catch(function () {});
       })
       .then(function () {
-        if (!detector) { manualFallback(status, foot, 'This device can’t auto-scan. Enter the code shown under the centre’s QR:'); return; }
+        if (!detector) { manualFallback(status, foot, 'This device can’t auto-scan. Enter the code shown under the centre’s One-Tap QR:'); return; }
         loop(video, status, foot);
       })
       .catch(function (err) {
@@ -200,7 +200,7 @@
           ? 'Camera permission was denied. Enable camera access for KiddieTrac in your phone settings.'
           : 'Could not start the camera.';
         fail(status, msg, foot);
-        manualFallback(status, foot, 'Or enter the code shown under the centre’s QR:');
+        manualFallback(status, foot, 'Or enter the code shown under the centre’s One-Tap QR:');
       });
   }
 
@@ -251,7 +251,7 @@
       var box = el('span', 'flex:0 0 auto;width:24px;height:24px;border-radius:7px;border:2px solid rgba(255,255,255,.7);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;', '\u2713');
       var mid = el('div', 'flex:1;min-width:0;');
       mid.appendChild(el('div', 'font-weight:700;font-size:16px;', c.name));
-      mid.appendChild(el('div', 'font-size:12px;opacity:.8;', c.is_in ? 'Currently checked in' : 'Not checked in yet'));
+      mid.appendChild(el('div', 'font-size:12px;opacity:.8;', c.is_in ? 'At Centre' : 'Not at Centre'));
       var tag = el('div', 'font-size:12px;font-weight:800;padding:4px 11px;border-radius:20px;white-space:nowrap;background:' + (c.action === 'check_in' ? 'rgba(52,211,153,.28)' : 'rgba(251,191,36,.28)') + ';', c.action_label);
       row.appendChild(box); row.appendChild(mid); row.appendChild(tag);
       function paint() {
@@ -361,6 +361,11 @@
       card.lastChild.style.borderBottom = 'none';
     }
     wrap.appendChild(card);
+    // Supplies the centre asked for (2026-10-23, kt-supplies.js).
+    try {
+      var inIds = (results || []).filter(function (r) { return r.event === 'check_in'; }).map(function (r) { return r.child_id; });
+      if (inIds.length && window.KT && KT.Supplies) { var supHost = el('div', 'width:100%;max-width:320px;display:flex;justify-content:center;'); wrap.appendChild(supHost); KT.Supplies.checkinAsk(supHost, inIds); }
+    } catch (e) {}
     var btns = el('div', 'display:flex;flex-direction:column;gap:10px;margin-top:24px;width:100%;max-width:320px;');
     var done = el('button', 'background:#fff;color:' + NAVY + ';border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:800;cursor:pointer;', 'Done');
     done.addEventListener('click', function () { location.hash = '#home'; });

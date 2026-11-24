@@ -161,6 +161,10 @@ final class EmailMissedMessagesCommand extends Command
 
             $senderIds = $msgs->pluck('sender_id')->unique()->all();
             $senders = DB::table('users')->whereIn('id', $senderIds)->get()->keyBy('id');
+            // Staff are named by first name only in email (Anthony, 2026-10-26); a parent keeps their full name.
+            $staffIds = DB::table('role_assignments')->whereIn('user_id', $senderIds)->where('role', '!=', 'guardian')
+                ->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->all();
+            foreach ($senders as $su) { $su->kt_staff = in_array((int) $su->id, $staffIds, true); }
 
             foreach ($recipients as $r) {
                 $unreadFromOthers = collect(array_values($perUser[(int) $r->id] ?? []));
@@ -306,13 +310,21 @@ final class EmailMissedMessagesCommand extends Command
         return $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
     }
 
+    /** A staff sender by first name only (no staff last names in email); a parent by full name. */
+    private function senderName(object $u): string
+    {
+        $first = trim((string) ($u->first_name ?? ''));
+        if (! empty($u->kt_staff) && $first !== '') return $first;
+        return trim($first . ' ' . (string) ($u->last_name ?? '')) ?: 'Someone';
+    }
+
     private function subjectFor(array $msgs, $senders, ?object $agency): string
     {
         $prefix = $agency ? '[' . $agency->name . '] ' : '';
         $count = count($msgs);
         if ($count === 1) {
             $sender = $senders[$msgs[0]->sender_id] ?? null;
-            $name = $sender ? trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? '')) : 'Someone';
+            $name = $sender ? $this->senderName($sender) : 'Someone';
             return $prefix . 'New message from ' . $name;
         }
         $uniqSenders = array_unique(array_map(fn ($m) => (int) $m->sender_id, $msgs));
@@ -325,7 +337,7 @@ final class EmailMissedMessagesCommand extends Command
         $items = '';
         foreach ($msgs as $m) {
             $sender = $senders[$m->sender_id] ?? null;
-            $name = $sender ? trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? '')) : 'Someone';
+            $name = $sender ? $this->senderName($sender) : 'Someone';
             $when = Carbon::parse($m->created_at)->diffForHumans();
             $body = trim((string) $m->body);
             $attachmentsNote = '';
@@ -337,7 +349,8 @@ final class EmailMissedMessagesCommand extends Command
             }
             $preview = $body !== '' ? htmlspecialchars(mb_strimwidth($body, 0, 320, '…'))
                                     : ($attachmentsNote ? '<em style="color:#6B7280;">(image)</em>' : '<em style="color:#6B7280;">(no text)</em>');
-            $items .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="background:#F8FAFC;border-radius:12px;border-left:4px solid #1F6080;margin-bottom:10px;">'
+            $preview = self::replyLineHtml('family', (int) $m->conversation_id, $m->reply_to_id ?? null) . $preview;
+            $items .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="background:#F8FAFC;border-radius:12px;--kt-edge:#1F6080;margin-bottom:10px;">'
                 . '<tr><td style="padding:14px 16px;">'
                 . '<div style="font-size:12px;font-weight:700;color:#1F6080;">' . htmlspecialchars($name)
                 . ' <span style="color:#9CA3AF;font-weight:400;font-size:11px;margin-left:8px;">· ' . htmlspecialchars($when) . '</span></div>'
@@ -388,7 +401,8 @@ final class EmailMissedMessagesCommand extends Command
             ->where('created_at', '<=', $cutoff)
             ->orderBy('created_at')
             ->limit(200)
-            ->get(['id', 'thread_id', 'sender_id', 'body', 'created_at']);
+            ->get(array_merge(['id', 'thread_id', 'sender_id', 'body', 'created_at'],
+                \App\Support\ChatReply::enabled('staff') ? ['reply_to_id'] : []));
 
         if ($msgs->isEmpty()) {
             return 0;
@@ -466,7 +480,7 @@ final class EmailMissedMessagesCommand extends Command
             if ($count === 0) { continue; }
 
             $names = DB::table('users')->whereIn('id', $missed->pluck('sender_id')->unique()->all())
-                ->selectRaw("id, TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))) as n")
+                ->selectRaw("id, COALESCE(NULLIF(TRIM(first_name),''), TRIM(COALESCE(last_name,''))) as n")   // colleagues: first name only in email
                 ->pluck('n', 'id')->all();
             $firstName = $names[$missed->first()->sender_id] ?? 'A colleague';
             $uniqueSenders = $missed->pluck('sender_id')->unique()->count();
@@ -494,6 +508,7 @@ final class EmailMissedMessagesCommand extends Command
                     .'color:#1E293B;white-space:pre-wrap;">'
                     .'<div style="font-size:12px;font-weight:700;color:#1F6080;margin-bottom:4px;">'
                     .$e($names[$m->sender_id] ?? 'A colleague').'</div>'
+                    .self::replyLineHtml('staff', (int) $m->thread_id, $m->reply_to_id ?? null)
                     .$e($m->body).'</div>')->implode('');
 
                 /* "Team chat" means nothing to a parent. Broadcast now delivers to
@@ -539,4 +554,18 @@ final class EmailMissedMessagesCommand extends Command
         return $sent;
     }
 
+    /* "↩ Replying to Anna: “…”" above a reply in the digest (App\Support\ChatReply - first names only, read
+       from the same conversation). Muted grey that reads on a light card and in dark mode alike. */
+    private static function replyLineHtml(string $kind, int $convId, $replyToId): string
+    {
+        if (! $replyToId) {
+            return '';
+        }
+        $line = \App\Support\ChatReply::line(\App\Support\ChatReply::one($kind, $convId, (int) $replyToId));
+        if ($line === '') {
+            return '';
+        }
+        return '<div style="font-size:12px;color:#64748B;border-left:3px solid #159FB4;padding:2px 0 2px 8px;margin:2px 0 6px;white-space:normal;">↩ '
+            . htmlspecialchars($line, ENT_QUOTES, 'UTF-8') . '</div>';
+    }
 }

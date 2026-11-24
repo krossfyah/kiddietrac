@@ -35,6 +35,9 @@ final class HeadcountRemindCommand extends Command
             $s = $a->settings ? (json_decode((string) $a->settings, true) ?: []) : [];
             if (empty($s['headcount_reminders']['enabled'])) continue;
             $every = max(10, min(240, (int) ($s['headcount_reminders']['minutes'] ?? 30)));
+            // Switched off for chosen centres and people (Room Controls -> Headcounts, 2026-10-23).
+            $offCentres = array_map('intval', (array) ($s['headcount_reminders']['off_centres'] ?? []));
+            $offUsers = array_map('intval', (array) ($s['headcount_reminders']['off_users'] ?? []));
             [$dayFrom, $dayTo] = AgencyTime::dayRange((int) $a->id);
 
             /* AFTER HOURS, NO REMINDERS (2026-10-15). Bruni stayed clocked in after work and
@@ -47,6 +50,7 @@ final class HeadcountRemindCommand extends Command
             $nowStr = $localNow->format('Y-m-d H:i:s');
 
             foreach (Live::centreIds((int) $a->id) as $cid) {
+                if (in_array((int) $cid, $offCentres, true)) continue;
                 $closeAt = DB::table('centres')->where('id', $cid)->value('close_time');
                 $onShift = function (int $u) use ($cid, $localNow, $nowStr, $closeAt): bool {
                     $end = DB::table('shifts as s')->join('rooms as r', 'r.id', '=', 's.room_id')
@@ -56,19 +60,22 @@ final class HeadcountRemindCommand extends Command
                     if ($closeAt) return $localNow->format('H:i:s') <= (string) $closeAt;
                     return true;
                 };
-                $punched = DB::table('time_punches')->where('centre_id', $cid)->where('punched_in_at', '>=', $dayFrom)
-                    ->where('punched_in_at', '<', $dayTo)->whereNull('punched_out_at')->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->all();
+                $punchRows = DB::table('time_punches')->where('centre_id', $cid)->where('punched_in_at', '>=', $dayFrom)
+                    ->where('punched_in_at', '<', $dayTo)->whereNull('punched_out_at')->orderBy('punched_in_at')->get(['id', 'user_id', 'punched_in_at']);
+                $clockIn = [];   // user => [punch id, clocked in at] (latest open punch)
+                foreach ($punchRows as $p) $clockIn[(int) $p->user_id] = [(int) $p->id, (string) $p->punched_in_at];
+                $punched = array_values(array_diff(array_keys($clockIn), $offUsers));
                 if (! $punched) continue;
 
                 foreach (DB::table('rooms')->where('centre_id', $cid)->get() as $room) {
                     $present = RatioRules::childIdsPresent($room, Carbon::now());
                     if (! $present) continue;
-                    $last = DB::table('headcounts')->where('room_id', $room->id)->where('taken_at', '>=', $dayFrom)->max('taken_at')
-                        ?: DB::table('check_events')->where('room_id', $room->id)->where('event_type', 'check_in')
-                            ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<=', now())->min('occurred_at');
-                    if (! $last) continue;
-                    $mins = (int) Carbon::parse($last, 'UTC')->diffInMinutes(now());
-                    if ($mins < $every) continue;
+                    /* THE COUNT STARTS AT CLOCK-IN (2026-10-23, Anthony: "head count should start when
+                       each provider clocks in ... do this only when educator clocks in"). Each educator's
+                       rhythm runs from their own clock-in: with children here and no count since they
+                       clocked in, they are asked straight away; after that, every N minutes from the
+                       room's last count. A child signing in does not start or restart anything. */
+                    $lastCount = DB::table('headcounts')->where('room_id', $room->id)->where('taken_at', '>=', $dayFrom)->max('taken_at');
 
                     $assigned = DB::table('educator_rooms')->where('room_id', $room->id)->whereIn('user_id', $punched)->pluck('user_id')->map(fn ($v) => (int) $v)->all();
                     if (! $assigned) {   // clocked-in educators at this centre with no room assignments cover every room
@@ -78,16 +85,36 @@ final class HeadcountRemindCommand extends Command
                     }
                     $assigned = array_values(array_filter($assigned, $onShift));
                     if (! $assigned) continue;
-                    if ($this->option('dry')) { $this->line("agency {$a->id} room {$room->id} {$room->name}: " . count($present) . " here, {$mins} min → " . count($assigned) . ' educator(s)'); continue; }
-                    if (! Cache::add('kt-hc-remind:' . $room->id, 1, now()->addMinutes($every - 1))) continue;
 
                     $title = "\u{1F440} Headcount due — " . $room->name;
-                    $body = count($present) . ' ' . (count($present) === 1 ? 'child' : 'children') . ' signed in. Last count ' . $mins . ' min ago. Tap to count.';
                     $link = '#headcounts?take=' . $room->id;
-                    \App\Support\Notify::write(array_map(fn ($u) => ['user_id' => $u, 'type' => 'headcount_due', 'title' => $title, 'body' => $body,
-                        'data' => json_encode(['link' => $link, 'room_id' => (int) $room->id]), 'created_at' => now()], $assigned));
+                    $kids = count($present) . ' ' . (count($present) === 1 ? 'child' : 'children') . ' signed in.';
                     foreach ($assigned as $u) {
+                        [$punchId, $inAt] = $clockIn[$u];
+                        $countedSinceIn = $lastCount && (string) $lastCount >= $inAt;
+                        if (! $countedSinceIn) {
+                            $key = 'kt-hc-start:' . $room->id . ':' . $punchId;                 // once per clock-in
+                            $body = 'No headcount since you clocked in. ' . $kids . ' Tap to count.';
+                        } else {
+                            $mins = (int) Carbon::parse($lastCount, 'UTC')->diffInMinutes(now());
+                            if ($mins < $every) continue;
+                            $key = 'kt-hc-remind:' . $room->id . ':' . $u;
+                            // "6h 38m ago", not "398 min ago" (2026-10-23).
+                            $ago = $mins < 60 ? $mins . ' min' : intdiv($mins, 60) . 'h' . ($mins % 60 ? ' ' . ($mins % 60) . 'm' : '');
+                            $body = $kids . ' Last count ' . $ago . ' ago. Tap to count.';
+                        }
+                        if ($this->option('dry')) { $this->line("agency {$a->id} room {$room->id} {$room->name} user {$u}: {$body}"); continue; }
+                        if (! Cache::add($key, 1, $countedSinceIn ? now()->addMinutes($every - 1) : now()->addHours(16))) continue;
+                        \App\Support\Notify::write(['user_id' => $u, 'type' => 'headcount_due', 'title' => $title, 'body' => $body,
+                            'data' => json_encode(['link' => $link, 'room_id' => (int) $room->id]), 'created_at' => now()]);
                         try { app(\App\Services\FcmService::class)->sendToUser($u, $title, $body, $link); } catch (\Throwable $e) {}
+                        // Not counted within 15 minutes = a strike (HeadcountStrikesCommand, 2026-11-03).
+                        try {
+                            if (Schema::hasTable('headcount_strikes')) {
+                                DB::table('headcount_strikes')->insertOrIgnore(['agency_id' => (int) $a->id, 'centre_id' => (int) $cid,
+                                    'room_id' => (int) $room->id, 'user_id' => $u, 'due_at' => now(), 'status' => 'pending', 'created_at' => now()]);
+                            }
+                        } catch (\Throwable $e) { report($e); }
                     }
                 }
             }

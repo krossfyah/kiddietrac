@@ -50,7 +50,7 @@ final class FamilyFilesController extends Controller
         $ids = \App\Support\Visibility::childIds((int) ($this->resolveAgencyId($request) ?: 0), $user);
         if (! $ids) return [];
         $live = Live::enrolledChildren(DB::table('children'))->whereIn('id', $ids)->pluck('id')->map(fn ($v) => (int) $v)->all();
-        return array_values(array_filter($live, fn ($cid) => $this->canAccessChildId($user, (int) $cid)));
+        return $this->filterAccessibleChildIds($user, $live);
     }
 
     private function staffFamilyIds(Request $request): array
@@ -269,9 +269,11 @@ final class FamilyFilesController extends Controller
         $safe = preg_replace('/[^\w.\- ]+/u', '_', $row->original_name) ?: 'file';
 
         return response()->stream(function () use ($row) {
+            // Not fpassthru: the web PHP disables it (see App\Support\FileResponse).
             $s = Storage::disk('local')->readStream($row->path);
-            fpassthru($s);
-            if (is_resource($s)) fclose($s);
+            if (! is_resource($s)) return;
+            while (! feof($s)) { $c = fread($s, 1048576); if ($c === false) break; echo $c; flush(); }
+            fclose($s);
         }, 200, [
             'Content-Type' => $row->mime ?: 'application/octet-stream',
             'Content-Length' => (string) $row->size,

@@ -114,7 +114,7 @@
 
         {{-- Bio --}}
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:14px 0 6px;">
-          <tr><td class="kt-panel" bgcolor="#F6F8FB" style="background:#F6F8FB;color:#2A3D5F;border-left:4px solid {{ $accent }};border-radius:8px;padding:16px 18px;">
+          <tr><td class="kt-panel" bgcolor="#F6F8FB" style="background:#F6F8FB;color:#2A3D5F;--kt-edge:{{ $accent }};border-radius:8px;padding:16px 18px;">
             <div class="kt-muted" style="font-size:11.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#7A8AA3;margin-bottom:6px;">A little about me</div>
             <div class="kt-text" style="font-size:14.5px;color:#2A3D5F;line-height:1.6;">{!! nl2br(e($providerBio)) !!}</div>
           </td></tr>
@@ -142,6 +142,9 @@
             <a href="{{ $portalUrl }}" style="display:inline-block;background:{{ $primary }};color:#ffffff;text-decoration:none;font-weight:800;font-size:15px;padding:14px 30px;border-radius:9px;mso-padding-alt:0;">Open your parent app →</a>
           </td></tr>
         </table>
+
+        {{-- Get the app (2026-10-28): the Google Play card, KiddieTrac brand only (ProviderWelcomeMailer sets appCard) --}}
+        @if(!empty($appCard))<div style="margin:22px 0 4px;">{!! $appCard !!}</div>@endif
 
         {{-- Contacts & escalation --}}
         <h2 class="kt-head" style="font-size:16px;color:{{ $primary }};font-weight:800;margin:26px 0 10px;">☎️ Who to contact</h2>

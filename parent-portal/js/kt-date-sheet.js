@@ -26,7 +26,50 @@
     try { return w.matchMedia && w.matchMedia('(pointer: coarse)').matches; }
     catch (e) { return false; }
   }
-  if (!coarse()) return;
+
+  /* STARTS AT NOW (2026-11-06, Anthony: "when educator for example uses daily log and choose one of the actions where it
+     asks for a time and you hit the field for time automatically jump to the current time ... full sweep across board
+     for things such as this including dates as well"). An empty time field opened at 9:00 AM, and an empty date at the
+     DEVICE's today. Both now start at the centre's own now (agency time zone, kt-tz.js):
+       - phones / the apps: the picker below opens on the current time and today; nothing is written until OK;
+       - desktop: tapping or tabbing into an EMPTY time or date-and-time field fills in the current time (the native
+         field has no picker to open there). A plain date is not filled on desktop - the browser's own calendar already
+         opens on today, and filling a date of birth or an expiry with today would be wrong.
+     Opt out on one field with data-kt-no-now. */
+  function agencyNow() {
+    var now = new Date(), z;
+    try { z = (KT.tz && KT.tz()) || undefined; } catch (e) { z = undefined; }
+    try {
+      var parts = new Intl.DateTimeFormat('en-CA', { timeZone: z, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+      var g = function (t) { for (var i = 0; i < parts.length; i++) { if (parts[i].type === t) return +parts[i].value; } return NaN; };
+      var o = { y: g('year'), m: g('month') - 1, day: g('day'), hh: g('hour') % 24, mm: g('minute') };
+      if (!isNaN(o.y) && !isNaN(o.hh)) return o;
+    } catch (e) { /* no Intl time zones: the device clock */ }
+    return { y: now.getFullYear(), m: now.getMonth(), day: now.getDate(), hh: now.getHours(), mm: now.getMinutes() };
+  }
+  KT.agencyNowParts = agencyNow;
+  function p2(n) { return (n < 10 ? '0' : '') + n; }
+
+  if (!coarse()) {
+    var keyFocus = false, pressedAt = 0;
+    d.addEventListener('keydown', function (e) { keyFocus = e.key === 'Tab'; }, true);
+    d.addEventListener('pointerdown', function () { pressedAt = Date.now(); keyFocus = false; }, true);
+    d.addEventListener('focusin', function (e) {
+      var el = e.target;
+      if (!el || el.tagName !== 'INPUT' || (el.type !== 'time' && el.type !== 'datetime-local')) return;
+      if (el.value || el.disabled || el.readOnly || el.hasAttribute('data-kt-no-now') || el.closest('[data-kt-no-now]')) return;
+      // Only when the person put themselves there (a click or Tab) - never a screen's own autofocus.
+      if (!keyFocus && Date.now() - pressedAt > 600) return;
+      var n = agencyNow();
+      var v = el.type === 'time' ? p2(n.hh) + ':' + p2(n.mm) : n.y + '-' + p2(n.m + 1) + '-' + p2(n.day) + 'T' + p2(n.hh) + ':' + p2(n.mm);
+      el.value = v;
+      if (el.value !== v) return;   // outside min/max: leave it empty
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }, true);
+    return;
+  }
 
   var Z = 2147483000;                       // above the portal's own modals
   var TYPES = { date: 1, time: 1, 'datetime-local': 1, month: 1 };
@@ -67,8 +110,10 @@
      it is showing rather than on today. */
   function currentParts(input) {
     var v = String(input.value || '');
-    var now = new Date();
-    var out = { y: now.getFullYear(), m: now.getMonth(), day: now.getDate(), hh: 9, mm: 0, hasDate: false, hasTime: false };
+    var now = input.hasAttribute('data-kt-no-now') ? null : agencyNow();
+    var dev = new Date();
+    var out = now ? { y: now.y, m: now.m, day: now.day, hh: now.hh, mm: now.mm, hasDate: false, hasTime: false }
+                  : { y: dev.getFullYear(), m: dev.getMonth(), day: dev.getDate(), hh: 9, mm: 0, hasDate: false, hasTime: false };
     var dm = v.match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
     if (dm) {
       out.y = +dm[1]; out.m = +dm[2] - 1;

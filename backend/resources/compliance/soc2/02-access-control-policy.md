@@ -16,7 +16,7 @@ The policy covers:
 
 - **Application accounts:** all portal and app roles.
 - **Infrastructure access:**
-  - GoDaddy cPanel and SSH;
+  - the Cloudways platform console and SSH (key-based) to the server;
   - the MySQL database;
   - the GitHub repository;
   - DNS and domain registrar accounts;
@@ -45,14 +45,14 @@ The policy covers:
 
 - **Customer users** are created by that agency's administrators through the portal's user-invite flow, or by the platform admin when onboarding a new agency.
 - **Temporary passwords** are one-time keys. `must_change_password` forces a password change at first login, and middleware blocks every other action until the change is made.
-- **Infrastructure access** (cPanel, SSH, database, GitHub, vendor consoles) is limited to the owner. Before anyone else gets infrastructure access, they need written approval from the Security Officer and must acknowledge 09. The grant is recorded in an access register. **Status: the register does not exist yet (Gap).**
+- **Infrastructure access** (Cloudways console, SSH, database, GitHub, vendor consoles) is limited to the owner. Before anyone else gets infrastructure access, they need written approval from the Security Officer and must acknowledge 09. The grant is recorded in an access register. **Status: the register does not exist yet (Gap).**
 
 ### 3.3 Deprovisioning (CC6.2, CC6.3)
 
 - Deactivating a user sets their account status. A job runs **every 15 minutes** and revokes all API tokens held by deactivated users, so any session still open ends within 15 minutes.
 - Offboarding and departure jobs run **daily** and process staff and family departures.
 - Agencies must deactivate departing staff on or before their last day.
-- For infrastructure accounts, credentials must be rotated within 24 hours of a person's departure. This covers cPanel, SSH keys, database passwords and vendor API keys.
+- For infrastructure accounts, credentials must be rotated within 24 hours of a person's departure. This covers the Cloudways console, SSH keys, database passwords and vendor API keys.
 - **Weakness:** role assignments carry only a `created_at` timestamp, and role changes are only partly written to `audit_logs`. So the platform cannot fully show who changed a role, or when. **(Partial; remediation R-AC-03.)**
 
 ### 3.4 Authentication
@@ -77,7 +77,7 @@ The policy covers:
 **Target state:**
 
 - MFA enforced **on the server** for platform_admin, agency_admin and centre_director.
-- MFA also required for cPanel, GitHub, the domain registrar and every sub-processor console.
+- MFA also required for the Cloudways console, GitHub, the domain registrar and every sub-processor console.
 
 (Remediation R-AC-01 and R-AC-02.)
 

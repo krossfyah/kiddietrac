@@ -376,7 +376,7 @@ final class EmergencyCardController extends Controller
   .agency-logo img { max-height: 50px; max-width: 110px; display: block; margin-left: auto; }
   .section { margin-bottom: 14px; }
   .section h3 { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: var(--kt-faint); margin: 0 0 6px; font-weight: 700; }
-  .alert-list .alert { background: #FEF2F2; border-left: 4px solid var(--kt-red); padding: 6px 10px; margin-bottom: 4px; font-size: 13px; color: #7F1D1D; border-radius: 4px; }
+  .alert-list .alert { background: #FEF2F2; --kt-edge:var(--kt-red); padding: 6px 10px; margin-bottom: 4px; font-size: 13px; color: #7F1D1D; border-radius: 4px; }
   .info-row { display: grid; grid-template-columns: 150px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid #F3F4F6; font-size: 13px; }
   .info-row .lbl { color: var(--kt-faint); font-weight: 600; font-size: 12px; }
   .guardians table, .meds table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -406,7 +406,7 @@ final class EmergencyCardController extends Controller
           background: #F0F7FA; border-radius: 8px; padding: 6px 9px; }
 
   /* Allergies are the reason this card exists — bigger and louder than anything else. */
-  .alert-list .alert { background: #FEF2F2; border-left: 5px solid var(--kt-red);
+  .alert-list .alert { background: #FEF2F2; --kt-edge:var(--kt-red);
         padding: 9px 12px; margin-bottom: 6px; font-size: 14.5px; color: #7F1D1D;
         border-radius: 6px; line-height: 1.45; }
   .alert-list .plan { margin-top: 4px; font-size: 12.5px; color: #991B1B; font-weight: 600; }
@@ -767,6 +767,18 @@ HTML;
     {
         if (! $roomId) {
             return collect();
+        }
+
+        /* THE HOME'S TEAM, provider first (2026-10-21). The narrowing below existed because
+           agency accounts sat in every room; App\Support\CentreTeam leaves exactly those out,
+           so a home with a real second educator (Rachel Blane at Bruni Meeser's) now lists
+           both of the people who may be with the child. The old rule stays as the fallback. */
+        $team = \App\Support\CentreTeam::forRooms([$roomId])[$roomId] ?? [];
+        if ($team) {
+            return collect(array_values($team))->map(fn ($m) => (object) [
+                'first_name' => $m['first_name'], 'last_name' => $m['last_name'], 'phone' => $m['phone'],
+                'photo_url' => $m['photo_url'], 'email' => $m['email'], 'sex' => $m['sex'],
+            ])->values();
         }
 
         $educators = DB::table('educator_rooms as er')

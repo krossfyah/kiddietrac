@@ -18,13 +18,18 @@ use Illuminate\Support\Facades\DB;
  * remain (they must be transferred or withdrawn, which has its own notices).
  * Families left open are REPORTED, not departed — departing a family closes logins
  * and is a decision for a person.
+ *
+ * Future shifts (2026-11-12, kt:integrity-check ticket #249): closing Bruni Meeser's home left
+ * 40 shifts booked there for her and Rachel Blane through December, on accounts the closure had
+ * itself closed. Shifts still 'scheduled' from the day after the last day (never before today)
+ * are removed here; a shift that was worked, started or cancelled is a record and stays.
  */
 trait ClosesCentres
 {
-    /** @return array{roles_closed:int, enrolments_ended:int, families_still_open:array<int,array{id:int,family_name:?string}>} */
+    /** @return array{roles_closed:int, enrolments_ended:int, shifts_removed:int, families_still_open:array<int,array{id:int,family_name:?string}>} */
     protected function closeCentreLinks(int $centreId, ?string $endDate = null): array
     {
-        $endDate = $endDate ?: now()->toDateString();
+        $endDate = $endDate ?: \App\Support\AgencyTime::today();
 
         $rolesClosed = DB::table('role_assignments')
             ->where('centre_id', $centreId)->where('active', 1)
@@ -37,14 +42,25 @@ trait ClosesCentres
                 ->update(['end_date' => $endDate])
             : 0;
 
+        $shiftsFrom = max(\Illuminate\Support\Carbon::parse($endDate)->addDay()->toDateString(),
+            \App\Support\AgencyTime::today());
+        $shiftsRemoved = $roomIds
+            ? DB::table('shifts')->whereIn('room_id', $roomIds)->where('status', 'scheduled')
+                ->where('starts_at', '>=', $shiftsFrom . ' 00:00:00')->delete()
+            : 0;
+
         $familiesOpen = DB::table('families')->where('centre_id', $centreId)
             ->whereNull('deleted_at')->whereNull('departure_applied_at')
+            /* A family waiting on the AGENCY waitlist is accounted for, not stranded (#251). */
+            ->whereNotExists(fn ($q) => $q->from('external_waitlist as w')->whereColumn('w.family_id', 'families.id')
+                ->whereNull('w.deleted_at')->whereIn('w.status', \App\Support\AgencyWaitlist::OPEN_STATUSES))
             ->orderBy('family_name')->get(['id', 'family_name'])
             ->map(fn ($f) => ['id' => (int) $f->id, 'family_name' => $f->family_name])->all();
 
         return [
             'roles_closed' => $rolesClosed,
             'enrolments_ended' => $enrolmentsEnded,
+            'shifts_removed' => $shiftsRemoved,
             'families_still_open' => $familiesOpen,
         ];
     }

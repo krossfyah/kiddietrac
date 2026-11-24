@@ -141,11 +141,51 @@ trait ResolvesCentreContext
     /**
      * Confirm the user can access a record belonging to a centre.
      */
+    /** Set only while filterAccessibleChildIds() runs: per-user answers that cannot change within that one call. */
+    private ?array $ktAccessMemo = null;
+
+    /**
+     * canAccessChildId() for a LIST of children, with the same answer for each - the rule is not restated here.
+     * (2026-10-30, phone speed sweep: Files > Received asked it once per child, about 8 queries each - 474 queries,
+     * most of them the same "what are this person's roles / rooms / centre access" for every child.) Inside this call
+     * those per-person answers are asked once; the per-child half still reads each child. The memo lives for this
+     * call only, so a role granted later in the same request is never answered from it.
+     */
+    protected function filterAccessibleChildIds($user, array $childIds): array
+    {
+        if (! $user || ! $childIds) return [];
+        $this->ktAccessMemo = ['uid' => (int) $user->id];
+        try {
+            return array_values(array_filter(array_map('intval', $childIds), fn ($cid) => $this->canAccessChildId($user, $cid)));
+        } finally {
+            $this->ktAccessMemo = null;
+        }
+    }
+
+    private function ktMemo($user, string $key, callable $read)
+    {
+        if ($this->ktAccessMemo === null || (int) ($this->ktAccessMemo['uid'] ?? 0) !== (int) $user->id) return $read();
+        if (! array_key_exists($key, $this->ktAccessMemo)) $this->ktAccessMemo[$key] = $read();
+        return $this->ktAccessMemo[$key];
+    }
+
     protected function authorizeCentreAccess($user, int $centreId): bool
     {
+        return (bool) $this->ktMemo($user, 'centre:' . $centreId, fn () => $this->authorizeCentreAccessUncached($user, $centreId));
+    }
+
+    private function authorizeCentreAccessUncached($user, int $centreId): bool
+    {
+        /* A PARENT'S ROLE ROW IS NOT STAFF (2026-11-05, leak sweep). Guardian role rows carry the
+           family's centre_id, so "any active role at this centre" let every parent through as staff
+           of their centre: guardian #1214 (family 573) opened child 654 of family 567 - profile,
+           ledger, invoices, immunization, care logs. 119 live parents could do the same. A parent's
+           own family is answered by the guardians table in canAccessChildId()/canAccessFamilyId(),
+           never by this check. */
         $has = DB::table('role_assignments')
             ->where('user_id', $user->id)
             ->where('active', true)
+            ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
             ->where(function ($q) use ($centreId) {
                 $q->where('centre_id', $centreId)
                   ->orWhere(function ($q2) use ($centreId) {
@@ -187,6 +227,7 @@ trait ResolvesCentreContext
                 $inAgency = DB::table('role_assignments')
                     ->where('user_id', $user->id)
                     ->where('active', true)
+                    ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
                     ->where('agency_id', $centreAgencyId)
                     ->exists();
 
@@ -346,14 +387,14 @@ trait ResolvesCentreContext
            Measured before shipping: iLearn 0 child-accesses removed (one room per centre,
            so the two scopes already coincided), Test Agency 48 removed (four rooms per
            centre) — which is the point. */
-        $activeRoles = DB::table('role_assignments')
+        $activeRoles = $this->ktMemo($user, 'roles', fn () => DB::table('role_assignments')
             ->where('user_id', $user->id)->where('active', true)
-            ->pluck('role')->all();
+            ->pluck('role')->all());
 
         $privileged = (bool) array_intersect($activeRoles, ['centre_director', 'agency_admin', 'platform_admin']);
         $isHomeVisitor = in_array('home_visitor', $activeRoles, true);
         $isEducator = in_array('educator', $activeRoles, true);
-        $holdsRooms = DB::table('educator_rooms')->where('user_id', $user->id)->exists();
+        $holdsRooms = $this->ktMemo($user, 'holdsRooms', fn () => DB::table('educator_rooms')->where('user_id', $user->id)->exists());
 
         $roomScoped = ! $privileged && ($isHomeVisitor || ($isEducator && $holdsRooms));
 

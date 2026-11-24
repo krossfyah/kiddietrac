@@ -354,11 +354,35 @@
     });
     cell.appendChild(kebab);
     cell.setAttribute('data-kt-ka', '1');
+    /* A CARD'S ⋮ GOES TO ITS CORNER ON A PHONE (2026-10-28, Anthony: "the kebab needs to be consistent across
+       the entire platform and push further to the right"). The action bar of a card-list row wrapped onto its
+       own line on a phone, leaving the ⋮ at the bottom left, centred, or mid-right. When the WHOLE bar collapsed
+       into the ⋮ (a pure action bar, which is all cardActionCell accepts), the bar is pinned to the card's
+       top-right corner at <=768px - where the table cards put theirs - and the card keeps room for it. */
+    if (cell.tagName !== 'TD' && cell.parentElement && cell.parentElement.parentElement
+        && cell.parentElement.parentElement.hasAttribute('data-kt-list')) {
+      cornerCss();
+      cell.setAttribute('data-kt-ka-card', '1');
+      cell.parentElement.classList.add('kt-ka-cardrow');
+    }
+  }
+  function cornerCss() {
+    if (d.getElementById('kt-ka-corner-css')) return;
+    var st = d.createElement('style');
+    st.id = 'kt-ka-corner-css';
+    st.textContent = '@media (max-width:768px){'
+      + '[data-kt-list] > .kt-ka-cardrow{position:relative !important;padding-right:50px !important;box-sizing:border-box;}'
+      + '[data-kt-list] > .kt-ka-cardrow > [data-kt-ka-card]{position:absolute !important;top:8px !important;right:6px !important;left:auto !important;bottom:auto !important;'
+      +   'margin:0 !important;padding:0 !important;width:auto !important;min-width:0 !important;display:block !important;z-index:2;background:none !important;border:0 !important;}'
+      + '}';
+    (d.head || d.documentElement).appendChild(st);
   }
 
   function restore(cell) {
     var kb = cell.querySelector('.kt-ka-kebab');
     if (kb) kb.remove();
+    cell.removeAttribute('data-kt-ka-card');
+    if (cell.parentElement) cell.parentElement.classList.remove('kt-ka-cardrow');
     var hidden = cell.querySelectorAll('.kt-ka-hidden');
     for (var i = 0; i < hidden.length; i++) { hidden[i].classList.remove('kt-ka-hidden'); hidden[i].style.removeProperty('display'); }
     cell.removeAttribute('data-kt-ka');

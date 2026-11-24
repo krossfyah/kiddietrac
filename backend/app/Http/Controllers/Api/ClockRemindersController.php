@@ -37,6 +37,11 @@ class ClockRemindersController extends Controller
         'weekdays_only' => true,
         'push' => true,
         'email' => true,
+        // Still clocked in after every child has left the room (2026-11-07, staff:empty-room-clock-out): an app
+        // reminder to the educator empty_after minutes after the last child left, again every empty_repeat (0 = once).
+        'empty_enabled' => true,
+        'empty_after' => 15,
+        'empty_repeat' => 30,
     ];
 
     public static function read(int $agencyId): array
@@ -69,7 +74,7 @@ class ClockRemindersController extends Controller
 
     private function assertAdmin(Request $request): void
     {
-        $ok = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('active', true)
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])->exists();
         abort_unless($ok, 403, 'Administrator access required.');
     }
@@ -94,13 +99,16 @@ class ClockRemindersController extends Controller
             'weekdays_only' => 'nullable|boolean',
             'push' => 'nullable|boolean',
             'email' => 'nullable|boolean',
+            'empty_enabled' => 'nullable|boolean',
+            'empty_after' => 'nullable|integer|min:5|max:240',
+            'empty_repeat' => 'nullable|integer|min:0|max:240',
         ]);
 
         $current = self::read($agencyId);
         $next = $current;
         foreach (self::DEFAULTS as $k => $_) {
             if (array_key_exists($k, $data) && $data[$k] !== null) {
-                $next[$k] = is_bool(self::DEFAULTS[$k]) ? (bool) $data[$k] : $data[$k];
+                $next[$k] = is_bool(self::DEFAULTS[$k]) ? (bool) $data[$k] : (is_int(self::DEFAULTS[$k]) ? (int) $data[$k] : $data[$k]);
             }
         }
 

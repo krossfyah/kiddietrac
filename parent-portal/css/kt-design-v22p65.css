@@ -376,7 +376,8 @@ html { scroll-behavior: smooth; }
   -webkit-appearance: none;
   width: 44px !important;
   height: 24px !important;
-  background: #CBD5E1 !important;
+  background: #D3DAE3 !important;
+  box-shadow: none;
   border: none !important;
   border-radius: 999px !important;
   cursor: pointer;
@@ -397,7 +398,8 @@ html { scroll-behavior: smooth; }
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
 }
 [data-kt-pretty] .kt-switch input[type="checkbox"]:checked {
-  background: linear-gradient(135deg, var(--kt-brand), var(--kt-brand-vibrant)) !important;
+  background: #0E7C90 !important;
+  box-shadow: none;
 }
 [data-kt-pretty] .kt-switch input[type="checkbox"]:checked::after {
   left: 23px;

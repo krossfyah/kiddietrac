@@ -187,7 +187,7 @@ final class LegalNoticeCommand extends Command
         }
 
         $testBanner = $isTest
-            ? '<tr><td style="padding:0 0 18px;"><div style="background:#FEF3C7;border-left:4px solid #F59E0B;'
+            ? '<tr><td style="padding:0 0 18px;"><div style="background:#FEF3C7;--kt-edge:#F59E0B;'
               . 'border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.55;color:#78350F;">'
               . '<strong>This is a test.</strong> Nobody else has received it, and no send has been recorded. '
               . 'The real notice is identical apart from this banner and the greeting.</div></td></tr>'

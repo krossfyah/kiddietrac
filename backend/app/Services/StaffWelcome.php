@@ -50,7 +50,7 @@ final class StaffWelcome
             ], $common);
         }
         $core = [
-            ['✅', 'Sign in & sign out', 'Record arrivals and departures by tap or QR code. Parents are told straight away.'],
+            ['✅', 'Sign in & sign out', 'Record arrivals and departures with a tap, or families check in themselves with One-Tap (QR contactless check-in). Parents are told straight away.'],
             ['📝', 'Daily care logs', 'Meals, naps, activities, milestones and photos. Families get a summary every evening.'],
             ['🎨', 'Lesson plans & observations', 'Plan the week and capture learning moments as they happen.'],
             ['🩹', 'Incidents & medications', 'Record accidents, health notes and medication given, with a signature.'],
@@ -105,7 +105,7 @@ final class StaffWelcome
             . '<div style="font-size:15px;line-height:1.65;color:#334155;">' . $para($F('intro')) . '</div>'
             . ($care !== ''
                 ? $h2('🌱 How we care for children at ' . e($agencyName))
-                  . '<div class="kt-panel" style="font-size:15px;line-height:1.7;color:#334155;background:#F0FDF4;border-left:4px solid #16A34A;border-radius:8px;padding:14px 16px;">' . $para($care) . '</div>'
+                  . '<div class="kt-panel" style="font-size:15px;line-height:1.7;color:#334155;background:#F0FDF4;--kt-edge:#16A34A;border-radius:8px;padding:14px 16px;">' . $para($care) . '</div>'
                 : '')
             . $h2('🧭 Your tour of KiddieTrac')
             . '<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">' . $tour . '</table>'
@@ -116,6 +116,12 @@ final class StaffWelcome
             . '<div style="font-size:14.5px;line-height:1.75;color:#334155;">' . $para($F('first_steps')) . '</div>'
             . ($who !== '' ? $h2('🙋 Who to ask') . '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;">' . $who . '</div>' : '')
             . '<div style="margin:24px 0 8px;">' . EmailTemplate::button('Open KiddieTrac', $portal) . '</div>'
+            /* GET THE APP (2026-10-28, Anthony: "the welcome to educator emails ... add the google play store image/link to
+               downloading the app"). The same Google Play card as the KiddieTrac emails (PlayBadge::card). KiddieTrac's
+               own brand only: a reseller's or white-label agency has its own app, so its educators are not sent ours. */
+            . ((\App\Support\Brand::forAgency($agencyId)['source'] ?? 'kiddietrac') === 'kiddietrac'
+                ? $h2('📱 Get the app on your phone') . \App\Support\PlayBadge::card()
+                : '')
             . '<div style="font-size:15px;line-height:1.65;color:#334155;margin-top:18px;">' . $para($F('signoff')) . '</div>';
 
         return EmailTemplate::wrap($agencyId, $body, [

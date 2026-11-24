@@ -32,6 +32,10 @@ final class SignedFormFiler
 {
     public const CATEGORY = 'signed_form';
     public const SOURCE   = 'managed_form_signoff';
+    /* A counter-signed form the office SHARED with a staff member (2026-10-20). Its own
+       source so the nightly backfill (which re-files SOURCE rows onto the signer) never
+       touches it, and one row per (sign-off, staff member). */
+    public const SHARE    = 'managed_form_share';
 
     /**
      * File (or refresh) the document for one sign-off.
@@ -125,7 +129,7 @@ final class SignedFormFiler
      */
     public static function withReview($docs)
     {
-        $ids = collect($docs)->filter(fn ($d) => ($d->source_type ?? null) === self::SOURCE)
+        $ids = collect($docs)->filter(fn ($d) => in_array($d->source_type ?? null, [self::SOURCE, self::SHARE], true))
             ->pluck('source_id')->map(fn ($v) => (int) $v)->all();
         $rows = $ids ? DB::table('managed_form_signoffs as s')->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
             ->whereIn('s.id', $ids)->get([
@@ -135,25 +139,39 @@ final class SignedFormFiler
         ])->keyBy('id') : collect();
 
         return collect($docs)->map(function ($d) use ($rows) {
-            $s = (($d->source_type ?? null) === self::SOURCE) ? ($rows[(int) $d->source_id] ?? null) : null;
+            $s = in_array($d->source_type ?? null, [self::SOURCE, self::SHARE], true) ? ($rows[(int) $d->source_id] ?? null) : null;
             if ($s) {
-                if ($s->countersigned_at) {
-                    $d->review = ['state' => 'countersigned', 'by' => $s->countersigner_name,
-                        'role' => $s->countersigner_role, 'at' => $s->countersigned_at, 'note' => $s->countersign_note];
-                } elseif ($s->correction_requested_at && ! $s->corrected_at) {
-                    $d->review = ['state' => 'returned', 'by' => $s->correction_requested_by_name,
-                        'at' => $s->correction_requested_at, 'note' => $s->correction_note];
-                } elseif ($s->correction_requested_at) {
-                    $d->review = ['state' => 'corrected', 'by' => $s->correction_requested_by_name,
-                        'at' => $s->corrected_at, 'note' => null];
-                } else {
-                    // A form set to need no counter-signature says so, rather than "not yet".
-                    $d->review = ['state' => ((int) ($s->requires_countersign ?? 1)) ? 'pending' : 'not_required'];
-                }
+                $d->review = self::reviewOf($s);
             }
             unset($d->source_type, $d->source_id);
             return $d;
         })->values();
+    }
+
+    /** Sign-off columns reviewOf() reads (prefix "s." on managed_form_signoffs, "f." on managed_forms). */
+    public const REVIEW_COLUMNS = ['s.countersigned_at', 's.countersigner_name', 's.countersigner_role', 's.countersign_note',
+        's.correction_requested_at', 's.correction_requested_by_name', 's.correction_note', 's.corrected_at', 'f.requires_countersign'];
+
+    /**
+     * The office's review of ONE sign-off, the single rule for Documents and My forms > Submitted
+     * (2026-11-09, Anthony: "replace with counter signed and who counter signed if any").
+     */
+    public static function reviewOf(object $s): array
+    {
+        if ($s->countersigned_at) {
+            return ['state' => 'countersigned', 'by' => $s->countersigner_name,
+                'role' => $s->countersigner_role, 'at' => $s->countersigned_at, 'note' => $s->countersign_note];
+        }
+        if ($s->correction_requested_at && ! $s->corrected_at) {
+            return ['state' => 'returned', 'by' => $s->correction_requested_by_name,
+                'at' => $s->correction_requested_at, 'note' => $s->correction_note];
+        }
+        if ($s->correction_requested_at) {
+            return ['state' => 'corrected', 'by' => $s->correction_requested_by_name, 'at' => $s->corrected_at, 'note' => null];
+        }
+
+        // A form set to need no counter-signature says so, rather than "not yet".
+        return ['state' => ((int) ($s->requires_countersign ?? 1)) ? 'pending' : 'not_required'];
     }
 
     /**

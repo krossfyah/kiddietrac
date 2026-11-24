@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B1F3A">
+<meta name="robots" content="noindex, nofollow">
+<title>Meeting request — KiddieTrac</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
+<link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
+<style>
+  /* Decide a website meeting request from the sales email, without signing in
+     (2026-10-23, BookingEmailActionController). Opening this page changes nothing. */
+  :root { --navy:#0B1F3A; --teal:#1FA2A6; --teal-d:#178A8E; --cream:#F6F4EF; --ink:#0B1F3A; --text:#4A5568; --muted:#8A94A6; --line:#E7E3DA; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--cream); color:var(--ink); font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .top { background:var(--navy); color:#fff; padding:20px 20px 30px; }
+  .top .in, main { max-width:720px; margin:0 auto; }
+  .top img { display:block; width:170px; height:auto; }
+  .eyebrow { font-size:11px; font-weight:700; letter-spacing:2.2px; text-transform:uppercase; color:#7FD3D5; margin-top:22px; }
+  h1 { font-size:28px; line-height:1.2; letter-spacing:-.5px; margin:10px 0 0; }
+  main { padding:0 16px 60px; margin-top:-16px; }
+  .card { background:#fff; border-radius:14px; box-shadow:0 1px 2px rgba(11,31,58,.06), 0 10px 30px -18px rgba(11,31,58,.35); padding:22px 22px 18px; margin-top:16px; }
+  .when { font-size:20px; font-weight:700; }
+  .sub { color:var(--text); font-size:14px; margin-top:4px; line-height:1.55; }
+  .who { margin-top:14px; font-size:14.5px; line-height:1.7; color:var(--ink); }
+  .who b { display:inline-block; min-width:84px; color:var(--muted); font-weight:700; font-size:12px; letter-spacing:.6px; text-transform:uppercase; }
+  .quote { margin-top:10px; background:var(--cream); border-radius:10px; padding:10px 12px; color:var(--text); font-size:14px; white-space:pre-wrap; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+  .tabs button { appearance:none; border:1.5px solid var(--line); background:#fff; color:var(--text); border-radius:999px; padding:9px 16px; font:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+  .tabs button.on { border-color:var(--teal); background:#E8F7F7; color:var(--teal-d); }
+  .tabs button.on.dec { border-color:#DC2626; background:#FEF2F2; color:#B91C1C; }
+  label.f { display:block; font-size:13px; font-weight:700; color:var(--ink); margin:14px 0 6px; }
+  label.f .opt { font-weight:500; color:var(--muted); }
+  input, textarea, select { width:100%; font:inherit; font-size:16px; color:var(--ink); background:#fff; border:1.5px solid var(--line); border-radius:10px; padding:10px 12px; }
+  textarea { min-height:90px; resize:vertical; line-height:1.5; }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(31,162,166,.16); }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .hint { font-size:12.5px; color:var(--muted); margin-top:6px; line-height:1.5; }
+  button.go { appearance:none; border:0; background:var(--teal); color:#fff; font:inherit; font-weight:700; font-size:16px; padding:14px 26px; border-radius:8px; cursor:pointer; margin-top:18px; }
+  button.go.dec { background:#DC2626; }
+  button.go:disabled { opacity:.6; cursor:default; }
+  .msg { font-size:14px; margin-top:10px; }
+  .msg.err { color:#B91C1C; }
+  .state { padding:12px 14px; border-radius:10px; font-size:14.5px; font-weight:700; margin-top:14px; }
+  .done { text-align:center; padding:34px 20px; }
+  .done .big { font-size:44px; }
+  .done h3 { font-size:24px; margin:10px 0 0; }
+  .done p { color:var(--text); font-size:15px; line-height:1.7; margin:10px auto 0; max-width:480px; }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:10px 16px 30px; }
+  footer a { color:var(--muted); }
+  @media (max-width:560px) { .row { grid-template-columns:1fr; } h1 { font-size:24px; } }
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <img src="https://www.kiddietrac.com/email-logo-v4.png" alt="KiddieTrac — Smart Childcare Management Platform" width="170" height="80">
+  <div class="eyebrow">Website meeting request</div>
+  <h1 id="h1">Loading…</h1>
+</div></div>
+<main id="main"><div class="card">Loading…</div></main>
+<footer>KiddieTrac Sales · <a href="https://app.kiddietrac.com/dashboard.html#sales-bookings">Open Sales → Bookings in the portal</a></footer>
+<script src="/js/kt-net.js?v=20261025"></script>
+<script>
+(function () {
+  var API = 'https://api.kiddietrac.com/api/v1/marketing-site/booking-action/';
+  var q = new URLSearchParams(location.search), id = q.get('b');
+  var main = document.getElementById('main'), h1 = document.getElementById('h1');
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var state = { links: {}, mode: q.get('a') };
+  function qs(link) { var u = new URL(link); return u.search; }
+  function bad(t) { h1.textContent = 'This link can’t be used'; main.innerHTML = '<div class="card">' + esc(t) + '<br><br>Open <a href="https://app.kiddietrac.com/dashboard.html#sales-bookings">Sales → Bookings</a> in the portal instead.</div>'; }
+  if (!id || !q.get('s')) { bad('The link is incomplete.'); return; }
+  fetch(API + encodeURIComponent(id) + location.search, { headers: { Accept: 'application/json' } })
+    .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.message || 'This link is not valid.'); return j; }); })
+    .then(render).catch(function (e) { bad(e.message); });
+
+  function render(d) {
+    var b = d.booking; state.links = d.links || {}; state.d = d;
+    h1.textContent = b.name + (b.agency ? ' · ' + b.agency : '');
+    var html = '<div class="card"><div class="when">' + esc(b.type_name) + ' · ' + b.duration_min + ' min</div>'
+      + '<div class="sub">' + esc(b.when_et) + (b.when_local ? '<br>' + esc(b.when_local) : '') + '<br>' + (b.meet_via === 'phone' ? '📞 Phone call' : '🎥 Microsoft Teams') + '</div>'
+      + '<div class="who"><b>Email</b> <a href="mailto:' + esc(b.email) + '">' + esc(b.email) + '</a>' + (b.phone ? '<br><b>Phone</b> ' + esc(b.phone) : '') + (b.children ? '<br><b>Children</b> ' + esc(b.children) : '') + '</div>'
+      + (b.notes ? '<div class="quote">“' + esc(b.notes) + '”</div>' : '');
+    var settled = d.status === 'declined' || d.status === 'cancelled';
+    if (d.status === 'booked') html += '<div class="state" style="background:#ECFDF5;color:#065F46">✓ Confirmed' + (d.decided_by ? ' by ' + esc(d.decided_by) : '') + '. You can still change the time or cancel below.</div>';
+    if (settled) html += '<div class="state" style="background:#F1F5F9;color:#475569">This request was ' + esc(d.status) + (d.decided_by ? ' by ' + esc(d.decided_by) : '') + '. Nothing more to do.</div>';
+    if (d.expired) html += '<div class="state" style="background:#FEF3C7;color:#92400E">The meeting time has passed, so these links have expired.</div>';
+    html += '</div>';
+    if (!settled && !d.expired) {
+      if (d.status === 'booked' && state.mode === 'accept') state.mode = 'modify';
+      html += '<div class="card"><div class="tabs">'
+        + (d.status === 'requested' ? '<button type="button" data-m="accept">✓ Accept</button>' : '')
+        + '<button type="button" data-m="modify">✎ ' + (d.status === 'booked' ? 'Change time' : 'Change & confirm') + '</button>'
+        + '<button type="button" data-m="decline" class="dec">✕ ' + (d.status === 'booked' ? 'Cancel meeting' : 'Decline') + '</button></div><div id="form"></div></div>';
+    }
+    main.innerHTML = html;
+    main.querySelectorAll('[data-m]').forEach(function (bt) { bt.onclick = function () { state.mode = bt.getAttribute('data-m'); paint(); }; });
+    if (!settled && !d.expired) paint();
+  }
+
+  function paint() {
+    var d = state.d, b = d.booking, m = state.mode, f = document.getElementById('form');
+    main.querySelectorAll('[data-m]').forEach(function (bt) { bt.classList.toggle('on', bt.getAttribute('data-m') === m); });
+    var teams = b.meet_via === 'phone' ? '' : '<label class="f">Teams link <span class="opt">(optional)</span></label><input id="teams" type="url" value="' + esc(b.teams_url || '') + '" placeholder="'
+      + esc(d.teams_auto ? 'Leave blank — a Teams meeting is created automatically' : (d.default_link ? 'Leave blank to use the default Teams link' : 'Paste the Teams meeting link')) + '">';
+    var inv = b.meet_via === 'phone' ? '' : '<label class="f">Also invite <span class="opt">(optional · emails, separated by commas — each gets an Outlook invite with the Teams link)</span></label><input id="invitees" type="text" value="' + esc((b.invitees || []).join(', ')) + '" placeholder="e.g. safia@kiddietrac.com, director@theircentre.ca">';
+    var note = '<label class="f">Personal note in the email <span class="opt">(optional · signed ' + esc(d.actor || '') + ')</span></label><textarea id="note"></textarea>';
+    var out = '';
+    if (m === 'accept') out = teams + inv + note + '<button class="go" id="go">✓ Accept & send the confirmation</button>';
+    else if (m === 'modify') out = '<div class="row"><div><label class="f">Date (Eastern)</label><input id="date" type="date" value="' + esc(b.local_date) + '"></div>'
+      + '<div><label class="f">Time (Eastern)</label><input id="time" type="time" step="300" value="' + esc(b.local_time) + '"></div></div>'
+      + '<div class="row"><div><label class="f">Meeting</label><select id="type">' + (d.types || []).map(function (t) { return '<option value="' + t.id + '"' + (t.id === b.type ? ' selected' : '') + '>' + esc(t.name) + ' (' + t.min + ' min)</option>'; }).join('') + '</select></div>'
+      + '<div><label class="f">Minutes</label><input id="dur" type="number" min="15" max="240" step="5" value="' + b.duration_min + '"></div></div>'
+      + teams + inv + note + '<div class="hint">They get a confirmation at the new time, with the change shown.</div><button class="go" id="go">✓ Confirm the new time</button>';
+    else out = '<label class="f">Reason <span class="opt">(optional, one line — shown to them)</span></label><input id="reason" type="text" placeholder="e.g. our team is fully booked that afternoon">'
+      + note + '<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:14px"><input id="notify" type="checkbox" checked style="width:auto"> Email them (recommended)</label>'
+      + '<button class="go dec" id="go">✕ ' + (d.status === 'booked' ? 'Cancel the meeting' : 'Decline the request') + '</button>';
+    f.innerHTML = out + '<div class="msg" id="msg"></div>';
+    if (m === 'modify') document.getElementById('type').onchange = function () { var t = (d.types || []).filter(function (x) { return x.id === this.value; }, this)[0]; if (t) document.getElementById('dur').value = t.min; };
+    document.getElementById('go').onclick = submit;
+  }
+
+  function val(id) { var e = document.getElementById(id); return e ? e.value.trim() : ''; }
+  function submit() {
+    var m = state.mode, body = { note: val('note') || null };
+    if (val('teams')) body.teams_url = val('teams');
+    if (document.getElementById('invitees')) body.invitees = val('invitees');
+    if (m === 'modify') { body.date = val('date'); body.time = val('time'); body.type = val('type'); body.duration_min = Number(val('dur')) || null; }
+    if (m === 'decline') { body.reason = val('reason') || null; body.notify = document.getElementById('notify').checked; }
+    var go = document.getElementById('go'), msg = document.getElementById('msg');
+    go.disabled = true; msg.className = 'msg'; msg.textContent = 'Working…';
+    var link = state.links[m]; if (!link) { msg.className = 'msg err'; msg.textContent = 'That action is not available.'; go.disabled = false; return; }
+    fetch(API + encodeURIComponent(id) + qs(link), { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.message || 'That could not be done.'); return j; }); })
+      .then(function (j) {
+        var words = m === 'accept' ? ['✅', 'Meeting confirmed', 'The confirmation with the Teams link is on its way to ' + state.d.booking.email + '.']
+          : m === 'modify' ? ['✅', 'New time confirmed', 'They have been sent the new time.']
+          : ['🗂', state.d.status === 'booked' ? 'Meeting cancelled' : 'Request declined', body.notify ? 'They have been told, kindly.' : 'No email was sent.'];
+        if (j.mail === false) words[2] = 'Saved — but the email to them failed. Check the email log in the portal.';
+        main.innerHTML = '<div class="card done"><div class="big">' + words[0] + '</div><h3>' + esc(words[1]) + '</h3><p>' + esc(words[2]) + '</p><p>It is in Sales → Bookings and the sales calendar.</p></div>';
+        window.scrollTo(0, 0);
+      })
+      .catch(function (e) { go.disabled = false; msg.className = 'msg err'; msg.textContent = e.message; });
+  }
+})();
+</script>
+</body>
+</html>

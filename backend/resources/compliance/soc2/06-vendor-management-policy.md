@@ -62,7 +62,9 @@ When a vendor is dropped:
 
 | Vendor | Service | Data shared (high level) | Tier | Region (to confirm) | DPA on file |
 |---|---|---|---|---|---|
-| GoDaddy | Shared cPanel hosting, MySQL, web server | Everything: full database, uploaded files, logs, backups | High | North America | [ ] |
+| Cloudways | Managed server platform: web server, PHP, MySQL, server backups, console | Everything: full database, uploaded files, logs, backups | High | Canada (Toronto) | [ ] |
+| DigitalOcean (via Cloudways) | Underlying cloud infrastructure and data centre | Everything (as infrastructure) | High | Canada (Toronto) | [ ] |
+| GoDaddy (former host, until 2026-10-26) | Old shared hosting; frozen copy of KiddieTrac | A copy of the data as of the move | High until deleted | North America | [ ] - deletion to be confirmed (RM-30) |
 | GitHub (Microsoft) | Private source code repository | Source code and configuration; no customer data by design (confirm no secrets or data dumps are committed) | High | US | [ ] |
 | Let's Encrypt (ISRG) | TLS certificates via acme.sh | Domain names only | Low | US | [ ] n/a (public CA terms) |
 | Stripe | Payments | Payer name, email, amounts, invoice references; card data handled by Stripe | Medium | US / Canada | [ ] |
@@ -85,7 +87,7 @@ When a vendor is dropped:
 1. Confirm the region, tier and DPA status for each vendor.
 2. Name the IP geolocation provider.
 3. Collect SOC 2 or ISO reports for the high-tier vendors.
-4. Confirm with GoDaddy whether shared MySQL storage is encrypted at rest.
+4. Confirm with Cloudways / DigitalOcean that the server's storage is encrypted at rest, and get confirmation that the KiddieTrac copy on the former GoDaddy host has been deleted (RM-14, RM-30).
 5. Check whether each vendor retains data, especially the AI and email providers, and whether they train on it.
 
 ## 5. Responsibilities

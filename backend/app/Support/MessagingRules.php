@@ -185,13 +185,94 @@ final class MessagingRules
         return false;
     }
 
+    /*
+     * THE CENTRE OFFICE THREAD (2026-11-06). Anthony: "allow parent to message its educator(s) or agency (everyone at
+     * agency admin/directors - would get the messages)". A parent's message to the office is a family conversation
+     * marked channel='office' (one per family). Only the agency's admins, the centre's directors and platform admins
+     * hear about it (ChatAudience::staffIds) or can list, count, open, answer, archive, report or translate it; to
+     * every other staff member - educators on any rule, auditors - it does not exist. The family always sees it.
+     */
+    public const OFFICE = 'office';
+
+    /** Is this an office thread? Loads channel/centre_id when the caller selected fewer columns. */
+    public static function isOffice(object $conv): bool
+    {
+        if (! property_exists($conv, 'channel') || ! property_exists($conv, 'centre_id')) {
+            $row = DB::table('conversations')->where('id', (int) ($conv->id ?? 0))->first(['channel', 'centre_id']);
+            $conv->channel = $row->channel ?? null;
+            $conv->centre_id = $row->centre_id ?? null;
+        }
+        return ($conv->channel ?? null) === self::OFFICE;
+    }
+
+    /** Centres whose office threads this person may see: null = every centre (platform admin). @return int[]|null */
+    public static function officeCentreIds(int $uid): ?array
+    {
+        if (array_key_exists($uid, self::$memo['office'] ?? [])) return self::$memo['office'][$uid];
+        $rows = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+            ->whereIn('role', self::PRIVILEGED)->get(['role', 'agency_id', 'centre_id']);
+        if ($rows->contains(fn ($r) => $r->role === 'platform_admin')) return self::$memo['office'][$uid] = null;
+        $ids = $rows->where('role', 'centre_director')->pluck('centre_id')->filter()->map(fn ($v) => (int) $v)->all();
+        $agencies = $rows->where('role', 'agency_admin')->pluck('agency_id')->filter()->all();
+        if ($agencies) {
+            $ids = array_merge($ids, DB::table('centres')->whereIn('agency_id', $agencies)->pluck('id')->map(fn ($v) => (int) $v)->all());
+        }
+        return self::$memo['office'][$uid] = array_values(array_unique($ids));
+    }
+
+    /** True when $conv is an office thread this person must not see (they are not its family or its office). */
+    public static function officeHiddenFrom(int $uid, object $conv): bool
+    {
+        if (! self::isOffice($conv)) return false;
+        $ids = self::officeCentreIds($uid);
+        if ($ids === null || in_array((int) $conv->centre_id, $ids, true)) return false;
+        return ! DB::table('guardians')->where('family_id', (int) ($conv->family_id ?? 0))->where('user_id', $uid)->exists();
+    }
+
+    /** Limit a staff `conversations` query to the office threads this person may see. */
+    public static function scopeOffice($query, int $uid, string $table = 'conversations'): void
+    {
+        $ids = self::officeCentreIds($uid);
+        if ($ids === null) return;
+        $query->where(function ($w) use ($table, $ids) {
+            $w->whereNull($table . '.channel')->orWhere($table . '.channel', '!=', self::OFFICE)
+              ->orWhereIn($table . '.centre_id', $ids ?: [0]);
+        });
+    }
+
     /** 'ok' | 'read_only' | 'hidden' for a family conversation. */
     public static function conversationState(int $uid, object $conv): string
     {
+        if (self::officeHiddenFrom($uid, $conv)) return 'hidden';
         $rules = self::forUser($uid);
         if (! $rules) return 'ok';
         if (self::familyAllowed($uid, (int) $conv->family_id)) return 'ok';
-        return $rules['existing'] === 'hidden' ? 'hidden' : 'read_only';
+        if ($rules['existing'] === 'hidden') return 'hidden';
+        return self::tookPart($uid, (int) $conv->id) ? 'read_only' : 'hidden';
+    }
+
+    /**
+     * READ-ONLY HISTORY IS THE EDUCATOR'S OWN HISTORY (2026-10-29). Anthony, from an educator's
+     * iPhone: "why is it showing other chats that is not relevant to this user". 'existing' =
+     * read_only was meant to keep the conversations a rule no longer allows - chats the educator
+     * had been writing in - but it kept EVERY family thread at the centre: a new educator with one
+     * room saw three family chats (other rooms, written by the director) and opened one into a
+     * read-only page. Out-of-room threads now stay only where this person sent a message.
+     */
+    public static function tookPart(int $uid, int $conversationId): bool
+    {
+        return DB::table('messages')->where('conversation_id', $conversationId)->where('sender_id', $uid)->exists();
+    }
+
+    /** Limit a `conversations` query to what a restricted person may see (see tookPart). */
+    public static function scopeConversations($query, int $uid, array $rules, array $allowedFams, string $table = 'conversations'): void
+    {
+        $query->where(function ($w) use ($uid, $rules, $allowedFams, $table) {
+            $w->whereIn($table . '.family_id', $allowedFams ?: [0]);
+            if ($rules['existing'] !== 'hidden') {
+                $w->orWhereIn($table . '.id', DB::table('messages')->where('sender_id', $uid)->select('conversation_id'));
+            }
+        });
     }
 
     /** 'ok' | 'read_only' | 'hidden' for a staff thread. */

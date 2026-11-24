@@ -28,7 +28,18 @@ final class EnforceAuditorReadOnly
         // Resolve the bearer user independently of route-level auth ordering.
         $user = $request->user() ?: auth('sanctum')->user();
         if ($user) {
-            $roles = \App\Support\UserRoles::names($request);
+            /* The roles of THAT user, in the agency being worked in (2026-11-05 leak sweep). This read
+               UserRoles::names($request), which goes through $request->user() - empty here for an app
+               token, because group middleware runs before auth:sanctum - so the gate saw no roles and
+               never refused anyone. And an auditor here who holds another role in a different agency is
+               still read-only here. The header is already one of the user's agencies (NormalizeActiveAgency). */
+            $agency = (int) $request->header('X-Active-Agency-Id');
+            $roles = \Illuminate\Support\Facades\DB::table('role_assignments as ra')
+                ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
+                ->where('ra.user_id', $user->id)->where('ra.active', true)
+                ->when($agency > 0, fn ($q) => $q->where(fn ($w) => $w->where('ra.role', 'platform_admin')
+                    ->orWhere('ra.agency_id', $agency)->orWhere('c.agency_id', $agency)))
+                ->distinct()->pluck('ra.role')->all();
             if (in_array('auditor', $roles, true) && count(array_diff($roles, ['auditor'])) === 0) {
                 return response()->json(['message' => 'Auditor accounts are read-only.'], 403);
             }

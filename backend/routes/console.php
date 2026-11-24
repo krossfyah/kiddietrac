@@ -37,27 +37,59 @@ Schedule::command('closures:remind')->dailyAt('11:30')->withoutOverlapping();
    before" the event, or a set date and time. Every five minutes, so one goes out within
    five minutes of its time; each is claimed before sending, so overlapping runs cannot
    send it twice. */
-Schedule::command('rsvp:send-reminders')->everyFiveMinutes()->withoutOverlapping(10);
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
 // Time-off approval reminders: each agency's own schedule (Settings -> Clock settings ->
 // Time-off approvals) decides when its digest is due; the run is claimed per agency per day.
-Schedule::command('timeoff:remind-approvers')->everyFifteenMinutes()->withoutOverlapping(14);
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
+// Cold reach: replies, due follow-ups (bell the owner), automatic follow-up emails when switched on (2026-10-30).
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
+// New invoices and payslips become personal announcements for the people they belong to (2026-10-31).
+// everyTwoMinutes in kt:minute two (MinuteBatchCommand) - one process for the group.
+// Payslip emails to staff when a payslip arrives (App\Support\PayslipNotices; agency Payroll settings).
+// everyTwoMinutes in kt:minute two (MinuteBatchCommand) - one process for the group.
 // Counter-signature reminders: one digest per admin/director of completed forms still
 // waiting for review, on each agency's schedule (Settings → Notifications). 2026-10-09.
-Schedule::command('forms:remind-countersign')->everyFifteenMinutes()->withoutOverlapping(14);
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
 /* Providers without a bio: each agency's schedule (Settings → Notifications → Provider bios). */
-Schedule::command('providers:remind-bio')->everyFifteenMinutes()->withoutOverlapping(14);
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
 /* Drill reminders: only agencies that switched them on (Drill log screen); weekdays 9:00 agency time. */
-Schedule::command('drills:remind')->everyFifteenMinutes()->withoutOverlapping(14);
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
 /* Headcount reminders: only agencies that switched them on (Headcounts screen); rooms with children
    signed in and no count within the agency's interval. Bell + push to clocked-in educators, never SMS. */
-Schedule::command('headcounts:remind')->everyFiveMinutes()->withoutOverlapping(10);
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
+/* Missed headcounts (2026-11-03): a reminder with no count of that room within 15 minutes becomes a strike
+   (Daily Overview + the educator's daily summary) and the centre's directors are told. HeadcountStrikesCommand. */
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
+/* New families and withdrawn children ring the bell for admins, directors and the centre's educators, once each,
+   however they were created or withdrawn (2026-11-03, App\Support\RosterAlerts). */
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
 /* Daily records reminders (2026-10-15): each agency after its own send time (Settings > Room
    Controls > Daily records), once per educator per day - App\Support\RecordReminders. */
-Schedule::command('records:remind')->everyFifteenMinutes()->withoutOverlapping(14);
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
 // Overdue sleep checks (2026-10-13, Ontario O. Reg. 137/15 s.33.1): one cheap query a minute instead of phones polling.
-Schedule::command('sleep-checks:alert')->everyMinute()->withoutOverlapping(5)->runInBackground();
+/* THE EVERY-MINUTE (AND EVERY 2/5/10/15-MINUTE) JOBS, ONE PROCESS PER GROUP (2026-11-10, the portal speed sweep). Each used to start its own
+   PHP (twice when in the background): 22 start-ups a minute, more CPU than all web traffic, and pages 3-4x slower in the
+   first seconds of every minute. MinuteBatchCommand::GROUPS lists the jobs; safety alerts have a group of their own. */
+Schedule::command('kt:minute safety')->everyMinute()->withoutOverlapping(10)->runInBackground()->onOneServer();
+Schedule::command('kt:minute work')->everyMinute()->withoutOverlapping(10)->runInBackground()->onOneServer();
+Schedule::command('kt:minute two')->everyTwoMinutes()->withoutOverlapping(5)->runInBackground()->onOneServer();
+/* OFF THE HOST'S FIVE-MINUTE MARK (2026-11-11, Anthony: "check audit log and figure out why a page loaded slowly was
+   logged"). The server's security agent (Imunify360, run by Cloudways as root: check_recurrent.py runs every five
+   minutes from /etc/cron.d/imunify360-firewall) takes most of one core for ~12 s at :00, :05, :10 ... of every hour. Every 5/10/15/
+   30-minute and hourly job here started on those same seconds, so both cores sat at 95-100% and pages opened then took
+   3-7 s: API calls in the first 20 s of a five-minute mark averaged 0.91 s (9.6% over 2 s) against 0.12-0.33 s the rest
+   of the time. Nothing but the every-minute and every-2-minute jobs starts on a multiple of five now; each tick below has
+   its own minute so they do not stack on one another either. A new periodic job: give it a minute that is not a
+   multiple of five (->cron('7-59/15 * * * *'), ->hourlyAt(n)). */
+Schedule::command('kt:minute five')->cron('2-59/5 * * * *')->withoutOverlapping(15)->runInBackground()->onOneServer();      // :02 :07 :12 ...
+Schedule::command('kt:minute ten')->cron('4-59/10 * * * *')->withoutOverlapping(30)->runInBackground()->onOneServer();      // :04 :14 :24 ...
+Schedule::command('kt:minute fifteen')->cron('6-59/15 * * * *')->withoutOverlapping(30)->runInBackground()->onOneServer();  // :06 :21 :36 :51
+// Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
 /* Ontario drill schedule (O. Reg. 137/15 s.68 / s.68.2, 2026-10-13): missing-child drill due within 14 days or
    overdue, monthly fire drill overdue — directors (admins on overdue), once per change. CA-ON agencies only. */
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
+// A parent's pickup alarm (the countdown on the parent Today screen, 2026-11-09).
+// Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
 Schedule::command('drills:cadence-remind')->dailyAt('08:00')->timezone('America/Toronto')->withoutOverlapping();
 
 /* Clear out dead API tokens. Every sign-in mints one and nothing ever removed one -- 796
@@ -104,13 +136,12 @@ Schedule::command('incidents:remind')
     ->timezone('America/Toronto')
     ->withoutOverlapping();
 
-Schedule::command("kiddietrac:educator-summary")->dailyAt("19:00")->timezone("America/Toronto");
-Schedule::command('kiddietrac:parent-summary')
-    ->dailyAt('18:30')
-    ->timezone('America/Toronto')
-    ->withoutOverlapping(60)
-    ->runInBackground()
-    ->onOneServer();
+/* DAILY SUMMARIES WHEN EACH ONE IS DUE (2026-10-29, App\Support\SummaryTiming). Were fixed
+   18:30 / 19:00 Toronto times. Now every 10 minutes: a parent's goes an hour (agency setting)
+   after the child's last check-out, an educator's an hour after their last clock-out, else at
+   the agency's own fallback time. summary_sends makes each one go once a day at most. */
+// everyTenMinutes in kt:minute ten (MinuteBatchCommand) - one process for the group.
+// everyTenMinutes in kt:minute ten (MinuteBatchCommand) - one process for the group.
 
 // Attendance reminders. Morning: the child has no sign-in and no reported absence.
 // Evening: the child was signed in and never signed out (an open attendance record
@@ -185,19 +216,11 @@ Schedule::command('schedule:autofill --days=28')
 // v22p38: marketing-campaign email sender — every 5 min so scheduled
 // campaigns are delivered within ~5 min of their scheduled_for. In-portal
 // 'both' campaigns get their email follow-up on the same tick.
-Schedule::command('kiddietrac:campaigns-mail')
-    ->everyFiveMinutes()
-    ->withoutOverlapping(10)
-    ->runInBackground()
-    ->onOneServer();
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
 
 /* Switched-off accounts lose their API tokens within 15 minutes, whichever path set
    the status. Deactivating used to block only NEW logins. */
-Schedule::command('kiddietrac:revoke-off-tokens')
-    ->everyFifteenMinutes()
-    ->withoutOverlapping(10)
-    ->runInBackground()
-    ->onOneServer();
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
 
 /* Missed-chat email notifications.
 
@@ -212,7 +235,7 @@ Schedule::command('kiddietrac:revoke-off-tokens')
    is stamped email_notified_at when it goes out, so nobody is told twice about the same
    one however often this runs. */
 Schedule::command('kiddietrac:chat-emails')
-    ->everyFiveMinutes()
+    ->cron('3-59/5 * * * *')   // :03 :08 ... - off the host's five-minute mark (see kt:minute five)
     ->skip(fn () => ! config('suppression.chat_emails_enabled', false))
     ->withoutOverlapping(20)
     ->runInBackground()
@@ -277,11 +300,31 @@ Schedule::command('expiry:warn')->dailyAt('08:00');
 
    Appended rather than overwritten, and only for this command: a scheduler that logs
    every run of every command fills a disk, and this is the one that has failed. */
-Schedule::command('demo:seed-daily')->dailyAt('05:00')->withoutOverlapping()
+/* EVERY HOUR (2026-11-04): the command writes only what has already happened at each centre (SeedDemoDaily, "nothing
+   from the future"), so the demo day fills in as it goes - one run at 05:00 would leave a day with nothing in it. */
+Schedule::command('demo:seed-daily')->hourlyAt(14)->withoutOverlapping()
     ->appendOutputTo(storage_path('logs/schedule-output.log'));
 
+/* BRIGHTWOOD (2026-10-28): the white-label California demo agency (kt:seed-brightwood-demo) gets its own fresh day
+   too. Looked up by slug, because --rebuild gives the agency a new id. Silent like the rest of the demo. */
+Schedule::call(function () {
+    $id = \Illuminate\Support\Facades\DB::table('agencies')->where('slug', \App\Console\Commands\SeedBrightwoodDemo::SLUG)->value('id');
+    if ($id) \Illuminate\Support\Facades\Artisan::call('demo:seed-daily', ['--agency' => (int) $id]);
+})->name('demo-seed-daily-brightwood')->hourlyAt(22)->withoutOverlapping();   // hourly: see demo:seed-daily above
+/* STARLIGHT (2026-10-30): the white-label website demo (kt:seed-starlight-demo), the same fresh day, by slug. */
+Schedule::call(function () {
+    $id = \Illuminate\Support\Facades\DB::table('agencies')->where('slug', \App\Console\Commands\SeedStarlightDemo::SLUG)->value('id');
+    if ($id) \Illuminate\Support\Facades\Artisan::call('demo:seed-daily', ['--agency' => (int) $id]);
+})->name('demo-seed-daily-starlight')->hourlyAt(28)->withoutOverlapping();   // hourly: see demo:seed-daily above
+/* ^ IN BRIGHTWOOD'S OWN MORNING (2026-10-31). At 05:10 UTC - 10:10 pm the evening before in California - each demo
+   "day" was seeded after it was over, and its 7:30 am shift then stayed open all the next day ("Checked in 15h"). */
+// Fictional demo shifts end after a working day (App\Support\PublicDemo::endShifts) instead of running all night.
+Schedule::call(fn () => \App\Support\PublicDemo::endShifts())->name('public-demo-end-shifts')->cron('11-59/15 * * * *')->withoutOverlapping();
 
-Schedule::command('drip:dispatch')->hourly();
+
+Schedule::command('drip:dispatch')->hourlyAt(1);
+// The public website demo: remove what visitors added, revoke expired demo logins (2026-10-31).
+Schedule::command('kt:reset-web-demo')->dailyAt('03:30')->timezone('America/Toronto')->withoutOverlapping();
 Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');
 
 // Mail goes out half an hour before the in-app bells, so the email about a birthday
@@ -290,28 +333,32 @@ Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');
 // Hourly, not once a night: the job only closes what is already past its agency's
 // sign-off time, and running often means a forgotten punch is corrected while the day
 // it belongs to is still recent enough for somebody to query it.
-Schedule::command('kiddietrac:auto-signoff')->hourly()->withoutOverlapping();
+Schedule::command('kiddietrac:auto-signoff')->hourlyAt(2)->withoutOverlapping();
 
 /* Delivery failures. Until this existed, email_logs said 'sent' whether the
    message arrived or was rejected outright -- bounces piled up unread in the
    server mailbox and nothing in the portal ever knew. */
-Schedule::command('mail:ingest-bounces')->hourly()->withoutOverlapping();
+Schedule::command('mail:ingest-bounces')->hourlyAt(3)->withoutOverlapping();
 Schedule::command('kiddietrac:birthday-emails')->dailyAt('07:00')->timezone('America/Toronto');
-Schedule::command('birthdays:celebrate')->dailyAt('07:30');
+Schedule::command('birthdays:celebrate')->dailyAt('07:30')->timezone('America/Toronto');   // morning bells; "today" is each agency's own day (2026-10-21)
 
 // v22p98 — staff time-clock reminders (compliance/payroll/reporting)
 // Hourly, not two fixed times: each agency sets its own reminder hours in Settings ->
 // Clock settings, and the command skips any agency whose hour is not the current one in
 // ITS timezone. A centre opening at 06:00 was previously nudged at 10:00 like everybody
 // else. Weekend skipping is per agency now too, so the schedule no longer assumes it.
-Schedule::command('staff:clock-reminders --mode=all --scheduled')->hourly()->withoutOverlapping();
+Schedule::command('staff:clock-reminders --mode=all --scheduled')->hourlyAt(4)->withoutOverlapping();
+// Lunch / break running over its limit: remind the educator, then alert directors/admins (2026-11-06, BreakOverrunCommand).
+// Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
+// Still clocked in after every child has left the room (2026-11-07): an app reminder to clock out (Clock settings).
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
 
 // Weekly portal tips — a rotating "did you know?" push to parents + educators
 // (APK notification + in-app bell). Wednesday mid-morning for good engagement.
 Schedule::command('kiddietrac:portal-tips')->weeklyOn(3, '10:00')->withoutOverlapping();
 
 // SOC 2 — security monitoring: scan the audit log for auth anomalies.
-Schedule::command('security:alerts')->everyFifteenMinutes()->withoutOverlapping();
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
 
 // SOC 2 — Availability: nightly verified database backup (retains 14 days).
 /* The hour is a PORTAL SETTING now (Settings -> Backups), not a constant. Read here
@@ -322,6 +369,9 @@ Schedule::command('security:alerts')->everyFifteenMinutes()->withoutOverlapping(
    Wrapped: routes/console.php is evaluated on every schedule:run tick (once a minute), so
    a missing table or an unreadable value must fall back to the old fixed time rather than
    take the whole scheduler down with it. */
+// Server health history for the super admin's page: one sample every 5 minutes, kept 14 days.
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
+
 Schedule::command('db:backup')
     ->dailyAt((function () {
         try {
@@ -336,11 +386,15 @@ Schedule::command('db:backup')
 
 // Invoice/payment reminders — hourly; gated by config('billing.reminders_enabled')
 // (OFF) + per-agency settings; only fires in each agency's send-time hour.
-Schedule::command('billing:reminders')->hourly()->withoutOverlapping();
+Schedule::command('billing:reminders')->hourlyAt(6)->withoutOverlapping();
+// Yesterday's payments to each agency's admins + directors, 7 AM agency time (App\Support\PaymentAlerts, 2026-11-05).
+Schedule::command('billing:payment-summary')->hourlyAt(8)->withoutOverlapping();
+// Overdue privacy breaches to admins + the breach centres' directors, 8 AM agency time (App\Support\PrivacyBreachAlerts, 2026-11-06).
+Schedule::command('privacy:breach-reminders')->hourlyAt(9)->withoutOverlapping();
 /* Hourly for the same reason billing reminders are: each agency picks its own
    weekday and local send time, so the command decides whether this is the hour.
    Every agency is opted out until they turn it on in Settings -> Email. */
-Schedule::command('immunization:reminders')->hourly()->withoutOverlapping();
+Schedule::command('immunization:reminders')->hourlyAt(11)->withoutOverlapping();
 
 // Async email/queue worker — drains queued jobs (invite emails, announcements,
 // bulk sends) in the background so admin actions return instantly instead of
@@ -397,6 +451,16 @@ Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=
 Schedule::command('kiddietrac:password-expiry')->dailyAt('09:00');
 
 Schedule::command('kiddietrac:sales-followups')->dailyAt('08:00');
+// Task reminders: app / email / text / voice, at the time set on the task (2026-10-27, App\Support\TaskReminders).
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
+// Agency contacts onto the KiddieTrac subscriber list, within the hour of onboarding (2026-10-27, App\Support\AgencySubscribers).
+Schedule::command('kiddietrac:agency-subscribers')->hourlyAt(12)->withoutOverlapping(30);
+// Sales campaigns: the next batch from sales@, bookings + replies from people a campaign reached (2026-10-26).
+// Every minute in kt:minute work (App\Console\Commands\MinuteBatchCommand) - one process for the group.
+// Email client (2026-11-02): new mail in a connected mailbox -> the bell (fresh rows only), and a daily use of each
+// Microsoft refresh token so a mailbox never hits the 90-day idle sign-out. App\Console\Commands\MailWatchCommand.
+// Every minute in kt:minute work (App\Console\Commands\MinuteBatchCommand) - one process for the group.
+Schedule::command('kiddietrac:mail-watch --keepalive')->dailyAt('10:20')->withoutOverlapping(30);
 
 // Nightly data-retention purge — enforces each agency's compliance policy
 // (chat + announcements past their retention window). Opt-in per agency via
@@ -404,7 +468,7 @@ Schedule::command('kiddietrac:sales-followups')->dailyAt('08:00');
 Schedule::command('retention:purge')->dailyAt('02:30')->withoutOverlapping();
 
 // Scheduled reports — email due canned-report schedules hourly (fires once/day at/after each schedule send-time hour).
-Schedule::command("kiddietrac:send-scheduled-reports")->hourly()->withoutOverlapping();
+Schedule::command("kiddietrac:send-scheduled-reports")->hourlyAt(13)->withoutOverlapping();
 
 // Any sender that sets X-KT-Logged without writing its own email_logs row leaves an
 // email delivered but invisible in the log. The email.sent audit rows are the
@@ -416,30 +480,69 @@ Schedule::command("mail:reconcile-logs --days=3 --backfill")->dailyAt("06:15")->
 // hour (default 07:00 ET) and caps itself at 4 reminders, >= 3 days apart, per invitee,
 // so hourly dispatch is the intended cadence rather than hourly mail. This was never
 // registered anywhere - in practice NOBODY was being reminded.
-Schedule::command("kiddietrac:onboarding-reminders")->hourly();
+Schedule::command("kiddietrac:onboarding-reminders")->hourlyAt(16);
 
 
 // The director / admin digest: what needs a decision today, and a wider view on Monday.
 // 07:00 and 07:10 Toronto — before the day starts, and far enough apart that a slow
 // weekly run cannot delay the daily one.
 Schedule::command('kiddietrac:admin-digest')->dailyAt('07:00')->timezone('America/Toronto')->withoutOverlapping();
+/* RESCUED FROM app/Console/Kernel.php (2026-10-30). That file is not read by Laravel 11, so these never ran and
+   Platform → AI digest status showed every child "pending" every day. The AI digest is built for the status page
+   only - no parent push (parents get the daily summary after check-out). Mail health warns superadmins before the
+   Microsoft mail secret expires. */
+Schedule::command('kiddietrac:generate-digests --no-notify')->dailyAt('18:00')->timezone('America/Toronto')->withoutOverlapping(60);
+Schedule::command('kiddietrac:mail-health')->dailyAt('07:30')->timezone('America/Toronto')->withoutOverlapping();
 Schedule::command('kiddietrac:admin-digest --weekly')->weeklyOn(1, '07:10')->timezone('America/Toronto')->withoutOverlapping();
+// Superadmin weekly summary: texts, calls and AI spend per agency, over-threshold first (2026-10-20).
+Schedule::command('platform:usage-summary')->weeklyOn(1, '07:15')->timezone('America/Toronto')->withoutOverlapping();
 
 /* Nightly billing. Installed but INERT: the command returns immediately unless
    billing.auto_raise is true in platform_settings, and refuses to email while
    invoice.issuer.address / tax_id are unset. Scheduling it costs nothing until
    those are deliberately turned on. */
-Schedule::command('platform:billing-run')->dailyAt('06:00')->withoutOverlapping();
+/* RECURRING INVOICES run at the time set in Accounting AR/AP -> Billing plans (Toronto time, default 06:00). Read
+   each time the scheduler starts; a bad value falls back to 06:00. Licence renewals (kt:licences) raise their
+   invoices in the same run window, 10 minutes earlier, so both land together (2026-10-25). */
+$ktRunAt = rescue(function () {
+    $t = (string) (json_decode((string) \Illuminate\Support\Facades\DB::table('platform_settings')->where('key', 'billing.recurring')->value('value'), true)['run_time'] ?? '06:00');
+    return preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $t) ? $t : '06:00';
+}, '06:00', false);
+$ktLicAt = \Carbon\Carbon::createFromFormat('H:i', $ktRunAt)->subMinutes(10)->format('H:i');
+Schedule::command('platform:billing-run')->dailyAt($ktRunAt)->timezone('America/Toronto')->withoutOverlapping();
+// Due-soon / due-today / overdue emails for KiddieTrac invoices (2026-10-25; settings in Sales → Invoices).
+// Form mail withheld from a parent = a bug; report it (2026-10-25).
+// Every 15 minutes, resending anything still withheld (2026-10-25: daily was too slow for Sheldon's countersigned copies).
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
+// A signed form's completed copy that never reached the form's address: send it and say so (2026-10-25).
+Schedule::command('kt:form-copy-watch --fix')->cron('17,47 * * * *')->withoutOverlapping();
+Schedule::command('platform:invoice-notices')->dailyAt('09:00')->timezone('America/Toronto')->withoutOverlapping();
 
 /* Scheduled announcements (2026-09-29): nothing sent them before this. Every minute;
    each row is claimed before delivery so an overlapping run cannot send it twice. */
-Schedule::command('announcements:send-scheduled')->everyMinute()->withoutOverlapping(5);
+// Every minute in kt:minute work (App\Console\Commands\MinuteBatchCommand) - one process for the group.
 
 /* Safe Arrival (2026-09-29): ask parents about children who have not arrived, then alert
    staff. Only agencies that switched it on; see App\Support\SafeArrival. */
 // Visible reference IDs for anything created since the last minute (App\Support\RefCode).
-Schedule::command('kiddietrac:ref-codes')->everyMinute()->withoutOverlapping(5)->runInBackground();
-Schedule::command('kiddietrac:safe-arrival')->everyFiveMinutes()->withoutOverlapping(10)->runInBackground()->onOneServer();
+// Every minute in kt:minute work (App\Console\Commands\MinuteBatchCommand) - one process for the group.
+// Every minute (2026-10-23) so the arrival/departure thresholds start on the minute, not up to 5 late.
+// Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
+/* The next guardian's Safe Arrival call, once the agency's wait after the last unanswered call
+   is up (SafeArrivalCall gap_secs, default 1 minute). Cheap: today's open checks with a call. */
+/* Transcribe new voicemails and recorded calls and file them on the caller's lead (2026-10-23). */
+/* Automatic proposal follow-ups that are due (weekdays 9-5 ET), 2026-10-23. */
+/* Leads onto the subscriber list - the ones written without the model (2026-10-23). */
+Schedule::command('kt:leads-subscribe')->hourlyAt(17)->withoutOverlapping(10)->runInBackground()->onOneServer();
+// Supplies from home (2026-10-23): a request still open after its day tells whoever asked, once.
+Schedule::command('kt:supply-overdue')->hourlyAt(23)->withoutOverlapping(10)->runInBackground()->onOneServer();
+// Licences (2026-10-24): renewals (draft invoices when billing is on), grace, expiry, reminders.
+Schedule::command('kt:licences')->dailyAt($ktLicAt)->timezone('America/Toronto')->withoutOverlapping(30)->runInBackground()->onOneServer();
+// KiddieTrac's recurring expenses, added on their dates (Sales -> Expenses, 2026-10-24).
+Schedule::command('kt:expenses-recurring')->dailyAt('05:50')->withoutOverlapping(30)->runInBackground()->onOneServer();
+Schedule::command('kt:proposal-followups')->hourlyAt(18)->withoutOverlapping(30)->runInBackground()->onOneServer();
+Schedule::command('kt:call-transcripts')->everyTwoMinutes()->withoutOverlapping(10)->runInBackground()->onOneServer();
+// Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
 
 /* Weekly What's new email (2026-09-29): Mondays 9am, only when there is something new,
    each person only what applies to their role. See WhatsNewDigestCommand. */
@@ -452,26 +555,106 @@ Schedule::command('kiddietrac:whats-new-digest')->weeklyOn(1, '09:00')->timezone
    when they find anything, and run before the morning's reminders and summaries. */
 Schedule::command('kt:integrity-check')->dailyAt('05:30')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
 Schedule::command('kt:leak-sweep')->dailyAt('05:40')->timezone('America/Toronto')->withoutOverlapping(60)->onOneServer();
+/* Global search coverage (2026-11-02): fails (and emails the platform admins) when a main record
+   type or a newly created table has no search source and no written reason. See
+   App\Support\SearchRegistry and KtSearchCoverage. */
+Schedule::command('kt:search-coverage')->dailyAt('05:45')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+/* The global search words learned from use: retire stale ones, mail only when learning stops (SearchKeysCommand). */
+Schedule::command('search-keys:health')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+// Photo permissions (2026-11-06): hide photos of a child whose family said no; fail on code reading photos without the rule.
+Schedule::command('kt:photo-consent-check')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+// Counter-signatures (2026-11-06): the worker stamps them; this re-runs any it did not finish, and after an hour sends the original and alerts.
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
+// Signature screens (2026-11-06): fail on any that draws its own signature canvas instead of the shared pad (saved signatures).
+Schedule::command('kt:signature-pad-check --quiet-ok')->dailyAt('05:55')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+// Every notification kind says who it is for; no staff-only alert reaches a parent (2026-11-06, NotifyAudience).
+Schedule::command('kt:notify-audience-check --quiet-ok')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+// Every staff child list holds the children that person looks after; enrolment counts agree (2026-11-09).
+Schedule::command('kt:child-scope-check --quiet-ok')->dailyAt('05:55')->timezone('America/Toronto')->withoutOverlapping(20)->onOneServer();
+// Each role sees only its own screens: admin routes guarded, deny list, one tile badge (2026-11-06 role sweep).
+Schedule::command('kt:screen-guard-check --quiet-ok')->dailyAt('05:45')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
 /* Raw escape codes (\u{...}) in code strings and in the last day's email (2026-10-09:
    "the year\u{2019}s" reached 59 inboxes). MailText repairs mail at send time; this
    finds the source. See KtTextCheck. */
+// Missed calls on the KiddieTrac line: app / email / text alerts (App\Support\CallAlerts, 2026-10-23).
+// Prospects who have not sent the intake form: one reminder a day until the meeting (2026-10-23).
+Schedule::command('kt:intake-reminders')->dailyAt('09:00')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
+// Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
 Schedule::command('kt:text-check')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
 /* Xero: agencies that turned on automatic sync in Settings → Xero (off by default). */
-Schedule::command('xero:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();
+Schedule::command('xero:sync')->cron('9,39 * * * *')->withoutOverlapping(25)->runInBackground()->onOneServer();
 /* QuickBooks: the same, for agencies with automatic sync on in Settings → QuickBooks. */
-Schedule::command('qbo:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();
+Schedule::command('qbo:sync')->cron('19,49 * * * *')->withoutOverlapping(25)->runInBackground()->onOneServer();
 /* Sage Accounting (cloud): the same, for agencies with automatic sync on in Settings → Sage. */
-Schedule::command('sage:sync')->everyThirtyMinutes()->withoutOverlapping(25)->runInBackground()->onOneServer();
+Schedule::command('sage:sync')->cron('29,59 * * * *')->withoutOverlapping(25)->runInBackground()->onOneServer();
 /* Ohio PFCC (2026-10-10): unpaid copays and the absent-day cap — bell only, to directors and
    admins, only for agencies where PFCC is on. See PfccAlertsCommand. */
 Schedule::command('pfcc:alerts')->dailyAt('07:15')->timezone('America/New_York')->withoutOverlapping(30)->onOneServer();
 
 // Policy library (2026-10-13): weekly — Mondays 8:00 agency time, once per ISO week — staff with policies to sign,
 // and director/admin summaries with reviews due within 30 days (O. Reg. 137/15 s.6.1, s.46). On unless switched off.
-Schedule::command('policies:remind')->hourlyAt(5)->withoutOverlapping(30)->onOneServer();
+Schedule::command('policies:remind')->hourlyAt(19)->withoutOverlapping(30)->onOneServer();
 // OCCMS Record of Attendance (2026-10-13): hourly; sends at 8:00 agency time on the 1st (ready to review) and two days
 // before the due day (not signed off). Ontario agencies with fee-subsidized children only; once per month and kind.
 Schedule::command('occms:roa-remind')->hourlyAt(7)->withoutOverlapping(30)->onOneServer();
 
 // Unused temporary (forms-only) parent accounts past each agency's limit — App\Support\TempGuardians (2026-10-13).
 Schedule::command('kt:temp-guardians-expire')->dailyAt('03:45')->timezone('America/Toronto')->withoutOverlapping();
+
+// Report cards each quarter (2026-11-04): in the last 14 days of a school-year quarter, one bell + push per educator
+// listing the children in their rooms with no card for it yet. Once per educator per quarter (report_card_reminders).
+Schedule::command('kiddietrac:report-card-reminders')->dailyAt('09:10')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
+
+// Field-level encryption safety net (App\Support\Sensitive, 2026-10-21): the database connection
+// seals children's health fields on every write; this seals anything a write path left in
+// plaintext. Idempotent and cheap (only rows not yet sealed are read).
+// everyTenMinutes in kt:minute ten (MinuteBatchCommand) - one process for the group.
+
+/* Forgotten walks (2026-10-21, Anthony: "close them quietly" + a safeguard). A walk still
+   open after its own agency day is closed at its last GPS point - no parent or staff
+   notifications; one bell to the educator who started it. Hourly so each agency's
+   midnight is caught soon after it passes (App\Support\WalkCleanup). */
+Schedule::command('walks:close-forgotten')->hourlyAt(31)->withoutOverlapping();
+
+/* Walks gone quiet (2026-10-28, Anthony: "make sure educator is prompted if walk is over"). A live walk with no
+   location for 20 minutes - the phone lost signal, the app was closed, or everyone is back and nobody ended it -
+   gets one bell + push to the educator who started it, at most once an hour. Nothing is closed and parents are
+   not told: the educator decides. */
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
+
+// Ratio breach alerts (2026-10-30): a room out of ratio tells its educators / directors (per agency settings) once per
+// episode, and again when it is back in ratio. It lived only in the dead app/Console/Kernel.php and the command did not exist.
+Schedule::command('kiddietrac:check-ratios')->cron('1-59/15 * * * *')->between('06:00', '19:00')->timezone('America/Toronto')->withoutOverlapping(14);
+
+// Automatic monthly thank-you awards (2026-10-31, App\Support\ThankYouAuto): each agency with it on, once its chosen day
+// and time (agency time zone) has passed, for the previous month, once. Also expires drafts nobody sent.
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
+
+/* SUPPORT SLA ALERTS (2026-11-01, Anthony: "when SLA's are breached with support tickets are emails not sent out"). A ticket
+   past its first-response or resolve target alerts superadmins (and its agency's admins) once, then daily. */
+// everyFifteenMinutes in kt:minute fifteen (MinuteBatchCommand) - one process for the group.
+
+/* SALES MEETINGS (2026-11-04, Anthony): meetings on the sales@ calendar onto their leads, and a 30-minute email + text
+   reminder to the lead (App\Support\SalesMeetings; reminders only while PlatformSettings sales.meeting_reminders = 1). */
+// everyFiveMinutes in kt:minute five (MinuteBatchCommand) - one process for the group.
+
+/* SCHEDULER.LOG STAYS SMALL (2026-11-10, PIPEDA review housekeeping). The cron line appends every minute's
+   "Running [...] DONE" to storage/logs/scheduler.log and nothing ever cut it: 87 MB / 705k lines. No personal data in
+   it (checked: no addresses), just bulk. Nightly: past 20 MB, keep the newest ~10 MB from a line boundary. A line
+   appended while it is being cut can be lost; nothing else is. */
+Schedule::call(function () {
+    $f = storage_path('logs/scheduler.log');
+    clearstatcache(true, $f);
+    if (! is_file($f) || filesize($f) < 20 * 1024 * 1024) return;
+    // In place (r+), so the file keeps its owner and mode: cron writes it as another user.
+    $h = fopen($f, 'r+b');
+    if (! $h || ! flock($h, LOCK_EX)) return;
+    fseek($h, -10 * 1024 * 1024, SEEK_END);
+    fgets($h);                                    // drop the partial first line
+    $keep = stream_get_contents($h);
+    ftruncate($h, 0);
+    rewind($h);
+    fwrite($h, $keep);
+    flock($h, LOCK_UN);
+    fclose($h);
+})->name('scheduler-log-trim')->dailyAt('03:20')->timezone('America/Toronto')->onOneServer();

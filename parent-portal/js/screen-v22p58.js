@@ -59,8 +59,17 @@
     // parent as the "KiddieTrac had a problem" crash prompt.
     const addCard = main.querySelector('#w-add-card');
     const addAch = main.querySelector('#w-add-ach');
-    if (addCard) addCard.onclick = () => startWalletAddFlow('card');
-    if (addAch) addAch.onclick = () => startWalletAddFlow('acss_debit');
+    /* A failure here used to escape as an unhandled promise and file a crash ticket
+       (#177: "Card payments are not set up for this agency yet."). Say it instead. */
+    const walletFail = (e) => {
+      const msg = (e && e.message) || 'Could not start adding a payment method.';
+      const friendly = /not set up/i.test(msg)
+        ? 'Card and bank payments aren\u2019t set up for your centre yet. Please pay the way your centre has asked (for example e-Transfer), or ask them.'
+        : msg;
+      (window.KT && KT.toast) ? KT.toast('\u26A0\uFE0F', 'Payment method', friendly, '#B45309') : alert(friendly);
+    };
+    if (addCard) addCard.onclick = () => startWalletAddFlow('card').catch(walletFail);
+    if (addAch) addAch.onclick = () => startWalletAddFlow('acss_debit').catch(walletFail);
     main.querySelectorAll('button[data-default]').forEach(b => b.onclick = async () => {
       await Api.post(`/parent/wallet/${b.dataset.default}/default`, {});
       renderWallet(main);
@@ -82,7 +91,7 @@
     if (type === 'card') {
       const m = document.createElement('div');
       m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
-      m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:440px;width:92%;">
+      m.innerHTML = `<div style="background:#fff;padding:22px;border-radius:14px;max-width:460px;width:94%;max-height:100%;overflow-y:auto;box-sizing:border-box;">
         <h3 style="margin:0 0 16px;color:#0F172A;">Add card</h3>
         <div id="w-card-el" style="padding:14px;border:1px solid #E2E8F0;border-radius:8px;"></div>
         <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Nickname (optional)</label>
@@ -93,15 +102,16 @@
           <button id="w-save" class="kt-btn kt-btn-primary" style="margin-left:8px;">Save card</button>
         </div></div>`;
       document.body.appendChild(m);
-      const elements = stripe.elements();
-      const card = elements.create('card');
-      card.mount('#w-card-el');
+      // The one card form (kt-card-form.js): labelled fields where the phone can offer its camera card scan.
+      const cardEl = m.querySelector('#w-card-el');
+      cardEl.style.cssText = '';
+      const form = await KT.cardForm.mount(cardEl, { publishableKey: intent.publishable_key, clientSecret: intent.client_secret });
       m.querySelector('#w-cancel').onclick = () => m.remove();
       m.querySelector('#w-save').onclick = async () => {
-        const { setupIntent, error } = await stripe.confirmCardSetup(intent.client_secret, { payment_method: { card } });
-        if (error) { m.querySelector('#w-err').textContent = error.message; return; }
+        let pm;
+        try { pm = await form.confirm(); } catch (e) { m.querySelector('#w-err').textContent = e.message; return; }
         await Api.post('/parent/wallet', {
-          payment_method: setupIntent.payment_method,
+          payment_method: pm,
           nickname: m.querySelector('#w-nick').value,
         });
         m.remove();
@@ -298,7 +308,7 @@
     // The statement must be for the family being LOOKED at, not the first one.
     if (_ldPdf) _ldPdf.onclick = () => downloadAuthed(
       '/parent/ledger/pdf' + (activeFam ? ('?family_id=' + encodeURIComponent(activeFam)) : ''),
-      'statement-' + new Date().toISOString().slice(0, 10) + '.pdf');
+      'statement-' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '.pdf');
   }
 
   // ============================ Refunds (director) ============================
@@ -729,7 +739,7 @@
             <div style="padding:14px 18px;">
               <div style="font-size:12.5px;color:#475569;">${fmtDate(v.taken_at)} · ${esc(v.uploader_name || '')}</div>
               <div style="font-size:13.5px;color:#0F172A;margin-top:6px;">${esc(v.caption || '')}</div>
-              <div style="margin-top:10px;display:flex;gap:6px;align-items:center;">
+              <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
                 ${['heart', 'smile', 'wow', 'celebrate', 'clap'].map(rx => {
                   const emoji = { heart: '❤️', smile: '😊', wow: '😮', celebrate: '🎉', clap: '👏' }[rx];
                   return `<button data-vid="${v.id}" data-rx="${rx}" style="background:#F1F5F9;border:0;padding:6px 10px;border-radius:14px;cursor:pointer;font-size:15px;">${emoji} ${reacts[rx] || 0}</button>`;
@@ -1003,7 +1013,7 @@
           })()}</td>
           <td data-kt-sort="${st[2]}"><span class="kt-pill ${st[1]}">${st[0]}</span></td>
           <td style="text-align:right;white-space:nowrap;">
-            <button type="button" data-kt-iconized="1" class="imm-child" data-id="${esc(c.child_id || '')}" data-n="${esc(c.child_name || '')}" style="padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">View immunisations</button>
+            <button type="button" data-kt-iconized="1" class="imm-child" data-id="${esc(c.child_id || '')}" data-n="${esc(c.child_name || '')}" style="padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">View immunizations</button>
             <button type="button" data-kt-iconized="1" class="imm-recs" data-id="${esc(c.child_id || '')}" data-n="${esc(c.child_name || '')}" style="margin-left:6px;padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">📄 Records on file</button>
             <button type="button" data-kt-iconized="1" class="imm-childrec" data-id="${esc(c.child_id || '')}" style="margin-left:6px;padding:6px 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#0F172A;">Open child record</button>
           </td>
@@ -1102,7 +1112,7 @@
       if (!id) { return; }
       if (KT.openChildImmun) { KT.openChildImmun(id, b.getAttribute('data-n')); }
     }));
-    /* Straight to the card the family sent in. Same panel as View immunisations, one
+    /* Straight to the card the family sent in. Same panel as View immunizations, one
        tab along - which is where somebody chasing a missing record is actually going,
        and it saves them the click every time. The leading glyph is deliberate: the
        fallback icon picker tests view/open/details before anything else, so an unlabelled
@@ -1179,13 +1189,17 @@
   }
 
   // ============================ CACFP =================================
+  let cacfpCentreId = null;
   async function renderCacfp(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading CACFP…</div>';
     const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;text-align:center;color:#64748B;padding:40px;">No centres.</div>'; return; }
-    const centreId = centres[0].id;
-    const date = new Date().toISOString().slice(0, 10);
+    // Was fixed to the first centre with no way to reach the others (2026-10-24): select first, then switch.
+    if (!cacfpCentreId || !centres.some(c => +c.id === +cacfpCentreId)) cacfpCentreId = centres.length === 1 ? centres[0].id : null;
+    if (!cacfpCentreId && window.KT && KT.selectFirst) { KT.selectFirst(main, { items: centres, onPick: function (id) { cacfpCentreId = id; renderCacfp(main); } }); return; }
+    const centreId = cacfpCentreId;
+    const date = ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
     const month = date.slice(0, 7);
     const [roster, report] = await Promise.all([
       Api.get(`/cacfp/roster?centre_id=${centreId}&date=${date}`),
@@ -1194,7 +1208,7 @@
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🍽 CACFP meal tracking</h2>
-        <p>${esc(centres[0].name)} · ${fmtDate(date)} · ${roster.data.length} enrolled children. Tap to record served meals — totals roll into the monthly reimbursement claim.</p>
+        <p>${esc((centres.find(c => +c.id === +centreId) || centres[0]).name)} · ${fmtDate(date)} · ${roster.data.length} enrolled children. Tap to record served meals — totals roll into the monthly reimbursement claim.</p>
       </div>
       <div class="kt-kpi-grid">
         <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Free</div><div class="kt-kpi-value">${report.totals.free || 0}</div></div>
@@ -1217,6 +1231,7 @@
         </table>
       </div>
     </div>`;
+    if (window.KT && KT.centreBar) KT.centreBar(main, { items: centres, current: centreId, onChange: function (id) { cacfpCentreId = id; renderCacfp(main); } });
     main.querySelectorAll('input[type="checkbox"][data-meal]').forEach(cb => cb.onchange = async () => {
       await Api.post('/cacfp/meal', {
         centre_id: centreId,

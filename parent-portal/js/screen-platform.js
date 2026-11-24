@@ -38,9 +38,9 @@
 
   // ── v22p32: widgets for the platform overview ────────────────────
   function cardShell(title, subtitle) {
-    var box = Dom.el('div', { style: 'background:white;border-radius:14px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-height:240px;' });
-    box.appendChild(Dom.el('h3', { style: 'margin:0 0 4px;font-size:14px;color:#6B7280;letter-spacing:0.5px;text-transform:uppercase;' }, title));
-    if (subtitle) box.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:14px;' }, subtitle));
+    var box = Dom.el('div', { style: 'background:white;border-radius:12px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-height:200px;' });
+    box.appendChild(Dom.el('h3', { style: 'margin:0 0 3px;font-size:12px;color:#6B7280;letter-spacing:0.5px;text-transform:uppercase;' }, title));
+    if (subtitle) box.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:10px;' }, subtitle));
     return box;
   }
 
@@ -135,30 +135,30 @@
   // capacity utilisation, net revenue retention. Numbers come pre-computed
   // from PlatformController::businessMetrics so the JS just paints tiles.
   function renderBusinessMetricsSection(bm) {
-    var section = Dom.el('div', { style: 'margin-top:18px;background:linear-gradient(135deg,#0F172A 0%,#1F2937 60%,#16637A 100%);border-radius:16px;padding:24px 28px;color:white;box-shadow:0 6px 18px rgba(15,23,42,.18);' });
+    var section = Dom.el('div', { style: 'margin-top:18px;background:linear-gradient(135deg,#0F172A 0%,#1F2937 60%,#16637A 100%);border-radius:14px;padding:16px 18px;color:white;box-shadow:0 6px 18px rgba(15,23,42,.18);' });
     // v22p35: previous version passed an HTML string as Dom.el's third argument,
     // which text-escapes the content — so users saw the literal <h3> tag.
     // Build the heading via innerHTML on a real element instead.
-    var head = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px;' });
+    var head = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;' });
     var heading = Dom.el('div');
     heading.innerHTML =
-      '<h3 style="margin:0;font-size:18px;letter-spacing:0.3px;">📊 Business metrics</h3>' +
+      '<h3 style="margin:0;font-size:16px;letter-spacing:0.3px;">📊 Business metrics</h3>' +
       '<div style="font-size:12px;color:rgba(255,255,255,.65);margin-top:2px;">SaaS KPIs · CAD · derived from current MRR + trend</div>';
     head.appendChild(heading);
     section.appendChild(head);
 
     function tile(label, value, hint, accent) {
-      var t = Dom.el('div', { style: 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;border-left:4px solid ' + accent + ';' });
+      var t = Dom.el('div', { style: 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:9px 12px;--kt-edge:' + accent + ';' });
       t.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;letter-spacing:1px;color:rgba(255,255,255,.6);text-transform:uppercase;' }, label));
-      t.appendChild(Dom.el('div', { style: 'font-size:26px;font-weight:800;color:white;line-height:1.1;margin:4px 0 2px;' }, String(value)));
-      if (hint) t.appendChild(Dom.el('div', { style: 'font-size:12px;color:rgba(255,255,255,.65);' }, hint));
+      t.appendChild(Dom.el('div', { style: 'font-size:19px;font-weight:800;color:white;line-height:1.1;margin:3px 0 1px;' }, String(value)));
+      if (hint) t.appendChild(Dom.el('div', { style: 'font-size:11px;color:rgba(255,255,255,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, hint));
       return t;
     }
     function money(n) { return '$' + Number(n || 0).toLocaleString('en-CA', { maximumFractionDigits: 0 }); }
     function moneyDecimals(n) { return '$' + Number(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
     function pct(n) { return (Number(n) >= 0 ? '+' : '') + Number(n || 0).toFixed(1) + '%'; }
 
-    var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;' });
+    var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;' });
     grid.appendChild(tile('ARR', money(bm.arr_dollars), 'Annualised recurring revenue', '#16A34A'));
     grid.appendChild(tile('ARPA', moneyDecimals(bm.arpa_dollars), 'Per active agency / month', '#8EC73C'));
     grid.appendChild(tile('ARPU', moneyDecimals(bm.arpu_dollars), 'Per enrolled child / month', '#FF8A65'));
@@ -198,7 +198,7 @@
       return '<svg width="' + (size || 22) + '" height="' + (size || 22) + '" viewBox="0 0 24 24" fill="none" stroke="' + (color || '#fff') + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name] || '') + '</svg>';
     }
 
-    var section = Dom.el('div', { style: 'position:relative;margin-top:14px;border-radius:16px;padding:18px 20px 20px;'
+    var section = Dom.el('div', { style: 'position:relative;margin-top:14px;border-radius:14px;padding:14px 16px 16px;'
       + 'background:#FBFCFE;border:1px solid #E8EEF6;box-shadow:0 1px 4px rgba(15,23,42,.03);' });
 
     var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:11px;margin-bottom:2px;' });
@@ -208,7 +208,7 @@
     section.appendChild(head);
 
     function groupLabel(title, sub) {
-      var g = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;margin:20px 0 13px;' });
+      var g = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;margin:12px 0 8px;' });
       g.innerHTML = '<span style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:#475569;text-transform:uppercase;">' + title + '</span>'
         + '<span style="flex:1;height:1px;background:linear-gradient(90deg,#D8E2EE,transparent);"></span>'
         + (sub ? '<span style="font-size:11px;color:#94A3B8;">' + sub + '</span>' : '');
@@ -221,21 +221,19 @@
     // spacing so more fits without the loud full-colour gradients.
     function tile(o) {
       var accent = o.c1;
-      var t = Dom.el('div', { style: 'position:relative;overflow:hidden;background:#fff;border:1px solid #E8EEF6;border-radius:12px;padding:12px 13px 12px;'
+      var t = Dom.el('div', { style: 'position:relative;overflow:hidden;background:#fff;border:1px solid #E8EEF6;border-radius:10px;padding:9px 11px;'
         + 'box-shadow:0 1px 2px rgba(15,23,42,.04);transition:box-shadow .15s ease,border-color .15s ease;' });
-      // A thin accent rail on the left edge — the only colour on the card.
-      t.appendChild(Dom.el('div', { style: 'position:absolute;left:0;top:0;bottom:0;width:3px;background:' + accent + ';' }));
       t.addEventListener('mouseenter', function () { t.style.boxShadow = '0 6px 16px -8px rgba(15,23,42,.22)'; t.style.borderColor = '#D8E2EE'; });
       t.addEventListener('mouseleave', function () { t.style.boxShadow = '0 1px 2px rgba(15,23,42,.04)'; t.style.borderColor = '#E8EEF6'; });
 
-      var top = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:9px;' });
+      var top = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;margin-bottom:6px;' });
       var chip = Dom.el('span', { style: 'width:26px;height:26px;border-radius:8px;background:' + accent + '18;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;' });
       chip.innerHTML = svg(o.icon, 15, accent);
       top.appendChild(chip);
       top.appendChild(Dom.el('span', { style: 'font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#94A3B8;' }, o.label));
       t.appendChild(top);
 
-      t.appendChild(Dom.el('div', { style: 'font-size:22px;font-weight:800;line-height:1;letter-spacing:-.4px;color:#0F172A;font-variant-numeric:tabular-nums;' }, String(o.value)));
+      t.appendChild(Dom.el('div', { style: 'font-size:19px;font-weight:800;line-height:1;letter-spacing:-.4px;color:#0F172A;font-variant-numeric:tabular-nums;' }, String(o.value)));
       if (o.hint) t.appendChild(Dom.el('div', { style: 'font-size:11px;color:#94A3B8;margin-top:4px;' }, o.hint));
       if (typeof o.bar === 'number') {
         var track = Dom.el('div', { style: 'margin-top:9px;height:4px;border-radius:99px;background:#EEF2F7;overflow:hidden;' });
@@ -347,31 +345,33 @@
         { label: 'MRR',      value: fmtMoney(t.mrr_cents || 0), hint: 'monthly recurring', accent: '#16A34A', icon: '💰' },
         { label: 'Sessions', value: (t.active_sessions_24h || 0), hint: 'active last 24h', accent: '#D97706', icon: '⚡' },
       ];
-      var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin:18px 0;' });
+      var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(136px,1fr));gap:10px;margin:14px 0;' });
       kpis.forEach(function (k) {
-        var c = Dom.el('div', { class: 'kt-kpi-tile', style: 'position:relative;overflow:hidden;background:color-mix(in srgb, ' + k.accent + ' 8%, #ffffff);border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:16px 16px 14px;' });
+        var ink = 'color-mix(in srgb, ' + k.accent + ' 80%, #0f172a)';
+        var c = Dom.el('div', { class: 'kt-kpi-tile', style: 'display:flex;align-items:center;gap:10px;min-width:0;background:color-mix(in srgb, ' + k.accent + ' 7%, #ffffff);border:1px solid rgba(15,23,42,.06);border-radius:12px;padding:10px 12px;' });
         c.innerHTML =
-          '<div style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:11px;background:linear-gradient(135deg, color-mix(in srgb, ' + k.accent + ' 55%, #ffffff), ' + k.accent + ');box-shadow:0 6px 13px -6px ' + k.accent + ';">' + k.icon + '</div>' +
-          '<div style="font-size:30px;font-weight:900;line-height:1;color:color-mix(in srgb, ' + k.accent + ' 80%, #0f172a);">' + esc(String(k.value)) + '</div>' +
-          '<div style="font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:color-mix(in srgb, ' + k.accent + ' 80%, #0f172a);opacity:.72;margin-top:9px;">' + esc(k.label) + '</div>' +
-          '<div style="font-size:11.5px;color:#64748b;margin-top:2px;">' + esc(k.hint) + '</div>';
+          '<div style="width:32px;height:32px;flex:0 0 32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;background:linear-gradient(135deg, color-mix(in srgb, ' + k.accent + ' 55%, #ffffff), ' + k.accent + ');">' + k.icon + '</div>' +
+          '<div style="min-width:0;">' +
+            '<div style="font-size:20px;font-weight:900;line-height:1.05;color:' + ink + ';font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(String(k.value)) + '</div>' +
+            '<div style="font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + ink + ';opacity:.72;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + esc(k.hint) + '">' + esc(k.label) + '</div>' +
+          '</div>';
         grid.appendChild(c);
       });
       wrap.appendChild(grid);
 
       // Recent 30d card
-      var recent = Dom.el('div', { style: 'background:white;border-radius:14px;padding:20px 24px;box-shadow:0 1px 3px rgba(0,0,0,.06);' });
+      var recent = Dom.el('div', { style: 'background:white;border-radius:12px;padding:12px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);' });
       recent.innerHTML =
-        '<h3 style="margin:0 0 12px;font-size:14px;color:#6B7280;letter-spacing:0.5px;text-transform:uppercase;">Recent 30 days</h3>' +
-        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;">' +
-          '<div><div style="font-size:13px;color:#6B7280;">New agencies</div><div style="font-size:24px;font-weight:800;color:#16A34A;">+' + (r.new_agencies || 0) + '</div></div>' +
-          '<div><div style="font-size:13px;color:#6B7280;">Cancellations</div><div style="font-size:24px;font-weight:800;color:#DC2626;">−' + (r.cancelled_agencies || 0) + '</div></div>' +
-          '<div><div style="font-size:13px;color:#6B7280;">Net change</div><div style="font-size:24px;font-weight:800;color:#1F6080;">' + (r.net >= 0 ? '+' : '') + (r.net || 0) + '</div></div>' +
+        '<h3 style="margin:0 0 6px;font-size:12px;color:#6B7280;letter-spacing:0.5px;text-transform:uppercase;">Recent 30 days</h3>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">' +
+          '<div><div style="font-size:12px;color:#6B7280;">New agencies</div><div style="font-size:19px;font-weight:800;color:#16A34A;">+' + (r.new_agencies || 0) + '</div></div>' +
+          '<div><div style="font-size:12px;color:#6B7280;">Cancellations</div><div style="font-size:19px;font-weight:800;color:#DC2626;">−' + (r.cancelled_agencies || 0) + '</div></div>' +
+          '<div><div style="font-size:12px;color:#6B7280;">Net change</div><div style="font-size:19px;font-weight:800;color:#1F6080;">' + (r.net >= 0 ? '+' : '') + (r.net || 0) + '</div></div>' +
         '</div>';
       wrap.appendChild(recent);
 
       // v22p32: trend widget row — MRR + agency growth side by side
-      var trends = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-top:14px;' });
+      var trends = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:10px;margin-top:10px;' });
       trends.appendChild(renderMrrTrendCard(data.mrr_trend || []));
       trends.appendChild(renderAgencyGrowthCard(data.agency_growth || []));
       wrap.appendChild(trends);
@@ -387,7 +387,7 @@
       }
 
       // v22p32: insight row — top agencies (left) + recent events (right)
-      var bottom = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;margin-top:14px;' });
+      var bottom = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:10px;margin-top:10px;' });
       bottom.appendChild(renderTopAgenciesCard(data.top_agencies || []));
       bottom.appendChild(renderRecentEventsCard(data.recent_events || []));
       wrap.appendChild(bottom);
@@ -499,6 +499,14 @@
           renderAgencies(container);
         });
         actionsTd.appendChild(toggleBtn);
+        // Lock sign-in for the WHOLE agency - every staff member and parent; KiddieTrac only (kt-signin-locks.js, 2026-11-10).
+        if (window.KT && KT.signinLock) {
+          var lockBtn = Dom.el('button', { class: 'kt-act-icon kt-icon-tip kt-act-warn', title: 'Sign-in lock', 'data-kttip': 'Sign-in lock', 'aria-label': 'Sign-in lock' }, '🚷');
+          lockBtn.addEventListener('click', function () {
+            KT.signinLock.openLock({ scope: 'agency', targetId: a.id, agencyId: a.id, label: a.name });
+          });
+          actionsTd.appendChild(lockBtn);
+        }
         tr.appendChild(actionsTd);
         tbody.appendChild(tr);
       });
@@ -599,7 +607,7 @@
       '<div style="margin-bottom:12px;">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
           '<div><div style="font-size:14px;font-weight:700;">🎨 White-label branding</div>' +
-            '<div style="font-size:11px;color:#6B7280;line-height:1.5;">The white-label licence (chargeable — include it in the monthly amount on Plan; suggest +$50/mo). When enabled, the agency’s logo replaces KiddieTrac in the portal top bar for every role, the app’s loading and unlock screens, the sign-in page of their branded app, and on emails, invoices and forms; the "Powered by Kiddietrac" footer is hidden. The rest of their branding (invoices, email delivery, payslips) is under Reseller › Branding while switched into the agency.</div>' +
+            '<div style="font-size:11px;color:#6B7280;line-height:1.5;">The white-label licence (chargeable — include it in the monthly amount on Plan; suggest +$50/mo). When enabled, the agency’s logo replaces KiddieTrac in the portal top bar for every role, the app’s loading and unlock screens, the sign-in page of their branded app, and on emails, invoices and forms; the "Powered by Kiddietrac" footer is hidden; and marketing campaigns can be sent from the agency’s own mailbox (a Gmail / Google Workspace sender account). The rest of their branding (invoices, email delivery, payslips) is under Reseller › Branding while switched into the agency.</div>' +
           '</div>' +
           '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">' +
             '<input id="ag-wl" type="checkbox" ' + (whiteLabelChecked ? 'checked' : '') + '> Enable' +
@@ -1149,7 +1157,7 @@
     m.querySelector('#ep-close').addEventListener('click', function () { ov.remove(); });
     var onEsc = function (e) { if (e.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', onEsc); } };
     document.addEventListener('keydown', onEsc);
-    Api.get('/platform/email-logs/' + id + '/preview').then(function (d) {
+    Api.get(_elBase + '/' + id + '/preview').then(function (d) {
       m.querySelector('#ep-head').innerHTML =
         '<h3 style="margin:0;font-size:16px;">' + esc(d.subject || '(no subject)') + '</h3>' +
         '<div style="font-size:12px;color:#6B7280;margin-top:2px;">To ' + esc((d.to_name ? d.to_name + ' ' : '') + '<' + (d.to_email || '') + '>') +
@@ -1159,11 +1167,25 @@
         // matters here because this is the line that answers "was the director copied?"
         // for an access-removal, suspension or de-enrolment notice.
         ((d.cc || d.bcc)
-          ? '<div style="font-size:12px;color:#475569;margin-top:4px;padding:6px 9px;background:#F1F5F9;border-radius:7px;">' +
+          // On the header band (2026-11-07): a see-through panel, not a pale box the white header text vanished into.
+          ? '<div style="font-size:12px;color:#fff;margin-top:6px;padding:6px 9px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);border-radius:7px;">' +
               (d.cc ? '<div><b>Cc:</b> ' + esc(d.cc) + '</div>' : '') +
               (d.bcc ? '<div><b>Bcc:</b> ' + esc(d.bcc) + '</div>' : '') +
             '</div>'
+          : '') +
+        // Attachments (2026-10-30): each one opens in the file viewer (view or download).
+        ((d.attachments && d.attachments.length)
+          ? '<div class="ep-atts" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">' + d.attachments.map(function (a) {
+              var kb = a.size >= 1048576 ? (a.size / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(a.size / 1024)) + ' KB';
+              var ico = /pdf/.test(a.mime || '') ? '📄' : /^image\//.test(a.mime || '') ? '🖼️' : /calendar/.test(a.mime || '') ? '📅' : /sheet|excel|csv/.test(a.mime || '') ? '📊' : '📎';
+              return a.kept
+                ? '<button type="button" data-att="' + a.id + '" data-name="' + esc(a.filename) + '" style="display:inline-flex;align-items:center;gap:6px;max-width:100%;height:28px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;color:#0F172A;font-size:12px;font-weight:600;cursor:pointer;" title="View or download">' + ico + ' <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px;">' + esc(a.filename) + '</span><span style="color:#64748B;font-weight:500;">' + kb + '</span></button>'
+                : '<span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border:1px dashed #CBD5E1;border-radius:8px;color:#64748B;font-size:12px;" title="Too large to keep a copy">' + ico + ' ' + esc(a.filename) + ' · ' + kb + ' · not kept</span>';
+            }).join('') + '</div>'
           : '');
+      m.querySelectorAll('.ep-atts [data-att]').forEach(function (b) {
+        b.addEventListener('click', function () { openEmailAttachment(id, b.getAttribute('data-att'), b.getAttribute('data-name'), b); });
+      });
       var epBody = m.querySelector('#ep-body');
       if (!d.html) {
         epBody.innerHTML = '<div style="padding:40px;text-align:center;color:#6B7280;">No stored content for this message (it predates preview capture, or was plain-text only).</div>';
@@ -1245,6 +1267,10 @@
   }
   function elToast(icon, title, msg, colour) { try { if (window.KT && KT.toast) KT.toast(icon, title, msg, colour || '#0E7C90'); } catch (e) {} }
 
+  /* Which email log these screens read (2026-11-03): the super admin's /platform/email-logs, or an agency
+     admin's own agency only (/admin/email-logs, opts.agency). Set by renderEmailLogScreen. */
+  var _elBase = '/platform/email-logs';
+
   function renderEmailLogScreen(container, opts) {
     // opts.status pre-filters the screen. The "Email errors" tab passes 'problems',
     // which the API expands to bounced + failed + deferred + suppressed.
@@ -1257,7 +1283,15 @@
     // (KT.pagerBar) — it was a "Load 100 more" button until 2026-09-25, the only
     // list in the portal that paged that way — and the count says how many matches
     // exist in total so nothing is silently cut off.
-    var state = { q: '', status: (opts.status || ''), from: '', to: '', page: 1, limit: 25, total: 0, rows: [] };
+    /* scope '' = the agency you are in; 'platform' = mail that belongs to no agency (crash
+       alerts, sales enquiries, website subscribers, platform invites), which the agency
+       view can never show (2026-10-22). Remembered for the visit. */
+    /* "All" is the super admin's default (Anthony, 2026-10-23: "keep this as a default for me").
+       A choice made here lasts for this tab; a fresh visit opens on All again. */
+    var _elScope = 'all'; try { var _s = sessionStorage.getItem('kt_el_scope'); if (_s !== null) _elScope = _s; } catch (e) {}
+    _elBase = opts.agency ? '/admin/email-logs' : '/platform/email-logs';
+    if (opts.agency) _elScope = '';   // an agency sees its own mail only; the server enforces it too
+    var state = { q: '', status: (opts.status || ''), from: '', to: '', page: 1, limit: 25, total: 0, rows: [], scope: _elScope };
     var errorsMode = state.status === 'problems';
 
     var inp = 'padding:8px 11px;border:1px solid #E2E8F0;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box;font-family:inherit;';
@@ -1271,6 +1305,11 @@
       + '<div class="kt-al-efilters" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin:0 2px 12px;">'
         + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;flex:1;min-width:240px;max-width:380px;">Search'
           + '<input id="elf-q" type="search" placeholder="Name, email address or subject…" style="' + inp + 'width:100%;margin-top:4px;font-weight:400;text-transform:none;"></label>'
+        + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Whose'
+          + '<select id="elf-scope" style="' + inp + 'display:block;margin-top:4px;font-weight:400;text-transform:none;">'
+            + '<option value="all">🌍 All — every agency + platform</option>'
+            + '<option value="">This agency</option>'
+            + '<option value="platform">🌐 Platform-level</option></select></label>'
         + '<label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Status'
           + '<select id="elf-status" style="' + inp + 'display:block;margin-top:4px;font-weight:400;text-transform:none;">'
             + '<option value="">All</option>'
@@ -1322,8 +1361,14 @@
           : '')
         + '<button class="kt-act-icon els-resend" data-id="' + l.id + '" data-email="' + esc(l.to_email || '') + '" title="Resend email" data-kttip="Resend" aria-label="Resend email">📤</button>';
       return '<tr style="border-top:1px solid #F3F4F6;">' +
-        '<td style="padding:9px 14px;color:#374151;white-space:nowrap;">' + esc(elWhen(l.created_at)) + '</td>' +
-        '<td style="padding:9px 14px;">' + esc((l.to_name ? l.to_name + ' ' : '') + '<' + (l.to_email || '') + '>') + '</td>' +
+        /* A bounce shows WHEN IT BOUNCED, with the send time under it (2026-11-01, Anthony:
+           "date and timestamp needs to show when the bounce happened"). */
+        '<td style="padding:9px 14px;color:#374151;white-space:nowrap;">' + (l.bounced_at
+          ? esc(elWhen(l.bounced_at)) + '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">Sent ' + esc(elWhen(l.created_at)) + '</div>'
+          : esc(elWhen(l.created_at))) + '</td>' +
+        '<td style="padding:9px 14px;">' + esc((l.to_name ? l.to_name + ' ' : '') + '<' + (l.to_email || '') + '>')
+          + (state.scope === 'all' ? '<div style="margin-top:3px;"><span style="display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:999px;' + (l.agency_name ? 'background:#EEF2FF;color:#3730A3;">🏫 ' + esc(l.agency_name) : 'background:#ECFEFF;color:#0E7490;">🌐 Platform') + '</span></div>' : '')
+          + '</td>' +
         '<td class="els-subj" data-id="' + (canView ? l.id : '') + '" style="padding:9px 14px;' + (canView ? 'cursor:pointer;' : '') + '">' + subjCell + '</td>' +
         '<td style="padding:9px 14px;white-space:nowrap;">' + statusPill(l.status) + (l.error ? '<div style="font-size:11px;color:#B91C1C;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(l.error) + '">' + esc(l.error) + '</div>' : '') + '</td>' +
         '<td style="padding:9px 14px;color:#6B7280;">' + esc(l.mailer || '—') + '</td>' +
@@ -1345,7 +1390,9 @@
       KT.pagerBar(more, state.page, pages, function (p) {
         state.page = p; load();
         try { container.scrollIntoView({ block: 'start' }); } catch (e) {}
-      });
+      }, { size: state.limit, total: state.total, max: 200, onSize: function (n) {
+        KT.rowsPerPage.set('email-logs:list', n); state.limit = n; state.page = 1; load();
+      } });
     }
 
     // Any filter change starts again from page 1; a page change keeps the filters.
@@ -1353,7 +1400,8 @@
 
     function load() {
       body.innerHTML = '<div style="padding:30px;text-align:center;color:#6B7280;">Loading…</div>';
-      var url = '/platform/email-logs?' + qs({ q: state.q, status: state.status, from: state.from, to: state.to, limit: state.limit, offset: (state.page - 1) * state.limit });
+      state.limit = ((window.KT && KT.rowsPerPage && KT.rowsPerPage.get('email-logs:list')) || state.limit);   // rows per page (2026-10-20)
+      var url = _elBase + '?' + qs({ scope: state.scope, q: state.q, status: state.status, from: state.from, to: state.to, limit: state.limit, offset: (state.page - 1) * state.limit });
       Api.get(url).then(function (data) {
         var logs = (data && data.logs) || [];
         state.total = (data && typeof data.total === 'number') ? data.total : logs.length;
@@ -1389,6 +1437,14 @@
        debounce (schedule() and its timer) went with it — nothing else used them. */
     KT.onSearchCommit(qEl, function () { state.q = qEl.value.trim(); reload(); });
     container.querySelector('#elf-status').addEventListener('change', function () { state.status = this.value; reload(); });
+    var scopeEl = container.querySelector('#elf-scope');
+    scopeEl.value = state.scope;
+    if (opts.agency && scopeEl.parentNode) scopeEl.parentNode.style.display = 'none';   // no "Whose" for an agency
+    scopeEl.addEventListener('change', function () {
+      state.scope = this.value;
+      try { sessionStorage.setItem('kt_el_scope', state.scope); } catch (e) {}
+      reload();
+    });
     container.querySelector('#elf-from').addEventListener('change', function () { state.from = this.value; reload(); });
     container.querySelector('#elf-to').addEventListener('change', function () { state.to = this.value; reload(); });
     container.querySelector('#elf-clear').addEventListener('click', function () {
@@ -1401,8 +1457,23 @@
     reload();
   }
 
+  function openEmailAttachment(id, aid, name, btn) {
+    var tok = ''; try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''; } catch (e) {}
+    var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    if (btn) btn.disabled = true;
+    fetch(base + _elBase + '/' + id + '/attachments/' + aid, { headers: { Authorization: 'Bearer ' + tok, Accept: '*/*' } })
+      .then(function (r) { if (!r.ok) throw new Error('Could not open that attachment.'); return r.blob(); })
+      .then(function (b) {
+        if (window.KT && KT.openFile) { KT.openFile(b, { title: name, filename: name, label: name }); return; }
+        var u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+      })
+      .catch(function (e) { elToast('⚠️', 'Attachment', e.message || 'error', '#B91C1C'); })
+      .then(function () { if (btn) btn.disabled = false; });
+  }
+
   function downloadEmail(id) {
-    Api.get('/platform/email-logs/' + id + '/preview').then(function (d) {
+    Api.get(_elBase + '/' + id + '/preview').then(function (d) {
       if (!d.html) { elToast('⚠️', 'Nothing to download', 'No stored content for this email.', '#B45309'); return; }
       var blob = new Blob([d.html], { type: 'text/html' });
       var url = URL.createObjectURL(blob);
@@ -1417,10 +1488,101 @@
     var to = email || 'the original recipient';
     Promise.resolve(window.KT && KT.confirm ? KT.confirm('Resend this email to ' + to + '?') : window.confirm('Resend this email to ' + to + '?')).then(function (ok) {
       if (!ok) return;
-      Api.post('/platform/email-logs/' + id + '/resend', {}).then(function (res) {
+      Api.post(_elBase + '/' + id + '/resend', {}).then(function (res) {
         elToast('✅', 'Resent', (res && res.message) || 'Email resent to ' + to + '.', '#16A34A');
       }).catch(function (e) { elToast('⚠️', 'Could not resend', e.message || 'error', '#B91C1C'); });
     });
+  }
+
+  /* MOBILE APP UPDATES (2026-10-30). The latest Google Play build and the oldest build still allowed - kt-appupdate.js
+     prompts installed apps from these (GET /app/versions). After a Play release goes live, raise "Latest build"; raise
+     "Minimum build" only when an old app must stop working (it then shows a blocking "Update required"). */
+  function appVersionsCard(host, mapi) {
+    if (!host) return;
+    var card = document.createElement('div');
+    card.className = 'kt-card';
+    card.style.cssText = 'max-width:none;margin-top:16px;';
+    card.innerHTML = '<div style="color:#64748B;font-size:13px;">Loading mobile app updates…</div>';
+    host.appendChild(card);
+    var f = 'height:32px;padding:0 10px;border:1px solid #D7DFE8;border-radius:8px;font-size:13px;box-sizing:border-box;font-family:inherit;';
+    mapi('/platform/app-versions').then(function (d) {
+      var p = d.play || {};
+      card.innerHTML = '<div style="font-weight:700;color:#0F172A;margin-bottom:4px;">📱 Mobile app updates (Google Play)</div>'
+        + '<p style="color:#64748B;font-size:12.5px;margin:0 0 10px;">Live on Google Play: <b style="color:#0F172A;">' + esc(p.version_name || '—') + ' (build ' + esc(p.latest_build) + ')</b>. '
+        + 'Apps older than the <b>latest</b> build see “Update available”; older than the <b>minimum</b> build see a blocking “Update required”. Raise “Latest” after each Play release goes live.</p>'
+        + (p.store_version && p.store_version !== p.version_name
+          ? '<p style="margin:0 0 10px;padding:8px 11px;border-radius:9px;background:#FEF3C7;border:1px solid #FCD34D;color:#92400E;font-size:12.5px;font-weight:600;">⚠️ Google Play now lists <b>' + esc(p.store_version) + '</b>. Set Latest build to that release\'s build number and Version name to ' + esc(p.store_version) + ', then Save.</p>'
+          : '')
+        + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">'
+        + '<label style="font-size:12px;font-weight:700;color:#334155;">Latest build<br><input id="av-latest" type="number" min="1" value="' + esc(p.latest_build) + '" style="' + f + 'width:110px;margin-top:3px;"></label>'
+        + '<label style="font-size:12px;font-weight:700;color:#334155;">Version name<br><input id="av-name" placeholder="3.12.8" value="' + esc(p.version_name || '') + '" style="' + f + 'width:110px;margin-top:3px;"></label>'
+        + '<label style="font-size:12px;font-weight:700;color:#334155;">Minimum build <span style="font-weight:500;color:#94A3B8;">(0 = none)</span><br><input id="av-min" type="number" min="0" value="' + esc(p.min_build) + '" style="' + f + 'width:110px;margin-top:3px;"></label>'
+        + '<label style="font-size:12px;font-weight:700;color:#334155;flex:1;min-width:220px;">Message <span style="font-weight:500;color:#94A3B8;">(optional)</span><br><input id="av-msg" maxlength="300" placeholder="Shown in the prompt" value="' + esc(p.message || '') + '" style="' + f + 'width:100%;margin-top:3px;"></label>'
+        + '<button id="av-save" style="height:32px;background:#1F6080;color:#fff;border:none;border-radius:8px;padding:0 16px;font-weight:700;cursor:pointer;">Save</button></div>'
+        + '<div id="av-out" style="font-size:12.5px;margin-top:8px;min-height:16px;"></div>';
+      var out = card.querySelector('#av-out');
+      card.querySelector('#av-save').onclick = async function () {
+        var body = { latest_build: parseInt(card.querySelector('#av-latest').value, 10) || 0, min_build: parseInt(card.querySelector('#av-min').value, 10) || 0,
+          version_name: (card.querySelector('#av-name').value || '').trim() || null, message: (card.querySelector('#av-msg').value || '').trim() || null };
+        if (body.min_build > body.latest_build) { out.style.color = '#B91C1C'; out.textContent = 'The minimum build cannot be newer than the latest build.'; return; }
+        if (body.min_build > (parseInt(p.min_build, 10) || 0) && window.KT && KT.confirm
+          && !(await KT.confirm('Raise the minimum to build ' + body.min_build + '? Apps older than that will be blocked until they update.'))) return;
+        out.style.color = '#64748B'; out.textContent = 'Saving…';
+        mapi('/platform/app-versions', 'PUT', body).then(function (r) { p = r.play || p; out.style.color = '#047857'; out.textContent = '✓ Saved - apps check this the next time they open.'; })
+          .catch(function (e) { out.style.color = '#B91C1C'; out.textContent = e.message || 'Could not save.'; });
+      };
+      iosVersionsBlock(card, d.ios || {}, mapi, f);
+    }).catch(function (e) { card.innerHTML = '<div style="color:#B91C1C;font-size:13px;">Could not load mobile app updates: ' + esc(e.message || 'error') + '</div>'; });
+  }
+
+  /* IPHONE APP UPDATES (2026-11-02). kt-appupdate.js prompts iPhone apps only for a version the App Store really lists
+     (the server asks Apple; the line below shows its answer). Minimum = older apps get a blocking "Update required"
+     once the store has that version; Latest (optional) = prompt "Update available" only below it. Empty = not used. */
+  function iosVersionsBlock(card, io, mapi, f) {
+    var box = document.createElement('div');
+    box.id = 'av-ios';
+    box.style.cssText = 'border-top:1px solid #E2E8F0;margin-top:14px;padding-top:12px;';
+    var verPat = '^\\d+(\\.\\d+){0,3}$';
+    function storeLine(x) {
+      if (!x.store_version) return 'App Store: <b style="color:#0F172A;">not listed yet</b>' + (x.lookup_ok === false ? ' <span style="color:#94A3B8;">(Apple did not answer - tried ' + esc(fmtWhen(x.checked_at)) + ')</span>' : '') + ' - iPhone apps are not prompted until it is.';
+      var rel = x.released_at ? ', released ' + esc(fmtDay(x.released_at)) : '';
+      return 'App Store: <b style="color:#0F172A;">' + esc(x.store_version) + rel + '</b>'
+        + (x.store_url ? ' · <a href="' + esc(x.store_url) + '" target="_blank" rel="noopener" style="color:#1F6080;">App Store page</a>' : '');
+    }
+    function fmtDay(s) { try { var dt = new Date(s); if (isNaN(dt)) return s; return dt.toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: dt.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' }); } catch (e) { return s; } }
+    function fmtWhen(s) { try { var dt = new Date(s); return isNaN(dt) ? '' : dt.toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } }
+    box.innerHTML = '<div style="font-weight:700;color:#0F172A;margin-bottom:4px;">📱 iPhone (App Store)</div>'
+      + '<p id="av-ios-store" style="color:#64748B;font-size:12.5px;margin:0 0 4px;">' + storeLine(io) + '</p>'
+      + '<p style="color:#64748B;font-size:12.5px;margin:0 0 10px;">iPhones older than the <b>minimum</b> version see a blocking “Update required”; older than the App Store version see “Update available” (only below <b>Latest</b> when it is set). Nothing shows for a version the App Store doesn’t list yet. Leave empty to not use.</p>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">'
+      + '<label style="font-size:12px;font-weight:700;color:#334155;">Latest version <span style="font-weight:500;color:#94A3B8;">(optional)</span><br><input id="av-ios-latest" placeholder="3.12.12" pattern="' + verPat + '" value="' + esc(io.latest_version || '') + '" style="' + f + 'width:120px;margin-top:3px;"></label>'
+      + '<label style="font-size:12px;font-weight:700;color:#334155;">Minimum version <span style="font-weight:500;color:#94A3B8;">(empty = none)</span><br><input id="av-ios-min" placeholder="3.12.10" pattern="' + verPat + '" value="' + esc(io.min_version || '') + '" style="' + f + 'width:120px;margin-top:3px;"></label>'
+      + '<label style="font-size:12px;font-weight:700;color:#334155;flex:1;min-width:220px;">Message <span style="font-weight:500;color:#94A3B8;">(optional)</span><br><input id="av-ios-msg" maxlength="300" placeholder="Shown in the prompt" value="' + esc(io.message || '') + '" style="' + f + 'width:100%;margin-top:3px;"></label>'
+      + '<button id="av-ios-save" style="height:32px;background:#1F6080;color:#fff;border:none;border-radius:8px;padding:0 16px;font-weight:700;cursor:pointer;">Save</button></div>'
+      + '<div id="av-ios-out" style="font-size:12.5px;margin-top:8px;min-height:16px;"></div>';
+    card.appendChild(box);
+    var out = box.querySelector('#av-ios-out'), re = new RegExp(verPat);
+    function vcmp(a, b) {
+      var x = String(a).split('.'), y = String(b).split('.'), n = Math.max(x.length, y.length);
+      for (var i = 0; i < n; i++) { var d = (parseInt(x[i], 10) || 0) - (parseInt(y[i], 10) || 0); if (d) return d < 0 ? -1 : 1; }
+      return 0;
+    }
+    box.querySelector('#av-ios-save').onclick = async function () {
+      var body = { min_version: (box.querySelector('#av-ios-min').value || '').trim() || null, latest_version: (box.querySelector('#av-ios-latest').value || '').trim() || null,
+        message: (box.querySelector('#av-ios-msg').value || '').trim() || null };
+      function bad(t) { out.style.color = '#B91C1C'; out.textContent = t; }
+      if (body.min_version && !re.test(body.min_version)) return bad('The minimum version must look like 3.12.10.');
+      if (body.latest_version && !re.test(body.latest_version)) return bad('The latest version must look like 3.12.12.');
+      if (body.min_version && body.latest_version && vcmp(body.min_version, body.latest_version) > 0) return bad('The minimum version cannot be newer than the latest version.');
+      if (body.min_version && (!io.min_version || vcmp(body.min_version, io.min_version) > 0) && window.KT && KT.confirm
+        && !(await KT.confirm('Raise the iPhone minimum to ' + body.min_version + '? iPhone apps older than that will be blocked until they update (once the App Store has it).'))) return;
+      out.style.color = '#64748B'; out.textContent = 'Saving…';
+      mapi('/platform/app-versions', 'PUT', { ios: body }).then(function (r) {
+        io = Object.assign(io, r.ios || {});
+        box.querySelector('#av-ios-store').innerHTML = storeLine(io);
+        out.style.color = '#047857'; out.textContent = '✓ Saved - iPhones check this the next time they open.';
+      }).catch(function (e) { bad(e.message || 'Could not save.'); });
+    };
   }
 
   function renderMaintenance(container) {
@@ -1483,6 +1645,7 @@
         mailOut.style.color = '#64748B'; mailOut.textContent = 'Emailing all users…';
         mapi('/platform/maintenance/notify-all', 'POST', {}).then(function (r) { mailOut.style.color = '#047857'; mailOut.textContent = '✓ ' + r.message; }).catch(function (e) { mailOut.style.color = '#B91C1C'; mailOut.textContent = '✗ ' + e.message; });
       };
+      appVersionsCard(container.firstElementChild, mapi);   // Mobile app updates (2026-10-30)
     }).catch(function (e) {
       container.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load maintenance settings: ' + esc(e.message || 'error') + '</div>';
     });

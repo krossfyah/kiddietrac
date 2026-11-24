@@ -170,6 +170,17 @@
         return;
       }
 
+      // Circle stats for the children listed (2026-11-04), from the rows already here.
+      if (KT.statRings) {
+        var n = children.length;
+        resultsEl.appendChild(KT.statRings([
+          { label: 'Children', value: n, color: '#1F6080', sub: 'in this list' },
+          { label: 'At Centre now', value: children.filter(function (c) { return c.is_at_centre; }).length, of: n, color: '#16A34A' },
+          { label: 'With a photo', value: children.filter(function (c) { return !!c.photo_url; }).length, of: n, color: '#7C3AED' },
+          { label: 'Family linked', value: children.filter(function (c) { return !!c.family_name; }).length, of: n, color: '#D97706' },
+        ]));
+      }
+
       // Count summary + view toggle
       var summaryRow = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;' });
       summaryRow.appendChild(Dom.el('div', {
@@ -179,7 +190,7 @@
       resultsEl.appendChild(summaryRow);
 
       // v22p26: branch on card/table view preference
-      var view = localStorage.getItem('kt_view_children') || localStorage.getItem('kt_view_pref') || 'cards';
+      var view = (window.matchMedia && window.matchMedia('(max-width:768px)').matches) ? 'table' : (localStorage.getItem('kt_view_children') || localStorage.getItem('kt_view_pref') || 'cards');
       if (view === 'table') {
         resultsEl.appendChild(renderChildrenTable(children, centreSelect.value));
         /* The table is built AFTER a fetch, and the global sweep has long since run by
@@ -199,7 +210,7 @@
         var card = Dom.el('a', {
           href: '#child-detail?id=' + c.id + (centreSelect.value ? '&centre_id=' + centreSelect.value : ''),
           class: 'kt-lift',
-          style: 'display:block;background:white;padding:14px 16px;border-radius:12px;text-decoration:none;color:#111827;box-shadow:0 1px 3px rgba(0,0,0,.04);border-left:4px solid ' + (c.room_color || '#1F6080') + ';',
+          style: 'display:block;background:white;padding:14px 16px;border-radius:12px;text-decoration:none;color:#111827;box-shadow:0 1px 3px rgba(0,0,0,.04);--kt-edge:' + (c.room_color || '#1F6080') + ';',
         });
         card.addEventListener('click', function (ev) {
           /* Let a deliberate new-tab through: ctrl/cmd/middle-click on a real link is a
@@ -275,6 +286,8 @@
 
   // v22p26: small toggle widget — cards vs table, persisted in localStorage.
   function buildViewToggle(storageKey, onChange) {
+    // Phone: no Cards / Table switch - always the table (Anthony 2026-10-27: "with mobile view remove the ability to toggle with cards to table and just keep table").
+    if ((window.matchMedia && window.matchMedia('(max-width:768px)').matches)) { return Dom.el('span', { style: 'display:none;' }); }
     var current = localStorage.getItem(storageKey) || localStorage.getItem('kt_view_pref') || 'cards';
     var wrap = Dom.el('div', { style: 'display:inline-flex;background:#F3F4F6;border-radius:8px;padding:2px;' });
     function btn(view, label, icon) {
@@ -422,6 +435,8 @@
 
   if (Shell && Shell.registerScreen) {
     Shell.registerScreen('agency_admin:admin-children', renderChildren);
+    // The same screen for a centre director: /director/enrollments and /admin/centres keep them to their centres (2026-11-13).
+    Shell.registerScreen('centre_director:admin-children', renderChildren);
   }
   KT.AdminChildrenScreen = { render: renderChildren };
 })(window);

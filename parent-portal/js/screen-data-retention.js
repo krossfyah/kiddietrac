@@ -35,7 +35,8 @@
      on a schedule. Three do (and only when auto-enforce is on); the other four are a
      stated policy and nothing removes them. Saying so is the difference between a
      compliance page and a compliance promise you are not keeping. (2026-08-25) */
-  var RETENTION_ENFORCED = ['message_months', 'announcement_months', 'suspended_family_months'];
+  var RETENTION_ENFORCED = ['message_months', 'announcement_months', 'suspended_family_months',
+    'recording_months', 'walk_gps_months', 'sms_log_months', 'email_log_months'];   // + 4 (2026-11-10)
 
   function retentionBadge(key) {
     var on = RETENTION_ENFORCED.indexOf(key) !== -1;
@@ -96,17 +97,25 @@
           + numField('message_months', 'Parent–educator messages (chat)', 'months', c.message_months)
           + numField('announcement_months', 'Announcements & news', 'months', c.announcement_months)
           + numField('suspended_family_months', 'Suspended families', 'months', c.suspended_family_months, 'Set to 0 to keep suspended families indefinitely.', 0)
+          + numField('recording_months', 'Call recordings & transcripts', 'months', c.recording_months || 0, 'The call stays in the call history; the audio and transcript are removed. 0 = keep.', 0)
+          + numField('walk_gps_months', 'Walk & field trip GPS trails', 'months', c.walk_gps_months || 0, 'The walk record stays; the location points are removed. 0 = keep.', 0)
+          + numField('sms_log_months', 'Log of texts sent', 'months', c.sms_log_months || 0, '0 = keep.', 0)
+          + numField('email_log_months', 'Log of emails sent', 'months', c.email_log_months || 0, '0 = keep.', 0)
           + numField('audit_log_months', 'Security & audit trail', 'months', c.audit_log_months)),
 
       enforce: card('Automatic enforcement', 'Off by default. When on, records past their retention period are handled automatically by a nightly review. Deletion is permanent — anonymising keeps aggregate stats while removing identifying details.',
-          toggle('auto_enforce', 'Automatically enforce retention', 'Runs nightly and applies only the periods marked ENFORCED above — messages, announcements and suspended families. The rest are recorded as policy and are never deleted automatically.', c.auto_enforce)
+          toggle('auto_enforce', 'Automatically enforce retention', 'Runs nightly and applies only the periods marked ENFORCED above — messages, announcements, suspended families, call recordings, GPS trails and the text and email logs. The rest are recorded as policy and are never deleted automatically.', c.auto_enforce)
           + '<div style="display:flex;align-items:center;gap:12px;padding:10px 0 2px;"><label for="c_enforce_mode" style="font-size:14px;color:#334155;font-weight:600;">When enforcing, records are</label>'
           + '<select id="c_enforce_mode" style="' + INP + 'width:auto;">'
           + '<option value="anonymize"' + (c.enforce_mode !== 'delete' ? ' selected' : '') + '>Anonymised</option>'
           + '<option value="delete"' + (c.enforce_mode === 'delete' ? ' selected' : '') + '>Permanently deleted</option></select></div>'),
 
       privacy: card('Privacy & consent', '',
-          toggle('require_consent', 'Require parent consent at enrolment', 'Parents must acknowledge your privacy terms before a child is enrolled.', c.require_consent)
+          toggle('require_consent', 'Ask parents to read our privacy notice', 'Each parent is shown your privacy notice once in the portal and taps “I’ve read it”; the date is recorded. Changing the link below asks everyone again.', c.require_consent)
+          /* PIPEDA review 2026-11-10: this switch now does something (PrivacyNoticeController). Off = nobody is asked. */
+          + '<div id="c-consent-warn" style="display:' + (c.require_consent === false ? 'block' : 'none') + ';background:#FBF1DC;border:1px solid #F0DCA8;color:#7A4F0E;border-radius:9px;padding:8px 12px;font-size:12.5px;margin:0 0 8px 29px;">'
+          + '<b>Off:</b> parents are not shown your privacy notice and nothing records that they were told how their information is used. PIPEDA expects you to tell them. Turning this off is recorded in the audit log.</div>'
+          + '<div id="c-pn" style="margin:0 0 6px 29px;font-size:12.5px;color:#64748B;"></div>'
           + '<div style="padding:10px 0;"><label for="c_privacy_policy_url" style="display:block;font-size:13px;font-weight:700;color:#475569;margin-bottom:5px;">Privacy policy URL</label>'
           + '<input id="c_privacy_policy_url" type="url" placeholder="https://…" value="' + esc(c.privacy_policy_url || '') + '" style="' + WIDE + '"></div>'
           + '<div style="padding:2px 0;"><label for="c_data_contact_email" style="display:block;font-size:13px;font-weight:700;color:#475569;margin-bottom:5px;">Data-protection contact email</label>'
@@ -124,6 +133,37 @@
       { key: 'notes', label: '📝 Notes', paint: sec('notes') },
     ], { eager: true });
 
+    /* Who has read the current privacy notice (GET /admin/privacy-notice), and "Ask parents again". */
+    var rc = main.querySelector('#c_require_consent'), warn = main.querySelector('#c-consent-warn');
+    if (rc && warn) rc.addEventListener('change', function () { warn.style.display = rc.checked ? 'none' : 'block'; });
+    function paintNotice() {
+      var box = main.querySelector('#c-pn');
+      if (!box) return;
+      Api.get('/admin/privacy-notice').then(function (s) {
+        if (!s.required) { box.innerHTML = ''; return; }
+        var waiting = s.waiting || [];
+        box.innerHTML = '<div style="border:1px solid #E7EBF0;border-radius:10px;padding:10px 12px;background:#fff;">'
+          + '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+          + '<span style="font-size:13px;color:#0F172A;"><b>' + s.acknowledged + '</b> of <b>' + s.parents + '</b> parents have read the current notice'
+          + (s.own_policy ? '' : ' (KiddieTrac’s, until you add your own link)') + '</span>'
+          + '<button type="button" data-pn-reask style="margin-left:auto;height:28px;padding:0 10px;border-radius:7px;border:1px solid #CBD5E1;background:#fff;color:#1E293B;font-size:12px;font-weight:600;cursor:pointer;" data-kttip="Your notice changed but the link did not: ask every parent to read it again">Ask parents again</button></div>'
+          + (waiting.length ? '<details style="margin-top:6px;"><summary style="cursor:pointer;">Not yet read (' + (s.parents - s.acknowledged) + ')</summary>'
+            + '<div style="margin-top:4px;color:#334155;">' + waiting.map(esc).join(', ') + (s.parents - s.acknowledged > waiting.length ? ', …' : '') + '</div></details>' : '')
+          + '</div>';
+        box.querySelector('[data-pn-reask]').onclick = function () {
+          Shell.Modal.open({
+            title: 'Ask every parent again?',
+            body: '<p style="margin:0;font-size:13.5px;color:#334155;">Every parent will be shown your privacy notice the next time they open the portal, and asked to confirm they have read it. Use this when the notice itself changed.</p>',
+            actions: [{ label: 'Cancel' }, { label: 'Ask again', primary: true, busyLabel: 'Saving…', handler: function () {
+              return Api.post('/admin/privacy-notice/reask', {}).then(function () { paintNotice(); if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Parents will be asked again', 'success'); })
+                .catch(function (e) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast((e && e.message) || 'Could not save', 'error'); return false; });
+            } }]
+          });
+        };
+      }).catch(function () { box.innerHTML = ''; });
+    }
+    paintNotice();
+
     var btn = main.querySelector('#c-save');
     btn.onclick = function () {
       var v = function (id) { var el = main.querySelector('#c_' + id); return el ? el.value : null; };
@@ -133,6 +173,8 @@
         daily_log_months: +v('daily_log_months'), message_months: +v('message_months'),
         announcement_months: +v('announcement_months'),
         suspended_family_months: +v('suspended_family_months'),
+        recording_months: +v('recording_months'), walk_gps_months: +v('walk_gps_months'),
+        sms_log_months: +v('sms_log_months'), email_log_months: +v('email_log_months'),
         audit_log_months: +v('audit_log_months'),
         auto_enforce: chk('auto_enforce'), enforce_mode: v('enforce_mode'),
         require_consent: chk('require_consent'),
@@ -146,6 +188,7 @@
         st.style.color = '#1E8E60'; st.textContent = '✓ Saved';
         setTimeout(function () { st.textContent = ''; }, 2600);
         if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Compliance settings saved', 'success');
+        paintNotice();
       }).catch(function (e) {
         btn.disabled = false; btn.textContent = 'Save changes';
         st.style.color = '#BE4038'; st.textContent = 'Save failed: ' + ((e && e.message) || 'error');

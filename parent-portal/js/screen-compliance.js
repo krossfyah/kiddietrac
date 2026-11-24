@@ -64,7 +64,7 @@
 
   function kpiTile(label, value, accent) {
     var t = Dom.el('div', {
-      style: 'background:white;border-radius:12px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05);border-left:4px solid ' + accent + ';',
+      style: 'background:white;border-radius:12px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.05);--kt-edge:' + accent + ';',
     });
     t.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, label));
     t.appendChild(Dom.el('div', { style: 'font-size:26px;font-weight:800;color:#111827;line-height:1.05;margin-top:4px;' }, String(value)));

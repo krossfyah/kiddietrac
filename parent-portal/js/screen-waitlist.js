@@ -50,7 +50,9 @@
       container.innerHTML = '<div style="padding:32px;color:#DC2626;">Could not load your centres. Are you signed in as a director/admin?</div>';
       return;
     }
-    activeCentreId = activeCentreId || centres[0].id;
+    if (!activeCentreId && centres.length === 1) activeCentreId = centres[0].id;
+    // Select a provider first (2026-10-24) — never the first one in the list.
+    if (!activeCentreId && window.KT && KT.selectFirst) { KT.selectFirst(container, { items: centres, onPick: function (id) { activeCentreId = id; render(container); } }); return; }
 
     let data;
     try {
@@ -207,7 +209,7 @@
             </div>
             <div>
               <label style="font-size:13px;font-weight:600;">Start date *</label>
-              <input type="date" name="start_date" required style="${inp()}" value="${new Date().toISOString().split('T')[0]}">
+              <input type="date" name="start_date" required style="${inp()}" value="${((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10))}">
             </div>
             <div>
               <label style="font-size:13px;font-weight:600;">Monthly fee (CAD) *</label>

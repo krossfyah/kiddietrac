@@ -37,6 +37,9 @@ final class CalendarSettingsController extends Controller
         'show_pending' => true,
         'show_staff_birthdays' => true,
         'show_child_birthdays' => true,
+        // Calendar sync (2026-11-03, cal1103): families' and staff's private calendar links.
+        // Off = every link serves nothing from this agency (the links themselves keep working).
+        'sync_enabled' => true,
     ];
 
     public static function read(int $agencyId): array
@@ -64,11 +67,22 @@ final class CalendarSettingsController extends Controller
 
     private function assertAdmin(Request $request): void
     {
-        $ok = DB::table('role_assignments')
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $request->user()->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])
             ->exists();
         abort_unless($ok, 403, 'Directors and admins only');
+    }
+
+    /* CALENDAR SYNC IS AN AGENCY ADMIN'S SWITCH (Anthony, 2026-11-03). Turning it off stops every
+       family's and every staff member's calendar link in the agency at once, so a centre director,
+       who can otherwise edit these settings, cannot flip it. Platform admins can. */
+    private function canChangeSync(Request $request): bool
+    {
+        return \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
+            ->where('user_id', $request->user()->id)->where('active', 1)
+            ->whereIn('role', ['agency_admin', 'platform_admin'])
+            ->exists();
     }
 
     /** GET /admin/calendar-settings */
@@ -83,6 +97,7 @@ final class CalendarSettingsController extends Controller
             'agency_id' => $row->id,
             'agency_name' => $row->name,
             'calendar' => self::read($agencyId),
+            'can_change_sync' => $this->canChangeSync($request),
         ]);
     }
 
@@ -99,6 +114,9 @@ final class CalendarSettingsController extends Controller
         $request->validate($rules);
 
         $current = self::read($agencyId);
+        if ($request->has('sync_enabled') && $request->boolean('sync_enabled') !== (bool) $current['sync_enabled']) {
+            abort_unless($this->canChangeSync($request), 403, 'Only an agency admin can switch calendar sync on or off.');
+        }
         foreach (array_keys(self::DEFAULTS) as $k) {
             // has() not filled(): false is a value here, and filled() discards it.
             if ($request->has($k)) {

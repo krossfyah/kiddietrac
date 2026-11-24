@@ -28,8 +28,8 @@ class TrainingRemind extends Command
     public function handle(): int
     {
         $dry = (bool) $this->option('dry-run');
-        $today = now()->toDateString();
-        $soon = now()->addDays(2)->toDateString();
+        $today = \App\Support\AgencyTime::today();
+        $soon = \App\Support\AgencyTime::todayDate()->addDays(2)->toDateString();
 
         $open = DB::table('training_assignments as ta')
             ->join('training_videos as v', 'v.id', '=', 'ta.video_id')

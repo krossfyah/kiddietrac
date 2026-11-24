@@ -1,0 +1,735 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Happy Birthday! | KiddieTrac</title>
+<link rel="icon" type="image/png" href="icon.png">
+<style>@font-face{font-family:"Baloo 2";font-style:normal;font-weight:400 800;font-display:swap;src:url(/fonts/baloo-2-latin-4a324d.woff2) format("woff2");}</style>
+<style>
+/* Birthday sing-along (2026-10-21). A classroom player: one big Play, fullscreen, lyrics always on.
+   Colours are set once for the one dark look this page has. */
+:root {
+  --ink: #0b2545; --ink-2: #13315c; --teal: #22b8b5; --sun: #ffcf3f; --pink: #ff5d8f;
+  --paper: #ffffff; --muted: #a9bdd6;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #071a2f; color: #fff; font-family: "Baloo 2", "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; padding: 12px 16px; }
+.wrap { width: 100%; max-width: 1280px; }
+.top { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.top img { height: 30px; width: auto; }
+.top .c { margin-left: auto; font-size: 14px; color: var(--muted); font-weight: 600; text-align: right; }
+.hello { margin: 0 0 12px; text-align: center; }
+.hello h1 { margin: 0; font-size: clamp(26px, 4.4vw, 46px); line-height: 1.1; font-weight: 800; text-wrap: balance; }
+.hello h1 span { color: var(--sun); }
+.hello p { margin: 4px 0 0; font-size: clamp(14px, 1.8vw, 18px); color: var(--muted); font-weight: 600; }
+.hello .note { display: none; margin: 8px auto 0; max-width: 560px; font-size: 13px; color: #ffd9a0; }
+
+.stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #0b2545; border-radius: 18px; overflow: hidden; box-shadow: 0 30px 80px -20px rgba(0,0,0,.6); }
+.stage:fullscreen { border-radius: 0; width: 100vw; height: 100vh; aspect-ratio: auto; background: #000; display: flex; align-items: center; justify-content: center; }
+.stage:fullscreen canvas { width: min(100vw, calc(100vh * 16 / 9)); height: auto; }
+canvas { display: block; width: 100%; height: 100%; }
+.big { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(7,26,47,.38); border: 0; cursor: pointer; color: #fff; font: inherit; padding: 16px; }
+.big .disc { width: clamp(84px, 14vw, 150px); height: clamp(84px, 14vw, 150px); border-radius: 50%; background: linear-gradient(135deg, #ffcf3f, #ff8a3d); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 10px rgba(255,207,63,.25), 0 18px 40px rgba(0,0,0,.35); animation: pulse 1.6s ease-in-out infinite; }
+.big .disc svg { width: 46%; height: 46%; margin-left: 8%; color: #0b2545; }
+.big .lbl { font-size: clamp(20px, 3.4vw, 40px); font-weight: 800; text-shadow: 0 2px 12px rgba(0,0,0,.45); text-align: center; line-height: 1.15; }
+.big .sub { font-size: clamp(13px, 1.6vw, 18px); font-weight: 600; opacity: .92; text-align: center; }
+@keyframes pulse { 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .big .disc { animation: none; } }
+.bar { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.ctl { flex: 0 0 auto; height: 44px; min-width: 44px; padding: 0 14px; border-radius: 12px; border: 0; background: rgba(255,255,255,.12); color: #fff; font: inherit; font-weight: 800; font-size: 15px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ctl:hover { background: rgba(255,255,255,.2); }
+.ctl.pri { background: var(--sun); color: var(--ink); }
+.ctl svg { width: 20px; height: 20px; }
+.track { flex: 1; height: 8px; border-radius: 4px; background: rgba(255,255,255,.15); overflow: hidden; cursor: pointer; min-width: 60px; }
+.track i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--sun), var(--pink)); }
+.tm { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; }
+.tip { margin: 12px 0 0; font-size: 14px; color: var(--muted); text-align: center; line-height: 1.5; }
+.err { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 24px; background: radial-gradient(800px 400px at 80% 0%, rgba(34,184,181,.25), transparent 60%), #0b2545; text-align: center; }
+.err.on { display: flex; }
+.err .card { max-width: 520px; }
+.err .e1 { font-size: clamp(40px, 7vw, 64px); }
+.err h1 { margin: 8px 0 6px; font-size: clamp(22px, 3.2vw, 34px); }
+.err p { margin: 0; font-size: 16px; color: var(--muted); line-height: 1.5; }
+@media (max-width: 560px) { .top .c { display: none; } .bar .lbl-txt { display: none; } .tm { min-width: 0; } .big .sub { display: none; } .big { gap: 8px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><img src="logo-white.png" alt="KiddieTrac"><div class="c" id="centreTop"></div></div>
+  <div class="hello"><h1 id="helloH">Happy Birthday! 🎂</h1><p id="helloP">A sing-along from KiddieTrac</p><p class="note" id="helloNote"></p></div>
+  <div class="stage" id="stage">
+    <canvas id="cv" width="1280" height="720" role="img" aria-label="Animated birthday sing-along"></canvas>
+    <button class="big" id="big" type="button" hidden>
+      <span class="disc"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6 4l15 8-15 8z"/></svg></span>
+      <span class="lbl" id="bigLbl">Play the birthday song</span>
+      <span class="sub">Turn the sound up 🔊 and tap ⛶ for full screen</span>
+    </button>
+    <div class="err" id="err" role="alert"><div class="card">
+      <div class="e1">🎈</div>
+      <h1 id="errH">This birthday video link has expired</h1>
+      <p id="errP">Birthday video links work for two weeks. Open the latest birthday email from KiddieTrac for a fresh link.</p>
+    </div></div>
+  </div>
+  <div class="bar">
+    <button class="ctl pri" id="pp" type="button" aria-label="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><path id="ppI" fill="currentColor" d="M6 4l15 8-15 8z"/></svg><span class="lbl-txt" id="ppT">Play</span></button>
+    <div class="track" id="track"><i id="fill"></i></div>
+    <div class="tm" id="tm">0:00</div>
+    <button class="ctl" id="again" type="button" aria-label="Play again"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg><span class="lbl-txt">Again</span></button>
+    <button class="ctl" id="fs" type="button" aria-label="Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg><span class="lbl-txt">Full screen</span></button>
+  </div>
+  <p class="tip">🎂 Play it in class so everyone can sing along. The words light up as you go.</p>
+</div>
+<audio id="au" src="audio/birthday.mp3" preload="auto"></audio>
+<script>
+
+(function () {
+  'use strict';
+  var TIMING = {"verses":[{"start":9.13,"end":25.435,"key":0,"syllables":[{"t":9.13,"d":0.489,"s":"Hap","line":0},{"t":9.62,"d":0.163,"s":"py","line":0},{"t":9.783,"d":0.652,"s":"birth","line":0},{"t":10.435,"d":0.652,"s":"day","line":0},{"t":11.087,"d":0.652,"s":"to","line":0},{"t":11.739,"d":1.304,"s":"you","line":0},{"t":13.043,"d":0.489,"s":"Hap","line":1},{"t":13.533,"d":0.163,"s":"py","line":1},{"t":13.696,"d":0.652,"s":"birth","line":1},{"t":14.348,"d":0.652,"s":"day","line":1},{"t":15.0,"d":0.652,"s":"to","line":1},{"t":15.652,"d":1.304,"s":"you","line":1},{"t":16.957,"d":0.489,"s":"Hap","line":2},{"t":17.446,"d":0.163,"s":"py","line":2},{"t":17.609,"d":0.652,"s":"birth","line":2},{"t":18.261,"d":0.652,"s":"day","line":2},{"t":18.913,"d":0.652,"s":"dear","line":2},{"t":19.565,"d":0.652,"s":"NAME","line":2},{"t":20.217,"d":0.652,"s":"NAME","line":2},{"t":20.87,"d":0.489,"s":"Hap","line":3},{"t":21.359,"d":0.163,"s":"py","line":3},{"t":21.522,"d":0.652,"s":"birth","line":3},{"t":22.174,"d":0.652,"s":"day","line":3},{"t":22.826,"d":0.652,"s":"to","line":3},{"t":23.478,"d":1.957,"s":"you","line":3}],"idx":1},{"start":34.565,"end":50.87,"key":2,"syllables":[{"t":34.565,"d":0.489,"s":"Hap","line":0},{"t":35.054,"d":0.163,"s":"py","line":0},{"t":35.217,"d":0.652,"s":"birth","line":0},{"t":35.87,"d":0.652,"s":"day","line":0},{"t":36.522,"d":0.652,"s":"to","line":0},{"t":37.174,"d":1.304,"s":"you","line":0},{"t":38.478,"d":0.489,"s":"Hap","line":1},{"t":38.967,"d":0.163,"s":"py","line":1},{"t":39.13,"d":0.652,"s":"birth","line":1},{"t":39.783,"d":0.652,"s":"day","line":1},{"t":40.435,"d":0.652,"s":"to","line":1},{"t":41.087,"d":1.304,"s":"you","line":1},{"t":42.391,"d":0.489,"s":"Hap","line":2},{"t":42.88,"d":0.163,"s":"py","line":2},{"t":43.043,"d":0.652,"s":"birth","line":2},{"t":43.696,"d":0.652,"s":"day","line":2},{"t":44.348,"d":0.652,"s":"dear","line":2},{"t":45.0,"d":0.652,"s":"NAME","line":2},{"t":45.652,"d":0.652,"s":"NAME","line":2},{"t":46.304,"d":0.489,"s":"Hap","line":3},{"t":46.793,"d":0.163,"s":"py","line":3},{"t":46.957,"d":0.652,"s":"birth","line":3},{"t":47.609,"d":0.652,"s":"day","line":3},{"t":48.261,"d":0.652,"s":"to","line":3},{"t":48.913,"d":1.957,"s":"you","line":3}],"idx":2}],"cues":{"intro_voice":[0.6,7.608],"again_voice":[25.785,31.305],"candles_out":51.02,"hooray":51.12,"outro_voice":[53.27,61.022],"end_card":53.07},"total":64.052};
+  var W = 1280, H = 720;
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var au = document.getElementById('au');
+  var icon = new Image(); icon.src = 'icon.png';
+  var logo = new Image(); logo.src = 'logo-white.png';
+  var agencyLogo = null;
+  var D = { name: '', turning: 0, centre: '', agency: '', home: false, teacher: '' };
+  var THUMB = /[?&]thumb=1/.test(location.search);
+
+/* Drawing helpers + characters (from the Safe Arrival film), with party hats. */
+  function rr(x, y, w, h, r) { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); }
+  function fillRR(x, y, w, h, r, c) { rr(x, y, w, h, r); ctx.fillStyle = c; ctx.fill(); }
+  function circ(x, y, r, c) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); }
+  function ell(x, y, rx, ry, c) { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); }
+  function txt(s, x, y, size, color, weight, align, font) {
+    ctx.font = (weight || 700) + ' ' + size + 'px ' + (font || '"Baloo 2", "Nunito Sans", sans-serif');
+    ctx.fillStyle = color; ctx.textAlign = align || 'left'; ctx.textBaseline = 'middle'; ctx.fillText(s, x, y);
+  }
+  function wrapTxt(s, x, y, maxW, size, color, weight, lh) {
+    ctx.font = (weight || 600) + ' ' + size + 'px "Nunito Sans", sans-serif';
+    ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    var words = s.split(' '), line = '', yy = y;
+    for (var i = 0; i < words.length; i++) {
+      var test = line ? line + ' ' + words[i] : words[i];
+      if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, yy); line = words[i]; yy += lh; } else line = test;
+    }
+    ctx.fillText(line, x, yy); return yy + lh;
+  }
+
+  /* ── characters ── */
+  var SKIN = { maya: '#c68b59', priya: '#9a6a4b', leo: '#f1c7a1', noor: '#7a4b32' };
+  function person(o) {
+    var kid = !!o.kid, fem = !!o.fem && !kid;
+    var legL = kid ? 40 : 72, bodyH = kid ? 50 : 90, headR = kid ? 25 : 27, bodyW = kid ? 42 : (fem ? 46 : 54);
+    ctx.save(); ctx.translate(o.x, o.y + (o.bob || 0)); ctx.scale((o.s || 1) * (o.flip ? -1 : 1), o.s || 1);
+    ell(0, 2, (kid ? 42 : 54) * 0.75, 7, 'rgba(0,0,0,.12)');
+    var sw = o.walk != null ? Math.sin(o.walk) * 0.5 : 0;
+    ctx.lineCap = 'round';
+    var top = -legL - bodyH, hy = top - headR + 2;
+    // long hair falls BEHIND the shoulders: drawn before the body
+    if (fem && o.hairStyle === 'wavy') {
+      var hb = hy + headR + 44, hw = headR + 9;
+      ctx.fillStyle = o.hair; ctx.beginPath();
+      ctx.moveTo(-hw, hy - 4);
+      ctx.quadraticCurveTo(-hw - 6, hb - 30, -hw + 2, hb);
+      for (var wv = 0; wv < 5; wv++) { var xa = -hw + 2 + (wv + 0.5) * (2 * hw - 4) / 5, xb = -hw + 2 + (wv + 1) * (2 * hw - 4) / 5; ctx.quadraticCurveTo(xa, hb + 9, xb, hb); }
+      ctx.quadraticCurveTo(hw + 6, hb - 30, hw, hy - 4);
+      ctx.arc(0, hy - 4, hw, 0, Math.PI, true); ctx.fill();
+    }
+    if (fem && o.hairStyle === 'curly') {
+      // a full halo of curls behind the head, down to the jaw
+      for (var cu = 0; cu < 11; cu++) { var ca = Math.PI * (0.78 + cu * 0.144); circ(Math.cos(ca) * (headR + 6), hy - 2 + Math.sin(ca) * (headR + 6), 13, o.hair); }
+      circ(-headR - 4, hy + 14, 12, o.hair); circ(headR + 4, hy + 14, 12, o.hair);
+    }
+    if (fem && o.hairStyle === 'ponytail') {
+      // full ponytail swinging behind the head
+      ctx.save(); ctx.translate(-headR * 0.85, hy - headR * 0.35); ctx.rotate(0.35 + Math.sin((o.walk || 0) + (o.blinkSeed || 0)) * 0.05);
+      ctx.fillStyle = o.hair; ctx.beginPath(); ctx.moveTo(0, -4); ctx.quadraticCurveTo(-26, 20, -12, 62); ctx.quadraticCurveTo(-2, 40, 8, 6); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    // legs
+    [[-1, sw], [1, -sw]].forEach(function (p) {
+      var hx = p[0] * bodyW * 0.2, a = p[1];
+      var fx = hx + Math.sin(a) * legL, fy = -legL + Math.cos(a) * legL;
+      ctx.strokeStyle = o.legs || o.pants; ctx.lineWidth = kid ? 13 : (fem ? 13 : 17);
+      ctx.beginPath(); ctx.moveTo(hx, -legL); ctx.lineTo(fx, fy - 4); ctx.stroke();
+      if (fem) { fillRR(fx - 6, fy - 9, 21, 9, 4.5, o.shoes || '#2d2d3a'); fillRR(fx - 6, fy - 3, 5, 5, 1, o.shoes || '#2d2d3a'); }
+      else ell(fx + 5, fy - 2, kid ? 10 : 13, kid ? 6 : 7, o.shoes || '#2d2d3a');
+    });
+    // body
+    if (o.dress) {
+      ctx.beginPath(); ctx.moveTo(-bodyW * 0.38, top + 6); ctx.lineTo(bodyW * 0.38, top + 6);
+      ctx.lineTo(bodyW * 0.62, -legL + 8); ctx.lineTo(-bodyW * 0.62, -legL + 8); ctx.closePath();
+      ctx.fillStyle = o.shirt; ctx.fill();
+      fillRR(-bodyW * 0.38, top, bodyW * 0.76, 22, 10, o.shirt);
+    } else if (fem) {
+      // fitted top: shoulders, nipped waist, then an A-line skirt / tunic to the knee
+      var waist = top + bodyH * 0.52, hem = o.skirt ? -legL * 0.45 : -legL + 14;
+      ctx.fillStyle = o.shirt; ctx.beginPath();
+      ctx.moveTo(-bodyW / 2 + 6, top); ctx.lineTo(bodyW / 2 - 6, top);
+      ctx.quadraticCurveTo(bodyW / 2 + 2, top + 4, bodyW / 2, top + 16);
+      ctx.quadraticCurveTo(bodyW * 0.32, waist - 6, bodyW * 0.34, waist);
+      ctx.lineTo(-bodyW * 0.34, waist);
+      ctx.quadraticCurveTo(-bodyW * 0.32, waist - 6, -bodyW / 2, top + 16);
+      ctx.quadraticCurveTo(-bodyW / 2 - 2, top + 4, -bodyW / 2 + 6, top); ctx.fill();
+      // skirt (or the flared tunic hem when there is no skirt)
+      ctx.fillStyle = o.skirt || o.shirt; ctx.beginPath();
+      ctx.moveTo(-bodyW * 0.36, waist - 2); ctx.lineTo(bodyW * 0.36, waist - 2);
+      ctx.quadraticCurveTo(bodyW * 0.62, hem - 20, bodyW * 0.7, hem);
+      ctx.quadraticCurveTo(0, hem + 7, -bodyW * 0.7, hem);
+      ctx.quadraticCurveTo(-bodyW * 0.62, hem - 20, -bodyW * 0.36, waist - 2); ctx.fill();
+      if (o.belt) fillRR(-bodyW * 0.37, waist - 4, bodyW * 0.74, 6, 3, o.belt);
+      // neckline
+      ctx.fillStyle = o.skin; ctx.beginPath(); ctx.moveTo(-8, top); ctx.quadraticCurveTo(0, top + 14, 8, top); ctx.fill();
+      if (o.cardigan) {
+        ctx.fillStyle = o.cardigan;
+        ctx.beginPath(); ctx.moveTo(-bodyW / 2 + 6, top); ctx.lineTo(-7, top); ctx.lineTo(-bodyW * 0.22, waist + 10); ctx.lineTo(-bodyW * 0.42, waist + 10); ctx.quadraticCurveTo(-bodyW / 2 - 2, top + 20, -bodyW / 2 + 6, top); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(bodyW / 2 - 6, top); ctx.lineTo(7, top); ctx.lineTo(bodyW * 0.22, waist + 10); ctx.lineTo(bodyW * 0.42, waist + 10); ctx.quadraticCurveTo(bodyW / 2 + 2, top + 20, bodyW / 2 - 6, top); ctx.fill();
+      }
+      if (o.necklace) { ctx.strokeStyle = o.necklace; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(0, top + 1, 10, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke(); circ(0, top + 11, 2.6, o.necklace); }
+    } else fillRR(-bodyW / 2, top, bodyW, bodyH + 6, 18, o.shirt);
+    if (!fem && !kid && o.collar) {
+      ctx.fillStyle = o.collar;
+      ctx.beginPath(); ctx.moveTo(-11, top - 1); ctx.lineTo(-1, top + 13); ctx.lineTo(-15, top + 9); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(11, top - 1); ctx.lineTo(1, top + 13); ctx.lineTo(15, top + 9); ctx.closePath(); ctx.fill();
+    }
+    if (!fem && o.cardigan) { fillRR(-bodyW / 2, top, bodyW * 0.32, bodyH + 6, 14, o.cardigan); fillRR(bodyW * 0.18, top, bodyW * 0.32, bodyH + 6, 14, o.cardigan); }
+    if (o.bag) { ctx.strokeStyle = o.bag; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-bodyW / 2 + 8, top + 1); ctx.lineTo(bodyW * 0.4, top + bodyH * 0.72); ctx.stroke(); fillRR(bodyW * 0.28, top + bodyH * 0.68, 26, 20, 6, o.bag); fillRR(bodyW * 0.28 + 9, top + bodyH * 0.68 + 7, 8, 3, 1.5, '#f7d27a'); }
+    if (o.lanyard) {
+      ctx.strokeStyle = '#2878a0'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-10, top + 2); ctx.lineTo(0, top + 34); ctx.lineTo(10, top + 2); ctx.stroke();
+      fillRR(-9, top + 32, 18, 22, 4, '#fff'); fillRR(-6, top + 36, 12, 5, 2, '#2878a0');
+    }
+    // arms: angle 0 = straight down, positive = forward
+    var armL = kid ? 40 : 62, aw = kid ? 10 : (fem ? 11 : 13);
+    var arms = o.arms || [o.walk != null ? -sw * 0.8 : 0.1, o.walk != null ? sw * 0.8 : -0.1];
+    arms.forEach(function (a, i) {
+      var sx = (i ? 1 : -1) * (bodyW / 2 - 4), sy = top + 12;
+      if (i === 1 && o.hold === 'ear') {
+        // bent arm, phone held to the ear
+        var elx = sx + (kid ? 10 : 18), ely = sy + (kid ? 26 : 40), hx2 = headR * 0.86, hy2 = hy + 8;
+        ctx.strokeStyle = o.sleeve || o.cardigan || o.shirt; ctx.lineWidth = aw; ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(elx, ely); ctx.lineTo(hx2, hy2); ctx.stroke();
+        fillRR(hx2 - 6, hy2 - 26, 13, 30, 4, '#1f2d3a'); fillRR(hx2 - 4, hy2 - 24, 9, 24, 2, o.phoneGlow || '#cfe9f7');
+        circ(hx2, hy2, aw * 0.62, o.skin);
+        return;
+      }
+      var ex = sx + Math.sin(a) * armL, ey = sy + Math.cos(a) * armL;
+      ctx.strokeStyle = o.sleeve || o.cardigan || o.shirt; ctx.lineWidth = aw;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      if (o.bracelet && i === 0) circ(sx + Math.sin(a) * armL * 0.88, sy + Math.cos(a) * armL * 0.88, aw * 0.55, o.bracelet);
+      circ(ex, ey, aw * 0.62, o.skin);
+      if (i === 1 && o.hold === 'tablet') { ctx.save(); ctx.translate(ex, ey); ctx.rotate(-0.25); fillRR(-4, -30, 34, 44, 5, '#1f2d3a'); fillRR(-1, -27, 28, 38, 3, o.tabletGlow || '#9fe3e1'); ctx.restore(); }
+      if (i === 1 && o.hold === 'phone') { ctx.save(); ctx.translate(ex, ey); fillRR(-8, -26, 18, 32, 4, '#1f2d3a'); fillRR(-6, -24, 14, 27, 3, o.phoneGlow || '#cfe9f7'); ctx.restore(); }
+    });
+    // neck + head
+    fillRR(fem ? -5 : -6, top - 10, fem ? 10 : 12, 14, 4, o.skin);
+    if (!fem && o.hair && o.hairStyle === 'long') { fillRR(-headR - 3, hy - headR + 4, headR * 2 + 6, headR * 2 + 26, 22, o.hair); }
+    if (fem) ell(0, hy + 1, headR - 1, headR + 1, o.skin); else circ(0, hy, headR, o.skin);
+    // earrings sit on the jaw line, under the hair
+    if (fem && o.earrings) {
+      if (o.earringStyle === 'hoop') { ctx.strokeStyle = o.earrings; ctx.lineWidth = 2.4; [-1, 1].forEach(function (sd) { ctx.beginPath(); ctx.arc(sd * (headR - 2), hy + 14, 5.5, 0, Math.PI * 2); ctx.stroke(); }); }
+      else [-1, 1].forEach(function (sd) { circ(sd * (headR - 1), hy + 10, 3.2, o.earrings); });
+    }
+    if (o.hair) {
+      ctx.fillStyle = o.hair;
+      if (fem) {
+        // crown + a side-swept fringe across the forehead
+        ctx.beginPath();
+        ctx.moveTo(-headR - 1, hy + 6);
+        ctx.arc(0, hy - 2, headR + 2, Math.PI * 1.0, Math.PI * 2.0);
+        ctx.lineTo(headR + 1, hy + 6);
+        ctx.quadraticCurveTo(headR * 0.55, hy - headR * 0.55, -headR * 0.15, hy - headR * 0.42);
+        ctx.quadraticCurveTo(-headR * 0.7, hy - headR * 0.25, -headR - 1, hy + 6);
+        ctx.fill();
+        if (o.hairStyle === 'wavy') {
+          // locks falling over the front of both shoulders
+          [-1, 1].forEach(function (sd) {
+            ctx.beginPath(); ctx.moveTo(sd * (headR + 2), hy - 2);
+            ctx.quadraticCurveTo(sd * (headR + 9), hy + 26, sd * (headR + 1), hy + headR + 34);
+            ctx.quadraticCurveTo(sd * (headR - 6), hy + headR + 20, sd * (headR - 5), hy + 8); ctx.closePath(); ctx.fill();
+          });
+        }
+        if (o.hairStyle === 'ponytail') { fillRR(-headR * 0.98, hy - headR * 0.52, 8, 8, 3, o.tie || '#ff7a6b'); }
+        // a soft highlight so the hair reads as hair, not a helmet
+        ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, hy - 2, headR - 4, Math.PI * 1.2, Math.PI * 1.45); ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(0, hy - 3, headR + 1, Math.PI * 1.02, Math.PI * 1.98); ctx.closePath(); ctx.fill();
+        if (o.hairStyle === 'bun') circ(0, hy - headR - 8, 12, o.hair);
+        if (o.hairStyle === 'pigtails') { circ(-headR - 4, hy - 4, 10, o.hair); circ(headR + 4, hy - 4, 10, o.hair); circ(-headR - 1, hy - 10, 4, o.bow || '#ff5d8f'); circ(headR + 1, hy - 10, 4, o.bow || '#ff5d8f'); }
+        if (o.hairStyle === 'short') { ctx.beginPath(); ctx.arc(0, hy - 4, headR + 2, Math.PI * 0.95, Math.PI * 2.05); ctx.fill(); }
+        if (o.hairStyle === 'crop') {
+          // short men's cut: sideburns and a side-parted quiff
+          fillRR(-headR - 1, hy - 9, 6, 17, 3, o.hair); fillRR(headR - 5, hy - 9, 6, 17, 3, o.hair);
+          ctx.beginPath(); ctx.ellipse(-headR * 0.25, hy - headR + 1, headR * 0.72, 9, -0.12, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    if (!kid && o.beard) {
+      // a trimmed beard and moustache along the jaw
+      ctx.fillStyle = o.beard; ctx.beginPath();
+      ctx.arc(0, hy + 1, headR + 0.5, 0.03 * Math.PI, 0.97 * Math.PI);
+      ctx.lineTo(-headR * 0.6, hy + 5); ctx.quadraticCurveTo(0, hy + 1, headR * 0.6, hy + 5); ctx.closePath(); ctx.fill();
+    }
+    // face
+    var blink = o.blink ? 0.15 : 1;
+    if (fem) {
+      [-1, 1].forEach(function (sd) {
+        var ex = sd * headR * 0.36, ey = hy + 3;
+        ell(ex, ey, 3.6, 4.4 * blink, '#1d1d28');
+        if (!o.blink) circ(ex + 1.1, ey - 1.4, 1.2, '#ffffff');
+        // lashes: three flicks off the outer top of each eye
+        ctx.strokeStyle = '#1d1d28'; ctx.lineWidth = 1.7;
+        for (var l = 0; l < 3; l++) { var ang = -Math.PI / 2 + sd * (0.35 + l * 0.38); ctx.beginPath(); ctx.moveTo(ex + Math.cos(ang) * 3.6, ey + Math.sin(ang) * 4.4 * blink); ctx.lineTo(ex + Math.cos(ang) * 7.4, ey + Math.sin(ang) * 4.4 * blink - 2.6); ctx.stroke(); }
+        // brows
+        ctx.strokeStyle = o.hair; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ex, ey - 1, 6.5, Math.PI * 1.25, Math.PI * 1.75); ctx.stroke();
+      });
+      circ(-headR * 0.58, hy + 11, 4.8, 'rgba(255,110,130,.38)'); circ(headR * 0.58, hy + 11, 4.8, 'rgba(255,110,130,.38)');
+      var lip = o.lips || '#c8455f';
+      if (o.face === 'open') { ctx.beginPath(); ctx.arc(0, hy + 11, 6, 0, Math.PI); ctx.closePath(); ctx.fillStyle = '#7a2b2b'; ctx.fill(); ctx.strokeStyle = lip; ctx.lineWidth = 2.6; ctx.stroke(); }
+      else if (o.face === 'eat') { ell(0, hy + 13, 4, 3 + Math.abs(Math.sin((o.chew || 0) * 9)) * 3, lip); }
+      else if (o.face === 'sleep') { ctx.strokeStyle = lip; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(-5, hy + 13); ctx.lineTo(5, hy + 13); ctx.stroke(); }
+      else {
+        // closed smile with full lips
+        ctx.fillStyle = lip; ctx.beginPath();
+        ctx.moveTo(-7.5, hy + 10.5); ctx.quadraticCurveTo(-3, hy + 8.6, 0, hy + 10); ctx.quadraticCurveTo(3, hy + 8.6, 7.5, hy + 10.5);
+        ctx.quadraticCurveTo(0, hy + 18, -7.5, hy + 10.5); ctx.fill();
+      }
+    } else {
+      ell(-headR * 0.36, hy + 2, 3.2, 3.6 * blink, '#1d1d28'); ell(headR * 0.36, hy + 2, 3.2, 3.6 * blink, '#1d1d28');
+      circ(-headR * 0.55, hy + 10, 4.5, 'rgba(255,120,120,.35)'); circ(headR * 0.55, hy + 10, 4.5, 'rgba(255,120,120,.35)');
+      if (o.masc) { ctx.strokeStyle = o.hair || '#2a1a12'; ctx.lineWidth = 3.4; ctx.lineCap = 'round'; [-1, 1].forEach(function (sd) { ctx.beginPath(); ctx.moveTo(sd * headR * 0.18, hy - 7); ctx.lineTo(sd * headR * 0.56, hy - 8); ctx.stroke(); }); }
+      ctx.strokeStyle = o.mouth || '#3a1f1a'; ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      if (o.face === 'open') { ctx.arc(0, hy + 9, 6, 0, Math.PI); ctx.fillStyle = '#7a2b2b'; ctx.fill(); }
+      else if (o.face === 'eat') { ell(0, hy + 12, 4, 3 + Math.abs(Math.sin((o.chew || 0) * 9)) * 3, '#7a2b2b'); }
+      else if (o.face === 'sleep') { ctx.moveTo(-6, hy + 11); ctx.lineTo(6, hy + 11); ctx.stroke(); }
+      else { ctx.arc(0, hy + 7, 8, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); }
+    }
+    // Party hat (birthday cartoon): a striped cone with a pom-pom, tilted a little.
+    if (o.hat) {
+      ctx.save(); ctx.translate(o.hatTilt || 0, hy - headR + 4); ctx.rotate(o.hatTilt ? o.hatTilt * 0.02 : -0.08);
+      var hh = headR * 1.25, hw = headR * 0.62;
+      ctx.beginPath(); ctx.moveTo(-hw, 0); ctx.lineTo(0, -hh); ctx.lineTo(hw, 0); ctx.closePath(); ctx.fillStyle = o.hat; ctx.fill();
+      ctx.save(); ctx.clip(); ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 5;
+      for (var hs = -2; hs <= 2; hs++) { ctx.beginPath(); ctx.moveTo(-hw + hs * 14, 2); ctx.lineTo(hs * 14 + 10, -hh - 4); ctx.stroke(); }
+      ctx.restore();
+      fillRR(-hw - 3, -5, hw * 2 + 6, 8, 4, o.hatBand || '#ffcf3f');
+      circ(0, -hh - 3, 7, o.pom || '#ffffff');
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  var mayaBase = { fem: true, skin: SKIN.maya, hair: '#3b2416', hairStyle: 'wavy', shirt: '#ffffff', cardigan: '#f2a93b', skirt: '#2c4a8a', belt: '#5a3d2b', legs: '#c68b59', shoes: '#c2405a', lips: '#c2405a', earrings: '#e9b93c', earringStyle: 'hoop', necklace: '#e9b93c', bag: '#8a4b2e', bracelet: '#e9b93c' };
+  var avaBase = { kid: true, skin: SKIN.maya, hair: '#3b2416', hairStyle: 'pigtails', shirt: '#ff7a6b', dress: true, pants: '#6b5bd6', shoes: '#ffcf3f', sleeve: '#ff7a6b' };
+  var priyaBase = { fem: true, skin: SKIN.priya, hair: '#151515', hairStyle: 'ponytail', tie: '#ff7a6b', shirt: '#6db33f', legs: '#2e3a59', shoes: '#22303f', lips: '#b0405a', earrings: '#f4d27a', lanyard: true };
+  function mk(base, extra) { var o = {}, k; for (k in base) o[k] = base[k]; for (k in extra) o[k] = extra[k]; return o; }
+  function blinkAt(t, seed) { return ((t + seed) % 3.4) < 0.12; }
+
+
+  /* ── data: a signed, expiring link -> first name, age, centre (never anything else) ── */
+  function apiBase() {
+    if (window.KT_BDAY_API) return window.KT_BDAY_API;
+    return /kiddietrac\.com$/.test(location.hostname) ? 'https://api.kiddietrac.com/api/v1' : '/api/v1';
+  }
+  function fail(h, p) {
+    document.getElementById('errH').textContent = h;
+    if (p) document.getElementById('errP').textContent = p;
+    document.getElementById('err').classList.add('on');
+    document.getElementById('big').hidden = true;
+    // Nothing to play: no controls under the message.
+    document.querySelector('.bar').style.display = 'none';
+    document.querySelector('.tip').style.display = 'none';
+  }
+  function loadData() {
+    if (window.KT_BDAY) return Promise.resolve(window.KT_BDAY);
+    var q = new URLSearchParams(location.search), id = q.get('id');
+    if (THUMB || !id) return Promise.resolve({});   // the song on its own: no greeting
+    var staff = q.get('k') === 's';
+    var url = id === 'demo'
+      ? apiBase() + '/birthday-video/demo'
+      // The order matters: the signature covers exactly "expires=..&n=.." (n only on a child's link).
+      : apiBase() + '/birthday-video/' + (staff ? 'staff/' : '') + encodeURIComponent(id) + '?expires=' + encodeURIComponent(q.get('expires') || '')
+        + (staff ? '' : '&n=' + encodeURIComponent(q.get('n') || '')) + '&signature=' + encodeURIComponent(q.get('signature') || '');
+    return fetch(url, { headers: { Accept: 'application/json' }, credentials: 'omit', cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw { status: r.status }; return r.json(); });
+  }
+
+  /* ── scene helpers ── */
+  var ease = function (t) { return t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t); };
+  var seg = function (t, a, b) { return ease((t - a) / (b - a)); };
+  var back = function (t) { t = Math.max(0, Math.min(1, t)); var c = 1.7; return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2); };
+  var PAL = ['#ff5d8f', '#ffcf3f', '#22b8b5', '#7c6cf0', '#5fc46b', '#ff8a3d', '#3fa3ff'];
+  function fitFont(str, maxW, size, weight) {
+    ctx.font = weight + ' ' + size + 'px "Baloo 2", system-ui, sans-serif';
+    while (size > 18 && ctx.measureText(str).width > maxW) { size -= 2; ctx.font = weight + ' ' + size + 'px "Baloo 2", system-ui, sans-serif'; }
+    return size;
+  }
+  function room() {
+    var g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#fff6e6'); g.addColorStop(1, '#ffe3ee');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 0.5;
+    for (var i = 0; i < 60; i++) circ((i * 137) % W, 40 + (i * 89) % 470, 5 + (i % 3) * 2, PAL[i % PAL.length]);
+    ctx.globalAlpha = 1;
+    fillRR(-10, 560, W + 20, 200, 0, '#f3d4a6');
+    for (var j = 0; j < 9; j++) fillRR(j * 150 - 20, 560, 4, 160, 0, 'rgba(160,110,60,.18)');
+  }
+  function bunting(t) {
+    [[0, 30, W, 30, 70], [0, 60, W, 60, 46]].forEach(function (b, bi) {
+      var n = 14, sag = b[4];
+      ctx.strokeStyle = 'rgba(11,37,69,.35)'; ctx.lineWidth = 2; ctx.beginPath();
+      for (var k = 0; k <= 40; k++) { var u = k / 40, x = b[0] + (b[2] - b[0]) * u, y = b[1] + Math.sin(u * Math.PI) * sag; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.stroke();
+      for (var i = 0; i < n; i++) {
+        var u2 = (i + 0.5) / n, x2 = W * u2, y2 = b[1] + Math.sin(u2 * Math.PI) * sag, sw = Math.sin(t * 2 + i + bi) * 0.06;
+        ctx.save(); ctx.translate(x2, y2); ctx.rotate(sw);
+        ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(20, 0); ctx.lineTo(0, 38); ctx.closePath();
+        ctx.fillStyle = PAL[(i + bi * 3) % PAL.length]; ctx.fill(); ctx.restore();
+      }
+    });
+  }
+  function balloon(x, y, c, t, seed) {
+    var bx = x + Math.sin(t * 1.1 + seed) * 8, by = y + Math.sin(t * 1.4 + seed * 2) * 10;
+    ctx.strokeStyle = 'rgba(11,37,69,.35)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(bx, by + 46);
+    ctx.quadraticCurveTo(bx + 12, by + 110, bx - 4, by + 170); ctx.stroke();
+    ell(bx, by, 36, 44, c);
+    ell(bx - 12, by - 16, 8, 12, 'rgba(255,255,255,.45)');
+    ctx.beginPath(); ctx.moveTo(bx - 6, by + 44); ctx.lineTo(bx + 6, by + 44); ctx.lineTo(bx, by + 52); ctx.closePath(); ctx.fillStyle = c; ctx.fill();
+  }
+  function banner(t, showName) {
+    var k = back(seg(t, 0.3, 1.2));
+    ctx.save(); ctx.translate(W / 2, 138); ctx.scale(k, k);
+    var title = showName && D.name ? D.name : 'Happy Birthday!';
+    var size = fitFont(title, 700, showName && D.name ? 88 : 70, 800);
+    var w = Math.max(520, Math.min(860, ctx.measureText(title).width + 140));
+    // ribbon tails
+    ctx.fillStyle = '#c93a6b';
+    [[-1], [1]].forEach(function (s) { s = s[0]; ctx.beginPath(); ctx.moveTo(s * (w / 2 - 20), -30); ctx.lineTo(s * (w / 2 + 60), -30); ctx.lineTo(s * (w / 2 + 30), 10); ctx.lineTo(s * (w / 2 + 60), 50); ctx.lineTo(s * (w / 2 - 20), 50); ctx.closePath(); ctx.fill(); });
+    var g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0); g.addColorStop(0, '#ff5d8f'); g.addColorStop(1, '#ff8a3d');
+    fillRR(-w / 2, -62, w, 128, 26, g);
+    fillRR(-w / 2 + 8, -54, w - 16, 112, 20, 'rgba(255,255,255,.12)');
+    if (showName && D.name) {
+      txt('HAPPY BIRTHDAY', 0, -34, 24, '#fff6c2', 800, 'center');
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
+      txt(title, 0, 18, size, '#ffffff', 800, 'center'); ctx.restore();
+    } else {
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.25)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 3;
+      txt(title, 0, 4, size, '#ffffff', 800, 'center'); ctx.restore();
+    }
+    ctx.restore();
+  }
+  function cake(t, outAt) {
+    var cx = W / 2, by = 488;
+    // table
+    fillRR(cx - 300, by, 600, 26, 10, '#ffffff');
+    fillRR(cx - 300, by + 20, 600, 70, 0, '#7cc6f0');
+    for (var i = 0; i < 12; i++) circ(cx - 275 + i * 50, by + 90, 18, '#7cc6f0');
+    fillRR(cx - 280, by + 26, 560, 8, 4, 'rgba(255,255,255,.5)');
+    // plate + cake (two tiers)
+    ell(cx, by + 4, 150, 16, '#e8eef5');
+    fillRR(cx - 125, by - 92, 250, 92, 18, '#ffd7e6');
+    fillRR(cx - 125, by - 92, 250, 26, 14, '#ffffff');
+    for (var d = 0; d < 9; d++) fillRR(cx - 115 + d * 28, by - 70, 14, 12 + (d % 3) * 8, 7, '#ffffff');
+    fillRR(cx - 85, by - 160, 170, 70, 16, '#b6ecff');
+    fillRR(cx - 85, by - 160, 170, 20, 10, '#ffffff');
+    for (var s = 0; s < 24; s++) fillRR(cx - 110 + (s * 37) % 220, by - 50 + (s * 13) % 40, 8, 3, 1.5, PAL[s % PAL.length]);
+    for (var s2 = 0; s2 < 12; s2++) fillRR(cx - 70 + (s2 * 29) % 140, by - 130 + (s2 * 11) % 30, 7, 3, 1.5, PAL[(s2 + 2) % PAL.length]);
+    // candles = the age (up to 12), flames out at `outAt`
+    var n = 5;   // the same cake for every birthday
+    var span = Math.min(150, 24 * (n - 1));
+    for (var c = 0; c < n; c++) {
+      var x = cx - span / 2 + (n > 1 ? c * span / (n - 1) : 0), top = by - 160 - 44;
+      fillRR(x - 5, top, 10, 44, 3, PAL[c % PAL.length]);
+      ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2;
+      for (var st = 0; st < 3; st++) { ctx.beginPath(); ctx.moveTo(x - 5, top + 8 + st * 12); ctx.lineTo(x + 5, top + 4 + st * 12); ctx.stroke(); }
+      ctx.restore();
+      if (t < outAt) {
+        var fl = 1 + Math.sin(ANIM * 18 + c * 1.7) * 0.12;
+        ctx.save(); ctx.translate(x, top - 6); ctx.scale(1, fl);
+        ell(0, -8, 9, 15, 'rgba(255,207,63,.35)'); ell(0, -6, 6, 11, '#ffb02e'); ell(0, -4, 3, 6, '#fff6c2');
+        ctx.restore();
+      } else {
+        var k = (t - outAt) / 1.8;
+        if (k < 1) { ctx.save(); ctx.globalAlpha = 1 - k; for (var p = 0; p < 3; p++) circ(x + Math.sin(k * 6 + p) * 6, top - 10 - k * 60 - p * 12, 5 + p * 2 + k * 6, 'rgba(160,170,190,.6)'); ctx.restore(); }
+      }
+    }
+  }
+  function confetti(t, t0, dur) {
+    if (t < t0) return;
+    var k = (t - t0);
+    for (var i = 0; i < 120; i++) {
+      var x = (i * 97 + k * (40 + i % 7 * 12)) % W, y = ((i * 53) % 200) - 120 + k * (90 + i % 5 * 25);
+      if (dur && k > dur) { var a = 1 - (k - dur); if (a <= 0) return; ctx.globalAlpha = a; }
+      if (y > H + 20) y = (y % (H + 140)) - 140;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(k * 3 + i); fillRR(-5, -3, 10, 6, 2, PAL[i % PAL.length]); ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ── the party ── */
+  var KIDS = [
+    { kid: true, skin: '#f1c7a1', hair: '#e07a2e', hairStyle: 'short', shirt: '#2f80ed', pants: '#3b3b58', shoes: '#ff5d5d', hat: '#ff5d8f' },
+    { kid: true, skin: '#7a4b32', hair: '#151515', hairStyle: 'pigtails', bow: '#ffcf3f', shirt: '#ffcf3f', dress: true, pants: '#22b8b5', shoes: '#ff7a6b', sleeve: '#ffcf3f', hat: '#22b8b5' },
+    { kid: true, skin: '#c68b59', hair: '#3b2416', hairStyle: 'pigtails', shirt: '#ff7a6b', dress: true, pants: '#6b5bd6', shoes: '#ffcf3f', sleeve: '#ff7a6b', hat: '#7c6cf0' },
+    { kid: true, skin: '#9a6a4b', hair: '#1d1410', hairStyle: 'short', shirt: '#5fc46b', pants: '#34405a', shoes: '#ffcf3f', hat: '#ff8a3d' },
+    { kid: true, skin: '#e8b48f', hair: '#6b4226', hairStyle: 'short', shirt: '#7c6cf0', pants: '#2c3446', shoes: '#22b8b5', hat: '#ffcf3f' },
+    { kid: true, skin: '#5c3a26', hair: '#151515', hairStyle: 'pigtails', bow: '#ff5d8f', shirt: '#22b8b5', dress: true, pants: '#ff8a3d', shoes: '#7c6cf0', sleeve: '#22b8b5', hat: '#5fc46b' },
+  ];
+  var MISS = { fem: true, skin: '#9a6a4b', hair: '#151515', hairStyle: 'ponytail', tie: '#ff7a6b', shirt: '#6db33f', legs: '#2e3a59', shoes: '#22303f', lips: '#b0405a', earrings: '#f4d27a', lanyard: true, hat: '#ff5d8f' };
+  var MR = { masc: true, skin: '#f1c7a1', hair: '#6b4226', hairStyle: 'crop', beard: '#6b4226', mouth: '#5a2a1a', shirt: '#3f7cb8', collar: '#ffffff', pants: '#34405a', shoes: '#2d2d3a', lanyard: true, hat: '#ffcf3f' };
+
+  function singing(t) {
+    if (!TIMING) return null;
+    for (var v = 0; v < TIMING.verses.length; v++) {
+      var vs = TIMING.verses[v];
+      if (t >= vs.start - 0.4 && t <= vs.end + 0.6) {
+        for (var i = 0; i < vs.syllables.length; i++) { var s = vs.syllables[i]; if (t >= s.t && t < s.t + s.d) return { v: vs, i: i, s: s }; }
+        return { v: vs, i: -1 };
+      }
+    }
+    return null;
+  }
+  function people(t) {
+    var sg = singing(t), C = TIMING ? TIMING.cues : {};
+    var hooray = C.hooray && t > C.hooray && t < C.hooray + 3.5;
+    var verse2 = sg && sg.v.idx === 2;
+    var beat = 60 / 92;
+    function pose(o, i) {
+      var ph = (t / beat) * Math.PI + i;
+      var sway = sg ? Math.sin((t / (beat * 3)) * Math.PI * 2 + i * 0.6) * 0.12 : Math.sin(t * 1.3 + i) * 0.04;
+      var arms;
+      if (hooray) arms = [2.6 + Math.sin(t * 12 + i) * 0.2, 2.6 + Math.cos(t * 12 + i) * 0.2];
+      else if (verse2) { var c = Math.abs(Math.sin(ph)); arms = [-(0.5 + c * 1.0), 0.5 + c * 1.0]; }   // arms out and in, to the beat
+      else arms = [0.25 + sway, -0.25 + sway];
+      var open = sg && sg.i >= 0 && ((t - sg.s.t) < Math.min(0.32, sg.s.d * 0.8));
+      return mk(o, { arms: arms, bob: (sg || hooray) ? -Math.abs(Math.sin(ph)) * (hooray ? 16 : 5) : 0, face: open || hooray ? 'open' : null, blink: blinkAt(t, i * 0.7) });
+    }
+    // behind the table
+    person(mk(pose(KIDS[0], 0), { x: 420, y: 520, s: 1.02 }));
+    person(mk(pose(KIDS[1], 1), { x: 860, y: 520, s: 1.02, flip: true }));
+    // adults at the sides
+    person(mk(pose(MISS, 2), { x: 120, y: 640, s: 1.02 }));
+    person(mk(pose(MR, 3), { x: 1165, y: 640, s: 1.02, flip: true }));
+    return { pose: pose };
+  }
+  function frontKids(t, P) {
+    person(mk(P.pose(KIDS[2], 4), { x: 300, y: 700, s: 1.2 }));
+    person(mk(P.pose(KIDS[3], 5), { x: 470, y: 718, s: 1.22 }));
+    person(mk(P.pose(KIDS[4], 6), { x: 815, y: 718, s: 1.22, flip: true }));
+    person(mk(P.pose(KIDS[5], 7), { x: 985, y: 700, s: 1.2, flip: true }));
+  }
+
+  /* ── lyrics strip (always on) ── */
+  var LINES = [['Hap', 'py', 'birth', 'day', 'to', 'you'], ['Hap', 'py', 'birth', 'day', 'to', 'you'], ['Hap', 'py', 'birth', 'day', 'dear', 'NAME', 'NAME'], ['Hap', 'py', 'birth', 'day', 'to', 'you']];
+  function lyricWords(line) {
+    // words for display: "Happy birthday to you" / "... dear <Name>"
+    var out = [], syl = LINES[line];
+    var groups = line === 2 ? [[0, 1], [2, 3], [4], [5, 6]] : [[0, 1], [2, 3], [4], [5]];
+    groups.forEach(function (g) { out.push({ text: g.map(function (k) { return syl[k] === 'NAME' ? 'friend' : syl[k]; }).filter(function (v, i, arr) { return arr.indexOf(v) === i; }).join('').replace(/^Hap(py)$/, 'Happy').replace(/^birth(day)$/, 'birthday'), syl: g }); });
+    out[0].text = 'Happy'; out[1].text = 'birthday';
+    return out;
+  }
+  function strip(t) {
+    if (THUMB) return;
+    var C = TIMING ? TIMING.cues : {}, sg = singing(t);
+    var y = 640, h = 80;
+    ctx.save(); fillRR(40, y - h / 2, W - 80, h, 24, 'rgba(11,37,69,.88)'); ctx.restore();
+    if (sg && sg.i >= 0) {
+      var vs = sg.v, s = sg.s, line = s.line;
+      // syllable index range for the line
+      var first = 0; for (var i = 0; i < vs.syllables.length; i++) { if (vs.syllables[i].line === line) { first = i; break; } }
+      var words = lyricWords(line);
+      var size = 50;
+      ctx.font = '800 ' + size + 'px "Baloo 2", system-ui, sans-serif';
+      var total = 0, gap = 22, ws = words.map(function (w) { var m = ctx.measureText(w.text).width; total += m; return m; });
+      total += gap * (words.length - 1);
+      if (total > W - 160) { size = Math.floor(size * (W - 160) / total); ctx.font = '800 ' + size + 'px "Baloo 2", system-ui, sans-serif'; total = 0; ws = words.map(function (w) { var m = ctx.measureText(w.text).width; total += m; return m; }); total += gap * (words.length - 1); }
+      var x = W / 2 - total / 2;
+      var local = sg.i - first;
+      words.forEach(function (w, k) {
+        var active = w.syl.indexOf(local) !== -1, done = w.syl[w.syl.length - 1] < local;
+        var col = active ? '#ffcf3f' : done ? '#ffffff' : 'rgba(255,255,255,.55)';
+        ctx.save();
+        if (active) { ctx.shadowColor = 'rgba(255,207,63,.6)'; ctx.shadowBlur = 16; }
+        txt(w.text, x, y + 3, size, col, 800, 'left');
+        ctx.restore();
+        if (active) {
+          var p = (t - s.t) / s.d, bx = x + ws[k] / 2, by = y - h / 2 - 14 - Math.sin(Math.min(1, p) * Math.PI) * 18;
+          circ(bx, by, 9, '#ff5d8f'); circ(bx - 3, by - 3, 3, 'rgba(255,255,255,.7)');
+        }
+        x += ws[k] + gap;
+      });
+      var lab = vs.idx === 2 ? '🎉 Everybody together!' : '🎤 Sing along!';
+      ctx.font = '800 20px "Baloo 2", system-ui, sans-serif';
+      var lw2 = ctx.measureText(lab).width + 28;
+      fillRR(60, y - h / 2 - 34, lw2, 32, 16, '#ffcf3f');
+      txt(lab, 74, y - h / 2 - 17, 20, '#0b2545', 800, 'left');
+    } else {
+      var msg = '🎶 Get ready to sing!';
+      if (C.again_voice && t >= TIMING.verses[0].end && t < TIMING.verses[1].start) msg = '🎉 One more time, everybody together!';
+      if (C.candles_out && t >= C.candles_out) msg = '🎂 Hooray! Happy birthday!';
+      var fs = fitFont(msg, W - 160, 44, 800);
+      txt(msg, W / 2, y + 3, fs, '#ffffff', 800, 'center');
+    }
+  }
+
+  /* ── intro title card + end card ── */
+  function introCard(t) {
+    var a = seg(t, 1.0, 1.8) * (1 - seg(t, 7.6, 8.6));
+    if (a <= 0) return;
+    ctx.save(); ctx.globalAlpha = a;
+    var y = 300;
+    fillRR(W / 2 - 260, y - 50, 520, 100, 26, 'rgba(255,255,255,.94)');
+    var line = "It's a birthday party!";
+    var fs = fitFont(line, 470, 44, 800);
+    txt(line, W / 2, y - 12, fs, '#0b2545', 800, 'center');
+    txt('🎂 Let’s all sing together!', W / 2, y + 26, 24, '#c93a6b', 800, 'center');
+    ctx.restore();
+  }
+  function endCard(t, t0) {
+    var a = seg(t, t0, t0 + 0.8);
+    if (a <= 0) return;
+    ctx.save(); ctx.globalAlpha = a;
+    var g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0b2545'); g.addColorStop(1, '#14445e');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    var gl = ctx.createRadialGradient(W * 0.85, 0, 0, W * 0.85, 0, 700); gl.addColorStop(0, 'rgba(34,184,181,.3)'); gl.addColorStop(1, 'rgba(34,184,181,0)');
+    ctx.fillStyle = gl; ctx.fillRect(0, 0, W, H);
+    confetti(t, t0, 0);
+    var k = back(seg(t, t0 + 0.2, t0 + 1.0));
+    if (icon.complete && icon.naturalWidth) {
+      var s = 96 * k; ctx.save(); rr(W / 2 - s / 2, 70, s, s, s * 0.24); ctx.clip(); ctx.drawImage(icon, W / 2 - s / 2, 70, s, s); ctx.restore();
+    }
+    var h1 = 'Happy birthday! 🎂';
+    var fs = fitFont(h1, W - 160, 76, 800);
+    ctx.save(); ctx.globalAlpha = a * seg(t, t0 + 0.5, t0 + 1.2);
+    txt(h1, W / 2, 250, fs, '#ffffff', 800, 'center');
+    var from = 'From all your friends and teachers';
+    txt(from, W / 2, 330, fitFont(from, W - 200, 36, 700), '#ffcf3f', 700, 'center');
+    txt('— and everyone at KiddieTrac 💛', W / 2, 380, 32, '#9fe3e1', 700, 'center');
+    ctx.restore();
+    if (logo.complete && logo.naturalWidth) {
+      ctx.save(); ctx.globalAlpha = a * seg(t, t0 + 1.0, t0 + 1.8);
+      var lw = 300, lh = lw * logo.naturalHeight / logo.naturalWidth;
+      ctx.drawImage(logo, W / 2 - lw / 2, 460, lw, lh); ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function watermark() {
+    ctx.save(); ctx.globalAlpha = 0.9;
+    fillRR(W - 214, 92, 190, 40, 20, 'rgba(255,255,255,.85)');
+    if (icon.complete && icon.naturalWidth) { ctx.save(); rr(W - 206, 98, 28, 28, 7); ctx.clip(); ctx.drawImage(icon, W - 206, 98, 28, 28); ctx.restore(); }
+    txt('KiddieTrac', W - 170, 113, 22, '#0b2545', 800, 'left');
+    ctx.restore();
+  }
+
+  var ANIM = 0;
+  function draw(t) {
+    var C = TIMING ? TIMING.cues : { candles_out: 1e9, end_card: 1e9 };
+    ANIM = au.paused ? performance.now() / 1000 : t;
+    room();
+    bunting(ANIM);
+    [[90, 250, 0], [200, 200, 1], [1090, 210, 2], [1190, 260, 3], [330, 290, 4], [960, 300, 5]].forEach(function (b) { balloon(b[0], b[1], PAL[b[2] % PAL.length], ANIM, b[2] * 1.7); });
+    banner(t, false);   // always "Happy Birthday!": the video never carries a name
+    watermark();
+    var P = people(t);
+    cake(t, C.candles_out);
+    frontKids(t, P);
+    introCard(t);
+    if (C.hooray && t > C.hooray && t < C.end_card + 1) confetti(t, C.hooray, 3);
+    strip(t);
+    if (C.end_card && t >= C.end_card) endCard(t, C.end_card);
+  }
+
+  /* ── player ── */
+  var big = document.getElementById('big'), pp = document.getElementById('pp'), ppI = document.getElementById('ppI'), ppT = document.getElementById('ppT');
+  var fill = document.getElementById('fill'), tm = document.getElementById('tm');
+  var ready = false, raf = 0;
+  function fmt(s) { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+  function total() { return (TIMING && TIMING.total) || au.duration || 64; }
+  function frame() {
+    raf = 0;
+    var t = au.currentTime || 0;
+    draw(t);
+    fill.style.width = Math.min(100, t / total() * 100) + '%';
+    tm.textContent = fmt(t) + ' / ' + fmt(total());
+    if (!au.paused) raf = requestAnimationFrame(frame);
+  }
+  var idleOn = false;
+  function idleLoop() {   // flames flicker and balloons drift while paused
+    if (!au.paused) { idleOn = false; return; }
+    idleOn = true;
+    draw(au.currentTime || 6.5);
+    requestAnimationFrame(idleLoop);
+  }
+  function setPlaying(on) {
+    ppI.setAttribute('d', on ? 'M6 4h4v16H6zM14 4h4v16h-4z' : 'M6 4l15 8-15 8z');
+    ppT.textContent = on ? 'Pause' : 'Play'; pp.setAttribute('aria-label', on ? 'Pause' : 'Play');
+    if (on) { big.hidden = true; if (!raf) raf = requestAnimationFrame(frame); } else if (!idleOn) { requestAnimationFrame(idleLoop); }
+  }
+  function play() { if (!ready) return; au.play().then(function () { setPlaying(true); }).catch(function () { big.hidden = false; }); }
+  au.addEventListener('pause', function () { setPlaying(false); });
+  au.addEventListener('ended', function () { setPlaying(false); draw(total() - 0.01); });
+  big.addEventListener('click', play);
+  pp.addEventListener('click', function () { au.paused ? play() : au.pause(); });
+  document.getElementById('again').addEventListener('click', function () { au.currentTime = 0; play(); });
+  document.getElementById('track').addEventListener('click', function (e) {
+    var r = this.getBoundingClientRect(); au.currentTime = (e.clientX - r.left) / r.width * total(); frame();
+  });
+  document.getElementById('fs').addEventListener('click', function () {
+    var st = document.getElementById('stage');
+    if (document.fullscreenElement) { document.exitFullscreen(); return; }
+    (st.requestFullscreen || st.webkitRequestFullscreen || function () {}).call(st);
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === ' ' || e.key === 'k') { e.preventDefault(); pp.click(); } if (e.key === 'f') document.getElementById('fs').click(); });
+
+  function greet(d) {
+    var h = document.getElementById('helloH'), p = document.getElementById('helloP');
+    var esc = function (x) { return String(x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    if (D.name) {
+      h.innerHTML = 'Happy birthday, <span>' + esc(D.name) + '</span>! 🎂';
+      var bits = [];
+      if (D.turning) bits.push('Turning ' + D.turning + ' today');
+      if (d.staff) bits.push('From everyone' + (D.agency ? ' at ' + D.agency : '') + ' and KiddieTrac');
+      else if (D.home && D.teacher) bits.push('From your teacher ' + D.teacher + ' and all your friends');
+      else if (D.centre) bits.push('From all your friends at ' + D.centre);
+      p.textContent = bits.join(' · ') || 'A sing-along from KiddieTrac';
+      document.title = 'Happy birthday, ' + D.name + '! | KiddieTrac';
+    }
+    document.getElementById('centreTop').textContent = D.home ? D.agency : D.centre;
+  }
+  window.__bday = { draw: draw, data: D };
+
+  var fontsReady = (document.fonts && document.fonts.load) ? document.fonts.load('800 40px "Baloo 2"').catch(function () {}) : Promise.resolve();
+  Promise.all([loadData(), fontsReady]).then(function (r) {
+    var d = r[0] || {};
+    D.name = String(d.name || d.first_name || '').slice(0, 24);
+    D.turning = Math.max(0, Math.min(12, parseInt(d.turning, 10) || 0));
+    D.centre = String(d.centre || '').slice(0, 60);
+    D.agency = String(d.agency || '').slice(0, 60);
+    D.home = d.setting === 'home';
+    D.teacher = String(d.teacher || '').slice(0, 30);
+    greet(d);
+    ready = true;
+    if (!THUMB) big.hidden = false;
+    draw(6.5);
+    if (!THUMB) requestAnimationFrame(idleLoop);
+  }).catch(function (e) {
+    /* The song is the same for everyone, so a greeting link that has expired (or a weak
+       connection) still plays it; only the personal greeting above the player goes. */
+    var s = e && e.status;
+    var note = document.getElementById('helloNote');
+    note.textContent = s === 403 ? 'This birthday link has expired, so there’s no name on it, but the song still plays.'
+      : 'We couldn’t load the birthday greeting, but the song still plays.';
+    note.style.display = 'block';
+    ready = true;
+    if (!THUMB) big.hidden = false;
+    draw(6.5);
+    if (!THUMB) requestAnimationFrame(idleLoop);
+  });
+  [icon, logo].forEach(function (im) { im.onload = function () { if (au.paused) draw(au.currentTime || 6.5); }; });
+})();
+</script>
+</body>
+</html>

@@ -38,7 +38,7 @@ Signed acknowledgements are kept for the whole period of access plus 2 years. **
 ### 3.3 Credentials
 
 - Use a password manager, with a unique password for each system.
-- Turn on MFA wherever it is offered. This is required for GitHub, cPanel, the domain registrar and every vendor console.
+- Turn on MFA wherever it is offered. This is required for GitHub, the Cloudways console, the domain registrar and every vendor console.
 - Never share accounts. Never put secrets in source code or chat.
 - Report a suspected exposure of credentials immediately. Rotate the credential within 24 hours.
 

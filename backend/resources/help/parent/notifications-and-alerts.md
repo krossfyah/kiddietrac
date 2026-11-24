@@ -65,11 +65,11 @@ calls** — see [Texts and phone calls](texts-and-phone-calls).
 Educators log the day as it happens, in between caring for children. A quiet stretch doesn't mean nothing happened — it means their hands were full. Most photos and notes appear in bursts around nap time and the end of the day.
 
 
-## When your child goes out
+## When your child goes out — Walk Watch
 
 If an educator takes your child on a walk or an outing, your phone gets a notification
 as it starts — where they are going, who is with them, and the time they left. Tapping
-it opens the live map so you can follow along.
+it opens the live map in **Walk Watch** so you can follow along.
 
 When they get back, the walk appears in your child's day with the route, how long they
 were out and how far they went, and the same map is included in your daily summary

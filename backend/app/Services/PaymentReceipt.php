@@ -80,6 +80,14 @@ final class PaymentReceipt
 
         $when = $p->paid_at ? Carbon::parse($p->paid_at) : Carbon::parse($p->created_at);
 
+        // Split billing (2026-10-30): a guardian paying their share gets a receipt for THEIR copy and THEIR balance.
+        $splitPayer = null; $splitNo = null; $balanceText = '$' . number_format((float) ($inv->balance_due ?? 0), 2);
+        if ($p->invoice_id && $p->payer_guardian_id && ($sh = \App\Support\BillingSplit::shareFor($inv, (int) $p->payer_guardian_id))) {
+            $splitPayer = $sh['name'];
+            $splitNo = \App\Support\SplitInvoiceCopy::numberFor($inv, (int) $p->payer_guardian_id);
+            $balanceText = '$' . number_format((float) $sh['balance'], 2) . ' (your share)';
+        }
+
         return [
             'agency' => (string) ($agency->name ?? 'Your childcare provider'),
             'agency_address' => trim($address),
@@ -95,9 +103,9 @@ final class PaymentReceipt
             'accent' => preg_match('/^#[0-9a-fA-F]{6}$/', (string) ($agency->brand_primary_color ?? ''))
                 ? (string) $agency->brand_primary_color : '#1F6080',
             'agency_id' => $agencyId,
-            'family' => (string) (DB::table('families')->where('id', $p->family_id)->value('family_name') ?: 'Account')
+            'family' => ($splitPayer ? $splitPayer . ' · ' : '') . (string) (DB::table('families')->where('id', $p->family_id)->value('family_name') ?: 'Account')
                 . (($fr = \App\Support\RefCode::families([(int) $p->family_id])[(int) $p->family_id] ?? null) ? ' · ' . $fr : ''),
-            'number' => (string) ($inv->invoice_number ?? $inv->number ?? ('#' . ($inv->id ?? ''))),
+            'number' => $splitNo ?: (string) ($inv->invoice_number ?? $inv->number ?? ('#' . ($inv->id ?? ''))),
             'receipt_no' => 'R-' . str_pad((string) $paymentId, 6, '0', STR_PAD_LEFT),
             'amount' => '$' . number_format((float) $p->amount, 2),
             'amount_raw' => (float) $p->amount,
@@ -105,7 +113,7 @@ final class PaymentReceipt
             'issued' => Carbon::now()->format('j F Y'),
             'method' => $methods[(string) $p->method] ?? ucfirst((string) $p->method),
             'reference' => (string) ($p->reference_number ?? ''),
-            'balance' => '$' . number_format((float) ($inv->balance_due ?? 0), 2),
+            'balance' => $balanceText,
             'fees' => $fees,
         ];
     }
@@ -158,11 +166,22 @@ final class PaymentReceipt
      */
     public static function pdf(int $paymentId): ?string
     {
+        /* A parent's document in the parent's language (2026-10-22): when it is made to be
+           SENT (an email, the billing run), the family's guardians' language; when it is
+           viewed, the viewer's (KtDompdf / MessageTranslator::pdfLocale). */
+        return \App\Support\MessageTranslator::forDocument(
+            (int) (\Illuminate\Support\Facades\DB::table('payments')->where('id', $paymentId)->value('family_id') ?: 0),
+            fn () => self::renderPdf($paymentId)
+        );
+    }
+
+    private static function renderPdf(int $paymentId): ?string
+    {
         try {
             $html = self::documentHtml($paymentId);
             if (! $html) { return null; }
 
-            $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+            $dompdf = new \App\Support\KtDompdf(['isRemoteEnabled' => true]);
             $dompdf->loadHtml($html, 'UTF-8');
             /* A TILL ROLL, NOT A LETTER PAGE. 80mm is the standard thermal receipt width
                (226.77pt); the length is generous so a receipt with several lines still

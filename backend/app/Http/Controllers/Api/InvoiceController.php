@@ -39,14 +39,27 @@ final class InvoiceController extends Controller
         $limit = min(12, (int) $request->input('limit', 6));
         $statusFilter = $request->input('status'); // current, all, paid, unpaid
 
+        /* DUE NOW, NOT THE WHOLE TERM (2026-10-28) - see App\Support\ParentBilling. An unpaid invoice due more than
+           the agency's window away (default 14 days) is left out of the list and the total until it comes up. Drafts
+           and voids never reach a parent: a draft has not been issued (it issues by itself before its due date - see
+           billing_setup.invoice_issue_lead_days), and a void is not owed. Both used to show on this list. */
+        $billAgency = \App\Support\ParentBilling::agencyOfFamily((int) $child->family_id);
+        $horizon = \App\Support\ParentBilling::horizon($billAgency);
+        $inWindow = function ($w) use ($horizon) {
+            $w->where('status', 'paid')->orWhereRaw('COALESCE(balance_due, total) <= 0')
+              ->orWhereNull('due_at')->orWhereDate('due_at', '<=', $horizon);
+        };
+
         $q = DB::table('invoices')
             ->where('family_id', $child->family_id)
+            ->whereNotIn('status', ['void', 'draft'])
+            ->where($inWindow)
             ->orderByDesc('issued_at')
             ->limit($limit);
 
         if ($statusFilter === 'current') {
             // Most recent unpaid invoice
-            $q->whereIn('status', ['sent', 'partial', 'overdue', 'draft']);
+            $q->whereIn('status', ['sent', 'partial', 'overdue']);
         } elseif ($statusFilter === 'paid') {
             $q->where('status', 'paid');
         } elseif ($statusFilter === 'unpaid') {
@@ -59,7 +72,7 @@ final class InvoiceController extends Controller
         if ($myGuardian) {
             foreach ($invoices as $inv) {
                 $mine = \App\Support\BillingSplit::shareFor($inv, $myGuardian);
-                if ($mine) { $inv->my_share = $mine; }
+                if ($mine) { $inv->my_share = $mine; $inv->invoice_number = \App\Support\SplitInvoiceCopy::numberFor($inv, $myGuardian) ?: $inv->invoice_number; }
             }
         }
 
@@ -69,7 +82,8 @@ final class InvoiceController extends Controller
         if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
             $eq = DB::table('external_invoices')
                 ->where('family_id', $child->family_id)
-                ->whereNotIn('status', ['void', 'cancelled', 'draft']);
+                ->whereNotIn('status', ['void', 'cancelled', 'draft'])
+                ->where($inWindow);
             if ($statusFilter === 'current' || $statusFilter === 'unpaid') {
                 $eq->where('balance_due', '>', 0);
             } elseif ($statusFilter === 'paid') {
@@ -115,13 +129,330 @@ final class InvoiceController extends Controller
         // can explain itself instead of just showing a smaller number.
         $all = $this->withPaymentHistory($all);
 
+        /* What the family owes NOW, over everything (not the six rows above), native and integrated alike, and how
+           many more are on the way. The Billing screen leads with this figure; the home card shows it. A split-bill
+           parent's figure is their own share, as on each invoice. */
+        $dueTotal = 0.0; $dueCount = 0; $upcoming = 0;
+        foreach (DB::table('invoices')->where('family_id', $child->family_id)
+            ->whereNotIn('status', ['void', 'draft', 'paid'])->get() as $r) {
+            $bal = (float) ($r->balance_due ?? $r->total);
+            if ($myGuardian && ($mine = \App\Support\BillingSplit::shareFor($r, $myGuardian))) {
+                $bal = (float) ($mine['balance'] ?? $bal);
+            }
+            if ($bal <= 0.004) continue;
+            if (\App\Support\ParentBilling::isUpcoming($r->due_at, $horizon)) { $upcoming++; continue; }
+            $dueTotal += $bal; $dueCount++;
+        }
+        if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
+            foreach (DB::table('external_invoices')->where('family_id', $child->family_id)
+                ->whereNotIn('status', ['void', 'cancelled', 'draft', 'paid'])->where('balance_due', '>', 0)
+                ->get(['balance_due', 'due_at']) as $r) {
+                if (\App\Support\ParentBilling::isUpcoming($r->due_at, $horizon)) { $upcoming++; continue; }
+                $dueTotal += (float) $r->balance_due; $dueCount++;
+            }
+        }
+        $extra = [
+            'due_now' => ['total' => round($dueTotal, 2), 'count' => $dueCount, 'upcoming_count' => $upcoming,
+                          'window_days' => \App\Support\ParentBilling::windowDays($billAgency)],
+            'pay_info' => \App\Support\ParentBilling::payInfo($billAgency),
+            // Split billing (2026-10-30): how this family splits, in words, from the reader's side. Read-only.
+            'my_split' => (function () use ($myGuardian, $child) {
+                if (! $myGuardian) return null;
+                $c = \App\Support\BillingSplit::config((int) $child->family_id);
+                if (! $c || $c['mode'] === 'single' || ! in_array($myGuardian, \App\Support\BillingSplit::guardiansOf($c), true)) return null;
+                $pct = null;
+                if ($c['mode'] === 'percent') foreach ($c['shares'] as $s) { if ($s['guardian_id'] === $myGuardian) $pct = $s['pct']; }
+                if ($c['mode'] === 'even') $pct = round(100 / max(1, count($c['guardians'])), 2);
+                return ['label' => \App\Support\BillingSplit::label($c), 'pct' => $pct, 'text' => \App\Support\BillingSplit::describe($c, $myGuardian)];
+            })(),
+        ];
+
         // Only fall back to the synthetic estimate when there's genuinely nothing.
         if (empty($all) && $statusFilter === 'current') {
             $synthetic = $this->buildSyntheticCurrentInvoice($childId);
-            return response()->json(['invoices' => $synthetic ? [$synthetic] : []]);
+            return response()->json(['invoices' => $synthetic ? [$synthetic] : []] + $extra);
         }
 
-        return response()->json(['invoices' => $all]);
+        return response()->json(['invoices' => $all] + $extra);
+    }
+
+    /**
+     * GET /parent/children/{child}/ledger — the family's ACCOUNT LEDGER and billing stats (2026-10-28, Anthony: "add
+     * some stats, graphs and anything else useful under billing and add an account ledger section for parents").
+     *
+     * Every charge (an invoice, on its issue date) and every payment (on the day it was made), native and integrated
+     * alike, oldest first with a running balance. It follows the Billing screen's rules (App\Support\ParentBilling):
+     * an unpaid invoice not yet within the due-now window is not a charge on this ledger yet, drafts and voids never
+     * are - so the ledger's closing balance is the same "due now" figure at the top of the screen.
+     *
+     * Payment dates for an integrated invoice come from the partner (external_invoices.payments); failing that, from
+     * a payment recorded here against it; failing both, one "payment received" line dated when the partner last
+     * updated it, so the arithmetic still closes.
+     */
+    public function ledgerForChild(Request $request, int $childId): JsonResponse
+    {
+        if (! $this->canAccessChild($request->user(), $childId)) {
+            abort(403);
+        }
+        $familyId = (int) DB::table('children')->where('id', $childId)->value('family_id');
+        abort_unless($familyId, 404, 'Not found');
+
+        $agencyId = \App\Support\ParentBilling::agencyOfFamily($familyId);
+        $horizon = \App\Support\ParentBilling::horizon($agencyId);
+        $today = \App\Support\AgencyTime::todayDate($agencyId)->toDateString();
+        $d10 = fn ($v) => $v ? substr((string) $v, 0, 10) : null;
+        /* A charge lands on the ledger when it reaches the parent: its issue date, or the day it came within the
+           due-now window, whichever is later. A schedule issues a whole term on one day; charged on that day, the
+           ledger read $374 owing in September for fees not due until November. */
+        $win = \App\Support\ParentBilling::windowDays($agencyId);
+        $chargeOn = function ($issued, $due, $created) use ($d10, $win) {
+            $iss = $d10($issued) ?: $d10($created);
+            if (! $due) return $iss;
+            $show = \Illuminate\Support\Carbon::parse($d10($due))->subDays($win)->toDateString();
+            return ($iss && $iss > $show) ? $iss : $show;
+        };
+        $LABEL = ['interac' => 'Interac e-Transfer', 'e_transfer' => 'Interac e-Transfer', 'etransfer' => 'Interac e-Transfer',
+            'eft' => 'Direct debit', 'card' => 'Card', 'stripe_card' => 'Card', 'stripe_ach' => 'Bank transfer', 'cash' => 'Cash',
+            'cheque' => 'Cheque', 'bank_transfer' => 'Bank transfer', 'manual' => 'Recorded by your centre'];
+        $methodLabel = function ($m) use ($LABEL) {
+            $k = strtolower(trim((string) $m));
+            if ($k === '') return null;
+            if (isset($LABEL[$k])) return $LABEL[$k];
+            if (str_contains($k, 'interac') || str_contains($k, 'transfer')) return 'Interac e-Transfer';
+            return ucfirst((string) $m);
+        };
+
+        /* A payment recorded in a partner system and mirrored here (App\Support\ExternalPaymentSync) says so:
+           "Paid in iLearn · Interac e-Transfer · ref C1AW6EMXA8YQ" - its notes are written for exactly this line. */
+        $payDetail = fn ($p) => (! empty($p->external_source) && trim((string) ($p->notes ?? '')) !== '')
+            ? mb_substr(trim((string) $p->notes), 0, 120)
+            : trim(($methodLabel($p->method) ?: 'Payment') . ($p->reference_number ? ' · ref ' . $p->reference_number : ''));
+
+        $entries = [];
+        $myG = \App\Support\BillingSplit::guardianFor((int) $request->user()->id, $familyId);
+        $invoices = [];   // for stats: number, due, total, balance, paid_on (last payment date)
+
+        // ── KiddieTrac invoices ──
+        $native = DB::table('invoices')->where('family_id', $familyId)->whereNotIn('status', ['void', 'draft'])->get();
+        $native = $native->reject(fn ($i) => $i->status !== 'paid' && (float) ($i->balance_due ?? $i->total) > 0
+            && \App\Support\ParentBilling::isUpcoming($i->due_at, $horizon));
+        $nIds = $native->pluck('id')->all();
+        $pays = $nIds ? DB::table('payments')->whereIn('invoice_id', $nIds)->orderBy('paid_at')->get() : collect();
+        $refs = $nIds ? DB::table('payment_refunds as r')->join('payments as p', 'p.id', '=', 'r.payment_id')
+            ->whereIn('p.invoice_id', $nIds)->whereIn('r.status', ['succeeded', 'pending', 'manual'])
+            ->get(['p.invoice_id', 'p.payer_guardian_id', 'r.amount', 'r.refunded_at', 'r.reason']) : collect();
+        foreach ($native as $i) {
+            /* SPLIT BILLING (2026-10-30): a guardian who pays a share sees THEIR ledger - their copy (INV-1234-A) for their
+               share, their own payments, their part of family payments nobody was named on, and refunds the same way. */
+            $mine = $myG ? \App\Support\BillingSplit::shareFor($i, $myG) : null;
+            if ($mine) {
+                $num = \App\Support\SplitInvoiceCopy::numberFor($i, $myG) ?: ($i->invoice_number ?: ('INV-' . $i->id));
+                $entries[] = ['date' => $chargeOn($i->issued_at, $i->due_at, $i->created_at), 'kind' => 'charge', 'ref' => $num, 'inv_kind' => 'native', 'inv_id' => (int) $i->id, 'inv_balance' => $mine['balance'],
+                    'title' => 'Invoice ' . $num, 'detail' => 'Your share of ' . ($i->invoice_number ?: ('INV-' . $i->id)) . ' ($' . number_format((float) $i->total, 2) . ')',
+                    'charge' => $mine['share'], 'credit' => 0.0];
+                $unGross = 0.0;
+                foreach ($pays->where('invoice_id', $i->id) as $p) if (! $p->payer_guardian_id && $p->status === 'succeeded') $unGross += (float) $p->amount;
+                $unRef = 0.0;
+                foreach ($refs->where('invoice_id', $i->id) as $r) if (! $r->payer_guardian_id) $unRef += (float) $r->amount;
+                $net = $unGross - $unRef;
+                $frac = $net > 0.004 ? max(0.0, min(1.0, $mine['unassigned_part'] / $net)) : 0.0;
+                $last = null;
+                foreach ($pays->where('invoice_id', $i->id) as $p) {
+                    if ($p->payer_guardian_id && (int) $p->payer_guardian_id !== $myG) continue;
+                    $ok = $p->status === 'succeeded';
+                    $amt = $p->payer_guardian_id ? round((float) $p->amount, 2) : round((float) $p->amount * $frac, 2);
+                    if ($amt < 0.005) continue;
+                    $entries[] = ['date' => $d10($p->paid_at), 'kind' => $ok ? 'payment' : 'pending', 'ref' => $num, 'inv_kind' => 'native', 'inv_id' => (int) $i->id, 'inv_balance' => $mine['balance'],
+                        'title' => $ok ? ($p->payer_guardian_id ? 'Payment — thank you' : 'Family payment — your part') : 'Payment on its way',
+                        'detail' => $payDetail($p),
+                        'charge' => 0.0, 'credit' => $ok ? $amt : 0.0, 'pending_amount' => $ok ? null : $amt];
+                    if ($ok) $last = $d10($p->paid_at);
+                }
+                foreach ($refs->where('invoice_id', $i->id) as $r) {
+                    if ($r->payer_guardian_id && (int) $r->payer_guardian_id !== $myG) continue;
+                    $amt = $r->payer_guardian_id ? round((float) $r->amount, 2) : round((float) $r->amount * $frac, 2);
+                    if ($amt < 0.005) continue;
+                    $entries[] = ['date' => $d10($r->refunded_at), 'kind' => 'refund', 'ref' => $num, 'inv_kind' => 'native', 'inv_id' => (int) $i->id, 'inv_balance' => $mine['balance'], 'title' => 'Refund to you',
+                        'detail' => $r->reason ? mb_substr((string) $r->reason, 0, 80) : null, 'charge' => $amt, 'credit' => 0.0];
+                }
+                $invoices[] = ['due' => $d10($i->due_at), 'total' => $mine['share'], 'balance' => $mine['balance'], 'paid_on' => $last, 'status' => $mine['balance'] <= 0.004 ? 'paid' : $i->status];
+                continue;
+            }
+            $num = $i->invoice_number ?: ('INV-' . $i->id);
+            $entries[] = ['date' => $chargeOn($i->issued_at, $i->due_at, $i->created_at), 'kind' => 'charge', 'ref' => $num, 'inv_kind' => 'native', 'inv_id' => (int) $i->id, 'inv_balance' => round((float) ($i->balance_due ?? $i->total), 2),
+                'title' => 'Invoice ' . $num, 'detail' => $i->notes ? mb_substr((string) $i->notes, 0, 80) : ($i->due_at ? 'Due ' . $d10($i->due_at) : null),
+                'charge' => round((float) $i->total, 2), 'credit' => 0.0];
+            $last = null;
+            foreach ($pays->where('invoice_id', $i->id) as $p) {
+                $ok = $p->status === 'succeeded';
+                $entries[] = ['date' => $d10($p->paid_at), 'kind' => $ok ? 'payment' : 'pending', 'ref' => $num, 'inv_kind' => 'native', 'inv_id' => (int) $i->id, 'inv_balance' => round((float) ($i->balance_due ?? $i->total), 2),
+                    'title' => $ok ? 'Payment — thank you' : 'Payment on its way', 'detail' => $payDetail($p),
+                    'charge' => 0.0, 'credit' => $ok ? round((float) $p->amount, 2) : 0.0, 'pending_amount' => $ok ? null : round((float) $p->amount, 2)];
+                if ($ok) $last = $d10($p->paid_at);
+            }
+            foreach ($refs->where('invoice_id', $i->id) as $r) {
+                $entries[] = ['date' => $d10($r->refunded_at), 'kind' => 'refund', 'ref' => $num, 'inv_kind' => 'native', 'inv_id' => (int) $i->id, 'inv_balance' => round((float) ($i->balance_due ?? $i->total), 2), 'title' => 'Refund to you',
+                    'detail' => $r->reason ? mb_substr((string) $r->reason, 0, 80) : null, 'charge' => round((float) $r->amount, 2), 'credit' => 0.0];
+            }
+            $invoices[] = ['due' => $d10($i->due_at), 'total' => (float) $i->total, 'balance' => (float) ($i->balance_due ?? $i->total), 'paid_on' => $last, 'status' => $i->status];
+        }
+
+        // ── Integrated (iLearn) invoices ──
+        if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices')) {
+            $ext = DB::table('external_invoices')->where('family_id', $familyId)
+                ->whereNotIn('status', ['void', 'cancelled', 'draft'])->get();
+            $ext = $ext->reject(fn ($e) => strtolower((string) $e->status) !== 'paid' && (float) $e->balance_due > 0
+                && \App\Support\ParentBilling::isUpcoming($e->due_at, $horizon));
+            $eIds = $ext->pluck('id')->all();
+            $ktPays = $eIds ? DB::table('payments')->whereIn('external_invoice_id', $eIds)->where('status', 'succeeded')->get() : collect();
+            foreach ($ext as $e) {
+                $num = $e->number ?: ('INV-' . $e->id);
+                $entries[] = ['date' => $chargeOn($e->issued_at, $e->due_at, $e->created_at), 'kind' => 'charge', 'ref' => $num, 'inv_kind' => 'ext', 'inv_id' => (int) $e->id, 'inv_balance' => round((float) $e->balance_due, 2),
+                    'title' => 'Invoice ' . $num, 'detail' => $e->description ? mb_substr((string) $e->description, 0, 80) : ($e->due_at ? 'Due ' . $d10($e->due_at) : null),
+                    'charge' => round((float) $e->total, 2), 'credit' => 0.0, 'source' => $e->source_label];
+                $list = [];
+                $pj = isset($e->payments) && $e->payments ? json_decode((string) $e->payments, true) : null;
+                if (is_array($pj) && $pj) {
+                    foreach ($pj as $p) $list[] = [$d10($p['date'] ?? null), (float) ($p['amount'] ?? 0), $p['method'] ?? null, $p['reference'] ?? null];
+                } elseif ($ktPays->where('external_invoice_id', $e->id)->count()) {
+                    foreach ($ktPays->where('external_invoice_id', $e->id) as $p) $list[] = [$d10($p->paid_at), (float) $p->amount, $p->method, $p->reference_number];
+                } elseif ((float) $e->amount_paid > 0.004) {
+                    $list[] = [$d10($e->external_updated_at) ?: $d10($e->updated_at), (float) $e->amount_paid, null, null];
+                }
+                $last = null;
+                foreach ($list as [$dt, $amt, $m, $ref]) {
+                    if ($amt <= 0.004) continue;
+                    $entries[] = ['date' => $dt, 'kind' => 'payment', 'ref' => $num, 'inv_kind' => 'ext', 'inv_id' => (int) $e->id, 'inv_balance' => round((float) $e->balance_due, 2), 'title' => 'Payment — thank you',
+                        'detail' => trim(($methodLabel($m) ?: 'Payment received') . ($ref ? ' · ref ' . $ref : '')), 'charge' => 0.0, 'credit' => round($amt, 2)];
+                    $last = max((string) $last, (string) $dt) ?: $last;
+                }
+                $invoices[] = ['due' => $d10($e->due_at), 'total' => (float) $e->total, 'balance' => (float) $e->balance_due, 'paid_on' => $last, 'status' => strtolower((string) $e->status)];
+            }
+        }
+
+        // Oldest first; on the same day the charge comes before the payment against it.
+        $order = ['charge' => 0, 'refund' => 1, 'payment' => 2, 'pending' => 3];
+        usort($entries, fn ($a, $b) => [(string) $a['date'], $order[$a['kind']]] <=> [(string) $b['date'], $order[$b['kind']]]);
+        $bal = 0.0;
+        foreach ($entries as &$en) {
+            $bal = round($bal + $en['charge'] - $en['credit'], 2);
+            $en['balance'] = $bal;
+        }
+        unset($en);
+
+        // ── stats ──
+        $year = substr($today, 0, 4);
+        $credits = array_values(array_filter($entries, fn ($x) => $x['kind'] === 'payment'));
+        $charges = array_values(array_filter($entries, fn ($x) => $x['kind'] === 'charge'));
+        $sum = fn ($rows, $k) => round(array_sum(array_column($rows, $k)), 2);
+        $inYear = fn ($rows) => array_values(array_filter($rows, fn ($x) => str_starts_with((string) $x['date'], $year)));
+        $lastPay = $credits ? end($credits) : null;
+        $settled = array_filter($invoices, fn ($i) => $i['balance'] <= 0.004 && $i['due'] && $i['paid_on']);
+        $onTime = $settled ? (int) round(100 * count(array_filter($settled, fn ($i) => $i['paid_on'] <= $i['due'])) / count($settled)) : null;
+        $open = array_filter($invoices, fn ($i) => $i['balance'] > 0.004 && $i['status'] !== 'paid');
+        $overdue = array_filter($open, fn ($i) => $i['due'] && $i['due'] < $today);
+        $nextDue = $open ? min(array_map(fn ($i) => $i['due'] ?: '9999-12-31', $open)) : null;
+
+        // Last 12 months: billed (by issue month) and paid (by payment month).
+        $months = [];
+        $cur = \Illuminate\Support\Carbon::parse($today)->startOfMonth()->subMonths(11);
+        for ($k = 0; $k < 12; $k++) { $months[$cur->format('Y-m')] = ['month' => $cur->format('Y-m'), 'label' => $cur->format('M'), 'billed' => 0.0, 'paid' => 0.0]; $cur->addMonth(); }
+        foreach ($charges as $c) { $m = substr((string) $c['date'], 0, 7); if (isset($months[$m])) $months[$m]['billed'] += $c['charge']; }
+        foreach ($credits as $c) { $m = substr((string) $c['date'], 0, 7); if (isset($months[$m])) $months[$m]['paid'] += $c['credit']; }
+        $billedMonths = array_filter($months, fn ($m) => $m['billed'] > 0);
+        $avg = $billedMonths ? round(array_sum(array_column($billedMonths, 'billed')) / count($billedMonths), 2) : 0.0;
+
+        $upcoming = 0;
+        foreach (DB::table('invoices')->where('family_id', $familyId)->whereNotIn('status', ['void', 'draft', 'paid'])->get(['due_at', 'balance_due', 'total']) as $r)
+            if ((float) ($r->balance_due ?? $r->total) > 0.004 && \App\Support\ParentBilling::isUpcoming($r->due_at, $horizon)) $upcoming++;
+        if (\Illuminate\Support\Facades\Schema::hasTable('external_invoices'))
+            foreach (DB::table('external_invoices')->where('family_id', $familyId)->whereNotIn('status', ['void', 'cancelled', 'draft', 'paid'])->where('balance_due', '>', 0)->get(['due_at']) as $r)
+                if (\App\Support\ParentBilling::isUpcoming($r->due_at, $horizon)) $upcoming++;
+
+        return response()->json([
+            'entries' => $entries,
+            'balance' => $bal,
+            'stats' => [
+                'due_now' => round(array_sum(array_column($open, 'balance')), 2),
+                'overdue_count' => count($overdue),
+                'overdue_total' => round(array_sum(array_column($overdue, 'balance')), 2),
+                'next_due' => $nextDue && $nextDue !== '9999-12-31' ? $nextDue : null,
+                'paid_this_year' => $sum($inYear($credits), 'credit'),
+                'billed_this_year' => $sum($inYear($charges), 'charge'),
+                'paid_all_time' => $sum($credits, 'credit'),
+                'last_payment' => $lastPay ? ['date' => $lastPay['date'], 'amount' => $lastPay['credit'], 'method' => $lastPay['detail']] : null,
+                'on_time_pct' => $onTime,
+                'on_time_of' => count($settled),
+                'avg_monthly' => $avg,
+                'invoice_count' => count($invoices),
+                'upcoming_count' => $upcoming,
+                'year' => $year,
+            ],
+            'months' => array_values(array_map(fn ($m) => array_merge($m, ['billed' => round($m['billed'], 2), 'paid' => round($m['paid'], 2)]), $months)),
+            'window_days' => \App\Support\ParentBilling::windowDays($agencyId),
+            'agency_name' => DB::table('agencies')->where('id', $agencyId)->value('name'),
+            'today' => $today,
+            'statement' => $this->statementParties($request, $agencyId, $familyId),
+        ]);
+    }
+
+    /* WHO THE STATEMENT IS FROM AND FOR (2026-10-28, Anthony: "account ledger for parents the pdf should show the ilearn
+       logo and full details of the agency and parent's full info"). The agency's legal name, address, phone, email,
+       website and logo (inlined as a data: URI, so it prints from the in-portal panel without another request), and
+       the signed-in parent: name, email, phone, the family's address and reference number, and the children. Only the
+       caller's own details and their own family's - this is their statement. */
+    private function statementParties(Request $request, ?int $agencyId, int $familyId): array
+    {
+        $a = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
+        $logo = null;
+        $lp = $a ? (string) ($a->brand_logo_url ?: $a->logo_url) : '';
+        if ($lp !== '' && str_starts_with($lp, '/storage/')) {
+            $file = storage_path('app/public/' . substr($lp, strlen('/storage/')));
+            if (is_file($file) && filesize($file) < 600000) {
+                $mime = function_exists('mime_content_type') ? (mime_content_type($file) ?: 'image/png') : 'image/png';
+                $logo = 'data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($file));
+            }
+        }
+        $phone = function ($p) {
+            $d = preg_replace('/\D+/', '', (string) $p);
+            if (strlen($d) === 11 && $d[0] === '1') { $d = substr($d, 1); }
+            return strlen($d) === 10 ? '(' . substr($d, 0, 3) . ') ' . substr($d, 3, 3) . '-' . substr($d, 6) : ((string) $p ?: null);
+        };
+        $f = DB::table('families')->where('id', $familyId)->first();
+        $u = $request->user();
+        $kids = DB::table('children')->where('family_id', $familyId)->whereNull('deleted_at')
+            ->orderBy('first_name')->get(['first_name', 'last_name'])
+            ->map(fn ($c) => trim($c->first_name . ' ' . $c->last_name))->filter()->values()->all();
+        $ref = null;
+        try { $ref = \App\Support\RefCode::ensureFamily($familyId); } catch (\Throwable $e) { $ref = null; }
+
+        return [
+            'agency' => $a ? [
+                'name' => $a->legal_name ?: $a->name,
+                'address' => array_values(array_filter([
+                    trim((string) $a->address_line1), trim((string) $a->address_line2),
+                    trim(implode(' ', array_filter([trim((string) $a->city) !== '' ? $a->city . ',' : null, $a->province, $a->postal_code]))),
+                    $a->country,
+                ])),
+                'phone' => $phone($a->contact_phone),
+                'email' => $a->brand_support_email ?: $a->contact_email,
+                'website' => $a->website,
+                'tax_registration' => $a->tax_registration ?: null,
+                'logo' => $logo,
+            ] : null,
+            'parent' => [
+                'name' => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')),
+                'email' => $u->email ?? null,
+                'phone' => $phone($u->phone ?? ($f->primary_phone ?? null)),
+                'family' => $f->family_name ?? null,
+                'reference' => $ref,
+                'address' => $f ? array_values(array_filter([
+                    trim((string) $f->address_line1), trim((string) ($f->address_line2 ?? '')),
+                    trim(implode(' ', array_filter([trim((string) $f->city) !== '' ? $f->city . ',' : null, $f->province, $f->postal_code]))),
+                ])) : [],
+                'children' => $kids,
+            ],
+        ];
     }
 
     /**
@@ -129,14 +460,17 @@ final class InvoiceController extends Controller
      */
     public function index(Request $request)
     {
-        $centreId = $this->resolveCentreId($request->user());
-        if (!$centreId) {
-            return response()->json(['invoices' => []]);
+        /* EVERY CENTRE THIS PERSON MAY SEE (2026-11-13 sweep): resolveCentreId() is ONE centre - an agency admin's is
+           the agency's first - so Bulk invoices' "Export CSV" held centre 8's invoices only at iLearn. ?centre_id
+           narrows to one of those centres. Fails closed. */
+        $ids = $this->visibleCentreIds($request);
+        if ($want = (int) $request->query('centre_id')) {
+            $ids = in_array($want, $ids, true) ? [$want] : [];
         }
 
         $q = DB::table('invoices')
             ->join('families', 'families.id', '=', 'invoices.family_id')
-            ->where('invoices.centre_id', $centreId)
+            ->whereIn('invoices.centre_id', $ids ?: [0])
             ->select(
                 'invoices.*',
                 'families.family_name',
@@ -152,7 +486,7 @@ final class InvoiceController extends Controller
         // payload.
         if (strtolower((string) $request->query('format', '')) === 'csv') {
             $rows = $q->limit(2000)->get();
-            $filename = 'invoices-' . now()->format('Y-m-d') . '.csv';
+            $filename = 'invoices-' . \App\Support\AgencyTime::today() . '.csv';
             $fref = \App\Support\RefCode::families($rows->pluck('family_id')->all());   // visible family IDs, 2026-10-14
             return new \Symfony\Component\HttpFoundation\StreamedResponse(function () use ($rows, $fref) {
                 $out = fopen('php://output', 'w');
@@ -183,15 +517,15 @@ final class InvoiceController extends Controller
 
         $stats = [
             'total_outstanding' => (float) DB::table('invoices')
-                ->where('centre_id', $centreId)
+                ->whereIn('centre_id', $ids ?: [0])
                 ->whereIn('status', ['sent', 'partial', 'overdue'])
                 ->sum('balance_due'),
             'overdue_count' => DB::table('invoices')
-                ->where('centre_id', $centreId)
+                ->whereIn('centre_id', $ids ?: [0])
                 ->where('status', 'overdue')
                 ->count(),
             'paid_this_month' => (float) DB::table('invoices')
-                ->where('centre_id', $centreId)
+                ->whereIn('centre_id', $ids ?: [0])
                 ->where('status', 'paid')
                 ->whereMonth('issued_at', now()->month)
                 ->sum('total'),
@@ -286,6 +620,11 @@ final class InvoiceController extends Controller
 
         $isOpenStatus = fn ($s) => ! in_array(strtolower((string) $s), ['paid', 'void'], true);
 
+        // Due-now window + how to pay (2026-10-28) - see App\Support\ParentBilling.
+        $billAgency = (int) (DB::table('external_invoices')->whereIn('family_id', $familyIds)->value('agency_id')
+            ?: \App\Support\ParentBilling::agencyOfFamily((int) $familyIds->first()));
+        $horizon = \App\Support\ParentBilling::horizon($billAgency);
+
         // Stats base = the family's whole set (search must NOT change the totals).
         $statsBase = DB::table('external_invoices as ei')
             ->whereIn('ei.family_id', $familyIds)
@@ -303,10 +642,15 @@ final class InvoiceController extends Controller
         //
         // ?scope=all opts back into the full history for anyone who wants it.
         if (strtolower((string) $request->query('scope', 'current')) !== 'all') {
-            $monthStart = \Illuminate\Support\Carbon::now()->startOfMonth()->toDateString();
-            $monthEnd = \Illuminate\Support\Carbon::now()->endOfMonth()->toDateString();
-            $base->where(function ($w) use ($monthStart, $monthEnd) {
+            $monthStart = \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString();
+            $monthEnd = \App\Support\AgencyTime::todayDate()->endOfMonth()->toDateString();
+            $base->where(function ($w) use ($monthStart, $monthEnd, $horizon) {
                 $w->whereBetween('ei.due_at', [$monthStart, $monthEnd])
+                  // Owed and due within the window, even if that is next month (2026-10-28).
+                  ->orWhere(function ($soon) use ($horizon) {
+                      $soon->where('ei.balance_due', '>', 0)->whereNotIn('ei.status', ['paid', 'void'])
+                           ->whereDate('ei.due_at', '<=', $horizon);
+                  })
                   ->orWhereBetween('ei.issued_at', [$monthStart, $monthEnd])
                   // Still owed from an earlier month — the ones that matter most.
                   ->orWhere(function ($late) use ($monthStart) {
@@ -316,6 +660,12 @@ final class InvoiceController extends Controller
                   });
             });
         }
+        /* And never an unpaid one that is not due for more than the window (2026-10-28), whatever the scope: next
+           month's fees come up two weeks ahead, not the day the schedule is made. Paid invoices are untouched. */
+        $base->where(function ($w) use ($horizon) {
+            $w->whereIn('ei.status', ['paid'])->orWhere('ei.balance_due', '<=', 0)
+              ->orWhereNull('ei.due_at')->orWhereDate('ei.due_at', '<=', $horizon);
+        });
 
         // Search across number / description / status.
         if ($search = trim((string) $request->query('search', ''))) {
@@ -328,11 +678,14 @@ final class InvoiceController extends Controller
         }
 
         // Stats over the WHOLE set (not the search-filtered / paged subset).
-        $all = $statsBase->get(['ei.status', 'ei.balance_due', 'ei.total']);
-        $openAll = $all->filter(fn ($r) => $isOpenStatus($r->status));
+        $all = $statsBase->get(['ei.status', 'ei.balance_due', 'ei.total', 'ei.due_at']);
+        $openAll = $all->filter(fn ($r) => $isOpenStatus($r->status) && (float) $r->balance_due > 0);
+        // "Total due" is what is due NOW; the rest is counted, not added (2026-10-28).
+        $dueNow = $openAll->reject(fn ($r) => \App\Support\ParentBilling::isUpcoming($r->due_at, $horizon));
         $stats = [
-            'open_total' => round((float) $openAll->sum('balance_due'), 2),
-            'open_count' => $openAll->count(),
+            'open_total' => round((float) $dueNow->sum('balance_due'), 2),
+            'open_count' => $dueNow->count(),
+            'upcoming_count' => $openAll->count() - $dueNow->count(),
             'paid_total' => round((float) $all->filter(fn ($r) => strtolower((string) $r->status) === 'paid')->sum('total'), 2),
             'paid_count' => $all->filter(fn ($r) => strtolower((string) $r->status) === 'paid')->count(),
         ];
@@ -384,6 +737,7 @@ final class InvoiceController extends Controller
                 'is_open'      => $isOpenStatus($r->status),
             ])->values(),
             'stats' => $stats,
+            'pay_info' => \App\Support\ParentBilling::payInfo($billAgency ?: null),
             'meta'  => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => $pages, 'sort' => $sortKey, 'dir' => $dir, 'stripe_enabled' => $stripeEnabled],
         ]);
     }
@@ -479,6 +833,152 @@ final class InvoiceController extends Controller
                 . preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($inv->number ?: $inv->id)) . '.' . $ext . '"',
             'X-KT-Document-Source' => (string) ($inv->external_source ?: 'external'),
         ]);
+    }
+
+    /* ── An integrated invoice as a PDF, and emailed to the parent who asks (2026-10-28) ──
+       Anthony: "add other options in the kebab to download, print, email". Native invoices already had both
+       (/parent/invoices/{id}/pdf and /email, LedgerController); an iLearn invoice had only its HTML document. The
+       official document is fetched the same way externalDocument() does and rendered to PDF here; an invoice with
+       no official document is drawn from its own fields, so Download and Email always work. */
+    private function externalAllowed(Request $request, object $inv, bool $guardianOnly = false): bool
+    {
+        $user = $request->user();
+        if (DB::table('guardians')->where('user_id', $user->id)->where('family_id', $inv->family_id)->exists()) {
+            return true;
+        }
+        if ($guardianOnly) {
+            return false;
+        }
+        $agencyId = (int) $request->header('X-Active-Agency-Id');
+
+        return $agencyId === (int) $inv->agency_id
+            && DB::table('role_assignments')->where('user_id', $user->id)->where('active', 1)
+                ->where(function ($q) use ($agencyId) { $q->where('agency_id', $agencyId)->orWhere('role', 'platform_admin'); })
+                ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])->exists();
+    }
+
+    /** An iLearn-synced invoice as a PDF, for emails (2026-10-31); $paid stamps it PAID (when it is built from HTML). */
+    public static function externalPdfFor(object $inv, bool $paid = false, ?string $paidOn = null): ?string
+    {
+        return (new self())->externalPdfBytes($inv, $paid, $paidOn);
+    }
+
+    private function externalPdfBytes(object $inv, bool $paidStamp = false, ?string $paidOn = null): ?string
+    {
+        $html = null;
+        if (! empty($inv->pdf_url)) {
+            try {
+                $res = \Illuminate\Support\Facades\Http::timeout(20)
+                    ->withOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]])->get((string) $inv->pdf_url);
+                if ($res->successful() && $res->body() !== '') {
+                    if (str_contains(strtolower((string) $res->header('Content-Type')), 'pdf') || str_starts_with($res->body(), '%PDF-')) {
+                        return $res->body();
+                    }
+                    $html = $res->body();
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('[invoices] pdf: source document unavailable', ['invoice' => $inv->id, 'error' => $e->getMessage()]);
+            }
+        }
+        if ($html === null) {
+            $agency = DB::table('agencies')->where('id', $inv->agency_id)->value('name');
+            $rows = '';
+            foreach ((array) json_decode((string) ($inv->items ?? '[]'), true) as $it) {
+                $qty = $it['qty'] ?? 1; $price = $it['price'] ?? null;
+                $amt = $it['amount'] ?? ($it['total'] ?? ($price !== null ? $qty * $price : 0));
+                $rows .= '<tr><td>' . e($it['desc'] ?? ($it['description'] ?? 'Item')) . '</td><td style="text-align:center">' . e($price !== null ? $qty : '')
+                    . '</td><td style="text-align:right">' . ($price !== null ? '$' . number_format((float) $price, 2) : '') . '</td><td style="text-align:right">$' . number_format((float) $amt, 2) . '</td></tr>';
+            }
+            $html = '<html><head><meta charset="utf-8"><style>body{font-family:DejaVu Sans,Arial,sans-serif;color:#1e293b;font-size:12px}'
+                . 'table{width:100%;border-collapse:collapse}td,th{padding:7px 6px;border-bottom:1px solid #e2e8f0;text-align:left}th{font-size:10px;text-transform:uppercase;color:#64748b}</style></head><body>'
+                . '<table style="border-bottom:2px solid #2C7BA0;margin-bottom:16px"><tr><td style="border:0"><div style="font-size:20px;font-weight:bold;color:#2C7BA0">' . e($agency ?: 'Invoice') . '</div><div style="color:#64748b">Childcare invoice</div></td>'
+                . '<td style="border:0;text-align:right"><div style="font-size:15px;font-weight:bold">Invoice ' . e($inv->number) . '</div><div>Issued: ' . e($inv->issued_at ?: '—') . '</div><div>Due: ' . e($inv->due_at ?: '—') . '</div></td></tr></table>'
+                . ($inv->description ? '<p style="color:#475569">' . e($inv->description) . '</p>' : '')
+                . '<table><tr><th>Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit</th><th style="text-align:right">Amount</th></tr>' . ($rows ?: '<tr><td colspan="4">No line items</td></tr>') . '</table>'
+                . '<table style="width:260px;margin-left:auto;margin-top:12px"><tr><td>Total</td><td style="text-align:right">$' . number_format((float) $inv->total, 2) . '</td></tr>'
+                . ((float) $inv->amount_paid > 0 ? '<tr><td>Paid</td><td style="text-align:right">-$' . number_format((float) $inv->amount_paid, 2) . '</td></tr>' : '')
+                . '<tr><td style="font-weight:bold">' . ((float) $inv->balance_due <= 0.004 ? 'Paid in full' : 'Balance due') . '</td><td style="text-align:right;font-weight:bold">$' . number_format((float) $inv->balance_due, 2) . '</td></tr></table>'
+                . '<p style="margin-top:24px;color:#64748b;font-size:10px">Billed by ' . e($agency ?: 'your provider') . '.</p></body></html>';
+        }
+        /* As it prints, not as it shows on screen: the source page's own print rules (no "Print" button, no grey
+           page), buttons hidden either way, and emoji taken out - the PDF fonts have none, so each became "?". */
+        $html = preg_replace('/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{FE0F}\x{200D}]/u', '', $html) ?? $html;
+        $html = preg_replace('~<script[^>]*>.*?</script>~is', '', $html) ?? $html;   // scripts and their overlays only add blank pages
+        $css = '<style>button,.no-print,.print-btn,.actions,.watermark,[onclick*="print"]{display:none!important}html,body{background:#fff!important;min-height:0!important;height:auto!important}body{padding:0!important}.sheet{overflow:visible!important;border:0!important;padding:0!important}</style>';
+        $html = stripos($html, '</head>') !== false ? preg_replace('~</head>~i', $css . '</head>', $html, 1) : $css . $html;
+        if ($paidStamp) {
+            $html = \App\Services\InvoiceDocument::paidStamp($html, $paidOn);
+        }
+        try {
+            $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans', 'defaultMediaType' => 'print']);
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('letter');
+            $dompdf->render();
+
+            return $dompdf->output();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('[invoices] pdf render failed', ['invoice' => $inv->id, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /** GET /invoices/external/{id}/pdf — the invoice as a PDF (guardian of the family, or agency staff). */
+    public function externalPdf(Request $request, int $id)
+    {
+        $inv = DB::table('external_invoices')->where('id', $id)->first();
+        abort_unless($inv, 404, 'Not found.');
+        abort_unless($this->externalAllowed($request, $inv), 403, 'Not permitted.');
+        $pdf = $this->externalPdfBytes($inv);
+        abort_unless($pdf !== null, 502, 'The invoice could not be turned into a PDF just now.');
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="Invoice-' . preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) ($inv->number ?: $inv->id)) . '.pdf"',
+        ]);
+    }
+
+    /** POST /parent/external-invoices/{id}/email — a copy to the signed-in guardian's OWN address, never anyone else's. */
+    public function emailExternalInvoice(Request $request, int $id)
+    {
+        $inv = DB::table('external_invoices')->where('id', $id)->first();
+        abort_unless($inv, 404, 'Not found.');
+        abort_unless($this->externalAllowed($request, $inv, true), 403, 'Not permitted.');
+        $user = $request->user();
+        $to = trim((string) ($user->email ?? ''));
+        if ($to === '' || ! filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['message' => 'Your account has no email address on file.'], 422);
+        }
+        $pdf = $this->externalPdfBytes($inv);
+        if ($pdf === null) {
+            return response()->json(['message' => 'The invoice could not be prepared just now. Please try again.'], 502);
+        }
+        $num = (string) ($inv->number ?: ('#' . $inv->id));
+        $first = trim((string) ($user->first_name ?? '')) ?: 'there';
+        $agency = DB::table('agencies')->where('id', $inv->agency_id)->value('name');
+        $balance = (float) $inv->balance_due;
+        // KiddieTrac's invoice header with the agency's logo and centre (2026-10-31, App\Support\InvoiceMail).
+        [, $html] = \App\Support\InvoiceMail::issued((int) $inv->agency_id, [
+            'number' => $num, 'total' => (float) ($inv->total ?? $balance), 'balance' => $balance,
+            'due' => $inv->due_at ? substr((string) $inv->due_at, 0, 10) : null, 'first_name' => $first === 'there' ? null : $first,
+            'agency_name' => $agency ?: null, 'kind' => 'copy',
+            'centre_id' => $inv->family_id ? DB::table('families')->where('id', $inv->family_id)->value('centre_id') : null,
+        ]);
+        try {
+            \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $num, $pdf) {
+                $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
+                // Parent-requested copy of their OWN invoice — always deliver (same as the native one).
+                $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+                $m->to($to)->subject('Your invoice ' . $num);
+                $m->attachData($pdf, 'Invoice-' . preg_replace('/[^A-Za-z0-9]/', '-', $num) . '.pdf', ['mime' => 'application/pdf']);
+            });
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('External invoice email-to-self failed: ' . $e->getMessage());
+
+            return response()->json(['message' => 'Could not send the email right now. Please try again.'], 500);
+        }
+
+        return response()->json(['ok' => true, 'email' => $to]);
     }
 
     /* A CENTRE DIRECTOR'S ACCOUNTING IS THEIR OWN CENTRES' FAMILIES (2026-10-05).
@@ -745,6 +1245,11 @@ final class InvoiceController extends Controller
         }
         usort($families, fn ($a, $b) => strcmp((string) $a['label'], (string) $b['label']));
 
+        // "e-Transfer requested Nov 2 by Safia" under the status (EtransferRequestController::notes, 2026-11-02).
+        $etNotes = \App\Http\Controllers\Api\EtransferRequestController::notes((int) $agencyId,
+            $rows->where('kt_source', 'kiddietrac')->pluck('id')->all(),
+            $rows->filter(fn ($r) => ($r->kt_source ?? 'provider') === 'provider')->pluck('id')->all());
+
         return response()->json([
             'invoices' => $rows->map(fn ($r) => [
                 'id'           => (int) $r->id,
@@ -776,6 +1281,9 @@ final class InvoiceController extends Controller
                 'items'        => $r->items ? json_decode($r->items, true) : [],
                 'has_document' => ! empty($r->pdf_url),   // see externalDocument()
                 'is_open'      => $isOpenStatus($r->status),
+                // Split billing: the row offers the guardians' own copies.
+                'split'        => ($r->kt_source ?? '') === 'kiddietrac' && \App\Support\SplitInvoiceCopy::isSplitInvoice((int) $r->id),
+                'etransfer'    => $etNotes[(($r->kt_source ?? 'provider') === 'kiddietrac' ? 'kt:' : (($r->kt_source ?? 'provider') === 'provider' ? 'ext:' : 'x:')) . (int) $r->id] ?? null,
             ])->values(),
             'stats' => $stats,
             'families' => $families,
@@ -962,6 +1470,9 @@ final class InvoiceController extends Controller
             ]);
         } catch (\Throwable $e) { /* never fail the receipt over its own audit row */ }
 
+        // The payer gets the receipt, and the invoice stamped PAID once it is settled (App\Support\PaidMail).
+        \App\Support\PaidMail::afterLatest(null, (int) $id);
+
         return response()->json([
             'status' => $status,
             'amount_paid' => $paid,
@@ -1012,6 +1523,7 @@ final class InvoiceController extends Controller
 
         \App\Services\AgencyMailer::forAgency($r['agency_id'])->html($r['html'],
             function ($m) use ($data, $r) {
+                \App\Support\MailScope::billing($m);   // reaches a billing guardian whose invite is not accepted yet (2026-11-06)
                 $m->to($data['to'])->subject($r['subject']);
                 /* The figures are IN the attachment and nowhere else. If dompdf could not
                    produce one the covering note still goes, and the response says the
@@ -1041,10 +1553,11 @@ final class InvoiceController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         abort_unless($agencyId, 400, 'No active agency.');
 
-        // The FAMILY must belong to the caller's agency, not merely exist.
-        $ok = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
-            ->where('f.id', $familyId)->where('c.agency_id', $agencyId)->exists();
-        abort_unless($ok, 404, 'No such family.');
+        // The FAMILY must belong to the caller's agency, not merely exist - and to a centre the
+        // caller works at: a director of one centre read another centre's billing emails (2026-11-05).
+        $famCentre = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('f.id', $familyId)->where('c.agency_id', $agencyId)->value('f.centre_id');
+        abort_unless($famCentre && \App\Support\CentreScope::canRead(\App\Support\CentreScope::ids($request, $agencyId), $famCentre), 404, 'No such family.');
 
         $emails = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
             ->where('g.family_id', $familyId)->whereNotNull('u.email')
@@ -1661,54 +2174,41 @@ final class InvoiceController extends Controller
         $agencyName = (string) DB::table('centres')
             ->leftJoin('agencies', 'agencies.id', '=', 'centres.agency_id')
             ->where('centres.id', $data['centre_id'])->value('agencies.name');
+        $batchAgencyId = (int) DB::table('centres')->where('id', $data['centre_id'])->value('agency_id');
         $renderer = app(InvoicePdfRenderer::class);
         $emailed = 0;
         $skipped = 0;
 
         foreach ($invoices as $inv) {
             try {
-                $emails = DB::table('guardians as g')
-                    ->join('users as u', 'u.id', '=', 'g.user_id')
-                    ->where('g.family_id', $inv->family_id)
-                    ->whereNotNull('u.email')->where('u.email', '!=', '')
-                    ->pluck('u.email')->unique()->values()->all();
-                if (! $emails) { $skipped++; continue; }
+                $people = self::invoiceRecipients((int) $inv->family_id);
+                if (! $people) { $skipped++; continue; }
 
                 $html = $renderer->renderFromInvoiceId((int) $inv->id);
                 if ($html === null) { $skipped++; continue; }
-                $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+                $dompdf = new \App\Support\KtDompdf(['isRemoteEnabled' => true]);
                 $dompdf->loadHtml($html, 'UTF-8');
                 $dompdf->setPaper('letter', 'portrait');
                 $dompdf->render();
                 $pdf = $dompdf->output();
 
                 $num = (string) ($inv->invoice_number ?: ('#' . $inv->id));
-                $bal = (float) ($inv->balance_due ?? 0);
-                $due = $bal > 0.005
-                    ? '<p style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:12px 16px;font-size:14px;margin:14px 0;">Balance due: <strong>$' . number_format($bal, 2) . '</strong>' . ($inv->due_at ? ' &middot; due ' . e($inv->due_at) : '') . '</p>'
-                    : '<p style="background:#ECFDF5;color:#047857;border-radius:8px;padding:12px 16px;font-size:14px;margin:14px 0;">This invoice is paid in full. Thank you! 🎉</p>';
-                $content = '<h1>🧾 Your invoice ' . e($num) . '</h1>'
-                    . '<p>Hello,</p>'
-                    . '<p>Your invoice from <strong>' . e($agencyName ?: 'your childcare provider') . '</strong> is attached as a PDF.</p>'
-                    . $due
-                    . '<p style="color:#64748B;font-size:13px;">You can also view and pay this invoice by signing in to KiddieTrac.</p>';
-                $mailHtml = view('emails.layout', [
-                    'slot' => $content,
-                    'title' => 'Your invoice ' . $num,
-                    'preheader' => 'Your invoice ' . $num . ' is attached.',
-                ])->render();
-
+                // KiddieTrac's invoice header with the agency's logo and centre (2026-10-31, App\Support\InvoiceMail).
                 $invCentreId = (int) $data['centre_id'];
-                Mail::html($mailHtml, function ($m) use ($emails, $num, $pdf, $invCentreId) {
-                    \App\Support\MailScope::centre($m, $invCentreId);
-                    $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
-                    $first = array_shift($emails);
-                    $m->to($first)->subject('Your invoice ' . $num);
-                    foreach ($emails as $cc) {
-                        $m->cc($cc);
-                    }
-                    $m->attachData($pdf, 'Invoice-' . preg_replace('/[^A-Za-z0-9]/', '-', $num) . '.pdf', ['mime' => 'application/pdf']);
-                });
+                foreach ($people as $email => $firstName) {
+                    [, $mailHtml] = \App\Support\InvoiceMail::issued($batchAgencyId ?: null, [
+                        'number' => $num, 'total' => (float) ($inv->total ?? 0), 'balance' => (float) ($inv->balance_due ?? 0),
+                        'due' => $inv->due_at ? substr((string) $inv->due_at, 0, 10) : null, 'agency_name' => $agencyName ?: null,
+                        'centre_id' => (int) $data['centre_id'], 'kind' => 'invoice', 'first_name' => $firstName ?: null,
+                    ]);
+                    Mail::html($mailHtml, function ($m) use ($email, $num, $pdf, $invCentreId) {
+                        \App\Support\MailScope::centre($m, $invCentreId);
+                        \App\Support\MailScope::billing($m);   // reaches a billing guardian whose invite is not accepted yet (2026-11-06)
+                        $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
+                        $m->to($email)->subject('Your invoice ' . $num);
+                        $m->attachData($pdf, 'Invoice-' . preg_replace('/[^A-Za-z0-9]/', '-', $num) . '.pdf', ['mime' => 'application/pdf']);
+                    });
+                }
                 $emailed++;
             } catch (\Throwable $e) {
                 Log::warning('Invoice email-batch failed for invoice ' . $inv->id . ': ' . $e->getMessage());
@@ -1730,16 +2230,12 @@ final class InvoiceController extends Controller
         // Validates ownership before honouring the override.
         $override = (int) $request->input('_centre_id_override');
         if ($override > 0) {
-            $callerAgencyId = DB::table('role_assignments')
-                ->where('user_id', $request->user()->id)
-                ->whereIn('role', ['agency_admin', 'platform_admin'])
-                ->where('active', true)
-                ->value('agency_id');
+            /* The centre must be in the agency you are working in, and you its admin there
+               (2026-11-05 leak sweep): this compared with whichever agency_admin row came first and
+               let a platform admin bill any agency's centre whatever agency they had switched into. */
             $centreAgencyId = (int) DB::table('centres')->where('id', $override)->value('agency_id');
-            $isPlatform = DB::table('role_assignments')
-                ->where('user_id', $request->user()->id)
-                ->where('role', 'platform_admin')->where('active', true)->exists();
-            $ok = $isPlatform || ($callerAgencyId && $callerAgencyId === $centreAgencyId);
+            $ok = $centreAgencyId && $centreAgencyId === (int) $this->resolveAgencyId($request)
+                && array_intersect(\App\Support\AgencyRole::names($request), ['agency_admin', 'platform_admin']);
             if (!$ok) return response()->json(['message' => 'Centre not in your agency'], 403);
             $centreId = $override;
         } else {
@@ -1989,6 +2485,7 @@ final class InvoiceController extends Controller
                 // (drives the parent app's Billing badge + notifications inbox).
                 $invTitle = 'New invoice: ' . $invoiceNumber;
                 $invBody = 'Your invoice for $' . number_format($total, 2) . ' is ready. Due ' . $dueDate->format('M j, Y') . '.';
+                if (\App\Support\SplitInvoiceCopy::notifyIssued((int) $invoiceId) === 0)
                 foreach (DB::table('guardians')->where('family_id', $familyId)->pluck('user_id') as $gid) {
                     \App\Support\Notify::write([
                         'user_id' => $gid,
@@ -2047,13 +2544,13 @@ final class InvoiceController extends Controller
         if (! $inv) {
             return false;
         }
+        // Split billing (2026-10-30): each guardian gets THEIR copy (INV-1234-A) with their share, not the family invoice.
+        if (\App\Support\BillingSplit::shares($inv)) {
+            return (bool) array_filter(\App\Support\SplitInvoiceCopy::sendAll($invoiceId), fn ($r) => ! empty($r['sent']));
+        }
 
-        $emails = DB::table('guardians as g')
-            ->join('users as u', 'u.id', '=', 'g.user_id')
-            ->where('g.family_id', $inv->family_id)
-            ->whereNotNull('u.email')->where('u.email', '!=', '')
-            ->pluck('u.email')->unique()->values()->all();
-        if (! $emails) {
+        $people = self::invoiceRecipients((int) $inv->family_id);
+        if (! $people) {
             return false;
         }
 
@@ -2064,33 +2561,15 @@ final class InvoiceController extends Controller
 
         $num = (string) ($inv->invoice_number ?: ('#' . $inv->id));
         $bal = (float) ($inv->balance_due ?? 0);
-
-        $appUrl = rtrim((string) (config('app.portal_url') ?: 'https://app.kiddietrac.com'), '/');
-        $payLink = $appUrl . '/dashboard.html#billing';
-
-        $due = $bal > 0.005
-            ? '<p style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:12px 16px;font-size:14px;margin:14px 0;">Balance due: <strong>$'
-                . number_format($bal, 2) . '</strong>' . ($inv->due_at ? ' &middot; due ' . e($inv->due_at) : '') . '</p>'
-            : '<p style="background:#ECFDF5;color:#047857;border-radius:8px;padding:12px 16px;font-size:14px;margin:14px 0;">This invoice is paid in full. Thank you! 🎉</p>';
-
-        $button = $bal > 0.005
-            ? '<p style="margin:20px 0;"><a href="' . e($payLink) . '" style="display:inline-block;background:#1F6FB2;color:#ffffff;'
-                . 'text-decoration:none;font-weight:700;font-size:15px;padding:13px 26px;border-radius:10px;">Pay this invoice</a></p>'
-                . '<p style="color:#64748B;font-size:12.5px;margin-top:-6px;">Opens KiddieTrac and takes you to your billing page. '
-                . 'You can pay the full amount or part of it.</p>'
-            : '';
-
-        $content = '<h1>🧾 Your invoice ' . e($num) . '</h1>'
-            . '<p>Hello,</p>'
-            . '<p>Your invoice from <strong>' . e($agencyName ?: 'your childcare provider') . '</strong> is attached as a PDF.</p>'
-            . $due
-            . $button;
-
-        $html = view('emails.layout', [
-            'slot' => $content,
-            'title' => 'Your invoice ' . $num,
-            'preheader' => 'Your invoice ' . $num . ' is ready.',
-        ])->render();
+        // KiddieTrac's invoice header with the agency's logo and centre (2026-10-31, App\Support\InvoiceMail).
+        $sendAgencyId = (int) DB::table('centres')->where('id', $inv->centre_id)->value('agency_id');
+        $payInfo = [];
+        try { $payInfo = \App\Support\ParentBilling::payInfo($sendAgencyId); } catch (\Throwable $e) {}
+        $mailOpts = [
+            'number' => $num, 'total' => (float) ($inv->total ?? 0), 'balance' => $bal,
+            'due' => $inv->due_at ? substr((string) $inv->due_at, 0, 10) : null, 'agency_name' => $agencyName ?: null,
+            'centre_id' => (int) ($inv->centre_id ?? 0) ?: null, 'interac' => $payInfo['interac']['email'] ?? null, 'kind' => 'invoice',
+        ];
 
         // The PDF, when it renders. A missing PDF must not stop the email: the balance
         // and the button are the useful part, and the invoice is in the app regardless.
@@ -2103,20 +2582,33 @@ final class InvoiceController extends Controller
         }
 
         $invCentreId = (int) ($inv->centre_id ?? 0);
-        Mail::html($html, function ($m) use ($emails, $num, $pdf, $invCentreId) {
-            \App\Support\MailScope::centre($m, $invCentreId ?: null);
-            $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
-            $first = array_shift($emails);
-            $m->to($first)->subject('Your invoice ' . $num);
-            foreach ($emails as $cc) {
-                $m->cc($cc);
-            }
-            if ($pdf !== null) {
-                $m->attachData($pdf, 'Invoice-' . $num . '.pdf', ['mime' => 'application/pdf']);
-            }
-        });
+        foreach ($people as $email => $firstName) {
+            [, $html] = \App\Support\InvoiceMail::issued($sendAgencyId ?: null, ['first_name' => $firstName ?: null] + $mailOpts);
+            Mail::html($html, function ($m) use ($email, $num, $pdf, $invCentreId) {
+                \App\Support\MailScope::centre($m, $invCentreId ?: null);
+                \App\Support\MailScope::billing($m);   // reaches a billing guardian whose invite is not accepted yet (2026-11-06)
+                $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
+                $m->to($email)->subject('Your invoice ' . $num);
+                if ($pdf !== null) {
+                    $m->attachData($pdf, 'Invoice-' . $num . '.pdf', ['mime' => 'application/pdf']);
+                }
+            });
+        }
 
         return true;
+    }
+
+    /** The family's guardians with an email: [email => first name], one letter each (2026-10-31). */
+    private static function invoiceRecipients(int $familyId): array
+    {
+        $out = [];
+        foreach (DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $familyId)->whereNotNull('u.email')->where('u.email', '!=', '')
+            ->get(['u.email', 'u.first_name']) as $r) {
+            $e = mb_strtolower(trim((string) $r->email));
+            if ($e !== '' && ! isset($out[$e])) $out[$e] = trim((string) $r->first_name);
+        }
+        return $out;
     }
 
     /**
@@ -2167,7 +2659,7 @@ final class InvoiceController extends Controller
             ], 422);
         }
 
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $wasScheduledFor = $invoice->issued_at ? substr((string) $invoice->issued_at, 0, 10) : null;
         $early = $wasScheduledFor && $wasScheduledFor > $today;
 
@@ -2209,6 +2701,8 @@ final class InvoiceController extends Controller
             ]);
         } catch (\Throwable $e) { /* never fail the issue over its own audit row */ }
 
+        // Split billing: each guardian is told their own copy and share; the family message only when not split.
+        if (\App\Support\SplitInvoiceCopy::notifyIssued((int) $invoiceId) === 0)
         foreach (DB::table('guardians')->where('family_id', $invoice->family_id)->pluck('user_id') as $gid) {
             try {
                 \App\Support\Notify::write([
@@ -2284,7 +2778,7 @@ final class InvoiceController extends Controller
             'balance_due' => 0,
             'status' => 'void',
             'notes' => trim((string) ($invoice->notes ?? '')
-                . ' [voided ' . now()->toDateString()
+                . ' [voided ' . \App\Support\AgencyTime::today()
                 . (($data['reason'] ?? '') !== '' ? ': ' . $data['reason'] : '') . ']'),
             'updated_at' => now(),
         ]);
@@ -2453,6 +2947,7 @@ final class InvoiceController extends Controller
                     $name = trim(($g->first_name ?? '') . ' ' . ($g->last_name ?? ''));
                     \App\Services\AgencyMailer::forAgency($agencyId)->html($letters['parent'],
                         function ($m) use ($g, $name, $letters) {
+                            \App\Support\MailScope::billing($m);   // reaches a billing guardian whose invite is not accepted yet (2026-11-06)
                             $m->to($g->email, $name ?: null)->subject($letters['subject_parent']);
                         });
                 } catch (\Throwable $inner) { report($inner); }
@@ -2519,20 +3014,19 @@ final class InvoiceController extends Controller
 
         $centreId = DB::table('families')->where('id', $familyId)->value('centre_id');
         abort_unless($centreId, 404);
-        $agencyId = DB::table('centres')->where('id', $centreId)->value('agency_id');
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
 
-        $ok = DB::table('role_assignments')
-            ->where('user_id', $user->id)
-            ->where('active', true)
-            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
-            ->where(function ($q) use ($centreId, $agencyId) {
-                $q->where('centre_id', $centreId)
-                  ->orWhereIn('centre_id', DB::table('centres')->where('agency_id', $agencyId)->pluck('id'))
-                  ->orWhereNull('centre_id');
-            })
-            ->exists();
-
-        abort_unless($ok, 403);
+        /* THE FAMILY'S OWN AGENCY, AND ONLY ITS OWN CENTRES (2026-11-05 leak sweep). This asked
+           "admin or director ANYWHERE, with a row at this agency's centres OR any agency-level row" -
+           `orWhereNull('centre_id')` matched every agency_admin row of every agency, so an admin of
+           one agency could void, issue, re-line and email receipts on another agency's invoices, and
+           a director of one centre could do it for every centre. Now: the family is in the caller's
+           active agency, the caller is admin/director THERE, and a director only at their centres.
+           Replayed all 13 real successful writes on these routes: 13 still allowed. */
+        $active = (int) $this->resolveAgencyId($request);
+        abort_unless($active > 0 && $active === $agencyId, 403);
+        abort_unless(array_intersect(\App\Support\AgencyRole::names($request), ['agency_admin', 'centre_director', 'platform_admin']), 403);
+        abort_unless(\App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, $agencyId), $centreId), 403);
     }
 
     public function recordPayment(Request $request, int $invoiceId): JsonResponse
@@ -2643,44 +3137,15 @@ final class InvoiceController extends Controller
                 'updated_at' => now(),
             ]);
 
-            // v22p48: notify the family + recording staff member when an
-            // invoice is paid off. Insert one notifications row per guardian
-            // on the family + a single row for the recording user as a
-            // receipt acknowledgement.
+            // v22p48: notify the family + recording staff member when an invoice is paid off. One shared
+            // path (App\Support\PaidMail::paidInFullNotice) so a payment mirrored from a partner says the same thing.
             if ($newStatus === 'paid') {
-                $guardianIds = DB::table('guardians')->where('family_id', $invoice->family_id)->pluck('user_id')->all();
-                $rows = [];
-                $title = 'Invoice ' . $invoice->invoice_number . ' paid in full';
-                $bodyPreview = '$' . number_format((float) $invoice->total, 2) . ' · receipt available in your billing tab';
-                $now = now();
-                foreach ($guardianIds as $gid) {
-                    $rows[] = [
-                        'user_id' => (int) $gid,
-                        'type' => 'payment',
-                        'title' => $title,
-                        'body' => $bodyPreview,
-                        'data' => json_encode([
-                            'url' => '/dashboard.html#billing',
-                            'invoice_id' => (int) $invoiceId,
-                        ]),
-                        'created_at' => $now,
-                    ];
-                }
-                // Also notify the staff member who recorded the payment
-                $rows[] = [
-                    'user_id' => (int) $request->user()->id,
-                    'type' => 'invoice',
-                    'title' => 'Payment recorded · ' . $invoice->invoice_number,
-                    'body' => 'Marked paid in full. ' . $bodyPreview,
-                    'data' => json_encode([
-                        'url' => '/dashboard.html#admin-billing',
-                        'invoice_id' => (int) $invoiceId,
-                    ]),
-                    'created_at' => $now,
-                ];
-                if (!empty($rows)) \App\Support\Notify::write($rows);
+                \App\Support\PaidMail::paidInFullNotice($invoice, (int) $invoiceId, (int) $request->user()->id);
             }
         });
+
+        // The payer gets the receipt, and the invoice stamped PAID once it is settled (App\Support\PaidMail).
+        \App\Support\PaidMail::afterLatest((int) $invoiceId);
 
         return response()->json(['message' => 'Payment recorded'], 201);
     }
@@ -2699,7 +3164,7 @@ final class InvoiceController extends Controller
         }
 
         // Same maths as the invoice run (SubsidyAmount), for this month.
-        $sa = \App\Support\SubsidyAmount::forChildMonth($childId, now()->toDateString(), now()->startOfMonth()->toDateString());
+        $sa = \App\Support\SubsidyAmount::forChildMonth($childId, \App\Support\AgencyTime::today(), \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString());
 
         $subtotal = (float) $enrollment->monthly_fee;
         $subsidyAmount = $sa ? min($sa['amount'], $subtotal) : 0;
@@ -2708,8 +3173,8 @@ final class InvoiceController extends Controller
         return [
             'id' => null,
             'invoice_number' => 'Estimated — '.now()->format('F Y'),
-            'issue_date' => now()->startOfMonth()->toDateString(),
-            'due_date' => now()->endOfMonth()->toDateString(),
+            'issue_date' => \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString(),
+            'due_date' => \App\Support\AgencyTime::todayDate()->endOfMonth()->toDateString(),
             'subtotal' => $subtotal,
             'subsidy_amount' => $subsidyAmount,
             'total' => $total,

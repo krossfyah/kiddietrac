@@ -47,7 +47,8 @@
   }
   function setPins(ids) { try { localStorage.setItem(userKey(), JSON.stringify(ids)); } catch (e) {} }
 
-  function go(hash) { window.location.hash = '#' + hash; }
+  // ✨ Log a moment opens the New observation form as a popup over the current screen (2026-11-09, KT.openObservation).
+  function go(hash) { if (hash === 'observation-new' && window.KT && KT.openObservation) { KT.openObservation({}); return; } window.location.hash = '#' + hash; }
 
   var menuOpen = false;
 
@@ -130,15 +131,14 @@
     menuOpen = true;
     document.getElementById('kt-quickadd-fab').classList.add('is-open');
 
-    setTimeout(function () {
-      document.addEventListener('click', outsideClose);
-    }, 30);
+    // Capture-phase pointerdown (2026-11-05): a bubbling click never arrived from a button that stops its click.
+    document.addEventListener('pointerdown', outsideClose, true);
   }
 
   function outsideClose(e) {
     var menu = document.getElementById('kt-quickadd-menu');
     var fab = document.getElementById('kt-quickadd-fab');
-    if (menu && !menu.contains(e.target) && e.target !== fab) closeMenu();
+    if (menu && !menu.contains(e.target) && !(fab && fab.contains(e.target))) closeMenu();
   }
 
   function closeMenu() {
@@ -147,7 +147,7 @@
     menuOpen = false;
     var fab = document.getElementById('kt-quickadd-fab');
     if (fab) fab.classList.remove('is-open');
-    document.removeEventListener('click', outsideClose);
+    document.removeEventListener('pointerdown', outsideClose, true);
   }
 
   function openCustomizer() {

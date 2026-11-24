@@ -13,7 +13,8 @@
      KT.mediaViewer.open(items, index, opts)
        items  [{ url, type: 'image'|'video', caption?, meta?, poster? }]
        index  the one that was tapped
-       opts   { download: function (item, button) }  — adds a Download button
+       opts   { download: function (item, button) }  — a screen's own download; without it the viewer's own
+              (download() below) is used; download: false leaves the button off
 
    ‹ › buttons, the keyboard's ← → and Esc, and a swipe on a phone. A counter
    ("3 / 12") when there is more than one. Videos play in place and stop when
@@ -39,6 +40,76 @@
     b.textContent = label;
     b.style.cssText = css;
     return b;
+  }
+
+  /* EVERY VIEWER CAN DOWNLOAD (2026-11-13, Anthony: "in chat messages when there is an image shared etc allow it to
+     be downloaded as well"). Only the parent's gallery and chat passed a download function, so a photo opened from a
+     staff chat, the chat window, a support ticket, a lesson plan or a child's feed could be looked at but not kept.
+     This is the parent app's download (screen-parent.js downloadPhoto), here once, and the viewer's Download button
+     uses it unless a screen passes its own (opts.download) or turns it off (opts.download === false):
+       1. fetch the file (same origin, or storage that allows it), else
+       2. through the API's media proxy (/media/download: signed in, image only, private hosts refused), then
+       3. phones: the share sheet ("Save image"); the Android app without one opens it in the browser to save;
+          computers: an ordinary file download. A video the proxy cannot carry opens in a new tab instead. */
+  function nativeApp() {
+    try { var C = w.Capacitor; if (C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative)) { return true; } } catch (e) {}
+    return d.documentElement.classList.contains('kt-native');
+  }
+  function openExternal(url) {
+    try { var C = w.Capacitor; if (C && C.Plugins && C.Plugins.Browser && C.Plugins.Browser.open) { C.Plugins.Browser.open({ url: url }); return true; } } catch (e) {}
+    if (!nativeApp()) { try { if (w.open(url, '_blank', 'noopener')) { return true; } } catch (e) {} }
+    return false;
+  }
+  function fileName(it, type) {
+    var base = clean(it.caption) || '';
+    if (!base) { try { base = decodeURIComponent(String(it.url).split('?')[0].split('/').pop() || '').replace(/\.[a-z0-9]{2,5}$/i, ''); } catch (e) {} }
+    base = ('kiddietrac-' + (base || (isVideo(it) ? 'video' : 'photo'))).replace(/[^a-z0-9]+/gi, '-').slice(0, 52).replace(/-+$/, '');
+    var ext = /png/.test(type) ? 'png' : /webp/.test(type) ? 'webp' : /gif/.test(type) ? 'gif' : /mp4/.test(type) ? 'mp4'
+      : /quicktime/.test(type) ? 'mov' : /webm/.test(type) ? 'webm' : (isVideo(it) ? 'mp4' : 'jpg');
+    return base + '.' + ext;
+  }
+  function download(it, button) {
+    if (!it || !it.url) { return; }
+    var url = it.url, native = nativeApp(), phone = native || !!(w.matchMedia && w.matchMedia('(pointer: coarse)').matches);
+    var old = button ? button.textContent : null;
+    if (button) { button.textContent = 'Preparing…'; button.disabled = true; }
+    function reset() { if (button) { button.textContent = old; button.disabled = false; } }
+    function toast(icon, title, body, colour) { try { if (w.KT && w.KT.toast) { w.KT.toast(icon, title, body, colour); } } catch (e) {} }
+    function external() {
+      reset();
+      var ok = openExternal(url);
+      if (ok && native) { toast('⬇️', 'Opened in the browser', 'Press and hold the photo, then tap Save.', '#159FB4'); }
+      else if (!ok) { toast('⚠️', 'Could not download it', 'Please try again in a moment.', '#B45309'); }
+    }
+    function save(b) {
+      var type = b.type || (isVideo(it) ? 'video/mp4' : 'image/jpeg'), name = fileName(it, type);
+      try {
+        if (phone && navigator.canShare) {
+          var f = new File([b], name, { type: type });
+          if (navigator.canShare({ files: [f] })) { return navigator.share({ files: [f], title: name }).then(reset, reset); }
+        }
+      } catch (e) {}
+      if (native) { external(); return; }
+      var u = URL.createObjectURL(b), a = d.createElement('a');
+      a.href = u; a.download = name; a.style.display = 'none';
+      d.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(u); if (a.parentNode) { a.parentNode.removeChild(a); } }, 4000);
+      reset();
+      toast('⬇️', 'Downloaded', name, '#159FB4');
+    }
+    function get(u, opt) { return fetch(u, opt).then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.blob(); }); }
+    function viaProxy() {
+      if (isVideo(it)) { return Promise.reject(new Error('video')); }
+      var t = ''; try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''; } catch (e) {}
+      var base = (w.KT && w.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var abs = url; try { abs = new URL(url, location.href).href; } catch (e) {}
+      return get(base + '/media/download?url=' + encodeURIComponent(abs) + '&name=' + encodeURIComponent(fileName(it, '')),
+        { headers: { Authorization: 'Bearer ' + t, Accept: 'image/*' } });
+    }
+    var same = false; try { same = new URL(url, location.href).origin === location.origin; } catch (e) {}
+    get(url, same ? { credentials: 'include' } : { mode: 'cors' }).then(save)
+      .catch(function () { return viaProxy().then(save); })
+      .catch(external);
   }
 
   function open(items, index, opts) {
@@ -70,10 +141,11 @@
     bar.style.cssText = 'display:flex;gap:10px;margin-top:12px;align-items:center;';
     ov.appendChild(bar);
     var dl = null;
-    if (typeof opts.download === 'function') {
+    var dlFn = opts.download === false ? null : (typeof opts.download === 'function' ? opts.download : download);
+    if (dlFn) {
       dl = btn('⬇️  Download', 'Download',
         'height:36px;background:#159FB4;color:#fff;border:0;border-radius:18px;padding:0 18px;font-weight:700;font-size:13.5px;cursor:pointer;');
-      dl.addEventListener('click', function (e) { e.stopPropagation(); opts.download(items[i], dl); });
+      dl.addEventListener('click', function (e) { e.stopPropagation(); dlFn(items[i], dl); });
       bar.appendChild(dl);
     }
 
@@ -95,6 +167,11 @@
     if (many) { ov.appendChild(prev); ov.appendChild(next); }
 
     var cur = null;
+    /* Pinch / double-tap / Ctrl+wheel to zoom a photo (2026-10-20). Zoomed in, a swipe pans
+       the photo instead of changing it. */
+    var pz = (w.KT && w.KT.pinchZoom)
+      ? w.KT.pinchZoom(stage, { mode: 'size', target: function () { return stage.querySelector('img'); }, controlHost: ov })
+      : null;
     function stopCurrent() {
       if (cur && cur.tagName === 'VIDEO') { try { cur.pause(); } catch (e) {} }
     }
@@ -126,8 +203,10 @@
       var c = clean(it.caption), m = it.meta ? String(it.meta) : '';
       cap.textContent = c && m ? c + ' · ' + m : (c || m);
       count.textContent = (i + 1) + ' / ' + items.length;
-      if (dl) { dl.style.display = isVideo(it) ? 'none' : ''; }
+      if (dl) { dl.style.display = isVideo(it) && dlFn !== download ? 'none' : ''; }
       if (many) { preload(i + 1); preload(i - 1); }
+      // Each photo opens at 100%; a video has nothing to zoom.
+      if (pz) { pz.reset(); if (pz.control) { pz.control.style.display = isVideo(it) ? 'none' : ''; } }
     }
 
     function onKey(e) {
@@ -161,6 +240,7 @@
     }, { passive: true });
     ov.addEventListener('touchend', function (e) {
       if (!many) { return; }
+      if (pz && pz.busy()) { return; }
       var t = e.changedTouches && e.changedTouches[0]; if (!t) { return; }
       var dx = t.clientX - sx, dy = t.clientY - sy;
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - st < 800) {
@@ -212,5 +292,5 @@
     fromElements(scrollRoot(img), 'img[data-kt-media-group="' + g.replace(/"/g, '') + '"]', img);
   }, true);
 
-  w.KT.mediaViewer = { open: open, fromElements: fromElements };
+  w.KT.mediaViewer = { open: open, fromElements: fromElements, download: download };
 })(window, document);

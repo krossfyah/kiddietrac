@@ -28,7 +28,7 @@ class ManualCheckinReminderCommand extends Command
 {
     protected $signature = 'kiddietrac:manual-checkin-reminders {--test= : send one white-labelled sample to this address and exit} {--force : ignore the weekly cadence gate}';
 
-    protected $description = 'Nudge parents who keep using manual (staff) check-in instead of the QR barcode.';
+    protected $description = 'Nudge parents who keep using manual (staff) check-in instead of One-Tap (QR contactless check-in).';
 
     public function handle(): int
     {
@@ -84,6 +84,10 @@ class ManualCheckinReminderCommand extends Command
                 ->join('centres as lce', 'lce.id', '=', 'lf.centre_id')
                 ->tap(fn ($q) => \App\Support\Live::centres(\App\Support\Live::families(\App\Support\Live::enrolledChildren($q, 'c'), 'lf'), 'lce'))
                 ->whereIn('ce.by_user_id', $staffIds)
+                /* Check-INS only (2026-11-05). Counting every event made each staff-done
+                   visit two "manual check-ins", and a child signed in and out twice in a day
+                   four - one busy day crossed the weekly threshold on its own. */
+                ->where('ce.event_type', 'check_in')
                 ->where('ce.occurred_at', '>=', $weekAgo)
                 ->whereNull('c.deleted_at')
                 ->groupBy('c.family_id')
@@ -135,20 +139,20 @@ class ManualCheckinReminderCommand extends Command
         $child = count($names) === 1 ? 'your child' : 'your children';
 
         $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">Hi ' . $first . ' 👋</p>'
-            . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">We noticed <strong>' . $kidList . '</strong> ' . (count($names) === 1 ? 'was' : 'were') . ' checked in or out <strong>manually ' . $manualCount . ' times</strong> this week, rather than with the <strong>QR barcode</strong> at drop-off and pick-up.</p>'
-            . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">No worries at all — but a quick tip! Scanning the QR yourself takes a couple of seconds and it:</p>'
+            . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">We noticed <strong>' . $kidList . '</strong> ' . (count($names) === 1 ? 'was' : 'were') . ' checked in or out <strong>manually ' . $manualCount . ' times</strong> this week, rather than with <strong>One-Tap</strong>, the QR code at the door, at drop-off and pick-up.</p>'
+            . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">No worries at all — but a quick tip! Using One-Tap yourself takes a couple of seconds and it:</p>'
             . '<ul style="margin:0 0 16px;padding-left:20px;font-size:14.5px;line-height:1.7;color:#334155;">'
             . '<li>records the <strong>exact</strong> time ' . $child . ' arrived and left,</li>'
             . '<li>logs <strong>who</strong> dropped off and collected ' . $them . ' — an important safety &amp; compliance record, and</li>'
             . '<li>saves our educators time so they can focus on ' . $them . '.</li>'
             . '</ul>'
-            . '<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Just open the KiddieTrac app and tap <strong>Check-in QR</strong> at the bottom, then scan the code at the door. That\'s it! 🎉</p>'
+            . '<p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Just open the KiddieTrac app and tap <strong>One-Tap</strong> at the bottom, then scan the code at the door. That\'s it! 🎉</p>'
             . '<p style="margin:16px 0 0;font-size:13px;color:#94A3B8;">Thanks for helping us keep ' . $child . '\'s records accurate. Questions? Just reply to this email.</p>';
 
         $html = EmailTemplate::wrap($agencyId, $body, [
             'eyebrow'   => 'A QUICK TIP',
             'title'     => $agencyName,
-            'subtitle'  => 'The fast, secure QR check-in',
+            'subtitle'  => 'One-Tap: fast, secure, contactless check-in',
             'preheader' => 'A couple of seconds at the door keeps ' . strip_tags($child) . '\'s arrival records accurate.',
         ]);
         $subject = 'A quick tip on checking ' . strip_tags($kidList) . ' in & out';

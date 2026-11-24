@@ -138,7 +138,7 @@ class TimeOffRemindersController extends Controller
         if (! $mine) {
             $sample = true;
             $mine = [(object) ['id' => 0, 'user_id' => 0, 'staff_name' => 'Sample Educator', 'request_type' => 'vacation',
-                'start_at' => now()->addDays(10)->toDateString(), 'end_at' => now()->addDays(12)->toDateString(), 'all_day' => 1,
+                'start_at' => \App\Support\AgencyTime::todayDate()->addDays(10)->toDateString(), 'end_at' => \App\Support\AgencyTime::todayDate()->addDays(12)->toDateString(), 'all_day' => 1,
                 'start_time' => null, 'end_time' => null, 'reason' => 'Family trip', 'created_at' => now()->subDays(2)->toDateTimeString()]];
         }
         [$subject, $html] = TimeOffReminders::digest($agencyId, $me, $mine, $test || $sample);

@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Dompdf\Options;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -44,11 +44,11 @@ final class PdfController extends Controller
            payments were counted before -- a receipt must only show money that stayed paid. */
         $guardianId = (int) $request->query('guardian_id', 0);
         $asGuardian = \App\Support\BillingSplit::guardianFor((int) $request->user()->id, $familyId);
-        $isStaff = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
+        $isStaff = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('active', 1)
             ->whereIn('role', ['platform_admin', 'agency_admin', 'centre_director', 'educator'])->exists();
         if ($asGuardian && ! $isStaff) { $guardianId = $asGuardian; }
         $payer = null;
-        if ($guardianId && \App\Support\BillingSplit::isSplit($familyId)) {
+        if ($guardianId && \App\Support\BillingSplit::hadSplit($familyId, $start->toDateTimeString(), $end->toDateTimeString())) {
             abort_unless(DB::table('guardians')->where('id', $guardianId)->where('family_id', $familyId)->exists(), 404);
             $payer = collect(\App\Support\BillingSplit::payers($familyId))->firstWhere('guardian_id', $guardianId)
                 ?? ['name' => (string) DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')->where('g.id', $guardianId)->value(DB::raw("TRIM(CONCAT(u.first_name,' ',u.last_name))"))];
@@ -80,6 +80,7 @@ final class PdfController extends Controller
             'total' => $total,
             'children' => $children,
             'payerName' => $payer['name'] ?? null,
+            'us' => strtoupper((string) ($family->country ?? '')) === 'US' || strtoupper((string) ($agency->country ?? '')) === 'US',
         ])->render();
 
         return $this->renderPdf($html, sprintf('Childcare-Receipt-%s%s-%d.pdf', $this->slug((string) $family->family_name),
@@ -159,7 +160,7 @@ final class PdfController extends Controller
         $user = $request->user();
         abort_unless($user, 401);
 
-        $isPlatformAdmin = DB::table('role_assignments')
+        $isPlatformAdmin = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $user->id)
             ->where('role', 'platform_admin')
             ->where('active', true)

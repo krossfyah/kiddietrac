@@ -73,7 +73,7 @@ class IncidentReportFiler
                 'audience' => 'parent',
             ])->render();
 
-            $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+            $dompdf = new \App\Support\KtDompdf(['isRemoteEnabled' => true]);
             $dompdf->loadHtml($html, 'UTF-8');
             $dompdf->setPaper('letter', 'portrait');
             $dompdf->render();

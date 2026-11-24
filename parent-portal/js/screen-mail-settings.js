@@ -69,7 +69,7 @@
       + '.ms-card{background:#fff;border:1px solid #E7EBF0;border-radius:16px;padding:22px 24px;box-shadow:0 1px 4px rgba(15,23,42,.05);}'
       + '</style>'
       + '<div style="padding:24px;max-width:720px;margin:0 auto;color:#0F172A;">'
-      + '<h2 style="margin:0 0 4px;font-size:21px;font-weight:800;">✉️ Email settings</h2>'
+      + '<h2 style="margin:0 0 4px;font-size:21px;font-weight:800;">📬 Mail settings</h2>'
       + '<div style="color:#64748B;font-size:13px;margin-bottom:18px;line-height:1.55;">How KiddieTrac sends outbound email. Microsoft Graph gives inbox delivery (SPF/DKIM/DMARC) + speed; sendmail is the automatic fallback so email never goes down.</div>'
 
       + '<div class="ms-card">'
@@ -99,6 +99,7 @@
       + '</div>'
       + '</div>'
 
+      + microsoftCard(d.microsoft || {}, field)
       + googleCard(d.google_gmail || {}, field)
 
       // Test panel
@@ -133,6 +134,7 @@
       }).catch(function (e) { out.style.color = '#B91C1C'; out.textContent = '✗ ' + e.message; });
     };
 
+    wireMicrosoft(container);
     wireGoogle(container);
 
     document.getElementById('ms-test').onclick = function () {
@@ -154,6 +156,74 @@
      sender is a Gmail account signed in through Google, and Google needs this client to
      let anyone sign in. Anthony: "make sure settings can be saved in the settings through
      the gui" — it was in the server's .env, where nobody could see or change it. */
+  /* MICROSOFT 365 SIGN-IN (2026-10-26, Anthony: "configurable ... and not hard coded in the env"). The Microsoft app
+     behind "Sign in with Microsoft" when connecting a mailbox (Email, Sales email) and on the login page. */
+  function microsoftCard(ms, field) {
+    var lc = null; try { lc = ms.last_check ? JSON.parse(ms.last_check) : null; } catch (e) {}
+    var status = ms.source === 'none' ? '<span style="color:#B45309;font-weight:700;">Not set up: connecting a Microsoft 365 mailbox will not work yet.</span>'
+      : ms.source === 'env' ? '<span style="color:#B45309;font-weight:700;">Using the server file (.env), which cannot be checked from here. Save the app below to manage it here.</span>'
+      : (lc ? '<span style="color:' + (lc.ok ? '#047857' : '#B91C1C') + ';font-weight:700;">' + (lc.ok ? '✓ ' : '✗ ') + esc(lc.result) + '</span><span style="color:#94A3B8;"> · checked ' + esc(lc.at || '') + '</span>' : '');
+    return '<div class="ms-card" style="margin-top:16px;">'
+      + '<div class="ms-sec" style="margin-bottom:6px;">🟦 Microsoft 365 sign-in (mailboxes and “Sign in with Microsoft”)</div>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:14px;">The Microsoft app people sign in through when they connect a mailbox in <b>Email</b> or <b>Sales email</b>, and for <b>Sign in with Microsoft</b> on the login page. '
+      + 'From Microsoft Entra → App registrations → your app. It needs the delegated permissions <b>Mail.ReadWrite</b>, <b>Mail.ReadWrite.Shared</b>, <b>offline_access</b> and <b>User.Read</b>.</div>'
+      + field('Application (client) ID', '<input id="mso-id" class="ms-input" value="' + esc(ms.client_id || '') + '" placeholder="00000000-0000-0000-0000-000000000000" autocomplete="off" spellcheck="false">', 'On the app’s Overview page. Not the secret, and not the Object ID.')
+      + field('Client secret value', '<input id="mso-secret" type="password" autocomplete="new-password" class="ms-input" placeholder="' + (ms.secret_set ? '•••••••• (unchanged)' : 'Paste the secret Value') + '">',
+          ms.secret_set ? 'Set — leave blank to keep the current secret.' : 'Certificates & secrets → the secret’s Value (not its Secret ID).')
+      /* No Tenant box (2026-11-05): a directory ID typed here locked every other organisation out of connecting its
+         mailbox. Sign-in now always accepts any Microsoft account. */
+      + '<div style="font-size:12.5px;color:#475569;line-height:1.5;margin:-2px 0 12px;">Anyone can connect: any work, school or personal Microsoft account (Microsoft 365, Outlook.com, Hotmail) signs in with this one app. Nobody connecting a mailbox needs an ID or a secret.</div>'
+      + field('Redirect URI (add under the app’s Authentication → Web)',
+          '<div style="display:flex;gap:8px;"><input id="mso-redirect" class="ms-input" readonly value="' + esc(ms.redirect_uri || '') + '" style="background:#F8FAFC;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;">'
+          + '<button id="mso-copy" type="button" style="background:#fff;border:1.5px solid #CBD5E1;border-radius:10px;padding:0 14px;font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;">Copy</button></div>')
+      + '<div style="font-size:12.5px;margin:-4px 0 12px;">' + status + '</div>'
+      + '<div style="padding-top:14px;border-top:1px solid #EEF2F6;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">'
+      + '<button id="mso-save" type="button" data-kt-always-save="1" style="background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);color:#fff;border:0;border-radius:10px;padding:9px 20px;font-weight:800;font-size:13px;cursor:pointer;">Save Microsoft settings</button>'
+      + (ms.source === 'settings' ? '<button id="mso-check" type="button" style="background:#fff;border:1.5px solid #CBD5E1;border-radius:10px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;">Check with Microsoft</button>'
+          + '<button id="mso-clear" type="button" style="background:none;border:0;color:#B91C1C;font-weight:700;font-size:12.5px;cursor:pointer;margin-left:auto;">Remove</button>' : '')
+      + '<span id="mso-out" style="font-size:13px;font-weight:700;"></span>'
+      + '</div></div>';
+  }
+
+  function wireMicrosoft(container) {
+    var out = document.getElementById('mso-out');
+    if (!out) return;
+    function say(ok, t) { out.style.color = ok == null ? '#64748B' : (ok ? '#047857' : '#B91C1C'); out.textContent = t; }
+    function result(r) {
+      var c = r && r.check;
+      if (c) { say(c.ok, (c.ok ? '✓ ' : '✗ ') + c.result); } else { say(true, '✓ Saved.'); }
+      setTimeout(function () { render(container); }, c && !c.ok ? 6000 : 1600);
+    }
+    document.getElementById('mso-copy').onclick = function () {
+      var i = document.getElementById('mso-redirect');
+      try { navigator.clipboard.writeText(i.value).then(function () { say(true, '✓ Copied.'); }); }
+      catch (e) { i.select(); try { document.execCommand('copy'); say(true, '✓ Copied.'); } catch (_e) {} }
+    };
+    document.getElementById('mso-save').onclick = function () {
+      var body = { client_id: document.getElementById('mso-id').value.trim() };
+      var sec = document.getElementById('mso-secret').value.trim();
+      if (sec) body.client_secret = sec;
+      say(null, 'Saving and checking with Microsoft…');
+      mapi('/platform/mail-settings/microsoft', 'PUT', body).then(result).catch(function (e) { say(false, '✗ ' + e.message); });
+    };
+    var chk = document.getElementById('mso-check');
+    if (chk) chk.onclick = function () {
+      say(null, 'Checking…');
+      mapi('/platform/mail-settings/microsoft/check', 'POST', {}).then(result).catch(function (e) { say(false, '✗ ' + e.message); });
+    };
+    var clr = document.getElementById('mso-clear');
+    if (clr) clr.onclick = function () {
+      var go = (window.KT && KT.confirm)
+        ? KT.confirm({ title: 'Remove the Microsoft sign-in app?', description: 'Mailbox sign-in and “Sign in with Microsoft” go back to the server file (.env). Mailboxes already connected keep working until their sign-in needs renewing.', okLabel: 'Remove' })
+        : Promise.resolve(false);
+      go.then(function (yes) {
+        if (!yes) return;
+        mapi('/platform/mail-settings/microsoft', 'PUT', { clear: true }).then(function () { say(true, '✓ Removed.'); setTimeout(function () { render(container); }, 900); })
+          .catch(function (e) { say(false, '✗ ' + e.message); });
+      });
+    };
+  }
+
   function googleCard(gg, field) {
     var lc = null; try { lc = gg.last_check ? JSON.parse(gg.last_check) : null; } catch (e) {}
     var status = !gg.client_id

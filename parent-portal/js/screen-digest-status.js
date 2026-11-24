@@ -31,7 +31,11 @@
   }
 
   async function renderDigestStatus(main, ctx) {
-    Dom.clear(main);
+    /* THE BANNER STAYS (2026-10-21): this screen draws into its own root, created once, so a
+       tab switch or refresh never wipes #appMain and the banner the shell put above it. */
+    let root = main.querySelector('#ds-root');
+    if (!root) { Dom.clear(main); root = document.createElement('div'); root.id = 'ds-root'; root.className = 'kt-section'; main.appendChild(root); }
+    Dom.clear(root);
 
     // Skeleton
     const skeleton = document.createElement('div');
@@ -43,7 +47,7 @@
         </div>
         <div style="height:300px; background:var(--kt-bg); border-radius:14px;"></div>
       </div>`;
-    main.appendChild(skeleton);
+    root.appendChild(skeleton);
 
     // Allow ?date=YYYY-MM-DD in hash
     const params = ctx?.params || {};
@@ -53,14 +57,14 @@
     try {
       data = await Api.get(`/director/digest-status?date=${encodeURIComponent(date)}`);
     } catch (e) {
-      Dom.clear(main);
-      main.appendChild(emptyState('!', 'Could not load digest status', e.message || 'Server error'));
+      Dom.clear(root);
+      root.appendChild(emptyState('!', 'Could not load digest status', e.message || 'Server error'));
       return;
     }
 
-    Dom.clear(main);
+    Dom.clear(root);
     const wrap = document.createElement('div');
-    main.appendChild(wrap);
+    root.appendChild(wrap);
 
     // Header
     wrap.insertAdjacentHTML('beforeend', `
@@ -80,7 +84,10 @@
     wrap.querySelector('#kt-digest-date')?.addEventListener('change', (e) => {
       window.location.hash = '#digest-status?date=' + encodeURIComponent(e.target.value);
     });
-    wrap.querySelector('#kt-digest-refresh')?.addEventListener('click', () => renderDigestStatus(main, ctx));
+    // Through the shell, so its header is folded into the banner again (never a second banner).
+    wrap.querySelector('#kt-digest-refresh')?.addEventListener('click', () => {
+      if (window.KT && KT.Shell && KT.Shell.renderScreen) { KT.Shell.renderScreen(); } else { renderDigestStatus(main, ctx); }
+    });
 
     // Summary tiles
     const s = data.summary;

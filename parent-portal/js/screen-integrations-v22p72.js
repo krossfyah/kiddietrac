@@ -138,6 +138,96 @@
     };
   }
 
+  /* LINK EMAILS TO PEOPLE (2026-11-07, Anthony: "allow agency mailboxes that are configured in email client to link
+     emails to parents, educators and any other user's accounts for tracking purposes - this can be a setting").
+     Off until an admin turns it on; saves on every change (App\Support\PersonMail, GET/PUT /admin/email-link-settings).
+     Admins only - the request fails for a director and the card is never drawn. */
+  async function emailLinkCard(host) {
+    var r;
+    try { r = await api().get('/admin/email-link-settings'); } catch (e) { return; }
+    if (!r || !r.settings || !host || !host.isConnected) return;
+    var s = r.settings;
+    var card = document.createElement('div');
+    card.className = 'kt-card';
+    card.id = 'es-elink';
+    // Saves itself: kt-live's redraw after the PUT would wipe the "Saved" line (and any unsaved field on this form).
+    card.setAttribute('data-kt-self-live', '1');
+    card.style.cssText = 'max-width:680px;margin:18px 0;';
+    var boxes = (r.mailboxes || []);
+    var boxNote = boxes.length
+      ? 'Agency mailboxes: ' + boxes.map(function (b) { return esc(b.email) + (b.auto ? '' : ' <span style="color:#94A3B8;">(by hand only)</span>'); }).join(', ') + '.'
+      : 'No agency mailbox is connected yet - connect one in Email.';
+    function chk(id, on, label) {
+      return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#0F172A;cursor:pointer;margin:0;">'
+        + '<input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + ' style="width:16px;height:16px;margin:0;"> ' + label + '</label>';
+    }
+    card.innerHTML =
+      '<label style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;margin:0;">'
+      + '<span><span style="display:block;font-size:14px;font-weight:700;color:#0F172A;">🔗 Link emails to people</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:3px;">File emails from this agency\'s mailboxes on the record of the parent, staff member or contact they are with, for an audit trail. Only people in this agency; every link and unlink is in the audit log.</span></span>'
+      + '<input type="checkbox" id="el-on"' + (s.enabled ? ' checked' : '') + ' style="width:20px;height:20px;flex:0 0 auto;margin:0;"></label>'
+      + '<div id="el-opts" style="display:' + (s.enabled ? 'flex' : 'none') + ';flex-direction:column;gap:9px;margin-top:14px;padding-top:12px;border-top:1px solid #E2E8F0;">'
+      + chk('el-auto', s.auto, 'Link automatically by email address <span style="color:#64748B;">(otherwise only with 🔗 Link to person)</span>')
+      + chk('el-sent', s.sent, 'Include emails the agency sends <span style="color:#64748B;">(Sent Items)</span>')
+      + '<div style="display:flex;flex-wrap:wrap;gap:14px;">'
+      + chk('el-k-guardian', s.kinds.indexOf('guardian') >= 0, 'Parents')
+      + chk('el-k-staff', s.kinds.indexOf('staff') >= 0, 'Staff')
+      + chk('el-k-contact', s.kinds.indexOf('contact') >= 0, 'Contacts')
+      + '</div>'
+      + '<div style="font-size:12px;color:#64748B;line-height:1.45;">' + boxNote + ' Automatic linking works with Microsoft 365 mailboxes; any mailbox can link by hand.</div>'
+      /* Who sees them (2026-11-06): roles, plus named admins/directors who see the whole agency. Seeing only -
+         linking and unlinking stay with agency admins and the mailbox's owner. */
+      + '<div style="margin-top:6px;padding-top:10px;border-top:1px solid #E2E8F0;">'
+      + '<div style="font-size:13px;font-weight:700;color:#0F172A;">Who can see linked emails</div>'
+      + '<div style="font-size:12px;color:#64748B;margin:2px 0 8px;line-height:1.45;">On the ✉️ Emails tab of a person\'s record and the family record. Seeing only: linking and unlinking stay with agency admins and the mailbox\'s owner.</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:14px;">'
+      + chk('el-v-agency_admin', (s.view_roles || ['agency_admin']).indexOf('agency_admin') >= 0, 'Agency admins')
+      + chk('el-v-centre_director', (s.view_roles || []).indexOf('centre_director') >= 0, 'Centre directors <span style="color:#64748B;">(their own centres)</span>')
+      + '</div>'
+      + ((r.viewers || []).length
+        ? '<div style="font-size:12.5px;font-weight:700;color:#334155;margin:10px 0 6px;">Also these people <span style="font-weight:400;color:#64748B;">(they see every linked email in the agency)</span></div>'
+          + '<div id="el-vu" style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto;">'
+          + r.viewers.map(function (v) {
+              return chk('el-vu-' + v.id, (s.view_users || []).indexOf(v.id) >= 0,
+                esc(v.name) + ' <span style="color:#64748B;">(' + (v.role === 'agency_admin' ? 'admin' : 'director') + ')</span>');
+            }).join('') + '</div>'
+        : '')
+      + '</div>'
+      + '</div>'
+      + '<div id="el-out" style="font-size:12.5px;margin-top:8px;min-height:16px;"></div>';
+    /* Into the Mailbox tab (2026-11-06). This card arrives after its own fetch, by which time applyEmailTabs has
+       already moved every card into its tab - so appended to the screen it sat outside them all and showed under
+       every tab, Closures and Birthdays included. */
+    var mbPane = host.querySelector('[data-es-pane="mailbox"]');
+    (mbPane || host).appendChild(card);
+    var out = card.querySelector('#el-out');
+    var busy = false;
+    function val() {
+      var kinds = ['guardian', 'staff', 'contact'].filter(function (k) { return card.querySelector('#el-k-' + k).checked; });
+      var viewRoles = ['agency_admin', 'centre_director'].filter(function (k) { return card.querySelector('#el-v-' + k).checked; });
+      var viewUsers = (r.viewers || []).filter(function (v) { var c = card.querySelector('#el-vu-' + v.id); return c && c.checked; }).map(function (v) { return v.id; });
+      return { enabled: card.querySelector('#el-on').checked, auto: card.querySelector('#el-auto').checked, sent: card.querySelector('#el-sent').checked, kinds: kinds,
+        view_roles: viewRoles, view_users: viewUsers };
+    }
+    async function save(el) {
+      if (busy) return;
+      busy = true;
+      var body = val();
+      card.querySelector('#el-opts').style.display = body.enabled ? 'flex' : 'none';
+      try {
+        await api().put('/admin/email-link-settings', body);
+        out.style.color = '#047857';
+        out.textContent = body.enabled ? '✓ Saved. Emails will be linked to people.' : '✓ Saved. Linking is off.';
+      } catch (e) {
+        el.checked = !el.checked;
+        card.querySelector('#el-opts').style.display = card.querySelector('#el-on').checked ? 'flex' : 'none';
+        out.style.color = '#B91C1C';
+        out.textContent = '✗ ' + (e.message || 'Could not save.');
+      } finally { busy = false; }
+    }
+    card.querySelectorAll('input[type=checkbox]').forEach(function (el) { el.addEventListener('change', function () { save(el); }); });
+  }
+
   /* ───────────── Email settings (per agency) ───────────── */
   async function renderEmailSettings(main) {
     main.setAttribute('data-kt-pretty', '1');
@@ -186,8 +276,8 @@
       // ── QR check-in nudge (manual-check-in reminder) ──
       + '<div class="kt-card" style="max-width:680px;margin-bottom:18px;">'
       + '<label style="display:flex;align-items:center;justify-content:space-between;gap:16px;cursor:pointer;margin:0;">'
-      + '<span><span style="display:block;font-size:14px;font-weight:700;color:#0F172A;">📷 QR check-in nudges</span>'
-      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:3px;">A friendly weekly email to parents whose child was checked in/out <strong>manually more than twice in a week</strong>, encouraging the QR barcode — personalised with their &amp; their children’s names, and CC’d to you.</span></span>'
+      + '<span><span style="display:block;font-size:14px;font-weight:700;color:#0F172A;">📷 One-Tap nudges</span>'
+      + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:3px;">A friendly weekly email to parents whose child was checked in/out <strong>manually more than twice in a week</strong>, encouraging One-Tap (the QR code at the door) — personalised with their &amp; their children’s names, and CC’d to you.</span></span>'
       + '<input type="checkbox" id="es-qrnudge" data-kt-switch="1"' + (s.manual_checkin_reminders_enabled !== false ? ' checked' : '') + '></label>'
       + '<div id="es-qrnudge-out" style="font-size:12px;margin-top:8px;min-height:14px;"></div>'
       + '</div>'
@@ -425,6 +515,7 @@
     // Closure reminders live on their own tab but are wired here with the rest.
     try { wireClosureReminders(document, patch); } catch (e) { /* card absent for this role */ }
     try { wireStatHolidays(document, patch); } catch (e) { /* card absent for this role */ }
+    try { emailLinkCard(main.firstElementChild || main); } catch (e) { /* admins only */ }
 
     var qrNudge = document.getElementById('es-qrnudge');
     var qrOut = document.getElementById('es-qrnudge-out');
@@ -432,7 +523,7 @@
       qrNudge.disabled = true;
       try {
         await patch('/admin/email-settings', { manual_checkin_reminders_enabled: qrNudge.checked });
-        if (qrOut) { qrOut.style.color = '#047857'; qrOut.textContent = qrNudge.checked ? '✓ QR check-in nudges ON.' : '✓ QR check-in nudges OFF.'; }
+        if (qrOut) { qrOut.style.color = '#047857'; qrOut.textContent = qrNudge.checked ? '✓ One-Tap nudges ON.' : '✓ One-Tap nudges OFF.'; }
       } catch (e) {
         qrNudge.checked = !qrNudge.checked;
         if (qrOut) { qrOut.style.color = '#B91C1C'; qrOut.textContent = '✗ ' + (e.message || 'Could not save.'); }
@@ -856,6 +947,15 @@
      devtools — a stale cached copy is otherwise indistinguishable from a bug. */
   var SCREEN_BUILD = '2026-09-10 carrier-subtabs + test-log + live-send';
 
+  /* A super admin? (the Toll-free line tab is theirs alone; the API is role:platform_admin too) */
+  function svPlat() {
+    try {
+      if (sessionStorage.getItem('kt_is_platform_admin') === '1') return true;
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {};
+      return (u.roles || []).indexOf('platform_admin') !== -1 || u.is_platform_admin === true;
+    } catch (e) { return false; }
+  }
+
   async function renderSmsSettings(main) {
     main.setAttribute('data-kt-pretty', '1');
     /* A settings form: a background re-render (a save in another tab, return-to-app)
@@ -978,15 +1078,17 @@
     }
 
     main.innerHTML = ''
-      + '<div style="padding:24px;max-width:880px;margin:0 auto;">'
-      +   '<div class="kt-page-hero"><h2>📡 Carrier settings</h2>'
-      +     '<p>The carriers this agency sends text messages and places announcement calls through.</p>'
+      /* The house section box (CONVENTIONS.md): same width and gutter as every screen. */
+      + '<div class="kt-section">'
+      +   '<div class="kt-page-hero"><h2>📡 ' + (svPlat() ? 'Phone &amp; carriers' : 'Carrier settings') + '</h2>'
+      +     '<p>The carriers this agency sends text messages and places announcement calls through'
+      +       (svPlat() ? '<span data-kt-keep-brand>, and KiddieTrac’s toll-free line: its call menu, greeting and voicemails</span>' : '') + '.</p>'
       +     '<div style="margin-top:6px;font-size:11px;opacity:.6;">Screen build '
       +       esc(SCREEN_BUILD) + '</div></div>'
       +   '<div id="tx-usage"></div>'
 
       /* ── channel tabs ── */
-      +   '<div style="display:flex;gap:6px;margin-top:16px;flex-wrap:wrap;" id="sv-tabs">'
+      +   '<div class="kt-subtabs" style="display:flex;gap:6px;margin-top:16px;flex-wrap:wrap;" id="sv-tabs">'
       +     '<button type="button" data-sv-tab="text" style="height:32px;padding:0 14px;border-radius:9px;'
       +       'border:1px solid #1F6080;background:#1F6080;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">'
       +       'Text messages</button>'
@@ -1315,6 +1417,23 @@
     }
     if (t.has_api_key) loadTxUsage(false);
 
+    /* ── Toll-free line (2026-10-22): Phone & voicemail moved here from Reseller. Super
+       admins only; its content is screen-phone-voicemail.js (KT.PhoneLine), drawn into
+       the pane the first time the tab is opened. ── */
+    if (svPlat()) {
+      var bar = main.querySelector('#sv-tabs'), voicePane = main.querySelector('[data-sv-pane="voice"]');
+      if (bar && voicePane) {
+        bar.insertAdjacentHTML('beforeend', '<button type="button" data-sv-tab="tollfree" style="height:32px;padding:0 14px;border-radius:9px;'
+          + 'border:1px solid #CBD5E1;background:#fff;color:#334155;font-weight:800;font-size:13px;cursor:pointer;">☎️ Toll-free line</button>');
+        var tf = document.createElement('div');
+        tf.setAttribute('data-sv-pane', 'tollfree');
+        tf.setAttribute('data-kt-keep-brand', '1');   // KiddieTrac's own line: never renamed to the agency's brand
+        tf.style.display = 'none';
+        tf.style.marginTop = '14px';
+        voicePane.parentNode.insertBefore(tf, voicePane.nextSibling);
+      }
+    }
+
     // ── channel tabs ──
     var panes = {};
     main.querySelectorAll('[data-sv-pane]').forEach(function (p) { panes[p.getAttribute('data-sv-pane')] = p; });
@@ -1328,6 +1447,11 @@
           o.style.borderColor = on ? '#1F6080' : '#CBD5E1';
         });
         Object.keys(panes).forEach(function (k) { panes[k].style.display = k === key ? '' : 'none'; });
+        if (key === 'tollfree' && panes.tollfree && !panes.tollfree.getAttribute('data-loaded')) {
+          panes.tollfree.setAttribute('data-loaded', '1');
+          if (window.KT && KT.PhoneLine && KT.PhoneLine.renderInto) KT.PhoneLine.renderInto(panes.tollfree);
+          else panes.tollfree.innerHTML = '<div class="kt-card">The toll-free line settings are still loading — open this tab again in a moment.</div>';
+        }
         // Remembered, so a re-render (after a Save, say) does not throw you back to Text.
         try { sessionStorage.setItem('kt_sv_tab', key); } catch (e) {}
       });

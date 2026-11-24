@@ -58,7 +58,10 @@ final class AuthController extends Controller
            paced at about six a minute, which is under both rate limits. Counting
            failures per identifier catches exactly that - slow, patient guessing at one
            account - which a per-minute limiter is designed not to notice. */
-        $heldFor = \App\Services\PasswordPolicy::lockedFor($login);
+        /* NOT FOR THE PUBLISHED DEMO LOGINS (2026-10-31). Their addresses and passwords are printed on kiddietrac.com,
+           so a hold would let one visitor typing rubbish lock the demo for everyone. They get no hold; the per-IP
+           limiter on this route ('login' in AppServiceProvider) still slows anyone hammering them. */
+        $heldFor = \App\Support\PublicDemo::isDemoLogin($login) ? 0 : \App\Services\PasswordPolicy::lockedFor($login);
         if ($heldFor > 0) {
             $this->audit($request, null, 'login_blocked_locked', null, null, [
                 'login' => $login,
@@ -238,6 +241,15 @@ final class AuthController extends Controller
             ], 422);
         }
 
+        /* THE RIGHT APP (2026-10-30, App\Support\BrandLock): a white-label partner's people sign in through their own
+           app, KiddieTrac's through KiddieTrac's. The wrong app gets exactly the wrong-password answer. */
+        if (! \App\Support\BrandLock::allows($request, (int) $user->id, 'login')) {
+            return response()->json([
+                'message' => 'Invalid credentials.',
+                'errors' => ['email' => ['Invalid credentials.']],
+            ], 422);
+        }
+
         /* SECURITY (2026-08-25): this listed 'suspended' and 'inactive'. There is no
            'inactive' — users.status is
            enum('active','invited','not_invited','suspended','deactivated') — so that
@@ -265,6 +277,12 @@ final class AuthController extends Controller
             return response()->json(['message' => 'Account is not active.'], 403);
         }
 
+        // Sign-in locks (2026-11-10): paused at every agency they belong to -> 423 with who to contact. After the
+        // password check, so the answer never tells a stranger an account exists.
+        if ($locked = \App\Support\SignInLocks::refusal((int) $user->id, $request, 'password')) {
+            return $locked;
+        }
+
         // Scheduled maintenance / downtime — nobody signs in except platform
         // admins (so they can manage or lift the window).
         if (\App\Http\Controllers\Api\MaintenanceController::isDown()) {
@@ -278,6 +296,11 @@ final class AuthController extends Controller
                 ], 503);
             }
         }
+
+        /* A PUBLISHED DEMO ACCOUNT IS ALWAYS READY (2026-10-31): Terms on file, no forced change, no MFA - whatever the
+           day brought - so the website's demo phone signs straight in. Demo-only people of a public demo agency only. */
+        $isPublicDemo = \App\Support\PublicDemo::isUser((int) $user->id);
+        if ($isPublicDemo) { \App\Support\PublicDemo::prepareUser((int) $user->id); $user->refresh(); }
 
         // v22p7.1: TOTP gate — block token issue if MFA is enabled and the
         // provided code is missing or invalid. Accepts a 6-digit TOTP
@@ -318,7 +341,8 @@ final class AuthController extends Controller
         $tokenObj = $user->createToken(
             $data['device_name'],
             ['*'],
-            now()->addDays(30)
+            // A demo sign-in is a visit, not a device: two hours (kt:reset-web-demo also signs them all out nightly).
+            $isPublicDemo ? now()->addHours(\App\Support\PublicDemo::SESSION_HOURS) : now()->addDays(30)
         );
 
         /* Signing in proves the invite was accepted. Without this the account
@@ -383,19 +407,93 @@ final class AuthController extends Controller
             'token' => $tokenObj->plainTextToken,
             'expires_at' => $tokenObj->accessToken->expires_at?->toIso8601String(),
             'user' => $this->formatUser($user),
-            'must_change_password' => (bool) ($user->must_change_password ?? false),
+            /* Admin reset OR a password past its age limit (2026-10-22): both mean the
+               dashboard's locked "choose a new password" dialog, straight away. */
+            'must_change_password' => $this->passwordChangeState($user)[0],
+            'password_change_reason' => $this->passwordChangeState($user)[1],
         ]);
     }
 
     public function me(Request $request): JsonResponse
     {
-        return response()->json($this->formatUser($request->user()));
+        /* THE CLIENT LEARNS ABOUT A PENDING CHANGE ON EVERY BOOT (2026-10-22).
+
+           Anthony: "password reset when you log in allows you to navigate to other screens
+           and sections within the portal ... forces you to reset and do not leave that
+           screen at all". The only signal used to be the login reply, so a restored
+           session, a biometric/PIN unlock or a password that aged out mid-session found out
+           only when a screen's request came back 403. /auth/me now says it, with the same
+           exemptions as EnsurePasswordChanged, and kt-pw-gate.js locks the portal behind
+           the change-password dialog. */
+        $user = $request->user();
+        $out = $this->formatUser($user);
+        [$required, $reason] = $this->passwordChangeState($user);
+        $out['must_change_password'] = $required;
+        $out['password_change_required'] = $required;
+        $out['password_change_reason'] = $reason;
+        return response()->json($out);
+    }
+
+    /**
+     * [required, reason] exactly as EnsurePasswordChanged decides it: off when the gate is
+     * switched off, never for an impersonation token, 'admin_reset' for an issued password,
+     * 'expired' for one past the age limit (which fails open, as the middleware does).
+     */
+    private function passwordChangeState($user): array
+    {
+        if (! config('onboarding.password_gate', true) || ! $user) {
+            return [false, null];
+        }
+        try {
+            $t = $user->currentAccessToken();
+            if ($t && isset($t->name) && str_starts_with((string) $t->name, 'impersonation:')) {
+                return [false, null];
+            }
+        } catch (\Throwable $e) { /* no token in play (the login call itself) */ }
+        if (! empty($user->must_change_password)) {
+            return [true, 'admin_reset'];
+        }
+        try {
+            if (\App\Services\PasswordPolicy::isExpired($user->password_changed_at ?? null)) {
+                return [true, 'expired'];
+            }
+        } catch (\Throwable $e) { /* fail open, as the middleware does */ }
+        return [false, null];
     }
 
     /**
      * v22p20 — list every agency this user has agency_admin access to.
      * Used by the frontend to populate the agency switcher.
      */
+    /** agency_ids: the agencies this person may switch into; landing_agency_id: the one
+        the portal opens in - the same rule agency-switcher.js applies to /auth/agencies. */
+    private function landing(User $user, array $roles, $agencyId): array
+    {
+        try {
+            $default = env('DEFAULT_ADMIN_AGENCY_ID') ? (int) env('DEFAULT_ADMIN_AGENCY_ID') : 0;
+            // The agency they last switched to (setActiveAgency) wins over the default.
+            $last = (int) ($user->last_agency_id ?? 0);
+            if (in_array('platform_admin', $roles, true)) {
+                if ($last && DB::table('agencies')->where('id', $last)->whereNull('deleted_at')->exists()) {
+                    return ['landing_agency_id' => $last, 'agency_ids' => null];
+                }
+                $first = $default && DB::table('agencies')->where('id', $default)->whereNull('deleted_at')->exists()
+                    ? $default : (int) DB::table('agencies')->whereNull('deleted_at')->orderBy('name')->value('id');
+                return ['landing_agency_id' => $first ?: ($agencyId ? (int) $agencyId : null), 'agency_ids' => null];
+            }
+            $ids = DB::table('role_assignments')->join('agencies', 'agencies.id', '=', 'role_assignments.agency_id')
+                ->where('role_assignments.user_id', $user->id)->where('role_assignments.role', 'agency_admin')
+                ->where('role_assignments.active', true)->whereNull('agencies.deleted_at')
+                ->orderBy('agencies.name')->distinct()->pluck('agencies.id')->map(fn ($v) => (int) $v)->values()->all();
+            if ($ids) {
+                if ($last && in_array($last, $ids, true)) return ['landing_agency_id' => $last, 'agency_ids' => $ids];
+                return ['landing_agency_id' => ($default && in_array($default, $ids, true)) ? $default : $ids[0], 'agency_ids' => $ids];
+            }
+        } catch (\Throwable $e) {
+        }
+        return ['landing_agency_id' => $agencyId ? (int) $agencyId : null, 'agency_ids' => null];
+    }
+
     public function myAgencies(Request $request): JsonResponse
     {
         // v22p21: platform_admin sees all agencies; agency_admin sees only theirs.
@@ -422,6 +520,7 @@ final class AuthController extends Controller
             ->distinct()
             ->orderBy('agencies.name')
             ->get();
+        $rows = \App\Support\BrandLock::filterAgencies($request, (int) $request->user()->id, $rows);   // only this app's agencies
         return response()->json(['agencies' => $rows]);
     }
 
@@ -449,12 +548,30 @@ final class AuthController extends Controller
         if (! $ok) {
             return response()->json(['message' => 'You do not have access to that agency.'], 403);
         }
+        /* REMEMBERED FOR THE NEXT SIGN-IN (2026-10-23, Anthony: "when i login as superadmin,
+           remember the last agency that I selected and login back into that"). landing() opens
+           it next time, while it is still one this person may enter. */
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('users', 'last_agency_id')) {
+                DB::table('users')->where('id', $request->user()->id)->update(['last_agency_id' => (int) $data['agency_id']]);
+            }
+        } catch (\Throwable $e) {
+        }
         $agency = DB::table('agencies')->where('id', $data['agency_id'])->first(['id', 'name', 'slug']);
         return response()->json(['active' => $agency]);
     }
 
     public function logout(Request $request): JsonResponse
     {
+        /* SIGNING OUT LEAVES THE PHONE (2026-11-02). The app's push address stayed linked to whoever signed out, so a
+           phone handed to someone else (or left signed out) kept showing that person's notifications until another
+           account registered on it. The address registered by THIS sign-in is removed with it; the app posts it again
+           on the next sign-in (kt-native-push.js re-registers on every fresh load). A biometric/PIN "sign out" keeps
+           its session for the unlock and never calls this, so those phones keep their notifications. */
+        /* REVERSED 2026-11-03 (Anthony: "alerts from the bell when app on phone is idle or not logged in the sounds do
+           not announce" - asked, he chose full alerts after sign-out). The phone keeps its push address, so a parent
+           timed out after 30 minutes still hears the bell. A different person signing in on the phone takes the
+           address over (PushController::register moves an existing token to the new user). */
         $request->user()->currentAccessToken()?->delete();
         return response()->json(['message' => 'Logged out']);
     }
@@ -1040,6 +1157,54 @@ final class AuthController extends Controller
      * POST /api/v1/auth/reset
      * Consumes a token and sets a new password.
      */
+    /**
+     * POST /auth/reset/check {token, email?} — is this reset link still good? Asked by the
+     * reset page as it opens, so an expired link says so BEFORE anyone types a password.
+     * (2026-10-23: Umera Aziz opened a four-day-old link and was refused three times, after
+     * typing a new password each time; the page only found out on submit.) The token is the
+     * secret; nothing about the account is returned.
+     */
+    public function resetCheck(Request $request): JsonResponse
+    {
+        $data = $request->validate(['token' => ['required', 'string', 'max:200'], 'email' => ['nullable', 'string', 'max:180']]);
+        $row = DB::table('password_resets')->where('token', hash('sha256', $data['token']))->orderByDesc('id')->first();
+        if (! $row || (! empty($data['email']) && $row->email && strcasecmp($row->email, $data['email']) !== 0)) {
+            return response()->json(['valid' => false, 'reason' => 'unknown', 'can_resend' => false]);
+        }
+        if ($row->used_at) {
+            $reason = 'used';
+        } elseif (now()->gte(\Illuminate\Support\Carbon::parse($row->expires_at))) {
+            $reason = 'expired';
+        } else {
+            return response()->json(['valid' => true]);
+        }
+        $newer = DB::table('password_resets')->where('id', '>', $row->id)
+            ->where(fn ($q) => $row->user_id ? $q->where('user_id', $row->user_id) : $q->where('email', $row->email))->exists();
+        return response()->json(['valid' => false, 'reason' => $newer && $reason === 'used' ? 'replaced' : $reason,
+            'can_resend' => (bool) $row->email && (bool) $row->user_id]);
+    }
+
+    /**
+     * POST /auth/reset/resend {token} — "Email me a new link" from an expired or used link.
+     * The old token names its account, so the fresh link goes to that one account's address
+     * through the normal Forgot-password path (same email, same audit, same limits).
+     */
+    public function resetResend(Request $request): JsonResponse
+    {
+        $data = $request->validate(['token' => ['required', 'string', 'max:200']]);
+        $row = DB::table('password_resets')->where('token', hash('sha256', $data['token']))->orderByDesc('id')->first();
+        $u = ($row && $row->user_id && $row->email) ? DB::table('users')->where('id', $row->user_id)->first(['id', 'email', 'username']) : null;
+        if (! $u || ! $u->email) {
+            return response()->json(['message' => 'Please go back to sign in and choose "Forgot password".'], 422);
+        }
+        $this->audit($request, (int) $u->id, 'password_reset_link_resent', 'user', (int) $u->id, ['from_reset_id' => (int) $row->id]);
+        $sub = Request::create('/api/v1/auth/forgot', 'POST',
+            array_filter(['email' => $u->email, 'username' => $u->username ?: null, 'channel' => 'email']), [], [], $request->server->all());
+        $sub->headers->set('Accept', 'application/json');
+        $this->forgotPassword($sub);
+        return response()->json(['ok' => true, 'message' => 'A new link is on its way to your email. It works for 60 minutes.']);
+    }
+
     public function resetPassword(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -1111,6 +1276,15 @@ final class AuthController extends Controller
             ]);
 
             return response()->json(['message' => 'Account not found.'], 422);
+        }
+        // A reset link cannot switch a suspended or deactivated account back on (2026-11-05, see setPassword).
+        if (in_array((string) $user->status, \App\Support\Audience::OFF_STATUSES, true)) {
+            $this->audit($request, (int) $user->id, 'password_reset_failed', 'user', (int) $user->id, [
+                'email' => $data['email'],
+                'reason' => 'account_switched_off',
+            ]);
+
+            return response()->json(['message' => 'This account has been switched off. Please contact your centre.'], 422);
         }
 
         /* A rejected password ("you have used this one recently") throws out of here
@@ -1188,12 +1362,63 @@ final class AuthController extends Controller
         if (! $record) {
             /* ONBOARDING ATTEMPTS ARE NOW RECORDED. Only success was audited, so an
                invite link that had expired - or had already been invalidated by a
-               second welcome email issued moments later - produced no row at all. */
-            $this->audit($request, null, 'onboarding_failed', null, null, [
-                'reason' => 'invite_link_invalid_used_or_expired',
-            ]);
+               second welcome email issued moments later - produced no row at all.
 
-            return response()->json(['message' => 'This link is invalid or has expired. Ask for a new invite.'], 422);
+               WHOSE LINK, AND WHY (2026-10-21). Anthony: "audit log shows onboarding failed
+               but no email or name attached". The row said only "invalid, used or
+               expired": Alysia Stephenson Sterling reopened her already-used invite eight
+               times and the log could not say it was her. The token is looked up again
+               WITHOUT the validity filters, so the row names the account, its agency and
+               the exact reason - and the person is told what to do instead. */
+            $any = DB::table('password_resets')
+                ->where(function ($q) use ($data, $hashed) {
+                    $q->where('token', $data['token'])->orWhere('token', $hashed);
+                })
+                ->orderByDesc('id')->first();
+            $who = $any && $any->user_id ? DB::table('users')->where('id', $any->user_id)->first(['id', 'first_name', 'last_name', 'email', 'status']) : null;
+            if (! $who && $any && $any->email) {
+                $who = DB::table('users')->whereRaw('LOWER(email) = ?', [mb_strtolower((string) $any->email)])
+                    ->orderBy('id')->first(['id', 'first_name', 'last_name', 'email', 'status']);
+            }
+            $name = $who ? trim(($who->first_name ?? '') . ' ' . ($who->last_name ?? '')) : '';
+            $tz = 'America/Toronto';
+            try { $tz = $who ? (\App\Support\AgencyTime::tz(\App\Support\AuditScope::ownAgency((int) $who->id)) ?: $tz) : $tz; } catch (Throwable $e) {}
+            $at = fn ($t) => $t ? \Illuminate\Support\Carbon::parse($t, 'UTC')->timezone($tz)->format('M j, g:i A') : null;
+            $newer = $any ? DB::table('password_resets')->where('id', '>', $any->id)
+                ->where(function ($q) use ($any) {
+                    $any->user_id ? $q->where('user_id', $any->user_id) : $q->where('email', $any->email);
+                })->orderByDesc('id')->first(['id', 'created_at']) : null;
+
+            if (! $any) {
+                $reason = 'link_not_recognised';
+                $why = 'the link is not one we issued (it may have been cut short when copied)';
+                $tell = 'This link is not valid. Please open the invite email again, or ask for a new invite.';
+            } elseif ($any->used_at) {
+                $reason = 'invite_already_used';
+                $why = 'their invite was already used to set a password on ' . $at($any->used_at);
+                $tell = 'This invite has already been used. Sign in with your email and the password you chose'
+                    . ' - or use "Forgot password" if you do not remember it.';
+            } elseif ($newer) {
+                $reason = 'invite_replaced_by_newer';
+                $why = 'a newer invite was sent on ' . $at($newer->created_at) . ', which replaced this one';
+                $tell = 'A newer invite has been sent to you. Please use the link in the most recent email.';
+            } else {
+                $reason = 'invite_expired';
+                $why = 'their invite expired on ' . $at($any->expires_at);
+                $tell = 'This invite has expired. Ask your agency for a new one.';
+            }
+            $label = $name !== '' ? $name : (string) ($any->email ?? 'Someone');
+            $this->audit($request, null, 'onboarding_failed', $who ? 'user' : null, $who ? (int) $who->id : null, array_filter([
+                'reason' => $reason,
+                'name' => $name !== '' ? $name : null,
+                'email' => $who->email ?? ($any->email ?? null),
+                'account_status' => $who->status ?? null,
+                'token_id' => $any->id ?? null,
+                'invite_sent' => $any ? $at($any->created_at) : null,
+                'summary' => $label . ' could not start onboarding: ' . $why . '.',
+            ], fn ($v) => $v !== null), $who ? \App\Support\AuditScope::ownAgency((int) $who->id) : null);
+
+            return response()->json(['message' => $tell, 'code' => $reason], 422);
         }
 
         $startedFor = ($record->user_id ?? null) ? (int) $record->user_id : null;
@@ -1211,9 +1436,23 @@ final class AuthController extends Controller
             $this->audit($request, null, 'onboarding_failed', null, null, [
                 'email' => $record->email,
                 'reason' => 'account_not_found_for_link',
+                'summary' => $record->email . ' could not start onboarding: the account this invite was for no longer exists.',
             ]);
 
             return response()->json(['message' => 'Account not found for this link.'], 422);
+        }
+        /* A SWITCHED-OFF ACCOUNT STAYS OFF (2026-11-05 leak sweep). This set status = 'active', so an
+           invite link sent before an admin suspended or deactivated someone switched them back on -
+           and a parent reaches their family through the guardians table, not their roles. Bringing
+           somebody back is an admin's call (Resend welcome moves them to 'invited' first). */
+        if (in_array((string) $user->status, \App\Support\Audience::OFF_STATUSES, true)) {
+            $this->audit($request, (int) $user->id, 'onboarding_failed', 'user', (int) $user->id, [
+                'email' => $record->email,
+                'reason' => 'account_switched_off',
+                'summary' => $record->email . ' used an invite link, but the account is ' . $user->status . ', so it was refused.',
+            ]);
+
+            return response()->json(['message' => 'This account has been switched off. Please contact your centre.'], 422);
         }
 
         try {
@@ -1222,6 +1461,7 @@ final class AuthController extends Controller
             $this->audit($request, (int) $user->id, 'onboarding_failed', 'user', (int) $user->id, [
                 'email' => $record->email,
                 'reason' => 'password_recently_used',
+                'summary' => 'Chose a password they have used before, so it was refused; they can pick another.',
             ]);
 
             throw $e;
@@ -1248,11 +1488,25 @@ final class AuthController extends Controller
         // Setting a password from the invite link IS accepting the invite.
         \App\Support\AccountStatus::markClaimed((int) $user->id);
         \App\Support\SignInAlert::remember((int) $user->id, $request);
+        if (! \App\Support\BrandLock::allows($request, (int) $user->id, 'set-password')) {
+            $this->audit($request, $user->id, 'password_set_via_invite', 'user', $user->id, [
+                'summary' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) . ' (' . $user->email . ') set their password from their invite link. They were not signed in here because the account belongs to another app.',
+                'email' => $user->email, 'signed_in' => false]);
+            return response()->json(['password_set' => true,
+                'message' => 'Your password is set. Open your childcare app to sign in.'], 200);
+        }
+        // Password set, but a sign-in lock keeps them out: say so instead of signing them in (2026-11-10).
+        if ($locked = \App\Support\SignInLocks::refusal((int) $user->id, $request, 'set-password')) {
+            return response()->json(['password_set' => true, 'access_locked' => true,
+                'message' => 'Your password is set. ' . $locked->getData(true)['message']], 200);
+        }
         $tokenObj = $user->createToken('set-password', ['*'], now()->addDays(30));
         DB::table('users')->where('id', $user->id)->update([
             'last_login_at' => now(), 'last_login_ip' => $request->ip(), 'updated_at' => now(),
         ]);
-        $this->audit($request, $user->id, 'password_set_via_invite', 'user', $user->id);
+        $this->audit($request, $user->id, 'password_set_via_invite', 'user', $user->id, [
+            'summary' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) . ' (' . $user->email . ') set their password from their invite link and was signed in.',
+            'email' => $user->email, 'signed_in' => true]);
 
         return response()->json([
             'token'      => $tokenObj->plainTextToken,
@@ -1309,6 +1563,8 @@ final class AuthController extends Controller
        would then behave differently depending on which door somebody came in by. */
     public function formatUser(User $user): array
     {
+        // A reseller's agency_admin grants follow its agencies, every time it is asked who it is.
+        try { if (\App\Support\ResellerAccess::isReseller((int) $user->id)) { \App\Support\ResellerAccess::sync((int) $user->id); } } catch (\Throwable $e) {}
         $assignments = DB::table('role_assignments')
             ->where('user_id', $user->id)
             ->where('active', true)
@@ -1332,7 +1588,7 @@ final class AuthController extends Controller
            an educator who runs the home; anyone holding a role above or beside that is not
            asked. */
         $bioApplies = in_array('educator', $roles, true)
-            && ! array_intersect($roles, ['agency_admin', 'centre_director', 'platform_admin', 'home_visitor', 'auditor', 'sales_rep']);
+            && ! array_intersect($roles, ['agency_admin', 'centre_director', 'platform_admin', 'home_visitor', 'auditor', 'sales_rep', 'reseller_admin']);
         $providerCentre = ($user->email && $bioApplies)
             ? DB::table('centres')
                 ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
@@ -1382,7 +1638,43 @@ final class AuthController extends Controller
             // No request context (a console render of this payload) — keep the role's agency.
         }
 
+        /* WAITING FOR THE AGENCY (2026-10-21). A parent account made so a form could be sent
+           to someone not on the system yet ("Created a not-yet-invited account ... so forms
+           could be sent") holds the guardian role but belongs to no family. Signed in, it was
+           shown the whole parent app — Home, Billing, the family directory — every screen
+           of which asked for a family it does not have and was refused (Alysia, 2026-10-21:
+           "Couldn't load directory (not allowed)"). Anthony: "until a family is created and
+           assigned we need to limit their access and put something on the screen indicating
+           that the approval process is still pending with the agency". The app reads this
+           flag and offers only the forms and documents sent to them, their own account, and
+           a screen saying who to contact. Clears itself the moment the agency links them. */
+        $familyPending = in_array('guardian', $roles, true)
+            && ! array_intersect($roles, ['platform_admin', 'agency_admin', 'centre_director', 'educator', 'home_visitor', 'auditor', 'sales_rep', 'reseller_admin'])
+            && ! DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                ->where('g.user_id', $user->id)->whereNull('f.deleted_at')->exists();
+        $pendingAgency = null;
+        if ($familyPending && $agencyId) {
+            $pa = DB::table('agencies')->where('id', $agencyId)
+                ->first(['name', 'contact_email', 'contact_phone', 'brand_support_email']);
+            if ($pa) {
+                $pendingAgency = ['name' => $pa->name,
+                    'email' => $pa->brand_support_email ?: $pa->contact_email,
+                    'phone' => $pa->contact_phone];
+            }
+        }
+
         return [
+            /* A website demo person (App\Support\PublicDemo, 2026-10-31): the client shows them no set-up nudges - no
+               fingerprint/PIN, passkey, 2FA, notification-permission, install or update prompts. They can't use any of them. */
+            'is_public_demo' => \App\Support\PublicDemo::isUser((int) $user->id),
+            'family_pending' => $familyPending,
+            // The reseller this person manages (2026-10-21), for the reseller panel.
+            'reseller' => in_array('reseller_admin', $roles, true)
+                ? DB::table('role_assignments as ra')->join('resellers as r', 'r.id', '=', 'ra.reseller_id')
+                    ->where('ra.user_id', $user->id)->where('ra.role', 'reseller_admin')->where('ra.active', true)
+                    ->first(['r.id', 'r.name', 'r.slug'])
+                : null,
+            'pending_agency' => $pendingAgency,
             /* Pick-up login (App\Support\PickupLogin): the parent view minus billing. The
                server refuses billing for them regardless; this lets the app hide the menu. */
             'billing_hidden' => \App\Support\PickupLogin::isPickupOnly((int) $user->id),
@@ -1390,8 +1682,15 @@ final class AuthController extends Controller
             'email' => $user->email,
             'username' => $user->username ?? null,
             'agency_timezone' => $agencyTz ?: 'America/Toronto',
+            // No licence to operate (2026-10-25): the shell shows only the renewal screen.
+            'licence_lapsed' => rescue(fn () => ! in_array('platform_admin', $roles ?? [], true) && \App\Support\Licences::lapsed($featureAgencyId ? (int) $featureAgencyId : null), false, false),
+            // The plan's name for the sidebar foot (2026-10-25), e.g. "Growth plan".
+            'licence_label' => rescue(fn () => \App\Support\Licences::planLabel($featureAgencyId ? (int) $featureAgencyId : null), null, false),
+            // The AI Bundle (2026-10-28): screens show their "✨ AI" help only when this is true (kt-ai-assist.js).
+            'ai_bundle' => rescue(fn () => \App\Support\AiBundle::on($featureAgencyId ? (int) $featureAgencyId : null), false, false),
             'hidden_screens' => \App\Http\Controllers\Api\FeatureFlagController::hiddenHashesFor(
-                $featureAgencyId ? (int) $featureAgencyId : null
+                $featureAgencyId ? (int) $featureAgencyId : null,
+                in_array('platform_admin', $roles ?? [], true)
             ),
             // Shown once when the app opens: the centre is closed today, or will be
             // shortly. Omitted entirely when there is nothing to say, so the client can
@@ -1402,6 +1701,11 @@ final class AuthController extends Controller
             // so a super admin opened the app inside real families' data.
             // DEFAULT_ADMIN_AGENCY_ID in .env; empty = first agency, as before.
             'default_agency_id' => env('DEFAULT_ADMIN_AGENCY_ID') ? (int) env('DEFAULT_ADMIN_AGENCY_ID') : null,
+            // WHERE THE PORTAL WILL OPEN (2026-10-21). The splash, the brand cache and the
+            // agency switcher all read this one answer, so the first frame already wears the
+            // brand of the agency that opens (a super admin's default agency, a Reseller's
+            // first agency) instead of the account's own agency_id and then swapping.
+            ...$this->landing($user, $roles, $agencyId),
             'first_name' => $user->first_name,
             'last_name' => $user->last_name,
             'sex' => $user->sex ?? null,
@@ -1770,7 +2074,7 @@ final class AuthController extends Controller
         // Educators only — never admins, directors or home visitors (2026-10-10).
         $obRoles = DB::table('role_assignments')->where('user_id', $user->id)->where('active', true)->pluck('role')->unique()->all();
         $obBio = in_array('educator', $obRoles, true)
-            && ! array_intersect($obRoles, ['agency_admin', 'centre_director', 'platform_admin', 'home_visitor', 'auditor', 'sales_rep']);
+            && ! array_intersect($obRoles, ['agency_admin', 'centre_director', 'platform_admin', 'home_visitor', 'auditor', 'sales_rep', 'reseller_admin']);
         $providerCentre = ($user->email && $obBio)
             ? DB::table('centres')
                 ->whereRaw('LOWER(email) = ?', [mb_strtolower(trim((string) $user->email))])
@@ -1850,6 +2154,7 @@ final class AuthController extends Controller
                         ctaLabel:      $ctaLabel,
                         ctaUrl:        $portal,
                         agencyId:      $noticeAgencyId,
+                        showApp:       true,   // Google Play card (2026-10-28)
                     ))->onQueue('mail')
                 );
             } catch (\Throwable $e) {
@@ -1877,6 +2182,8 @@ final class AuthController extends Controller
             in_array('guardian', $roles, true) => 'guardian',
             in_array('home_visitor', $roles, true) => 'home_visitor',
             in_array('sales_rep', $roles, true) => 'sales_rep',
+            // A reseller admin manages one reseller's brand and nothing inside its agencies.
+            in_array('reseller_admin', $roles, true) => 'reseller_admin',
             in_array('auditor', $roles, true) => 'auditor',
             default => $roles[0] ?? null,
         };

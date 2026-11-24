@@ -257,8 +257,13 @@ textarea:focus-visible {
 .page-header-v17 .actions .btn-primary { background: #fff !important; color: #1F6080 !important; border-color: #fff !important; }
 
 /* v22 (2026-06) — guarantee ALL form fields are clearly visible everywhere (incl. modals not under [data-kt-pretty]) */
+/* A TEXTAREA THAT SAYS HOW TALL IT IS KEEPS IT (2026-11-06, Anthony: "when I edit a provider the provider bio
+   window is too small, make this bigger - full sweep"). This rule's min-height:0 / height:auto !important beat
+   every textarea's own inline min-height, so the provider bio (190px) rendered 43px tall, and every notes box with
+   a min-height collapsed the same way. A textarea with an inline min-height now only takes the border and colours
+   below; the compact sizing still applies to every other field. */
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="time"]):not([type="date"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]),
-textarea,
+textarea:not([style*="min-height"]),
 select {
   border: 1.5px solid #CBD5E1 !important;
   background-color: #FFFFFF !important;
@@ -272,6 +277,12 @@ select {
   height: auto !important;
   min-height: 0 !important;
   background-position: right 8px center !important;
+}
+textarea[style*="min-height"] {
+  border: 1.5px solid #CBD5E1 !important;
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-radius: 8px !important;
 }
 /* ── Native date/time fields ───────────────────────────────────────────────
    Excluded from the rule above, and styled here instead, because that rule reserves

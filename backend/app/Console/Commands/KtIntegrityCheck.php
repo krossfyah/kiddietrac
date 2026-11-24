@@ -46,7 +46,10 @@ class KtIntegrityCheck extends Command
             select f.id, f.family_name name, c.agency_id agency, f.centre_id centre, concat('centre ', c.name) detail
             from families f join centres c on c.id=f.centre_id
             where f.deleted_at is null and f.departure_applied_at is null
-              and (c.deleted_at is not null or c.status in ('closed','archived','inactive','deleted'))",
+              and (c.deleted_at is not null or c.status in ('closed','archived','inactive','deleted'))
+              /* waiting on the agency waitlist for a new home = accounted for (AgencyWaitlist, #251) */
+              and not exists (select 1 from external_waitlist w where w.family_id=f.id and w.deleted_at is null
+                              and w.status in ('Waiting','Contacted','Approved'))",
         'ACTIVE staff assignment on a CLOSED centre' => "
             select u.id, concat(u.first_name,' ',u.last_name) name, ra.agency_id agency, ra.centre_id centre,
                    concat(ra.role, ' at ', c.name) detail
@@ -82,9 +85,12 @@ class KtIntegrityCheck extends Command
     public function handle(): int
     {
         $found = [];
+        // TEST AGENCIES ARE NOT ALERTED ON (2026-11-09, Anthony: "alerts for test agency's should all be turnt off"): App\Support\TestAgencies.
+        $test = \App\Support\TestAgencies::ids();
         foreach (self::CHECKS as $title => $sql) {
             try {
                 $rows = DB::select($sql);
+                $rows = array_values(array_filter($rows, fn ($r) => ! in_array((int) $r->agency, $test, true)));
             } catch (Throwable $e) {
                 $rows = [(object) ['id' => '-', 'name' => 'CHECK FAILED', 'agency' => '-', 'centre' => '-', 'detail' => $e->getMessage()]];
             }

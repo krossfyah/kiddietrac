@@ -108,7 +108,9 @@
 
   async function nativeVerify(subtitle) {
     var nb = nativeBio();
-    try { var r = await nb.authenticate({ title: 'KiddieTrac', subtitle: subtitle || 'Confirm your identity' }); if (!(r && r.success)) lastError = 'native: ' + (r && r.error); return !!(r && r.success); }
+    // Through the one-request-at-a-time gate (kt-cred-mutex.js): a waiting passkey autofill is stopped first.
+    var ask = function () { return nb.authenticate({ title: 'KiddieTrac', subtitle: subtitle || 'Confirm your identity' }); };
+    try { var r = await (window.KT_credExclusive ? window.KT_credExclusive(ask) : ask()); if (!(r && r.success)) lastError = 'native: ' + (r && r.error); return !!(r && r.success); }
     catch (e) { lastError = 'native authenticate: ' + ((e && (e.message || e.name)) || e); return false; }
   }
 
@@ -210,6 +212,7 @@
   }
   function restoreSession() {
     try {
+      sessionStorage.removeItem('kt_locked');
       var t = get('kt_bio_token'); if (t) sessionStorage.setItem('kt_token', t);
       var u = get('kt_bio_user'); if (u) sessionStorage.setItem('kt_user', u);
       var a = get('kt_bio_agency'); if (a) sessionStorage.setItem('kt_active_agency_id', a);
@@ -256,7 +259,7 @@
         localStorage.removeItem('kt_resume_to');
         if (rt && /^#[A-Za-z0-9_\-\/?=&.]{1,120}$/.test(rt.hash || '') && (Date.now() - (rt.at || 0)) < 3600000) { dest += rt.hash; }
       } catch (e) {}
-      location.replace(dest);
+      (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })(dest, true);   // the sign-in fade (kt-launch-scene.js)
     };
     var t = tok();
     if (!t) { go(); return; }
@@ -270,7 +273,7 @@
           if (r.status === 401 || r.status === 419) {
             disable();
             try { sessionStorage.removeItem('kt_token'); } catch (e) {}
-            location.replace('/index.html?signed_out=biometric_expired');
+            if (window.KT_out) window.KT_out.go('/index.html?signed_out=biometric_expired', true); else location.replace('/index.html?signed_out=biometric_expired');
           } else { go(); }
         })
         .catch(function () { if (!settled) { settled = true; try { clearTimeout(timer); } catch (e) {} go(); } });
@@ -290,9 +293,68 @@
   }
 
   window.KT = window.KT || {};
-  window.KT.biometric = { available: available, enroll: enroll, signIn: signIn, disable: disable, isEnabled: isEnabled, hasVault: hasVault, verify: signIn, lastError: function () { return lastError; }, showLock: function () { showLock(/dashboard\.html/i.test(location.pathname)); } };
+  window.KT.biometric = { available: available, enroll: enroll, signIn: signIn, disable: disable, isEnabled: isEnabled, hasVault: hasVault, verify: signIn, lastError: function () { return lastError; }, showLock: function (opts) { showLock(/dashboard\.html/i.test(location.pathname), opts && opts.inPlace ? opts : null); } };
 
   // ── UI: enable prompt (after login) ─────────────────────────────────
+
+  /* ONE FIRST-RUN QUESTION AT A TIME (2026-11-03, Anthony's iPhone recording of a first sign-in: the biometric offer,
+     the phone's "allow notifications" alert and What's new came back to back and on top of each other). Each of the
+     three ran on its own clock. They now take turns: KT.promptTurn(name) resolves when nothing else is asking and a
+     breather (1.5 s) has passed since the last one closed; KT.promptDone(name) frees the turn. When several are
+     waiting, the order is biometric, then notifications, then What's new. Nothing is dropped - a question that is
+     waiting keeps its place. While one is up, html.kt-prompt-up puts the toast stack under it (kt-toasts.js).
+     Installed by whichever of kt-biometric.js, kt-native-push.js and kt-whatsnew.js loads first. */
+  (function (w) {
+    w.KT = w.KT || {};
+    if (w.KT.promptTurn) return;
+    var ORDER = { biometric: 1, push: 2, whatsnew: 3 }, GAP = 1500;
+    var active = null, freeAt = 0, waiting = [];
+    /* WHAT MOVES THE SCREEN RIGHT AFTER A QUESTION CLOSES (2026-11-03). On Anthony's iPhone, Learning Observations opened
+       by itself ~2 s after "Not now" on the biometric offer, and the screen went back to Home when What's new closed;
+       neither happens in a desktop or WebKit test. A screen change in the 6 s after one of these questions closes is
+       reported once (diag/scroll, "PROMPTNAV"): from/to, how long after which question, and the last click (trusted or
+       synthetic, where, on what). Diagnostic only - nothing is changed for the person. */
+    var closedAt = 0, closedName = '', lastTap = null, told = 0;
+    try {
+      document.addEventListener('click', function (e) {
+        var t = e.target, el = '';
+        try { el = ((t.closest && t.closest('a,button,[data-hash],[role=button]')) || t).outerHTML.slice(0, 140); } catch (x) {}
+        lastTap = { ago: Date.now(), trusted: !!e.isTrusted, x: Math.round(e.clientX || 0), y: Math.round(e.clientY || 0), el: el };
+      }, true);
+      w.addEventListener('hashchange', function (e) {
+        if (!closedAt || Date.now() - closedAt > 6000 || told >= 3) return;
+        told++;
+        var tap = lastTap ? { trusted: lastTap.trusted, x: lastTap.x, y: lastTap.y, el: lastTap.el, msBefore: Date.now() - lastTap.ago } : null;
+        var tok = ''; try { tok = sessionStorage.getItem('kt_token') || ''; } catch (x) {}
+        fetch('https://api.kiddietrac.com/api/v1/diag/scroll', { method: 'POST', keepalive: true,
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: tok ? 'Bearer ' + tok : '' },
+          body: JSON.stringify({ data: ('PROMPTNAV ' + String(e.oldURL || '').split('#')[1] + ' -> ' + location.hash + ' ' + (Date.now() - closedAt) + 'ms after ' + closedName
+            + ' closed; vis=' + document.visibilityState + ' focus=' + document.hasFocus() + ' last click ' + JSON.stringify(tap)).slice(0, 600) }) }).catch(function () {});
+      });
+    } catch (e) {}
+    function up(on) { try { document.documentElement.classList.toggle('kt-prompt-up', on); } catch (e) {} }
+    function pump() {
+      if (active || !waiting.length) return;
+      var wait = freeAt + GAP - Date.now();
+      if (wait > 0) { setTimeout(pump, wait + 20); return; }
+      waiting.sort(function (a, b) { return (a.o - b.o) || (a.t - b.t); });
+      var n = waiting.shift();
+      active = n.name; up(true);
+      n.go();
+    }
+    w.KT.promptTurn = function (name) {
+      return new Promise(function (res) {
+        waiting.push({ name: name, o: ORDER[name] || 9, t: Date.now(), go: res });
+        setTimeout(pump, 0);
+      });
+    };
+    w.KT.promptDone = function (name) {
+      if (active !== name) return;
+      active = null; freeAt = closedAt = Date.now(); closedName = name; up(false);
+      setTimeout(pump, GAP + 20);
+    };
+  })(window);
+
   function card(html, onYes, onNo, yesLabel) {
     if (document.getElementById('kt-bio-ov')) return;
     var st = document.createElement('style');
@@ -317,14 +379,47 @@
      boot decides no lock is needed. */
   function dropPending() { try { document.documentElement.classList.remove('kt-bio-pending'); } catch (e) {} }
 
-  function showLock(onDash) {
+  /* The brand of the ACCOUNT this device unlocks (its own cached entry, kt_brand_a<id>),
+     never whatever session was here before (fix 3, 2026-10-21). null = KiddieTrac. */
+  function lockBrand() {
+    try {
+      var a = get('kt_bio_agency');
+      if (!a) { var u = JSON.parse(localStorage.getItem('kt_user') || 'null'); a = u && u.agency_id; }
+      var e = a ? JSON.parse(localStorage.getItem('kt_brand_a' + a) || 'null') : null;
+      return e && e.theme && e.theme.white_label ? e.theme : null;
+    } catch (x) { return null; }
+  }
+  /* THE LOGO ON THE LOCK (2026-10-21). Anthony: "when going to app.kiddietrac.com on my
+     mobile the boot up screen is missing our logo" - after the launch scene his phone (a
+     fingerprint unlock in Chrome) landed on this screen, which had only a padlock emoji.
+     KiddieTrac's wordmark, or the account's white-label logo on a white plate, or - a brand
+     with no logo uploaded - its name on the plate. kt-pin.js uses it too. */
+  window.KT_lockLogo = function () {
+    var lb = lockBrand();
+    if (!lb) return '<img class="kt-lock-logo" src="/login-wordmark.png" alt="KiddieTrac" style="display:block;width:min(64vw,250px);height:auto;margin:0 auto 22px;filter:drop-shadow(0 6px 20px rgba(19,183,204,.28));" onerror="this.style.display=\'none\'">';
+    var url = lb.logo_wordmark_url || '';
+    if (url && !/^(https?:|data:)/i.test(url)) url = 'https://api.kiddietrac.com' + (url.charAt(0) === '/' ? '' : '/') + url;
+    var own = url && !/app\.kiddietrac\.com\/(logo-wordmark|login-wordmark)/.test(url);
+    var colour = /^#[0-9a-f]{3,8}$/i.test(lb.primary_color || '') ? lb.primary_color : '#1F6080';
+    return '<span class="kt-lock-logo" style="display:inline-flex;align-items:center;justify-content:center;background:#fff;border-radius:20px;padding:16px 24px;margin:0 auto 22px;max-width:min(70vw,280px);box-shadow:0 14px 40px -16px rgba(0,0,0,.55);">'
+      + (own ? '<img src="' + escTxt(url) + '" alt="' + escTxt(lb.name || '') + '" style="max-width:100%;max-height:96px;width:auto;height:auto;object-fit:contain;" onerror="this.nextSibling.style.display=\'inline\';this.remove()">' : '')
+      + '<span style="' + (own ? 'display:none;' : '') + 'font-weight:900;font-size:26px;color:' + colour + ';">' + escTxt(lb.name || '') + '</span>'
+      + '</span>';
+  };
+  function escTxt(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  /* inPlace (session-timeout.js, 2026-10-23): the idle lock over a LIVE portal - the
+     session never left, so a good unlock just lifts the screen (inPlace.done) and
+     "Use password instead" ends the session properly (inPlace.out). */
+  function showLock(onDash, inPlace) {
     if (document.getElementById('kt-bio-lock')) { dropPending(); return; }
+    var lb = lockBrand();
     var ov = document.createElement('div'); ov.id = 'kt-bio-lock';
     // Navy unlock screen — matches the login + PIN navy theme (per request).
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:radial-gradient(120% 55% at 50% 0%, rgba(19,183,204,.18) 0%, rgba(19,183,204,0) 55%), linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;color:#ffffff;font-family:system-ui,-apple-system,sans-serif;';
-    ov.innerHTML = '<div style="font-size:64px;line-height:1;margin-bottom:14px;">🔒</div>'
+    ov.style.cssText = 'position:fixed;inset:0;z-index:' + (inPlace ? 2147483000 : 2147482000) + ';background:radial-gradient(120% 55% at 50% 0%, rgba(19,183,204,.18) 0%, rgba(19,183,204,0) 55%), linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;color:#ffffff;font-family:system-ui,-apple-system,sans-serif;';
+    ov.innerHTML = window.KT_lockLogo()
       + '<div style="font-weight:800;font-size:20px;margin-bottom:8px;color:#fff;">Welcome back</div>'
-      + '<div style="font-size:14px;color:#93a8c2;margin-bottom:26px;max-width:280px;line-height:1.5;">Unlock KiddieTrac with your fingerprint or face.</div>'
+      + '<div style="font-size:14px;color:#93a8c2;margin-bottom:26px;max-width:280px;line-height:1.5;">Unlock ' + escTxt(lb ? lb.name : 'KiddieTrac') + ' with your fingerprint or face.</div>'
       + '<button id="kt-bio-unlock" style="background:linear-gradient(135deg,#13b7cc,#4bc47a 55%,#8ec73c);color:#05263b;border:none;border-radius:14px;padding:14px 30px;font-size:16px;font-weight:800;box-shadow:0 12px 28px -10px rgba(19,183,204,.7);cursor:pointer;">Unlock</button>'
       + '<button id="kt-bio-pin" hidden style="background:rgba(255,255,255,.08);color:#dbe7f3;border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:11px 24px;margin-top:14px;font-size:14px;font-weight:700;cursor:pointer;">Use PIN instead</button>'
       + '<div id="kt-bio-err" style="font-size:12.5px;color:#ffb4b4;margin-top:16px;min-height:16px;max-width:280px;line-height:1.4;"></div>'
@@ -335,7 +430,7 @@
       if (window.KT && KT.pin && KT.pin.isSet()) {
         var pinBtn = ov.querySelector('#kt-bio-pin');
         pinBtn.hidden = false;
-        pinBtn.onclick = function () { ov.remove(); KT.pin.showLock(onDash); };
+        pinBtn.onclick = function () { ov.remove(); KT.pin.showLock(onDash, inPlace); };
       }
     } catch (e) {}
     var errEl = ov.querySelector('#kt-bio-err');
@@ -346,19 +441,50 @@
       signIn().then(function (ok) {
         busy = false;
         bioDiag('unlock-attempt', { ok: ok });
+        // "A request is already pending" is ours, not theirs: try once more, quietly.
+        if (!ok && /pending|already/i.test(lastError || '') && !attempt.retried) { attempt.retried = true; setTimeout(attempt, 600); return; }
         if (!ok) {
           if (errEl) errEl.textContent = lastError ? ('Couldn’t verify: ' + lastError + ' — tap Unlock to retry.') : '';
           return;
         }
         try { sessionStorage.setItem('kt_bio_session', '1'); } catch (e) {}
         set('kt_bio_unlocked_at', String(Date.now()));
+        if (inPlace) { ov.remove(); try { inPlace.done(); } catch (e) {} return; }
         try {
           /* A white-label agency (branding-loader decides, for the agency this device
              unlocked into) shows its own logo on a white plate instead of ours. */
           var wl = '';
           try { wl = (window.KT && KT.brandLogo) ? KT.brandLogo(get('kt_bio_agency')) : ''; } catch (e) {}
-          ov.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:22px;padding:0 28px;">'
-            + (wl
+          /* On the sign-in page the unlock goes straight to the dashboard splash's bare first
+             frame (kt-launch-scene.js): its intro is then the ONLY logo on the way in -
+             no "Signing you in" logo of our own first (2026-10-21, no double loaders). */
+          /* ...and that frame keeps the logo (2026-11-01, Anthony's APK video: the logo faded to an empty
+             blue screen and came back lower down). The lock's words and buttons fade, its logo glides onto
+             the frame's logo - the splash's spot - and the frame fades in over it (kt-launch-scene.js
+             carryFrame). A white-label lock is not carried (glide is not called) and keeps the bare frame. */
+          if (window.KT_portalFade && window.KT_portalFade.prepare) window.KT_portalFade.prepare({ glide: function (to) {
+            var lg = ov.querySelector('img.kt-lock-logo');
+            if (!lg || !to || !to.width) return 0;
+            var r = lg.getBoundingClientRect();
+            if (!r.width) return 0;
+            var still = false;
+            try { still = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+            for (var i = 0; i < ov.children.length; i++) {
+              var c = ov.children[i];
+              if (c !== lg) { c.style.transition = 'opacity .2s ease'; c.style.opacity = '0'; }
+            }
+            lg.style.transformOrigin = '50% 50%';
+            lg.style.transition = still ? 'none' : 'transform .34s cubic-bezier(.45,0,.2,1), filter .34s ease';
+            lg.style.transform = 'translate(' + ((to.left + to.width / 2) - (r.left + r.width / 2)) + 'px,'
+              + ((to.top + to.height / 2) - (r.top + r.height / 2)) + 'px) scale(' + (to.width / r.width) + ')';
+            lg.style.filter = 'none';
+            return still ? 200 : 360;
+          } });
+          else ov.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;gap:22px;padding:0 28px;">'
+            // A white-label account with no logo uploaded: its name, never our wordmark.
+            + (!wl && lb
+              ? '<span style="display:inline-block;background:#fff;border-radius:20px;padding:18px 26px;font-weight:900;font-size:28px;color:' + escTxt(lb.primary_color || '#1F6080') + ';">' + escTxt(lb.name) + '</span>'
+              : wl
               ? '<span style="display:inline-block;line-height:0;background:#fff;border-radius:20px;padding:18px 24px;max-width:min(66vw,260px);box-shadow:0 14px 40px -16px rgba(0,0,0,.55);">'
                 + '<img src="' + String(wl).replace(/"/g, '&quot;') + '" alt="" style="max-width:100%;max-height:120px;width:auto;height:auto;object-fit:contain;" '
                 + 'onerror="this.onerror=null;this.src=\'/login-wordmark.png\';this.parentNode.style.background=\'none\';this.parentNode.style.boxShadow=\'none\';"></span>'
@@ -373,10 +499,13 @@
     ov.querySelector('#kt-bio-signout').onclick = function () {
       // Fall back to the password this time; biometric stays enrolled.
       ov.remove();
+      if (inPlace) { try { inPlace.out(); } catch (e) {} return; }
       if (!onDash) injectLoginButton();     // leave a way back to biometric
-      if (onDash) location.replace('/index.html');
+      if (onDash) { if (window.KT_out) window.KT_out.go('/index.html', true); else location.replace('/index.html'); }
     };
-    attempt();   // auto-fire the prompt on launch
+    /* Auto-fire the prompt on launch - but only once the launch scene (kt-launch-scene.js)
+       has dissolved, so the system dialog never lands on top of the animation. */
+    (inPlace ? Promise.resolve() : (window.__ktLaunchScene || Promise.resolve())).then(attempt);
   }
 
   // ── UI: visible biometric button on the LOGIN page ──────────────────
@@ -402,7 +531,23 @@
     else { host.appendChild(wrap); }
   }
 
+  // A step the person has to finish first: terms, setup, 2FA, a forced password change,
+  // the splash. The same list kt-modal-guard.js treats as never-closable.
+  function mandatoryStepOpen() {
+    var ids = ['kt-agree', 'kt-onboarding-overlay', 'kt-onboarding-catchup', 'kt-mfa-gate', 'kt-bio-lock',
+      'kt-session-warning', 'kt-urgent', 'kt-splash', 'kt-reload-gate', 'kt-force-password'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      // Not offsetParent: every one of these is position:fixed, whose offsetParent is always null.
+      if (el && el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none') { return true; }
+    }
+    if (/^#(onboarding|change-password)/.test(location.hash || '')) { return true; }
+    try { var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); if (u && (u.must_change_password || u.family_pending)) { return true; } } catch (e) {}
+    return false;
+  }
+
   async function tick() {
+    if (window.KT_PUBLIC_DEMO) return;   // a shared public demo account: never offer biometric unlock (2026-10-31)
     var kind = await available(); if (!kind) return;
     var onDashboard = /dashboard\.html/i.test(location.pathname);
     if (tok() && onDashboard) {
@@ -410,16 +555,33 @@
       // Re-offer after a while instead of suppressing forever on one "Not now".
       var dc = parseInt(get('kt_biometric_declined') || '0', 10) || 0;
       if (dc && (Date.now() - dc) < (7 * 24 * 3600 * 1000)) return;
+      /* NOT OVER A MANDATORY STEP (2026-10-21, found by the Reseller mobile sweep): the offer
+         fired 2.5 s after boot whatever was on screen, so a brand-new account met "Enable
+         biometric unlock?" on top of the terms agreement, the setup wizard and the 2FA gate.
+         Wait until none of them is open, then offer; checked again every few seconds for at
+         most ten minutes so a long setup still gets the offer once it is done. */
+      if (mandatoryStepOpen()) {
+        if ((tick._waited = (tick._waited || 0) + 1) <= 120) { setTimeout(tick, 5000); }
+        return;
+      }
+      // Its turn among the first-run questions (KT.promptTurn); still wanted once the turn comes.
+      if (tick._asking) return;
+      tick._asking = true;
+      await window.KT.promptTurn('biometric');
+      tick._asking = false;
+      var done = function () { window.KT.promptDone('biometric'); };
+      if (!tok() || isEnabled() || mandatoryStepOpen() || document.getElementById('kt-bio-ov')) { done(); if (tok() && !isEnabled()) setTimeout(tick, 5000); return; }
       card('<div style="font-weight:800;font-size:19px;color:#0D1B2A;">Enable biometric unlock?</div>'
         + '<div style="font-size:13.5px;color:#64748B;margin-top:7px;line-height:1.5;">Next time, open the app straight from your fingerprint or face — no password to type.</div>',
-        function () { enroll().then(function (ok) { if (window.KT.toast) window.KT.toast(ok ? '✅' : '⚠️', ok ? 'Biometric sign-in enabled' : 'Could not enable — ' + (lastError || 'try again'), '', '#0E7C90'); }); },
-        function () { set('kt_biometric_declined', String(Date.now())); }, 'Enable');
+        function () { enroll().then(function (ok) { done(); if (window.KT.toast) window.KT.toast(ok ? '✅' : '⚠️', ok ? 'Biometric sign-in enabled' : 'Could not enable — ' + (lastError || 'try again'), '', '#0E7C90'); }, done); },
+        function () { set('kt_biometric_declined', String(Date.now())); done(); }, 'Enable');
     }
   }
 
   async function boot() {
     var onDash = /dashboard\.html/i.test(location.pathname);
-    var hasSession = false; try { hasSession = !!sessionStorage.getItem('kt_token'); } catch (e) {}
+    // A page reloaded while the idle lock was up (kt_locked) has a session but is still locked.
+    var hasSession = false; try { hasSession = !!sessionStorage.getItem('kt_token') && sessionStorage.getItem('kt_locked') !== '1'; } catch (e) {}
     var unlockedThisSession = false; try { unlockedThisSession = sessionStorage.getItem('kt_bio_session') === '1'; } catch (e) {}
     var recentlyUnlocked = (Date.now() - (parseInt(get('kt_bio_unlocked_at') || '0', 10) || 0)) < 20000;
     // Just explicitly signed out → do NOT auto-prompt biometric (that's what made

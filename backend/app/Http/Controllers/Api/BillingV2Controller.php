@@ -89,6 +89,9 @@ final class BillingV2Controller extends Controller
                 $q->where('agency_id', $agencyId)->orWhere('centre_id', $family->centre_id)->orWhere('role', 'platform_admin');
             })->exists();
         abort_unless($ok, 403, 'Forbidden');
+        /* Same rule as deciding a hold (2026-11-05 leak sweep): the check above accepted any role in the
+           family's agency (an educator, a director of another centre) and a platform admin in any agency. */
+        abort_unless($this->mayDecideForFamily($request, (int) $data['family_id']), 403, 'Forbidden');
         $id = DB::table('vacation_holds')->insertGetId([
             'family_id' => $data['family_id'],
             'start_date' => $data['start_date'],
@@ -120,6 +123,10 @@ final class BillingV2Controller extends Controller
         ]);
         $hold = DB::table('vacation_holds')->where('id', $id)->first();
         abort_unless($hold, 404);
+        /* The hold's family must be at a centre you direct, in this agency (2026-11-05 leak sweep): the hold was
+           changed by id with no scope, so any director or admin could approve (and set the credit on) another
+           centre's or another agency's vacation hold. */
+        abort_unless($this->mayDecideForFamily($request, (int) $hold->family_id), 403);
         // Auto-compute credit if approved + no override given
         $credit = $data['credit_amount'] ?? null;
         if ($data['status'] === 'approved' && $credit === null) {
@@ -198,6 +205,13 @@ final class BillingV2Controller extends Controller
         ]);
         $child = DB::table('children')->where('id', $data['child_id'])->first();
         abort_unless($child, 404);
+        /* The child must be at a centre you may see, in this agency (2026-11-05 leak sweep): child_id was read
+           unchecked, so the preview disclosed any agency's child's enrolment date by id. */
+        $agencyId = $this->resolveAgencyId($request);
+        $childCentre = (int) DB::table('families')->where('id', (int) $child->family_id)->value('centre_id');
+        abort_unless($childCentre
+            && (int) DB::table('centres')->where('id', $childCentre)->value('agency_id') === $agencyId
+            && \App\Support\CentreScope::canRead(\App\Support\CentreScope::ids($request, $agencyId), $childCentre), 403);
         $start = Carbon::parse($data['period_start']);
         $end = Carbon::parse($data['period_end']);
         $totalDays = Carbon::parse($end->copy()->startOfMonth())->daysInMonth;
@@ -213,6 +227,19 @@ final class BillingV2Controller extends Controller
             'prorated_fee' => $prorated,
             'savings' => round($base - $prorated, 2),
         ]);
+    }
+
+    /* Agency admin / platform admin of the family's agency (the active one), or the centre director of the
+       family's own centre (2026-11-05 leak sweep). */
+    private function mayDecideForFamily(Request $request, int $familyId): bool
+    {
+        $centreId = (int) DB::table('families')->where('id', $familyId)->value('centre_id');
+        if (! $centreId) return false;
+        $agencyId = $this->resolveAgencyId($request);
+        if ((int) DB::table('centres')->where('id', $centreId)->value('agency_id') !== $agencyId) return false;
+        if (\App\Support\CentreScope::ids($request, $agencyId) === null) return true;
+        return DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+            ->where('role', 'centre_director')->where('centre_id', $centreId)->exists();
     }
 
     private function resolveAgencyId(Request $request): int

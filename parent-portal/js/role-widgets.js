@@ -127,7 +127,12 @@
 
   /* No cards if EITHER the previewed role or the real account has none — the preview
      decides what would be shown, the account decides what actually arrives. */
+  /* A PARENT'S TODAY LEADS WITH THE CHILD'S DAY (2026-11-06, Anthony: "the today screen for guardian take the cards
+     from the top out of there"). The status / balance / photos strip duplicated the child card and the menu below it;
+     screen-parent.js now opens on meals, naps, changes and play instead. Checked on the SHOWN role so a preview of
+     the parent view matches what a parent sees. */
   function servesNoCards() {
+    if (roleOf() === 'guardian') return true;
     return NO_CARDS.indexOf(roleOf()) !== -1 || NO_CARDS.indexOf(accountRole()) !== -1;
   }
 

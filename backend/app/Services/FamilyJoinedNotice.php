@@ -34,6 +34,12 @@ final class FamilyJoinedNotice
             if (! $fam || ! $fam->agency_id) {
                 return 0;
             }
+            /* ONCE PER FAMILY (2026-11-03): claimed before anybody is told, so the creating screen and the
+               kiddietrac:roster-alerts sweep (families created any other way) never both ring. */
+            if (\Illuminate\Support\Facades\Schema::hasColumn('families', 'joined_alerted_at')
+                && ! DB::table('families')->where('id', $familyId)->whereNull('joined_alerted_at')->update(['joined_alerted_at' => now()])) {
+                return 0;
+            }
 
             $kids = DB::table('children')->where('family_id', $familyId)
                 ->whereNull('deleted_at')->count();
@@ -41,16 +47,11 @@ final class FamilyJoinedNotice
             /* The agency's own admins and directors, and nobody else. A director attached
                to a single centre still gets it: a family arriving anywhere in the agency
                is something the office as a whole acts on (invites, forms, room). */
-            $userIds = DB::table('role_assignments as ra')
-                ->join('users as u', 'u.id', '=', 'ra.user_id')
-                ->where('ra.agency_id', $fam->agency_id)
-                ->where('ra.active', true)
-                ->whereIn('ra.role', ['agency_admin', 'centre_director'])
-                ->whereNull('u.deleted_at')
-                ->where('u.status', 'active')
-                ->distinct()
-                ->pluck('u.id')
-                ->all();
+            /* And the family's own educator(s) / provider (2026-11-03, Anthony: "new family should also be alerted
+               the same way by the bell ... to its educator/provider and not to all") - App\Support\RosterAlerts. */
+            $famRooms = DB::table('enrollments as e')->join('children as c', 'c.id', '=', 'e.child_id')
+                ->where('c.family_id', $familyId)->whereNull('e.end_date')->pluck('e.room_id')->all();
+            $userIds = \App\Support\RosterAlerts::recipients((int) $fam->agency_id, (int) $fam->centre_id, $famRooms);
 
             // The person who just created them is looking at the result already.
             if ($actorUserId) {
@@ -87,8 +88,9 @@ final class FamilyJoinedNotice
                         'family_id' => (int) $fam->id,
                         'centre_id' => $fam->centre_id ? (int) $fam->centre_id : null,
                         'children' => $kids,
-                        // Where the bell should take them.
+                        // Where the bell should take them (link: the phone push opens it too).
                         'hash' => 'admin-families',
+                        'link' => '#admin-families',
                     ]),
                     'created_at' => $now,
                 ];

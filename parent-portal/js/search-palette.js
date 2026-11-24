@@ -70,8 +70,10 @@
       '.kt-cmdk-item:hover .kt-cmdk-sub,.kt-cmdk-item.is-active .kt-cmdk-sub{color:rgba(255,255,255,.78);}' +
       '.kt-cmdk-item:hover .kt-cmdk-icon,.kt-cmdk-item.is-active .kt-cmdk-icon{filter:grayscale(0);}' +
       '.kt-cmdk-icon{width:28px;text-align:center;font-size:18px;flex-shrink:0;}' +
-      '.kt-cmdk-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}' +
-      '.kt-cmdk-sub{font-size:12px;color:#64748B;margin-left:auto;flex-shrink:0;}' +
+      '.kt-cmdk-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}' +
+      /* An invoice's line ("Smith family · $412.00 · Overdue · due Oct 3") is long; it shrinks
+         and ellipses rather than pushing the name out (2026-11-02). */
+      '.kt-cmdk-sub{font-size:12px;color:#64748B;margin-left:auto;flex:0 1 auto;min-width:0;max-width:62%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;}' +
       '.kt-cmdk-empty{padding:30px 16px;text-align:center;color:#64748B;font-size:13px;}' +
       '.kt-cmdk-footer{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid #E5E7EB;background:#FAFBFC;font-size:11px;color:#64748B;}' +
       '.kt-cmdk-footer kbd{font-family:ui-monospace,monospace;background:white;border:1px solid #E5E7EB;border-radius:4px;padding:1px 5px;margin:0 3px;color:#64748B;}';
@@ -97,7 +99,7 @@
     var input = document.createElement('input');
     input.className = 'kt-cmdk-input';
     input.type = 'search';
-    input.placeholder = 'Jump to a screen or search children, families, centres, rooms, staff…';
+    input.placeholder = 'Jump to a screen, or search people, invoices and payments…';
     input.autocomplete = 'off';
     input.spellcheck = false;
     inputWrap.appendChild(input);
@@ -179,25 +181,34 @@
       ? KT.navSearch(q, { limit: 8, extra: SHORTCUTS })
       : SHORTCUTS.filter(function (s) { return s.label.toLowerCase().indexOf(ql) !== -1; });
 
+    var navItems = staticMatches.map(function (s) {
+      return { label: s.label, sublabel: s.kwPhrase ? s.sublabel : 'Go to', icon: s.icon, hash: s.hash, group: 'Jump to' };
+    });
+    /* A role that cannot search records (educator, parent) gets the screens only, without a
+       request that can only answer 403. */
+    if (KT.canSearchRecords && !KT.canSearchRecords()) {
+      state.items = navItems; state.cursor = 0; paint();
+      return;
+    }
+    var asked = q;
     Api.get('/admin/search?q=' + encodeURIComponent(q)).then(function (data) {
-      var r = (data && data.results) || {};
-      var items = staticMatches.map(function (s) {
-        return { label: s.label, sublabel: 'Go to', icon: s.icon, hash: s.hash, group: 'Jump to' };
+      if (!state.input || (state.input.value || '').trim() !== asked) { return; }   // a newer keystroke owns the list
+      /* RECORDS IN THE SERVER'S ORDER (2026-11-02): invoices, payments and every other group
+         come labelled and ranked from /admin/search (App\Support\SearchRegistry), so a new
+         searchable type shows up here with no change to this file. When a record IS what was
+         typed (rank 0/1, e.g. an invoice number), it leads; otherwise the screens do. */
+      var groups = (KT.searchGroups) ? KT.searchGroups(data) : [];
+      var recItems = [];
+      groups.forEach(function (g) {
+        g.items.forEach(function (x) { recItems.push({ label: x.label, sublabel: x.sublabel || g.label, icon: g.icon, hash: x.hash, group: g.label }); });
       });
-      (r.centres || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Centre', icon: '🏫', hash: x.hash, group: 'Centres' }); });
-      (r.rooms || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Room', icon: '🚪', hash: x.hash, group: 'Rooms' }); });
-      (r.families || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Family', icon: '👪', hash: x.hash, group: 'Families' }); });
-      (r.children || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Child', icon: '🧒', hash: x.hash, group: 'Children' }); });
-      (r.staff || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Staff', icon: '👤', hash: x.hash, group: 'Staff' }); });
-      // Parents and guardians, by name or by their ID (ILH-P-0031) — 2026-10-14.
-      (r.parents || []).forEach(function (x) { items.push({ label: x.label, sublabel: x.sublabel || 'Parent', icon: '👨‍👩‍👧', hash: x.hash, group: 'Parents' }); });
-
-      state.items = items;
+      state.items = (groups.length && groups[0].best <= 1) ? recItems.concat(navItems) : navItems.concat(recItems);
       state.cursor = 0;
       paint();
     }).catch(function () {
+      if (!state.input || (state.input.value || '').trim() !== asked) { return; }
       state.items = staticMatches.map(function (s) {
-        return { label: s.label, sublabel: 'Go to', icon: s.icon, hash: s.hash, group: 'Jump to' };
+        return { label: s.label, sublabel: s.kwPhrase ? s.sublabel : 'Go to', icon: s.icon, hash: s.hash, group: 'Jump to' };
       });
       state.cursor = 0;
       paint();
@@ -207,7 +218,7 @@
   function paint() {
     if (!state.list) return;
     if (!state.items.length) {
-      state.list.innerHTML = '<div class="kt-cmdk-empty">No matches.</div>';
+      state.list.innerHTML = '<div class="kt-cmdk-empty">No matches. Try a name, an invoice number, an amount or an ID.</div>';
       return;
     }
     state.list.innerHTML = '';
@@ -226,7 +237,7 @@
       row.innerHTML =
         '<div class="kt-cmdk-icon">' + (it.icon || '•') + '</div>' +
         '<div class="kt-cmdk-label">' + escHtml(it.label) + '</div>' +
-        '<div class="kt-cmdk-sub">' + escHtml(it.sublabel || '') + '</div>';
+        '<div class="kt-cmdk-sub" title="' + escHtml(it.sublabel || '').replace(/"/g, '&quot;') + '">' + escHtml(it.sublabel || '') + '</div>';
       row.addEventListener('mouseenter', function () {
         state.cursor = idx; updateActive();
       });

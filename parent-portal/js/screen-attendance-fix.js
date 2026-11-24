@@ -176,7 +176,10 @@
             day.innerHTML = '<span style="color:#64748B;">Nothing recorded for that day.</span>';
             return;
           }
-          day.innerHTML = '<div style="font-weight:700;color:#334155;margin-bottom:4px;">Already recorded</div>';
+          /* More than one visit a day is fine (2026-11-05): say so, so a half-recorded
+             second visit is not mistaken for a duplicate. */
+          day.innerHTML = '<div style="font-weight:700;color:#334155;margin-bottom:4px;">Already recorded</div>'
+            + '<div style="color:#64748B;font-size:11.5px;margin-bottom:4px;">Left and came back? Add the other visit as its own arrival and departure.</div>';
           evts.forEach(function (e) {
             var row = document.createElement('div');
             row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 0;'

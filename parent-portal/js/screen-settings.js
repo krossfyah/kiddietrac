@@ -24,13 +24,16 @@
   // A real sliding toggle switch — used for the on/off settings that were plain
   // pill buttons before (biometric, urgent alerts, autopay). .kt_set(bool) paints
   // it; .kt_disabled(bool) greys it out when the feature isn't available.
+  // A setting kept on this device only (no server write, so kt-progress cannot confirm it): the house Saved toast.
+  function devSaved(what) { try { if (KT.savedToast) KT.savedToast(what + ' - saved on this device.'); } catch (e) {} }
+
   function mkSwitch() {
     /* -webkit-appearance:none FIRST, for the same reason the checkbox toggle sets it:
        a <button> that does not opt out keeps the platform's native widget styling, and
        the iOS/APK WebView then sizes and paints it its own way while desktop Chrome
        renders it exactly as authored. Inline as well as in kt-consistency-polish.css,
        because this one control is worth not depending on a stylesheet for. */
-    var s = el('button', { type: 'button', 'aria-pressed': 'false', style: '-webkit-appearance:none;appearance:none;position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;max-height:28px;box-sizing:border-box;border-radius:999px;border:none;background:#CBD5E1;cursor:pointer;padding:0;font:inherit;transition:background .18s ease;' });
+    var s = el('button', { type: 'button', class: 'kt-sw-btn', 'aria-pressed': 'false', style: '-webkit-appearance:none;appearance:none;position:relative;flex:0 0 auto;width:48px;height:28px;min-height:0;max-height:28px;box-sizing:border-box;border-radius:999px;border:none;background:#CBD5E1;cursor:pointer;padding:0;font:inherit;transition:background .18s ease;' });
     var knob = el('span', {});
     knob.style.cssText = 'position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.28);transition:transform .18s ease;';
     s.appendChild(knob);
@@ -275,7 +278,7 @@
       if (nw.value !== cf.value) { pwStatus.style.color = '#B45309'; pwStatus.textContent = 'New passwords don’t match.'; return; }
       pwBtn.disabled = true; pwBtn.textContent = 'Updating…';
       Api.post('/auth/change-password', { current_password: cur.value, new_password: nw.value })
-        .then(function () { pwBtn.disabled = false; pwBtn.textContent = 'Change password'; pwStatus.style.color = '#16A34A'; pwStatus.textContent = '✓ Password changed.'; cur.value = nw.value = cf.value = ''; })
+        .then(function () { try { sessionStorage.removeItem('kt_force_password_change'); sessionStorage.removeItem('kt_force_password_reason'); } catch (e) {} pwBtn.disabled = false; pwBtn.textContent = 'Change password'; pwStatus.style.color = '#16A34A'; pwStatus.textContent = '✓ Password changed.'; cur.value = nw.value = cf.value = ''; })
         .catch(function (e) { pwBtn.disabled = false; pwBtn.textContent = 'Change password'; pwStatus.style.color = '#B91C1C'; pwStatus.textContent = (e && e.message) ? e.message : 'Could not change password.'; });
     });
     sc.appendChild(pwStatus); sc.appendChild(pwBtn);
@@ -335,6 +338,19 @@
        PIN) instead of a password. An ADDITIONAL way in: the password still works and
        still expires on schedule. Not available inside the Android app, whose web view
        has no WebAuthn; said plainly there instead of showing a button that fails. */
+    /* Signed-in devices (2026-11-09, Anthony: "Sign out a lost phone or kiosk remotely in one click"): every phone,
+       tablet and browser on this account, each with Sign out, plus Sign out of every other device (kt-devices.js). */
+    sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
+    (function () {
+      var head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
+      head.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['📱 Signed-in devices']),
+        el('div', { style: 'font-size:12px;color:#64748B;' }, ['Lost a phone? See where you are signed in and sign a device out remotely.'])]));
+      var b = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;' }, ['Manage devices']);
+      b.addEventListener('click', function () { if (KT.devices) KT.devices.open(); });
+      head.appendChild(b);
+      sc.appendChild(head);
+    })();
+
     sc.appendChild(el('hr', { style: 'border:none;border-top:1px solid #EEF2F6;margin:16px 0;' }));
     (function () {
       var PK = window.KT && KT.passkeys;
@@ -342,12 +358,17 @@
       /* The Android app does passkeys from 3.10.3 (2026-10-10): the app turns WebAuthn on
          in its WebView. An older app, or a phone whose WebView is too old, still has none,
          so say what fixes it rather than "not available". */
-      var inApp = false;
+      var inApp = false, iosApp = false;
       try { inApp = !!(window.Capacitor && (Capacitor.isNativePlatform ? Capacitor.isNativePlatform() : Capacitor.isNative)); } catch (e) {}
+      // The iPhone app (2026-11-04, iPhone recording): its web view has no passkeys yet, and the Android advice (app
+      // 3.10.3, Android System WebView) meant nothing there.
+      try { iosApp = inApp && Capacitor.getPlatform && Capacitor.getPlatform() === 'ios'; } catch (e) {}
       var head = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;' });
       var sub = el('div', { style: 'font-size:12px;color:#64748B;' }, [can
         ? 'Sign in with your face, fingerprint or device PIN — no password to type. Your password still works.'
-        : (inApp
+        : (iosApp
+          ? 'Passkeys are coming to the iPhone app. Face ID sign-in above works meanwhile.'
+          : inApp
           ? 'Update the KiddieTrac app to use passkeys here (version 3.10.3 or later), and keep Android System WebView up to date in the Play Store. Fingerprint unlock works meanwhile.'
           : 'This browser cannot use passkeys. Use an up-to-date Chrome, Safari or Edge.')]);
       head.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['🔑 Passkeys']), sub]));
@@ -443,6 +464,38 @@
     catch (e) { host.appendChild(el('div', { style: 'color:#B91C1C;font-size:13px;' }, ['Could not load security settings.'])); }
   };
 
+  /* WHO EACH SETTING IS FOR (2026-11-06, Anthony: "i logged in as a parent and I see notification types for staff").
+     The server (App\Support\NotifyAudience) sends only the kinds a person can receive, each with `for`: staff,
+     family or all. Here the list narrows to the ROLE being viewed: a parent never sees staff kinds; staff see
+     family kinds only when they are a parent too (marked "as a parent"), never while previewing a role. */
+  var _ktRole = '';
+  function ktSettingsRole() {
+    if (_ktRole) return _ktRole;
+    try { if (typeof window.__ktActiveRole === 'function') return window.__ktActiveRole() || ''; } catch (e) {}
+    try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}').primary_role || ''; } catch (e) { return ''; }
+  }
+  function ktPreviewing() { try { return !!sessionStorage.getItem('kt_view_as'); } catch (e) { return false; } }
+  /* ROLE BY ROLE (2026-11-07, Anthony: "under home visitor why is there a head count notification"). A staff item can
+     carry `roles` (NotifyAudience::SOUND_ROLES / VOICE_ROLES): the staff roles it is for. Viewed as any other staff
+     role it is hidden - unless the person is a parent too and it is a parent item as well ("all"), not while previewing. */
+  function ktForRole(item, sides) {
+    var aud = (item && item.for) || 'all';
+    var role = ktSettingsRole();
+    var guardian = role === 'guardian';
+    if (guardian) return aud !== 'staff';
+    var asParent = !ktPreviewing() && !!(sides && sides.family);
+    var staffOk = !(item && item.roles && item.roles.length) || item.roles.indexOf(role) !== -1;
+    if (aud === 'staff') return staffOk;
+    if (aud === 'all') return staffOk || asParent;
+    return asParent;
+  }
+  function ktAudLabel(item) {
+    var role = ktSettingsRole();
+    var notMine = item.for === 'family' || (item.for === 'all' && item.roles && item.roles.length && item.roles.indexOf(role) === -1);
+    return item.label + (notMine && role !== 'guardian' ? ' \u00b7 as a parent' : '');
+  }
+  KT.settingsForRole = ktForRole;
+
   /* TEXTS AND PHONE CALLS (2026-09-29). One card, two places: the Profile tab here,
      and the "My profile" dialog an agency admin gets in User management, which mounts
      it through KT.renderContactPrefs. Built once so the two cannot drift apart
@@ -495,7 +548,7 @@
              check_in_out, off unless the parent turns it on), so the two are kept in step
              with a page event: change one and the other follows, and neither can save a
              stale value over the other. */
-          var texts = (d.sms || []).slice();
+          var texts = (d.sms || []).filter(function (c) { return ktForRole(c, d.sides); });
           if (texts.length) {
             cpBody.appendChild(cpHead('Texts'));
             if (!d.sms_opted_in) {
@@ -526,7 +579,7 @@
               cpBody.appendChild(ask);
             }
             texts.forEach(function (c) {
-              var r = cpRow(c.label, c.hint, c.on, function (on) {
+              var r = cpRow(ktAudLabel(c), c.hint, c.on, function (on) {
                 return Api.put('/me/contact-prefs', { channel: 'sms', key: c.key, on: on }).then(function (x) {
                   if (c.key === 'checkin') {
                     try { window.dispatchEvent(new CustomEvent('kt-checkin-sms', { detail: { on: on, from: 'texts' } })); } catch (e) {}
@@ -551,7 +604,7 @@
               ['Your agency does not place announcement calls at the moment. Your choices here are kept for when it does.']));
           }
           var callRows = [];
-          (d.voice || []).forEach(function (c) {
+          (d.voice || []).filter(function (c) { return ktForRole(c, d.sides); }).forEach(function (c) {
             var r = cpRow(c.label, c.urgent ? 'An urgent call about your centre.' : 'A non-urgent announcement by phone.', c.on,
               function (on) { return Api.put('/me/contact-prefs', { channel: 'voice', key: c.key, on: on }); }, d.voice_opt_out);
             callRows.push(r);
@@ -656,12 +709,13 @@
        She still has it, in the parent portal, where it belongs. */
     var activeRole = (ctx && ctx.role) || u.primary_role || '';
     var isGuardian = activeRole === 'guardian';
+    _ktRole = activeRole;   // the lists in every tab narrow to this role (ktForRole)
 
     /* Anybody the agency pays. A director and an admin are on payroll too — and an
        auditor is not, so they are deliberately absent. */
     var isPaidStaff = ['educator', 'home_visitor', 'centre_director', 'agency_admin']
       .indexOf(activeRole) !== -1;
-    var tabBar = el('div', { style: 'display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid #E5E7EB;margin-bottom:16px;-webkit-overflow-scrolling:touch;' });
+    var tabBar = el('div', { role: 'tablist', style: 'display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid #E5E7EB;margin-bottom:16px;-webkit-overflow-scrolling:touch;' });
     var paneProfile = el('div', { class: 'kt-st-pane kt-st-cols' });
     /* NOTIFICATIONS IS ITS OWN TAB (2026-10-10, Anthony: "under notifications in settings
        there are multiple settings on one page add the sections in its own substabs within
@@ -676,28 +730,88 @@
     var panePayroll = el('div', { class: 'kt-st-pane kt-st-full', style: 'display:none;' });
     var paneSecurity = el('div', { class: 'kt-st-pane kt-st-cols', style: 'display:none;' });
     var paneAbout = el('div', { class: 'kt-st-pane kt-st-full', style: 'display:none;' });
+    /* CALENDAR SYNC (2026-11-03, cal1103): "Add to my calendar" - a private subscription link for
+       Apple / Google / Outlook. Parents with a family, and paid staff. js/kt-cal-sync.js loads when
+       the tab first opens, so nobody who never opens it makes a link. */
+    var calOn = isGuardian ? !cachedUser().family_pending : isPaidStaff;
+    var paneCal = el('div', { class: 'kt-st-pane kt-st-full', style: 'display:none;' });
+    /* PHOTOS (2026-11-06): each child's photo permission (kt-photo-consent.js, App\Support\MediaConsent). A parent with a
+       family only; drawn when the tab first opens. #settings/photos opens it (the photo prompt and #photo-permissions point here). */
+    var photoOn = isGuardian && !cachedUser().family_pending;
+    var panePhotos = el('div', { class: 'kt-st-pane kt-st-full', style: 'display:none;max-width:720px;' });
+    /* SIGNATURE (2026-11-06): a saved signature and initials, applied to a document only on a tap
+       (KT.savedSignature in kt-signature-pad.js). Everyone; drawn when the tab first opens. #settings/signature. */
+    var paneSig = el('div', { class: 'kt-st-pane kt-st-full', style: 'display:none;max-width:720px;' });
     var _stabs = [];
+    // No Payments for a parent the agency has not linked to a family yet: autopay and
+    // the wallet belong to a family (/auth/me family_pending, 2026-10-21).
+    var payFamily = isGuardian && !cachedUser().family_pending;
     function stab(label, pane) {
-      var b = el('button', { type: 'button', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:9px 8px;margin-bottom:-1px;font-size:14px;font-weight:700;color:#6B7280;cursor:pointer;white-space:nowrap;flex:0 0 auto;' }, [label]);
-      b.addEventListener('click', function () { _stabs.forEach(function (t) { t.b.style.color = '#6B7280'; t.b.style.borderBottomColor = 'transparent'; t.p.style.display = 'none'; }); b.style.color = '#1F6080'; b.style.borderBottomColor = '#1F6080'; pane.style.display = ''; });
+      var b = el('button', { type: 'button', role: 'tab', 'aria-selected': 'false', style: 'appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:9px 8px;margin-bottom:-1px;font-size:14px;font-weight:700;color:#6B7280;cursor:pointer;white-space:nowrap;flex:0 0 auto;' }, [label]);
+      b.addEventListener('click', function () { _stabs.forEach(function (t) { t.b.style.color = '#6B7280'; t.b.style.borderBottomColor = 'transparent'; t.b.setAttribute('aria-selected', 'false'); t.p.style.display = 'none'; }); b.style.color = '#1F6080'; b.style.borderBottomColor = '#1F6080'; b.setAttribute('aria-selected', 'true'); pane.style.display = '';
+        try { sessionStorage.setItem('kt_settings_tab', String(label).toLowerCase()); } catch (e) {} });
       _stabs.push({ b: b, p: pane, key: String(label).toLowerCase() }); tabBar.appendChild(b); return b;
     }
     var _t0 = stab('Profile', paneProfile);
     stab('Notifications', paneNotif);
     stab('Documents', paneDocs);
-    if (isGuardian) stab('Payments', panePay);
-    if (isPaidStaff) stab('Payroll', panePayroll);
+    if (payFamily) stab('Payments', panePay);
+    if (isPaidStaff && !(function(){try{var u=JSON.parse(sessionStorage.getItem('kt_user')||localStorage.getItem('kt_user')||'{}'),r=u.roles||[];return r.indexOf('reseller_admin')!==-1&&r.indexOf('platform_admin')===-1;}catch(e){return false;}})()) stab('Payroll', panePayroll);   // not a Reseller's (2026-10-21)
+    if (calOn) {
+      var _calDone = false;
+      stab('Calendar', paneCal).addEventListener('click', function () {   // cal1103
+        if (_calDone) return; _calDone = true;
+        var go = function () { KT.calSync.render(paneCal, { role: activeRole, mkSwitch: mkSwitch, CARD: CARD, SECT: SECT }); };
+        if (KT.calSync) { go(); return; }
+        var s = document.createElement('script'); s.src = '/js/kt-cal-sync.js?v=20261103cal1'; s.onload = go;
+        s.onerror = function () { _calDone = false; paneCal.textContent = 'Could not load. Please try again.'; };
+        document.head.appendChild(s);
+      });
+    }
+    if (photoOn) {
+      var _photosDone = false;
+      stab('Photos', panePhotos).addEventListener('click', function () {
+        if (_photosDone) return;
+        if (KT.photoConsent && KT.photoConsent.renderInto) { _photosDone = true; KT.photoConsent.renderInto(panePhotos); }
+        else panePhotos.textContent = 'Could not load. Please try again.';
+      });
+    }
+    var _sigDone = false;
+    stab('Signature', paneSig).addEventListener('click', function () {
+      if (_sigDone) return;
+      if (KT.savedSignature && KT.savedSignature.renderInto) { _sigDone = true; KT.savedSignature.renderInto(paneSig); }
+      else paneSig.textContent = 'Could not load. Please try again.';
+    });
     stab('Security', paneSecurity);
     stab('About', paneAbout);
     wrap.appendChild(tabBar);
     wrap.appendChild(paneProfile);
     wrap.appendChild(paneNotif);
     wrap.appendChild(paneDocs);
-    if (isGuardian) wrap.appendChild(panePay);
+    if (payFamily) wrap.appendChild(panePay);
     if (isPaidStaff) wrap.appendChild(panePayroll);
+    if (calOn) wrap.appendChild(paneCal);   // cal1103
+    if (photoOn) wrap.appendChild(panePhotos);
+    wrap.appendChild(paneSig);
     wrap.appendChild(paneSecurity);
     wrap.appendChild(paneAbout);
     _t0.style.color = '#1F6080'; _t0.style.borderBottomColor = '#1F6080';
+
+    /* STAY ON THE TAB YOU WERE ON (2026-10-21). Anthony: "when choosing new notifications
+       and sounds the screen just goes back to profile in apk mobile". Saving a tone is a
+       write; kt-live re-renders the current screen after a write, and this screen always
+       rebuilt on Profile because the tab you had tapped was remembered nowhere. Now it is,
+       for the session (sessionStorage, like the subtabs in kt-settings-tabs.js), so any
+       re-render — a write elsewhere, a return to the app — keeps you where you were. A
+       link naming a tab (below) still wins. */
+    try {
+      var _keep = sessionStorage.getItem('kt_settings_tab') || '';
+      if (_keep && _keep !== 'profile') {
+        for (var _k = 0; _k < _stabs.length; _k++) {
+          if (_stabs[_k].key === _keep) { _stabs[_k].b.click(); break; }
+        }
+      }
+    } catch (e) {}
 
     /* ASK FOR A TAB BY NAME.
 
@@ -729,7 +843,7 @@
       if (hit) { hit.b.click(); }
     }());
     // Payments (guardian only) — Autopay + Wallet, moved here from the home tiles.
-    if (isGuardian) {
+    if (payFamily) {
       var apBox = el('div', {});
       var wBox = el('div', { style: 'margin-top:10px;' });
       panePay.appendChild(apBox); panePay.appendChild(wBox);
@@ -746,7 +860,7 @@
     }
 
     // ── PROFILE ──
-    var pc = el('div', { style: CARD });
+    var pc = el('div', { style: CARD, 'data-kt-nofit': '1' });   // a stacked form: one width for every field
     pc.appendChild(el('div', { style: SECT }, ['Profile']));
 
     // avatar
@@ -755,19 +869,32 @@
     var av = el('div', { style: 'width:64px;height:64px;border-radius:50%;flex-shrink:0;background:#1F6080 center/cover no-repeat;color:#fff;font-size:24px;font-weight:800;display:flex;align-items:center;justify-content:center;overflow:hidden;' },
       [avatarUrl ? '' : ((u.first_name || u.name || '?')[0] || '?').toUpperCase()]);
     if (avatarUrl) av.style.backgroundImage = 'url(' + absUrl(avatarUrl) + ')';
-    var fileInput = el('input', { type: 'file', accept: 'image/*', style: 'display:none;' });
+    var fileInput = el('input', { type: 'file', accept: 'image/*', style: 'display:none;', 'data-kt-noface': '1', 'data-kt-face': '1' });
     var changeBtn = el('button', { type: 'button', style: 'border:1.5px solid #cbd5e1;background:#fff;color:#1F6080;border-radius:10px;padding:9px 14px;font-size:14px;font-weight:700;cursor:pointer;' }, ['Change photo']);
     changeBtn.addEventListener('click', function () { fileInput.click(); });
     fileInput.addEventListener('change', function () {
       var f = fileInput.files && fileInput.files[0]; if (!f) return;
-      av.style.backgroundImage = 'url(' + URL.createObjectURL(f) + ')'; av.textContent = '';
-      changeBtn.textContent = 'Uploading…'; changeBtn.disabled = true;
-      var fd = new FormData(); fd.append('avatar', f);
-      fetch(apiBase() + '/auth/me/avatar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' }, body: fd })
-        .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
-        .then(function () { changeBtn.textContent = 'Change photo'; changeBtn.disabled = false; })
-        .catch(function () { changeBtn.textContent = 'Change photo'; changeBtn.disabled = false; profileStatus('Could not upload photo.', true); });
+      if (window.KT && KT.AvatarCropper) KT.AvatarCropper.open(f, function (blob) { fileInput.value = ''; if (blob) upAvatar(blob); });
+      else upAvatar(f);
     });
+    // A profile photo must show a face, checked on the device (KT.faceGate, 2026-10-30).
+    function upAvatar(f) {
+      if (!(window.KT && KT.faceGate)) { upAvatarNow(f); return; }
+      KT.faceGate(f, { who: 'self', retry: function () { fileInput.click(); } }).then(function (ok) { if (ok) upAvatarNow(f); });
+    }
+    function upAvatarNow(f) {
+      var before = av.style.backgroundImage, beforeTxt = av.textContent;
+      av.style.backgroundImage = 'url(' + URL.createObjectURL(f) + ')'; av.textContent = '';
+      changeBtn.textContent = 'Uploading…'; changeBtn.disabled = true; profileStatus('');
+      var fd = new FormData(); fd.append('avatar', f, 'avatar.jpg');
+      fetch(apiBase() + '/auth/me/avatar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' }, body: fd })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(r.status === 413 ? 'That photo is too large.' : (j.message || 'Could not upload photo.')); return j; }); })
+        .then(function (j) {
+          changeBtn.textContent = 'Change photo'; changeBtn.disabled = false; profileStatus('✓ Photo updated.');
+          try { var ku = cachedUser(); ku.photo_url = j.photo_url; sessionStorage.setItem('kt_user', JSON.stringify(ku)); if (localStorage.getItem('kt_user')) localStorage.setItem('kt_user', JSON.stringify(ku)); } catch (e) {}
+        })
+        .catch(function (e) { av.style.backgroundImage = before; av.textContent = beforeTxt; changeBtn.textContent = 'Change photo'; changeBtn.disabled = false; profileStatus(e && e.message ? e.message : 'Could not upload photo.', true); });
+    }
     avatarWrap.appendChild(av); avatarWrap.appendChild(changeBtn); avatarWrap.appendChild(fileInput);
     pc.appendChild(avatarWrap);
 
@@ -829,7 +956,7 @@
       bc.appendChild(el('div', { style: SECT }, ['Your bio']));
       bc.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin:-4px 0 12px;line-height:1.45;' },
         ['Introduce yourself to the families in your care — your experience, your approach, what makes your home special. This appears on each family’s provider card and their welcome email.']));
-      var bio = el('textarea', { rows: '6', style: 'width:100%;padding:11px 13px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:vertical;' });
+      var bio = el('textarea', { rows: '9', style: 'width:100%;min-height:220px;line-height:1.55;padding:11px 13px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:14px;font-family:inherit;box-sizing:border-box;resize:vertical;' });
       bio.value = u.provider_bio || '';
       bio.setAttribute('placeholder', 'e.g. Hi, I’m Chearstine! I’ve run a licensed home daycare for 8 years and love nature walks, music, and cozy story time…');
       bc.appendChild(bio);
@@ -903,7 +1030,9 @@
 
     // ── FAMILY DIRECTORY (guardian only) — moved here from the Directory screen so
     //    all of the user's preferences live in one place. ──
-    if (/\brole-guardian\b/.test(document.body.className || '')) {
+    //    Not for a parent the agency has not linked to a family yet: there is no family
+    //    to list, and the server refuses (/auth/me family_pending, 2026-10-21).
+    if (/\brole-guardian\b/.test(document.body.className || '') && !cachedUser().family_pending) {
       var fc = el('div', { style: CARD });
       fc.appendChild(el('div', { style: SECT }, ['Family directory']));
       fc.appendChild(el('div', { style: 'font-size:13px;color:#64748b;margin:-2px 0 12px;' },
@@ -955,7 +1084,7 @@
       // a message or alert lands while the app is open. On by default for staff,
       // but it must be switchable — it's deliberately hard to ignore.
       try {
-        if (KT.urgentAlert) {
+        if (KT.urgentAlert && !isGuardian) {   // a staff takeover: never offered to a parent
           var ua = el('div', { style: 'border-top:1px solid #EEF2F6;margin-top:14px;padding-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;' });
           var uaSub = el('div', { style: 'font-size:12px;color:#64748B;' },
             [KT.urgentAlert.isEnabled() ? 'New chats and alerts take over the screen with sound.' : 'New chats and alerts only show a badge.']);
@@ -966,7 +1095,7 @@
             uaBtn.kt_set(on);
             uaSub.textContent = on ? 'New chats and alerts take over the screen with sound.' : 'New chats and alerts only show a badge.';
           };
-          uaBtn.addEventListener('click', function () { KT.urgentAlert.setEnabled(!KT.urgentAlert.isEnabled()); paintUa(); });
+          uaBtn.addEventListener('click', function () { KT.urgentAlert.setEnabled(!KT.urgentAlert.isEnabled()); paintUa(); devSaved('Urgent alerts ' + (KT.urgentAlert.isEnabled() ? 'on' : 'off')); });
           paintUa();
           ua.appendChild(uaBtn);
           nd.appendChild(ua);
@@ -974,8 +1103,52 @@
           // Opt out of kt-icon-buttons: the old "Preview…" label contained "view",
           // so it was auto-collapsed into a cryptic ℹ️ icon. Keep it a real button.
           uaTest.dataset.ktIconized = '1';
-          uaTest.addEventListener('click', function () { KT.urgentAlert.test('message'); });
+          uaTest.addEventListener('click', function () { KT.urgentAlert.test('high'); });
           nd.appendChild(uaTest);
+          // Amber is the everyday alert (headcounts, reminders); red is kept for high alerts (2026-10-30).
+          var uaWarn = el('button', { type: 'button', style: 'display:inline-flex;align-items:center;gap:6px;margin:12px 0 0 8px;background:#FFFBEB;color:#92400E;border:1.5px solid #FCD34D;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;' }, ['\u26a0\ufe0f Test warning alert']);
+          uaWarn.dataset.ktIconized = '1';
+          uaWarn.addEventListener('click', function () { KT.urgentAlert.test('warning'); });
+          nd.appendChild(uaWarn);
+        }
+      } catch (e) {}
+
+      /* KEEP KIDDIETRAC READY (2026-11-02, Android app 3.12.13+; ON by default from 3.12.14). Saved on THIS phone by
+         the app (KtKeepReady plugin; never chosen = on, an explicit off is kept): a small notification keeps the app
+         ready, so it opens instantly even after it is swiped away; the app pauses this page while it is in the
+         background, so it costs very little battery. Shown only when the installed app has the plugin (older apps and
+         browsers never see it). Painted ON until the app answers, because that is the default. */
+      try {
+        var _C = window.Capacitor;
+        var _KR = _C && _C.Plugins && _C.Plugins.KtKeepReady;
+        var _krNative = !!(_C && (_C.isNativePlatform ? _C.isNativePlatform() : _C.isNative)) && (!_C.getPlatform || _C.getPlatform() === 'android');
+        var _krAvail = _krNative && _KR && typeof _KR.get === 'function' && typeof _KR.set === 'function'
+          && (!_C.isPluginAvailable || _C.isPluginAvailable('KtKeepReady'));
+        if (_krAvail) {
+          var kr = el('div', { style: 'border-top:1px solid #EEF2F6;margin-top:14px;padding-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;', 'data-kt-keepready': '1' });
+          var krSub = el('div', { style: 'font-size:12px;color:#64748B;' }, ['Opens instantly, even after you swipe it away. Shows a small notification. Uses very little battery.']);
+          kr.appendChild(el('div', {}, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, ['Keep KiddieTrac ready']), krSub]));
+          var krBtn = mkSwitch();
+          krBtn.id = 'kt-keepready-toggle';
+          krBtn.setAttribute('aria-label', 'Keep KiddieTrac ready');
+          krBtn.kt_set(true); krBtn.kt_disabled(true);
+          var krOn = true;
+          _KR.get().then(function (r) { krOn = !!(r && r.on); krBtn.kt_set(krOn); krBtn.kt_disabled(false); })
+            .catch(function () { krBtn.kt_disabled(false); });
+          krBtn.addEventListener('click', function () {
+            if (krBtn.disabled) return;
+            var want = !krOn;
+            krBtn.kt_disabled(true);
+            _KR.set({ on: want }).then(function (r) {
+              krOn = !!(r && r.on); krBtn.kt_set(krOn); krBtn.kt_disabled(false);
+              devSaved('Keep KiddieTrac ready ' + (krOn ? 'on' : 'off'));
+            }).catch(function () {
+              krBtn.kt_set(krOn); krBtn.kt_disabled(false);
+              krSub.textContent = 'Could not change this setting. Try again.';
+            });
+          });
+          kr.appendChild(krBtn);
+          nd.appendChild(kr);
         }
       } catch (e) {}
 
@@ -1036,9 +1209,13 @@
 
         Api.get('/me/notification-prefs').then(function (res) {
           Dom.clear ? Dom.clear(prefsBody) : (prefsBody.innerHTML = '');
-          (res.preferences || []).forEach(function (p) {
+          var mine = (res.preferences || []).filter(function (p) { return ktForRole(p, res.sides); });
+          if (!mine.length) {
+            prefsBody.appendChild(el('div', { style: 'color:#64748B;font-size:13px;padding:6px 0;' }, ['Nothing to choose here for your role. Chats, announcements and alerts are set under Push & alerts and Sounds & vibration.']));
+          }
+          mine.forEach(function (p) {
             var row = el('div', { style: 'padding:6px 0;' });
-            row.appendChild(el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, [p.label]));
+            row.appendChild(el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;' }, [ktAudLabel(p)]));
             row.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:9px;' }, [p.hint]));
 
             var chans = el('div', { style: 'display:flex;gap:7px;flex-wrap:wrap;' });
@@ -1046,9 +1223,12 @@
             // paintChan is per-channel and scoped to the forEach below; the stop-all
             // link needs the SMS one, so it is captured on the way past.
             var smsPaint = null;
-            [['email', '✉️ Email'], ['push', '🔔 In-app'], ['sms', '💬 Text']].forEach(function (c) {
+            /* Some categories are in-app/phone only (instant moments, 2026-10-31): p.channels lists them. */
+            [['email', '✉️ Email'], ['push', p.channels ? '🔔 In-app & phone' : '🔔 In-app'], ['sms', '💬 Text']].filter(function (c) {
+              return !p.channels || p.channels.indexOf(c[0]) >= 0;
+            }).forEach(function (c) {
               var key = c[0];
-              var b = el('button', { type: 'button', style: 'border-radius:999px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;border:1.5px solid;' }, [c[1]]);
+              var b = el('button', { type: 'button', 'data-kt-autosave': '1', style: 'border-radius:999px;padding:9px 14px;font-size:13px;font-weight:800;cursor:pointer;border:1.5px solid;' }, [c[1]]);
               var paintChan = function () {
                 var on = state[key];
                 b.style.background = on ? '#159FB4' : '#fff';
@@ -1143,6 +1323,181 @@
     var _notifTexts = null;
     try { _notifTexts = buildContactPrefsCard(); } catch (e) {}
 
+    /* SOUNDS & VIBRATION (2026-10-21). Anthony: "make the mobile app have different tones
+       available for chat, email, announcements etc that I can choose from - have a variety
+       that are loud and noticable with variations to the vibration on my phone as well".
+       One row per kind of notification: a tone (with a play button) and a vibration
+       pattern, saved as soon as it changes. GET/PUT /me/notification-sounds; the server
+       sends the choice with every push (App\Support\NotificationSounds). */
+    function buildSoundsCard() {
+      var box = el('div', { style: CARD });
+      box.appendChild(el('div', { style: SECT }, ['Sounds & vibration']));
+      var body = el('div', { style: 'color:#64748B;font-size:13px;' }, ['Loading…']);
+      box.appendChild(body);
+
+      var Cap = window.Capacitor;
+      var isNative = !!(Cap && Cap.isNativePlatform && Cap.isNativePlatform());
+      var plat = isNative && Cap.getPlatform ? Cap.getPlatform() : 'web';
+      var SEL = 'height:32px;border:1px solid #CBD5E1;border-radius:8px;padding:0 8px;font-size:13px;background:#fff;color:#0f172a;max-width:100%;';
+      var BTN = 'height:32px;min-width:32px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;cursor:pointer;font-size:13px;font-weight:700;color:#0f766e;padding:0 10px;';
+
+      var audio = null;
+      function preview(cat, toneKey, vibKey) {
+        var tone = cat.tonesByKey[toneKey]; var vib = cat.vibsByKey[vibKey];
+        var pattern = (vib && vib.pattern) || [];
+        var KtBio = Cap && Cap.Plugins && Cap.Plugins.KtBio;
+        // The app (build 55+) plays it exactly as a notification would: tone + vibration.
+        if (isNative && KtBio && KtBio.previewTone && (window.KT_APP_BUILD || 0) >= cat.minBuild) {
+          KtBio.previewTone({ tone: toneKey, pattern: pattern }).catch(function () {});
+          return;
+        }
+        if (window.KT && KT.sounds && KT.sounds.preview) { KT.sounds.preview(tone.url); }
+        else { try { if (audio) { audio.pause(); } audio = new Audio(tone.url); audio.play().catch(function () {}); } catch (e) {} }
+        // Android patterns start with a wait; the browser's start with a buzz.
+        try { if (navigator.vibrate && pattern.length) { navigator.vibrate(pattern[0] === 0 ? pattern.slice(1) : pattern); } } catch (e) {}
+      }
+
+      Api.get('/me/notification-sounds').then(function (d) {
+        body.innerHTML = '';
+        var cat = { tonesByKey: {}, vibsByKey: {}, minBuild: d.min_build || 55 };
+        (d.tones || []).forEach(function (t) { cat.tonesByKey[t.key] = t; });
+        (d.vibrations || []).forEach(function (v) { cat.vibsByKey[v.key] = v; });
+
+        // What this device will actually do with the choice.
+        var note;
+        if (plat === 'android' && (window.KT_APP_BUILD || 0) < cat.minBuild) {
+          note = '📲 Update the KiddieTrac app to hear these: this version plays the standard chime for everything. Your choices are saved and start working as soon as the app is updated.';
+        } else if (plat === 'android') {
+          note = (window.KT_APP_BUILD || 0) >= (d.remote_build || 56)
+            ? 'Your choices apply to this phone straight away. ▶ plays the tone with its vibration; 🔔 Test shows a real notification.'
+            : 'Your choices apply to this phone. This app version has the ' + (d.tones || []).filter(function (t) { return t.bundled; }).length
+              + ' built-in tones; update the app to use the whole library (others play as the built-in tone until then).';
+        } else if (plat === 'ios') {
+          note = 'On iPhone the tone you choose is used. Apple does not let apps set their own vibration, so iPhones buzz the standard way.';
+        } else {
+          note = 'These apply to the KiddieTrac phone app. Notifications in a web browser use the browser\'s own sound. ▶ plays the tone here' + (navigator.vibrate ? ' (and vibrates on an Android phone).' : '.');
+        }
+        body.appendChild(el('div', { style: 'background:#F0FDFA;border:1px solid #99F6E4;color:#115E59;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:12px;' }, [note]));
+        /* Required by the agency (2026-10-31, App\Support\StaffNotifyRequirement): these categories stay on; tones are still theirs to choose. */
+        var reqBox = el('div', { style: 'display:none;background:#EFF6FF;border:1px solid #BFDBFE;color:#1E3A8A;border-radius:10px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin-bottom:12px;' });
+        body.appendChild(reqBox);
+        Api.get('/me/notify-requirement').then(function (r) {
+          if (!r || !r.required) return;
+          var names = (r.locked || []).map(function (k) { var c = (d.categories || []).filter(function (x) { return x.key === k; })[0]; return c ? c.label : null; }).filter(Boolean);
+          reqBox.textContent = '🔒 Required by ' + (r.agency || 'your agency') + ' for your role: notifications for ' + names.join(', ')
+            + ' must stay on, on your phone. You can still choose their tones and vibration below.';
+          reqBox.style.display = '';
+        }).catch(function () {});
+
+        /* THIS DEVICE (2026-10-21): sounds while KiddieTrac is open, on a computer or in
+           the app. Stored on this device only (KT.sounds); the tones themselves are the
+           per-category choices below, shared with the phone. */
+        if (window.KT && KT.sounds) {
+          var S = KT.sounds;
+          var dev = el('div', { style: 'border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:12px;display:grid;gap:10px;' });
+          dev.appendChild(el('div', { style: 'font-weight:800;font-size:14px;color:#0f172a;' }, [isNative ? 'On this device, while KiddieTrac is open' : 'On this computer, while KiddieTrac is open']));
+          var onBox = el('input', { type: 'checkbox', style: 'width:16px;height:16px;' }); onBox.checked = S.isOn();
+          var vol = el('input', { type: 'range', min: '0', max: '100', step: '5', style: 'flex:1;min-width:120px;max-width:260px;' }); vol.value = String(S.volume());
+          var volVal = el('span', { style: 'font-size:12px;color:#475569;min-width:36px;' }, [S.volume() + '%']);
+          var tmBox = el('input', { type: 'checkbox', style: 'width:16px;height:16px;' }); tmBox.checked = S.typingMute();
+          onBox.addEventListener('change', function () { S.setOn(onBox.checked); vol.disabled = !onBox.checked; tmBox.disabled = !onBox.checked; devSaved('Sounds ' + (onBox.checked ? 'on' : 'off')); });
+          vol.addEventListener('input', function () { S.setVolume(parseInt(vol.value, 10)); volVal.textContent = vol.value + '%'; });
+          vol.addEventListener('change', function () { devSaved('Volume ' + vol.value + '%'); });   // once, when the slider is let go
+          tmBox.addEventListener('change', function () { S.setTypingMute(tmBox.checked); devSaved('Mute while typing ' + (tmBox.checked ? 'on' : 'off')); });
+          vol.disabled = !onBox.checked; tmBox.disabled = !onBox.checked;
+          dev.appendChild(el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;' }, [onBox, 'Play sounds for chats, announcements and other notifications']));
+          dev.appendChild(el('div', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap;' }, [el('span', { style: 'font-weight:700;color:#475569;' }, ['🔉 Volume']), vol, volVal]));
+          dev.appendChild(el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;' }, [tmBox, 'Mute while I\'m typing in chat']));
+          /* VIBRATE (2026-10-30): notifications that ring while KiddieTrac is open vibrate too, with each category's
+             pattern below. Phones that can vibrate from the app only (Android); not shown where it cannot work. */
+          if (S.canVibrate && S.canVibrate() && S.setVibOn) {
+            var vbBox = el('input', { type: 'checkbox', style: 'width:16px;height:16px;' }); vbBox.checked = S.vibOn();
+            vbBox.addEventListener('change', function () { S.setVibOn(vbBox.checked); if (vbBox.checked && S.buzz) S.buzz([250, 120, 250]); devSaved('Vibrate ' + (vbBox.checked ? 'on' : 'off')); });
+            dev.appendChild(el('label', { style: 'display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;' }, [vbBox, '📳 Vibrate for notifications (each kind uses its pattern below, even with sounds off)']));
+          }
+          if (!isNative) {
+            dev.appendChild(el('div', { style: 'font-size:12px;color:#64748B;line-height:1.5;' },
+              ['When KiddieTrac is closed, notifications come from your browser and use your computer\'s own notification sound — browsers do not let a website choose it.']));
+          }
+          body.appendChild(dev);
+        }
+
+        (d.categories || []).filter(function (c) { return ktForRole(c, d.sides); }).forEach(function (c) {
+          var cur = (d.choices || {})[c.key] || { tone: c.default_tone, vibration: c.default_vibration };
+          var row = el('div', { style: 'border-top:1px solid #F1F5F9;padding:12px 0;display:grid;gap:8px;' });
+          row.appendChild(el('div', {}, [
+            el('div', { style: 'font-weight:800;font-size:14px;color:#0f172a;' }, [ktAudLabel(c)]),
+            el('div', { style: 'font-size:12px;color:#64748B;margin-top:2px;' }, [c.hint]),
+          ]));
+          var toneSel = el('select', { style: SEL, 'aria-label': c.label + ' tone' });
+          /* The library is grouped (Chimes, Bells, Alarms & sirens…); each group is a
+             section of the list. Tones come from the hosted catalogue, so new ones appear
+             here without a release (2026-10-21). */
+          (d.groups && d.groups.length ? d.groups : ['']).forEach(function (g) {
+            var host = g ? el('optgroup', { label: g }) : toneSel;
+            (d.tones || []).forEach(function (t) {
+              if (g && t.group !== g) { return; }
+              var o = el('option', { value: t.key }, [t.label]); if (t.key === cur.tone) { o.selected = true; } host.appendChild(o);
+            });
+            if (g) { toneSel.appendChild(host); }
+          });
+          var vibSel = el('select', { style: SEL, 'aria-label': c.label + ' vibration' });
+          (d.vibrations || []).forEach(function (v) {
+            var o = el('option', { value: v.key }, [v.label]); if (v.key === cur.vibration) { o.selected = true; } vibSel.appendChild(o);
+          });
+          if (c.vibration_locked) { vibSel.disabled = true; vibSel.title = 'Emergency messages always ring and vibrate until answered.'; }
+          var play = el('button', { type: 'button', style: BTN, title: 'Play this tone', 'aria-label': 'Play ' + c.label + ' tone' }, ['▶']);
+          var status = el('span', { style: 'font-size:12px;color:#16A34A;min-width:52px;' }, ['']);
+          play.addEventListener('click', function () { preview(cat, toneSel.value, vibSel.value); });
+          function save() {
+            status.style.color = '#64748B'; status.textContent = 'Saving…';
+            try {
+              var KB = Cap && Cap.Plugins && Cap.Plugins.KtBio;
+              if (isNative && KB && KB.prefetchTone) { KB.prefetchTone({ tone: toneSel.value }).catch(function () {}); }
+            } catch (e) {}
+            Api.put('/me/notification-sounds', { category: c.key, tone: toneSel.value, vibration: vibSel.value }).then(function () {
+              status.style.color = '#16A34A'; status.textContent = 'Saved ✓';
+              try { if (window.KT && KT.sounds) { KT.sounds.refresh(); } } catch (e) {}
+              setTimeout(function () { status.textContent = ''; }, 2000);
+            }).catch(function () { status.style.color = '#DC2626'; status.textContent = 'Not saved'; });
+          }
+          toneSel.addEventListener('change', function () { preview(cat, toneSel.value, vibSel.value); save(); });
+          vibSel.addEventListener('change', function () { preview(cat, toneSel.value, vibSel.value); save(); });
+          var bits = [
+            el('span', { style: 'font-size:12px;color:#475569;font-weight:700;' }, ['🎵']), toneSel, play,
+            el('span', { style: 'font-size:12px;color:#475569;font-weight:700;margin-left:4px;' }, ['📳']), vibSel,
+          ];
+          var KBt = Cap && Cap.Plugins && Cap.Plugins.KtBio;
+          if (isNative && KBt && KBt.previewNotification) {
+            var test = el('button', { type: 'button', style: BTN + 'color:#475569;', title: 'Show a real notification on this phone with this tone and vibration' }, ['🔔 Test']);
+            test.addEventListener('click', function () {
+              KBt.previewNotification({ category: c.key, tone: toneSel.value, vib: vibSel.value,
+                title: c.label, body: 'This is how ' + c.label.toLowerCase() + ' will sound.' }).catch(function () {});
+            });
+            bits.push(test);
+          }
+          bits.push(status);
+          row.appendChild(el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;' }, bits));
+          body.appendChild(row);
+        });
+
+        var reset = el('button', { type: 'button', style: BTN + 'color:#475569;margin-top:6px;' }, ['Reset all to defaults']);
+        reset.addEventListener('click', function () {
+          Api.put('/me/notification-sounds', { reset: true }).then(function () {
+            var host = box.parentNode; var fresh = buildSoundsCard();
+            if (host) { host.replaceChild(fresh, box); }
+            if (KT.savedToast) KT.savedToast('Every sound is back to its default.');
+          }).catch(function () { if (KT.savedToast) KT.savedToast('The sounds were not reset. Try again.', true); });
+        });
+        body.appendChild(reset);
+      }).catch(function () {
+        body.textContent = 'Could not load your sound settings.';
+      });
+      return box;
+    }
+    var _notifSounds = null;
+    try { _notifSounds = buildSoundsCard(); } catch (e) {}
+
     // The Notifications tab: one subtab per section (see paneNotif above).
     try {
       var _nHost = el('div', {});
@@ -1156,9 +1511,10 @@
         };
       };
       KT.settingsTabs(_nHost, 'settings-notifications', [
-        typeof _notifAbout !== 'undefined' && _notifAbout ? { key: 'about', label: '🔔 Notify me about', paint: _card(_notifAbout) } : null,
+        typeof _notifAbout !== 'undefined' && _notifAbout && (isGuardian || (!ktPreviewing() && (u.roles || []).indexOf('guardian') !== -1)) ? { key: 'about', label: '🔔 Notify me about', paint: _card(_notifAbout) } : null,
         _notifTexts ? { key: 'texts', label: '📱 Texts & calls', paint: _card(_notifTexts) } : null,
         typeof _notifPush !== 'undefined' && _notifPush ? { key: 'push', label: '📲 Push & alerts', paint: _card(_notifPush) } : null,
+        _notifSounds ? { key: 'sounds', label: '🔊 Sounds & vibration', paint: _card(_notifSounds) } : null,
       ], { param: 'sub' });
     } catch (e) {}
 
@@ -1180,22 +1536,34 @@
     paneSecurity.appendChild(sc);
 
     // Delete my account (App Store Guideline 5.1.1(v) in-app deletion path).
+    /* DELETING IS DONE HERE, NOT REQUESTED (2026-11-05): confirming archives the account at once, the same as
+       an admin removing it in the portal - access ends on every device, the agency's admins and directors are
+       emailed, and the records the centre must keep stay on its Archived screen for its retention period.
+       This button used to send a request for an administrator to act on. */
     var dz = el('div', { style: CARD + 'border:1px solid #FECACA;' });
     dz.appendChild(el('div', { style: 'font-size:16px;font-weight:800;color:#B91C1C;margin:0 0 10px;' }, ['Delete my account']));
-    dz.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:12px;' }, ['Your account is managed by your childcare agency. Request deletion and your agency administrator will permanently remove your account and personal data.']));
+    dz.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;line-height:1.5;margin-bottom:12px;' }, ['Deleting signs you out on every device and you can’t sign in again. Records your centre must keep by law, such as your child’s care records and invoices, are archived by the centre and removed when their retention period ends.']));
     var dzStatus = el('div', { style: 'font-size:12.5px;min-height:16px;margin-bottom:8px;' });
-    var dzBtn = el('button', { type: 'button', style: 'background:#fff;color:#B91C1C;border:1.5px solid #FCA5A5;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:800;cursor:pointer;min-height:0;' }, ['Request account deletion']);
+    var dzBtn = el('button', { type: 'button', style: 'background:#fff;color:#B91C1C;border:1.5px solid #FCA5A5;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:800;cursor:pointer;min-height:0;' }, ['Delete my account']);
     dzBtn.addEventListener('click', async function () {
-      var ok = (window.KT && KT.confirm) ? await KT.confirm('Request permanent deletion of your KiddieTrac account and data? Your agency administrator will be notified to complete it.') : window.confirm('Request account deletion?');
+      var ok = (window.KT && KT.confirm) ? await KT.confirm('Delete your KiddieTrac account? You will be signed out everywhere and cannot sign in again. This cannot be undone from the app.') : window.confirm('Delete your KiddieTrac account?');
       if (!ok) return;
-      dzBtn.disabled = true; dzBtn.textContent = 'Sending…';
+      dzBtn.disabled = true; dzBtn.textContent = 'Deleting…';
       try {
         var r = await Api.post('/me/account-deletion', {});
-        dzStatus.style.color = '#16A34A'; dzStatus.textContent = (r && r.message) || 'Request sent to your agency administrator.';
-        dzBtn.textContent = 'Request sent';
+        if (!r || !r.deleted) throw new Error((r && r.message) || 'Could not delete your account - please try again.');
+        dzStatus.style.color = '#16A34A'; dzStatus.textContent = r.message;
+        dzBtn.textContent = 'Account deleted';
+        // The server has already ended every session; forget this device's saved sign-ins too, then leave.
+        try { ['kt_biometric_enabled','kt_bio_token','kt_bio_user','kt_bio_agency','kt_bio_view','kt_bio_cred','kt_pin_vault','kt_pin_enabled'].forEach(function (k) { localStorage.removeItem(k); }); } catch (e) {}
+        setTimeout(function () {
+          if (window.KT && typeof KT.signOut === 'function') { KT.signOut(); return; }
+          try { sessionStorage.clear(); localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user'); } catch (e) {}
+          location.href = '/index.html';
+        }, 2500);
       } catch (e) {
-        dzBtn.disabled = false; dzBtn.textContent = 'Request account deletion';
-        dzStatus.style.color = '#B91C1C'; dzStatus.textContent = (e && e.message) || 'Could not send — please try again.';
+        dzBtn.disabled = false; dzBtn.textContent = 'Delete my account';
+        dzStatus.style.color = '#B91C1C'; dzStatus.textContent = (e && e.message) || 'Could not delete your account - please try again.';
       }
     });
     dz.appendChild(dzStatus); dz.appendChild(dzBtn);
@@ -1214,7 +1582,7 @@
     var about = el('div', { style: 'text-align:center;margin:10px 0 4px;font-size:11.5px;color:#64748B;line-height:1.7;' });
     about.appendChild(el('div', { style: 'font-weight:800;color:#334155;font-size:12.5px;' }, ['KiddieTrac']));
     about.appendChild(el('div', {}, ['Web build ' + (window.KT_VERSION || '—')]));
-    about.appendChild(el('div', { style: 'color:#94A3B8;font-size:10.5px;margin-top:2px;' }, ['© 2021–2026 KiddieTrac. All rights reserved.']));
+    about.appendChild(el('div', { class: 'kt-copyright', style: 'color:#94A3B8;font-size:10.5px;margin-top:2px;' }, [(window.KT && KT.copyrightText ? KT.copyrightText() : '\u00a9 ' + new Date().getFullYear() + ' KiddieTrac Inc. All Rights Reserved.')]));   // hidden for a white-label agency
     var appLine = el('div', { style: 'font-weight:700;color:#334155;' }, ['App build: checking…']);
     about.appendChild(appLine);
     try {
@@ -1259,6 +1627,7 @@
       var nowOn = !diagOn();
       try { localStorage.setItem('kt_diag', nowOn ? '1' : '0'); } catch (e) {}
       diagSw.kt_set(nowOn);
+      devSaved('Diagnostics overlay ' + (nowOn ? 'on' : 'off'));
       try { if (window.__ktDiagRefresh) window.__ktDiagRefresh(); } catch (e) {}
     });
     diagRow.appendChild(diagSw);
@@ -1453,6 +1822,11 @@
      most needed somewhere personal to manage it. */
   Shell.registerScreen('agency_admin:settings', render);
   Shell.registerScreen('centre_director:settings', render);
+  /* Every role has a personal Settings screen (2026-10-21): an auditor and a reseller
+     admin had none, so #settings fell back to their home screen and their notification
+     sounds could not be reached at all. */
+  Shell.registerScreen('auditor:settings', render);
+  Shell.registerScreen('reseller_admin:settings', render);
   /* The same profile under the label the nav now uses. `settings` stays registered for
      every role because it is in bookmarks, in the sidebar's build line (#settings/about)
      and in help articles — removing an address people already hold would break those to

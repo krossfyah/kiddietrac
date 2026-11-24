@@ -28,7 +28,7 @@ final class ChildController extends Controller
         // own centre. The centre filter still narrows when supplied.
         $user = $request->user();
         $requestedCentre = $request->integer("centre_id");
-        $isAgencyLevel = DB::table('role_assignments')->where('user_id', $user->id)
+        $isAgencyLevel = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $user->id)
             ->where('active', 1)->whereIn('role', ['agency_admin', 'platform_admin'])->exists();
 
         /* CURRENT BY DEFAULT (2026-10-09). With no status this returned every child ever
@@ -367,12 +367,6 @@ final class ChildController extends Controller
 
     public function enroll(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-
-        if (! $centreId) {
-            return response()->json(['message' => 'No centre access'], 403);
-        }
-
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:80'],
             'last_name' => ['required', 'string', 'max:80'],
@@ -388,14 +382,21 @@ final class ChildController extends Controller
             'dietary_notes' => ['nullable', 'string'],
         ]);
 
-        $family = DB::table('families')->where('id', $data['family_id'])->first();
-        if (! $family || (int) $family->centre_id !== $centreId) {
+        /* THE FAMILY'S CENTRE, NOT THE CALLER'S FIRST (2026-11-13 sweep, after "Could not save - Child not in your
+           centre" on an immunization). Both checks compared with resolveCentreId(), ONE centre - an agency admin's is
+           the agency's first - so "Add child" on a family at any of iLearn's other six centres answered "Family not
+           found in your centre". Now: the family is at a centre this person may see in the active agency and
+           directs (directsCentre, as update() uses), and the room is at that same centre (as updateEnrollment). */
+        $family = DB::table('families')->where('id', $data['family_id'])->whereNull('deleted_at')->first();
+        $centreId = $family ? (int) $family->centre_id : 0;
+        if (! $centreId || ! in_array($centreId, $this->visibleCentreIds($request), true)
+            || ! $this->directsCentre($request, $centreId)) {
             return response()->json(['message' => 'Family not found in your centre'], 422);
         }
 
         $room = DB::table('rooms')->where('id', $data['room_id'])->first();
         if (! $room || (int) $room->centre_id !== $centreId) {
-            return response()->json(['message' => 'Room not found in your centre'], 422);
+            return response()->json(['message' => 'Choose a room at the family\'s own centre.'], 422);
         }
         if (! \App\Support\Live::centreOpen((int) $room->centre_id)) {
             return response()->json(['message' => 'That room belongs to a centre that is closed.'], 422);
@@ -484,7 +485,7 @@ final class ChildController extends Controller
         /* Re-opening an ended enrolment (end_date cleared or pushed past today) or moving it
            to another room is a placement: the same refusal as creating one (2026-10-09). */
         $reopening = array_key_exists('end_date', $data) && $enrollment->end_date !== null
-            && ($data['end_date'] === null || $data['end_date'] > now()->toDateString());
+            && ($data['end_date'] === null || $data['end_date'] > \App\Support\AgencyTime::today());
         if ($reopening || array_key_exists('room_id', $data)) {
             \App\Http\Controllers\Concerns\EnrolmentGuard::assert((int) $enrollment->child_id, (int) ($data['room_id'] ?? $enrollment->room_id));
         }
@@ -687,8 +688,10 @@ final class ChildController extends Controller
                 $destRoomId = $roomFor((int) $cid);
                 $placements[(int) $cid] = $destRoomId;
 
+                // The old placement's LAST DAY is the day before the move (2026-11-09): ending it ON the move day
+                // counted the child in both rooms that day.
                 DB::table('enrollments')->where('child_id', $cid)->whereNull('end_date')
-                    ->update(['end_date' => $effective]);
+                    ->update(['end_date' => Carbon::parse($effective)->subDay()->toDateString()]);
 
                 // Carry the placement's terms forward; a move is not a re-negotiation.
                 $prev = $open->first();
@@ -1036,15 +1039,16 @@ final class ChildController extends Controller
 
     public function waitlist(Request $request): JsonResponse
     {
-        $centreId = $this->resolveCentreId($request->user());
-
-        if (! $centreId) {
-            return response()->json(['waitlist' => []]);
+        /* Every centre this person may see, or the one the screen asks for (?centre_id, sent by screen-waitlist.js and
+           ignored until 2026-11-13 - the list was resolveCentreId()'s one centre, the agency's first for an admin). */
+        $ids = $this->visibleCentreIds($request);
+        if ($want = (int) $request->query('centre_id')) {
+            $ids = in_array($want, $ids, true) ? [$want] : [];
         }
 
         $children = DB::table('children')
             ->join('families', 'families.id', '=', 'children.family_id')
-            ->where('families.centre_id', $centreId)
+            ->whereIn('families.centre_id', $ids ?: [0])
             ->where('children.enrollment_status', 'waitlist')
             ->select('children.*', 'families.family_name')
             ->orderBy('children.created_at')
@@ -1063,7 +1067,8 @@ final class ChildController extends Controller
         }
 
         $family = DB::table("families")->where("id", $child->family_id)->first();
-        if (! $family || ! $this->authorizeCentreAccess($request->user(), (int) $family->centre_id)) {
+        if (! $family || ! $this->authorizeCentreAccess($request->user(), (int) $family->centre_id)
+            || ! $this->directsCentre($request, (int) $family->centre_id)) {
             return response()->json(["message" => "Forbidden"], 403);
         }
 
@@ -1127,7 +1132,7 @@ final class ChildController extends Controller
         $data["updated_at"] = now();
         DB::transaction(function () use ($childId, $data, $leaving) {
             if ($leaving) {
-                $endDate = now()->toDateString();
+                $endDate = \App\Support\AgencyTime::today();
                 $data["withdrawn_at"] = $data["withdrawn_at"] ?? $endDate;
                 DB::table("enrollments")->where("child_id", $childId)->whereNull("end_date")
                     ->update(["end_date" => $endDate]);
@@ -1146,7 +1151,8 @@ final class ChildController extends Controller
         }
 
         $family = DB::table("families")->where("id", $child->family_id)->first();
-        if (! $family || ! $this->authorizeCentreAccess($request->user(), (int) $family->centre_id)) {
+        if (! $family || ! $this->authorizeCentreAccess($request->user(), (int) $family->centre_id)
+            || ! $this->directsCentre($request, (int) $family->centre_id)) {
             return response()->json(["message" => "Forbidden"], 403);
         }
 
@@ -1154,11 +1160,11 @@ final class ChildController extends Controller
             DB::table("enrollments")
                 ->where("child_id", $childId)
                 ->whereNull("end_date")
-                ->update(["end_date" => now()->toDateString()]);
+                ->update(["end_date" => \App\Support\AgencyTime::today()]);
             DB::table("children")->where("id", $childId)->update([
                 "deleted_at" => now(),
                 "enrollment_status" => "withdrawn",
-                "withdrawn_at" => now()->toDateString(),
+                "withdrawn_at" => \App\Support\AgencyTime::today(),
                 "updated_at" => now(),
             ]);
         });
@@ -1167,6 +1173,26 @@ final class ChildController extends Controller
     }
 
     // ─── helpers ────────────────────────────────────────────────────
+
+    /* DIRECTOR OF THIS CENTRE, OR AN ADMIN OF ITS AGENCY (2026-11-05 leak sweep). authorizeCentreAccess says yes to
+       any staff role at the centre, so someone who is a director at one centre and an educator at another could
+       edit and archive the other centre's children through these director routes. A platform admin only in the
+       agency they switched into. */
+    private function directsCentre(Request $request, int $centreId): bool
+    {
+        $agencyId = (int) DB::table("centres")->where("id", $centreId)->value("agency_id");
+        if (! $agencyId) {
+            return false;
+        }
+        $roles = DB::table("role_assignments")->where("user_id", $request->user()->id)->where("active", true)
+            ->get(["role", "agency_id", "centre_id"]);
+        if ($roles->contains(fn ($r) => $r->role === "platform_admin")) {
+            return (int) $this->resolveAgencyId($request) === $agencyId;
+        }
+
+        return $roles->contains(fn ($r) => ($r->role === "agency_admin" && (int) $r->agency_id === $agencyId)
+            || ($r->role === "centre_director" && (int) $r->centre_id === $centreId));
+    }
 
     /** v22p88: GET /director/children/{child}/daily-events — recent day events + check-ins. */
     public function dailyEvents(Request $request, int $childId): JsonResponse
@@ -1185,8 +1211,8 @@ final class ChildController extends Controller
         }
         if ($on === '') {
             $days = max(1, min(90, (int) $request->query('days', 14)));
-            $since = now()->subDays($days)->startOfDay();
-            $until = now()->endOfDay();
+            $since = \App\Support\AgencyTime::boundaryUtc(null, 'day', -$days);
+            $until = \App\Support\AgencyTime::boundaryUtc(null, 'day', 1)->subSecond();
         }
 
         // Recorder names, so the record says WHO logged each moment rather than

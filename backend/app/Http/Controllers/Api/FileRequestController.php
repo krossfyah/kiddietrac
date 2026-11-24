@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\Storage;
  * same place -- a row in `documents` on the person's own record -- so a parent has one
  * Documents screen rather than two half-answers.
  *
- * A request is a LIST. "Immunisation card (2 photos), photo ID (1), proof of address (1)"
+ * A request is a LIST. "Immunization card (2 photos), photo ID (1), proof of address (1)"
  * is one ask with three lines, tracked line by line, because "have they sent everything?"
  * is the only question anybody has about it.
  */
@@ -40,7 +40,8 @@ final class FileRequestController extends Controller
 
     private function roles(int $uid): array
     {
-        $roles = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->pluck('role')->all();
+        // In the active agency only (2026-11-05 leak sweep): a role held in another agency counted here.
+        $roles = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $uid)->where('active', 1)->pluck('role')->all();
         if (DB::table('guardians')->where('user_id', $uid)->exists()) {
             $roles[] = 'guardian';
         }
@@ -102,16 +103,31 @@ final class FileRequestController extends Controller
     /* ───────────────────────── list ───────────────────────── */
 
     /** GET /admin/file-requests */
+    /* CENTRE DIRECTORS (2026-11-13, Forms Manager scoped to their centres): a request belongs to the person it
+       was sent to, so a director sees and acts on requests to the people of their own centres
+       (App\Support\CentreScope::people). Agency-wide callers: unchanged. */
+    private function requestOutOfScope(Request $request, int $agencyId, int $id): ?JsonResponse
+    {
+        $people = \App\Support\CentreScope::people($request, $agencyId);
+        if ($people === null) {
+            return null;
+        }
+        $uid = (int) DB::table('file_requests')->where('id', $id)->value('user_id');
+        return ($uid && in_array($uid, $people, true)) ? null : response()->json(['message' => 'Not found'], 404);
+    }
+
     public function index(Request $request): JsonResponse
     {
         if (! $this->canRead($request)) {
             return response()->json(['requests' => []], 403);
         }
         $agencyId = $this->agencyId($request);
+        $people = \App\Support\CentreScope::people($request, $agencyId);
 
         $rows = DB::table('file_requests as r')
             ->leftJoin('users as u', 'u.id', '=', 'r.user_id')
             ->where('r.agency_id', $agencyId)
+            ->when($people !== null, fn ($q) => $q->whereIn('r.user_id', $people ?: [0]))
             ->orderByDesc('r.created_at')->orderByDesc('r.id')
             ->limit(300)
             ->get([
@@ -220,6 +236,10 @@ final class FileRequestController extends Controller
         if (! $this->agencyMemberIds($agencyId, [$userId])) {
             return response()->json(['message' => 'That person is not at this agency.'], 422);
         }
+        $people = \App\Support\CentreScope::people($request, $agencyId);
+        if ($people !== null && ! in_array($userId, $people, true)) {
+            return response()->json(['message' => 'That person is not at your centre.'], 422);
+        }
 
         $user = DB::table('users')->where('id', $userId)->whereNull('deleted_at')
             ->first(['id', 'first_name', 'last_name', 'email']);
@@ -304,6 +324,9 @@ final class FileRequestController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->requestOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('file_requests as r')
             ->leftJoin('users as u', 'u.id', '=', 'r.user_id')
             ->where('r.id', $id)->where('r.agency_id', $agencyId)
@@ -449,6 +472,9 @@ final class FileRequestController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->requestOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('file_requests')->where('id', $id)->where('agency_id', $agencyId)->first();
         if (! $r) {
             return response()->json(['message' => 'Not found'], 404);
@@ -510,6 +536,9 @@ final class FileRequestController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->requestOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('file_requests')->where('id', $id)->where('agency_id', $agencyId)
             ->first(['id', 'user_id', 'email', 'status']);
         if (! $r) {
@@ -548,6 +577,9 @@ final class FileRequestController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->requestOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('file_requests')->where('id', $id)->where('agency_id', $agencyId)->first(['id', 'status']);
         if (! $r) {
             return response()->json(['message' => 'Not found'], 404);
@@ -572,6 +604,7 @@ final class FileRequestController extends Controller
 
         $req = DB::table('file_requests')->where('id', $id)->where('agency_id', $agencyId)->first(['id']);
         abort_unless($req, 404);
+        abort_if($this->requestOutOfScope($request, $agencyId, $id) !== null, 404);
 
         /* The document must belong to THIS request. Possession of a document id is not
            authorisation to read it -- the check is the join, not the guess. */

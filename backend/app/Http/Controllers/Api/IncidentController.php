@@ -84,6 +84,27 @@ class IncidentController extends Controller
         /* room_id is NOT NULL with no default, and the form does not send one —
            an educator should not have to restate which room a child is in. Derived
            from the child's placement, which this schema stores in two places. */
+        /* Staff file incidents, and a picked room must be this child's and at a centre you work at
+           (2026-11-05 leak sweep): canAccessChildId() also says yes to the child's own parent, and
+           room_id was written unchecked, so an incident could be filed into another centre's or
+           agency's room (and show on that room's lists). */
+        abort_unless($this->isStaff($request->user()), 403);
+        $isParent = DB::table('guardians')->where('user_id', $request->user()->id)->where('family_id', $child->family_id ?? 0)->exists();
+        abort_if($isParent && ! $this->authorizeCentreAccess($request->user(), (int) $centreId), 403,
+            'Incidents about your own child are filed by the staff at their centre.');
+        if (! empty($data['room_id'])) {
+            $roomCentre = (int) DB::table('rooms')->where('id', $data['room_id'])->value('centre_id');
+            $childRooms = DB::table('enrollments')->where('child_id', (int) $data['child_id'])
+                ->whereNull('end_date')->pluck('room_id')->map(fn ($r) => (int) $r)->all();
+            if (! empty($child->primary_room_id)) $childRooms[] = (int) $child->primary_room_id;
+            $matchesChild = $roomCentre === (int) $centreId || in_array((int) $data['room_id'], $childRooms, true);
+            $roomAgency = (int) DB::table('centres')->where('id', $roomCentre)->value('agency_id');
+            $mayRoom = $roomCentre > 0 && ($this->authorizeCentreAccess($request->user(), $roomCentre)
+                || ($this->isPlatformAdminUser($request->user()) && $roomAgency > 0 && $roomAgency === (int) $this->resolveAgencyId($request)));
+            if (! $matchesChild || ! $mayRoom) {
+                return response()->json(['error' => 'That room is not one of this child\'s rooms at a centre you work at.'], 422);
+            }
+        }
         if (empty($data['room_id'])) {
             $data['room_id'] = $this->resolveRoomId((int) $data['child_id'], $centreId);
         }
@@ -495,7 +516,7 @@ class IncidentController extends Controller
             'logo'     => $logo,
         ])->render();
 
-        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+        $dompdf = new \App\Support\KtDompdf(['isRemoteEnabled' => true]);
         $dompdf->loadHtml($html, 'UTF-8');
         $dompdf->setPaper('letter', 'portrait');
         $dompdf->render();
@@ -951,7 +972,7 @@ class IncidentController extends Controller
                     . '<p style="margin:0 0 4px;font-size:15px;line-height:1.6;">'
                     . '<strong style="color:#B3261E;">An incident report for ' . e($childName) . ' is waiting for your review.</strong></p>'
                     . ($incident->is_serious_occurrence
-                        ? '<p style="margin:12px 0;padding:11px 15px;background:#FBEAE8;border-left:3px solid #B3261E;'
+                        ? '<p style="margin:12px 0;padding:11px 15px;background:#FBEAE8;--kt-edge:#B3261E;'
                           . 'font-size:14px;color:#7A1710;border-radius:0 8px 8px 0;"><strong>Serious occurrence</strong> '
                           . '&mdash; CCEYA reporting obligations may apply.</p>'
                         : '')
@@ -1186,7 +1207,8 @@ class IncidentController extends Controller
         if (! $user) {
             return [];
         }
-        return DB::table('role_assignments')
+        // In the active agency only (2026-11-05 leak sweep): a role held in another agency counted here.
+        return \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $user->id)->where('active', true)
             ->pluck('role')->map(fn ($r) => (string) $r)->unique()->values()->all();
     }

@@ -126,7 +126,7 @@
   }
 
   function renderCard(form, container) {
-    var card = Dom.el('div', { style: 'background:white;border-radius:14px;padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:12px;cursor:pointer;border-left:4px solid ' + (form.already_submitted ? '#16A34A' : '#7C3AED') + ';display:flex;align-items:center;gap:14px;' });
+    var card = Dom.el('div', { style: 'background:white;border-radius:14px;padding:18px 22px;box-shadow:0 1px 3px rgba(0,0,0,.05);margin-bottom:12px;cursor:pointer;--kt-edge:' + (form.already_submitted ? '#16A34A' : '#7C3AED') + ';display:flex;align-items:center;gap:14px;' });
     card.addEventListener('mouseenter', function () { card.style.transform = 'translateY(-1px)'; card.style.boxShadow = '0 4px 12px rgba(0,0,0,.07)'; });
     card.addEventListener('mouseleave', function () { card.style.transform = ''; card.style.boxShadow = '0 1px 3px rgba(0,0,0,.05)'; });
     card.addEventListener('click', function () { openSubmitModal(form, container); });
@@ -218,6 +218,7 @@
         if (isVisible(f, responses)) clean[f.id] = responses[f.id];
       });
       submit.disabled = true; submit.textContent = 'Submitting…';
+      (responses.__pads || []).forEach(function (p) { try { p.commit(); } catch (x) {} });
       Api.post('/forms/' + form.id + '/submit', { response: clean })
         .then(function () {
           overlay.remove();
@@ -280,21 +281,20 @@
       });
     } else if (f.type === 'signature') {
       // v22p85: digital signature pad — draws to a canvas, stored as a PNG data URL.
-      var sigBox = Dom.el('div', { style: 'border:1px solid #D1D5DB;border-radius:8px;overflow:hidden;background:#FFFEF8;' });
-      var canvas = Dom.el('canvas', { style: 'display:block;width:100%;height:160px;touch-action:none;cursor:crosshair;' });
-      sigBox.appendChild(canvas);
+      // The shared pad (kt-signature-pad.js) since 2026-11-06: saved signatures included.
+      var sigBox = Dom.el('div', {});
       wrap.appendChild(sigBox);
       var sigBar = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-top:6px;' });
       sigBar.appendChild(Dom.el('span', { style: 'font-size:12px;color:#64748B;' }, 'Sign above with your finger or mouse'));
       var clearBtn = Dom.el('button', { type: 'button', style: 'background:#F1F5F9;border:none;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;color:#374151;' }, 'Clear');
       sigBar.appendChild(clearBtn);
       wrap.appendChild(sigBar);
-      setTimeout(function () {
-        initSignaturePad(canvas,
-          function (dataUrl) { responses[f.id] = dataUrl; onChange(); },
-          clearBtn,
-          function () { responses[f.id] = ''; onChange(); });
-      }, 0);
+      var pad = KT.signaturePadInline(sigBox, { height: 160, context: 'custom_form_field:' + f.id,
+        onChange: function (empty) { responses[f.id] = empty ? '' : pad.toDataURL({ save: false }); onChange(); } });
+      clearBtn.addEventListener('click', function () { pad.clear(); });
+      // Read at submit to honour "save for next time" (not enumerable: never sent, never "unsaved changes").
+      if (!responses.__pads) { Object.defineProperty(responses, '__pads', { value: [], enumerable: false }); }
+      responses.__pads.push(pad);
     } else if (f.type === 'payment') {
       // v22p85: payment attachment — shows the amount the director attached to
       // this form. Submitting records the charge against the family's account.
@@ -347,42 +347,6 @@
     catch (e) { return '$' + n.toFixed(2); }
   }
 
-  // Canvas signature pad. Calls onDraw(dataUrl) when a stroke completes,
-  // onClear() when the Clear button is pressed. Supports mouse + touch.
-  function initSignaturePad(canvas, onDraw, clearBtn, onClear) {
-    var rect = canvas.getBoundingClientRect();
-    var ratio = window.devicePixelRatio || 1;
-    canvas.width = Math.max(1, Math.round((rect.width || 300) * ratio));
-    canvas.height = Math.max(1, Math.round((rect.height || 160) * ratio));
-    var ctx = canvas.getContext('2d');
-    ctx.scale(ratio, ratio);
-    ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#111827';
-    var drawing = false, last = null, dirty = false;
-    function pos(e) {
-      var r = canvas.getBoundingClientRect();
-      var p = (e.touches && e.touches[0]) || e;
-      return { x: p.clientX - r.left, y: p.clientY - r.top };
-    }
-    function start(e) { e.preventDefault(); drawing = true; last = pos(e); }
-    function move(e) {
-      if (!drawing) return;
-      e.preventDefault();
-      var p = pos(e);
-      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
-      last = p; dirty = true;
-    }
-    function end() { if (!drawing) return; drawing = false; if (dirty) onDraw(canvas.toDataURL('image/png')); }
-    canvas.addEventListener('mousedown', start);
-    canvas.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', end);
-    canvas.addEventListener('touchstart', start, { passive: false });
-    canvas.addEventListener('touchmove', move, { passive: false });
-    canvas.addEventListener('touchend', end);
-    clearBtn.addEventListener('click', function () {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      dirty = false; onClear();
-    });
-  }
 
   if (Shell && Shell.registerScreen) {
     Shell.registerScreen('guardian:forms', render);

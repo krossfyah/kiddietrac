@@ -106,9 +106,15 @@ class AgencyRouterTransport extends AbstractTransport
 
                 protected function doSend(SentMessage $message): void
                 {
+                    // A chosen sender (X-KT-Send-As-Strict, sales campaigns 2026-11-09) is never re-sent from another address.
+                    $orig = $message->getOriginalMessage();
+                    $strict = $orig instanceof \Symfony\Component\Mime\Message && $orig->getHeaders()->has('X-KT-Send-As-Strict');
                     try {
                         (new GraphTransport($this->graph))->send($message->getOriginalMessage(), $message->getEnvelope());
                     } catch (\Throwable $e) {
+                        if ($strict) {
+                            throw $e;
+                        }
                         /* Throwable, not TransportException. The narrow catch WAS the
                            defect: a DNS fault arrives as ConnectionException, which is
                            not a TransportException, so it went straight past this net.

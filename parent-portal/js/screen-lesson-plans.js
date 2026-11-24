@@ -22,6 +22,144 @@
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return (r || document).querySelectorAll(s); }
 
+  // ── pictures ──────────────────────────────────────────────────────────────
+  function scopeParams() { return activeScope === 'centre' ? { centre_id: activeCentreId } : { room_id: activeRoomId }; }
+  function picUrl(a) { return (a && (a.thumb_url || a.image_url || a.image)) || ''; }
+  function fullUrl(a) { return (a && (a.image_url || a.image || a.thumb_url)) || ''; }
+  function wantsPic(a) { return !!(a && (a.title || '').trim() && !picUrl(a) && a.image_source !== 'none'); }
+  /** A lazy-loaded picture that opens full size on tap (KT.mediaViewer, which pinch-zooms) - read-only views only. */
+  function picImg(a, cls, title) {
+    const u = picUrl(a);
+    if (!u) return '';
+    const credit = a.image_credit ? 'Picture: ' + a.image_credit : '';
+    return '<img class="' + cls + ' lp-zoom" src="' + esc(u) + '" data-full="' + esc(fullUrl(a)) + '" data-cap="' + esc((title || '') + (credit ? ' \u00b7 ' + credit : '')) + '"'
+      + ' alt="' + esc(title || '') + '" loading="lazy" decoding="async"' + (credit ? ' title="' + esc(credit) + '"' : '') + ' onerror="this.remove()">';
+  }
+  async function apiForm(path, fd) {
+    const res = await fetch(apiBase() + path, { method: 'POST', headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' }, body: fd });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.message || ('API ' + res.status));
+    return json;
+  }
+  if (!window.__ktLpZoom) {
+    window.__ktLpZoom = 1;
+    document.addEventListener('click', function (e) {
+      const im = e.target && e.target.closest && e.target.closest('img.lp-zoom');
+      if (!im || im.closest('.kt-activity-tap')) return;   // while editing, a tap opens the activity instead
+      e.preventDefault(); e.stopPropagation();
+      if (window.KT && KT.mediaViewer && KT.mediaViewer.open) {
+        KT.mediaViewer.open([{ url: im.getAttribute('data-full') || im.src, type: 'image', caption: im.getAttribute('data-cap') || '' }], 0);
+      }
+    }, true);
+  }
+
+  /** The Picture block inside a dialog: preview, Choose / Upload my own / Find with AI / Remove. */
+  function picSection(label) {
+    return '<label class="lp-ph-lbl">' + esc(label || 'Picture') + '</label>'
+      + '<div class="lp-ph"><div class="lp-ph-prev" data-ph="prev"></div><div class="lp-ph-btns">'
+      + '<button type="button" data-ph="pick">\ud83d\uddbc Choose</button>'
+      + '<button type="button" data-ph="up">\u2b06 Upload my own</button>'
+      + (lpImages.ai ? '<button type="button" data-ph="ai">\u2728 Find with AI</button>' : '')
+      + '<button type="button" data-ph="rm" class="lp-ph-rm">Remove</button>'
+      + '</div></div>'
+      + '<div class="lp-ph-note" data-ph="note"></div>'
+      + '<div class="lp-ph-box" data-ph="box" hidden><div class="lp-ph-search"><input data-ph="q" placeholder="Search pictures, e.g. leaves" data-kt-nospell="1"><button type="button" data-ph="go">Search</button></div>'
+      + '<div class="lp-ph-grid" data-ph="grid"></div><div class="lp-ph-src">Openly licensed pictures from Wikimedia Commons (CC0, public domain or CC BY, credited).</div></div>'
+      + '<input type="file" data-ph="file" accept="image/*" hidden>';
+  }
+  function wirePic(root, start, ctx) {
+    const st = {};
+    PIC_FIELDS.forEach(f => { st[f] = start && start[f] != null ? start[f] : null; });
+    if (start && !st.image_url && start.image) { st.image_url = start.image; st.thumb_url = start.image; st.image_source = 'library'; }
+    const q = (k) => root.querySelector('[data-ph="' + k + '"]');
+    const note = (t, c) => { const n = q('note'); n.textContent = t || ''; n.style.color = c || '#64748B'; };
+    function paint() {
+      const u = st.thumb_url || st.image_url;
+      q('prev').innerHTML = u ? '<img src="' + esc(u) + '" alt="">' : '<span>No picture</span>';
+      q('rm').hidden = !u;
+      if (u) note(st.image_credit ? 'Picture: ' + st.image_credit : (st.image_source === 'upload' ? 'Your own photo' : ''));
+      else if (st.image_source === 'none') note('Removed \u2014 no picture will be added automatically.');
+      else note(lpImages.auto ? 'A picture is added automatically after you save, when a good one is found.' : 'No picture yet.');
+    }
+    const set = (img) => { PIC_FIELDS.forEach(f => { st[f] = img && img[f] != null ? img[f] : null; }); paint(); };
+    const busy = (b, on) => { if (!b) return; b.disabled = on; b.setAttribute('aria-busy', on ? 'true' : 'false'); };
+    async function search(term) {
+      const box = q('box'), grid = q('grid');
+      box.hidden = false;
+      grid.innerHTML = '<div class="lp-ph-msg">Searching\u2026</div>';
+      const c = ctx();
+      if (!term && !c.title) { grid.innerHTML = '<div class="lp-ph-msg">Type the activity first, or search for a picture above.</div>'; return; }
+      try {
+        const r = await api('POST', '/provider/lesson-plans/image/search', Object.assign({ title: c.title, notes: c.notes, theme: c.theme, q: term || '' }, scopeParams()));
+        if (!term && r.terms && r.terms[0] && !q('q').value) q('q').value = r.terms[0];
+        const list = r.candidates || [];
+        grid.innerHTML = list.length
+          ? list.map((x, i) => '<button type="button" class="lp-ph-cand" data-i="' + i + '" title="' + esc(x.title + ' \u00b7 ' + x.credit) + '"><img src="' + esc(x.thumb) + '" alt="' + esc(x.title) + '" loading="lazy" onerror="this.parentNode.remove()"></button>').join('')
+          : '<div class="lp-ph-msg">No suitable openly licensed pictures found. Try another word, or upload your own.</div>';
+        grid.querySelectorAll('.lp-ph-cand').forEach(b => {
+          b.onclick = async () => {
+            const x = list[+b.getAttribute('data-i')];
+            busy(b, true); note('Adding the picture\u2026');
+            try { const p2 = await api('POST', '/provider/lesson-plans/image/pick', Object.assign({ key: x.key }, scopeParams())); set(p2.image); box.hidden = true; }
+            catch (e) { note(e.message, '#B91C1C'); }
+            finally { busy(b, false); }
+          };
+        });
+      } catch (e) { grid.innerHTML = '<div class="lp-ph-msg" style="color:#B91C1C;">' + esc(e.message) + '</div>'; }
+    }
+    q('pick').onclick = () => { const box = q('box'); if (!box.hidden) { box.hidden = true; return; } search(''); };
+    q('go').onclick = () => search(q('q').value.trim());
+    q('q').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); search(q('q').value.trim()); } });
+    q('up').onclick = () => q('file').click();
+    q('file').onchange = async () => {
+      const f = q('file').files && q('file').files[0];
+      if (!f) return;
+      const fd = new FormData(); fd.append('photo', f);
+      const sp = scopeParams(); Object.keys(sp).forEach(k => fd.append(k, sp[k]));
+      busy(q('up'), true); note('Uploading\u2026');
+      try { const r = await apiForm('/provider/lesson-plans/image/upload', fd); set(r.image); }
+      catch (e) { note(e.message, '#B91C1C'); }
+      finally { busy(q('up'), false); q('file').value = ''; }
+    };
+    if (q('ai')) {
+      q('ai').onclick = async () => {
+        const c = ctx();
+        if (!c.title) { note('Type the activity first.', '#92400E'); return; }
+        busy(q('ai'), true); note('\u2728 Looking for a picture\u2026');
+        try {
+          const r = await api('POST', '/ai/assist/lesson-image', Object.assign({ title: c.title, notes: c.notes, theme: c.theme }, scopeParams()));
+          if (r.image) set(r.image); else note('No picture fits this one honestly. Choose one or upload your own.', '#92400E');
+        } catch (e) { note(e.message, '#B91C1C'); }
+        finally { busy(q('ai'), false); }
+      };
+    }
+    q('rm').onclick = () => { set(null); st.image_source = 'none'; paint(); };
+    paint();
+    return st;
+  }
+  function picFields(st) { const o = {}; PIC_FIELDS.forEach(f => { o[f] = st[f] != null ? st[f] : null; }); return o; }
+
+  /** Ask the server to find the pictures a SAVED week is missing, then show them (only if still reading that week). */
+  async function fillPictures(container, force) {
+    const key = draftKey();
+    const say = (t, c) => { const el = document.getElementById('kt-save-status'); if (el && t) { el.style.color = c || '#6B7280'; el.textContent = t; } };
+    say('\ud83d\uddbc Finding pictures\u2026');
+    let filled = 0, left = 0;
+    for (let round = 0; round < 4; round++) {
+      let r;
+      try { r = await api('POST', '/provider/lesson-plans/fill-images', Object.assign({ week_starting: activeWeek, force: !!force }, scopeParams())); }
+      catch (e) { say('Pictures: ' + e.message, '#B91C1C'); return; }
+      filled += r.filled || 0; left = r.left || 0;
+      if (r.done || !r.filled) break;
+    }
+    if (draftKey() !== key || !lpReadOnly) return;   // moved to another week, or editing: never clobber
+    await renderProvider(container);
+    say(filled
+      ? '\ud83d\uddbc Added ' + filled + ' picture' + (filled === 1 ? '' : 's') + (left ? ' \u00b7 ' + left + ' without a good match (choose or upload one)' : '')
+      : (left ? 'No suitable picture found for ' + left + (left === 1 ? ' activity' : ' activities') + ' \u2014 choose or upload one.' : 'Every activity has a picture.'),
+      filled ? '#047857' : '#92400E');
+  }
+
   const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
 
   /* Opens read-only. Editing is a deliberate act, not the default state of a
@@ -58,6 +196,33 @@
     { v: 'self_care',         l: '🧼 Self Care',          c: '#34D399' },
     { v: 'outdoor',           l: '🌳 Outdoor',            c: '#86EFAC' },
   ];
+
+  /* HDLH foundations (2026-11-03): activities from the Ontario curriculum library carry them, and the
+     Framework gaps report counts planned activities by them. Editable in the activity dialog. */
+  const FND = {
+    belonging:  { l: 'Belonging',  i: '🤝', c: '#C2410C', b: '#FFF1E6' },
+    wellbeing:  { l: 'Well-being', i: '🌱', c: '#047857', b: '#E7F7EF' },
+    engagement: { l: 'Engagement', i: '🔍', c: '#1D4ED8', b: '#E8EFFE' },
+    expression: { l: 'Expression', i: '🎨', c: '#7E22CE', b: '#F4EAFD' },
+  };
+  function fndChips(a) {
+    return ((a && a.foundations) || []).filter(k => FND[k]).map(k =>
+      `<span title="HDLH: ${FND[k].l}" style="display:inline-flex;align-items:center;gap:2px;padding:0 6px;border-radius:20px;background:${FND[k].b};color:${FND[k].c};font-size:10.5px;font-weight:700;line-height:18px;white-space:nowrap;">${FND[k].i} ${FND[k].l}</span>`).join(' ');
+  }
+  /* The curriculum unit this week came from: what to watch for, and ideas to share with families. */
+  function unitBanner() {
+    const u = currentPlan && currentPlan.unit;
+    if (!u || !u.title) return '';
+    const li = (arr) => (arr || []).map(x => `<li style="margin:0 0 4px;">${esc(x)}</li>`).join('');
+    return `<details class="lp-note" style="display:block;">
+      <summary style="cursor:pointer;">📖 <strong>From the curriculum unit “${esc(u.title)}”</strong>${u.of > 1 ? ` · week ${u.week} of ${u.of}` : ''}${u.focus ? ` — ${esc(u.focus)}` : ''}
+        <span style="color:#1F6080;font-weight:700;white-space:nowrap;">· observation prompts and family ideas</span></summary>
+      ${(u.observe || []).length ? `<div style="font-weight:800;font-size:12px;margin:8px 0 3px;">👀 Watch for</div><ul style="margin:0;padding-left:18px;font-size:12.5px;">${li(u.observe)}</ul>` : ''}
+      ${(u.family || []).length ? `<div style="font-weight:800;font-size:12px;margin:8px 0 3px;">🏡 Family ideas (families see these once the week is published)</div><ul style="margin:0;padding-left:18px;font-size:12.5px;">${li(u.family)}</ul>` : ''}
+      ${(u.french || []).length ? `<div style="font-weight:800;font-size:12px;margin:8px 0 3px;">🇫🇷 French words</div><div style="font-size:12.5px;">${u.french.map(p => `${esc(p[0])} → <strong lang="fr">${esc(p[1])}</strong>`).join(' · ')}</div>` : ''}
+      ${u.id ? `<div style="margin-top:8px;"><a href="#curriculum?unit=${+u.id}" style="color:#1F6080;font-weight:700;font-size:12.5px;">Open the unit in the curriculum library →</a></div>` : ''}
+    </details>`;
+  }
 
   // Each weekday gets its own accent so the week reads at a glance.
   const DAY_COLORS = {
@@ -129,6 +294,13 @@
      the saved plan, which silently threw these away -- the AI dialog said "Draft ready"
      and the week came back unchanged. Kept per room/centre + week until Save or Discard. */
   let pendingDraft = null;   // { key, theme, days, source }
+  let lpDay = null;          // the day shown on a phone (2026-10-23)
+  /* PICTURES (2026-11-02, App\Support\LessonImages). Each activity, and the week's theme ("cover"), can carry a
+     picture: image_url, thumb_url, image_source (library | upload | auto | none), lesson_image_id. 'none' = removed on
+     purpose and never refilled. The server keeps a saved picture when a save sends none (templates, the AI draft). */
+  let lpImages = { auto: true, ai: false, can_manage: false };
+  let currentCover = null;
+  const PIC_FIELDS = ['image_url', 'thumb_url', 'image_source', 'lesson_image_id', 'image_credit', 'image_credit_url', 'image_credit_required'];
   function draftKey() {
     return activeScope + ':' + (activeScope === 'centre' ? activeCentreId : activeRoomId) + ':' + activeWeek;
   }
@@ -282,7 +454,14 @@
     if (activeScope === 'centre' && !canCentre) activeScope = 'room';
     if (activeScope === 'room' && !hasRooms) activeScope = 'centre';
 
-    if (hasRooms && (!activeRoomId || !rooms.find(r => r.id == activeRoomId))) activeRoomId = rooms[0].id;
+    if (hasRooms && activeRoomId && !rooms.find(r => r.id == activeRoomId)) activeRoomId = null;
+    if (hasRooms && !activeRoomId && rooms.length === 1) activeRoomId = rooms[0].id;
+    // Select a room first (2026-10-24) — never the first one in the list.
+    if (activeScope === 'room' && hasRooms && !activeRoomId && window.KT && KT.selectFirst) {
+      KT.selectFirst(container, { word: 'Room', items: rooms.map(r => ({ id: r.id, name: (r.name || ('Room ' + r.id)) + (r.centre_name && centres.length > 1 ? ' — ' + r.centre_name : '') })),
+        onPick: function (id) { activeRoomId = id; renderProvider(container); } });
+      return;
+    }
     if (!activeCentreId || !centres.find(c => c.id == activeCentreId)) {
       var _ar = rooms.find(r => r.id == activeRoomId);
       activeCentreId = (_ar && _ar.centre_id) || (centres[0] && centres[0].id) || null;
@@ -301,10 +480,12 @@
 
     currentPlan = plan.plan;
     currentTheme = plan.theme || '';
+    lpImages = plan.images || lpImages;
+    currentCover = plan.cover || null;
     var lpDraft = pendingDraft && pendingDraft.key === draftKey() ? pendingDraft : null;
     if (pendingDraft && !lpDraft) { pendingDraft = null; }   // moved to another week or room
     if (lpDraft) {
-      currentPlan = { days: JSON.parse(JSON.stringify(lpDraft.days)) };
+      currentPlan = { days: JSON.parse(JSON.stringify(lpDraft.days)), unit: lpDraft.unit || null };
       currentTheme = lpDraft.theme || currentTheme;
       lpReadOnly = false;
     }
@@ -312,57 +493,126 @@
        silently republish itself the next time somebody saves. */
     lpStatus = plan.status || 'published';
 
+    lpCss();
+    const totalActs = planCount((currentPlan && currentPlan.days) || {});
+    // Saved activities still without a picture (and not removed on purpose) -> offer "Find pictures".
+    const picsWanted = !lpDraft && plan.updated_at && !plan.inherited_from_centre
+      && DAYS.some(d => (((currentPlan && currentPlan.days) || {})[d] || []).some(wantsPic));
+    const isCurrent = viewingCurrentWeek();
+    const stateChip = !plan.plan && !lpDraft
+      ? '<span class="lp-chip lp-chip-none">Not planned yet</span>'
+      : (lpStatus === 'draft' ? '<span class="lp-chip lp-chip-draft">Draft · staff only</span>' : '<span class="lp-chip lp-chip-pub">Published · families can see it</span>');
+    /* LESSON PLANS, REDONE (2026-10-23, Anthony: "the lessons plans section under educator view
+       can you make this alot better - full sweep"). One tidy toolbar (what, which week, what you
+       can do), a status you can read, labelled buttons instead of bare icons, the theme as a
+       line of text until you edit, and the week as five dated columns — one day at a time,
+       with day tabs, on a phone. Ids and the save/load paths are unchanged. */
     container.innerHTML = `
-      <div style="padding:24px;max-width:1800px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px;">
-          <div>
-            <h2 style="font-size:24px;margin:0;">📚 Lesson Plans</h2>
-            <p style="color:#6B7280;font-size:14px;margin:4px 0 0;">Weekly activities organized by HDLH domain</p>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-            ${showScopeToggle ? `<select id="kt-scope" style="${selectStyle()}" title="Plan for one room or the whole centre">${scopeOpts}</select>` : ''}
-            <select id="kt-target" style="${selectStyle()}">
+      <div class="lp-wrap">
+        <div class="lp-bar">
+          <div class="lp-row">
+            ${showScopeToggle ? `<label class="lp-field"><span>Plan for</span><select id="kt-scope" title="Plan for one room or the whole centre">${scopeOpts}</select></label>` : ''}
+            <label class="lp-field lp-grow"><span>${activeScope === 'centre' ? 'Centre' : 'Room'}</span><select id="kt-target">
               ${activeScope==='centre'
-                ? centres.map(c => `<option value="${c.id}" ${c.id==activeCentreId?'selected':''}>🏫 ${esc(c.name)}</option>`).join('')
+                ? centres.map(c => `<option value="${c.id}" ${c.id==activeCentreId?'selected':''}>${esc(c.name)}</option>`).join('')
                 : rooms.map(r => `<option value="${r.id}" ${r.id==activeRoomId?'selected':''}>${esc(r.name)}${r.centre_name?' · '+esc(r.centre_name):''}</option>`).join('')}
-            </select>
-            <button id="kt-prev-week" style="${navBtnStyle()}">‹</button>
-            <input type="date" id="kt-week" value="${activeWeek}" style="${selectStyle()};width:160px;">
-            <button id="kt-next-week" style="${navBtnStyle()}">›</button>
-            <button id="kt-ai" class="kt-icon-tip" title="Draft with AI" data-kttip="Draft this week with AI" aria-label="Draft with AI" style="height:36px;padding:0 12px;box-sizing:border-box;background:#fff;color:#1F6080;border:1px solid #CFE3EB;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:6px;">✨ Draft with AI</button>
-            <button id="kt-lp-templates" data-kt-iconized="1" title="Start this week from a template" style="height:36px;padding:0 12px;box-sizing:border-box;background:#fff;color:#1F6080;border:1px solid #CFE3EB;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:6px;">📋 Templates</button>
-            <button id="kt-lp-savetpl" data-kt-iconized="1" title="Save this week as a template your agency can reuse" style="height:36px;padding:0 12px;box-sizing:border-box;background:#fff;color:#475569;border:1px solid #D1D5DB;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;line-height:1;display:${lpReadOnly ? 'none' : 'inline-flex'};align-items:center;gap:6px;">💾 Save as template</button>
-            <select id="kt-lp-status" title="Published plans are visible to families. Draft is staff-only." style="${selectStyle()};display:${lpReadOnly ? 'none' : 'inline-block'};">
-              <option value="draft" ${lpStatus === 'draft' ? 'selected' : ''}>Draft</option>
-              <option value="published" ${lpStatus === 'published' ? 'selected' : ''}>Published</option>
-            </select>
-            <button id="kt-lp-edit" style="height:36px;padding:0 14px;box-sizing:border-box;border:1px solid #D1D5DB;background:#fff;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;display:${lpReadOnly ? 'inline-block' : 'none'};">✏️ Edit</button>
-            <button id="kt-save" class="kt-icon-tip" title="Save" data-kttip="Save" aria-label="Save" style="height:36px;width:36px;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;display:inline-flex;align-items:center;justify-content:center;">💾</button>
+            </select></label>
+            <div class="lp-field"><span>Week</span>
+              <div class="lp-week">
+                <button id="kt-prev-week" type="button" aria-label="Previous week" title="Previous week">‹</button>
+                <label class="lp-week-label" title="Pick a week">${esc(weekRange(activeWeek))}<input type="date" id="kt-week" value="${activeWeek}" aria-label="Pick a week"></label>
+                <button id="kt-next-week" type="button" aria-label="Next week" title="Next week">›</button>
+              </div>
+            </div>
+            ${isCurrent ? '' : '<button type="button" id="kt-lp-thisweek" class="lp-btn lp-btn-ghost lp-btn-sm">This week</button>'}
+          </div>
+          <div class="lp-row lp-row-actions">
+            <div class="lp-state">${lpReadOnly ? stateChip : ''}<span class="lp-count">${totalActs} ${totalActs === 1 ? 'activity' : 'activities'}</span></div>
+            <div class="lp-actions">
+              ${lpReadOnly ? `
+                <div class="lp-tools">
+                <button id="kt-ai" type="button" data-kt-iconized="1" class="lp-btn lp-btn-ghost" title="Draft this week with AI">✨ Draft with AI</button>
+                <button id="kt-lp-templates" type="button" class="lp-btn lp-btn-ghost" data-kt-iconized="1" title="Start this week from a template">📋 Templates</button>
+                ${picsWanted ? `<button id="kt-lp-pics" type="button" class="lp-btn lp-btn-ghost" data-kt-iconized="1" title="Find pictures for the activities that have none">🖼 Find pictures</button>` : ''}
+                </div>
+                <button id="kt-lp-edit" type="button" data-kt-iconized="1" class="lp-btn lp-btn-primary">✏️ Edit week</button>
+                <button id="kt-save" type="button" hidden></button>
+                <button id="kt-lp-savetpl" type="button" hidden></button>
+                <select id="kt-lp-status" hidden><option value="${esc(lpStatus)}" selected></option></select>`
+              : `
+                <div class="lp-seg" role="group" aria-label="Who can see it">
+                  <button type="button" data-st="draft" class="${lpStatus === 'draft' ? 'on' : ''}" title="Staff only">Draft</button>
+                  <button type="button" data-st="published" class="${lpStatus === 'published' ? 'on' : ''}" title="Families can see it">Published</button>
+                </div>
+                <select id="kt-lp-status" hidden><option value="draft" ${lpStatus === 'draft' ? 'selected' : ''}>Draft</option><option value="published" ${lpStatus === 'published' ? 'selected' : ''}>Published</option></select>
+                <div class="lp-tools">
+                <button id="kt-ai" type="button" data-kt-iconized="1" class="lp-btn lp-btn-ghost lp-btn-sm" title="Draft this week with AI">✨ AI</button>
+                <button id="kt-lp-templates" type="button" class="lp-btn lp-btn-ghost lp-btn-sm" data-kt-iconized="1">📋 Templates</button>
+                <button id="kt-lp-savetpl" type="button" class="lp-btn lp-btn-ghost lp-btn-sm" data-kt-iconized="1" title="Save this week as a template your agency can reuse">Save template</button>
+                </div>
+                <div class="lp-commit">
+                <button id="kt-lp-cancel" type="button" data-kt-iconized="1" class="lp-btn lp-btn-ghost">Cancel</button>
+                <button id="kt-save" type="button" data-kt-iconized="1" class="lp-btn lp-btn-primary">💾 Save week</button>
+                </div>
+                <button id="kt-lp-edit" type="button" hidden></button>`}
+            </div>
           </div>
         </div>
 
-        ${lpDraft ? `<div id="kt-lp-draftbar" style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#92400E;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">📋 <span style="flex:1;min-width:220px;"><strong>Filled from ${esc(lpDraft.source)}.</strong> Nothing is saved yet — review it, change anything you like, then press Save.</span><button type="button" id="kt-lp-discard" data-kt-iconized="1" style="height:30px;padding:0 12px;border-radius:8px;border:1px solid #FCD34D;background:#fff;color:#92400E;font-weight:800;font-size:12.5px;cursor:pointer;">Discard</button></div>` : ''}
-        ${activeScope==='centre' ? `<div style="background:#EAF3F6;border:1px solid #CFE3EB;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#16526E;">🏫 <strong>Centre-wide plan.</strong> This applies to every room in the centre, and parents see it for any room that doesn't have its own plan this week.</div>` : ''}
+        ${lpDraft ? `<div id="kt-lp-draftbar" class="lp-note lp-note-warn">📋 <span style="flex:1;min-width:200px;"><strong>Filled from ${esc(lpDraft.source)}.</strong> Nothing is saved yet — review it, change anything you like, then press Save week.</span><button type="button" id="kt-lp-discard" data-kt-iconized="1" class="lp-btn lp-btn-ghost lp-btn-sm">Discard</button></div>` : ''}
+        ${activeScope==='centre' ? `<div class="lp-note">🏫 <span><strong>Centre-wide plan.</strong> It applies to every room in the centre; families see it for any room without its own plan this week.</span></div>` : ''}
+        ${unitBanner()}
 
-        <div style="background:white;border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.04);">
-          <label style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#6B7280;">Weekly theme</label>
-          <input id="kt-theme" placeholder="e.g. 'Spring & New Beginnings'" value="${esc(currentTheme)}" style="width:100%;padding:8px 0;border:none;outline:none;font-size:18px;font-weight:600;color:#111827;">
-        </div>
-
-        <div id="kt-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;"></div>
-
-        <div id="kt-save-status" style="margin-top:12px;font-size:14px;min-height:20px;"></div>
-
-        <div style="margin-top:24px;padding:14px;background:white;border-radius:12px;font-size:12px;color:#6B7280;">
-          <strong style="color:#111827;">HDLH domain legend:</strong>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;">
-            ${DOMAINS.map(d => `<span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:12px;height:12px;background:${d.c};border-radius:3px;"></span>${esc(d.l)}</span>`).join('')}
+        <div class="lp-theme">
+          <div class="lp-theme-main">
+          ${picUrl(currentCover) ? `<div class="lp-cover">${picImg(currentCover, 'lp-cover-img', currentTheme)}</div>` : ''}
+          <div class="lp-theme-body">
+          <div class="lp-theme-lbl">This week's theme</div>
+          ${lpReadOnly
+            ? `<div class="lp-theme-txt${currentTheme ? '' : ' lp-muted'}">${currentTheme ? esc(currentTheme) : 'No theme set'}</div><input id="kt-theme" type="hidden" value="${esc(currentTheme)}">`
+            : `<div class="lp-theme-edit"><input id="kt-theme" placeholder="e.g. Spring & new beginnings" value="${esc(currentTheme)}"><button type="button" id="kt-lp-cover" class="lp-btn lp-btn-ghost lp-btn-sm" data-kt-iconized="1" title="A picture for this week's theme">🖼 Picture</button></div>`}
+          </div>
           </div>
         </div>
+
+        <div class="lp-daytabs" role="tablist" data-kt-noband="1">
+          ${DAYS.map(d => `<button type="button" data-lpday="${d}" role="tab"><b>${DAY_LABELS[d]}</b><small>${esc(dayDate(d))}</small><i${((currentPlan.days || {})[d] || []).length ? '' : ' hidden'}>${((currentPlan.days || {})[d] || []).length}</i></button>`).join('')}
+        </div>
+        <div id="kt-grid" class="lp-grid"></div>
+
+        <div id="kt-save-status" class="lp-status"></div>
+
+        <div class="lp-legend">
+          <span class="lp-legend-lbl">Learning areas</span>
+          ${DOMAINS.map(d => `<span class="lp-dom" style="--c:${d.c}">${esc(d.l)}</span>`).join('')}
+        </div>
+        ${lpImages.can_manage ? `<div class="lp-picopt"><label><input type="checkbox" id="kt-lp-autopics" ${lpImages.auto ? 'checked' : ''}> Add pictures to activities automatically</label>
+          <div>Openly licensed pictures (no people) are looked up for each activity and the week's theme${lpImages.ai ? ', chosen with AI' : ''}. Staff can always change or remove one, or upload their own.</div></div>` : ''}
       </div>
     `;
 
     renderGrid();
+    // Phone: one day at a time. Opens on today when this week is on screen, else Monday.
+    (function () {
+      const tabs = container.querySelectorAll('[data-lpday]');
+      const show = (d) => {
+        lpDay = d;
+        tabs.forEach(t => t.classList.toggle('on', t.getAttribute('data-lpday') === d));
+        container.querySelectorAll('#kt-grid .lp-day').forEach(c => c.classList.toggle('on', c.getAttribute('data-day') === d));
+      };
+      tabs.forEach(t => t.addEventListener('click', () => show(t.getAttribute('data-lpday'))));
+      const today = isCurrent ? agencyWeekdayKey() : null;
+      show(DAYS.indexOf(lpDay) > -1 ? lpDay : (DAYS.indexOf(today) > -1 ? today : 'monday'));
+    })();
+    const thisWeek = $('#kt-lp-thisweek', container);
+    if (thisWeek) thisWeek.addEventListener('click', () => { activeWeek = mondayOf(new Date()); lpDay = null; renderProvider(container); });
+    const cancelBtn = $('#kt-lp-cancel', container);
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { pendingDraft = null; lpReadOnly = true; renderProvider(container); });
+    container.querySelectorAll('.lp-seg [data-st]').forEach(b => b.addEventListener('click', () => {
+      lpStatus = b.getAttribute('data-st');
+      container.querySelectorAll('.lp-seg [data-st]').forEach(x => x.classList.toggle('on', x === b));
+      const sel = $('#kt-lp-status', container); if (sel) sel.value = lpStatus;
+    }));
 
     if ($('#kt-scope', container)) {
       $('#kt-scope', container).addEventListener('change', (e) => { activeScope = e.target.value; renderProvider(container); });
@@ -399,6 +649,22 @@
       lpStatusEl.addEventListener('change', function () { lpStatus = lpStatusEl.value; });
     }
     $('#kt-ai', container).addEventListener('click', () => openAiDialog(container));
+    const picsBtn = $('#kt-lp-pics', container);
+    if (picsBtn) picsBtn.addEventListener('click', () => { picsBtn.disabled = true; fillPictures(container, true); });
+    const coverBtn = $('#kt-lp-cover', container);
+    if (coverBtn) coverBtn.addEventListener('click', () => openCoverDialog(container));
+    const autoBox = $('#kt-lp-autopics', container);
+    if (autoBox) autoBox.addEventListener('change', async () => {
+      const on = autoBox.checked;
+      try {
+        await api('PUT', '/provider/lesson-plans/image-settings', Object.assign({ auto: on }, scopeParams()));
+        lpImages.auto = on;
+        if (window.KT && KT.toast) KT.toast('🖼', 'Lesson plan pictures', on ? 'Pictures are added automatically.' : 'Pictures are no longer added automatically.');
+      } catch (e) {
+        autoBox.checked = !on;
+        if (window.KT && KT.toast) KT.toast('⚠️', 'Could not change it', e.message || '', '#B91C1C');
+      }
+    });
     $('#kt-lp-templates', container).addEventListener('click', () => openTemplates(container));
     var saveTplBtn = $('#kt-lp-savetpl', container);
     if (saveTplBtn) saveTplBtn.addEventListener('click', () => saveAsTemplate(container));
@@ -493,7 +759,7 @@
               + '<div style="padding:8px;display:flex;flex-direction:column;gap:8px;">'
               + ((days[d] || []).map(function (a) {
                   var dom = DOMAINS.find(function (x) { return x.v === a.domain; });
-                  return '<div style="border-left:4px solid ' + (dom ? dom.c : '#CBD5E1') + ';padding:4px 8px;">'
+                  return '<div style="--kt-edge:' + (dom ? dom.c : '#CBD5E1') + ';padding:4px 8px;">'
                     + '<div style="font-size:11.5px;color:#64748B;">' + esc(fmtTime(a.time) || '') + (dom ? ' · ' + esc(dom.l) : '') + '</div>'
                     + '<div style="font-weight:800;font-size:13px;color:#0F172A;">' + esc(a.title) + '</div>'
                     + (a.notes ? '<div style="font-size:12px;color:#475569;line-height:1.45;margin-top:2px;">' + esc(a.notes) + '</div>' : '') + '</div>';
@@ -619,6 +885,9 @@
     DAYS.forEach(d => { if (!Array.isArray(currentPlan.days[d])) currentPlan.days[d] = []; });
 
     grid.innerHTML = DAYS.map(day => dayColumn(day, currentPlan.days[day])).join('');
+    if (lpDay) grid.querySelectorAll('.lp-day').forEach(c => c.classList.toggle('on', c.getAttribute('data-day') === lpDay));
+    // Keep the phone's day-tab counts in step after an edit.
+    document.querySelectorAll('[data-lpday]').forEach(t => { const i = t.querySelector('i'), n = (currentPlan.days[t.getAttribute('data-lpday')] || []).length; if (i) { i.textContent = n; i.hidden = !n; } });
 
     /* Read-only shows the SAME cards, just not tappable — activityCard() decides that
        from lpReadOnly, so the two modes render from one path and cannot drift apart.
@@ -646,13 +915,18 @@
     /* Only tint when the week on screen contains today — otherwise every week
        would highlight a Wednesday, which tells the reader nothing. */
     const isToday = viewingCurrentWeek() && agencyWeekdayKey() === day;
-    const todayBg = isToday ? 'background:#FFFBEB;box-shadow:0 0 0 2px #FDE68A;' : '';
     return `
-      <div style="background:white;border-radius:12px;padding:12px;min-height:240px;box-shadow:0 1px 3px rgba(0,0,0,.04);border-top:4px solid ${dc};${todayBg}">
-        <div style="font-weight:800;font-size:14px;color:${dc};margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">${DAY_LABELS[day]}${isToday ? ' <span style="font-size:10px;background:#F59E0B;color:#fff;padding:1px 6px;border-radius:8px;letter-spacing:0;vertical-align:middle;">TODAY</span>' : ''}</div>
-        ${activities.map((a, i) => activityCard(day, i, a)).join('')}
-        <button class="kt-add-activity" data-day="${day}" style="width:100%;background:#F3F4F6;color:#6B7280;border:1px dashed #D1D5DB;padding:8px;border-radius:8px;font-size:13px;cursor:pointer;margin-top:4px;">+ Add</button>
-      </div>
+      <section class="lp-day${isToday ? ' lp-today' : ''}" data-day="${day}" style="--dc:${dc}">
+        <header>
+          <span class="lp-dname">${DAY_LABELS[day]}</span>
+          <span class="lp-ddate">${esc(dayDate(day))}</span>
+          ${isToday ? '<span class="lp-dtoday">Today</span>' : ''}
+          <span class="lp-dcount">${activities.length || ''}</span>
+        </header>
+        ${activities.length ? activities.map((a, i) => activityCard(day, i, a)).join('')
+          : `<div class="lp-empty">${lpReadOnly ? 'Nothing planned' : 'Nothing planned yet'}</div>`}
+        <button class="kt-add-activity lp-add" data-day="${day}" type="button">+ Add activity</button>
+      </section>
     `;
   }
 
@@ -671,22 +945,21 @@
     // Domain colour when set; otherwise a distinct palette colour by position so
     // template-added (domain-less) activities are still easy to tell apart.
     const colour = domain ? domain.c : ACTIVITY_PALETTE[idx % ACTIVITY_PALETTE.length];
-    const bg = colour + '33';
-    const border = colour;
     const title = (a.title || '').trim();
     const when = (a.time || '').trim();
     const notes = (a.notes || '').trim();
     const tappable = !lpReadOnly;
     return `
-      <div class="kt-activity${tappable ? ' kt-activity-tap' : ''}" data-day="${day}" data-idx="${idx}"
-           ${tappable ? 'role="button" tabindex="0"' : ''}
-           style="background:${bg};border-left:3px solid ${border};border-radius:6px;padding:9px 10px;margin-bottom:6px;font-size:12px;${tappable ? 'cursor:pointer;' : ''}">
-        <div style="display:flex;align-items:baseline;gap:6px;">
-          ${when ? `<span style="font-size:11px;font-weight:800;color:#334155;font-variant-numeric:tabular-nums;white-space:nowrap;">${esc(when)}</span>` : ''}
-          <span style="font-weight:700;color:${title ? '#0D1B2A' : '#94A3B8'};font-size:12.5px;line-height:1.3;">${title ? esc(title) : (tappable ? 'Tap to fill in' : '—')}</span>
+      <div class="kt-activity lp-act${tappable ? ' kt-activity-tap' : ''}" data-day="${day}" data-idx="${idx}" style="--ac:${colour}"
+           ${tappable ? 'role="button" tabindex="0" title="Tap to edit"' : ''}>
+        ${picImg(a, 'lp-pic', title)}
+        <div class="lp-act-top">
+          ${when ? `<span class="lp-time">${esc(fmtTime(when))}</span>` : ''}
+          <span class="lp-title${title ? '' : ' lp-muted'}">${title ? esc(title) : (tappable ? 'Tap to fill in' : '—')}</span>
         </div>
-        ${domain ? `<div style="margin-top:4px;"><span style="display:inline-block;background:#fff;border:1px solid ${border};color:#334155;border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:700;">${esc(domain.l)}</span></div>` : ''}
-        ${notes ? `<div style="margin-top:4px;color:#475569;font-size:11.5px;line-height:1.35;">${esc(notes.length > 90 ? notes.slice(0, 90) + '…' : notes)}</div>` : ''}
+        ${domain ? `<span class="lp-dom lp-dom-sm" style="--c:${domain.c}">${esc(domain.l)}</span>` : ''}
+        ${(a.foundations || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0 0;">${fndChips(a)}</div>` : ''}
+        ${notes ? `<div class="lp-notes">${esc(notes)}</div>` : ''}
       </div>
     `;
   }
@@ -722,9 +995,14 @@
           <option value="">— Domain —</option>
           ${DOMAINS.map(d => `<option value="${d.v}" ${d.v === a.domain ? 'selected' : ''}>${esc(d.l)}</option>`).join('')}
         </select>
+        <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px;">HDLH foundations</label>
+        <div id="lp-fnd" style="display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px;" data-kt-noswitch>
+          ${Object.keys(FND).map(k => `<label style="display:inline-flex;align-items:center;gap:5px;font-weight:600;color:#334155;cursor:pointer;"><input type="checkbox" value="${k}" ${((a.foundations || []).indexOf(k) !== -1) ? 'checked' : ''} style="width:15px;height:15px;"> ${FND[k].i} ${FND[k].l}</label>`).join('')}
+        </div>
         <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px;">Notes</label>
         <textarea id="lp-notes" rows="3" placeholder="Optional"
                   style="display:block;width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;resize:vertical;">${esc(a.notes || '')}</textarea>
+        <div class="lp-ph-wrap">${picSection('Picture')}</div>
       </div>
       <div style="padding:14px 20px;border-top:1px solid #EDF2F7;display:flex;gap:8px;align-items:center;">
         ${isNew ? '' : '<button id="lp-del" style="background:#fff;border:1px solid #FECACA;color:#B91C1C;border-radius:10px;padding:10px 14px;font:inherit;font-size:14px;font-weight:700;cursor:pointer;">Delete</button>'}
@@ -739,8 +1017,12 @@
       try { if (window.KT && KT.popOverlay) { KT.popOverlay(ov); } } catch (e) {}
       ov.remove();
     };
+    lpCss();
+    const pic = wirePic(ov.querySelector('.lp-ph-wrap'), a, () => ({
+      title: ov.querySelector('#lp-title').value.trim(), notes: ov.querySelector('#lp-notes').value.trim(),
+      theme: ($('#kt-theme') || {}).value || currentTheme || '' }));
     const t = ov.querySelector('#lp-title');
-    if (t) { t.focus(); t.select(); }
+    if (t && window.innerWidth > 768) { t.focus(); t.select(); }   // on a phone the keyboard waits for a tap
     ov.querySelector('#lp-x').onclick = close;
     ov.addEventListener('click', e => { if (e.target === ov) close(); });
     ov.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
@@ -756,9 +1038,17 @@
         domain: ov.querySelector('#lp-domain').value || null,
         notes: ov.querySelector('#lp-notes').value.trim(),
       };
+      const fnd = Array.prototype.map.call(ov.querySelectorAll('#lp-fnd input:checked'), c => c.value);
+      if (fnd.length) next.foundations = fnd;
+      if (a.unit_activity) next.unit_activity = a.unit_activity;   // which unit activity it came from
       /* An empty new activity is not worth a card. An existing one emptied out is a
          deliberate clear, and Delete is right there for removing it outright. */
       if (isNew && !next.time && !next.title && !next.notes && !next.domain) { close(); return; }
+      // The picture travels with the activity. An automatic one belongs to the old title, so a new title gets a new one.
+      Object.assign(next, picFields(pic));
+      if (!isNew && pic.image_source === 'auto' && next.title !== (a.title || '').trim()) {
+        PIC_FIELDS.forEach(f => { next[f] = null; });
+      }
       if (isNew) { currentPlan.days[day].push(next); }
       else { currentPlan.days[day][idx] = next; }
       close();
@@ -774,9 +1064,11 @@
     try {
       const payload = { week_starting: activeWeek, theme: currentTheme, plan: currentPlan,
                         status: lpStatus };
+      if (currentCover) payload.cover = picFields(currentCover);
       if (activeScope === 'centre') payload.centre_id = activeCentreId;
       else payload.room_id = activeRoomId;
-      await api('PUT', '/provider/lesson-plans', payload);
+      const saved = await api('PUT', '/provider/lesson-plans', payload);
+      const needPics = saved && saved.pictures && saved.pictures.auto && saved.pictures.missing > 0;
       pendingDraft = null;
       status.style.color = '#16A34A';
       status.textContent = (lpStatus === 'published' ? '✓ Published ' : '✓ Saved as draft ')
@@ -785,11 +1077,48 @@
       /* Back to reading once it is saved, so the week cannot be edited by accident
          after the person has finished with it. */
       lpReadOnly = true;
-      renderProvider(container);
+      await renderProvider(container);
+      if (needPics) fillPictures(container, false);
     } catch (e) {
       status.style.color = '#DC2626';
       status.textContent = '✗ ' + e.message;
     }
+  }
+
+  /** The week's theme picture: the same Picture block as an activity, in a small dialog of its own. */
+  function openCoverDialog(container) {
+    lpCss();
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;';
+    ov.innerHTML = `<div role="dialog" aria-modal="true" style="background:#fff;border-radius:16px;max-width:440px;width:100%;max-height:88vh;overflow:auto;box-shadow:0 24px 60px rgba(15,23,42,.35);">
+      <div style="padding:16px 20px;border-bottom:1px solid #EDF2F7;">
+        <div style="font-size:16px;font-weight:800;color:#0D1B2A;">Picture for this week's theme</div>
+        <div style="font-size:12.5px;color:#64748B;margin-top:2px;">Shown above the plan for families and in the daily summary.</div>
+      </div>
+      <div style="padding:16px 20px;"><div class="lp-ph-wrap">${picSection('Picture')}</div></div>
+      <div style="padding:14px 20px;border-top:1px solid #EDF2F7;display:flex;gap:8px;justify-content:flex-end;">
+        <button id="lp-cx" style="background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px 16px;font:inherit;font-size:14px;color:#475569;cursor:pointer;">Cancel</button>
+        <button id="lp-cok" style="background:linear-gradient(135deg,#1F6080,#2c7894);border:0;border-radius:10px;padding:10px 20px;font:inherit;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">Done</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    try { if (window.KT && KT.pushOverlay) { KT.pushOverlay(ov); } } catch (e) {}
+    const close = () => { try { if (window.KT && KT.popOverlay) { KT.popOverlay(ov); } } catch (e) {} ov.remove(); };
+    const themeNow = () => (($('#kt-theme', container) || {}).value || '').trim();
+    const pic = wirePic(ov.querySelector('.lp-ph-wrap'), currentCover, () => ({ title: themeNow(), notes: '', theme: '' }));
+    ov.querySelector('#lp-cx').onclick = close;
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    ov.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    ov.querySelector('#lp-cok').onclick = () => {
+      currentCover = picFields(pic);
+      close();
+      // Shown in place: re-rendering would reload the saved week over the unsaved edits.
+      const c = container.querySelector('.lp-theme-main');
+      if (c) {
+        const old = c.querySelector('.lp-cover'); if (old) old.remove();
+        if (picUrl(currentCover)) c.insertAdjacentHTML('afterbegin', '<div class="lp-cover">' + picImg(currentCover, 'lp-cover-img', themeNow()) + '</div>');
+      }
+    };
   }
 
   async function renderParent(container) {
@@ -810,6 +1139,7 @@
       return;
     }
 
+    lpCss();
     container.innerHTML = '<div style="padding:24px;max-width:1800px;"><h2 style="font-size:24px;margin:0 0 16px;">📚 This Week\'s Activities</h2><div id="kt-kids-plans"></div></div>';
     const mount = $('#kt-kids-plans', container);
 
@@ -832,6 +1162,7 @@
           <div style="font-weight:700;font-size:18px;">${esc(child.first_name)} ${esc(child.last_name||'')}</div>
           <div style="font-size:13px;color:#6B7280;">Week of ${esc(plan.week_starting)}</div>
         </div>
+        ${picUrl(plan.cover) ? `<div class="lp-pcover">${picImg(plan.cover, 'lp-pcover-img', plan.theme || '')}${plan.cover.image_credit_required && plan.cover.image_credit ? `<div class="lp-credit">Picture: ${esc(plan.cover.image_credit)}</div>` : ''}</div>` : ''}
         ${plan.theme ? `<div style="font-size:14px;color:#1F6080;margin-bottom:12px;"><em>Theme:</em> <strong>${esc(plan.theme)}</strong></div>` : ''}
         ${empty
           ? '<div style="color:#64748B;font-style:italic;">No plan posted yet for this week.</div>'
@@ -839,6 +1170,11 @@
               ${DAYS.map(d => parentDayCard(d, days[d] || [])).join('')}
             </div>`
         }
+        ${(!empty && plan.plan && plan.plan.unit && (plan.plan.unit.family || []).length) ? `<div style="margin-top:12px;background:#F0FDFA;border:1px solid #99F6E4;border-radius:10px;padding:10px 12px;font-size:13px;color:#134E4A;">
+            <div style="font-weight:800;margin-bottom:4px;">🏡 Try at home this week</div>
+            <ul style="margin:0;padding-left:18px;">${plan.plan.unit.family.slice(0, 4).map(x => `<li style="margin:0 0 3px;">${esc(x)}</li>`).join('')}</ul>
+            ${(plan.plan.unit.french || []).length ? `<div style="margin-top:6px;font-size:12px;">🇫🇷 ${plan.plan.unit.french.slice(0, 6).map(p => `${esc(p[0])} → <strong lang="fr">${esc(p[1])}</strong>`).join(' · ')}</div>` : ''}
+          </div>` : ''}
       </div>
     `;
   }
@@ -853,6 +1189,8 @@
               const dom = DOMAINS.find(d => d.v === a.domain);
               const bg = dom ? dom.c + '40' : '#FFF';
               return `<div style="background:${bg};border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:12px;">
+                ${picImg(a, 'lp-ppic', a.title || '')}
+                ${picUrl(a) && a.image_credit_required && a.image_credit ? `<div class="lp-credit">Picture: ${esc(a.image_credit)}</div>` : ''}
                 ${a.time ? `<span style="color:#6B7280;white-space:nowrap;">${esc(fmtTime(a.time))}</span> ` : ''}
                 <strong>${esc(a.title||'')}</strong>
               </div>`;
@@ -860,6 +1198,135 @@
         }
       </div>
     `;
+  }
+
+  /* "Oct 19 – 23, 2026" for the week on screen; "Oct 19" for one of its days. Local noon so a
+     UTC offset never shifts the date. */
+  function weekRange(monday) {
+    try {
+      const a = new Date(monday + 'T12:00:00'), b = new Date(a); b.setDate(a.getDate() + 4);
+      const m = (d) => d.toLocaleDateString(undefined, { month: 'short' });
+      return m(a) + ' ' + a.getDate() + ' – ' + (m(b) !== m(a) ? m(b) + ' ' : '') + b.getDate() + ', ' + b.getFullYear();
+    } catch (e) { return monday; }
+  }
+  function dayDate(day) {
+    try {
+      const d = new Date(activeWeek + 'T12:00:00'); d.setDate(d.getDate() + DAYS.indexOf(day));
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch (e) { return ''; }
+  }
+  function lpCss() {
+    picCss();
+    if (document.getElementById('kt-lp-css')) return;
+    const st = document.createElement('style'); st.id = 'kt-lp-css';
+    st.textContent = ''
+      + '.lp-wrap{padding:18px 20px 28px;max-width:1800px;box-sizing:border-box}'
+      + '.lp-bar{background:#fff;border:1px solid #E6EBF1;border-radius:14px;padding:12px 14px;box-shadow:0 1px 3px rgba(15,23,42,.04);margin-bottom:12px;display:flex;flex-direction:column;gap:10px}'
+      + '.lp-row{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-end}'
+      + '.lp-field{display:flex;flex-direction:column;gap:4px;min-width:0}.lp-field>span{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B}'
+      + '.lp-grow{flex:0 1 300px}'
+      // #appMain: the phone rule for every select (padding 11px) outranks a class and clipped the text.
+      + '#appMain .lp-field select,.lp-field select{height:40px !important;min-height:40px !important;padding:0 30px 0 11px !important;line-height:normal !important;border:1px solid #CBD5E1;border-radius:9px;font-size:15px !important;background-color:#fff;max-width:100%;width:auto}'
+      + '.lp-week{display:flex;align-items:center;gap:4px;background:#F1F5F9;border-radius:10px;padding:3px;height:38px;box-sizing:border-box}'
+      + '.lp-week>button{width:32px;height:32px;min-height:0 !important;border:0;border-radius:8px;background:#fff;color:#1F6080;font-size:18px;font-weight:800;cursor:pointer;padding:0 !important;line-height:1}'
+      + '.lp-week-label{position:relative;font-weight:800;font-size:13.5px;color:#0F172A;padding:0 10px;white-space:nowrap;cursor:pointer}'
+      + '.lp-week-label input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;border:0;padding:0}'
+      + '.lp-row-actions{justify-content:space-between;align-items:center;border-top:1px solid #F1F5F9;padding-top:10px}'
+      + '.lp-state{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.lp-count{font-size:12.5px;color:#64748B;font-weight:600}'
+      + '.lp-chip{display:inline-flex;align-items:center;font-size:11.5px;font-weight:800;padding:4px 10px;border-radius:999px}'
+      + '.lp-chip-pub{background:#DCFCE7;color:#166534}.lp-chip-draft{background:#FEF3C7;color:#92400E}.lp-chip-none{background:#F1F5F9;color:#475569}'
+      + '.lp-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.lp-tools,.lp-commit{display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
+      + '.lp-btn{height:38px !important;min-height:38px !important;padding:0 14px !important;border-radius:9px;font-size:13.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;box-sizing:border-box;line-height:1}'
+      + '.lp-btn-sm{height:34px !important;min-height:34px !important;padding:0 11px !important;font-size:12.5px}'
+      + '.lp-btn-primary{background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;box-shadow:0 6px 14px -8px rgba(31,96,128,.85)}'
+      + '.lp-btn-ghost{background:#fff;color:#1F6080;border:1px solid #CFE3EB}'
+      + '.lp-seg{display:inline-flex;background:#F1F5F9;border-radius:9px;padding:3px;gap:2px}'
+      + '.lp-seg button{height:32px;min-height:0 !important;padding:0 12px !important;border:0;border-radius:7px;background:transparent;font-size:12.5px;font-weight:800;color:#475569;cursor:pointer}'
+      + '.lp-seg button.on{background:#fff;color:#0F172A;box-shadow:0 1px 3px rgba(15,23,42,.12)}'
+      + '.lp-note{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#EAF3F6;border:1px solid #CFE3EB;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#16526E}'
+      + '.lp-note-warn{background:#FFFBEB;border-color:#FCD34D;color:#92400E}'
+      + '.lp-theme{background:#fff;border:1px solid #E6EBF1;border-radius:14px;padding:12px 16px;margin-bottom:12px}'
+      + '.lp-theme-lbl{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin-bottom:3px}'
+      + '.lp-theme-txt{font-size:18px;font-weight:800;color:#0F172A}.lp-muted{color:#94A3B8 !important;font-weight:600 !important}'
+      + '.lp-theme input{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #CBD5E1;border-radius:9px;font-size:16px;font-weight:700;color:#0F172A}'
+      + '.lp-daytabs{display:none;gap:5px;margin-bottom:10px}'
+      + '.lp-daytabs button{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:7px 2px !important;min-height:0 !important;height:auto !important;border:1px solid #E2E8F0;border-radius:11px;background:#fff;cursor:pointer;position:relative}'
+      + '.lp-daytabs b{font-size:13px;color:#0F172A}.lp-daytabs small{font-size:10.5px;color:#64748B}'
+      + '.lp-daytabs i[hidden]{display:none}.lp-daytabs i{position:absolute;top:3px;right:3px;font-style:normal;font-size:10px;font-weight:800;background:#1F6080;color:#fff;border-radius:999px;min-width:16px;padding:1px 4px;line-height:14px}'
+      + '.lp-daytabs button.on{background:#1F6080;border-color:#1F6080}.lp-daytabs button.on b,.lp-daytabs button.on small{color:#fff}.lp-daytabs button.on i{background:#F59E0B}'
+      + '.lp-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}'
+      + '.lp-day{background:#fff;border:1px solid #E6EBF1;border-top:4px solid var(--dc);border-radius:12px;padding:10px;min-height:220px;display:flex;flex-direction:column;gap:7px}'
+      + '.lp-day.lp-today{background:#FFFDF5;box-shadow:0 0 0 2px #FDE68A}'
+      + '.lp-day header{display:flex;align-items:baseline;gap:6px;margin-bottom:2px}'
+      + '.lp-dname{font-weight:900;font-size:14px;color:var(--dc);text-transform:uppercase;letter-spacing:.8px}.lp-ddate{font-size:12px;color:#64748B;font-weight:600}'
+      + '.lp-dtoday{font-size:10px;font-weight:800;background:#F59E0B;color:#fff;padding:1px 7px;border-radius:999px}'
+      + '.lp-dcount{margin-left:auto;font-size:11px;font-weight:800;color:#94A3B8}'
+      + '.lp-empty{font-size:12.5px;color:#94A3B8;text-align:center;padding:14px 6px;border:1px dashed #E2E8F0;border-radius:9px}'
+      + '.lp-act{background:color-mix(in srgb,var(--ac) 16%,#fff);--kt-edge:var(--ac);border-radius:9px;padding:8px 10px;display:flex;flex-direction:column;gap:5px}'
+      + '.lp-act.kt-activity-tap{cursor:pointer}.lp-act.kt-activity-tap:hover{box-shadow:0 2px 8px rgba(15,23,42,.08)}'
+      + '.lp-act-top{display:flex;align-items:flex-start;gap:7px}'
+      + '.lp-time{flex:0 0 auto;font-size:11px;font-weight:800;color:#1F6080;background:#fff;border:1px solid #CFE3EB;border-radius:6px;padding:1px 6px;font-variant-numeric:tabular-nums;white-space:nowrap}'
+      + '.lp-title{font-size:13px;font-weight:800;color:#0F172A;line-height:1.3;overflow-wrap:anywhere}'
+      + '.lp-notes{font-size:12px;color:#475569;line-height:1.4;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}'
+      + '.lp-dom{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#334155;background:#fff;border:1px solid #E2E8F0;border-radius:999px;padding:3px 10px 3px 8px}'
+      + '.lp-dom::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--c)}'
+      + '.lp-dom-sm{align-self:flex-start;font-size:10.5px;padding:1px 8px 1px 6px}'
+      + '.lp-add{margin-top:auto;width:100%;height:38px !important;min-height:0 !important;background:#F0F9FF !important;color:#1F6080 !important;border:1.5px dashed #93C5FD !important;border-radius:10px !important;font-size:13px !important;font-weight:800 !important;cursor:pointer;box-shadow:none !important}'
+      + '.lp-status{margin-top:12px;font-size:14px;min-height:20px}'
+      + '.lp-legend{margin-top:16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.lp-legend-lbl{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin-right:4px}'
+      + '@media (max-width:1100px){.lp-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}'
+      + '@media (max-width:768px){.lp-wrap{padding:12px 4px 24px}.lp-daytabs{display:flex}.lp-grid{grid-template-columns:1fr}.lp-grid>.lp-day:not(.on){display:none}'
+      + '.lp-day{min-height:0}'
+      // What + which week: two equal columns, the week across both.
+      + '.lp-bar>.lp-row:first-child{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}'
+      + '.lp-bar>.lp-row:first-child>.lp-field{min-width:0}.lp-bar>.lp-row:first-child>.lp-field:only-of-type,.lp-field:has(.lp-week),#kt-lp-thisweek{grid-column:1 / -1}'
+      + '#appMain .lp-field select,.lp-field select{width:100% !important;min-width:0 !important;max-width:100% !important}'
+      + '.lp-week{width:100%}.lp-week-label{flex:1;text-align:center}'
+      + '.lp-row-actions{flex-direction:column;align-items:stretch}.lp-actions{flex-direction:column;align-items:stretch}'
+      + '.lp-seg{width:100%;box-sizing:border-box}.lp-seg button{flex:1 1 0}'
+      + '.lp-commit{flex-wrap:nowrap}.lp-tools{flex-wrap:wrap}'
+      + '.lp-tools>.lp-btn{flex:1 1 auto;justify-content:center;padding:0 10px !important}.lp-commit>.lp-btn{flex:1 1 0;min-width:0;justify-content:center;padding:0 8px !important}'
+      + '.lp-actions>.lp-btn-primary{justify-content:center}.lp-commit>.lp-btn-primary{flex:2 1 0}}'
+      // A narrow phone: the two pickers one under the other, so the room name is not cut off.
+      + '@media (max-width:400px){.lp-bar>.lp-row:first-child{grid-template-columns:1fr}}';
+    document.head.appendChild(st);
+  }
+
+  /* Pictures (2026-11-02). Their own style element, so a page still holding the previous kt-lp-css gets them too. */
+  function picCss() {
+    if (document.getElementById('kt-lp-pic-css')) return;
+    const st = document.createElement('style'); st.id = 'kt-lp-pic-css';
+    st.textContent = ''
+      // A short banner across the top of the card: a thumbnail beside the title squeezed it into a 3-letter column.
+      + '.lp-act>.lp-pic{display:block;width:100%;height:auto;aspect-ratio:16/9;max-height:118px;object-fit:cover;border-radius:7px;background:#F1F5F9;cursor:zoom-in}'
+      + '.kt-activity-tap .lp-pic{cursor:pointer}'
+      + '.lp-theme-main{display:flex;gap:14px;align-items:center}.lp-theme-body{flex:1 1 auto;min-width:0}'
+      + '.lp-cover{flex:0 0 112px}.lp-cover-img{display:block;width:112px;height:84px;object-fit:cover;border-radius:10px;background:#F1F5F9;cursor:zoom-in}'
+      + '.lp-theme-edit{display:flex;gap:8px;align-items:center}.lp-theme-edit input{flex:1 1 auto;min-width:0}'
+      + '.lp-picopt{margin-top:12px;font-size:12.5px;color:#374151}.lp-picopt label{display:inline-flex;align-items:center;gap:8px;font-weight:600;cursor:pointer}'
+      + '.lp-picopt input{width:16px;height:16px}.lp-picopt div{font-size:11.5px;color:#94A3B8;margin-top:3px}'
+      + '.lp-ph-lbl{display:block;font-size:12px;font-weight:700;color:#475569;margin:14px 0 6px}'
+      + '.lp-ph{display:flex;gap:12px;align-items:center}'
+      + '.lp-ph-prev{flex:0 0 96px;width:96px;height:72px;border-radius:10px;background:#F1F5F9;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#94A3B8;font-size:11.5px}'
+      + '.lp-ph-prev img{width:100%;height:100%;object-fit:cover;display:block}'
+      + '.lp-ph-btns{display:flex;flex-wrap:wrap;gap:6px}'
+      + '.lp-ph-btns button,.lp-ph-search button{height:32px;min-height:0 !important;padding:0 11px !important;border:1px solid #CBD5E1;background:#fff;color:#1F6080;border-radius:8px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer}'
+      + '.lp-ph-btns button[hidden]{display:none}.lp-ph-btns .lp-ph-rm{border-color:#FCA5A5;color:#B91C1C}'
+      + '.lp-ph-btns button[aria-busy=true]{opacity:.6;cursor:progress}'
+      + '.lp-ph-note{font-size:11.5px;color:#64748B;margin-top:6px;min-height:14px;overflow-wrap:anywhere}'
+      + '.lp-ph-box{margin-top:8px;border:1px solid #E2E8F0;border-radius:10px;padding:8px}.lp-ph-box[hidden]{display:none}'
+      + '.lp-ph-search{display:flex;gap:6px;margin-bottom:8px}.lp-ph-search input{flex:1 1 auto;min-width:0;height:32px;box-sizing:border-box;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font:inherit;font-size:13px}'
+      + '.lp-ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;max-height:240px;overflow:auto}'
+      + '.lp-ph-cand{padding:0 !important;min-height:0 !important;border:2px solid transparent;border-radius:8px;background:#F1F5F9;cursor:pointer;aspect-ratio:4/3;overflow:hidden}'
+      + '.lp-ph-cand:hover,.lp-ph-cand:focus-visible{border-color:#1F6080}.lp-ph-cand img{width:100%;height:100%;object-fit:cover;display:block}'
+      + '.lp-ph-cand[aria-busy=true]{opacity:.5}'
+      + '.lp-ph-msg{grid-column:1 / -1;font-size:12px;color:#64748B;padding:6px 2px}.lp-ph-src{font-size:10.5px;color:#94A3B8;margin-top:6px}'
+      + '.lp-pcover{margin:0 0 10px}.lp-pcover-img{display:block;width:100%;max-height:220px;object-fit:cover;border-radius:12px;background:#F1F5F9;cursor:zoom-in}'
+      + '.lp-ppic{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;margin-bottom:5px;background:#F1F5F9;cursor:zoom-in}'
+      + '.lp-credit{font-size:10px;color:#94A3B8;margin:2px 0 4px;line-height:1.3;overflow-wrap:anywhere}'
+      + '@media (max-width:768px){.lp-act>.lp-pic{max-height:170px}.lp-cover{flex-basis:88px}.lp-cover-img{width:88px;height:66px}'
+      + '.lp-pcover-img{max-height:180px}}';
+    document.head.appendChild(st);
   }
 
   function selectStyle() { return 'padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;background:white;'; }

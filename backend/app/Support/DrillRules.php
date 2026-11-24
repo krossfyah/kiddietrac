@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class DrillRules
 {
-    public const TYPES = ['fire' => 'Fire', 'weather' => 'Severe weather', 'lockdown' => 'Lockdown', 'vehicle_exit' => 'Vehicle evacuation', 'shelter' => 'Shelter-in-place', 'other' => 'Other'];
+    public const TYPES = ['fire' => 'Fire', 'weather' => 'Severe weather', 'lockdown' => 'Lockdown', 'vehicle_exit' => 'Vehicle evacuation', 'shelter' => 'Shelter-in-place', 'disaster' => 'Disaster / earthquake', 'other' => 'Other'];
 
     /** [start, end) of the period containing $at, in the agency's timezone. */
     public static function period(string $every, Carbon $at): array
@@ -56,8 +56,10 @@ final class DrillRules
         /* "Missed" only counts once the centre has started its drill log: before its first
            recorded drill there is no way to tell a missed drill from one done on paper. */
         $first = DB::table('drills')->where('centre_id', $centreId)->whereNull('deleted_at')->min('drilled_at');
+        $off = DrillCadence::off($centreId);   // switched off for this centre: not owed, never reminded
         $out = [];
         foreach ($rules as $rule) {
+            if (isset($off[$rule['type'] ?? ''])) continue;
             $every = $rule['every'] ?? 'month';
             [$cs, $ce] = self::period($every, $now);
             [$ps, $pe] = self::period($every, $cs->copy()->subDay());

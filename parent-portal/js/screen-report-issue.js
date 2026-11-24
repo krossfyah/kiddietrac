@@ -111,7 +111,7 @@
       var thread = (i.messages || []).map(function (m) {
         var mine = m.side === 'parent';
         return '<div style="margin-top:8px;padding:8px 11px;border-radius:10px;font-size:13.5px;line-height:1.45;white-space:pre-wrap;'
-          + (mine ? 'background:#F1F5F9;' : 'background:#EFF6FF;border-left:3px solid #1F6080;') + '">'
+          + (mine ? 'background:#F1F5F9;' : 'background:#EFF6FF;--kt-edge:#1F6080;') + '">'
           + '<div style="font-size:11.5px;font-weight:800;color:#475569;margin-bottom:2px;">' + esc(m.who) + ' · ' + esc(m.at) + '</div>' + esc(m.body) + '</div>';
       }).join('');
       return '<div data-issue="' + i.id + '" style="background:var(--kt-surface,#fff);border:1px solid var(--kt-border,#E5E7EB);border-radius:12px;padding:12px 14px;margin-bottom:10px;">'

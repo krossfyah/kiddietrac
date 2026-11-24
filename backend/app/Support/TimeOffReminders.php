@@ -137,7 +137,7 @@ final class TimeOffReminders
             $r->staff_name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: 'A team member';
             // The request's own centre, else every centre the requester works at.
             $r->centre_ids = $r->centre_id ? [(int) $r->centre_id]
-                : DB::table('role_assignments')->where('user_id', $r->user_id)->where('agency_id', $agencyId)
+                : DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $r->user_id)->where('agency_id', $agencyId)
                     ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
         }
 
@@ -261,7 +261,7 @@ final class TimeOffReminders
                 }
             }
             if (! empty($s['in_app'])) {
-                Notify::write(['user_id' => (int) $uid, 'type' => 'time_off_reminder', 'title' => $subject,
+                Notify::write(['agency_id' => $agencyId, 'user_id' => (int) $uid, 'type' => 'time_off_reminder', 'title' => $subject,
                     'body' => implode(' · ', array_map(fn ($r) => $r->staff_name . ' (' . TimeOffController::whenPhrase($r) . ')', array_slice($list, 0, 4))) . (count($list) > 4 ? ' …' : ''),
                     'data' => json_encode(['link' => '#time-off']), 'created_at' => now()]);
                 $res['in_app']++;

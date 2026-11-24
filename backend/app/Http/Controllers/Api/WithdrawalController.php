@@ -126,9 +126,21 @@ final class WithdrawalController extends Controller
         $child = DB::table('children')->where('id', $w->child_id)->first();
         $family = $child ? DB::table('families')->where('id', $child->family_id)->first() : null;
         $centreAgency = $family ? (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id') : 0;
-        $allowed = $family && $this->authorizeCentreAccess($request->user(), (int) $family->centre_id);
-        if (! $allowed) {
-            $allowed = $centreAgency > 0 && $centreAgency === (int) $this->resolveAgencyId($request);
+        /* Only an admin of the child's agency, or a director OF THE CHILD'S CENTRE, decides
+           (2026-11-05 leak sweep). authorizeCentreAccess() said yes to an educator there, and
+           the agency fallback said yes to anybody in the agency - so a director of another
+           centre (or an educator) could approve a withdrawal, which ends the child's
+           enrolment and switches the parents' accounts off. */
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $centreId = $family ? (int) $family->centre_id : 0;
+        $names = \App\Support\AgencyRole::names($request);
+        $allowed = $family && $centreAgency > 0 && $centreAgency === $agencyId;
+        if ($allowed) {
+            $wide = \App\Support\CentreScope::ids($request, $agencyId) === null;
+            $directorHere = in_array('centre_director', $names, true)
+                && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+                    ->where('role', 'centre_director')->where('centre_id', $centreId)->exists();
+            $allowed = $wide || $directorHere;
         }
         if (! $allowed) abort(403);
 
@@ -145,7 +157,7 @@ final class WithdrawalController extends Controller
         try { $this->notifyDecision((int) $id, $child, $data['status'], $effective); }
         catch (\Throwable $e) { Log::error('Withdrawal decision notify: ' . $e->getMessage()); }
 
-        if ($data['status'] === 'approved' && Carbon::parse($effective)->startOfDay()->lte(now()->startOfDay())) {
+        if ($data['status'] === 'approved' && Carbon::parse($effective)->startOfDay()->lte(\App\Support\AgencyTime::todayDate())) {
             try { $this->applyWithdrawal((int) $id); } catch (\Throwable $e) { Log::error('Withdrawal apply: ' . $e->getMessage()); }
         }
 
@@ -200,15 +212,31 @@ final class WithdrawalController extends Controller
                 ->update(['enrollment_status' => 'withdrawn', 'withdrawn_at' => $effective, 'updated_at' => now()]);
 
             // No enrolled children left in the family → deactivate the guardian users.
+            /* A child held on the agency waitlist after their provider closed is NOT withdrawn from KiddieTrac: care at
+               the old provider ends (enrolment end date above), the child is Waitlisted, and the family keeps its
+               logins until an admin places them (AgencyWaitlist, Anthony 2026-11-24). */
+            if (\App\Support\AgencyWaitlist::holdsChild((int) $child->id)) {
+                DB::table('children')->where('id', $child->id)
+                    ->update(['enrollment_status' => 'waitlist', 'withdrawn_at' => null, 'updated_at' => now()]);
+            }
             $remaining = DB::table('children')->where('family_id', $child->family_id)
-                ->where('enrollment_status', 'enrolled')->whereNull('deleted_at')->count();
+                ->where(fn ($w) => $w->where('enrollment_status', 'enrolled')
+                    ->orWhere(fn ($h) => $h->where('enrollment_status', 'waitlist')->whereExists(fn ($x) => $x->select(DB::raw(1))
+                        ->from('external_waitlist as xw')->whereColumn('xw.child_id', 'children.id')->whereNull('xw.deleted_at')
+                        ->whereIn('xw.status', \App\Support\AgencyWaitlist::OPEN_STATUSES))))
+                ->whereNull('deleted_at')->count();
             if ($remaining === 0) {
                 $guardianIds = DB::table('guardians')->where('family_id', $child->family_id)
                     ->whereNotNull('user_id')->pluck('user_id')->all();
                 if ($guardianIds) {
-                    DB::table('users')->whereIn('id', $guardianIds)
+                    // Parent-only accounts close; a guardian with a job or another family keeps
+                    // their account (2026-11-05 leak sweep, AccountStatus::closeFamilyGuardians).
+                    $closeIds = \App\Support\AccountStatus::closeFamilyGuardians($guardianIds, (int) $child->family_id,
+                        (int) DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+                            ->where('f.id', $child->family_id)->value('c.agency_id'));
+                    if ($closeIds) DB::table('users')->whereIn('id', $closeIds)
                         ->update(['status' => 'deactivated', 'updated_at' => now()]);
-                    \App\Support\AccountStatus::closeRoles($guardianIds);
+                    \App\Support\AccountStatus::closeRoles($closeIds);
                 }
             }
 
@@ -225,9 +253,10 @@ final class WithdrawalController extends Controller
                 ->where('centre_id', $centreId)->pluck('user_id')->unique()->values()->all();
         }
         $effFmt = Carbon::parse($effective)->format('M j, Y');
+        /* The bell for admins, directors and the centre's educators (2026-11-03, App\Support\RosterAlerts) - once,
+           shared with every other way a child is withdrawn. The room's educators still get their email below. */
+        \App\Support\RosterAlerts::childWithdrawn((int) $child->id);
         foreach ($eduIds as $uid) {
-            $this->notify((int) $uid, '👋 Child withdrawn',
-                $childName . ' has been withdrawn (effective ' . $effFmt . '). They have been removed from your roster and records.', '#today');
             $u = DB::table('users')->where('id', $uid)->first();
             if ($u && ! empty($u->email)) {
                 $this->mailUser($agencyId, $u->email, trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')),

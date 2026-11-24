@@ -128,12 +128,7 @@ class BillingRun extends Command
                     . '<p style="margin:16px 0 0;font-size:13px;color:#64748B;line-height:1.6;">'
                     . 'All major cards and EFT are accepted. Reply to this email with any questions.</p>';
 
-                $html = \App\Services\EmailTemplate::wrap(null, $body, [
-                    'eyebrow' => 'INVOICE',
-                    'title' => 'Invoice ' . $number,
-                    'subtitle' => $money,
-                    'preheader' => 'Invoice ' . $number . ' for ' . $money . '.',
-                ]);
+                [, $html] = \App\Support\PlatformAccounts::compose(\App\Support\PlatformAccounts::invoice($number), 'invoice');   // accounts template (2026-10-25)
 
                 Mail::html($html, function ($m) use ($to, $number, $pdf) {
                     $m->to($to)

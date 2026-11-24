@@ -41,6 +41,15 @@ class MailSettingsController extends Controller
             'last_test'         => $s['mail.last_test'] ?? null,
             // The Google OAuth client behind "Connect Gmail" on RSVP sender accounts.
             // The secret is write-only, like the Graph one.
+            // The Microsoft app behind mailbox sign-in and "Sign in with Microsoft". Secret write-only.
+            'microsoft' => [
+                'client_id'    => $s['mailbox.microsoft.client_id'] ?? null,
+                'tenant'       => ($s['mailbox.microsoft.tenant'] ?? '') ?: 'common',
+                'secret_set'   => ! empty($s['mailbox.microsoft.client_secret']),
+                'redirect_uri' => (string) config('services.microsoft.redirect'),
+                'source'       => ! empty($s['mailbox.microsoft.client_id']) ? 'settings' : (config('services.microsoft.client_id') ? 'env' : 'none'),
+                'last_check'   => $s['mailbox.microsoft.last_check'] ?? null,
+            ],
             'google_gmail' => [
                 'client_id'    => $s['rsvp.google.client_id'] ?? null,
                 'secret_set'   => ! empty($s['rsvp.google.client_secret']),
@@ -131,6 +140,91 @@ class MailSettingsController extends Controller
         }
     }
 
+    /**
+     * PUT /platform/mail-settings/microsoft - the Microsoft 365 app for mailbox sign-in and "Sign in with Microsoft".
+     * A blank secret keeps the stored one; clear=1 removes all three (falls back to .env).
+     */
+    public function saveMicrosoft(Request $request): JsonResponse
+    {
+        $guid = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+        $data = $request->validate([
+            'client_id'     => ['nullable', 'string', 'max:60', 'regex:' . $guid],
+            'client_secret' => ['nullable', 'string', 'max:300'],
+            'tenant'        => ['nullable', 'string', 'max:120', 'regex:/^(common|organizations|consumers|[0-9a-f-]{36}|[a-z0-9.-]+\.[a-z]{2,})$/i'],
+            'clear'         => ['nullable', 'boolean'],
+        ], [
+            'client_id.regex' => 'That is not an Application (client) ID. It looks like 00000000-0000-0000-0000-000000000000 and is on the app\'s Overview page.',
+            'tenant.regex' => 'Use "common" (any Microsoft 365 organisation), or your Directory (tenant) ID / domain.',
+        ]);
+        if (! empty($data['clear'])) {
+            foreach (['client_id', 'tenant', 'last_check'] as $k) PlatformSettings::set('mailbox.microsoft.' . $k, null);
+            PlatformSettings::set('mailbox.microsoft.client_secret', null);
+            \App\Support\CriticalNotifier::send('Microsoft sign-in app removed from settings', ['Mailbox sign-in and "Sign in with Microsoft" fall back to the server .env.']);
+            return response()->json(['ok' => true]);
+        }
+        $id = trim((string) ($data['client_id'] ?? ''));
+        if ($id === '') return response()->json(['message' => 'Enter the Application (client) ID.'], 422);
+        $secret = trim((string) ($data['client_secret'] ?? ''));
+        if ($secret !== '' && preg_match($guid, $secret)) {
+            return response()->json(['message' => 'That is the secret\'s ID. Paste the secret\'s Value instead (shown once, when the secret is created).'], 422);
+        }
+        if ($secret === '' && ! PlatformSettings::getSecret('mailbox.microsoft.client_secret')) {
+            return response()->json(['message' => 'Enter the client secret Value.'], 422);
+        }
+        PlatformSettings::set('mailbox.microsoft.client_id', $id);
+        // Always 'common' (2026-11-05): a directory ID here shut every other organisation's mailbox out.
+        PlatformSettings::set('mailbox.microsoft.tenant', 'common');
+        if ($secret !== '') PlatformSettings::setSecret('mailbox.microsoft.client_secret', $secret);
+        $check = $this->microsoftCheckResult();
+        PlatformSettings::set('mailbox.microsoft.last_check', json_encode($check));
+        \App\Support\CriticalNotifier::send('Microsoft sign-in app updated', array_values(array_filter([
+            'Application ID ' . $id, $secret !== '' ? 'The client secret was changed.' : null, 'Check with Microsoft: ' . $check['result'],
+        ])));
+        return response()->json(['ok' => true, 'check' => $check]);
+    }
+
+    public function checkMicrosoft(Request $request): JsonResponse
+    {
+        $check = $this->microsoftCheckResult();
+        PlatformSettings::set('mailbox.microsoft.last_check', json_encode($check));
+        return response()->json(['check' => $check]);
+    }
+
+    /* ASK MICROSOFT WHETHER THE APP AND SECRET ARE REAL, without anyone signing in: an app-only token from the
+       directory the app lives in (the saved tenant, or KiddieTrac's own when it is "common"). A wrong ID, secret or
+       expired secret is refused for that reason. The redirect URI cannot be checked this way, so the result says so.
+       (A made-up sign-in code was tried first and is useless: Microsoft rejects the code before looking at the app.) */
+    private function microsoftCheckResult(): array
+    {
+        $s = PlatformSettings::all();
+        $id = (string) ($s['mailbox.microsoft.client_id'] ?? '');
+        $secret = (string) PlatformSettings::getSecret('mailbox.microsoft.client_secret');
+        $tenant = (string) (($s['mailbox.microsoft.tenant'] ?? '') ?: 'common');
+        $at = now()->toDateTimeString();
+        if ($id === '' || $secret === '') return ['ok' => false, 'result' => 'not set', 'at' => $at];
+        $home = in_array(strtolower($tenant), ['common', 'organizations', 'consumers'], true) ? (string) ($s['mail.graph.tenant'] ?? '') : $tenant;
+        if ($home === '') return ['ok' => false, 'result' => 'Saved. Set the Directory (tenant) ID to let KiddieTrac check it.', 'at' => $at];
+        try {
+            $r = Http::asForm()->timeout(15)->post('https://login.microsoftonline.com/' . rawurlencode($home) . '/oauth2/v2.0/token', [
+                'client_id' => $id, 'client_secret' => $secret, 'grant_type' => 'client_credentials', 'scope' => 'https://graph.microsoft.com/.default',
+            ]);
+            if ($r->successful() && $r->json('access_token')) {
+                return ['ok' => true, 'result' => 'Microsoft accepts this app and secret. Make sure the redirect URI below is registered on it.', 'at' => $at];
+            }
+            $err = (string) $r->json('error_description');
+            $code = preg_match('/AADSTS(\d+)/', $err, $m) ? $m[1] : '';
+            $map = [
+                '700016' => 'Microsoft does not know that Application ID in this directory. Check the ID (Overview page) and the tenant.',
+                '7000215' => 'The client secret is wrong. Paste the secret Value, not its ID.',
+                '7000222' => 'The client secret has expired. Create a new one in Certificates & secrets.',
+                '90002' => 'Microsoft does not recognise that tenant.',
+            ];
+            return ['ok' => false, 'result' => $map[$code] ?? ('Microsoft said: ' . mb_substr($err ?: ('HTTP ' . $r->status()), 0, 200)), 'at' => $at];
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'result' => 'Could not reach Microsoft: ' . mb_substr($e->getMessage(), 0, 160), 'at' => $at];
+        }
+    }
+
     public function save(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -202,7 +296,7 @@ class MailSettingsController extends Controller
         $sendOk = false;
         $sendErr = null;
         try {
-            Mail::html('<p>KiddieTrac mail test — sent '.now()->format('M j, g:i A').' via <strong>'.config('mail.default').'</strong>.</p>', function ($m) use ($data) {
+            Mail::html('<p>KiddieTrac mail test — sent '.\App\Support\AgencyTime::now()->format('M j, g:i A').' via <strong>'.config('mail.default').'</strong>.</p>', function ($m) use ($data) {
                 $m->to($data['to'])->subject('KiddieTrac mail test');
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
             });

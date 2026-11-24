@@ -44,6 +44,16 @@ final class ChatAudience
         $centreId = (int) $conv->centre_id;
         $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
 
+        // A message to the centre office (MessagingRules::OFFICE): the centre's directors and the agency's admins only.
+        if (MessagingRules::isOffice($conv)) {
+            return DB::table('role_assignments')->where('active', true)
+                ->where(function ($q) use ($centreId, $agencyId) {
+                    $q->where(fn ($w) => $w->where('role', 'centre_director')->where('centre_id', $centreId))
+                      ->orWhere(fn ($w) => $w->where('role', 'agency_admin')->where('agency_id', $agencyId));
+                })
+                ->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+        }
+
         return DB::table('role_assignments')->where('active', true)
             ->where(function ($q) use ($centreId, $agencyId) {
                 $q->where('centre_id', $centreId)

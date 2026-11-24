@@ -1,5 +1,10 @@
 <?php
 
+/* ⚠️ NOT USED (2026-10-30). Laravel 11 schedules from routes/console.php; nothing here runs. Jobs found only here were
+   moved there (generate-digests, mail-health) or have replacements (invoices:issue-scheduled, expiry:warn,
+   kiddietrac:checkin-reminders, kiddietrac:chat-emails, tokens:prune); kiddietrac:check-ratios is built separately.
+   Do not add schedules to this file. */
+
 namespace App\Console;
 
 use App\Console\Commands\GenerateDailyDigests;

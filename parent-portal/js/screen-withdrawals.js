@@ -111,7 +111,7 @@
 
   function wdCard(r, main) {
     var pending = r.status === 'pending';
-    var card = Dom.el('div', { style: 'background:#fff;border:1px solid #EDF1F6;border-left:5px solid ' + (pending ? '#F59E0B' : (r.status === 'approved' ? '#16A34A' : '#94A3B8')) + ';border-radius:15px;padding:14px;margin-bottom:11px;box-shadow:0 2px 8px -3px rgba(15,23,42,.12);' });
+    var card = Dom.el('div', { style: 'background:#fff;border:1px solid #EDF1F6;--kt-edge:' + (pending ? '#F59E0B' : (r.status === 'approved' ? '#16A34A' : '#94A3B8')) + ';border-radius:15px;padding:14px;margin-bottom:11px;box-shadow:0 2px 8px -3px rgba(15,23,42,.12);' });
     var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
     var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
     mid.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15.5px;color:#0F172A;' }, r.child_name));

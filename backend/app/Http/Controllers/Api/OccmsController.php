@@ -7,8 +7,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Support\AgencyTime;
 use App\Support\Live;
+use App\Support\MonthlyAttendance;
 use App\Support\OccmsRoa;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -72,6 +73,17 @@ final class OccmsController extends Controller
             $m = Carbon::parse(AgencyTime::today($agencyId))->startOfMonth()->subMonthNoOverflow()->format('Y-m');
         }
         abort_if($m > Carbon::parse(AgencyTime::today($agencyId))->format('Y-m'), 422, 'That month has not started yet.');
+
+        return $m;
+    }
+
+    /** Like month(), but the running month is fine too: the attendance sheet fills in as the month goes. Default: this month. */
+    private function monthAny(Request $request, int $agencyId): string
+    {
+        $m = (string) $request->input('month', '');
+        $now = Carbon::parse(AgencyTime::today($agencyId))->format('Y-m');
+        if (! preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $m)) $m = $now;
+        abort_if($m > $now, 422, 'That month has not started yet.');
 
         return $m;
     }
@@ -394,6 +406,93 @@ final class OccmsController extends Controller
             'Content-Disposition' => 'attachment; filename="' . $this->fileName($centres[$cid], $month, 'pdf') . '"']);
     }
 
+    /** GET /occms/attendance?centre_id=&month= — Monthly attendance & fees (App\Support\MonthlyAttendance). */
+    public function attendance(Request $request): JsonResponse
+    {
+        [$agencyId, $centres] = $this->ctx($request);
+        $month = $this->monthAny($request, $agencyId);
+        $cid = $this->centre($request, $centres);
+
+        return response()->json(['month' => $month, 'centre' => ['id' => $cid, 'name' => $centres[$cid]], 'marks' => MonthlyAttendance::MARKS]
+            + MonthlyAttendance::build($agencyId, $cid, $month));
+    }
+
+    /** GET /occms/attendance/xlsx?centre_id=&month= — laid out like the sheet centres keep by hand. */
+    public function attendanceXlsx(Request $request, \App\Services\XlsxExportService $xlsx): \Symfony\Component\HttpFoundation\Response
+    {
+        [$agencyId, $centres] = $this->ctx($request);
+        $month = $this->monthAny($request, $agencyId);
+        $cid = $this->centre($request, $centres);
+        $b = MonthlyAttendance::build($agencyId, $cid, $month);
+        $cols = [['header' => 'Parent signature', 'key' => 'sig', 'width' => 18], ['header' => 'Last', 'key' => 'last_name', 'width' => 16], ['header' => 'First', 'key' => 'first_name', 'width' => 14]];
+        foreach ($b['days'] as $i => $x) $cols[] = ['header' => (string) $x['d'], 'key' => 'd' . $i, 'width' => 5.5];
+        $cols = array_merge($cols, [['header' => 'Hours', 'key' => 'hours', 'width' => 8], ['header' => 'Parent fees', 'key' => 'parent_fees', 'width' => 12, 'format' => 'money'],
+            ['header' => 'Gov. fees', 'key' => 'gov_fees', 'width' => 12, 'format' => 'money'], ['header' => 'Total fees', 'key' => 'total_fees', 'width' => 12, 'format' => 'money'],
+            ['header' => 'Space type', 'key' => 'space_type', 'width' => 10]]);
+        $rows = array_map(function ($c) {
+            $r = ['sig' => '', 'last_name' => $c['last_name'], 'first_name' => $c['first_name'], 'hours' => $c['hours'], 'parent_fees' => $c['parent_fees'],
+                'gov_fees' => $c['gov_fees'], 'total_fees' => $c['total_fees'], 'space_type' => $c['space_type']];
+            foreach ($c['cells'] as $i => $v) $r['d' . $i] = $v;
+            return $r;
+        }, $b['children']);
+        $label = Carbon::createFromFormat('Y-m-d', $month . '-01')->format('F Y');
+        $this->audit($request, $agencyId, 'occms.attendance_export', $cid, 'Monthly attendance & fees (Excel) exported: ' . $centres[$cid] . ', ' . $month);
+
+        return $xlsx->download($agencyId, $label . ' Attendance', 'Attendance-' . trim(preg_replace('/[^A-Za-z0-9]+/', '-', $centres[$cid]), '-') . '-' . $month . '.xlsx', $cols, $rows, [
+            'period' => $centres[$cid] . ' · ' . $label . ' · A absent, X closed, x not booked, IN no sign-out',
+            'totals_row' => ['last_name' => 'Total', 'hours' => $b['totals']['hours'], 'parent_fees' => $b['totals']['parent'], 'gov_fees' => $b['totals']['gov'], 'total_fees' => $b['totals']['total']],
+        ]);
+    }
+
+    /** GET /occms/attendance/pdf?centre_id=&month= — printable, with a parent signature column. */
+    public function attendancePdf(Request $request): Response
+    {
+        [$agencyId, $centres] = $this->ctx($request);
+        $month = $this->monthAny($request, $agencyId);
+        $cid = $this->centre($request, $centres);
+        $b = MonthlyAttendance::build($agencyId, $cid, $month);
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $money = fn ($v) => '$' . number_format((float) $v, 2);
+        $num = fn ($v) => is_float($v) || is_int($v) ? rtrim(rtrim(number_format((float) $v, 2), '0'), '.') : $e($v);
+        $c = DB::table('centres')->where('id', $cid)->first(['name', 'license_number']);
+        $label = Carbon::createFromFormat('Y-m-d', $month . '-01')->format('F Y');
+
+        $html = '<html><head><meta charset="utf-8"><style>'
+            . '@page{margin:22px 20px;}body{font-family:DejaVu Sans,sans-serif;font-size:8px;color:#0F172A;}'
+            . 'h1{font-size:14px;margin:0 0 2px;}table{border-collapse:collapse;width:100%;}'
+            . 'th,td{border:1px solid #94A3B8;padding:3px 2px;text-align:center;}th{background:#E2E8F0;font-size:7.5px;}'
+            . 'td.l,th.l{text-align:left;}td.r,th.r{text-align:right;padding-right:4px;}.cl{background:#F1F5F9;}.A{color:#B91C1C;font-weight:bold;}.m{color:#94A3B8;}'
+            . '</style></head><body>';
+        $html .= '<h1>' . $e($label) . ' Attendance</h1><div style="margin-bottom:6px;font-size:9px;">' . $e((string) DB::table('agencies')->where('id', $agencyId)->value('name'))
+            . ' · ' . $e($c->name) . ($c->license_number ? ' · Licence ' . $e($c->license_number) : '') . '</div>';
+        $html .= '<table><thead><tr><th class="l" style="width:90px">Parent signature</th><th class="l" style="width:70px">Last</th><th class="l" style="width:60px">First</th>';
+        foreach ($b['days'] as $x) $html .= '<th' . ($x['closure'] ? ' class="cl"' : '') . '>' . $x['d'] . '<br>' . $e(substr($x['dow'], 0, 1)) . '</th>';
+        $html .= '<th>Hours</th><th class="r">Parent fees</th><th class="r">Gov. fees</th><th class="r">Total fees</th><th>Space type</th></tr></thead><tbody>';
+        foreach ($b['children'] as $r) {
+            $html .= '<tr><td style="height:16px"></td><td class="l">' . $e($r['last_name']) . '</td><td class="l">' . $e($r['first_name']) . '</td>';
+            foreach ($r['cells'] as $i => $v) {
+                $cls = ($b['days'][$i]['closure'] ? 'cl ' : '') . ($v === 'A' ? 'A' : (in_array($v, ['x', 'X', 'IN'], true) ? 'm' : ''));
+                $html .= '<td class="' . trim($cls) . '">' . ($v === '' ? '' : $num($v)) . '</td>';
+            }
+            $html .= '<td><b>' . $num($r['hours']) . '</b></td><td class="r">' . $money($r['parent_fees']) . '</td><td class="r">' . $money($r['gov_fees']) . '</td><td class="r">' . $money($r['total_fees']) . '</td><td>' . $e($r['space_type']) . '</td></tr>';
+        }
+        if (! $b['children']) $html .= '<tr><td colspan="' . (count($b['days']) + 8) . '">No children enrolled at this centre this month.</td></tr>';
+        else $html .= '<tr style="font-weight:bold;"><td></td><td class="l" colspan="' . (2 + count($b['days'])) . '">Total</td><td>' . $num($b['totals']['hours']) . '</td><td class="r">' . $money($b['totals']['parent'])
+            . '</td><td class="r">' . $money($b['totals']['gov']) . '</td><td class="r">' . $money($b['totals']['total']) . '</td><td></td></tr>';
+        $html .= '</tbody></table><div style="margin-top:6px;color:#475569;">Hours in care each day, from sign-in to sign-out. <b>A</b> absent · <b>X</b> centre closed · <b>x</b> not booked that day · <b>IN</b> signed in, no sign-out. '
+            . 'Space type: IN infant, TO toddler, PS preschool, KG kindergarten, SA school age; FT five or more days a week, PT fewer. Fees from the month\'s invoices; Gov. fees are the subsidy on the invoice, or the family\'s CWELCC rate.</div>';
+        $html .= '</body></html>';
+
+        $dompdf = new Dompdf(['isRemoteEnabled' => false]);
+        $dompdf->loadHtml($html, 'UTF-8');
+        $dompdf->setPaper('legal', 'landscape');
+        $dompdf->render();
+        $this->audit($request, $agencyId, 'occms.attendance_export', $cid, 'Monthly attendance & fees (PDF) exported: ' . $centres[$cid] . ', ' . $month);
+
+        return new Response($dompdf->output(), 200, ['Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="Attendance-' . trim(preg_replace('/[^A-Za-z0-9]+/', '-', $centres[$cid]), '-') . '-' . $month . '.pdf"']);
+    }
+
     /** GET /occms/cwelcc?centre_id=&month= */
     public function cwelcc(Request $request): JsonResponse
     {
@@ -401,7 +500,25 @@ final class OccmsController extends Controller
         $month = $this->month($request, $agencyId);
         $cid = $this->centre($request, $centres);
 
-        return response()->json(['month' => $month, 'centre' => ['id' => $cid, 'name' => $centres[$cid]]] + OccmsRoa::cwelcc($agencyId, $cid, $month));
+        return response()->json(['month' => $month, 'centre' => ['id' => $cid, 'name' => $centres[$cid]]] + OccmsRoa::cwelcc($agencyId, $cid, $month)
+            + ['fees' => \App\Support\CwelccFees::check($agencyId, $cid, $month)]);
+    }
+
+    /** POST /occms/cwelcc/fees {centre_id, dec2024: {group: daily fee|null}} - the December 31, 2024 fee per age group (agency admins). */
+    public function cwelccFees(Request $request): JsonResponse
+    {
+        [$agencyId, $centres, $wide] = $this->ctx($request);
+        abort_unless($wide, 403, 'Agency admins only.');
+        $cid = $this->centre($request, $centres);
+        $rules = ['dec2024' => ['present', 'array']];
+        foreach (\App\Support\CwelccFees::GROUPS as $g) $rules['dec2024.' . $g] = ['nullable', 'numeric', 'min:0', 'max:500'];
+        $d = $request->validate($rules);
+        $set = \App\Support\CwelccFees::save($cid, $d['dec2024']);
+        $parts = [];
+        foreach ($set['dec2024'] as $g => $v) if ($v !== null) $parts[] = (OccmsRoa::AGE_GROUPS[$g] ?? $g) . ' $' . number_format($v, 2);
+        $this->audit($request, $agencyId, 'occms.cwelcc_fees', $cid, 'CWELCC December 31, 2024 fees set for ' . $centres[$cid] . ': ' . ($parts ? implode(', ', $parts) : 'none'));
+
+        return response()->json(['ok' => true, 'settings' => $set]);
     }
 
     /** GET /occms/cwelcc/csv?centre_id=&month= */
@@ -411,9 +528,10 @@ final class OccmsController extends Controller
         $month = $this->month($request, $agencyId);
         $cid = $this->centre($request, $centres);
         $c = OccmsRoa::cwelcc($agencyId, $cid, $month);
+        $f = \App\Support\CwelccFees::check($agencyId, $cid, $month);
         $this->audit($request, $agencyId, 'occms.cwelcc_export', $cid, 'CWELCC monthly summary CSV exported: ' . $centres[$cid] . ', ' . $month);
 
-        return response()->streamDownload(function () use ($c, $centres, $cid, $month) {
+        return response()->streamDownload(function () use ($c, $f, $centres, $cid, $month) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
             fputcsv($h, ['CWELCC monthly summary']);
@@ -434,6 +552,18 @@ final class OccmsController extends Controller
                 fputcsv($h, ['Leaving CWELCC soon (tell families 2 months ahead)', 'Age group', 'Eligible until']);
                 foreach ($c['ageing_out'] as $r) fputcsv($h, [$r['name'], $r['group'], $r['until']]);
             }
+            // Base fees (Ontario since 2025): the limit per age group and each CWELCC child's daily fee against it.
+            fputcsv($h, []);
+            fputcsv($h, ['Base fee check', 'Age group', 'Monthly fee', 'Days a week', 'Daily fee', 'Base fee limit', 'Over by (per day)', 'Status']);
+            foreach ($f['children'] as $r) fputcsv($h, [$r['name'], $r['label'], $r['monthly_fee'], $r['days_per_week'], $r['daily'], $r['limit'] . ($r['base_known'] ? '' : ' ($22 cap: Dec 31, 2024 fee not entered)'), $r['over_per_day'], ['ok' => 'Within base fee', 'over' => 'Over the base fee', 'no_fee' => 'No fee on enrolment'][$r['status']]]);
+            if ($f['fees']) {
+                fputcsv($h, []);
+                fputcsv($h, ['Other charges to CWELCC families (allowed only for optional services)', 'Invoice', 'Description', 'Amount']);
+                foreach ($f['fees'] as $r) fputcsv($h, [$r['family'], $r['invoice'], $r['description'], $r['amount']]);
+            }
+            $cl = $f['closures'];
+            fputcsv($h, []);
+            fputcsv($h, ['Closure days this year', $cl['year_total'] . ' of ' . \App\Support\CwelccFees::CLOSURE_YEAR, 'Longest run', $cl['longest_run'] . ' of ' . \App\Support\CwelccFees::CLOSURE_RUN . ' business days']);
             fclose($h);
         }, 'CWELCC-summary-' . preg_replace('/[^A-Za-z0-9]+/', '-', $centres[$cid]) . '-' . $month . '.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
     }

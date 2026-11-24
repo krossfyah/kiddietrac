@@ -35,6 +35,16 @@
     return { short: short, label: short + (code === 'CA-ON' ? ' (CCEYA)' : '') };
   };
 
+  /* Immunization exemptions (2026-10-28): California (SB 277) accepts medical exemptions only. */
+  KT.jurMedicalOnly = function () {
+    var ex = KT.jurisdiction && KT.jurisdiction.immunization_exemptions;
+    return !!(ex && ex.length && ex.indexOf('belief') < 0);
+  };
+  KT.jurExemptionReasons = function () {
+    if (KT.jurMedicalOnly()) return ['Medical exemption (signed by a physician, CAIR-ME)', 'Other medical reason'];
+    return ['Religious or conscientious belief', 'Medical reason (documented by a physician)', 'Other'];
+  };
+
   setTimeout(function () { KT.loadJurisdiction(); }, 1200);
   setTimeout(function () { KT.loadJurisdiction(); }, 6000);
   // An agency switch changes the answer.

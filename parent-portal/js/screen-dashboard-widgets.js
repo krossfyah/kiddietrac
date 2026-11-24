@@ -76,9 +76,14 @@
 
   function inject() {
     var grid = document.getElementById('kt-widgets-grid');
-    if (!grid || document.getElementById('kt-dash-extra')) return;
+    if (!grid || grid.closest('[data-kt-refresh-snap],[data-kt-nav-cover]')) return;
     var section = grid.closest('section') || grid.parentNode;
     if (!section || !section.parentNode) return;
+    /* "Already there?" is asked of THIS screen, not the document (2026-11-10, Anthony's video: the row vanished and
+       came back every 45s). During a background refresh the cover over the screen is a clone of the old one, ids
+       and all, so document.getElementById('kt-dash-extra') found the cover's copy and the new screen never got its
+       row until some later mutation - the jump. kt-cover-id-guard.js now guards every document lookup the same way. */
+    if (section.parentNode.querySelector('#kt-dash-extra')) return;
     injectStyleOnce();
     var extra = document.createElement('div');
     extra.id = 'kt-dash-extra';
@@ -194,8 +199,12 @@
         bd.innerHTML = list.slice(0, 8).map(function (b) {
           return '<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid #F4F6F9;">'
             + wAvatar(b.name, b.photo_url, b.sex, 28, b.kind === 'child')
-            + '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:#334155;">' + esc(b.name) + (b.is_today ? ' <span style="color:#E91E8C;">🎉 today!</span>' : '') + '</div>'
-            + '<div style="font-size:12px;color:#64748B;">' + esc(b.display) + ' · turning ' + b.turning + '</div></div></div>';
+            + '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:700;color:#334155;">' + esc(b.name)
+            /* Staff and parents carry a role chip (2026-10-21: "upcoming birthdays add staff in
+               that list"); adults never show an age, only the day. */
+            + (b.role ? ' <span style="font-size:10.5px;font-weight:800;color:' + (b.kind === 'staff' ? '#1F6080;background:#E0F2FE' : '#6D28D9;background:#EDE9FE') + ';border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:1px;">' + esc(b.role) + '</span>' : '')
+            + (b.is_today ? ' <span style="color:#E91E8C;">🎉 today!</span>' : '') + '</div>'
+            + '<div style="font-size:12px;color:#64748B;">' + esc(b.display) + (b.turning != null && b.kind === 'child' ? ' · turning ' + b.turning : '') + '</div></div></div>';
         }).join('');
       }
       /* The dots and the strip under the grid used to be drawn from here, which is why
@@ -282,7 +291,7 @@
       // Today is always drawn, even when empty: "nothing today" is an answer, and a
       // heading that vanishes on a quiet day teaches people to stop reading the card.
       // Today's block is highlighted — tinted, with an accent edge — so it reads first.
-      var html = '<div style="background:#ECF8FA;border:1px solid #CDEBEF;border-left:4px solid var(--brand-blue,#0E7C90);border-radius:10px;padding:4px 10px 6px;margin:0 0 4px;">'
+      var html = '<div style="background:#ECF8FA;border:1px solid #CDEBEF;--kt-edge:var(--brand-blue,#0E7C90);border-radius:10px;padding:4px 10px 6px;margin:0 0 4px;">'
         + head('Today · ' + now.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }))
         + ((byDay[todayStr] || []).length
             ? byDay[todayStr].map(row).join('')

@@ -135,7 +135,15 @@ class ScheduleAutofillCommand extends Command
             return null;
         }
 
-        $userIds = $this->staffFor($centre);
+        /* STANDING HOURS (2026-10-21): plus anyone a director gave a standing pattern on
+           this home (App\Support\StandingShifts), at THEIR hours and days. Only people still
+           on the home's team: a pattern left behind by someone who has moved on rosters no one. */
+        $standing = \App\Support\StandingShifts::patterns($centre);
+        if ($standing) {
+            $team = \App\Support\CentreTeam::forCentres([(int) $centre->id])[(int) $centre->id] ?? [];
+            $standing = array_intersect_key($standing, $team);
+        }
+        $userIds = array_values(array_unique(array_merge($this->staffFor($centre), array_keys($standing))));
         if (! $userIds) {
             return null;
         }
@@ -163,17 +171,19 @@ class ScheduleAutofillCommand extends Command
 
         foreach ($userIds as $uid) {
             $room = optional($ownRoom->get($uid))->first()->room_id ?? $rooms[0];
+            $pat = $standing[$uid] ?? null;
+            $uDays = $pat ? $pat['days'] : $openDays;
             for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
                 $date = $d->toDateString();
-                if (! in_array((int) $d->isoWeekday(), $openDays, true)) { continue; }
+                if (! in_array((int) $d->isoWeekday(), $uDays, true)) { continue; }
                 if (isset($closures[$date])) { continue; }
                 if (isset($existing[$uid . '|' . $date])) { continue; }
                 $rows[] = [
                     'user_id' => $uid,
                     'room_id' => $room,
-                    'starts_at' => $date . ' ' . $open,
-                    'ends_at' => $date . ' ' . $close,
-                    'role' => 'lead',
+                    'starts_at' => $date . ' ' . ($pat ? $pat['start'] . ':00' : $open),
+                    'ends_at' => $date . ' ' . ($pat ? $pat['end'] . ':00' : $close),
+                    'role' => $pat['role'] ?? 'lead',
                     'status' => 'scheduled',
                     'created_at' => $now,
                 ];
@@ -202,6 +212,8 @@ class ScheduleAutofillCommand extends Command
 
         \App\Support\Audit::write([
             'user_id' => null,
+            // The centre's agency, so its admins see the night's fill (2026-10-21).
+            'agency_id' => (int) (DB::table('centres')->where('id', $centre->id)->value('agency_id') ?? 0) ?: null,
             'action' => 'shift.autofilled',
             'entity_type' => 'centre',
             'entity_id' => $centre->id,

@@ -50,11 +50,62 @@
       + ' "' + (n.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40) + '"';
   }
 
+  /* A COLUMN IS AS WIDE AS WHAT IT HOLDS (2026-10-29). Anthony, Message Centre on desktop: "the
+     active overlapping the time - full sweep to find issues like this and resolve", then "add logic
+     to auto size properly - guards". The pass below leaves every horizontal scroller alone, and on
+     desktop every list table IS one (kt-desktop-fluid makes filtered tables scroll sideways), so a
+     fixed-layout table whose Status column was set to 110px drew "Delivered" + the ACTIVE pill
+     (~170px) straight over the Date beside it.
+
+     For each table-layout:fixed table: a cell whose content is wider than its column (and is not
+     clipping on purpose) widens that column's header to fit, capped at 420px; the columns without
+     a set width (the message, the description) give up the room. Reads first, then writes; checks
+     the first 40 rows; each column is only ever widened. */
+  function fitCells(main) {
+    var tables = main.querySelectorAll('table');
+    var grow = [];
+    for (var t = 0; t < tables.length && t < 30; t++) {
+      var tb = tables[t];
+      if (!tb.offsetParent || tb.closest('[data-kt-allow-overflow]')) continue;
+      if (w.getComputedStyle(tb).tableLayout !== 'fixed') continue;
+      var head = tb.tHead && tb.tHead.rows.length ? tb.tHead.rows[tb.tHead.rows.length - 1] : null;
+      if (!head) continue;
+      var heads = head.cells, need = {};
+      var rows = tb.tBodies.length ? tb.tBodies[0].rows : [];
+      for (var r = 0; r < rows.length && r < 40; r++) {
+        var cells = rows[r].cells;
+        if (cells.length !== heads.length) continue;            // colspan rows: columns do not line up
+        for (var c = 0; c < cells.length; c++) {
+          var td = cells[c];
+          var over = td.scrollWidth - td.clientWidth;
+          if (over <= 2) continue;
+          var cs = w.getComputedStyle(td);
+          if (cs.overflowX !== 'visible' || cs.textOverflow === 'ellipsis') continue;   // clipping on purpose
+          if (!need[c] || over > need[c]) need[c] = over;
+        }
+      }
+      for (var k in need) {
+        var th = heads[k];
+        if (!th) continue;
+        var cur = th.getBoundingClientRect().width;
+        var want = Math.min(Math.ceil(cur + need[k] + 6), 420);
+        if (want > cur + 1) grow.push([th, want, tb]);
+      }
+    }
+    for (var g = 0; g < grow.length; g++) {
+      grow[g][0].style.width = grow[g][1] + 'px';
+      fixed.push({ hash: w.location.hash, el: label(grow[g][0]), by: grow[g][1], as: 'column' });
+      if (fixed.length > 200) fixed.shift();
+    }
+    return grow.length;
+  }
+
   function pass() {
     timer = null;
     if (w.__ktNoOverflowGuard) return;
     var main = d.getElementById('appMain');
     if (!main || d.hidden) return;
+    try { fitCells(main); } catch (e) { /* never break a page */ }
     var all = main.querySelectorAll('div,span,strong,b,small,em,p,a,label,li,h1,h2,h3,h4,h5,h6,button');
     var n = 0, budget = 5000;
     for (var i = 0; i < all.length && i < budget && n < 40; i++) {

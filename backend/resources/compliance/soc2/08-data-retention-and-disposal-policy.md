@@ -25,7 +25,7 @@ It covers all customer data in the platform, the security and application logs, 
 
 | Class | Examples | Handling |
 |---|---|---|
-| Restricted | Children's records (health, immunisations, incidents, custody notes), family circumstances, staff payout details, credentials and secrets | Access by role and tenant only; secrets encrypted at the application level (see 10); never used in tests or screenshots; Test Agency (agency 6) used for all QA |
+| Restricted | Children's records (health, immunizations, incidents, custody notes), family circumstances, staff payout details, credentials and secrets | Access by role and tenant only; secrets encrypted at the application level (see 10); never used in tests or screenshots; Test Agency (agency 6) used for all QA |
 | Confidential | Contact details, attendance, messages, invoices, audit logs | Access by role and tenant only |
 | Internal | Source code, runbooks | Owner and approved contractors only |
 | Public | Marketing site, help articles | None |

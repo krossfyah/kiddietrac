@@ -273,7 +273,7 @@ final class PurchaseOrderController extends Controller
                 'reference'         => 'PENDING',
                 'status'            => 'awaiting_approval',
                 'category'          => $po->category,
-                'issue_date'        => now()->toDateString(),
+                'issue_date'        => \App\Support\AgencyTime::today(),
                 'subtotal'          => $po->subtotal,
                 'tax'               => $po->tax,
                 'total'             => $po->total,

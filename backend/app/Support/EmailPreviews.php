@@ -166,12 +166,12 @@ final class EmailPreviews
                     return false;
                 }
 
-                public function sendToTokens(array $tokens, string $title, string $body, array $data = [], bool $urgent = false): array
+                public function sendToTokens(array $tokens, string $title, string $body, array $data = [], bool $urgent = false, ?array $sound = null): array
                 {
                     return [];
                 }
 
-                public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false, bool $webFallback = true): array
+                public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false, bool $webFallback = true, array $extra = []): array
                 {
                     return [];
                 }

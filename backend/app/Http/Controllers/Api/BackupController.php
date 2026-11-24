@@ -37,7 +37,7 @@ class BackupController extends Controller
 
     private function dir(): string
     {
-        return base_path('../backups');
+        return \App\Support\BackupPaths::dir();
     }
 
     /** GET /admin/backups — status, settings, and what is actually on disk. */
@@ -45,7 +45,7 @@ class BackupController extends Controller
     {
         $this->assertPlatformAdmin($request);
 
-        $files = glob($this->dir() . '/kiddietrac-*.sql.gz') ?: [];
+        $files = glob($this->dir() . '/kiddietrac-*.sql.gz*') ?: [];   // encrypted .gpg too
         rsort($files);
 
         $list = [];
@@ -57,6 +57,7 @@ class BackupController extends Controller
                 'name' => basename($f),
                 'size_mb' => round($size / 1048576, 2),
                 'taken_at' => date('Y-m-d H:i:s', (int) @filemtime($f)),
+                'encrypted' => str_ends_with($f, '.gpg'),
             ];
         }
 
@@ -72,6 +73,7 @@ class BackupController extends Controller
                 'enabled' => PlatformSettings::get('backup.enabled', '1') !== '0',
                 'time' => (string) PlatformSettings::get('backup.time', '03:30'),
                 'keep' => (int) PlatformSettings::get('backup.keep', 14),
+                'encrypted' => trim((string) PlatformSettings::get('backup.gpg_recipient', '')) !== '',
             ],
             'status' => [
                 'last_ok_at' => $lastOk ?: null,

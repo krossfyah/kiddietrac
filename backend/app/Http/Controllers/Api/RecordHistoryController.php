@@ -57,7 +57,7 @@ final class RecordHistoryController extends Controller
         ['incidents',              'Incidents',           "\u{26A0}",  ['occurred_at', 'created_at'], ['incident_type'], ['description', 'severity']],
         ['medications',            'Medications',         "\u{1F48A}", ['starts_on', 'created_at'], ['name'], ['dosage', 'frequency', 'status']],
         ['medication_logs',        'Doses given',         "\u{1F489}", ['administered_at', 'created_at'], ['dose_given'], ['outcome', 'notes']],
-        ['immunizations',          'Immunisations',       "\u{1F6E1}", ['administered_on', 'created_at'], ['vaccine'], ['dose_label']],
+        ['immunizations',          'Immunizations',       "\u{1F6E1}", ['administered_on', 'created_at'], ['vaccine'], ['dose_label']],
         ['wellness_screenings',    'Wellness screenings', "\u{1FA7A}", ['screening_date', 'created_at'], ['result'], ['notes']],
         ['child_absences',         'Absences',            "\u{1F3E0}", ['absent_on', 'created_at'], ['reason'], ['note']],
         ['report_cards',           'Report cards',        "\u{1F4C4}", ['created_at'], ['term'], ['status']],

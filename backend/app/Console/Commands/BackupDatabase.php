@@ -16,6 +16,14 @@ use Throwable;
  *   php artisan db:backup [--keep=14]
  *
  * Restore:  gunzip < backups/kiddietrac-YYYY-MM-DD-HHMMSS.sql.gz | mysql -u<user> -p <db>
+ *
+ * ENCRYPTED BACKUPS (2026-10-21): when Platform setting backup.gpg_recipient holds a key
+ * fingerprint, each verified dump is encrypted to that PUBLIC key (keyring ~/.kt-backup-gnupg)
+ * and the plain .sql.gz is deleted, leaving kiddietrac-*.sql.gz.gpg. The PRIVATE key is not on
+ * this server: Anthony keeps it (KiddieTrac-Backup-Key folder). Restore on a machine with it:
+ *   gpg --decrypt kiddietrac-YYYY-MM-DD-HHMMSS.sql.gz.gpg | gunzip | mysql -u<user> -p <db>
+ * A backup that cannot be encrypted is KEPT in plain form (a backup beats no backup) and a
+ * high-severity 'backup_not_encrypted' security alert is raised.
  */
 class BackupDatabase extends Command
 {
@@ -34,7 +42,11 @@ class BackupDatabase extends Command
         }
 
         $conn = config('database.connections.' . config('database.default'));
-        $dir = base_path('../backups');          // ~/kiddietrac/backups — outside backend/public + parent-portal
+        $dir = \App\Support\BackupPaths::dir();   // KT_BACKUP_DIR, outside every web root (2026-10-26)
+        if (\App\Support\BackupPaths::insideWebRoot($dir)) {
+            return $this->failure('backup directory is inside the web root, refusing to write a dump there: ' . $dir
+                . ' (set KT_BACKUP_DIR in .env to a folder outside public_html)');
+        }
         if (! is_dir($dir)) {
             @mkdir($dir, 0700, true);
         }
@@ -72,8 +84,44 @@ class BackupDatabase extends Command
             return $this->failure('backup archive failed gzip integrity check');
         }
 
+        /* ENCRYPT IT, then keep only the encrypted copy. The dump sat on this server in plain
+           SQL, next to the site: anyone who got into the hosting account got every family's
+           record, and the backups were the easiest place to find them all at once. */
+        $encrypted = false;
+        $recipient = trim((string) \App\Support\PlatformSettings::get('backup.gpg_recipient', ''));
+        if ($recipient !== '') {
+            $out = $file . '.gpg';
+            $home = $this->gpgHome();
+            $enc = new Process(['gpg', '--homedir', $home, '--batch', '--yes', '--no-tty', '--trust-model', 'always',
+                '--recipient', $recipient, '--output', $out, '--encrypt', $file], null, null, null, 900);
+            $enc->run();
+            // Proof it is an OpenPGP message to that key. Without the private key gpg cannot go
+            // further than the key packet, which is exactly the point.
+            $chk = new Process(['gpg', '--homedir', $home, '--batch', '--no-tty', '--list-packets', $out], null, null, null, 120);
+            $chk->run();
+            $packets = $chk->getOutput() . $chk->getErrorOutput();
+            if ($enc->isSuccessful() && is_file($out) && filesize($out) >= filesize($file) * 0.9
+                && stripos($packets, 'pubkey enc packet') !== false) {
+                @unlink($file);
+                $file = $out;
+                $encrypted = true;
+            } else {
+                @unlink($out);
+                Log::error('[BACKUP] encryption failed, plain backup kept: ' . substr(trim($enc->getErrorOutput()), 0, 300));
+                try {
+                    DB::table('security_alerts')->insert([
+                        'type' => 'backup_not_encrypted', 'severity' => 'high', 'subject' => 'db:backup',
+                        'details' => 'Tonight\'s database backup could not be encrypted, so it was kept unencrypted: '
+                            . substr(trim($enc->getErrorOutput()) ?: 'no output', 0, 300),
+                        'created_at' => now(), 'updated_at' => now(),
+                    ]);
+                } catch (Throwable $e) {
+                }
+            }
+        }
+
         $mb = round(filesize($file) / 1048576, 2);
-        Log::info("[BACKUP] ok: {$file} ({$mb} MB)");
+        Log::info("[BACKUP] ok: {$file} ({$mb} MB)" . ($encrypted ? ' encrypted' : ''));
         $this->info("Backup written: {$file} ({$mb} MB)");
 
         // Retention — keep the newest N, delete the rest.
@@ -81,7 +129,7 @@ class BackupDatabase extends Command
         $keep = (int) ($this->option('keep')
             ?: \App\Support\PlatformSettings::get('backup.keep', 14));
         $keep = max(1, min(90, $keep));
-        $all = glob($dir . '/kiddietrac-*.sql.gz') ?: [];
+        $all = glob($dir . '/kiddietrac-*.sql.gz*') ?: [];   // plain .sql.gz and encrypted .sql.gz.gpg
         rsort($all);
         foreach (array_slice($all, $keep) as $old) {
             @unlink($old);
@@ -93,10 +141,17 @@ class BackupDatabase extends Command
             \App\Support\PlatformSettings::set('backup.last_ok_at', now()->toDateTimeString());
             \App\Support\PlatformSettings::set('backup.last_size_mb', (string) $mb);
             \App\Support\PlatformSettings::set('backup.last_error', '');
+            \App\Support\PlatformSettings::set('backup.last_encrypted', $encrypted ? '1' : '0');
         } catch (Throwable $e) {
         }
 
         return self::SUCCESS;
+    }
+
+    /** The keyring holding ONLY the backups public key, outside every webroot. */
+    private function gpgHome(): string
+    {
+        return \App\Support\BackupPaths::gnupgHome();
     }
 
     private function failure(string $msg): int

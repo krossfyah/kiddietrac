@@ -50,7 +50,8 @@
     return false;
   }
   function mobile() {
-    try { return isNativeApp() || window.innerWidth <= 768; } catch (e) { return false; }
+    // matchMedia does not force a layout; innerWidth did, on every pass (PERF 2026-10-28).
+    try { return isNativeApp() || (window.matchMedia ? window.matchMedia('(max-width:768px)').matches : window.innerWidth <= 768); } catch (e) { return false; }
   }
 
   /* The open dialogs on screen. Same shape test kt-mobilenav.js uses for the chrome —
@@ -72,10 +73,17 @@
         if (out.indexOf(el) !== -1) { continue; }
         var cs = window.getComputedStyle(el);
         if (cs.position !== 'fixed') { continue; }
+        if (cs.pointerEvents === 'none' || el.id === 'kt-clockglow') { continue; }   // decoration, not a popup
         var z = parseInt(cs.zIndex, 10);
         if (isNaN(z) || z < 900) { continue; }
         var r = el.getBoundingClientRect();
-        if (r.width < 250 || r.height < 200) { continue; }
+        /* AN OVERLAY WE SHRANK IS STILL A POPUP (2026-10-28). An educator: "When I click on it to fill it will somehow
+           go all the way to the top of the app and can only see part of the form, so cant see to fill it". centreVisible
+           sizes a full-screen overlay to what you can see; the moment that was under 200px (a taller keyboard panel -
+           emoji, clipboard, Samsung Pass - for an instant, a split screen) this size test stopped counting the form
+           filler as open, so nothing ever sized it again: it stayed a ~120px strip at the top with My Forms showing
+           underneath, for as long as it was open. One we centred is followed whatever its size. */
+        if ((r.width < 250 || r.height < 200) && el.getAttribute('data-kt-centred') !== '1') { continue; }
         out.push(el);
       }
     } catch (e) {}
@@ -203,11 +211,17 @@
         if (c.getBoundingClientRect().height > 60) { card = c; break; }
       }
       if (!card) { return; }
-      var r = card.getBoundingClientRect();
-      if (r.bottom <= vh + 1 && r.top >= -1) { return; }            // fits: leave it
-      if (overlay.scrollHeight - overlay.clientHeight > SLACK) { return; }  // already scrolls
       var ocs = window.getComputedStyle(overlay);
       if (ocs.position !== 'fixed') { return; }
+      /* LAYOUT, NOT PAINT (2026-10-20, Closed Testing Report issue 6). A dialog that is still
+         sliding in has a transform, and getBoundingClientRect includes it: the select sheet's
+         panel, mid translateY(14px), measured 14px past the bottom, so it was re-anchored to
+         the TOP and its title + close button sat under the status bar. offsetTop/offsetHeight
+         are against the fixed overlay and ignore transforms. */
+      var top = card.offsetParent === overlay ? card.offsetTop : card.getBoundingClientRect().top;
+      var bottom = top + (card.offsetHeight || card.getBoundingClientRect().height);
+      if (bottom <= Math.max(vh, overlay.clientHeight) + 1 && top >= -1) { return; }   // fits: leave it
+      if (overlay.scrollHeight - overlay.clientHeight > SLACK) { return; }  // already scrolls
       /* Centring is what makes the overflow unreachable: half of it goes off the TOP,
          where no scroll can follow. Anchored to the start, all of it is below. */
       overlay.style.alignItems = 'flex-start';
@@ -217,10 +231,56 @@
     } catch (e) {}
   }
 
+  /* IN THE MIDDLE OF WHAT YOU CAN SEE (2026-10-23, Anthony: "the pop up is shown towards the
+     bottom vs the middle of the screen - this is a problem through out the mobile"). A popup
+     centred with inset:0 is centred on the WHOLE layout viewport: that includes the phone's
+     bottom bar (and, in a mobile browser, the toolbar / keyboard area the visual viewport
+     leaves out), so it sat low, its buttons under the bar. A centred, full-screen overlay is
+     laid over the visual viewport instead, with the bottom bar's height kept clear. Re-run on
+     every sweep, so the keyboard opening or closing re-centres it. */
+  function centreVisible(overlay) {
+    try {
+      if (overlay.getAttribute('data-kt-fit') === 'scroll-y') { return; }
+      var cs = window.getComputedStyle(overlay);
+      /* A popup kt-modal-guard hangs from the top on a phone (data-kt-hang) is laid over what you can see too, so the
+         keyboard and the bottom bar shrink the space its card may use (2026-10-30). */
+      var hung = overlay.getAttribute('data-kt-hang') === '1';
+      if (cs.position !== 'fixed' || cs.display.indexOf('flex') === -1 || (cs.alignItems !== 'center' && !hung)) { return; }
+      var r = overlay.getBoundingClientRect();
+      /* ONCE CENTRED, ALWAYS FOLLOWED (2026-10-26). The keyboard shrinks the overlay to the space above it. Measured again
+         with the keyboard gone it was "not full-screen" any more, so it was never grown back: the form filler stayed 470px
+         tall with My Forms showing (and scrolling) underneath it (Anthony's phone). An overlay we centred keeps following
+         what you can see. */
+      if (overlay.getAttribute('data-kt-centred') !== '1' && !hung && (r.height < window.innerHeight * 0.9 || r.width < window.innerWidth * 0.9)) { return; }   // not a full-screen scrim
+      if (hung && (r.width < window.innerWidth * 0.9)) { return; }
+      var vv = window.visualViewport;
+      var top = vv ? Math.round(vv.offsetTop) : 0, h = vv ? Math.round(vv.height) : window.innerHeight;
+      var nav = document.getElementById('kt-mobilenav'), navH = 0;
+      /* The bottom bar is only kept clear when it is drawn ABOVE the overlay. An overlay that covers it (the form filler:
+         z 2147480000 over the bar's 9500) had an 83px dead strip at its foot instead. */
+      var navUnder = false;
+      try { navUnder = !!nav && (parseInt(cs.zIndex, 10) || 0) > (parseInt(window.getComputedStyle(nav).zIndex, 10) || 0); } catch (e) {}
+      if (nav && !navUnder && !document.documentElement.classList.contains('kt-kb-open')) {
+        var nr = nav.getBoundingClientRect(), ncs = window.getComputedStyle(nav);
+        if (ncs.display !== 'none' && ncs.visibility !== 'hidden' && nr.height > 0 && nr.top < top + h) { navH = Math.round(Math.max(0, top + h - nr.top)); }
+      }
+      if (overlay.__ktCentre !== top + '/' + h + '/' + navH) {
+        overlay.__ktCentre = top + '/' + h + '/' + navH;
+        if (overlay.__ktPadB == null) { overlay.__ktPadB = parseFloat(cs.paddingBottom) || 0; }
+        overlay.style.setProperty('top', top + 'px', 'important');
+        overlay.style.setProperty('bottom', 'auto', 'important');
+        overlay.style.setProperty('height', h + 'px', 'important');
+        overlay.style.setProperty('padding-bottom', Math.max(overlay.__ktPadB, navH ? navH + 10 : 0) + 'px', 'important');
+        overlay.setAttribute('data-kt-centred', '1');
+      }
+    } catch (e) {}
+  }
+
   function fitDialog(dlg) {
     if (!mobile()) { return; }
     var changed = 0;
     try {
+      centreVisible(dlg);
       fitHeight(dlg);
       /* DEEPEST FIRST. In document order a wrapper is reached before the row that is
          actually too wide, and the coarse repair for a wrapper then pre-empts the right
@@ -346,6 +406,7 @@
     }
     window.addEventListener('resize', schedule);
     window.addEventListener('orientationchange', schedule);
+    try { if (window.visualViewport) { window.visualViewport.addEventListener('resize', schedule); window.visualViewport.addEventListener('scroll', schedule); } } catch (e) {}
     schedule();
   }
   start();

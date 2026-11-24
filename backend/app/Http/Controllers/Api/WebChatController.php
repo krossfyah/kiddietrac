@@ -86,19 +86,23 @@ class WebChatController extends Controller
         return $n !== '' ? $n : 'A team member';
     }
 
-    private static function addMessage(int $chatId, string $sender, string $body, ?int $userId = null, ?string $author = null): int
+    private static function addMessage(int $chatId, string $sender, string $body, ?int $userId = null, ?string $author = null, ?int $replyTo = null): int
     {
-        return (int) DB::table('web_chat_messages')->insertGetId([
+        $row = [
             'web_chat_id' => $chatId,
             'sender'      => $sender,
             'user_id'     => $userId,
             'author'      => $author,
             'body'        => $body,
             'created_at'  => self::now(),
-        ]);
+        ];
+        if ($replyTo && \App\Support\ChatReply::enabled('web')) {
+            $row['reply_to_id'] = $replyTo;
+        }
+        return (int) DB::table('web_chat_messages')->insertGetId($row);
     }
 
-    private static function messageOut(object $m): array
+    private static function messageOut(object $m, ?array $quote = null): array
     {
         return [
             'id'     => (int) $m->id,
@@ -106,7 +110,32 @@ class WebChatController extends Controller
             'author' => $m->author,
             'body'   => $m->body,
             'at'     => self::iso($m->created_at),
+            'reply_to_id' => ! empty($m->reply_to_id) ? (int) $m->reply_to_id : null,
+            'reply_to'    => $quote,
         ];
+    }
+
+    /**
+     * The messages of one chat, each with the line it replies to (App\Support\ChatReply - read from this
+     * chat only). For the VISITOR's page the quote is written into the text itself, so the widget on the
+     * website shows it with no change of its own: "↩ Replying to you: “…”" above the team's answer.
+     */
+    private static function messagesOut($msgs, object $chat, bool $forVisitor = false): array
+    {
+        $quotes = \App\Support\ChatReply::quotes('web', (int) $chat->id, collect($msgs)->pluck('reply_to_id')->filter()->all(),
+            ['visitor' => (string) ($chat->name ?? ''), 'viewer' => $forVisitor ? 'visitor' : 'staff']);
+        return collect($msgs)->map(function ($m) use ($quotes, $forVisitor) {
+            $q = ! empty($m->reply_to_id) ? ($quotes[(int) $m->reply_to_id] ?? null) : null;
+            $o = self::messageOut($m, $q);
+            if ($forVisitor) {
+                unset($o['reply_to_id'], $o['reply_to']);
+                if ($q && empty($q['deleted'])) {
+                    $who = $q['author_first_name'] === 'You' ? 'you' : $q['author_first_name'];
+                    $o['body'] = '↩ **Replying to ' . $who . ':** “' . $q['snippet'] . '”' . "\n\n" . $m->body;
+                }
+            }
+            return $o;
+        })->values()->all();
     }
 
     // ─────────────────────────────── public (the website) ───────────────────────────────
@@ -126,6 +155,7 @@ class WebChatController extends Controller
             }
             $now = self::now();
             $chat = DB::table('web_chats')->where('session', $session)->first();
+            $hadEmail = $chat ? (string) ($chat->email ?? '') : '';
             if (! $chat) {
                 $id = DB::table('web_chats')->insertGetId([
                     'session'    => $session,
@@ -147,6 +177,12 @@ class WebChatController extends Controller
             }
             if ($email !== '' && $email !== $chat->email) {
                 $upd['email'] = $email;
+            }
+            // The first time a visitor gives an email: the lead welcome + the subscriber
+            // list (2026-10-22, App\Support\LeadWelcome: once per address, queued, and never
+            // for someone who unsubscribed).
+            if ($email !== '' && $hadEmail === '') {
+                \App\Support\LeadWelcome::send($email, $name, 'website-chat', '', false, (string) $request->ip());
             }
             $author = null;
             if ($sender === 'visitor') {
@@ -218,7 +254,7 @@ class WebChatController extends Controller
         } else {
             $q->where('id', '>', $after)->whereIn('sender', ['agent', 'system'])->limit(100);
         }
-        $out['messages'] = $q->get()->map(fn ($m) => self::messageOut($m))->all();
+        $out['messages'] = self::messagesOut($q->get(), $chat, true);
         $out['status'] = $chat->status;
         if ($chat->agent_id && $chat->status === 'open') {
             $out['agent'] = ['name' => $chat->agent_name ?: 'KiddieTrac team'];
@@ -385,6 +421,7 @@ class WebChatController extends Controller
         ]);
         try {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $who, $chat) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $m->to($to)->subject('Website chat waiting — '.$who);
                 if ($chat->email && filter_var($chat->email, FILTER_VALIDATE_EMAIL)) {
                     $m->replyTo($chat->email, $chat->name ?: $chat->email);
@@ -534,7 +571,7 @@ class WebChatController extends Controller
                 'started'     => self::iso($c->created_at),
                 'lead'        => $lead ? ['id' => (int) $lead->id, 'name' => $lead->name, 'stage' => $lead->stage] : null,
             ],
-            'messages' => $msgs->map(fn ($m) => self::messageOut($m))->values(),
+            'messages' => self::messagesOut($msgs, $c),
         ]);
     }
 
@@ -571,18 +608,45 @@ class WebChatController extends Controller
     /** POST /sales/web-chats/{id}/reply {body} - replying takes the chat if nobody has it. */
     public function reply(Request $request, int $id): JsonResponse
     {
-        $data = $request->validate(['body' => 'required|string|max:4000']);
+        $data = $request->validate(['body' => 'required|string|max:4000', 'reply_to_id' => 'sometimes|nullable|integer']);
         $c = DB::table('web_chats')->where('id', $id)->first();
         abort_unless($c, 404);
         $c = $this->claim($c);
         $u = auth()->user();
-        $mid = self::addMessage($id, 'agent', trim($data['body']), (int) $u->id, self::firstName($u));
+        // Only a line of THIS chat (App\Support\ChatReply); anything else is dropped.
+        $replyTo = \App\Support\ChatReply::valid('web', $id, $data['reply_to_id'] ?? null);
+        $mid = self::addMessage($id, 'agent', trim($data['body']), (int) $u->id, self::firstName($u), $replyTo);
         DB::table('web_chats')->where('id', $id)->update([
             'last_staff_at' => self::now(), 'staff_typing_at' => null, 'updated_at' => self::now(),
             'staff_read_id' => $mid,
         ]);
 
-        return response()->json(['ok' => true, 'message' => self::messageOut(DB::table('web_chat_messages')->where('id', $mid)->first())], 201);
+        return response()->json(['ok' => true, 'message' => self::messagesOut([DB::table('web_chat_messages')->where('id', $mid)->first()], $c)[0]], 201);
+    }
+
+    /**
+     * POST /sales/web-chats/{id}/nudge - a "still there?" ping the visitor sees (2026-10-30, Anthony: "add
+     * ability to nudge on the website chat as well"). A system line in their chat; the page flashes its tab
+     * title and opens the chat if it was minimised. Once a minute at most, per chat.
+     */
+    public function nudge(int $id): JsonResponse
+    {
+        $c = DB::table('web_chats')->where('id', $id)->first();
+        abort_unless($c, 404);
+        if ($c->status !== 'open') {
+            return response()->json(['message' => 'This chat is closed.'], 422);
+        }
+        $key = 'webchat-nudge:' . $id;
+        if (\Illuminate\Support\Facades\Cache::has($key)) {
+            return response()->json(['message' => 'Already nudged in the last minute.'], 429);
+        }
+        \Illuminate\Support\Facades\Cache::put($key, 1, 60);
+        $u = auth()->user();
+        $name = self::firstName($u);
+        self::addMessage($id, 'system', '👋 ' . $name . ' from the KiddieTrac team is waiting for your reply - are you still there?', (int) $u->id, $name);
+        DB::table('web_chats')->where('id', $id)->update(['last_staff_at' => self::now(), 'updated_at' => self::now()]);
+
+        return response()->json(['ok' => true]);
     }
 
     /** POST /sales/web-chats/{id}/typing */

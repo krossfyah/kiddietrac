@@ -33,6 +33,12 @@ final class DataRetentionController extends Controller
         // 0 means never - deliberately, because a default here would start removing
         // family records at agencies that never asked for it.
         'suspended_family_months' => 0,
+        /* PIPEDA review (2026-11-10): four more periods the nightly purge acts on. All 0 = never, so nothing
+           changes until an agency sets a period AND turns on auto_enforce. */
+        'recording_months'   => 0,          // call recordings + transcripts (the call row itself stays)
+        'walk_gps_months'    => 0,          // walk / field trip GPS points (the walk record stays)
+        'sms_log_months'     => 0,          // the log of texts sent
+        'email_log_months'   => 0,          // the log of emails sent
         'auto_enforce'       => false,      // apply retention automatically (nightly)
         'enforce_mode'       => 'anonymize', // anonymize | delete
         'require_consent'    => true,       // require parent consent at enrolment
@@ -58,7 +64,7 @@ final class DataRetentionController extends Controller
     private function assertAdmin(Request $request): void
     {
         $u = $request->user();
-        $ok = DB::table('role_assignments')
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $u->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin'])
             ->exists();
@@ -105,6 +111,10 @@ final class DataRetentionController extends Controller
             'announcement_months' => ['nullable', 'integer', 'min:1', 'max:600'],
             // min:0 here, unlike the others: 0 is the meaningful "never" value.
             'suspended_family_months' => ['nullable', 'integer', 'min:0', 'max:600'],
+            'recording_months'   => ['nullable', 'integer', 'min:0', 'max:600'],
+            'walk_gps_months'    => ['nullable', 'integer', 'min:0', 'max:600'],
+            'sms_log_months'     => ['nullable', 'integer', 'min:0', 'max:600'],
+            'email_log_months'   => ['nullable', 'integer', 'min:0', 'max:600'],
             'document_years'     => ['nullable', 'integer', 'min:1', 'max:50'],
             'audit_log_months'   => ['nullable', 'integer', 'min:1', 'max:600'],
             'auto_enforce'       => ['nullable', 'boolean'],
@@ -134,6 +144,7 @@ final class DataRetentionController extends Controller
         }
 
         $current = $this->read($agencyId);
+        $before = $current;
         foreach (self::DEFAULTS as $k => $def) {
             if (is_bool($def)) {
                 if ($request->has($k)) {
@@ -147,6 +158,11 @@ final class DataRetentionController extends Controller
         $row = DB::table('agencies')->where('id', $agencyId)->select('settings')->first();
         abort_unless($row, 404, 'Agency not found');
         $settings = ($row->settings) ? (json_decode($row->settings, true) ?: []) : [];
+        /* PRIVACY NOTICE (2026-11-10, PrivacyNoticeController): a different policy link is a different notice, so every
+           parent is asked to read it again. */
+        if (trim((string) ($before['privacy_policy_url'] ?? '')) !== trim((string) ($current['privacy_policy_url'] ?? ''))) {
+            $current['privacy_notice_version'] = max(1, (int) ($before['privacy_notice_version'] ?? 1)) + 1;
+        }
         $settings['compliance'] = $current;
 
         DB::table('agencies')->where('id', $agencyId)->update([
@@ -168,6 +184,20 @@ final class DataRetentionController extends Controller
             ]);
         } catch (Throwable $e) {
             // never fail the save because of audit
+        }
+
+        // Switching the privacy notice off means parents are no longer told: its own audit line, said plainly.
+        if ((bool) ($before['require_consent'] ?? true) !== (bool) ($current['require_consent'] ?? true)) {
+            try {
+                \App\Support\Audit::write(['user_id' => $request->user()->id ?? null, 'agency_id' => $agencyId,
+                    'action' => $current['require_consent'] ? 'privacy_notice.required_on' : 'privacy_notice.required_off',
+                    'entity_type' => 'agency', 'entity_id' => $agencyId, 'created_at' => now(),
+                    'payload' => json_encode(['summary' => $current['require_consent'] ? 'Turned ON asking parents to read the privacy notice'
+                        : 'Turned OFF asking parents to read the privacy notice - parents are no longer shown it']),
+                ]);
+            } catch (Throwable $e) {
+                report($e);
+            }
         }
 
         return response()->json(['status' => 'saved', 'compliance' => $current]);

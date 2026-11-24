@@ -9,6 +9,46 @@
   const API_BASE = (window.KT_CONFIG && window.KT_CONFIG.apiBase)
     || 'https://api.kiddietrac.com/api/v1';
 
+  /* THE SAME READ, ONCE (2026-11-13, portal speed sweep). Modules that read with plain fetch() - the top bar, the MFA
+     nudge, the PIN / fingerprint unlock, the password gate - asked for /auth/me, /auth/mfa/status and
+     /admin/activity-feed at the same moment as the shell, so a refresh sent them twice to a two-core server already
+     busy with everything else. A GET to the API identical to one still on its way (same address, sign-in, agency and
+     view-as) now shares that request; each caller gets its own copy of the response. Never a request carrying a
+     cancel signal or a cache choice, never a write, and nothing is kept once the answer has arrived. */
+  (function shareReads() {
+    const real = window.fetch;
+    if (typeof real !== 'function' || real.__ktShared) return;
+    const flight = new Map();
+    const hdr = function (h, name) {
+      if (!h) return '';
+      try {
+        if (typeof Headers !== 'undefined' && h instanceof Headers) return h.get(name) || '';
+        for (const k in h) { if (k.toLowerCase() === name.toLowerCase()) return String(h[k]); }
+      } catch (e) {}
+      return '';
+    };
+    const shared = function (input, init) {
+      try {
+        if (typeof input === 'string' && input.indexOf('/api/v1/') !== -1
+            && (!init || ((!init.method || String(init.method).toUpperCase() === 'GET') && !init.signal && !init.cache && !init.body))) {
+          const h = init && init.headers;
+          const key = input + '|' + hdr(h, 'Authorization') + '|' + hdr(h, 'X-Active-Agency-Id') + '|' + hdr(h, 'X-View-As-Role');
+          let p = flight.get(key);
+          if (!p) {
+            p = real.apply(this, arguments);
+            flight.set(key, p);
+            const done = function () { if (flight.get(key) === p) flight.delete(key); };
+            p.then(done, done);
+          }
+          return p.then(function (r) { return r.clone(); });
+        }
+      } catch (e) {}
+      return real.apply(this, arguments);
+    };
+    shared.__ktShared = true;
+    window.fetch = shared;
+  })();
+
   // ─── Auth ───────────────────────────────────────────────────────
   const Auth = {
     // Fall back to localStorage so the session survives a WebView process kill
@@ -30,6 +70,10 @@
     rememberSession() {
       try {
         if (localStorage.getItem('kt_biometric_enabled') === '1' || localStorage.getItem('kt_pin_enabled') === '1') return;
+        /* A test tab (support / QA sign-in kept in this tab only) sets kt_no_persist in its
+           own sessionStorage. localStorage is shared by every tab of the browser, so mirroring
+           a test session there signs the owner's real tabs in as the test account. */
+        if (sessionStorage.getItem('kt_no_persist') === '1') return;
         var s = sessionStorage.getItem('kt_token');
         var l = localStorage.getItem('kt_token');
         if (s) {
@@ -66,13 +110,18 @@
       } catch (e) {}
     },
     clear() {
+      // Every way a session ends passes here (or calls KT.markSignedOut itself).
+      var shared = ownsSharedSession();   // before markSignedOut / the removals below
+      markSignedOut();
       // SECURITY: the bearer token is also written to localStorage (biometric
       // sign-in, set-password) and every helper reads sessionStorage||localStorage,
       // so a session-only clear left the token live on a shared device after
       // sign-out / expiry. Purge both stores.
       try {
         sessionStorage.removeItem('kt_token'); sessionStorage.removeItem('kt_user');
-        localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user');
+        if (shared) { localStorage.removeItem('kt_token'); localStorage.removeItem('kt_user'); }
+        // The password-change flag belongs to the session that raised it (2026-10-22).
+        sessionStorage.removeItem('kt_force_password_change'); sessionStorage.removeItem('kt_force_password_reason');
         /* The view-as PREVIEW dies with the session; the remembered PREFERENCE does not,
            because remembering it across a sign-out is the whole point. It is safe to keep
            only because it carries the user id it belongs to and is ignored for anybody
@@ -100,11 +149,61 @@
         keepToken = (localStorage.getItem('kt_biometric_enabled') === '1' && !!localStorage.getItem('kt_bio_token'))
           || (localStorage.getItem('kt_pin_enabled') === '1' && !!localStorage.getItem('kt_pin_vault'));
       } catch (e) {}
+      // The portal fades out while the session ends (window.KT_out, kt-signout-fade.js).
+      var out = window.KT_out;
+      window.__ktLoggingOut = true;
+      if (out) out.cover();
       if (!keepToken) { try { await Api.post('/auth/logout'); } catch (_) {} }
       this.clear();
-      window.location.href = '/index.html';
+      if (out) out.go('/index.html'); else window.location.href = '/index.html';
     },
   };
+
+  /* ONE SIGN-OUT MARK (2026-10-21). Every way a session ends - the menu, the profile
+     menu, the home-screen button, a timeout, a 401, access changed, another tab - leaves
+     the device the same way, so the sign-in page that follows is right from its first
+     frame:
+       - kt_signed_out: straight to the sign-in form (launch scene), no biometric
+         auto-prompt (kt-biometric reads and clears it);
+       - kt_bio_unlocked_at gone, so the dashboard does not re-open the session;
+       - the SHARED brand cache (kt_branding) gone, unless it is this app build's own
+         tenant (?tenant= / kt_tenant): a white-label session's logo must not dress the
+         next person's sign-in. Each account's own kt_brand_a<id> stays - the unlock
+         screen and the first frames after that account's next sign-in use it.
+     Before this only the home-screen sign-out set the mark, so a menu sign-out left the
+     white-label brand in the shared cache. */
+  /* WHOSE SIGN-IN IS IN localStorage (2026-11-13). A tab-only session (kt_no_persist: a support / QA / demo sign-in)
+     never mirrors itself into localStorage (rememberSession), so what is there belongs to the browser's owner - and
+     every tab shares it. Ending the tab-only session (a 401, an idle timeout, Sign out) used to purge it anyway: the
+     owner's other tabs were signed out (kt-signout-fade follows a removed kt_token) and the next launch came up signed
+     out. Such a tab clears the shared copy only when it IS this tab's token. Read BEFORE this tab's token is removed. */
+  function ownsSharedSession() {
+    try {
+      if (sessionStorage.getItem('kt_no_persist') !== '1') return true;
+      var l = localStorage.getItem('kt_token');
+      return !!l && l === sessionStorage.getItem('kt_token');
+    } catch (e) { return true; }
+  }
+  function markSignedOut() {
+    try {
+      var L = localStorage;
+      if (!ownsSharedSession()) {
+        // Only this tab's session ends; the owner's sign-in, unlock and brand stay as they are.
+        try { sessionStorage.removeItem('kt_active_agency_id'); sessionStorage.removeItem('kt_active_agency_name'); } catch (e) {}
+        return;
+      }
+      L.setItem('kt_signed_out', '1');
+      L.removeItem('kt_bio_unlocked_at');
+      // The agency this tab was working in ends with the session.
+      try { sessionStorage.removeItem('kt_active_agency_id'); sessionStorage.removeItem('kt_active_agency_name'); } catch (e) {}
+      var c = null; try { c = JSON.parse(L.getItem('kt_branding') || 'null'); } catch (e) {}
+      var slug = null; try { slug = sessionStorage.getItem('kt_tenant'); } catch (e) {}
+      if (!(c && slug && (c.agency_slug === slug || c.reseller_slug === slug))) L.removeItem('kt_branding');
+    } catch (e) {}
+  }
+  window.KT = window.KT || {};
+  window.KT.markSignedOut = markSignedOut;
+  window.KT.ownsSharedSession = ownsSharedSession;
 
   // ─── API client ─────────────────────────────────────────────────
   const Api = {
@@ -116,8 +215,42 @@
        request passes through — means no screen has to announce anything. */
     async request(path, opts) {
       try { window.__ktInflight = (window.__ktInflight || 0) + 1; } catch (e) {}
-      try { return await this._request(path, opts); }
-      finally { try { window.__ktInflight = Math.max(0, (window.__ktInflight || 1) - 1); } catch (e) {} }
+      /* ...AND HOW MANY OF THEM A SCREEN ASKED FOR (2026-11-02). The phone's boot cover waits
+         for the first screen's data, but __ktInflight also counts the page's own background
+         modules - markers, pulse, the notification/agreement/MFA gates, currency, jurisdiction -
+         which start one after another for seconds after boot. Measured on the unlock path: the
+         home screen was drawn at 0.56s and the cover stayed up until 3.3s waiting on that
+         chatter (Anthony's Samsung: ~6s of splash after the fingerprint). Screens live in
+         /js/screen-*.js, so a request whose call stack passes through one is the screen's. */
+      let _ktScreenReq = false;
+      try { _ktScreenReq = /\/js\/screen-[^\/]*\.js/.test(String(new Error().stack || '')); } catch (e) {}
+      if (_ktScreenReq) { try { window.__ktScreenInflight = (window.__ktScreenInflight || 0) + 1; } catch (e) {} }
+      try {
+        try { return await this._request(path, opts); }
+        catch (err) {
+          /* NOT SIGNED IN (2026-11-04). A care log or daily event for a child who is not signed in is
+             refused with not_signed_in until the educator says so. Asked HERE so every screen that logs -
+             care, the quick tiles, room logs, the sleep room - shows the same bold yellow warning
+             (KT.warnNotSignedIn) instead of each needing its own. "Log anyway" re-posts with
+             confirm_absent=1; Cancel throws a quiet error the screen can show or ignore (ktCancelled). */
+          const b = opts && opts.body;
+          if (err && err.status === 422 && err.data && err.data.message === 'not_signed_in'
+              && opts && opts.method === 'POST' && b && typeof b === 'object' && !(b instanceof FormData) && !b.confirm_absent) {
+            const ask = (window.KT && KT.warnNotSignedIn) ? KT.warnNotSignedIn(err.data)
+              : Promise.resolve(window.confirm(err.data.prompt || 'This child is not signed in. Log anyway?'));
+            if (await ask) return await this.request(path, Object.assign({}, opts, { body: Object.assign({}, b, { confirm_absent: 1 }) }));
+            const names = (err.data.absent || []).join(', ');
+            const e = new Error('Not logged - ' + (names || 'this child') + ((err.data.absent || []).length > 1 ? ' are' : ' is') + ' not signed in.');
+            e.ktCancelled = true; e.status = 422; e.data = err.data;
+            throw e;
+          }
+          throw err;
+        }
+      }
+      finally {
+        try { window.__ktInflight = Math.max(0, (window.__ktInflight || 1) - 1); } catch (e) {}
+        if (_ktScreenReq) { try { window.__ktScreenInflight = Math.max(0, (window.__ktScreenInflight || 1) - 1); } catch (e) {} }
+      }
     },
     async _request(path, { method = 'GET', body = null, query = null, _retried = false } = {}) {
       const opts_retried = _retried;
@@ -250,18 +383,53 @@
              re-navigate on each reply and the reason would flash past unread. */
           if (!window.__ktPwRedirect) {
             window.__ktPwRedirect = true;
-            try {
-              if (window.KT && KT.toast) {
-                KT.toast('\u{1F511}', 'Choose a new password',
-                  _pw.message || 'Your password needs changing before you can continue.', '#B45309');
-              }
-            } catch (e) {}
-            setTimeout(function () {
+            /* The locked dialog (kt-pw-gate.js, 2026-10-22), not a trip to Settings: the
+               portal is not usable until the password is changed, so nothing else shows. */
+            if (window.__ktPwGateShow) { window.__ktPwGateShow(_pw.reason, _pw.message); }
+            else setTimeout(function () {
               if (!/#settings/.test(window.location.hash)) { window.location.hash = 'settings?tab=security'; }
             }, 300);
           }
           throw new ApiError('password_change_required',
             _pw.message || 'Please choose a new password to continue.', 403, _pw);
+        }
+        /* TWO-FACTOR REQUIRED (2026-11-10, EnsureStrongSignIn): every call but set-up answers 403 until an
+           authenticator app or passkey is added. Hand it to the gate once; the screen just stops quietly. */
+        if (_pw && _pw.mfa_setup_required) {
+          if (!window.__ktMfaRedirect) {
+            window.__ktMfaRedirect = true;
+            if (window.__ktMfaGateShow) { window.__ktMfaGateShow(); }
+          }
+          throw new ApiError('mfa_setup_required',
+            _pw.message || 'Set up two-factor sign-in to continue.', 403, _pw);
+        }
+      }
+
+      /* SIGN-IN PAUSED (2026-11-10, App\Support\SignInLocks / EnforceSignInLocks): an admin locked this person, their
+         centre or their agency. Every call but sign-out answers 423. Once per page: someone who still has another
+         agency is moved to it (switch_to); anyone else is signed out on the server too and shown who to contact. */
+      if (res.status === 423) {
+        let _lk = null;
+        try { _lk = await res.clone().json(); } catch (_) {}
+        if (_lk && _lk.access_locked) {
+          if (!window.__ktLockedOut) {
+            window.__ktLockedOut = true;
+            if (_lk.switch_to) {
+              try { sessionStorage.setItem('kt_active_agency_id', String(_lk.switch_to)); sessionStorage.removeItem('kt_active_agency_name'); } catch (e) {}
+              window.location.reload();
+            } else {
+              const _tok = Auth.token();
+              const _bye = function () {
+                Auth.clear();
+                try { sessionStorage.setItem('kt_locked_msg', _lk.message || ''); } catch (e) {}
+                const _to = '/index.html?signed_out=locked';
+                if (window.KT_out) window.KT_out.go(_to); else window.location.href = _to;
+              };
+              fetch(API_BASE + '/auth/logout', { method: 'POST', headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + _tok } })
+                .then(_bye, _bye);
+            }
+          }
+          throw new ApiError('access_locked', _lk.message || 'Your access is paused.', 423, _lk);
         }
       }
 
@@ -270,7 +438,9 @@
         Auth.clear();
         if (!window.location.pathname.endsWith('index.html')
             && window.location.pathname !== '/') {
-          window.location.href = '/index.html';
+          // Say why on the sign-in page - unless this is the sign-out itself.
+          var _to = window.__ktLoggingOut ? '/index.html' : '/index.html?signed_out=expired';
+          if (window.KT_out) window.KT_out.go(_to); else window.location.href = _to;
         }
         throw new ApiError('unauthorized', 'Session expired. Please sign in again.', 401);
       }
@@ -294,7 +464,11 @@
       try { data = await res.json(); } catch (_) {}
 
       if (!res.ok) {
-        const msg = data?.message || data?.error || res.statusText;
+        let msg = data?.message || data?.error || res.statusText;
+        /* Never the server's raw words (2026-10-22): an empty body, "Server Error", a
+           status text, or anything that reads like code becomes a plain sentence. */
+        if (window.__ktCleanError) msg = window.__ktCleanError(msg, res.status);
+        else if (!msg || res.status >= 500) msg = 'Something went wrong on our side. Please try again in a moment.';
         throw new ApiError(data?.error || 'error', msg, res.status, data);
       }
 
@@ -359,7 +533,36 @@
       } catch (e) { /* a failed report is not worth a second failure */ }
     },
 
-    get(path, query) { return this.request(path, { query }); },
+    /* ONE REQUEST FOR THE SAME READ (2026-11-13, Anthony: "when the portal refreshes or saves that process moves very
+       slow - full sweep"). On a refresh the shell, the top bar and the gates each asked for the same things at once -
+       /auth/me, the MFA status, the markers and the activity feed all went twice - and the server, two cores, queued
+       them behind everything else. A GET identical to one still on its way (same path, query, agency and view-as)
+       now waits for that one instead of sending its own. Each extra caller gets its OWN copy of the answer, so a
+       screen that changes what it was given cannot change another's. Finished requests are not kept: the next read
+       always goes to the server. */
+    get(path, query) {
+      let key = null;
+      try {
+        key = path + '|' + (query ? JSON.stringify(query) : '') + '|' + (sessionStorage.getItem('kt_active_agency_id') || '')
+          + '|' + (sessionStorage.getItem('kt_view_as') || '');
+      } catch (e) { key = null; }
+      const live = key && this._inflightGets && this._inflightGets.get(key);
+      if (live) {
+        return live.then(function (d) {
+          if (d == null || typeof d !== 'object') return d;
+          try { return (typeof structuredClone === 'function') ? structuredClone(d) : JSON.parse(JSON.stringify(d)); } catch (e) { return d; }
+        });
+      }
+      const p = this.request(path, { query });
+      if (key) {
+        if (!this._inflightGets) this._inflightGets = new Map();
+        const map = this._inflightGets;
+        map.set(key, p);
+        const done = function () { if (map.get(key) === p) map.delete(key); };
+        p.then(done, done);
+      }
+      return p;
+    },
     post(path, body) { return this.request(path, { method: 'POST', body }); },
     /** Multipart upload. Same as post() — request() detects FormData — but named
      *  so call sites reading as an upload are obvious. */
@@ -411,7 +614,9 @@
       const z = (window.KT && KT.tz) ? KT.tz() : null;
       const opts = { hour: 'numeric', minute: '2-digit', hour12: true };
       if (z) opts.timeZone = z;
-      return d.toLocaleTimeString('en-CA', opts);
+      // A US agency (kt-term.js -> kt_spelling) reads "3:27 PM"; everyone else keeps en-CA's "3:27 p.m." (2026-10-28).
+      let loc = 'en-CA'; try { if (sessionStorage.getItem('kt_spelling') === 'us') loc = 'en-US'; } catch (e) {}
+      return d.toLocaleTimeString(loc, opts);
     },
     date(iso, opts = { weekday: 'long', month: 'long', day: 'numeric' }) {
       const d = this.parse(iso);
@@ -457,7 +662,8 @@
       }
       return node;
     },
-    clear(node) { while (node.firstChild) node.removeChild(node.firstChild); },
+    // Nothing to clear is not an error (ticket #185: a render after #appMain was removed threw here).
+    clear(node) { if (!node) return; while (node.firstChild) node.removeChild(node.firstChild); },
     show(node) { node.hidden = false; },
     hide(node) { node.hidden = true; },
     toast(message, type = 'info') {
@@ -574,7 +780,10 @@
   } catch (_) {}
 
   // Export
-  window.KT = { Auth, Api, ApiError, Fmt, Dom, bootstrapPage, API_BASE };
+  /* markSignedOut / ownsSharedSession ride along (2026-11-13): this export REPLACES window.KT, so the two set
+     earlier in the file were dropped and session-timeout / kt-topbar's "KT.markSignedOut &&" quietly skipped the
+     sign-out mark since 2026-10-21. */
+  window.KT = { Auth, Api, ApiError, Fmt, Dom, bootstrapPage, API_BASE, markSignedOut, ownsSharedSession };
 
   /* KEEP THE SESSION ALIVE ACROSS AN APP RESTART — CALLED HERE, ON EVERY PAGE.
 

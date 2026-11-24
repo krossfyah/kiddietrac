@@ -21,6 +21,11 @@
       Api.get('/time-off/mine').catch(() => ({ data: [] })),
       isStaffOrAdmin() ? Api.get('/admin/time-off').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
     ]);
+    /* REPLACED WHILE LOADING (2026-11-08, ticket #240: Safia tapped Deny on the phone app and got "Cannot set
+       properties of null"). The shell gives each render a fresh #appMain; if the screen was redrawn while this one
+       was still fetching (the reload after Deny, a live refresh), this render's node is no longer on the page and
+       document.getElementById found nothing. A stale render now stops, and its lookups stay inside its own node. */
+    if (!main.isConnected) return;   // replaced while loading: the newer screen draws itself (ticket #240)
     const allRows = all.data || [];
     const pending = { data: allRows.filter(r => (r.status || 'pending').toLowerCase() === 'pending') };
     const decided = { data: allRows.filter(r => (r.status || 'pending').toLowerCase() !== 'pending')
@@ -42,11 +47,11 @@
           + '<div id="tor-team"></div>' : ''}
       </div>`).firstElementChild);
 
-    renderTorList(document.getElementById('tor-mine'), mine.data || [], false);
+    renderTorList(main.querySelector('#tor-mine'), mine.data || [], false);
     if (isStaffOrAdmin()) {
       renderTorTabs(pending.data || [], decided.data || []);
     }
-    document.getElementById('tor-new').onclick = () => openTorModal();
+    main.querySelector('#tor-new').onclick = () => openTorModal();
   }
   function isMobile() { return window.innerWidth <= 700 || document.documentElement.classList.contains('kt-native'); }
   var TOR_META = {
@@ -114,7 +119,7 @@
     }))) return;
     try {
       await Api.post('/time-off/' + r.id + '/cancel', {});
-      renderTimeOff(document.getElementById('appMain') || document.querySelector('main'));
+      torReload();
     } catch (e) {
       alert((e && e.message) || 'Could not withdraw that request.');
     }
@@ -132,7 +137,7 @@
   async function actOnTor(id, status) {
     if (status === 'approved') { return approveTor(id); }
     await Api.patch('/admin/time-off/' + id, { status: status });
-    renderTimeOff(document.getElementById('appMain') || document.querySelector('main'));
+    torReload();
   }
 
   /* APPROVE, AND SAY WHETHER THE CENTRE CLOSES (2026-10-13, Anthony: "when approving time off
@@ -295,7 +300,7 @@
       b.onclick = async () => {
         if (b.dataset.act === 'approved') { return approveTor(b.dataset.id); }
         await Api.patch(`/admin/time-off/${b.dataset.id}`, { status: b.dataset.act });
-        renderTimeOff(document.getElementById('main') || document.querySelector('main'));
+        torReload();
       };
     });
     host.querySelectorAll('button[data-closetor]').forEach(b => {
@@ -388,8 +393,13 @@
       if (partial && startEl.value) { endEl.value = startEl.value; }
     }
     allDayEl.addEventListener('change', syncAllDay);
+    /* THE END DATE FOLLOWS THE START (ticket #219, 2026-11-04). An educator picked Dec 21 to start, then opened the
+       empty end date: its calendar opened on THIS month, so "27" became Nov 27, before the start. The server refused
+       it, nothing on screen said why, and Submit just did nothing. Now the end can never be before the start (min,
+       which kt-date-sheet greys out), and an empty or earlier end jumps to the start, so its calendar opens there. */
     startEl.addEventListener('change', function () {
-      if (!allDayEl.checked) { endEl.value = startEl.value; }
+      endEl.min = startEl.value || '';
+      if (!allDayEl.checked || !endEl.value || (startEl.value && endEl.value < startEl.value)) { endEl.value = startEl.value; }
     });
     syncAllDay();
 
@@ -410,10 +420,13 @@
         if (payload.end_time <= payload.start_time) { errEl.textContent = 'The end time has to be after the start.'; return; }
       }
       if (!payload.start_at || !payload.end_at) { errEl.textContent = 'Pick the dates.'; return; }
+      if (payload.end_at < payload.start_at) { errEl.textContent = 'The end date can\'t be before the start date.'; return; }
       errEl.textContent = '';
-      await Api.post('/time-off', payload);
+      // Said in the form, never a silent Submit (and never filed as a crash).
+      try { await Api.post('/time-off', payload); }
+      catch (e) { errEl.textContent = (e && e.data && e.data.message) || (e && e.message) || 'Could not send the request. Please try again.'; return; }
       m.remove();
-      renderTimeOff(document.getElementById('main') || document.querySelector('main'));
+      torReload();
     };
   }
 
@@ -432,6 +445,20 @@
        timezone shift: '2026-10-15' is the 15th everywhere). */
   const BGC = { main: null, rows: [], staff: [], status: '' };
   const BGC_TYPES = [{ code: 'vss', label: 'VSS' }, { code: 'criminal', label: 'Criminal' }, { code: 'driver', label: 'Driver' }, { code: 'reference', label: 'Reference' }, { code: 'other', label: 'Other' }];
+  /* The hero line in the agency's own terms (2026-10-28): "vulnerable-sector screening" is Canadian; a US agency
+     reads its profile's note (California: Live Scan + CACI, no expiry). */
+  function bgcHeroSub() {
+    const j = window.KT && KT.jurisdiction;
+    if (j && /^US-/.test(j.jurisdiction || '')) {
+      return 'Criminal record clearances and other screening for every staff member — when each one expires (if it does), the document on file, and any notes.'
+        + (j.background_check_note ? ' ' + j.background_check_note : '');
+    }
+    return 'Police checks and vulnerable-sector screening for every staff member — when each one expires, the document on file, and any notes.';
+  }
+  // The profile can arrive after the first paint (kt-jurisdiction.js loads it ~1 s in): reword the hero then.
+  window.addEventListener('kt:jurisdiction', function () {
+    document.querySelectorAll('[data-bgc-sub]').forEach(function (el) { el.textContent = bgcHeroSub(); });
+  });
   function bgcTypes() { return (window.KT && KT._jurChecks && KT._jurChecks.length) ? KT._jurChecks : BGC_TYPES; }
   function bgcTypeLabel(code) {
     const t = bgcTypes().concat(BGC_TYPES).find(x => x.code === code);
@@ -448,6 +475,7 @@
     return `<span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:700;background:${t[0]};color:${t[1]};white-space:nowrap;">${t[2]}</span>`;
   }
   function bgcWhen(r) {
+    if (r.no_expiry || !r.expires_at) return 'does not expire';
     const n = Number(r.days_until_expiry);
     if (!isFinite(n)) return '';
     if (r.status_bucket === 'expired') return `${Math.abs(n)} day${Math.abs(n) === 1 ? '' : 's'} ago`;
@@ -472,7 +500,7 @@
       <div>
         <div class="kt-hero" style="background:linear-gradient(135deg,#0B2545 0%,#13315C 55%,#1F6FB2 100%);">
           <div class="kt-hero-greet">🛡️ STAFF COMPLIANCE</div><h1>Background checks</h1>
-          <div class="kt-hero-sub">Police checks and vulnerable-sector screening for every staff member — when each one expires, the document on file, and any notes.</div>
+          <div class="kt-hero-sub" data-bgc-sub>${escapeHtml(bgcHeroSub())}</div>
         </div>
         <div id="bgc-bar" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0 12px;">
           <select id="bgc-status" style="height:34px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;background:#fff;">
@@ -512,7 +540,7 @@
           <td>${escapeHtml(bgcTypeLabel(r.check_type))}</td>
           <td>${escapeHtml(r.reference || '—')}</td>
           <td style="white-space:nowrap;">${r.issued_at ? bgcDay(r.issued_at) : '—'}</td>
-          <td style="white-space:nowrap;">${bgcDay(r.expires_at)}<div style="font-size:12px;color:#64748B;">${bgcWhen(r)}</div></td>
+          <td style="white-space:nowrap;">${r.expires_at ? bgcDay(r.expires_at) : 'No expiry'}<div style="font-size:12px;color:#64748B;">${bgcWhen(r)}</div></td>
           <td>${bgcChip(r.status_bucket)}${r.document_url ? `<div style="margin-top:4px;"><a href="${escapeHtml(bgcDocUrl(r.document_url))}" target="_blank" rel="noopener" style="font-size:12px;color:#1D4ED8;font-weight:600;">📄 Document</a></div>` : ''}</td>
           <td style="max-width:260px;font-size:13px;color:#334155;">${r.notes ? `<div style="white-space:pre-wrap;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${escapeHtml(r.notes)}</div>` : '<span style="color:#94A3B8;">—</span>'}</td>
           <td style="text-align:right;white-space:nowrap;">
@@ -545,7 +573,7 @@
         <tr><td style="${cell}">Check</td><td style="padding:6px 0;">${escapeHtml(bgcTypeLabel(row.check_type))}</td></tr>
         <tr><td style="${cell}">Reference</td><td style="padding:6px 0;">${escapeHtml(row.reference || '—')}</td></tr>
         <tr><td style="${cell}">Issued</td><td style="padding:6px 0;">${row.issued_at ? bgcDay(row.issued_at) : '—'}</td></tr>
-        <tr><td style="${cell}">Expires</td><td style="padding:6px 0;">${bgcDay(row.expires_at)} · ${bgcWhen(row)} ${bgcChip(row.status_bucket)}</td></tr>
+        <tr><td style="${cell}">Expires</td><td style="padding:6px 0;">${row.expires_at ? bgcDay(row.expires_at) + ' · ' : ''}${bgcWhen(row)} ${bgcChip(row.status_bucket)}</td></tr>
         <tr><td style="${cell}">Notes</td><td style="padding:6px 0;white-space:pre-wrap;">${escapeHtml(row.notes || '—')}</td></tr>
       </table>
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid #F1F5F9;">
@@ -629,8 +657,11 @@
           const expires = body.querySelector('#bgc-expires').value;
           const issued = body.querySelector('#bgc-issued').value;
           if (!userId) { err.textContent = 'Choose the staff member.'; return false; }
-          if (!expires) { err.textContent = 'Enter the expiry date.'; return false; }
-          if (issued && issued > expires) { err.textContent = 'The expiry date is before the issue date.'; return false; }
+          // A check whose catalogue entry never renews (California Live Scan / CACI) may be left without an expiry.
+          const tSel = bgcTypes().find(x => x.code === body.querySelector('#bgc-type').value);
+          const noRenew = !!(tSel && Object.prototype.hasOwnProperty.call(tSel, 'renew_years') && !tSel.renew_years);
+          if (!expires && !noRenew) { err.textContent = 'Enter the expiry date.'; return false; }
+          if (issued && expires && issued > expires) { err.textContent = 'The expiry date is before the issue date.'; return false; }
           err.textContent = '';
           try {
             await Api.post('/admin/background-checks', {
@@ -639,7 +670,7 @@
               check_type: body.querySelector('#bgc-type').value,
               reference: body.querySelector('#bgc-ref').value.trim(),
               issued_at: issued || null,
-              expires_at: expires,
+              expires_at: expires || null,
               notes: body.querySelector('#bgc-notes').value.trim(),
             });
           } catch (e) { err.textContent = (e && e.message) || 'Could not save.'; return false; }
@@ -652,9 +683,23 @@
 
   // ============================ Payroll ============================
   async function renderPayroll(main) {
+    if (!document.getElementById('kt-pp-css')) {
+      const st = document.createElement('style'); st.id = 'kt-pp-css';
+      st.textContent = '@media (max-width:900px){.pp-cards2{grid-template-columns:minmax(0,1fr)!important}}'
+        + '@media (max-width:600px){#pp-cards{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}'
+        + '#pp-cards>.pp-cardx:last-child:nth-child(odd){grid-column:1/-1}' + '#pp-cards .pp-cardx>div:last-child{font-size:11.5px!important}#pp-cards .pp-cardx span[style*="font-size:24px"]{font-size:19px!important}}'
+        + '@media (max-width:380px){#pp-cards{grid-template-columns:minmax(0,1fr)!important}}';
+      document.head.appendChild(st);
+    }
     main.innerHTML = `
       <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <h2 style="margin:0 0 12px;color:#1F6080;">Payroll</h2>
+        <div role="tablist" aria-label="Payroll views" id="pr-mode" style="display:flex;gap:4px;margin:0 0 16px;">
+          <button type="button" role="tab" aria-selected="true" data-pr-mode="hours" style="padding:9px 14px;font-size:13.5px;font-weight:700;white-space:nowrap;cursor:pointer;">⏱️ Hours &amp; payslips</button>
+          <button type="button" role="tab" aria-selected="false" data-pr-mode="periods" style="padding:9px 14px;font-size:13.5px;font-weight:700;white-space:nowrap;cursor:pointer;">📅 Pay periods</button>
+        </div>
+        <div id="pr-periods-view" hidden></div>
+        <div id="pr-hours-view">
         <!-- The "Documents issued" tab was here. Hours and documents are one
              question, so the documents now sit on the rows they belong to. -->
         <div style="display:flex;gap:12px;margin-bottom:18px;align-items:end;">
@@ -664,8 +709,10 @@
           <button id="pr-csv" style="background:#059669;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">⤓ CSV</button>
           <button id="pr-manual" style="background:#7C3AED;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">＋ Generate payroll</button>
         </div>
+        <div id="pr-quick" style="display:flex;gap:6px;flex-wrap:wrap;margin:-8px 0 16px;"></div>
         <div id="pr-result"></div>
         <div id="pr-docs" hidden></div>
+        </div>
       </div>`;
 
     /* The two tabs are gone. What each person worked and what they were paid for it is
@@ -683,6 +730,49 @@
     document.getElementById('pr-from').valueAsDate = startWin;
     document.getElementById('pr-to').valueAsDate = today;
     document.getElementById('pr-run').onclick = () => runPayroll();
+    /* Views: hours (what was worked) and pay periods (what each period paid). */
+    const modeBar = document.getElementById('pr-mode');
+    const setMode = (m) => {
+      if (!modeBar) return;
+      modeBar.querySelectorAll('[data-pr-mode]').forEach(b => b.setAttribute('aria-selected', b.getAttribute('data-pr-mode') === m ? 'true' : 'false'));
+      const hv = document.getElementById('pr-hours-view'), pv = document.getElementById('pr-periods-view');
+      if (hv) hv.hidden = m !== 'hours';
+      if (pv) { pv.hidden = m !== 'periods'; if (m === 'periods') renderPayPeriods(pv); }
+      try { sessionStorage.setItem('kt_payroll_view', m); } catch (e) {}
+    };
+    if (modeBar) modeBar.querySelectorAll('[data-pr-mode]').forEach(b => { b.onclick = () => setMode(b.getAttribute('data-pr-mode')); });
+    /* Quick periods for the hours report: the agency's pay schedule when one is set, else the periods its payslips
+       cover; months always. Each sets From/To and runs. */
+    const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const quickHost = document.getElementById('pr-quick');
+    const quickBtn = (label, from, to, hint) => {
+      const b = document.createElement('button');
+      const tipText = (hint ? hint + ': ' : '') + (KT.dayLabel ? KT.dayLabel(from) + ' – ' + KT.dayLabel(to) : from + ' to ' + to);
+      b.type = 'button'; b.textContent = label; b.title = tipText; b.setAttribute('data-kttip', tipText); b.setAttribute('aria-label', label + ' (' + tipText + ')');
+      b.setAttribute('data-kt-iconized', '1'); b.setAttribute('data-kt-btn-free', '1');
+      b.style.cssText = 'background:#fff;border:1px solid #CBD5E1;color:#1F6080;border-radius:999px;height:32px;padding:0 13px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;';
+      b.onclick = () => {
+        const fe = document.getElementById('pr-from'), te = document.getElementById('pr-to');
+        if (fe) fe.value = from; if (te) te.value = to;
+        runPayroll();
+      };
+      return b;
+    };
+    const paintQuick = (q) => {
+      if (!quickHost) return;
+      quickHost.innerHTML = '';
+      const hint = q && q.source === 'schedule' ? 'Pay schedule' : 'From the payslips';
+      if (q && q.this) quickHost.appendChild(quickBtn('This pay period', q.this.from, q.this.to, hint));
+      if (q && q.last) quickHost.appendChild(quickBtn('Last pay period', q.last.from, q.last.to, hint));
+      const n = new Date();
+      quickHost.appendChild(quickBtn('This month', iso(new Date(n.getFullYear(), n.getMonth(), 1)), iso(new Date(n.getFullYear(), n.getMonth() + 1, 0))));
+      quickHost.appendChild(quickBtn('Last month', iso(new Date(n.getFullYear(), n.getMonth() - 1, 1)), iso(new Date(n.getFullYear(), n.getMonth(), 0))));
+    };
+    paintQuick(null);
+    Api.get('/admin/payroll/periods').then(r => paintQuick(r && r.quick)).catch(() => {});
+    let startView = 'hours';
+    try { if (sessionStorage.getItem('kt_payroll_view') === 'periods') startView = 'periods'; } catch (e) {}
+    if (startView === 'periods') setTimeout(() => setMode('periods'), 0);
     /* Manual payroll — pay several people for one period in one pass. The wizard lives
        in its own module (screen-manual-payroll.js) rather than here: this file is large
        already, and a payroll RUN is a different thing from the hours report. */
@@ -1070,10 +1160,499 @@
       }).join('')}<tr><td colspan="3" style="padding:10px 8px;text-align:right;font-weight:700;border-top:2px solid #1F6080;">Total</td><td style="padding:10px 8px;text-align:right;font-weight:700;border-top:2px solid #1F6080;">${tot.toFixed(2)}</td></tr></tbody></table>`;
   }
 
+  /* ============================ Pay periods (2026-10-31) ============================
+     Anthony: "payroll gets read from iLearn into KiddieTrac today - how do we see staff's payroll for each
+     period?" The hours report answers who worked what over typed dates; this answers what each PAY PERIOD
+     paid and to whom: one row per period the payslips carry (iLearn's or KiddieTrac's own), then that
+     period's payslips with KiddieTrac's clock hours beside the hours each payslip paid. */
+  var PP = { year: '', q: '', status: '', page: 1, per: 25, data: null };
+
+  function ppMoney(n) { return n == null ? '—' : '$' + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function ppMoney0(n) { return '$' + Math.round(Number(n) || 0).toLocaleString(); }
+  function ppShort(n) { n = Number(n) || 0; return n >= 1000 ? '$' + (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : '$' + Math.round(n); }
+  function ppDay(d) { return (window.KT && KT.dayLabel) ? KT.dayLabel(d) : (d || ''); }
+  function ppPeriod(r) { return r.period_start === r.period_end ? ppDay(r.period_end) : ppDay(r.period_start) + ' – ' + ppDay(r.period_end); }
+  function ppPeriodHtml(r) { var n = function (d) { return '<span style="white-space:nowrap;">' + escapeHtml(ppDay(d)) + '</span>'; }; return r.period_start === r.period_end ? n(r.period_end) : n(r.period_start) + ' – ' + n(r.period_end); }
+  function ppGroup(g) { return g === 'educators' ? '🧑‍🏫 Educators' : '👥 Other staff'; }
+  function ppStatus(s) {
+    var t = s === 'paid' ? ['#DCFCE7', '#166534', '✓ Paid'] : (s === 'part_paid' ? ['#FEF3C7', '#92400E', 'Part paid'] : ['#E0F2FE', '#075985', 'Issued']);
+    return '<span style="font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 9px;white-space:nowrap;background:' + t[0] + ';color:' + t[1] + ';">' + t[2] + '</span>';
+  }
+  function ppAvatar(p, size) {
+    var nm = (p && p.name) || '';
+    if (window.KT && KT.avatar) return KT.avatar(nm, { size: size || 26, photoUrl: p && p.photo_url, userId: p && p.user_id, initials: !(p && p.photo_url) });
+    return '<span style="display:inline-flex;width:' + (size || 26) + 'px;height:' + (size || 26) + 'px;border-radius:50%;background:#CBD5E1;"></span>';
+  }
+  // A delta badge: ▲ 12% / ▼ 4%, green when up for money paid out is neutral, so colour only says direction.
+  function ppDelta(now, before, opts) {
+    opts = opts || {};
+    if (before == null || !isFinite(before) || before === 0 || now == null) return '';
+    var pct = (now - before) / Math.abs(before) * 100;
+    if (Math.abs(pct) < 0.5) return '<span style="font-size:11.5px;font-weight:700;color:#475569;background:#F1F5F9;border-radius:999px;padding:2px 8px;white-space:nowrap;">= same</span>';
+    var up = pct > 0;
+    return '<span title="' + escapeHtml(opts.title || 'vs previous') + '" style="font-size:11.5px;font-weight:700;border-radius:999px;padding:2px 8px;white-space:nowrap;'
+      + (up ? 'color:#075985;background:#E0F2FE;' : 'color:#7C2D12;background:#FFEDD5;') + '">' + (up ? '▲ ' : '▼ ') + Math.abs(pct).toFixed(pct > -10 && pct < 10 ? 1 : 0) + '%</span>';
+  }
+  function ppCsv(name, headers, rows) {
+    var esc = function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var text = [headers].concat(rows).map(function (r) { return r.map(esc).join(','); }).join('\r\n');
+    var url = URL.createObjectURL(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }));
+    var a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  }
+
+  /* Card chrome: white card, a subtle tinted band with an icon and title, then the body and a one-line plain-English
+     caption that says what the card means. data-kt-nosechead: the band is ours, kt-tab-band must not add a second. */
+  var PP_TINT = { blue: ['#EFF6FF', '#DBEAFE', '#1D4ED8'], teal: ['#ECFEFF', '#CFFAFE', '#0E7490'], amber: ['#FFFBEB', '#FEF3C7', '#B45309'],
+    violet: ['#F5F3FF', '#EDE9FE', '#6D28D9'], green: ['#F0FDF4', '#DCFCE7', '#15803D'], slate: ['#F8FAFC', '#E2E8F0', '#334155'] };
+  function ppCard(tint, icon, title, body, caption, extra) {
+    var t = PP_TINT[tint] || PP_TINT.slate;
+    return '<div class="pp-cardx kt-sec-card" style="background:#fff;border:1px solid #E6EBF1;border-radius:14px;overflow:hidden;display:flex;flex-direction:column;min-width:0;' + (extra || '') + '">'
+      + '<div data-kt-nosechead="1" style="display:flex;align-items:center;gap:8px;padding:9px 14px;background:linear-gradient(135deg,' + t[0] + ' 0%,#fff 100%);border-bottom:1px solid ' + t[1] + ';">'
+      +   '<span aria-hidden="true" style="width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:' + t[1] + ';font-size:14px;">' + icon + '</span>'
+      +   '<span style="font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:' + t[2] + ';">' + title + '</span></div>'
+      + '<div style="padding:12px 14px 4px;flex:1;min-width:0;">' + body + '</div>'
+      + (caption ? '<div style="padding:4px 14px 12px;font-size:12px;color:#64748B;line-height:1.45;">' + caption + '</div>' : '')
+      + '</div>';
+  }
+  function ppBig(v, delta) {
+    return '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;"><span style="font-size:24px;font-weight:800;color:#0F172A;letter-spacing:-.3px;">' + v + '</span>' + (delta || '') + '</div>';
+  }
+  // Small inline trend (sparkline) - thin line, end dot, no axes.
+  function ppSpark(vals, color) {
+    if (!vals || vals.length < 2) return '';
+    var w = 160, h = 34, max = Math.max.apply(null, vals), min = Math.min.apply(null, vals), rng = (max - min) || 1;
+    var pts = vals.map(function (v, i) { return [Math.round(i * (w - 6) / (vals.length - 1)) + 3, Math.round(h - 4 - (v - min) / rng * (h - 8))]; });
+    var d = pts.map(function (p, i) { return (i ? 'L' : 'M') + p[0] + ' ' + p[1]; }).join(' ');
+    var last = pts[pts.length - 1];
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" width="100%" height="' + h + '" preserveAspectRatio="none" aria-hidden="true" style="display:block;margin-top:6px;max-width:220px;">'
+      + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>'
+      + '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="3.5" fill="' + color + '" stroke="#fff" stroke-width="2"/></svg>';
+  }
+
+  /* Payroll by month: grouped bars (gross light, net dark), one axis in dollars, hover/tap tooltip per month. */
+  var PP_GROSS = '#9CC3EE', PP_NET = '#2A78D6';
+  function ppMonthChart(months, width) {
+    var n = months.length;
+    if (!n) return '<div style="color:#64748B;font-size:13px;">No payslips yet.</div>';
+    var W = Math.round(width || 640), H = W < 500 ? 190 : 210, padL = 46, padB = 26, padT = 10, innerW = W - padL - 8, innerH = H - padB - padT;
+    var max = Math.max.apply(null, months.map(function (m) { return Math.max(m.gross, m.net); })) || 1;
+    var step = Math.pow(10, Math.floor(Math.log10(max))), nice = Math.ceil(max / step) * step;
+    if (nice / step <= 2) { step = step / 2; } nice = Math.ceil(max / step) * step;
+    var slot = innerW / n, bw = Math.max(4, Math.min(16, slot / 2 - 4));
+    var y = function (v) { return padT + innerH - v / nice * innerH; };
+    var grid = '', ticks = 4;
+    for (var i = 0; i <= ticks; i++) {
+      var v = nice * i / ticks, yy = Math.round(y(v)) + .5;
+      grid += '<line x1="' + padL + '" x2="' + (W - 8) + '" y1="' + yy + '" y2="' + yy + '" stroke="#E2E8F0" stroke-width="1"/>'
+        + '<text x="' + (padL - 6) + '" y="' + (yy + 4) + '" text-anchor="end" font-size="11" fill="#64748B">' + ppShort(v) + '</text>';
+    }
+    var bars = '', hits = '';
+    var bar = function (x, v, c) {
+      if (!v) return '';
+      var top = y(v), hgt = padT + innerH - top, r = Math.min(4, bw / 2, hgt);
+      return '<path d="M' + x + ' ' + (padT + innerH) + 'V' + (top + r) + 'Q' + x + ' ' + top + ' ' + (x + r) + ' ' + top + 'H' + (x + bw - r) + 'Q' + (x + bw) + ' ' + top + ' ' + (x + bw) + ' ' + (top + r) + 'V' + (padT + innerH) + 'Z" fill="' + c + '"/>';
+    };
+    months.forEach(function (m, i) {
+      var cx = padL + slot * i + slot / 2;
+      bars += bar(cx - bw - 1, m.gross, PP_GROSS) + bar(cx + 1, m.net, PP_NET);
+      var lab = new Date(m.month + '-01T12:00:00').toLocaleDateString(undefined, { month: 'short' });
+      if (slot >= 30 || i % 2 === (n - 1) % 2) bars += '<text x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="#64748B">' + lab + '</text>';
+      hits += '<rect data-ppm="' + i + '" x="' + (padL + slot * i) + '" y="' + padT + '" width="' + slot + '" height="' + innerH + '" fill="transparent" style="cursor:pointer;"/>';
+    });
+    return '<div class="pp-chart" style="position:relative;">'
+      + '<div style="display:flex;gap:14px;font-size:12px;color:#334155;margin:0 0 6px;flex-wrap:wrap;">'
+      +   '<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:' + PP_GROSS + ';"></span>Gross</span>'
+      +   '<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:10px;height:10px;border-radius:3px;background:' + PP_NET + ';"></span>Net paid</span></div>'
+      + '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Payroll by month, gross and net" style="display:block;overflow:visible;">' + grid
+      + '<line x1="' + padL + '" x2="' + (W - 8) + '" y1="' + (padT + innerH + .5) + '" y2="' + (padT + innerH + .5) + '" stroke="#94A3B8" stroke-width="1"/>'
+      + bars + hits + '</svg>'
+      + '<div class="pp-tip" role="status" style="position:absolute;pointer-events:none;display:none;background:#0F172A;color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.5;box-shadow:0 10px 24px -8px rgba(15,23,42,.5);white-space:nowrap;z-index:2;"></div>'
+      + '</div>';
+  }
+  function ppWireChart(host, months) {
+    var wrap = host.querySelector('.pp-chart'); if (!wrap) return;
+    var tip = wrap.querySelector('.pp-tip');
+    var show = function (el) {
+      var m = months[+el.getAttribute('data-ppm')]; if (!m) return;
+      var lab = new Date(m.month + '-01T12:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      tip.innerHTML = '<div style="font-weight:800;margin-bottom:2px;">' + escapeHtml(lab) + '</div>'
+        + '<div>Gross <strong>' + ppMoney(m.gross) + '</strong></div><div>Net paid <strong>' + ppMoney(m.net) + '</strong></div>'
+        + '<div style="opacity:.75;">' + m.docs + ' payslip' + (m.docs === 1 ? '' : 's') + ' · ' + m.people + ' ' + (m.people === 1 ? 'person' : 'people') + '</div>';
+      tip.style.display = 'block';
+      var wr = wrap.getBoundingClientRect(), r = el.getBoundingClientRect();
+      var x = r.left - wr.left + r.width / 2 - tip.offsetWidth / 2;
+      tip.style.left = Math.max(0, Math.min(wr.width - tip.offsetWidth, x)) + 'px';
+      tip.style.top = '18px';
+      wrap.querySelectorAll('[data-ppm]').forEach(function (h) { h.setAttribute('fill', h === el ? 'rgba(42,120,214,.07)' : 'transparent'); });
+    };
+    var hide = function () { tip.style.display = 'none'; wrap.querySelectorAll('[data-ppm]').forEach(function (h) { h.setAttribute('fill', 'transparent'); }); };
+    wrap.querySelectorAll('[data-ppm]').forEach(function (el) {
+      el.addEventListener('mouseenter', function () { show(el); });
+      el.addEventListener('click', function () { show(el); });
+    });
+    wrap.addEventListener('mouseleave', hide);
+  }
+  /* Where the gross goes: one stacked bar (net + each deduction), 2px gaps, legend with amounts and shares. */
+  function ppBreakdown(b) {
+    var parts = [['Net paid', b.net, '#2a78d6'], ['CPP', b.cpp, '#eb6834'], ['EI', b.ei, '#1baf7a'], ['Income tax', b.income_tax, '#eda100'], ['Other deductions', b.other_deductions, '#e87ba4']];
+    var total = parts.reduce(function (a, p) { return a + (p[1] || 0); }, 0);
+    if (!total) return '<div style="color:#64748B;font-size:13px;">Nothing paid yet.</div>';
+    var segs = parts.filter(function (p) { return p[1] > 0; }).map(function (p) {
+      return '<span title="' + escapeHtml(p[0] + ': ' + ppMoney(p[1])) + '" style="flex:' + p[1] + ' 1 0;min-width:4px;background:' + p[2] + ';"></span>';
+    }).join('');
+    return '<div style="display:flex;gap:2px;height:16px;border-radius:6px;overflow:hidden;background:#F1F5F9;">' + segs + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr auto auto;gap:4px 12px;margin-top:10px;font-size:12.5px;align-items:center;">'
+      + parts.map(function (p) {
+          return '<span style="display:inline-flex;align-items:center;gap:7px;color:#334155;min-width:0;"><span style="width:10px;height:10px;border-radius:3px;flex:none;background:' + p[2] + ';"></span>' + p[0] + '</span>'
+            + '<span style="text-align:right;font-weight:700;color:#0F172A;">' + ppMoney(p[1]) + '</span>'
+            + '<span style="text-align:right;color:#64748B;min-width:44px;">' + (total ? (p[1] / total * 100).toFixed(p[1] / total < .01 && p[1] ? 2 : 1) : '0') + '%</span>';
+        }).join('')
+      + (b.vacation_pay ? '<span style="color:#334155;">＋ Vacation pay</span><span style="text-align:right;font-weight:700;color:#0F172A;">' + ppMoney(b.vacation_pay) + '</span><span></span>' : '')
+      + '</div>';
+  }
+  function ppTop(top) {
+    if (!top || !top.length) return '<div style="color:#64748B;font-size:13px;">No payslips yet.</div>';
+    var max = top[0].net || 1;
+    return top.map(function (p, i) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">' + ppAvatar(p, 28)
+        + '<div style="flex:1;min-width:0;"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;"><span style="font-weight:700;color:#0F172A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(p.name) + '</span>'
+        + '<span style="font-weight:700;color:#0F172A;white-space:nowrap;">' + ppMoney0(p.net) + '</span></div>'
+        + '<div style="height:6px;border-radius:4px;background:#EEF2F7;margin-top:4px;overflow:hidden;"><div style="height:100%;width:' + Math.max(3, p.net / max * 100) + '%;background:#2a78d6;border-radius:4px;"></div></div></div></div>';
+    }).join('');
+  }
+  // Staff column: overlapping avatars + the first names; "+N more" lists everyone on hover/tap.
+  function ppStaffCell(list) {
+    list = list || [];
+    if (!list.length) return '<span style="color:#94A3B8;">—</span>';
+    var shown = list.slice(0, 3), more = list.length - shown.length;
+    var faces = list.slice(0, 4).map(function (p, i) { return '<span style="display:inline-flex;margin-left:' + (i ? -8 : 0) + 'px;border:2px solid #fff;border-radius:50%;">' + ppAvatar(p, 24) + '</span>'; }).join('');
+    var all = list.map(function (p) { return p.name; }).join(', ');
+    return '<div style="display:flex;align-items:center;gap:8px;min-width:0;">'
+      + '<span style="display:inline-flex;flex:none;">' + faces + '</span>'
+      + '<span style="font-size:12.5px;color:#334155;line-height:1.35;min-width:0;">' + shown.map(function (p) { return escapeHtml(p.name); }).join(', ')
+      + (more > 0 ? ' <span title="' + escapeHtml(all) + '" data-pp-more="1" style="display:inline-block;font-size:11.5px;font-weight:700;color:#1D4ED8;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:999px;padding:0 7px;white-space:nowrap;cursor:help;">+' + more + ' more</span>' : '')
+      + '</span></div>';
+  }
+
+  var PP_COLS = ['Period', 'Frequency', 'Group', 'Staff', 'Payslips', 'People', 'Gross', 'Deductions', 'Vacation', 'Net', 'Status', 'Source'];
+  function ppExportRows(list) {
+    return list.map(function (r) {
+      return [r.period_start + ' to ' + r.period_end, r.pay_frequency || '', r.staff_group === 'educators' ? 'Educators' : 'Other staff',
+        (r.staff || []).map(function (p) { return p.name; }).join('; '),
+        r.docs, r.people, r.gross.toFixed(2), r.deductions.toFixed(2), r.vacation.toFixed(2), r.net.toFixed(2),
+        r.status === 'paid' ? 'Paid' : (r.status === 'part_paid' ? 'Part paid' : 'Issued'), r.source];
+    });
+  }
+
+  async function renderPayPeriods(host) {
+    if (!host) return;
+    host.innerHTML = '<div style="color:#64748B;padding:14px;">Loading pay periods…</div>';
+    var res;
+    try { res = await Api.get('/admin/payroll/periods' + (PP.year ? '?year=' + encodeURIComponent(PP.year) : '')); }
+    catch (e) { host.innerHTML = '<div style="color:#B91C1C;padding:14px;">Could not load pay periods. ' + escapeHtml((e && e.message) || '') + '</div>'; return; }
+    PP.data = res;
+    var all = res.data || [];
+    var years = res.years || [];
+    var chip = function (key, label) {
+      var on = PP.status === key;
+      return '<button type="button" role="tab" data-pp-st="' + key + '" data-kt-iconized="1" data-kt-btn-free="1" aria-selected="' + (on ? 'true' : 'false') + '" style="padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">' + label + '</button>';
+    };
+
+    host.innerHTML = '<div id="pp-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:12px;margin:0 0 12px;"></div>'
+      + '<div id="pp-cards2" class="pp-cards2" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:12px;margin:0 0 16px;align-items:start;"></div>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:0 0 12px;">'
+      +   '<label style="font-size:12.5px;color:#374151;font-weight:600;">Year<select id="pp-year" style="display:block;margin-top:4px;min-width:110px;">'
+      +     '<option value="">All years</option>' + years.map(function (y) { return '<option value="' + y + '"' + (String(PP.year) === String(y) ? ' selected' : '') + '>' + y + '</option>'; }).join('')
+      +   '</select></label>'
+      +   '<label style="font-size:12.5px;color:#374151;font-weight:600;flex:1;min-width:180px;max-width:340px;">Search<input id="pp-q" type="search" placeholder="Name, month, frequency…" value="' + escapeHtml(PP.q) + '" style="display:block;margin-top:4px;width:100%;"></label>'
+      +   '<div role="tablist" aria-label="Show" style="display:flex;gap:4px;align-items:center;">' + chip('', 'All') + chip('open', '⏳ Outstanding') + chip('paid', '✓ Paid') + '</div>'
+      + '</div>'
+      + '<div id="pp-list"></div><div id="pp-pager"></div>';
+
+    // ── the cards ──────────────────────────────────────────────────────────────────────────────
+    var t = res.totals || {}, b = res.breakdown || {}, out = res.outstanding || {}, months = res.months || [];
+    var nowYm = (function () { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
+    var done = months.filter(function (m) { return m.docs > 0 && m.month < nowYm; });
+    var mNow = done[done.length - 1] || null, mPrev = done[done.length - 2] || null;
+    var mName = function (m) { return m ? new Date(m.month + '-01T12:00:00').toLocaleDateString(undefined, { month: 'long' }) : ''; };
+    var seats = all.reduce(function (a, r) { return a + (r.people || 0); }, 0);
+    var avg = seats ? (t.net || 0) / seats : 0;
+    var avgNow = mNow && mNow.people ? mNow.net / mNow.people : null, avgPrev = mPrev && mPrev.people ? mPrev.net / mPrev.people : null;
+    var trend = months.slice(-12);
+    var cards = host.querySelector('#pp-cards');
+    if (cards) cards.innerHTML =
+      ppCard('blue', '💵', 'Net paid', ppBig(ppMoney(t.net || 0)) + '<div style="font-size:12.5px;color:#475569;margin-top:4px;">' + (t.docs || 0) + ' payslips · ' + all.length + ' pay period' + (all.length === 1 ? '' : 's') + '</div>'
+        + (mNow ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:#334155;margin-top:8px;">' + escapeHtml(mName(mNow)) + ' <strong>' + ppMoney(mNow.net) + '</strong>' + ppDelta(mNow.net, mPrev && mPrev.net, { title: 'vs ' + mName(mPrev) }) + '</div>' : ''),
+        'Take-home pay that went out ' + (PP.year ? 'in ' + PP.year : 'across all years') + (mPrev ? '. The badge compares ' + escapeHtml(mName(mNow)) + ' with ' + escapeHtml(mName(mPrev)) + '.' : '.'))
+      + ppCard('teal', '🧑‍🤝‍🧑', 'People paid', ppBig(String(t.people || 0)) + ppSpark(trend.map(function (m) { return m.people || 0; }), '#0E7490'),
+        'Different people with a payslip. The line shows how many were paid each month' + (PP.year ? ' of ' + PP.year : ' over the last 12 months') + '.')
+      + ppCard('violet', '⚖️', 'Average per person', ppBig(ppMoney(avg)) + (avgNow != null ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:#334155;margin-top:6px;">' + escapeHtml(mName(mNow)) + ' <strong>' + ppMoney(avgNow) + '</strong>' + ppDelta(avgNow, avgPrev, { title: 'vs ' + mName(mPrev) }) + '</div>' : ''),
+        'Net pay per person per pay period, on average. The month figure is what each person received that month.')
+      + ppCard('amber', '⏳', 'Outstanding', ppBig(ppMoney(out.net || 0)) + '<div style="font-size:12.5px;color:#475569;margin-top:4px;">' + (out.docs || 0) + ' payslip' + ((out.docs || 0) === 1 ? '' : 's') + ' · ' + (out.people || 0) + ' ' + ((out.people || 0) === 1 ? 'person' : 'people') + '</div>'
+        + (out.docs ? '<button type="button" data-pp-st="open" data-kt-iconized="1" data-kt-btn-free="1" style="margin-top:8px;height:30px;padding:0 12px;border-radius:999px;border:1px solid #FCD34D;background:#FFFBEB;color:#92400E;font-weight:700;font-size:12.5px;cursor:pointer;">Show them ›</button>' : ''),
+        'Payslips issued but not marked paid yet.');
+    var cards2 = host.querySelector('#pp-cards2');
+    if (cards2) cards2.innerHTML =
+      ppCard('blue', '📊', 'Payroll by month', ppMonthChart(months, host.clientWidth && host.clientWidth < 900 ? Math.max(300, host.clientWidth - 30) : 640), 'Gross and net pay by the month each pay period ends' + (PP.year ? ' in ' + PP.year : ', last 12 months') + '. Hover or tap a month for the figures.')
+      + '<div style="display:grid;gap:12px;min-width:0;">'
+      +   ppCard('green', '🧾', 'Where the gross goes', ppBreakdown(b), 'Of every dollar earned: what reached staff and what went to deductions.')
+      +   ppCard('slate', '🏅', 'Highest paid', ppTop(res.top || []), 'Total net per person ' + (PP.year ? 'in ' + PP.year : 'across all years') + '. Only managers see this.')
+      + '</div>';
+    ppWireChart(host, months);
+    // Hours check: the newest period with hourly payslips, against KiddieTrac's clock.
+    var hourly = all.filter(function (r) { return r.docs; });
+    if (cards) {
+      var hc = document.createElement('div');
+      hc.innerHTML = ppCard('amber', '⏱', 'Hours check', '<div class="pp-hc" style="font-size:13px;color:#475569;">Checking…</div>', 'Payslip hours against clock-in hours for the same dates. A difference over half an hour is flagged.');
+      cards.appendChild(hc.firstChild);
+      (async function () {
+        var el = cards.querySelector('.pp-hc'); if (!el) return;
+        for (var i = 0; i < Math.min(6, hourly.length); i++) {
+          var r = hourly[i];
+          try {
+            var d = await Api.get('/admin/payroll/periods/detail?start=' + encodeURIComponent(r.period_start) + '&end=' + encodeURIComponent(r.period_end)
+              + '&group=' + encodeURIComponent(r.staff_group) + '&frequency=' + encodeURIComponent(r.pay_frequency || ''));
+            var rows = (d && d.data) || [];
+            if (!rows.some(function (x) { return x.paid_hours != null; })) continue;
+            var f = (d.totals && d.totals.flagged) || 0;
+            el.innerHTML = ppBig(String(f), f ? '<span style="font-size:11.5px;font-weight:700;color:#92400E;background:#FEF3C7;border-radius:999px;padding:2px 8px;">⚠ to review</span>' : '<span style="font-size:11.5px;font-weight:700;color:#166534;background:#DCFCE7;border-radius:999px;padding:2px 8px;">✓ all match</span>')
+              + '<div style="margin-top:4px;">in ' + escapeHtml(ppPeriod(r)) + '</div>'
+              + '<button type="button" data-pp-hc="' + all.indexOf(r) + '" data-kt-iconized="1" data-kt-btn-free="1" style="margin-top:8px;height:30px;padding:0 12px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:700;font-size:12.5px;cursor:pointer;">Open period ›</button>';
+            var ob = el.querySelector('[data-pp-hc]'); if (ob) ob.onclick = function () { openPayPeriod(host, all[+ob.getAttribute('data-pp-hc')]); };
+            return;
+          } catch (e) { break; }
+        }
+        el.innerHTML = ppBig('—') + '<div style="font-size:12.5px;color:#475569;margin-top:4px;line-height:1.45;">Flat-amount payslips, so no hours to compare. Each period still shows clock-in hours.</div>';
+      })();
+    }
+
+    // ── the list ───────────────────────────────────────────────────────────────────────────────
+    var view = [];
+    function filter() {
+      var q = PP.q.trim().toLowerCase();
+      view = all.filter(function (r) {
+        if (PP.status === 'open' && r.status === 'paid') return false;
+        if (PP.status === 'paid' && r.status !== 'paid') return false;
+        if (!q) return true;
+        return (ppPeriod(r) + ' ' + r.period_start + ' ' + r.period_end + ' ' + (r.pay_frequency || '') + ' ' + ppGroup(r.staff_group) + ' ' + r.source + ' ' + r.status + ' '
+          + (r.staff || []).map(function (p) { return p.name; }).join(' ')).toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    function draw() {
+      var list = host.querySelector('#pp-list');
+      if (!list) return;
+      if (!view.length) {
+        list.innerHTML = '<div style="color:#64748B;padding:16px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;">'
+          + (all.length ? 'No pay period matches that filter.' : 'No payslips yet for the agency you are viewing. Periods appear here as payslips are issued or sync in from iLearn.') + '</div>';
+        if (window.KT && KT.pagerBar) KT.pagerBar(host.querySelector('#pp-pager'), 1, 1, function () {});
+        return;
+      }
+      var pages = Math.max(1, Math.ceil(view.length / PP.per));
+      if (PP.page > pages) PP.page = pages;
+      var slice = view.slice((PP.page - 1) * PP.per, PP.page * PP.per);
+      var th = function (a) { return 'text-align:' + a + ';padding:9px 8px;border-bottom:1px solid #E5E7EB;font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;white-space:nowrap;'; };
+      var td = function (a, x) { return 'padding:10px 8px;border-bottom:1px solid #F1F5F9;text-align:' + a + ';vertical-align:middle;' + (x || ''); };
+      list.innerHTML = '<div style="background:#fff;border:1px solid #E6EBF1;border-radius:12px;overflow:hidden;"><div style="overflow-x:auto;">'
+        + '<table id="pp-table" data-kt-no-filter="1" style="width:100%;border-collapse:collapse;font-size:13.5px;"><thead><tr>'
+        + '<th style="' + th('left') + '">Period</th><th style="' + th('left') + '">Staff paid</th><th style="' + th('left') + '">Group</th>'
+        + '<th style="' + th('right') + '">Gross</th><th style="' + th('right') + '">Deductions</th>'
+        + '<th style="' + th('right') + '">Net</th><th style="' + th('left') + '">Status</th><th style="' + th('left') + '"></th>'
+        + '</tr></thead><tbody>'
+        + slice.map(function (r) {
+            var i = all.indexOf(r);
+            return '<tr data-pp-row="' + i + '" style="cursor:pointer;">'
+              + '<td style="' + td('left', 'min-width:150px;') + '"><div style="font-weight:700;color:#0F172A;">' + ppPeriodHtml(r) + '</div>'
+              +   '<div style="font-size:11.5px;color:#94A3B8;">' + escapeHtml([r.pay_frequency || '', r.source].filter(Boolean).join(' · ')) + '</div></td>'
+              + '<td style="' + td('left', 'min-width:260px;max-width:400px;') + '">' + ppStaffCell(r.staff) + '</td>'
+              + '<td style="' + td('left', 'white-space:nowrap;') + '">' + ppGroup(r.staff_group) + '<div style="font-size:11.5px;color:#94A3B8;">' + r.docs + ' payslip' + (r.docs === 1 ? '' : 's') + '</div></td>'
+              + '<td style="' + td('right') + '" data-kt-sort="' + r.gross + '">' + ppMoney(r.gross) + '</td>'
+              + '<td style="' + td('right') + '" data-kt-sort="' + r.deductions + '">' + ppMoney(r.deductions) + '</td>'
+              + '<td style="' + td('right', 'font-weight:800;color:#0F172A;') + '" data-kt-sort="' + r.net + '">' + ppMoney(r.net) + '</td>'
+              + '<td style="' + td('left') + '">' + ppStatus(r.status) + '</td>'
+              + '<td style="' + td('right', 'white-space:nowrap;') + '"><button type="button" data-pp-open="' + i + '" data-kt-iconized="1" data-kt-btn-free="1" style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;border-radius:8px;height:30px;padding:0 11px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;">Open ›</button>'
+              + ' <button type="button" data-pp-resend="' + i + '" data-kt-iconized="1" style="background:#fff;border:1px solid #CBD5E1;color:#0F172A;border-radius:8px;height:30px;padding:0 11px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;">✉️ Resend all payslips</button></td>'
+              + '</tr>';
+          }).join('')
+        + '</tbody></table></div></div>';
+      var tbl = list.querySelector('#pp-table');
+      if (tbl) {
+        tbl.__ktRecordTotal = view.length;
+        tbl.__ktExportAll = function () { return { headers: PP_COLS, rows: ppExportRows(view) }; };
+      }
+      list.querySelectorAll('[data-pp-resend]').forEach(function (rb) {
+        rb.addEventListener('click', function (e) {
+          e.preventDefault(); e.stopPropagation();
+          resendPeriodSlips(all[+rb.getAttribute('data-pp-resend')], null, rb);
+        });
+      });
+      list.querySelectorAll('[data-pp-row]').forEach(function (tr) {
+        tr.addEventListener('click', function (e) {
+          if (e.target.closest('[data-pp-more]') && window.matchMedia && matchMedia('(hover:hover)').matches) return;
+          if (e.target.closest('button') && !e.target.closest('[data-pp-open]')) return;
+          openPayPeriod(host, all[+tr.getAttribute('data-pp-row')]);
+        });
+      });
+      if (window.KT && KT.pagerBar) {
+        KT.pagerBar(host.querySelector('#pp-pager'), PP.page, pages, function (pg) { PP.page = pg; draw(); },
+          { size: PP.per, total: view.length, allowAll: true, onSize: function (n) { PP.per = n === 'all' || n === 0 ? 100000 : (+n || 25); PP.page = 1; draw(); } });
+      }
+      if (window.KT && KT.enhanceTables) setTimeout(KT.enhanceTables, 0);
+    }
+    filter(); draw();
+    var ySel = host.querySelector('#pp-year');
+    if (ySel) ySel.onchange = function () { PP.year = ySel.value; PP.page = 1; renderPayPeriods(host); };
+    var qIn = host.querySelector('#pp-q');
+    if (qIn) qIn.oninput = function () { PP.q = qIn.value; PP.page = 1; filter(); draw(); };
+    host.querySelectorAll('[data-pp-st]').forEach(function (b2) {
+      b2.onclick = function () {
+        PP.status = b2.getAttribute('data-pp-st'); PP.page = 1;
+        host.querySelectorAll('[role="tab"][data-pp-st]').forEach(function (c) {
+          c.setAttribute('aria-selected', c.getAttribute('data-pp-st') === PP.status ? 'true' : 'false');
+        });
+        filter(); draw();
+        var l = host.querySelector('#pp-list'); if (l && b2.closest('#pp-cards') && l.scrollIntoView) l.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+    });
+  }
+
+  var PPD_COLS = ['Staff', 'Role', 'Centre', 'Payslip hours', 'Clock hours', 'Difference', 'Rate', 'Gross', 'CPP', 'EI', 'Income tax', 'Other deductions', 'Vacation', 'Net', 'Previous period net', 'Status', 'Reference'];
+  function ppdRows(list) {
+    return list.map(function (r) {
+      return [r.name, r.role, r.centre || '', r.paid_hours == null ? (r.unit_label || 'flat') : r.paid_hours, r.clock_hours == null ? '' : r.clock_hours,
+        r.hours_diff == null ? '' : r.hours_diff, r.rate == null ? '' : r.rate, r.gross == null ? '' : r.gross.toFixed(2),
+        r.cpp.toFixed(2), r.ei.toFixed(2), r.income_tax.toFixed(2), r.other_deductions.toFixed(2), r.vacation_pay.toFixed(2),
+        r.net == null ? '' : r.net.toFixed(2), r.prev_net == null ? '' : r.prev_net.toFixed(2), r.status, r.reference || ''];
+    });
+  }
+
+  async function openPayPeriod(host, p) {
+    if (!p) return;
+    var stale = document.querySelector('.pp-ov'); if (stale) stale.remove();
+    var ov = document.createElement('div');
+    ov.className = 'kt-scrim pp-ov';
+    ov.setAttribute('data-no-modal-guard', '1');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147479000;display:flex;align-items:flex-start;justify-content:center;'
+      + 'padding:calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 12px) 12px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 12px);'
+      + 'overflow:hidden;background:rgba(8,20,40,.55);';   // 2026-11-02: the backdrop no longer scrolls; the body below does (header stays put)
+    var title = ppPeriod(p);
+    ov.innerHTML = '<div class="pp-card" role="dialog" aria-modal="true" aria-label="Pay period ' + escapeHtml(title) + '" style="background:#fff;border-radius:16px;max-width:1240px;width:100%;margin:auto;max-height:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
+      + '<div style="flex:0 0 auto;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);box-shadow:inset 0 -3px 0 #7FD3CC;color:#fff;padding:16px 20px 19px;display:flex;align-items:center;gap:12px;">'
+      +   '<div style="min-width:0;"><div style="font-size:17px;font-weight:800;">📅 Pay period · ' + escapeHtml(title) + '</div>'
+      +   '<div style="font-size:12.5px;opacity:.85;margin-top:2px;">' + escapeHtml(ppGroup(p.staff_group).replace(/^\S+\s/, '')) + (p.pay_frequency ? ' · ' + escapeHtml(p.pay_frequency) : '') + ' · ' + escapeHtml(p.source) + '</div></div>'
+      +   '<button type="button" class="pp-x" aria-label="Close" data-kt-iconized="1" data-kt-btn-free="1" style="margin-left:auto;background:rgba(255,255,255,.16);border:0;border-radius:9px;width:34px;height:34px;min-height:0;font-size:17px;cursor:pointer;color:#fff;">✕</button>'
+      + '</div>'
+      + '<div class="pp-body kt-dlg-scroll" data-kt-scroll="1" style="flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:14px 18px 18px;"><div style="color:#64748B;padding:10px;">Loading payslips…</div></div></div>';
+    (host.closest('#appMain') || document.body).appendChild(ov);
+    var close = function () { ov.remove(); document.removeEventListener('keydown', onKey); };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    ov.querySelector('.pp-x').onclick = close;
+
+    var body = ov.querySelector('.pp-body');
+    var res;
+    try {
+      res = await Api.get('/admin/payroll/periods/detail?start=' + encodeURIComponent(p.period_start) + '&end=' + encodeURIComponent(p.period_end)
+        + '&group=' + encodeURIComponent(p.staff_group) + '&frequency=' + encodeURIComponent(p.pay_frequency || ''));
+    } catch (e) { body.innerHTML = '<div style="color:#B91C1C;padding:10px;">Could not load this period. ' + escapeHtml((e && e.message) || '') + '</div>'; return; }
+    var rows = res.data || [], t = res.totals || {};
+    var prevTotal = rows.reduce(function (a, r) { return a + (r.prev_net || 0); }, 0);
+    var hasPrev = rows.some(function (r) { return r.prev_net != null; });
+    var pp = res.prev_period;
+    var th = function (a) { return 'text-align:' + a + ';padding:8px 7px;border-bottom:1px solid #E5E7EB;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;white-space:nowrap;'; };
+    var td = function (a, x) { return 'padding:9px 7px;border-bottom:1px solid #F1F5F9;text-align:' + a + ';vertical-align:middle;' + (x || ''); };
+    var hrs = function (r) { return r.paid_hours == null ? '<span style="color:#94A3B8;">' + escapeHtml(r.unit_label || 'flat') + '</span>' : r.paid_hours.toFixed(2); };
+    var clock = function (r) {
+      if (r.clock_hours == null) return '<span style="color:#94A3B8;">—</span>';
+      var flag = r.hours_flag ? ' <span title="Payslip hours and clock hours differ" style="font-size:11px;font-weight:800;color:#92400E;background:#FEF3C7;border-radius:999px;padding:1px 7px;white-space:nowrap;">⚠ ' + (r.hours_diff > 0 ? '+' : '') + r.hours_diff.toFixed(2) + 'h</span>' : '';
+      return r.clock_hours.toFixed(2) + flag;
+    };
+    var maxNet = Math.max.apply(null, rows.map(function (r) { return Math.max(r.net || 0, r.prev_net || 0); }).concat([1]));
+    var DCOLS = [['cpp', 'CPP'], ['ei', 'EI'], ['income_tax', 'Tax'], ['other_deductions', 'Other'], ['vacation_pay', 'Vacation']]
+      .filter(function (c) { return rows.some(function (r) { return Number(r[c[0]]) !== 0; }); });
+    var hidden = 5 - DCOLS.length;
+    // Net vs last period: two thin bars (last period light, this period dark) and the change.
+    var netCell = function (r) {
+      var now = r.net || 0, before = r.prev_net;
+      return '<div style="font-weight:800;color:#0F172A;">' + ppMoney(r.net) + '</div>'
+        + '<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-top:3px;">'
+        +   '<div style="width:70px;display:grid;gap:2px;">'
+        +     (before != null ? '<div title="Last period ' + escapeHtml(ppMoney(before)) + '" style="height:4px;border-radius:3px;background:#9CC3EE;width:' + Math.max(2, before / maxNet * 100) + '%;margin-left:auto;"></div>' : '')
+        +     '<div title="This period ' + escapeHtml(ppMoney(now)) + '" style="height:4px;border-radius:3px;background:#2A78D6;width:' + Math.max(2, now / maxNet * 100) + '%;margin-left:auto;"></div>'
+        +   '</div>' + (before != null ? ppDelta(now, before, { title: 'vs ' + (pp ? ppPeriod({ period_start: pp.start, period_end: pp.end }) : 'the previous period') }) : '<span style="font-size:11px;color:#94A3B8;">new</span>')
+        + '</div>';
+    };
+    var stat = function (label, val, sub) {
+      return '<div style="background:#F8FAFC;border:1px solid #E6EBF1;border-radius:12px;padding:9px 12px;min-width:0;">'
+        + '<div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;">' + label + '</div>'
+        + '<div style="font-size:18px;font-weight:800;color:#0F172A;margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">' + val + '</div>'
+        + (sub ? '<div style="font-size:11.5px;color:#64748B;">' + sub + '</div>' : '') + '</div>';
+    };
+    body.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 14px;">'
+      + stat('People', String(rows.length), (rows.length === 1 ? 'one payslip' : rows.length + ' payslips') + (t.clock_hours ? ' · ' + Number(t.clock_hours).toFixed(1) + ' clock hrs' : ''))
+      + stat('Gross', ppMoney(t.gross))
+      + stat('Deductions', ppMoney(t.deductions), 'CPP ' + ppMoney0(t.cpp) + ' · EI ' + ppMoney0(t.ei) + ' · tax ' + ppMoney0(t.income_tax))
+      + stat('Net paid', ppMoney(t.net) + (hasPrev ? ppDelta(t.net, prevTotal) : ''), hasPrev && pp ? 'vs ' + escapeHtml(ppPeriod({ period_start: pp.start, period_end: pp.end })) : '')
+      + stat('Hours check', t.flagged ? '⚠ ' + t.flagged : (rows.some(function (r) { return r.paid_hours != null; }) ? '✓ 0' : '—'),
+          t.flagged ? 'with a difference over ½h' : (rows.some(function (r) { return r.paid_hours != null; }) ? 'payslips match the clock' : 'flat payslips, no hours to compare'))
+      + '</div>'
+      + '<div style="display:flex;justify-content:flex-end;margin:0 0 10px;"><button type="button" class="ppd-resend-all" data-kt-btn-free="1" data-kt-iconized="1" style="background:#fff;border:1px solid #CBD5E1;color:#0F172A;border-radius:8px;height:32px;padding:0 12px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;">✉️ Resend all payslips</button></div>'
+      + '<div style="border:1px solid #E6EBF1;border-radius:12px;overflow:hidden;"><div style="overflow-x:auto;">'
+      + '<table id="ppd-table" style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr>'
+      + '<th style="' + th('left') + '">Staff</th><th style="' + th('right') + '">Payslip hrs</th><th style="' + th('right') + '">Clock hrs</th>'
+      + '<th style="' + th('right') + '">Gross</th>' + DCOLS.map(function (c) { return '<th style="' + th('right') + '">' + c[1] + '</th>'; }).join('')
+      + '<th style="' + th('right') + '">Net · vs last</th>'
+      + '<th style="' + th('left') + '">Status</th><th style="' + th('left') + '"></th></tr></thead><tbody>'
+      + rows.map(function (r) {
+          var paid = String(r.status) === 'paid';
+          return '<tr>'
+            + '<td style="' + td('left', 'min-width:200px;') + '" data-kt-sort="' + escapeHtml(r.name.toLowerCase()) + '"><div style="display:flex;align-items:center;gap:10px;">' + ppAvatar(r, 34)
+            +   '<div style="min-width:0;"><div style="font-weight:700;color:#0F172A;">' + escapeHtml(r.name) + '</div>'
+            +   '<div style="font-size:11.5px;color:#64748B;">' + escapeHtml([r.role || '', r.centre || ''].filter(Boolean).join(' · ')) + (r.rate ? ' · ' + ppMoney(r.rate) + '/' + escapeHtml(r.unit_label || 'h') : '') + '</div></div></div></td>'
+            + '<td style="' + td('right') + '" data-kt-sort="' + (r.paid_hours == null ? -1 : r.paid_hours) + '">' + hrs(r) + '</td>'
+            + '<td style="' + td('right', 'white-space:nowrap;') + '" data-kt-sort="' + (r.clock_hours == null ? -1 : r.clock_hours) + '">' + clock(r) + '</td>'
+            + '<td style="' + td('right') + '" data-kt-sort="' + (r.gross || 0) + '">' + ppMoney(r.gross) + '</td>'
+            + DCOLS.map(function (c) { return '<td style="' + td('right') + '" data-kt-sort="' + (r[c[0]] || 0) + '">' + ppMoney(r[c[0]]) + '</td>'; }).join('')
+            + '<td style="' + td('right', 'min-width:150px;') + '" data-kt-sort="' + (r.net || 0) + '">' + netCell(r) + '</td>'
+            + '<td style="' + td('left') + '">' + ppStatus(paid ? 'paid' : 'issued')
+            +   (r.last_sent ? '<div style="font-size:11px;color:#64748B;margin-top:3px;white-space:nowrap;" title="Last emailed">✉️ Sent ' + escapeHtml(ppSentLabel(r.last_sent)) + '</div>' : '') + '</td>'
+            + '<td style="' + td('right', 'white-space:nowrap;') + '">'
+            +   '<button type="button" data-doc-act="pdf" data-doc="' + r.id + '">View payslip</button> '
+            +   '<button type="button" data-doc-act="save" data-doc="' + r.id + '">Download payslip</button> '
+            +   '<button type="button" data-doc-act="email" data-doc="' + r.id + '" data-email="' + escapeHtml(r.email || '') + '" data-who="' + escapeHtml(r.first_name || '') + '" data-last="' + escapeHtml(r.last_sent ? ppSentLabel(r.last_sent) : '') + '">✉️ Resend payslip</button>'
+            +   (paid ? '' : ' <button type="button" data-doc-act="status" data-to="paid" data-doc="' + r.id + '">Mark paid</button>')
+            + '</td></tr>';
+        }).join('')
+      + '</tbody>'
+      + '</table></div></div>'
+      + '<div style="font-size:12px;color:#64748B;margin-top:10px;line-height:1.5;">'
+      +   (rows.some(function (r) { return r.paid_hours == null; }) ? 'Payslips paid as a flat amount carry no hours, so only the clock-in hours are shown for them. ' : '')
+      +   (hidden ? (hidden === 5 ? 'No deductions or vacation pay on these payslips, so those columns are hidden (the export still has them). ' : 'Columns that are $0 for everyone are hidden (the export still has them). ') : '')
+      +   '"vs last" compares each person with ' + (pp ? escapeHtml(ppPeriod({ period_start: pp.start, period_end: pp.end })) : 'the previous period') + '.</div>';
+    var rab = body.querySelector('.ppd-resend-all');
+    if (rab) rab.onclick = function () { resendPeriodSlips(p, rows, rab, function () { openPayPeriod(host, p); }); };
+    var tbl = body.querySelector('#ppd-table');
+    if (tbl) { tbl.__ktRecordTotal = rows.length; tbl.__ktExportAll = function () { return { headers: PPD_COLS, rows: ppdRows(rows) }; }; }
+    // The payslip actions are the same code the hours report and the payslips popup use.
+    body.addEventListener('click', function (ev) {
+      var b = ev.target.closest ? ev.target.closest('[data-doc-act]') : null;
+      if (!b || !body.contains(b)) return;
+      ev.preventDefault();
+      runDocAction(b.getAttribute('data-doc-act'), b, function () {
+        openPayPeriod(host, p);
+        var ph = document.getElementById('pr-periods-view'); if (ph && !ph.hidden) renderPayPeriods(ph);
+      });
+    });
+    if (window.KT && KT.enhanceTables) setTimeout(KT.enhanceTables, 0);
+    if (window.KT && KT.sweepRowActions) setTimeout(KT.sweepRowActions, 0);
+  }
+
   // ============================ Agency billing config ============================
   async function renderAgencyBilling(main) {
     main.innerHTML = '<div style="padding:20px;">Loading…</div>';
     const res = await Api.get('/admin/billing-config');
+    if (!main.isConnected) return;   // replaced while loading: the newer screen draws itself (ticket #240)
     const a = res.data || {};
     main.innerHTML = `<div style="padding:24px;max-width:600px;margin:0 auto;">
       <h2 style="margin:0 0 16px;color:#1F6080;">Billing settings</h2>
@@ -1109,13 +1688,14 @@
   async function renderAutopay(main) {
     main.innerHTML = '<div style="padding:20px;">Loading…</div>';
     const res = await Api.get('/parent/billing/status').catch(() => ({}));
+    if (!main.isConnected) return;   // replaced while loading: the newer screen draws itself (ticket #240)
     main.innerHTML = `<div style="padding:24px;max-width:520px;margin:0 auto;">
       <h2 style="margin:0 0 16px;color:#1F6080;">Auto-pay</h2>
       <p style="color:#6B7280;font-size:14px;">Save a card and we'll automatically charge each invoice when it's due. Cancel any time.</p>
       <div id="ap-state" style="background:#F9FAFB;padding:18px;border-radius:8px;margin-top:16px;">
         ${res.has_card ? `<div><strong>Saved card:</strong> •••• ${res.card_last4 || '****'}</div>
           <div style="margin-top:8px;"><strong>Auto-pay:</strong> ${res.autopay_enabled ? '<span style="color:#047857;font-weight:600;">on</span>' : '<span style="color:#6B7280;">off</span>'}</div>
-          <button id="ap-toggle" style="background:${res.autopay_enabled ? '#EF4444' : '#10B981'};color:#fff;border:0;padding:9px 16px;border-radius:6px;margin-top:14px;cursor:pointer;">${res.autopay_enabled ? 'Turn off auto-pay' : 'Turn on auto-pay'}</button>
+          <button id="ap-toggle" data-kt-autosave="1" style="background:${res.autopay_enabled ? '#EF4444' : '#10B981'};color:#fff;border:0;padding:9px 16px;border-radius:6px;margin-top:14px;cursor:pointer;">${res.autopay_enabled ? 'Turn off auto-pay' : 'Turn on auto-pay'}</button>
           <button id="ap-replace" style="background:#F3F4F6;border:0;padding:9px 16px;border-radius:6px;margin-top:14px;margin-left:8px;cursor:pointer;">Replace card</button>` :
         `<div>No card saved yet.</div><button id="ap-add" style="background:#1F6080;color:#fff;border:0;padding:11px 20px;border-radius:6px;margin-top:14px;cursor:pointer;">+ Add card</button>`}
       </div></div>`;
@@ -1139,23 +1719,23 @@
     const stripe = window.Stripe(pubKey);
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:24px;border-radius:8px;max-width:440px;width:90%;">
+    m.innerHTML = `<div style="background:#fff;padding:22px;border-radius:14px;max-width:460px;width:94%;max-height:100%;overflow-y:auto;box-sizing:border-box;">
       <h3 style="margin:0 0 12px;">Save a card</h3>
-      <div id="ap-element" style="padding:12px;border:1px solid #E5E7EB;border-radius:4px;"></div>
+      <div id="ap-element"></div>
       <div id="ap-err" style="color:#B91C1C;font-size:13px;margin-top:8px;"></div>
       <div style="margin-top:16px;text-align:right;">
         <button id="ap-cancel" style="background:#F3F4F6;border:0;padding:9px 16px;border-radius:4px;margin-right:8px;cursor:pointer;">Cancel</button>
         <button id="ap-save" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:4px;cursor:pointer;">Save card</button>
       </div></div>`;
     document.body.appendChild(m);
-    const elements = stripe.elements();
-    const card = elements.create('card');
-    card.mount('#ap-element');
+    void stripe;
+    // The one card form (kt-card-form.js): labelled fields where the phone can offer its camera card scan.
+    const form = await KT.cardForm.mount(m.querySelector('#ap-element'), { publishableKey: pubKey, clientSecret: intent.client_secret });
     m.querySelector('#ap-cancel').onclick = () => m.remove();
     m.querySelector('#ap-save').onclick = async () => {
-      const { setupIntent, error } = await stripe.confirmCardSetup(intent.client_secret, { payment_method: { card } });
-      if (error) { m.querySelector('#ap-err').textContent = error.message; return; }
-      await Api.post('/parent/billing/save-card', { payment_method: setupIntent.payment_method });
+      let pm;
+      try { pm = await form.confirm(); } catch (e) { m.querySelector('#ap-err').textContent = e.message; return; }
+      await Api.post('/parent/billing/save-card', { payment_method: pm });
       m.remove();
       renderAutopay(document.getElementById('main') || document.querySelector('main'));
     };
@@ -1191,8 +1771,8 @@
        PANES, NOT RE-RENDERS. Each tab is a sibling div toggled with `hidden`, so the
        compose form keeps whatever is half-typed in it when you look at the roster and
        come back. Switching tabs does not re-fetch either. */
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <div id="sms-tabs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;"></div>
+    main.innerHTML = `<div class="kt-section">
+      <div id="sms-tabs" role="tablist" aria-label="SMS" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;"></div>
 
       <div id="sms-pane-send">
       <div class="kt-card" style="max-width:720px;padding:20px;">
@@ -1260,6 +1840,10 @@
 
       </div>
 
+      <div id="sms-pane-replies" hidden>
+        <div id="sms-replies"></div>
+      </div>
+
       <div id="sms-pane-consent" hidden>
         <div id="sms-consent"></div>
       </div>
@@ -1276,6 +1860,7 @@
        the entire reason this screen reached nobody. */
     const SMS_TABS = [
       ['send', 'Send a message'],
+      ['replies', 'Replies'],
       ['consent', 'Text alerts'],
       ['recent', 'Sent & received'],
     ];
@@ -1290,8 +1875,11 @@
           ? `<span style="margin-left:8px;background:${on ? 'rgba(255,255,255,.22)' : '#FEF3C7'};`
             + `color:${on ? '#fff' : '#B45309'};border-radius:999px;padding:1px 8px;font-size:11px;font-weight:700;">`
             + `${smsConsentBadge}</span>`
+          : (id === 'replies' && smsRepliesBadge)
+          ? `<span aria-label="${smsRepliesBadge} unread" style="margin-left:6px;background:#DC2626;color:#FFFFFF;`
+            + `border-radius:999px;padding:1px 7px;font-size:11px;font-weight:800;">${smsRepliesBadge > 99 ? '99+' : smsRepliesBadge}</span>`
           : '';
-        return `<button data-sms-tab="${id}" class="kt-tab${on ? ' active' : ''}" style="padding:8px 16px;`
+        return `<button type="button" role="tab" aria-selected="${on ? 'true' : 'false'}" data-sms-tab="${id}" class="kt-tab${on ? ' active' : ''}" style="padding:8px 16px;`
           + `border:1px solid ${on ? '#1F6080' : '#D1D5DB'};border-radius:8px;`
           + `background:${on ? '#1F6080' : 'white'};color:${on ? 'white' : '#374151'};`
           + `font-weight:600;cursor:pointer;">${label}${badge}</button>`;
@@ -1301,13 +1889,17 @@
       });
     }
 
-    function showSmsTab(id) {
+    function showSmsTab(id, openId) {
+      if (!SMS_TABS.some(([t]) => t === id)) id = 'send';
       smsTab = id;
       SMS_TABS.forEach(([t]) => {
         const pane = document.getElementById('sms-pane-' + t);
         if (pane) pane.hidden = (t !== id);
       });
       paintSmsTabs();
+      // The address follows the tab (replaceState: no re-render, so a half-typed message survives).
+      if (id === 'replies') { if (!openId) _srAddress(_srOpenId()); loadSmsReplies(openId || 0); }
+      else { try { if (/^#sms\?/.test(location.hash)) history.replaceState(history.state, '', '#sms'); } catch (e) {} }
       /* A table drawn behind a hidden pane gets no search box and no sortable headers:
          the sweeps are driven by hashchange and the sweep bus, and an in-screen tab fires
          neither. Ask for them here, where the table is finally on screen. See
@@ -1600,6 +2192,13 @@
     // syncChannel() above already drew the list for the starting channel.
     _smsTabsRepaint = paintSmsTabs;
     paintSmsTabs();
+    /* '#sms?tab=replies&id=1867' - a notification or push: open that tab with that text open. */
+    try {
+      const q = new URLSearchParams((location.hash.split('?')[1] || ''));
+      const want = q.get('tab');
+      try { if (window.KT && KT.smsTexts) KT.smsTexts.close(); } catch (e) {}
+      if (want && want !== 'send') showSmsTab(want, +q.get('id') || 0);
+    } catch (e) {}
     /* Both lists are fetched now rather than on first click: they are two small reads,
        and a tab that pauses on a spinner the first time it is opened feels broken. */
     loadSmsConsent();
@@ -1932,6 +2531,55 @@
     </tr>`;
   }
 
+  /* ============================ SMS → REPLIES (2026-11-02) ============================
+
+     Anthony tapped a phone notification "Text reply from Bruni Meeser" and landed on the
+     broadcast SEND screen, where the only trace of her text was one row at the bottom of
+     "Sent & received". Replies is the inbox for texts in to the agency's number: newest
+     first, unread marked, the conversation with that number, and a reply box that texts
+     back through the agency's ordinary send path (SmsController::sendOne - consent, STOP,
+     suppression and the agency switch all still decide; the server says why in words).
+
+     Links: '#sms?tab=replies&id=<sms id>' opens this tab with that text open and
+     highlighted (notifications and pushes carry it, App\Support\SmsInbound). The badge on
+     the tab and on the nav item is GET /badges' sms_replies: exactly the unread rows this
+     list shows (App\Support\SmsReplies::unread).
+
+     Layout: list beside conversation on desktop; on a phone (<=760px) one at a time, with
+     "All replies" to go back. Not a table, so no row kebab (CONVENTIONS.md). */
+  var smsRepliesBadge = 0;
+  function _srSetBadge(n) {
+    n = +n || 0;
+    try { if (window.KT && KT.Shell && KT.Shell.setBadge) KT.Shell.setBadge('sms_replies', n); } catch (e) {}
+    if (n === smsRepliesBadge) return;
+    smsRepliesBadge = n;
+    // A new text while the inbox is on screen shows at once: KT.smsTexts reloads its list on the same event.
+    try { if (_smsTabsRepaint && document.getElementById('sms-tabs')) _smsTabsRepaint(); } catch (e) {}
+  }
+  window.addEventListener('kt:badges', function (e) { if (e && e.detail) _srSetBadge(e.detail.sms_replies); });
+  try { var _srNow = window.KT && KT.badges && KT.badges.now && KT.badges.now(); if (_srNow) _srSetBadge(_srNow.sms_replies); } catch (e) {}
+
+  // The address says which reply is open, without re-rendering the screen (no hashchange).
+  function _srAddress(id) {
+    try {
+      const h = '#sms?tab=replies' + (id ? '&id=' + id : '');
+      if (location.hash !== h) history.replaceState(history.state, '', h);
+    } catch (e) {}
+  }
+
+  /* The inbox itself is KT.smsTexts (kt-sms-replies.js, 2026-11-02): the same list and conversation
+     Message Centre -> Texts shows, so the two can never drift. This tab is the agency overview. */
+  function loadSmsReplies(openId) {
+    const host = document.getElementById('sms-replies');
+    if (!host) return;
+    if (!(window.KT && KT.smsTexts)) {
+      host.innerHTML = '<div class="kt-card" style="color:#64748B;padding:28px;text-align:center;font-size:13px;">Text replies are loading. Open this tab again in a moment.</div>';
+      return;
+    }
+    KT.smsTexts.render(host, { place: 'sms', openId: +openId || 0, address: _srAddress });
+  }
+  function _srOpenId() { try { return (window.KT && KT.smsTexts) ? (+KT.smsTexts.openId() || 0) : 0; } catch (e) { return 0; } }
+
   async function loadSmsRecent(channel) {
     const voice = channel === 'voice';
     const r = await Api.get(voice ? '/admin/voice/calls' : '/admin/sms/messages').catch(() => ({ data: [] }));
@@ -2068,6 +2716,7 @@
   // ============================ Locale picker ============================
   async function renderLocale(main) {
     const res = await Api.get('/locale');
+    if (!main.isConnected) return;   // replaced while loading: the newer screen draws itself (ticket #240)
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <h2 style="margin:0 0 16px;color:#1F6080;">Language / Langue / Idioma</h2>
       <p style="color:#6B7280;font-size:14px;">Current: <strong>${res.locale}</strong></p>
@@ -2183,7 +2832,7 @@
                 +   '<button type="button" data-doc-act="save" data-doc="' + d.id + '" style="' + SLIP_BTN + '">⬇️ Download</button>'
                 +   '<button type="button" data-doc-act="print" data-doc="' + d.id + '" style="' + SLIP_BTN + '">🖨 Print</button>'
                 +   '<button type="button" data-doc-act="email" data-doc="' + d.id + '" data-email="'
-                +     escapeHtml(d.email || opts.email || '') + '" style="' + SLIP_BTN_P + '">✉️ Email</button>'
+                +     escapeHtml(d.email || opts.email || '') + '" data-who="' + escapeHtml(String(opts.title || '').split(' ')[0]) + '" style="' + SLIP_BTN_P + '">✉️ Resend payslip</button>'
                 +   ((opts.userId && !isPaid)
                         ? '<button type="button" data-doc-act="zum" data-doc="' + d.id + '" data-user="' + opts.userId
                           + '" data-net="' + d.net + '" style="' + SLIP_BTN + '">Send by Interac</button>'
@@ -2231,9 +2880,9 @@
       if (act === 'pdf' || act === 'print') {
         const slip = await payslipBlob(id);
         if (window.KT && KT.openFile) {
-          KT.openFile(slip, { title: 'Payslip', filename: 'payslip-' + id + '.pdf', label: 'Payslip' });
-          // Print = the viewer's own Print button, pressed for you.
-          if (act === 'print') { setTimeout(() => { const all = document.querySelectorAll('.ktdv-fprint'); const p = all[all.length - 1]; if (p) p.click(); }, 700); }
+          const h = KT.openFile(slip, { title: 'Payslip', filename: 'payslip-' + id + '.pdf', label: 'Payslip' });
+          // Print = the viewer's Print, once the pages are drawn (2026-11-06; it was a click at 700ms, before pdf.js had drawn).
+          if (act === 'print') { Promise.resolve(h).then((v) => { if (v && v.print) v.print(); }); }
           return;
         }
         const url = URL.createObjectURL(slip);
@@ -2255,24 +2904,43 @@
       }
 
       if (act === 'email') {
-        /* Prefilled, never assumed — the endpoint requires an address for the same
-           reason: a default recipient means a lost field posts somebody's pay to an
-           address nobody chose. */
-        const to = await window.KT.prompt({
-          title: 'Email this payslip',
-          description: 'It is sent to this address with the payslip attached.',
-          fields: [{ key: 'to', label: 'Email address', type: 'email', value: b.getAttribute('data-email') || '' }],
+        /* RESEND PAYSLIP (2026-10-31, Anthony: "resend the payslip from payroll / pay period using the kebab").
+           It goes to the address on the person's own account, shown and not editable. Only when there is no
+           account address (a synced payslip with nobody behind it) is one typed - never assumed. Agency admins
+           may also send a copy to one more address; the server refuses that for anyone else. */
+        const email = (b.getAttribute('data-email') || '').trim();
+        const who = (b.getAttribute('data-who') || '').trim();
+        const last = (b.getAttribute('data-last') || '').trim();
+        const fields = [];
+        if (!email) { fields.push({ key: 'to', label: 'Email address', type: 'email', value: '' }); }
+        if (isPayrollAdmin()) { fields.push({ key: 'also', label: 'Also send a copy to (optional)', type: 'email', placeholder: 'e.g. office@yourcentre.ca' }); }
+        fields.push({ key: 'message', label: 'Note (optional)', type: 'textarea', rows: 3, placeholder: 'Shown above the payslip in the email' });
+        const res = await window.KT.prompt({
+          title: '✉️ Resend payslip',
+          description: email
+            ? 'Sends ' + (who ? who + '\'s' : 'this') + ' payslip to ' + email + ' with the PDF attached.' + (last ? ' Last sent ' + last + '.' : '')
+            : 'There is no email on this person\'s account. Type the address to send it to.',
+          fields: fields,
           okLabel: 'Send payslip',
         });
-        if (!to) { return; }
+        if (res === null || res === undefined) { return; }
+        const vals = typeof res === 'string' ? { [fields[0].key]: res } : res;
+        const to = email || String(vals.to || '').trim();
+        if (!to) { return say('Add an email address first.'); }
+        const body = { to: to };
+        if (vals.message && String(vals.message).trim()) { body.message = String(vals.message).trim(); }
+        if (vals.also && String(vals.also).trim()) { body.also = String(vals.also).trim(); }
         b.disabled = true;
         try {
           /* NOTE the /provider/ prefix. The admin payroll-document routes are
              namespaced there; only the PDF route is not. */
-          const res = await Api.post(`/provider/payroll-documents/${id}/email`, { to });
-          say(res.sent
-            ? 'Payslip emailed to ' + to + (res.attachment ? '' : ' (without the PDF — it could not be built)')
-            : 'Not sent: ' + (res.reason || 'the mail layer held it back.'));
+          const r = await Api.post(`/provider/payroll-documents/${id}/email`, body);
+          let msg = r.sent
+            ? 'Payslip sent to ' + to + (r.attachment ? '' : ' (without the PDF — it could not be built)')
+            : 'Not sent to ' + to + ': ' + (r.reason || 'the mail layer held it back.');
+          if (body.also) { msg += r.also_sent ? ' · copy sent to ' + body.also : ' · the copy to ' + body.also + ' was not sent'; }
+          say(msg);
+          if (after && (r.sent || r.also_sent)) { after(); }
         } finally {
           b.disabled = false;
         }
@@ -2343,6 +3011,52 @@
   // Approving time off is for directors & agency admins ONLY. Honour "View as":
   // when a super-admin previews a lower role (educator / home_visitor / guardian),
   // they must NOT see the approve/deny queue — only the effective role counts.
+  // Agency admins (and platform admins) only - "View as" honoured, like isStaffOrAdmin below.
+  function isPayrollAdmin() {
+    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    if (va) return va === 'agency_admin';
+    var u = {}; try { u = JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) {}
+    return Array.isArray(u.roles) && u.roles.some(function (r) { return r === 'agency_admin' || r === 'platform_admin'; });
+  }
+  function ppSentLabel(ts) {
+    try { if (window.KT && KT.fmtDateTime) return KT.fmtDateTime(ts); } catch (e) {}
+    return fmtDate(ts);
+  }
+  /* RESEND ALL payslips of one pay period: each person gets their own, at their own account address. Confirmed with
+     the count and the names first; people with no address on file are skipped and counted. `rows` when the detail
+     is already loaded, else it is fetched. */
+  async function resendPeriodSlips(p, rows, btn, after) {
+    if (!p) return;
+    try {
+      if (!rows) {
+        const d = await Api.get('/admin/payroll/periods/detail?start=' + encodeURIComponent(p.period_start) + '&end=' + encodeURIComponent(p.period_end)
+          + '&group=' + encodeURIComponent(p.staff_group || '') + '&frequency=' + encodeURIComponent(p.pay_frequency || ''));
+        rows = (d && d.data) || [];
+      }
+    } catch (e) { return say((e && e.message) || 'Could not load this pay period.'); }
+    const withEmail = rows.filter(function (r) { return r.email; });
+    const skipped = rows.length - withEmail.length;
+    if (!withEmail.length) { return say('Nobody in this pay period has an email address on file.'); }
+    const names = withEmail.slice(0, 6).map(function (r) { return r.name + ' (' + r.email + ')'; }).join(', ')
+      + (withEmail.length > 6 ? ' and ' + (withEmail.length - 6) + ' more' : '');
+    const n = withEmail.length;
+    const ok = await window.KT.confirm({
+      title: '✉️ Resend ' + n + ' payslip' + (n === 1 ? '' : 's') + '?',
+      description: 'Pay period ' + ppPeriod(p) + '. Each person gets their own payslip, PDF attached: ' + names + '.'
+        + (skipped ? ' ' + skipped + ' with no email on file will be skipped.' : ''),
+      okLabel: 'Resend ' + n,
+    });
+    if (!ok) return;
+    if (btn) { btn.disabled = true; }
+    let sent = 0, held = 0;
+    for (const r of withEmail) {
+      try { const x = await Api.post('/provider/payroll-documents/' + r.id + '/email', { to: r.email }); if (x && x.sent) { sent++; } else { held++; } }
+      catch (e) { held++; }
+    }
+    if (btn) { btn.disabled = false; }
+    say(sent + ' payslip' + (sent === 1 ? '' : 's') + ' sent' + (held ? ' · ' + held + ' not sent' : '') + (skipped ? ' · ' + skipped + ' had no email' : ''));
+    if (after) { after(); }
+  }
   function isStaffOrAdmin() {
     var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
     if (va) return ['agency_admin', 'centre_director'].indexOf(va) !== -1;

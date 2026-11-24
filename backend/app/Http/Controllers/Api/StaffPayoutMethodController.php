@@ -168,10 +168,13 @@ final class StaffPayoutMethodController extends Controller
 
         /* Everybody the agency actually employs — a role at the agency, or at one of its
            centres. `?: [0]` so an agency with no centres matches nobody, never everybody. */
+        $scope = $this->payoutScope($request, (int) $agencyId);
         $staffIds = DB::table('role_assignments')
             ->where('active', 1)
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'home_visitor', 'auditor'])
-            ->where(fn ($q) => $q->where('agency_id', $agencyId)->orWhereIn('centre_id', $centreIds ?: [0]))
+            ->where(fn ($q) => $scope === null
+                ? $q->where('agency_id', $agencyId)->orWhereIn('centre_id', $centreIds ?: [0])
+                : $q->whereIn('centre_id', $scope ?: [0]))
             ->pluck('user_id')->unique()->values();
 
         $methods = DB::table('staff_payout_methods')->whereIn('user_id', $staffIds ?: [0])
@@ -212,9 +215,12 @@ final class StaffPayoutMethodController extends Controller
            anybody on the platform by id — the shape that has bitten this codebase before
            (see the standing data-leakage rule). 404, not 403: another agency's staff are
            not ours to confirm the existence of. */
+        $scope = $this->payoutScope($request, (int) $agencyId);
         $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id');
         $isOurs = DB::table('role_assignments')->where('user_id', $user)->where('active', 1)
-            ->where(fn ($q) => $q->where('agency_id', $agencyId)->orWhereIn('centre_id', $centreIds ?: [0]))
+            ->where(fn ($q) => $scope === null
+                ? $q->where('agency_id', $agencyId)->orWhereIn('centre_id', $centreIds ?: [0])
+                : $q->whereIn('centre_id', $scope ?: [0]))
             ->exists();
         abort_unless($isOurs, 404, 'Not found');
 
@@ -241,6 +247,24 @@ final class StaffPayoutMethodController extends Controller
             'transit_number'     => $row->method === 'direct_deposit' ? $dec($row->transit_number_enc) : null,
             'account_number'     => $row->method === 'direct_deposit' ? $dec($row->account_number_enc) : null,
         ]);
+    }
+
+    /**
+     * A director sees and reveals payout details only for staff of their own centres (2026-10-31); agency admins and
+     * platform admins see the whole agency. Returns null for agency-wide, or the director's centre ids. Anyone else 403.
+     */
+    private function payoutScope(Request $request, int $agencyId): ?array
+    {
+        $centres = \App\Support\AgencyRole::centreIds($agencyId);
+        $roles = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)->get(['role', 'agency_id', 'centre_id']);
+        if ($roles->contains(fn ($r) => $r->role === 'platform_admin')
+            || $roles->contains(fn ($r) => $r->role === 'agency_admin' && (int) $r->agency_id === $agencyId)) {
+            return null;
+        }
+        $isDirector = $roles->contains(fn ($r) => $r->role === 'centre_director'
+            && ((int) $r->agency_id === $agencyId || ($r->centre_id && in_array((int) $r->centre_id, $centres, true))));
+        abort_unless($isDirector, 403, 'Directors and admins only');
+        return \App\Support\Visibility::centreIds($agencyId, $request->user());
     }
 
     /** What any screen may see: the method, a hint, and when it was last touched. */

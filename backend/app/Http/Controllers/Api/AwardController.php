@@ -45,7 +45,7 @@ class AwardController extends Controller
         $award = ChildAward::create(array_merge($data, [
             'centre_id'     => $centreId ?: null,
             'awarded_by_id' => $request->user()->id,
-            'awarded_on'    => $data['awarded_on'] ?? now()->toDateString(),
+            'awarded_on'    => $data['awarded_on'] ?? \App\Support\AgencyTime::today(),
         ]));
         $award->load(self::WITH);
 
@@ -77,7 +77,7 @@ class AwardController extends Controller
                         'type' => 'award',
                         'title' => $title,
                         'body' => mb_substr($body, 0, 500),
-                        'data' => json_encode(['award_id' => $award->id, 'child_id' => (int) $data['child_id']]),
+                        'data' => json_encode(['award_id' => $award->id, 'child_id' => (int) $data['child_id'], 'link' => '#awards']),
                         'created_at' => $now,
                     ]);
                 }
@@ -159,20 +159,13 @@ class AwardController extends Controller
         $user = $request->user();
         $agencyId = $this->resolveAgencyId($request);
 
-        $centreIds = DB::table('centres')
-            ->where('agency_id', $agencyId)->whereNull('deleted_at')
-            ->pluck('id')->all();
-
-        $allowed = array_values(array_filter(
-            $centreIds,
-            fn ($cid) => $this->authorizeCentreAccess($user, (int) $cid)
-        ));
-
-        $children = $allowed
+        /* Enrolled children in this person's rooms (2026-11-09): it listed every child of the centre's families,
+           withdrawn ones included - 29 of the 58 an iLearn provider saw had left. See Visibility::liveChildIds. */
+        $ids = \App\Support\Visibility::liveChildIds((int) $agencyId, $user);
+        $children = $ids
             ? DB::table('children as c')
                 ->join('families as f', 'f.id', '=', 'c.family_id')
-                ->whereIn('f.centre_id', $allowed)
-                ->whereNull('c.deleted_at')
+                ->whereIn('c.id', $ids)
                 ->orderBy('c.first_name')->orderBy('c.last_name')
                 ->get(['c.id', 'c.first_name', 'c.last_name', 'c.photo_url', 'f.centre_id'])
             : collect();

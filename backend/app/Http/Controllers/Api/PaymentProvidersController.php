@@ -42,7 +42,7 @@ class PaymentProvidersController extends Controller
 
     private function assertAdmin(Request $request): void
     {
-        $ok = DB::table('role_assignments')->where('user_id', $request->user()->id)
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)
             ->where('active', true)
             ->whereIn('role', ['agency_admin', 'platform_admin'])
             ->exists();
@@ -68,7 +68,8 @@ class PaymentProvidersController extends Controller
             // documented, because a mistyped webhook URL fails silently at settlement.
             'webhook_urls' => [
                 'zumrails' => rtrim(config('app.url'), '/').'/api/v1/zumrails/webhook',
-                'stripe' => rtrim(config('app.url'), '/').'/api/v1/stripe/webhook',
+                // Family payments (2026-11-05): /stripe/webhook is KiddieTrac's own billing. Connected for them on save.
+                'stripe' => rtrim(config('app.url'), '/').\App\Support\AgencyStripe::WEBHOOK_PATH,
             ],
         ]);
     }
@@ -90,10 +91,29 @@ class PaymentProvidersController extends Controller
 
         PaymentProviders::save($agencyId, $provider, $data, (int) $request->user()->id);
 
+        /* THE WEBHOOK CONNECTS ITSELF (2026-11-05, Anthony: "Auto-connect the webhook"): with Stripe keys in place,
+           KiddieTrac's webhook is registered on the agency's Stripe and its secret kept, so a payment finished after
+           the parent closed the app is still recorded. Already connected = nothing changes. */
+        $webhook = null;
+        if ($provider === PaymentProviders::STRIPE && \App\Support\AgencyStripe::keys($agencyId)) {
+            $webhook = \App\Support\AgencyStripe::connectWebhook($agencyId, (int) $request->user()->id);
+        }
+
         // Returned rather than assumed: an admin who has just typed a key wants to know
         // whether it counts as configured, not to be told "saved" and left guessing.
         return response()->json([
             'provider' => PaymentProviders::forDisplay($agencyId, $provider),
+            'webhook' => $webhook,
         ]);
+    }
+
+    /** POST /admin/payment-providers/stripe/webhook - connect (or reconnect) KiddieTrac's webhook on the agency's Stripe. */
+    public function connectStripeWebhook(Request $request): JsonResponse
+    {
+        $this->assertAdmin($request);
+        $agencyId = $this->resolveAgencyId($request);
+        $r = \App\Support\AgencyStripe::connectWebhook($agencyId, (int) $request->user()->id);
+
+        return response()->json($r + ['provider' => PaymentProviders::forDisplay($agencyId, PaymentProviders::STRIPE)], $r['ok'] ? 200 : 422);
     }
 }

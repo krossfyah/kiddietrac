@@ -200,8 +200,20 @@
      treats a page that was off screen. The wrapper is transparent: same arguments,
      same return value, and it records even when the dialog throws. */
   var dialogClosedAt = 0;
+  /* PRINTING IS A DIALOG TOO (tickets #160 and #161, 2026-10-21). Safia printed a One-Tap
+     poster; Chrome's print preview held the page for 14.6s and then 126s while she chose a
+     printer, and both were filed as the interface freezing. print() is wrapped like the
+     others, the browser's afterprint counts, and a print started on a hidden frame (the
+     poster, kt-qr.js) reports itself through KT.noteBlockingDialog(). */
+  try { w.addEventListener('afterprint', function () { dialogClosedAt = Date.now(); }); } catch (e) {}
+  try {
+    w.KT = w.KT || {};
+    w.KT.noteBlockingDialog = function () { dialogClosedAt = Date.now(); };
+    // Also on window: a later script that replaces window.KT wholesale must not lose it.
+    w.__ktNoteBlockingDialog = w.KT.noteBlockingDialog;
+  } catch (e) {}
   (function () {
-    ['alert', 'confirm', 'prompt'].forEach(function (name) {
+    ['alert', 'confirm', 'prompt', 'print'].forEach(function (name) {
       var native = w[name];
       if (typeof native !== 'function') { return; }
       w[name] = function () {
@@ -278,7 +290,7 @@
       try {
         if (w.KT && w.KT.crumb) {
           w.KT.crumb('freeze', 'ignored ' + (gap / 1000).toFixed(1) + 's on ' + screenName()
-            + ' — a browser dialog was open');
+            + ' — a browser dialog or the print window was open');
         }
       } catch (e) {}
       return;

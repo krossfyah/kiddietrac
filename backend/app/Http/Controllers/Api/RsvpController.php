@@ -716,6 +716,11 @@ class RsvpController extends Controller
      */
     public function googleCallback(Request $request)
     {
+        // An Email client mailbox signing in with Google shares this redirect URI; its state starts "gmbx."
+        // (App\Support\GoogleMailbox). Not an RSVP sender.
+        if (\App\Support\GoogleMailbox::isOurs($request->query('state'))) {
+            return \App\Support\GoogleMailbox::callback($request);
+        }
         $back = fn (string $r, string $extra = '') => redirect()->away(RsvpMail::APP . '/dashboard.html?rsvp_gmail=' . $r . $extra . '#rsvp');
         $st = RsvpGmail::readState($request->query('state'));
         if (! $st) return $back('state');
@@ -989,6 +994,14 @@ class RsvpController extends Controller
         $name = $this->nameFrom($answers) ?: ($inv->name ?? null);
 
         $existing = DB::table('rsvp_responses')->where('event_id', $e->id)->where('email', $email)->first();
+        /* The shared link cannot rewrite someone else's answer (2026-11-05 leak sweep). It is open to
+           anyone holding the link, and typing a registered person's email replaced their RSVP and
+           mailed them a confirmation of it. Changing an answer goes through the personal link in
+           that person's own confirmation email, which is bound to their address. */
+        if ($existing && ! $inv) {
+            return response()->json(['message' => 'This email address has already registered. To change the answers, '
+                . 'use the "Update your RSVP" link in the confirmation email that was sent to it.'], 409);
+        }
         if (! $existing && $e->capacity && DB::table('rsvp_responses')->where('event_id', $e->id)->count() >= (int) $e->capacity) {
             return response()->json(['message' => 'Sorry — this event is full.'], 409);
         }
@@ -1373,7 +1386,7 @@ class RsvpController extends Controller
         } else {
             $row = $this->reminderInput($request, $e, $agencyId, false);
             $rid = DB::table('rsvp_reminders')->insertGetId($row + ['agency_id' => $agencyId, 'event_id' => $e->id, 'status' => 'scheduled', 'manual' => true,
-                'send_at' => now()->format('Y-m-d H:i:s'), 'created_by_id' => (int) $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);
+                'send_at' => now()->format('Y-m-d H:i:s'), 'created_by_id' => (int) $request->user()->id, 'created_at' => now(), 'updated_at' => now()]);   // tz-ok: a stored UTC instant
         }
         $res = RsvpReminders::run($rid);
         $this->audit($request, $agencyId, 'rsvp.reminder_sent', 'rsvp_event', $e->id, 'Reminder for "' . $e->title . '" sent now: ' . $res['queued'] . ' queued' . ($res['note'] ? ' (' . $res['note'] . ')' : ''));

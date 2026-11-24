@@ -87,7 +87,8 @@ final class HeadcountController extends Controller
 
     private function roles(int $uid): array
     {
-        return DB::table('role_assignments')->where('user_id', $uid)->where('active', true)->pluck('role')->all();
+        // In the active agency only (2026-11-05 leak sweep): a role held in another agency counted here.
+        return \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $uid)->where('active', true)->pluck('role')->all();
     }
 
     private function isManager(int $uid): bool
@@ -138,6 +139,25 @@ final class HeadcountController extends Controller
         if (! $ids) return [];
 
         return DB::table('children')->whereIn('id', $ids)->whereNull('deleted_at')->pluck('id')->map(fn ($v) => (int) $v)->all();
+    }
+
+    /**
+     * NOT SIGNED IN YET (2026-11-03). The room's children who are on today's Safe Arrival list (scheduled, centre open,
+     * enrolled) but have no sign-in today and no reported absence. They sit under the checklist so the educator can
+     * tick one who is physically there; Safe Arrival then counts the child as here (headcount_mode = present) instead
+     * of texting the parents. Only for agencies with Safe Arrival on and headcounts counting - otherwise nothing changes.
+     */
+    private function notSignedIn(int $agencyId, object $room): array
+    {
+        if (! Schema::hasColumn('headcounts', 'unsigned_offered_child_ids')) return [];
+        $cfg = \App\Support\SafeArrival::settings($agencyId);
+        if (! $cfg['enabled'] || $cfg['headcount_mode'] !== 'present') return [];
+        $ids = [];
+        foreach (\App\Support\SafeArrival::today($agencyId, [(int) $room->centre_id], [(int) $room->id]) as $cid => $r) {
+            if (! $r['arrived_at'] && ! $r['absent']) $ids[] = (int) $cid;
+        }
+
+        return $ids;
     }
 
     /** Children on a walk / outing (approved permission rows). */
@@ -277,6 +297,7 @@ final class HeadcountController extends Controller
             'kind' => $kind, 'room_id' => $kind === 'room' ? (int) $obj->id : null, 'trip_id' => $kind === 'trip' ? (int) $obj->id : null,
             'centre_id' => $centreId, 'centre_name' => DB::table('centres')->where('id', $centreId)->value('name'), 'label' => $label,
             'children' => $this->childRows($expected),
+            'not_signed_in' => $kind === 'room' ? $this->childRows(array_values(array_diff($this->notSignedIn($agencyId, $obj), $expected))) : [],
             'contexts' => self::CONTEXTS, 'default_context' => $kind === 'trip' ? 'field_trip' : 'routine',
             'acting' => self::actingSupervisors($centreId),
             'last' => $last ? ['local' => Carbon::parse($last->taken_at, 'UTC')->setTimezone($tz)->format('g:i A'),
@@ -314,9 +335,17 @@ final class HeadcountController extends Controller
             'location' => ['nullable', 'string', 'max:200'], 'note' => ['nullable', 'string', 'max:2000'],
             'seen_ids' => ['present', 'array', 'max:500'], 'seen_ids.*' => ['integer'],
             'shown_ids' => ['nullable', 'array', 'max:500'], 'shown_ids.*' => ['integer'],
+            // Ticked from the "not signed in yet" list (2026-11-03).
+            'unsigned_seen_ids' => ['nullable', 'array', 'max:500'], 'unsigned_seen_ids.*' => ['integer'],
         ]);
         [$kind, $obj, $centreId, $label, $expected] = $this->target($request, $agencyId);
-        abort_unless($expected, 422, $kind === 'trip' ? 'No children are attached to this walk.' : 'No children are signed in to this room right now.');
+        /* The "not signed in yet" list as the SERVER sees it now, narrowed to the children this phone actually showed:
+           a child who was never on the educator's screen must not be recorded as looked-for-and-not-seen (that would
+           undo an earlier count of them). An older app that sends no shown_ids records none. */
+        $offered = $kind === 'room' ? array_values(array_diff($this->notSignedIn($agencyId, $obj), $expected)) : [];
+        $offered = isset($d['shown_ids']) ? array_values(array_intersect($offered, array_map('intval', $d['shown_ids']))) : [];
+        $tickedUnsigned = array_map('intval', $d['unsigned_seen_ids'] ?? []);
+        abort_unless($expected || $offered, 422, $kind === 'trip' ? 'No children are attached to this walk.' : 'No children are signed in to this room right now.');
 
         /* A child signed in AFTER the list was opened was never on the educator's screen, so
            they could not have been ticked. Don't record them as missing — send the list back
@@ -330,26 +359,35 @@ final class HeadcountController extends Controller
             }
         }
 
-        $seen = array_values(array_intersect($expected, array_map('intval', $d['seen_ids'])));
+        // A child ticked under "not signed in yet" who was signed in before the save is simply seen.
+        $seen = array_values(array_intersect($expected, array_unique(array_merge(array_map('intval', $d['seen_ids']), $tickedUnsigned))));
         $missing = array_values(array_diff($expected, $seen));
+        $unsignedSeen = array_values(array_intersect($offered, $tickedUnsigned));
         $uid = (int) $request->user()->id;
-        $id = DB::table('headcounts')->insertGetId([
+        $row = [
             'agency_id' => $agencyId, 'centre_id' => $centreId,
             'room_id' => $kind === 'room' ? (int) $obj->id : null, 'field_trip_id' => $kind === 'trip' ? (int) $obj->id : null,
             'taken_by' => $uid, 'context' => $d['context'], 'location' => $d['location'] ?? null,
             'expected_count' => count($expected), 'counted_count' => count($seen), 'all_accounted' => ! $missing,
             'expected_child_ids' => json_encode($expected), 'seen_child_ids' => json_encode($seen), 'missing_child_ids' => json_encode($missing),
             'note' => $d['note'] ?? null, 'taken_at' => now(), 'created_at' => now(), 'updated_at' => now(),
-        ]);
+        ];
+        if ($offered) {
+            $row['unsigned_offered_child_ids'] = json_encode($offered);
+            $row['unsigned_seen_child_ids'] = json_encode($unsignedSeen);
+        }
+        $id = DB::table('headcounts')->insertGetId($row);
         $this->audit($request, $agencyId, $missing ? 'headcount.missing' : 'headcount.taken', 'headcount', $id,
             'Headcount (' . self::CONTEXTS[$d['context']] . ') ' . $label . ': ' . count($seen) . ' of ' . count($expected)
-            . ($missing ? ' — NOT accounted for: ' . implode(', ', $this->shortNames($missing)) : ' — all accounted for'));
+            . ($missing ? ' — NOT accounted for: ' . implode(', ', $this->shortNames($missing)) : ' — all accounted for')
+            . ($unsignedSeen ? '; also here but not signed in: ' . implode(', ', $this->shortNames($unsignedSeen)) : ''));
 
         $missingRows = $this->childRows($missing);
         $tz = AgencyTime::tz($agencyId);
 
         return response()->json(['ok' => true, 'id' => $id, 'expected' => count($expected), 'counted' => count($seen),
             'all_accounted' => ! $missing, 'missing' => $missingRows, 'label' => $label, 'centre_id' => $centreId,
+            'not_signed_in_seen' => $this->childRows($unsignedSeen),
             'acting' => $missing ? self::actingSupervisors($centreId) : [],
             'local' => Carbon::now($tz)->format('Y-m-d\TH:i'), 'location' => $d['location'] ?? null, 'context_label' => self::CONTEXTS[$d['context']]]);
     }
@@ -535,7 +573,16 @@ final class HeadcountController extends Controller
 
         return response()->json(['centres' => $out, 'is_admin' => $this->isAgencyWide($uid), 'is_manager' => $this->isManager($uid),
             'jurisdiction' => \App\Support\Jurisdictions::forAgency($agencyId)['code'] ?? null,
-            'reminders' => ['enabled' => (bool) ($s['headcount_reminders']['enabled'] ?? false), 'minutes' => (int) ($s['headcount_reminders']['minutes'] ?? 30)]]);
+            'reminders' => ['enabled' => (bool) ($s['headcount_reminders']['enabled'] ?? false), 'minutes' => (int) ($s['headcount_reminders']['minutes'] ?? 30),
+                'off_centres' => array_map('intval', (array) ($s['headcount_reminders']['off_centres'] ?? [])),
+                'off_users' => array_map('intval', (array) ($s['headcount_reminders']['off_users'] ?? [])),
+                // Who could be reminded: educators and home child care providers at live centres.
+                'people' => $this->isAgencyWide($uid) ? DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+                    ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
+                    ->where('ra.agency_id', $agencyId)->where('ra.role', 'educator')->where('ra.active', true)->whereNull('u.deleted_at')
+                    ->whereIn('ra.centre_id', \App\Support\Live::centreIds($agencyId) ?: [0])
+                    ->orderBy('u.first_name')->orderBy('u.last_name')->get(['u.id', 'u.first_name', 'u.last_name', 'c.name as centre'])
+                    ->groupBy('id')->map(fn ($g) => ['id' => (int) $g[0]->id, 'name' => trim($g[0]->first_name . ' ' . $g[0]->last_name), 'centres' => $g->pluck('centre')->filter()->unique()->values()])->values() : []]]);
     }
 
     /** POST /headcounts/settings { enabled, minutes } — agency admins. Default OFF. */
@@ -543,14 +590,21 @@ final class HeadcountController extends Controller
     {
         $agencyId = $this->agencyId($request);
         abort_unless($this->isAgencyWide((int) $request->user()->id), 403, 'Agency admins only.');
-        $d = $request->validate(['enabled' => ['required', 'boolean'], 'minutes' => ['required', 'integer', 'min:10', 'max:240']]);
-        DB::transaction(function () use ($agencyId, $d) {
+        $d = $request->validate(['enabled' => ['required', 'boolean'], 'minutes' => ['required', 'integer', 'min:10', 'max:240'],
+            'off_centres' => ['sometimes', 'array'], 'off_centres.*' => ['integer'], 'off_users' => ['sometimes', 'array'], 'off_users.*' => ['integer']]);
+        $off = '';
+        DB::transaction(function () use ($agencyId, $d, $request, &$off) {
             $raw = DB::table('agencies')->where('id', $agencyId)->lockForUpdate()->value('settings');
             $s = $raw ? (json_decode((string) $raw, true) ?: []) : [];
-            $s['headcount_reminders'] = ['enabled' => (bool) $d['enabled'], 'minutes' => (int) $d['minutes']];
+            $prev = $s['headcount_reminders'] ?? [];
+            $live = \App\Support\Live::centreIds($agencyId);
+            $oc = $request->has('off_centres') ? array_values(array_intersect(array_map('intval', $d['off_centres'] ?? []), $live)) : (array) ($prev['off_centres'] ?? []);
+            $ou = $request->has('off_users') ? array_values(array_unique(array_map('intval', $d['off_users'] ?? []))) : (array) ($prev['off_users'] ?? []);
+            $s['headcount_reminders'] = ['enabled' => (bool) $d['enabled'], 'minutes' => (int) $d['minutes'], 'off_centres' => $oc, 'off_users' => $ou];
+            $off = ($oc ? '; off at ' . count($oc) . ' centre' . (count($oc) > 1 ? 's' : '') : '') . ($ou ? '; off for ' . count($ou) . ' educator' . (count($ou) > 1 ? 's' : '') : '');
             DB::table('agencies')->where('id', $agencyId)->update(['settings' => json_encode($s), 'updated_at' => now()]);
         });
-        $this->audit($request, $agencyId, 'headcount.reminders', 'agency', $agencyId, 'Headcount reminders ' . ($d['enabled'] ? 'on, every ' . $d['minutes'] . ' minutes' : 'off'));
+        $this->audit($request, $agencyId, 'headcount.reminders', 'agency', $agencyId, 'Headcount reminders ' . ($d['enabled'] ? 'on, every ' . $d['minutes'] . ' minutes from each clock-in' : 'off') . $off);
 
         return response()->json(['ok' => true, 'enabled' => (bool) $d['enabled'], 'minutes' => (int) $d['minutes']]);
     }

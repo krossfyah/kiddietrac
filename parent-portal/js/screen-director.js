@@ -107,7 +107,7 @@
         flavor: stats.utilization_pct > 90 ? 'warn' : 'good',
       }));
       tiles.appendChild(statTile({
-        label: 'Here right now', value: stats.present_now, icon: '📍',
+        label: 'At Centre now', value: stats.present_now, icon: '📍',
         detail: 'children checked in',
         accent: { c1: '#93C5FD', c2: '#2563EB', tint: '#EFF6FF', ink: '#1D4ED8' },
       }));
@@ -377,7 +377,7 @@
       ...rooms.map(r => [r.room_id, r.room_name]),
     ], { required: true });
     fields.monthly_fee = textInput('Monthly fee (gross)', '1500', { type: 'number', required: true });
-    fields.start_date = textInput('Enrollment start', new Date().toISOString().split('T')[0], { type: 'date', required: true });
+    fields.start_date = textInput('Enrollment start', ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)), { type: 'date', required: true });
 
     form.appendChild(fields.first_name.row);
     form.appendChild(fields.last_name.row);
@@ -642,11 +642,12 @@
         });
         row.appendChild(Dom.el('td', {}, sw));
 
-        row.appendChild(Dom.el('td', {},
-          s.status === 'active'
+        const _stTag = s.status === 'active'
             ? Dom.el('span', { class: 'tag tag-success' }, 'ACTIVE')
-            : Dom.el('span', { class: 'tag tag-warn' }, (s.status || 'INVITED').toUpperCase())
-        ));
+            : Dom.el('span', { class: 'tag tag-warn' }, (s.status || 'INVITED').toUpperCase());
+        // A sign-in lock leaves the account 'active': say Locked here instead (kt-signin-locks.js, 2026-11-10).
+        if (s.status === 'active' && window.KT && KT.signinLock) KT.signinLock.markLocked(_stTag, s.id);
+        row.appendChild(Dom.el('td', {}, _stTag));
         tbody.appendChild(row);
       });
       table.appendChild(tbody);
@@ -719,7 +720,8 @@
     var goingIn = !child.is_at_centre;
     var name = child.display_name || 'this child';
 
-    var ok = await KT.confirm({
+    /* Not One-Tap: the centred yellow warning every manual check-in/out asks with (2026-11-06). */
+    var ok = (KT.warnManualCheck) ? await KT.warnManualCheck({ name: name, going: goingIn ? 'in' : 'out' }) : await KT.confirm({
       title: (goingIn ? 'Sign in ' : 'Sign out ') + name + '?',
       description: goingIn
         ? (name + ' will be marked present in ' + (room.room_name || 'this room')
@@ -792,11 +794,11 @@
       if (child.is_at_centre) {
         card.appendChild(Dom.el('div', { class: 'child-card-status' },
           Dom.el('span', { class: 'status-dot' }),
-          `Here since ${child.arrived_at || ''}`));
+          `At Centre since ${child.arrived_at || ''}`));
       } else {
         card.appendChild(Dom.el('div', { class: 'child-card-status' },
-          Dom.el('span', { class: 'status-dot', style: 'background: var(--kt-text-faint);' }),
-          'Not in yet',
+          Dom.el('span', { class: 'status-dot', style: 'background: ' + (child.running_late ? '#4338CA' : 'var(--kt-text-faint)') + ';' }),
+          child.running_late ? 'Late drop-off · by ' + child.running_late.by : (child.absence ? 'Absent today' : 'Not at Centre'),
         ));
       }
 
@@ -815,6 +817,36 @@
         directorCheckEvent(child, room, act, card);
       });
       card.appendChild(act);
+
+      /* Running late (2026-11-06): a child not here yet whose family said they will be in later. Safe Arrival
+         waits until then (KT.runningLate, screen-safe-arrival.js). */
+      if (child.status === 'away' && !child.absence) {
+        var late = Dom.el('button', {
+          type: 'button', 'data-kt-iconized': '1',
+          style: 'margin-top:6px;width:100%;padding:5px 8px;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;'
+            + 'border-radius:7px;border:1px solid #C7D2FE;background:#EEF2FF;color:#3730A3;',
+        }, child.running_late ? '⏰ Drop-off by ' + child.running_late.by : '⏰ Late drop-off');
+        late.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          KT.runningLate({ child_id: child.id, name: [child.display_name, child.last_name].filter(Boolean).join(' '), first_name: child.display_name, late: child.running_late },
+            { onDone: function () { if (KT.Shell && KT.Shell.renderScreen) KT.Shell.renderScreen(); } });
+        });
+        card.appendChild(late);
+      }
+      // A child who is here: a late pickup (the end-of-day check waits for it).
+      if (child.status === 'in') {
+        var lp = Dom.el('button', {
+          type: 'button', 'data-kt-iconized': '1',
+          style: 'margin-top:6px;width:100%;padding:5px 8px;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;'
+            + 'border-radius:7px;border:1px solid #C7D2FE;background:#EEF2FF;color:#3730A3;',
+        }, child.late_pickup ? '⏰ Pickup by ' + child.late_pickup.by : '⏰ Late pickup');
+        lp.addEventListener('click', function (ev) {
+          ev.stopPropagation();
+          KT.runningLate({ child_id: child.id, name: [child.display_name, child.last_name].filter(Boolean).join(' '), first_name: child.display_name, late: child.late_pickup },
+            { kind: 'departure', onDone: function () { if (KT.Shell && KT.Shell.renderScreen) KT.Shell.renderScreen(); } });
+        });
+        card.appendChild(lp);
+      }
 
       /* Signing in above records "now", which is what you want at the door and wrong
          for a day somebody forgot. This is the other case: the time it actually
@@ -865,7 +897,7 @@
       // Big status card
       content.appendChild(Dom.el('div', {
         class: 'card',
-        style: 'margin-bottom: 20px; border-left: 4px solid ' + (data.all_rooms_compliant ? 'var(--kt-success)' : 'var(--kt-danger)'),
+        style: 'margin-bottom: 20px; --kt-edge:' + (data.all_rooms_compliant ? 'var(--kt-success)' : 'var(--kt-danger)'),
       },
         Dom.el('h2', { style: 'font-family: var(--kt-font-display); font-size: 22px;' },
           data.all_rooms_compliant ? '✅ All rooms compliant' : '⚠️ Compliance issues'),
@@ -973,14 +1005,25 @@
   // Register routes — both agency_admin and centre_director use these
   // ──────────────────────────────────────────────────────────────
   function registerForRole(role) {
-    Shell.registerScreen(`${role}:dashboard`, (main, ctx) => renderDirectorRoot(main, ctx, renderDashboard));
-    Shell.registerScreen(`${role}:children`, (main, ctx) => renderDirectorRoot(main, ctx, renderChildren));
-    Shell.registerScreen(`${role}:families`, (main, ctx) => renderDirectorRoot(main, ctx, renderFamilies));
-    Shell.registerScreen(`${role}:staff`, (main, ctx) => renderDirectorRoot(main, ctx, renderStaff));
+    /* ONE SET OF SCREENS FOR EVERY ROLE (2026-11-13, Anthony: "things need to be consistent across
+       roles/responsibilities as to how we designed them"). A director's Dashboard, Children, Families and
+       Staff are the admin screens now - the agency overview (screen-agency-admin.js), Children
+       (screen-admin-children.js), Families and User management (screen-admin.js) - and the server limits
+       each to their own centres. The old hashes still work: they land on the shared screen. */
+    [['children', 'admin-children'], ['families', 'admin-families'], ['staff', 'admin-users']].forEach(function (p) {
+      Shell.registerScreen(role + ':' + p[0], function () {
+        var q = String(location.hash || '').split('?')[1];
+        location.replace('#' + p[1] + (q ? '?' + q : ''));
+      });
+    });
     Shell.registerScreen(`${role}:today`, (main, ctx) => renderDirectorRoot(main, ctx, renderTodayDirector));
     Shell.registerScreen(`${role}:compliance`, (main, ctx) => renderDirectorRoot(main, ctx, renderCompliance));
   }
   // registerForRole('agency_admin'); // handled by screen-agency-admin.js
   registerForRole('centre_director');
+  /* The director's own add-family and invite-parent forms (POST /director/families, /director/families/{id}/invite),
+     for the shared Families screen: the admin family wizard is an agency_admin route. */
+  window.KT = window.KT || {};
+  KT.directorFamily = { add: openAddFamilyModal, invite: openInviteParentModal };
 
 })(window);

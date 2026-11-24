@@ -5,7 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Laravel\Sanctum\PersonalAccessToken;
+use App\Models\PersonalAccessToken;   // the per-request shared lookup (2026-11-13)
 use Symfony\Component\HttpFoundation\Response;
 
 /**

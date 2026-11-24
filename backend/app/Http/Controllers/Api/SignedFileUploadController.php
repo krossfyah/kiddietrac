@@ -370,6 +370,7 @@ final class SignedFileUploadController extends Controller
             .   'It will never ask you for a password or a payment.'
             . '</div>'
             . '</div>'
+            . '<script src="https://app.kiddietrac.com/js/kt-net.js?v=20261025"></script>'   // no raw errors (2026-10-25)
             . '<script>(function(){var CFG=' . $json . ';'
             . 'var items=document.getElementById("items"),msg=document.getElementById("msg"),'
             . 'bar=document.getElementById("bar"),count=document.getElementById("count");'

@@ -177,7 +177,7 @@ final class StaffComplianceController extends Controller
             try {
                 $s = DB::table('role_assignments as ra')->where('ra.active', true)
                     ->where(fn ($w) => $w->where(fn ($a) => $a->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId))
-                        ->orWhere(fn ($dd) => $dd->where('ra.role', 'centre_director')->whereIn('ra.centre_id', DB::table('role_assignments')->where('user_id', $uid)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id'))))
+                        ->orWhere(fn ($dd) => $dd->where('ra.role', 'centre_director')->whereIn('ra.centre_id', DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $uid)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id'))))
                     ->where('ra.user_id', '!=', $uid)->pluck('ra.user_id')->unique();
                 $who = trim((string) DB::table('users')->where('id', $uid)->value(DB::raw("CONCAT_WS(' ', first_name, last_name)")));
                 $rows = [];
@@ -227,7 +227,8 @@ final class StaffComplianceController extends Controller
         abort_unless((int) $row->user_id === (int) $request->user()->id || $this->canManageUser($request, $agencyId, (int) $row->user_id), 403);
         $this->audit($request, $agencyId, 'staff.pd_certificate_viewed', 'user', (int) $row->user_id, 'Opened a training certificate: ' . $row->title);
 
-        return Storage::disk('local')->response($row->certificate_path, $row->certificate_name ?: 'certificate', ['Cache-Control' => 'private, no-store']);
+        // FileResponse, not Storage::response(): that streams with fpassthru(), which this server's PHP disables (ticket #197, 2026-11-01).
+        return \App\Support\FileResponse::download($row->certificate_path, $row->certificate_name ?: 'certificate', ['Cache-Control' => 'private, no-store'], 'local', true);
     }
 
     /* ───────────── certifications (CPR, first aid, RECE …) ─────────────
@@ -386,7 +387,7 @@ final class StaffComplianceController extends Controller
             'cert_type' => [$creating ? 'required' : 'sometimes', 'in:' . implode(',', $this->certCodes())],
             'title' => ['nullable', 'string', 'max:160'],
             'certifier' => ['nullable', 'string', 'max:160'],
-            'issued_at' => [$creating ? 'required' : 'sometimes', 'date', 'before_or_equal:' . now()->addDay()->toDateString()],
+            'issued_at' => [$creating ? 'required' : 'sometimes', 'date', 'before_or_equal:' . \App\Support\AgencyTime::todayDate()->addDay()->toDateString()],
             'expires_at' => ['nullable', 'date', 'after_or_equal:issued_at'],
             'document' => ['nullable', 'file', 'max:10240', 'mimes:' . self::CERT_MIMES],
             'remove_document' => ['nullable', 'boolean'],
@@ -507,7 +508,8 @@ final class StaffComplianceController extends Controller
         abort_unless($row->document_path && Storage::disk('local')->exists($row->document_path), 404, 'No certificate file is attached.');
         $this->audit($request, $agencyId, 'staff.certification_viewed', 'user', (int) $row->user_id, 'Opened a certificate file: ' . ($this->certTypes($agencyId)[$row->cert_type] ?? $row->cert_type));
 
-        return Storage::disk('local')->response($row->document_path, $row->document_name ?: 'certificate', ['Cache-Control' => 'private, no-store']);
+        // FileResponse, not Storage::response(): that streams with fpassthru(), which this server's PHP disables (ticket #197, 2026-11-01).
+        return \App\Support\FileResponse::download($row->document_path, $row->document_name ?: 'certificate', ['Cache-Control' => 'private, no-store'], 'local', true);
     }
 
     /** Wrappers for the older /staff/{user}/certifications routes, now scoped the same way. */
@@ -529,7 +531,7 @@ final class StaffComplianceController extends Controller
     private function certTellManagers(int $agencyId, int $uid, string $titleFmt, string $body): void
     {
         try {
-            $centres = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id');
+            $centres = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $uid)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id');
             $to = DB::table('role_assignments as ra')->where('ra.active', true)
                 ->where(fn ($w) => $w->where(fn ($a) => $a->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId))
                     ->orWhere(fn ($dd) => $dd->where('ra.role', 'centre_director')->whereIn('ra.centre_id', $centres->all() ?: [0])))

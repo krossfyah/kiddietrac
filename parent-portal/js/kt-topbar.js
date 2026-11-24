@@ -16,9 +16,10 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function firstName(u) { var n = (u && (u.name || u.first_name || '')) || ''; return n.split(' ')[0] || 'there'; }
 
-  var ROLE = { platform_admin: 'Super Admin', agency_admin: 'Agency Admin', centre_director: 'Centre Director', educator: 'Educator', guardian: 'Parent', home_visitor: 'Home Visitor', sales_rep: 'Sales Rep', auditor: 'Auditor' };
+  var ROLE = { platform_admin: 'Super Admin', agency_admin: 'Agency Admin', centre_director: 'Centre Director', educator: 'Educator', guardian: 'Parent', home_visitor: 'Home Visitor', sales_rep: 'Sales Rep', reseller_admin: 'Reseller', auditor: 'Auditor' };
   function roleLabel(u) {
     var roles = (u && u.roles) || [];
+    if (roles.indexOf('reseller_admin') !== -1 && roles.indexOf('platform_admin') === -1) return ROLE.reseller_admin;   // 2026-10-21
     var order = ['platform_admin', 'agency_admin', 'centre_director', 'educator', 'auditor', 'guardian'];
     for (var i = 0; i < order.length; i++) { if (roles.indexOf(order[i]) !== -1) return ROLE[order[i]]; }
     return (u && u.primary_role && ROLE[u.primary_role]) || 'Member';
@@ -66,7 +67,15 @@
           var nm = sel.value === 'all' ? 'All agencies' : ((list.filter(function (a) { return String(a.id) === sel.value; })[0] || {}).name || '');
           sessionStorage.setItem('kt_active_agency_name', nm);
         } catch (e) {}
-        window.location.reload();
+        // Remembered for the next sign-in (2026-10-23). "All agencies" is a browser-only scope.
+        if (sel.value === 'all') { window.location.reload(); return; }
+        var go = function () { window.location.reload(); };
+        var tk = store('kt_token'); if (!tk) { go(); return; }
+        var tm = setTimeout(go, 2500);
+        fetch(API + '/auth/active-agency', { method: 'POST', keepalive: true,
+          headers: { 'Authorization': 'Bearer ' + tk, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ agency_id: parseInt(sel.value, 10) }) })
+          .catch(function () {}).then(function () { clearTimeout(tm); go(); });
       });
       wrap.appendChild(lab); wrap.appendChild(sel);
     };
@@ -90,8 +99,8 @@
     return { g: 'Good night', e: '🌙' };
   }
   function fmtClock() {
-    var d = new Date(), h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM', hh = h % 12; if (hh === 0) hh = 12;
-    return hh + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
+    var t = (window.KT && KT.agencyHM) ? KT.agencyHM() : { h: new Date().getHours(), m: new Date().getMinutes() }, h = t.h, ap = h >= 12 ? 'PM' : 'AM', hh = h % 12; if (hh === 0) hh = 12;   // agency time (kt-tz.js)
+    return hh + ':' + String(t.m).padStart(2, '0') + ' ' + ap;
   }
   function wxEmoji(c) {
     if (c === 0) return '☀️'; if (c <= 2) return '🌤'; if (c === 3) return '☁️';
@@ -100,11 +109,26 @@
     if (c >= 85 && c <= 86) return '🌨'; if (c >= 95) return '⛈'; return '🌡';
   }
   function loadWeather(cb) {
-    try { var c = sessionStorage.getItem('kt_wx'); if (c) { var o = JSON.parse(c); if (o && o.t && (Date.now() - o.t < 1800000)) { cb(o.txt); return; } } } catch (e) {}
-    var done = function (txt) { try { sessionStorage.setItem('kt_wx', JSON.stringify({ t: Date.now(), txt: txt })); } catch (e) {} cb(txt); };
+    var tries = 0, sp0 = null;
+    try { sp0 = sessionStorage.getItem('kt_spelling'); } catch (e) {}
+    if (!sp0) {
+      (function wait() {
+        var v = null; try { v = sessionStorage.getItem('kt_spelling'); } catch (e) {}
+        if (v || ++tries > 100) loadWeatherNow(cb); else setTimeout(wait, 100);
+      })();
+      return;
+    }
+    loadWeatherNow(cb);
+  }
+  function loadWeatherNow(cb) {
+    var agF = false; try { agF = sessionStorage.getItem('kt_spelling') === 'us'; } catch (e) {}
+    try { var c = sessionStorage.getItem('kt_wx'); if (c) { var o = JSON.parse(c); if (o && o.t && (Date.now() - o.t < 1800000) && !!o.agF === agF) { cb(o.txt); return; } } } catch (e) {}
+    var done = function (txt) { try { sessionStorage.setItem('kt_wx', JSON.stringify({ t: Date.now(), txt: txt, agF: agF })); } catch (e) {} cb(txt); };
     fetch('https://ipapi.co/json/').then(function (r) { return r.json(); }).then(function (loc) {
-      return fetch('https://api.open-meteo.com/v1/forecast?latitude=' + loc.latitude + '&longitude=' + loc.longitude + '&current=temperature_2m,weather_code')
-        .then(function (r) { return r.json(); }).then(function (w) { done(wxEmoji(w.current.weather_code) + ' ' + Math.round(w.current.temperature_2m) + '°C'); });
+      // Fahrenheit where the viewer is (2026-10-28: a US demo agency showed 13°C).
+      var fahr = agF || ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'LR', 'MM', 'BS', 'BZ', 'KY', 'PW', 'FM', 'MH'].indexOf(String(loc.country_code || loc.country || '').toUpperCase()) >= 0;
+      return fetch('https://api.open-meteo.com/v1/forecast?latitude=' + loc.latitude + '&longitude=' + loc.longitude + '&current=temperature_2m,weather_code' + (fahr ? '&temperature_unit=fahrenheit' : ''))
+        .then(function (r) { return r.json(); }).then(function (w) { done(wxEmoji(w.current.weather_code) + ' ' + Math.round(w.current.temperature_2m) + (fahr ? '°F' : '°C')); });
     }).catch(function () { cb(null); });
   }
 
@@ -161,6 +185,19 @@
       ? { month: 'short', day: 'numeric', timeZone: _tz }
       : { month: 'short', day: 'numeric' });
   }
+  /* THE BELL OPENS ON WHAT IT ALREADY KNOWS (2026-10-28, Anthony's desktop video: "clicking on
+     the bell does[n't] open up instantly and has this slow loading effect to it"). The panel
+     opened on "Loading…" and waited for /admin/activity-feed - measured 200-650ms from a
+     desktop browser - before a single row, so it popped open small and then grew. The badge
+     poll asks for the very same feed every 15 seconds, so the last good answer is kept here
+     (per token and agency, 5 minutes at most) and the panel draws it the moment it opens; the
+     fresh request still goes out and redraws in place when it lands. */
+  var __feedMemo = null;
+  function feedMemo() {
+    var m = __feedMemo, t = store('kt_token') || '', a = '';
+    try { a = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+    return m && m.tok === t.slice(-12) && m.agency === a && Date.now() - m.at < 300000 ? m.d : null;
+  }
   function loadFeed(cb) {
     var t = store('kt_token'); if (!t) { cb(null); return; }
     /* ADMIN ONLY. The route is behind
@@ -182,8 +219,13 @@
        to clear by reading anything on screen. (Anthony, 2026-09-09) */
     var h = { 'Authorization': 'Bearer ' + t };
     try { var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa; } catch (e) {}
+    __feedAt = Date.now();   // asked now: a repaint in the meantime does not ask again
     fetch(API + '/admin/activity-feed', { headers: h })
-      .then(function (r) { return r.ok ? r.json() : null; }).then(cb).catch(function () { cb(null); });
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.events) { __feedMemo = { at: Date.now(), tok: t.slice(-12), agency: h['X-Active-Agency-Id'] || '', d: d }; __feedLast = __feedMemo; __feedAt = Date.now(); }
+        cb(d);
+      }).catch(function () { cb(null); });
   }
   function setNotifBadge(n) {
     var b = document.getElementById('kt-tb-notif-badge'); if (!b) return;
@@ -212,8 +254,9 @@
     if (!t) { __ownUnread = 0; if (done) done(); return; }
     var h = { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' };
     try { var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa; } catch (e) {}
-    fetch(API + '/notifications/unread-count?type=*', { headers: h })   // * = every kind, not just announcements
-      .then(function (r) { return r.ok ? r.json() : null; })
+    // Every badge reads one answer (kt-badges.js, 2026-10-30): "new since you last opened the inbox".
+    (window.KT && KT.badges ? KT.badges.get().then(function (b) { return b ? { unread: b.notifications } : null; })
+      : fetch(API + '/notifications/unread-count?type=*', { headers: h }).then(function (r) { return r.ok ? r.json() : null; }))   // * = every kind, not just announcements
       .then(function (d) {
         var n = d && (d.unread_count != null ? d.unread_count
                     : (d.count != null ? d.count : (d.unread != null ? d.unread : null)));
@@ -223,9 +266,23 @@
       .then(function () { if (done) done(); });
   }
 
-  function refreshNotifBadge() {
+  /* THE FEED IS NOT A COUNTER (2026-10-30, speed follow-up). Every badge repaint (kt:badges - each read, every 10 s)
+     and the 15 s poll re-fetched /admin/activity-feed, ~10 queries over seven tables, on about 80% of screen changes and
+     sometimes 3 times in one. Now the bell's number is worked out from the last feed answer plus the person's own
+     unread; the feed itself is fetched on start, when the bell opens, when data changes (kt:data-changed: a write here
+     or a change /pulse saw elsewhere - at most every 20 s), and otherwise every 2 minutes. */
+  var __feedLast = null, __feedAt = 0;
+  function feedFor() {
+    var m = __feedLast, t = store('kt_token') || '', a = '';
+    try { a = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+    return m && m.tok === t.slice(-12) && m.agency === a ? m.d : null;
+  }
+  function refreshNotifBadge(fetchFeed) {
+    var cached = feedFor();
+    var stale = Date.now() - __feedAt > (cached ? 120000 : 8000);   // none yet: ask, unless a request just went out
+    var feedNow = (fetchFeed === true || stale) ? loadFeed : function (cb) { cb(cached); };
     refreshOwnUnread(function () {
-    loadFeed(function (d) {
+    feedNow(function (d) {
       // No feed (not an admin, or it failed) is not a reason to hide their own alerts.
       if (!d || !d.events) { setNotifBadge(__ownUnread); return; }
       var seen = notifSeen();
@@ -262,15 +319,22 @@
     /* Immediately when the token is already there — the 1500ms wait was to let it
        land, but the bar is built after sign-in, so it only left the bell blank.
        The delayed attempt stays as a fallback for a bar built before storage. */
-    if (store('kt_token')) { refreshNotifBadge(); }
-    setTimeout(refreshNotifBadge, 1500);
-    setInterval(refreshNotifBadge, 15000);
+    if (store('kt_token')) { refreshNotifBadge(true); }
+    setTimeout(function () { refreshNotifBadge(); }, 1500);
+    setInterval(function () { refreshNotifBadge(); }, 15000);   // repaints from the last feed; fetches it when 2 min old
+    var lastDataFeed = 0;
+    window.addEventListener('kt:data-changed', function () {
+      if (Date.now() - lastDataFeed < 20000) return;
+      lastDataFeed = Date.now();
+      setTimeout(function () { refreshNotifBadge(true); }, 1500);
+    });
   }
   // Staff (educator / home visitor) bell badge — unread count from THEIR own
   // notifications inbox (role-relevant notifications addressed to them).
   var __staffNotifStarted = false;
   function refreshStaffNotifBadge() {
     var t = store('kt_token'); if (!t) return;
+    if (window.KT && KT.badges) { KT.badges.get().then(function (b) { if (b) setNotifBadge(b.notifications || 0); }); return; }
     fetch(API + '/notifications', { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
@@ -296,17 +360,27 @@
   }
   function toggleNotif() {
     if (notifPanel) { closeNotif(); return; }
+    var openOwn = __ownUnread;   // what was waiting for them before this opening (seen() zeroes it next)
+    // Opening the bell is opening the inbox: every alert counter resets, here and on the person's other devices.
+    if (window.KT && KT.badges) { KT.badges.seen(); }
     notifPanel = document.createElement('div');
     notifPanel.id = 'kt-notif-panel';
     notifPanel.style.cssText = 'position:fixed;top:52px;right:14px;width:360px;max-width:calc(100vw - 20px);max-height:70vh;background:#fff;border:1px solid #E5E7EB;border-radius:14px;box-shadow:0 20px 50px -12px rgba(15,23,42,.4);z-index:10050;display:flex;flex-direction:column;overflow:hidden;font-family:inherit;';
     notifPanel.innerHTML = '<div style="padding:13px 16px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'
       + '<strong style="font-size:14.5px;color:#0D1B2A;">🔔 Notifications</strong>'
-      + '<span id="kt-notif-scope" style="font-size:11px;color:#94A3B8;font-weight:600;"></span></div>'
+      + '<span style="display:flex;align-items:center;gap:10px;"><span id="kt-notif-scope" style="font-size:11px;color:#94A3B8;font-weight:600;"></span>'
+      + '<a id="kt-notif-sounds" href="#settings?tab=notifications&amp;sub=sounds" title="Choose your notification sounds" style="font-size:12px;font-weight:700;color:#0F766E;text-decoration:none;white-space:nowrap;">🔊 Sounds</a></span></div>'
       + '<div id="kt-notif-list" style="overflow-y:auto;padding:6px 0;"><div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">Loading…</div></div>';
     document.body.appendChild(notifPanel);
+    var _snd = notifPanel.querySelector('#kt-notif-sounds');
+    if (_snd) { _snd.addEventListener('click', function () { closeNotif(); }); }
     setTimeout(function () { document.addEventListener('click', outsideNotif, true); }, 0);
-    loadFeed(function (d) {
+    // "New" is measured against what was seen BEFORE this opening, so the quiet redraw keeps
+    // the same rows highlighted as the first draw (which itself moves the marker on).
+    var openSeen = notifSeen(), drewFromMemory = false;
+    var drawFeed = function (d) {
       var list = document.getElementById('kt-notif-list'); if (!list) return;
+      var oldOwn = document.getElementById('kt-notif-own'); if (oldOwn && oldOwn.parentNode) oldOwn.parentNode.removeChild(oldOwn);
       var scopeEl = document.getElementById('kt-notif-scope');
       if (scopeEl && d && d.scope === 'all') scopeEl.textContent = 'Across all agencies';
       var events = (d && d.events) || [];
@@ -320,20 +394,21 @@
 
          Writing it first costs nothing: the newest event is already in hand, and marking
          it seen is exactly what opening the panel means. */
-      var seen = notifSeen();
+      var seen = openSeen;
       if (events[0] && events[0].when) { setNotifSeen(events[0].when); }
       setNotifBadge(__ownUnread);   // opening the FEED does not read their inbox
 
       /* Alerts addressed to this person, above the agency's activity. Without this
          the badge could show a number with nothing in the panel to explain it. */
-      if (__ownUnread > 0) {
+      if (openOwn > 0) {
         var own = document.createElement('div');
+        own.id = 'kt-notif-own';
         own.style.cssText = 'display:flex;gap:11px;align-items:center;padding:11px 16px;'
           + 'border-bottom:1px solid #E2E8F0;background:#F0F9FF;cursor:pointer;';
         own.innerHTML = '<span style="font-size:17px;">📬</span>'
           + '<span style="flex:1;min-width:0;font-size:13px;color:#0D1B2A;">'
-          + '<strong>' + (__ownUnread > 99 ? '99+' : __ownUnread) + '</strong> '
-          + (__ownUnread === 1 ? 'alert for you' : 'alerts for you') + '</span>'
+          + '<strong>' + (openOwn > 99 ? '99+' : openOwn) + '</strong> '
+          + (openOwn === 1 ? 'alert for you' : 'alerts for you') + '</span>'
           + '<span style="font-size:12px;color:#1F6080;font-weight:700;">Open ›</span>';
         own.addEventListener('click', function () { closeNotif(); go('#notifications'); });
         list.parentNode.insertBefore(own, list);
@@ -364,6 +439,14 @@
         list.appendChild(row);
       });
       // (seen + badge were already set above, before the rows were built)
+    };
+    var memo = feedMemo();
+    if (memo) { drawFeed(memo); drewFromMemory = true; }
+    loadFeed(function (d) {
+      if (!d && drewFromMemory) return;   // a failed refresh keeps the rows already on screen
+      var l = document.getElementById('kt-notif-list'), top = l ? l.scrollTop : 0;
+      drawFeed(d);
+      if (l && l.isConnected) l.scrollTop = top;
     });
   }
   function openProfile() {
@@ -383,8 +466,51 @@
     if (admin && window.KT && typeof KT.openMyAccount === 'function') { KT.openMyAccount(); return; }
     location.hash = roles.indexOf('centre_director') !== -1 ? '#my-profile' : '#settings';
   }
+  /* YOUR NAME OPENS A MENU (2026-10-21). Anthony: "where in the desktop view can I change
+     the notification sounds i dont see that under the user profile settings". For an admin
+     the name opened the User-management record, which has no notification settings, so
+     the personal Settings screen (sounds, two-step, notifications) was unreachable from
+     where people look. The profile is still the first item. */
+  var profileMenu = null;
+  function closeProfileMenu() {
+    if (profileMenu && profileMenu.parentNode) profileMenu.parentNode.removeChild(profileMenu);
+    profileMenu = null;
+    document.removeEventListener('click', outsideProfileMenu, true);
+  }
+  function outsideProfileMenu(e) { if (profileMenu && !profileMenu.contains(e.target)) closeProfileMenu(); }
+  function openProfileMenu(anchor) {
+    if (profileMenu) { closeProfileMenu(); return; }
+    var r = anchor.getBoundingClientRect();
+    profileMenu = document.createElement('div');
+    profileMenu.id = 'kt-profile-menu';
+    profileMenu.setAttribute('role', 'menu');
+    profileMenu.style.cssText = 'position:fixed;z-index:10060;min-width:220px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;'
+      + 'box-shadow:0 16px 40px -12px rgba(15,23,42,.35);padding:6px;font-family:inherit;top:' + Math.round(r.bottom + 6) + 'px;left:'
+      + Math.max(8, Math.min(Math.round(r.left), window.innerWidth - 240)) + 'px;';
+    [
+      ['👤', 'My profile', function () { openProfile(); }],
+      ['⚙️', 'My settings', function () { location.hash = '#settings'; }],
+      ['🔊', 'Notification sounds', function () { location.hash = '#settings?tab=notifications&sub=sounds'; }],
+    ].forEach(function (it) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;padding:9px 12px;border-radius:8px;'
+        + 'font-size:13.5px;font-weight:600;color:#0D1B2A;cursor:pointer;text-align:left;';
+      b.innerHTML = '<span style="width:20px;text-align:center;">' + it[0] + '</span>' + it[1];
+      b.addEventListener('mouseenter', function () { b.style.background = '#F1F5F9'; });
+      b.addEventListener('mouseleave', function () { b.style.background = 'none'; });
+      b.addEventListener('click', function () { closeProfileMenu(); it[2](); });
+      profileMenu.appendChild(b);
+    });
+    document.body.appendChild(profileMenu);
+    setTimeout(function () { document.addEventListener('click', outsideProfileMenu, true); }, 0);
+  }
   function openHome() { location.hash = '#dashboard'; }
-  function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
+  // Repainted every tick, so translate at the source (2026-10-22); kt-i18n may not be loaded yet.
+  function ktT(s) { try { return (window.KT && KT.i18n && KT.i18n.t) ? KT.i18n.t(s) : s; } catch (e) { return s; } }
+  // In the chosen language even when this runs before kt-i18n.js has loaded (2026-10-22).
+  function fmtDate() { try { var tag = { fr: 'fr-CA', es: 'es-ES', hi: 'hi-IN' }[localStorage.getItem('kt_locale')]; var o = { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }; return (window.KT && KT.agencyNowText) ? KT.agencyNowText(o, tag) : new Date().toLocaleDateString(tag, o); } catch (e) { return ''; } }
 
   /* THE BAR MUST NOT FADE IN (Anthony, 2026-10-06: "the top bar disappears and
      reappears"). Measured frame by frame: the bar was never missing — every removal (the
@@ -438,6 +564,13 @@
       '@media(max-width:520px){.kt-tb-clock{display:none;}}',
       '@media(max-width:600px){.kt-topbar{padding:6px 10px;gap:6px;}.kt-tb-emoji{display:none;}.kt-tb-greet{font-size:12px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.kt-tb-ico{width:29px;height:29px;font-size:14px;}}',
       '@media(max-width:430px){.kt-tb-greet{display:none;}}',
+      /* Fit levels (fitBar below): each hides the next least important thing. */
+      '.kt-topbar.kt-tb-fit1 .kt-tb-date{display:none !important;}',
+      '.kt-topbar.kt-tb-fit2 .kt-tb-weather,.kt-topbar.kt-tb-fit2 .kt-tb-sep{display:none !important;}',
+      '.kt-topbar.kt-tb-fit3 .kt-tb-emoji{display:none !important;}.kt-topbar.kt-tb-fit3 .kt-tb-right{gap:5px;}',
+      '.kt-topbar.kt-tb-fit4 .kt-tb-role{display:none !important;}',
+      '.kt-topbar.kt-tb-fit5 #kt-tb-locale{width:100px !important;max-width:100px !important;padding-left:4px !important;padding-right:2px !important;}.kt-topbar.kt-tb-fit5 .kt-tb-ico{width:28px;height:28px;font-size:14px;}',
+      '.kt-topbar.kt-tb-fit6 .kt-tb-greet{display:none !important;}',
       // Super-admin: View-as + agency switcher relocated into the bar (centre group)
       '.kt-tb-selectors{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:center;flex:1 1 auto;min-width:0;}',
       '.kt-tb-ctl{display:flex;align-items:center;gap:6px;background:rgba(15,23,42,.05);border:1px solid rgba(15,23,42,.1);border-radius:9px;padding:3px 8px;}',
@@ -548,6 +681,36 @@
     for (var i = 0; i < host.children.length; i++) { if (host.children[i].id === 'kt-topbar') return host.children[i]; }
     return null;
   }
+  /* THE BAR FITS THE WINDOW IT IS IN (2026-10-29). Anthony: "the portal resizing based on size
+     screens its not resizing properly" / "add logic to auto size properly". The bar's width
+     depends on the role (how many icons), the sidebar, and things that arrive late (weather,
+     badges), so fixed breakpoints could not keep it in: at 1024px the clock sat 17px past the
+     edge and the page scrolled sideways; at 1400px the language picker covered the SUPER ADMIN
+     pill. This measures instead: if anything in the bar overflows its box, hide the next least
+     important item (date, weather, emoji, role pill, wide language box, greeting) and measure
+     again. Starts from nothing hidden each time, so widening the window brings things back. */
+  var FIT_MAX = 6;
+  function barFits(bar) {
+    if (bar.scrollWidth > bar.clientWidth + 1) return false;
+    for (var c = bar.firstElementChild; c; c = c.nextElementSibling) {
+      if (c.offsetParent && c.scrollWidth > c.clientWidth + 1) return false;
+    }
+    return true;
+  }
+  function fitBar() {
+    var bar = _bar;
+    if (!bar || !bar.isConnected || !bar.offsetParent) return;
+    var cur = 0;
+    for (var i = 1; i <= FIT_MAX; i++) { if (bar.classList.contains('kt-tb-fit' + i)) cur = i; }
+    for (var j = 1; j <= FIT_MAX; j++) bar.classList.remove('kt-tb-fit' + j);
+    var lvl = 0;
+    while (lvl < FIT_MAX && !barFits(bar)) { lvl++; bar.classList.add('kt-tb-fit' + lvl); }
+    void cur;
+  }
+  var _fitT = null;
+  function fitSoon() { if (_fitT) return; _fitT = setTimeout(function () { _fitT = null; fitBar(); }, 120); }
+  window.addEventListener('resize', fitSoon);
+
   function ensure() {
     var host = document.getElementById('appMain');
     if (!host || !store('kt_token') || liveBar(host)) return;
@@ -562,6 +725,7 @@
     var key = [(u && u.id) || '', (u && u.name) || '', (u && u.photo_url) || '', viewAs].join('|');
     if (_bar && _barKey === key) {
       host.insertBefore(_bar, host.firstChild);
+      fitSoon();
       try {
         var d0 = _bar.querySelector('#kt-tb-date'); if (d0) d0.textContent = fmtDate();
         var c0 = _bar.querySelector('#kt-tb-clock'); if (c0) c0.textContent = fmtClock();
@@ -570,24 +734,40 @@
     }
     var effAdmin = true;
     injectStyle();
-    var pod = greetEmoji(new Date().getHours());
+    var pod = greetEmoji(((window.KT && KT.agencyHM) ? KT.agencyHM() : { h: new Date().getHours() }).h);
     var bar = document.createElement('div');
     bar.id = 'kt-topbar'; bar.className = 'kt-topbar';
 
     var left = document.createElement('div'); left.className = 'kt-tb-left';
     // The user's avatar (photo → coloured initials) PLUS the time-of-day emoji.
-    left.innerHTML = tbAvatarHtml(u) + '<span class="kt-tb-emoji">' + pod.e + '</span><span class="kt-tb-greet">' + pod.g + ', <a class="kt-tb-name" title="Your profile">' + esc(firstName(u)) + '</a></span><span class="kt-tb-role">' + esc(roleLabel(u)) + '</span>';
+    left.innerHTML = tbAvatarHtml(u) + '<span class="kt-tb-emoji">' + pod.e + '</span><span class="kt-tb-greet">' + ktT(pod.g) + ', <a class="kt-tb-name" title="Your profile">' + esc(firstName(u)) + '</a></span><span class="kt-tb-role">' + esc(roleLabel(u)) + '</span>';
     var _avaImg = left.querySelector('.kt-tb-ava img');
     if (_avaImg) _avaImg.onerror = function () { var sp = left.querySelector('.kt-tb-ava'); if (sp) { sp.className = 'kt-tb-ava kt-tb-ava--init'; sp.style.background = avaColour((u && u.name) || ''); sp.textContent = tbInitials(u); } };
-    var avaClick = left.querySelector('.kt-tb-ava'); if (avaClick) { avaClick.style.cursor = 'pointer'; avaClick.title = 'Your profile'; avaClick.addEventListener('click', function () { openProfile(); }); }
-    var nameEl = left.querySelector('.kt-tb-name'); if (nameEl) nameEl.addEventListener('click', function (e) { e.preventDefault(); openProfile(); });
+    var avaClick = left.querySelector('.kt-tb-ava'); if (avaClick) { avaClick.style.cursor = 'pointer'; avaClick.title = 'Your profile & settings'; avaClick.addEventListener('click', function (e) { e.stopPropagation(); openProfileMenu(avaClick); }); }
+    var nameEl = left.querySelector('.kt-tb-name'); if (nameEl) { nameEl.title = 'Your profile & settings'; nameEl.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openProfileMenu(nameEl); }); }
 
     var right = document.createElement('div'); right.className = 'kt-tb-right';
     right.appendChild(languagePicker());
     right.appendChild(iconBtn('🏠', 'Home', openHome));
+    /* The dial pad, next to Home (Anthony, 2026-10-23: "add shortcut to dialpad as a popout
+       at the top bar next to the home button"). kt-dialer.js opens it as a floating,
+       resizable popup and hides this button for anyone not allowed to call. */
+    var phoneBtn = iconBtn('📞', 'Phone · dial pad', function () { if (window.KT && window.KT.dialpad) window.KT.dialpad.toggle(); }, 'kt-tb-phone-badge');
+    phoneBtn.id = 'kt-tb-phone'; phoneBtn.setAttribute('aria-pressed', 'false');
+    right.appendChild(phoneBtn);
     if (effAdmin) right.appendChild(iconBtn('⚡', 'Quick add', openQuickAdd));
     right.appendChild(iconBtn('💬', 'Message Centre', function () { go('#chat'); }, 'kt-tb-msg-badge'));
-    right.appendChild(iconBtn('📣', 'Announcements', function () { go('#announcements'); }));
+    // The email client for admins and directors; the sales@ mailbox for whoever may open it (sales team, superadmins).
+    /* Each with its inbox unread count (2026-11-04, from /badges). 📮 for a super admin in ANY agency: inside an agency
+       the cached roles are that agency's (agency_admin), so is_platform_admin and the badge feed's
+       sales_email_access decide too. */
+    right.appendChild(iconBtn('✉️', 'Email client', function () { go('#email'); }, 'kt-tb-mail-badge'));
+    var salesBtn = iconBtn('📮', 'Sales email', function () { go('#sales-email'); }, 'kt-tb-salesmail-badge');
+    salesBtn.id = 'kt-tb-salesmail';
+    if (!(((u && u.roles) || []).some(function (r) { return r === 'sales_rep' || r === 'platform_admin'; }) || (u && u.is_platform_admin) || (AGENCIES && AGENCIES.is_platform_admin))) salesBtn.style.display = 'none';
+    right.appendChild(salesBtn);
+    // Its unread count (2026-11-09): the 📣 had no badge at all, so unread announcements never showed up here.
+    right.appendChild(iconBtn('📣', 'Announcements', function () { go('#announcements'); }, 'kt-tb-ann-badge'));
     // Notification bell for EVERY bar role. Admins/directors get the agency
     // activity-feed dropdown; educators/home visitors get their OWN inbox (the
     // activity-feed endpoint is admin-only), so their bell opens #notifications.
@@ -600,7 +780,14 @@
     var calcBtn = iconBtn('🧮', 'Calculator (Alt+C)', function () { if (window.KT && window.KT.toggleCalculator) window.KT.toggleCalculator(); });
     calcBtn.id = 'kt-tb-calc'; calcBtn.setAttribute('aria-pressed', 'false');
     right.appendChild(calcBtn);
-    right.appendChild(iconBtn('🤖', 'AI assistant', openAI));
+    /* ONE AI BUTTON (Anthony, 2026-11-03: "should be combined into one on the top bar"). It was 🤖 (the help
+       assistant) beside ✨ (Ask KiddieTrac). Decided at the tap, not when the bar is drawn, because kt-ask.js can load
+       after the first bar: an admin or director with the AI Bundle gets the assistant that answers both "who owes
+       money?" and "how do I…?"; everyone else gets the help assistant as before. */
+    right.appendChild(iconBtn('🤖', 'AI assistant', function () {
+      if (window.KT && window.KT.ask && window.KT.ask.available && window.KT.ask.available()) { window.KT.ask.open(); return; }
+      openAI();
+    }));
     if (effAdmin) right.appendChild(iconBtn('🎁', "What's new", function () { if (window.KT && window.KT.openWhatsNew) window.KT.openWhatsNew(); }, 'kt-tb-wn-badge'));
     var sep = document.createElement('div'); sep.className = 'kt-tb-sep'; right.appendChild(sep);
     var wx = document.createElement('span'); wx.className = 'kt-tb-weather'; wx.id = 'kt-tb-weather'; wx.style.display = 'none'; right.appendChild(wx);
@@ -628,15 +815,37 @@
     _bar = bar; _barKey = key;
     buildSelectors();
 
-    loadWeather(function (txt) { var w = document.getElementById('kt-tb-weather'); if (w && txt) { w.textContent = txt; w.style.display = ''; } });
+    loadWeather(function (txt) { var w = document.getElementById('kt-tb-weather'); if (w && txt) { w.textContent = txt; w.style.display = ''; fitSoon(); } });
     refreshUnread();
+    fitBar();
+  }
+
+  /* Unread mail on ✉️ / 📮 (2026-11-04, Anthony: "if tehre is new mail add the unread notifications as well to the top
+     bar for the email clients"). Counts come from /badges (App\Support\MailUnread); 📮 appears once the feed says
+     this person may open Sales -> Email. */
+  function paintMail(b) {
+    if (!b) return;
+    function put(id, n) {
+      var bd = document.getElementById(id); if (!bd) return;
+      n = parseInt(n, 10) || 0;
+      if (n > 0) { bd.textContent = n > 99 ? '99+' : n; bd.hidden = false; } else { bd.hidden = true; }
+      var btn = bd.parentNode; if (btn) btn.setAttribute('aria-label', btn.getAttribute('data-kttip') + (n > 0 ? ', ' + n + ' unread' : ''));
+    }
+    put('kt-tb-ann-badge', b.announcements);   // the Announcements screen's own unread (App\Support\AnnouncementInbox)
+    put('kt-tb-mail-badge', b.email);
+    put('kt-tb-salesmail-badge', b.sales_email);
+    var sb = document.getElementById('kt-tb-salesmail');
+    if (sb && b.sales_email_access && sb.style.display === 'none') { sb.style.display = ''; fitSoon(); }
   }
 
   function refreshUnread() {
     var t = store('kt_token'); if (!t) return;
     // Accurate UNREAD MESSAGES only (not general notifications like birthdays/tours).
-    fetch(API + '/chats/unread-count', { headers: { 'Authorization': 'Bearer ' + t } })
-      .then(function (r) { return r.ok ? r.json() : null; })
+    /* ALL MESSAGES, NOT FAMILY CHATS ALONE (2026-11-01, Anthony: "why doesnt the browser when logged in show that I have
+     new notifications or chat messages"). This read b.chats - family conversations only - so a staff team message or a
+     website chat moved KT.badges and nothing on screen. KT.badges.msgs() is the one sum of every kind. */
+    (window.KT && KT.badges ? KT.badges.get().then(function (b) { paintMail(b); return b ? { unread: (KT.badges.msgs ? KT.badges.msgs(b) : b.chats) } : null; })
+      : fetch(API + '/chats/unread-count', { headers: { 'Authorization': 'Bearer ' + t } }).then(function (r) { return r.ok ? r.json() : null; }))
       .then(function (d) {
         var n = 0;
         if (d) n = (d.unread_count != null ? d.unread_count : (d.count != null ? d.count : (d.unread != null ? d.unread : 0)));
@@ -685,13 +894,33 @@
              visible half of it, not the enforcement. (Anthony, 2026-09-08) */
           try {
             var msg = 'Your access has changed. Please sign in again.';
+            // A tab-only session leaves the owner's shared sign-in alone (app.js ownsSharedSession, 2026-11-13).
+            var shared = true;
+            try { if (window.KT && KT.ownsSharedSession) shared = KT.ownsSharedSession(); } catch (e2) {}
+            try { if (window.KT && KT.markSignedOut) KT.markSignedOut(); } catch (e2) {}   // before the session store goes (reads kt_tenant)
             sessionStorage.clear();
-            localStorage.removeItem('kt_token');
-            localStorage.removeItem('kt_user');
+            if (shared) {
+              localStorage.removeItem('kt_token');
+              localStorage.removeItem('kt_user');
+            }
             try { sessionStorage.setItem('kt_signout_reason', msg); } catch (e2) {}
           } catch (e) {}
-          window.location.href = '/index.html?reason=roles-changed';
+          if (window.KT_out) window.KT_out.go('/index.html?reason=roles-changed'); else window.location.href = '/index.html?reason=roles-changed';
           return;
+        }
+
+        /* WAITING FOR THE AGENCY, OR NOT ANY MORE (2026-10-21). A parent not yet linked to
+           a family sees a cut-down app (family_pending). The moment the agency links them —
+           or for a session signed in before the flag existed — adopt the server's answer and
+           redraw, so nobody has to sign out to see their family. */
+        if (typeof fresh.family_pending === 'boolean' && fresh.family_pending !== !!cur.family_pending) {
+          cur.family_pending = fresh.family_pending;
+          cur.pending_agency = fresh.pending_agency || null;
+          // Reload only once the new answer is stored, or it would reload forever.
+          try {
+            sessionStorage.setItem('kt_user', JSON.stringify(cur));
+            if (!sessionStorage.getItem('kt_view_as')) { window.location.reload(); return; }
+          } catch (e) {}
         }
 
         if (fresh.photo_url && fresh.photo_url !== cur.photo_url) {
@@ -795,9 +1024,17 @@
   (window.KT && KT.sweepBus) ? KT.sweepBus.on(ensure) : setInterval(ensure, 1200);   // safety net; the shell now calls ensure() on every render
   (window.KT && KT.sweepBus) ? KT.sweepBus.on(buildSelectors) : setInterval(buildSelectors, 1400);   // rebuild View-as + agency switcher in the bar after any nav
   setInterval(refreshUnread, 15000);   // near-real-time unread badge
+  /* REAL TIME (kt-badges.js, 2026-10-30): repaint the moment the counts change - a read here, in another tab, a
+     resume - and when the inbox is opened anywhere, the agency activity also counts as seen. */
+  // Only while this bar is on screen: in a parent or educator view it is not drawn, and the admin feed must not be asked for.
+  window.addEventListener('kt:badges', function () { try { if (!document.getElementById('kt-topbar')) return; refreshUnread(); if (__staffNotifStarted) refreshStaffNotifBadge(); else refreshNotifBadge(false); } catch (e) {} });
+  window.addEventListener('kt:badges-seen', function () {
+    setNotifBadge(0);   // at once; the next repaint confirms it
+    try { if (__feedMemo && __feedMemo.d && __feedMemo.d.events && __feedMemo.d.events[0] && __feedMemo.d.events[0].when) setNotifSeen(__feedMemo.d.events[0].when); } catch (e) {}
+  });
   // No lag on return: refresh the bell + unread the instant the tab/app is
   // re-focused, instead of waiting up to a full poll interval.
-  function refreshBellBadge() { try { (__staffNotifStarted ? refreshStaffNotifBadge : refreshNotifBadge)(); } catch (e) {} }
+  function refreshBellBadge() { try { if (__staffNotifStarted) refreshStaffNotifBadge(); else refreshNotifBadge(); } catch (e) {} }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { refreshBellBadge(); try { refreshUnread(); } catch (e) {} } });
   window.addEventListener('focus', function () { refreshBellBadge(); try { refreshUnread(); } catch (e) {} });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { ensure(); refreshUser(); });
@@ -810,5 +1047,12 @@
   /* Exposed so an arriving push can move the bell AT ONCE instead of waiting up to a
      full 15s poll. "Realtime" is what a person expects of a notification indicator, and
      the push is the earliest moment the news exists on the device. */
-  window.KT.refreshBell = function () { refreshBellBadge(); try { refreshUnread(); } catch (e) {} };
+  window.KT.refreshBell = function () {
+    // KT.badges.get() alone hands back the last answer for up to 10 s - the push would have changed nothing (2026-11-05).
+    if (window.KT.badges && window.KT.badges.refresh) {
+      window.KT.badges.refresh().then(function () { refreshBellBadge(); try { refreshUnread(); } catch (e) {} });
+      return;
+    }
+    refreshBellBadge(); try { refreshUnread(); } catch (e) {}
+  };
 })();

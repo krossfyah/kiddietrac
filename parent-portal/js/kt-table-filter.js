@@ -103,6 +103,34 @@
     return table.hasAttribute('data-kt-server-paged') || !!screenPagerOf(table);
   }
 
+  /* ONE PAGE FROM THE FIRST FRAME (2026-10-28, Anthony: "the bottom bar with the buttons freezes and
+     I cannot click on anything" after a sub-tab switch). Until the pager below attaches, rows past
+     the first page are hidden by CSS: every other module that measures the page in the meantime
+     would otherwise lay out all of them (441 rows on Forms Manager > Completed, ~2 s on a phone).
+     data-kt-filtered (set at attach) switches the rule off, so the pager and a person's own
+     rows-per-page choice take over. Tables this module never pages are left alone. */
+  (function () {
+    if (document.getElementById('kt-tf-prepage-css')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-tf-prepage-css';
+    var base = '#appMain table:not([data-kt-filtered]):not([data-kt-no-filter]):not([data-kt-server-paged])';
+    st.textContent = base + ':not([data-kt-paginate]) > tbody > tr:nth-child(n+26),'
+      + base + '[data-kt-paginate="25"] > tbody > tr:nth-child(n+26),'
+      + base + '[data-kt-paginate="10"] > tbody > tr:nth-child(n+11),'
+      + base + '[data-kt-paginate="20"] > tbody > tr:nth-child(n+21),'
+      + base + '[data-kt-paginate="50"] > tbody > tr:nth-child(n+51){display:none !important;}';
+    (document.head || document.documentElement).appendChild(st);
+  })();
+
+  /* A LIST ON A SUB-TAB KEEPS ITS SEARCH BOX WHILE IT IS SHORT (2026-11-06, Anthony: "message centre and clicking on
+     website subtab the filter field is missing compared to the other subtabs - full sweep"). Below two rows the box was
+     left off, so on a screen with sub-tabs the tab with 0 or 1 entries was the one without a search box - CWELCC
+     Provincial subsidy, Workforce funding received, RSVP templates, Prospect NDAs. A headed table under a sub-tab strip
+     counts as data-kt-filter-always; a headless key/value table does not. */
+  function tabList(t) {
+    return !!(t.tHead && t.tHead.rows.length && t.closest('#appMain')
+      && document.querySelector('#appMain [role=tablist], #appMain .kt-subtabs, #appMain .kt-tabband'));
+  }
   function attachFilter(table) {
     // Opt-out for screens that own their own search. The email log, for one, searches
     // SERVER-side across every row — bolting this client-side box (which can only see
@@ -117,7 +145,7 @@
     // Skip 1-row tables: a search box over a single row is noise. A table can opt in
     // with data-kt-filter-always when the control should be present even while empty,
     // so a screen still being populated does not look like it is missing the feature.
-    if (tbody.children.length < 2 && !table.hasAttribute('data-kt-filter-always')) return;
+    if (tbody.children.length < 2 && !table.hasAttribute('data-kt-filter-always') && !tabList(table)) return;
 
     /* THE FLAG IS STAMPED HERE, NOT ABOVE.
 
@@ -140,7 +168,7 @@
     left.style.cssText = 'position:relative;flex:1;';
     const input = document.createElement('input');
     input.type = 'search';
-    input.placeholder = '🔍  Filter ' + tbody.children.length + ' rows…';
+    input.placeholder = tbody.children.length < 2 ? '🔍  Filter…' : '🔍  Filter ' + tbody.children.length + ' rows…';
     input.className = 'kt-table-filter-input';
     input.style.cssText = 'width:100%;padding:9px 14px;border:1px solid #E2E8F0;border-radius:8px;font-size:13.5px;background:#fff;transition:border-color .15s;';
     input.addEventListener('focus', () => input.style.borderColor = '#1F6080');
@@ -239,6 +267,10 @@
     if (sortWrap) wrap.appendChild(sortWrap);
     wrap.appendChild(right);
 
+    DOCKED.push({ table: table, wrap: wrap });
+    table.__ktFilterBar = wrap;   // kt-table-export finds the counter here once the bar is docked
+    setTimeout(function () { try { dockAll(); } catch (e) {} }, 80);
+
     // Bounded height + internal scroll (Gmail-style): wrap the table in a
     // scroll container so long tables scroll WITHIN a reasonable box instead of
     // stretching the page. The toolbar (search + count) is inserted ABOVE the
@@ -293,14 +325,30 @@
 
     /** The size this table asked for, else the house default. */
     function tablePageSize() {
+      // The person's choice for this table first (0 = All), then the screen's, then 25.
+      const mine = (KT.rowsPerPage && rppKey) ? KT.rowsPerPage.get(rppKey) : null;
+      if (mine === 0) return ALL_ROWS;   // a number, never Infinity: 0 x Infinity is NaN
+      if (mine) return mine;
       const want = parseInt(table.getAttribute('data-kt-paginate') || '', 10);
       return want > 0 ? want : PAGE_SIZE;
+    }
+    /* Rows per page (2026-10-20): drawn under the table, beside the page buttons. */
+    const ALL_ROWS = 1e9;
+    let rppKey = null;
+    try { rppKey = KT.rowsPerPage ? KT.rowsPerPage.keyFor(table) : null; } catch (e) {}
+    function sizeOpts(total) {
+      if (!KT.rowsPerPage || !rppKey) return null;
+      const cur = tablePageSize();
+      return {
+        size: cur === ALL_ROWS ? 0 : cur, total: total, allowAll: true,
+        onSize: (n) => { KT.rowsPerPage.set(rppKey, n); page = 1; render(); },
+      };
     }
 
     /* The bar itself is KT.pagerBar (kt-card-pager.js) — the one every pager in the
        portal draws with, server-paged screens included. */
-    function buildPager(totalPages) {
-      if (KT.pagerBar) { KT.pagerBar(pager, page, totalPages, (p) => { page = p; render(); }); return; }
+    function buildPager(totalPages, total) {
+      if (KT.pagerBar) { KT.pagerBar(pager, page, totalPages, (p) => { page = p; render(); }, sizeOpts(total)); return; }
       pager.style.display = 'none';
     }
 
@@ -449,7 +497,7 @@
         ? (from + '–' + to + ' of ' + total)
         : (from + '–' + to + ' of ' + total + ' (filtered from ' + rows.length + ')');
       counter.style.color = total ? '#64748B' : '#EF4444';
-      buildPager(totalPages);
+      buildPager(totalPages, total);
     }
     function scheduleRender() {
       if (renderScheduled) return;
@@ -481,10 +529,102 @@
       if (!tbody) return;
       if (tbody.children.length === 1) {
         const td = tbody.children[0].querySelector('td');
-        if (td && td.colSpan && td.colSpan > 1) return; // it's an empty-state row
+        if (td && td.colSpan && td.colSpan > 1 && !tabList(t)) return; // it's an empty-state row
       }
       attachFilter(t);
     });
+    try { dockAll(); } catch (e) {}
+  }
+
+  /* ── ONE ROW OF FILTERS (2026-10-20) ─────────────────────────────────────────────
+     Anthony: "under families as an example why is the drop down and filter fields are
+     not condensed side by side - this is a problem throughout the portal".
+
+     A screen draws its own filters (Enrolled / Centre / Status dropdowns, Cards|Table,
+     + Add) in a row of its own, and this module then put the search box on a SECOND row
+     underneath, directly above the table. Two half-empty rows for one set of filters.
+
+     The search box now joins the screen's row when there is one: a horizontal row with
+     a dropdown or a field in it, ending no more than 60px above the box, side by side
+     with it, and not part of a form, a popup, the banner or a tab strip. It goes in
+     after the last dropdown, so the screen's buttons stay at the end of the row.
+
+     Screens redraw their filter rows (changing a filter often rebuilds the row), which
+     would take the docked box with it. So every sweep re-checks: a box that has been
+     lifted out is put straight back above its table and docks again into the new row. */
+  const DOCKED = [];
+  const DOCK_SKIP = 'table, form, .modal, #modalRoot, .kt-table-filter, .kt-hero, .kt-page-hero, '
+    + '[role="tablist"], .kt-tabband, #kt-topbar, [data-kt-nodock]';
+  function isRow(el) {
+    const cs = getComputedStyle(el);
+    return cs.display.indexOf('flex') !== -1 && cs.flexDirection.indexOf('column') === -1;
+  }
+  function filterRowAbove(wrap) {
+    const main = wrap.closest('#appMain');
+    if (!main) return null;
+    const tr = wrap.getBoundingClientRect();
+    if (!tr.height || !tr.width) return null;
+    let best = null, bestGap = 1e9;
+    const ctrls = main.querySelectorAll('select, input[type="search"], input[type="text"], input[type="date"], input:not([type])');
+    for (const c of ctrls) {
+      if (c.closest(DOCK_SKIP) || c.offsetParent === null) continue;
+      let row = c.parentElement, hops = 0;
+      while (row && row !== main && hops < 3 && !isRow(row)) { row = row.parentElement; hops++; }
+      if (!row || row === main || !isRow(row) || row.contains(wrap) || row.closest(DOCK_SKIP)) continue;
+      if (row.querySelector('table, textarea')) continue;
+      const rr = row.getBoundingClientRect();
+      if (rr.height > 72 || rr.width < 200) continue;
+      const gap = tr.top - rr.bottom;
+      if (gap < -2 || gap > 60) continue;   // 60: a one-line summary may sit between (Bulk invoice run)
+      if (rr.right < tr.left + 20 || rr.left > tr.right - 20) continue;
+      if (gap < bestGap) { best = row; bestGap = gap; }
+    }
+    return best;
+  }
+  function dockCss() {
+    if (document.getElementById('kt-tf-dock-css')) return;
+    const st = document.createElement('style');
+    st.id = 'kt-tf-dock-css';
+    st.textContent = '.kt-table-filter.kt-tf-docked{flex:0 1 300px !important;min-width:180px;margin:0 !important;width:auto !important;}'
+      + '.kt-table-filter.kt-tf-docked .kt-tf-left{min-width:0 !important;max-width:none !important;}'
+      + '.kt-table-filter.kt-tf-docked .kt-table-filter-input{padding-top:7px !important;padding-bottom:7px !important;}'
+      + '@media (max-width:600px){.kt-table-filter.kt-tf-docked{flex:1 1 150px !important;min-width:140px;}}';
+    document.head.appendChild(st);
+  }
+  function dock(entry) {
+    const { table, wrap } = entry;
+    const anchor = table.closest('.kt-tbl-scroll') || table;
+    if (!wrap.isConnected) {
+      // Our row was redrawn away: back above the table, then try again below.
+      if (!anchor.isConnected) return;
+      anchor.parentElement.insertBefore(wrap, anchor);
+      wrap.classList.remove('kt-tf-docked');
+    }
+    if (wrap.classList.contains('kt-tf-docked')) return;
+    if (getComputedStyle(wrap).display === 'none') return;   // server-paged: nothing to show
+    /* A box with no filter row above it is looked at again only when the screen around it has changed
+       (phone speed sweep 2026-10-30): every sweep re-measured every field on the screen for a table that had no
+       row to join - most of a Users-screen navigation on a phone. Same answer whenever the same fields sit in the
+       same place. */
+    const main = wrap.closest('#appMain');
+    const sig = main ? main.querySelectorAll('select, input').length + ':' + main.childElementCount + ':' + Math.round(wrap.getBoundingClientRect().top + (main.scrollTop || 0)) : '';
+    if (sig && entry.noRowSig === sig) return;
+    const row = filterRowAbove(wrap);
+    if (!row) { entry.noRowSig = sig; return; }
+    entry.noRowSig = null;
+    let after = null;
+    for (const k of Array.from(row.children)) {
+      if (k.matches('select, input') || k.querySelector('select, input')) after = k;
+    }
+    dockCss();
+    row.insertBefore(wrap, after ? after.nextSibling : row.firstChild);
+    wrap.classList.add('kt-tf-docked');
+  }
+  function dockAll() {
+    for (let i = DOCKED.length - 1; i >= 0; i--) {
+      if (!DOCKED[i].table.isConnected) { DOCKED.splice(i, 1); continue; }
+      try { dock(DOCKED[i]); } catch (e) {}
+    }
   }
 
   // Run on hashchange + at intervals
@@ -513,6 +653,47 @@
   window.KT = window.KT || {};
   KT.tableEnhancers = KT.tableEnhancers || [];
   KT.tableEnhancers.push(sweepTables);
+
+  /* AS THE TABLE LANDS, NOT ON THE NEXT SWEEP (2026-10-28, Anthony: "when moving from one subtab
+     to the next how the data is presented (its not smooth loading)" and, on desktop, "screen is
+     jumpy when moving from the subtabs"). A sub-tab switch changes no hash, so its table waited for
+     a bus tick: painted with every row, then the toolbar dropped in above it and the pager cut it
+     to one page. Mutation callbacks run before the browser paints, so a table attached here is
+     first seen already paged, with its toolbar in place. Same checks as sweepTables(). */
+  function attachNew(list) {
+    var found = [];
+    for (var i = 0; i < list.length; i++) {
+      var ad = list[i].addedNodes;
+      for (var j = 0; j < ad.length; j++) {
+        var n = ad[j];
+        if (n.nodeType !== 1) continue;
+        var ts = n.tagName === 'TABLE' ? [n]
+          : (n.tagName === 'TR' || n.tagName === 'TBODY') ? [n.closest('table')]
+          : Array.prototype.slice.call(n.getElementsByTagName('table'));
+        for (var k = 0; k < ts.length; k++) {
+          var t = ts[k];
+          if (t && !t.dataset.ktFiltered && found.indexOf(t) === -1) found.push(t);
+        }
+      }
+    }
+    if (!found.length) return;
+    var any = false;
+    found.forEach(function (t) {
+      if (!t.isConnected || !t.closest('#appMain')) return;
+      var tbody = t.querySelector('tbody');
+      if (!tbody) return;
+      if (tbody.children.length === 1) {
+        var td = tbody.children[0].querySelector('td');
+        if (td && td.colSpan && td.colSpan > 1 && !tabList(t)) return;   // an empty-state row (a sub-tab list keeps its box)
+      }
+      try { attachFilter(t); any = any || !!t.dataset.ktFiltered; } catch (e) {}
+    });
+    if (any) { try { dockAll(); } catch (e) {} }
+  }
+  function watchNew() {
+    if (window.KT && typeof KT.observeMain === 'function') { KT.observeMain(attachNew, { childList: true, subtree: true }); }
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', watchNew); } else { watchNew(); }
   if (!KT.enhanceTables) {
     KT.enhanceTables = function () {
       (KT.tableEnhancers || []).forEach(function (f) { try { f(); } catch (e) {} });

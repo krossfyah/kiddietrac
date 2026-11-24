@@ -23,10 +23,11 @@
   }
 
   function nextMonday() {
-    const d = new Date();
-    const day = d.getDay();
+    // From the AGENCY's date, stepped in UTC days, so the evening never jumps a week.
+    const d = new Date(((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + 'T00:00:00Z');
+    const day = d.getUTCDay();
     const diff = day === 1 ? 7 : (8 - day) % 7 || 7;
-    d.setDate(d.getDate() + diff);
+    d.setUTCDate(d.getUTCDate() + diff);
     return d.toISOString().split('T')[0];
   }
 

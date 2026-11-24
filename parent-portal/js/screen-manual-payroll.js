@@ -121,6 +121,9 @@
            lines the server worked out. Added as SEPARATE lines when the person is ticked,
            because the pay stub must show them separately on every pay cheque. */
         funding: s.funding || null,
+        /* Educator reward bonuses waiting for a pay run (2026-10-20): added as lines when
+           the person is ticked, and marked paid when this payslip is created. */
+        rewards: s.rewards || [],
         lines: [], notes: '', picked: false
       };
     });
@@ -155,6 +158,10 @@
     /* Seed the funding lines once, from the server's rates and the clock's hours. They are
        ordinary lines after that (editable, removable) but keep their component. */
     function seedFunding(r) {
+      if (r.rewards && r.rewards.length && !r.rewardsSeeded) {
+        r.rewardsSeeded = true;
+        r.rewards.forEach(function (b) { r.lines.push({ label: b.label, amount: b.amount, reward_award_id: b.reward_award_id }); });
+      }
       if (!r.funding || r.fundingSeeded) return;
       r.fundingSeeded = true;
       (r.funding.lines || []).forEach(function (l) {
@@ -200,7 +207,10 @@
           + '<input type="checkbox" data-pick="' + esc(r.key) + '"' + (r.picked ? ' checked' : '') + ' style="width:16px;height:16px;"></td>'
           + '<td style="padding:8px 10px;border-top:1px solid ' + C.line + ';">'
           + '<strong>' + esc(r.name) + '</strong>'
-          + '<div style="font-size:11.5px;color:' + C.muted + ';">' + esc(r.sub || '') + '</div>' + fundingChip(r) + '</td>';
+          + '<div style="font-size:11.5px;color:' + C.muted + ';">' + esc(r.sub || '') + '</div>' + fundingChip(r)
+          + ((r.rewards || []).length ? '<div style="font-size:11px;color:#B45309;margin-top:2px;">⭐ Rewards bonus '
+              + money(r.rewards.reduce(function (a, b) { return a + (Number(b.amount) || 0); }, 0)) + ' to include</div>' : '')
+          + '</td>';
 
         if (r.kind === 'staff') {
           cells += '<td style="padding:8px 10px;border-top:1px solid ' + C.line + ';white-space:nowrap;">'

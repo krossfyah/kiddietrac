@@ -115,6 +115,19 @@
     return b;
   }
 
+  function ensureActionCss() {
+    if (document.getElementById('kt-cd-actions-css')) { return; }
+    var st = document.createElement('style');
+    st.id = 'kt-cd-actions-css';
+    st.textContent = ''
+      + '.kt-cd-actions{display:flex;gap:8px;flex-wrap:wrap;}'
+      + '.kt-cd-actions>button{display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;min-height:38px;}'
+      + '@media (max-width:600px){.kt-cd-actions{display:grid;grid-template-columns:1fr 1fr;width:100%;}'
+      + '.kt-cd-actions>button{min-width:0;padding-left:8px !important;padding-right:8px !important;}'
+      + '.kt-cd-actions>button:last-child:nth-child(odd){grid-column:1 / -1;}}';
+    document.head.appendChild(st);
+  }
+
   function btnPrimary() {
     return 'background:#1F6080;color:white;';
   }
@@ -125,16 +138,27 @@
     return 'background:#DC2626;color:white;';
   }
 
-  function showEditModal(child, onSaved) {
-    var overlay = Dom.el('div', {
+  /* EDIT IN PLACE (2026-10-20). Anthony: "when editing a child record the popup is shown but
+     I need to close that first popup to get to edit the other fields - make this whole
+     experience better so when hitting edit I get access to it all". The details form was a
+     second popup laid over the record, so the record's own tabs (schedule, enrolment, files)
+     sat underneath it until it was closed. With an `inlineHost` it now renders INTO the
+     record as its "Details" tab: no overlay, everything else one click away. Without one it
+     is still the old popup, for any caller that wants that. */
+  function showEditModal(child, onSaved, inlineHost) {
+    var inline = !!inlineHost;
+    var overlay = inline ? null : Dom.el('div', {
       style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px;overflow:auto;',
     });
+    var closeIt = function () { if (overlay) { overlay.remove(); } };
     var modal = Dom.el('div', {
-      style: 'background:white;border-radius:14px;padding:24px;max-width:640px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);',
+      style: inline
+        ? 'background:white;border:1px solid #E5E7EB;border-radius:14px;padding:18px;'
+        : 'background:white;border-radius:14px;padding:24px;max-width:640px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);',
     });
     modal.appendChild(Dom.el('h3', {
-      style: 'margin:0 0 16px;font-size:18px;',
-    }, 'Edit ' + (child.display_name || child.full_name)));
+      style: 'margin:0 0 ' + (inline ? '12' : '16') + 'px;font-size:' + (inline ? '16' : '18') + 'px;',
+    }, inline ? '✏️ Child details' : 'Edit ' + (child.display_name || child.full_name)));
 
     /* THE CHILD'S PHOTO, IN THE SAME FORM (2026-10-09: "edit on child record should also
        allow to edit the avatar/display picture for that child"). Uploaded the moment it is
@@ -148,7 +172,7 @@
       photoPreview.appendChild(_avatarEl(child.full_name, { size: 64, photoUrl: photoState.url ? (photoState.preview || mediaUrl(photoState.url)) : '' }));
       removeLink.style.display = photoState.url ? '' : 'none';
     };
-    var photoIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none;' });
+    var photoIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none;', 'data-kt-noface': '1', 'data-kt-face': '1' });
     var photoMsg = Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:4px;' }, 'JPG, PNG or WebP, up to 4 MB.');
     var changeBtn = btn('📷 Change photo', btnSecondary(), function () { photoIn.click(); });
     var removeLink = Dom.el('button', { type: 'button', style: 'margin-left:8px;background:none;border:0;padding:0;color:#B91C1C;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:underline;' }, 'Remove photo');
@@ -160,6 +184,7 @@
     photoIn.addEventListener('change', function () {
       var f = photoIn.files && photoIn.files[0];
       if (!f) return;
+      if (window.KT && KT.faceGateInput && !KT.faceGateInput(photoIn, { who: 'child', name: child.first_name })) return;
       if (f.size > 4 * 1024 * 1024) { photoMsg.textContent = 'That photo is over 4 MB — please choose a smaller one.'; photoMsg.style.color = '#B91C1C'; return; }
       var fd = new FormData(); fd.append('photo', f);
       var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
@@ -187,6 +212,8 @@
     paintPhoto();
 
     var form = Dom.el('form', {});
+    // Enter in a field must not submit the form (a native submit reloads the portal).
+    form.addEventListener('submit', function (e) { e.preventDefault(); });
 
     /* ALLERGIES & HEALTH IS A SUBTAB OF THIS POPUP (2026-10-09: "at a glance with child
        record still showing the ability to add allergies when this should be included in
@@ -197,8 +224,8 @@
     var subTabs = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid #E5E7EB;margin:0 0 14px;' });
     var showPane = function (key) {
       var details = key === 'details';
-      photoBox.style.display = details ? '' : 'none';
-      form.style.display = details ? '' : 'none';
+      if (!inline) { photoBox.style.display = details ? '' : 'none'; }
+      form.style.display = details ? (inline ? 'grid' : '') : 'none';   // inline keeps its grid
       allergyPane.style.display = details ? 'none' : '';
       Array.prototype.forEach.call(subTabs.children, function (b) {
         var on = b.getAttribute('data-pane') === key;
@@ -209,8 +236,8 @@
         allergyLoaded = true;
         KT.healthEditor.open(child, {
           into: allergyPane,
-          onClose: function () { overlay.remove(); },
-          onSaved: function () { overlay.remove(); if (onSaved) onSaved(); },
+          onClose: function () { closeIt(); },
+          onSaved: function () { closeIt(); if (onSaved) onSaved(); },
         });
       }
     };
@@ -219,7 +246,11 @@
       b.addEventListener('click', function () { showPane(t[0]); });
       subTabs.appendChild(b);
     });
-    modal.insertBefore(subTabs, photoBox);
+    // Inline, Allergies & health is its own tab of the record, so no sub-tabs here.
+    if (!inline) { modal.insertBefore(subTabs, photoBox); }
+    // Inline, the photo is changed on the record itself (tap the photo at the top).
+    if (inline) { photoBox.remove(); }
+    if (inline) { form.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:0 14px;'; }
     var fields = [
       { name: 'first_name', label: 'First name', value: child.first_name, type: 'text' },
       { name: 'last_name', label: 'Last name', value: child.last_name, type: 'text' },
@@ -271,13 +302,23 @@
       }
       inputs[f.name] = input;
       wrap.appendChild(input);
+      if (inline && f.type === 'textarea') { wrap.style.gridColumn = '1 / -1'; }
       form.appendChild(wrap);
     });
 
     var actions = Dom.el('div', {
-      style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px;',
+      style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:16px;' + (inline ? 'grid-column:1 / -1;' : ''),
     });
-    var cancelB = btn('Cancel', btnSecondary(), function () { overlay.remove(); });
+    var original = { photo: photoState.url };
+    var cancelB = btn(inline ? 'Discard changes' : 'Cancel', btnSecondary(), function (ev) {
+      if (ev && ev.preventDefault) { ev.preventDefault(); }
+      if (!inline) { closeIt(); return; }
+      // Inline there is nothing to close: put the fields back as they were.
+      fields.forEach(function (f) { if (inputs[f.name]) { inputs[f.name].value = f.value || ''; } });
+      photoState.url = original.photo; photoState.preview = null; photoState.changed = false;
+      photoMsg.style.color = '#6B7280'; photoMsg.textContent = 'JPG, PNG or WebP, up to 4 MB.';
+      paintPhoto();
+    });
     actions.appendChild(cancelB);
     var saveB = btn('Save changes', btnPrimary());
     actions.appendChild(saveB);
@@ -296,7 +337,7 @@
       saveB.textContent = 'Saving...';
       Api.patch('/director/children/' + child.id, payload)
         .then(function () {
-          overlay.remove();
+          closeIt();
           if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Child updated', 'success');
           if (onSaved) onSaved();
         })
@@ -310,6 +351,10 @@
     modal.appendChild(form);
     modal.appendChild(allergyPane);
     showPane('details');
+    if (inline) {
+      inlineHost.appendChild(modal);
+      return;
+    }
     overlay.appendChild(modal);
     overlay.addEventListener('click', function (e) {
       if (e.target === overlay) overlay.remove();
@@ -381,6 +426,8 @@
   var editModeFor = null;
   /* Set by Edit: the next paint of this child opens the details form (one click to edit). */
   var openDetailsFor = null;
+  /* The tab the next paint opens on: Edit opens "Details", and a save keeps you where you were. */
+  var pendingTab = null;
 
   /**
    * Make a region non-interactive while the record is read-only.
@@ -500,7 +547,7 @@
       return;
     }
 
-    var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
+    var wrap = Dom.el('div', { class: 'kt-cd-wrap', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
 
     var loading = Dom.el('div', {
@@ -523,7 +570,18 @@
          its too plain can you make this present itself better". The header is a soft branded
          card (bigger photo, status / room / family chips), and the plain label-value list
          under the tabs is quick-fact tiles plus a "Health & care" card. Same data, same tabs. */
+      /* In the popup the title bar says which mode this is: "At a glance", or
+         "Editing · <child>" with the accent line (see ensureChildModalStyles). */
+      try {
+        var _cm = container.closest && container.closest('.modal.kt-child-modal');
+        if (_cm) {
+          _cm.classList.toggle('kt-editing', !!editMode);
+          var _t = _cm.querySelector('#kt-modal-title');
+          if (_t) { _t.textContent = editMode ? ('✏️ Editing · ' + (child.display_name || child.full_name || 'child')) : (opts && opts.params && opts.params.archived ? 'At a glance (archived)' : 'At a glance'); }
+        }
+      } catch (e) {}
       var header = Dom.el('div', {
+        class: 'kt-cd-head',
         style: 'display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:14px;'
              + 'background:radial-gradient(120% 140% at 0% 0%,rgba(34,193,195,.16) 0%,rgba(34,193,195,0) 55%),'
              + 'radial-gradient(120% 140% at 100% 0%,rgba(124,58,237,.12) 0%,rgba(124,58,237,0) 55%),linear-gradient(135deg,#F7FBFD 0%,#FAF8FF 100%);'
@@ -552,12 +610,68 @@
       /* The face before the name: a record about a person should look like one.
          (Anthony, 2026-08-25) */
       var _idRow = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;' });
-      _idRow.appendChild(_avatarEl(child.full_name, {
+      var _face = _avatarEl(child.full_name, {
         size: 78,
         photoUrl: child.photo_url ? mediaUrl(child.photo_url) : '',
         sex: child.sex || child.gender || null,
         kind: 'child',
-      }));
+      });
+      /* THE PHOTO IS CHANGED WHERE IT IS SHOWN (2026-10-20). Anthony: "with the display pic
+         to change for the child record make it editable at the top vs having a second option
+         below". While editing, the photo at the top is the control: tap it to choose a new
+         one (uploaded and saved at once), "Remove" under it to clear it. The Details form no
+         longer carries its own copy of the photo. */
+      if (editMode && !_departed) {
+        var _faceWrap = Dom.el('div', { style: 'flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;' });
+        var _faceBtn = Dom.el('button', { type: 'button', title: 'Change photo', 'aria-label': 'Change ' + (child.display_name || child.full_name || 'child') + '\'s photo',
+          style: 'position:relative;border:0;padding:0;background:none;cursor:pointer;border-radius:50%;line-height:0;' });
+        _faceBtn.appendChild(_face);
+        _faceBtn.appendChild(Dom.el('span', { 'aria-hidden': 'true',
+          style: 'position:absolute;right:-2px;bottom:-2px;width:28px;height:28px;border-radius:50%;background:#0F2D57;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;box-shadow:0 2px 6px rgba(15,23,42,.3);' }, '📷'));
+        var _faceIn = Dom.el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', style: 'display:none;', 'data-kt-noface': '1', 'data-kt-face': '1' });
+        var _faceMsg = Dom.el('div', { style: 'font-size:11px;color:#64748B;text-align:center;max-width:110px;' }, 'Tap to change');
+        var _repaint = function () {
+          try { pendingTab = (typeof activeTab !== 'undefined' && activeTab) ? activeTab : null; } catch (e) {}
+          renderChildDetail(container, opts);
+        };
+        var _savePhoto = function (url) {
+          return Api.patch('/director/children/' + child.id, { photo_url: url }).then(function () {
+            if (KT.Dom && KT.Dom.toast) { KT.Dom.toast(url ? 'Photo updated' : 'Photo removed', 'success'); }
+            _repaint();
+          });
+        };
+        _faceBtn.addEventListener('click', function () { _faceIn.click(); });
+        _faceIn.addEventListener('change', function () {
+          var f = _faceIn.files && _faceIn.files[0];
+          if (!f) { return; }
+          if (window.KT && KT.faceGateInput && !KT.faceGateInput(_faceIn, { who: 'child', name: child.first_name })) { return; }
+          if (f.size > 4 * 1024 * 1024) { _faceMsg.style.color = '#B91C1C'; _faceMsg.textContent = 'Over 4 MB - choose a smaller photo'; return; }
+          var fd = new FormData(); fd.append('photo', f);
+          var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+          var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+          var agency = ''; try { agency = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+          _faceMsg.style.color = '#64748B'; _faceMsg.textContent = 'Uploading…'; _faceBtn.disabled = true;
+          fetch(base + '/director/children/' + child.id + '/photo', { method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'X-Active-Agency-Id': agency, 'Accept': 'application/json' }, body: fd })
+            .then(function (r) { return r.json().then(function (j) { if (!r.ok) { throw new Error(j.message || ('HTTP ' + r.status)); } return j; }); })
+            .then(function (j) { return _savePhoto(j.photo_url); })
+            .catch(function (e) { _faceBtn.disabled = false; _faceMsg.style.color = '#B91C1C'; _faceMsg.textContent = 'Not saved: ' + ((e && e.message) || 'error'); })
+            .then(function () { _faceIn.value = ''; });
+        });
+        _faceWrap.appendChild(_faceBtn);
+        _faceWrap.appendChild(_faceIn);
+        _faceWrap.appendChild(_faceMsg);
+        if (child.photo_url) {
+          var _rm = Dom.el('button', { type: 'button', style: 'background:none;border:0;padding:0;color:#B91C1C;font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline;' }, 'Remove');
+          _rm.addEventListener('click', function () {
+            _rm.disabled = true;
+            _savePhoto(null).catch(function (e) { _rm.disabled = false; _faceMsg.style.color = '#B91C1C'; _faceMsg.textContent = 'Not removed: ' + ((e && e.message) || 'error'); });
+          });
+          _faceWrap.appendChild(_rm);
+        }
+        _idRow.appendChild(_faceWrap);
+      } else {
+        _idRow.appendChild(_face);
+      }
       var _idText = Dom.el('div', {});
       _idRow.appendChild(_idText);
       headerLeft.appendChild(_idRow);
@@ -573,7 +687,7 @@
         }
         var left = !!child.is_archived || !!child.departed_at;
         if (left) chip('🗄️ Has left', '#FFF7ED', '#9A3412', '#FED7AA');
-        else if (child.is_at_centre) chip('● At the centre now', '#DCFCE7', '#166534', '#BBF7D0');
+        else if (child.is_at_centre) chip('● At Centre', '#DCFCE7', '#166534', '#BBF7D0');
         else if (child.enrollment && child.enrollment.end_date) chip('Withdrawn', '#F1F5F9', '#475569', '#E2E8F0');
         else if (child.enrollment) chip('Enrolled', '#E0F2FE', '#075985', '#BAE6FD');
         if (child.room && child.room.name) chip('🏫 ' + child.room.name, '#FFFFFF', '#1F6080', '#D6E4EE');
@@ -611,9 +725,13 @@
       /* Wraps: four buttons (Edit · Emergency card · Archive · Compliance report) are wider
          than a phone, and unwrapped the row was turned into a hidden sideways scroller with
          Archive cut off at the edge (Anthony's screenshot, 2026-10-15). */
-      var headerActions = Dom.el('div', {
-        style: 'display:flex;gap:8px;flex-wrap:wrap;',
-      });
+      /* EVEN BUTTONS (2026-11-09, Anthony's phone: "look at the other tabs up top for request supplies,
+         archive etc - fix these so they are presented better"). Wrapped as a plain row, five buttons of
+         five widths fell into three ragged lines with a solid red Archive in the middle. On a phone they
+         are now two even columns (the odd one out takes the full width), Archive comes last and is
+         outlined red: still plainly the destructive one, no longer the loudest thing on the record. */
+      ensureActionCss();
+      var headerActions = Dom.el('div', { class: 'kt-cd-actions' });
       /* Edit is now a MODE, not a single modal. The modal still owns the core fields
          and is reachable from inside the mode — but the tabs' own editors only come
          alive once the mode is on. */
@@ -636,12 +754,11 @@
         /* Nothing to add: the banner has already explained why. An explanation beats a
            row of disabled buttons nobody can act on. */
       } else if (editMode) {
-        headerActions.appendChild(btn('📝 Edit details…', btnSecondary(), function () {
-          showEditModal(child, function () { renderChildDetail(container, opts); });
-        }));
+        /* Details and Allergies & health are TABS of the record while editing (see TABS
+           below), not a popup over it - so nothing has to be closed to reach the rest. */
         if (String(openDetailsFor) === String(child.id)) {
           openDetailsFor = null;
-          setTimeout(function () { showEditModal(child, function () { renderChildDetail(container, opts); }); }, 0);
+          pendingTab = 'details';
         }
         /* No "Done" (2026-10-09: "remove the done button ... not sure why there is a done
            button there"). It only switched edit mode off; closing the record does that now
@@ -711,14 +828,10 @@
           w.document.close();
         }).catch(function (e) { alert('Could not load emergency card: ' + e.message); });
       }));
-      if (! _readOnly) {
-        headerActions.appendChild(btn('🗄️ Archive', btnDanger(), function () {
-          showArchiveConfirm(child, function () {
-            /* In the popup there is no list to navigate back TO - the list is still
-             behind it. Close and let the caller refresh in place. */
-          if (opts && typeof opts.onDone === 'function') { opts.onDone(); }
-          else { window.location.hash = backHash(params); }
-          });
+      // Supplies from home (2026-10-23, kt-supplies.js).
+      if (! _readOnly && window.KT && KT.Supplies) {
+        headerActions.appendChild(btn('🧺 Request supplies', btnSecondary(), function () {
+          KT.Supplies.request([{ id: child.id, name: child.preferred_name || child.first_name || child.full_name }]);
         }));
       }
       headerActions.appendChild(btn('📋 Compliance report', btnSecondary(), function () {
@@ -742,7 +855,7 @@
           + '<tr><td class="l">Preferred name</td><td>' + _e(child.preferred_name || '—') + '</td></tr>'
           + '<tr><td class="l">Date of birth</td><td>' + _e(fmtDate(child.date_of_birth)) + '</td></tr>'
           + '<tr><td class="l">Age</td><td>' + _e(child.age && child.age.human ? child.age.human : '—') + '</td></tr>'
-          + '<tr><td class="l">Gender</td><td>' + _e(child.gender ? child.gender.replace(/_/g, ' ') : '—') + '</td></tr>'
+          + '<tr><td class="l">Gender</td><td>' + _e(child.gender ? (child.gender.charAt(0).toUpperCase() + child.gender.slice(1)).replace(/_/g, ' ') : '—') + '</td></tr>'
           + '<tr><td class="l">Pronouns</td><td>' + _e(child.pronouns || '—') + '</td></tr></table>'
           + '<h2>Enrollment</h2><table>'
           + '<tr><td class="l">Family</td><td>' + _e(child.family ? child.family.family_name : '—') + '</td></tr>'
@@ -756,6 +869,17 @@
           + '<div class="foot">KiddieTrac &middot; Reflects records on file at generation time. Confirm current requirements with your licensing authority.</div>'
           + '</body></html>'); w.document.close();
       }));
+      // Destructive last (2026-11-09).
+      if (! _readOnly) {
+        headerActions.appendChild(btn('🗄️ Archive', 'background:#FFFFFF;color:#B91C1C;border:1px solid #FCA5A5!important;', function () {
+          showArchiveConfirm(child, function () {
+            /* In the popup there is no list to navigate back TO - the list is still
+             behind it. Close and let the caller refresh in place. */
+          if (opts && typeof opts.onDone === 'function') { opts.onDone(); }
+          else { window.location.hash = backHash(params); }
+          });
+        }));
+      }
       header.appendChild(headerActions);
       wrap.appendChild(header);
 
@@ -763,12 +887,13 @@
          the name, above the tabs. Appended to the container earlier, it rendered below
          everything: a notice about the mode you are in, underneath the content it
          governs. */
+      var editNote = null;
       if (editMode) {
-        wrap.appendChild(Dom.el('div', {
+        wrap.appendChild(editNote = Dom.el('div', {
           style: 'background:#FFFBEB;border:1px solid #FDE68A;border-radius:10px;'
                + 'padding:9px 14px;margin:0 0 14px;font-size:13px;color:#92400E;'
                + 'display:flex;align-items:center;gap:8px;',
-        }, '✏️  Editing — changes on every tab are live. Press Done when you have finished.'));
+        }, '✏️  Editing — everything is open: Details, Allergies & health and every other tab. Each section saves with its own button; close the record when you are finished.'));
       }
 
       // Quick facts: one tile each, so the essentials read at a glance.
@@ -788,7 +913,7 @@
         fact('📅', 'Enrolled since', fmtDate(child.enrollment.start_date), '#F0FDF4');
         fact('💳', 'Monthly fee', child.enrollment.monthly_fee ? ('$' + child.enrollment.monthly_fee) : '—', '#FFFBEB');
       }
-      fact('🧒', 'Gender', child.gender ? child.gender.replace(/_/g, ' ') : '—');
+      fact('🧒', 'Gender', child.gender ? (child.gender.charAt(0).toUpperCase() + child.gender.slice(1)).replace(/_/g, ' ') : '—');
       fact('💬', 'Pronouns', child.pronouns || '—');
       wrap.appendChild(facts);
 
@@ -1018,7 +1143,12 @@
                       .then(function () { _loginToast('Login sent to ' + g.email, 'success'); });
                   }, b);
                 })]
-              : [_loginPill('✓ Signs in', '#047857', '#ECFDF5')]));
+              : [(function () {
+                  // "✓ Signs in" is wrong for a locked parent: kt-signin-locks.js swaps it for 🚷 (2026-11-10).
+                  var _p = _loginPill('✓ Signs in', '#047857', '#ECFDF5');
+                  if ((g.user_id || g.id) && window.KT && KT.signinLock) KT.signinLock.markLocked(_p, g.user_id || g.id);   // here g.id IS the user id (ChildController selects users.id)
+                  return _p;
+                })()]));
             sec.appendChild(gr);
           });
         }
@@ -1058,7 +1188,7 @@
             };
             if (email) {
               _loginConfirm((approving ? 'Approve' : 'Set up') + ' a pick-up login for ' + who + '?',
-                'They sign in with ' + email + ' and can check the children in and out with their own QR code, and see the parent view. They never see billing.',
+                'They sign in with ' + email + ' and can check the children in and out with One-Tap from their own phone, and see the parent view. They never see billing.',
                 approving ? 'Approve' : 'Set up login', function () { return go(email); }, b);
               return;
             }
@@ -1075,7 +1205,7 @@
           if (e.user_id) {
             btns.push(_loginPill('🚸 Has login', '#047857', '#ECFDF5'));
             btns.push(_loginBtn('Remove', 'ghost', function (b) {
-              _loginConfirm('Remove ' + who + '\'s pick-up login?', 'They will no longer be able to sign in for this family or use their QR code to pick up. Their contact details stay on file.', 'Remove login', function () {
+              _loginConfirm('Remove ' + who + '\'s pick-up login?', 'They will no longer be able to sign in for this family or use One-Tap to pick up. Their contact details stay on file.', 'Remove login', function () {
                 return Api.delete('/director/emergency-contacts/' + e.id + '/pickup-login').then(function () { _loginToast('Login removed', 'success'); });
               }, b);
             }));
@@ -1096,7 +1226,7 @@
       })();
 
       // v22p88: tabbed sections — Overview / Enrollment / Daily reports / Live feed / Attachments
-      /* Immunisation sits between the health-shaped tabs and the paperwork, because that
+      /* Immunization sits between the health-shaped tabs and the paperwork, because that
          is what it is: a compliance question with a document behind it. It had no home
          here at all — the records were filed on the child (scope_type 'child') and only
          ever readable from the immunization SECTION or buried in Attachments among
@@ -1107,16 +1237,28 @@
          should be added when your editing the child record as a subtab"). */
       // (Allergies & health is a subtab of the Edit popup, not of the record — 2026-10-09.)
       // A note alert links here with &tab=notes (2026-10-09).
-      var activeTab = (params && params.tab === 'notes') ? 'notes' : 'overview';
+      var canEditHere = editMode && !_readOnly;
+      if (canEditHere) {
+        TABS = [['details', '✏️ Details'], ['allergies', '⚠️ Allergies & health']].concat(TABS);
+      }
+      var activeTab = (canEditHere && pendingTab) ? pendingTab
+        : ((params && params.tab === 'notes') ? 'notes' : 'overview');
+      pendingTab = null;
+      // Repaint this record, staying in edit mode on the tab that was open.
+      var keepTab = function () { pendingTab = activeTab; renderChildDetail(container, opts); };
+      // Built once per paint and kept across tab switches, so typed values survive a look elsewhere.
+      var detailsHost = null;
       /* ALL THE TABS IN VIEW (2026-10-09: "the subtabs are scrollable vs all there
          visually"): they wrap onto a second line instead of scrolling sideways. */
-      var tabbar = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:2px 4px;border-bottom:1px solid #E5E7EB;margin:4px 0 18px;' });
+      // Top/bottom only: a side margin here beat the popup's own side inset (2026-10-26, "not fully aligned").
+      var _phoneTabs = !!(window.matchMedia && window.matchMedia('(max-width:600px)').matches);
+      var tabbar = Dom.el('div', { style: 'display:flex;flex-wrap:' + (_phoneTabs ? 'nowrap;overflow-x:auto' : 'wrap') + ';gap:2px 4px;border-bottom:1px solid #E5E7EB;margin-top:4px;margin-bottom:18px;' });
       var tabContent = Dom.el('div', {});
       function paintTabs() {
         Dom.clear(tabbar);
         TABS.forEach(function (t) {
           var on = activeTab === t[0];
-          var b = Dom.el('button', { type: 'button', 'data-kt-inpage': '1', style: 'padding:9px 13px;border:none;background:transparent;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;' + (on ? 'color:#1F6080;border-bottom:2px solid #1F6080;margin-bottom:-1px;' : 'color:#6B7280;') }, t[1]);
+          var b = Dom.el('button', { type: 'button', 'data-kt-inpage': '1', 'data-tab': t[0], style: 'padding:9px 13px;border:none;background:transparent;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;' + (on ? 'color:#1F6080;border-bottom:2px solid #1F6080;margin-bottom:-1px;' : 'color:#6B7280;') }, t[1]);
           b.addEventListener('click', function () { activeTab = t[0]; paintTabs(); paintTab(); });
           tabbar.appendChild(b);
         });
@@ -1134,9 +1276,16 @@
       function gatherLoose() {
         try {
           if (!looseBox) { looseBox = Dom.el('div', {}); wrap.appendChild(looseBox); }
-          var fixed = [header, tabbar, tabContent, looseBox];
+          /* THE TAB BAR NEVER GOES IN THE BOX (2026-11-09, Anthony's phone: "when navigating from subtabs,
+             for example going to enrollment, the subtab navigating bar disappears"). On a phone the bar
+             scrolls sideways, so kt-tab-band puts it inside a wrapper with its ‹ › arrows. The wrapper,
+             not the bar, is then the child of wrap; it matched nothing in this list, was swept into the
+             Overview box on the first tab change and hidden with it. A child that HOLDS a fixed part is
+             fixed too. */
+          var fixed = [header, editNote, tabbar, tabContent, looseBox];
           [].slice.call(wrap.children).forEach(function (el) {
-            if (fixed.indexOf(el) === -1) looseBox.appendChild(el);   // appendChild MOVES
+            var keep = fixed.some(function (f) { return f && (el === f || el.contains(f)); });
+            if (!keep) looseBox.appendChild(el);   // appendChild MOVES
           });
         } catch (e) {}
       }
@@ -1145,7 +1294,21 @@
         gatherLoose();
         if (looseBox) looseBox.style.display = (activeTab === 'overview') ? '' : 'none';
         Dom.clear(tabContent);
-        if (activeTab === 'allergies') buildAllergySection(tabContent);
+        if (activeTab === 'details') {
+          if (!detailsHost) {
+            detailsHost = Dom.el('div', {});
+            showEditModal(child, keepTab, detailsHost);
+          }
+          tabContent.appendChild(detailsHost);
+        }
+        else if (activeTab === 'allergies' && canEditHere && window.KT && KT.healthEditor) {
+          KT.healthEditor.open(child, {
+            into: tabContent,
+            onClose: function () { activeTab = 'overview'; paintTabs(); paintTab(); },
+            onSaved: keepTab,
+          });
+        }
+        else if (activeTab === 'allergies') buildAllergySection(tabContent);
         else if (activeTab === 'incidents') appendIncidentsSection(tabContent, child.id);
         else if (activeTab === 'enrollment') renderEnrollmentTab(tabContent, child);
         else if (activeTab === 'daily') renderDailyTab(tabContent, child);
@@ -1192,7 +1355,7 @@
   function tcard(tone) {
     var t = CARD_TONES[tone] || CARD_TONES.neutral;
     return 'background:' + t[0] + ';border-radius:14px;padding:20px 24px;margin-bottom:16px;'
-      + 'border:1px solid #EDF2F7;border-left:4px solid ' + t[1] + ';'
+      + 'border:1px solid #EDF2F7;--kt-edge:' + t[1] + ';'
       + 'box-shadow:0 1px 3px rgba(15,23,42,.05);';
   }
   function loadingBox(msg) { return Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, msg || 'Loading…'); }
@@ -1354,7 +1517,21 @@
       + (weekReadOnly
           ? '<div style="margin-top:10px;font-size:12.5px;color:#64748B;">'
             + 'Press <strong>Edit</strong> above to change who has this child on each day.</div>'
-          : '<div style="display:flex;align-items:center;gap:10px;margin-top:12px;">'
+          /* TELL THE FAMILY AND STAFF (2026-10-20). Anthony: a changed week is emailed to the
+             parents and to admin/director staff, with a note from whoever made it, and the
+             provider introduced; it may be temporary or permanent. Sent only if a day really
+             changes (the server compares the week before and after both saves). */
+          : '<div id="wk-notice" style="margin-top:12px;padding:12px;border:1px solid #E2E8F0;border-radius:12px;background:#F8FAFC;">'
+            + '<div style="font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">Tell the family &amp; staff</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:13px;color:#0F172A;">'
+              + '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="wk-type" value="permanent" checked> Permanent</label>'
+              + '<label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="radio" name="wk-type" value="temporary"> Temporary</label>'
+              + '<label id="wk-until-wrap" style="display:none;align-items:center;gap:6px;">until <input type="date" id="wk-until" style="padding:5px 8px;font-size:13px;"></label>'
+            + '</div>'
+            + '<textarea id="wk-note" maxlength="1000" rows="3" placeholder="A note for the family and staff (optional): why it is changing, anything they should know" style="width:100%;margin-top:8px;padding:8px 10px;font-size:13px;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:8px;resize:vertical;"></textarea>'
+            + '<label style="display:flex;gap:6px;align-items:flex-start;margin-top:6px;font-size:12.5px;color:#334155;cursor:pointer;"><input type="checkbox" id="wk-notify" checked style="margin-top:2px;"> <span>Email the parents, admins, directors and the providers involved, with an introduction to any new provider. Only sent if a day actually changes.</span></label>'
+          + '</div>'
+          + '<div style="display:flex;align-items:center;gap:10px;margin-top:12px;">'
             + '<button id="wk-save" class="kt-btn kt-btn-primary kt-btn-sm">Save schedule</button>'
             + '<span id="wk-msg" style="font-size:12.5px;color:#64748B;"></span>'
           + '</div>');
@@ -1380,9 +1557,15 @@
     });
 
     var msg = host.querySelector('#wk-msg');
+    host.querySelectorAll('input[name="wk-type"]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        var temp = (host.querySelector('input[name="wk-type"]:checked') || {}).value === 'temporary';
+        host.querySelector('#wk-until-wrap').style.display = temp ? 'flex' : 'none';
+      });
+    });
     host.querySelector('#wk-save').addEventListener('click', async function () {
       var btn = this;
-      var weekPayload = {}, patPayload = { effective_from: (new Date()).toISOString().slice(0, 10) };
+      var weekPayload = {}, patPayload = { effective_from: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) };
       host.querySelectorAll('select[data-wk-prov]').forEach(function (sel) {
         weekPayload[sel.getAttribute('data-wk-prov')] = sel.value ? parseInt(sel.value, 10) : null;
       });
@@ -1405,9 +1588,24 @@
           renderWeekTable(host, childId);
           return;
         }
+        /* Both saved: now tell the family and staff. A failure here is reported, never
+           allowed to read as if the schedule itself had not saved. */
+        var told = '';
+        try {
+          var tp = (host.querySelector('input[name="wk-type"]:checked') || {}).value || 'permanent';
+          var nr = await Api.post('/admin/children/' + childId + '/schedule-change', {
+            note: (host.querySelector('#wk-note').value || '').trim() || null,
+            change_type: tp,
+            until: tp === 'temporary' ? (host.querySelector('#wk-until').value || null) : null,
+            notify: !!host.querySelector('#wk-notify').checked
+          });
+          told = (nr && nr.message) ? ' ' + nr.message : '';
+        } catch (e3) {
+          told = ' Saved, but the family and staff could not be emailed: ' + ((e3 && e3.message) || 'error') + '.';
+        }
         msg.style.color = '#166534';
-        msg.textContent = r.summary || 'Saved';
-        if (Dom.toast) { Dom.toast(r.message || 'Weekly schedule saved', 'success'); }
+        msg.textContent = (r.summary || 'Saved') + told;
+        if (Dom.toast) { Dom.toast((r.message || 'Weekly schedule saved') + told, 'success'); }
         if (r.over_capacity && r.over_capacity.length && Dom.toast) {
           Dom.toast('Over capacity — ' + r.over_capacity.join('; '), 'warning');
         }
@@ -1448,7 +1646,7 @@
       var open = !e.end_date;
       var row = Dom.el('div', {
         style: 'padding:8px 0;border-bottom:1px solid #F3F4F6;'
-             + (open ? 'border-left:3px solid #1F6080;padding-left:9px;margin-left:-9px;' : ''),
+             + (open ? 'background:#EEF4FB;border-radius:8px;padding-left:9px;margin-left:-9px;' : ''),
       });
       row.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:' + (open ? '700' : '600') + ';color:#0F172A;' },
         (e.room_name || 'Room —') + (open ? '  ·  current' : '')));
@@ -1488,7 +1686,7 @@
     // A date picker, because "what happened on the 3rd" is as common a question as
     // "what happened today" — and until now the tab could only answer the second,
     // and only as an undated 21-day scroll.
-    var state = { mode: 'day', date: (new Date()).toISOString().slice(0, 10) };
+    var state = { mode: 'day', date: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) };
 
     var bar = Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;' });
     var prev = Dom.el('button', { style: 'padding:8px 12px;border:1px solid #E2E8F0;background:#fff;border-radius:9px;cursor:pointer;font-weight:700;' }, '‹');
@@ -1511,12 +1709,12 @@
     prev.addEventListener('click', function () { shift(-1); });
     next.addEventListener('click', function () { shift(1); });
     dateIn.addEventListener('change', function () { state.date = dateIn.value; state.mode = 'day'; load(); });
-    todayBtn.addEventListener('click', function () { state.date = (new Date()).toISOString().slice(0, 10); dateIn.value = state.date; state.mode = 'day'; load(); });
+    todayBtn.addEventListener('click', function () { state.date = ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)); dateIn.value = state.date; state.mode = 'day'; load(); });
     recentBtn.addEventListener('click', function () { state.mode = 'recent'; load(); });
 
     var ICON = { meal: '🍽️', snack: '🍎', nap: '😴', nap_start: '😴', nap_end: '🌅', diaper: '🧷',
       bathroom: '🚽', activity: '✨', mood: '🙂', note: '📝', bottle: '🍼', sunscreen: '☀️', outdoor: '🌳',
-      check_in: '✅', check_out: '👋' };
+      medication: '💊', medicine: '💊', clothing: '👕', check_in: '✅', check_out: '👋' };
 
     function load() {
       Dom.clear(host);
@@ -1936,31 +2134,43 @@
       + (editMode ? '' : 'display:none;') });
     var titleIn = Dom.el('input', { type: 'text', placeholder: 'Title (optional)', style: 'flex:1;min-width:140px;padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;' });
     var catSel = Dom.el('select', { style: 'padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;background:#fff;' });
-    [['file', 'File'], ['medical', 'Medical'], ['immunisation', 'Immunisation'],
+    [['file', 'File'], ['medical', 'Medical'], ['immunisation', 'Immunization'],
      ['consent', 'Consent'], ['id', 'ID document'], ['court', 'Court order'],
      ['other', 'Other']].forEach(function (o) { catSel.appendChild(Dom.el('option', { value: o[0] }, o[1])); });
     var expIn = Dom.el('input', { type: 'date', title: 'Expires (optional)', style: 'padding:6px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;' });
-    var fileIn = Dom.el('input', { type: 'file', accept: '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx', style: 'display:none;' });
-    var upBtn = Dom.el('button', { type: 'button', style: 'padding:7px 14px;background:#1F6080;color:#fff;border:0;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;' }, '\uff0b Attach file');
+    var fileIn = Dom.el('input', { type: 'file', multiple: 'multiple', accept: '.pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,.xls,.xlsx', style: 'display:none;' });
+    var upBtn = Dom.el('button', { type: 'button', style: 'padding:7px 14px;background:#1F6080;color:#fff;border:0;border-radius:6px;font-size:12.5px;font-weight:700;cursor:pointer;' }, '\uff0b Attach files');
     var upMsg = Dom.el('span', { style: 'font-size:12px;color:#6B7280;' });
     upBtn.addEventListener('click', function () { fileIn.click(); });
+    /* SEVERAL AT ONCE (2026-11-13): every picked file is filed as its own document with the same title, category
+       and expiry, one after another; a file that fails is named and the rest still go. */
     fileIn.addEventListener('change', async function () {
-      var f = fileIn.files[0];
-      if (!f) return;
-      if (f.size > 10 * 1024 * 1024) { upMsg.style.color = '#B91C1C'; upMsg.textContent = 'Max 10 MB'; return; }
-      upBtn.disabled = true; upMsg.style.color = '#6B7280'; upMsg.textContent = 'Uploading\u2026';
+      var files = Array.prototype.slice.call(fileIn.files || []);
+      if (!files.length) return;
+      var big = files.filter(function (f) { return f.size > 10 * 1024 * 1024; })[0];
+      if (big) { upMsg.style.color = '#B91C1C'; upMsg.textContent = big.name + ' is over 10 MB'; fileIn.value = ''; return; }
+      upBtn.disabled = true; upMsg.style.color = '#6B7280';
+      var title = titleIn.value.trim(), failed = [], lastErr = '';
       try {
-        var fd = new FormData();
-        fd.append('file', f);
-        if (titleIn.value.trim()) fd.append('title', titleIn.value.trim());
-        fd.append('category', catSel.value);
-        if (expIn.value) fd.append('expires_at', expIn.value);
-        await Api.postForm('/director/children/' + child.id + '/documents', fd);
-        titleIn.value = ''; expIn.value = '';
-        upMsg.style.color = '#16A34A'; upMsg.textContent = '\u2713 Attached';
+        for (var i = 0; i < files.length; i++) {
+          upMsg.textContent = files.length > 1 ? 'Uploading ' + (i + 1) + ' of ' + files.length + '\u2026' : 'Uploading\u2026';
+          try {
+            var fd = new FormData();
+            fd.append('file', files[i]);
+            if (title) fd.append('title', files.length > 1 ? title + ' (' + (i + 1) + ' of ' + files.length + ')' : title);
+            fd.append('category', catSel.value);
+            if (expIn.value) fd.append('expires_at', expIn.value);
+            await Api.postForm('/director/children/' + child.id + '/documents', fd);
+          } catch (e) { failed.push(files[i].name); lastErr = e.message || ''; }
+        }
+        if (failed.length < files.length) { titleIn.value = ''; expIn.value = ''; }
+        if (!failed.length) {
+          upMsg.style.color = '#16A34A'; upMsg.textContent = '\u2713 ' + (files.length > 1 ? files.length + ' files attached' : 'Attached');
+        } else {
+          upMsg.style.color = '#B91C1C';
+          upMsg.textContent = (files.length > 1 ? 'Not attached: ' + failed.join(', ') + (lastErr ? ' \u2014 ' + lastErr : '') : (lastErr || 'Upload failed'));
+        }
         load();
-      } catch (e) {
-        upMsg.style.color = '#B91C1C'; upMsg.textContent = e.message || 'Upload failed';
       } finally {
         upBtn.disabled = false; fileIn.value = '';
       }
@@ -1999,12 +2209,14 @@
        content, so it grew and shrank as you moved between tabs; it now holds a fixed
        height and the content scrolls inside it. The title says what this is ("At a
        glance") — the child's name is the first line of the record itself. */
-    var host = Dom.el('div', { style: 'height:min(76vh, 860px);overflow-y:auto;overflow-x:hidden;' });
+    var host = Dom.el('div', { class: 'kt-cd-host', style: 'height:min(76vh, 860px);overflow-y:auto;overflow-x:hidden;' });
     Shell.Modal.open({
       title: opts.archived ? 'At a glance (archived)' : 'At a glance',
       body: host,
       large: true,
     });
+    ensureChildModalStyles();
+    try { var _m = document.querySelector('#modalRoot .modal'); if (_m) { _m.classList.add('kt-child-modal'); } } catch (e) {}
     // Opening a record starts read-only; Edit (below) is the only way in to edit mode.
     if (!opts.edit) { editMode = false; editModeFor = String(childId); }
     /* Opened by a list's Edit (2026-10-09): start in edit mode, details form up — the
@@ -2026,6 +2238,32 @@
         if (typeof opts.onChanged === 'function') { opts.onChanged(); }
       },
     });
+  }
+
+  /* THE RECORD POPUP, EDGE TO EDGE UNDER A NAVY BAR (2026-10-20). Anthony: "the at a glance
+     should be a dark navy border or make this a gradient ... and the popup should be edge to
+     edge with the content as right now there is a white space". Two paddings stacked (the
+     popup body's and the record's own 24px) left a white gutter all round. Scoped to this
+     popup by .kt-child-modal; the shared popup is unchanged everywhere else. */
+  function ensureChildModalStyles() {
+    if (document.getElementById('kt-child-modal-css')) { return; }
+    var css = ''
+      + '.modal.kt-child-modal{overflow:hidden;border:1px solid #1B3A63;}'
+      + '.modal.kt-child-modal .modal-header{background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%) !important;border-bottom:0 !important;padding:13px 18px !important;}'
+      + '.modal.kt-child-modal .modal-header h2{color:#FFFFFF !important;font-size:16px !important;font-weight:800 !important;letter-spacing:.2px;}'
+      + '.modal.kt-child-modal .modal-close{color:#FFFFFF !important;background:rgba(255,255,255,.12) !important;border-radius:8px;opacity:1 !important;}'
+      + '.modal.kt-child-modal .modal-close:hover{background:rgba(255,255,255,.24) !important;}'
+      + '.modal.kt-child-modal.kt-editing .modal-header{background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%) !important;box-shadow:inset 0 -3px 0 #7FD3CC;}'
+      + '.modal.kt-child-modal .modal-body{padding:0 !important;}'
+      + '.modal.kt-child-modal .kt-cd-wrap{padding:0 0 18px !important;max-width:none !important;}'
+      + '.modal.kt-child-modal .kt-cd-wrap>*{margin-left:18px;margin-right:18px;}'
+      + '.modal.kt-child-modal .kt-cd-wrap>.kt-cd-head{margin:0 0 14px !important;border-radius:0 !important;border-width:0 0 1px 0 !important;box-shadow:none !important;padding:18px 20px !important;}'
+      + '@media (max-width:600px){.modal.kt-child-modal .kt-cd-wrap>*{margin-left:12px;margin-right:12px;}'
+      + '.modal.kt-child-modal .kt-cd-wrap>.kt-cd-head{padding:14px !important;}}';
+    var st = document.createElement('style');
+    st.id = 'kt-child-modal-css';
+    st.textContent = css;
+    document.head.appendChild(st);
   }
 
   // Expose for tests / debug.

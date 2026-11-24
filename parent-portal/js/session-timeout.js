@@ -156,7 +156,7 @@
 
   // Activity tracking ---------------------------------------------------------
 
-  var lastMouseMove = 0;
+  var lastMouseMove = 0, lastX = null, lastY = null;
 
   function touchActivity() {
     var now = Date.now();
@@ -165,8 +165,21 @@
     hideWarningModal();
   }
 
+  /* ONLY A PERSON COUNTS (2026-11-07, same report). Activity used to include `focus` and `scroll`, which code fires on
+     its own: a popup focusing its first button, a list scrolling itself to the newest row, a screen restoring its
+     place. A popup opening over an idle screen could therefore restart the idle clock with nobody there. Now:
+       - only events the browser marks as real input (isTrusted), so code calling .click() is not a person;
+       - no focus / scroll: a person who scrolls also touches, wheels or presses a key, and those count;
+       - a mousemove only when the pointer really moved: Chrome sends one when something new appears under a
+         mouse that has not moved (a popup opening over a parked cursor). */
   function onActivity(e) {
+    if (locked) return;                      // touching the lock screen is not activity
+    if (warningEl) return;                   // the warning needs an explicit choice (its buttons call touchActivity)
+    if (e && e.isTrusted === false) return;
     if (e && e.type === 'mousemove') {
+      var x = e.screenX, y = e.screenY;
+      if (x === lastX && y === lastY) return;
+      lastX = x; lastY = y;
       var now = Date.now();
       if (now - lastMouseMove < DEFAULTS.mouseMoveThrottleMs) return;
       lastMouseMove = now;
@@ -179,35 +192,100 @@
   var warningEl = null;
   var countdownTimer = null;
 
+  /* STAY SIGNED IN, IN THE MIDDLE (2026-10-31, Anthony: "the stay signed in prompt on mobile should be in the middle of
+     the screen with a dimmed background"). On a phone kt-modal-guard hung it from the top (top 12px, the house rule for
+     tall popups); it now opts out with data-kt-centre-always and kt-dialog-fit centres it over what you can see (above
+     the bottom bar and the keyboard). The ONE popup header (navy-to-teal band + teal line; it is not an alarm, so not
+     red), a big countdown, Stay signed in / Sign out. A modal: focus stays inside, Esc and taps on the dim do nothing -
+     an explicit choice is required. Above every popup (z 2147482000), below the urgent/emergency takeover
+     (2147483000) and the forced app update (2147483646). */
+  var HEAD_BG = 'linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%)';
+  var lastFocus = null;
+  /* ABOVE THE FORCED UPDATE (2026-11-05, Anthony: yes to "make the countdown show above the update screen"). The
+     "Update required" screen (kt-appupdate.js, #kt-update-required, z 2147483646) covered this warning, so someone left
+     on it was signed out with no countdown. While that screen is up the warning goes to the very top; otherwise it
+     stays below the emergency takeover. Re-checked every second, as the update screen can arrive mid-countdown. */
+  /* ON TOP OF EVERY POPUP (2026-11-07, Anthony: "when the new update to the portal pops up the timer for the idle
+     session does not work - full sweep with any pop ups to ensure idle works add guards"). The warning sat at
+     2147482000, and some 25 popups sit higher: clock-in, calls, the dial pad, the child card, the photo cropper and
+     zoom, form signing, face check, the forced update. Behind any of them the countdown ran unseen and the person was
+     signed out with no warning. It now takes the very top, except while the urgent / emergency takeover (#kt-urgent,
+     2147483000) is up: an emergency is read first, and the warning sits just under it. Re-checked every second. */
+  var Z_TOP = 2147483647, Z_UNDER_URGENT = 2147482999;
+  function placeWarning() {
+    if (!warningEl) return;
+    var urgent = document.getElementById('kt-urgent');
+    var z = String(urgent && urgent.isConnected && urgent.offsetWidth > 0 ? Z_UNDER_URGENT : Z_TOP);
+    if (warningEl.style.zIndex !== z) warningEl.style.zIndex = z;
+  }
+
   function showWarningModal(secondsRemaining) {
-    if (warningEl) { updateCountdown(secondsRemaining); return; }
+    if (warningEl) { placeWarning(); updateCountdown(secondsRemaining); return; }
+    lastFocus = document.activeElement;
     var overlay = document.createElement('div');
     overlay.id = 'kt-session-warning';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:inherit;';
+    overlay.setAttribute('role', 'alertdialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-labelledby', 'kt-session-title');
+    overlay.setAttribute('aria-describedby', 'kt-session-msg');
+    overlay.setAttribute('data-kt-centre-always', '1');
+    overlay.setAttribute('data-kt-no-close', '1');
+    overlay.setAttribute('data-kt-nomove', '1');   // a timed security prompt is not dragged or resized (kt-dialog-move)
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(8,17,33,.62);display:flex;align-items:center;justify-content:center;'
+      + 'z-index:2147482000;font-family:inherit;box-sizing:border-box;overscroll-behavior:contain;'
+      + 'padding:calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 16px) 16px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 16px);';
 
+    /* REDESIGN (2026-10-31, Anthony: "the count down timer before signout ... looks sloppy right now"). Was: an emoji
+       stopwatch, a bare 40px number over an all-caps caption, two lines of copy, and a primary button that a
+       white-label brand's colour rewrite (branding-loader rewrites inline #0E7C90) turned mustard with dark text. Now:
+       a clean SVG clock in the house header, a ring that empties as the time runs out (amber in the last 30s - an
+       alarm red is for emergencies only), one line of copy, and buttons styled from a stylesheet so no brand rewrite
+       can muddy them. Phone: stacked, Stay first. Wider: side by side, Stay on the right. */
+    ensureWarningStyles();
+    var R = 37, CIRC = 2 * Math.PI * R;
     var box = document.createElement('div');
-    box.style.cssText = 'background:white;padding:24px 28px;border-radius:14px;max-width:400px;width:90%;box-shadow:0 12px 32px rgba(0,0,0,.25);text-align:center;';
+    box.className = 'kt-idle-card';
     box.innerHTML =
-      '<div style="font-size:38px;margin-bottom:8px;">⏱️</div>' +
-      '<div style="font-size:18px;font-weight:700;margin-bottom:6px;">You will be signed out soon</div>' +
-      '<div id="kt-session-msg" style="font-size:14px;color:#6B7280;margin-bottom:18px;line-height:1.4;">For security, your session ends after a period of inactivity. Pick an option below.</div>' +
-      '<div style="display:flex;gap:10px;justify-content:center;">' +
-      '  <button id="kt-session-extend" style="background:#1F6080;color:white;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Stay signed in</button>' +
-      '  <button id="kt-session-out" style="background:white;color:#6B7280;border:1px solid #D1D5DB;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;">Sign out now</button>' +
+      '<div class="kt-dlg-head kt-idle-head" data-kt-own-head="1" style="background:' + HEAD_BG + ';">' +
+      '  <span class="kt-idle-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5M12 2.5V5"/></svg></span>' +
+      '  <div id="kt-session-title" class="kt-idle-title">Are you still there?</div>' +
+      '</div>' +
+      '<div class="kt-idle-body">' +
+      '  <div class="kt-idle-ring" aria-hidden="true">' +
+      '    <svg viewBox="0 0 88 88" width="88" height="88"><circle cx="44" cy="44" r="' + R + '" class="kt-idle-track"/>' +
+      '      <circle cx="44" cy="44" r="' + R + '" class="kt-idle-prog" id="kt-session-prog" stroke-dasharray="' + CIRC.toFixed(2) + '" stroke-dashoffset="0" transform="rotate(-90 44 44)"/></svg>' +
+      '    <div class="kt-idle-time"><span id="kt-session-count"></span><small>remaining</small></div>' +
+      '  </div>' +
+      '  <div id="kt-session-msg" class="kt-idle-msg"><b>You’ve been inactive for a while.</b>For your security, you’ll be signed out automatically when the timer runs out.</div>' +
+      '  <div id="kt-session-sr" class="kt-idle-sr" aria-live="polite"></div>' +
+      '  <div class="kt-idle-actions">' +
+      '    <button id="kt-session-out" type="button" class="kt-idle-btn kt-idle-ghost">Sign out</button>' +
+      '    <button id="kt-session-extend" type="button" class="kt-idle-btn kt-idle-primary">Stay signed in</button>' +
+      '  </div>' +
       '</div>';
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     warningEl = overlay;
+    placeWarning();
 
-    document.getElementById('kt-session-extend').addEventListener('click', function () {
-      touchActivity();
+    var stay = document.getElementById('kt-session-extend');
+    var out = document.getElementById('kt-session-out');
+    stay.addEventListener('click', function () { touchActivity(); });
+    out.addEventListener('click', function () { forceLogout('signed out'); });
+    // Taps on the dim are ignored on purpose; keys stay inside the card (Tab cycles, Esc does nothing).
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return; }
+      if (e.key !== 'Tab') return;
+      var first = out, last = stay;   // DOM order: Sign out, then Stay signed in
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      else if (document.activeElement !== first && document.activeElement !== last) { e.preventDefault(); first.focus(); }
     });
-    document.getElementById('kt-session-out').addEventListener('click', function () {
-      forceLogout('signed out');
-    });
+    try { stay.focus({ preventScroll: true }); } catch (e) { try { stay.focus(); } catch (e2) {} }
 
     updateCountdown(secondsRemaining);
     countdownTimer = setInterval(function () {
+      placeWarning();
       var msLeft = lastActivity() + getConfig().idleMs - Date.now();
       if (msLeft <= 0) {
         forceLogout('idle');
@@ -218,18 +296,78 @@
   }
 
   function updateCountdown(secondsRemaining) {
-    var msg = document.getElementById('kt-session-msg');
-    if (!msg) return;
-    var m = Math.floor(secondsRemaining / 60);
-    var s = secondsRemaining % 60;
-    msg.textContent = 'For security, your session ends after a period of inactivity. ' +
-      (m > 0 ? m + ' min ' : '') + s + ' sec remaining.';
+    var c = document.getElementById('kt-session-count');
+    if (!c) return;
+    var sec = Math.max(0, secondsRemaining | 0);
+    var m = Math.floor(sec / 60), s = sec % 60;
+    c.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    // The ring: the share of the warning window still left (a longer preview just shows it full).
+    var prog = document.getElementById('kt-session-prog');
+    if (prog) {
+      var total = Math.max(1, Math.round(getConfig().warnMs / 1000));
+      var circ = parseFloat(prog.getAttribute('stroke-dasharray')) || 0;
+      prog.setAttribute('stroke-dashoffset', (circ * (1 - Math.min(1, sec / total))).toFixed(2));
+    }
+    if (warningEl) warningEl.classList.toggle('kt-idle-low', sec <= 30);
+    // Screen readers hear it on the minute and in the last 10s, not every second.
+    var sr = document.getElementById('kt-session-sr');
+    if (sr && (s === 0 || sec <= 10 || !sr.textContent)) {
+      sr.textContent = sec > 59 ? (m + ' minute' + (m === 1 ? '' : 's') + ' until you are signed out') : (sec + ' seconds until you are signed out');
+    }
+  }
+
+  function ensureWarningStyles() {
+    if (document.getElementById('kt-idle-style')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-idle-style';
+    st.textContent =
+      /* COMPACT AND SEALED (2026-11-02, Anthony's phone screenshot: "look at the buttons ... the screen is also too big
+         and the background is not dimmed"). The buttons were the toggle-switch rule (button.kt-sw-btn, a 44x26 pill)
+         landing on this popup's old class names - so it has its own kt-idle-* names now, and its button box is set with
+         !important because house button rules elsewhere use it too. A 320px card, an 88px ring, both buttons on one row,
+         and a darker dim with a soft blur pinned on the overlay itself. */
+      '#kt-session-warning{background:rgba(8,17,33,.62)!important;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:kt-idle-dim .2s ease both}' +
+      '@keyframes kt-idle-dim{from{opacity:0}to{opacity:1}}' +
+      '@keyframes kt-idle-pop{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}' +
+      '#kt-session-warning .kt-idle-card{background:#fff;border-radius:16px;max-width:320px;width:100%;max-height:100%;overflow:hidden auto;' +
+        'box-shadow:0 24px 60px -12px rgba(8,17,33,.5),0 0 0 1px rgba(8,17,33,.06);animation:kt-idle-pop .24s cubic-bezier(.2,.8,.2,1) both;text-align:center}' +
+      '#kt-session-warning .kt-idle-head{color:#fff;padding:11px 14px;box-shadow:inset 0 -3px 0 #7FD3CC;display:flex;align-items:center;gap:9px;text-align:left}' +
+      '#kt-session-warning .kt-idle-ico{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.16);display:inline-flex;align-items:center;justify-content:center;color:#fff}' +
+      '#kt-session-warning .kt-idle-ico svg{width:15px;height:15px}' +
+      '#kt-session-warning .kt-idle-title{font-size:15px;font-weight:800;letter-spacing:.1px;color:#fff;line-height:1.2}' +
+      '#kt-session-warning .kt-idle-body{padding:16px 16px 14px}' +
+      '#kt-session-warning .kt-idle-ring{position:relative;width:88px;height:88px;margin:0 auto 12px}' +
+      '#kt-session-warning .kt-idle-ring svg{display:block}' +
+      '#kt-session-warning .kt-idle-track{fill:none;stroke:#E8EEF4;stroke-width:6}' +
+      '#kt-session-warning .kt-idle-prog{fill:none;stroke:#1593A6;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1s linear,stroke .3s ease}' +
+      '#kt-session-warning.kt-idle-low .kt-idle-prog{stroke:#D97706}' +
+      '#kt-session-warning .kt-idle-time{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}' +
+      '#kt-session-warning #kt-session-count{font-size:21px;font-weight:800;color:#0F2340;font-variant-numeric:tabular-nums;letter-spacing:-.3px;line-height:1}' +
+      '#kt-session-warning.kt-idle-low #kt-session-count{color:#B45309}' +
+      '#kt-session-warning .kt-idle-time small{margin-top:3px;font-size:10px;font-weight:600;color:#7A8A9E;letter-spacing:.2px}' +
+      '#kt-session-warning .kt-idle-msg{font-size:13px;color:#5B6B80;line-height:1.45;margin:0 auto 14px;max-width:270px}' +
+      '#kt-session-warning .kt-idle-msg b{display:block;font-size:14px;font-weight:700;color:#0F2340;margin-bottom:2px}' +
+      '#kt-session-warning .kt-idle-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}' +
+      '#kt-session-warning .kt-idle-actions{display:flex;flex-direction:row;gap:8px}' +
+      '#kt-session-warning button.kt-idle-btn{flex:1 1 0!important;width:auto!important;min-width:0!important;max-width:none!important;height:auto!important;max-height:none!important;' +
+        'min-height:40px!important;padding:0 12px!important;margin:0!important;border-radius:10px!important;font:inherit;font-size:14px!important;font-weight:700!important;' +
+        'line-height:1.2!important;white-space:nowrap!important;overflow-wrap:normal!important;word-break:normal!important;cursor:pointer;outline:none;' +
+        'transition:background-color .15s ease,box-shadow .15s ease;-webkit-tap-highlight-color:transparent;display:inline-flex!important;align-items:center;justify-content:center}' +
+      '#kt-session-warning button.kt-idle-primary{background:#0D6E80!important;color:#fff!important;border:0!important;box-shadow:0 6px 16px -8px rgba(13,110,128,.8)!important}' +
+      '#kt-session-warning button.kt-idle-primary:hover{background:#0B5F6E!important}' +
+      '#kt-session-warning button.kt-idle-ghost{background:#fff!important;color:#475569!important;border:1px solid #D5DDE6!important;font-weight:600!important;box-shadow:none!important}' +
+      '#kt-session-warning button.kt-idle-ghost:hover{background:#F5F7FA!important}' +
+      '#kt-session-warning button.kt-idle-btn:focus-visible{box-shadow:0 0 0 3px rgba(21,147,166,.35)!important}' +
+      '@media (prefers-reduced-motion:reduce){#kt-session-warning,#kt-session-warning .kt-idle-card{animation:none}#kt-session-warning .kt-idle-prog{transition:none}}';
+    (document.head || document.documentElement).appendChild(st);
   }
 
   function hideWarningModal() {
     if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
     if (warningEl && warningEl.parentNode) warningEl.parentNode.removeChild(warningEl);
     warningEl = null;
+    try { if (lastFocus && lastFocus.focus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true }); } catch (e) {}
+    lastFocus = null;
   }
 
   // Lifecycle -----------------------------------------------------------------
@@ -276,7 +414,83 @@
     } catch (e) {}
   }
 
+  /* LOCK, DON'T SIGN OUT (Anthony, 2026-10-23: "when I launch the app again, it shows
+     signing out and then brings me to the sign on page ... having me to wait").
+
+     Coming back to the app after the idle limit used to: fade to "Signing out…", wipe the
+     session, load the sign-in page, and only THEN offer the fingerprint, which reloaded
+     the portal again. His phone's own telemetry showed exactly that path. Where this
+     device has a fingerprint/face or PIN unlock set up, the lock now goes up right here,
+     over the screen they were on, and unlocking simply carries on - no sign-out, no page
+     loads. Nobody gets past it without the unlock, which is what the timeout is for.
+     "Use password instead" on the lock still signs out properly. Without an unlock the
+     session ends as before, but straight to the sign-in page (no "Signing out…" stop). */
+  var locked = false;
+  function onPhone() {
+    try {
+      var C = window.Capacitor;
+      if (C && ((typeof C.isNativePlatform === 'function' && C.isNativePlatform()) || C.isNative)) { return true; }
+      return !!(window.__KT_NATIVE || window.__KT_PHONE);
+    } catch (e) { return false; }
+  }
+  function lockInPlace(reason) {
+    var p = window.location.pathname || '';
+    if (!/dashboard\.html$/i.test(p) || !onPhone()) { return false; }
+    var K = window.KT || {};
+    var bio = false, pin = false;
+    try { bio = !!(K.biometric && K.biometric.isEnabled() && K.biometric.hasVault()); } catch (e) {}
+    try { pin = !!(K.pin && K.pin.isSet()); } catch (e) {}
+    if (!bio && !pin) { return false; }
+    locked = true;
+    hideWarningModal();
+    try {
+      sessionStorage.setItem('kt_locked', '1');          // a reload while locked still shows the lock
+      sessionStorage.removeItem('kt_bio_session');
+      sessionStorage.removeItem('kt_pin_session');
+    } catch (e) {}
+    var opts = {
+      inPlace: true,
+      done: function () {
+        locked = false;
+        try {
+          sessionStorage.removeItem('kt_locked');
+          if (reason === 'absolute') { sessionStorage.setItem('kt_login_at', String(Date.now())); persist(P_LOGIN, Date.now()); }
+        } catch (e) {}
+        touchActivity();
+      },
+      out: function () {
+        locked = false;
+        try { sessionStorage.removeItem('kt_locked'); localStorage.setItem('kt_signed_out', '1'); } catch (e) {}
+        forceLogoutNow(reason, true);
+      },
+    };
+    try {
+      if (bio) { K.biometric.showLock(opts); } else { K.pin.showLock(true, opts); }
+    } catch (e) { locked = false; return false; }
+    return true;
+  }
+
   function forceLogout(reason) {
+    if (locked) return;
+    if (reason === 'idle' || reason === 'absolute') {
+      if (lockInPlace(reason)) return;
+      forceLogoutNow(reason, true);                       // no unlock here: straight to sign-in
+      return;
+    }
+    /* Fade the portal out first (window.KT_out); the session is cleared once it is
+       covered, so nothing signed-out ever paints underneath (see COVER FIRST below). */
+    var _pp = window.location.pathname || '';
+    if (window.KT_out && !forceLogout._fading && !(_pp.endsWith('index.html') || _pp === '/' || _pp === '')) {
+      forceLogout._fading = true;
+      window.__ktSigningOut = true;
+      hideWarningModal();
+      window.KT_out.cover(function () { forceLogoutNow(reason); });
+      return;
+    }
+    forceLogoutNow(reason);
+  }
+
+  function forceLogoutNow(reason, instant) {
     hideWarningModal();
     if (reason === 'idle' || reason === 'absolute') { revokeOnServer(reason); }
     try { localStorage.removeItem(P_ACT); localStorage.removeItem(P_LOGIN); localStorage.removeItem(P_ID); } catch (e) {}
@@ -292,10 +506,15 @@
     // Only when a navigation follows: on the login page itself nothing would lift it.
     if (_leaving) { try { document.documentElement.classList.add('kt-bio-pending'); } catch (e) {} }
     window.__ktSigningOut = true;
+    /* A tab-only session (kt_no_persist) leaves the browser owner's shared sign-in alone (app.js ownsSharedSession,
+       2026-11-13). Read before this tab's token goes. */
+    var shared = true;
+    try { if (window.KT && KT.ownsSharedSession) shared = KT.ownsSharedSession(); } catch (e) {}
+    try { if (window.KT && KT.markSignedOut) KT.markSignedOut(); } catch (e) {}   // one sign-out mark (app.js)
     /* Where they were, so a fingerprint unlock can take them back there rather than to
        the home screen. Only the hash, only for an hour, only read by the unlock. */
     try {
-      if (window.location.hash && window.location.hash.length > 1) {
+      if (shared && window.location.hash && window.location.hash.length > 1) {
         localStorage.setItem('kt_resume_to', JSON.stringify({ hash: window.location.hash, at: Date.now() }));
       }
     } catch (e) {}
@@ -325,15 +544,17 @@
 
          Biometric / PIN unlock keep their own bearer token under separate
          kt_bio_* / kt_pin_* keys, so clearing these does not disarm them. */
-      localStorage.removeItem('kt_token');
-      localStorage.removeItem('kt_user');
-      localStorage.removeItem('kt_active_agency_id');
-      localStorage.removeItem('kt_active_agency_name');
+      if (shared) {
+        localStorage.removeItem('kt_token');
+        localStorage.removeItem('kt_user');
+        localStorage.removeItem('kt_active_agency_id');
+        localStorage.removeItem('kt_active_agency_name');
+      }
     } catch (e) {}
     var path = window.location.pathname || '';
     var qs = reason ? ('?signed_out=' + encodeURIComponent(reason)) : '';
     if (path.endsWith('index.html') || path === '/' || path === '') return;
-    window.location.href = '/index.html' + qs;
+    if (window.KT_out) window.KT_out.go('/index.html' + qs, !!instant, instant ? { instant: true } : null); else window.location.href = '/index.html' + qs;
   }
 
   // Make sure a parent's saved pair exists for THIS sign-in (sign-in time first: a new
@@ -345,7 +566,7 @@
   }
 
   function tick() {
-    if (!hasToken()) return;
+    if (!hasToken() || locked) return;
     try { syncPersisted(); } catch (e) {}
     var cfg = getConfig();
     var now = Date.now();
@@ -369,7 +590,7 @@
   }
 
   function bindActivity() {
-    var events = ['click', 'keydown', 'mousemove', 'touchstart', 'scroll', 'focus'];
+    var events = ['pointerdown', 'click', 'keydown', 'mousemove', 'touchstart', 'wheel'];
     events.forEach(function (ev) {
       window.addEventListener(ev, onActivity, { passive: true, capture: true });
     });
@@ -412,6 +633,8 @@
       } catch (e) {}
     },
     forceLogout: forceLogout,
+    previewWarning: function (sec) { showWarningModal(sec || 120); },
+    isLocked: function () { return locked; },
     config: getConfig,
     setIdleMinutes: function (minutes) {
       if (minutes < 1) return;

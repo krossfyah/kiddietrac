@@ -31,6 +31,16 @@ class SalesQuote extends Model
         'declined_at'      => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        // Sales -> Customers (2026-11-10): a won lead's customer takes its services from the winning proposal.
+        static::saved(function (SalesQuote $q) {
+            if (! $q->wasChanged(['countersigned_at', 'client_signed_at', 'status'])) return;
+            $lead = SalesLead::find($q->lead_id);
+            if ($lead && $lead->stage === 'won') \App\Support\SalesCustomers::ensure($lead, auth()->id());
+        });
+    }
+
     public function items()
     {
         return $this->hasMany(SalesQuoteItem::class, 'quote_id')->orderBy('sort')->orderBy('id');

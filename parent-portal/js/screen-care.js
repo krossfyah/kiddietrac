@@ -173,7 +173,15 @@
     btn.addEventListener('mouseenter', function () { btn.style.transform = 'translateY(-1px)'; });
     btn.addEventListener('mouseleave', function () { btn.style.transform = ''; });
     card.appendChild(btn);
+    /* Lunch / break (2026-11-05, App\Support\StaffBreaks): off the floor without ending the day. */
+    var brkRow = Dom.el('div', { style: 'display:none;gap:10px;justify-content:center;margin-top:12px;flex-wrap:wrap;' });
+    var mkB = function (label) { return Dom.el('button', { type: 'button', style: 'background:#EDE9FE;color:#5B21B6;border:1px solid #DDD6FE;padding:9px 18px;border-radius:11px;font-weight:800;cursor:pointer;font-size:14px;' }, label); };
+    var lunchBtn = mkB('🍽️ Lunch'), breakBtn = mkB('☕ Short break');
+    brkRow.appendChild(lunchBtn); brkRow.appendChild(breakBtn);
+    card.appendChild(brkRow);
     wrap.appendChild(card);
+    var state = { open: null, onBreak: null };
+    var P = function (iso) { return (KT.parseTs ? KT.parseTs(iso) : new Date(String(iso).replace(' ', 'T') + 'Z')); };
 
     var history = Dom.el('div', { style: 'background:white;border-radius:14px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05);' });
     history.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;font-size:13px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, 'Recent punches'));
@@ -184,8 +192,16 @@
     function refresh() {
       Api.get('/staff/punches/me').then(function (data) {
         var open = (data.punches || []).find(function (p) { return !p.punched_out_at; });
-        if (open) {
-          var since = new Date(open.punched_in_at);
+        state.open = open || null;
+        state.onBreak = (!open && data.on_break) ? data.on_break : null;
+        brkRow.style.display = open ? 'flex' : 'none';
+        if (state.onBreak) {
+          statusEl.innerHTML = 'You\'re on <strong>' + (state.onBreak.kind === 'lunch' ? 'lunch' : 'a break') + '</strong> since <strong>' + fmt(state.onBreak.started_at) + '</strong> · still on today\'s shift';
+          btn.textContent = 'I\'m back';
+          btn.style.background = '#6D28D9';
+          btn.style.boxShadow = '0 4px 14px rgba(109,40,217,.28)';
+        } else if (open) {
+          var since = P(open.punched_in_at);
           var hrs = (Date.now() - since.getTime()) / 3600000;
           statusEl.innerHTML = 'You\'re clocked in since <strong>' + fmt(open.punched_in_at) + '</strong> · ' + hrs.toFixed(1) + ' h elapsed';
           btn.textContent = 'Clock out';
@@ -205,28 +221,52 @@
         }
         var T = function (d) { return d ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '…'; };
         data.punches.forEach(function (p) {
-          var inO = new Date(p.punched_in_at);
-          var outO = p.punched_out_at ? new Date(p.punched_out_at) : null;
+          // UTC with no zone marker: new Date() read it as LOCAL and shifted every row (2026-11-05).
+          var inO = P(p.punched_in_at);
+          var outO = p.punched_out_at ? P(p.punched_out_at) : null;
           var live = !outO;
           var durTxt = outO ? ((outO - inO) / 3600000).toFixed(2) + ' h' : 'In progress';
           var row = Dom.el('div', { style: 'display:flex;align-items:center;gap:11px;padding:11px 4px;border-bottom:1px solid #F1F5F9;' });
           row.appendChild(Dom.el('span', { style: 'flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:' + (live ? '#F59E0B' : '#16A34A') + ';box-shadow:0 0 0 3px ' + (live ? 'rgba(245,158,11,.15)' : 'rgba(22,163,74,.15)') + ';' }));
           var mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
           mid.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:13.5px;color:#0F172A;' }, fmt(p.punched_in_at)));
-          mid.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:1px;' }, T(inO) + ' → ' + T(outO)));
+          mid.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:1px;' }, T(inO) + ' → ' + T(outO) + (p.out_reason === 'lunch' ? ' · lunch' : (p.out_reason === 'break' ? ' · break' : ''))));
           row.appendChild(mid);
           row.appendChild(Dom.el('div', { style: 'flex:0 0 auto;font-size:12.5px;font-weight:800;padding:5px 12px;border-radius:20px;background:' + (live ? '#FEF3C7' : '#DCFCE7') + ';color:' + (live ? '#B45309' : '#15803D') + ';white-space:nowrap;' }, durTxt));
           list.appendChild(row);
         });
       });
     }
-    btn.addEventListener('click', function () {
-      btn.disabled = true; btn.textContent = '…';
-      Api.post('/staff/punch', {}).then(function () { refresh(); }).catch(function (e) {
-        alert('Failed: ' + (e.message || 'error'));
+    /* Send what was pressed (intent) so a stale screen can never flip the wrong way, and
+       when children are still signed in, warn and let the person go ahead (2026-11-05). */
+    function send(path, body) {
+      btn.disabled = true; lunchBtn.disabled = true; breakBtn.disabled = true;
+      return Api.post(path, body).then(function (d) {
+        if (d && d.message && KT.Dom && KT.Dom.toast) KT.Dom.toast(d.message, 'success');
         refresh();
-      }).finally(function () { btn.disabled = false; });
+      }).catch(async function (e) {
+        var b = (e && e.data) || {};
+        if (b.reason === 'children_still_signed_in' && b.can_override) {
+          var names = (b.children || []).map(function (c) { return c.label; }).join('\n');
+          var ok = await KT.confirm({ title: (b.children || []).length + ' still signed in', description: (b.message || '') + (names ? '\n\n' + names : '') + (b.what_to_do ? '\n\n' + b.what_to_do : ''), okLabel: 'Go ahead anyway', tone: 'danger' });
+          if (ok) return send(path, Object.assign({}, body, { confirm_children: true }));
+        } else if (KT.Dom && KT.Dom.toast) {
+          KT.Dom.toast((e && e.message) || 'Could not update the clock.', 'error');
+        }
+        refresh();
+      }).finally(function () { btn.disabled = false; lunchBtn.disabled = false; breakBtn.disabled = false; });
+    }
+    btn.addEventListener('click', function () {
+      if (state.onBreak) {
+        // Ask first: a stray tap must not end a lunch or break (2026-11-06, KT.confirmBackFromBreak in kt-clockbar.js).
+        var ask = (KT.confirmBackFromBreak) ? KT.confirmBackFromBreak(state.onBreak.kind || state.onBreak) : Promise.resolve(true);
+        ask.then(function (ok) { if (ok) send('/staff/break/end', { source: 'web' }); });
+        return;
+      }
+      send('/staff/punch', { source: 'web', intent: state.open ? 'out' : 'in' });
     });
+    lunchBtn.addEventListener('click', function () { send('/staff/break/start', { kind: 'lunch' }); });
+    breakBtn.addEventListener('click', function () { send('/staff/break/start', { kind: 'break' }); });
     refresh();
   }
 
@@ -252,7 +292,7 @@
     container.appendChild(wrap);
 
     var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#8EC73C 0%,#1F6080 60%,#7C3AED 100%);' });
-    hero.innerHTML = '<div class="kt-hero-greet">📝 DAILY LOG</div><h1>Log a moment</h1><div class="kt-hero-sub">Quick-tap diaper / bathroom / nap / meal / bottle entries. They roll up into the parent\'s Today screen instantly.</div>';
+    hero.innerHTML = '<div class="kt-hero-greet">📝 DAILY LOG</div><h1>Log a moment</h1><div class="kt-hero-sub">Quick-tap diaper / bathroom / nap / meal / bottle entries, or an observation of what a child is learning. They roll up into the parent\'s Today screen instantly.</div>';
     wrap.appendChild(hero);
 
     /* Provider + Child in ONE card, side by side where there is room.
@@ -266,17 +306,17 @@
        The provider field is for an agency admin, who spans the whole agency and picks a
        provider before a child; for everybody else it is hidden and Child simply takes
        the full width, which the grid does on its own. */
-    var pickCard = Dom.el('div', { style: 'margin:18px 0;background:white;padding:16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;align-items:end;' });
+    var pickCard = Dom.el('div', { style: 'margin:18px 0;background:white;padding:16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;' });
     var FIELD_LABEL = 'display:block;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;';
     var FIELD_SELECT = 'width:100%;box-sizing:border-box;padding:10px;border:1px solid #D1D5DB;border-radius:10px;font-size:14px;background:white;';
 
-    var providerSelWrap = Dom.el('div', { style: 'min-width:0;display:none;' });
+    var providerSelWrap = Dom.el('div', { style: 'flex:0 1 280px;min-width:0;display:none;' });
     providerSelWrap.appendChild(Dom.el('label', { style: FIELD_LABEL }, 'Provider'));
     var providerSel = Dom.el('select', { style: FIELD_SELECT });
     providerSelWrap.appendChild(providerSel);
     pickCard.appendChild(providerSelWrap);
 
-    var childSelWrap = Dom.el('div', { style: 'min-width:0;' });
+    var childSelWrap = Dom.el('div', { style: 'flex:0 1 320px;min-width:0;' });
     childSelWrap.appendChild(Dom.el('label', { style: FIELD_LABEL }, 'Child'));
     var childSel = Dom.el('select', { style: FIELD_SELECT });
     childSel.appendChild(Dom.el('option', { value: '' }, 'Loading children…'));
@@ -296,6 +336,11 @@
       { type: 'outdoor',   icon: '🌳', label: 'Outdoor play', color: '#2E7D32' },
       { type: 'sunscreen', icon: '☀️', label: 'Sunscreen', color: '#F59E0B' },
       { type: 'mood',      icon: '🙂', label: 'Mood',      color: '#7C3AED' },
+      // Medicine and a change of clothes (2026-11-09, Anthony: "log a moment add medicine as an option as well as change of clothing").
+      // Medicine asks for what was given and how much; a formal administration record with the parent's consent is
+      // still kept on the Medications screen.
+      { type: 'medicine',  icon: '💊', label: 'Medicine',  color: '#DB2777' },
+      { type: 'clothing',  icon: '👕', label: 'Change of clothes', color: '#0284C7' },
       // Media tiles. These are NOT care logs — `daily_care_logs.log_type` is a
       // MySQL enum of the eight types above, so filing a photo there would need a
       // schema change. They post straight to /photos (the table the parent gallery,
@@ -306,6 +351,15 @@
       // Not a care log: this one goes to late_events and to a director for a decision.
       { type: 'late',      icon: '⏰', label: 'Late',      color: '#DC2626', late: true },
     ];
+    // Supplies from home (2026-10-23, Anthony: "add the request for supplies under the daily log
+    // as well"). Staff only; kt-supplies.js. "All children" offers everyone in the list.
+    if (window.KT && KT.Supplies && roleOf() !== 'guardian') TYPES.push({ type: 'supplies', icon: '🧺', label: 'Supplies', color: '#0E7490', supplies: true });
+    /* OBSERVATION (2026-11-09, Anthony: "log a moment, add observation and link this to the observation feature thats
+       already there"). Not a care log: it opens the Observations form (screen-observations.js, #observation-new?child=)
+       with this child already chosen - the same learning record, ELECT domains and AI help as everywhere else. Staff
+       only; "All children" opens the form to pick the child there. */
+    if (roleOf() !== 'guardian') TYPES.splice(TYPES.findIndex(function (t) { return t.type === 'photo'; }), 0,
+      { type: 'observation', icon: '🌱', label: 'Observation', color: '#15803D', observation: true });
     TYPES.forEach(function (t) {
       var btn = Dom.el('button', {
         type: 'button',
@@ -325,7 +379,23 @@
 
            DIAPER and BATHROOM stay single-child on purpose: those describe one child's
            body, and filing them for a room would record things that did not happen. */
-        var ALL_OK = ['outdoor', 'snack', 'meal', 'bottle', 'sunscreen', 'mood', 'nap'];
+        var ALL_OK = ['outdoor', 'snack', 'meal', 'bottle', 'sunscreen', 'mood', 'nap'];   // never medicine or clothes: one child's body
+        // A photo or video can show any number of children: "All children" opens the
+        // tag picker with nobody chosen yet (2026-10-20).
+        if (childSel.value === '__all__' && t.media) { openMediaModal(t, []); return; }
+        if (t.observation) {
+          var oc = childSel.value && childSel.value !== '__all__' ? childSel.value : null;
+          // window.KT read now, not the copy taken at load: KT can be replaced after this file runs.
+          if (window.KT && window.KT.openObservation) window.KT.openObservation({ childId: oc });   // a popup over Log a moment
+          else location.hash = '#observation-new?from=care' + (oc ? '&child=' + encodeURIComponent(oc) : '');
+          return;
+        }
+        if (t.supplies) {
+          var kids = childSel.value === '__all__' ? CHILDREN.slice()
+            : CHILDREN.filter(function (c) { return String(c.id) === String(childSel.value); });
+          KT.Supplies.request(kids.map(function (c) { return { id: c.id, name: c.name }; }));
+          return;
+        }
         if (childSel.value === '__all__') {
           if (ALL_OK.indexOf(t.type) === -1) {
             alert('Pick a child to log for — "All children" does not apply to ' + t.label.toLowerCase() + '.');
@@ -474,7 +544,7 @@
       childSel.appendChild(Dom.el('option', { value: '__all__' }, 'All children'));
       kids.forEach(function (c) {
         childSel.appendChild(Dom.el('option', { value: c.id },
-          c.name + (c.at_centre ? ' · here now' : '') + (c.suffix ? ' · ' + c.suffix : '')));
+          c.name + (c.at_centre ? ' · at Centre' : '') + (c.suffix ? ' · ' + c.suffix : '')));
       });
       loadRecent();
     }
@@ -510,6 +580,14 @@
       var ALL = [];
       function applyFilter() {
         var cid = providerSel.value;
+        if (!cid && providerSelWrap.style.display !== 'none') {
+          CHILDREN = [];
+          childSel.innerHTML = '<option value="">Choose a provider first</option>';
+          childSel.disabled = true;
+          try { Dom.clear(recent); recent.appendChild(Dom.el('div', { style: 'padding:24px;color:#64748B;font-size:13px;text-align:center;' }, 'Choose a provider to see and log their children’s day.')); } catch (e) {}
+          return;
+        }
+        childSel.disabled = false;
         var list = cid ? ALL.filter(function (k) { return String(k.centre_id) === String(cid); }) : ALL;
         fillOptions(list.map(function (c) {
           // at_centre has to survive BOTH maps or the agency-wide path silently
@@ -528,7 +606,7 @@
         var seen = {}; var provs = [];
         ALL.forEach(function (k) { if (k.centre_id && !seen[k.centre_id]) { seen[k.centre_id] = 1; provs.push({ id: k.centre_id, name: k.centre_name }); } });
         provs.sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
-        providerSel.innerHTML = '<option value="">All providers</option>';
+        providerSel.innerHTML = '<option value="">Choose a provider…</option>';
         provs.forEach(function (p) { providerSel.appendChild(Dom.el('option', { value: p.id }, p.name)); });
         providerSelWrap.style.display = provs.length > 1 ? '' : 'none';
         providerSel.addEventListener('change', applyFilter);
@@ -553,7 +631,10 @@
           // Directors/educators with no rooms of their own → agency-wide list.
           return loadAgencyWide();
         })
-        .catch(function () { childSel.innerHTML = '<option value="">No children loaded</option>'; });
+        .catch(function () {
+          // Usually an educator with no room yet: the agency-wide list is not theirs to see.
+          childSel.innerHTML = '<option value="">No children in your room yet. Ask your director to assign you a room.</option>';
+        });
     }
     childSel.addEventListener('change', loadRecent);
 
@@ -669,6 +750,8 @@
       outdoor:   ['Played outside', 'Nature walk', 'Water play', 'Too cold — indoor gross motor', 'Too wet — indoor gross motor'],
       sunscreen: ['Applied', 'Reapplied'],
       mood:      ['Happy', 'Calm', 'Playful', 'Tired', 'Fussy', 'Upset', 'Unwell'],
+      medicine:  ['Given', 'Cream applied', 'Inhaler', 'Refused'],
+      clothing:  ['Wet clothes', 'Soiled clothes', 'Messy play', 'Spill at a meal', 'Too warm', 'Too cold'],
     };
 
     /* ── Late arrival / late departure ────────────────────────────────────
@@ -770,27 +853,60 @@
     function openMediaModal(t, childId) {
       var isVideo = t.media === 'video';
       var MEDIA_MAX = 30 * 1024 * 1024;
-      var kid = (CHILDREN || []).filter(function (c) { return String(c.id) === String(childId); })[0];
-      var kidName = kid ? kid.name : 'this child';
+      /* TAG EVERYONE IN IT (2026-10-20). Anthony: "have ability to tag in photos based on
+         childrens name in the room ... easy for educator to tag multiple kids". The child
+         picked above is tagged to start with; the chips add the rest of the room. Each
+         tagged child gets the moment on their own timeline and their family sees it. */
+      var startIds = Array.isArray(childId) ? childId : (childId ? [childId] : []);
+      var tagger = null;
+      function taggedNames() {
+        var ids = tagger ? tagger.value() : startIds;
+        return (CHILDREN || []).filter(function (c) { return ids.indexOf(Number(c.id)) !== -1 || ids.indexOf(String(c.id)) !== -1; })
+          .map(function (c) { return String(c.name).split(' ')[0]; });
+      }
+      function whoLine() {
+        var n = taggedNames();
+        return !n.length ? 'Tag the children in it below.'
+          : n.length === 1 ? n[0] + '’s family'
+          : n.length <= 3 ? n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1] + '’s families'
+          : n.length + ' families';
+      }
+      var kidName = whoLine();
 
       var overlay = Dom.el('div', { style: 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;padding:18px;' });
       var modal = Dom.el('div', { style: 'background:white;border-radius:16px;max-width:440px;width:100%;padding:20px;max-height:88vh;overflow-y:auto;' });
       overlay.appendChild(modal);
       modal.innerHTML = '<h2 style="margin:0 0 4px;font-size:18px;">' + t.icon + ' ' + (isVideo ? 'Share a video' : 'Share a photo') + '</h2>'
         + '<p style="margin:0 0 14px;font-size:13px;color:#64748B;line-height:1.45;">'
-        + esc(kidName) + '’s family sees this in Photos &amp; video, and it appears in the daily overview and tonight’s summary email.</p>';
+        + '<span class="kt-care-who">' + esc(kidName) + '</span> see' + (startIds.length === 1 ? 's' : '') + ' this in Photos &amp; video, and it appears in the daily overview and tonight’s summary email.</p>';
 
       var file = Dom.el('input', {
         type: 'file',
         accept: isVideo ? 'video/mp4,video/quicktime,video/webm,video/3gpp' : 'image/jpeg,image/png,image/webp',
         style: 'display:none;',
       });
+      // Photos: several at once (2026-11-13), each shared with the same children and description. A video stays one.
+      if (!isVideo) file.multiple = true;
       var pick = Dom.el('button', {
         type: 'button',
         style: 'width:100%;box-sizing:border-box;background:#F8FAFC;border:1.5px dashed #CBD5E1;color:' + t.color + ';border-radius:12px;padding:22px 12px;font-size:14.5px;font-weight:800;cursor:pointer;',
-      }, isVideo ? '🎬 Choose a video' : '📷 Choose a photo');
+      }, isVideo ? '🎬 Choose a video' : '📷 Choose photos');
       var preview = Dom.el('div', { style: 'display:none;margin-top:10px;' });
       modal.appendChild(pick); modal.appendChild(file); modal.appendChild(preview);
+
+      var tagHost = Dom.el('div', { style: 'margin-top:14px;' });
+      modal.appendChild(tagHost);
+      if (window.KT && KT.childTagger) {
+        tagger = KT.childTagger.mount(tagHost, {
+          children: (CHILDREN || []).map(function (c) { return { id: c.id, name: c.name, at_centre: c.at_centre === true, group: c.suffix || '' }; }),
+          selected: startIds,
+          noun: isVideo ? 'video' : 'photo',
+          onChange: function () {
+            var w1 = modal.querySelector('.kt-care-who');
+            if (w1) { var n = taggedNames().length; w1.textContent = whoLine(); w1.nextSibling.textContent = ' see' + (n === 1 ? 's' : '') + ' this in Photos & video, and it appears in the daily overview and tonight’s summary email.'; }
+          }
+        });
+      }
 
       modal.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin:14px 0 6px;' }, 'Description (required)'));
       var cap = Dom.el('input', {
@@ -801,25 +917,37 @@
       var msg = Dom.el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:8px;min-height:16px;' });
       modal.appendChild(msg);
 
-      var chosen = null;
+      var chosen = null, chosenAll = [];
       pick.addEventListener('click', function () { file.click(); });
       file.addEventListener('change', function () {
-        var f = file.files && file.files[0];
+        var all = Array.prototype.slice.call(file.files || [], 0, isVideo ? 1 : 20);
+        var f = all[0];
         if (!f) return;
-        if (f.size > MEDIA_MAX) {
+        var big = all.filter(function (x) { return x.size > MEDIA_MAX; })[0];
+        if (big) {
           msg.style.color = '#DC2626';
-          msg.textContent = 'That file is ' + (f.size / 1048576).toFixed(1) + ' MB — the limit is 30 MB (about 30 seconds of video).';
-          file.value = ''; chosen = null; return;
+          msg.textContent = (all.length > 1 ? big.name + ' is ' : 'That file is ') + (big.size / 1048576).toFixed(1) + ' MB — the limit is 30 MB (about 30 seconds of video).';
+          file.value = ''; chosen = null; chosenAll = []; return;
         }
-        chosen = f;
+        chosen = f; chosenAll = all;
         msg.style.color = '#64748B';
-        msg.textContent = f.name + ' · ' + (f.size / 1048576).toFixed(1) + ' MB';
-        pick.textContent = '🔁 Choose a different file';
+        msg.textContent = all.length > 1
+          ? all.length + ' photos · ' + (all.reduce(function (t2, x) { return t2 + x.size; }, 0) / 1048576).toFixed(1) + ' MB'
+          : f.name + ' · ' + (f.size / 1048576).toFixed(1) + ' MB';
+        pick.textContent = all.length > 1 ? '🔁 Choose different photos' : '🔁 Choose a different file';
         Dom.clear(preview);
-        var url = URL.createObjectURL(f);
-        preview.appendChild(/^video\//.test(f.type)
-          ? Dom.el('video', { src: url, controls: true, preload: 'metadata', playsInline: true, style: 'width:100%;max-height:210px;border-radius:12px;background:#0F172A;display:block;' })
-          : Dom.el('img', { src: url, alt: 'Preview', style: 'width:100%;max-height:210px;object-fit:cover;border-radius:12px;display:block;' }));
+        if (all.length > 1) {
+          var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px;' });
+          all.forEach(function (x) {
+            grid.appendChild(Dom.el('img', { src: URL.createObjectURL(x), alt: 'Preview', style: 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;display:block;' }));
+          });
+          preview.appendChild(grid);
+        } else {
+          var url = URL.createObjectURL(f);
+          preview.appendChild(/^video\//.test(f.type)
+            ? Dom.el('video', { src: url, controls: true, preload: 'metadata', playsInline: true, style: 'width:100%;max-height:210px;border-radius:12px;background:#0F172A;display:block;' })
+            : Dom.el('img', { src: url, alt: 'Preview', style: 'width:100%;max-height:210px;object-fit:cover;border-radius:12px;display:block;' }));
+        }
         preview.style.display = 'block';
       });
 
@@ -829,6 +957,8 @@
       var send = Dom.el('button', { style: 'background:' + t.color + ';color:white;border:none;padding:9px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;' }, 'Share it');
       send.addEventListener('click', function () {
         if (!chosen) { msg.style.color = '#B45309'; msg.textContent = 'Pick a ' + (isVideo ? 'video' : 'photo') + ' first.'; return; }
+        var tagged = tagger ? tagger.value() : startIds;
+        if (!tagged.length) { msg.style.color = '#B45309'; msg.textContent = 'Tag at least one child so their family sees it.'; return; }
         // A description is mandatory: an untitled photo tells the parent nothing,
         // and the caption is what carries the moment into the digest email.
         if (!cap.value.trim()) {
@@ -839,6 +969,7 @@
         }
         send.disabled = true; send.textContent = 'Uploading…';
         msg.style.color = '#64748B'; msg.textContent = 'Uploading — please keep this open.';
+        if (chosenAll.length > 1) { shareMany(tagged); return; }
         ktShrinkImage(chosen, 1600, 0.82).then(async function (toSend) {
         if (toSend !== chosen) {
           msg.style.color = '#64748B';
@@ -855,7 +986,7 @@
              list, cast that inner array to the integer 1, and refused the upload as
              access to child #1. Every photo that ever saved had exactly one child on
              it; multi-select had never once worked. */
-          fd.append('child_ids', JSON.stringify(Array.isArray(childId) ? childId : [childId]));
+          fd.append('child_ids', JSON.stringify(tagged.map(Number)));
         fetch(_careApiBase() + '/photos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + _careToken() }, body: fd })
           .then(function (r) {
             return r.json().catch(function () { return {}; }).then(function (d) {
@@ -863,10 +994,13 @@
               return d;
             });
           })
-          .then(function () {
+          .then(function (d) {
             overlay.remove();
             loadRecent();
-            if (KT.toast) KT.toast(t.icon, isVideo ? 'Video shared' : 'Photo shared', kidName + '’s family can see it now.', 'success');
+            // Photo permissions (2026-11-06): a family-only child keeps the photo from other families - say so.
+            if (KT.toast) KT.toast(t.icon, (d && d.notice) ? (isVideo ? 'Video saved' : 'Photo saved') : (isVideo ? 'Video shared' : 'Photo shared'),
+              (d && d.notice) ? d.notice
+                : (tagged.length === 1 ? whoLine() + ' can see it now.' : 'Shared with ' + whoLine() + ', and on each child’s timeline.'), (d && d.notice) ? 'info' : 'success');
           })
           .catch(function (e) {
             msg.style.color = '#DC2626';
@@ -875,6 +1009,42 @@
           });
         });
       });
+      /* SEVERAL PHOTOS (2026-11-13): one upload each, in order, same children and description. Every one but the
+         last goes batch_quiet (no phone rung); the last carries batch_total so each family hears once - "3 new
+         photos shared" (PhotoFeedController::upload). A photo that fails is named and the rest still go. */
+      async function shareMany(tagged) {
+        var done = 0, failed = [], lastErr = '', n = chosenAll.length, notice = null;
+        for (var i = 0; i < n; i++) {
+          msg.style.color = '#64748B';
+          msg.textContent = 'Uploading ' + (i + 1) + ' of ' + n + ' — please keep this open.';
+          try {
+            var toSend = await ktShrinkImage(chosenAll[i], 1600, 0.82);
+            var fd = new FormData();
+            fd.append('photo', toSend);
+            fd.append('caption', cap.value.trim());
+            fd.append('child_ids', JSON.stringify(tagged.map(Number)));
+            if (i < n - 1) fd.append('batch_quiet', '1'); else fd.append('batch_total', String(done + 1));
+            var r = await fetch(_careApiBase() + '/photos', { method: 'POST', headers: { 'Authorization': 'Bearer ' + _careToken() }, body: fd });
+            var d = await r.json().catch(function () { return {}; });
+            if (!r.ok) throw new Error((d && d.message) || ('Upload failed (' + r.status + ')'));
+            done++;
+            if (d && d.notice) notice = d.notice;
+          } catch (e) { failed.push(chosenAll[i].name); lastErr = (e && e.message) || ''; }
+        }
+        loadRecent();
+        if (!failed.length) {
+          overlay.remove();
+          if (KT.toast) KT.toast(t.icon, notice ? n + ' photos saved' : n + ' photos shared',
+            notice || (tagged.length === 1 ? whoLine() + ' can see them now.' : 'Shared with ' + whoLine() + ', and on each child’s timeline.'), notice ? 'info' : 'success');
+          return;
+        }
+        msg.style.color = '#DC2626';
+        msg.textContent = (done ? done + ' shared. ' : '') + 'Not shared: ' + failed.join(', ') + (lastErr ? ' — ' + lastErr : '');
+        chosenAll = chosenAll.filter(function (x) { return failed.indexOf(x.name) !== -1; });
+        chosen = chosenAll[0] || null;
+        send.disabled = false; send.textContent = 'Share it';
+      }
+
       actions.appendChild(cancel); actions.appendChild(send);
       modal.appendChild(actions);
       document.body.appendChild(overlay);
@@ -953,6 +1123,25 @@
         modal.appendChild(otherIn);
       }
 
+      var creamOn = false;
+      if (t.type === 'diaper') {
+        var cream = Dom.el('button', {
+          type: 'button', 'aria-pressed': 'false',
+          style: 'border:1.5px dashed #CBD5E1;background:#fff;color:#0F172A;border-radius:999px;'
+            + 'padding:8px 13px;font-size:13.5px;font-weight:700;cursor:pointer;margin:-6px 0 14px;',
+        }, '🧴 Cream applied');
+        cream.addEventListener('click', function () {
+          creamOn = !creamOn;
+          cream.setAttribute('aria-pressed', creamOn ? 'true' : 'false');
+          cream.style.background = creamOn ? t.color : '#fff';
+          cream.style.color = creamOn ? '#fff' : '#0F172A';
+          cream.style.borderStyle = creamOn ? 'solid' : 'dashed';
+          cream.style.borderColor = creamOn ? t.color : '#CBD5E1';
+          cream.textContent = (creamOn ? '✓ ' : '🧴 ') + 'Cream applied';
+        });
+        modal.appendChild(cream);
+      }
+
       // Nap: capture the actual asleep → woke window (the parent sees real times).
       var napAsleep = null, napWoke = null;
       if (t.type === 'nap') {
@@ -969,6 +1158,14 @@
         modal.appendChild(napGrid);
       }
 
+      // Medicine: what was given and how much, always (the parent's first question).
+      var medIn = null;
+      if (t.type === 'medicine') {
+        modal.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:7px;' }, 'Medicine and dose'));
+        medIn = Dom.el('input', { type: 'text', maxlength: '100', placeholder: 'e.g. Children\'s Tylenol 5 ml',
+          style: 'width:100%;box-sizing:border-box;padding:11px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:16px;margin-bottom:14px;' });
+        modal.appendChild(medIn);
+      }
       modal.appendChild(Dom.el('div', {
         style: 'font-size:11px;font-weight:800;letter-spacing:.5px;color:#64748B;text-transform:uppercase;margin-bottom:6px;',
       }, 'Note (optional)'));
@@ -1070,6 +1267,12 @@
         // literal word "Other".
         var detail = detailsIn.value.trim();
         if (detail === 'Other') detail = otherIn.value.trim();
+        if (t.type === 'diaper' && creamOn) detail = detail ? (detail + ' · cream applied') : 'Cream applied';
+        if (medIn) {
+          var med = medIn.value.trim();
+          if (!med) { saveMsg.textContent = 'Say which medicine and how much.'; saveMsg.style.color = '#B91C1C'; medIn.focus(); return; }
+          detail = (detail ? detail + ' · ' : '') + med;
+        }
         // Fold the nap window / snack time-of-day into the detail string (the care
         // log stores one detail field, which rolls up to the parent's Today feed).
         function _t12(v) { if (!v) return ''; var p = String(v).split(':'); var h = parseInt(p[0], 10); if (isNaN(h)) return ''; var ap = h < 12 ? 'AM' : 'PM'; var h12 = h % 12; if (h12 === 0) h12 = 12; return h12 + ':' + p[1] + ' ' + ap; }
@@ -1157,18 +1360,9 @@
            real part of the day, and the entry is then marked as retrospective. */
         function postLog(extra) {
           var payload = extra ? Object.assign({}, body, extra) : body;
-          return Api.post('/care/logs', payload).then(function () { logSaved = true; })
-            .catch(function (err) {
-              var m = (err && err.message) || '';
-              var d = (err && err.data) || {};
-              if (!/not_signed_in/.test(m) && d.message !== 'not_signed_in') { throw err; }
-              var ask = d.prompt || 'That child is not signed in right now. Log this anyway as a catch-up entry?';
-              var ok = (window.KT && KT.confirm) ? KT.confirm(ask) : Promise.resolve(window.confirm(ask));
-              return Promise.resolve(ok).then(function (yes) {
-                if (!yes) { var e = new Error('cancelled'); e.ktCancelled = true; throw e; }
-                return postLog({ confirm_absent: 1 });
-              });
-            });
+          // The not-signed-in question is asked by Api.request() itself (KT.warnNotSignedIn, the bold yellow
+          // warning every log path shares); Cancel arrives here as an error with ktCancelled set.
+          return Api.post('/care/logs', payload).then(function () { logSaved = true; });
         }
         (logSaved ? Promise.resolve() : postLog()).then(function () {
           // The care log is saved. If media was attached, upload it as a second
@@ -1210,7 +1404,7 @@
           }).then(function (d) {
             overlay.remove(); loadRecent();
             if (KT.toast) {
-              KT.toast('📸', 'Moment shared', (d && d.media_type === 'video' ? 'The video' : 'The photo') + ' is now in the parent’s Photos & video.', 'success');
+              KT.toast('📸', (d && d.notice) ? 'Moment saved' : 'Moment shared', (d && d.notice) ? d.notice : (d && d.media_type === 'video' ? 'The video' : 'The photo') + ' is now in the parent’s Photos & video.', (d && d.notice) ? 'info' : 'success');
             }
           });
           });
@@ -1269,7 +1463,7 @@
 
       var stats = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;' });
       function tile(label, value, color) {
-        var t = Dom.el('div', { style: 'background:white;padding:14px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);border-left:4px solid ' + color + ';' });
+        var t = Dom.el('div', { style: 'background:white;padding:14px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);--kt-edge:' + color + ';' });
         t.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;' }, label));
         t.appendChild(Dom.el('div', { style: 'font-size:24px;font-weight:800;color:#0F172A;' }, String(value)));
         return t;
@@ -1287,7 +1481,7 @@
         feed.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'No observations recorded yet.'));
       } else {
         data.observations.forEach(function (o) {
-          var item = Dom.el('div', { style: 'border-left:3px solid #7C3AED;padding:6px 14px;margin-bottom:14px;background:#F8FAFC;border-radius:0 10px 10px 0;' });
+          var item = Dom.el('div', { style: '--kt-edge:#7C3AED;padding:6px 14px;margin-bottom:14px;background:#F8FAFC;border-radius:0 10px 10px 0;' });
           item.appendChild(Dom.el('div', { style: 'font-size:11px;color:#6B7280;font-weight:700;letter-spacing:.5px;' }, fmt(o.observed_at) + ' · ' + o.framework + ' / ' + o.domain + ' · ' + o.recorded_by));
           if (o.title) item.appendChild(Dom.el('div', { style: 'font-weight:700;font-size:14px;color:#0F172A;margin-top:3px;' }, o.title));
           item.appendChild(Dom.el('div', { style: 'font-size:13px;color:#374151;margin-top:3px;line-height:1.5;' }, o.body || ''));
@@ -1343,7 +1537,7 @@
                 Api.post('/care/milestones', {
                   child_id: childId, framework: 'HDLH', domain: domain,
                   milestone_key: m.key, milestone_label: m.label,
-                  status: s, observed_at: new Date().toISOString().slice(0,10),
+                  status: s, observed_at: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)),
                 }).then(function () { renderMilestones(container); }).catch(function (e) { alert('Failed: ' + e.message); });
               });
               row.appendChild(b);

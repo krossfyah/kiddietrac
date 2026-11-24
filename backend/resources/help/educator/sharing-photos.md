@@ -42,11 +42,20 @@ Avoid:
 
 ## What about consent?
 
-By enrolling, families consent to photos for their own child within Kiddietrac. **Do not** share photos:
+Every parent chooses, for each of their children, one of three answers. Check **Photo permissions** in the menu for the children in your room:
 
-- Outside Kiddietrac (Facebook, Instagram, etc.) without explicit written consent
-- Of children whose families have opted out of photo sharing (your director will tell you)
+- 🚫 **Do not photograph** — do not take or share photos or videos of this child. KiddieTrac will not let you tag them, and any photo that already tags them is hidden from every family.
+- 👪 **Family only** — share photos with their own family. A photo with this child in it is not shown to the other families tagged in it. Until a parent answers, every child is treated as family only.
+- ✅ **Group photos OK** — they can be in group photos the other families see.
+
+If two parents choose differently, the more careful answer applies. When you tag children, the picker shows 🚫 and 👪 next to their names, and after you share it tells you which families will not see the photo.
+
+**Do not** share photos:
+
+- Outside KiddieTrac (Facebook, Instagram, etc.). Marketing use is a separate yes or no that parents give, shown on Photo permissions
 - Of any child not enrolled in the room (other children visiting, parents visiting)
+
+A parent who has signed a paper form instead: ask your director to record it on Photo permissions.
 
 ## What about captions?
 

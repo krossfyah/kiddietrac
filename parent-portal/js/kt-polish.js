@@ -35,27 +35,105 @@
   if (!document.getElementById('kt-modal-css')) {
     const s = document.createElement('style');
     s.id = 'kt-modal-css';
-    s.textContent = '@keyframes kt-fade-in { from { opacity: 0; } to { opacity: 1; } } @keyframes kt-pop-in { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }';
+    s.textContent = '@keyframes kt-fade-in { from { opacity: 0; } to { opacity: 1; } } @keyframes kt-pop-in { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }'
+      /* Confirm card (2026-10-27): short heading in the band with the tone icon beside it, the
+         explanation in the body, and on a phone full-width buttons a thumb can hit. */
+      + '.kt-cf{background:#fff;padding:24px;border-radius:14px;max-width:460px;width:92%;box-sizing:border-box;box-shadow:0 20px 60px rgba(15,23,42,.25);animation:kt-pop-in .15s ease-out;}'
+      + '.kt-cf .kt-dlg-head{margin:-24px -24px 0;padding:16px 54px 16px 22px;border-radius:14px 14px 0 0;display:flex;gap:12px;align-items:center;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);}'
+      + '.kt-cf .kt-cf-ico{width:32px;height:32px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.18);}'
+      + '.kt-cf h3{margin:0;color:#fff;font-size:17px;font-weight:700;line-height:1.35;overflow-wrap:anywhere;}'
+      + '.kt-cf .kt-cf-body{padding-top:18px;}'
+      + '.kt-cf .kt-cf-text{margin:0;color:#334155;font-size:14.5px;line-height:1.6;white-space:pre-line;overflow-wrap:anywhere;}'
+      /* A one-line question (2026-10-28, Anthony: "prompts like this looks weird as there is a blank space on the
+         second line"): the question is the body, in clear dark type; the header carries a short heading. */
+      + '.kt-cf .kt-cf-text.kt-cf-q{color:#0F172A;font-size:16px;font-weight:700;line-height:1.45;}'
+      + '.kt-cf .kt-confirm-extra:not(:empty){margin-top:14px;}'
+      + '.kt-cf .kt-cf-acts{margin-top:22px;display:flex;justify-content:flex-end;gap:8px;}'
+      + '.kt-cf .kt-cf-acts button{border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;min-height:40px;}'
+      /* ALARM (2026-11-04): a warning that must not be clicked through - the page behind dims to yellow,
+         the card gets an amber ring, and the body leads with a big warning sign and bold amber words. */
+      + '.kt-cf.kt-cf-alarm{border:3px solid #F59E0B;box-shadow:0 0 0 6px rgba(245,158,11,.25),0 20px 60px rgba(120,53,15,.35);}'
+      + '.kt-cf-warn{display:flex;gap:14px;align-items:flex-start;background:#FEF3C7;border:2px solid #F59E0B;border-radius:12px;padding:14px 16px;}'
+      + '.kt-cf-warn .kt-cf-warn-ico{font-size:34px;line-height:1;flex:0 0 auto;}'
+      + '.kt-cf-warn .kt-cf-warn-big{margin:0;color:#78350F;font-size:17px;font-weight:800;line-height:1.4;overflow-wrap:anywhere;}'
+      + '.kt-cf-warn .kt-cf-warn-names{margin:8px 0 0;display:flex;flex-wrap:wrap;gap:6px;}'
+      + '.kt-cf-warn .kt-cf-warn-names b{background:#fff;border:1.5px solid #F59E0B;color:#78350F;border-radius:999px;padding:2px 10px;font-size:13.5px;}'
+      + '.kt-cf-warn .kt-cf-warn-sub{margin:10px 0 0;color:#92400E;font-size:13.5px;line-height:1.5;font-weight:600;}'
+      + '.kt-cf.kt-cf-alarm .kt-cf-acts button[data-action="ok"]{font-weight:800;}'
+      /* A WARNING LOOKS LIKE A WARNING (2026-11-06, Anthony: check-in/out without One-Tap "should be a warning message
+         using the warning symbol with a yellow background"): an alarm's header band is yellow with dark amber words and
+         the ⚠ sign, instead of the navy band every other popup has. */
+      /* !important: kt-dialog-chrome's one-header rule paints every .kt-dlg-head navy with white words, !important. */
+      + '.kt-cf.kt-cf-alarm .kt-dlg-head{background:linear-gradient(135deg,#FDE68A 0%,#FCD34D 100%) !important;box-shadow:inset 0 -2px 0 #F59E0B !important;}'
+      + '.kt-cf.kt-cf-alarm .kt-dlg-head h3{color:#78350F !important;}'
+      + '.kt-cf.kt-cf-alarm .kt-dlg-head .kt-cf-ico{background:#fff !important;color:#B45309 !important;font-size:18px;box-shadow:0 0 0 2px #F59E0B;}'
+      /* the guard's ✕ sits beside the card, over its header */
+      + '.kt-cf.kt-cf-alarm ~ .kt-modal-x,:has(> .kt-cf.kt-cf-alarm) > .kt-modal-x{color:#78350F !important;-webkit-text-fill-color:#78350F !important;text-shadow:none !important;}'
+      + '@media (max-width:520px){.kt-cf{padding:20px;width:calc(100% - 32px);}'
+      + '.kt-cf .kt-dlg-head{margin:-20px -20px 0;padding:14px 50px 14px 18px;}'
+      + '.kt-cf h3{font-size:16px;}'
+      + '.kt-cf .kt-cf-acts button{flex:1 1 0;min-height:44px;}}';
     document.head.appendChild(s);
   }
+
+  /* ONE QUESTION IN THE HEADING, THE REST IN THE BODY (2026-10-27).
+     Most callers hand over a single string: "Delete Amelie Tremblay (amelie@…)?\n\nThey will be
+     unable to sign in. Their family/child records stay intact for audit." All of it became the
+     heading. Split it where the writer did: at a blank line, else after the first sentence. A
+     parenthetical (usually an email address) leaves a long heading for the body, and anything
+     still too long for a heading goes to the body under a plain "Please confirm". */
+  function shapeText(opts) {
+    var t = String(opts.title || '').trim();
+    if (!t || (t.length <= 60 && t.indexOf('\n') === -1)) { if (t) opts.title = t; return opts; }
+    var head = t, rest = '';
+    var nlAt = t.search(/\n\s*\n|\n/);
+    if (nlAt > 0) { head = t.slice(0, nlAt).trim(); rest = t.slice(nlAt).trim(); }
+    if (head.length > 60) {
+      var m = head.match(/^[\s\S]{6,110}?[?!.](?=\s|$)/);
+      if (m && m[0].length < head.length) { rest = (head.slice(m[0].length).trim() + (rest ? '\n\n' + rest : '')).trim(); head = m[0].trim(); }
+    }
+    if (head.length > 48) {
+      var pm = head.match(/\s*\(([^()]{3,80})\)/);
+      if (pm) { head = (head.slice(0, pm.index) + head.slice(pm.index + pm[0].length)).replace(/\s+([?!.])$/, '$1'); rest = pm[1] + (rest ? '\n\n' + rest : ''); }
+    }
+    if (head.length > 70) {
+      // A statement too long for a heading: the question it ends on ("Save anyway?") is the heading.
+      var all = head + (rest ? '\n\n' + rest : '');
+      var q = all.match(/(^|[.!?]\s+|\n)([^.!?\n]{3,60}\?)\s*$/);
+      if (q) { head = q[2].trim(); rest = all.slice(0, q.index + q[1].length).trim(); }
+      else { rest = all; head = 'Please confirm'; }
+    }
+    opts.title = head;
+    if (rest) opts.description = rest + (opts.description ? '\n\n' + opts.description : '');
+    return opts;
+  }
+  KT.shapeDialogText = shapeText;
 
   KT.prompt = function (opts, more) {
     /* (title, { description, ... }) is accepted too: several callers wrote it that way
        and their description and button label were silently dropped (2026-10-05). */
     if (typeof opts === 'string') opts = Object.assign({ title: opts }, more || {});
-    opts = opts || {};
+    opts = shapeText(opts || {});
     return new Promise((resolve) => {
       const o = buildOverlay();
       const m = document.createElement('div');
-      m.style.cssText = 'background:#fff;padding:28px;border-radius:14px;max-width:440px;width:92%;box-shadow:0 20px 60px rgba(15,23,42,.25);animation:kt-pop-in .15s ease-out;';
+      // A dialog with a multi-line box gets the room to write in (2026-10-23).
+      const wide = (opts.fields || []).some(f => f.type === 'textarea');
+      m.style.cssText = 'background:#fff;padding:28px;border-radius:14px;max-width:' + (wide ? 600 : 440) + 'px;width:92%;box-shadow:0 20px 60px rgba(15,23,42,.25);animation:kt-pop-in .15s ease-out;';
       m.innerHTML = `
-        <h3 style="margin:0 0 6px;color:#0F172A;font-size:18px;font-weight:700;">${esc(opts.title || 'Enter value')}</h3>
-        ${opts.description ? `<p style="color:#64748B;font-size:13.5px;margin:0 0 14px;">${esc(opts.description)}</p>` : '<div style="height:6px;"></div>'}
-        ${(opts.fields || [{ key: 'value', label: opts.title || '', placeholder: opts.placeholder || '', type: opts.type || 'text' }]).map(f => `
-          <label style="display:block;font-size:13px;font-weight:600;margin-top:10px;color:#374151;">${esc(f.label || '')}</label>
-          <input data-field="${esc(f.key || 'value')}" type="${esc(f.type || 'text')}" placeholder="${esc(f.placeholder || '')}" value="${esc(f.value || '')}" ${f.min !== undefined ? 'min=' + f.min : ''} ${f.max !== undefined ? 'max=' + f.max : ''} ${f.step !== undefined ? 'step=' + f.step : ''}
-            style="width:100%;padding:11px 14px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;margin-top:5px;outline:none;transition:border-color .15s;">
-        `).join('')}
+        <div class="kt-dlg-head" style="margin:-28px -28px 14px;padding:18px 56px 16px 28px;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);border-radius:14px 14px 0 0;">
+          <h3 style="margin:0;color:#fff;font-size:18px;font-weight:700;">${esc(opts.title || 'Enter value')}</h3>
+          ${opts.description ? `<p style="color:rgba(255,255,255,.85);font-size:13.5px;margin:6px 0 0;line-height:1.5;">${esc(opts.description)}</p>` : ''}
+        </div>
+        ${(opts.fields || [{ key: 'value', label: opts.label || '', placeholder: opts.placeholder || '', type: opts.type || 'text' }]).map(f => `${f.showWhen ? `<div data-kt-pf="${esc(f.key || 'value')}">` : ''}
+          ${f.label ? `<label style="display:block;font-size:13px;font-weight:600;margin-top:10px;color:#374151;">${esc(f.label)}</label>` : ''}
+          ${f.type === 'select'
+            ? `<select data-field="${esc(f.key || 'value')}" style="width:100%;padding:10px 12px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;margin-top:5px;background:#fff;">${(f.options || []).map(o => `<option value="${esc(o.value)}"${String(o.value) === String(f.value) ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>`
+            : f.type === 'textarea'
+            ? `<textarea data-field="${esc(f.key || 'value')}" rows="${f.rows || 6}" placeholder="${esc(f.placeholder || '')}" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;line-height:1.5;margin-top:5px;outline:none;resize:vertical;font-family:inherit;min-height:130px;transition:border-color .15s;">${esc(f.value || '')}</textarea>`
+            : `<input data-field="${esc(f.key || 'value')}" type="${esc(f.type || 'text')}" placeholder="${esc(f.placeholder || '')}" value="${esc(f.value || '')}" ${f.min !== undefined ? 'min=' + f.min : ''} ${f.max !== undefined ? 'max=' + f.max : ''} ${f.step !== undefined ? 'step=' + f.step : ''}
+            style="width:100%;padding:11px 14px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;margin-top:5px;outline:none;transition:border-color .15s;">`}
+        ${f.showWhen ? '</div>' : ''}`).join('')}
         <div style="margin-top:22px;display:flex;justify-content:flex-end;gap:8px;">
           <button data-action="cancel" style="background:#F1F5F9;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;color:#475569;font-size:14px;">${esc(opts.cancelLabel || 'Cancel')}</button>
           <button data-action="ok" style="background:linear-gradient(180deg,#1F6080,#154057);color:#fff;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;">${esc(opts.okLabel || 'OK')}</button>
@@ -64,19 +142,28 @@
       o.appendChild(m);
       document.body.appendChild(o);
 
-      const inputs = Array.from(m.querySelectorAll('input[data-field]'));
+      const inputs = Array.from(m.querySelectorAll('[data-field]'));
       inputs.forEach(i => {
         i.addEventListener('focus', () => i.style.borderColor = '#1F6080');
         i.addEventListener('blur', () => i.style.borderColor = '#E2E8F0');
       });
       setTimeout(() => inputs[0] && inputs[0].focus(), 80);
 
+      /* A field that only applies to some answers of another one (2026-11-10, the drill schedule: a date asked for on
+         "Every month" was meaningless): showWhen { field, in: [values] }. A hidden field answers '' on save, so a value
+         left from an earlier choice is never sent. */
+      const conds = (opts.fields || []).filter(f => f.showWhen);
+      const shown = (f) => { const c = m.querySelector('[data-field="' + f.showWhen.field + '"]'); return !c || (f.showWhen.in || []).map(String).indexOf(c.value) > -1; };
+      const sync = () => conds.forEach(f => { const w = m.querySelector('[data-kt-pf="' + (f.key || 'value') + '"]'); if (w) w.style.display = shown(f) ? '' : 'none'; });
+      if (conds.length) { inputs.forEach(i => i.addEventListener('change', sync)); sync(); }
+      const hiddenNow = (i) => { const w = i.closest('[data-kt-pf]'); return !!(w && w.style.display === 'none'); };
+
       const close = (result) => { o.remove(); resolve(result); };
       m.querySelector('[data-action="cancel"]').onclick = () => close(null);
       m.querySelector('[data-action="ok"]').onclick = () => {
         if (opts.fields && opts.fields.length > 1) {
           const out = {};
-          inputs.forEach(i => out[i.dataset.field] = i.value);
+          inputs.forEach(i => out[i.dataset.field] = hiddenNow(i) ? '' : i.value);
           close(out);
         } else {
           close(inputs[0].value);
@@ -94,7 +181,7 @@
   KT.confirm = function (opts, more) {
     // (title, { description, okLabel, ... }) accepted as well as one object — see KT.prompt.
     if (typeof opts === 'string') opts = Object.assign({ title: opts }, more || {});
-    opts = opts || {};
+    opts = shapeText(opts || {});
     // Auto-flag clearly DESTRUCTIVE actions with the danger (red ⚠) tone + a
     // matching action label, unless the caller set a tone explicitly. This makes
     // the ~47 migrated confirm() sites visually honest with no per-site edits.
@@ -119,24 +206,36 @@
     }
     return new Promise((resolve) => {
       const o = buildOverlay();
+      if (opts.alarm) o.style.background = 'rgba(234,179,8,.42)';     // the page behind dims to yellow
       const m = document.createElement('div');
       const tone = opts.tone || 'default';
       const accent = tone === 'danger' ? '#EF4444' : tone === 'warning' ? '#F59E0B' : '#1F6080';
-      m.style.cssText = 'background:#fff;padding:28px;border-radius:14px;max-width:440px;width:92%;box-shadow:0 20px 60px rgba(15,23,42,.25);animation:kt-pop-in .15s ease-out;';
+      m.className = 'kt-cf' + (opts.alarm ? ' kt-cf-alarm' : '');
+      m.setAttribute('role', 'alertdialog');
+      m.setAttribute('aria-modal', 'true');
+      /* NO EMPTY MIDDLE (2026-10-28, Anthony: "prompts like this looks weird as there is a blank space on the
+         second line ... make this look better through out all prompts like this"). A confirm with only a title
+         ("Mark all 5 as read?") drew the title in the header and nothing between it and the buttons. Now the
+         question moves into the body as the line you read, and the header says what kind of moment it is. */
+      let question = '';
+      if (!opts.description && !(opts.extra && opts.extra.nodeType === 1) && !opts.keepHeaderTitle) {
+        question = opts.title || 'Are you sure?';
+        opts.title = tone === 'danger' ? 'Are you sure?' : tone === 'warning' ? 'Before you continue' : 'Please confirm';
+      }
+      const hasBody = !!question || !!opts.description || !!(opts.extra && opts.extra.nodeType === 1);
       m.innerHTML = `
-        <div style="display:flex;gap:14px;align-items:flex-start;">
-          <div style="background:${accent}22;color:${accent};width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">
-            ${tone === 'danger' ? '⚠' : tone === 'warning' ? '!' : '?'}
-          </div>
-          <div style="flex:1;">
-            <h3 style="margin:0 0 4px;color:#0F172A;font-size:17px;font-weight:700;">${esc(opts.title || 'Are you sure?')}</h3>
-            ${opts.description ? `<p style="color:#64748B;font-size:14px;margin:6px 0 0;line-height:1.55;white-space:pre-line;">${esc(opts.description)}</p>` : ''}
-            <div class="kt-confirm-extra" style="margin-top:14px;"></div>
-          </div>
+        <div class="kt-dlg-head">
+          <span class="kt-cf-ico" aria-hidden="true" style="background:${accent};">${opts.alarm ? '⚠' : tone === 'danger' ? '!' : tone === 'warning' ? '!' : '?'}</span>
+          <h3>${esc(opts.title || 'Are you sure?')}</h3>
         </div>
-        <div style="margin-top:24px;display:flex;justify-content:flex-end;gap:8px;">
-          <button data-action="cancel" style="background:#F1F5F9;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;color:#475569;">${esc(opts.cancelLabel || 'Cancel')}</button>
-          <button data-action="ok" style="background:${accent};color:#fff;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;">${esc(opts.okLabel || 'Confirm')}</button>
+        ${hasBody ? `<div class="kt-cf-body">
+          ${question ? `<p class="kt-cf-text kt-cf-q">${esc(question)}</p>` : ''}
+          ${opts.description ? `<p class="kt-cf-text">${esc(opts.description)}</p>` : ''}
+          <div class="kt-confirm-extra"></div>
+        </div>` : '<div class="kt-confirm-extra"></div>'}
+        <div class="kt-cf-acts">
+          <button data-action="cancel" style="background:#F1F5F9;color:#475569;">${esc(opts.cancelLabel || 'Cancel')}</button>
+          <button data-action="ok" style="background:${opts.alarm ? '#D97706' : accent};color:#fff;">${esc(opts.okLabel || 'Confirm')}</button>
         </div>
       `;
 
@@ -156,6 +255,62 @@
       o.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(false); });
       o.tabIndex = -1;
       o.focus();
+    });
+  };
+
+  /* LOGGING FOR A CHILD WHO IS NOT SIGNED IN (2026-11-04, Anthony: "dimm the background to a yellow and the
+     warning popup should have a warning symbol and make this apparent and bold"). Care logs and daily events
+     (meals, snacks, naps, room logs, the sleep room) answer 422 not_signed_in; Api.request() brings that here,
+     and re-posts with confirm_absent=1 only on "Log anyway". Resolves true / false. */
+  KT.warnNotSignedIn = function (d) {
+    d = d || {};
+    var names = Array.isArray(d.absent) ? d.absent.filter(Boolean) : [];
+    var box = document.createElement('div');
+    box.className = 'kt-cf-warn';
+    var ico = document.createElement('span'); ico.className = 'kt-cf-warn-ico'; ico.setAttribute('aria-hidden', 'true'); ico.textContent = '⚠️';
+    var col = document.createElement('div');
+    var big = document.createElement('p'); big.className = 'kt-cf-warn-big';
+    big.textContent = names.length > 1 ? names.length + ' children are NOT signed in' : (names.length ? names[0] + ' is NOT signed in' : 'This child is NOT signed in');
+    col.appendChild(big);
+    if (names.length > 1) {
+      var list = document.createElement('p'); list.className = 'kt-cf-warn-names';
+      names.forEach(function (n) { var b = document.createElement('b'); b.textContent = n; list.appendChild(b); });
+      col.appendChild(list);
+    }
+    var sub = document.createElement('p'); sub.className = 'kt-cf-warn-sub';
+    sub.textContent = 'Sign ' + (names.length > 1 ? 'them' : 'this child') + ' in first. Choose Log anyway only if you are catching up after pick-up.';
+    col.appendChild(sub);
+    box.appendChild(ico); box.appendChild(col);
+    return KT.confirm({ title: 'Not signed in', extra: box, tone: 'warning', alarm: true, okLabel: 'Log anyway', cancelLabel: 'Cancel' });
+  };
+
+  /* CHECKING A CHILD IN OR OUT BY HAND (2026-11-06, Anthony: "the pop ups for check in and check out for children should
+     be in the centre of the screen and should be a warning message using the warning symbol with a yellow background
+     ... if they are not using the QR sign in - fully sweep"). Every staff screen that signs a child in or out without
+     One-Tap asks through here: the Today roster and the child's quick actions (educator), the director's rooms, and the
+     Daily Overview. Centred, yellow, ⚠, short. Resolves true / false.
+     d: { name, going: 'in' | 'out' } */
+  KT.warnManualCheck = function (d) {
+    d = d || {};
+    var name = String(d.name || 'this child'), going = d.going === 'out' ? 'out' : 'in';
+    var box = document.createElement('div');
+    box.className = 'kt-cf-warn';
+    var ico = document.createElement('span'); ico.className = 'kt-cf-warn-ico'; ico.setAttribute('aria-hidden', 'true'); ico.textContent = '⚠️';
+    var col = document.createElement('div');
+    var big = document.createElement('p'); big.className = 'kt-cf-warn-big';
+    big.textContent = 'Not using One-Tap';
+    var sub = document.createElement('p'); sub.className = 'kt-cf-warn-sub';
+    sub.textContent = (going === 'in' ? 'Parents should check in' : 'Parents should check out')
+      + ' by scanning the centre’s QR code with their KiddieTrac app. Use this only if they can’t (no phone, dead battery).';
+    var note = document.createElement('p'); note.className = 'kt-cf-warn-sub';
+    note.style.fontWeight = '500';
+    note.textContent = going === 'in' ? name + ' will be marked at the centre and the family notified.' : name + ' will be marked as picked up and the family notified.';
+    col.appendChild(big); col.appendChild(sub); col.appendChild(note);
+    box.appendChild(ico); box.appendChild(col);
+    return KT.confirm({
+      title: (going === 'in' ? 'Check in ' : 'Check out ') + name + '?',
+      keepHeaderTitle: true, extra: box, tone: 'warning', alarm: true,
+      okLabel: going === 'in' ? 'Check in anyway' : 'Check out anyway', cancelLabel: 'Cancel',
     });
   };
 
@@ -189,6 +344,8 @@
     var zone;
     try { zone = (window.KT && KT.tz && KT.tz()) || undefined; } catch (e) { zone = undefined; }
 
+    // A US agency reads "Oct 10, 2026 09:30 AM" (kt-term.js sets kt_spelling); others keep the device's form.
+    var loc; try { loc = sessionStorage.getItem('kt_spelling') === 'us' ? 'en-US' : undefined; } catch (e) { loc = undefined; }
     var dateOpts = { timeZone: zone, year: 'numeric', month: 'short', day: 'numeric' };
     var timeOpts = { timeZone: zone, hour: '2-digit', minute: '2-digit' };
 
@@ -199,7 +356,7 @@
         var iso = /(Z|[+-]\d{2}:?\d{2})$/.test(s) ? s : s + 'Z';
         var d = new Date(iso);
         if (isNaN(d)) return s;
-        return d.toLocaleDateString(undefined, dateOpts) + ' ' + d.toLocaleTimeString(undefined, timeOpts);
+        return d.toLocaleDateString(loc, dateOpts) + ' ' + d.toLocaleTimeString(loc, timeOpts);
       } catch (e) { return s; }
     }
     // Date only: 2026-05-20. A bare date has no time to shift, so render it as
@@ -209,15 +366,17 @@
         var parts = s.split('-');
         var dd = new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2]));
         if (isNaN(dd)) return s;
-        return dd.toLocaleDateString(undefined, { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });
+        return dd.toLocaleDateString(loc, { timeZone: 'UTC', year: 'numeric', month: 'short', day: 'numeric' });
       } catch (e) { return s; }
     }
-    // MySQL datetime: 2026-05-20 12:34:56 — zone-less, therefore UTC.
-    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) {
+    /* MySQL datetime: 2026-05-20 12:34:56 — zone-less, therefore UTC. WITH SECONDS only (2026-10-28): a raw DATETIME
+       always has them, while "2026-10-10 09:30" is a time a screen already put in the agency's zone (the drill log's
+       `local`), and reading that as UTC moved it again — a 9:30 drill in Long Beach showed as 2:30 a.m. */
+    if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(s)) {
       try {
         var d2 = new Date(s.replace(' ', 'T') + 'Z');
         if (isNaN(d2)) return s;
-        return d2.toLocaleDateString(undefined, dateOpts) + ' ' + d2.toLocaleTimeString(undefined, timeOpts);
+        return d2.toLocaleDateString(loc, dateOpts) + ' ' + d2.toLocaleTimeString(loc, timeOpts);
       } catch (e) { return s; }
     }
     return s;
@@ -256,7 +415,10 @@
 
     // ---- Sortable headers ----
     const ths = Array.from(thead.querySelectorAll('th'));
-    ths.forEach((th) => {
+    /* Every header's padding read before any header is written (phone speed sweep 2026-10-30): reading it after
+       the previous header's write re-calculated the page's styles once per column. */
+    const _prs = ths.map(th => parseFloat(getComputedStyle(th).paddingRight) || 0);
+    ths.forEach((th, _i) => {
       const text = (th.textContent || '').trim();
       if (!text || text === '') return;
       if (th.querySelector('button')) return; // action header
@@ -277,8 +439,7 @@
         + 'line-height:1;pointer-events:none;';
       indicator.textContent = '⇅';
       // Only widen a header that would otherwise have its text run under the arrows.
-      const _pr = parseFloat(getComputedStyle(th).paddingRight) || 0;
-      if (_pr < 16) { th.style.paddingRight = '16px'; }
+      if (_prs[_i] < 16) { th.style.paddingRight = '16px'; }
       th.appendChild(indicator);
       th.addEventListener('click', () => {
         const currentDir = th.dataset.ktSort || '';
@@ -403,7 +564,7 @@
     const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'table-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.download = 'table-' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '.csv';
     a.click();
   }
   function csvCell(s) {
@@ -580,125 +741,8 @@
   }
 
 
-  /* ── A signature, drawn ────────────────────────────────────────────────────
-     Shared because two screens capture one now (refunds from the ledger, and the
-     older payment-refund screen) and a second hand-rolled copy is how the two
-     drift apart.
-
-     Pointer events rather than mouse+touch pairs: one code path for mouse, pen and
-     finger, and setPointerCapture keeps the stroke attached when the finger leaves
-     the canvas mid-signature. The backing store is scaled by devicePixelRatio,
-     without which a signature on a phone is a blurry rectangle.
-
-     mount() returns a handle; the caller asks isEmpty() before submitting, because
-     an unsigned refund must be refused in the browser as well as on the server. */
-  /* KT.signaturePadInline — NOT KT.signaturePad.
-
-     Two different pads were both published as KT.signaturePad: this one, which mounts a
-     canvas INSIDE a host element and returns a handle (isEmpty/clear/toDataURL), and
-     kt-signature-pad.js, which opens a full-screen overlay and returns a Promise. Both
-     files are deferred, so they run in document order and the overlay — loaded later —
-     silently replaced this one for the whole page.
-
-     Everything that asked for a handle then got a Promise. Refund approval called
-     pad.clear() and pad.isEmpty() on it, threw a TypeError, and could not be completed
-     at all; an unrelated signature overlay appeared over the dialog as a bonus. Three
-     call sites, broken since the overlay shipped.
-
-     Two pads is fine. Two pads with one name is not, so this one is named for what it
-     is. See kt-signature-pad.js for the overlay. */
-  KT.signaturePadInline = function (host, opts) {
-    opts = opts || {};
-    var h = opts.height || 130;
-    host.innerHTML = '';
-    host.style.cssText = 'position:relative;border:1px dashed #CBD5E1;border-radius:10px;'
-      + 'background:#FFFFFF;overflow:hidden;';
-
-    var cv = document.createElement('canvas');
-    cv.style.cssText = 'display:block;width:100%;height:' + h + 'px;touch-action:none;cursor:crosshair;';
-    host.appendChild(cv);
-
-    var hint = document.createElement('div');
-    hint.textContent = opts.hint || 'Sign here';
-    hint.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;'
-      + 'justify-content:center;color:#94A3B8;font-size:13px;pointer-events:none;';
-    host.appendChild(hint);
-
-    var ctx, drawn = false, drawing = false;
-
-    function size() {
-      var r = Math.max(1, window.devicePixelRatio || 1);
-      var w = cv.clientWidth || host.clientWidth || 320;
-      // Resizing the canvas CLEARS it, so an already-drawn signature is preserved.
-      var keep = drawn ? cv.toDataURL() : null;
-      cv.width = Math.round(w * r);
-      cv.height = Math.round(h * r);
-      ctx = cv.getContext('2d');
-      ctx.scale(r, r);
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = '#0F172A';
-      if (keep) {
-        var img = new Image();
-        img.onload = function () { ctx.drawImage(img, 0, 0, w, h); };
-        img.src = keep;
-      }
-    }
-    size();
-    var ro = null;
-    try { ro = new ResizeObserver(size); ro.observe(host); } catch (e) {}
-
-    function at(e) {
-      var b = cv.getBoundingClientRect();
-      return { x: e.clientX - b.left, y: e.clientY - b.top };
-    }
-    cv.addEventListener('pointerdown', function (e) {
-      drawing = true;
-      try { cv.setPointerCapture(e.pointerId); } catch (x) {}
-      var p = at(e);
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y);
-      e.preventDefault();
-    });
-    cv.addEventListener('pointermove', function (e) {
-      if (!drawing) return;
-      var p = at(e);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-      if (!drawn) { drawn = true; hint.style.display = 'none'; }
-      e.preventDefault();
-    });
-    function stop(e) {
-      if (!drawing) return;
-      drawing = false;
-      try { cv.releasePointerCapture(e.pointerId); } catch (x) {}
-    }
-    cv.addEventListener('pointerup', stop);
-    cv.addEventListener('pointercancel', stop);
-    cv.addEventListener('pointerleave', stop);
-
-    return {
-      isEmpty: function () { return !drawn; },
-      clear: function () {
-        ctx.clearRect(0, 0, cv.width, cv.height);
-        drawn = false;
-        hint.style.display = '';
-      },
-      /* PNG on white: the server stores it as a data URI and it is rendered back into
-         a PDF, where a transparent background prints as a black block in some viewers. */
-      toDataURL: function () {
-        var out = document.createElement('canvas');
-        out.width = cv.width; out.height = cv.height;
-        var o = out.getContext('2d');
-        o.fillStyle = '#FFFFFF';
-        o.fillRect(0, 0, out.width, out.height);
-        o.drawImage(cv, 0, 0);
-        return out.toDataURL('image/png');
-      },
-      destroy: function () { try { if (ro) ro.disconnect(); } catch (e) {} },
-    };
-  };
+  /* KT.signaturePadInline moved to kt-signature-pad.js (2026-11-06), beside the popup pad, so
+     both share the saved signature and the public signing pages get it too. */
 
   KT.invoiceStatus = function (status, dueAt) {
     var s = String(status == null ? '' : status).trim().toLowerCase();
@@ -867,7 +911,7 @@
   function lkpi(label, value, tint, sub) {
     /* min-width:0 — a grid child defaults to min-width:auto, so anything wide inside
        widens the TRACK instead of scrolling in its own box. */
-    return '<div class="kt-card" style="min-width:0;padding:14px 16px;border-left:3px solid ' + tint + ';">'
+    return '<div class="kt-card" style="min-width:0;padding:14px 16px;--kt-edge:' + tint + ';">'
       + '<div style="font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:' + LC.muted + ';">' + lesc(label) + '</div>'
       + '<div style="font-size:20px;font-weight:800;margin-top:5px;color:' + tint + ';font-variant-numeric:tabular-nums;">' + lesc(value) + '</div>'
       + (sub ? '<div style="font-size:11.5px;color:' + LC.muted + ';margin-top:3px;">' + sub + '</div>' : '')

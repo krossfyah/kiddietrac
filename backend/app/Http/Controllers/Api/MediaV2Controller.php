@@ -76,7 +76,7 @@ final class MediaV2Controller extends Controller
     public function videoFeed(Request $request): JsonResponse
     {
         $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
+        $isStaff = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->whereIn('role', ['agency_admin', 'centre_director', 'educator', 'platform_admin'])
             ->where('active', 1)->exists();
         $q = DB::table('videos as v')
@@ -129,18 +129,28 @@ final class MediaV2Controller extends Controller
             'child_ids' => 'nullable',
             'duration_seconds' => 'nullable|integer|min:1|max:600',
         ]);
-        $hasUpload = DB::table('role_assignments')->where('user_id', $u->id)
+        $hasUpload = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->whereIn('role', ['agency_admin', 'centre_director', 'educator', 'platform_admin'])
             ->where('active', 1)->exists();
         abort_unless($hasUpload, 403);
+
+        /* The video's centre must be one you work at, in this agency (2026-11-05 leak sweep): centre_id was taken
+           from the request unchecked, and with none sent it fell back to the first centre on any of your roles
+           (any agency) and then to centre 1, so videos were filed into other centres' and other agencies'
+           feeds. With none sent it is now the first centre you may see here; with none of those, refused. */
+        $visibleCentres = $this->visibleCentreIds($request);
+        $centreId = (int) ($request->input('centre_id') ?: ($visibleCentres[0] ?? 0));
+        $agencyId = (int) $this->resolveAgencyId($request);
+        if (! $centreId || ! $agencyId
+            || (int) DB::table('centres')->where('id', $centreId)->value('agency_id') !== $agencyId
+            || ! (in_array($centreId, $visibleCentres, true) || $this->authorizeCentreAccess($u, $centreId))) {
+            return response()->json(['message' => 'Choose a centre you work at before sharing a video.'], 422);
+        }
 
         $file = $request->file('video');
         $path = $file->storeAs('videos/' . now()->format('Y/m'),
             $u->id . '-' . time() . '-' . preg_replace('/[^A-Za-z0-9._-]/', '', $file->getClientOriginalName()),
             'public');
-
-        $centreId = (int) ($request->input('centre_id')
-            ?: DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('centre_id') ?: 1);
 
         $childIds = $request->input('child_ids');
         if (is_string($childIds)) $childIds = json_decode($childIds, true);

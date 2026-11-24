@@ -100,7 +100,7 @@ class SalesLibraryController extends Controller
                 /* Signed, bearer-free and short-lived — the same mechanism every other
                    protected file in the portal uses, and the only way the packaged app
                    can hand a document to the real browser. */
-                'open_url' => ProtectedMedia::sign($d->file_url),
+                'open_url' => ProtectedMedia::sign($d->file_url, self::displayName($d->file_name, $d->title, $d->file_url)),
             ])->values()->all(),
             'categories' => $rows->pluck('category')->filter()->unique()->sort()->values()->all(),
         ]);

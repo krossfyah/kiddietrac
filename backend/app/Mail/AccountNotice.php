@@ -35,6 +35,11 @@ final class AccountNotice extends Mailable
            which is exactly how two sign-in emails were lost before this was moved
            here. A scalar serializes; a closure does not. */
         public readonly ?int $agencyId = null,
+        /* GET THE APP (2026-10-28, Anthony: "with all of the onboarding emails to users, parents, staff now add the
+           google play icon/link"). True on the emails that bring somebody in - welcomes, invitations, pick-up logins -
+           and false on everything else (a password reset is not the moment). The card itself is shown only under
+           KiddieTrac's own brand: a white-label agency's people use that agency's app, not ours. */
+        public readonly bool $showApp = false,
     ) {}
 
     public function envelope(): Envelope
@@ -60,6 +65,23 @@ final class AccountNotice extends Mailable
         return new Headers(text: $text);
     }
 
+    private function appCard(): string
+    {
+        if (! $this->showApp) {
+            return '';
+        }
+        try {
+            $src = $this->agencyId ? (\App\Support\Brand::forAgency($this->agencyId)['source'] ?? 'kiddietrac') : 'kiddietrac';
+            if ($src !== 'kiddietrac') {
+                return '';
+            }
+
+            return '<div style="margin:26px 0 4px;">' . \App\Support\PlayBadge::card() . '</div>';
+        } catch (\Throwable $e) {
+            return '';
+        }
+    }
+
     public function content(): Content
     {
         return new Content(
@@ -71,6 +93,7 @@ final class AccountNotice extends Mailable
                 'ctaLabel'      => $this->ctaLabel,
                 'ctaUrl'        => $this->ctaUrl,
                 'appUrl'        => config('app.url', 'https://app.kiddietrac.com'),
+                'appCard'       => $this->appCard(),
             ],
         );
     }

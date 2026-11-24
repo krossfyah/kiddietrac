@@ -27,17 +27,18 @@ final class PlatformController extends Controller
      */
     public function overview(Request $request): JsonResponse
     {
-        $agencies = DB::table('agencies')->whereNull('deleted_at')->count();
-        $centres  = DB::table('centres')->whereNull('deleted_at')->count();
-        $rooms    = DB::table('rooms')->count();
-        $families = DB::table('families')->whereNull('deleted_at')->count();
-        $children = DB::table('children')->whereNull('deleted_at')->count();
+        $agencies = DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))->whereNull('deleted_at')->count();
+        $centres  = DB::table('centres')->whereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0]))->whereNull('deleted_at')->count();
+        $rooms    = DB::table('rooms')->whereIn('centre_id', (\App\Support\TestAgencies::realCentreIds() ?: [0]))->count();
+        $families = DB::table('families')->whereIn('centre_id', (\App\Support\TestAgencies::realCentreIds() ?: [0]))->whereNull('deleted_at')->count();
+        $children = DB::table('children')->whereIn('family_id', DB::table('families')->whereIn('centre_id', (\App\Support\TestAgencies::realCentreIds() ?: [0]))->whereNull('deleted_at')->select('id'))->whereNull('deleted_at')->count();
         $staff    = DB::table('role_assignments')
             ->whereIn('role', ['agency_admin', 'centre_director', 'educator'])
+            ->whereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0]))
             ->where('active', true)
             ->distinct()
             ->count('user_id');
-        $guardians = DB::table('guardians')->distinct()->count('user_id');
+        $guardians = DB::table('guardians')->whereIn('family_id', DB::table('families')->whereIn('centre_id', (\App\Support\TestAgencies::realCentreIds() ?: [0]))->whereNull('deleted_at')->select('id'))->distinct()->count('user_id');
 
         /* Plan MRR — each active agency's plan NORMALISED TO A MONTHLY amount.
            A raw sum of plan_amount_cents counts an annual plan as twelve times its real
@@ -46,7 +47,7 @@ final class PlatformController extends Controller
            convert with — so the base currency is the headline and the rest is reported
            beside it rather than being folded in or dropped. */
         $mrrByCurrency = [];
-        foreach (DB::table('agencies')
+        foreach (DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))
             ->whereNull('deleted_at')
             ->where('billing_status', 'active')
             ->get(['plan_amount_cents', 'plan_currency', 'billing_interval']) as $a) {
@@ -65,11 +66,11 @@ final class PlatformController extends Controller
 
         // Recent agency signups + churn — last 30 days
         $thirtyDaysAgo = now()->subDays(30);
-        $newAgencies30d = DB::table('agencies')
+        $newAgencies30d = DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))
             ->where('created_at', '>=', $thirtyDaysAgo)
             ->whereNull('deleted_at')
             ->count();
-        $cancelledAgencies30d = DB::table('agencies')
+        $cancelledAgencies30d = DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))
             ->where('cancelled_at', '>=', $thirtyDaysAgo)
             ->count();
 
@@ -78,13 +79,13 @@ final class PlatformController extends Controller
         // Agency growth — last 6 calendar months
         $agencyGrowth = [];
         for ($i = 5; $i >= 0; $i--) {
-            $start = now()->startOfMonth()->subMonths($i);
+            $start = \App\Support\AgencyTime::boundaryUtc(null, 'month')->subMonths($i);
             $end   = (clone $start)->endOfMonth();
-            $signups = DB::table('agencies')
+            $signups = DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))
                 ->whereBetween('created_at', [$start, $end])
                 ->whereNull('deleted_at')
                 ->count();
-            $cancelled = DB::table('agencies')
+            $cancelled = DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))
                 ->whereBetween('cancelled_at', [$start, $end])
                 ->count();
             $agencyGrowth[] = [
@@ -98,12 +99,12 @@ final class PlatformController extends Controller
         // MRR trend — snapshot active agencies at the END of each of the last 6 months
         $mrrTrend = [];
         for ($i = 5; $i >= 0; $i--) {
-            $monthEnd = now()->startOfMonth()->subMonths($i)->endOfMonth();
+            $monthEnd = \App\Support\AgencyTime::boundaryUtc(null, 'month')->subMonths($i)->addMonth()->subSecond();
             /* Same normalisation as the headline. If the trend summed raw amounts
                while the headline did not, month-on-month growth would be measured against
                a differently-computed baseline and read as a jump that never happened. */
             $rows = 0;
-            foreach (DB::table('agencies')
+            foreach (DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))
                 ->where('created_at', '<=', $monthEnd)
                 ->where(function ($q) use ($monthEnd) {
                     $q->whereNull('cancelled_at')->orWhere('cancelled_at', '>', $monthEnd);
@@ -139,6 +140,7 @@ final class PlatformController extends Controller
                 $j->on('c.family_id', '=', 'f.id')->whereNull('c.deleted_at');
             })
             ->whereNull('a.deleted_at')
+            ->whereIn('a.id', (\App\Support\TestAgencies::realIds() ?: [0]))
             ->groupBy('a.id', 'a.name', 'a.brand_primary_color', 'a.billing_status')
             ->orderByRaw('COUNT(DISTINCT c.id) DESC')
             ->limit(5)
@@ -148,6 +150,8 @@ final class PlatformController extends Controller
         // the affected entity (e.g. WHICH user was deleted) so the feed isn't generic.
         $recentEvents = DB::table('audit_logs as al')
             ->leftJoin('users as u', 'u.id', '=', 'al.user_id')
+            ->where(fn ($q) => $q->whereNull('al.agency_id')->orWhereIn('al.agency_id', (\App\Support\TestAgencies::realIds() ?: [0])))
+            ->where(fn ($q) => $q->whereNull('al.user_id')->orWhereNotIn('al.user_id', (\App\Support\TestAgencies::testOnlyUserIds() ?: [0])))
             ->orderByDesc('al.created_at')->orderByDesc('al.id')
             ->limit(12)
             ->get([
@@ -162,6 +166,7 @@ final class PlatformController extends Controller
 
         // Active sessions in the last 24 hours — distinct users with a recently-used token
         $sessionsToday = DB::table('personal_access_tokens')
+            ->whereNotIn('tokenable_id', (\App\Support\TestAgencies::testOnlyUserIds() ?: [0]))
             ->where('last_used_at', '>=', now()->subDay())
             ->distinct()
             ->count('tokenable_id');
@@ -215,18 +220,18 @@ final class PlatformController extends Controller
         $dayAgo = $now->copy()->subDay();
 
         // ── Email deliverability (last 7 days) ──
-        $emailTotal = DB::table('email_logs')->where('created_at', '>=', $sevenDaysAgo)->count();
-        $emailFailed = DB::table('email_logs')->where('created_at', '>=', $sevenDaysAgo)->whereIn('status', ['failed', 'error'])->count();
-        $emailSuppressed = DB::table('email_logs')->where('created_at', '>=', $sevenDaysAgo)->where('status', 'suppressed')->count();
-        $emailOpened = DB::table('email_logs')->where('created_at', '>=', $sevenDaysAgo)->whereNotNull('opened_at')->count();
+        $emailTotal = DB::table('email_logs')->where(fn ($q) => $q->whereNull('agency_id')->orWhereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0])))->where('created_at', '>=', $sevenDaysAgo)->count();
+        $emailFailed = DB::table('email_logs')->where(fn ($q) => $q->whereNull('agency_id')->orWhereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0])))->where('created_at', '>=', $sevenDaysAgo)->whereIn('status', ['failed', 'error'])->count();
+        $emailSuppressed = DB::table('email_logs')->where(fn ($q) => $q->whereNull('agency_id')->orWhereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0])))->where('created_at', '>=', $sevenDaysAgo)->where('status', 'suppressed')->count();
+        $emailOpened = DB::table('email_logs')->where(fn ($q) => $q->whereNull('agency_id')->orWhereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0])))->where('created_at', '>=', $sevenDaysAgo)->whereNotNull('opened_at')->count();
         $emailDelivered = max(0, $emailTotal - $emailFailed - $emailSuppressed);
         $openRate = $emailDelivered > 0 ? (int) round(($emailOpened / $emailDelivered) * 100) : 0;
         $failRate = $emailTotal > 0 ? round(($emailFailed / $emailTotal) * 100, 1) : 0.0;
 
         // ── Usage & engagement ──
-        $loginsToday = DB::table('audit_logs')->where('action', 'login')->where('created_at', '>=', $today)->count();
-        $logins7d = DB::table('audit_logs')->where('action', 'login')->where('created_at', '>=', $sevenDaysAgo)->count();
-        $activeUsers24h = DB::table('audit_logs')->where('created_at', '>=', $dayAgo)->whereNotNull('user_id')->distinct()->count('user_id');
+        $loginsToday = DB::table('audit_logs')->whereNotIn('user_id', (\App\Support\TestAgencies::testOnlyUserIds() ?: [0]))->where(fn ($q) => $q->whereNull('agency_id')->orWhereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0])))->where('action', 'login')->where('created_at', '>=', $today)->count();
+        $logins7d = DB::table('audit_logs')->whereNotIn('user_id', (\App\Support\TestAgencies::testOnlyUserIds() ?: [0]))->where(fn ($q) => $q->whereNull('agency_id')->orWhereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0])))->where('action', 'login')->where('created_at', '>=', $sevenDaysAgo)->count();
+        $activeUsers24h = DB::table('audit_logs')->whereNotIn('user_id', (\App\Support\TestAgencies::testOnlyUserIds() ?: [0]))->where(fn ($q) => $q->whereNull('agency_id')->orWhereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0])))->where('created_at', '>=', $dayAgo)->whereNotNull('user_id')->distinct()->count('user_id');
 
         // Active agencies = those with a child check-in in the last 30 days.
         $activeAgencies = DB::table('check_events as ce')
@@ -234,8 +239,9 @@ final class PlatformController extends Controller
             ->join('centres as c', 'c.id', '=', 'r.centre_id')
             ->where('ce.occurred_at', '>=', $thirtyDaysAgo)
             ->whereNull('c.deleted_at')
+            ->whereIn('c.agency_id', (\App\Support\TestAgencies::realIds() ?: [0]))
             ->distinct()->count('c.agency_id');
-        $totalAgencies = DB::table('agencies')->whereNull('deleted_at')->count();
+        $totalAgencies = DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))->whereNull('deleted_at')->count();
         $dormantAgencies = max(0, $totalAgencies - $activeAgencies);
 
         // ── System ──
@@ -296,14 +302,14 @@ final class PlatformController extends Controller
         $mrrGrowthAbs = ($lastMrr - $prevMrr) / 100;
 
         // Churn rate (last 30 days) — cancelled / starting count
-        $startingAgencies = DB::table('agencies')
+        $startingAgencies = DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))
             ->where('created_at', '<', $thirtyDaysAgo)
             ->where(function ($q) use ($thirtyDaysAgo) {
                 $q->whereNull('cancelled_at')->orWhere('cancelled_at', '>=', $thirtyDaysAgo);
             })
             ->whereNull('deleted_at')
             ->count();
-        $cancelledLast30 = DB::table('agencies')
+        $cancelledLast30 = DB::table('agencies')->whereIn('id', (\App\Support\TestAgencies::realIds() ?: [0]))
             ->where('cancelled_at', '>=', $thirtyDaysAgo)
             ->count();
         $churnPct = $startingAgencies > 0 ? round(($cancelledLast30 / $startingAgencies) * 100, 1) : 0.0;
@@ -316,10 +322,11 @@ final class PlatformController extends Controller
         $ltvDollars = $arpa * $ltvMonths;
 
         // Capacity utilisation — total enrolled / total licensed capacity
-        $licensedCapacity = (int) DB::table('centres')->whereNull('deleted_at')->sum('license_capacity');
+        $licensedCapacity = (int) DB::table('centres')->whereIn('agency_id', (\App\Support\TestAgencies::realIds() ?: [0]))->whereNull('deleted_at')->sum('license_capacity');
         $enrolledCount = DB::table('children as c')
             ->join('families as f', 'f.id', '=', 'c.family_id')
             ->where('c.enrollment_status', 'enrolled')
+            ->whereIn('f.centre_id', (\App\Support\TestAgencies::realCentreIds() ?: [0]))
             ->whereNull('c.deleted_at')
             ->count();
         $capacityPct = $licensedCapacity > 0 ? round(($enrolledCount / $licensedCapacity) * 100, 1) : 0.0;
@@ -485,8 +492,9 @@ final class PlatformController extends Controller
 
         $planAmounts = ['starter' => 4900, 'growth' => 14900, 'enterprise' => 34900];
         $amount = $data['plan_amount_cents'] ?? ($planAmounts[$data['plan_code']] ?? 0);
-        // White-label is included on growth + enterprise (FeatureFlag plan_min=growth).
-        $whiteLabel = in_array($data['plan_code'], ['growth', 'enterprise'], true);
+        // White-label is an add-on on every plan (2026-10-24): a new agency starts with "Powered by"
+        // showing; the White-label licence switches it off (Licences::sync).
+        $whiteLabel = false;
 
         // Residence country → currency + display name (also drives compliance).
         $countryMap = [
@@ -515,8 +523,10 @@ final class PlatformController extends Controller
             ."\n".$data['city'].', '.$data['province'].'  '.$data['postal_code']
             ."\n".$countryName);
 
-        $result = DB::transaction(function () use ($data, $slug, $amount, $whiteLabel, $address, $currency, $countryName, $locale) {
+        $resellerId = $request->attributes->get('kt_reseller_id') ?: null;   // ResellerController::createAgency (2026-10-21)
+        $result = DB::transaction(function () use ($data, $slug, $amount, $whiteLabel, $address, $currency, $countryName, $locale, $resellerId) {
             $agencyId = DB::table('agencies')->insertGetId([
+                'reseller_id'         => $resellerId,
                 'name'                => $data['name'],
                 'slug'                => $slug,
                 'contact_email'       => $data['contact_email'],
@@ -589,8 +599,23 @@ final class PlatformController extends Controller
             return ['agency_id' => $agencyId, 'centre_id' => $centreId, 'user_id' => $userId, 'token' => $token];
         });
 
+        /* EVERY AGENCY HAS A LICENCE (2026-10-25). A proposal conversion grants its own from the
+           quote (kt_hold_invite); an agency made here gets its plan, at the agreed amount. */
+        if (! $request->attributes->get('kt_hold_invite')) {
+            try {
+                $pid = DB::table('sales_products')->where('kind', 'plan')->where('plan_code', $data['plan_code'])->where('active', 1)->value('id');
+                if ($pid) \App\Support\Licences::grant((int) $result['agency_id'], (int) $pid, ['unit_price' => round($amount / 100, 2), 'interval' => 'monthly', 'notes' => 'Granted when the agency was created.']);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('plan licence at agency creation failed', ['agency' => $result['agency_id'], 'error' => $e->getMessage()]);
+            }
+        }
+
         $link = 'https://app.kiddietrac.com/set-password.html?token='.$result['token'];
-        $this->sendAdminInvite($data, $link);
+        // A proposal approved in Sales (SalesConversionController) holds the welcome email until
+        // the superadmin sends it (2026-10-23, Anthony's choice).
+        if (! $request->attributes->get('kt_hold_invite')) {
+            $this->sendAdminInvite($data, $link);
+        }
 
         return response()->json([
             'agency'              => DB::table('agencies')->where('id', $result['agency_id'])->first(),
@@ -648,7 +673,7 @@ final class PlatformController extends Controller
         return null;
     }
 
-    private function sendAdminInvite(array $data, string $link): void
+    public function sendAdminInvite(array $data, string $link): void   // also ResellerController (2026-10-21)
     {
         $trackToken = bin2hex(random_bytes(16));
         $apiBase = preg_replace('#/api/v1/?$#', '', rtrim((string) config('app.url', 'https://api.kiddietrac.com'), '/'));
@@ -784,7 +809,25 @@ final class PlatformController extends Controller
         // this returned every agency's emails regardless of the active agency (leak).
         $q = DB::table('email_logs')->orderByDesc('id');
         $active = $request->header('X-Active-Agency-Id');
-        if (Schema::hasColumn('email_logs', 'agency_id') && $active !== null && $active !== '' && strtolower((string) $active) !== 'all' && ctype_digit((string) $active)) {
+        /* PLATFORM-LEVEL (2026-10-22). Mail that belongs to no agency (crash alerts, sales
+           enquiries and voicemails, website subscribers, platform invites) is logged with
+           agency_id NULL, and inside any agency that filter hid it: Anthony "a few emails
+           got sent out as per platform-level and i don't see them in the email log". Same
+           answer as the audit log's Platform-level tab: ask for exactly those rows. This
+           route is platform_admin only. */
+        $scope = strtolower(trim((string) $request->query('scope', '')));
+        $platformScope = $scope === 'platform';
+        /* ALL (2026-10-23, Anthony: "create an all in the whose so the superadmin can see it
+           all"): every agency's mail and the platform's together. This route is platform_admin
+           only, so nobody else can ask for it. Each row carries whose it is. */
+        if (Schema::hasColumn('email_logs', 'agency_id')) $cols[] = 'agency_id';
+        $hasBouncedAt = Schema::hasColumn('email_logs', 'bounced_at');
+        if ($hasBouncedAt) $cols[] = 'bounced_at';
+        if ($scope === 'all') {
+            // no agency filter
+        } elseif ($platformScope && Schema::hasColumn('email_logs', 'agency_id')) {
+            $q->whereNull('agency_id');
+        } elseif (Schema::hasColumn('email_logs', 'agency_id') && $active !== null && $active !== '' && strtolower((string) $active) !== 'all' && ctype_digit((string) $active)) {
             $q->where('agency_id', (int) $active);
         }
 
@@ -816,6 +859,20 @@ final class PlatformController extends Controller
         $status = trim((string) $request->query('status', ''));
         if ($status === 'problems') {
             $q->whereIn('status', ['bounced', 'failed', 'deferred', 'suppressed']);
+            /* DEMO SUPPRESSIONS ARE NOT ERRORS (2026-11-01, Anthony chose "Hide demo suppressions
+               only"). Demo and website-demo accounts are never mailed by design; ~800 of those
+               rows buried the 5 real bounces. Real people held back by a setting stay listed.
+               The Email log tab still shows them. */
+            $q->where(function ($w) {
+                $w->whereNull('error')
+                  ->orWhere(function ($v) {
+                      $v->where('error', 'not like', 'Demo / non-existent address%')
+                        ->where('error', 'not like', 'Public website demo%')
+                        ->where('error', 'not like', 'Integration account (no mailbox)%');
+                  });
+            });
+            // Newest PROBLEM first: a bounce is dated when it bounced, not when it was sent.
+            if ($hasBouncedAt) { $q->reorder()->orderByRaw('COALESCE(bounced_at, created_at) DESC')->orderByDesc('id'); }
         } elseif ($status !== '' && $status !== 'all') {
             $q->where('status', $status);
         }
@@ -856,6 +913,10 @@ final class PlatformController extends Controller
         } else {
             $logs = $logs->map(function ($r) { $r->has_body = false; return $r; });
         }
+        $names = [];
+        $ids = $logs->pluck('agency_id')->filter()->unique()->values()->all();
+        if ($ids) $names = DB::table('agencies')->whereIn('id', $ids)->pluck('name', 'id')->all();
+        $logs = $logs->map(function ($r) use ($names) { $r->agency_name = isset($r->agency_id) && $r->agency_id ? ($names[$r->agency_id] ?? ('Agency #' . $r->agency_id)) : null; return $r; });
         return response()->json([
             'logs'   => $logs->values(),
             'total'  => $total,
@@ -892,7 +953,17 @@ final class PlatformController extends Controller
             'cc'         => $row->cc ?? null,
             'bcc'        => $row->bcc ?? null,
             'html'       => $row->body_html ?: null,
+            'attachments' => \App\Support\EmailLogAttachments::forLog((int) $row->id),
         ]);
+    }
+
+    /** GET /platform/email-logs/{id}/attachments/{aid}: one stored attachment (inline for viewing, or as a download). */
+    public function emailAttachment(Request $request, int $id, int $aid)
+    {
+        $a = Schema::hasTable('email_log_attachments')
+            ? DB::table('email_log_attachments')->where('id', $aid)->where('email_log_id', $id)->first() : null;
+        abort_unless($a && $a->path && \Illuminate\Support\Facades\Storage::disk('local')->exists($a->path), 404, 'That attachment was not kept.');
+        return \App\Support\FileResponse::download($a->path, $a->filename, ['Content-Type' => $a->mime ?: 'application/octet-stream']);
     }
 
     /**

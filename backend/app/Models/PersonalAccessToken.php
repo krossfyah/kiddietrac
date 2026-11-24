@@ -23,6 +23,29 @@ class PersonalAccessToken extends SanctumToken
     /** Seconds between last_used_at writes for one token. */
     private const STAMP_EVERY = 60;
 
+    /**
+     * ONE LOOKUP PER REQUEST (2026-11-13, Anthony: "when the portal refreshes or saves that process moves very slow").
+     * Sanctum's guard and five middleware (EnsurePasswordChanged, EnsureOnboarded, EnsureStrongSignIn,
+     * EnforceSignInLocks, BrandingController) each looked the bearer token up, and then its user: a badge poll read
+     * personal_access_tokens + users five times. The answer is kept on the request, so they share one model (and its
+     * loaded tokenable). Web requests only: a queue worker's request object outlives the job. A token deleted during
+     * the request (an expired parent session) is never handed out again.
+     */
+    public static function findToken($token)
+    {
+        if (app()->runningInConsole() || ! app()->bound('request')) return parent::findToken($token);
+        $r = app('request');
+        $key = '_kt_pat.' . hash('sha256', (string) $token);
+        if ($r->attributes->has($key)) {
+            $found = $r->attributes->get($key);
+            return ($found && $found->exists) ? $found : null;
+        }
+        $found = parent::findToken($token);
+        $r->attributes->set($key, $found);
+
+        return $found;
+    }
+
     public function save(array $options = [])
     {
         $dirty = $this->getDirty();

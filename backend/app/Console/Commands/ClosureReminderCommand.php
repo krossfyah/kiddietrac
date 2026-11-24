@@ -63,7 +63,7 @@ class ClosureReminderCommand extends Command
            centre has nobody to tell. App\Support\Live is the one definition of open. */
         foreach (\App\Support\Live::centres(DB::table('centre_closures as cc')
             ->join('centres as c', 'c.id', '=', 'cc.centre_id'), 'c')
-            ->whereDate('cc.closure_date', '>=', now()->subDay()->toDateString())
+            ->whereDate('cc.closure_date', '>=', \App\Support\AgencyTime::todayDate()->subDay()->toDateString())
             ->get(['cc.*', 'c.name as centre_name', 'c.agency_id']) as $row) {
 
             // "How many days away" must be counted on the AGENCY's calendar. Counted in
@@ -429,7 +429,7 @@ class ClosureReminderCommand extends Command
         /* The meaning of the day, set apart so it reads as a note rather than as more
            logistics. Only ever present for a statutory holiday. */
         $meaningBlock = $isHoliday
-            ? '<tr><td style="padding:14px 0 2px;"><div style="border-left:3px solid #8EC73C;background:#F6FBEF;'
+            ? '<tr><td style="padding:14px 0 2px;"><div style="--kt-edge:#8EC73C;background:#F6FBEF;'
                 . 'border-radius:0 10px 10px 0;padding:14px 16px;">'
                 . '<div style="font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#4D7C0F;">'
                 . 'About ' . $e($reason) . '</div>'

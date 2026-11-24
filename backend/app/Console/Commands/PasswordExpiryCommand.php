@@ -59,7 +59,7 @@ final class PasswordExpiryCommand extends Command
 
             /* Sent once per step. The marker holds the step, so moving from 14 to 7 sends
                again but a second night at 7 does not. */
-            $marker = $step . '|' . now()->toDateString();
+            $marker = $step . '|' . now()->toDateString();   // tz-ok: a dedupe key, deliberately on the server clock
             if (str_starts_with((string) ($p->password_expiry_notified_at ?? ''), $step . '|')) {
                 $skipped++;
                 continue;

@@ -34,6 +34,7 @@ class EducatorDailySummaryCommand extends Command
         {--date= : YYYY-MM-DD in the agency timezone (default: today)}
         {--to= : Send to this address instead of the educator (for testing)}
         {--limit= : Stop after N educators (defaults to 1 when --to is set)}
+        {--due : Scheduled mode: send each one only when due (App\Support\SummaryTiming), once a day}
         {--dry-run : Build it, print what would happen, send nothing}';
 
     protected $description = 'Email each educator a warm end-of-day summary of their day, with wins and gentle suggestions';
@@ -43,6 +44,7 @@ class EducatorDailySummaryCommand extends Command
         $onlyUser = $this->option('user') ? (int) $this->option('user') : null;
         $override = $this->option('to');
         $dry = (bool) $this->option('dry-run');
+        $due = (bool) $this->option('due');
         // A test send is to check the layout, not to mail yourself the whole staff
         // list: --to produced one email per educator (24 of them, once). It now
         // means "show me one", unless --limit says otherwise.
@@ -81,6 +83,15 @@ class EducatorDailySummaryCommand extends Command
             $tz = $ed->tz ?: 'America/Toronto';
             $date = $this->option('date') ? Carbon::parse((string) $this->option('date'), $tz) : Carbon::now($tz);
 
+            /* SCHEDULED MODE (2026-10-29, App\Support\SummaryTiming): an hour (the agency's
+               setting) after their last clock-out, or the fallback time if they never clocked
+               out. Claimed per PERSON, so someone assigned to two centres gets one email. */
+            if ($due && ! $override) {
+                if (\App\Support\SummaryTiming::sent('educator', (int) $ed->id, $date->toDateString())) continue;
+                if (! \App\Support\SummaryTiming::educatorDue((int) $ed->id, (int) $ed->agency_id, $tz, $date)) continue;
+                if (! $dry && ! \App\Support\SummaryTiming::claim('educator', (int) $ed->id, $date->toDateString(), 'due')) continue;
+            }
+
             // Not a day this centre runs — nothing to write up. The parent summary has
             // always checked this; this one never did, so educators at a Monday–Friday
             // centre were getting a Saturday summary of a day that did not happen.
@@ -106,6 +117,11 @@ class EducatorDailySummaryCommand extends Command
             $subject = "Your day at a glance \u{2014} " . ($sPlace ? $sPlace . " \u{2014} " : '')
                 . $date->format('D j M Y') . " \u{1F49B}";
             $to = $override ?: $ed->email;
+            if (! $due && ! $override && ! $dry
+                && ! \App\Support\SummaryTiming::claim('educator', (int) $ed->id, $date->toDateString(), 'run')) {
+                $this->line("· {$ed->first_name}: already sent today, skipping");
+                continue;
+            }
 
             if ($dry) {
                 $this->info("[dry-run] would send to {$to} — {$today['moments']} moments, "
@@ -177,7 +193,7 @@ class EducatorDailySummaryCommand extends Command
         if ($roomIds) {
             $q->whereIn('e.room_id', $roomIds);
         } else {
-            $centreIds = DB::table('role_assignments')->where('user_id', $educatorId)
+            $centreIds = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $educatorId)
                 ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
             if (! $centreIds) {
                 return [];
@@ -209,7 +225,7 @@ class EducatorDailySummaryCommand extends Command
     {
         $out = ['expected_absent' => [], 'reported' => []];
         try {
-            $centreIds = DB::table('role_assignments')->where('user_id', $educatorId)
+            $centreIds = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $educatorId)
                 ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
             if (! $centreIds) return $out;
 
@@ -287,7 +303,7 @@ class EducatorDailySummaryCommand extends Command
         $CARE_TO_EVENT = [
             'meal' => 'meal', 'snack' => 'snack', 'bottle' => 'meal',
             'nap' => 'nap', 'diaper' => 'diaper', 'bathroom' => 'diaper',
-            'mood' => 'mood', 'sunscreen' => 'care',
+            'mood' => 'mood', 'sunscreen' => 'care', 'medicine' => 'care', 'clothing' => 'care',
         ];
 
         $byType = [];
@@ -404,7 +420,7 @@ class EducatorDailySummaryCommand extends Command
         } catch (\Throwable $e) {
         }
         try {
-            $centreId = DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)
+            $centreId = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $userId)->where('active', 1)
                 ->whereNotNull('centre_id')->value('centre_id');
             if (! $centreId && Schema::hasTable('educator_rooms')) {
                 $centreId = DB::table('educator_rooms as er')->join('rooms as r', 'r.id', '=', 'er.room_id')
@@ -428,7 +444,7 @@ class EducatorDailySummaryCommand extends Command
              . '<td style="background:#E6EDF5;height:10px;border-radius:0 6px 6px 0;font-size:0;line-height:0;">&nbsp;</td></tr></table>';
 
         return '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-             . 'style="border-collapse:separate;background:linear-gradient(135deg,#0B2545 0%,#12315C 60%,#0E7C90 140%);'
+             . 'bgcolor="#0B2545" style="border-collapse:separate;background-color:#0B2545;background-image:linear-gradient(135deg,#0B2545 0%,#12315C 60%,#0E7C90 140%);'
              . 'border-radius:18px;margin:6px 0 22px;"><tr><td style="padding:22px 24px;">'
              . ($place
                  ? '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.4px;color:#8FB3D9;text-transform:uppercase;margin-bottom:10px;">'
@@ -646,6 +662,7 @@ class EducatorDailySummaryCommand extends Command
             'activity' => 'joined an activity', 'mood' => 'had their mood checked',
             'observation' => 'was observed for their learning story',
             'note' => 'had a moment shared', 'sunscreen' => 'had sunscreen applied',
+            'medicine' => 'was given medicine', 'clothing' => 'had a change of clothes',
         ];
 
         $out = [];
@@ -753,6 +770,32 @@ class EducatorDailySummaryCommand extends Command
             : '<span style="color:#B45309;">▼ ' . abs($d) . '</span>';
     }
 
+    /* "✨ Your day in a few lines" - the AI Bundle (2026-10-28). Additive: '' unless the agency has the bundle and the AI
+       answered, so the email is otherwise exactly what it was. Built from this email's own numbers and moments. */
+    private function aiNote($ed, array $t, Carbon $date, string $tz): string
+    {
+        if (! \App\Support\AiBundle::on((int) $ed->agency_id)) {
+            return '';
+        }
+        $kids = [];
+        try { $kids = array_slice($this->childrenNarrative((int) $ed->id, $tz, $date), 0, 12); } catch (\Throwable $e) {}
+        /* NAMED facts, never raw keys (2026-10-28): $t['minutes'] is CLOCKED-IN time, and the note called 344 of them
+           "minutes of recorded care and observation". Each number says exactly what it counts. */
+        $facts = [
+            'hours_clocked_in' => round(((int) ($t['minutes'] ?? 0)) / 60, 1),
+            'care_moments_logged' => (int) ($t['moments'] ?? 0), 'children_cared_for' => (int) ($t['children'] ?? 0),
+            'observations_written' => (int) ($t['observations'] ?? 0), 'photos_and_videos_shared' => (int) ($t['media'] ?? 0),
+            'meals_and_snacks_logged' => (int) ($t['meals'] ?? 0), 'naps_logged' => (int) ($t['naps'] ?? 0),
+            'activities_logged' => (int) ($t['activities'] ?? 0), 'diaper_and_bathroom_changes' => (int) ($t['diapers'] ?? 0),
+            'notes_written' => (int) ($t['notes'] ?? 0),
+        ];
+        $text = \App\Support\AiSummaries::write((int) $ed->agency_id, 'educator', [
+            'educator_first_name' => (string) $ed->first_name, 'date' => $date->format('l, j F Y'), 'todays_numbers' => $facts, 'children_moments' => $kids,
+        ]);
+
+        return $text ? \App\Support\AiSummaries::box('YOUR DAY IN A FEW LINES', $text) : '';
+    }
+
     private function buildHtml($ed, array $t, array $y, array $m, Carbon $date, string $tz): string
     {
         $name = $ed->first_name ?: 'there';
@@ -824,7 +867,8 @@ class EducatorDailySummaryCommand extends Command
 
         $body = '<p style="font-size:16px;font-weight:700;color:#0F172A;margin:0 0 4px;">' . $greet . '</p>'
             . $this->heroCard($sc, $placeName, $placeWord, $date)
-            . '<p style="margin:0 0 4px;">' . $opener . '</p>';
+            . '<p style="margin:0 0 4px;">' . $opener . '</p>'
+            . $this->aiNote($ed, $t, $date, $tz);
 
         // ── Your day in numbers ────────────────────────────────────────────
         // Soft washes rather than bordered white boxes: this is a thank-you, not a
@@ -849,7 +893,7 @@ class EducatorDailySummaryCommand extends Command
         $walks = $this->walksLed((int) $ed->id, $date, $tz);
         if ($walks) {
             $totalKm = round(array_sum(array_map(fn ($w) => $w['km'], $walks)), 2);
-            $body .= $this->sectionHead("\u{1F6B6}", 'Where you took them'
+            $body .= $this->sectionHead("\u{1F6B6}", 'Where you took them · Walk Watch'
                 . ($totalKm > 0 ? ' — ' . rtrim(rtrim(number_format($totalKm, 2), '0'), '.') . ' km' : ''));
 
             foreach ($walks as $w) {
@@ -943,6 +987,32 @@ class EducatorDailySummaryCommand extends Command
             }
         }
 
+        // ── Missed headcounts (strikes, 2026-11-03) ────────────────────────
+        // A "Headcount due" reminder with no count of that room within 15 minutes (HeadcountStrikesCommand).
+        $strikes = [];
+        try {
+            $sFrom = Carbon::parse($date->toDateString() . ' 00:00:00', $tz)->utc()->toDateTimeString();
+            $sTo = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc()->toDateTimeString();
+            $strikes = \App\Console\Commands\HeadcountStrikesCommand::between(null, (int) $ed->id, $sFrom, $sTo);
+        } catch (\Throwable $e) {
+            $strikes = [];
+        }
+        if ($strikes) {
+            $n = count($strikes);
+            $body .= $this->sectionHead("\u{26A0}\u{FE0F}", 'Missed headcounts · ' . $n . ' ' . ($n === 1 ? 'strike' : 'strikes'));
+            $body .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                . 'style="border-collapse:collapse;background:#fff;border:1px solid #FECACA;border-radius:14px;overflow:hidden;margin-bottom:6px;">';
+            foreach ($strikes as $s) {
+                $body .= '<tr><td style="padding:11px 13px;border-bottom:1px solid #F1F5F9;">'
+                    . '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#DC2626;margin-right:8px;"></span>'
+                    . '<strong style="color:#0F172A;">' . e(\App\Support\AgencyTime::fmt($s['due_at'], $tz)) . ($s['room'] !== '' ? ' · ' . e($s['room']) : '') . '</strong>'
+                    . '<span style="color:#B91C1C;font-size:13px;"> — no headcount within ' . \App\Console\Commands\HeadcountStrikesCommand::GRACE_MINUTES . ' minutes of the reminder</span>'
+                    . '</td></tr>';
+            }
+            $body .= '</table>'
+                . '<p style="margin:0 0 6px;font-size:13px;color:#B91C1C;">Each missed count is recorded as a strike. When the reminder comes, count the room straight away.</p>';
+        }
+
         // ── How today compares ─────────────────────────────────────────────
         $body .= $this->sectionHead("\u{1F4C8}", 'How today compares')
             . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
@@ -964,7 +1034,7 @@ class EducatorDailySummaryCommand extends Command
         // reads better as a closing note once the numbers have been seen.
         $body .= $this->sectionHead("\u{1F4AD}", 'A thought to end on')
             . '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
-            .   'style="border-collapse:separate;background:#F8FBFD;border-left:4px solid #0E7C90;border-radius:0 12px 12px 0;">'
+            .   'style="border-collapse:separate;background:#F8FBFD;--kt-edge:#0E7C90;border-radius:0 12px 12px 0;">'
             . '<tr><td style="padding:14px 16px;">' . EmailTemplate::dailyQuote(crc32($date->toDateString())) . '</td></tr></table>';
 
         // ── The children's day, in words ───────────────────────────────────
@@ -1049,7 +1119,7 @@ class EducatorDailySummaryCommand extends Command
             if ($stillIn) {
                 $names = implode(', ', array_map(fn ($c) => e($c), array_slice($stillIn, 0, 12)));
                 $more = count($stillIn) > 12 ? ' and ' . (count($stillIn) - 12) . ' more' : '';
-                $body .= '<div class="kt-panel" style="background:#FEF2F2;border:1px solid #FECACA;border-left:4px solid #DC2626;'
+                $body .= '<div class="kt-panel" style="background:#FEF2F2;border:1px solid #FECACA;--kt-edge:#DC2626;'
                     . 'border-radius:0 12px 12px 0;padding:15px 17px;margin:18px 0 4px;">'
                     . '<div style="font-size:15px;font-weight:800;color:#991B1B;margin:0 0 6px;">'
                     . '🚸 ' . count($stillIn) . ' ' . (count($stillIn) === 1 ? 'child is' : 'children are')
@@ -1112,7 +1182,7 @@ class EducatorDailySummaryCommand extends Command
             }
 
             if ($gaps) {
-                $body .= '<div class="kt-panel" style="background:#FEF3C7;border:1px solid #FDE68A;border-left:4px solid #F59E0B;'
+                $body .= '<div class="kt-panel" style="background:#FEF3C7;border:1px solid #FDE68A;--kt-edge:#F59E0B;'
                     . 'border-radius:0 12px 12px 0;padding:15px 17px;margin:18px 0 4px;">'
                     . '<div style="font-size:15px;font-weight:800;color:#92400E;margin:0 0 8px;">⚠️ Needs setting up for next week</div>';
                 foreach ($gaps as $g) {
@@ -1149,6 +1219,9 @@ class EducatorDailySummaryCommand extends Command
         $body .= '<p style="margin-top:20px;font-size:15px;">' . $close . '</p>'
             . '<p style="font-weight:800;color:#0F172A;">' . $signoff . '<br>'
             . 'The team at ' . e((string) (DB::table('agencies')->where('id', (int) $ed->agency_id)->value('name') ?: 'your team')) . '</p>';
+
+        // Get the app: the Google Play card (KiddieTrac-branded agencies only, PlayBadge::forAgency).
+        $body .= \App\Support\PlayBadge::forAgency((int) $ed->agency_id);
 
         return EmailTemplate::wrap((int) $ed->agency_id, $body, [
             'title'     => 'Your day at a glance',

@@ -59,6 +59,25 @@
      which is the whole point: the guards that used to decide this lived ON the nodes and
      died with them. */
   var LAST = (w.__ktCardValues = w.__ktCardValues || {});
+  /* WHEN each card last showed that figure (2026-11-03). Saurav's Home "ENROLLED" card read
+     2 -> 1 -> 2: role-widgets paints the strip from its sessionStorage cache, then swaps in
+     fresh cards when /widgets/me returns (any card's value or hint differing is enough), and
+     every new node rolled up from ZERO again - through 1 on its way back to the same 2. A card
+     that showed a figure seconds ago is a re-render, not an arrival: it rolls from that
+     figure (i.e. holds still when unchanged). After RECENT_MS it is a fresh visit and the
+     entrance count-up plays from 0 as it always has. */
+  var LAST_AT = (w.__ktCardValuesAt = w.__ktCardValuesAt || {});
+  var RECENT_MS = 15000;
+  function remember(sig, n) {
+    if (!sig || n === null) { return; }
+    LAST[sig] = n;
+    try { LAST_AT[sig] = Date.now(); } catch (e) {}
+  }
+  function recentValue(sig) {
+    if (!sig || typeof LAST[sig] !== 'number') { return undefined; }
+    var at = LAST_AT[sig] || 0;
+    return (Date.now() - at) < RECENT_MS ? LAST[sig] : undefined;
+  }
 
   function signatureOf(card) {
     try {
@@ -179,12 +198,13 @@
     }
   }
 
-  function reveal(card, instant) {
+  /* PERF (2026-10-28): the headline number of every card in a batch is found (font sizes read) BEFORE any card
+     is touched; reading it inside reveal() made each card pay a full style recalculation. */
+  function reveal(card, instant, measured) {
     if (card.__ktRevealed) return;
+    var v = measured !== undefined ? measured : valueNodeOf(card);
     card.__ktRevealed = true;
     card.classList.remove('kt-anim-init');
-
-    var v = valueNodeOf(card);
 
     if (instant) {
       /* No kt-anim-in: that class carries the 0.5s fade-and-slide, and playing it on a
@@ -216,7 +236,7 @@
       } else if (v) {
         v.__ktCounted = true;
       }
-      if (sig && now !== null) { LAST[sig] = now; }
+      remember(sig, now);
 
       return;
     }
@@ -224,22 +244,29 @@
     card.classList.add('kt-anim-in');
     var sig0 = signatureOf(card);
     var n0 = numberIn(v);
-    countUp(v, 0);
-    if (sig0 && n0 !== null) { LAST[sig0] = n0; }
+    var recent = recentValue(sig0);
+    countUp(v, typeof recent === 'number' ? recent : 0);   // a re-render rolls from what it showed, not from 0
+    remember(sig0, n0);
     drawCharts(card);
   }
 
   var io = ('IntersectionObserver' in w) ? new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) { if (e.isIntersecting) { reveal(e.target); io.unobserve(e.target); } });
+    var hit = entries.filter(function (e) { return e.isIntersecting && !e.target.__ktRevealed; });
+    var vs = hit.map(function (e) { return valueNodeOf(e.target); });
+    hit.forEach(function (e, i) { reveal(e.target, false, vs[i]); io.unobserve(e.target); });
   }, { threshold: 0.12 }) : null;
 
   function scan() {
-    var cards = document.querySelectorAll(CARD_SEL);
+    /* Never inside the navigation / refresh cover (a still picture of the old screen): its numbers rolled up from
+       zero again while the next screen loaded - the "numbers restart" seen on a phone (2026-10-28). */
+    var cards = [].filter.call(document.querySelectorAll(CARD_SEL), function (c) { return !c.closest('[data-kt-refresh-snap]'); });
     /* Asked ONCE for the whole pass, not per card: a render that straddles the end of the
        window would otherwise animate the tail of its own cards and not the rest, which
        looks worse than either. */
     var instant = silentNow();
 
+    var pre = [];
+    if (instant) { for (var q = 0; q < cards.length; q++) { pre[q] = cards[q].__ktSeen ? null : valueNodeOf(cards[q]); } }
     for (var i = 0; i < cards.length; i++) {
       var c = cards[i];
       if (c.__ktSeen) continue;
@@ -247,7 +274,7 @@
       if (instant) {
         /* Deliberately before the kt-anim-init branch: staging the card at opacity 0 and
            revealing it in the same frame is what produced the flash this removes. */
-        reveal(c, true);
+        reveal(c, true, pre[i]);
       } else if (io && !reduce) {
         c.classList.add('kt-anim-init');
         io.observe(c);

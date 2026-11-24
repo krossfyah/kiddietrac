@@ -1,26 +1,40 @@
 /*
  * kt-spellcheck.js — the browser's own spelling underline where people write words,
- * and never where it is wrong (2026-10-09).
+ * and never where it is wrong (2026-10-09, widened 2026-11-02).
  *
  * Anthony: "with entering data into the portal is there a spell check feature that can
  * just highlight or underline a spelling error". The native spellchecker already exists
- * in every browser and in the Android app's WebView (the keyboard does the work there);
- * nothing in the portal decided where it applies, so it was on everywhere by default —
- * names, emails, postal codes and search boxes included — and the phone keyboard was
- * given no hint that a notes box is prose.
+ * in every browser and in the Android / iPhone app's web view (the keyboard does the work
+ * there); nothing in the portal decided where it applies, so it was on everywhere by
+ * default — names, emails, postal codes and search boxes included — and the phone keyboard
+ * was given no hint that a notes box is prose.
  *
- * ON  (spellcheck, lang, autocapitalize=sentences, autocorrect=on):
- *     every <textarea> and [contenteditable], and single-line inputs whose name / id /
- *     placeholder / label say prose: note, comment, description, message, subject,
- *     title, reason, summary, observation, details, bio, tagline …
+ * 2026-11-02 (Anthony: "educators typing with many spelling mistakes - full sweep"): the
+ * first version switched spellcheck OFF on every single-line box it could not prove was
+ * prose. On a phone that is worse than doing nothing: spellcheck=false is what tells the
+ * Android keyboard to drop its suggestion strip and autocorrect, and iOS to drop its
+ * underline. Short free-text boxes ("e.g. Broken fence board", "Where to?", training
+ * names) lost the help the browser gives by default. Now an unlabelled-as-identifier text
+ * box is ON, and OFF has to be earned (type, autocomplete, inputmode, pattern, the shape
+ * of the placeholder, or an identifier word in its name / label).
+ *
+ * ON  (spellcheck=true, autocapitalize=sentences, autocorrect=on):
+ *     every <textarea> and [contenteditable], and single-line text inputs that are not
+ *     identifiers.
  * OFF (spellcheck=false, autocorrect=off): passwords, email, url, tel, number, dates and
- *     times, search and filter boxes, names (autocapitalize=words), addresses, postal
- *     codes, phone, licence / reference / account numbers, amounts, codes, PINs, tokens,
- *     HTML/CSS/JSON/code editors — and any single-line input that does not read as prose.
+ *     times, search and filter boxes, names (autocapitalize=words), usernames, addresses,
+ *     postal codes, phone, licence / reference / account numbers, amounts, codes, PINs,
+ *     tokens, HTML/CSS/JSON/code editors, numeric / email / url keyboards (inputmode),
+ *     fields with a pattern, and placeholders shaped like data ("0.00", "A1B 2C3", "@").
  *
- * data-kt-spellcheck="on|off" on a field or any ancestor decides outright.
- * Containers with data-kt-noautofill are left to kt-no-autofill.js.
- * Watches document.body (never #appMain, which is replaced every render) and batches.
+ * Opt out: data-kt-nospell (or data-kt-spellcheck="off") on a field or any ancestor.
+ * Force on: data-kt-spellcheck="on". A spellcheck attribute written in the markup by the
+ * screen itself is respected. Containers with data-kt-noautofill are left to
+ * kt-no-autofill.js.
+ * The dictionary follows <html lang>, which this file keeps in step with kt_locale
+ * (fr / es / hi); fields inherit it, nothing pins a language on a field.
+ * Watches document.body (never #appMain, which is replaced every render) and batches,
+ * so screens that load later (kt-screen-loader.js) and popups in #modalRoot are covered.
  */
 (function () {
   'use strict';
@@ -29,14 +43,21 @@
 
   var OFF_TYPES = /^(password|email|url|tel|number|date|time|datetime-local|month|week|search|color|range)$/;
   var OFF_AUTOCOMPLETE = /(name|email|tel|username|password|address|postal|street|country|locality|region|one-time-code|cc-|bday|organization|url|sex)/;
-  var NAMEY = /(^|[^a-z])(first|last|middle|given|family|sur|preferred|nick|full|child|parent|guardian|contact|educator|provider|owner|signer|staff|user)?[ _-]?name([^a-z]|$)/;
-  var OFF_WORDS = /(e-?mail|phone|tel\b|mobile|cell\b|fax|url|website|web site|link|domain|sub-?domain|slug|username|user name|login|password|passcode|\bpin\b|code\b|token|api key|secret|postal|zip|street|address|\bcity\b|province|country|licen[cs]e|\bnumber\b|\bno\.|#|amount|price|\bfee\b|rate\b|\$|qty|quantity|\bdate\b|\btime\b|\bdob\b|birth|\bsin\b|search|filter|find\b|lookup|look up|colou?r|\bhex\b|sku|reference|\bref\b|iban|account|transit|institution|smtp|\bhost\b|\bport\b|merge|\{\{|html|\bcss\b|json|\bcode\b|regex|\bip\b|latitude|longitude|\blat\b|\blng\b|percent|%|hours?\b|minutes?\b|age\b|capacity|ratio|count\b|signature|initials)/;
-  var PROSE = /(note|comment|descri|message|\bbody\b|reason|narrat|detail|summary|observ|\bbio\b|tagline|subject|title|heading|caption|feedback|explain|\bwhy\b|what happened|story|goal|\bplan\b|activit|remark|instruction|question|answer|topic|headline|greeting|announce|\btext\b|paragraph|intro|closing|opening|wording|follow-?up|concern|action taken|outcome|response|reply|update|highlight|learning|incident|injur|treatment|first aid given|witness|tip|blurb|about)/;
-
+  var OFF_INPUTMODE = /^(numeric|decimal|tel|email|url|search|none)$/;
+  var USERNAME = /(user ?name|login|log-in|sign-?in id|handle)/;
+  var NAMEY = /(^|[^a-z])(first|last|middle|given|family|sur|preferred|nick|full|child|parent|guardian|contact|educator|provider|owner|signer|staff)?[ _-]?names?([^a-z]|$)/;
+  var OFF_WORDS = /(e-?mail|phone|tel\b|mobile|cell\b|fax|url|website|web site|link|domain|sub-?domain|slug|username|user name|login|password|passcode|\bpin\b|code\b|token|api key|secret|postal|zip|street|address|\bcity\b|province|country|licen[cs]e|\bnumber\b|\bno\.|#|amount|price|\bfee\b|rate\b|\$|qty|quantity|\bdate\b|\btime\b|\bdob\b|birth|\bsin\b|search|filter|find\b|lookup|look up|colou?r|\bhex\b|sku|reference|\bref\b|iban|account|transit|institution|smtp|\bhost\b|\bport\b|merge|\{\{|html|\bcss\b|json|\bcode\b|regex|\bip\b|latitude|longitude|\blat\b|\blng\b|percent|%|hours?\b|minutes?\b|age\b|capacity|ratio|count\b|signature|initials|go to page|\bid\b|client id|tenant|public key|webhook|base64|reach you)/;
   var STRONG_PROSE = /(note|comment|descri|message|reason|narrat|explain|summary|observ|remark|feedback|instruction|what happened|action taken|subject)/;
+  var PROSE_NAME = /(event|form|template|file|document|plan|activity|room|group|zone|lesson|theme|title|award|course|training|campaign|walk|trip|outing)\s*name/;
 
-  function lang() {
-    return (document.documentElement.getAttribute('lang') || 'en-CA');
+  /** The locale the person chose (kt-i18n keeps it in kt_locale), as <html lang>. */
+  function syncDocLang() {
+    try {
+      var l = localStorage.getItem('kt_locale');
+      if (!l || l === 'en') return;
+      var cur = (document.documentElement.getAttribute('lang') || '').toLowerCase();
+      if (cur.split('-')[0] !== l.toLowerCase().split('-')[0]) document.documentElement.setAttribute('lang', l);
+    } catch (e) {}
   }
 
   function labelText(el) {
@@ -50,7 +71,10 @@
       if (p) t += ' ' + p.textContent;
       var prev = el.previousElementSibling;
       if (prev && prev.tagName !== 'INPUT' && prev.tagName !== 'TEXTAREA') t += ' ' + (prev.textContent || '').slice(0, 80);
-      if (!prev && el.parentElement) {
+      // The label in front of the field's wrapper — but not when the field already sits in
+      // its own <label>: then the label before it belongs to the NEIGHBOURING field
+      // ("Training" was read as "Date" and lost its speller).
+      if (!prev && !p && el.parentElement) {
         var pp = el.parentElement.previousElementSibling;
         if (pp && pp.tagName === 'LABEL') t += ' ' + pp.textContent;
       }
@@ -64,19 +88,33 @@
       .filter(Boolean).join(' ').toLowerCase().replace(/[_]+/g, ' ');
   }
 
-  /** 'on' | 'off' | 'name' | null (leave alone). */
+  /** A placeholder that shows the SHAPE of data rather than words: "0.00", "A1B 2C3",
+      "(416) 555-0199", "HH:MM", "you@example.com", "https://…". */
+  function dataShaped(ph) {
+    if (!ph) return false;
+    ph = ph.replace(/^\s*(e\.g\.|eg|ex\.?|example:?)\s*/i, '');
+    if (/@|:\/\/|^www\.|\.(com|ca|org|net)\b/i.test(ph)) return true;
+    if (!/[A-Za-z\u00C0-\u024F\u0900-\u097F]{3,}/.test(ph)) return true;   // no real word in it
+    if (/\d/.test(ph) && /^[A-Z0-9\s\-\/.:()#]+$/.test(ph)) return true;      // "A1B 2C3", "KT-PLN-0001"
+    return false;
+  }
+
+  /** 'on' | 'off' | 'name' | 'user' | null (leave alone). */
   function decide(el) {
+    if (el.closest('[data-kt-nospell]')) return 'off';
     var forced = el.closest('[data-kt-spellcheck]');
     if (forced) {
       var v = (forced.getAttribute('data-kt-spellcheck') || '').toLowerCase();
       if (v === 'on' || v === 'off') return v;
     }
     if (el.closest('[data-kt-noautofill]')) return null;
+    // The screen wrote spellcheck="…" itself (login, HTML template editor, client ids): its call.
+    if (el.hasAttribute('spellcheck') && !el.__ktSpellOwn) return null;
     var tag = el.tagName;
     if (tag === 'TEXTAREA' || el.isContentEditable) {
       if (el.closest('.CodeMirror, .cm-editor, .ace_editor, .monaco-editor, [data-kt-code]')) return 'off';
       var kt = key(el);
-      if (/(html|\bcss\b|json|regex|\bcode\b|address|location|venue|signature|merge tag)/.test(kt)) return 'off';
+      if (/(html|\bcss\b|json|regex|\bcode\b|address|signature|merge tag|api key|private key|\bpem\b|\bcsv\b)/.test(kt)) return 'off';
       return 'on';
     }
     if (tag !== 'INPUT') return null;
@@ -84,15 +122,26 @@
     if (/^(hidden|checkbox|radio|file|submit|button|reset|image)$/.test(type)) return null;
     if (OFF_TYPES.test(type)) return 'off';
     if (type !== 'text' && type !== '') return 'off';
+    if (el.readOnly && !el.closest('[data-kt-noautofill]')) return null;
     var ac = (el.getAttribute('autocomplete') || '').toLowerCase();
-    if (ac && ac !== 'off' && ac !== 'on' && OFF_AUTOCOMPLETE.test(ac)) return /name/.test(ac) ? 'name' : 'off';
+    if (ac && ac !== 'off' && ac !== 'on' && OFF_AUTOCOMPLETE.test(ac)) {
+      if (/username/.test(ac)) return 'user';
+      return /name/.test(ac) ? 'name' : 'off';
+    }
+    if (OFF_INPUTMODE.test((el.getAttribute('inputmode') || '').toLowerCase())) return 'off';
+    if (el.hasAttribute('pattern')) return 'off';
+    var max = parseInt(el.getAttribute('maxlength') || '0', 10);
+    if (max > 0 && max <= 8) return 'off';                      // codes, initials, PINs
     var k = key(el);
-    if (NAMEY.test(k) && !/(event|form|template|file|document|plan|activity|room|group|zone|lesson|theme|title)\s*name/.test(k)) return 'name';
+    if (!k.replace(/\s+/g, '')) return null;                     // nothing to go on: the browser default
+    if (/(search|filter|look ?up|find\b)/.test((el.getAttribute('placeholder') || '').toLowerCase())) return 'off';
+    if (USERNAME.test(k)) return 'user';
+    if (NAMEY.test(k) && !PROSE_NAME.test(k)) return 'name';
     // "Reason for time off", "Notes about the amount": a sentence about an identifier is still a sentence.
     if (STRONG_PROSE.test(k)) return 'on';
     if (OFF_WORDS.test(k)) return 'off';
-    if (PROSE.test(k) || /(event|form|template|document|plan|activity|lesson|theme|room|group|zone) name/.test(k)) return 'on';
-    return 'off';   // a single-line box that does not read as prose: an identifier until shown otherwise
+    if (dataShaped(el.getAttribute('placeholder'))) return 'off';
+    return 'on';    // a short line of words ("e.g. Broken fence board", "Where to?"): help the speller
   }
 
   function apply(el) {
@@ -102,21 +151,20 @@
     var was = el.getAttribute('data-kt-spell');
     if (was === d) return;
     el.setAttribute('data-kt-spell', d);
+    el.__ktSpellOwn = true;
+    var canCap = !el.hasAttribute('autocapitalize') || el.__ktCap;
     if (d === 'on') {
       el.setAttribute('spellcheck', 'true');
-      if (!el.closest('[lang]') || el.closest('[lang]') === document.documentElement) el.setAttribute('lang', lang());
-      if (!el.hasAttribute('autocapitalize') || el.__ktCap) { el.setAttribute('autocapitalize', 'sentences'); el.__ktCap = true; }
+      if (canCap) { el.setAttribute('autocapitalize', 'sentences'); el.__ktCap = true; }
       el.setAttribute('autocorrect', 'on');
     } else {
       el.setAttribute('spellcheck', 'false');
       el.setAttribute('autocorrect', 'off');
-      if (d === 'name') {
-        if (!el.hasAttribute('autocapitalize') || el.__ktCap) { el.setAttribute('autocapitalize', 'words'); el.__ktCap = true; }
-      } else if (!el.hasAttribute('autocapitalize') || el.__ktCap) {
-        el.__ktCap = true;
-        var t = (el.getAttribute('type') || 'text').toLowerCase();
-        el.setAttribute('autocapitalize', /^(email|url|password)$/.test(t) || /e-?mail|url|username|login|code|token|slug|domain/.test(key(el)) ? 'none' : 'off');
-      }
+      if (!canCap) return;
+      el.__ktCap = true;
+      if (d === 'name') { el.setAttribute('autocapitalize', 'words'); return; }
+      var t = (el.getAttribute('type') || 'text').toLowerCase();
+      el.setAttribute('autocapitalize', d === 'user' || /^(email|url|password)$/.test(t) || /e-?mail|url|username|login|code|token|slug|domain/.test(key(el)) ? 'none' : 'off');
     }
   }
 
@@ -144,6 +192,7 @@
   }
 
   function start() {
+    syncDocLang();
     scan(document.body);
     try {
       new MutationObserver(function (muts) {
@@ -158,9 +207,10 @@
           }
         }
       }).observe(document.body, { childList: true, subtree: true, attributes: true,
-        attributeFilter: ['placeholder', 'name', 'type', 'data-kt-spellcheck', 'aria-label'] });
+        attributeFilter: ['placeholder', 'name', 'type', 'data-kt-spellcheck', 'data-kt-nospell', 'aria-label', 'inputmode', 'contenteditable'] });
     } catch (e) {}
-    // Backstop for anything built in a way the observer missed: decide on first focus.
+    // Backstop for anything built in a way the observer missed: decide on first focus,
+    // before the keyboard opens (the phone keyboard reads the flags when it attaches).
     document.addEventListener('focusin', function (e) { if (e.target && e.target.matches && e.target.matches(SEL)) apply(e.target); }, true);
   }
 

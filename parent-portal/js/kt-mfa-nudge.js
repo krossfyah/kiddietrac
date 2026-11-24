@@ -9,7 +9,8 @@
 (function () {
   'use strict';
   var API = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
-  var ADMIN_ROLES = ['platform_admin', 'agency_admin', 'centre_director'];
+  var ADMIN_ROLES = ['platform_admin', 'reseller', 'agency_admin', 'centre_director'];
+  var graceUntil = null;
   var needsMfa = false, decided = false;
 
   function store(k) { try { return sessionStorage.getItem(k) || localStorage.getItem(k); } catch (e) { return null; } }
@@ -17,6 +18,14 @@
   function user() { try { return JSON.parse(store('kt_user') || '{}'); } catch (e) { return {}; } }
   function isAdmin(u) { var r = (u && u.roles) || []; return ADMIN_ROLES.some(function (x) { return r.indexOf(x) !== -1; }); }
   function dismissed() { try { return sessionStorage.getItem('kt_mfa_nudge_dismiss') === '1'; } catch (e) { return false; } }
+
+  // "Tuesday 24 November": the server sends UTC 'YYYY-MM-DD HH:MM:SS'.
+  function when(utc) {
+    try {
+      var d = new Date(String(utc).replace(' ', 'T') + 'Z');
+      return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+    } catch (e) { return String(utc).slice(0, 10); }
+  }
 
   function inject() {
     var host = document.getElementById('appMain');
@@ -28,7 +37,7 @@
       + 'border-radius:12px;font:600 13.5px/1.4 system-ui,-apple-system,sans-serif;'
       + 'box-shadow:0 6px 18px -8px rgba(190,64,56,.6);';
     b.innerHTML =
-      '<span>🔐 Two-factor authentication is required for administrator accounts.</span>'
+      '<span>🔐 ' + (graceUntil ? 'Two-factor sign-in is required from ' + when(graceUntil) + '. After that the portal stays locked until it is set up.' : 'Two-factor authentication is required for administrator accounts.') + '</span>'
       + '<a href="#mfa" id="kt-mfa-go" style="background:#fff;color:#BE4038;font-weight:700;text-decoration:none;padding:7px 15px;border-radius:8px;white-space:nowrap;">Set it up now →</a>'
       + '<button id="kt-mfa-x" title="Remind me later this session" aria-label="Dismiss" style="background:transparent;border:0;color:rgba(255,255,255,.85);font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">×</button>';
     host.insertBefore(b, host.firstChild);
@@ -40,11 +49,19 @@
   }
 
   function decide() {
+    if (window.KT_PUBLIC_DEMO) { decided = true; return; }   // website demo person: no 2FA nudge (2026-10-31)
     var t = token(), u = user();
     if (!t || !isAdmin(u)) { decided = true; return; }
     fetch(API + '/auth/mfa/status', { headers: { 'Authorization': 'Bearer ' + t } })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { decided = true; needsMfa = !!(d && !d.enabled); if (needsMfa) inject(); else clearNudge(); })
+      .then(function (d) {
+        decided = true;
+        /* The server's answer when it gives one (StrongSignIn, 2026-11-10): a passkey counts, and the gate - not this
+           banner - handles anyone already blocked. */
+        if (d && 'required' in d) { needsMfa = !!(d.required && !d.strong && !d.blocked); graceUntil = d.grace_until || null; }
+        else needsMfa = !!(d && !d.enabled && !d.demo_exempt);
+        if (needsMfa) inject(); else clearNudge();
+      })
       .catch(function () { decided = true; });
   }
 

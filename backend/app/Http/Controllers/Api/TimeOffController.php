@@ -64,13 +64,17 @@ final class TimeOffController extends Controller
      */
     private function centreFor(object $row): ?int
     {
+        /* Only a centre of the request's own agency (2026-11-05 leak sweep): centre_id was stored as submitted, so
+           a request naming another agency's centre made approval close that centre and email its families. The
+           fallback likewise counted the person's centres in every agency. */
+        $inAgency = \App\Support\AgencyRole::centreIds((int) $row->agency_id);
         $centreId = (int) ($row->centre_id ?? 0);
         if ($centreId) {
-            return $centreId;
+            return in_array($centreId, $inAgency, true) ? $centreId : null;
         }
-        $centreIds = DB::table('role_assignments')
+        $centreIds = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
             ->where('user_id', $row->user_id)->where('active', true)
-            ->whereNotNull('centre_id')->distinct()->pluck('centre_id');
+            ->whereIn('centre_id', $inAgency ?: [0])->distinct()->pluck('centre_id');
 
         return $centreIds->count() === 1 ? (int) $centreIds->first() : null;
     }
@@ -114,6 +118,7 @@ final class TimeOffController extends Controller
         $row = DB::table('time_off_requests')->where('id', $id)->first();
         abort_unless($row, 404);
         $this->assertAgencyAccess($request, (int) $row->agency_id);
+        $this->assertDecider($request, $row);
         $cid = $this->centreFor($row);
         $staff = $cid ? DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.centre_id', $cid)->where('ra.active', true)
@@ -152,6 +157,7 @@ final class TimeOffController extends Controller
         $d = $request->validate(['centre_id' => 'nullable|integer']);
         $centre = $this->checkedCentre($row, $d['centre_id'] ?? null);
         abort_unless($centre, 422, 'This person is not at a single centre, so choose the centre to close.');
+        $this->assertDecider($request, $row, $centre);
         if ($this->closureFor($centre, $row)) {
             return response()->json(['message' => 'The centre is already closed for these dates.'], 422);
         }
@@ -206,7 +212,21 @@ final class TimeOffController extends Controller
             }
         }
         $user = $request->user();
+        /* STAFF ONLY (2026-11-06 role sweep): a parent could post here and land in the staff approval queue. */
+        if (! array_intersect(\App\Support\AgencyRole::names($request), array_merge(\App\Support\Visibility::STAFF_ROLES, ['platform_admin']))) {
+            return response()->json(['message' => 'Time off is for staff. To tell the centre your child will be away, use Absences or Vacation holds.'], 403);
+        }
         $agencyId = $this->resolveAgencyId($request);
+
+        /* The centre must be one you work at (2026-11-05 leak sweep): centre_id was written unchecked, so a
+           request could name any centre, and approving it closed that centre and told its families. */
+        $agencyWide = DB::table('role_assignments')->where('user_id', $user->id)->where('active', true)
+            ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->whereNull('centre_id')->where('agency_id', $agencyId)->exists();
+        if (! empty($data['centre_id'])
+            && ! in_array((int) $data['centre_id'], $agencyWide ? \App\Support\AgencyRole::centreIds((int) $agencyId)
+                : \App\Support\Visibility::centreIds($agencyId, $user), true)) {
+            return response()->json(['message' => 'Choose a centre you work at.'], 422);
+        }
 
         $id = DB::table('time_off_requests')->insertGetId([
             'agency_id'    => $agencyId,
@@ -236,7 +256,7 @@ final class TimeOffController extends Controller
            when a centre has no director). */
         $req = (object) ['id' => $id, 'user_id' => (int) $user->id, 'centre_id' => $data['centre_id'] ?? null];
         $req->centre_ids = $req->centre_id ? [(int) $req->centre_id]
-            : DB::table('role_assignments')->where('user_id', $user->id)->where('agency_id', $agencyId)
+            : DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $user->id)->where('agency_id', $agencyId)
                 ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
         $approvers = collect(\App\Support\TimeOffReminders::approvers($agencyId, ['recipients' => 'both'], collect([$req])))
             ->map(fn ($o) => (object) ['id' => (int) $o['user']->user_id, 'email' => $o['user']->email,
@@ -409,6 +429,7 @@ final class TimeOffController extends Controller
         $mode = $data['close'] ?? 'auto';
         $centre = $mode === 'centre' ? $this->checkedCentre($row, $data['close_centre_id'] ?? null) : null;
         abort_if($mode === 'centre' && ! $centre, 422, 'Choose the centre to close.');
+        $this->assertDecider($request, $row, $centre ?: ($mode === 'auto' ? $this->centreFor($row) : null));
 
         $result = $this->applyDecision($row, $data['status'], $data['decision_notes'] ?? null, $request->user(), $mode, $centre);
 
@@ -1109,6 +1130,37 @@ final class TimeOffController extends Controller
             ->value('agency_id');
         abort_unless($first, 400, 'No agency context');
         return (int) $first;
+    }
+
+    /* A DIRECTOR DECIDES ONLY FOR THEIR OWN CENTRES (2026-11-05 leak sweep). assertAgencyAccess passed any
+       centre director in the agency, so a director at one centre could approve another centre's leave and close
+       that centre (emailing its families). Same rule as who is asked (TimeOffReminders::approvers): an agency
+       admin of the request's agency, or a director of the request's centre (or of a centre the requester works
+       at), and any centre being closed must be one they direct. A platform admin only in the agency they chose. */
+    private function assertDecider(Request $request, object $row, ?int $closeCentre = null): void
+    {
+        $u = $request->user();
+        $agencyId = (int) $row->agency_id;
+        $roles = DB::table('role_assignments')->where('user_id', $u->id)->where('active', true)->get(['role', 'agency_id', 'centre_id']);
+        if ($roles->contains(fn ($r) => $r->role === 'platform_admin')) {
+            abort_unless($this->resolveAgencyId($request) === $agencyId, 403);
+            return;
+        }
+        if ($roles->contains(fn ($r) => $r->role === 'agency_admin' && (int) $r->agency_id === $agencyId)) {
+            return;
+        }
+        $inAgency = \App\Support\AgencyRole::centreIds($agencyId);
+        $directs = $roles->filter(fn ($r) => $r->role === 'centre_director' && $r->centre_id)
+            ->map(fn ($r) => (int) $r->centre_id)->filter(fn ($c) => in_array($c, $inAgency, true))->unique()->values()->all();
+        $requestCentres = $row->centre_id ? [(int) $row->centre_id]
+            : DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $row->user_id)
+                ->where('active', true)->whereIn('centre_id', $inAgency ?: [0])->pluck('centre_id')
+                // ...and the centres of the rooms they cover: a home visitor has no centre row at all.
+                ->merge(DB::table('educator_rooms as er')->join('rooms as r', 'r.id', '=', 'er.room_id')
+                    ->where('er.user_id', $row->user_id)->whereIn('r.centre_id', $inAgency ?: [0])->pluck('r.centre_id'))
+                ->map(fn ($v) => (int) $v)->unique()->values()->all();
+        abort_unless(array_intersect($directs, $requestCentres), 403, 'You can only decide time off for a centre you direct.');
+        abort_if($closeCentre && ! \App\Support\CentreScope::canWrite($directs, $closeCentre), 403, 'You can only close a centre you direct.');
     }
 
     private function assertAgencyAccess(Request $request, int $agencyId): void

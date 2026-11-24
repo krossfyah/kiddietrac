@@ -89,6 +89,13 @@
          table.kt-mcards:not(.kt-nomc) out-specifies kt-mobile-app.css's
          `#appMain table.kt-mcards td{display:flex !important}`. */
       '  #appMain table.kt-mcards:not(.kt-nomc) tr{display:grid !important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:14px;row-gap:7px;position:relative;padding:11px 13px 12px !important;margin-bottom:8px !important;}',
+      /* A HIDDEN ROW STAYS HIDDEN (2026-10-28, Anthony: "the bottom bar with the buttons freezes and I
+         cannot click on anything"). The pager and the search hide rows with an inline display:none,
+         and the !important grid rule above beat it - so on a phone EVERY row of a paged table was a
+         card: 441 on Forms Manager > Completed under a "1-25 of 441" pager, ~20,000 boxes to lay out
+         on each switch. These selectors out-rank the grid rule. */
+      '  #appMain table.kt-mcards:not(.kt-nomc) tr[style*="display: none"],#appMain table.kt-mcards:not(.kt-nomc) tr[style*="display:none"],#appMain table.kt-mcards:not(.kt-nomc) tr[hidden]{display:none !important;}',
+      '  #appMain table:not(.kt-nomc) tr[style*="display: none"],#appMain table:not(.kt-nomc) tr[style*="display:none"]{display:none !important;}',
       '  #appMain table.kt-mcards:not(.kt-nomc) td{display:block !important;text-align:left !important;padding:0 !important;min-width:0;line-height:1.3 !important;font-size:13px !important;}',
       '  #appMain table.kt-mcards:not(.kt-nomc) td::before{display:block !important;max-width:none !important;font-size:9.5px !important;letter-spacing:.35px;margin:0 0 1px !important;padding:0 !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
       '  #appMain table.kt-mcards:not(.kt-nomc) td[data-label=""]::before{display:none !important;}',
@@ -97,11 +104,20 @@
       '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-title{font-size:15px !important;padding:0 0 2px !important;}',
       '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-title::before{display:none !important;}',
       '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-empty{display:none !important;}',
-      '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-select,#appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-actions{position:absolute !important;top:9px;right:10px;width:auto !important;z-index:1;}',
+      '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-select,#appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-actions{position:absolute !important;top:7px;right:5px;width:auto !important;z-index:1;}',
       '  #appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-select::before,#appMain table.kt-mcards:not(.kt-nomc) td.kt-mcard-actions::before{display:none !important;}',
-      '  #appMain table.kt-mcards:not(.kt-nomc) tr:has(> td.kt-mcard-select) > td.kt-mcard-actions{right:42px;}',
-      '  #appMain table.kt-mcards:not(.kt-nomc) tr:has(> td.kt-mcard-select, > td.kt-mcard-actions) > td.kt-mcard-title{padding-right:40px !important;}',
-      '  #appMain table.kt-mcards:not(.kt-nomc) tr:has(> td.kt-mcard-select):has(> td.kt-mcard-actions) > td.kt-mcard-title{padding-right:84px !important;}',
+      /* THE KEBAB IN THE CORNER (2026-10-28, Anthony: "the kebab needs to be consistent across the
+         entire platform and push further to the right"). The select cell is there on every row but its
+         checkbox is hidden on a phone, so the old "make room for the checkbox" shift left an empty slot
+         beside every ⋮. table.kt-mc-sel = the checkbox is really showing (set in apply()). */
+      '  #appMain table.kt-mcards.kt-mc-sel:not(.kt-nomc) tr:has(> td.kt-mcard-actions) > td.kt-mcard-select{right:46px;}',   /* the checkbox steps left; the kebab keeps the corner */
+      '  #appMain table.kt-mcards:not(.kt-nomc) tr:has(> td.kt-mcard-actions) > td.kt-mcard-title, #appMain table.kt-mcards.kt-mc-sel:not(.kt-nomc) tr:has(> td.kt-mcard-select) > td.kt-mcard-title{padding-right:42px !important;}',
+      '  #appMain table.kt-mcards.kt-mc-sel:not(.kt-nomc) tr:has(> td.kt-mcard-select):has(> td.kt-mcard-actions) > td.kt-mcard-title{padding-right:84px !important;}',
+      '}',
+      /* ONE KEBAB ON A PHONE (2026-10-28): table cards had a 38x44 box (the tap-size rule), other cards
+         the 32x28 desktop button. Every ⋮ on a phone is now the same 36px square. */
+      '@media (max-width:768px){',
+      '  #appMain .kt-ka-kebab{width:36px !important;height:36px !important;min-width:36px !important;min-height:36px !important;max-height:36px !important;border-radius:10px !important;font-size:18px !important;line-height:1 !important;}',
       '}',
     ].join('\n');
     document.head.appendChild(s);
@@ -159,6 +175,10 @@
     table.classList.add('kt-mcards');
     [].forEach.call(table.querySelectorAll('tbody tr'), function (tr) {
       if (tr.__ktCards) return;                        // already done
+      /* Rows the pager or search is hiding wait until they are shown (2026-10-28): restacking all
+         441 rows of a 25-row page cost ~0.3 s on a phone. apply() runs on every change, so a row is
+         done in the same frame it appears. */
+      if (tr.style.display === 'none' || tr.hidden) return;
       tr.__ktCards = true;
       var cells = [].slice.call(tr.children);
       cells.forEach(function (td, i) {
@@ -202,6 +222,11 @@
         }
         var t = (td.textContent || '').replace(/\s+/g, ' ').trim();
         if (t.length > 26 || /\S+@\S+\.\S+/.test(t)) td.classList.add('kt-mcard-block');
+        /* A PILL NEVER WRAPS INTO A HALF COLUMN (2026-10-23, Anthony: "pills not showing all
+           data"). "🐞 Technical / app issue" is 24 characters - short enough to stay in a
+           half-width cell, too long for a pill there, so it broke over two lines. A cell
+           whose value is a pill longer than a half column holds takes the whole row. */
+        else if (t.length > 16 && td.querySelector('.kt-pill,.badge,[class*="pill"],[class*="chip"],[class*="badge"],[class*="tag"]')) td.classList.add('kt-mcard-block');
       });
       if (lastActions) lastActions.classList.add('kt-mcard-actions');
     });
@@ -236,6 +261,7 @@
     var main = document.getElementById('appMain');
     if (!main) return;
     liftBannerActions();
+    var cards = [];
     [].forEach.call(main.querySelectorAll('table'), function (t) {
       /* Leave a table alone if a screen has already built its own mobile view, or if it
          is a layout table with no header row — and SAY SO on the element, because the
@@ -246,11 +272,52 @@
       }
       t.classList.remove('kt-nomc');
       restack(t);
+      cards.push(t);
     });
+    /* Is the bulk-select checkbox actually showing? (Hidden on phones unless a screen shows it.) Asked after every
+       table is restacked, and without a layout where the browser can answer from styles (phone speed sweep
+       2026-10-30: getClientRects() here forced a full layout per table, mid-write - 300-400 ms of a navigation). */
+    var sel = cards.map(function (t) {
+      var cb = t.querySelector('tbody td.kt-mcard-select input[type="checkbox"]');
+      if (!cb) return false;
+      return cb.checkVisibility ? cb.checkVisibility() : !!cb.getClientRects().length;
+    });
+    cards.forEach(function (t, i) { t.classList.toggle('kt-mc-sel', sel[i]); });
   }
 
-  var pending = null;
-  function schedule() { clearTimeout(pending); pending = setTimeout(apply, 120); }
+  var pending = null, firstAt = 0;
+  function schedule() {
+    var now = Date.now();
+    if (!pending) firstAt = now;
+    clearTimeout(pending);
+    // Debounced, but never starved: a screen that never stops changing still gets laid out.
+    pending = setTimeout(function () { pending = null; apply(); }, now - firstAt >= 400 ? 0 : 120);
+  }
+
+  /* BEFORE THE FIRST PAINT (2026-10-28, Anthony's video: "when moving from one subtab to the next how
+     the data is presented (its not smooth loading)"). The debounce meant new rows were painted as plain
+     cards and re-laid out as condensed cards a moment later. A mutation callback runs before the browser
+     paints, so when table rows arrive they are restacked right here; restack() skips rows already done,
+     so the callbacks our own changes cause cost almost nothing. Everything else keeps the debounce. */
+  function onMut(list) {
+    if (isPhone() && list && list.length) {
+      for (var i = 0; i < list.length; i++) {
+        var ad = list[i].addedNodes;
+        for (var j = 0; j < ad.length; j++) {
+          var n = ad[j];
+          if (n.nodeType === 1 && (/^(TABLE|TBODY|TR)$/.test(n.tagName) || n.querySelector('tr'))) {
+            try { apply(); } catch (e) {}
+            schedule();
+            return;
+          }
+        }
+      }
+      // Anything else (a pager redraw showing the next page of rows): rows already done are
+      // skipped, so this costs a loop over flags.
+      try { apply(); } catch (e) {}
+    }
+    schedule();
+  }
 
   // Screens render (and re-render) asynchronously, so watch #appMain rather than
   // trying to hook every screen's render.
@@ -264,8 +331,8 @@
     var main = document.getElementById('appMain');
     if (main && window.MutationObserver) {
       /* Re-binds when the shell swaps #appMain (kt:main-swapped); a MutationObserver follows a NODE, and this one used to die silently at the first render. */
-      if (window.KT && KT.observeMain) { KT.observeMain(schedule, { childList: true, subtree: true }); }
-      else { new MutationObserver(schedule).observe(main, { childList: true, subtree: true }); }
+      if (window.KT && KT.observeMain) { KT.observeMain(onMut, { childList: true, subtree: true }); }
+      else { new MutationObserver(onMut).observe(main, { childList: true, subtree: true }); }
     }
     window.addEventListener('hashchange', schedule);
     if (window.matchMedia) {

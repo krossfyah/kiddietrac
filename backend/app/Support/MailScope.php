@@ -46,6 +46,24 @@ class MailScope
         }
     }
 
+    /**
+     * BILLING MAIL (2026-11-06): an invoice, a reminder of money owed, a receipt, a refund or a payment that did not go
+     * through. SuppressAgencyMail lets it reach a billing guardian who has not accepted their app invite yet - the one
+     * narrow exception Anthony agreed to the not-onboarded gate after form packages ("Yes, billing mail only"). Every
+     * other gate (agency switch, allowlist, bounces) still applies.
+     */
+    public static function billing($message): void
+    {
+        try {
+            $h = $message->getHeaders();
+            if (! $h->has('X-KT-Billing')) {
+                $h->addTextHeader('X-KT-Billing', '1');
+            }
+        } catch (\Throwable $e) {
+            Log::warning('MailScope::billing could not stamp: ' . $e->getMessage());
+        }
+    }
+
     /** Tenant mail where only the centre is in hand. */
     public static function centre($message, ?int $centreId): void
     {
@@ -64,6 +82,12 @@ class MailScope
     {
         try {
             $message->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+            /* ...and the email log files it under Platform (2026-10-23): without this the
+               logger guessed an agency from the recipient or from whichever agency the
+               previous send in the same process belonged to. */
+            if (! $message->getHeaders()->has('X-KT-Platform')) {
+                $message->getHeaders()->addTextHeader('X-KT-Platform', '1');
+            }
         } catch (\Throwable $e) {
             Log::warning('MailScope::platform could not stamp: ' . $e->getMessage());
         }

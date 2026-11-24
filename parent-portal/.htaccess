@@ -10,6 +10,16 @@
     </IfModule>
 </FilesMatch>
 
+# KT-HTTPS (2026-10-21): every plain-HTTP request goes to HTTPS. Without this the portal
+# and the API answered on http:// too, so a first visit, an old bookmark or a captive Wi-Fi
+# could carry a sign-in unencrypted (HSTS only protects browsers that have already been here).
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
 # KiddieTrac parent-portal (app.kiddietrac.com) — v22p84
 # Performance (compression + caching) and security headers.
 # Every block is guarded by <IfModule> so a missing module is a no-op, never a 500.
@@ -54,6 +64,14 @@
 # forever. mod_rewrite is the reliable way to inspect the query string in .htaccess.
 <IfModule mod_rewrite.c>
   RewriteEngine On
+
+  # KT-SLASH (2026-10-21, Cloudways): add a folder's trailing slash ourselves. Apache's own
+  # DirectorySlash redirect is built from the INTERNAL path on this host, so /blog went to
+  # http://www.kiddietrac.com/public_html/blog/ (a 404). THE_REQUEST holds the path the
+  # visitor asked for, before any host routing.
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteCond %{THE_REQUEST} ^\S+\s([^?\s]*[^/?\s])(\?\S*)?\s
+  RewriteRule ^ https://%{HTTP_HOST}%1/ [R=301,L,NE]
   RewriteCond %{QUERY_STRING} (^|&)v=
   RewriteRule \.(js|css)$ - [E=KT_VERSIONED:1]
 </IfModule>
@@ -76,13 +94,14 @@
 
   # ─── Security headers ─────────────────────────────────────────────
   Header always set X-Content-Type-Options "nosniff"
-  Header always set X-Frame-Options "SAMEORIGIN"
+  # X-Frame-Options removed (2026-10-31): it cannot name an allowed origin, and the website's live phone demo frames
+  # this app. frame-ancestors below is the control: only this app itself and kiddietrac.com may frame it.
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
   Header always set Permissions-Policy "geolocation=(self), microphone=(self), camera=(self), payment=(self)"
   # Clickjacking defence-in-depth (complements X-Frame-Options). No script/style
   # rules here — the SPA relies on inline scripts, so a full CSP needs a separate
   # nonce refactor (tracked as a SOC 2 gap).
-  Header always set Content-Security-Policy "frame-ancestors 'self'"
+  Header always set Content-Security-Policy "frame-ancestors 'self' https://www.kiddietrac.com https://kiddietrac.com"
   Header always set X-Permitted-Cross-Domain-Policies "none"
   # HSTS — the portal is HTTPS-only. Scoped to this host (no includeSubDomains)
   # so it can't affect other subdomains that may not be HTTPS. 1 year.

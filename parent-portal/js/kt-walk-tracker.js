@@ -19,11 +19,72 @@
   if (!Api) { return; }
 
   var PING_EVERY_MS = 12000;
-  var state = { tripId: null, watchId: null, pings: 0, lastPingAt: 0, sharing: false, lat: null, lon: null, lastAcc: null, status: '', trail: [], map: null, marker: null, accCircle: null, path: null };
+  var state = { tripId: null, watchId: null, pings: 0, lastPingAt: 0, sharing: false, lat: null, lon: null, lastAcc: null, status: '', trail: [], map: null, marker: null, accCircle: null, path: null,
+    queue: [], flushing: false, lastFixAt: 0, startedAt: 0, nextAskAt: 0, dog: null,
+    src: null, srcSince: 0, gotFix: false, nativeOff: false, dist: null, perm: null, nativeTimer: null, told: {} };
+
+  /* SURVIVING A LOST CONNECTION (2026-10-28, Anthony: "with educators on a walk and for whatever reason it loses
+     connection can you resume and make sure educator is prompted if walk is over (this needs to be handled better)").
+     Before: whether this phone was sharing lived only in memory, so a reload, a crash or Android killing the app in
+     the background ended the sharing silently while the walk stayed "live" for parents; a ping that failed offline
+     was dropped; and a GPS watch that died in the background was never restarted. Now:
+       - this phone remembers the walk it is sharing (localStorage LIVE_KEY) and picks it back up on its own;
+       - every fix is QUEUED with the time it was taken and sent in batches - offline fixes wait and go when the
+         connection is back, so the route has no hole (/field-trips/{id}/ping takes points[]);
+       - a watchdog restarts GPS when fixes stop, and on coming back to the foreground or online;
+       - a walk the server says has ended (409) stops sharing here;
+       - any screen, not only #walk, asks "your walk is still running - resume or end?" when this phone is not
+         sharing it, and a long walk asks "still out?" now and then. walks:nudge-quiet reaches the educator by
+         push when the app is closed. */
+  var LIVE_KEY = 'kt_walk_live', QUEUE_KEY = 'kt_walk_queue', ASK_KEY = 'kt_walk_resume_asked';
+  /* The native watcher's id, kept across page reloads (2026-10-31). The native location service lives in the app, not
+     the page: a reload mid-walk (an update, a crash, a refresh) lost the id, nothing could stop that watcher, and its
+     "Recording this walk" notification stayed after the walk had ended. A page that boots removes any watcher a
+     previous page left behind; sharing (or resuming) starts a fresh one. */
+  var BGW_KEY = 'kt_walk_bgw';
+  function nativePlugin() { try { var C = window.Capacitor; return (C && C.Plugins && C.Plugins.BackgroundGeolocation) || null; } catch (e) { return null; } }
+  /* RESTART-PROOF WALKS (2026-10-31, app 3.12.11+). The app remembers the running walk (walk id + this sign-in) so
+     that after a phone restart it can keep recording (location "all the time") or post "Your walk is still active -
+     tap to resume tracking". Disarmed when the walk ends here or elsewhere. */
+  function nativeWalk(op, trip) {
+    try {
+      var C = window.Capacitor, b = C && C.Plugins && C.Plugins.KtBio;
+      if (!b || typeof b.walkArm !== 'function') return;
+      if (op === 'arm') {
+        var tok = null, ag = null;
+        try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
+        try { ag = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id'); } catch (e) {}
+        if (!tok || !trip) return;
+        b.walkArm({ trip: Number(trip), token: tok, agency: ag ? String(ag) : null, api: (KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1', title: '' }).catch(function () {});
+      } else {
+        b.walkDisarm().catch(function () {});
+      }
+    } catch (e) {}
+  }
+  function forgetWatcher(id) {
+    var p = nativePlugin(); if (p && id) { try { p.removeWatcher({ id: id }); } catch (e) {} }
+    if (!id || lsGet(BGW_KEY) === id) lsSet(BGW_KEY, null);
+  }
+  var ASK_AFTER_MIN = 90, ASK_EVERY_MIN = 45;
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsSet(k, v) { try { if (v == null) { localStorage.removeItem(k); } else { localStorage.setItem(k, JSON.stringify(v)); } } catch (e) {} }
+  function saveQueue() { lsSet(QUEUE_KEY, state.queue.length ? { trip: state.tripId, points: state.queue.slice(-500) } : null); }
+  function isProviderRole() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var va = sessionStorage.getItem('kt_view_as');
+      if (va) { return ['educator', 'home_visitor', 'centre_director'].indexOf(va) !== -1; }
+      return (u.roles || []).some(function (r) { return ['educator', 'home_visitor', 'centre_director', 'agency_admin'].indexOf(r) !== -1; });
+    } catch (e) { return false; }
+  }
 
   // ─── Leaflet loader (same CDN the provider map uses) ─────────────────
-  var LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-  var LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  /* SELF-HOSTED (2026-11-10, ticket #246): Leaflet 1.9.4 is served from our own domain (js/vendor/leaflet-1.9.4,
+     byte-identical to the npm package, checksum-verified). It used to come from unpkg.com, and when that request
+     failed on an educator's phone every map in the session was dead. A failed load is no longer cached either:
+     the next call tries again. */
+  var LEAFLET_CSS = '/js/vendor/leaflet-1.9.4/leaflet.css';
+  var LEAFLET_JS = '/js/vendor/leaflet-1.9.4/leaflet.js';
   var _leafletP = null;
   function loadLeaflet() {
     if (window.L) return Promise.resolve(window.L);
@@ -34,7 +95,7 @@
       }
       var s = document.createElement('script'); s.src = LEAFLET_JS;
       s.onload = function () { res(window.L); };
-      s.onerror = function () { rej(new Error('Could not load the map.')); };
+      s.onerror = function () { _leafletP = null; s.remove(); rej(new Error('Could not load the map.')); };
       document.head.appendChild(s);
     });
     return _leafletP;
@@ -43,7 +104,7 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function toast(msg, kind) { if (KT.toast) { KT.toast(msg, kind); } }
   function fmtClock(d) { try { return new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } }
-  function fmtDist(m) { if (m == null) return '—'; return m >= 1000 ? (m / 1000).toFixed(2) + ' km' : Math.round(m) + ' m'; }
+  function fmtDist(m) { if (m == null) return '—'; return ((m) / 1000).toFixed(2) + ' km (' + Math.round(m).toLocaleString() + ' m)'; }
   function fmtSteps(n) { if (n == null) return '—'; return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n); }
   function fmtDur(min) { if (!min) return '—'; if (min < 60) return min + ' min'; return Math.floor(min / 60) + 'h ' + (min % 60) + 'm'; }
 
@@ -64,11 +125,16 @@
     var s = document.createElement('style'); s.id = 'ktw-css';
     s.textContent =
       '@keyframes ktwPulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.55)}70%{box-shadow:0 0 0 10px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}' +
-      '#ktw-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(78px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));z-index:99998;display:flex;align-items:center;gap:11px;padding:8px 8px 8px 14px;border-radius:999px;background:rgba(15,23,42,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.35);color:#fff;font-size:13px;font-weight:700;max-width:94vw;}' +
-      '#ktw-pill .ktw-live{display:flex;align-items:center;gap:7px;white-space:nowrap;}' +
+      '#ktw-pill{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(78px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));z-index:99998;display:flex;align-items:center;gap:11px;padding:8px 8px 8px 14px;border-radius:999px;background:rgba(15,23,42,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.35);color:#fff;font-size:13px;font-weight:700;width:max-content;max-width:calc(100vw - 20px);box-sizing:border-box;}' +
+      '#ktw-pill .ktw-live{display:flex;align-items:center;gap:7px;white-space:nowrap;flex:1 1 auto;min-width:0;overflow:hidden;}' +
+      '#ktw-pill .ktw-live > span{min-width:0;overflow:hidden;text-overflow:ellipsis;}' +
+      '#ktw-pill .ktw-live b{flex:0 0 auto;}' +
       '#ktw-pill .ktw-live b{width:9px;height:9px;border-radius:50%;background:#34D399;animation:ktwPulse 1.7s infinite;}' +
       '#ktw-pill .ktw-sub{opacity:.72;font-weight:600;font-size:11.5px;}' +
-      '#ktw-pill button{border:0;cursor:pointer;font-weight:800;border-radius:999px;font-size:12.5px;}' +
+      '#ktw-pill button{border:0;cursor:pointer;font-weight:800;border-radius:999px;font-size:12.5px;flex:0 0 auto;white-space:nowrap;}' +
+      '@media (max-width:440px){#ktw-pill{gap:7px;padding:6px 6px 6px 11px;font-size:12.5px;}#ktw-pill .ktw-map{padding:7px 10px;}#ktw-pill .ktw-stop{padding:7px 12px;}}' +
+      /* While the bar shows, the page keeps room for it at the bottom, so it never covers the last lines. */
+      'body.ktw-pill-on #appMain::after{content:"";display:block;height:calc(84px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));}' +
       '#ktw-pill .ktw-map{background:rgba(255,255,255,.14);color:#fff;padding:7px 12px;}' +
       '#ktw-pill .ktw-stop{background:#fff;color:#DC2626;padding:7px 14px;}' +
       '.ktw-chip{position:relative;border:2px solid transparent;border-radius:16px;padding:8px 6px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;background:#fff;transition:.12s;-webkit-tap-highlight-color:transparent;}' +
@@ -83,12 +149,14 @@
   function renderPill() {
     injectCss();
     var pill = document.getElementById('ktw-pill');
-    if (!state.sharing) { if (pill) pill.remove(); return; }
+    if (!state.sharing) { if (pill) pill.remove(); document.body.classList.remove('ktw-pill-on'); return; }
     if (!pill) { pill = document.createElement('div'); pill.id = 'ktw-pill'; document.body.appendChild(pill); }
+    document.body.classList.add('ktw-pill-on');
     var sub = state.pings > 0
       ? (fmtDist(walkDist()) + (state.lastAcc != null ? ' · ±' + Math.round(state.lastAcc) + 'm' : ''))
       : (state.status || 'Getting your location…');
     pill.innerHTML =
+      '<img src="/img/walk-watch.svg" alt="" width="20" height="20" style="display:inline-block;vertical-align:middle;border-radius:5px;flex:0 0 auto;margin-right:-4px;">' +
       '<span class="ktw-live"><b></b><span>Live<span class="ktw-sub"> · ' + esc(sub) + '</span></span></span>' +
       '<button class="ktw-map" id="ktw-pill-map">Map</button>' +
       (KT.Headcount ? '<button class="ktw-map" id="ktw-pill-hc" title="Headcount of the children on this walk">\ud83d\udc40 Count</button>' : '') +
@@ -124,6 +192,12 @@
       if (trail && trail.length) container._ktpath.setLatLngs(trail);
       if (follow) m.panTo([lat, lon], { animate: true, duration: .6 });
       return m;
+    }).catch(function () {
+      if (!container._ktmap && container.isConnected) {
+        container.innerHTML = '<div style="padding:22px;text-align:center;color:#64748B;font-size:13px;line-height:1.5;">The map could not load on this connection. '
+          + 'Your walk and location sharing carry on; the map will try again.</div>';
+      }
+      return null;
     });
   }
 
@@ -246,6 +320,9 @@
 
   function onFix(pos) {
     if (!state.sharing) return;
+    if (!state.gotFix) { state.gotFix = true; gpsDiag('first_fix', { acc: pos.coords && pos.coords.accuracy != null ? Math.round(pos.coords.accuracy) : null }); }
+    if (state.nativeTimer) { clearTimeout(state.nativeTimer); state.nativeTimer = null; }
+    state.lastFixAt = Date.now();
     state.lat = pos.coords.latitude; state.lon = pos.coords.longitude; state.lastAcc = pos.coords.accuracy; state.lastErr = null;
     state.trail.push([state.lat, state.lon]);
     if (state.trail.length > 400) state.trail.shift();
@@ -254,22 +331,220 @@
     var now = Date.now();
     if (now - state.lastPingAt < PING_EVERY_MS) { setStatus('Located · ±' + Math.round(state.lastAcc) + 'm'); return; }
     state.lastPingAt = now;
-    Api.post('/field-trips/' + state.tripId + '/ping', {
+    // Queued with the time it was taken; flush() sends whatever is waiting, now or when the connection is back.
+    state.queue.push({
       lat: +state.lat.toFixed(6), lon: +state.lon.toFixed(6),
       accuracy_m: state.lastAcc != null ? Math.round(state.lastAcc) : null,
-      speed_mps: (pos.coords.speed != null && !isNaN(pos.coords.speed)) ? pos.coords.speed : null
-    }).then(function () { state.pings++; setStatus('Sharing · ' + state.pings + ' sent'); })
-      .catch(function () { setStatus('Fix OK · upload retrying'); });
+      speed_mps: (pos.coords.speed != null && !isNaN(pos.coords.speed)) ? pos.coords.speed : null,
+      recorded_at: new Date(now).toISOString()
+    });
+    if (state.queue.length > 500) { state.queue.splice(0, state.queue.length - 500); }
+    saveQueue();
+    flush();
+    maybeAskStillOut();
   }
+
+  function flush() {
+    if (state.flushing || !state.tripId || !state.queue.length) { return Promise.resolve(); }
+    if (navigator.onLine === false) { setStatus('Offline · ' + state.queue.length + ' location' + (state.queue.length === 1 ? '' : 's') + ' saved, sending when back online'); return Promise.resolve(); }
+    state.flushing = true;
+    var batch = state.queue.slice(0, 300), trip = state.tripId;
+    return Api.post('/field-trips/' + trip + '/ping', { points: batch }).then(function () {
+      state.queue.splice(0, batch.length); saveQueue();
+      state.pings += batch.length; state.flushing = false;
+      setStatus('Sharing · ' + state.pings + ' sent');
+      if (state.queue.length) { return flush(); }
+    }, function (e) {
+      state.flushing = false;
+      var st = e && (e.status || (e.response && e.response.status));
+      if (st === 409 || /ended/i.test(String(e && e.message))) { endedElsewhere(); return; }
+      setStatus('Connection lost · ' + state.queue.length + ' location' + (state.queue.length === 1 ? '' : 's') + ' saved, retrying');
+    });
+  }
+
+  /* The centre (or the overnight clean-up) already ended this walk: stop sharing here, quietly. */
+  function endedElsewhere() {
+    lsSet(LIVE_KEY, null); state.queue = []; saveQueue(); nativeWalk('disarm');
+    if (state.sharing) { stopSharing(true); toast('This walk has already ended — location sharing stopped.', 'success'); }
+  }
+
+  function restartWatch() {
+    if (!state.sharing) { return; }
+    if (state.watchId != null && navigator.geolocation) { try { navigator.geolocation.clearWatch(state.watchId); } catch (e) {} state.watchId = null; }
+    if (state.bgWatchId && state.bgWatchId !== 'pending') { forgetWatcher(state.bgWatchId); state.bgWatchId = null; }
+    beginWatch();
+  }
+  /* GPS stops when the app is backgrounded on many phones and does not always come back by itself. */
+  function watchdog() {
+    if (!state.sharing) { return; }
+    if (state.lastFixAt && Date.now() - state.lastFixAt > 75000) { gpsDiag(state.gotFix ? 'fixes_stopped' : 'no_fix_75s'); setStatus('GPS paused · restarting'); restartWatch(); }
+    flush();
+    maybeAskStillOut();
+  }
+
+  /* A long walk asks now and then. Never ends anything by itself: only the educator knows the children are back. */
+  function maybeAskStillOut() {
+    if (!state.sharing || !state.startedAt || document.hidden) { return; }
+    var mins = (Date.now() - state.startedAt) / 60000;
+    if (mins < ASK_AFTER_MIN || Date.now() < state.nextAskAt) { return; }
+    state.nextAskAt = Date.now() + ASK_EVERY_MIN * 60000;
+    sheet('🚶 Still on your walk?', 'Your walk has been going for ' + Math.round(mins) + ' minutes. If everyone is back, end it so parents and your director can see the group has returned.',
+      [['Still out', null], ['End the walk', function () { stopSharing(false); toast('Walk ended — sharing stopped.', 'success'); }]]);
+  }
+
+  /* The prompt card used by this file (same look as Walk auto-detect's). buttons: [[label, fn|null], ...] - last is primary. */
+  function sheet(title, text, buttons) {
+    if (document.getElementById('ktw-sheet')) { return; }
+    var scrim = document.createElement('div'); scrim.id = 'ktw-sheet';
+    scrim.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:100001;display:flex;align-items:flex-end;justify-content:center;padding:16px;';
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:18px;max-width:460px;width:100%;padding:20px 22px;box-shadow:0 20px 50px rgba(15,23,42,.3);';
+    card.innerHTML = '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;"><img src="/img/walk-watch.svg" alt="" width="30" height="30" style="border-radius:8px;flex:0 0 auto;">'
+      + '<div style="font-size:15px;font-weight:800;color:#0F172A;">' + esc(title) + '</div></div>'
+      + '<div style="color:#475569;font-size:13.5px;line-height:1.5;">' + esc(text) + '</div>'
+      + '<div class="ktw-sheet-btns" style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;"></div>';
+    var row = card.querySelector('.ktw-sheet-btns');
+    buttons.forEach(function (b, i) {
+      var primary = i === buttons.length - 1;
+      var el = document.createElement('button'); el.type = 'button'; el.textContent = b[0];
+      el.style.cssText = 'flex:1;min-width:120px;padding:11px;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;'
+        + (primary ? 'border:0;background:#065F46;color:#fff;' : 'border:1px solid #CBD5E1;background:#fff;color:#0F172A;');
+      el.addEventListener('click', function () { try { document.body.removeChild(scrim); } catch (e) {} if (b[1]) { b[1](); } });
+      row.appendChild(el);
+    });
+    scrim.appendChild(card);
+    document.body.appendChild(scrim);
+  }
+
+  /* On boot, on coming back to the app and on reconnecting: is a walk of mine still running? */
+  function checkActiveWalk() {
+    if (!isProviderRole() || document.hidden) { return; }
+    Api.get('/provider/walks/active').then(function (r) {
+      var a = r && r.active, live = lsGet(LIVE_KEY);
+      if (!a) {
+        if (live || state.sharing) { endedElsewhere(); }
+        return;
+      }
+      if (state.sharing && state.tripId === a.id) { restartWatchIfStale(); flush(); return; }
+      if (live && live.trip === a.id) {
+        // This phone was sharing this walk before the app restarted or lost its connection: pick it back up.
+        startSharing(a.id, true);
+        toast('Walk Watch resumed — still sharing your location for ' + (a.destination || a.title || 'your walk') + '.', 'success');
+        return;
+      }
+      var asked = null; try { asked = sessionStorage.getItem(ASK_KEY); } catch (e) {}
+      if (asked === String(a.id)) { return; }
+      try { sessionStorage.setItem(ASK_KEY, String(a.id)); } catch (e) {}
+      sheet('🚶 Your walk is still running',
+        (a.destination ? 'To ' + a.destination + ' · ' : '') + 'started ' + (a.minutes_out != null ? a.minutes_out + ' minutes ago' : 'earlier')
+          + '. This phone is not sharing its location. Resume sharing, or end the walk if everyone is back.',
+        [['End the walk', function () {
+            Api.post('/provider/walks/' + a.id + '/end', {}).then(function () { lsSet(LIVE_KEY, null); toast('Walk ended.', 'success'); refresh(); },
+              function (e) { toast((e && e.message) || 'Could not end the walk.', 'error'); });
+          }],
+         ['Resume sharing', function () { startSharing(a.id, true); refresh(); }]]);
+    }).catch(function () { /* offline: try again when the connection is back */ });
+  }
+  function restartWatchIfStale() { if (state.lastFixAt && Date.now() - state.lastFixAt > 75000) { restartWatch(); } }
   function onGeoErr(err) {
     var code = err && err.code;
+    gpsDiag(code === 1 ? 'permission_denied' : 'web_error', { code: code, msg: err && err.message });
     if (code === 1) { toast('Location is off. Allow location for KiddieTrac in Settings, then start again.', 'error'); stopSharing(true); setStatus('Permission denied'); return; }
     setStatus(code === 3 ? 'Waiting for GPS signal…' : 'No GPS fix yet');
   }
+  function platformName() { try { var C = window.Capacitor; return (C && C.getPlatform) ? C.getPlatform() : 'web'; } catch (e) { return 'web'; } }
+  function iosBgPlugin() {
+    var C = window.Capacitor;
+    try { if (!(C && C.isNativePlatform && C.isNativePlatform() && C.getPlatform && /^(ios|android)$/.test(C.getPlatform()))) return null; } catch (e) { return null; }
+    if (state.nativeOff) return null;
+    /* The Google Play build removed the plugin's location service until 3.12.8 (src/play/AndroidManifest.xml): there
+       the plugin loads but can never start ("Service not running."). Android uses it only on a build that has the
+       service: the sideload build, or a Play build whose KtBio.dist() reports bgWalks (read from the installed
+       package, 2026-10-30). The 20-second no-fix fallback to the WebView GPS stays either way. */
+    if (C.getPlatform() === 'android' && state.dist !== 'sideload' && state.bgWalks !== true) return null;
+    var p = C.Plugins && C.Plugins.BackgroundGeolocation;
+    return (p && typeof p.addWatcher === 'function') ? p : null;
+  }
+  /* Older apps have no KtBio.dist() and are sideload builds (same rule as kt-walk-autodetect.js). */
+  function appDist() {
+    if (state.dist) return Promise.resolve(state.dist);
+    try {
+      var bio = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KtBio;
+      if (!bio || typeof bio.dist !== 'function') return Promise.resolve(state.dist = 'sideload');
+      return bio.dist().then(function (r) { state.bgWalks = !!(r && r.bgWalks === true); return (state.dist = (r && r.dist) || 'sideload'); }, function () { return (state.dist = 'sideload'); });
+    } catch (e) { return Promise.resolve(state.dist = 'sideload'); }
+  }
+  /* The native watcher failed or stayed silent: use the WebView's GPS for the rest of this walk. */
+  function nativeFallback(why, extra) {
+    if (!state.sharing || state.nativeOff) return;
+    state.nativeOff = true;
+    if (state.nativeTimer) { clearTimeout(state.nativeTimer); state.nativeTimer = null; }
+    if (state.bgWatchId && state.bgWatchId !== 'pending') forgetWatcher(state.bgWatchId);
+    state.bgWatchId = null;
+    gpsDiag(why, extra);
+    beginWatch();
+  }
+  /* GPS trouble (and the first fix) reaches the server once per walk and kind, so an empty route explains itself. */
+  function gpsDiag(ev, extra) {
+    try {
+      if (!state.tripId || state.told[ev]) return;
+      state.told[ev] = 1;
+      var x = extra || {};
+      var parts = ['ev=' + ev, 'src=' + (state.src || '-'), 'plat=' + platformName(), 'dist=' + (state.dist || '-') + (state.bgWalks ? '+bg' : ''), 'perm=' + (state.perm == null ? '-' : state.perm),
+        'nofix_s=' + (state.srcSince ? Math.round((Date.now() - state.srcSince) / 1000) : '-'), 'vis=' + (document.hidden ? 'hidden' : 'visible')];
+      Object.keys(x).forEach(function (k) { if (x[k] != null && x[k] !== '') parts.push(k + '=' + String(x[k]).replace(/\s+/g, ' ').slice(0, 80)); });
+      var tok = ''; try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''; } catch (e) {}
+      var ag = ''; try { ag = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+      var h = { 'Content-Type': 'application/json', Accept: 'application/json' };
+      if (tok) h.Authorization = 'Bearer ' + tok;
+      if (ag) h['X-Active-Agency-Id'] = ag;
+      fetch(((KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1') + '/diag/client-error', {
+        method: 'POST', headers: h, keepalive: true,
+        body: JSON.stringify({ status: 0, kind: 'walk_gps', path: '/field-trips/' + state.tripId, ms: state.startedAt ? Math.max(0, Date.now() - state.startedAt) : null, text: parts.join(' ').slice(0, 300) })
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  function beginNativeWatch(plugin) {
+    setStatus('Getting your location…');
+    /* ONE native watcher at a time (2026-10-31). A resume while already sharing started a second watcher and dropped
+       the first's id, so ending the walk stopped only one and the "Recording this walk" notification stayed. */
+    if (state.bgWatchId && state.bgWatchId !== 'pending') forgetWatcher(state.bgWatchId);
+    var saved = lsGet(BGW_KEY); if (saved) forgetWatcher(saved);
+    state.bgWatchId = 'pending';
+    state.src = 'native'; state.srcSince = Date.now();
+    if (state.nativeTimer) { clearTimeout(state.nativeTimer); }
+    state.nativeTimer = setTimeout(function () { state.nativeTimer = null; if (state.sharing && !state.gotFix && state.src === 'native') nativeFallback('native_no_fix_20s'); }, 20000);
+    try {
+      /* addWatcher hands back the watcher id as a plain value in this Capacitor (a callback method), not a promise
+         (2026-10-31: every walk logged "plugin.addWatcher(...).then is not a function"). The native service had
+         already started, its id was lost, the walk fell back to web GPS, and the "Recording this walk" notification
+         could never be removed. Promise.resolve takes either form. */
+      Promise.resolve(plugin.addWatcher({
+        // backgroundMessage is what turns on background updates (blue location pill) on iOS.
+        backgroundMessage: 'Recording this walk so the centre knows where the group is.',
+        backgroundTitle: 'KiddieTrac',
+        requestPermissions: true, stale: false, distanceFilter: 10
+      }, function (loc, err) {
+        if (err) {
+          if (err.code === 'NOT_AUTHORIZED') { gpsDiag('native_denied', { msg: err.message }); onGeoErr({ code: 1 }); return; }
+          nativeFallback('native_error', { code: err.code, msg: err.message });
+          return;
+        }
+        if (!loc) return;
+        onFix({ coords: { latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy, speed: loc.speed } });
+      })).then(function (id) {
+        if (state.sharing && state.bgWatchId === 'pending') { state.bgWatchId = id; lsSet(BGW_KEY, id); }
+        else { try { plugin.removeWatcher({ id: id }); } catch (e) {} }   // stopped before it started
+      }).catch(function (e) { state.bgWatchId = null; nativeFallback('native_start_failed', { msg: e && e.message }); });
+    } catch (e) { state.bgWatchId = null; state.nativeOff = true; gpsDiag('native_threw', { msg: e && e.message }); return beginWatch(); }
+    return true;
+  }
   function beginWatch() {
+    var bg = iosBgPlugin(); if (bg) return beginNativeWatch(bg);
     if (!navigator.geolocation) { toast('This device has no GPS.', 'error'); return false; }
     try {
       setStatus('Getting your location…');
+      state.src = 'web'; state.srcSince = Date.now();
       navigator.geolocation.getCurrentPosition(onFix, onGeoErr, { enableHighAccuracy: false, timeout: 20000, maximumAge: 30000 });
       state.watchId = navigator.geolocation.watchPosition(onFix, onGeoErr, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
     } catch (e) { toast('Could not start GPS.', 'error'); return false; }
@@ -279,19 +554,45 @@
     var done, p = new Promise(function (r) { done = r; }), settled = false;
     var fin = function () { if (!settled) { settled = true; done(); } };
     setTimeout(fin, 7000);
-    try { var C = window.Capacitor, bio = C && C.Plugins && C.Plugins.KtBio; if (bio && bio.requestLocation) bio.requestLocation().then(fin, fin); else fin(); } catch (e) { fin(); }
-    return p;
+    var got = function (r) { if (r && typeof r.granted === 'boolean') state.perm = r.granted ? 'granted' : 'denied'; fin(); };
+    try { var C = window.Capacitor, bio = C && C.Plugins && C.Plugins.KtBio; if (bio && bio.requestLocation) bio.requestLocation().then(got, fin); else fin(); } catch (e) { fin(); }
+    return Promise.all([p, appDist()]);
   }
-  function startSharing(tripId) {
-    state.tripId = tripId; state.pings = 0; state.lastPingAt = 0; state.sharing = true; state.lastAcc = null; state.trail = []; state.status = 'Starting…';
+  function startSharing(tripId, resumed) {
+    state.tripId = tripId; state.pings = 0; state.lastPingAt = 0; state.sharing = true; state.lastAcc = null; state.trail = []; state.status = resumed ? 'Resuming…' : 'Starting…';
+    state.gotFix = false; state.nativeOff = false; state.told = {}; state.src = null; state.srcSince = 0;
+    // Remember it (survives a reload or the app being killed), and pick up any fixes saved while offline.
+    var live = lsGet(LIVE_KEY);
+    state.startedAt = (live && live.trip === tripId && live.since) ? live.since : Date.now();
+    state.nextAskAt = 0;
+    lsSet(LIVE_KEY, { trip: tripId, since: state.startedAt });
+    nativeWalk('arm', tripId);
+    var q = lsGet(QUEUE_KEY); state.queue = (q && q.trip === tripId && q.points) ? q.points : [];
+    state.lastFixAt = Date.now();
+    if (state.dog) { clearInterval(state.dog); }
+    state.dog = setInterval(watchdog, 20000);
     renderPill();
     ensureNativeLocation().then(function () { if (!state.sharing) return; if (!beginWatch()) { state.sharing = false; renderPill(); refresh(); return; } renderPill(); });
   }
   function stopSharing(silent) {
     if (state.watchId != null && navigator.geolocation) { try { navigator.geolocation.clearWatch(state.watchId); } catch (e) {} }
+    if (state.bgWatchId && state.bgWatchId !== 'pending') forgetWatcher(state.bgWatchId);
+    state.bgWatchId = null;
+    if (state.nativeTimer) { clearTimeout(state.nativeTimer); state.nativeTimer = null; }
+    if (state.dog) { clearInterval(state.dog); state.dog = null; }
     var tid = state.tripId; state.sharing = false; state.watchId = null; renderPill();
-    if (tid && !silent) Api.post('/provider/walks/' + tid + '/end', {}).catch(function () {});
-    refresh();
+    lsSet(LIVE_KEY, null);
+    nativeWalk('disarm');
+    if (tid && !silent) {
+      // Send what is still queued first, so the route ends where the walk did; then end it.
+      var pending = state.queue.slice(0, 300); state.queue = []; saveQueue();
+      /* Redraw only AFTER the server has ended the walk (2026-10-31). refresh() ran straight away, so the screen asked
+         for the active walk before /end had landed and showed "A walk is in progress - Resume sharing" for a walk
+         that was already ended. */
+      (pending.length ? Api.post('/field-trips/' + tid + '/ping', { points: pending }).catch(function () {}) : Promise.resolve())
+        .then(function () { return Api.post('/provider/walks/' + tid + '/end', {}); }).catch(function () {})
+        .then(function () { refresh(); });
+    } else { state.queue = []; saveQueue(); refresh(); }
   }
   function confirmStop() {
     Promise.resolve(KT.confirm ? KT.confirm('Stop sharing your location and end this walk?') : window.confirm('End this walk?')).then(function (ok) {
@@ -308,7 +609,7 @@
     m.innerHTML =
       '<div style="background:#fff;border-radius:18px;max-width:720px;width:100%;max-height:94vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.4);">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;padding:15px 18px;border-bottom:1px solid #EEF2F7;">' +
-          '<div style="font-size:16px;font-weight:800;color:#0F172A;">🚶 ' + esc(title || 'Live location') + '</div>' +
+          '<div style="font-size:16px;font-weight:800;color:#0F172A;display:flex;align-items:center;gap:9px;min-width:0;"><img src="/img/walk-watch.svg" alt="" width="26" height="26" style="display:inline-block;vertical-align:middle;border-radius:7px;flex:0 0 auto;"><span style="min-width:0;"><span style="display:block;font-size:10.5px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#0E8F99;">Walk Watch</span>' + esc(title || 'Live location') + '</span></div>' +
           '<button id="ktw-x" style="background:#F1F5F9;border:0;border-radius:10px;width:34px;height:34px;font-size:18px;cursor:pointer;color:#334155;">×</button>' +
         '</div>' +
         '<div id="ktw-stats" style="display:flex;gap:9px;flex-wrap:wrap;padding:14px 18px 0;"></div>' +
@@ -351,7 +652,7 @@
     main.innerHTML =
       '<div id="ktw-livewrap" style="padding:18px;max-width:640px;margin:0 auto;">' +
         '<div style="background:linear-gradient(135deg,#065F46,#0E9E6E);color:#fff;border-radius:18px;padding:16px 18px;box-shadow:0 8px 22px rgba(6,95,70,.28);">' +
-          '<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.9;"><span style="width:9px;height:9px;border-radius:50%;background:#A7F3D0;animation:ktwPulse 1.7s infinite;"></span>Live · sharing your location</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;opacity:.9;"><span style="width:9px;height:9px;border-radius:50%;background:#A7F3D0;animation:ktwPulse 1.7s infinite;"></span><span>Walk Watch</span><span style="opacity:.7;">·</span><span>Live · sharing your location</span></div>' +
           '<div style="font-size:20px;font-weight:800;margin-top:3px;">' + esc(a.title || 'Walk / outing') + '</div>' +
           (a.destination ? '<div style="opacity:.92;">' + esc(a.destination) + '</div>' : '') +
           '<div style="display:flex;gap:20px;margin-top:12px;">' +
@@ -392,22 +693,36 @@
   function renderStartForm(main) {
     var selected = {};
     main.innerHTML =
-      '<div style="padding:20px;max-width:640px;margin:0 auto;">' +
-        '<div style="text-align:center;margin-bottom:8px;"><div style="font-size:48px;line-height:1;">🚶</div>' +
-          '<h2 style="margin:8px 0 2px;color:#0F172A;">Start a walk or outing</h2>' +
+      '<div id="ktw-form" style="padding:20px;max-width:640px;margin:0 auto;">' +
+        '<style>#ktw-form .ktw-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px 18px;max-width:980px}' +
+          '#ktw-form .ktw-f{display:flex !important;flex-direction:column;gap:6px;font-size:13px;font-weight:800;color:#334155;min-width:0;margin:0}' +
+          '#ktw-form .ktw-f input{width:100% !important;max-width:none !important;box-sizing:border-box;margin:0;padding:11px;border:1px solid #E2E8F0;border-radius:10px;font-size:14px;font-weight:500}' +
+          '#ktw-form .ktw-who{display:flex;align-items:center;gap:12px;margin-top:18px}' +
+          '#ktw-form .ktw-act{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px}' +
+          '#ktw-start{min-width:260px;padding:13px 28px;border:0;border-radius:12px;color:#fff;font-weight:800;font-size:15px}' +
+          '#appMain #ktw-start:disabled{opacity:1 !important}' +
+          '#ktw-hint{font-size:12px;color:#94A3B8;line-height:1.5;margin:0}' +
+          '@media(max-width:640px){#ktw-start{width:100%}#ktw-hint{width:100%;text-align:center}}</style>' +
+        '<div style="text-align:center;margin-bottom:8px;"><div style="line-height:1;"><img src="/img/walk-watch.svg" alt="" width="56" height="56" style="display:inline-block;vertical-align:middle;border-radius:15px;"></div>' +
+          '<div data-kt-nosechead="1" style="margin-top:8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#0E8F99;">Walk Watch</div>' +
+          '<h2 style="margin:2px 0 2px;color:#0F172A;">Start a walk or outing</h2>' +
           '<p style="color:#64748B;margin:0;font-size:13.5px;line-height:1.5;">Pick who\'s coming and share your live location. Parents of the selected children can follow along on a live map.</p></div>' +
         '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:16px;margin-top:14px;">' +
-          '<label style="display:block;font-size:13px;font-weight:800;color:#334155;">Where to? <span style="color:#DC2626;">*</span>' +
-            '<input id="ktw-dest" placeholder="e.g. Neighbourhood park" style="width:100%;box-sizing:border-box;margin-top:5px;padding:11px;border:1px solid #E2E8F0;border-radius:10px;font-size:14px;"></label>' +
-          '<label style="display:block;font-size:13px;font-weight:800;color:#334155;margin-top:12px;">What is it? <span style="font-weight:500;color:#94A3B8;">(optional)</span>' +
-            '<input id="ktw-title" placeholder="Walk / outing" style="width:100%;box-sizing:border-box;margin-top:5px;padding:11px;border:1px solid #E2E8F0;border-radius:10px;font-size:14px;"></label>' +
-          '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;">' +
+          '<div class="ktw-row">' +
+            '<label class="ktw-f"><span>Where to? <span style="color:#DC2626;">*</span></span>' +
+              '<input id="ktw-dest" placeholder="e.g. Neighbourhood park"></label>' +
+            '<label class="ktw-f"><span>What is it? <span style="font-weight:500;color:#94A3B8;">(optional)</span></span>' +
+              '<input id="ktw-title" placeholder="Walk / outing"></label>' +
+          '</div>' +
+          '<div class="ktw-who">' +
             '<div style="font-size:13px;font-weight:800;color:#334155;">Who\'s coming? <span style="color:#DC2626;">*</span></div>' +
             '<button id="ktw-all" type="button" style="background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;">Select all</button>' +
           '</div>' +
           '<div id="ktw-kids" style="margin-top:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:8px;"><div style="grid-column:1/-1;color:#94A3B8;font-size:13px;padding:8px 0;">Loading children…</div></div>' +
-          '<button id="ktw-start" disabled style="width:100%;margin-top:16px;background:#CBD5E1;color:#fff;border:0;border-radius:14px;padding:15px;font-weight:800;font-size:15px;cursor:not-allowed;">▶ Start walk &amp; share location</button>' +
-          '<p id="ktw-hint" style="font-size:11.5px;color:#94A3B8;line-height:1.5;margin:9px 0 0;text-align:center;">Add a destination and pick at least one child to start.</p>' +
+          '<div class="ktw-act">' +
+            '<button id="ktw-start" disabled style="background:#E2E8F0;color:#475569;cursor:not-allowed;">▶ Start walk &amp; share location</button>' +
+            '<p id="ktw-hint">Add a destination and pick at least one child to start.</p>' +
+          '</div>' +
         '</div>' +
       '</div>';
 
@@ -415,7 +730,10 @@
     function validate() {
       var ok = destEl.value.trim() && Object.keys(selected).length > 0;
       startBtn.disabled = !ok;
-      startBtn.style.background = ok ? '#065F46' : '#CBD5E1';
+      // Waiting: pale slate with slate words, readable even under the portal's faded disabled look (2026-11-06; white
+      // on #CBD5E1 at 55% could not be read).
+      startBtn.style.background = ok ? '#065F46' : '#E2E8F0';
+      startBtn.style.color = ok ? '#fff' : '#475569';
       startBtn.style.cursor = ok ? 'pointer' : 'not-allowed';
       var n = Object.keys(selected).length;
       main.querySelector('#ktw-hint').textContent = ok ? (n + ' child' + (n === 1 ? '' : 'ren') + ' selected — ready to go.') : 'Add a destination and pick at least one child to start.';
@@ -468,7 +786,7 @@
       if (!host) { host = document.createElement('div'); host.id = 'ktw-parent-banner'; host.style.cssText = 'position:fixed;left:8px;right:8px;top:calc(8px + var(--kt-safe-top, env(safe-area-inset-top,0px)));z-index:99990;display:flex;flex-direction:column;gap:8px;pointer-events:none;'; document.body.appendChild(host); }
       host.innerHTML = walks.map(function (w) {
         return '<button data-trip="' + w.trip_id + '" data-title="' + esc((w.child_name || 'Your child') + ' — ' + (w.title || 'walk')) + '" style="pointer-events:auto;text-align:left;background:linear-gradient(135deg,#065F46,#0E9E6E);color:#fff;border:0;border-radius:14px;padding:11px 14px;box-shadow:0 8px 22px rgba(6,95,70,.32);display:flex;align-items:center;gap:11px;cursor:pointer;">' +
-          '<span style="font-size:24px;">🚶</span><span style="flex:1;min-width:0;"><span style="display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;opacity:.85;">Live walk in progress</span>' +
+          '<img src="/img/walk-watch.svg" alt="" width="30" height="30" style="display:inline-block;vertical-align:middle;border-radius:8px;flex:0 0 auto;box-shadow:0 0 0 2px rgba(255,255,255,.35);"><span style="flex:1;min-width:0;"><span style="display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;opacity:.85;"><span>Walk Watch</span> · <span>Live now</span></span>' +
           '<span style="display:block;font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(w.child_name || 'Your child') + ' is out' + (w.destination ? ' · ' + esc(w.destination) : '') + '</span></span>' +
           '<span style="background:rgba(255,255,255,.2);border-radius:16px;padding:6px 12px;font-weight:800;font-size:12.5px;white-space:nowrap;">See map ›</span></button>';
       }).join('');
@@ -490,7 +808,7 @@
         return '<div style="border:1px solid ' + (isLive ? '#A7F3D0' : '#E5E7EB') + ';background:' + (isLive ? '#ECFDF5' : '#fff') + ';border-radius:14px;padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
           '<div style="flex:1;min-width:0;"><div style="font-weight:800;color:#0F172A;">🚶 ' + esc(w.title || 'Walk') + ' ' + (isLive ? '<span style="font-size:10.5px;font-weight:800;color:#065F46;background:#D1FAE5;border-radius:999px;padding:2px 9px;">● LIVE</span>' : '') + '</div>' +
           '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + esc(w.child_name || '') + ' · ' + esc(w.destination || '') + ' · ' + esc(w.trip_date || '') + '</div>' +
-          '<div style="font-size:12px;color:#334155;margin-top:3px;font-weight:700;">' + fmtDist(w.distance_m) + ' · ' + fmtSteps(w.steps_est) + ' steps · ' + fmtDur(w.duration_min) + '</div></div>' +
+          '<div style="font-size:12px;color:#334155;margin-top:3px;font-weight:700;">' + fmtDist(w.distance_m) + ' walked · ' + fmtSteps(w.steps_est) + ' steps · ' + fmtDur(w.duration_min) + '</div></div>' +
           (w.has_location ? '<button class="kt-pw-map" data-id="' + w.trip_id + '" data-live="' + (isLive ? '1' : '') + '" data-t="' + esc((w.child_name || '') + ' — ' + (w.title || 'walk')) + '" style="background:' + (isLive ? '#065F46' : '#EFF6FF') + ';color:' + (isLive ? '#fff' : '#1E40AF') + ';border:' + (isLive ? '0' : '1px solid #BFDBFE') + ';border-radius:10px;padding:9px 13px;font-weight:800;font-size:12.5px;cursor:pointer;white-space:nowrap;">📍 ' + (isLive ? 'Live map' : 'View route') + '</button>' : '<span style="font-size:11.5px;color:#94A3B8;">No location</span>') +
           '</div>' +
           // Inline route/live map, expanded in place by the button above — parents
@@ -498,7 +816,7 @@
           (w.has_location ? '<div class="kt-pw-routewrap" data-for="' + w.trip_id + '" style="display:none;margin:-4px 0 12px;"><div class="kt-pw-route" style="height:260px;border-radius:12px;overflow:hidden;background:#EEF2F7;"></div></div>' : '');
       };
       main.innerHTML = '<div style="padding:18px;max-width:640px;margin:0 auto;">' +
-        '<div style="text-align:center;margin-bottom:12px;"><div style="font-size:44px;line-height:1;">🚶</div><h2 style="margin:6px 0 2px;color:#0F172A;">Walks &amp; outings</h2><p style="color:#64748B;margin:0;font-size:13.5px;">Follow your child\'s live location while they\'re out — plus their recent walks.</p></div>' +
+        '<div style="text-align:center;margin-bottom:12px;"><div style="line-height:1;"><img src="/img/walk-watch.svg" alt="" width="52" height="52" style="display:inline-block;vertical-align:middle;border-radius:14px;"></div><h2 style="margin:6px 0 2px;color:#0F172A;">Walk Watch</h2><p style="color:#64748B;margin:0;font-size:13.5px;">Follow your child\'s live location while they\'re out — plus their recent walks.</p></div>' +
         (live.length ? '<div style="font-size:12px;font-weight:800;color:#065F46;text-transform:uppercase;letter-spacing:.5px;margin:6px 2px;">Live now</div>' + live.map(row).join('') : '') +
         (past.length ? '<div style="font-size:12px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin:14px 2px 6px;">Recent (last 30 days)</div>' + past.map(row).join('') : '') +
         (!walks.length ? '<div style="text-align:center;color:#94A3B8;padding:30px;background:#F8FAFC;border-radius:14px;">No walks yet. When an educator takes your child on a walk or outing, it appears here with a live map.</div>' : '') +
@@ -529,12 +847,20 @@
   }
 
   function init() {
+    var orphan = lsGet(BGW_KEY);
+    if (orphan) forgetWatcher(orphan);
+    if (!lsGet(LIVE_KEY)) nativeWalk('disarm');
     if (Shell && Shell.registerScreen) {
       ['educator', 'home_visitor', 'centre_director', 'agency_admin', 'platform_admin'].forEach(function (role) { Shell.registerScreen(role + ':walk', renderWalkScreen); });
       Shell.registerScreen('guardian:walks', renderParentWalks);
     }
     setTimeout(pollParentWalks, 4000);
     setInterval(pollParentWalks, 45000);
+    // Educators: resume or ask about a running walk on boot, on return to the app, and on reconnecting.
+    setTimeout(checkActiveWalk, 6000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) { setTimeout(checkActiveWalk, 800); if (state.sharing) { setTimeout(watchdog, 1500); } } });
+    window.addEventListener('online', function () { setTimeout(checkActiveWalk, 800); flush(); });
+    window.addEventListener('offline', function () { if (state.sharing) { setStatus('Offline · locations are saved and will send when back online'); } });
   }
 
   KT.WalkTracker = { openMap: openMap, mountLiveMap: mountLiveMap, mountRouteMap: mountRouteMap, renderWalkScreen: renderWalkScreen, renderParentWalks: renderParentWalks };

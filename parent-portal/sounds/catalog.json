@@ -1,0 +1,450 @@
+{
+ "version": 2,
+ "groups": [
+  "Chimes",
+  "Bells",
+  "Musical",
+  "Pager & beeps",
+  "Classic phone",
+  "Nature-ish",
+  "Alarms & sirens (loud)",
+  "Urgent"
+ ],
+ "base_url": "https://app.kiddietrac.com/sounds/",
+ "tones": [
+  {
+   "id": "kt_notify",
+   "name": "KiddieTrac classic",
+   "group": "Chimes",
+   "seconds": 1.1,
+   "bundled": true
+  },
+  {
+   "id": "kt_tone_chime",
+   "name": "Chime",
+   "group": "Chimes",
+   "seconds": 0.63,
+   "bundled": true
+  },
+  {
+   "id": "kt_chime_crystal",
+   "name": "Crystal",
+   "group": "Chimes",
+   "seconds": 1.3,
+   "bundled": false
+  },
+  {
+   "id": "kt_chime_four",
+   "name": "Four-note",
+   "group": "Chimes",
+   "seconds": 1.29,
+   "bundled": false
+  },
+  {
+   "id": "kt_chime_glass",
+   "name": "Glass",
+   "group": "Chimes",
+   "seconds": 1.25,
+   "bundled": false
+  },
+  {
+   "id": "kt_chime_sparkle",
+   "name": "Sparkle",
+   "group": "Chimes",
+   "seconds": 1.23,
+   "bundled": false
+  },
+  {
+   "id": "kt_chime_soft_up",
+   "name": "Up-chime",
+   "group": "Chimes",
+   "seconds": 0.9,
+   "bundled": false
+  },
+  {
+   "id": "kt_chime_wind",
+   "name": "Wind chimes",
+   "group": "Chimes",
+   "seconds": 2.05,
+   "bundled": false
+  },
+  {
+   "id": "kt_bell_bicycle",
+   "name": "Bicycle bell",
+   "group": "Bells",
+   "seconds": 1.1,
+   "bundled": false
+  },
+  {
+   "id": "kt_bell_church",
+   "name": "Church bell",
+   "group": "Bells",
+   "seconds": 2.2,
+   "bundled": false
+  },
+  {
+   "id": "kt_bell_cowbell",
+   "name": "Cowbell",
+   "group": "Bells",
+   "seconds": 1.11,
+   "bundled": false
+  },
+  {
+   "id": "kt_bell_desk",
+   "name": "Desk bell",
+   "group": "Bells",
+   "seconds": 1.6,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_doorbell",
+   "name": "Doorbell",
+   "group": "Bells",
+   "seconds": 1.4,
+   "bundled": true
+  },
+  {
+   "id": "kt_bell_hand",
+   "name": "Hand bell",
+   "group": "Bells",
+   "seconds": 1.6,
+   "bundled": false
+  },
+  {
+   "id": "kt_bell_school",
+   "name": "School bell",
+   "group": "Bells",
+   "seconds": 2.2,
+   "bundled": false
+  },
+  {
+   "id": "kt_music_arp_down",
+   "name": "Arpeggio down",
+   "group": "Musical",
+   "seconds": 1.15,
+   "bundled": false
+  },
+  {
+   "id": "kt_music_arp_up",
+   "name": "Arpeggio up",
+   "group": "Musical",
+   "seconds": 1.15,
+   "bundled": false
+  },
+  {
+   "id": "kt_music_fanfare",
+   "name": "Fanfare",
+   "group": "Musical",
+   "seconds": 1.02,
+   "bundled": false
+  },
+  {
+   "id": "kt_music_harp",
+   "name": "Harp glissando",
+   "group": "Musical",
+   "seconds": 1.65,
+   "bundled": false
+  },
+  {
+   "id": "kt_music_jingle",
+   "name": "Jingle",
+   "group": "Musical",
+   "seconds": 1.64,
+   "bundled": false
+  },
+  {
+   "id": "kt_music_kalimba",
+   "name": "Kalimba",
+   "group": "Musical",
+   "seconds": 1.38,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_marimba",
+   "name": "Marimba",
+   "group": "Musical",
+   "seconds": 0.86,
+   "bundled": true
+  },
+  {
+   "id": "kt_music_piano",
+   "name": "Piano chord",
+   "group": "Musical",
+   "seconds": 1.6,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_rise",
+   "name": "Rising",
+   "group": "Musical",
+   "seconds": 0.82,
+   "bundled": true
+  },
+  {
+   "id": "kt_music_synth",
+   "name": "Synth stab",
+   "group": "Musical",
+   "seconds": 0.56,
+   "bundled": false
+  },
+  {
+   "id": "kt_beep_digital",
+   "name": "Digital beep",
+   "group": "Pager & beeps",
+   "seconds": 0.44,
+   "bundled": false
+  },
+  {
+   "id": "kt_beep_double",
+   "name": "Double beep",
+   "group": "Pager & beeps",
+   "seconds": 0.4,
+   "bundled": false
+  },
+  {
+   "id": "kt_beep_monitor",
+   "name": "Monitor",
+   "group": "Pager & beeps",
+   "seconds": 1.5,
+   "bundled": false
+  },
+  {
+   "id": "kt_beep_morse",
+   "name": "Morse \"KT\"",
+   "group": "Pager & beeps",
+   "seconds": 1.41,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_pager",
+   "name": "Pager",
+   "group": "Pager & beeps",
+   "seconds": 0.96,
+   "bundled": true
+  },
+  {
+   "id": "kt_beep_radar",
+   "name": "Radar ping",
+   "group": "Pager & beeps",
+   "seconds": 1.8,
+   "bundled": false
+  },
+  {
+   "id": "kt_beep_scanner",
+   "name": "Scanner",
+   "group": "Pager & beeps",
+   "seconds": 0.24,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_triple",
+   "name": "Triple ping",
+   "group": "Pager & beeps",
+   "seconds": 0.54,
+   "bundled": true
+  },
+  {
+   "id": "kt_beep_watch",
+   "name": "Watch alarm",
+   "group": "Pager & beeps",
+   "seconds": 2.0,
+   "bundled": false
+  },
+  {
+   "id": "kt_phone_8bit",
+   "name": "8-bit",
+   "group": "Classic phone",
+   "seconds": 0.58,
+   "bundled": false
+  },
+  {
+   "id": "kt_phone_uk",
+   "name": "Double ring",
+   "group": "Classic phone",
+   "seconds": 2.4,
+   "bundled": false
+  },
+  {
+   "id": "kt_phone_office",
+   "name": "Office phone",
+   "group": "Classic phone",
+   "seconds": 1.6,
+   "bundled": false
+  },
+  {
+   "id": "kt_phone_old",
+   "name": "Old telephone",
+   "group": "Classic phone",
+   "seconds": 2.4,
+   "bundled": false
+  },
+  {
+   "id": "kt_phone_sms",
+   "name": "Text message",
+   "group": "Classic phone",
+   "seconds": 0.39,
+   "bundled": false
+  },
+  {
+   "id": "kt_phone_trim",
+   "name": "Trimphone warble",
+   "group": "Classic phone",
+   "seconds": 1.84,
+   "bundled": false
+  },
+  {
+   "id": "kt_nature_bird",
+   "name": "Bird chirp",
+   "group": "Nature-ish",
+   "seconds": 1.2,
+   "bundled": false
+  },
+  {
+   "id": "kt_nature_bubbles",
+   "name": "Bubbles",
+   "group": "Nature-ish",
+   "seconds": 0.42,
+   "bundled": false
+  },
+  {
+   "id": "kt_nature_cricket",
+   "name": "Cricket",
+   "group": "Nature-ish",
+   "seconds": 1.6,
+   "bundled": false
+  },
+  {
+   "id": "kt_nature_frog",
+   "name": "Frog",
+   "group": "Nature-ish",
+   "seconds": 1.14,
+   "bundled": false
+  },
+  {
+   "id": "kt_nature_drop",
+   "name": "Water drop",
+   "group": "Nature-ish",
+   "seconds": 1.02,
+   "bundled": false
+  },
+  {
+   "id": "kt_nature_wood",
+   "name": "Wood knock",
+   "group": "Nature-ish",
+   "seconds": 0.51,
+   "bundled": false
+  },
+  {
+   "id": "kt_alarm_airhorn",
+   "name": "Air horn",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 1.7,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_alarm",
+   "name": "Alarm",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 1.6,
+   "bundled": true
+  },
+  {
+   "id": "kt_alarm_clock",
+   "name": "Alarm clock",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 1.95,
+   "bundled": false
+  },
+  {
+   "id": "kt_alarm_buzzer",
+   "name": "Buzzer",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 1.8,
+   "bundled": false
+  },
+  {
+   "id": "kt_alarm_fire",
+   "name": "Fire alarm whoop",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 2.25,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_klaxon",
+   "name": "Klaxon",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 1.41,
+   "bundled": true
+  },
+  {
+   "id": "kt_alarm_nuclear",
+   "name": "Red alert",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 2.7,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_siren",
+   "name": "Siren",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 2.2,
+   "bundled": true
+  },
+  {
+   "id": "kt_alarm_warble",
+   "name": "Warble siren",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 2.4,
+   "bundled": false
+  },
+  {
+   "id": "kt_alarm_yelp",
+   "name": "Yelp siren",
+   "group": "Alarms & sirens (loud)",
+   "seconds": 2.16,
+   "bundled": false
+  },
+  {
+   "id": "kt_urgent_horn",
+   "name": "Emergency horn",
+   "group": "Urgent",
+   "seconds": 1.8,
+   "bundled": false
+  },
+  {
+   "id": "kt_urgent_rapid",
+   "name": "Rapid alert",
+   "group": "Urgent",
+   "seconds": 1.6,
+   "bundled": false
+  },
+  {
+   "id": "kt_urgent_rising",
+   "name": "Rising alarm",
+   "group": "Urgent",
+   "seconds": 1.56,
+   "bundled": false
+  },
+  {
+   "id": "kt_urgent_strobe",
+   "name": "Strobe beep",
+   "group": "Urgent",
+   "seconds": 1.92,
+   "bundled": false
+  },
+  {
+   "id": "kt_urgent_triple",
+   "name": "Triple alarm",
+   "group": "Urgent",
+   "seconds": 1.5,
+   "bundled": false
+  },
+  {
+   "id": "kt_tone_urgent",
+   "name": "Urgent beeps",
+   "group": "Urgent",
+   "seconds": 1.19,
+   "bundled": true
+  }
+ ]
+}

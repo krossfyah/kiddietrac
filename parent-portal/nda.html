@@ -23,7 +23,6 @@
     input,textarea{width:100%;padding:11px 12px;border:1.5px solid #E2E8F0;border-radius:10px;font-size:15px;font-family:inherit}
     input:focus,textarea:focus{outline:none;border-color:#1F6080}
     .row{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media(max-width:600px){.row{grid-template-columns:1fr}}
-    canvas{width:100%;height:170px;border:1.5px dashed #94A3B8;border-radius:12px;background:#fff;touch-action:none;display:block}
     .btn{display:inline-block;padding:13px 22px;border-radius:12px;border:0;background:linear-gradient(135deg,#081C41,#1F6080);color:#fff;font-weight:800;font-size:15px;cursor:pointer}
     .btn[disabled]{opacity:.5;cursor:not-allowed} .link{background:none;border:0;color:#1F6080;font-weight:700;cursor:pointer;font-size:13px}
     .msg{font-size:14px;margin-top:12px} .err{color:#B91C1C} .ok{color:#047857}
@@ -40,6 +39,9 @@
   </div>
   <div id="main"></div>
 </div>
+<script src="/js/kt-net.js?v=20261022raw"></script>
+<!-- The shared signature pad (2026-11-06). No sign-in here, so no saved signatures: it just draws. -->
+<script src="/js/kt-signature-pad.js?v=20261106sig"></script>
 <script>
 (function () {
   var API = 'https://api.kiddietrac.com/api/v1';
@@ -72,7 +74,7 @@
         + '<div class="row"><div><label for="sn">Your full name</label><input id="sn" autocomplete="name" value="' + esc(j.name || '') + '">'
         + '<div style="font-size:12px;color:#64748B;margin-top:5px;line-height:1.45;">Pre-filled from our invitation — correct it if needed, or enter the name of the person signing for the business.</div></div>'
         + '<div><label for="rt">Your role in the company</label><input id="rt" autocomplete="organization-title" placeholder="e.g. Owner, Director"></div></div>'
-        + '<label>Signature</label><canvas id="pad"></canvas><button type="button" class="link" id="clr">Clear signature</button>'
+        + '<label>Signature</label><div id="pad"></div><button type="button" class="link" id="clr">Clear signature</button>'
         + '<label class="agree"><input type="checkbox" id="ag"> <span>I have read and agree to the KiddieTrac Non-Disclosure Agreement on behalf of the business named above, and I am authorised to sign for it.</span></label>'
         + '<div style="margin-top:18px;"><button class="btn" id="go">Sign the NDA</button></div><div class="msg" id="m"></div></div>';
       wire();
@@ -80,16 +82,8 @@
     .catch(function () { sub.textContent = ''; card('<p>We could not load this right now. Please try again in a moment.</p>'); });
 
   function wire() {
-    var c = document.getElementById('pad'), ctx, drawing = false, inked = false;
-    function size() { var r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1; c.width = r.width * d; c.height = r.height * d; ctx = c.getContext('2d'); ctx.scale(d, d); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.strokeStyle = '#0F172A'; inked = false; }
-    size();
-    function pos(e) { var r = c.getBoundingClientRect(), t = e.touches ? e.touches[0] : e; return [t.clientX - r.left, t.clientY - r.top]; }
-    function start(e) { e.preventDefault(); drawing = true; var p = pos(e); ctx.beginPath(); ctx.moveTo(p[0], p[1]); }
-    function move(e) { if (!drawing) return; e.preventDefault(); var p = pos(e); ctx.lineTo(p[0], p[1]); ctx.stroke(); inked = true; }
-    function end() { drawing = false; }
-    c.addEventListener('mousedown', start); c.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
-    c.addEventListener('touchstart', start, { passive: false }); c.addEventListener('touchmove', move, { passive: false }); c.addEventListener('touchend', end);
-    document.getElementById('clr').onclick = size;
+    var pad = KT.signaturePadInline(document.getElementById('pad'), { height: 170 });
+    document.getElementById('clr').onclick = function () { pad.clear(); };
     var m = document.getElementById('m'), go = document.getElementById('go');
     function v(id) { return document.getElementById(id).value.trim(); }
     go.onclick = function () {
@@ -98,12 +92,12 @@
       if (v('ba').length < 8) miss.push('full legal business address');
       if (v('sn').length < 2) miss.push('your name');
       if (v('rt').length < 2) miss.push('your role');
-      if (!inked) miss.push('your signature');
+      if (pad.isEmpty()) miss.push('your signature');
       if (!document.getElementById('ag').checked) miss.push('the agreement checkbox');
       if (miss.length) { m.className = 'msg err'; m.textContent = 'Please add: ' + miss.join(', ') + '.'; return; }
       go.disabled = true; m.className = 'msg'; m.textContent = 'Signing…';
       fetch(API + '/public/nda/' + token + '/sign', { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ business_name: v('bn'), business_address: v('ba'), signer_name: v('sn'), role_title: v('rt'), signature: c.toDataURL('image/png'), agree: true }) })
+        body: JSON.stringify({ business_name: v('bn'), business_address: v('ba'), signer_name: v('sn'), role_title: v('rt'), signature: pad.toDataURL(), agree: true }) })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (x) {
           if (!x.ok) { go.disabled = false; m.className = 'msg err'; m.textContent = (x.j && x.j.message) || 'That did not go through. Please try again.'; return; }

@@ -35,7 +35,22 @@
    stays on the admin screen and is not smuggled in here.
    ═══════════════════════════════════════════════════════════════════ */
 (function (window) {
+
   'use strict';
+  /* THE KIDDIETRAC APP ON THEIR PHONE (2026-10-23, App\Support\AppInstalls): the app has
+     been signed in on that phone and is registered for notifications. */
+  function ktAppText(app) {
+    if (!app || (!app.android && !app.ios)) return 'Not installed';
+    var rel = function (t) {
+      if (!t) return '';
+      var d = new Date(String(t).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(t)) ? '' : 'Z'));
+      var m = Math.round((Date.now() - d.getTime()) / 60000);
+      if (!(m >= 0)) return '';
+      return m < 60 ? 'active ' + Math.max(1, m) + ' min ago' : (m < 1440 ? 'active ' + Math.round(m / 60) + ' h ago' : 'active ' + Math.round(m / 1440) + ' d ago');
+    };
+    var part = function (name, x) { return name + (x.build ? ' (build ' + x.build + ')' : '') + (x.phones > 1 ? ' on ' + x.phones + ' phones' : '') + (rel(x.last) ? ', ' + rel(x.last) : ''); };
+    return [app.android ? part('Android app', app.android) : null, app.ios ? part('iPhone app', app.ios) : null].filter(Boolean).join(' · ');
+  }
   var KT = window.KT || (window.KT = {});
   if (KT.AccountPanes) { return; }
 
@@ -189,6 +204,8 @@
       }
       card.appendChild(factRow('Last signed in', when(s.last_login_at, true) || 'Never',
         s.last_login_at ? '#0F172A' : '#B45309'));
+      // The KiddieTrac app on their phone (2026-10-23, App\Support\AppInstalls).
+      card.appendChild(factRow('KiddieTrac app', ktAppText(s.app), s.app && (s.app.android || s.app.ios) ? '#047857' : '#64748B'));
 
       card.appendChild(el('div', MUTED + 'margin-top:12px;',
         'Two-factor is theirs to switch on or off, from their own profile. The '
@@ -239,11 +256,52 @@
     var box = el('div', 'text-align:center;margin:10px 0 4px;font-size:11.5px;color:#64748B;line-height:1.7;');
     box.appendChild(el('div', 'font-weight:800;color:#334155;font-size:12.5px;', 'KiddieTrac'));
     box.appendChild(el('div', '', 'Web build ' + (window.KT_VERSION || '—')));
-    box.appendChild(el('div', 'color:#94A3B8;font-size:10.5px;margin-top:2px;',
-      '© 2021–2026 KiddieTrac. All rights reserved.'));
+    var cp = el('div', 'color:#94A3B8;font-size:10.5px;margin-top:2px;', (window.KT && KT.copyrightText ? KT.copyrightText() : '\u00a9 ' + new Date().getFullYear() + ' KiddieTrac Inc. All Rights Reserved.'));
+    cp.className = 'kt-copyright';   // hidden for a white-label agency (branding-loader.js)
+    box.appendChild(cp);
 
     var appLine = el('div', 'font-weight:700;color:#334155;', 'App build: checking…');
     box.appendChild(appLine);
+
+    /* THE PUBLISHED APP (2026-10-25, Anthony: "in the about also add the version of the mobile app there
+       as well that is deployed"). From version.json "play", kept with each Google Play release, so an
+       installed build can be compared with what the store is handing out. */
+    /* THE STORE FOR THIS PHONE (2026-11-04, iPhone recording: the iPhone app's About led with "Mobile app on Google
+       Play: 3.12.17"). An iPhone hears about the App Store, an Android phone about Google Play, a computer about both. */
+    var plat = 'web';
+    try { plat = (window.Capacitor && Capacitor.getPlatform) ? Capacitor.getPlatform() : 'web'; } catch (e) {}
+    if (plat === 'web' && /iPad|iPhone|iPod/.test(navigator.userAgent || '')) plat = 'ios-web';
+    var playLine = el('div', 'color:#475569;', 'Mobile app on Google Play: checking…');
+    if (plat === 'ios' || plat === 'ios-web') playLine.style.display = 'none';
+    box.appendChild(playLine);
+    /* FROM THE STORES THEMSELVES (2026-11-03, Anthony: "shows a old google play version - why is this not being
+       updated"). This read version.json, which only changed when someone saved Platform -> Mobile app updates after a
+       release; it said 3.12.5 (62) while Play listed 3.12.17. GET /app/versions now carries what the Play listing and
+       the App Store really show (AppVersionController::playStore / iosStore). The build number is added only when the
+       admin's recorded release is that same version. version.json stays as the fallback if the API cannot answer. */
+    try {
+      var apiBase = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      var fromFile = function () {
+        return fetch('/version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (vj) {
+          var pl = vj && vj.play;
+          return { play: { store_version: pl && pl.versionName, version_name: pl && pl.versionName, latest_build: pl && pl.versionCode }, ios: {} };
+        });
+      };
+      fetch(apiBase + '/app/versions', { cache: 'no-store', headers: { Accept: 'application/json' } })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .catch(fromFile)
+        .then(function (d) {
+          var pl = (d && d.play) || {}, io = (d && d.ios) || {};
+          var name = pl.store_version || pl.version_name || '';
+          var code = name && pl.version_name === name && pl.latest_build ? ' (' + pl.latest_build + ')' : '';
+          playLine.textContent = 'Mobile app on Google Play: ' + (name ? name + code : '—');
+          if (plat === 'android') return;
+          box.insertBefore(el('div', plat === 'ios' || plat === 'ios-web' ? 'color:#475569;' : 'color:#94A3B8;font-size:10.5px;', io.store_version
+            ? 'iPhone app on the App Store: ' + io.store_version
+            : 'iPhone app on the App Store: —'), playLine.nextSibling);   // live on the App Store since 2026-11-06
+        })
+        .catch(function () { playLine.textContent = 'Mobile app on Google Play: —'; });
+    } catch (e) { playLine.textContent = 'Mobile app on Google Play: —'; }
 
     try {
       var sc = document.querySelector('script[src*="kt-account-panes.js"]')

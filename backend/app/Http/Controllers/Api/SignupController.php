@@ -341,7 +341,7 @@ final class SignupController extends Controller
 
         // Auto-login: create a token so the parent lands on the dashboard.
         $user  = \App\Models\User::find($result['user_id']);
-        $token = $user->createToken('signup-by-code')->plainTextToken;
+        $token = $user->createToken('signup-by-code', ['*'], now()->addDays(30))->plainTextToken;   // 30 days, as a password sign-in (PIPEDA review 2026-11-10)
         \App\Support\SignInAlert::remember((int) $user->id, $request);
 
         return response()->json([

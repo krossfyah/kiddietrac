@@ -28,7 +28,7 @@
     return '<span style="font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;background:' + c.b + ';color:' + c.f + ';">' + esc(p || 'Normal') + '</span>';
   }
   function statusBadge(s) {
-    var m = { Waiting: { b: '#F1F5F9', f: '#475569' }, Contacted: { b: '#E0F2FE', f: '#075985' }, Approved: { b: '#DCFCE7', f: '#166534' }, Enrolled: { b: '#D1FAE5', f: '#065F46' }, Declined: { b: '#FEE2E2', f: '#991B1B' } };
+    var m = { Waiting: { b: '#F1F5F9', f: '#475569' }, Contacted: { b: '#E0F2FE', f: '#075985' }, Approved: { b: '#DCFCE7', f: '#166534' }, Enrolled: { b: '#D1FAE5', f: '#065F46' }, Assigned: { b: '#CCFBF1', f: '#115E59' }, Declined: { b: '#FEE2E2', f: '#991B1B' } };
     var c = m[s] || m.Waiting;
     return '<span style="font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:999px;background:' + c.b + ';color:' + c.f + ';">' + esc(s || 'Waiting') + '</span>';
   }
@@ -52,6 +52,40 @@
       if (KT.toast) KT.toast('🎓', 'Enrolled', 'Family created — enrolment started.', '#16A34A');
       if (r && r.family_id && await KT.confirm({ title: 'Family created', description: 'Open the Families list now?', okLabel: 'Open Families', cancelLabel: 'Stay here' })) { location.hash = '#families'; }
     }).catch(function (err) { if (KT.toast) KT.toast('⚠️', 'Could not enrol', (err && err.message) || 'Error.', '#DC2626'); });
+  }
+  /* FAMILIES FROM A CLOSED PROVIDER (#251, 2026-11-24). A linked row is a family already in
+     KiddieTrac: it is PLACED with a centre (the family moves there and the child joins that
+     centre's own waitlist, where Enrol picks the room), never "enrolled" as a new family. */
+  function openAssign(container, e, centres) {
+    if (!e) return;
+    if (!centres || !centres.length) { if (KT.toast) KT.toast('ℹ️', 'No centre to choose', 'There is no open centre you can place families with.', '#64748B'); return; }
+    var body = document.createElement('div');
+    body.innerHTML = '<div style="font-size:13.5px;color:#334155;line-height:1.55;margin-bottom:12px;">'
+      + '<strong>' + esc(e.parent_name || 'This family') + '</strong>' + (e.from_centre ? ' was at <strong>' + esc(e.from_centre) + '</strong>, which closed.' : '.')
+      + ' Choose the educator or centre who will take them. Brothers and sisters move together.</div>'
+      + '<label style="display:block;font-size:12.5px;font-weight:700;color:#334155;">Educator / centre'
+      + '<select id="wl-assign-centre" style="width:100%;margin-top:4px;padding:7px 10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;">'
+      + '<option value="">Choose…</option>'
+      + centres.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + (c.city ? ' — ' + esc(c.city) : '') + '</option>'; }).join('')
+      + '</select></label>'
+      + '<div style="font-size:12px;color:#64748B;margin-top:10px;line-height:1.5;">Next: open that centre\u2019s waitlist and press <strong>Enrol</strong> to choose the room, start date and fee.</div>'
+      + '<div id="wl-assign-err" style="color:#DC2626;font-size:12.5px;min-height:16px;margin-top:8px;"></div>';
+    Shell.Modal.open({
+      title: '🏠 Assign ' + (e.child_name || e.parent_name || 'family'),
+      body: body,
+      actions: [{
+        label: 'Assign', primary: true,
+        onClick: async function () {
+          var sel = body.querySelector('#wl-assign-centre'), err = body.querySelector('#wl-assign-err');
+          if (!sel.value) { err.textContent = 'Choose a centre.'; return false; }
+          try {
+            var r = await Api.post('/agency/waitlist/' + e.id + '/assign', { centre_id: Number(sel.value) });
+            load(container);
+            if (KT.toast) KT.toast('🏠', 'Assigned', (r && r.message) || 'Family placed.', '#16A34A');
+          } catch (x) { err.textContent = (x && x.message) || 'Could not assign.'; return false; }
+        },
+      }],
+    });
   }
   function openReachOut(container, e) {
     if (!e) return;
@@ -171,7 +205,8 @@
         statTile('On waitlist', s.total || 0, '#EFF6FF', '#1D4ED8')
         + statTile('Approved', s.approved || 0, '#F0FDF4', '#15803D')
         + statTile('Declined', s.declined || 0, '#FEF2F2', '#B91C1C')
-        + statTile('Added here', s.kt || 0, '#F1F5F9', '#475569');
+        + statTile('Added here', s.kt || 0, '#F1F5F9', '#475569')
+        + (d.waiting_for_home ? statTile('Need a new home', d.waiting_for_home, '#F0FDFA', '#0F766E') : '');
       if (!entries.length) { body.innerHTML = '<div class="kt-card" style="text-align:center;color:#64748B;padding:40px;">No waitlist entries yet. Add one to get started.</div>'; return; }
       var th = 'text-align:left;padding:10px 12px;font-size:10.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;';
       var td = 'padding:10px 12px;font-size:13px;color:#334155;border-top:1px solid #F1F5F9;vertical-align:middle;';
@@ -181,7 +216,10 @@
           var contact = [e.email, e.phone].filter(Boolean).map(esc).join('<br>');
           return '<tr>'
             + '<td style="' + td + 'font-weight:700;color:#0F172A;">' + esc(e.parent_name || '—') + '</td>'
-            + '<td style="' + td + '">' + (e.child_name ? esc(e.child_name) : '<span style="color:#94A3B8;">(no child yet)</span>') + '</td>'
+            + '<td style="' + td + '">' + (e.child_name ? esc(e.child_name) : '<span style="color:#94A3B8;">(no child yet)</span>')
+              + (e.from_centre ? '<div style="font-size:11.5px;color:#0F766E;margin-top:2px;">Previously at ' + esc(e.from_centre) + '</div>' : '')
+              + (e.assigned_centre ? '<div style="font-size:11.5px;color:#115E59;margin-top:2px;">Placed with ' + esc(e.assigned_centre) + '</div>' : '')
+              + '</td>'
             + '<td style="' + td + 'font-size:12px;color:#64748B;">' + (contact || '—') + '</td>'
             + '<td style="' + td + 'white-space:nowrap;">' + (fmtDate(e.desired_start) || '—') + '</td>'
             + '<td style="' + td + '">' + prioBadge(e.priority) + '</td>'
@@ -190,7 +228,9 @@
             + '<td style="' + td + 'white-space:nowrap;text-align:right;">'
               + '<button type="button" class="wl-act" data-id="' + e.id + '" data-act="edit" style="border:none;background:none;cursor:pointer;color:#334155;font-weight:600;font-size:12.5px;padding:3px 7px;">✏️ Edit</button>'
               + '<button type="button" class="wl-act" data-id="' + e.id + '" data-act="reachout" style="border:none;background:none;cursor:pointer;color:#1D4ED8;font-weight:600;font-size:12.5px;padding:3px 7px;">📣 Reach out</button>'
-              + '<button type="button" class="wl-act" data-id="' + e.id + '" data-act="enroll" style="border:none;background:none;cursor:pointer;color:#065F46;font-weight:600;font-size:12.5px;padding:3px 7px;">🎓 Enrol parent</button>'
+              + (e.linked
+                ? (e.status === 'Assigned' ? '' : '<button type="button" class="wl-act" data-id="' + e.id + '" data-act="assign" style="border:none;background:none;cursor:pointer;color:#0F766E;font-weight:700;font-size:12.5px;padding:3px 7px;">🏠 Assign</button>')
+                : '<button type="button" class="wl-act" data-id="' + e.id + '" data-act="enroll" style="border:none;background:none;cursor:pointer;color:#065F46;font-weight:600;font-size:12.5px;padding:3px 7px;">🎓 Enrol parent</button>')
               + '<button type="button" class="wl-act" data-id="' + e.id + '" data-act="approve" style="border:none;background:none;cursor:pointer;color:#166534;font-weight:600;font-size:12.5px;padding:3px 7px;">✅ Approve</button>'
               + '<button type="button" class="wl-act" data-id="' + e.id + '" data-act="decline" style="border:none;background:none;cursor:pointer;color:#B45309;font-weight:600;font-size:12.5px;padding:3px 7px;">🚫 Decline</button>'
               + '<button type="button" class="wl-act" data-id="' + e.id + '" data-act="delete" style="border:none;background:none;cursor:pointer;color:#DC2626;font-weight:600;font-size:12.5px;padding:3px 7px;">🗑 Delete</button>'
@@ -204,6 +244,7 @@
           if (act === 'edit') openForm(container, e);
           else if (act === 'reachout') openReachOut(container, e);
           else if (act === 'enroll') enrollLead(container, e);
+          else if (act === 'assign') openAssign(container, e, d.centres || []);
           else if (act === 'approve') setStatus(container, e.id, 'Approved');
           else if (act === 'decline') setStatus(container, e.id, 'Declined');
           else if (act === 'delete') { KT.confirm({ title: 'Delete this waitlist entry?', description: 'It is removed from the waitlist and cannot be recovered.', okLabel: 'Delete', tone: 'danger' }).then(function (ok) { if (ok) delEntry(container, e.id); }); }

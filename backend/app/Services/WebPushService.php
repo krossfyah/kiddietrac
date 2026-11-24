@@ -47,6 +47,8 @@ final class WebPushService
     public function sendToUser(int $userId, array $payload): int
     {
         if (! $this->validatePayload($payload)) return 0;
+        // Sign-in locked out everywhere: no notifications until the lock is lifted (SignInLocks, 2026-11-10).
+        if (\App\Support\SignInLocks::pushPaused($userId)) return 0;
 
         /* DO-NOT-CONTACT. FcmService has carried this guard since 16 real iLearn
            parents were pushed by accident on 2026-07-14; web push never had it, so the
@@ -54,7 +56,7 @@ final class WebPushService
            suppressed family through this service was bypassing the switch entirely.
            Audited even though nothing is sent — "we deliberately did not tell them" is
            exactly the fact somebody needs later. (2026-08-26) */
-        if (\App\Support\Suppression::isUser($userId)) {
+        if (\App\Support\Suppression::isUser($userId) || (\App\Support\TestAgency::isSession() && ! \App\Support\TicketAlerts::allowsUser((int) $userId))) {   // + test agency (2026-11-24)
             \App\Support\Suppression::note('webpush', $userId, (string) ($payload['title'] ?? ''));
             \App\Support\PushAudit::record('webpush', [$userId],
                 (string) ($payload['title'] ?? ''), (string) ($payload['body'] ?? ''), 'suppressed');
@@ -97,6 +99,7 @@ final class WebPushService
            rather than all-or-nothing: a broadcast that happens to include one
            suppressed family must still reach everybody else. */
         $suppressed = [];
+        $userIds = array_values(array_filter($userIds, fn ($uid) => ! \App\Support\SignInLocks::pushPaused((int) $uid)));   // locked out (2026-11-10)
         $userIds = array_values(array_filter($userIds, function ($uid) use (&$suppressed) {
             if (\App\Support\Suppression::isUser((int) $uid)) {
                 $suppressed[] = (int) $uid;
@@ -156,6 +159,10 @@ final class WebPushService
 
     private function sendBatch(array $tokensById, array $payload): int
     {
+        if (\App\Support\Outbound::off()) {
+            \App\Support\Outbound::note('browser push', ['devices' => count($tokensById), 'title' => (string) ($payload['title'] ?? '')]);
+            return 0;
+        }
         $auth = [
             'VAPID' => [
                 'subject'    => env('VAPID_SUBJECT', 'mailto:noreply@kiddietrac.com'),

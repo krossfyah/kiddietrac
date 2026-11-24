@@ -33,7 +33,7 @@ class HomeVisitReportController extends Controller
 
     private function isReviewer(Request $request): bool
     {
-        return DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+        return \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('active', true)
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])->exists();
     }
 
@@ -73,7 +73,7 @@ class HomeVisitReportController extends Controller
     {
         // Platform-admin "All agencies" mode (agency switcher sends X-Active-Agency-Id: all)
         // → span every agency instead of scoping to one. Mirrors AdminController::listUsers.
-        $isPlatform = DB::table('role_assignments')->where('user_id', $request->user()->id)
+        $isPlatform = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)
             ->where('role', 'platform_admin')->where('active', true)->exists();
         $allMode = $isPlatform && strtolower(trim((string) $request->header('X-Active-Agency-Id'))) === 'all';
         $agencyId = $allMode ? null : $this->agencyId($request);
@@ -128,6 +128,24 @@ class HomeVisitReportController extends Controller
         if (! empty($data['centre_id'])) {
             $ok = DB::table('centres')->where('id', $data['centre_id'])->where('agency_id', $agencyId)->exists();
             abort_unless($ok, 422, 'That centre is not in your agency.');
+        }
+
+        /* The family and child must be in your agency, and the child in that family (2026-11-05 leak
+           sweep): family_id/child_id were written unchecked, so a report could be filed against (and
+           later shown with) another agency's family or child. */
+        $famCentre = null;
+        if (! empty($data['family_id'])) {
+            $famCentre = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
+                ->where('f.id', $data['family_id'])->where('c.agency_id', $agencyId)->value('f.centre_id');
+            abort_unless($famCentre, 422, 'That family is not in your agency.');
+        }
+        if (! empty($data['child_id'])) {
+            $child = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+                ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                ->where('ch.id', $data['child_id'])->where('c.agency_id', $agencyId)->first(['ch.family_id']);
+            abort_unless($child, 422, 'That child is not in your agency.');
+            abort_if(! empty($data['family_id']) && (int) $child->family_id !== (int) $data['family_id'], 422,
+                'That child is not in the family you picked.');
         }
 
         $id = DB::table('home_visit_reports')->insertGetId(array_merge($data, [
@@ -205,7 +223,7 @@ class HomeVisitReportController extends Controller
         abort_unless($row, 404);
         // Platform admins (incl. "All agencies") may view any agency's report;
         // everyone else is scoped to their active agency + must be author/reviewer.
-        $isPlatform = DB::table('role_assignments')->where('user_id', $request->user()->id)
+        $isPlatform = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)
             ->where('role', 'platform_admin')->where('active', true)->exists();
         if (! $isPlatform) {
             abort_unless((int) $row->agency_id === (int) $this->agencyId($request), 403);
@@ -218,7 +236,7 @@ class HomeVisitReportController extends Controller
     public function pdf(Request $request, int $id)
     {
         $row = $this->fetchScoped($request, $id);
-        $pdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
+        $pdf = new \App\Support\KtDompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
         $pdf->loadHtml($this->pdfHtml($row));
         $pdf->setPaper('letter');
         $pdf->render();
@@ -315,7 +333,7 @@ class HomeVisitReportController extends Controller
             . '<td style="font-size:8.5px;color:#94a3b8;">CONFIDENTIAL — ' . $e($agencyName) . ' home-visit compliance record. Generated ' . now(self::TZ_SAFE())->format('M j, Y g:i A') . '.</td>'
             . '</tr></table></div>'
             // title
-            . '<div style="border-left:5px solid ' . $accent . ';padding:2px 0 2px 12px;margin-bottom:6px;">'
+            . '<div style="--kt-edge:' . $accent . ';padding:2px 0 2px 12px;margin-bottom:6px;">'
             . '<div style="font-size:19px;font-weight:800;color:#0f172a;">Home Visit Report</div>'
             . '<div style="font-size:11px;color:#64748b;">' . $e($typeLabels[$r->visit_type] ?? $r->visit_type) . ' · ' . $fmtDate($r->visit_date) . '</div></div>'
             // details grid
@@ -401,7 +419,7 @@ class HomeVisitReportController extends Controller
         // still a DRAFT; once submitted, only a reviewer can amend it.
         abort_unless($isReviewer || ($isAuthor && $row->status === 'draft'), 403,
             'You can only edit your own draft — submitted reports are edited by an admin or director.');
-        $isPlatform = DB::table('role_assignments')->where('user_id', $u->id)
+        $isPlatform = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->where('role', 'platform_admin')->where('active', true)->exists();
         if (! $isPlatform) {
             abort_unless((int) $row->agency_id === (int) $this->agencyId($request), 403);

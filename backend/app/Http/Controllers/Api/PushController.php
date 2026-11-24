@@ -116,15 +116,23 @@ final class PushController extends Controller
         $data = $request->validate([
             'token' => ['required', 'string', 'max:500'],
             'platform' => ['nullable', 'string', 'max:20'],
+            // The app's versionCode: only builds that have the per-category notification
+            // channels are sent per-category tones (App\Support\NotificationSounds).
+            'app_build' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ]);
         $user = $request->user();
+        $build = isset($data['app_build']) ? ['app_build' => (int) $data['app_build']] : [];
+        /* The sign-in that registered this phone (2026-11-02). Signing out of that session unlinks the push address
+           (AuthController::logout), so a handed-on or shared phone stops showing the previous person's notifications. */
+        $tok = $user->currentAccessToken();
+        $build['access_token_id'] = ($tok && isset($tok->id) && is_numeric($tok->id)) ? (int) $tok->id : null;
         $platform = $this->platformFor($data['platform'] ?? null, (string) $request->header('User-Agent'));
 
         $existing = DB::table('device_tokens')->where('token', $data['token'])->first();
         if ($existing) {
             DB::table('device_tokens')->where('id', $existing->id)->update([
                 'user_id' => $user->id, 'platform' => $platform, 'last_active_at' => now(),
-            ]);
+            ] + $build);
             return response()->json(['success' => true, 'token_id' => $existing->id, 'updated' => true]);
         }
         try {
@@ -135,7 +143,7 @@ final class PushController extends Controller
                 'device_name' => substr((string) $request->header('User-Agent'), 0, 120),
                 'last_active_at' => now(),
                 'created_at' => now(),
-            ]);
+            ] + $build);
         } catch (\Throwable $e) {
             /* TWO REGISTRATIONS AT ONCE (2026-10-19). The app sends its token on start-up and
                again on resume; when both land together each finds no row, one inserts, and the
@@ -146,7 +154,7 @@ final class PushController extends Controller
             if ($race) {
                 DB::table('device_tokens')->where('id', $race->id)->update([
                     'user_id' => $user->id, 'platform' => $platform, 'last_active_at' => now(),
-                ]);
+                ] + $build);
                 return response()->json(['success' => true, 'token_id' => $race->id, 'updated' => true]);
             }
             Log::error('Device register failed', ['error' => $e->getMessage()]);

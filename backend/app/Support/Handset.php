@@ -101,6 +101,57 @@ final class Handset
         return ['ok' => true, 'via' => (int) $via->id, 'reason' => ''];
     }
 
+    /**
+     * May an ANNOUNCEMENT be texted to this person? (2026-10-21)
+     *
+     * Anthony: "announcements when using SMS should allow text to phone numbers not opt'd
+     * in for all users that the SMS are intended for (this needs to work this way)", and on
+     * being asked who exactly: everyone except STOP for STAFF, and for parents everyone
+     * except people who said no.
+     *
+     *   - STOP (an opt-out recorded from a text reply, source 'sms', on any account on this
+     *     handset) always wins, for everyone. It is the carrier-mandated keyword; the
+     *     carrier blocks the number itself anyway, and texting past it is what gets a
+     *     sending number taken away.
+     *   - Staff of this agency (a work notice to their own team): sent, even if they switched
+     *     texts off in the app or declined the invitation.
+     *   - Everyone else (parents): sent when they consented OR simply never answered; not
+     *     sent when they said no (in the app, by the consent email, or recorded by an admin).
+     *
+     * @return array{ok:bool, mode:string, reason:string}  mode: consent|staff|not_answered
+     */
+    public static function announcementSms(int $agencyId, int $userId, ?string $phone): array
+    {
+        $pool = self::accounts($phone)->pluck('id')->map(fn ($i) => (int) $i)->push($userId)->unique()->values()->all();
+        $stopped = DB::table('users')->whereIn('id', $pool)
+            ->where('sms_consent_source', 'sms')->whereNotNull('sms_opt_out_at')->where('sms_opt_in', 0)
+            ->exists();
+        if ($stopped) {
+            return ['ok' => false, 'mode' => 'stop', 'reason' => 'replied STOP'];
+        }
+
+        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        $isStaff = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+            ->whereIn('role', ['educator', 'home_visitor', 'centre_director', 'agency_admin'])
+            ->where(fn ($q) => $q->where('agency_id', $agencyId)->orWhereIn('centre_id', $centreIds ?: [0]))
+            ->exists();
+        if ($isStaff) {
+            return ['ok' => true, 'mode' => 'staff', 'reason' => ''];
+        }
+
+        $consent = self::smsConsent($agencyId, $userId, $phone);
+        if ($consent['ok']) {
+            return ['ok' => true, 'mode' => 'consent', 'reason' => ''];
+        }
+        // Not consented: a "no" on any of their accounts here stops it; silence does not.
+        $saidNo = DB::table('users')->whereIn('id', $pool)->whereNotNull('sms_opt_out_at')->exists();
+        if ($saidNo) {
+            return ['ok' => false, 'mode' => 'declined', 'reason' => 'said no to texts'];
+        }
+
+        return ['ok' => true, 'mode' => 'not_answered', 'reason' => ''];
+    }
+
     /** Has anybody on this number asked not to be telephoned? Returns their id or null. */
     public static function voiceOptedOut(?string $phone): ?int
     {

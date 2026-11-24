@@ -30,12 +30,35 @@
    ═══════════════════════════════════════════════════════════════════ */
 (function (w) {
   'use strict';
+  // A touch screen is tapped, not clicked (2026-11-03). No hover means fingers; the packaged app is always touch.
+  function faTouch() {
+    try { if (w.Capacitor && typeof w.Capacitor.isNativePlatform === 'function' && w.Capacitor.isNativePlatform()) return true; } catch (e) {}
+    try { return !!(w.matchMedia && w.matchMedia('(hover: none)').matches); } catch (e) { return false; }
+  }
   if (w.KT_FORM_ANNOTATE) { return; }
   w.KT_FORM_ANNOTATE = true;
   var KT = (w.KT = w.KT || {});
 
   var PDFJS_URL = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
-  var PDFJS_WORKER = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  /* WHERE THIS FILE CAME FROM, not where the page is. The no-login sign page lives on the API
+     host and loads this script from the app host; a bare '/js/vendor/...' asked the API host
+     for the PDF worker, got a 404, and pdf.js put "Setting up fake worker failed: Cannot load
+     script at ..." in front of a parent (2026-10-25). */
+  var ASSET = (function () {
+    try { var cs = document.currentScript; if (cs && cs.src) return new URL(cs.src, location.href).origin; } catch (e) {}
+    return '';
+  })();
+
+  /* An error for a person. Library and loading failures (a script that would not load, the
+     PDF worker, a damaged file) are never shown word for word: they name files and URLs. */
+  var LIB_RX = /fake worker|Cannot load script|Could not load\b|failed to load|importScripts|Invalid PDF|PDF header|PDFException|Unexpected server response|NetworkError|Failed to fetch|Worker/i;
+  function ktSaid(e, fallback) {
+    var m = (e && e.message) || (typeof e === 'string' ? e : '');
+    if (!m || LIB_RX.test(m)) return fallback;
+    return w.__ktCleanError ? w.__ktCleanError(m) : m;
+  }
+  var PDFJS_WORKER = ASSET + '/js/vendor/pdf.worker.compat.js?v=20261025';   // same 3.11.174 worker, local, with shims (tickets #175/#176)
   var PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
 
   var TEAL = { r: 0.06, g: 0.45, b: 0.55 };
@@ -102,12 +125,12 @@
       /* Above the counter-sign dialog (2147483001) because it is opened FROM it and
          must not repeat the signature-pad mistake of painting underneath its caller. */
       ov.style.cssText = 'position:fixed;inset:0;z-index:2147483200;display:flex;'
-        + 'align-items:center;justify-content:center;padding:16px;';
+        + 'align-items:center;justify-content:center;padding:calc(16px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 16px calc(16px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));box-sizing:border-box;';
 
       ov.innerHTML = '<div style="background:#F6F9FC;border-radius:16px;width:100%;max-width:1000px;'
-          + 'height:min(94vh,1200px);display:flex;flex-direction:column;overflow:hidden;'
+          + 'height:min(94vh,1200px);max-height:100%;display:flex;flex-direction:column;overflow:hidden;'
           + 'box-shadow:0 30px 80px -20px rgba(8,20,40,.6);">'
-        + '<div style="background:#0B2545;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
+        + '<div style="background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;flex:0 0 auto;">'
           + '<div style="min-width:0;flex:1;">'
             + '<div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">ADD INFORMATION TO THE FORM</div>'
             + '<div style="font-size:15px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
@@ -120,7 +143,8 @@
         + '</div>'
         + '<div style="flex:0 0 auto;background:#ECFEFF;border-bottom:1px solid #A5F3FC;color:#155E75;'
           + 'padding:9px 16px;font-size:12.5px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
-          + '<span><strong>Click anywhere on the form</strong> to add information there. Drag a box to move it.</span>'
+          /* "Tap" on a touch screen (2026-11-03): the same rule as the photo viewer's hint. */
+          + '<span><strong>' + (faTouch() ? 'Tap' : 'Click') + ' anywhere on the form</strong> to add information there. Drag a box to move it.</span>'
           + '<button id="fa-clear" type="button" style="margin-left:auto;background:#fff;border:1px solid #A5F3FC;'
             + 'border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;color:#155E75;cursor:pointer;">Remove all</button>'
         + '</div>'
@@ -273,7 +297,7 @@
           return chain;
         });
       }).catch(function (e) {
-        fail((e && e.message) || 'The form could not be opened for editing.');
+        fail(ktSaid(e, 'The form could not be opened for editing.'));
       });
 
       /* ── write the additions into the document ───────────────────────────── */
@@ -326,7 +350,7 @@
           });
         }).catch(function (e) {
           btn.disabled = false; btn.textContent = 'Save the information';
-          fail((e && e.message) || 'The information could not be written to the form.');
+          fail(ktSaid(e, 'The information could not be written to the form.'));
         });
       };
     });

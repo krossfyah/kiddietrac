@@ -6,7 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\EmailTemplate;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Dompdf\Options;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -318,7 +318,8 @@ class ProspectNdaController extends Controller
     private function mailLink(object $r, $sender, ?string $note): string
     {
         $link = 'https://app.kiddietrac.com/nda.html?t=' . $r->token;
-        $from = trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? '')) ?: 'The KiddieTrac team';
+        // First name only (2026-11-07, Anthony: "do not have my staffs last name added - look at the NDA request email").
+        $from = trim((string) ($sender->first_name ?? '')) ?: 'The KiddieTrac team';
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $body = '<p style="margin:0 0 14px;">Hi ' . $e($r->name) . ',</p>'
             . '<p style="margin:0 0 14px;line-height:1.6;">' . $e($from) . ' has sent you the KiddieTrac '

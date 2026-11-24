@@ -79,9 +79,9 @@ final class AdminDigestHtml
         $html .= self::section('⚠️ Incidents recorded', $s['incidents'] ?? null, 'incidents');
         /* Before the 'no record' list on purpose: a card somebody has already sent
            is closer to done, and it is the one with a person waiting on the centre. */
-        $html .= self::section('📄 Immunisation records waiting to be filled in',
+        $html .= self::section('📄 Immunization records waiting to be filled in',
             $s['immunRecords'] ?? null, 'immunRecords');
-        $html .= self::section('💉 Children with no immunisation record', $s['immunisations'] ?? null, 'immunisations');
+        $html .= self::section('💉 Children with no immunization record', $s['immunisations'] ?? null, 'immunisations');
         $html .= self::section('📅 The week ahead', $s['week'] ?? null, 'week');
         $html .= self::section('🧾 Parents with forms but no family yet', $s['tempGuardians'] ?? null, 'tempGuardians',
             'Forms were sent to these parents before their family was in KiddieTrac. Add the family using the same email to link them (their forms come too), or remove the account in Settings → Notifications → Forms-only parents. Unused accounts are removed automatically after the number of days set in Settings → Notifications → Forms.');
@@ -129,7 +129,7 @@ final class AdminDigestHtml
             foreach ($s['educators']['rows'] as $r) {
                 $score = (int) $r['score'];
                 $colour = $score < 40 ? '#DC2626' : ($score < 60 ? '#F59E0B' : ($score < 75 ? '#0EA5E9' : '#16A34A'));
-                $body .= '<div style="border-left:3px solid ' . $colour . ';padding:8px 12px;margin-bottom:8px;background:#F8FAFC;border-radius:0 9px 9px 0;">'
+                $body .= '<div style="--kt-edge:' . $colour . ';padding:8px 12px;margin-bottom:8px;background:#F8FAFC;border-radius:0 9px 9px 0;">'
                     . '<div style="font-size:14px;font-weight:800;color:#0F172A;">' . e($r['who'])
                     . ' <span style="color:' . $colour . ';">' . $score . '</span></div>'
                     . self::bar($score, 100, $colour)
@@ -181,7 +181,7 @@ final class AdminDigestHtml
                 . 'everything your educators post about their child is invisible to them.';
         }
         if (! empty($s['immunisations']['count'])) {
-            $steps[] = 'Chase the missing immunisation records when you have a quiet moment. It is not urgent today and it is '
+            $steps[] = 'Chase the missing immunization records when you have a quiet moment. It is not urgent today and it is '
                 . 'the first thing asked for in an inspection.';
         }
         if (! empty($s['tickets']['count'])) {
@@ -242,7 +242,7 @@ final class AdminDigestHtml
         }
         $inner .= '</table>';
 
-        return '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:4px solid #0E7C90;'
+        return '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;--kt-edge:#0E7C90;'
             . 'border-radius:0 11px 11px 0;padding:14px 16px;margin:16px 0 0;">'
             . '<div style="font-size:14.5px;font-weight:800;color:#0F172A;margin:0 0 8px;">📊 How your educators are doing'
             . ' <span style="background:#0E7C90;color:#fff;border-radius:999px;font-size:11.5px;padding:1px 8px;margin-left:4px;">'
@@ -265,7 +265,7 @@ final class AdminDigestHtml
         $body = '<div style="font-size:13.5px;color:#475569;line-height:1.5;margin:0 0 10px;">Providers added in the last '
             . \App\Support\AdminDigest::NEW_DAYS . ' days, or whose centre is still being set up. Each drops off this list once everything is done.</div>';
         foreach ($data['cards'] as $c) {
-            $body .= '<div style="border:1px solid #E2E8F0;border-left:3px solid #0E7C90;border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:9px;background:#FFFFFF;">'
+            $body .= '<div style="border:1px solid #E2E8F0;--kt-edge:#0E7C90;border-radius:0 10px 10px 0;padding:10px 12px;margin-bottom:9px;background:#FFFFFF;">'
                 . '<div style="font-size:14.5px;font-weight:800;color:#0F172A;">' . e($c['who'])
                 . ' <span style="font-weight:600;font-size:12.5px;color:#64748B;">· ' . e($c['where']) . ' · ' . e($c['since']) . '</span></div>'
                 . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:6px;"><tr>'
@@ -321,7 +321,7 @@ final class AdminDigestHtml
             $inner .= '<div class="kt-muted" style="font-size:12.5px;color:#64748B;margin-top:6px;">and ' . ($count - $shown) . ' more.</div>';
         }
 
-        return '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:4px solid ' . $accent . ';border-radius:0 11px 11px 0;padding:14px 16px;margin:16px 0 0;">'
+        return '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;--kt-edge:' . $accent . ';border-radius:0 11px 11px 0;padding:14px 16px;margin:16px 0 0;">'
             . '<div style="font-size:14.5px;font-weight:800;color:#0F172A;margin:0 0 8px;">' . e($title)
             . ' <span style="background:' . $accent . ';color:#fff;border-radius:999px;font-size:11.5px;padding:1px 8px;margin-left:4px;">' . $count . '</span></div>'
             . $inner . '</div>';

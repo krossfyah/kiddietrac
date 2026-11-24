@@ -48,7 +48,23 @@ final class PushAudit
 
             $rows = [];
             $now = now();
+            $names = [];
+            try {
+                foreach (DB::table('users')->whereIn('id', $userIds)->get(['id', 'first_name', 'last_name', 'email']) as $u) {
+                    $names[(int) $u->id] = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: (string) $u->email;
+                }
+            } catch (\Throwable $e) {}
+            $chan = $channel === 'webpush' ? 'web browser' : 'phone app';
             foreach ($userIds as $uid) {
+                $who = $names[$uid] ?? 'a person';
+                $t = trim($title) !== '' ? '“' . mb_substr($title, 0, 120) . '”' : 'a notification';
+                $summary = match ($outcome) {
+                    'sent' => 'Notification ' . $t . ' delivered to ' . $who . ' (' . $chan . ')',
+                    'no_device' => 'Notification ' . $t . ' for ' . $who . ' not delivered by ' . $chan . ': no ' . ($channel === 'webpush' ? 'browser' : 'phone') . ' registered for notifications',
+                    'suppressed' => 'Notification ' . $t . ' for ' . $who . ' held back' . (! empty($extra['reason']) ? ': ' . str_replace('_', ' ', (string) $extra['reason']) : ''),
+                    'failed' => 'Notification ' . $t . ' to ' . $who . ' failed (' . $chan . ')' . (! empty($extra['error']) ? ': ' . mb_substr((string) $extra['error'], 0, 120) : ''),
+                    default => 'Notification ' . $t . ' for ' . $who . ': ' . str_replace('_', ' ', $outcome) . ' (' . $chan . ')',
+                } . '.';
                 $rows[] = [
                     'user_id' => null,          // system-sent; the audit screen renders this as "System"
                     'agency_id' => self::agencyOf($uid),
@@ -56,6 +72,7 @@ final class PushAudit
                     'entity_type' => 'user',
                     'entity_id' => $uid,
                     'payload' => json_encode(array_merge([
+                        'summary' => $summary,
                         'channel' => $channel,
                         'to_user' => $uid,
                         // Trimmed: the audit log is a record that it was sent and what it
@@ -102,6 +119,10 @@ final class PushAudit
                 if ($centreId) {
                     $agencyId = DB::table('centres')->where('id', $centreId)->value('agency_id');
                 }
+            }
+            // Last resort: the agency the person last worked in (iLearn providers' role rows carry neither id).
+            if (! $agencyId) {
+                $agencyId = DB::table('users')->where('id', $userId)->value('last_agency_id');
             }
         } catch (\Throwable $e) {
             $agencyId = null;

@@ -36,7 +36,15 @@
   var CONFIRM_FIXES = 2;      // consecutive out-of-fence fixes before believing it
   var DISMISS_KEY = 'kt_walk_prompt_dismissed';
 
-  var state = { fence: null, outCount: 0, prompting: false, timer: null, started: false, bgId: null };
+  /* 2026-10-21 (Anthony: "the auto detect walk for educators is that working and wired up
+     correctly - full sweep"). It was not: this file was committed on 2026-09-01 and never
+     loaded by any page, so it had never run; its "Start a walk" went to #walks, the PARENT
+     walk screen (staff use #walk); and it would have started the background watcher on
+     every educator's phone the moment it loaded. Now: loaded on the dashboard, sends
+     staff to #walk, never fires a cold location prompt, background only when the agency
+     turns it on (fence.background), and it also offers to END a walk on the way back in. */
+  var state = { fence: null, outCount: 0, inCount: 0, wasOut: false, prompting: false, timer: null, started: false, bgId: null, endAskedFor: null };
+  var END_DISMISS_KEY = 'kt_walk_end_prompt_dismissed';
 
   function tok() {
     try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); }
@@ -59,7 +67,10 @@
   function isProvider() {
     try {
       var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
-      var roles = u.roles || [];
+      var roles = (u.roles || []).slice();
+      if (u.role_key) { roles.push(u.role_key); }
+      if (u.primary_role) { roles.push(u.primary_role); }
+      if (window.ktRoles && sessionStorage.getItem('kt_view_as')) { roles = window.ktRoles(u); }   // previewing a parent: no staff geofence
       return ['educator', 'centre_director', 'agency_admin'].some(function (r) {
         return roles.indexOf(r) !== -1;
       });
@@ -93,7 +104,7 @@
 
     var scrim = document.createElement('div');
     scrim.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10000;'
-      + 'display:flex;align-items:flex-end;justify-content:center;padding:16px;';
+      + 'display:flex;align-items:flex-end;justify-content:center;padding:16px 16px calc(16px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));';
     var card = document.createElement('div');
     card.style.cssText = 'background:#fff;border-radius:18px;max-width:460px;width:100%;'
       + 'padding:20px 22px;box-shadow:0 20px 50px rgba(15,23,42,.3);';
@@ -122,28 +133,86 @@
       /* Not now means not again today. The educator knows what they are doing; a
          second prompt on the same outing is the thing that gets a feature muted. */
       dismissForToday();
-      stop();
+      state.outCount = 0;
+      // Not stop(): the start offer is snoozed for today, but a walk started later by hand
+      // should still get the "back at the centre?" check.
       close();
     });
     card.querySelector('#kwa-yes').addEventListener('click', function () {
       close();
       dismissForToday();          // they are dealing with it either way
-      stop();
-      window.location.hash = 'walks';
+      state.outCount = 0;
+      // #walk is the staff walk screen; #walks is the PARENT one (it sent staff there).
+      window.location.hash = 'walk';
+    });
+  }
+
+  /* On the way back in: a walk left running is a record that says children are still
+     off the property. Asked once per walk; ending happens on the walk screen, where the
+     return headcount lives. */
+  function endDismissed(id) {
+    try { return sessionStorage.getItem(END_DISMISS_KEY) === String(id); } catch (e) { return false; }
+  }
+  function promptEnd(fence) {
+    if (state.prompting || !fence.walk_id || endDismissed(fence.walk_id)) { return; }
+    state.prompting = true;
+    state.endAskedFor = fence.walk_id;
+    var scrim = document.createElement('div');
+    scrim.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10000;'
+      + 'display:flex;align-items:flex-end;justify-content:center;padding:16px 16px calc(16px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));';
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border-radius:18px;max-width:460px;width:100%;'
+      + 'padding:20px 22px;box-shadow:0 20px 50px rgba(15,23,42,.3);';
+    card.innerHTML =
+      '<div style="font-size:15px;font-weight:800;color:#0F172A;margin-bottom:4px;">🏠 Back at '
+      + (fence.centre_name ? String(fence.centre_name).replace(/[<>&]/g, '') : 'the centre') + '?</div>'
+      + '<div style="color:#475569;font-size:13.5px;line-height:1.5;">Your walk is still running. '
+      + 'End it so parents and your director can see everyone is back.</div>'
+      + '<div style="display:flex;gap:10px;margin-top:16px;">'
+      + '<button id="kwe-no" style="flex:1;padding:11px;border-radius:10px;border:1px solid #CBD5E1;'
+      + 'background:#fff;font-weight:700;font-size:14px;cursor:pointer;">Still out</button>'
+      + '<button id="kwe-yes" style="flex:1;padding:11px;border-radius:10px;border:0;'
+      + 'background:#1F6080;color:#fff;font-weight:700;font-size:14px;cursor:pointer;">End the walk</button>'
+      + '</div>';
+    scrim.appendChild(card);
+    document.body.appendChild(scrim);
+    function close() { try { document.body.removeChild(scrim); } catch (e) {} state.prompting = false; }
+    card.querySelector('#kwe-no').addEventListener('click', function () {
+      try { sessionStorage.setItem(END_DISMISS_KEY, String(fence.walk_id)); } catch (e) {}
+      close();
+    });
+    card.querySelector('#kwe-yes').addEventListener('click', function () {
+      try { sessionStorage.setItem(END_DISMISS_KEY, String(fence.walk_id)); } catch (e) {}
+      close();
+      window.location.hash = 'walk';
     });
   }
 
   /* One decision, whichever source the fix came from. */
   function evaluate(lat, lon, accuracy) {
     var f = state.fence;
-    if (!f || !f.enabled || dismissedToday() || state.prompting) { return; }
-    if (f.walk_in_progress || !f.children_present) { return; }
+    if (!f || !f.enabled || state.prompting) { return; }
 
     /* A fix worse than the fence itself tells us nothing — indoors, a phone can report
        a 500 m accuracy circle while sitting perfectly still inside it. */
     if (accuracy && accuracy > f.radius_m) { return; }
 
     var m = metresApart(lat, lon, f.latitude, f.longitude);
+
+    if (f.walk_in_progress) {
+      // Out on a walk: once we have seen them away, two fixes back inside = home again.
+      if (m > f.radius_m) { state.wasOut = true; state.inCount = 0; return; }
+      /* After a restart mid-walk this phone never SAW itself leave, so it never asked (2026-10-28). A walk out for
+         ten minutes or more that is now inside the fence has come back. */
+      if (!state.wasOut && f.walk_minutes != null && f.walk_minutes >= 10) { state.wasOut = true; }
+      if (state.wasOut) {
+        state.inCount++;
+        if (state.inCount >= CONFIRM_FIXES) { promptEnd(f); }
+      }
+      return;
+    }
+    state.wasOut = false; state.inCount = 0;
+    if (dismissedToday() || !f.children_present) { return; }
     if (m > f.radius_m) {
       state.outCount++;
       if (state.outCount >= CONFIRM_FIXES) { prompt(f, m); }
@@ -152,24 +221,39 @@
     }
   }
 
+  /* NEVER A COLD PERMISSION PROMPT. A location dialog out of nowhere, 20 seconds after
+     signing in, is how this gets denied for good. Detection runs once location has been
+     allowed (the walk screen asks, with its reason on screen). 'prompt' = not yet asked:
+     stay quiet. No Permissions API (some web views): go ahead, as before. */
+  function locationAllowed() {
+    try {
+      if (!navigator.permissions || !navigator.permissions.query) { return Promise.resolve(true); }
+      return navigator.permissions.query({ name: 'geolocation' })
+        .then(function (p) { return p.state === 'granted'; }, function () { return true; });
+    } catch (e) { return Promise.resolve(true); }
+  }
+
   function check() {
-    if (dismissedToday() || state.prompting) { return; }
+    if (state.prompting) { return; }
     if (document.hidden) { return; }
 
     get('/provider/walks/geofence').then(function (f) {
-      if (!f || !f.enabled || f.walk_in_progress || !f.children_present) {
-        state.outCount = 0;
-        return;
-      }
+      if (!f || !f.enabled) { state.outCount = 0; return; }
+      var startable = !f.walk_in_progress && f.children_present && !dismissedToday();
+      var endable = f.walk_in_progress && f.walk_id && !endDismissed(f.walk_id);
+      if (!startable && !endable) { state.outCount = 0; state.fence = f; syncBackground(f); return; }
       state.fence = f;
-      if (!navigator.geolocation) { stop(); return; }
+      syncBackground(f);
+      if (!navigator.geolocation) { return; }
 
-      navigator.geolocation.getCurrentPosition(function (pos) {
-        evaluate(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
-      }, function () {
-        /* No permission, or no fix. Nothing to do and nothing to say — this is an
-           optional convenience, not something to nag about. */
-      }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+      locationAllowed().then(function (ok) {
+        if (!ok) { return; }
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          evaluate(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+        }, function () {
+          /* No fix. Nothing to say — an optional convenience, not something to nag about. */
+        }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 });
+      });
     }).catch(function () { /* offline or not permitted; try again next tick */ });
   }
 
@@ -187,9 +271,24 @@
     } catch (e) { return null; }
   }
 
+  /* GOOGLE PLAY BUILD (2026-10-21). The Play app (KtBio.dist() === 'play') must not offer the
+     sideload "download the new APK" banner (Play updates it) and has no background-location
+     service. Older apps have no dist() and are sideload builds. */
+  var _ktDist = null;
+  function appDist() {
+    if (_ktDist) { return Promise.resolve(_ktDist); }
+    try {
+      var bio = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.KtBio;
+      if (!bio || typeof bio.dist !== 'function') { return Promise.resolve(_ktDist = 'sideload'); }
+      return bio.dist().then(function (r) { return (_ktDist = (r && r.dist) || 'sideload'); },
+        function () { return (_ktDist = 'sideload'); });
+    } catch (e) { return Promise.resolve(_ktDist = 'sideload'); }
+  }
+
   function startBackground() {
     var plugin = backgroundPlugin();
     if (!plugin || state.bgId || typeof plugin.addWatcher !== 'function') { return false; }
+    state.bgId = 'pending';        // one watcher, even if two checks land before it resolves
     try {
       plugin.addWatcher({
         /* Shown in the permanent notification Android requires for background
@@ -201,12 +300,42 @@
         stale: false,
         distanceFilter: 60,
       }, function (position, error) {
+        /* Permission refused ("only while using the app" / "deny") arrives here as an
+           error: say nothing and carry on with foreground checks — no nagging. */
         if (error || !position) { return; }
         evaluate(position.latitude, position.longitude, position.accuracy);
-      }).then(function (id) { state.bgId = id; });
+      }).then(function (id) {
+        // Switched off while it was starting: take it straight back down.
+        if (state.bgId !== 'pending') { try { plugin.removeWatcher({ id: id }); } catch (e) {} return; }
+        state.bgId = id;
+      }, function () { state.bgId = null; });
 
       return true;
+    } catch (e) { state.bgId = null; return false; }
+  }
+
+  /* The agency's switch (Room Controls → Walks), re-read on every check: turned on, the
+     watcher starts on the next check; turned off, it stops — no app rebuild either way.
+     Educators only: a director or admin's phone is not the one going out on walks. */
+  function isEducator() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      var r = (u.roles || []).concat([u.role_key, u.primary_role]);
+      return r.indexOf('educator') !== -1;
     } catch (e) { return false; }
+  }
+  function stopBackground() {
+    var plugin = backgroundPlugin();
+    if (state.bgId && state.bgId !== 'pending' && plugin && typeof plugin.removeWatcher === 'function') {
+      try { plugin.removeWatcher({ id: state.bgId }); } catch (e) {}
+    }
+    state.bgId = null;              // a pending start sees this and removes its own watcher
+  }
+  function syncBackground(f) {
+    if (f && f.enabled && f.background && isEducator()) {
+      appDist().then(function (d) { if (d !== 'play') { startBackground(); } });
+    }
+    else if (state.bgId) { stopBackground(); }
   }
 
   function start() {
@@ -225,17 +354,12 @@
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden && state.started) { setTimeout(check, 1200); }
     });
-
-    startBackground();
+    // Background watching starts from check(), only when the agency has turned it on.
   }
 
   function stop() {
     if (state.timer) { clearInterval(state.timer); state.timer = null; }
-    var plugin = backgroundPlugin();
-    if (state.bgId && plugin && typeof plugin.removeWatcher === 'function') {
-      try { plugin.removeWatcher({ id: state.bgId }); } catch (e) {}
-      state.bgId = null;
-    }
+    stopBackground();
     state.started = false;
   }
 

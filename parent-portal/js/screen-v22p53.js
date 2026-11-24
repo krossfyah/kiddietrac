@@ -19,7 +19,10 @@
 
   const apiBase = () => (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };
+  /* A date-only value ("2026-10-19") is a calendar day: new Date() reads it as UTC midnight and
+     showed the day before in every western zone ("Week of Oct 18" for a Monday-19 week, trips a
+     day early — 2026-10-24). Formatted from its parts by KT.dayLabel; instants still go through Date. */
+  const fmtDate = (s) => { if (!s) return ''; if (/^\d{4}-\d{2}-\d{2}$/.test(String(s)) && window.KT && KT.dayLabel) return KT.dayLabel(String(s)); const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); };
   const userRoles = () => { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles || []; } catch (e) { return []; } };
   const isStaff = () => userRoles().some(r => ['agency_admin', 'centre_director', 'educator', 'platform_admin'].includes(r));
 
@@ -50,6 +53,165 @@
   function _mondayOf(d) { const x = new Date(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); x.setHours(0, 0, 0, 0); return x; }
   function _ymd(d) { const x = new Date(d); return new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
 
+  // ============================ Food photos on the menu ============================
+  /* 2026-10-31, Anthony: "with the meal plan can the educators choose pictures for common foods and show this like how
+     you have this in the emulator ... or have AI do this on their behalf". A shared, licensed food library
+     (App\Support\FoodPhotos, /operations/food-images); a dish gets a confident library match on its own when the agency
+     has "Add food photos automatically" on; staff can choose, upload their own, or remove (a removed photo stays
+     removed). The AI Bundle helper places dishes the library match cannot. */
+  let _foodLib = null;
+  function foodLib(force) {
+    if (!_foodLib || force) { _foodLib = Api.get('/operations/food-images').catch(() => ({ data: [], auto: false, ai: false, can_manage: false })); }
+    return _foodLib;
+  }
+  function cellThumb(url, w) {
+    w = w || 36; const h = Math.round(w * 0.75);
+    if (!url) { return `<span class="mp-cell-img" data-w="${w}" style="display:none;"></span>`; }
+    return `<span class="mp-cell-img" data-w="${w}" style="flex:0 0 ${w}px;width:${w}px;height:${h}px;border-radius:6px;overflow:hidden;background:#F1F5F9;display:block;"><img src="${esc(url)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;"></span>`;
+  }
+  function photoInputs(d, m, it) {
+    return `<input type="hidden" data-d="${d}" data-m="${m}" data-f="img" value="${esc(it.image_url || '')}">`
+      + `<input type="hidden" data-d="${d}" data-m="${m}" data-f="imgsrc" value="${esc(it.image_source || '')}">`
+      + `<input type="hidden" data-d="${d}" data-m="${m}" data-f="foodid" value="${esc(it.food_image_id || '')}">`;
+  }
+  const _fold = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+  /* The library as a searchable grid. Resolves with the chosen food, or null. */
+  function openFoodPicker(query) {
+    return new Promise((resolve) => {
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+      ov.innerHTML = `<div role="dialog" aria-modal="true" aria-label="Choose a food photo" style="background:#fff;border-radius:16px;max-width:680px;width:100%;height:min(720px,calc(100dvh - 32px));display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden;">
+        <div class="kt-dlg-head" style="display:flex;align-items:center;gap:10px;padding:14px 18px;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);box-shadow:inset 0 -3px 0 #7FD3CC;color:#fff;">
+          <div style="font-size:16px;font-weight:800;flex:1;">🍽 Choose a food photo</div>
+          <button type="button" id="fp-x" aria-label="Close" style="background:transparent;border:0;color:#fff;font-size:18px;cursor:pointer;width:32px;height:32px;">✕</button>
+        </div>
+        <div style="padding:12px 16px 8px;">
+          <input id="fp-q" type="search" placeholder="Search foods — e.g. pasta, banana, soup" value="${esc(query || '')}" autocomplete="off"
+                 style="width:100%;box-sizing:border-box;height:36px;padding:0 12px;border:1px solid #CBD5E1;border-radius:9px;font:inherit;font-size:14px;">
+        </div>
+        <div id="fp-grid" style="flex:1;overflow:auto;padding:4px 16px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;align-content:start;">
+          <div style="grid-column:1/-1;color:#64748B;font-size:13px;padding:20px 0;text-align:center;">Loading photos…</div>
+        </div>
+        <div style="padding:8px 16px;border-top:1px solid #EDF2F7;font-size:11px;color:#94A3B8;">Photos: Wikimedia Commons, public domain / CC0. Most used by your team first.</div>
+      </div>`;
+      document.body.appendChild(ov);
+      const close = (v) => { ov.remove(); resolve(v || null); };
+      ov.querySelector('#fp-x').onclick = () => close(null);
+      ov.addEventListener('click', (e) => { if (e.target === ov) close(null); });
+      ov.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(null); } });
+      const q = ov.querySelector('#fp-q'), grid = ov.querySelector('#fp-grid');
+      if (window.innerWidth > 768) { q.focus(); }
+      foodLib().then((lib) => {
+        const all = (lib.data || []).slice().sort((a, b) => (b.used - a.used) || a.name.localeCompare(b.name));
+        const paint = () => {
+          const t = _fold(q.value).trim();
+          const words = t.split(/\s+/).filter(Boolean);
+          let list = all;
+          if (words.length) {
+            list = all.filter((f) => { const hay = _fold(f.name + ' ' + (f.synonyms || '')); return words.some((w) => hay.indexOf(w) > -1); })
+              .sort((a, b) => {
+                const sa = words.filter((w) => _fold(a.name + ' ' + a.synonyms).indexOf(w) > -1).length, sb = words.filter((w) => _fold(b.name + ' ' + b.synonyms).indexOf(w) > -1).length;
+                return (sb - sa) || (b.used - a.used) || a.name.localeCompare(b.name);
+              });
+          }
+          if (!list.length) { grid.innerHTML = `<div style="grid-column:1/-1;color:#64748B;font-size:13px;padding:20px 0;text-align:center;">No photo for “${esc(q.value)}”. Try another word, or upload your own.</div>`; return; }
+          grid.innerHTML = list.map((f) => `<button type="button" data-id="${f.id}" title="${esc(f.name)}${f.credit ? ' — ' + esc(f.credit) : ''}" style="border:1px solid #E2E8F0;background:#fff;border-radius:11px;padding:0;overflow:hidden;cursor:pointer;text-align:left;font:inherit;">
+            <span style="display:block;aspect-ratio:4/3;background:#F1F5F9;"><img src="${esc(f.thumb_url)}" alt="${esc(f.name)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block;"></span>
+            <span style="display:block;padding:5px 7px 6px;font-size:11.5px;font-weight:700;color:#0D1B2A;line-height:1.25;">${esc(f.name)}</span></button>`).join('');
+        };
+        paint();
+        let t = null; q.addEventListener('input', () => { clearTimeout(t); t = setTimeout(paint, 120); });
+        grid.addEventListener('click', (e) => {
+          const b = e.target.closest('button[data-id]'); if (!b) return;
+          close(all.find((f) => String(f.id) === b.dataset.id));
+        });
+      });
+    });
+  }
+
+  /* The Photo block inside the dish dialog. st = {url, src, fid}; returns {commit()} for Done. */
+  function wireDishPhoto(ov, st, dishIn, algIn) {
+    const prev = ov.querySelector('#mp-ph-prev'), sugg = ov.querySelector('#mp-ph-sugg'), hint = ov.querySelector('#mp-ph-hint');
+    const rm = ov.querySelector('#mp-ph-rm'), file = ov.querySelector('#mp-ph-file'), note = ov.querySelector('#mp-ph-note');
+    let lib = { data: [], auto: false, ai: false };
+    foodLib().then((l) => { lib = l || lib; suggest(); });
+    function paint() {
+      prev.innerHTML = st.url ? `<img src="${esc(st.url)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">` : '<span style="font-size:26px;">🍽</span>';
+      rm.style.display = st.url ? '' : 'none';
+      note.textContent = st.src === 'auto' ? 'Picked for you — change it if it is not right.' : (st.src === 'none' ? 'No photo for this dish.' : '');
+    }
+    function pickFood(f, how) {
+      st.url = f.thumb_url; st.src = how || 'library'; st.fid = f.id; paint();
+      hint.innerHTML = '';
+      if (f.allergens && !algIn.value.trim()) {
+        hint.innerHTML = `Usually contains: <b>${esc(f.allergens)}</b> · <a href="#" id="mp-ph-addalg" style="color:#1F6080;font-weight:700;">Add to allergens</a>`;
+        hint.querySelector('#mp-ph-addalg').onclick = (e) => { e.preventDefault(); algIn.value = f.allergens.replace(/\s*\([^)]*\)/g, ''); hint.innerHTML = ''; };
+      }
+    }
+    let seq = 0;
+    async function suggest() {
+      const name = dishIn.value.trim(); const my = ++seq;
+      sugg.innerHTML = '';
+      if (!name) return;
+      let r = null; try { r = await Api.post('/operations/food-images/match', { names: [name] }); } catch (e) { return; }
+      if (my !== seq || !ov.isConnected) return;
+      const m = (r && r.matches && r.matches[name]) || { suggestions: [] };
+      const list = (m.suggestions || []).filter((f) => !st.url || f.thumb_url !== st.url);
+      if (!st.url && st.src !== 'none' && m.best && lib.auto) { pickFood(m.best, 'auto'); }
+      if (list.length) {
+        sugg.innerHTML = '<div style="font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;margin:10px 0 5px;">Suggested</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + list.slice(0, 4).map((f) => `<button type="button" data-id="${f.id}" title="${esc(f.name)}" style="border:1px solid #E2E8F0;background:#fff;border-radius:9px;padding:0;overflow:hidden;cursor:pointer;width:72px;">
+            <span style="display:block;width:72px;height:54px;"><img src="${esc(f.thumb_url)}" alt="${esc(f.name)}" style="width:100%;height:100%;object-fit:cover;display:block;"></span>
+            <span style="display:block;padding:2px 4px;font-size:10px;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(f.name)}</span></button>`).join('') + '</div>';
+        sugg.querySelectorAll('button[data-id]').forEach((b) => { b.onclick = () => { pickFood(list.find((f) => String(f.id) === b.dataset.id)); suggest(); }; });
+        if (lib.ai && !m.confident) {
+          const ab = document.createElement('button'); ab.type = 'button'; ab.textContent = '✨ Not right? Ask AI';
+          ab.style.cssText = 'margin-top:8px;height:28px;padding:0 10px;border:1px solid #C4B5FD;background:#F5F3FF;color:#5B21B6;border-radius:8px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;';
+          ab.onclick = async () => {
+            ab.disabled = true; ab.textContent = '✨ Looking…';
+            try {
+              const a = await Api.post('/ai/assist/food-photo', { names: [name] });
+              const f = a && a.matches && a.matches[name];
+              if (f) { pickFood(f, 'library'); ab.textContent = '✨ AI picked ' + f.name; } else { ab.textContent = 'AI found no better photo'; }
+            } catch (err) { ab.textContent = (err && err.message) || 'AI is not available right now'; }
+          };
+          sugg.appendChild(ab);
+        }
+      } else if (!st.url && lib.ai) {
+        sugg.innerHTML = '<button type="button" id="mp-ph-ai" style="margin-top:10px;height:32px;padding:0 12px;border:1px solid #C4B5FD;background:#F5F3FF;color:#5B21B6;border-radius:8px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">✨ Find a photo with AI</button>';
+        sugg.querySelector('#mp-ph-ai').onclick = async (e) => {
+          const b = e.currentTarget; b.disabled = true; b.textContent = '✨ Looking…';
+          try {
+            const a = await Api.post('/ai/assist/food-photo', { names: [name] });
+            const f = a && a.matches && a.matches[name];
+            if (f) { pickFood(f, 'library'); sugg.innerHTML = ''; } else { b.textContent = 'No good match — choose or upload one'; }
+          } catch (err) { b.textContent = (err && err.message) || 'AI is not available right now'; }
+        };
+      }
+    }
+    let t = null;
+    dishIn.addEventListener('input', () => {
+      if (st.src === 'auto') { st.url = ''; st.src = ''; st.fid = ''; paint(); }
+      clearTimeout(t); t = setTimeout(suggest, 380);
+    });
+    ov.querySelector('#mp-ph-pick').onclick = async () => { const f = await openFoodPicker(dishIn.value.trim().split(/\s+/)[0] || ''); if (f) { pickFood(f); suggest(); } };
+    ov.querySelector('#mp-ph-up').onclick = () => file.click();
+    file.onchange = async () => {
+      const f = file.files && file.files[0]; if (!f) return;
+      note.textContent = 'Uploading…';
+      try {
+        const fd = new FormData(); fd.append('photo', f);
+        const r = await Api.postForm('/operations/menu/photo', fd);
+        st.url = r.thumb_url; st.src = 'upload'; st.fid = ''; paint();
+      } catch (e) { note.textContent = (e && e.message) || 'That photo could not be uploaded.'; }
+      file.value = '';
+    };
+    rm.onclick = () => { st.url = ''; st.src = 'none'; st.fid = ''; paint(); suggest(); };
+    paint();
+    return st;
+  }
+
   async function renderMenu(main) {
     main.innerHTML = '<div style="padding:24px;">Loading menu…</div>';
     // resolve a centre for the user (works for educator/director/admin/platform)
@@ -62,8 +224,9 @@
     // alphabetically first one means everybody else is a hunt.
     const CENTRE_KEY = 'kt_menu_centre';
     let cid = (function () {
-      const saved = parseInt(localStorage.getItem(CENTRE_KEY) || '', 10);
-      return centreList.some(c => +c.id === saved) ? saved : centreList[0].id;
+      /* Always "Select a provider" — never the first one, and not the last one used either
+         (2026-10-24, Anthony: "doesnt show select a provider as we asked"). One provider = no choice to make. */
+      return centreList.length === 1 ? centreList[0].id : null;
     })();
     const centreNameOf = (id) => {
       const c = centreList.filter(x => +x.id === +id)[0] || centreList[0];
@@ -155,8 +318,36 @@
       </div>`;
     }
 
+    function centrePicker() {
+      return `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#374151;font-weight:600;margin:4px 0 2px;">${esc(centreWord)}
+               <select id="mp-centre" style="height:36px;padding:0 30px 0 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13.5px;background-color:#fff;max-width:280px;min-width:0;flex:1 1 auto;">
+                 <option value="" disabled ${cid ? '' : 'selected'}>Select a ${esc(centreWord.toLowerCase())}…</option>
+                 ${centreList.map(c => `<option value="${c.id}" ${+c.id === +cid ? 'selected' : ''}>${esc(c.name || ('#' + c.id))}</option>`).join('')}
+               </select></label>`;
+    }
+    function wireCentrePicker() {
+      const centreSel = main.querySelector('#mp-centre');
+      if (centreSel) {
+        centreSel.onchange = () => {
+          cid = parseInt(centreSel.value, 10) || null;
+          try { if (cid) localStorage.setItem(CENTRE_KEY, String(cid)); } catch (e) {}
+          load();
+        };
+      }
+    }
+
+    let _tools = null;
     async function load() {
+      _tools = null;
       const weekStartStr = _ymd(cur);
+      if (!cid) {
+        main.innerHTML = `<div style="padding:16px;max-width:1200px;margin:0 auto;">
+          ${centrePicker()}
+          <div style="margin-top:14px;background:#F8FAFC;border:1px dashed #CBD5E1;border-radius:12px;padding:22px 16px;text-align:center;color:#64748B;font-size:13.5px;">🍽 Select a ${esc(centreWord.toLowerCase())} to see and edit its weekly menu.</div>
+        </div>`;
+        wireCentrePicker();
+        return;
+      }
       main.innerHTML = '<div style="padding:24px;">Loading menu…</div>';
       const [r, allergyHtml] = await Promise.all([
         Api.get(`/operations/menu?centre_id=${cid}&week_start=${weekStartStr}`).catch(() => ({})),
@@ -220,13 +411,13 @@
         const band = MEAL_TINT[m] || '#FFFFFF';
         const edge = MEAL_EDGE[m] || '#E5E7EB';
         table += `<tr style="background:${band};">
-          <td style="padding:8px 8px 8px 10px;border-bottom:1px solid #EDF2F7;border-left:4px solid ${edge};font-size:12px;position:sticky;left:0;background:${band};z-index:1;">
+          <td style="padding:8px 8px 8px 10px;border-bottom:1px solid #EDF2F7;--kt-edge:${edge};font-size:12px;position:sticky;left:0;background:${band};z-index:1;">
             <div style="font-weight:700;text-transform:capitalize;color:#0D1B2A;">${m.replace('_', ' ')}</div>
             <!-- A bare clock under a meal name says nothing about what it is for. The
                  aria-label always covered screen readers; this covers everyone else. -->
             <div style="margin-top:5px;font-size:9.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#94A3B8;">Serves at</div>
             <input data-meal-time="${m}" type="time" value="${esc(mealTimes[m] || '')}" aria-label="${m.replace('_', ' ')} serving time"
-                   style="margin-top:2px;width:124px;box-sizing:border-box;padding:3px 6px;border:1px solid #E5E7EB;border-radius:6px;font-size:11.5px;color:#475569;background:#fff;">
+                   style="margin-top:3px;width:118px;height:32px;box-sizing:border-box;padding:0 8px;border:1px solid #E5E7EB;border-radius:8px;font-size:12.5px;color:#334155;background:#fff;">
           </td>`;
         cols.forEach(c => {
           const it = itemsByDayMeal[`${c.dow}-${m}`] || {};
@@ -237,12 +428,12 @@
              truth and the save path is untouched. */
           table += `<td class="${isToday ? 'kt-today-cell' : ''}" style="padding:6px 4px;border-bottom:1px solid #EDF2F7;min-width:132px;">
             <input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="name" value="${esc(it.name || '')}">
-            <input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="allergens" value="${esc(it.allergens || '')}">
+            <input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="allergens" value="${esc(it.allergens || '')}"><input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="description" value="${esc(it.description || '')}">${photoInputs(c.dow, m, it)}
             <button type="button" class="mp-cell" data-cd="${c.dow}" data-cm="${m}"
                     aria-label="${it.name ? 'Edit' : 'Add'} ${m.replace('_', ' ')} for ${c.label}"
-                    style="width:100%;min-height:48px;box-sizing:border-box;text-align:left;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:7px 8px;font:inherit;cursor:pointer;">
+                    style="width:100%;min-height:48px;box-sizing:border-box;text-align:left;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:7px 8px;font:inherit;cursor:pointer;display:flex;align-items:center;gap:7px;">${cellThumb(it.image_url, 34)}<span style="display:block;min-width:0;flex:1 1 auto;">
               <span class="mp-cell-name" style="display:block;font-size:12px;line-height:1.25;color:${it.name ? '#0D1B2A' : '#94A3B8'};font-weight:${it.name ? '600' : '400'};">${it.name ? esc(it.name) : '+ Add'}</span>
-              <span class="mp-cell-alg" style="display:block;font-size:11px;line-height:1.2;color:#92400E;margin-top:2px;">${it.allergens ? '\u26A0 ' + esc(it.allergens) : ''}</span>
+              <span class="mp-cell-alg" style="display:block;font-size:11px;line-height:1.2;color:#92400E;margin-top:2px;">${it.allergens ? '\u26A0 ' + esc(it.allergens) : ''}</span></span>
             </button>
           </td>`;
         });
@@ -250,39 +441,79 @@
       });
       table += '</tbody></table>';
 
+      /* ON A PHONE (2026-10-23, Anthony: "look at weekly menu and you will see the fields are
+         not consistent and needs to look better and the buttons"). The seven-column table was
+         being re-laid as cards by kt-mobile-tables: a stray coloured box, a giant clock and a
+         column of dashes. Here it is drawn for the phone: a card per meal with its serving
+         time, and one row per day. Same hidden inputs and .mp-cell buttons, so editing and
+         Save work exactly as on a computer. */
+      const phone = window.innerWidth <= 768;
+      if (phone) {
+        let cards = '<div data-kt-nobreathe="1">';
+        meals.forEach((m) => {
+          const band = MEAL_TINT[m] || '#FFFFFF', edge = MEAL_EDGE[m] || '#E5E7EB';
+          cards += `<div style="background:${band};border:1px solid #E7EDF3;--kt-edge:${edge};border-radius:12px;padding:10px 12px;margin-top:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;">
+              <div style="font-weight:800;font-size:15px;color:#0D1B2A;text-transform:capitalize;">${m.replace('_', ' ')}</div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;white-space:nowrap;">Serves at
+                <input data-meal-time="${m}" type="time" value="${esc(mealTimes[m] || '')}" aria-label="${m.replace('_', ' ')} serving time"
+                       style="width:112px !important;height:36px !important;min-height:36px !important;box-sizing:border-box;padding:0 8px !important;border:1px solid #E5E7EB;border-radius:8px;font-size:15px !important;color:#334155;background:#fff;flex:0 0 auto;"></label>
+            </div>`;
+          cols.forEach(c => {
+            const it = itemsByDayMeal[`${c.dow}-${m}`] || {};
+            const dt = dateOf(c.dow), isToday = _ymd(dt) === todayStr;
+            cards += `<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-top:1px solid rgba(15,23,42,.06);">
+              <div style="flex:0 0 64px;font-size:12.5px;font-weight:800;color:${isToday ? '#1F6080' : '#0D1B2A'};line-height:1.2;">${c.label}${isToday ? ' ·' : ''}
+                <div style="font-size:11px;font-weight:600;color:#64748B;">${isToday ? 'today' : dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</div></div>
+              <div style="flex:1 1 auto;min-width:0;">
+                <input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="name" value="${esc(it.name || '')}">
+                <input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="allergens" value="${esc(it.allergens || '')}"><input type="hidden" data-d="${c.dow}" data-m="${m}" data-f="description" value="${esc(it.description || '')}">${photoInputs(c.dow, m, it)}
+                <button type="button" class="mp-cell" data-cd="${c.dow}" data-cm="${m}" aria-label="${it.name ? 'Edit' : 'Add'} ${m.replace('_', ' ')} for ${c.label}"
+                        style="width:100%;min-height:40px;box-sizing:border-box;text-align:left;background:#fff;border:1px solid #E5E7EB;border-radius:8px;padding:7px 10px;font:inherit;cursor:pointer;display:flex;align-items:center;gap:9px;">${cellThumb(it.image_url, 44)}<span style="display:block;min-width:0;flex:1 1 auto;">
+                  <span class="mp-cell-name" style="display:block;font-size:13.5px;line-height:1.3;color:${it.name ? '#0D1B2A' : '#94A3B8'};font-weight:${it.name ? '600' : '400'};">${it.name ? esc(it.name) : '+ Add'}</span>
+                  <span class="mp-cell-alg" style="display:block;font-size:11.5px;line-height:1.2;color:#92400E;margin-top:2px;">${it.allergens ? '\u26A0 ' + esc(it.allergens) : ''}</span></span>
+                </button>
+              </div>
+            </div>`;
+          });
+          cards += '</div>';
+        });
+        table = cards + '</div>';
+      }
+
       const isThis = _ymd(cur) === _ymd(thisMonday);
       const navBtn = 'width:30px;height:32px;border:none;background:transparent;border-radius:8px;cursor:pointer;font-size:14px;color:#1F6080;';
       main.innerHTML = `<div style="padding:16px;max-width:1200px;margin:0 auto;">
-        <h2 style="margin:0 0 2px;color:#1F6080;font-size:19px;">Weekly menu</h2>
         ${centreList.length > 1
-          ? `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#374151;font-weight:600;margin:4px 0 2px;">${esc(centreWord)}
-               <select id="mp-centre" style="height:32px;padding:0 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:#fff;max-width:280px;">
-                 ${centreList.map(c => `<option value="${c.id}" ${+c.id === +cid ? 'selected' : ''}>${esc(c.name || ('#' + c.id))}</option>`).join('')}
-               </select></label>`
+          ? centrePicker()
           : `<div style="color:#6B7280;font-size:12.5px;">${esc(centreNameOf(cid))}</div>`}
         ${allergyHtml}
-        <div style="display:flex;align-items:center;gap:2px;background:#F3F4F6;border-radius:10px;padding:2px;width:fit-content;margin-top:6px;">
+        <div data-kt-nobreathe="1" style="display:flex;align-items:center;gap:2px;background:#F3F4F6;border-radius:10px;padding:2px;width:fit-content;height:36px;box-sizing:border-box;margin-top:6px;">
           <button id="mp-prev" title="Previous week" style="${navBtn}">◀</button>
           <span style="font-weight:700;font-size:12.5px;color:#111827;min-width:120px;text-align:center;">Week of ${fmtDate(weekStartStr)}</span>
           <button id="mp-next" title="Next week" style="${navBtn}">▶</button>
-          ${isThis ? '' : `<button id="mp-today" style="height:28px;border:none;background:#fff;border-radius:7px;padding:0 10px;font-size:12px;cursor:pointer;color:#1F6080;font-weight:600;margin-left:4px;">This week</button>`}
+          ${isThis ? '' : `<button id="mp-today" style="height:30px;border:none;background:#fff;border-radius:8px;padding:0 11px;font-size:12.5px;cursor:pointer;color:#1F6080;font-weight:700;margin-left:4px;">This week</button>`}
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:14px;">
+        <div style="display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center;margin-top:14px;">
           ${!r.data ? '<span style="font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;background:#F1F5F9;color:#475569;padding:4px 10px;border-radius:20px;" title="Nothing has been saved for this week yet.">Not saved yet</span>' : `<span style="font-size:11px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:4px 10px;border-radius:20px;background:${week.status === 'published' ? '#DCFCE7' : '#F1F5F9'};color:${week.status === 'published' ? '#166534' : '#475569'};">${week.status === 'published' ? 'Published' : (week.status === 'archived' ? 'Archived' : 'Draft')}</span>`}
-          <label style="font-size:12.5px;color:#374151;font-weight:600;display:flex;align-items:center;gap:7px;" title="Published weeks are visible to families. Draft is only visible to staff.">${!r.data ? 'Save as' : 'Status'}
-            <select id="mp-status" style="height:36px !important;min-height:36px !important;min-width:148px;flex:0 0 auto;padding:0 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px;background:#fff;box-sizing:border-box;vertical-align:middle;">
+          <label style="font-size:12.5px;color:#374151;font-weight:600;display:flex;align-items:center;gap:7px;white-space:nowrap;" title="Published weeks are visible to families. Draft is only visible to staff.">${!r.data ? 'Save as' : 'Status'}
+            <select id="mp-status" style="height:36px !important;min-height:36px !important;width:140px;flex:0 0 auto;padding:0 30px 0 10px !important;line-height:normal !important;border:1px solid #D1D5DB;border-radius:8px;font-size:13.5px !important;background-color:#fff;box-sizing:border-box;vertical-align:middle;">
               <option value="draft" ${week.status === 'draft' ? 'selected' : ''}>Draft</option>
               <option value="published" ${week.status === 'published' ? 'selected' : ''}>Published</option>
               <option value="archived" ${week.status === 'archived' ? 'selected' : ''}>Archived</option>
             </select>
           </label>
-          <button id="mp-edit" class="kt-btn kt-btn-secondary kt-btn-sm" data-kt-iconized="1" style="height:36px;flex:0 0 auto;margin-right:6px;white-space:nowrap;">✏️ Edit</button><button id="mp-save" title="Save menu" aria-label="Save menu" style="height:36px;flex:0 0 auto;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0 16px;border-radius:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:7px;justify-content:center;vertical-align:middle;white-space:nowrap;box-shadow:0 6px 14px -8px rgba(31,96,128,.85);">💾 Save menu</button>
+          <span style="display:inline-flex;gap:8px;flex:0 0 auto;"><button id="mp-edit" data-kt-iconized="1" style="height:36px !important;min-height:36px !important;flex:0 0 auto;box-sizing:border-box;background:#fff;color:#1F6080;border:1px solid #CBD5E1;padding:0 14px;border-radius:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">✏️ Edit</button><button id="mp-save" data-kt-always-save="1" title="Save menu" aria-label="Save menu" style="height:36px !important;min-height:36px !important;flex:0 0 auto;box-sizing:border-box;background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border:0;padding:0 16px;border-radius:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:7px;justify-content:center;vertical-align:middle;white-space:nowrap;box-shadow:0 6px 14px -8px rgba(31,96,128,.85);">💾 Save menu</button><button id="mp-fill" title="Add a photo to every dish that has none" style="height:36px !important;min-height:36px !important;flex:0 0 auto;box-sizing:border-box;background:#fff;color:#1F6080;border:1px solid #CBD5E1;padding:0 12px;border-radius:8px;cursor:pointer;font:inherit;font-size:13px;font-weight:700;line-height:1;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;">📷 Fill photos</button></span>
         </div>
+        <div id="mp-tools"></div>
         <div id="mp-msg" style="font-size:12.5px;color:#047857;min-height:16px;margin-top:7px;"></div>
         <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">${table}</div>
-        <label style="display:block;margin-top:16px;font-size:12.5px;color:#374151;font-weight:600;">Notes (optional)
-          <textarea id="mp-notes" rows="3" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #E5E7EB;border-radius:6px;margin-top:4px;font-size:13px;">${esc(week.notes || '')}</textarea>
-        </label>
+        <div id="mp-fg"></div>
+        <div style="margin-top:16px;">
+          <label for="mp-notes" style="display:block;text-align:left;margin:0 0 5px;font-size:12.5px;color:#374151;font-weight:600;">Notes (optional)</label>
+          <textarea id="mp-notes" rows="3" style="display:block;width:100% !important;max-width:none !important;box-sizing:border-box;padding:9px 11px;border:1px solid #E5E7EB;border-radius:8px;margin:0;font-size:13.5px;font-family:inherit;resize:vertical;">${esc(week.notes || '')}</textarea>
+        </div>
+        <div id="mp-photo-opt" style="margin-top:12px;"></div>
       </div>`;
 
       const go = (delta) => { cur.setDate(cur.getDate() + delta); load(); };
@@ -290,14 +521,7 @@
       main.querySelector('#mp-next').onclick = () => go(7);
       const todayBtn = main.querySelector('#mp-today'); if (todayBtn) todayBtn.onclick = () => { cur = _mondayOf(new Date()); load(); };
 
-      const centreSel = main.querySelector('#mp-centre');
-      if (centreSel) {
-        centreSel.onchange = () => {
-          cid = parseInt(centreSel.value, 10);
-          try { localStorage.setItem(CENTRE_KEY, String(cid)); } catch (e) {}
-          load();
-        };
-      }
+      wireCentrePicker();
 
       /* The grid is READ far more often than it is changed, and a table made of form
          controls invites an accidental edit — one stray keystroke rewrites the week.
@@ -316,6 +540,9 @@
           b.style.cursor = _menuEditing ? 'pointer' : 'default';
           b.style.borderColor = _menuEditing ? '#E5E7EB' : 'transparent';
           b.style.background = _menuEditing ? '#fff' : 'transparent';
+          /* The read-only week is there to be READ (2026-11-02): the global button:disabled rule (opacity .55)
+             washed out every dish name and food photo until Edit was pressed. */
+          b.style.setProperty('opacity', '1', 'important');
           var n = b.querySelector('.mp-cell-name');
           if (n) {
             var has = !!(b.parentElement.querySelector('input[data-f="name"]') || {}).value;
@@ -347,9 +574,23 @@
         var sb = main.querySelector('#mp-save');
         if (eb) { eb.innerHTML = _menuEditing ? '✓ Done' : '✏️ Edit'; }
         if (sb) { sb.style.display = _menuEditing ? '' : 'none'; }
+        var fb = main.querySelector('#mp-fill');
+        if (fb) { fb.style.display = _menuEditing ? '' : 'none'; }
       }
+      /* "✓ DONE" NEVER DROPS THE WEEK (2026-11-09, Anthony: "meal plan wasn't saving for educators today at all").
+         Done left edit mode with the dishes still drawn in the grid, so a week that was never saved looked saved.
+         Done with unsaved changes now saves them, exactly like 💾 Save menu (a failed save stays in edit mode). */
+      var _menuSig = function () {
+        return Array.prototype.map.call(main.querySelectorAll('input[data-d][data-m], input[data-meal-time], #mp-notes, #mp-status'), function (i) { return i.value; }).join('\u241f');
+      };
+      var _menuSaved = null, _saveMenu = null;
       var _eb = main.querySelector('#mp-edit');
-      if (_eb) { _eb.onclick = function () { _menuEditing = !_menuEditing; applyMenuMode(); }; }
+      if (_eb) {
+        _eb.onclick = function () {
+          if (_menuEditing && _saveMenu && _menuSig() !== _menuSaved) { _saveMenu(); return; }
+          _menuEditing = !_menuEditing; applyMenuMode();
+        };
+      }
       applyMenuMode();
 
       /* EDIT A DISH IN A DIALOG. Two stacked inputs in each of 35 cells is unusable
@@ -360,12 +601,16 @@
           const dow = btn.getAttribute('data-cd'), meal = btn.getAttribute('data-cm');
           const nameIn = main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="name"]`);
           const algIn  = main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="allergens"]`);
+          const noteIn = main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="description"]`);
+          const imgIn  = main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="img"]`);
+          const srcIn  = main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="imgsrc"]`);
+          const fidIn  = main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="foodid"]`);
           const dayLbl = (cols.find(c => String(c.dow) === String(dow)) || {}).label || '';
           const mealLbl = meal.replace('_', ' ');
 
           const ov = document.createElement('div');
           ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:20px;';
-          ov.innerHTML = `<div role="dialog" aria-modal="true" style="background:#fff;border-radius:16px;max-width:420px;width:100%;box-shadow:0 24px 60px rgba(15,23,42,.35);overflow:hidden;">
+          ov.innerHTML = `<div role="dialog" aria-modal="true" style="background:#fff;border-radius:16px;max-width:440px;width:100%;max-height:calc(100dvh - 32px);overflow:auto;box-shadow:0 24px 60px rgba(15,23,42,.35);">
             <div style="padding:16px 20px;border-bottom:1px solid #EDF2F7;">
               <div style="font-size:16px;font-weight:800;color:#0D1B2A;text-transform:capitalize;">${esc(mealLbl)} &middot; ${esc(dayLbl)}</div>
               <div style="font-size:12.5px;color:#64748B;margin-top:2px;">What is being served, and anything families need to know about.</div>
@@ -377,7 +622,23 @@
               <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px;">Allergens</label>
               <input id="mp-alg" value="${esc(algIn.value)}" placeholder="e.g. dairy, wheat"
                      style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #FEF3C7;border-radius:9px;font:inherit;font-size:14px;color:#92400E;">
+              <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:12px 0 4px;">Notes for families</label>
+              <textarea id="mp-note" rows="2" maxlength="1000" placeholder="e.g. Whole oats, diced apple, milk - or a swap for a child with allergies"
+                     style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #E2E8F0;border-radius:9px;font:inherit;font-size:14px;resize:vertical;">${esc(noteIn ? noteIn.value : '')}</textarea>
               <div style="font-size:11.5px;color:#94A3B8;margin-top:6px;">Leave the dish empty to clear this slot.</div>
+              <label style="display:block;font-size:12px;font-weight:700;color:#475569;margin:14px 0 6px;">Photo</label>
+              <div style="display:flex;gap:12px;align-items:center;">
+                <div id="mp-ph-prev" style="flex:0 0 96px;width:96px;height:72px;border-radius:10px;background:#F1F5F9;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#94A3B8;"></div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                  <button type="button" id="mp-ph-pick" style="height:32px;padding:0 11px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;border-radius:8px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">🖼 Choose photo</button>
+                  <button type="button" id="mp-ph-up" style="height:32px;padding:0 11px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;border-radius:8px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">⬆ Upload my own</button>
+                  <button type="button" id="mp-ph-rm" style="height:32px;padding:0 11px;border:1px solid #FCA5A5;background:#fff;color:#B91C1C;border-radius:8px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">Remove</button>
+                </div>
+              </div>
+              <div id="mp-ph-note" style="font-size:11.5px;color:#64748B;margin-top:6px;min-height:14px;"></div>
+              <div id="mp-ph-hint" style="font-size:12px;color:#92400E;margin-top:2px;"></div>
+              <div id="mp-ph-sugg"></div>
+              <input type="file" id="mp-ph-file" accept="image/*" style="display:none;">
             </div>
             <div style="padding:14px 20px;border-top:1px solid #EDF2F7;display:flex;gap:8px;justify-content:flex-end;">
               <button id="mp-x" style="background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px 16px;font:inherit;font-size:14px;color:#475569;cursor:pointer;">Cancel</button>
@@ -386,7 +647,8 @@
           </div>`;
           document.body.appendChild(ov);
           const dish = ov.querySelector('#mp-dish');
-          dish.focus(); dish.select();
+          const photo = wireDishPhoto(ov, { url: imgIn ? imgIn.value : '', src: srcIn ? srcIn.value : '', fid: fidIn ? fidIn.value : '' }, dish, ov.querySelector('#mp-alg'));
+          if (window.innerWidth > 768) { dish.focus(); dish.select(); }   // on a phone the keyboard waits for a tap (2026-10-23)
           const close = () => ov.remove();
           ov.querySelector('#mp-x').onclick = close;
           ov.addEventListener('click', e => { if (e.target === ov) close(); });
@@ -394,22 +656,110 @@
           ov.querySelector('#mp-ok').onclick = () => {
             const nm = dish.value.trim(), ag = ov.querySelector('#mp-alg').value.trim();
             nameIn.value = nm; algIn.value = ag;
+            if (noteIn) noteIn.value = nm ? ov.querySelector('#mp-note').value.trim() : '';
+            if (imgIn) {
+              imgIn.value = nm ? (photo.url || '') : ''; srcIn.value = nm ? (photo.src || '') : ''; fidIn.value = nm ? (photo.fid || '') : '';
+              const old = btn.querySelector('.mp-cell-img');
+              if (old) { old.outerHTML = cellThumb(imgIn.value, +(old.getAttribute('data-w') || 34)); }
+            }
             const nEl = btn.querySelector('.mp-cell-name'), aEl = btn.querySelector('.mp-cell-alg');
             nEl.textContent = nm || '+ Add';
             nEl.style.color = nm ? '#0D1B2A' : '#94A3B8';
             nEl.style.fontWeight = nm ? '600' : '400';
             aEl.textContent = ag ? '\u26A0 ' + ag : '';
             close();
+            if (_tools) _tools.refresh();
           };
         };
       });
 
-      main.querySelector('#mp-save').onclick = async () => {
+      const fillBtn = main.querySelector('#mp-fill');
+      if (fillBtn) {
+        fillBtn.onclick = async () => {
+          const msg = main.querySelector('#mp-msg');
+          const val = (d, m, f) => main.querySelector(`input[data-d="${d}"][data-m="${m}"][data-f="${f}"]`);
+          const slots = [];
+          main.querySelectorAll('input[data-d][data-m][data-f="name"]').forEach((inp) => {
+            const nm = inp.value.trim(); if (!nm) return;
+            const img = val(inp.dataset.d, inp.dataset.m, 'img'), src = val(inp.dataset.d, inp.dataset.m, 'imgsrc');
+            if (!img || img.value || (src && src.value === 'none')) return;
+            slots.push({ d: inp.dataset.d, m: inp.dataset.m, name: nm });
+          });
+          if (!slots.length) { msg.textContent = 'Every dish already has a photo.'; msg.style.color = '#047857'; return; }
+          fillBtn.disabled = true; msg.textContent = 'Finding photos…'; msg.style.color = '#6B7280';
+          const names = [...new Set(slots.map((x) => x.name))], found = {};
+          try {
+            const r = await Api.post('/operations/food-images/match', { names });
+            const unsure = [];
+            names.forEach((n) => { const x = r && r.matches && r.matches[n]; if (x && x.best) found[n] = x.best; if (!x || !x.confident) unsure.push(n); });
+            const lib = await foodLib(), missing = unsure;
+            if (missing.length && lib.ai) {
+              try { const a = await Api.post('/ai/assist/food-photo', { names: missing.slice(0, 40) }); Object.keys((a && a.matches) || {}).forEach((n) => { if (a.matches[n]) found[n] = a.matches[n]; }); } catch (e) {}
+            }
+          } catch (e) { msg.textContent = (e && e.message) || 'Could not find photos just now.'; msg.style.color = '#B91C1C'; fillBtn.disabled = false; return; }
+          let added = 0;
+          slots.forEach((x) => {
+            const f = found[x.name]; if (!f) return;
+            val(x.d, x.m, 'img').value = f.thumb_url; val(x.d, x.m, 'imgsrc').value = 'auto'; val(x.d, x.m, 'foodid').value = f.id;
+            const cell = main.querySelector(`button.mp-cell[data-cd="${x.d}"][data-cm="${x.m}"] .mp-cell-img`);
+            if (cell) { cell.outerHTML = cellThumb(f.thumb_url, +(cell.getAttribute('data-w') || 34)); }
+            added++;
+          });
+          const left = slots.length - added;
+          msg.textContent = (added ? `Added ${added} photo${added === 1 ? '' : 's'}` : 'No photos found') + (left ? ` · ${left} dish${left === 1 ? '' : 'es'} without a match (choose or upload one)` : '') + (added ? '. Press Save menu to keep them.' : '.');
+          msg.style.color = added ? '#047857' : '#92400E';
+          fillBtn.disabled = false;
+        };
+      }
+      foodLib().then((lib) => {
+        const box = main.querySelector('#mp-photo-opt'); if (!box || !lib || !lib.can_manage) return;
+        box.innerHTML = `<label style="display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:#374151;font-weight:600;cursor:pointer;">
+          <input type="checkbox" id="mp-auto" ${lib.auto ? 'checked' : ''} style="width:16px;height:16px;"> Add food photos automatically to new dishes</label>
+          <div style="font-size:11.5px;color:#94A3B8;margin-top:3px;">A photo is added only when the dish clearly matches one in the food library. Staff can always change or remove it.</div>`;
+        box.querySelector('#mp-auto').onchange = async (e) => {
+          const on = e.target.checked;
+          try { await Api.put('/operations/menu/photo-settings', { auto: on }); foodLib(true); if (KT.toast) KT.toast('📷', 'Food photos', on ? 'Photos are added automatically.' : 'Photos are no longer added automatically.'); }
+          catch (err) { e.target.checked = !on; if (KT.toast) KT.toast('⚠️', 'Could not change it', (err && err.message) || '', '#B91C1C'); }
+        };
+      });
+
+      /* Menu tools (2026-11-03, kt-menu-tools.js): Copy last week, Save as template, Apply a template,
+         and the Canada's Food Guide check. They read and fill the same hidden inputs Save collects. */
+      const fillCell = (dow, meal, it) => {
+        const q = (f) => main.querySelector(`input[data-d="${dow}"][data-m="${meal}"][data-f="${f}"]`);
+        const nameIn = q('name'); if (!nameIn) return;
+        const nm = it ? String(it.name || '').trim() : '', ag = it ? String(it.allergens || '').trim() : '';
+        nameIn.value = nm; const algIn = q('allergens'); if (algIn) algIn.value = ag;
+        const noteIn = q('description'); if (noteIn) noteIn.value = nm ? String((it && it.description) || '').trim() : '';
+        const imgIn = q('img'), srcIn = q('imgsrc'), fidIn = q('foodid');
+        if (imgIn) { imgIn.value = (nm && it.image_url) || ''; srcIn.value = (nm && it.image_source) || ''; fidIn.value = (nm && it.food_image_id) || ''; }
+        const btn = main.querySelector(`button.mp-cell[data-cd="${dow}"][data-cm="${meal}"]`); if (!btn) return;
+        const old = btn.querySelector('.mp-cell-img');
+        if (old && imgIn) { old.outerHTML = cellThumb(imgIn.value, +(old.getAttribute('data-w') || 34)); }
+        const nEl = btn.querySelector('.mp-cell-name'), aEl = btn.querySelector('.mp-cell-alg');
+        nEl.textContent = nm || (_menuEditing ? '+ Add' : '—'); nEl.style.color = nm ? '#0D1B2A' : '#94A3B8'; nEl.style.fontWeight = nm ? '600' : '400';
+        aEl.textContent = ag ? '\u26A0 ' + ag : '';
+      };
+      const cellsNow = () => {
+        const o = {};
+        main.querySelectorAll('input[data-d][data-m][data-f="name"]').forEach(i => { o[i.dataset.d + '-' + i.dataset.m] = i.value.trim(); });
+        return o;
+      };
+      _tools = (window.KT && KT.MenuTools) ? KT.MenuTools.mount(main, {
+        cid, weekStart: weekStartStr, centres: centreList, openDays,
+        isEditing: () => _menuEditing, setEditing: (on) => { _menuEditing = !!on; applyMenuMode(); },
+        cells: cellsNow, fillCell, reload: load,
+      }) : null;
+
+      _menuSaved = _menuSig();
+      _saveMenu = async () => {
         const items = [];
         main.querySelectorAll('input[data-d][data-m][data-f="name"]').forEach(inp => {
           const name = inp.value.trim(); if (!name) return;
           const allergens = main.querySelector(`input[data-d="${inp.dataset.d}"][data-m="${inp.dataset.m}"][data-f="allergens"]`).value.trim();
-          items.push({ day_of_week: +inp.dataset.d, meal_type: inp.dataset.m, name, allergens: allergens || null });
+          const ph = (f) => { const x = main.querySelector(`input[data-d="${inp.dataset.d}"][data-m="${inp.dataset.m}"][data-f="${f}"]`); return x ? x.value : ''; };
+          items.push({ day_of_week: +inp.dataset.d, meal_type: inp.dataset.m, name, allergens: allergens || null, description: ph('description').trim() || null,
+            image_url: ph('img') || null, image_source: ph('imgsrc') || null, food_image_id: ph('foodid') ? +ph('foodid') : null });
         });
         const status = main.querySelector('#mp-status').value;
         const msg = main.querySelector('#mp-msg');
@@ -420,6 +770,8 @@
             if (t.value) { meal_times[t.getAttribute('data-meal-time')] = t.value; }
           });
           await Api.post('/operations/menu', { centre_id: cid, week_start: weekStartStr, status, notes: main.querySelector('#mp-notes').value, items, meal_times });
+          _menuSaved = _menuSig();
+          if (window.KT && KT.dirtySave) KT.dirtySave.saved(main.querySelector('#mp-save'));
           msg.textContent = status === 'published' ? 'Published — families notified.' : 'Saved.'; msg.style.color = '#047857';
           /* Save IS the completion — no second confirmation. Only on success: a failed
              save keeps the grid editable, because the work is still in the boxes and
@@ -427,6 +779,9 @@
           _menuEditing = false; applyMenuMode();
         } catch (e) { msg.textContent = 'Save failed.'; msg.style.color = '#B91C1C'; }
       };
+      /* data-kt-always-save: Save menu is on whenever the grid is open for editing. The "no changes" tracker could
+         not see the dish grid (see kt-dirty-save.js, 2026-11-09) and kept this greyed all day. */
+      main.querySelector('#mp-save').onclick = _saveMenu;
     }
     load();
   }
@@ -489,8 +844,10 @@
               <div style="min-width:0;flex:1;">
                 <div style="font-size:10.5px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:.03em;">${meta[1]}${mealTimes[mt] ? ` · ${esc(mealTimes[mt])}` : ''}</div>
                 <div style="font-size:14px;color:#0D1B2A;">${esc(it.name)}</div>
+                ${it.description ? `<div style="font-size:12.5px;color:#475569;margin-top:2px;line-height:1.4;white-space:pre-wrap;">${esc(it.description)}</div>` : ''}
                 ${it.allergens ? `<div style="margin-top:3px;"><span style="display:inline-block;background:#FEF3C7;color:#92400E;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:8px;">⚠ ${esc(it.allergens)}</span></div>` : ''}
               </div>
+              ${it.image_url ? `<img src="${esc(it.image_url)}" alt="${esc(it.name)}" loading="lazy" style="width:64px;height:48px;object-fit:cover;border-radius:9px;flex-shrink:0;align-self:center;background:#F1F5F9;">` : ''}
             </div>`;
           });
           html += `</div>`;
@@ -526,7 +883,7 @@
         </div>
       </div>` : ''}
       <div style="margin-top:18px;">
-        ${(r.data || []).map(c => `<div style="border-left:4px solid #B91C1C;background:#FEF2F2;padding:14px 18px;margin-bottom:10px;border-radius:0 8px 8px 0;">
+        ${(r.data || []).map(c => `<div style="--kt-edge:#B91C1C;background:#FEF2F2;padding:14px 18px;margin-bottom:10px;border-radius:0 8px 8px 0;">
           <strong style="color:#991B1B;font-size:16px;">${esc(c.first_name)} ${esc(c.last_name)}</strong>
           <div style="margin-top:6px;font-size:13px;color:#374151;">
             ${(c.tags || []).map(t => {
@@ -552,6 +909,7 @@
         <h2 style="margin:0;color:#1F6080;">Field trips</h2>
         <button id="ft-new" style="background:#1F6080;color:#fff;border:0;padding:10px 18px;border-radius:6px;cursor:pointer;">+ Plan trip</button>
       </div>
+      <div id="ft-stats" style="margin-top:16px;"></div>
       <table style="width:100%;border-collapse:collapse;margin-top:18px;">
         <thead><tr>
           <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Trip</th>
@@ -559,17 +917,21 @@
           <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Centre</th>
           <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Status</th>
           <th></th></tr></thead>
-        <tbody>${(r.data || []).map(t => `<tr>
+        <tbody>${(r.data || []).map(t => `<tr data-ft-row="${t.id}" style="cursor:pointer;">
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><strong>${esc(t.title)}</strong><div style="color:#6B7280;font-size:12px;">${esc(t.destination)}</div></td>
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${fmtDate(t.trip_date)}</td>
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${esc(t.centre_name)}</td>
           <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="background:#EFF6FF;color:#1E40AF;padding:2px 8px;border-radius:4px;font-size:12px;">${esc(t.status)}</span></td>
-          <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;white-space:nowrap;"><button data-ft-id="${t.id}" class="kt-act-icon kt-act-info kt-icon-tip" title="Permission slips" data-kttip="Permission slips" aria-label="Permission slips">🔑</button><button data-ft-del="${t.id}" class="kt-act-icon kt-act-danger kt-icon-tip" title="Delete trip" data-kttip="Delete" aria-label="Delete">🗑️</button></td>
+          <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;white-space:nowrap;"><button data-ft-view="${t.id}" class="kt-act-icon kt-act-info kt-icon-tip" title="View details" data-kttip="View details" aria-label="View details">👁</button><button data-ft-id="${t.id}" class="kt-act-icon kt-act-info kt-icon-tip" title="Permission slips" data-kttip="Permission slips" aria-label="Permission slips">🔑</button><button data-ft-del="${t.id}" class="kt-act-icon kt-act-danger kt-icon-tip" title="Delete trip" data-kttip="Delete" aria-label="Delete">🗑️</button></td>
         </tr>`).join('') || '<tr><td colspan="5" style="padding:24px;color:#64748B;text-align:center;">No field trips planned.</td></tr>'}
         </tbody></table>
     </div>`;
+    if (r.stats) ftStats(main.querySelector('#ft-stats'), r.stats);
     document.getElementById('ft-new').onclick = () => openFieldTripModal();
     main.querySelectorAll('button[data-ft-id]').forEach(b => b.onclick = () => openPermissionsModal(+b.getAttribute('data-ft-id'), b));
+    main.querySelectorAll('button[data-ft-view]').forEach(b => b.onclick = () => openTripDetails(+b.getAttribute('data-ft-view'), b));
+    // The trip name opens the details too.
+    main.querySelectorAll('tr[data-ft-row]').forEach(tr => tr.addEventListener('click', (ev) => { if (ev.target.closest('button')) return; openTripDetails(+tr.getAttribute('data-ft-row')); }));
     main.querySelectorAll('button[data-ft-del]').forEach(b => b.onclick = async () => {
       if (!await KT.confirm('Delete this field trip? This removes the trip and its permission slips.')) return;
       try {
@@ -582,6 +944,84 @@
     });
     // Real <table> but renders async — nudge the ⋮ kebab sweep.
     if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
+  }
+  /* FIELD TRIP STATS (2026-11-09, Anthony: "field trips section add stats, circle graphs etc"). The circle stats
+     (KT.statRings, kt-stat-rings.js) for what is coming up and the last 12 months, then trips + walks by month and how
+     the children travel. Walk Watch walks are counted apart from trips (the server tells them apart: stats in
+     GET /operations/field-trips). Series colours passed the dataviz palette check in light and dark. */
+  function ftStats(el, st) {
+    if (!el) return;
+    if (!document.getElementById('kt-ftv-css')) {
+      const css = document.createElement('style'); css.id = 'kt-ftv-css';
+      css.textContent = '.kt-ftv{--ftv-trip:#2a78d6;--ftv-walk:#D97706;--ftv-c1:#2a78d6;--ftv-c2:#eb6834;--ftv-c3:#1baf7a;--ftv-c4:#eda100;--ftv-c5:#94A3B8}'
+        + 'html.kt-dark .kt-ftv,[data-theme="dark"] .kt-ftv{--ftv-trip:#3987e5;--ftv-walk:#c98500;--ftv-c1:#3987e5;--ftv-c2:#d95926;--ftv-c3:#199e70;--ftv-c4:#c98500;--ftv-c5:#64748B}'
+        + '.kt-ftv-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:10px}'
+        + '.kt-ftv-card{background:var(--surface,#fff);border:1px solid var(--ink-100,#E5E7EB);border-radius:12px;padding:12px 14px;min-width:0}'
+        + '.kt-ftv-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:10px}'
+        + '.kt-ftv-h b{font-size:13px;color:var(--ink-700,#334155)}.kt-ftv-h span{font-size:11.5px;color:var(--ink-500,#64748B)}'
+        + '.kt-ftv-key{display:inline-flex;align-items:center;gap:5px;margin-left:10px}.kt-ftv-key i{width:10px;height:10px;border-radius:3px;display:inline-block}'
+        + '.kt-ftv-bars{display:flex;align-items:flex-end;gap:6px;height:130px;border-bottom:1px solid var(--ink-100,#E5E7EB)}'
+        + '.kt-ftv-col{flex:1 1 0;min-width:0;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:2px;cursor:default}'
+        + '.kt-ftv-col .n{font-size:11px;font-weight:700;color:var(--ink-700,#334155);text-align:center;line-height:1;margin-bottom:2px}'
+        + '.kt-ftv-col i{display:block;min-height:3px;width:min(100%,28px)}.kt-ftv-col i:first-of-type{border-radius:4px 4px 0 0}'
+        + '.kt-ftv-col:hover i{filter:brightness(1.12)}'
+        + '.kt-ftv-mon{display:flex;gap:6px;margin-top:5px}.kt-ftv-mon span{flex:1 1 0;min-width:0;text-align:center;font-size:10.5px;color:var(--ink-500,#64748B)}'
+        + '.kt-ftv-seg{display:flex;gap:2px;height:14px;border-radius:4px;overflow:hidden}.kt-ftv-seg i{display:block;min-width:4px}'
+        + '.kt-ftv-leg{margin-top:9px;display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-700,#334155)}'
+        + '.kt-ftv-leg div{display:flex;align-items:center;gap:7px}.kt-ftv-leg i{width:10px;height:10px;border-radius:3px;flex:none}.kt-ftv-leg em{margin-left:auto;font-style:normal;color:var(--ink-500,#64748B)}'
+        + '.kt-ftv-fee{margin-top:12px;padding-top:10px;border-top:1px solid var(--ink-100,#E5E7EB);font-size:12.5px;color:var(--ink-500,#64748B)}.kt-ftv-fee b{display:block;font-size:18px;color:var(--ink-900,#0F172A)}'
+        + '@media (max-width:900px){.kt-ftv-grid{grid-template-columns:minmax(0,1fr)}.kt-ftv-bars{gap:3px}.kt-ftv-mon{gap:3px}}';
+      document.head.appendChild(css);
+    }
+    const sl = st.slips || {};
+    const rings = [
+      { label: 'Upcoming trips', value: st.upcoming, color: '#1F6080', sub: st.next ? 'Next: ' + st.next.title + ' · ' + fmtDate(st.next.date) : 'None planned' },
+    ];
+    if (sl.total) {
+      rings.push({ label: 'Slips signed', value: sl.approved, of: sl.total, color: '#16A34A' });
+      rings.push({ label: 'Awaiting parents', value: sl.pending, of: sl.total, color: '#D97706' });
+    }
+    rings.push({ label: 'Past trips', value: st.held_12m, color: '#2a78d6', sub: 'last 12 months' });
+    rings.push({ label: 'Walks', value: st.walks_12m, color: '#0F766E', sub: 'Walk Watch · last 12 months' });
+    rings.push({ label: 'Children who went', value: st.children_went_12m, of: st.children_total, color: '#7C3AED' });
+    el.innerHTML = '';
+    el.className = 'kt-ftv';
+    if (KT.statRings) el.appendChild(KT.statRings(rings));
+
+    const months = st.months || [];
+    const max = Math.max(1, ...months.map(m => m.trips + m.walks));
+    const tot = months.reduce((a, m) => ({ t: a.t + m.trips, w: a.w + m.walks }), { t: 0, w: 0 });
+    const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+    const cols = months.map((m) => {
+      const tip = m.label + ': ' + plural(m.trips, 'trip') + ', ' + plural(m.walks, 'walk');
+      const h = (n) => (n / max * 108).toFixed(1) + 'px';
+      return '<div class="kt-ftv-col" data-kttip="' + esc(tip) + '" aria-label="' + esc(tip) + '" role="img">'
+        + (m.trips + m.walks ? '<span class="n">' + (m.trips + m.walks) + '</span>' : '')
+        + (m.walks ? '<i style="height:' + h(m.walks) + ';background:var(--ftv-walk)"></i>' : '')
+        + (m.trips ? '<i style="height:' + h(m.trips) + ';background:var(--ftv-trip)"></i>' : '')
+        + '</div>';
+    }).join('');
+    const tr = (st.transport || []).slice();
+    if (tr.length > 4) { const rest = tr.splice(3); tr.push({ label: 'Other', n: rest.reduce((a, x) => a + x.n, 0) }); }
+    const trTot = tr.reduce((a, x) => a + x.n, 0);
+    const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+    const trCol = (i, x) => x.label === 'Other' || x.label === 'Not set' ? 'var(--ftv-c5)' : 'var(--ftv-c' + (i + 1) + ')';
+    const travel = trTot
+      ? '<div class="kt-ftv-seg" role="img" aria-label="How children travel">' + tr.map((x, i) => '<i data-kttip="' + esc(cap(x.label) + ': ' + plural(x.n, 'trip')) + '" style="flex:' + x.n + ' 1 0;background:' + trCol(i, x) + '"></i>').join('') + '</div>'
+        + '<div class="kt-ftv-leg">' + tr.map((x, i) => '<div><i style="background:' + trCol(i, x) + '"></i>' + esc(cap(x.label)) + '<em>' + x.n + ' · ' + Math.round(x.n * 100 / trTot) + '%</em></div>').join('') + '</div>'
+      : '<div style="font-size:12.5px;color:var(--ink-500,#64748B);">No trips in the last 12 months.</div>';
+    const money = (n) => '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const grid = document.createElement('div');
+    grid.className = 'kt-ftv-grid';
+    grid.style.marginBottom = '6px';
+    grid.innerHTML = '<div class="kt-ftv-card"><div class="kt-ftv-h"><b>Trips and walks by month</b><span>'
+        + '<span class="kt-ftv-key"><i style="background:var(--ftv-trip)"></i>Trips ' + tot.t + '</span>'
+        + '<span class="kt-ftv-key"><i style="background:var(--ftv-walk)"></i>Walks ' + tot.w + '</span></span></div>'
+        + '<div class="kt-ftv-bars">' + cols + '</div>'
+        + '<div class="kt-ftv-mon">' + months.map(m => '<span>' + esc(m.label) + '</span>').join('') + '</div></div>'
+      + '<div class="kt-ftv-card"><div class="kt-ftv-h"><b>How children travel</b><span>trips, last 12 months</span></div>' + travel
+        + '<div class="kt-ftv-fee">Trip fees from signed slips<b>' + money(st.fees_12m) + '</b>last 12 months and upcoming</div></div>';
+    el.appendChild(grid);
   }
   async function openFieldTripModal() {
     /* v22p70: fix field-trip modal response keys */
@@ -622,6 +1062,133 @@
       m.remove();
       renderFieldTrips(document.querySelector('main') || document.getElementById('main'));
     };
+  }
+  /* TRIP DETAILS (2026-10-24, Anthony: "add to the kebab view which pops up all of the information
+     about the trip including map, children, steps, how long, add more detail"). One call
+     (GET /operations/field-trips/{id}) carries the trip, every child and their permission slip,
+     the GPS route and the distance / estimated steps / duration worked out from it. Times are
+     shown in the agency's time zone (KT.fmtTime / KT.parseTs). */
+  function ftLeaflet() {
+    if (window.L) return Promise.resolve(window.L);
+    if (window._ktFtLeaflet) return window._ktFtLeaflet;
+    window._ktFtLeaflet = new Promise((resolve, reject) => {
+      if (!document.querySelector('link[data-kt-leaflet]')) {
+        const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/js/vendor/leaflet-1.9.4/leaflet.css'; css.setAttribute('data-kt-leaflet', '1'); document.head.appendChild(css);
+      }
+      // Self-hosted, and a failed load is not cached (ticket #246, see kt-walk-tracker.js).
+      const sc = document.createElement('script'); sc.src = '/js/vendor/leaflet-1.9.4/leaflet.js';
+      sc.onload = () => resolve(window.L); sc.onerror = () => { window._ktFtLeaflet = null; sc.remove(); reject(new Error('map library')); }; document.head.appendChild(sc);
+    });
+    return window._ktFtLeaflet;
+  }
+  async function openTripDetails(tripId, btn) {
+    const done = (btn && window.KT && KT.busy) ? KT.busy(btn) : function () {};
+    let d;
+    try { d = await Api.get('/operations/field-trips/' + tripId); }
+    catch (e) { done(); if (window.KT && KT.toast) KT.toast('⚠️', 'Could not load the trip', (e && e.message) || 'Please try again.', '#DC2626'); return; }
+    done();
+    const t = d.trip || {}, kids = d.children || [], c = d.counts || {};
+    const tm = (ts) => ts ? ((window.KT && KT.fmtTime) ? KT.fmtTime(ts) : String(ts).slice(11, 16)) : '';
+    const clock = (hms) => { if (!hms) return ''; const [h, m] = String(hms).split(':').map(Number); if (isNaN(h)) return hms; return ((h % 12) || 12) + ':' + String(m || 0).padStart(2, '0') + (h < 12 ? ' AM' : ' PM'); };
+    const day = (ymd) => ymd ? ((window.KT && KT.dayLabel) ? KT.dayLabel(String(ymd).slice(0, 10)) : String(ymd).slice(0, 10)) : '';
+    let mins = d.duration_min;
+    if (!mins && t.depart_time && t.return_time) { const a = t.depart_time.split(':'), b = t.return_time.split(':'); mins = (+b[0] * 60 + +b[1]) - (+a[0] * 60 + +a[1]); if (mins < 0) mins = null; }
+    const dur = mins ? (mins >= 60 ? Math.floor(mins / 60) + ' h ' + (mins % 60 ? (mins % 60) + ' min' : '') : mins + ' min') : '—';
+    const km = d.distance_m != null ? ((d.distance_m) / 1000).toFixed(2) + ' km (' + Math.round(d.distance_m).toLocaleString() + ' m)' : (t.distance_km ? ((Number(t.distance_km) * 1000) / 1000).toFixed(2) + ' km (' + Math.round(Number(t.distance_km) * 1000).toLocaleString() + ' m)' : '—');
+    const steps = d.steps_est ? Number(d.steps_est).toLocaleString() : '—';
+    const cost = +t.cost_per_child || 0;
+    const STATUS = { planned: ['#1E40AF', '#EFF6FF'], active: ['#047857', '#ECFDF5'], in_progress: ['#047857', '#ECFDF5'], completed: ['#334155', '#F1F5F9'], ended: ['#334155', '#F1F5F9'], cancelled: ['#B91C1C', '#FEF2F2'] };
+    const st = STATUS[String(t.status || '').toLowerCase()] || ['#1E40AF', '#EFF6FF'];
+    const PERM = { approved: ['Approved', '#047857', '#ECFDF5'], denied: ['Declined', '#B91C1C', '#FEF2F2'], pending: ['Waiting', '#B45309', '#FFFBEB'] };
+    const tile = (icon, label, value, sub) => `<div style="background:#fff;border:1px solid #E6EBF1;border-radius:14px;padding:11px 13px;min-width:0;">
+        <div style="font-size:11.5px;font-weight:700;color:#64748B;">${icon} ${label}</div>
+        <div style="font-size:20px;font-weight:800;color:#0F172A;margin-top:3px;line-height:1.1;">${value}</div>${sub ? `<div style="font-size:11px;color:#94A3B8;margin-top:2px;">${sub}</div>` : ''}</div>`;
+    const departed = d.first_ping ? tm(d.first_ping) : '', returned = d.last_ping && d.ping_count > 1 ? tm(d.last_ping) : '';
+    const stepsList = [
+      ['📝', 'Planned', t.created_at ? day(t.created_at) + (t.created_by_name ? ' · by ' + esc(t.created_by_name) : '') : '', true],
+      ['✉️', 'Permission slips', c.total ? `${c.approved || 0} of ${c.total} approved${t.permission_deadline ? ' · due ' + day(t.permission_deadline) : ''}` : 'None sent', (c.total || 0) > 0],
+      ['🚶', 'Departed', departed ? departed + (t.depart_time ? ' (planned ' + clock(t.depart_time) + ')' : '') : (t.depart_time ? 'Planned ' + clock(t.depart_time) : 'Not yet'), !!departed],
+      ['🏁', 'Returned', returned ? returned + (t.return_time ? ' (planned ' + clock(t.return_time) + ')' : '') : (t.return_time ? 'Planned ' + clock(t.return_time) : 'Not yet'), !!returned],
+    ];
+    const m = document.createElement('div');
+    m.className = 'kt-ft-details';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+    m.innerHTML = `<div role="dialog" aria-modal="true" style="background:#F8FAFC;border-radius:18px;width:min(1080px,100%);max-height:92vh;overflow:auto;box-shadow:0 24px 60px -20px rgba(15,23,42,.5);">
+      <div style="background:linear-gradient(120deg,#0A1E55,#1F6080);color:#fff;padding:18px 22px;border-radius:18px 18px 0 0;display:flex;gap:14px;align-items:flex-start;justify-content:space-between;">
+        <div style="min-width:0;">
+          <div style="font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#7DD3FC;">${esc(/walk/i.test(String(t.transport_method || '')) ? 'Walk' : 'Field trip')} · ${esc(t.centre_name || '')}</div>
+          <div style="font-size:21px;font-weight:800;margin-top:3px;">${esc(t.title || 'Trip')}</div>
+          <div style="font-size:13px;color:#C9D6F2;margin-top:3px;">📍 ${esc(t.destination || 'No destination set')} · 📅 ${day(t.trip_date)}${t.depart_time ? ' · ' + clock(t.depart_time) + (t.return_time ? '–' + clock(t.return_time) : '') : ''}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex:0 0 auto;">
+          <span style="background:${st[1]};color:${st[0]};padding:3px 10px;border-radius:999px;font-size:12px;font-weight:800;text-transform:capitalize;">${esc(String(t.status || 'planned').replace('_', ' '))}</span>
+          <button type="button" data-ft-close aria-label="Close" style="background:rgba(255,255,255,.12);color:#fff;border:0;width:32px;height:32px;border-radius:9px;cursor:pointer;font-size:16px;">✕</button>
+        </div>
+      </div>
+      <div style="padding:16px 20px 20px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px;">
+          ${tile('🧒', 'Children', (c.approved || 0) + ' / ' + (c.total || 0), (c.pending ? c.pending + ' waiting' : 'all answered') + (c.denied ? ' · ' + c.denied + ' declined' : ''))}
+          ${tile('⏱️', 'How long', dur, departed ? 'from GPS' : (t.depart_time ? 'planned' : ''))}
+          ${tile('📏', 'Distance', km, d.ping_count ? d.ping_count + ' GPS points' : 'no route recorded')}
+          ${tile('👣', 'Steps (est.)', steps, d.steps_est ? 'from distance walked' : '')}
+          ${tile('🚌', 'Transport', esc(t.transport_method ? String(t.transport_method).replace('_', ' ') : '—'), t.lead_name ? 'lead: ' + esc(t.lead_name) : '')}
+          ${tile('💵', 'Cost', cost ? '$' + cost.toFixed(2) : 'Free', cost ? 'per child · $' + (cost * (c.approved || 0)).toFixed(2) + ' approved' : '')}
+        </div>
+        <div style="display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:14px;" class="kt-ft-grid">
+          <div style="background:#fff;border:1px solid #E6EBF1;border-radius:14px;overflow:hidden;min-height:300px;position:relative;">
+            <div id="kt-ft-map" style="height:340px;"></div>
+            ${(d.trail || []).length ? '' : '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;color:#64748B;font-size:13.5px;background:#F8FAFC;"><div style="font-size:30px;">🗺️</div>No GPS route recorded for this trip yet.<div style="font-size:12px;color:#94A3B8;">The route appears once staff start the trip on their phone.</div></div>'}
+          </div>
+          <div style="background:#fff;border:1px solid #E6EBF1;border-radius:14px;padding:14px 16px;">
+            <div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:10px;">🪜 Trip steps</div>
+            ${stepsList.map((x, i) => `<div style="display:flex;gap:10px;position:relative;padding-bottom:${i < stepsList.length - 1 ? 14 : 0}px;">
+              ${i < stepsList.length - 1 ? '<span style="position:absolute;left:14px;top:30px;bottom:0;width:2px;background:#E2E8F0;"></span>' : ''}
+              <span style="flex:0 0 30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;background:${x[3] ? '#ECFDF5' : '#F1F5F9'};border:2px solid ${x[3] ? '#10B981' : '#CBD5E1'};">${x[0]}</span>
+              <div style="min-width:0;"><div style="font-weight:700;font-size:13px;color:#0F172A;">${x[1]}</div><div style="font-size:12px;color:#64748B;">${x[2] || '—'}</div></div></div>`).join('')}
+            ${(d.tracked_by || []).length ? `<div style="margin-top:12px;font-size:12px;color:#475569;"><strong>Tracked by:</strong> ${d.tracked_by.map(esc).join(', ')}</div>` : ''}
+            ${t.description ? `<div style="margin-top:12px;padding-top:10px;border-top:1px solid #EEF2F6;font-size:12.5px;color:#334155;white-space:pre-wrap;"><strong>Notes</strong><br>${esc(t.description)}</div>` : ''}
+          </div>
+        </div>
+        <div style="background:#fff;border:1px solid #E6EBF1;border-radius:14px;margin-top:14px;overflow:hidden;">
+          <div style="padding:12px 16px;font-weight:800;font-size:14px;color:#0F172A;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">🧒 Children on this trip <span style="font-weight:600;font-size:12px;color:#64748B;">${c.approved || 0} approved · ${c.pending || 0} waiting · ${c.denied || 0} declined</span></div>
+          ${kids.length ? `<div style="overflow-x:auto;"><table data-kt-filtered="1" data-kt-noexport="1" style="width:100%;border-collapse:collapse;">
+            <thead><tr>${['Child', 'Permission', 'Answered by', 'When', 'Signed'].map(h => `<th style="text-align:left;padding:8px 14px;font-size:11px;letter-spacing:.4px;text-transform:uppercase;color:#64748B;background:#F8FAFC;">${h}</th>`).join('')}</tr></thead>
+            <tbody>${kids.map(k => { const pm = PERM[k.status] || [k.status || '—', '#475569', '#F1F5F9']; return `<tr>
+              <td style="padding:9px 14px;border-top:1px solid #EEF2F6;font-weight:700;font-size:13px;">${esc((k.first_name || '') + ' ' + (k.last_name || ''))}</td>
+              <td style="padding:9px 14px;border-top:1px solid #EEF2F6;"><span style="background:${pm[2]};color:${pm[1]};padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:800;">${pm[0]}</span></td>
+              <td style="padding:9px 14px;border-top:1px solid #EEF2F6;font-size:13px;color:#334155;">${esc(k.guardian_name || '—')}</td>
+              <td style="padding:9px 14px;border-top:1px solid #EEF2F6;font-size:12.5px;color:#64748B;white-space:nowrap;">${k.responded_at ? day(k.responded_at) + ' ' + tm(k.responded_at) : '—'}</td>
+              <td style="padding:9px 14px;border-top:1px solid #EEF2F6;font-size:13px;">${+k.signed ? '✍️ Yes' : '—'}</td></tr>`; }).join('')}</tbody></table></div>`
+          : '<div style="padding:4px 16px 16px;color:#64748B;font-size:13px;">No children were invited.</div>'}
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;">
+          <button type="button" data-ft-perm style="background:#fff;color:#1F6080;border:1px solid #CBD5E1;padding:0 14px;height:34px;border-radius:9px;font-weight:700;cursor:pointer;">🔑 Permission slips</button>
+          <button type="button" data-ft-close style="background:#1F6080;color:#fff;border:0;padding:0 16px;height:34px;border-radius:9px;font-weight:700;cursor:pointer;">Close</button>
+        </div>
+      </div></div>
+      <style>@media (max-width:760px){.kt-ft-details .kt-ft-grid{grid-template-columns:1fr !important}}</style>`;
+    document.body.appendChild(m);
+    const close = () => { m.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    m.addEventListener('click', (e) => { if (e.target === m) close(); });
+    m.querySelectorAll('[data-ft-close]').forEach(b => b.onclick = close);
+    m.querySelector('[data-ft-perm]').onclick = () => { close(); openPermissionsModal(tripId); };
+    const trail = d.trail || [];
+    if (trail.length) {
+      ftLeaflet().then((L) => {
+        const el = m.querySelector('#kt-ft-map'); if (!el || !m.isConnected) return;
+        const map = L.map(el, { zoomControl: true, attributionControl: true });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+        const pts = trail.map(x => [x[0], x[1]]);
+        const line = L.polyline(pts, { color: '#1DB9C3', weight: 5, opacity: .9 }).addTo(map);
+        const dot = (ll, color, label) => L.circleMarker(ll, { radius: 8, color: '#fff', weight: 3, fillColor: color, fillOpacity: 1 }).addTo(map).bindTooltip(label);
+        dot(pts[0], '#10B981', 'Start · ' + tm(trail[0][2]));
+        if (pts.length > 1) dot(pts[pts.length - 1], '#EF4444', 'Last point · ' + tm(trail[trail.length - 1][2]));
+        map.fitBounds(line.getBounds(), { padding: [24, 24], maxZoom: 17 });
+        setTimeout(() => map.invalidateSize(), 120);
+      }).catch(() => {});
+    }
   }
   async function openPermissionsModal(tripId, btn) {
     // Guard against a silent failure: a rejected fetch used to leave the button
@@ -785,10 +1352,15 @@
     const month = monthArg || new Date().toISOString().slice(0, 7);
     const r = await Api.get(`/compliance/cwelcc/monthly?month=${month}`);
     if (!pane.isConnected) return;
+    // Ontario since 2025 is the base fee model (CwelccFees): no %, the subsidy is the fee subsidy applied.
+    const onBase = r.model === 'on_base_fee';
+    const L = onBase ? { gross: 'BASE FEE REVENUE', sub: 'FEE SUBSIDY PAID', par: 'PARENTS PAID', g: 'Base fee', s: 'Fee subsidy', p: 'Parents' }
+                     : { gross: 'GROSS', sub: 'SUBSIDY', par: 'PARENT', g: 'Gross', s: 'Subsidy', p: 'Parent' };
     pane.innerHTML = `<div>
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <div>
           <h3 style="margin:0 0 4px;color:#1F6080;font-size:16px;">CWELCC monthly report</h3>
+          ${onBase ? '<div style="color:#64748B;font-size:12.5px;margin:0 0 4px;">Ontario base fee model: parents pay the base fee, less any fee subsidy. Base fee limits and extra-fee checks are on the OCCMS screen.</div>' : ''}
           <div style="color:#6B7280;font-size:14px;">Month: <input id="cw-month" type="month" value="${month}" style="padding:6px;border:1px solid #E5E7EB;border-radius:4px;font-size:14px;"></div>
         </div>
         <div>
@@ -798,22 +1370,22 @@
       </div>
       <div style="display:flex;gap:14px;margin-top:18px;">
         <div style="flex:1;background:#EFF6FF;padding:16px;border-radius:8px;"><div style="font-size:11px;color:#1E40AF;font-weight:600;">CHILDREN</div><div style="font-size:24px;font-weight:700;color:#1E40AF;">${r.totals.child_count}</div></div>
-        <div style="flex:1;background:#F0FDF4;padding:16px;border-radius:8px;"><div style="font-size:11px;color:#166534;font-weight:600;">GROSS</div><div style="font-size:24px;font-weight:700;color:#166534;">$${(r.totals.gross || 0).toFixed(2)}</div></div>
-        <div style="flex:1;background:#FEF3C7;padding:16px;border-radius:8px;"><div style="font-size:11px;color:#92400E;font-weight:600;">SUBSIDY</div><div style="font-size:24px;font-weight:700;color:#92400E;">$${(r.totals.subsidy || 0).toFixed(2)}</div></div>
-        <div style="flex:1;background:#FAE8FF;padding:16px;border-radius:8px;"><div style="font-size:11px;color:#86198F;font-weight:600;">PARENT</div><div style="font-size:24px;font-weight:700;color:#86198F;">$${(r.totals.parent || 0).toFixed(2)}</div></div>
+        <div style="flex:1;background:#F0FDF4;padding:16px;border-radius:8px;"><div style="font-size:11px;color:#166534;font-weight:600;">${L.gross}</div><div style="font-size:24px;font-weight:700;color:#166534;">$${(r.totals.gross || 0).toFixed(2)}</div></div>
+        <div style="flex:1;background:#FEF3C7;padding:16px;border-radius:8px;"><div style="font-size:11px;color:#92400E;font-weight:600;">${L.sub}</div><div style="font-size:24px;font-weight:700;color:#92400E;">$${(r.totals.subsidy || 0).toFixed(2)}</div></div>
+        <div style="flex:1;background:#FAE8FF;padding:16px;border-radius:8px;"><div style="font-size:11px;color:#86198F;font-weight:600;">${L.par}</div><div style="font-size:24px;font-weight:700;color:#86198F;">$${(r.totals.parent || 0).toFixed(2)}</div></div>
       </div>
       <table style="width:100%;border-collapse:collapse;margin-top:24px;">
         <thead><tr>
           <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Family</th>
           <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Children</th>
           <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Centre</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Gross</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Subsidy</th>
-          <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Parent</th>
+          <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${L.g}</th>
+          <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${L.s}</th>
+          <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">${L.p}</th>
         </tr></thead>
         <tbody>${(r.data || []).map(row => `<tr>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;"><div style="font-weight:600;">${esc(row.family_name)}</div>
-            <div style="font-size:11.5px;color:#64748B;">Enrolled ${subDay(row.period_from)}${row.period_to ? ' – ' + subDay(row.period_to) : ''} · ${esc(row.subsidy_rate)}%</div></td>
+            <div style="font-size:11.5px;color:#64748B;">Enrolled ${subDay(row.period_from)}${row.period_to ? ' – ' + subDay(row.period_to) : ''}${onBase ? '' : ' · ' + esc(row.subsidy_rate) + '%'}</div></td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(row.child_name || '—')}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;">${esc(row.centre_name)}</td>
           <td style="padding:9px 8px;border-bottom:1px solid #F3F4F6;font-size:13px;text-align:right;">$${row.gross_fee.toFixed(2)}</td>

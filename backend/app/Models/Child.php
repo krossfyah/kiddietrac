@@ -96,8 +96,8 @@ class Child extends Model
     {
         return $this->hasMany(Subsidy::class)
             ->where('active', true)
-            ->where('valid_from', '<=', today())
-            ->where(fn($q) => $q->whereNull('valid_to')->orWhere('valid_to', '>=', today()));
+            ->where('valid_from', '<=', \App\Support\AgencyTime::today())
+            ->where(fn($q) => $q->whereNull('valid_to')->orWhere('valid_to', '>=', \App\Support\AgencyTime::today()));
     }
 
     public function authorizedPickups(): HasMany

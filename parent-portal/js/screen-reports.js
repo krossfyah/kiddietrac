@@ -17,8 +17,9 @@
     });
   }
   function todayISO(offsetDays) {
-    var d = new Date();
-    if (offsetDays) d.setDate(d.getDate() + offsetDays);
+    // The AGENCY's date, stepped in whole UTC days (the device's UTC date is tomorrow from 8pm Toronto).
+    var d = new Date(((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + 'T00:00:00Z');
+    if (offsetDays) d.setUTCDate(d.getUTCDate() + offsetDays);
     return d.toISOString().slice(0, 10);
   }
   function absUrl(u) {
@@ -68,48 +69,84 @@
        an educator this panel would render, then hand them a 403 from every button
        in it. The server says whether to draw it at all. */
     var canSchedule = META.can_schedule !== false;
+    var repTab = 'run';
+    try { if (canSchedule && sessionStorage.getItem('kt_rep_tab') === 'sched') repTab = 'sched'; } catch (e) {}
     var scopeNote = META.scope_note
       ? '<div style="background:#EFF6FF;border:1px solid #BFDBFE;color:#1E3A8A;border-radius:10px;padding:9px 12px;font-size:12.5px;margin-bottom:14px;">' +
         '🔒 ' + esc(META.scope_note) + '</div>'
       : '';
 
-    var cards = (META.reports || []).map(function (r) {
+    function cardHtml(r) {
       return '<button class="kt-rep-card" data-type="' + esc(r.type) + '" data-dated="' + (r.dated ? '1' : '0') +
         '" style="text-align:left;background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px;cursor:pointer;display:flex;gap:12px;align-items:flex-start;transition:box-shadow .15s,border-color .15s;">' +
         '<div style="font-size:30px;line-height:1;flex-shrink:0;">' + esc(r.icon || '📄') + '</div>' +
         '<div><div style="font-weight:700;font-size:15px;color:#0D1B2A;margin-bottom:2px;">' + esc(r.title) + '</div>' +
         '<div style="font-size:12.5px;color:#64748B;line-height:1.35;">' + esc(r.desc || '') + '</div></div></button>';
-    }).join('');
+    }
+    /* OCCMS REPORTING, ITS OWN SECTION (2026-11-13, Anthony: "can the OCCMS reporting have its own screen vs redirecting
+       to produce the data like how other reports are being produced?"). The server marks those reports section 'occms' -
+       only for an Ontario agency - and they run here like any other report. The link is for what only that screen does:
+       correcting a code, operating capacity, signing off. */
+    var cards = (META.reports || []).filter(function (r) { return r.section !== 'occms'; }).map(cardHtml).join('');
+    var occmsCards = (META.reports || []).filter(function (r) { return r.section === 'occms'; }).map(cardHtml).join('');
+    var occmsSection = occmsCards
+      ? '<div style="margin:0 0 18px;"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 8px;">'
+        + '<div class="kt-rep-sec" style="margin:0;">OCCMS reporting</div>'
+        + '<a href="#subsidy-roa" class="kt-report-noprint" style="font-size:12.5px;font-weight:700;color:#1F6080;text-decoration:none;">Correct codes, set capacity or sign off in OCCMS reporting →</a></div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">' + occmsCards + '</div></div>'
+      : '';
 
     main.innerHTML =
       '<div style="padding:14px 24px;">' +
+        '<style>.kt-rep-sec{font-weight:800;font-size:13px;color:#475569;text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px}</style>' +
         '<div class="kt-page-hero"><h2>📋 Reports</h2><p>Pick a report, set a date range and centre, then run it. Every report is branded and print-ready.</p></div>' +
         scopeNote +
+        /* SCHEDULED REPORTS ON THEIR OWN TAB (2026-11-01, Anthony: "for scheduled reports add a subtab to separate
+           this from the main page"). The standard band (kt-tab-band adopts any role=tablist). */
+        (canSchedule ? '<div class="kt-report-noprint" role="tablist" aria-label="Reports" id="rep-tabs" style="display:flex;gap:4px;margin:0 0 14px;">' +
+          '<button type="button" role="tab" data-rep-tab="run" aria-selected="' + (repTab === 'run') + '">📋 Reports</button>' +
+          '<button type="button" role="tab" data-rep-tab="sched" aria-selected="' + (repTab === 'sched') + '">📅 Scheduled reports</button></div>' : '') +
+        '<div id="rep-pane-run"' + (repTab === 'run' ? '' : ' hidden') + '>' +
         '<div class="kt-report-noprint" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:14px 16px;margin-bottom:16px;">' +
           '<label style="font-size:12px;font-weight:700;color:#475569;">' + pickerLabel + '<br><select id="' + pickerId + '" style="margin-top:4px;">' + centreOpts + '</select></label>' +
           '<label id="rep-from-wrap" style="font-size:12px;font-weight:700;color:#475569;">From<br><input type="date" id="rep-from" value="' + todayISO(-30) + '" style="margin-top:4px;"></label>' +
           '<label id="rep-to-wrap" style="font-size:12px;font-weight:700;color:#475569;">To<br><input type="date" id="rep-to" value="' + todayISO(0) + '" style="margin-top:4px;"></label>' +
-          '<span style="font-size:12px;color:#64748B;align-self:center;">Date range applies to dated reports (' +
+          '<span style="font-size:12px;color:#64748B;align-self:center;flex:1 1 220px;min-width:0;white-space:normal;">Date range applies to dated reports (' +
             (rooms.length ? 'attendance, staff hours, observations, incidents' : 'attendance, payments, invoices, staff hours') + ').</span>' +
         '</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:18px;">' + cards + '</div>' +
+        '<div style="margin:0 0 18px;"><div class="kt-rep-sec">' + (rooms.length ? 'Centre reports' : 'Agency reports') + '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;">' + cards + '</div></div>' +
+        occmsSection +
+        ((window.KT && KT.reportsPlusCards) ? KT.reportsPlusCards() : '') +
+        '<div id="rep-out"></div>' +
+        '</div>' +
         // ── Scheduled reports ──
         (canSchedule ?
-        '<div class="kt-report-noprint" style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px;margin-bottom:16px;">' +
+        '<div id="rep-pane-sched"' + (repTab === 'sched' ? '' : ' hidden') + '><div class="kt-report-noprint" style="background:#fff;border:1px solid #E7EBF0;border-radius:14px;padding:16px;margin-bottom:16px;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">' +
             '<div><div style="font-weight:800;font-size:15px;color:#0D1B2A;">📅 Scheduled reports</div>' +
             '<div style="font-size:12.5px;color:#64748B;">Email any report automatically — PDF and/or CSV — on a daily, weekly or monthly cadence.</div></div>' +
             '<button id="rep-add-sched" style="background:#1F6080;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-weight:700;cursor:pointer;">＋ Schedule a report</button>' +
           '</div>' +
           '<div id="rep-sched-list"><div style="color:#94A3B8;font-size:13px;padding:6px 0;">Loading…</div></div>' +
-        '</div>' : '') +
-        '<div id="rep-out"></div>' +
+        '</div></div>' : '') +
       '</div>';
 
     main.querySelectorAll('.kt-rep-card').forEach(function (b) {
       b.addEventListener('mouseenter', function () { b.style.boxShadow = '0 6px 18px rgba(15,23,42,.10)'; b.style.borderColor = '#C9D3DE'; });
       b.addEventListener('mouseleave', function () { b.style.boxShadow = 'none'; b.style.borderColor = '#E7EBF0'; });
-      b.addEventListener('click', function () { runReport(b.getAttribute('data-type')); });
+      if (b.hasAttribute('data-type')) b.addEventListener('click', function () { runReport(b.getAttribute('data-type')); });
+    });
+
+    var tabs = document.getElementById('rep-tabs');
+    if (tabs) tabs.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-rep-tab]'); if (!b) return;
+      var v = b.getAttribute('data-rep-tab');
+      [].forEach.call(tabs.querySelectorAll('[data-rep-tab]'), function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+      var run = document.getElementById('rep-pane-run'), sch = document.getElementById('rep-pane-sched');
+      if (run) run.hidden = v !== 'run';
+      if (sch) sch.hidden = v !== 'sched';
+      try { sessionStorage.setItem('kt_rep_tab', v); } catch (e2) {}
     });
 
     if (canSchedule) {
@@ -161,6 +198,7 @@
       return '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #EEF2F7;border-radius:10px;padding:10px 12px;' + (s.active ? '' : 'opacity:.55;') + '">' +
         '<div style="flex:1;min-width:180px;"><div style="font-weight:700;color:#0D1B2A;font-size:14px;">' + esc(s.report_title) + ' <span style="font-weight:500;color:#64748B;font-size:12px;">· ' + esc(fmt) + '</span></div>' +
         '<div style="font-size:12px;color:#64748B;">' + esc(s.schedule_label) + ' → ' + esc(s.recipient) + (s.centre_name ? ' · ' + esc(s.centre_name) : '') + '</div>' +
+        ((s.scheduled_by || s.scheduled_at) ? '<div style="font-size:11px;color:#94A3B8;">Scheduled' + (s.scheduled_by ? ' by ' + esc(s.scheduled_by) : '') + (s.scheduled_at ? ' · ' + esc(s.scheduled_at) : '') + '</div>' : '') +
         (s.last_sent_on ? '<div style="font-size:11px;color:#94A3B8;">Last sent ' + esc(s.last_sent_on) + '</div>' : '') + '</div>' +
         '<label style="font-size:11px;color:#64748B;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" data-toggle="' + s.id + '"' + (s.active ? ' checked' : '') + '> Active</label>' +
         /* Plain buttons in an actions bar that is the row's LAST element child —
@@ -416,10 +454,46 @@
 
   var LAST_OPTS = {};
 
+  /* ── Month (and family) for the monthly attendance sheets (2026-11-13) ─────────────
+     Both are one calendar month, so they ask for a month rather than reading the From/To boxes; the by-family sheet
+     then offers a family picker over its results ("All families" or one). */
+  var MONTH_SHEETS = { attendance_fees: '📅 Monthly attendance & fees', attendance_fees_family: '👪 Monthly attendance & fees by family',
+    occms_roa: '🧾 Record of Attendance', occms_cwelcc: '💵 CWELCC monthly summary', occms_capacity: '🪑 Capacity & vacancies' };
+  function openMonthCriteria(type) {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1);   // last month: the one that is complete
+    var last = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+    var now = new Date(); var cur = now.getFullYear() + '-' + ('0' + (now.getMonth() + 1)).slice(-2);
+    overlay.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:400px;width:100%;padding:20px 22px;box-shadow:0 18px 48px rgba(0,0,0,.28);">'
+      + '<div style="font-size:16px;font-weight:800;color:#0D1B2A;margin:0 0 4px;">' + esc(MONTH_SHEETS[type]) + '</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Pick the month. The centre picker on the screen still applies' + (type === 'attendance_fees_family' ? '; choose a family once it is run.' : '.') + '</div>'
+      + '<input id="mc-month" type="month" value="' + last + '" max="' + cur + '" style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #D6DEE7;border-radius:9px;font-size:14px;">'
+      + '<div id="mc-err" style="color:#DC2626;font-size:12.5px;min-height:17px;margin-top:8px;"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;">'
+      + '<button id="mc-cancel" style="background:#fff;color:#374151;border:1px solid #D1D5DB;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Cancel</button>'
+      + '<button id="mc-run" style="background:#1F6080;color:#fff;border:0;padding:9px 18px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;">Run report</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#mc-cancel').addEventListener('click', function () { overlay.remove(); });
+    overlay.querySelector('#mc-run').addEventListener('click', function () {
+      var m = overlay.querySelector('#mc-month').value || '';
+      if (!/^\d{4}-\d{2}$/.test(m)) { overlay.querySelector('#mc-err').textContent = 'Pick a month.'; return; }
+      var end = new Date(+m.slice(0, 4), +m.slice(5, 7), 0);
+      overlay.remove();
+      runReport(type, { from: m + '-01', to: m + '-' + ('0' + end.getDate()).slice(-2) });
+    });
+  }
+  // "2 Mo" - a day column of a monthly sheet: drawn as the day over its weekday.
+  var DAY_COL = /^(\d{1,2}) ([A-Z][a-z])$/;
+  function colHead(c) { var m = DAY_COL.exec(c); return m ? m[1] + '<br>' + m[2] : esc(c); }
+
   async function runReport(type, opts) {
     // Ask first, run second — but only the first time, so the re-run after a sort or an
     // export does not re-prompt for criteria already chosen.
     if (type === 'invoices' && !opts) { return openInvoiceCriteria(type); }
+    if (MONTH_SHEETS[type] && !opts) { return openMonthCriteria(type); }
     var out = document.getElementById('rep-out');
     if (!out) return;
     var roomSel = document.getElementById('rep-room');
@@ -440,6 +514,7 @@
     if (to) qs += '&to=' + encodeURIComponent(to);
     if (opts && opts.status) qs += '&status=' + encodeURIComponent(opts.status);
     if (opts && opts.balance) qs += '&balance=' + encodeURIComponent(opts.balance);
+    if (opts && opts.family_id) qs += '&family_id=' + encodeURIComponent(opts.family_id);
     // Remembered so a re-render (sort, export, print) reuses the same criteria rather
     // than silently widening the report back out to everything.
     LAST_OPTS[type] = opts || null;
@@ -479,15 +554,18 @@
     }
 
     var thead = '<tr>' + cols.map(function (c, i) {
-      var numeric = /amount|total|paid|balance|hours/i.test(c);
-      return '<th style="text-align:' + (numeric && i > 0 ? 'right' : 'left') + ';padding:9px 12px;font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:' +
-        esc(ag.color || '#1F6080') + ';">' + esc(c) + '</th>';
+      var numeric = /amount|total|paid|balance|hours|fees/i.test(c), day = DAY_COL.test(c);
+      return '<th style="text-align:' + (day ? 'center' : (numeric && i > 0 ? 'right' : 'left')) + ';padding:' + (day ? '7px 4px' : '9px 12px') + ';font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:' +
+        esc(ag.color || '#1F6080') + ';line-height:1.2;">' + colHead(c) + '</th>';
     }).join('') + '</tr>';
 
     var tbody = rows.length ? rows.map(function (row, ri) {
       var bg = ri % 2 ? '#F5F8FB' : '#FFFFFF';   // zebra
-      return '<tr style="background:' + bg + ';">' + cols.map(function (c, i) {
-        var v = row[c]; var numeric = /amount|total|paid|balance|hours/i.test(c);
+      var famTotal = row.Last === 'Family total';   // the by-family sheet's closing line for each family
+      if (famTotal) bg = '#EEF4F8';
+      return '<tr style="background:' + bg + ';' + (famTotal ? 'font-weight:800;' : '') + '">' + cols.map(function (c, i) {
+        var v = row[c]; var numeric = /amount|total|paid|balance|hours|fees/i.test(c);
+        if (DAY_COL.test(c)) return '<td style="padding:8px 4px;font-size:12px;color:' + (v === 'A' ? '#B91C1C;font-weight:700' : (/^(x|X|IN)$/.test(String(v)) ? '#94A3B8' : '#1E293B')) + ';border-bottom:1px solid #E9EEF3;text-align:center;">' + esc(v) + '</td>';
         var isStatus = /status/i.test(c);
         var cell = esc(v);
         if (isStatus && v) {
@@ -558,6 +636,21 @@
     out.scrollIntoView({ behavior: 'smooth', block: 'start' });
     document.getElementById('rep-print').onclick = function () { window.print(); };
     document.getElementById('rep-csv').onclick = function () { downloadCsv(r); };
+    // The by-family sheet: pick one family (its own page to sign) or all of them. Re-runs with the same month.
+    if (r.family_options) {
+      var fb = document.createElement('div');
+      fb.className = 'kt-report-noprint';
+      fb.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid #E7EBF0;border-radius:12px;padding:10px 14px;margin-bottom:10px;';
+      var curFam = String((opts && opts.family_id) || '');
+      fb.innerHTML = '<label for="rep-fam" style="font-size:12px;font-weight:700;color:#475569;">Family</label>'
+        + '<select id="rep-fam" style="min-width:240px;"><option value="">All families (' + r.family_options.length + ')</option>'
+        + r.family_options.map(function (f) { return '<option value="' + f.id + '"' + (String(f.id) === curFam ? ' selected' : '') + '>' + esc(f.name) + '</option>'; }).join('') + '</select>'
+        + '<span style="font-size:12px;color:#64748B;">One family gives the page that parent signs; all families shows each one with its total.</span>';
+      out.insertBefore(fb, out.firstChild);
+      fb.querySelector('#rep-fam').addEventListener('change', function () {
+        runReport(type, Object.assign({}, opts || {}, { from: r.date_from, to: r.date_to, family_id: this.value || null }));
+      });
+    }
     document.getElementById('rep-xlsx').onclick = function (ev) { downloadServerFile(qs, type, 'xlsx', ev.currentTarget); };
     document.getElementById('rep-pdf').onclick = function (ev) { downloadServerFile(qs, type, 'pdf', ev.currentTarget); };
   }

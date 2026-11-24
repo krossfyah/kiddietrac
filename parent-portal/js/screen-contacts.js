@@ -90,6 +90,7 @@
     if (state.busy) return;
     state.busy = true;
     var body = container.querySelector('#ct-body');
+    state.per_page = ((window.KT && KT.rowsPerPage && KT.rowsPerPage.get('contacts:list')) || state.per_page);   // rows per page (2026-10-20)
     var qs = '?page=' + state.page + '&per_page=' + state.per_page
       + (state.search ? '&search=' + encodeURIComponent(state.search) : '')
       + (state.category ? '&category=' + encodeURIComponent(state.category) : '')
@@ -248,7 +249,8 @@
        wants them — there is simply no permanent control for them here. */
 
     var pg = body.querySelector('#ct-pager');
-    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); });
+    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); },
+      { size: state.per_page, total: meta.total, max: 200, onSize: function (n) { KT.rowsPerPage.set('contacts:list', n); state.per_page = n; state.page = 1; load(container); } });
 
     var add = body.querySelector('#ct-new');
     if (add) add.addEventListener('click', function () { openEditor(container, null); });
@@ -352,9 +354,57 @@
 
     var cardUrl = e.card_image_url || null;
 
+    /* EMAILS, ITS OWN TAB (2026-11-11, Anthony: "full sweep across all user records to have a subtab for linked emails").
+       A directory contact can have emails linked to it (App\Support\PersonMail, type=contact) and its record never
+       showed them. An existing contact opens with Details | ✉️ Emails - the Emails tab shown once /email-links/access
+       says this reader may see them, loaded the first time it is opened (KT.renderLinkedEmails, screen-admin.js). */
+    var modalBody = wrap;
+    if (existing && KT.renderLinkedEmails && KT.linkedEmailAccess) {
+      modalBody = Dom.el('div', { style: 'width:100%;' });
+      var tabBar = Dom.el('div', { role: 'tablist', class: 'kt-rtabbar', style: 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px;padding:5px;background:#EEF3F8;border:1px solid #E2E8F0;border-radius:14px;' });
+      var emPane = Dom.el('div', { style: 'display:none;min-height:220px;' });
+      var tabs = {}, emDrawn = false;
+      var paint = function (on) {
+        Object.keys(tabs).forEach(function (k) {
+          var b = tabs[k], sel = k === on;
+          b.style.background = sel ? 'linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%)' : 'transparent';
+          b.style.color = sel ? '#fff' : '#475569';
+          b.style.boxShadow = sel ? '0 4px 12px -4px rgba(27,58,99,.55)' : 'none';
+          b.setAttribute('aria-selected', sel ? 'true' : 'false');
+        });
+      };
+      var show = function (k) {
+        wrap.style.display = k === 'details' ? '' : 'none';
+        emPane.style.display = k === 'emails' ? '' : 'none';
+        paint(k);
+        if (k === 'emails' && !emDrawn) {
+          emDrawn = true;
+          KT.renderLinkedEmails(emPane, '/email-links/person?type=contact&id=' + encodeURIComponent(existing.id), {
+            onCount: function (n) { tabs.emails.textContent = '✉️ Emails (' + n + ')'; },
+            onHide: function (why) {
+              emPane.innerHTML = '<div style="font-size:13px;color:' + C.muted + ';">' + (why === 'off'
+                ? 'Linking emails to people is off for this agency. Turn it on in Email settings.'
+                : why === 'denied' ? 'You do not have access to this contact\u2019s linked emails.'
+                : 'Linked emails could not be loaded. Try again in a moment.') + '</div>';
+              if (why === 'error') emDrawn = false;   // a later click tries again
+            },
+          });
+        }
+      };
+      [['details', 'Details'], ['emails', '✉️ Emails']].forEach(function (t) {
+        var b = Dom.el('button', { type: 'button', role: 'tab', class: 'kt-rtab', 'data-kt-iconized': '1', style: 'appearance:none;display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:10px;border:1px solid transparent;background:transparent;font-size:13px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap;' }, t[1]);
+        b.addEventListener('click', function () { show(t[0]); });
+        tabs[t[0]] = b; tabBar.appendChild(b);
+      });
+      tabs.emails.style.display = 'none';
+      KT.linkedEmailAccess().then(function (a) { if (a && a.view) tabs.emails.style.display = ''; });
+      paint('details');
+      modalBody.appendChild(tabBar); modalBody.appendChild(wrap); modalBody.appendChild(emPane);
+    }
+
     Shell.Modal.open({
       title: existing ? 'Edit contact' : 'Add contact',
-      body: wrap,
+      body: modalBody,
       large: true,
       actions: [
         { label: 'Cancel' },

@@ -201,13 +201,22 @@ final class StaffOffboardController extends Controller
                     /* Closed at the punch's own day-end, not "now" — stamping a
                        three-week-old shift with today's time would invent hours that
                        were never worked. */
-                    $out = Carbon::parse($pn['punched_in_at'])->addHours(8);
+                    /* Eight hours from the DAY's first clock-in, not this row's (2026-11-05):
+                       after a lunch the open row starts mid-afternoon, and +8h from there
+                       paid hours into the night. Never before the row itself began.
+                       (time_punches has no updated_at - writing one failed every close.) */
+                    $in = Carbon::parse($pn['punched_in_at']);
+                    $dayFirst = DB::table('time_punches')->where('user_id', $userId)
+                        ->where('punched_in_at', '>=', $in->copy()->subHours(14))->where('punched_in_at', '<=', $in)->min('punched_in_at');
+                    $out = Carbon::parse($dayFirst ?: $in)->addHours(8);
+                    if ($out->lte($in)) {
+                        $out = $in->copy()->addMinutes(1);
+                    }
                     if ($out->isFuture()) {
                         $out = now();
                     }
                     DB::table('time_punches')->where('id', $pn['id'])->update([
                         'punched_out_at' => $out,
-                        'updated_at' => now(),
                     ]);
                     $report['punches_closed']++;
                 } catch (\Throwable $e) {
@@ -423,7 +432,7 @@ final class StaffOffboardController extends Controller
                 .'<strong>'.e($name).'</strong>.</p>'
 
                 .($uncovered
-                    ? '<div style="background:#FEF2F2;border:1px solid #FECACA;border-left:4px solid #DC2626;'
+                    ? '<div style="background:#FEF2F2;border:1px solid #FECACA;--kt-edge:#DC2626;'
                         .'border-radius:12px;padding:14px 16px;margin:0 0 16px;">'
                         .'<div style="font-weight:800;color:#991B1B;font-size:14.5px;">'
                         .count($uncovered).' room'.(count($uncovered) === 1 ? '' : 's')

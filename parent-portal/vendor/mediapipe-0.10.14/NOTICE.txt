@@ -1,0 +1,4 @@
+MediaPipe Tasks Vision 0.10.14 (npm @mediapipe/tasks-vision) and the BlazeFace short-range face detector model
+(blaze_face_short_range.tflite, float16 v1), Copyright The MediaPipe Authors, licensed under the Apache License 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). Self-hosted unmodified, except vision_bundle.mjs renamed to
+vision_bundle.js with its sourceMappingURL line removed. Used by parent-portal/js/kt-face-check.js.

@@ -37,6 +37,7 @@ final class TrackSlowRequests
     private const EXPECT_SLOW = [
         'pdf', 'xlsx', 'csv', 'export', 'download', 'upload', 'import',
         'reports/canned', 'report-cards/generate', 'backup', 'photos', 'videos',
+        'v1/cal/',   // calendar feed: the path IS the secret link, never write it to the log (cal1103)
     ];
 
     public function handle(Request $request, Closure $next): Response

@@ -48,7 +48,8 @@
     var d = parse(ts);
     if (!d) return '';
     try {
-      return new Intl.DateTimeFormat([], Object.assign({ timeZone: tz() }, opts)).format(d);
+      var loc = []; try { if (sessionStorage.getItem('kt_spelling') === 'us') loc = 'en-US'; } catch (e) {}   // US agency: "3:27 PM" (2026-10-28)
+      return new Intl.DateTimeFormat(loc, Object.assign({ timeZone: tz() }, opts)).format(d);
     } catch (e) {
       return d.toLocaleString();
     }
@@ -105,4 +106,21 @@
   KT.agencyToday = agencyToday;
   KT.agencyDateOf = agencyDateOf;
   KT.isAgencyToday = function (ts) { return !!ts && agencyDateOf(ts) === agencyToday(); };
+
+  /* THE HEADER CLOCK AND GREETING ARE THE CENTRE'S TOO (2026-11-05, Anthony's App Review recording: the parent
+     header read "Good night · 12:29 AM" at 1:29 PM in Toronto, because the phone was set to another zone). They
+     read new Date().getHours(), the device's clock. KT.agencyHM() is the agency's hour and minute now;
+     KT.agencyNowText(opts, locale) formats today's date in the agency's zone. */
+  KT.agencyHM = function () {
+    try {
+      var p = new Intl.DateTimeFormat('en-GB', { timeZone: tz(), hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date());
+      var h = 0, m = 0;
+      p.forEach(function (x) { if (x.type === 'hour') h = parseInt(x.value, 10) % 24; if (x.type === 'minute') m = parseInt(x.value, 10); });
+      return { h: h, m: m };
+    } catch (e) { var d = new Date(); return { h: d.getHours(), m: d.getMinutes() }; }
+  };
+  KT.agencyNowText = function (opts, locale) {
+    try { return new Date().toLocaleDateString(locale, Object.assign({ timeZone: tz() }, opts || {})); }
+    catch (e) { return new Date().toLocaleDateString(locale, opts || {}); }
+  };
 })(window);

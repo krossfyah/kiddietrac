@@ -115,6 +115,7 @@
         <p>Days you'll be closed. Families are notified automatically. Billing pauses on closures with affects_billing = yes.</p>
         <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="cl-new">+ New closure</button></div>
       </div>
+      <div id="cl-overview"></div>
       <div class="kt-card">
         <table>
           <thead><tr><th>Date</th><th>Centre</th><th>Type</th><th>Reason</th><th>Billing</th><th>Added</th><th></th></tr></thead>
@@ -131,6 +132,7 @@
       </div>
     </div>`;
     document.getElementById('cl-new').onclick = () => openClosureModal();
+    try { closureOverview(main.querySelector('#cl-overview'), r.data || []); } catch (e) {}
     main.querySelectorAll('button[data-ed]').forEach(b => b.onclick = () => {
       const row = (r.data || []).filter(c => String(c.id) === String(b.dataset.ed))[0];
       if (row) { openClosureModal(row); }
@@ -141,6 +143,170 @@
       renderClosures(main);
     });
   }
+  /* ── CLOSURES AT A GLANCE (2026-10-28, Anthony: "closures and holidays section add some stats cards, graphs or
+     something cool to gauge whats happening from this perspective"). Everything is worked out from the rows the
+     table already has, so it can never disagree with it:
+       - DAYS are WEEKDAYS (Mon-Fri) in a closure's range: a long weekend's Saturday is not a lost care day.
+         A day counts once per centre that closes (two centres closed on Family Day = 2 centre-days).
+       - Dates are read from their parts (never through Date() parsing), and "today" is the agency's date.
+     Stats: next closure + countdown, next 90 days, centre-days closed this year, billing-paused days, centres
+     touched. Charts (inline SVG): closed days by month stacked by type, type share donut, days per centre, and
+     the next closures as a timeline. A year picker switches the year-based parts. */
+  const CL_TYPES = {
+    holiday: ['Holiday', '#0E7490'] /* not #1F6080: agency branding repaints that colour */, pd_day: ['PD day', '#7C3AED'], emergency: ['Emergency', '#DC2626'],
+    renovation: ['Renovation', '#D97706'], other: ['Other', '#64748B'],
+  };
+  function clType(t) { return CL_TYPES[t] || [String(t || 'Other').replace(/_/g, ' '), '#64748B']; }
+  function clParts(d) { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? [+m[1], +m[2], +m[3]] : null; }
+  function clUtc(p) { return Date.UTC(p[0], p[1] - 1, p[2]); }
+  function clIso(ms) { return new Date(ms).toISOString().slice(0, 10); }
+  function clToday() {
+    try { return new Date().toLocaleDateString('en-CA', { timeZone: (window.KT && KT.agencyTz && KT.agencyTz()) || undefined }); }
+    catch (e) { return new Date().toISOString().slice(0, 10); }
+  }
+  /* Every weekday a closure covers, as YYYY-MM-DD strings (capped at a year: a typo'd end date must not hang the page). */
+  function clDays(c) {
+    const a = clParts(c.closure_date); if (!a) { return []; }
+    const b = clParts(c.end_date) || a;
+    const out = [];
+    for (let t = clUtc(a), end = Math.min(clUtc(b), clUtc(a) + 366 * 864e5); t <= end; t += 864e5) {
+      const wd = new Date(t).getUTCDay();
+      if (wd !== 0 && wd !== 6) { out.push(clIso(t)); }
+    }
+    return out;
+  }
+  function clNice(iso) { const p = clParts(iso); return p ? (MONTHS_ABBR[p[1] - 1] || p[1]) + ' ' + p[2] : iso; }
+  function closureOverview(host, rows) {
+    if (!host) { return; }
+    if (!document.getElementById('cl-ov-css')) {
+      const st = document.createElement('style'); st.id = 'cl-ov-css';
+      st.textContent = '.cl-ov{margin:0 0 16px}'
+        + '.cl-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:14px}'
+        + '.cl-tile{position:relative;overflow:hidden;border-radius:14px;padding:14px 16px;border:1px solid #E2E8F0;background:linear-gradient(160deg,var(--t1),#fff 70%);box-shadow:0 1px 3px rgba(15,23,42,.05)}'
+        + '.cl-tile .k{font-weight:800;font-size:10.5px;line-height:1.2;letter-spacing:.6px;text-transform:uppercase;color:var(--t2)}'
+        + '.cl-tile .v{font-weight:800;font-size:26px;line-height:1.15;color:#0F172A;margin-top:6px}'
+        + '.cl-tile .s{font-size:12.5px;color:#64748B;margin-top:3px;line-height:1.35}'
+        + '.cl-tile .ic{position:absolute;right:12px;top:10px;font-size:22px;opacity:.85}'
+        + '.cl-charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}'
+        + '.cl-chart{background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:14px 16px;box-shadow:0 1px 3px rgba(15,23,42,.05);min-width:0}'
+        + '.cl-chart h4{margin:0 0 10px;font-size:14px;color:#0F172A;display:flex;justify-content:space-between;align-items:center;gap:8px}'
+        + '.cl-chart h4 small{font-weight:600;color:#94A3B8;font-size:12px}'
+        + '.cl-leg{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font-size:12px;color:#475569}'
+        + '.cl-leg .sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}'
+        + '.cl-yr{display:inline-flex;gap:4px;flex-wrap:wrap}.cl-yr button{border:1px solid #E2E8F0;background:#fff;border-radius:999px;padding:3px 10px;font-weight:700;font-size:12px;color:#475569;cursor:pointer}'
+        + '.cl-yr button.on{background:#1F6080;border-color:#1F6080;color:#fff}'
+        + '.cl-hbar{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:8px;align-items:center;font-size:12.5px;margin:6px 0}'
+        + '.cl-hbar .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155;font-weight:600}'
+        + '.cl-hbar .b{height:10px;border-radius:999px;background:#EEF2F7;overflow:hidden}.cl-hbar .b i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#14B8C4,#1F6080)}'
+        + '.cl-hbar .c{font-weight:800;color:#0F172A;min-width:22px;text-align:right}'
+        + '.cl-next{display:flex;flex-direction:column;gap:8px}'
+        + '.cl-next .r{display:grid;grid-template-columns:52px 1fr auto;gap:10px;align-items:center}'
+        + '.cl-next .d{border-radius:10px;text-align:center;padding:5px 0;color:#fff;font-weight:800;font-size:11px;line-height:1.15;}.cl-next .d b{display:block;font-size:17px}'
+        + '.cl-next .t{min-width:0}.cl-next .t div{font-weight:700;color:#0F172A;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cl-next .t span{font-size:12px;color:#64748B}'
+        + '.cl-next .in{font-weight:800;font-size:11.5px;color:#1F6080;background:#E0F2F7;border-radius:999px;padding:3px 9px;white-space:nowrap}'
+        + '.cl-empty{color:#94A3B8;font-size:13px;padding:18px 0;text-align:center}';
+      document.head.appendChild(st);
+    }
+    const today = clToday(), tp = clParts(today), thisYear = tp ? tp[0] : new Date().getFullYear();
+    const items = rows.map(c => ({ c: c, days: clDays(c) })).filter(x => x.days.length || clParts(x.c.closure_date));
+    const years = Array.from(new Set(items.flatMap(x => x.days.map(d => +d.slice(0, 4))).concat([thisYear]))).sort();
+    let year = thisYear;
+
+    function draw() {
+      const inYear = d => +d.slice(0, 4) === year;
+      // Next closure (any year) and the next 90 days.
+      const upcoming = items.map(x => ({ c: x.c, first: x.days.find(d => d >= today) || (x.days.length ? null : (String(x.c.closure_date).slice(0, 10) >= today ? String(x.c.closure_date).slice(0, 10) : null)) }))
+        .filter(x => x.first).sort((a, b) => a.first.localeCompare(b.first));
+      const t90 = clIso(clUtc(tp || [thisYear, 1, 1]) + 90 * 864e5);
+      const next90 = items.reduce((n, x) => n + x.days.filter(d => d >= today && d <= t90).length, 0);
+      const next90cl = items.filter(x => x.days.some(d => d >= today && d <= t90)).length;
+      const centreDays = items.reduce((n, x) => n + x.days.filter(inYear).length, 0);
+      const pastDays = items.reduce((n, x) => n + x.days.filter(d => inYear(d) && d < today).length, 0);
+      const billDays = items.reduce((n, x) => n + (x.c.affects_billing ? x.days.filter(inYear).length : 0), 0);
+      const centres = new Set(items.filter(x => x.days.some(inYear)).map(x => x.c.centre_name || x.c.centre_id));
+      const allCentres = new Set(rows.map(c => c.centre_name || c.centre_id));
+      const daysTo = upcoming[0] ? Math.round((clUtc(clParts(upcoming[0].first)) - clUtc(tp)) / 864e5) : null;
+
+      const tile = (ic, k, v, sub, c1, c2) => `<div class="cl-tile" style="--t1:${c1};--t2:${c2}"><span class="ic">${ic}</span><div class="k">${k}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+      const nx = upcoming[0];
+      const tiles = '<div class="cl-tiles">'
+        + tile('⏭️', 'Next closure', nx ? clNice(nx.first) : '—', nx ? esc((nx.c.reason || clType(nx.c.closure_type)[0]) + ' · ' + (daysTo === 0 ? 'today' : daysTo === 1 ? 'tomorrow' : 'in ' + daysTo + ' days')) : 'Nothing scheduled', '#E0F2F7', '#0E7490')
+        + tile('📅', 'Next 90 days', String(next90), 'centre-days closed · ' + next90cl + ' closure' + (next90cl === 1 ? '' : 's'), '#EDE9FE', '#6D28D9')
+        + tile('🏫', 'Closed in ' + year, String(centreDays), pastDays + ' already · ' + Math.max(0, centreDays - pastDays) + ' still to come', '#FEF3C7', '#B45309')
+        + tile('💳', 'Billing paused', String(billDays), centreDays ? Math.round(billDays * 100 / centreDays) + '% of closed days in ' + year : 'No closed days', '#DCFCE7', '#15803D')
+        + tile('📍', 'Centres affected', centres.size + ' / ' + allCentres.size, 'with a closure in ' + year, '#FCE7F3', '#BE185D')
+        + '</div>';
+
+      // Month bars, stacked by type.
+      const byMonth = Array.from({ length: 12 }, () => ({}));
+      items.forEach(x => x.days.filter(inYear).forEach(d => { const m = +d.slice(5, 7) - 1, t = x.c.closure_type || 'other'; byMonth[m][t] = (byMonth[m][t] || 0) + 1; }));
+      const mTot = byMonth.map(o => Object.values(o).reduce((a, b) => a + b, 0));
+      const mMax = Math.max(1, ...mTot);
+      const W = 360, H = 150, bw = 20, gap = (W - 12 * bw) / 12;
+      let bars = '';
+      byMonth.forEach((o, i) => {
+        let y = H - 18; const x = i * (bw + gap) + gap / 2;
+        Object.keys(CL_TYPES).concat(Object.keys(o).filter(k => !CL_TYPES[k])).forEach(t => {
+          const v = o[t]; if (!v) { return; }
+          const h = Math.max(2, (H - 34) * v / mMax); y -= h;
+          bars += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="4" fill="${clType(t)[1]}"><title>${MONTHS_ABBR[i]}: ${v} ${clType(t)[0]}</title></rect>`;
+        });
+        if (mTot[i]) { bars += `<text x="${x + bw / 2}" y="${y - 4}" text-anchor="middle" font-size="10" font-weight="800" fill="#0F172A">${mTot[i]}</text>`; }
+        const isNow = year === thisYear && tp && tp[1] - 1 === i;
+        bars += `<text x="${x + bw / 2}" y="${H - 4}" text-anchor="middle" font-size="10" fill="${isNow ? '#1F6080' : '#94A3B8'}" font-weight="${isNow ? 800 : 600}">${(MONTHS_ABBR[i] || '').slice(0, 1)}</text>`;
+      });
+      const usedTypes = Object.keys(CL_TYPES).filter(t => byMonth.some(o => o[t]));
+      const monthChart = `<div class="cl-chart"><h4>Closed days by month <small>${year}</small></h4>`
+        + (centreDays ? `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Closed days by month">${bars}</svg>` : '<div class="cl-empty">No closures in ' + year + '.</div>')
+        + `<div class="cl-leg">${usedTypes.map(t => `<span><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="margin-right:6px;vertical-align:-1px"><rect width="10" height="10" rx="3" fill="${clType(t)[1]}"/></svg>${clType(t)[0]}</span>`).join('')}</div></div>`;
+
+      // Type donut.
+      const byType = {};
+      items.forEach(x => { const n = x.days.filter(inYear).length; if (n) { byType[x.c.closure_type || 'other'] = (byType[x.c.closure_type || 'other'] || 0) + n; } });
+      const tot = Object.values(byType).reduce((a, b) => a + b, 0);
+      let arcs = '', a0 = -Math.PI / 2;
+      const R = 52, cx = 70, cy = 70, sw = 20;
+      Object.keys(byType).sort((a, b) => byType[b] - byType[a]).forEach(t => {
+        const frac = byType[t] / tot, a1 = a0 + frac * Math.PI * 2;
+        if (frac >= 0.999) { arcs += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${clType(t)[1]}" stroke-width="${sw}"/>`; }
+        else {
+          const x0 = cx + R * Math.cos(a0), y0 = cy + R * Math.sin(a0), x1 = cx + R * Math.cos(a1), y1 = cy + R * Math.sin(a1);
+          arcs += `<path d="M${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 ${frac > 0.5 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}" fill="none" stroke="${clType(t)[1]}" stroke-width="${sw}"><title>${clType(t)[0]}: ${byType[t]}</title></path>`;
+        }
+        a0 = a1;
+      });
+      const donut = `<div class="cl-chart"><h4>What closes us <small>${year}</small></h4>` + (tot
+        ? `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap"><svg viewBox="0 0 140 140" width="140" height="140" role="img" aria-label="Closure types">${arcs}<text x="70" y="68" text-anchor="middle" font-size="22" font-weight="800" fill="#0F172A">${tot}</text><text x="70" y="86" text-anchor="middle" font-size="10.5" fill="#64748B">centre-days</text></svg>`
+          + `<div style="flex:1;min-width:140px">${Object.keys(byType).sort((a, b) => byType[b] - byType[a]).map(t => `<div class="cl-hbar" style="grid-template-columns:1fr auto"><span class="n"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" style="margin-right:6px;vertical-align:-1px"><rect width="10" height="10" rx="3" fill="${clType(t)[1]}"/></svg>${clType(t)[0]}</span><span class="c">${byType[t]} <span style="color:#94A3B8;font-weight:600">· ${Math.round(byType[t] * 100 / tot)}%</span></span></div>`).join('')}</div></div>`
+        : '<div class="cl-empty">No closures in ' + year + '.</div>') + '</div>';
+
+      // Per centre.
+      const byCentre = {};
+      items.forEach(x => { const n = x.days.filter(inYear).length; if (n) { const k = x.c.centre_name || ('Centre ' + x.c.centre_id); byCentre[k] = (byCentre[k] || 0) + n; } });
+      const cMax = Math.max(1, ...Object.values(byCentre));
+      const centreChart = `<div class="cl-chart"><h4>Days closed per centre <small>${year}</small></h4>` + (Object.keys(byCentre).length
+        ? Object.keys(byCentre).sort((a, b) => byCentre[b] - byCentre[a]).slice(0, 8).map(k => `<div class="cl-hbar"><span class="n" title="${esc(k)}">${esc(k)}</span><span class="b"><i style="width:${Math.round(byCentre[k] * 100 / cMax)}%"></i></span><span class="c">${byCentre[k]}</span></div>`).join('')
+        : '<div class="cl-empty">No closures in ' + year + '.</div>') + '</div>';
+
+      // Up next.
+      const nextChart = `<div class="cl-chart"><h4>Up next <small>${upcoming.length} scheduled</small></h4>` + (upcoming.length
+        ? '<div class="cl-next">' + upcoming.slice(0, 5).map(u => {
+            const p = clParts(u.first), dd = Math.round((clUtc(p) - clUtc(tp)) / 864e5), ty = clType(u.c.closure_type);
+            const n = clDays(u.c).length;
+            return `<div class="r"><div class="d" style="background:${ty[1]}">${(MONTHS_ABBR[p[1] - 1] || '').toUpperCase()}<b>${p[2]}</b></div>`
+              + `<div class="t"><div>${esc(u.c.reason || ty[0])}</div><span>${esc(u.c.centre_name || '')} · ${ty[0]}${n > 1 ? ' · ' + n + ' days' : ''}${u.c.affects_billing ? ' · billing paused' : ''}</span></div>`
+              + `<span class="in">${dd === 0 ? 'Today' : dd === 1 ? 'Tomorrow' : 'in ' + dd + 'd'}</span></div>`;
+          }).join('') + '</div>'
+        : '<div class="cl-empty">Nothing scheduled. Add the next holiday with "+ New closure".</div>') + '</div>';
+
+      const picker = years.length > 1 ? `<div class="cl-yr" role="tablist" aria-label="Year">${years.map(y => `<button type="button" data-y="${y}" class="${y === year ? 'on' : ''}" role="tab" aria-selected="${y === year}">${y}</button>`).join('')}</div>` : '';
+      host.innerHTML = '<div class="cl-ov">' + (picker ? `<div style="display:flex;justify-content:flex-end;margin:0 0 8px">${picker}</div>` : '') + tiles
+        + '<div class="cl-charts">' + nextChart + monthChart + donut + centreChart + '</div></div>';
+      host.querySelectorAll('.cl-yr button').forEach(b => b.onclick = () => { year = +b.dataset.y; draw(); });
+    }
+    draw();
+  }
+
   /* A closure's created_at is stored UTC. Rendered in the agency's timezone, like
      every other timestamp — never the device's. */
   function fmtStamp(ts) {
@@ -393,6 +559,44 @@
       const c = centres.find(x => String(x.id) === b.getAttribute('data-rr-settings'));
       if (c) openRatioSettings(main, c, rooms.filter(x => x.centre_id === c.id), groups);
     }));
+    paintRatioAlerts(main, r.alerts);
+  }
+
+  /* BREACH ALERTS (2026-10-30): every 15 minutes, 6 AM-7 PM, a room that goes out of ratio alerts the people below once,
+     and again when it is back in ratio (kiddietrac:check-ratios). A one-line summary under the banner; admins edit it. */
+  function paintRatioAlerts(main, a) {
+    if (!a) return;
+    const kpi = main.querySelector('.kt-kpi-grid');
+    if (!kpi) return;
+    const who = [a.notify_educators && 'educators in the room', a.notify_directors && 'centre directors', a.notify_admins && 'agency admins'].filter(Boolean);
+    const line = document.createElement('div');
+    line.setAttribute('data-rr-alerts', '1');
+    line.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 14px;font-size:12.5px;color:#475569;';
+    line.innerHTML = '<span>🔔 ' + (a.enabled
+      ? 'Breach alerts on: ' + esc(who.length ? who.join(', ') : 'nobody selected') + ' are told when a room goes out of ratio, and when it is back.'
+      : 'Breach alerts are off: nobody is told when a room goes out of ratio.') + '</span>'
+      + (a.can_edit ? '<button type="button" class="kt-btn kt-btn-ghost" data-rr-alerts-edit style="height:28px;padding:0 10px;font-size:12px;">Change</button>' : '');
+    const old = main.querySelector('[data-rr-alerts]'); if (old) old.remove();
+    kpi.parentNode.insertBefore(line, kpi.nextSibling);
+    const b = line.querySelector('[data-rr-alerts-edit]');
+    if (b) b.addEventListener('click', () => openRatioAlerts(main, a));
+  }
+  function openRatioAlerts(main, a) {
+    const Shell = window.KT && KT.Shell;
+    const row = (k, label, hint) => `<label style="display:flex;align-items:flex-start;gap:10px;padding:6px 0;font-size:13px;"><input type="checkbox" data-k="${k}"${a[k] ? ' checked' : ''}><span><b style="font-weight:600;">${label}</b>${hint ? `<span style="display:block;font-size:11.5px;color:#64748B;">${hint}</span>` : ''}</span></label>`;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'width:min(460px,90vw);';
+    wrap.innerHTML = row('enabled', 'Alert when a room goes out of ratio', 'Checked every 15 minutes from 6 AM to 7 PM. One alert per breach, and a note when the room is back in ratio.')
+      + '<div style="font-size:11.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin:10px 0 2px;">Who is told</div>'
+      + row('notify_educators', 'Educators in the room', 'On a shift in the room, or clocked in and assigned to it. If nobody is, everyone clocked in at the centre.')
+      + row('notify_directors', 'Centre directors', 'The directors of that centre. A centre with no director: the agency admins instead.')
+      + row('notify_admins', 'Agency admins', 'Every agency admin, for every centre.');
+    Shell.Modal.open({ title: '🔔 Ratio breach alerts', body: wrap, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, handler: async () => {
+      const body = {}; wrap.querySelectorAll('input[data-k]').forEach(i => { body[i.getAttribute('data-k')] = i.checked; });
+      const res = await Api.put('/operations/ratio-alerts', body);
+      if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Ratio alerts saved', 'success');
+      paintRatioAlerts(main && main.isConnected ? main : (document.getElementById('appMain') || main), res.alerts);
+    } }] });
   }
 
   // Ontario: licence type, program hours, reduced-ratio windows (s.8(4)), outdoor play, room age groups.
@@ -861,59 +1065,8 @@
     m.addEventListener('click', e => { if (e.target === m) m.remove(); });
     document.body.appendChild(m);
   }
-  function openESignModal() {
-    const m = document.createElement('div');
-    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
-    m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:560px;width:92%;">
-      <h3 style="margin:0 0 16px;color:#0F172A;">Sign a document</h3>
-      <label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px;">Document type</label>
-      <select id="es-type" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-        <option value="enrollment_contract">Enrollment contract</option>
-        <option value="photo_consent">Photo consent</option>
-        <option value="medical_authorization">Medical authorization</option>
-        <option value="field_trip">Field trip permission</option>
-        <option value="parent_handbook">Parent handbook acknowledgement</option>
-        <option value="other">Other</option>
-      </select>
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Document text (what you're agreeing to)</label>
-      <textarea id="es-text" rows="5" placeholder="Paste the policy / contract text here…" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Your full name</label>
-      <input id="es-name" placeholder="Jane Smith" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;">
-      <label style="display:block;font-size:13px;font-weight:600;margin:14px 0 4px;">Signature</label>
-      <canvas id="es-pad" width="500" height="160" style="border:2px dashed #CBD5E1;border-radius:8px;width:100%;background:#FAFCFE;cursor:crosshair;"></canvas>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-        <button id="es-clear" style="background:#F1F5F9;border:0;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;">Clear</button>
-        <div style="font-size:11px;color:#64748B;">Sign above with mouse or finger</div>
-      </div>
-      <div style="margin-top:20px;text-align:right;">
-        <button id="es-cancel" style="background:#F1F5F9;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;">Cancel</button>
-        <button id="es-save" class="kt-btn kt-btn-primary" style="margin-left:8px;">Submit signature</button>
-      </div></div>`;
-    document.body.appendChild(m);
-    const c = m.querySelector('#es-pad');
-    const ctx = c.getContext('2d');
-    ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2; ctx.lineCap = 'round';
-    let drawing = false;
-    const pos = (e) => { const r = c.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return [(t.clientX - r.left) * c.width / r.width, (t.clientY - r.top) * c.height / r.height]; };
-    const start = (e) => { e.preventDefault(); drawing = true; const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); };
-    const draw = (e) => { if (!drawing) return; e.preventDefault(); const [x, y] = pos(e); ctx.lineTo(x, y); ctx.stroke(); };
-    const stop = () => { drawing = false; };
-    c.addEventListener('mousedown', start); c.addEventListener('mousemove', draw); c.addEventListener('mouseup', stop); c.addEventListener('mouseleave', stop);
-    c.addEventListener('touchstart', start); c.addEventListener('touchmove', draw); c.addEventListener('touchend', stop);
-    m.querySelector('#es-clear').onclick = () => ctx.clearRect(0, 0, c.width, c.height);
-    m.querySelector('#es-cancel').onclick = () => m.remove();
-    m.querySelector('#es-save').onclick = async () => {
-      if (!m.querySelector('#es-name').value.trim() || !m.querySelector('#es-text').value.trim()) { alert('Name + document text required'); return; }
-      await Api.post('/engagement/sign-document', {
-        document_type: m.querySelector('#es-type').value,
-        signer_name: m.querySelector('#es-name').value,
-        signature_data: c.toDataURL('image/png'),
-        document_text: m.querySelector('#es-text').value,
-      });
-      m.remove();
-      renderSignedDocs(document.querySelector('main'));
-    };
-  }
+  /* openESignModal (its own signature canvas, posting to /engagement/sign-document) was removed
+     2026-11-06: nothing called it, and every signature now goes through kt-signature-pad.js. */
 
   // ============================ Bus routes (transport) =================================
   /* MANAGED HERE (2026-10-16). Anthony: "how do you add bus routes" — you could not: this

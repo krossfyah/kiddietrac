@@ -15,10 +15,14 @@
   function agencyId() { try { return sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) { return ''; } }
 
   var TERM = 'centre', ready = false;
+  /* US SPELLING (2026-10-28): a US agency (GET /agency/centre-term -> spelling: 'us') reads "Center(s)" wherever
+     the product says "Centre(s)" in a label, including "Message Center". Labels only, like everything here. */
+  var SPELL = 'ca';
   var STATE = 'Province', ZIP = 'Postal code';   // country-specific address labels
   function chosen(plural) {
     if (TERM === 'room') return plural ? 'Rooms' : 'Room';
     if (TERM === 'provider') return plural ? 'Providers' : 'Provider';
+    if (SPELL === 'us') return plural ? 'Centers' : 'Center';
     return plural ? 'Centres' : 'Centre';
   }
 
@@ -29,6 +33,11 @@
        the facility word is swapped, then put back. */
     var MC = /Message Centre/gi.test(out);
     if (MC) out = out.replace(/Message Centre/g, '\uE000MC\uE000').replace(/message centre/g, '\uE000mc\uE000');
+    /* "At Centre" / "Not at Centre" is a child's status, worded the same for every agency (2026-11-04, Anthony chose
+       "At Centre everywhere" over "At Provider" for agencies that say Provider). Held aside like "Message Centre";
+       US spelling still reads "At Center". */
+    var AC = /\bat centre\b/i.test(out);
+    if (AC) out = out.replace(/\b(at|At|AT) (Centre|centre|CENTRE)\b/g, function (m, w, c) { return w + ' \uE001' + (c === 'CENTRE' ? 'U' : c === 'centre' ? 'l' : 'C') + '\uE001'; });
     if (/centre/i.test(out)) {
       // Combined "Centres / Rooms" + "Centre / Room" → the single chosen term.
       out = out.replace(/Centres\s*\/\s*Rooms/g, chosen(true)).replace(/centres\s*\/\s*rooms/g, chosen(true).toLowerCase());
@@ -39,7 +48,12 @@
           .replace(/\bcentres\b/g, _p.toLowerCase()).replace(/\bcentre\b/g, _s.toLowerCase());
       }
     }
-    if (MC) out = out.replace(/\uE000MC\uE000/g, 'Message Centre').replace(/\uE000mc\uE000/g, 'message centre');
+    if (SPELL === 'us' && TERM === 'centre' && /centre/i.test(out)) {
+      out = out.replace(/\bCentres\b/g, 'Centers').replace(/\bCentre\b/g, 'Center').replace(/\bcentres\b/g, 'centers').replace(/\bcentre\b/g, 'center')
+        .replace(/\bCENTRES\b/g, 'CENTERS').replace(/\bCENTRE\b/g, 'CENTER');
+    }
+    if (AC) out = out.replace(/\uE001U\uE001/g, SPELL === 'us' ? 'CENTER' : 'CENTRE').replace(/\uE001l\uE001/g, SPELL === 'us' ? 'center' : 'centre').replace(/\uE001C\uE001/g, SPELL === 'us' ? 'Center' : 'Centre');
+    if (MC) out = out.replace(/\uE000MC\uE000/g, SPELL === 'us' ? 'Message Center' : 'Message Centre').replace(/\uE000mc\uE000/g, SPELL === 'us' ? 'message center' : 'message centre');
     // Country address labels (base is CA: Province / Postal code).
     if (STATE !== 'Province' && /province/i.test(out)) {
       out = out.replace(/\bProvince\b/g, STATE).replace(/\bprovince\b/g, STATE.toLowerCase());
@@ -56,7 +70,7 @@
   // document.body) also adapt. The transform only ever touches the words
   // Centre/Province/Postal, so a wide selector is safe.
   var SEL = '#navLinks .nav-label,.sidebar-section-label,#appMain h1,#appMain h2,#appMain h3,'
-    + '#appMain button,#appMain summary,#appMain .kt-hero-sub,#appMain .kt-page-hero p,label,th';
+    + '#appMain button,#appMain summary,#appMain .kt-hero-sub,#appMain .kt-page-hero p,label,th,#kt-mobilenav button,#appMain .kt-tile-label,#appMain .kt-sechead';
 
   function sweep() {
     if (!ready) return;
@@ -85,6 +99,7 @@
       var c = sessionStorage.getItem('kt_centre_term'); if (c) TERM = c;
       var s = sessionStorage.getItem('kt_state_label'); if (s) STATE = s;
       var z = sessionStorage.getItem('kt_zip_label'); if (z) ZIP = z;
+      var sp = sessionStorage.getItem('kt_spelling'); if (sp) SPELL = sp;
       if (c || s || z) { ready = true; sweep(); }
     } catch (e) {}
     fetch(API + '/agency/centre-term', { headers: { 'Authorization': 'Bearer ' + t, 'X-Active-Agency-Id': agencyId() } })
@@ -94,7 +109,8 @@
         if (d.term) TERM = d.term;
         if (d.state_label) STATE = d.state_label;
         if (d.zip_label) ZIP = d.zip_label;
-        try { sessionStorage.setItem('kt_centre_term', TERM); sessionStorage.setItem('kt_state_label', STATE); sessionStorage.setItem('kt_zip_label', ZIP); } catch (e) {}
+        SPELL = d.spelling === 'us' ? 'us' : 'ca';
+        try { sessionStorage.setItem('kt_centre_term', TERM); sessionStorage.setItem('kt_state_label', STATE); sessionStorage.setItem('kt_zip_label', ZIP); sessionStorage.setItem('kt_spelling', SPELL); } catch (e) {}
         ready = true; sweep();
       }).catch(function () {});
   }
@@ -109,7 +125,7 @@
   // KT.centreWord()      -> 'Centre' | 'Provider' | 'Room'   (capitalised, singular)
   // KT.centreWord(true)  -> plural;  KT.centreWord(false,true) -> lowercase.
   window.KT.centreWord = function (plural, lower) {
-    try { var c = sessionStorage.getItem('kt_centre_term'); if (c) TERM = c; } catch (e) {}
+    try { var c = sessionStorage.getItem('kt_centre_term'); if (c) TERM = c; var sp = sessionStorage.getItem('kt_spelling'); if (sp) SPELL = sp; } catch (e) {}
     var w = chosen(!!plural);
     return lower ? w.toLowerCase() : w;
   };
@@ -123,7 +139,8 @@
     try { return transform(String(t)); } catch (e) { return t; }
   };
   window.KT.setCountry = function (code) {
-    var L = CLABELS[code] || CLABELS.CA; STATE = L[0]; ZIP = L[1];
+    var L = CLABELS[code] || CLABELS.CA; STATE = L[0]; ZIP = L[1]; SPELL = code === 'US' ? 'us' : 'ca';
+    try { sessionStorage.setItem('kt_spelling', SPELL); } catch (e) {}
     try { sessionStorage.setItem('kt_country', code); sessionStorage.setItem('kt_state_label', STATE); sessionStorage.setItem('kt_zip_label', ZIP); } catch (e) {}
     ready = true; sweep();
   };

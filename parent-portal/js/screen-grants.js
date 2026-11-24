@@ -160,7 +160,7 @@
     var titles = { received: 'Funds received', spent: 'Record spending', returned: 'Funds returned to the funder', adjustment: 'Adjustment' };
     var cats = Object.keys(d.categories || {}).map(function (k) { return [k, d.categories[k]]; });
     var bills = [['', '— none —']].concat((d.expenses || []).map(function (e) { return [e.id, (e.invoice_number || e.reference || ('Bill #' + e.id)) + ' · ' + money(e.total) + ' · ' + day(e.issue_date)]; }));
-    dialog(titles[kind], '<div class="gr-f">' + fld('txn_date', 'Date *', new Date().toISOString().slice(0, 10), { type: 'date' })
+    dialog(titles[kind], '<div class="gr-f">' + fld('txn_date', 'Date *', ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)), { type: 'date' })
       + fld('amount', kind === 'adjustment' ? 'Amount * (negative to reduce)' : 'Amount *', '', { type: 'number', step: '0.01' })
       + (kind === 'spent' ? fld('category', 'Category', 'wages', { sel: cats }) + fld('expense_invoice_id', 'Linked expense bill (optional)', '', { sel: bills }) : '')
       + fld('description', 'Description', '', { full: true, ph: kind === 'received' ? 'e.g. Q1 instalment' : '' }) + fld('reference', 'Reference (cheque, EFT, payroll run)', '', { full: true }) + '</div>', async function (ov) {

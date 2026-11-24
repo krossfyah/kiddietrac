@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
  * ASK SOMEBODY FOR FILES, AND KNOW WHEN THEY ARRIVE.
  *
  * Forms cover the case where the agency supplies the document and the family fills it in.
- * The other half has had no home at all: "send me a copy of her immunisation card, both
+ * The other half has had no home at all: "send me a copy of her immunization card, both
  * sides of your ID, and last year's tax slip". That happened over email, so nobody could
  * answer "what did we ask the Hoseins for, and what is still missing" without reading a
  * thread.

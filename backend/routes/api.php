@@ -95,6 +95,8 @@ Route::prefix('v1')->group(function () {
             'method' => 'nullable|string|max:10',
             'kind'   => 'nullable|string|max:40',
             'ms'     => 'nullable|integer|min:0|max:86400000',
+            // kind raw_error_shown: the error text the portal caught on screen (2026-10-22).
+            'text'   => 'nullable|string|max:300',
         ]);
 
         $userId = null;
@@ -103,6 +105,13 @@ Route::prefix('v1')->group(function () {
             $u = $r->user();
             if ($u) { $userId = (int) $u->id; }
         } catch (\Throwable $e) {}
+        // Outside auth:sanctum, so read the bearer token here (2026-11-04: every push.tapped row had no user).
+        if (! $userId && $r->bearerToken()) {
+            try {
+                $pat = \Laravel\Sanctum\PersonalAccessToken::findToken($r->bearerToken());
+                if ($pat && (! $pat->expires_at || $pat->expires_at->isFuture())) { $userId = (int) $pat->tokenable_id; }
+            } catch (\Throwable $e) {}
+        }
         /* The client sends the agency it was scoped to. Unstamped rows are invisible in
            every agency, which for an error log means written and never read. */
         $hdr = (int) $r->header('X-Active-Agency-Id');
@@ -112,11 +121,44 @@ Route::prefix('v1')->group(function () {
         }
 
         $status = (int) $d['status'];
-        $what = $status === 0
+
+        /* A NOTIFICATION TAP (2026-10-22). Anthony tapped a website-chat push on his phone
+           and did not land in the chat; nothing recorded where a tap went, so it could not
+           be traced. The app now reports the link it was given and the screen it reached. */
+        if (($d['kind'] ?? null) === 'push_tap') {
+            try {
+                \App\Support\Audit::write([
+                    'user_id' => $userId, 'agency_id' => $agencyId,
+                    'action' => 'push.tapped', 'entity_type' => 'notification', 'entity_id' => null,
+                    'payload' => json_encode(['summary' => (string) ($d['text'] ?? ''), 'link' => $d['path'], 'ms' => $d['ms'] ?? null]),
+                    'ip_address' => $r->ip(), 'user_agent' => mb_substr((string) $r->userAgent(), 0, 500), 'created_at' => now(),
+                ]);
+            } catch (\Throwable $e) {}
+            return response()->json(['ok' => true]);
+        }
+        /* WALK WATCH GPS (2026-10-30). Walks #47-#49 recorded no route and nothing said why: the Play app's GPS
+           watcher could not start and only the phone knew. kt-walk-tracker.js now reports GPS trouble (and each
+           walk's first fix) here; it is filed on the walk, so the walk's audit trail shows what the phone saw. */
+        if (($d['kind'] ?? null) === 'walk_gps') {
+            $tripId = preg_match('#^/field-trips/(\d+)$#', (string) $d['path'], $m) ? (int) $m[1] : null;
+            try {
+                \App\Support\Audit::write([
+                    'user_id' => $userId, 'agency_id' => $agencyId,
+                    'action' => 'walk.gps', 'entity_type' => 'field_trip', 'entity_id' => $tripId,
+                    'payload' => json_encode(['summary' => 'Walk Watch GPS on the phone: ' . (string) ($d['text'] ?? ''), 'ms' => $d['ms'] ?? null]),
+                    'ip_address' => $r->ip(), 'user_agent' => mb_substr((string) $r->userAgent(), 0, 500), 'created_at' => now(),
+                ]);
+            } catch (\Throwable $e) {}
+            return response()->json(['ok' => true]);
+        }
+        $raw = ($d['kind'] ?? null) === 'raw_error_shown';
+        $what = $raw
+            ? 'raw error text reached the screen and was replaced with a plain sentence: "' . ($d['text'] ?? '') . '"'
+            : ($status === 0
             ? 'The request never completed (no response reached the browser)'
             : 'HTTP ' . $status
                 . ($status === 508 ? ' Resource Limit Is Reached - the hosting account was at its concurrency limit' : '')
-                . ($status === 421 ? ' Misdirected Request' : '');
+                . ($status === 421 ? ' Misdirected Request' : ''));
 
         try {
             \App\Support\Audit::write([
@@ -126,8 +168,11 @@ Route::prefix('v1')->group(function () {
                 'entity_type' => 'request',
                 'entity_id'   => null,
                 'payload'     => json_encode([
-                    'summary' => 'The portal could not load ' . ($d['method'] ?? 'GET') . ' /'
+                    'summary' => $raw
+                        ? 'On ' . $d['path'] . ', ' . $what . '.'
+                        : 'The portal could not load ' . ($d['method'] ?? 'GET') . ' /'
                         . ltrim($d['path'], '/') . ': ' . $what . '.',
+                    'text'    => $d['text'] ?? null,
                     'status'  => $status,
                     'path'    => $d['path'],
                     'method'  => $d['method'] ?? 'GET',
@@ -141,318 +186,12 @@ Route::prefix('v1')->group(function () {
         } catch (\Throwable $e) { /* never break the error sink */ }
 
         return response()->json(['ok' => true]);
-    })->middleware('throttle:60,1');
+    })->middleware('throttle:60,1,r-grp');
 
     // Public crash-report sink — the Android app POSTs its last captured native
     // crash here on next launch so we can review it server-side (storage/app/crash-reports.log).
-    Route::post('/diag/crash', function (\Illuminate\Http\Request $r) {
-        // Resolve the reporter FIRST: their agency decides which timezone this
-        // report is stamped in, and the agency's own zone is the only one that
-        // lines up with "what were you doing when it broke".
-        $claimedUser = $r->input('user_id') ? (int) $r->input('user_id') : null;
-        if ($claimedUser && ! \Illuminate\Support\Facades\DB::table('users')->where('id', $claimedUser)->exists()) {
-            $claimedUser = null;                       // client-supplied; never trust it blindly
-        }
-        $agencyId = $r->input('agency_id') ? (int) $r->input('agency_id') : null;
-        if ($claimedUser) {
-            // Prefer the agency we can PROVE from their roles over the one the
-            // browser claims — a stale active-agency id has misfiled data before.
-            $real = \Illuminate\Support\Facades\DB::table('role_assignments')
-                ->where('user_id', $claimedUser)->where('active', true)
-                ->whereNotNull('agency_id')->value('agency_id');
-            if ($real) $agencyId = (int) $real;
-        }
-        if ($agencyId && ! \Illuminate\Support\Facades\DB::table('agencies')->where('id', $agencyId)->exists()) {
-            $agencyId = null;
-        }
-        $tz = \App\Support\AgencyTime::tz($agencyId);   // null agency → the system default
-        $nowLocal = now()->setTimezone($tz);
-
-        // Context, not just a stack. A trace with no screen, no user and no last
-        // action tells you something broke but not what anyone was doing.
-        $data = [
-            'at'          => $nowLocal->format('D, M j, Y g:i A') . ' (' . $nowLocal->format('T') . ')',
-            'at_utc'      => now()->toDateTimeString(),
-            'timezone'    => $tz,
-            'lang'        => mb_substr((string) $r->input('lang'), 0, 20),
-            'screen_size' => mb_substr((string) $r->input('screen_size'), 0, 24),
-            'dpr'         => mb_substr((string) $r->input('dpr'), 0, 8),
-            'sw'          => mb_substr((string) $r->input('sw'), 0, 60),
-            'device'      => mb_substr((string) $r->input('device'), 0, 200),
-            'os'          => mb_substr((string) $r->input('os'), 0, 80),
-            'app'         => mb_substr((string) $r->input('app'), 0, 80),
-            'app_version' => mb_substr((string) $r->input('app_version'), 0, 40),
-            'url'         => mb_substr((string) $r->input('url'), 0, 300),
-            'screen'      => mb_substr((string) $r->input('screen'), 0, 120),
-            'user_id'     => $r->input('user_id') ? (int) $r->input('user_id') : null,
-            'user_email'  => mb_substr((string) $r->input('user_email'), 0, 160),
-            'user_name'   => mb_substr((string) $r->input('user_name'), 0, 120),
-            'role'        => mb_substr((string) $r->input('role'), 0, 40),
-            'agency_id'   => $r->input('agency_id') ? (int) $r->input('agency_id') : null,
-            'last_action' => mb_substr((string) $r->input('last_action'), 0, 160),
-            'viewport'    => mb_substr((string) $r->input('viewport'), 0, 24),
-            'native'      => (bool) $r->input('native'),
-            'trace'       => mb_substr((string) $r->input('trace'), 0, 8000),
-            /* What the session was doing before it broke — navigations, failed
-               requests, service-worker takeovers, clicks. A stack trace says WHERE it
-               died; this says how it got there. Added after ticket #18 filed with
-               "Last action: not captured". (2026-08-26) */
-            'breadcrumbs' => mb_substr((string) $r->input('breadcrumbs'), 0, 2400),
-            /* Which script blocked the main thread, and for how long. The freeze
-               watchdog collects this from PerformanceObserver('longtask') at the
-               moment it decides to report, so a freeze ticket names a file instead
-               of leaving the reader to guess. (2026-09-04) */
-            'long_tasks'  => mb_substr((string) $r->input('long_tasks'), 0, 600),
-            'ip'          => $r->ip(),
-        ];
-        try { \Illuminate\Support\Facades\Storage::append('crash-reports.log', json_encode($data)); } catch (\Throwable $e) {}
-
-        /* A FREEZE also goes in the audit log, next to perf.slow_request.
-           The ticket is for acting on; this is for asking whether it is getting
-           better -- which screen, how long, how often, and whether a fix moved the
-           number. Everything here is guarded: this endpoint exists to survive a bad
-           client, so a freeze that cannot be summarised must still be stored above. */
-        try {
-            $trace = (string) $data['trace'];
-            if (preg_match('/UI (FROZE|LONG STALL)/', $trace, $kind)) {
-                $secs = null;
-                if (preg_match('/responding for ([0-9.]+)s/', $trace, $m)) { $secs = (float) $m[1]; }
-                \App\Support\Audit::write([
-                    'user_id'     => $data['user_id'],
-                    'agency_id'   => $agencyId,
-                    'action'      => 'perf.ui_freeze',
-                    'entity_type' => 'screen',
-                    'user_agent'  => mb_substr((string) $data['device'], 0, 500),
-                    'payload'     => json_encode([
-                        'kind'        => $kind[1] === 'FROZE' ? 'freeze' : 'long_stall',
-                        'seconds'     => $secs,
-                        'screen'      => $data['screen'] ?: $data['url'],
-                        'long_tasks'  => $data['long_tasks'],
-                        'app_version' => $data['app_version'],
-                        'sw'          => $data['sw'],
-                        'native'      => $data['native'],
-                        'summary'     => trim(($kind[1] === 'FROZE' ? 'Interface froze' : 'Interface stalled')
-                                         . ($secs ? ' for ' . $secs . 's' : '')
-                                         . ' on ' . ($data['screen'] ?: 'unknown screen')
-                                         . ($data['long_tasks'] ? ' — blocked by ' . $data['long_tasks'] : '')),
-                    ]),
-                    'created_at'  => now(),
-                ]);
-            }
-        } catch (\Throwable $e) { /* never break the crash sink */ }
-
-        // The first line of the trace is the error itself; the rest is where it came
-        // from. That first line is what makes two reports "the same crash".
-        // Neither preg_replace nor strtok is safe to chain into trim(): the first
-        // returns null on a pattern failure and the second returns FALSE when the
-        // string is empty, and trim() rejects both with a TypeError - a 500 on the
-        // one endpoint whose whole job is to survive a bad client. A report whose
-        // JSON does not decode arrives here with an empty trace, which is exactly
-        // the case that hit. Cast, guard, then split.
-        $cleanTrace = (string) preg_replace('/^\S+\s+(JS ERROR|UNHANDLED PROMISE)\s+/', '', $data['trace']);
-        if (trim($cleanTrace) === '') $cleanTrace = (string) $data['trace'];
-        $lines = explode("\n", $cleanTrace);
-        $firstLine = trim((string) ($lines[0] ?? ''));
-        $subject = 'Crash: ' . mb_substr($firstLine !== '' ? $firstLine : 'Unknown error', 0, 150);
-
-        /* AN OPAQUE "Script error." IS NOT OURS AND CANNOT BE WORKED ON.
-
-           The browser refuses to describe an exception raised by a cross-origin script —
-           an extension, a content blocker, a password manager, an injected script — so
-           there is no file, no line and no stack, and nothing in KiddieTrac to change.
-           The reporter already recognises this class and replaces the useless trace with
-           an explanation; what it could not do was stop it becoming a ticket.
-
-           That mattered little while reports were opt-in, because somebody had to tap
-           Send. Since 2026-08-31 they send automatically, so every extension misbehaving
-           on somebody's phone would file a high-priority technical ticket nobody can act
-           on — the queue becomes noise and the real crashes get lost in it.
-
-           Still LOGGED (crash-reports.log), because the pattern is worth seeing if it
-           ever becomes twenty users in a day. Just not filed, and not emailed. Found
-           when Eisha Wright hit exactly this at 8:06 on 2026-08-31. */
-        $isOpaque = (bool) preg_match('/^script error/i', trim($firstLine))
-            || str_contains($data['trace'], 'Script error (opaque)');
-        if ($isOpaque) {
-            return response()->json([
-                'ok' => true,
-                'ticket_id' => null,
-                'note' => 'Logged. No ticket filed: the browser withheld the detail, so there is nothing actionable.',
-            ]);
-        }
-
-        /* NOT OUR CODE (tickets #154 and #156, 2026-10-16): "Error: blocked" with a trace made
-           only of a browser extension (chrome-extension://…) and the host's injected traffic
-           script (img1.wsimg.com). When every URL in the trace is another origin, there is
-           nothing in KiddieTrac to fix. Logged above like the opaque case, not filed. */
-        if (preg_match_all('#(?:https?|chrome-extension|moz-extension|safari-web-extension)://([^/\s:)]+)#i', (string) $data['trace'], $hostM)
-            && ! array_filter($hostM[1], fn ($h) => (bool) preg_match('/(^|\.)kiddietrac\.com$/i', $h))) {
-            return response()->json([
-                'ok' => true,
-                'ticket_id' => null,
-                'note' => 'Logged. No ticket filed: the error came from a third-party script or browser extension, not KiddieTrac.',
-            ]);
-        }
-
-        /* A REPORT THAT SAYS NOTHING IS NOT A CRASH (ticket #86, 2026-09-21).
-
-           #86 read, in full: "Crash: Unknown error. Who: unknown. Screen: ? URL: ?
-           Last action: not captured. App: ? Viewport: ? Device: OS: Trace: (empty)."
-           Every field a question mark, and nothing to work on.
-
-           It came from 202.61.157.28 at 08:08 on 20 September — the first request of the
-           probe that spent the next twenty minutes guessing passwords. This endpoint is
-           public by necessity (a crashed client has no session to prove), which means
-           anyone can post an empty body and file a technical ticket. Left alone, that is
-           a way to bury a real crash queue under junk, and it is free to do.
-
-           So: no trace, no screen, no URL, and nobody signed in — log it and stop.
-           LOGGED, never silently dropped, because a flood of these is itself worth
-           seeing; it is the same rule the opaque-error guard above already follows. */
-        $hasNothing = trim((string) $data['trace']) === ''
-            && trim((string) $data['screen']) === ''
-            && trim((string) $data['url']) === ''
-            && ! $claimedUser;
-        if ($hasNothing) {
-            return response()->json([
-                'ok' => true,
-                'ticket_id' => null,
-                'note' => 'Logged. No ticket filed: the report carried no error, screen or URL.',
-            ]);
-        }
-
-        // Track it as a support ticket, so a crash is something you can work through
-        // and close rather than a line in a log nobody opens.
-        $ticketId = null;
-        try {
-            // The SAME crash reported repeatedly is one problem, not twenty tickets:
-            // three identical traces arrived within an hour of each other in August.
-            // Reopen nothing, spam nothing — only file a new one if there is no open
-            // ticket for this error already.
-            $existing = \Illuminate\Support\Facades\DB::table('support_tickets')
-                ->where('category', 'technical')->where('status', 'open')
-                ->where('subject', $subject)
-                ->orderByDesc('id')->first();
-
-            $userId = $claimedUser;
-
-            $bodyText = "Automatically filed from a crash report.\n\n"
-                . 'When: ' . $data['at'] . "\n"
-                . 'Who: ' . ($data['user_name'] ?: 'unknown') . ' <' . ($data['user_email'] ?: 'unknown') . '>'
-                . ($data['role'] ? ' · ' . $data['role'] : '') . "\n"
-                . 'Screen: ' . ($data['screen'] ?: '?') . '   URL: ' . ($data['url'] ?: '?') . "\n"
-                . 'Last action: ' . ($data['last_action'] ?: 'not captured') . "\n"
-                . 'App: ' . ($data['app'] ?: '?') . ' ' . $data['app_version']
-                . ($data['native'] ? ' (native app)' : ' (browser)') . '   Viewport: ' . ($data['viewport'] ?: '?')
-                . ($data['screen_size'] ? '   Screen: ' . $data['screen_size'] : '')
-                . ($data['dpr'] ? ' @' . $data['dpr'] . 'x' : '') . "\n"
-                . 'Device: ' . $data['device'] . "\n"
-                . 'OS: ' . $data['os'] . ($data['lang'] ? '   Language: ' . $data['lang'] : '')
-                . '   IP: ' . $data['ip'] . "\n"
-                . 'Service worker: ' . ($data['sw'] ?: 'not reported')
-                . '   Recorded ' . $data['at_utc'] . ' UTC' . "\n\n"
-                . ($data['breadcrumbs']
-                    ? "What led up to it (oldest first):\n" . $data['breadcrumbs'] . "\n\n"
-                    : '')
-                . "Trace:\n" . $data['trace'];
-
-            if ($existing) {
-                // Append the recurrence to the open ticket instead of filing a twin.
-                \Illuminate\Support\Facades\DB::table('support_tickets')->where('id', $existing->id)->update([
-                    'body' => mb_substr($existing->body . "\n\n--- reported again ---\n" . $bodyText, 0, 60000),
-                    'updated_at' => now(),
-                ]);
-                $ticketId = (int) $existing->id;
-            } else {
-                $ticketId = \Illuminate\Support\Facades\DB::table('support_tickets')->insertGetId([
-                    'agency_id'         => $agencyId,
-                    'centre_id'         => null,
-                    'raised_by_user_id' => $userId,
-                    'category'          => 'technical',
-                    'priority'          => 'high',
-                    'subject'           => $subject,
-                    'body'              => $bodyText,
-                    'status'            => 'open',
-                    'created_at'        => now(),
-                    'updated_at'        => now(),
-                ]);
-            }
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Crash report: could not file a support ticket', ['error' => $e->getMessage()]);
-        }
-
-        // Email the crash to the team so it lands in the inbox, not just a log —
-        // branded like every other KiddieTrac email, and led by the ticket number
-        // so the report and the thing you track it in are never separate items.
-        try {
-            $row = function ($label, $value) {
-                return '<tr><td class="kt-muted" style="padding:5px 14px 5px 0;color:#64748B;font-size:13px;white-space:nowrap;vertical-align:top;">'
-                    . e($label) . '</td><td class="kt-strong" style="padding:5px 0;color:#0F172A;font-size:13px;font-weight:600;word-break:break-word;">'
-                    . e($value ?: '—') . '</td></tr>';
-            };
-            $ticketLine = $ticketId
-                ? '<div style="display:inline-block;background:#13b7cc;color:#04263a;font-weight:800;font-size:13px;letter-spacing:.4px;padding:6px 14px;border-radius:999px;">SUPPORT TICKET #' . (int) $ticketId . '</div>'
-                : '<div style="display:inline-block;background:#FEE2E2;color:#991B1B;font-weight:800;font-size:13px;padding:6px 14px;border-radius:999px;">NO TICKET FILED — SEE THE LOG</div>';
-
-            $body = '<!doctype html><html><head><meta charset="UTF-8">'
-                . '<meta name="viewport" content="width=device-width, initial-scale=1">'
-                // Declaring the scheme is what stops a client inventing its own inversion
-                // of a white panel full of near-black text.
-                . '<meta name="color-scheme" content="light dark">'
-                . '<meta name="supported-color-schemes" content="light dark">'
-                . '<style>@media (prefers-color-scheme: dark){'
-                . '.kt-bg{background:#0E1726 !important;}'
-                . '.kt-panel{background:#152033 !important;border-color:#26344A !important;}'
-                . '.kt-panel td,.kt-panel div,.kt-panel span,.kt-panel p{color:#D6DEE9 !important;}'
-                . '.kt-strong{color:#F1F5F9 !important;}'
-                . '.kt-muted{color:#9AA8BC !important;}'
-                . '}</style></head><body style="margin:0;padding:0;">'
-                . '<div class="kt-bg" style="margin:0;padding:0;background:#F1F5F9;">'
-                . '<div style="max-width:640px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
-                // Branded navy header, matching the portal's other emails.
-                . '<div style="background:linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);padding:22px 24px;border-radius:14px 14px 0 0;text-align:center;">'
-                .   '<img src="https://app.kiddietrac.com/login-wordmark.png" alt="KiddieTrac" width="190" style="max-width:190px;height:auto;display:block;margin:0 auto 10px;">'
-                .   '<div style="color:#fff;font-size:17px;font-weight:800;">Crash report</div>'
-                .   '<div style="color:rgba(255,255,255,.72);font-size:12.5px;margin-top:3px;">' . e($data['at']) . '</div>'
-                . '</div>'
-                . '<div class="kt-panel" style="background:#fff;padding:20px 24px;border:1px solid #E2E8F0;border-top:0;">'
-                .   '<div style="text-align:center;margin-bottom:16px;">' . $ticketLine . '</div>'
-                .   '<div class="kt-strong" style="font-size:15px;font-weight:800;color:#0F172A;margin:0 0 4px;">' . e($firstLine ?: 'Unknown error') . '</div>'
-                .   '<div class="kt-muted" style="font-size:12.5px;color:#64748B;margin-bottom:16px;">on ' . e($data['screen'] ?: 'an unknown screen') . '</div>'
-                .   '<table style="width:100%;border-collapse:collapse;margin-bottom:16px;">'
-                .     $row('When', $data['at'])
-                .     $row('Who', ($data['user_name'] ?: 'Not signed in') . ($data['user_email'] ? ' <' . $data['user_email'] . '>' : '') . ($data['role'] ? ' · ' . $data['role'] : ''))
-                .     $row('Screen', $data['screen'])
-                .     $row('URL', $data['url'])
-                .     $row('Last action', $data['last_action'] ?: 'not captured')
-                .     $row('App', trim(($data['app'] ?: '?') . ' ' . $data['app_version']) . ($data['native'] ? ' · native app' : ' · browser'))
-                .     $row('Viewport', trim($data['viewport'] . ($data['screen_size'] ? ' (screen ' . $data['screen_size'] . ')' : '')))
-                .     $row('Device', $data['device'])
-                .     $row('OS', $data['os'] . ($data['lang'] ? ' · ' . $data['lang'] : ''))
-                .     $row('Service worker', $data['sw'])
-                .     $row('IP', $data['ip'])
-                .   '</table>'
-                .   '<div class="kt-muted" style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Trace</div>'
-                .   '<pre style="white-space:pre-wrap;word-break:break-word;background:#0B1220;color:#E2E8F0;padding:14px;border-radius:10px;font-size:11.5px;line-height:1.55;margin:0;">'
-                .   e($data['trace']) . '</pre>'
-                . '</div>'
-                . '<div class="kt-muted" style="text-align:center;padding:14px 24px 24px;color:#94A3B8;font-size:11.5px;">'
-                .   'Times shown in ' . e($data['timezone']) . ' · recorded ' . e($data['at_utc']) . ' UTC<br>'
-                .   'Filed automatically by KiddieTrac from an in-app crash report.'
-                . '</div></div></div></body></html>';
-
-            $subject = '⚠️ KiddieTrac crash' . ($ticketId ? ' · ticket #' . (int) $ticketId : '')
-                . ' · ' . mb_substr($firstLine ?: 'Unknown error', 0, 80);
-            \App\Services\AgencyMailer::forAgency($agencyId)->mailer()->html($body, function ($m) use ($subject) {
-                $m->to('info@kiddietrac.com')->subject($subject);
-            });
-        } catch (\Throwable $e) {
-            // Do NOT swallow this silently again: the undefined-$data bug hid every
-            // crash email for weeks because the failure had nowhere to be seen.
-            \Illuminate\Support\Facades\Log::error('Crash report: could not email the team', ['error' => $e->getMessage()]);
-        }
-        return response()->json(['ok' => true, 'ticket_id' => $ticketId]);
-    })->middleware('throttle:30,1');
+    // Body in DiagCrashController (2026-11-04): the cached closure crashed PHP on every report.
+    Route::post('/diag/crash', [\App\Http\Controllers\Api\DiagCrashController::class, 'store'])->middleware('throttle:30,1,r-grp-512');
 
     // Device-side scroll diagnostics (log only, no email) — lets us SEE the phone's
     // real scroll timeline on a Home navigation, which the desktop browser can't reproduce.
@@ -462,7 +201,13 @@ Route::prefix('v1')->group(function () {
             'data' => mb_substr((string) $r->input('data'), 0, 4000),
         ])); } catch (\Throwable $e) {}
         return response()->json(['ok' => true]);
-    })->middleware('throttle:60,1');
+    })->middleware('throttle:60,1,r-grp-522');
+
+    // Connection speed as the device saw it (App\Support\NetQuality) - one summary per session.
+    Route::post('/diag/net', function (\Illuminate\Http\Request $r) {
+        try { \App\Support\NetQuality::record($r); } catch (\Throwable $e) {}
+        return response()->json(['ok' => true]);
+    })->middleware('throttle:20,1,r-grp-528');
 
     Route::post('/diag/bio', function (\Illuminate\Http\Request $r) {
         try { \Illuminate\Support\Facades\Storage::append('bio-diag.log', json_encode([
@@ -470,68 +215,135 @@ Route::prefix('v1')->group(function () {
             'data' => mb_substr((string) $r->input('data'), 0, 2000),
         ])); } catch (\Throwable $e) {}
         return response()->json(['ok' => true]);
-    })->middleware('throttle:120,1');
+    })->middleware('throttle:120,1,r-grp-536');
+
+    // Native app cold-boot timing (2026-11-01), log only: the inline beacon at the top of
+    // dashboard.html / index.html. iPhone has no Safari inspector here, so the app reports itself.
+    Route::post('/diag/boot', function (\Illuminate\Http\Request $r) {
+        try { \Illuminate\Support\Facades\Storage::append('boot-diag.log', json_encode([
+            'at' => now()->toDateTimeString(), 'ua' => mb_substr((string) $r->userAgent(), 0, 200),
+            'data' => mb_substr((string) $r->input('data'), 0, 4000),
+        ])); } catch (\Throwable $e) {}
+        return response()->json(['ok' => true]);
+    })->middleware('throttle:60,1,r-grp-boot');
 
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login');
     // Public: lets the login page show a scheduled-maintenance notice.
     Route::get('/maintenance/status', [\App\Http\Controllers\Api\MaintenanceController::class, 'show']);
-    Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+    // Public: the Google Play build numbers the app compares itself with (update prompts, 2026-10-30).
+    Route::get('/app/versions', [\App\Http\Controllers\Api\AppVersionController::class, 'show'])->middleware('throttle:120,1,r-app-versions');
+    Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1,r-auth-register');
 /* PASSKEYS — public half. Sign-in names no account: the credential does, which is what
    eight accounts sharing three email addresses actually needs. Throttled like the other
    unauthenticated auth routes, because an open verify endpoint is a guessing endpoint. */
-Route::post('/auth/passkey/options', [\App\Http\Controllers\Api\PasskeyController::class, 'loginOptions'])->middleware('throttle:30,1');
-Route::post('/auth/passkey/verify',  [\App\Http\Controllers\Api\PasskeyController::class, 'loginVerify'])->middleware('throttle:30,1');
+Route::post('/auth/passkey/options', [\App\Http\Controllers\Api\PasskeyController::class, 'loginOptions'])->middleware('throttle:120,1,r-auth-passkey-options');
+Route::post('/auth/passkey/verify',  [\App\Http\Controllers\Api\PasskeyController::class, 'loginVerify'])->middleware('throttle:30,1,r-auth-passkey-verify');
 
-    Route::post('/auth/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
+    Route::post('/auth/forgot', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1,r-auth-forgot');
     // The 6-digit code from email / text / call (2026-10-15). 10 tries a minute per IP on
     // top of the 5-wrong-guesses limit each code carries.
-    Route::post('/auth/forgot/verify', [AuthController::class, 'verifyResetCode'])->middleware('throttle:10,1');
-    Route::post('/auth/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
-    Route::post('/auth/set-password', [AuthController::class, 'setPasswordFromToken'])->middleware('throttle:10,1');
+    Route::post('/auth/forgot/verify', [AuthController::class, 'verifyResetCode'])->middleware('throttle:10,1,r-auth-forgot-verify');
+    Route::post('/auth/reset', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1,r-auth-reset');
+    // The reset page checks its link on open, and can email a fresh one (2026-10-23).
+    Route::post('/auth/reset/check', [AuthController::class, 'resetCheck'])->middleware('throttle:20,1,r-auth-reset-check');
+    Route::post('/auth/reset/resend', [AuthController::class, 'resetResend'])->middleware('throttle:3,1,r-auth-reset-resend');
+    Route::post('/auth/set-password', [AuthController::class, 'setPasswordFromToken'])->middleware('throttle:10,1,r-auth-set-password');
     Route::get('/auth/social/providers', [\App\Http\Controllers\Api\SocialAuthController::class, 'providers']);
-    Route::get('/auth/social/{provider}/redirect', [\App\Http\Controllers\Api\SocialAuthController::class, 'redirect'])->where('provider', '[a-z]+')->middleware('throttle:20,1');
-    Route::get('/auth/social/{provider}/callback', [\App\Http\Controllers\Api\SocialAuthController::class, 'callback'])->where('provider', '[a-z]+')->middleware('throttle:20,1');
+    // An announcement's attached PDF (2026-10-20). No sign-in: the signed, expiring link
+    // is the permission, handed only to the announcement's own recipients.
+    Route::get('/announcements/{id}/pdf', [\App\Http\Controllers\Api\AnnouncementController::class, 'pdf'])
+        ->whereNumber('id')->name('announcements.pdf')->middleware(['signed', 'throttle:60,1,r-grp-563']);
+    // The birthday sing-along cartoon (2026-10-21): what the player shows, by signed link only.
+    Route::get('/birthday-video/demo', [\App\Http\Controllers\Api\BirthdayVideoController::class, 'demo'])->middleware('throttle:60,1,r-birthday-video-demo');
+    Route::get('/birthday-video/staff/{user}', [\App\Http\Controllers\Api\BirthdayVideoController::class, 'staff'])
+        ->whereNumber('user')->name('birthday.video.staff')->middleware(['signed', 'throttle:60,1,r-grp-567']);
+    Route::get('/birthday-video/{child}', [\App\Http\Controllers\Api\BirthdayVideoController::class, 'show'])
+        ->whereNumber('child')->name('birthday.video')->middleware(['signed', 'throttle:60,1,r-grp-569']);
+    Route::get('/auth/social/{provider}/redirect', [\App\Http\Controllers\Api\SocialAuthController::class, 'redirect'])->where('provider', '[a-z]+')->middleware('throttle:20,1,r-auth-social-x-redirect');
+    Route::get('/auth/social/{provider}/callback', [\App\Http\Controllers\Api\SocialAuthController::class, 'callback'])->where('provider', '[a-z]+')->middleware('throttle:20,1,r-auth-social-x-callback');
     // The phone app trades its one-time code for a token (SocialAuthController::appExchange).
-    Route::post('/auth/social/app-exchange', [\App\Http\Controllers\Api\SocialAuthController::class, 'appExchange'])->middleware('throttle:20,1');
+    Route::post('/auth/social/app-exchange', [\App\Http\Controllers\Api\SocialAuthController::class, 'appExchange'])->middleware('throttle:20,1,r-auth-social-app-exchange');
     // v22p93: email open-tracking pixel (public, no auth)
     Route::get('/e/o/{token}', [\App\Http\Controllers\Api\PlatformController::class, 'trackOpen']);
 
     // ─── Public signup (rate-limited, v7) ───
-    Route::post('/signup/centre', [SignupController::class, 'signup'])->middleware('throttle:3,60');
+    Route::post('/signup/centre', [SignupController::class, 'signup'])->middleware('throttle:3,60,r-signup-centre');
 
     // v22p2.1: public invite-code parent signup
-    Route::get('/signup/invitation/{code}', [InvitationController::class, 'probe'])->middleware('throttle:30,1');
-    Route::post('/signup/by-code', [SignupController::class, 'byCode'])->middleware('throttle:5,60');
+    Route::get('/signup/invitation/{code}', [InvitationController::class, 'probe'])->middleware('throttle:30,1,r-signup-invitation-x');
+    Route::post('/signup/by-code', [SignupController::class, 'byCode'])->middleware('throttle:5,60,r-signup-by-code');
 
 
 Route::any('/login', function () { return response()->json(['message' => 'Unauthenticated. Please sign in via the app.'], 401); })->name('login');
-Route::get('/branding', [BrandingController::class, 'show']);
+// Throttled (2026-11-05 leak sweep): public, and it used to name any agency by number.
+Route::get('/branding', [BrandingController::class, 'show'])->middleware('throttle:240,1,branding');
+// A white-label app's brand before its first paint (index.html <head>, 2026-10-30).
+Route::get('/branding/boot.js', [BrandingController::class, 'bootJs'])->middleware('throttle:120,1,brandboot');
 Route::get('/marketing-site/config', [\App\Http\Controllers\Api\MarketingSiteController::class, 'publicConfig']);
-Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead'])->middleware('throttle:5,1,mklead');
+Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitLead'])->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:5,1,mklead']);
 // Website booking wizard (2026-09-29): month availability + book a meeting
 Route::get('/marketing-site/booking/availability', [\App\Http\Controllers\Api\MarketingBookingController::class, 'availability'])->middleware('throttle:60,1,mkbooka');
-Route::post('/marketing-site/booking', [\App\Http\Controllers\Api\MarketingBookingController::class, 'store'])->middleware('throttle:6,60,mkbook');
+Route::post('/marketing-site/booking', [\App\Http\Controllers\Api\MarketingBookingController::class, 'store'])->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:6,60,mkbook']);
+Route::get('/marketing-site/booking/{id}/calendar.ics', [\App\Http\Controllers\Api\MarketingBookingController::class, 'calendar'])->whereNumber('id')->middleware('throttle:60,1,mkbookics');
+// Calendar sync (2026-11-03, cal1103): a person's private subscription feed. No sign-in (calendar apps cannot);
+// the 256-bit token is the key. CalendarFeedController also rate-limits per link and per IP.
+Route::match(['GET', 'HEAD'], '/cal/{token}.ics', [\App\Http\Controllers\Api\CalendarFeedController::class, 'feed'])->where('token', '[A-Za-z0-9_-]{40,64}')->middleware('throttle:240,1,calfeed');
+// The prospect intake form, signed per booking (2026-10-23).
+Route::get('/marketing-site/intake/{id}', [\App\Http\Controllers\Api\ProspectIntakeController::class, 'show'])->whereNumber('id')->middleware('throttle:60,1,mkintake');
+Route::post('/marketing-site/intake/{id}', [\App\Http\Controllers\Api\ProspectIntakeController::class, 'submit'])->whereNumber('id')->middleware('throttle:10,1,mkintakep');
+// Sales campaign email links, no sign-in: a 40-character token per recipient (2026-10-26). See SalesCampaignPublicController.
+// Cold reach emails: the open pixel and unsubscribe (2026-10-30).
+Route::get('/c/po/{token}.gif', [\App\Http\Controllers\Api\SalesProspectController::class, 'pixel'])->where('token', '[a-z0-9]{40}')->middleware('throttle:240,1,kcpopen');
+Route::match(['get', 'post'], '/c/pu/{token}', [\App\Http\Controllers\Api\SalesProspectController::class, 'unsubscribe'])->where('token', '[a-z0-9]{40}')->middleware('throttle:60,1,kcpunsub');
+Route::get('/c/o/{token}.gif', [\App\Http\Controllers\Api\SalesCampaignPublicController::class, 'open'])->where('token', '[a-z0-9]{40}')->middleware('throttle:240,1,kccopen');
+Route::get('/c/l/{token}/{key}', [\App\Http\Controllers\Api\SalesCampaignPublicController::class, 'click'])->where('token', '[a-z0-9]{40}')->where('key', '[a-z]{2,12}')->middleware('throttle:120,1,kcclick');
+Route::match(['get', 'post'], '/c/i/{token}', [\App\Http\Controllers\Api\SalesCampaignPublicController::class, 'interested'])->where('token', '[a-z0-9]{40}')->middleware('throttle:60,1,kccint');
+Route::match(['get', 'post'], '/c/u/{token}', [\App\Http\Controllers\Api\SalesCampaignPublicController::class, 'unsubscribe'])->where('token', '[a-z0-9]{40}')->middleware('throttle:60,1,kccunsub');
+// Decide a website meeting request from the sales email, no sign-in (signed per booking + action, 2026-10-23).
+Route::get('/marketing-site/booking-action/{id}', [\App\Http\Controllers\Api\BookingEmailActionController::class, 'show'])->whereNumber('id')->middleware('throttle:60,1,mkbkact');
+Route::post('/marketing-site/booking-action/{id}', [\App\Http\Controllers\Api\BookingEmailActionController::class, 'submit'])->whereNumber('id')->middleware('throttle:10,1,mkbkactp');
 Route::post('/marketing-site/hit', [\App\Http\Controllers\Api\MarketingSiteController::class, 'recordHit'])->middleware('throttle:60,1,mkhit');
-Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat'])->middleware('throttle:45,1,mkchat');
+Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteController::class, 'logChat'])->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:45,1,mkchat']);
 // A finished conversation goes to sales as a transcript. Throttled hard: one chat
 // ends once, and this one sends mail.
+// The website chat answered by Claude (2026-10-30, MarketingAiChatController): Maya asks this first, falls back to her scripted answers.
+// Job applications from www.kiddietrac.com/careers: CV + cover letter (2026-10-30, CareersController).
+Route::post('/marketing-site/careers/apply', [\App\Http\Controllers\Api\CareersController::class, 'apply'])->middleware('throttle:5,10,careers');
+Route::post('/marketing-site/chat/ai', [\App\Http\Controllers\Api\MarketingAiChatController::class, 'reply'])->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:20,1,mkai']);
+// The website's live phone demo: a 2-hour login to a fictional Brightwood account (2026-10-31, App\Support\PublicDemo).
+Route::post('/marketing-site/demo-session', [\App\Http\Controllers\Api\WebDemoController::class, 'start'])->middleware('throttle:10,1,webdemo');
 Route::post('/marketing-site/chat/end', [\App\Http\Controllers\Api\MarketingSiteController::class, 'endChat'])->middleware('throttle:6,1,mkchatend');
 // Each public marketing route has its OWN throttle prefix. Without one, Laravel keys every
 // throttle by IP alone, so page hits + chat polls used up the lead form's 5/min and the
 // transcript's 6/min, and those were refused with 429 mid-visit.
 // Live website chat: the page polls for the team's replies + typing, and can ask for a person.
 Route::get('/marketing-site/chat/poll', [\App\Http\Controllers\Api\WebChatController::class, 'poll'])->middleware('throttle:90,1,mkpoll');
-Route::post('/marketing-site/chat/human', [\App\Http\Controllers\Api\WebChatController::class, 'wantHuman'])->middleware('throttle:6,1,mkhuman');
+Route::post('/marketing-site/chat/human', [\App\Http\Controllers\Api\WebChatController::class, 'wantHuman'])->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:6,1,mkhuman']);
 // Marketing-site auto-translation: the page reports text it has no FR/ES for; translated once, served after.
 Route::get('/marketing-site/i18n/{lang}/extra', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'extra'])->where('lang', 'fr|es|hi')->middleware('throttle:120,1,mki18nx');
 Route::post('/marketing-site/i18n/missing', [\App\Http\Controllers\Api\MarketingTranslationController::class, 'missing'])->middleware('throttle:20,1,mki18n');
 Route::get('/marketing-site/unsubscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'unsubscribe']);
 Route::post('/marketing-site/subscribe', [\App\Http\Controllers\Api\MarketingSiteController::class, 'subscribeNewsletter'])->middleware('throttle:5,10,mknews');
-Route::post('/marketing-site/contact', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitContact'])->middleware('throttle:5,10,mkcontact');
+Route::post('/marketing-site/contact', [\App\Http\Controllers\Api\MarketingSiteController::class, 'submitContact'])->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:5,10,mkcontact']);
 // Website support tickets + toll-free voicemail (2026-09-29)
 Route::post('/marketing-site/support', [\App\Http\Controllers\Api\WebsiteSupportController::class, 'submitTicket'])->middleware('throttle:5,10,mksupport');
-Route::post('/voice/voicemail/{token}', [\App\Http\Controllers\Api\WebsiteSupportController::class, 'voicemail'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:60,1,voicemail');
-Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1');
+/* GET as well as POST (2026-10-22): Telnyx fetched the call-menu step with GET although the
+   script asked for POST, and a POST-only route answered 405 — callers heard "an application
+   error has occurred". Parameters arrive in the query string either way ($request->input). */
+Route::match(['get', 'post'], '/voice/voicemail/{token}', [\App\Http\Controllers\Api\WebsiteSupportController::class, 'voicemail'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:60,1,voicemail');
+// Toll-free call menu (2026-10-22): Telnyx asks these during a call. App\Support\PhoneMenu.
+Route::match(['get', 'post'], '/voice/ivr/{token}/choose',    [\App\Http\Controllers\Api\PhoneMenuController::class, 'choose'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+Route::match(['get', 'post'], '/voice/ivr/{token}/screen',    [\App\Http\Controllers\Api\PhoneMenuController::class, 'screen'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+Route::match(['get', 'post'], '/voice/ivr/{token}/screen-ok', [\App\Http\Controllers\Api\PhoneMenuController::class, 'screenOk'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+// The dialer's calls (Telnyx TeXML → us), each protected by its own token (2026-10-23).
+Route::match(['get', 'post'], '/voice/dialer/hook/{id}/{token?}/{step?}', [\App\Http\Controllers\Api\DialerController::class, 'hook'])
+    ->where(['id' => '[0-9]+|fallback', 'token' => '[A-Za-z0-9]{0,64}', 'step' => '[a-z]{0,12}'])->middleware('throttle:240,1,dialer');
+Route::match(['get', 'post'], '/voice/ivr/{token}/dialed',    [\App\Http\Controllers\Api\PhoneMenuController::class, 'dialed'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+// A held caller put through to the app that answered the ringing push (2026-10-23).
+Route::match(['get', 'post'], '/voice/ivr/{token}/connect',   [\App\Http\Controllers\Api\PhoneMenuController::class, 'connect'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+// An answered incoming call's recording (2026-10-23, App\Support\CallRecords).
+Route::match(['get', 'post'], '/voice/ivr/{token}/recorded',  [\App\Http\Controllers\Api\PhoneMenuController::class, 'recorded'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+Route::post('/stripe/webhook', [StripeBillingController::class, 'webhook'])->middleware('throttle:600,1,r-stripe-webhook');
 
 // PUBLIC — Zum Rails settlement callbacks. No auth: Zum calls this, not a user. Guarded
 // by a shared secret compared inside the controller. This is the ONLY thing that marks a
@@ -557,12 +369,12 @@ Route::get('/media/e/{token}', [\App\Http\Controllers\Api\MediaFileController::c
     ->where('token', '[A-Za-z0-9\-_\.]+')
     ->name('media.email');
 
-Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle'])->middleware('throttle:600,1');
+Route::post('/zumrails/webhook', [\App\Http\Controllers\Api\ZumWebhookController::class, 'handle'])->middleware('throttle:600,1,r-zumrails-webhook');
 
 // PUBLIC — Twilio inbound SMS: STOP, START and HELP. No auth (Twilio holds no session);
 // the request is Twilio-signature-verified inside, and refused outright when TWILIO_TOKEN
 // is unset, since an unverifiable endpoint here would let anyone opt a number in or out.
-Route::post('/sms/inbound', [\App\Http\Controllers\Api\SmsConsentController::class, 'inbound'])->middleware('throttle:120,1');
+Route::post('/sms/inbound', [\App\Http\Controllers\Api\SmsConsentController::class, 'inbound'])->middleware('throttle:120,1,r-sms-inbound');
 
 /* PUBLIC — Telnyx inbound SMS and call events (2026-09-10). No auth for the same
    reason as the Twilio route above; verified instead with the agency's own Ed25519
@@ -577,11 +389,12 @@ Route::post('/sms/inbound', [\App\Http\Controllers\Api\SmsConsentController::cla
    four webhooks per recipient (initiated, answered, speak.ended, hangup), so thirty
    families is a burst of a hundred and twenty in under a minute. */
 Route::post('/sms/telnyx/inbound/{agency}', [\App\Http\Controllers\Api\SmsConsentController::class, 'telnyxInbound'])
-    ->where('agency', '[0-9]+')->middleware('throttle:300,1');
+    ->where('agency', '[0-9]+')->middleware('throttle:300,1,r-grp-696');
 Route::post('/voice/telnyx/webhook/{agency}', [\App\Http\Controllers\Api\VoiceController::class, 'webhook'])
-    ->where('agency', '[0-9]+')->middleware('throttle:1200,1');
+    ->where('agency', '[0-9]+')->middleware('throttle:1200,1,r-grp-698');
 // Signed (session-less) e-document view — a mobile WebView can open this URL directly.
 Route::get('/edoc/{id}/view', [\App\Http\Controllers\Api\EDocumentController::class, 'signedStream'])->name('edoc.signed')->middleware('signed');
+Route::get('/report-card/{id}/view', [\App\Http\Controllers\Api\ParentReportCardController::class, 'signedPdf'])->name('rc.signed')->middleware('signed');
 
 /* The emergency card, openable in the device's own browser so it can be printed —
    the app's web view has no window.print(). Signed and five minutes long; minted by
@@ -611,6 +424,8 @@ Route::get ('/files/upload/{req}/{u}', [\App\Http\Controllers\Api\SignedFileUplo
 Route::post('/files/upload/{req}/{u}', [\App\Http\Controllers\Api\SignedFileUploadController::class, 'put'])
     ->middleware('signed')->name('files.upload.put')->whereNumber('req')->whereNumber('u');
 
+// The Accept / Maybe / Decline buttons in a meeting invitation: signed per attendee, no sign-in (2026-10-25).
+Route::get ('/meetings/rsvp/{attendee}/{response}', [\App\Http\Controllers\Api\MeetingController::class, 'rsvp'])->whereNumber('attendee')->where('response', 'accepted|tentative|declined')->middleware('throttle:60,1,r-grp-731');
 Route::get ('/forms/fill/{form}/{u}',       [\App\Http\Controllers\Api\SignedFormController::class, 'page'])->name('forms.fill')->middleware('signed')->whereNumber('form')->whereNumber('u');
 Route::post('/forms/fill/{form}/{u}',       [\App\Http\Controllers\Api\SignedFormController::class, 'submit'])->name('forms.fill.submit')->middleware('signed')->whereNumber('form')->whereNumber('u');
 Route::post('/forms/fill/{form}/{u}/draft', [\App\Http\Controllers\Api\SignedFormController::class, 'draft'])->name('forms.fill.draft')->middleware('signed')->whereNumber('form')->whereNumber('u');
@@ -646,7 +461,19 @@ Route::get ('/public/nda/{token}/pdf',  [\App\Http\Controllers\Api\ProspectNdaCo
 Route::get ('/public/proposal/{token}',         [\App\Http\Controllers\Api\ProposalSignController::class, 'show'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:60,1,propv');
 Route::post('/public/proposal/{token}/sign',    [\App\Http\Controllers\Api\ProposalSignController::class, 'sign'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:8,10,props');
 Route::post('/public/proposal/{token}/decline', [\App\Http\Controllers\Api\ProposalSignController::class, 'decline'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:8,10,propd');
+// Proposal email opened (2026-10-23, App\Support\ProposalTracking): a 1x1 image, signed per proposal.
+Route::get ('/proposal-open/{quote}/{sig}.gif', function (\Illuminate\Http\Request $r, int $quote, string $sig) {
+    if (hash_equals(\App\Support\ProposalTracking::sig($quote), $sig)) {
+        \App\Support\ProposalTracking::open($quote, $r->query('k') === 'f' ? 'followup' : 'email', $r);
+    }
+    return response(base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'), 200, ['Content-Type' => 'image/gif',
+        'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0', 'Pragma' => 'no-cache', 'X-Robots-Tag' => 'noindex']);
+})->where(['quote' => '[0-9]+', 'sig' => '[a-f0-9]{24}'])->middleware('throttle:60,1,propo');
 Route::get ('/public/proposal/{token}/pdf',     [\App\Http\Controllers\Api\ProposalSignController::class, 'pdf'])->where('token', '[A-Za-z0-9]{40}')->middleware('throttle:30,1,propp');
+/* "Enter the real time" from the automatic sign-out / clock-out emails (2026-10-22). Public:
+   the token is the credential (App\Support\AutoTimeFix). */
+Route::get ('/public/time-fix/{token}',  [\App\Http\Controllers\Api\AutoTimeFixController::class, 'show'])->where('token', '[A-Za-z0-9]{30,64}')->middleware('throttle:60,1,timefixget');
+Route::post('/public/time-fix/{token}',  [\App\Http\Controllers\Api\AutoTimeFixController::class, 'submit'])->where('token', '[A-Za-z0-9]{30,64}')->middleware('throttle:10,10,timefixpost');
 Route::get ('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'publicEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpget');
 Route::post('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'submitEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:10,10,rsvpsub');
 Route::get ('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'publicInvite'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpgeti');
@@ -656,7 +483,7 @@ Route::post('/public/rsvp/optout/{token}', [\App\Http\Controllers\Api\RsvpContro
 // Google sends the browser back here after "Connect Gmail"; the signed single-use state is the auth.
 Route::get ('/rsvp/google/callback', [\App\Http\Controllers\Api\RsvpController::class, 'googleCallback'])->middleware('throttle:30,1,rsvpgcb');
 Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, 'publicTourBook'])
-    ->middleware('throttle:8,60');
+    ->middleware('throttle:8,60,r-grp-789');
 
     
 
@@ -686,22 +513,58 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::prefix('platform')->middleware('role:platform_admin')->group(function () {
             Route::get('/overview', [\App\Http\Controllers\Api\PlatformController::class, 'overview']);
             // Outbound email configuration (sendmail vs Microsoft Graph) — superadmin only.
+            // Usage & spend per agency + thresholds for the superadmin weekly summary (2026-10-20).
+            Route::get ('/usage-spend',        [\App\Http\Controllers\Api\PlatformUsageController::class, 'show']);
+            Route::put ('/usage-settings',     [\App\Http\Controllers\Api\PlatformUsageController::class, 'save']);
+            Route::post('/usage-summary/test', [\App\Http\Controllers\Api\PlatformUsageController::class, 'test'])->middleware('throttle:6,1,r-usage-summary-test');
+            // Platform → AI usage: the Claude key + model, live state, credits estimate, full stats (2026-10-28).
+            Route::get   ('/ai',             [\App\Http\Controllers\Api\PlatformAiController::class, 'show']);
+            Route::put   ('/ai/settings',    [\App\Http\Controllers\Api\PlatformAiController::class, 'save'])->middleware('throttle:10,1,r-grp-825');
+            Route::post  ('/ai/test',        [\App\Http\Controllers\Api\PlatformAiController::class, 'test'])->middleware('throttle:10,1,r-grp-826');
+            Route::put   ('/ai/off',         [\App\Http\Controllers\Api\PlatformAiController::class, 'saveOff']);
+            Route::post  ('/ai/topups',      [\App\Http\Controllers\Api\PlatformAiController::class, 'addTopup']);
+            Route::delete('/ai/topups/{id}', [\App\Http\Controllers\Api\PlatformAiController::class, 'removeTopup'])->where('id', '[a-f0-9]{8}');
+            // SMS Incremental: monthly text & call allowance, approved overage onto the next invoice (2026-10-28).
+            Route::get   ('/messaging-overage',          [\App\Http\Controllers\Api\PlatformUsageController::class, 'overage']);
+            Route::put   ('/messaging-overage/settings', [\App\Http\Controllers\Api\PlatformUsageController::class, 'overageSettings']);
+            Route::post  ('/messaging-overage/charge',   [\App\Http\Controllers\Api\PlatformUsageController::class, 'overageCharge'])->middleware('throttle:30,1,r-grp-833');
+            Route::post  ('/messaging-overage/waive',    [\App\Http\Controllers\Api\PlatformUsageController::class, 'overageWaive'])->middleware('throttle:30,1,r-grp-834');
+            Route::delete('/messaging-overage/{id}',     [\App\Http\Controllers\Api\PlatformUsageController::class, 'overageUndo'])->whereNumber('id');
             Route::get ('/mail-settings',      [\App\Http\Controllers\Api\MailSettingsController::class, 'show']);
             Route::put ('/mail-settings',      [\App\Http\Controllers\Api\MailSettingsController::class, 'save']);
             Route::post('/mail-settings/test', [\App\Http\Controllers\Api\MailSettingsController::class, 'sendTest']);
             // The Google client behind RSVP "Connect Gmail" (saved here, not in .env).
             Route::put ('/mail-settings/google',       [\App\Http\Controllers\Api\MailSettingsController::class, 'saveGoogle']);
             Route::post('/mail-settings/google/check', [\App\Http\Controllers\Api\MailSettingsController::class, 'checkGoogle'])->middleware('throttle:10,1,ggchk');
+            // The Microsoft 365 app behind mailbox sign-in and "Sign in with Microsoft" (saved here, not in .env; 2026-10-26).
+            Route::put ('/mail-settings/microsoft',       [\App\Http\Controllers\Api\MailSettingsController::class, 'saveMicrosoft']);
+            Route::post('/mail-settings/microsoft/check', [\App\Http\Controllers\Api\MailSettingsController::class, 'checkMicrosoft'])->middleware('throttle:10,1,mschk');
             // Scheduled maintenance / downtime (super-admin).
             Route::get ('/maintenance',            [\App\Http\Controllers\Api\MaintenanceController::class, 'show']);
             Route::post('/maintenance',            [\App\Http\Controllers\Api\MaintenanceController::class, 'save']);
             Route::post('/maintenance/test',       [\App\Http\Controllers\Api\MaintenanceController::class, 'sendTest']);
+            // Mobile app updates: the latest / minimum Google Play build (2026-10-30).
+            Route::get ('/app-versions',           [\App\Http\Controllers\Api\AppVersionController::class, 'settings']);
+            Route::put ('/app-versions',           [\App\Http\Controllers\Api\AppVersionController::class, 'save']);
             Route::post('/maintenance/notify-all', [\App\Http\Controllers\Api\MaintenanceController::class, 'notifyAll']);
             Route::get('/directory', [\App\Http\Controllers\Api\ImpersonationController::class, 'directory']);
             Route::post('/impersonate/{user}', [\App\Http\Controllers\Api\ImpersonationController::class, 'start'])->where('user', '[0-9]+');
             Route::get('/social-config', [\App\Http\Controllers\Api\SocialAuthController::class, 'configGet']);
             Route::post('/social-config', [\App\Http\Controllers\Api\SocialAuthController::class, 'configSave']);
             Route::get('/security-alerts', [\App\Http\Controllers\Api\SecurityController::class, 'alerts']);
+            // Server health: CPU, memory, disk, database, jobs, errors, certificates, backups (2026-10-22).
+            Route::get('/server-health', [\App\Http\Controllers\Api\ServerHealthController::class, 'show']);
+            // Platform -> Careers: website job applications (2026-10-30).
+            Route::get('/careers', [\App\Http\Controllers\Api\CareersController::class, 'index']);
+            Route::get('/careers/stats', [\App\Http\Controllers\Api\CareersController::class, 'stats']); // Insights tab (2026-11-02)
+            Route::get('/careers/{id}/file/{kind}', [\App\Http\Controllers\Api\CareersController::class, 'file'])->whereNumber('id')->where('kind', 'resume|cover');
+            // Read a resume / cover letter in the portal: a PDF or picture as itself, a Word file as a page (2026-11-04).
+            Route::get('/careers/{id}/view/{kind}', [\App\Http\Controllers\Api\CareersController::class, 'view'])->whereNumber('id')->where('kind', 'resume|cover');
+            Route::patch('/careers/{id}', [\App\Http\Controllers\Api\CareersController::class, 'update'])->whereNumber('id');
+            // The Cloudways server through Cloudways' API v2 (read-only access token).
+            Route::get   ('/server-health/cloudways', [\App\Http\Controllers\Api\ServerHealthController::class, 'cloudways']);
+            Route::put   ('/server-health/cloudways', [\App\Http\Controllers\Api\ServerHealthController::class, 'saveCloudways'])->middleware('throttle:10,1,r-grp-873');
+            Route::delete('/server-health/cloudways', [\App\Http\Controllers\Api\ServerHealthController::class, 'disconnectCloudways']);
             Route::post('/security-alerts/{id}/resolve', [\App\Http\Controllers\Api\SecurityController::class, 'resolveAlert'])->where('id', '[0-9]+');
             /* Acknowledge everything open, then clear what has been acknowledged. Two
                separate acts on purpose - see clearAlerts(): an unread security warning
@@ -726,6 +589,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/agencies/{agency}/resend-invite', [\App\Http\Controllers\Api\PlatformController::class, 'resendInvite']);
             Route::get('/email-logs', [\App\Http\Controllers\Api\PlatformController::class, 'emailLogs']);
             Route::get('/email-logs/{id}/preview', [\App\Http\Controllers\Api\PlatformController::class, 'emailPreview']);
+            Route::get('/email-logs/{id}/attachments/{aid}', [\App\Http\Controllers\Api\PlatformController::class, 'emailAttachment'])->whereNumber('id')->whereNumber('aid');
             Route::post('/email-logs/{id}/resend', [\App\Http\Controllers\Api\PlatformController::class, 'emailResend']);
             Route::get('/crash-reports', [\App\Http\Controllers\Api\PlatformController::class, 'crashReports']);
             Route::get('/marketing-site', [\App\Http\Controllers\Api\MarketingSiteController::class, 'get']);
@@ -734,6 +598,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Website subscribers. Platform-level, like the site itself.
             Route::get   ('/site-subscribers',                  [\App\Http\Controllers\Api\SiteSubscriberController::class, 'index']);
             Route::post  ('/site-subscribers',                  [\App\Http\Controllers\Api\SiteSubscriberController::class, 'store']);
+            Route::post  ('/site-subscribers/suppress',          [\App\Http\Controllers\Api\SiteSubscriberController::class, 'suppress']);
+            Route::get   ('/site-subscribers/status',            [\App\Http\Controllers\Api\SiteSubscriberController::class, 'status']);   // email client pill (2026-11-09)
             Route::post  ('/site-subscribers/{id}/unsubscribe',  [\App\Http\Controllers\Api\SiteSubscriberController::class, 'unsubscribe'])->where('id','[0-9]+');
             Route::post  ('/site-subscribers/{id}/resubscribe',  [\App\Http\Controllers\Api\SiteSubscriberController::class, 'resubscribe'])->where('id','[0-9]+');
             Route::delete('/site-subscribers/{id}',              [\App\Http\Controllers\Api\SiteSubscriberController::class, 'destroy'])->where('id','[0-9]+');
@@ -750,10 +616,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         });
         Route::get('/auth/me', [AuthController::class, 'me']);
         // Visible reference IDs, ILH-C-0042 (2026-10-14, App\Support\RefCode).
-        Route::get('/refs/lookup', [\App\Http\Controllers\Api\RefController::class, 'lookup'])->middleware('throttle:60,1');
+        Route::get('/refs/lookup', [\App\Http\Controllers\Api\RefController::class, 'lookup'])->middleware('throttle:60,1,r-refs-lookup');
         Route::get('/refs/mine', [\App\Http\Controllers\Api\RefController::class, 'mine']);
         Route::get('/admin/ref-prefix', [\App\Http\Controllers\Api\RefController::class, 'prefix']);
-        Route::put('/admin/ref-prefix', [\App\Http\Controllers\Api\RefController::class, 'setPrefix'])->middleware('throttle:10,1');
+        Route::put('/admin/ref-prefix', [\App\Http\Controllers\Api\RefController::class, 'setPrefix'])->middleware('throttle:10,1,r-admin-ref-prefix');
         // Tasks — admins/directors assign to educators; educators mark progress/done.
         Route::middleware('role:educator,home_visitor,guardian,centre_director,agency_admin,platform_admin')->prefix('tasks')->group(function () {
             Route::get('/mine', [\App\Http\Controllers\Api\TaskController::class, 'mine']);
@@ -793,7 +659,95 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            agency that has not switched it off. (2026-09-17) */
         Route::middleware(['role:sales_rep,platform_admin', 'feature:sales_crm'])->prefix('sales')->group(function () {
             Route::get('/leads', [\App\Http\Controllers\Api\SalesController::class, 'index']);
+            // Leads → Cold reach (2026-10-30): prospects who are not leads yet, calls / emails / follow-ups, convert to a lead.
+            Route::get('/prospects', [\App\Http\Controllers\Api\SalesProspectController::class, 'index']);
+            Route::post('/prospects', [\App\Http\Controllers\Api\SalesProspectController::class, 'store']);
+            Route::post('/prospects/import', [\App\Http\Controllers\Api\SalesProspectController::class, 'import'])->middleware('throttle:20,1,r-prospects-import');
+            Route::post('/prospects/parse', [\App\Http\Controllers\Api\SalesProspectController::class, 'parse'])->middleware('throttle:30,1,r-prospects-parse');
+            Route::post('/prospects/parse-file', [\App\Http\Controllers\Api\SalesProspectController::class, 'parseFile'])->middleware('throttle:30,1,r-prospects-parse-file');
+            Route::post('/prospects/email-bulk', [\App\Http\Controllers\Api\SalesProspectController::class, 'emailBulk'])->middleware('throttle:10,1,r-prospects-email-bulk');
+            Route::get('/prospects-stats', [\App\Http\Controllers\Api\SalesProspectController::class, 'stats']);
+            Route::get('/prospect-batches', [\App\Http\Controllers\Api\SalesProspectController::class, 'batches']);
+            Route::patch('/prospect-batches/{id}', [\App\Http\Controllers\Api\SalesProspectController::class, 'renameBatch'])->whereNumber('id');
+            Route::post('/prospect-batches/{id}/recheck', [\App\Http\Controllers\Api\SalesProspectController::class, 'recheckBatch'])->whereNumber('id')->middleware('throttle:10,1,r-prospect-batches-x-recheck');
+            Route::delete('/prospect-batches/{id}', [\App\Http\Controllers\Api\SalesProspectController::class, 'deleteBatch'])->whereNumber('id');
+            Route::post('/prospects/email-preview', [\App\Http\Controllers\Api\SalesProspectController::class, 'emailPreview']);
+            Route::get('/prospects-settings', [\App\Http\Controllers\Api\SalesProspectController::class, 'settings']);
+            Route::put('/prospects-settings', [\App\Http\Controllers\Api\SalesProspectController::class, 'saveSettings']);
+            Route::post('/prospects-settings/test', [\App\Http\Controllers\Api\SalesProspectController::class, 'testEmail'])->middleware('throttle:20,1,r-prospects-settings-test');
+            Route::get('/prospects/{id}', [\App\Http\Controllers\Api\SalesProspectController::class, 'show'])->whereNumber('id');
+            Route::patch('/prospects/{id}', [\App\Http\Controllers\Api\SalesProspectController::class, 'update'])->whereNumber('id');
+            Route::delete('/prospects/{id}', [\App\Http\Controllers\Api\SalesProspectController::class, 'destroy'])->whereNumber('id');
+            Route::post('/prospects/{id}/touches', [\App\Http\Controllers\Api\SalesProspectController::class, 'touch'])->whereNumber('id');
+            Route::post('/prospects/{id}/email', [\App\Http\Controllers\Api\SalesProspectController::class, 'email'])->whereNumber('id')->middleware('throttle:60,1,r-prospects-x-email');
+            Route::post('/prospects/{id}/convert', [\App\Http\Controllers\Api\SalesProspectController::class, 'convert'])->whereNumber('id');
+            // Website meeting requests: accept / modify / decline (2026-10-23).
+            Route::get('/bookings', [\App\Http\Controllers\Api\SalesBookingController::class, 'index']);
+            Route::get('/bookings/calendar', [\App\Http\Controllers\Api\SalesBookingController::class, 'calendar']);   // the sales@ Outlook calendar (2026-11-04)
+            /* Sales -> Email (2026-10-26): the email client on the ONE shared sales@ mailbox. kt_mailbox=sales switches
+               the email controllers from "my mailboxes" to the shared one (App\Support\SalesMailbox). */
+            Route::get('/email/accounts', [\App\Http\Controllers\Api\EmailAccountController::class, 'index'])->defaults('kt_mailbox', 'sales');
+            Route::post('/email/accounts', [\App\Http\Controllers\Api\EmailAccountController::class, 'store'])->defaults('kt_mailbox', 'sales');
+            Route::patch('/email/accounts/{id}', [\App\Http\Controllers\Api\EmailAccountController::class, 'update'])->defaults('kt_mailbox', 'sales');
+            Route::delete('/email/accounts/{id}', [\App\Http\Controllers\Api\EmailAccountController::class, 'destroy'])->defaults('kt_mailbox', 'sales');
+            Route::post('/email/accounts/{id}/test', [\App\Http\Controllers\Api\EmailAccountController::class, 'test'])->defaults('kt_mailbox', 'sales');
+            Route::get('/email/accounts/{id}/auto-replies', [\App\Http\Controllers\Api\EmailAccountController::class, 'autoReplies'])->defaults('kt_mailbox', 'sales')->middleware('throttle:60,1,r-sales-email-auto-replies');
+            Route::put('/email/accounts/{id}/auto-replies', [\App\Http\Controllers\Api\EmailAccountController::class, 'saveAutoReplies'])->defaults('kt_mailbox', 'sales')->middleware('throttle:20,1,r-sales-email-auto-replies-save');
+            Route::put('/email/accounts/{id}/alerts', [\App\Http\Controllers\Api\EmailAccountController::class, 'saveAlerts'])->defaults('kt_mailbox', 'sales')->middleware('throttle:60,1,r-sales-email-alerts');
+            Route::post('/email/accounts/{id}/microsoft', [\App\Http\Controllers\Api\EmailAccountController::class, 'microsoftStart'])->defaults('kt_mailbox', 'sales')->middleware('throttle:20,1,r-email-accounts-x-microsoft');
+            Route::post('/email/microsoft/finish', [\App\Http\Controllers\Api\EmailAccountController::class, 'microsoftFinish'])->defaults('kt_mailbox', 'sales')->middleware('throttle:20,1,r-email-microsoft-finish');
+            // Sign in with Google + "which provider is this address?" (2026-11-04).
+            Route::post('/email/accounts/{id}/google', [\App\Http\Controllers\Api\EmailAccountController::class, 'googleStart'])->defaults('kt_mailbox', 'sales')->middleware('throttle:20,1,r-email-accounts-x-google');
+            Route::post('/email/discover', [\App\Http\Controllers\Api\EmailAccountController::class, 'discover'])->defaults('kt_mailbox', 'sales')->middleware('throttle:30,1,r-email-discover');
+            Route::get('/email/folders', [\App\Http\Controllers\Api\EmailMailController::class, 'folders'])->defaults('kt_mailbox', 'sales');
+            Route::get('/email/messages', [\App\Http\Controllers\Api\EmailMailController::class, 'messages'])->defaults('kt_mailbox', 'sales');
+            Route::get('/email/messages/{uid}', [\App\Http\Controllers\Api\EmailMailController::class, 'message'])->defaults('kt_mailbox', 'sales');
+            Route::get('/email/messages/{uid}/attachment', [\App\Http\Controllers\Api\EmailMailController::class, 'attachment'])->defaults('kt_mailbox', 'sales');
+            Route::post('/email/messages/{uid}/action', [\App\Http\Controllers\Api\EmailMailController::class, 'action'])->defaults('kt_mailbox', 'sales');
+            Route::post('/email/messages/bulk', [\App\Http\Controllers\Api\EmailMailController::class, 'bulk'])->defaults('kt_mailbox', 'sales')->middleware('throttle:60,1,r-sales-email-bulk');
+            Route::post('/email/send', [\App\Http\Controllers\Api\EmailMailController::class, 'send'])->defaults('kt_mailbox', 'sales')->middleware('throttle:30,1,r-email-send');
+            Route::post('/email/ai', [\App\Http\Controllers\Api\EmailAiController::class, 'assist'])->middleware('throttle:20,1,r-email-ai');   // suggest / rewrite (2026-11-09)
+            // Sales -> Campaigns: introduction emails to prospects, tracked per person, responses to Leads (2026-10-26).
+            Route::get('/campaigns', [\App\Http\Controllers\Api\SalesCampaignController::class, 'index']);
+            Route::post('/campaigns', [\App\Http\Controllers\Api\SalesCampaignController::class, 'store']);
+            Route::get('/campaigns/{id}', [\App\Http\Controllers\Api\SalesCampaignController::class, 'show'])->whereNumber('id');
+            Route::patch('/campaigns/{id}', [\App\Http\Controllers\Api\SalesCampaignController::class, 'update'])->whereNumber('id');
+            Route::delete('/campaigns/{id}', [\App\Http\Controllers\Api\SalesCampaignController::class, 'destroy'])->whereNumber('id');
+            Route::post('/campaigns/{id}/copy', [\App\Http\Controllers\Api\SalesCampaignController::class, 'copy'])->whereNumber('id');   // copy to a new draft (2026-11-11)
+            Route::post('/campaigns/{id}/recipients', [\App\Http\Controllers\Api\SalesCampaignController::class, 'addRecipients'])->whereNumber('id');
+            Route::delete('/campaigns/{id}/recipients/{rid}', [\App\Http\Controllers\Api\SalesCampaignController::class, 'removeRecipient'])->whereNumber('id')->whereNumber('rid');
+            Route::post('/campaigns/{id}/recipients/{rid}/action', [\App\Http\Controllers\Api\SalesCampaignController::class, 'recipientAction'])->whereNumber('id')->whereNumber('rid');
+            Route::get('/campaigns/{id}/preview', [\App\Http\Controllers\Api\SalesCampaignController::class, 'preview'])->whereNumber('id');
+            Route::post('/campaigns/{id}/test', [\App\Http\Controllers\Api\SalesCampaignController::class, 'test'])->whereNumber('id')->middleware('throttle:10,1,r-campaigns-x-test');
+            Route::post('/campaigns/{id}/send', [\App\Http\Controllers\Api\SalesCampaignController::class, 'send'])->whereNumber('id');
+            Route::post('/campaigns/{id}/pause', [\App\Http\Controllers\Api\SalesCampaignController::class, 'pause'])->whereNumber('id');
+            Route::post('/campaigns/{id}/schedule', [\App\Http\Controllers\Api\SalesCampaignController::class, 'schedule'])->whereNumber('id');
+            Route::post('/campaigns/{id}/approve', [\App\Http\Controllers\Api\SalesCampaignController::class, 'approve'])->whereNumber('id');
+            // Email templates: KiddieTrac presets + the team's own (2026-11-04).
+            Route::get('/campaign-templates', [\App\Http\Controllers\Api\SalesCampaignTemplateController::class, 'index']);
+            Route::post('/campaign-templates', [\App\Http\Controllers\Api\SalesCampaignTemplateController::class, 'store']);
+            Route::post('/campaign-templates/preview', [\App\Http\Controllers\Api\SalesCampaignTemplateController::class, 'preview'])->middleware('throttle:60,1,r-camp-tpl-preview');
+            Route::post('/campaign-images', [\App\Http\Controllers\Api\SalesCampaignTemplateController::class, 'image'])->middleware('throttle:30,1,r-camp-img');   // rich editor pictures (2026-11-05)
+            Route::patch('/campaign-templates/{id}', [\App\Http\Controllers\Api\SalesCampaignTemplateController::class, 'update'])->whereNumber('id');
+            Route::delete('/campaign-templates/{id}', [\App\Http\Controllers\Api\SalesCampaignTemplateController::class, 'destroy'])->whereNumber('id');
+            Route::post('/campaigns/{id}/apply-template', [\App\Http\Controllers\Api\SalesCampaignTemplateController::class, 'apply'])->whereNumber('id');
+            // Sales calendar: bookings, hours, time off, whereabouts (2026-10-23).
+            Route::get('/calendar', [\App\Http\Controllers\Api\SalesCalendarController::class, 'index']);
+            Route::post('/calendar/events', [\App\Http\Controllers\Api\SalesCalendarController::class, 'store']);
+            Route::patch('/calendar/events/{id}', [\App\Http\Controllers\Api\SalesCalendarController::class, 'update'])->whereNumber('id');
+            Route::delete('/calendar/events/{id}', [\App\Http\Controllers\Api\SalesCalendarController::class, 'destroy'])->whereNumber('id');
+            Route::put('/calendar/availability', [\App\Http\Controllers\Api\SalesCalendarController::class, 'saveAvailability']);
+            Route::put('/bookings/settings', [\App\Http\Controllers\Api\SalesBookingController::class, 'saveSettings']);
+            Route::post('/bookings/{id}/accept', [\App\Http\Controllers\Api\SalesBookingController::class, 'accept'])->whereNumber('id');
+            Route::post('/bookings/{id}/modify', [\App\Http\Controllers\Api\SalesBookingController::class, 'modify'])->whereNumber('id');
+            Route::post('/bookings/{id}/decline', [\App\Http\Controllers\Api\SalesBookingController::class, 'decline'])->whereNumber('id');
             Route::post('/leads', [\App\Http\Controllers\Api\SalesController::class, 'store']);
+            // Duplicate leads: find + advise, merge, not-the-same (2026-10-23).
+            Route::get('/leads/duplicates', [\App\Http\Controllers\Api\SalesLeadMergeController::class, 'index']);
+            // Follow-ups numbers + open tasks (2026-10-23).
+            Route::get('/followups/stats', [\App\Http\Controllers\Api\SalesFollowupStatsController::class, 'index']);
+            Route::post('/leads/not-duplicates', [\App\Http\Controllers\Api\SalesLeadMergeController::class, 'dismiss']);
+            Route::post('/leads/{lead}/merge', [\App\Http\Controllers\Api\SalesLeadMergeController::class, 'merge'])->where('lead','[0-9]+');
             Route::get('/leads/{lead}', [\App\Http\Controllers\Api\SalesController::class, 'show'])->where('lead','[0-9]+');
             Route::patch('/leads/{lead}', [\App\Http\Controllers\Api\SalesController::class, 'update'])->where('lead','[0-9]+');
             Route::delete('/leads/{lead}', [\App\Http\Controllers\Api\SalesController::class, 'destroy'])->where('lead','[0-9]+');
@@ -812,12 +766,43 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::delete('/products/{product}', [\App\Http\Controllers\Api\SalesController::class, 'productDelete'])->where('product','[0-9]+');
             Route::post('/demo-token', [\App\Http\Controllers\Api\SalesController::class, 'demoToken']);
             Route::get('/quotes/{quote}/pdf', [\App\Http\Controllers\Api\SalesController::class, 'quotePdf'])->where('quote','[0-9]+');
+            // Everything about one proposal, all revisions, and where it stands (2026-11-10).
+            Route::get('/quotes/{quote}/history', [\App\Http\Controllers\Api\SalesController::class, 'quoteHistory'])->where('quote','[0-9]+');
             Route::post('/quotes/{quote}/send', [\App\Http\Controllers\Api\SalesController::class, 'quoteSend'])->where('quote','[0-9]+');
+            // Automatic follow-up: change or stop (2026-10-23).
+            Route::patch('/quotes/{quote}/followup', [\App\Http\Controllers\Api\SalesController::class, 'quoteFollowup'])->where('quote','[0-9]+');
             // Proposal view / delete + proposal defaults (terms, valid-for days, taxes) — 2026-10-16.
             Route::get('/quotes/{quote}/preview', [\App\Http\Controllers\Api\SalesController::class, 'quotePreview'])->where('quote','[0-9]+');
             // Online signing (2026-10-16): the private link, and KiddieTrac's countersignature.
             Route::post('/quotes/{quote}/sign-link', [\App\Http\Controllers\Api\SalesController::class, 'quoteSignLink'])->where('quote','[0-9]+');
             Route::post('/quotes/{quote}/countersign', [\App\Http\Controllers\Api\SalesController::class, 'quoteCountersign'])->where('quote','[0-9]+');
+            // KiddieTrac's own expenses (2026-10-24, Sales -> Expenses): reps their own, superadmins all.
+            Route::get   ('/expenses',                    [\App\Http\Controllers\Api\PlatformExpenseController::class, 'index']);
+            Route::post  ('/expenses',                    [\App\Http\Controllers\Api\PlatformExpenseController::class, 'store']);
+            Route::post  ('/expenses/{id}',               [\App\Http\Controllers\Api\PlatformExpenseController::class, 'update'])->whereNumber('id');
+            Route::delete('/expenses/{id}',               [\App\Http\Controllers\Api\PlatformExpenseController::class, 'destroy'])->whereNumber('id');
+            Route::post  ('/expenses/{id}/approve',       [\App\Http\Controllers\Api\PlatformExpenseController::class, 'approve'])->whereNumber('id');
+            Route::post  ('/expenses/{id}/reject',        [\App\Http\Controllers\Api\PlatformExpenseController::class, 'reject'])->whereNumber('id');
+            Route::post  ('/expenses/{id}/reimburse',     [\App\Http\Controllers\Api\PlatformExpenseController::class, 'reimburse'])->whereNumber('id');
+            Route::get   ('/expenses/{id}/receipt',       [\App\Http\Controllers\Api\PlatformExpenseController::class, 'receipt'])->whereNumber('id');
+            Route::post  ('/expense-recurring',           [\App\Http\Controllers\Api\PlatformExpenseController::class, 'recurringStore']);
+            Route::patch ('/expense-recurring/{id}',      [\App\Http\Controllers\Api\PlatformExpenseController::class, 'recurringUpdate'])->whereNumber('id');
+            Route::delete('/expense-recurring/{id}',      [\App\Http\Controllers\Api\PlatformExpenseController::class, 'recurringDestroy'])->whereNumber('id');
+            // KiddieTrac's own suppliers for the expense Vendor dropdown (2026-11-02). Reps add; superadmins change/archive.
+            Route::get   ('/suppliers',                   [\App\Http\Controllers\Api\SalesSupplierController::class, 'index']);
+            Route::post  ('/suppliers',                   [\App\Http\Controllers\Api\SalesSupplierController::class, 'store']);
+            Route::patch ('/suppliers/{id}',              [\App\Http\Controllers\Api\SalesSupplierController::class, 'update'])->whereNumber('id');
+            Route::delete('/suppliers/{id}',              [\App\Http\Controllers\Api\SalesSupplierController::class, 'destroy'])->whereNumber('id');
+            // Every proposal with its stats and trends (2026-10-24, Sales -> Proposals).
+            Route::get('/quotes-overview', [\App\Http\Controllers\Api\SalesReportsController::class, 'quotes']);
+            // Customers (2026-11-10): every won lead, what they bought, and (superadmins) their AR.
+            Route::get  ('/customers',      [\App\Http\Controllers\Api\SalesCustomerController::class, 'index']);
+            Route::get  ('/customers/{id}', [\App\Http\Controllers\Api\SalesCustomerController::class, 'show'])->whereNumber('id');
+            Route::patch('/customers/{id}', [\App\Http\Controllers\Api\SalesCustomerController::class, 'update'])->whereNumber('id');
+            // The signed contract (2026-10-23, SalesConversionController): required before approval.
+            Route::post('/quotes/{quote}/contract', [\App\Http\Controllers\Api\SalesConversionController::class, 'uploadContract'])->where('quote','[0-9]+');
+            Route::get('/quotes/{quote}/contract', [\App\Http\Controllers\Api\SalesConversionController::class, 'downloadContract'])->where('quote','[0-9]+');
+            Route::delete('/quotes/{quote}/contract', [\App\Http\Controllers\Api\SalesConversionController::class, 'removeContract'])->where('quote','[0-9]+');
             Route::delete('/quotes/{quote}', [\App\Http\Controllers\Api\SalesController::class, 'quoteDestroy'])->where('quote','[0-9]+');
             Route::get('/proposal-defaults', [\App\Http\Controllers\Api\SalesController::class, 'proposalDefaults']);
             Route::put('/proposal-defaults', [\App\Http\Controllers\Api\SalesController::class, 'proposalDefaultsSave']);
@@ -827,6 +812,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/web-chats/{id}', [\App\Http\Controllers\Api\WebChatController::class, 'show'])->where('id','[0-9]+');
             Route::post('/web-chats/{id}/reply', [\App\Http\Controllers\Api\WebChatController::class, 'reply'])->where('id','[0-9]+');
             Route::post('/web-chats/{id}/typing', [\App\Http\Controllers\Api\WebChatController::class, 'typing'])->where('id','[0-9]+');
+            Route::post('/web-chats/{id}/nudge', [\App\Http\Controllers\Api\WebChatController::class, 'nudge'])->where('id','[0-9]+');
             Route::post('/web-chats/{id}/join', [\App\Http\Controllers\Api\WebChatController::class, 'join'])->where('id','[0-9]+');
             Route::post('/web-chats/{id}/release', [\App\Http\Controllers\Api\WebChatController::class, 'release'])->where('id','[0-9]+');
             Route::post('/web-chats/{id}/close', [\App\Http\Controllers\Api\WebChatController::class, 'close'])->where('id','[0-9]+');
@@ -845,6 +831,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            must not reach it. Sharing the group would have handed it to them with one
            word of middleware and no other sign. The controller asks again. */
         Route::middleware('role:platform_admin')->prefix('sales')->group(function () {
+            // Approve / reject a proposal; approval sets the prospect up as a customer (2026-10-23).
+            Route::get('/quotes/{quote}/conversion', [\App\Http\Controllers\Api\SalesConversionController::class, 'preview'])->where('quote','[0-9]+');
+            Route::post('/quotes/{quote}/approve', [\App\Http\Controllers\Api\SalesConversionController::class, 'approve'])->where('quote','[0-9]+');
+            Route::post('/quotes/{quote}/reject', [\App\Http\Controllers\Api\SalesConversionController::class, 'reject'])->where('quote','[0-9]+');
+            Route::post('/quotes/{quote}/send-invite', [\App\Http\Controllers\Api\SalesConversionController::class, 'sendInvite'])->where('quote','[0-9]+');
             Route::get   ('/library',                 [\App\Http\Controllers\Api\SalesLibraryController::class, 'index']);
             Route::post  ('/library',                 [\App\Http\Controllers\Api\SalesLibraryController::class, 'store']);
             Route::get   ('/library/{doc}/download',  [\App\Http\Controllers\Api\SalesLibraryController::class, 'download'])->whereNumber('doc');
@@ -855,6 +846,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         });
         Route::patch('/auth/me', [AuthController::class, 'updateProfile']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
+        // The website's demo phone: a few fictional notifications in a demo person's first minutes (2026-10-31).
+        Route::post('/demo/pulse', [\App\Http\Controllers\Api\WebDemoController::class, 'pulse'])->middleware('throttle:12,1,dpulse');
+        // The parent's phone beside a demo staff phone on the website (2026-10-31): a fenced sign-in for the same demo agency's parent.
+        Route::post('/demo/companion', [\App\Http\Controllers\Api\WebDemoController::class, 'companion'])->middleware('throttle:10,1,dcompanion');
+        // The demo phone's Mail app (2026-10-31, App\Support\WebDemoMail): a demo person's own captured, never-delivered mail.
+        Route::get('/demo/mail', [\App\Http\Controllers\Api\WebDemoMailController::class, 'index'])->middleware('throttle:60,1,dmail');
+        Route::get('/demo/mail/{id}', [\App\Http\Controllers\Api\WebDemoMailController::class, 'show'])->whereNumber('id')->middleware('throttle:60,1,dmailshow');
+        Route::get('/demo/mail/{id}/files/{n}', [\App\Http\Controllers\Api\WebDemoMailController::class, 'file'])->whereNumber('id')->whereNumber('n')->middleware('throttle:60,1,dmailfile');
+        // The demo phone rings and texts (2026-10-30, App\Support\WebDemoPhone): demo-only people, their own calls/texts.
+        Route::get ('/demo/phone/events', [\App\Http\Controllers\Api\WebDemoPhoneController::class, 'events'])->middleware('throttle:40,1,dphev');
+        Route::post('/demo/phone/calls/{id}', [\App\Http\Controllers\Api\WebDemoPhoneController::class, 'call'])->whereNumber('id')->middleware('throttle:30,1,dphcall');
+        Route::get ('/demo/phone/texts', [\App\Http\Controllers\Api\WebDemoPhoneController::class, 'texts'])->middleware('throttle:30,1,dphtx');
+        Route::post('/demo/phone/texts', [\App\Http\Controllers\Api\WebDemoPhoneController::class, 'reply'])->middleware('throttle:10,1,dphrp');
+        Route::post('/demo/phone/try', [\App\Http\Controllers\Api\WebDemoPhoneController::class, 'tryIt'])->middleware('throttle:6,1,dphtry');
         // v22p3.5: onboarding wizard submission
         Route::patch('/auth/me/onboarding', [AuthController::class, 'updateOnboarding']);
     Route::get('/auth/me/payee-invoices', [\App\Http\Controllers\Api\PayeeInvoiceController::class, 'mine']);
@@ -862,12 +867,17 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // shared with admins and decides for itself whose document may be opened.
     Route::get('/auth/me/payroll-documents', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'mine']);
     Route::get('/payroll-documents/{id}/pdf', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'pdf'])->where('id', '[0-9]+');
+    // My own payslip, emailed to my own address (2026-10-28).
+    Route::post('/me/payroll-documents/{id}/email', [\App\Http\Controllers\Api\PayrollDocumentController::class, 'emailMine'])->where('id', '[0-9]+');
     /* The invoice the source system actually issued, fetched by us rather than linked
        to. Same shape as the payslip route above and for the same reason: the signed
        URL is self-authenticating and permanent, so it must not reach a browser. Shared
        between a parent and agency staff, and the method decides which of them is
        asking -- a client can ask for any id it likes. */
     Route::get('/invoices/external/{id}/document', [\App\Http\Controllers\Api\InvoiceController::class, 'externalDocument'])->where('id', '[0-9]+');
+    // The same invoice as a PDF, and a copy emailed to the guardian themselves (2026-10-28).
+    Route::get('/invoices/external/{id}/pdf', [\App\Http\Controllers\Api\InvoiceController::class, 'externalPdf'])->where('id', '[0-9]+');
+    Route::post('/parent/external-invoices/{id}/email', [\App\Http\Controllers\Api\InvoiceController::class, 'emailExternalInvoice'])->where('id', '[0-9]+');
     Route::get ('/auth/me/auto-signoff-notice',     [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'show']);
     Route::post('/auth/me/auto-signoff-notice/ack', [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'ack']);
     Route::get('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'show']);
@@ -880,6 +890,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
                 'avatar' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             ]);
             $file = $request->file('avatar');
+            if (\App\Support\AvatarCheck::looksBlank($file->getRealPath())) {
+                return response()->json(['message' => \App\Support\AvatarCheck::MESSAGE, 'errors' => ['avatar' => [\App\Support\AvatarCheck::MESSAGE]]], 422);
+            }
             $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
             $name = (string) \Illuminate\Support\Str::uuid() . '.' . $ext;
             // v22p43: Laravel 11 changed the local-disk root to storage/app/private,
@@ -942,7 +955,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/help/{slug}/view', [HelpController::class, 'trackView']);
         Route::post('/help/{slug}/feedback', [HelpController::class, 'feedback']);
         Route::get('/help/{slug}', [HelpController::class, 'show']);
-        Route::post('/help/ask', [HelpController::class, 'ask'])->middleware('throttle:30,1');
+        Route::post('/help/ask', [HelpController::class, 'ask'])->middleware('throttle:30,1,r-help-ask');
 
         // Training: a narrated tutorial per help article, gated exactly as the article is.
         Route::get('/training', [\App\Http\Controllers\Api\TrainingController::class, 'index']);
@@ -961,9 +974,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // A parent's own notification preferences (email / SMS / in-app), e.g.
         // being told when their child is signed in or out. Scoped to the caller.
         Route::get('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'index']);
+        Route::get('/me/notify-requirement', [\App\Http\Controllers\Api\StaffNotifyController::class, 'me'])->middleware('throttle:60,1,r-notify-requirement');
         // Which kinds of texts and calls I want (My profile, 2026-09-29).
         Route::get('/me/contact-prefs', [\App\Http\Controllers\Api\ContactPrefsController::class, 'index']);
         Route::put('/me/contact-prefs', [\App\Http\Controllers\Api\ContactPrefsController::class, 'update']);
+        // Calendar sync (2026-11-03, cal1103): Settings > Calendar - the person's own link, choices and reset.
+        Route::get('/me/calendar-feed', [\App\Http\Controllers\Api\CalendarFeedController::class, 'show']);
+        Route::patch('/me/calendar-feed', [\App\Http\Controllers\Api\CalendarFeedController::class, 'update']);
+        Route::post('/me/calendar-feed/reset', [\App\Http\Controllers\Api\CalendarFeedController::class, 'reset'])->middleware('throttle:10,1,calreset');
         Route::put('/me/voice-opt-out', [\App\Http\Controllers\Api\ContactPrefsController::class, 'voiceOptOut']);
         // Consent to be texted at all — a separate question from which events you want,
         // and the one a carrier wants evidence of. See kiddietrac.com/privacy#sms.
@@ -984,6 +1002,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            family that splits its week across providers. */
         Route::get ('/admin/children/{child}/care-schedule', [\App\Http\Controllers\Api\CareScheduleController::class, 'show']);
         Route::put ('/admin/children/{child}/care-schedule', [\App\Http\Controllers\Api\CareScheduleController::class, 'update']);
+        Route::post('/admin/children/{child}/schedule-change', [\App\Http\Controllers\Api\CareScheduleController::class, 'notice']);
         /* PASSKEYS — signed-in half: enrol, list, remove. Beside the biometric routes
            on purpose; the two are neighbours in the UI and in what they are for. */
         Route::get   ('/passkeys',                  [\App\Http\Controllers\Api\PasskeyController::class, 'index']);
@@ -991,7 +1010,21 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/passkeys/register/verify',  [\App\Http\Controllers\Api\PasskeyController::class, 'registerVerify']);
         Route::delete('/passkeys/{id}',             [\App\Http\Controllers\Api\PasskeyController::class, 'destroy'])->whereNumber('id');
         Route::post('/me/biometric-enrolled', [\App\Http\Controllers\Api\BiometricController::class, 'enrolled']);
+        Route::post('/me/device-permissions', [\App\Http\Controllers\Api\DevicePermissionsController::class, 'store'])->middleware('throttle:20,1,r-device-permissions');
         Route::post('/me/biometric-revoked',  [\App\Http\Controllers\Api\BiometricController::class, 'revoked']);
+        // Signed-in devices: see them, sign a lost one out remotely (2026-11-09, DeviceSessionController).
+        Route::get ('/me/devices',          [\App\Http\Controllers\Api\DeviceSessionController::class, 'mine']);
+        Route::post('/me/devices/sign-out', [\App\Http\Controllers\Api\DeviceSessionController::class, 'signOutMine'])->middleware('throttle:30,1,r-me-devices-out');
+        Route::get ('/admin/users/{user}/devices',          [\App\Http\Controllers\Api\DeviceSessionController::class, 'forUser'])->whereNumber('user')->middleware('role:agency_admin,platform_admin,centre_director');   // + assertMay: own agency; directors only their centre's non-admin staff
+        Route::post('/admin/users/{user}/devices/sign-out', [\App\Http\Controllers\Api\DeviceSessionController::class, 'signOutUser'])->whereNumber('user')->middleware(['role:agency_admin,platform_admin,centre_director', 'throttle:30,1,r-user-devices-out']);
+        /* Report a message / block a person in messages (2026-11-03, App Store Guideline 1.2) - ContentReportController.
+           The admin pair checks the agency-admin / superadmin rule itself (the same as Chat conversations). */
+        Route::post  ('/me/content-reports', [\App\Http\Controllers\Api\ContentReportController::class, 'report'])->middleware('throttle:20,1,r-content-report');
+        Route::get   ('/me/blocks',          [\App\Http\Controllers\Api\ContentReportController::class, 'myBlocks']);
+        Route::post  ('/me/blocks',          [\App\Http\Controllers\Api\ContentReportController::class, 'block'])->middleware('throttle:20,1,r-user-block');
+        Route::delete('/me/blocks/{user}',   [\App\Http\Controllers\Api\ContentReportController::class, 'unblock'])->whereNumber('user');
+        Route::get   ('/admin/content-reports',      [\App\Http\Controllers\Api\ContentReportController::class, 'adminIndex']);
+        Route::patch ('/admin/content-reports/{id}', [\App\Http\Controllers\Api\ContentReportController::class, 'adminUpdate'])->whereNumber('id');
         Route::get ('/admin/biometric-report', [\App\Http\Controllers\Api\BiometricController::class, 'report']);
         Route::get('/me/sms-consent',  [\App\Http\Controllers\Api\SmsConsentController::class, 'show']);
         Route::post('/me/sms-consent', [\App\Http\Controllers\Api\SmsConsentController::class, 'store']);
@@ -999,6 +1032,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/parent/absences',    [\App\Http\Controllers\Api\AbsenceController::class, 'index']);
         Route::post('/parent/absences',   [\App\Http\Controllers\Api\AbsenceController::class, 'store']);
         Route::delete('/parent/absences/{child}/{date}', [\App\Http\Controllers\Api\AbsenceController::class, 'destroy']);
+        // 'We're running late' (drop-off or pickup) - holds Safe Arrival back and tells the staff (2026-11-06).
+        Route::get   ('/parent/running-late', [\App\Http\Controllers\Api\ParentRunningLateController::class, 'index']);
+        Route::post  ('/parent/running-late', [\App\Http\Controllers\Api\ParentRunningLateController::class, 'store'])->middleware('throttle:30,1,r-parent-late');
+        Route::delete('/parent/running-late/{child}/{kind}', [\App\Http\Controllers\Api\ParentRunningLateController::class, 'destroy'])->whereNumber('child')->whereIn('kind', ['arrival', 'departure']);
+        // Pickup countdown + alarm: the parent's own reminder, from check-in to pickup (2026-11-09).
+        Route::get ('/parent/pickup-plan', [\App\Http\Controllers\Api\ParentPickupPlanController::class, 'index']);
+        Route::post('/parent/pickup-plan', [\App\Http\Controllers\Api\ParentPickupPlanController::class, 'store'])->middleware('throttle:60,1,r-parent-pickup');
+        // Global search words, learned from use (App\Support\SearchKeywords).
+        Route::get ('/search-keys', [\App\Http\Controllers\Api\SearchKeywordController::class, 'index']);
+        Route::post('/diag/search-words', [\App\Http\Controllers\Api\SearchKeywordController::class, 'report'])->middleware('throttle:30,1,r-search-words');
         // Which rooms an educator is assigned to (director / agency-admin only —
         // the controller checks centre access on both the user and the rooms).
         // 2026-08-30 — these five carried NO role middleware. The controller's own
@@ -1008,6 +1051,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Room assignment is a director/agency-admin decision (the controller says so
         // in its own docblock); punch correction is payroll. Both are admin-only.
         Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+            // Linked emails on a record, for whoever the agency lets see them (2026-11-06, PersonMail::viewScope).
+            Route::get('/email-links/access', [\App\Http\Controllers\Api\EmailLinkController::class, 'access'])->middleware('throttle:120,1,r-email-links-access');
+            Route::get('/email-links/person', [\App\Http\Controllers\Api\EmailLinkController::class, 'person'])->middleware('throttle:120,1,r-email-links-person');
+            Route::get('/email-links/family/{id}', [\App\Http\Controllers\Api\EmailLinkController::class, 'family'])->whereNumber('id')->middleware('throttle:120,1,r-email-links-family');
+            // Open, download, print and forward one linked email (2026-11-09) - gated by the record, see EmailLinkController::linked().
+            Route::get('/email-links/{id}/message', [\App\Http\Controllers\Api\EmailLinkController::class, 'message'])->whereNumber('id')->middleware('throttle:60,1,r-email-link-open');
+            Route::get('/email-links/{id}/attachment', [\App\Http\Controllers\Api\EmailLinkController::class, 'attachment'])->whereNumber('id')->middleware('throttle:60,1,r-email-link-open');
+            Route::get('/email-links/{id}/download', [\App\Http\Controllers\Api\EmailLinkController::class, 'download'])->whereNumber('id')->middleware('throttle:30,1,r-email-link-open');
+            Route::post('/email-links/{id}/forward', [\App\Http\Controllers\Api\EmailLinkController::class, 'forward'])->whereNumber('id')->middleware('throttle:10,1,r-email-link-forward');
             Route::get('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'show']);
             Route::put('/admin/users/{user}/rooms', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'update']);
             // A staff member's clock in/out history, on their own record.
@@ -1024,6 +1076,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::delete('/admin/users/{user}/punches/{punch}', [\App\Http\Controllers\Api\EducatorRoomsController::class, 'destroyPunch']);
         });
         Route::put('/me/notification-prefs',  [\App\Http\Controllers\Api\NotificationPrefsController::class, 'update']);
+        // Tone + vibration per notification category (App\Support\NotificationSounds).
+        Route::get('/me/notification-sounds', [\App\Http\Controllers\Api\NotificationSoundsController::class, 'index']);
+        Route::put('/me/notification-sounds', [\App\Http\Controllers\Api\NotificationSoundsController::class, 'update']);
 
         // Onboarding — Privacy Policy & NDA. Every role signs once; the signature,
         // a hash of the exact wording, the IP and the timestamp are recorded, the
@@ -1047,6 +1102,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/care/portfolio/{child}',    [\App\Http\Controllers\Api\CareController::class, 'portfolio']);
         Route::post  ('/staff/punch',               [\App\Http\Controllers\Api\CareController::class, 'punch']);
         Route::get   ('/staff/punches/me',          [\App\Http\Controllers\Api\CareController::class, 'myPunches']);
+        // Lunch and breaks: off the floor without ending the day (2026-11-05, App\Support\StaffBreaks).
+        Route::post  ('/staff/break/start',         [\App\Http\Controllers\Api\CareController::class, 'breakStart']);
+        Route::post  ('/staff/break/end',           [\App\Http\Controllers\Api\CareController::class, 'breakEnd']);
         // A supervisor view — every staff member's punches at the centre. Gated like
         // one (2026-08-30); it previously answered to any authenticated role there.
         Route::get   ('/staff/punches/centre',      [\App\Http\Controllers\Api\CareController::class, 'centrePunches'])->middleware('role:centre_director,agency_admin,platform_admin');
@@ -1067,6 +1125,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Split family billing (2026-09-29)
         Route::get ('/admin/families/{id}/billing-split', [\App\Http\Controllers\Api\BillingSplitController::class, 'show'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
         Route::put ('/admin/families/{id}/billing-split', [\App\Http\Controllers\Api\BillingSplitController::class, 'update'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
+        Route::post('/admin/families/{id}/billing-split/preview', [\App\Http\Controllers\Api\BillingSplitController::class, 'previewUnsaved'])->where('id', '[0-9]+')->middleware(['role:agency_admin,centre_director,platform_admin', 'throttle:60,1,splitprev']);
         // Grant tracking & reconciliation (2026-09-29)
         // Batch payment run (2026-09-29): agency admins only.
         Route::get ('/admin/payment-runs/preview', [\App\Http\Controllers\Api\PaymentRunController::class, 'preview'])->middleware('role:agency_admin,platform_admin');
@@ -1081,8 +1140,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/admin/grants/{id}/transactions/{txnId}', [\App\Http\Controllers\Api\GrantController::class, 'deleteTransaction'])->where(['id' => '[0-9]+', 'txnId' => '[0-9]+'])->middleware('role:agency_admin,centre_director,platform_admin');
         Route::get ('/admin/grants/{id}/export.csv', [\App\Http\Controllers\Api\GrantController::class, 'csv'])->where('id', '[0-9]+')->middleware('role:agency_admin,centre_director,platform_admin');
 
-        Route::get   ('/provider/shifts/me',        [\App\Http\Controllers\Api\EducatorSelfController::class, 'myShifts']);
-        Route::get   ('/provider/children',          [\App\Http\Controllers\Api\EducatorSelfController::class, 'children']);
+        Route::get   ('/provider/shifts/me',        [\App\Http\Controllers\Api\EducatorSelfController::class, 'myShifts'])->middleware(KT_PROVIDER_ROLES);   // staff self-service: no parent (2026-11-04 roles sweep)
+        // The educator's own calendar: shifts, own time off, closures + birthdays for their centres (2026-10-28).
+        Route::get   ('/provider/calendar/me',      [\App\Http\Controllers\Api\CalendarOverlayController::class, 'mine'])->middleware(KT_PROVIDER_ROLES);
+        Route::get   ('/provider/children',          [\App\Http\Controllers\Api\EducatorSelfController::class, 'children'])->middleware(KT_PROVIDER_ROLES);
         // ── Forms Manager: upload PDF → assign to roles → e-sign → track sign-offs ──
         Route::get   ('/admin/managed-forms/signoffs',           [\App\Http\Controllers\Api\ManagedFormController::class, 'signoffs']);
         // Send a completed copy to the address configured on its form (see emailSignoff).
@@ -1091,6 +1152,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            finished document to BOTH sides. Admin-only; the controller re-checks and
            scopes to the active agency. */
         Route::post  ('/admin/managed-forms/signoffs/{id}/countersign', [\App\Http\Controllers\Api\ManagedFormController::class, 'countersign'])->where('id', '[0-9]+');
+        // Share a counter-signed form with staff (filed to their Documents) or any address (2026-10-20).
+        Route::get   ('/admin/managed-forms/share-recipients',      [\App\Http\Controllers\Api\ManagedFormController::class, 'shareRecipients']);
+        Route::post  ('/admin/managed-forms/signoffs/{id}/share',   [\App\Http\Controllers\Api\ManagedFormController::class, 'share'])->where('id', '[0-9]+')->middleware('throttle:20,1,fmshare');
         Route::post  ('/admin/managed-forms/signoffs/sync-documents',   [\App\Http\Controllers\Api\ManagedFormController::class, 'syncDocuments']);
         Route::post  ('/admin/managed-forms/signoffs/{id}/return',      [\App\Http\Controllers\Api\ManagedFormController::class, 'returnToSigner'])->where('id', '[0-9]+');
         Route::delete('/admin/managed-forms/signoffs/{id}',       [\App\Http\Controllers\Api\ManagedFormController::class, 'deleteSignoff'])->where('id', '[0-9]+');
@@ -1124,7 +1188,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/managed-forms/assigned',                  [\App\Http\Controllers\Api\ManagedFormController::class, 'assigned']);
         Route::post  ('/managed-forms/{id}/sign',                 [\App\Http\Controllers\Api\ManagedFormController::class, 'sign']);
         Route::post  ('/managed-forms/{id}/draft',                [\App\Http\Controllers\Api\ManagedFormController::class, 'draft']);
-        Route::get   ('/provider/children/{child}',  [\App\Http\Controllers\Api\EducatorSelfController::class, 'childRecord']);
+        Route::get   ('/provider/children/{child}',  [\App\Http\Controllers\Api\EducatorSelfController::class, 'childRecord'])->middleware(KT_PROVIDER_ROLES);
         Route::get   ('/admin/tours',               [\App\Http\Controllers\Api\CareController::class, 'listTours']);
         Route::patch ('/admin/tours/{id}',          [\App\Http\Controllers\Api\CareController::class, 'updateTour']);
 
@@ -1137,11 +1201,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post  ('/marketing/assets',              [\App\Http\Controllers\Api\MarketingController::class, 'assetsStore']);
             Route::delete('/marketing/assets/{id}',         [\App\Http\Controllers\Api\MarketingController::class, 'assetsDestroy']);
             Route::get   ('/marketing/campaigns',           [\App\Http\Controllers\Api\MarketingController::class, 'index']);
+            // Reports → Campaign report (2026-10-31): the agency's campaigns + announcements with recorded delivery/opens.
+            Route::get   ('/marketing/campaigns-report',    [\App\Http\Controllers\Api\MarketingController::class, 'report'])->middleware('throttle:60,1,r-campaign-report');
             Route::post  ('/marketing/campaigns',           [\App\Http\Controllers\Api\MarketingController::class, 'store']);
             Route::get   ('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'show']);
             Route::patch ('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'update']);
             Route::delete('/marketing/campaigns/{id}',      [\App\Http\Controllers\Api\MarketingController::class, 'destroy']);
             Route::post  ('/marketing/campaigns/{id}/send', [\App\Http\Controllers\Api\MarketingController::class, 'sendNow']);
+            Route::get   ('/marketing/senders',             [\App\Http\Controllers\Api\MarketingController::class, 'senders']);
             Route::post  ('/marketing/images',              [\App\Http\Controllers\Api\MarketingController::class, 'uploadImage']);
             // Agency-wide accounting view of externally-synced (iLearn) invoices —
             // admins + directors (+ platform_admin in tenant context). Parents use
@@ -1156,6 +1223,38 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::middleware('role:agency_admin,platform_admin')->group(function () {
                 Route::get ('/admin/payroll/manual/prepare', [\App\Http\Controllers\Api\ManualPayrollController::class, 'prepare']);
                 Route::post('/admin/payroll/manual',         [\App\Http\Controllers\Api\ManualPayrollController::class, 'commit']);
+            });
+
+            /* THE PRIVACY BREACH REGISTER (2026-11-06) — PIPEDA s. 10.3: every breach of
+               security safeguards involving personal information is recorded and kept 24
+               months, reported or not. The agency is the accountable organization, so its
+               admins only; no delete route on purpose. Not plan-gated: a legal duty. */
+            // Centre directors READ their centres' records (they get the alert emails, PrivacyBreachAlerts);
+            // the controller scopes them and refuses every write.
+            Route::middleware('role:agency_admin,platform_admin,centre_director')->group(function () {
+                Route::get  ('/compliance/privacy-breaches',            [\App\Http\Controllers\Api\PrivacyBreachController::class, 'index']);
+                Route::get  ('/compliance/privacy-breaches/{id}',       [\App\Http\Controllers\Api\PrivacyBreachController::class, 'show'])->where('id', '[0-9]+');
+            });
+            Route::middleware('role:agency_admin,platform_admin')->group(function () {
+                Route::get  ('/compliance/privacy-breaches/export',     [\App\Http\Controllers\Api\PrivacyBreachController::class, 'export']);
+                Route::get  ('/compliance/privacy-breaches/alert-settings', [\App\Http\Controllers\Api\PrivacyBreachController::class, 'alertSettings']);
+                Route::post ('/compliance/privacy-breaches/alert-settings', [\App\Http\Controllers\Api\PrivacyBreachController::class, 'saveAlertSettings']);
+                Route::post ('/compliance/privacy-breaches',            [\App\Http\Controllers\Api\PrivacyBreachController::class, 'store']);
+                Route::patch('/compliance/privacy-breaches/{id}',       [\App\Http\Controllers\Api\PrivacyBreachController::class, 'update'])->where('id', '[0-9]+');
+                Route::post ('/compliance/privacy-breaches/{id}/notes', [\App\Http\Controllers\Api\PrivacyBreachController::class, 'note'])->where('id', '[0-9]+');
+            });
+
+            /* PRIVACY REQUESTS (2026-11-10) - PIPEDA Principle 4.9 / s. 8: a person asks to see, correct or delete what
+               is held about them or their child; 30 days to answer. Agency admins only; no delete route on purpose.
+               Not plan-gated: a legal duty. */
+            Route::middleware('role:agency_admin,platform_admin')->group(function () {
+                Route::get  ('/compliance/privacy-requests',              [\App\Http\Controllers\Api\PrivacyRequestController::class, 'index']);
+                Route::get  ('/compliance/privacy-requests/subjects',     [\App\Http\Controllers\Api\PrivacyRequestController::class, 'subjects']);
+                Route::get  ('/compliance/privacy-requests/{id}',         [\App\Http\Controllers\Api\PrivacyRequestController::class, 'show'])->where('id', '[0-9]+');
+                Route::get  ('/compliance/privacy-requests/{id}/export',  [\App\Http\Controllers\Api\PrivacyRequestController::class, 'export'])->where('id', '[0-9]+');
+                Route::post ('/compliance/privacy-requests',              [\App\Http\Controllers\Api\PrivacyRequestController::class, 'store']);
+                Route::patch('/compliance/privacy-requests/{id}',         [\App\Http\Controllers\Api\PrivacyRequestController::class, 'update'])->where('id', '[0-9]+');
+                Route::post ('/compliance/privacy-requests/{id}/notes',   [\App\Http\Controllers\Api\PrivacyRequestController::class, 'note'])->where('id', '[0-9]+');
             });
 
             /* THE AGENCY CONTACT BOOK — the drawer of business cards, digitised.
@@ -1193,6 +1292,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
                    guessing would fetch a different family's invoice. */
                 Route::post('/admin/invoices/{kind}/{id}/email', [\App\Http\Controllers\Api\AccountLedgerController::class, 'emailInvoice'])
                     ->where('kind', 'native|external')->where('id', '[0-9]+');
+                // The resend popup's guardians and staff to copy (2026-10-31).
+                Route::get('/admin/invoices/{kind}/{id}/email-recipients', [\App\Http\Controllers\Api\AccountLedgerController::class, 'emailRecipients'])
+                    ->where('kind', 'native|external')->where('id', '[0-9]+');
             });
 
             Route::get   ('/agency/external-invoices',       [\App\Http\Controllers\Api\InvoiceController::class, 'externalForAgency']);
@@ -1217,6 +1319,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::patch ('/agency/waitlist/{id}/status', [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'setStatus'])->where('id','[0-9]+');
             Route::post  ('/agency/waitlist/{id}/reach-out', [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'reachOut'])->where('id','[0-9]+');
             Route::post  ('/agency/waitlist/{id}/enroll', [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'enroll'])->where('id','[0-9]+');
+            /* Families from a closed provider (#251): wait on the agency list, then get placed. */
+            Route::post  ('/agency/waitlist/{id}/assign', [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'assign'])->where('id','[0-9]+');
+            Route::post  ('/agency/waitlist/from-families', [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'fromFamilies']);
             Route::delete('/agency/waitlist/{id}', [\App\Http\Controllers\Api\ExternalWaitlistController::class, 'destroy'])->where('id','[0-9]+');
         });
 
@@ -1225,15 +1330,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Report an issue to the centre (2026-10-13).
             Route::get('/issues/options', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentOptions']);
             Route::get('/issues', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentIndex']);
-            Route::post('/issues', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentStore'])->middleware('throttle:10,1');
-            Route::post('/issues/{id}/messages', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentMessage'])->whereNumber('id')->middleware('throttle:20,1');
+            Route::post('/issues', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentStore'])->middleware('throttle:10,1,r-issues');
+            Route::post('/issues/{id}/messages', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentMessage'])->whereNumber('id')->middleware('throttle:20,1,r-issues-x-messages');
             // Family & pick-ups: a parent asks the centre for a contact's pick-up login (2026-10-13).
             Route::get('/family-contacts', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentContacts']);
-            Route::post('/family-contacts/{ec}/login-request', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentRequest'])->whereNumber('ec')->middleware('throttle:10,1');
+            Route::post('/family-contacts/{ec}/login-request', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentRequest'])->whereNumber('ec')->middleware('throttle:10,1,r-family-contacts-x-login-request');
             // Parents keep their own pick-up list (2026-10-13): add / edit / remove, staff told, logged.
-            Route::post('/family-contacts', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentAdd'])->middleware('throttle:20,1');
-            Route::patch('/family-contacts/{ec}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentUpdate'])->whereNumber('ec')->middleware('throttle:30,1');
-            Route::delete('/family-contacts/{ec}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentRemove'])->whereNumber('ec')->middleware('throttle:20,1');
+            Route::post('/family-contacts', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentAdd'])->middleware('throttle:20,1,r-family-contacts');
+            Route::patch('/family-contacts/{ec}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentUpdate'])->whereNumber('ec')->middleware('throttle:30,1,r-family-contacts-x');
+            Route::delete('/family-contacts/{ec}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentRemove'])->whereNumber('ec')->middleware('throttle:20,1,r-family-contacts-x-1533');
             Route::delete('/pickup-login-requests/{id}', [\App\Http\Controllers\Api\PickupLoginController::class, 'parentCancel'])->whereNumber('id');
             Route::get('/children', [FamilyController::class, 'myChildren']);
             Route::post('/withdrawals', [\App\Http\Controllers\Api\WithdrawalController::class, 'submit']);
@@ -1242,6 +1347,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/children/{child}/timeline', [DailyEventController::class, 'timeline']);
             Route::get('/children/{child}/digest/{date}', [DailyEventController::class, 'digest']);
             Route::get('/children/{child}/invoices', [InvoiceController::class, 'forChild']);
+            // Account ledger + billing stats for the parent's Billing screen (2026-10-28).
+            Route::get('/children/{child}/ledger', [InvoiceController::class, 'ledgerForChild']);
             Route::get('/external-invoices', [InvoiceController::class, 'externalForParent']);
             // Open ONE externally-issued invoice. Returns the provider's link after
             // checking the guardian belongs to the family it was raised against.
@@ -1251,7 +1358,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/messages', [MessageController::class, 'myConversations']);
             // These static paths MUST precede /messages/{conversation} or they'd bind as an id.
             Route::get('/messages/unread-count', [MessageController::class, 'unreadCount']);
-            Route::post('/messages/nudge', [MessageController::class, 'nudge'])->middleware('throttle:6,1');
+            Route::post('/messages/nudge', [MessageController::class, 'nudge'])->middleware('throttle:6,1,r-messages-nudge');
+            Route::post('/messages/call', [MessageController::class, 'call'])->middleware('throttle:10,1,r-chat-call');
             Route::get('/messages/{conversation}', [MessageController::class, 'show']);
             Route::post('/messages/{conversation}/typing', [MessageController::class, 'typing'])->where('conversation','[0-9]+');
             Route::post('/messages/{conversation}/react/{message}', [MessageController::class, 'reactMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
@@ -1270,6 +1378,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
             // Child awards (parent view)
             Route::get('/awards',                          [\App\Http\Controllers\Api\AwardController::class, 'forParent']);
+            // Report cards (parent view) + asking for this quarter's card (2026-11-04)
+            Route::get ('/report-cards',                   [\App\Http\Controllers\Api\ParentReportCardController::class, 'index']);
+            Route::post('/report-cards/request',           [\App\Http\Controllers\Api\ParentReportCardController::class, 'request'])->middleware('throttle:20,1');
+            Route::get ('/report-cards/{id}/link',         [\App\Http\Controllers\Api\ParentReportCardController::class, 'link']);
 
             // v22p1: Parent reads of child health
             Route::get('/children/{child}/health',         [ChildHealthController::class, 'show']);
@@ -1436,10 +1548,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
             Route::get('/children/{child}', [ChildController::class, 'show']);
             // Logins next to the family's people on the child record (2026-10-13), centre-scoped.
-            Route::post('/emergency-contacts/{ec}/pickup-login', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffGrant'])->whereNumber('ec')->middleware('throttle:20,1');
+            Route::post('/emergency-contacts/{ec}/pickup-login', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffGrant'])->whereNumber('ec')->middleware('throttle:20,1,r-emergency-contacts-x-pickup-login');
             Route::delete('/emergency-contacts/{ec}/pickup-login', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffRevoke'])->whereNumber('ec');
             Route::post('/pickup-login-requests/{id}/decline', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffDecline'])->whereNumber('id');
-            Route::post('/guardians/{user}/login-invite', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffInviteGuardian'])->whereNumber('user')->middleware('throttle:20,1');
+            Route::post('/guardians/{user}/login-invite', [\App\Http\Controllers\Api\PickupLoginController::class, 'staffInviteGuardian'])->whereNumber('user')->middleware('throttle:20,1,r-guardians-x-login-invite');
             // v22p88: child-detail tabs
             Route::get('/children/{child}/daily-events', [ChildController::class, 'dailyEvents']);
             Route::get('/children/{child}/feed',         [ChildController::class, 'feed']);
@@ -1626,7 +1738,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             });
         });
 
-        Route::prefix('agency')->middleware('role:agency_admin')->group(function () {
+        // Directors too (2026-11-13): the same overview, narrowed to their own centres in AgencyController (CentreScope).
+        Route::prefix('agency')->middleware('role:agency_admin,centre_director')->group(function () {
             Route::get('/dashboard', [AgencyController::class, 'dashboard']);
         });
     
@@ -1764,14 +1877,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::delete('/forms/{form}', [\App\Http\Controllers\Api\FormsController::class, 'destroy']);
         Route::get('/forms/{form}/responses', [\App\Http\Controllers\Api\FormsController::class, 'listResponses']);
         Route::post('/forms/{form}/email', [\App\Http\Controllers\Api\FormsController::class, 'emailToParents']);
-        Route::get('/families/{family}', [AdminController::class, 'showFamily']);
         Route::patch('/guardians/{guardian}', [AdminController::class, 'updateGuardian']);
         /* The family record's own editing surface: notes with an author and a date, and
            unlinking a guardian. Adding a child and inviting a guardian already had
            endpoints (enrollments / families.invite) that nothing on screen called. */
-        Route::get   ('/families/{family}/provider-history',     [\App\Http\Controllers\Api\FamilyRecordController::class, 'providerHistory']);
-        Route::get   ('/families/{family}/documents',            [\App\Http\Controllers\Api\FamilyRecordController::class, 'documents'])->whereNumber('family');
-        Route::get   ('/families/{family}/notes',                [\App\Http\Controllers\Api\FamilyRecordController::class, 'listNotes']);
         Route::post  ('/families/{family}/notes',                [\App\Http\Controllers\Api\FamilyRecordController::class, 'addNote']);
         Route::delete('/families/{family}/notes/{note}',         [\App\Http\Controllers\Api\FamilyRecordController::class, 'deleteNote']);
         Route::post  ('/families/{family}/notes/{note}/pin',     [\App\Http\Controllers\Api\FamilyRecordController::class, 'pinNote']);
@@ -1859,6 +1968,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/chats/start',                [ChatController::class, 'parentStart']);
         Route::get('/chats/{conversation}',        [ChatController::class, 'parentShow']);
         Route::post('/chats/{conversation}/send',  [ChatController::class, 'parentSend']);
+        // 👋 Nudges (App\Support\ChatNudge): the cooldown is in the class, per conversation and sender.
+        Route::post('/chats/{conversation}/nudge', [ChatController::class, 'parentNudge'])->whereNumber('conversation');
+        Route::post('/threads/{thread}/nudge',     [\App\Http\Controllers\Api\TeamChatController::class, 'nudge'])->where('thread', '[0-9]+');
+        // 📞 Calls (App\Support\ChatCall), beside the nudge.
+        Route::post('/chats/{conversation}/call',  [ChatController::class, 'parentCall'])->whereNumber('conversation')->middleware('throttle:10,1,r-chat-call');
+        Route::post('/threads/{thread}/call',      [\App\Http\Controllers\Api\TeamChatController::class, 'call'])->where('thread', '[0-9]+')->middleware('throttle:10,1,r-chat-call');
         Route::delete('/chats/{conversation}/messages/{message}', [ChatController::class, 'parentDeleteMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
         Route::post('/chats/{conversation}/messages/{message}/react', [ChatController::class, 'parentReactMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
         Route::delete('/chats/{conversation}', [ChatController::class, 'parentDeleteConversation'])->where('conversation','[0-9]+');
@@ -1880,6 +1995,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/centres', [AdminController::class, 'listCentres']);
         Route::get('/users', [AdminController::class, 'listUsers']);
         Route::get('/families', [AdminController::class, 'listFamilies']);
+        /* A family's record, READ ONLY, for the shared Families screen (2026-11-13). showFamily uses listScope;
+           FamilyRecordController::assertFamily lets staff reach only families of a centre they are placed at.
+           Notes can be read here; adding one stays in the agency_admin group. */
+        Route::get('/families/{family}', [AdminController::class, 'showFamily']);
+        Route::get   ('/families/{family}/provider-history',     [\App\Http\Controllers\Api\FamilyRecordController::class, 'providerHistory']);
+        Route::get   ('/families/{family}/notes',                [\App\Http\Controllers\Api\FamilyRecordController::class, 'listNotes']);
+        Route::get   ('/families/{family}/documents',            [\App\Http\Controllers\Api\FamilyRecordController::class, 'documents'])->whereNumber('family');
         Route::get('/children', [AdminController::class, 'listAgencyChildren']);
         Route::get('/compliance', [AdminController::class, 'compliance']);
         Route::get('/search', [\App\Http\Controllers\Api\SearchController::class, 'query']);
@@ -1919,9 +2041,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/chats/{conversation}/messages/{message}/react', [ChatController::class, 'providerReactMessage'])->where(['conversation'=>'[0-9]+','message'=>'[0-9]+']);
         Route::delete('/chats/{conversation}', [ChatController::class, 'providerDeleteConversation'])->where('conversation','[0-9]+');
         Route::post('/chats/{conversation}/nudge',  [ChatController::class, 'providerNudge']);
+        Route::post('/chats/{conversation}/call',   [ChatController::class, 'providerCall'])->whereNumber('conversation')->middleware('throttle:10,1,r-chat-call');
         // Text / Email the family from a conversation — a separate function and popup (2026-10-10).
         Route::get ('/chats/{conversation}/parent-contacts', [ChatController::class, 'providerParentContacts'])->whereNumber('conversation');
-        Route::post('/chats/{conversation}/text-email',      [ChatController::class, 'providerTextEmail'])->whereNumber('conversation')->middleware('throttle:20,1');
+        Route::post('/chats/{conversation}/text-email',      [ChatController::class, 'providerTextEmail'])->whereNumber('conversation')->middleware('throttle:20,1,r-chats-x-text-email');
         Route::post('/chats/{conversation}/typing', [ChatController::class, 'providerTyping'])->where('conversation','[0-9]+');
         Route::post('/chats/start',                [ChatController::class, 'providerStart']);
         // Families this person may start a conversation with (Message Centre rules, 2026-10-09).
@@ -1935,7 +2058,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:educator,centre_director,agency_admin,home_visitor,platform_admin')->prefix('provider')->group(function () {
         Route::get   ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'staffList']);
         Route::get   ('/files/recipients',       [\App\Http\Controllers\Api\FamilyFilesController::class, 'recipients']);
-        Route::post  ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'staffSend'])->middleware('throttle:30,1');
+        Route::post  ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'staffSend'])->middleware('throttle:30,1,r-grp-2237');
         Route::get   ('/files/settings',         [\App\Http\Controllers\Api\FamilyFilesController::class, 'showSettings']);
         Route::post  ('/files/settings',         [\App\Http\Controllers\Api\FamilyFilesController::class, 'saveSettings']);
         Route::get   ('/files/{id}/download',    [\App\Http\Controllers\Api\FamilyFilesController::class, 'download'])->whereNumber('id');
@@ -1943,7 +2066,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     });
     Route::middleware('role:guardian')->prefix('parent')->group(function () {
         Route::get   ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'parentList']);
-        Route::post  ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'parentSend'])->middleware('throttle:20,1');
+        Route::post  ('/files',                  [\App\Http\Controllers\Api\FamilyFilesController::class, 'parentSend'])->middleware('throttle:20,1,r-grp-2245');
         Route::get   ('/files/{id}/download',    [\App\Http\Controllers\Api\FamilyFilesController::class, 'download'])->whereNumber('id');
         Route::delete('/files/{id}',             [\App\Http\Controllers\Api\FamilyFilesController::class, 'destroy'])->whereNumber('id');
     });
@@ -1959,14 +2082,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Staff certificates (2026-10-19): CPR, first aid, RECE … with the certificate file.
         Route::get   ('/staff-certifications',                 [\App\Http\Controllers\Api\StaffComplianceController::class, 'certIndex']);
         Route::get   ('/staff-certifications/roster',          [\App\Http\Controllers\Api\StaffComplianceController::class, 'certRoster']);
-        Route::post  ('/staff-certifications',                 [\App\Http\Controllers\Api\StaffComplianceController::class, 'certStore'])->middleware('throttle:30,1');
-        Route::post  ('/staff-certifications/{id}',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'certUpdate'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post  ('/staff-certifications',                 [\App\Http\Controllers\Api\StaffComplianceController::class, 'certStore'])->middleware('throttle:30,1,r-grp-2261');
+        Route::post  ('/staff-certifications/{id}',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'certUpdate'])->whereNumber('id')->middleware('throttle:30,1,r-grp-2262');
         Route::patch ('/staff-certifications/{id}',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'certUpdate'])->whereNumber('id');
         Route::post  ('/staff-certifications/{id}/verify',     [\App\Http\Controllers\Api\StaffComplianceController::class, 'certVerify'])->whereNumber('id');
         Route::delete('/staff-certifications/{id}',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'certDelete'])->whereNumber('id');
         Route::get   ('/staff-certifications/{id}/document',   [\App\Http\Controllers\Api\StaffComplianceController::class, 'certDocument'])->whereNumber('id');
         Route::get   ('/pd-hours',                             [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdIndex']);
-        Route::post  ('/pd-hours',                             [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdStore'])->middleware('throttle:30,1');
+        Route::post  ('/pd-hours',                             [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdStore'])->middleware('throttle:30,1,r-grp-2268');
         Route::post  ('/pd-hours/{id}/review',                 [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdReview'])->whereNumber('id');
         Route::delete('/pd-hours/{id}',                        [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdDelete'])->whereNumber('id');
         Route::get   ('/pd-hours/{id}/certificate',            [\App\Http\Controllers\Api\StaffComplianceController::class, 'pdCertificate'])->whereNumber('id');
@@ -1986,10 +2109,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/children/{child}/parent-contacts',           [\App\Http\Controllers\Api\ParentContactController::class, 'contacts'])->whereNumber('child');
         // Staff notes on a child's record (2026-10-09); room-scoped in the controller.
         Route::get  ('/children/{child}/notes',            [\App\Http\Controllers\Api\ChildNotesController::class, 'index'])->whereNumber('child');
-        Route::post ('/children/{child}/notes',            [\App\Http\Controllers\Api\ChildNotesController::class, 'store'])->whereNumber('child')->middleware('throttle:30,1');
-        Route::patch('/child-notes/{id}',                  [\App\Http\Controllers\Api\ChildNotesController::class, 'update'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post ('/children/{child}/notes',            [\App\Http\Controllers\Api\ChildNotesController::class, 'store'])->whereNumber('child')->middleware('throttle:30,1,r-grp-2288');
+        Route::patch('/child-notes/{id}',                  [\App\Http\Controllers\Api\ChildNotesController::class, 'update'])->whereNumber('id')->middleware('throttle:30,1,r-child-notes-x');
         Route::get  ('/child-notes/{id}/history',          [\App\Http\Controllers\Api\ChildNotesController::class, 'history'])->whereNumber('id');
-        Route::post('/children/{child}/message-parents',           [\App\Http\Controllers\Api\ParentContactController::class, 'send'])->whereNumber('child')->middleware('throttle:20,1');
+        Route::post('/children/{child}/message-parents',           [\App\Http\Controllers\Api\ParentContactController::class, 'send'])->whereNumber('child')->middleware('throttle:20,1,r-children-x-message-parents');
     });
 
     Route::middleware('role:educator,centre_director,agency_admin,home_visitor,platform_admin,auditor')->prefix('provider')->group(function () {
@@ -2010,6 +2133,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch('/team-threads/{thread}', [\App\Http\Controllers\Api\TeamChatController::class, 'rename'])->where('thread', '[0-9]+');
         Route::get ('/team-threads/{thread}',      [\App\Http\Controllers\Api\TeamChatController::class, 'show'])->where('thread', '[0-9]+');
         Route::post('/team-threads/{thread}/send', [\App\Http\Controllers\Api\TeamChatController::class, 'send'])->where('thread', '[0-9]+');
+        Route::post('/team-threads/{thread}/nudge', [\App\Http\Controllers\Api\TeamChatController::class, 'nudge'])->where('thread', '[0-9]+');
+        Route::post('/team-threads/{thread}/call',  [\App\Http\Controllers\Api\TeamChatController::class, 'call'])->where('thread', '[0-9]+')->middleware('throttle:10,1,r-chat-call');
         Route::post('/team-threads/{thread}/messages/{message}/react', [\App\Http\Controllers\Api\TeamChatController::class, 'react'])->where(['thread' => '[0-9]+', 'message' => '[0-9]+']);
         // Archiving is per person and covers both kinds of thread, so it lives on its
         // own endpoint rather than being duplicated into each chat controller.
@@ -2070,6 +2195,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get ('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'index']);
     Route::post('/chat-archive', [\App\Http\Controllers\Api\ChatArchiveController::class, 'store']);
     
+    /* 📞 A call from a chat once it has started (App\Support\ChatCall, browser to browser - free) - any signed-in
+       person, parents too: being the caller or one of the people rung is the permission (anything else is 404). */
+    Route::get ('/chat-calls/{id}',         [\App\Http\Controllers\Api\ChatCallController::class, 'show'])->whereNumber('id')->middleware('throttle:240,1,r-chat-calls-g');
+    Route::post('/chat-calls/{id}/offer',   [\App\Http\Controllers\Api\ChatCallController::class, 'offer'])->whereNumber('id')->middleware('throttle:30,1,r-chat-calls-p');
+    Route::post('/chat-calls/{id}/answer',  [\App\Http\Controllers\Api\ChatCallController::class, 'answer'])->whereNumber('id')->middleware('throttle:30,1,r-chat-calls-p');
+    Route::post('/chat-calls/{id}/decline', [\App\Http\Controllers\Api\ChatCallController::class, 'decline'])->whereNumber('id')->middleware('throttle:30,1,r-chat-calls-p');
+    Route::post('/chat-calls/{id}/hangup',  [\App\Http\Controllers\Api\ChatCallController::class, 'hangup'])->whereNumber('id')->middleware('throttle:30,1,r-chat-calls-p');
+    Route::post('/chat-calls/{id}/talking', [\App\Http\Controllers\Api\ChatCallController::class, 'talking'])->whereNumber('id')->middleware('throttle:30,1,r-chat-calls-p');
+
     // AGENCY management (agency_admin)
     Route::middleware('role:agency_admin')->prefix('admin')->group(function () {
         Route::get('/agencies',                    [AgencyManagementController::class, 'index']);
@@ -2102,16 +2236,37 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // bulk). Deleting also purges the inbox notifications it generated.
         Route::post('/announcements/delete',          [AnnouncementController::class, 'destroyMany']);
         Route::delete('/announcements/{id}',          [AnnouncementController::class, 'destroy']);
+        // Due dates + reminders (2026-10-22): staff it was sent to tap Done; the sender sees who has.
+        Route::post('/announcements/{id}/done',       [AnnouncementController::class, 'markDone'])->whereNumber('id');
+        Route::get('/announcements/{id}/responses',   [AnnouncementController::class, 'responses'])->whereNumber('id');
+        // Details (who it reached, read / done) and Resend, for whoever could have sent it (2026-11-09).
+        Route::get('/announcements/{id}/details',     [AnnouncementController::class, 'details'])->whereNumber('id');
+        Route::post('/announcements/{id}/resend',     [AnnouncementController::class, 'resend'])->whereNumber('id')->middleware('throttle:6,1,r-ann-resend');
+        // Read / unread / archive in MY list (2026-11-07): the caller's own rows only (announcement_user_state).
+        Route::post('/announcements/state',           [AnnouncementController::class, 'parentState'])->middleware('throttle:60,1,r-annstate-staff');
+        // Supplies from home (2026-10-23, App\Support\Supplies).
+        Route::get('/supplies/catalogue',             [\App\Http\Controllers\Api\SupplyController::class, 'catalogue']);
+        Route::put('/supplies/catalogue',             [\App\Http\Controllers\Api\SupplyController::class, 'saveCatalogue']);
+        Route::get('/supplies',                       [\App\Http\Controllers\Api\SupplyController::class, 'index']);
+        Route::post('/supplies',                      [\App\Http\Controllers\Api\SupplyController::class, 'store'])->middleware('throttle:30,1,r-supplies');
+        Route::post('/supplies/{id}/received',        [\App\Http\Controllers\Api\SupplyController::class, 'received'])->whereNumber('id');
+        Route::post('/supplies/{id}/cancel',          [\App\Http\Controllers\Api\SupplyController::class, 'cancel'])->whereNumber('id');
     });
     
     // PARENT — announcements inbox + waitlist status + autopay
     Route::middleware('role:guardian')->prefix('parent')->group(function () {
         Route::get('/announcements',                  [AnnouncementController::class, 'indexParent']);
+        Route::post('/announcements/{id}/done',       [AnnouncementController::class, 'markDone'])->whereNumber('id');
+        // Read / unread / remove from MY News (2026-11-07): the parent's own rows only (announcement_user_state).
+        Route::post('/announcements/state',           [AnnouncementController::class, 'parentState'])->middleware('throttle:60,1,r-annstate');
+        Route::get('/supplies',                       [\App\Http\Controllers\Api\SupplyController::class, 'parentIndex']);
+        Route::post('/supplies/respond',              [\App\Http\Controllers\Api\SupplyController::class, 'respond']);
         Route::get('/waitlist-status',                [WaitlistController::class, 'parentStatus']);
-        Route::get('/billing/autopay-status',         [AutopayController::class, 'status']);
-        Route::post('/billing/setup-intent',          [AutopayController::class, 'setupIntent']);
-        Route::post('/billing/confirm-autopay',       [AutopayController::class, 'confirmAutopay']);
-        Route::post('/billing/disable-autopay',       [AutopayController::class, 'disableAutopay']);
+        // The agency's own Stripe (2026-11-05): AutopayController's Connect design was never switched on.
+        Route::get('/billing/autopay-status',         [\App\Http\Controllers\Api\StripeParentPayController::class, 'autopayStatus']);
+        Route::post('/billing/setup-intent',          [\App\Http\Controllers\Api\StripeParentPayController::class, 'setupIntent']);
+        Route::post('/billing/confirm-autopay',       [\App\Http\Controllers\Api\StripeParentPayController::class, 'confirmAutopay']);
+        Route::post('/billing/disable-autopay',       [\App\Http\Controllers\Api\StripeParentPayController::class, 'disableAutopay']);
     });
 
     // ─────────────────────────────────────────────────────────────────────
@@ -2130,6 +2285,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/lesson-plan-templates',             [\App\Http\Controllers\Api\LessonPlanTemplateController::class, 'store']);
         Route::delete('/lesson-plan-templates/{id}',      [\App\Http\Controllers\Api\LessonPlanTemplateController::class, 'destroy'])->where('id', '[0-9]+');
         Route::post('/lesson-plan-templates/{id}/used',   [\App\Http\Controllers\Api\LessonPlanTemplateController::class, 'used'])->where('id', '[0-9]+');
+        // Pictures on lesson plans (2026-11-02, App\Support\LessonImages): look up, choose, upload, the auto setting, fill a saved week.
+        Route::post('/lesson-plans/image/search',   [LessonPlanController::class, 'imageSearch'])->middleware('throttle:40,1,lpimgsearch');
+        Route::post('/lesson-plans/image/pick',     [LessonPlanController::class, 'imagePick'])->middleware('throttle:30,1,lpimgpick');
+        Route::post('/lesson-plans/image/upload',   [LessonPlanController::class, 'imageUpload'])->middleware('throttle:30,1,lpimgup');
+        Route::put ('/lesson-plans/image-settings', [LessonPlanController::class, 'imageSettings']);
+        Route::post('/lesson-plans/fill-images',    [LessonPlanController::class, 'fillImages'])->middleware('throttle:20,1,lpimgfill');
     });
     
     Route::middleware('role:centre_director,agency_admin')->prefix('director')->group(function () {
@@ -2142,6 +2303,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // The nightly-autofill switch. Agency-wide, so agency admins only to change it.
         Route::get  ('/schedule/settings',       [SchedulingController::class, 'scheduleSettings']);
         Route::patch('/schedule/settings',       [SchedulingController::class, 'saveScheduleSettings']);
+        // Standing hours per person on a home's team (App\Support\StandingShifts).
+        Route::get  ('/schedule/standing',       [SchedulingController::class, 'standing']);
+        Route::put  ('/schedule/standing',       [SchedulingController::class, 'saveStanding']);
         Route::patch('/schedule/shift/{id}',     [SchedulingController::class, 'updateShift']);
         Route::delete('/schedule/shift/{id}',    [SchedulingController::class, 'deleteShift']);
         Route::get('/timesheets',                [SchedulingController::class, 'timesheets']);
@@ -2164,12 +2328,18 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/admin/floor-staff',        ['App\Http\Controllers\Api\DashboardExtrasController','floorStaff']);
         Route::post('/admin/quick-notify',       ['App\Http\Controllers\Api\DashboardExtrasController','quickNotify']);
         Route::get ('/checkin/centre-code/{centreId}', [\App\Http\Controllers\Api\CheckinScanController::class, 'centreCode']);
+        Route::get ('/checkin/poster-info/{centreId}', [\App\Http\Controllers\Api\CheckinScanController::class, 'posterInfo'])->whereNumber('centreId');
         Route::post('/parent/checkin/scan',            [\App\Http\Controllers\Api\CheckinScanController::class, 'scan']);
     Route::post('/push/test',                [PushController::class, 'test']);
     
     // NOTIFICATIONS — unread badge support
     Route::get('/notifications/unread-count', [NotificationUnreadController::class, 'unreadCount']);
     Route::post('/notifications/mark-read',   [NotificationUnreadController::class, 'markRead']);
+    // Every badge in one answer; opening the inbox marks it seen; iPhone icon sync (App\Support\Badges, 2026-10-30).
+    Route::get('/announcements/popup',        [\App\Http\Controllers\Api\AnnouncementController::class, 'popup'])->middleware('throttle:30,1,annpopup');
+    Route::get('/badges',                     [\App\Http\Controllers\Api\BadgeController::class, 'index'])->middleware('throttle:120,1,badges');
+    Route::post('/notifications/seen',        [\App\Http\Controllers\Api\BadgeController::class, 'seen'])->middleware('throttle:60,1,badgeseen');
+    Route::post('/badges/sync',               [\App\Http\Controllers\Api\BadgeController::class, 'sync'])->middleware('throttle:30,1,badgesync');
     // Inbox housekeeping — always scoped to the caller's own notifications.
     Route::post('/notifications/delete',      [NotificationUnreadController::class, 'destroyMany']);
     Route::delete('/notifications/{id}',      [NotificationUnreadController::class, 'destroy']);
@@ -2192,26 +2362,135 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
        no role middleware at all, and any authenticated user could read them. */
     Route::get   ('/admin/mrr/overview',               [MrrDashboardController::class, 'overview'])->middleware('role:platform_admin');
     Route::get   ('/admin/mrr/agencies',               [MrrDashboardController::class, 'agencyList'])->middleware('role:platform_admin');
+    Route::get   ('/admin/mrr/insights',               [MrrDashboardController::class, 'insights'])->middleware('role:platform_admin');
 
     /* Platform invoices — what agencies owe KiddieTrac. Same platform-admin group
        as the MRR dashboard above; nothing agency-scoped may reach these. */
     Route::get   ('/platform/invoices',                [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'index'])->middleware('role:platform_admin');
     Route::get   ('/platform/billing-automation',      [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'automation'])->middleware('role:platform_admin');
     Route::put   ('/platform/billing-automation',      [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveAutomation'])->middleware('role:platform_admin');
+    Route::get   ('/platform/billing-recurring',       [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'recurring'])->middleware('role:platform_admin');
+    Route::put   ('/platform/billing-recurring',       [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveRecurring'])->middleware('role:platform_admin');
     Route::get   ('/platform/billing-plans',           [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'plans'])->middleware('role:platform_admin');
     Route::put   ('/platform/billing-plans/{agencyId}',[\App\Http\Controllers\Api\PlatformInvoiceController::class, 'savePlan'])->middleware('role:platform_admin');
+
+    /* RESELLERS (2026-10-21). Platform admins manage resellers; a reseller admin edits only
+       its own brand and sees only its own agencies' names (ResellerController). */
+    /* KIDDIETRAC SALES REPORT (2026-10-24): platform revenue by part number, kind, month, customer. Never an agency's. */
+    Route::get('/platform/sales-report', [\App\Http\Controllers\Api\SalesReportsController::class, 'platform'])->middleware('role:platform_admin');
+    /* KIDDIETRAC REPORTS (2026-10-31): superadmin-only sales, leads, cold reach and campaign reports (Reports → KiddieTrac). */
+    Route::get('/platform/reports/sales',     [\App\Http\Controllers\Api\PlatformReportsController::class, 'sales'])->middleware(['role:platform_admin', 'throttle:60,1,r-pr-sales']);
+    Route::get('/platform/reports/leads',     [\App\Http\Controllers\Api\PlatformReportsController::class, 'leads'])->middleware(['role:platform_admin', 'throttle:60,1,r-pr-leads']);
+    Route::get('/platform/reports/coldreach', [\App\Http\Controllers\Api\PlatformReportsController::class, 'coldreach'])->middleware(['role:platform_admin', 'throttle:60,1,r-pr-cold']);
+    Route::get('/platform/reports/campaigns', [\App\Http\Controllers\Api\PlatformReportsController::class, 'campaigns'])->middleware(['role:platform_admin', 'throttle:60,1,r-pr-camp']);
+    /* LICENCES (2026-10-24, App\Support\Licences): plans and add-ons per agency, with expiry and renewal. */
+    Route::get   ('/platform/licences',                     [\App\Http\Controllers\Api\LicenceController::class, 'index'])->middleware('role:platform_admin');
+    Route::post  ('/platform/licences',                     [\App\Http\Controllers\Api\LicenceController::class, 'store'])->middleware('role:platform_admin');
+    Route::patch ('/platform/licences/{id}',                [\App\Http\Controllers\Api\LicenceController::class, 'update'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/licences/{id}/convert',        [\App\Http\Controllers\Api\LicenceController::class, 'convert'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/licences/{id}/renew',          [\App\Http\Controllers\Api\LicenceController::class, 'renew'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::get   ('/admin/licence',                         [\App\Http\Controllers\Api\LicenceController::class, 'mine'])->middleware('role:agency_admin,platform_admin');
+    Route::get   ('/platform/resellers',                    [\App\Http\Controllers\Api\ResellerController::class, 'index'])->middleware('role:platform_admin');
+    Route::post  ('/platform/resellers',                    [\App\Http\Controllers\Api\ResellerController::class, 'store'])->middleware('role:platform_admin');
+    Route::patch ('/platform/resellers/{id}',               [\App\Http\Controllers\Api\ResellerController::class, 'update'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::put   ('/platform/resellers/{id}/agencies',      [\App\Http\Controllers\Api\ResellerController::class, 'setAgencies'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/resellers/{id}/admins',        [\App\Http\Controllers\Api\ResellerController::class, 'addAdmin'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::delete('/platform/resellers/{id}/admins/{userId}', [\App\Http\Controllers\Api\ResellerController::class, 'removeAdmin'])->whereNumber('id')->whereNumber('userId')->middleware('role:platform_admin');
+    Route::get   ('/platform/resellers/{id}/app',           [\App\Http\Controllers\Api\ResellerController::class, 'app'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::put   ('/platform/resellers/{id}/app',           [\App\Http\Controllers\Api\ResellerController::class, 'saveApp'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/resellers/{id}/app/kit',       [\App\Http\Controllers\Api\ResellerController::class, 'kit'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/reseller/agencies',                     [\App\Http\Controllers\Api\ResellerController::class, 'createAgency'])->middleware('role:reseller_admin,platform_admin');
+    Route::get   ('/reseller/agencies/{agencyId}/admins',   [\App\Http\Controllers\Api\ResellerController::class, 'agencyAdmins'])->whereNumber('agencyId')->middleware('role:reseller_admin,platform_admin');
+    Route::post  ('/reseller/agencies/{agencyId}/admins',   [\App\Http\Controllers\Api\ResellerController::class, 'inviteAgencyAdmin'])->whereNumber('agencyId')->middleware('role:reseller_admin,platform_admin');
+    Route::post  ('/reseller/agencies/{agencyId}/admins/{userId}/{action}', [\App\Http\Controllers\Api\ResellerController::class, 'agencyAdminAction'])->whereNumber('agencyId')->whereNumber('userId')->whereIn('action', ['deactivate', 'reactivate', 'reset'])->middleware('role:reseller_admin,platform_admin');
+    Route::get   ('/reseller/tickets',                      [\App\Http\Controllers\Api\ResellerController::class, 'tickets'])->middleware('role:reseller_admin,platform_admin');
+    Route::get   ('/reseller/statement',                    [\App\Http\Controllers\Api\ResellerController::class, 'statement'])->middleware('role:reseller_admin,platform_admin');
+    Route::get   ('/reseller/overview',                     [\App\Http\Controllers\Api\ResellerController::class, 'overview'])->middleware('role:reseller_admin,platform_admin');
+    Route::get   ('/reseller/brand',                        [\App\Http\Controllers\Api\ResellerController::class, 'brand'])->middleware('role:reseller_admin,platform_admin');
+    Route::put   ('/reseller/brand',                        [\App\Http\Controllers\Api\ResellerController::class, 'saveBrand'])->middleware('role:reseller_admin,platform_admin');
+    Route::post  ('/reseller/brand/upload',                 [\App\Http\Controllers\Api\ResellerController::class, 'upload'])->middleware('role:reseller_admin,platform_admin');
     Route::post  ('/platform/invoices/{id}/email',     [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'email'])->middleware('role:platform_admin');
     Route::patch ('/platform/invoices/{id}',           [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'update'])->middleware('role:platform_admin');
     Route::delete('/platform/invoices/{id}',           [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'destroy'])->middleware('role:platform_admin');
     Route::post  ('/platform/invoices/raise',          [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'raise'])->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices',                [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'store'])->middleware('role:platform_admin');
     Route::get   ('/platform/invoices/{id}/pdf',       [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'pdf'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     Route::post  ('/platform/invoices/{id}/issue',     [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'issue'])->where('id', '[0-9]+')->middleware('role:platform_admin');
+    // KiddieTrac accounts (2026-10-25): payments ledger, reported payments, billing emails.
+    Route::post  ('/platform/invoices/{id}/payments', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'recordPayment'])->where('id', '[0-9]+')->middleware('role:platform_admin');
+    Route::get   ('/platform/invoices/payments', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'pendingPayments'])->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/payments/{payment}/confirm', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'confirmPayment'])->whereNumber('payment')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/payments/{payment}/reject', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'rejectPayment'])->whereNumber('payment')->middleware('role:platform_admin');
+    Route::get   ('/platform/billing-emails', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'billingEmails'])->middleware('role:platform_admin');
+    // Lines, extras, NSF (2026-10-25)
+    Route::get   ('/platform/invoices/{id}/detail', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'detail'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/{id}/lines', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'addLine'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::delete('/platform/invoices/{id}/lines/{line}', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'removeLine'])->whereNumber('id')->whereNumber('line')->middleware('role:platform_admin');
+    Route::put   ('/platform/invoices/{id}/edit', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'editInvoice'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/{id}/refund', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'refundInvoice'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/{id}/reissue', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'reissue'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/{id}/waive-late-fees', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'waiveLateFees'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/payments/{payment}/return', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'returnPayment'])->whereNumber('payment')->middleware('role:platform_admin');
+    Route::post  ('/platform/invoices/payments/{payment}/refund', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'refundPayment'])->whereNumber('payment')->middleware('role:platform_admin');
+    Route::get   ('/platform/billing-extras', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'extras'])->middleware('role:platform_admin');
+    Route::post  ('/platform/billing-extras', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveExtra'])->middleware('role:platform_admin');
+    Route::patch ('/platform/billing-extras/{extra}', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveExtra'])->whereNumber('extra')->middleware('role:platform_admin');
+    Route::delete('/platform/billing-extras/{extra}', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'deleteExtra'])->whereNumber('extra')->middleware('role:platform_admin');
+    Route::put   ('/platform/billing-emails', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveBillingEmails'])->middleware('role:platform_admin');
+    // An agency's own KiddieTrac invoices: admins only, the active agency.
+    Route::get   ('/admin/kt-invoices', [\App\Http\Controllers\Api\AgencyBillingController::class, 'index'])->middleware('role:agency_admin,platform_admin');
+    Route::get   ('/admin/kt-invoices/{id}/pdf', [\App\Http\Controllers\Api\AgencyBillingController::class, 'pdf'])->whereNumber('id')->middleware('role:agency_admin,platform_admin');
+    Route::get   ('/admin/kt-invoices/receipts/{payment}', [\App\Http\Controllers\Api\AgencyBillingController::class, 'receipt'])->whereNumber('payment')->middleware('role:agency_admin,platform_admin');
+    Route::post  ('/admin/kt-invoices/{id}/report-payment', [\App\Http\Controllers\Api\AgencyBillingController::class, 'reportPayment'])->whereNumber('id')->middleware(['role:agency_admin,platform_admin', 'throttle:20,1,r-grp-2589']);
+    Route::post  ('/admin/kt-invoices/prepay-year', [\App\Http\Controllers\Api\AgencyBillingController::class, 'prepayYear'])->middleware(['role:agency_admin,platform_admin', 'throttle:5,1,r-grp-2590']);
     Route::post  ('/platform/invoices/{id}/mark-paid', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'markPaid'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     Route::post  ('/platform/invoices/{id}/void',      [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'void'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     // Phone & voicemail (2026-09-29): greeting voice/wording + voicemail counts, platform admins.
     Route::get   ('/platform/phone', [\App\Http\Controllers\Api\PhoneLineController::class, 'show'])->middleware('role:platform_admin');
     Route::put   ('/platform/phone', [\App\Http\Controllers\Api\PhoneLineController::class, 'save'])->middleware('role:platform_admin');
+    // Text the caller back after a voicemail (2026-10-23).
+    Route::get   ('/platform/phone/voicemail-reply', [\App\Http\Controllers\Api\PhoneLineController::class, 'replyShow'])->middleware('role:platform_admin');
+    Route::put   ('/platform/phone/voicemail-reply', [\App\Http\Controllers\Api\PhoneLineController::class, 'replySave'])->middleware('role:platform_admin');
     Route::get   ('/platform/phone/voicemails', [\App\Http\Controllers\Api\PhoneLineController::class, 'voicemails'])->middleware('role:platform_admin');
+    // Call menu: departments, numbers to ring, hours, mailboxes (2026-10-22).
+    Route::get   ('/platform/phone/menu', [\App\Http\Controllers\Api\PhoneMenuController::class, 'show'])->middleware('role:platform_admin');
+    Route::put   ('/platform/phone/menu', [\App\Http\Controllers\Api\PhoneMenuController::class, 'save'])->middleware('role:platform_admin');
+    // Portal ringing (call menu stage 2): a 24-hour WebRTC token for staff a department rings in the portal.
+    Route::get   ('/platform/phone/webrtc', [\App\Http\Controllers\Api\PhoneMenuController::class, 'webrtc'])->middleware('throttle:30,1,r-grp-2604');
+    Route::get   ('/platform/phone/webrtc/caller', [\App\Http\Controllers\Api\PhoneMenuController::class, 'lastCaller'])->middleware('throttle:60,1,r-grp-2605');
+    // The outbound dialer (2026-10-23, App\Support\Dialer): the phone session (menu ringing +
+    // dialling), placing and ending calls, the call log, recordings and who may dial.
+    Route::get   ('/voice/phone/session', [\App\Http\Controllers\Api\DialerController::class, 'session'])->middleware('throttle:30,1,r-grp-2608');
+    Route::post  ('/voice/phone/answer', [\App\Http\Controllers\Api\PhoneMenuController::class, 'answer'])->middleware('throttle:20,1,r-grp-2609');
+    Route::post  ('/voice/dialer/call', [\App\Http\Controllers\Api\DialerController::class, 'call'])->middleware('throttle:20,1,r-grp-2610');
+    Route::post  ('/voice/dialer/calls/{id}/hangup', [\App\Http\Controllers\Api\DialerController::class, 'hangup'])->whereNumber('id')->middleware('throttle:60,1,r-grp-2611');
+    Route::get   ('/voice/dialer/calls', [\App\Http\Controllers\Api\DialerController::class, 'calls'])->middleware('throttle:60,1,r-grp-2612');
+    Route::get   ('/voice/dialer/calls/{id}', [\App\Http\Controllers\Api\DialerController::class, 'show'])->whereNumber('id')->middleware('throttle:120,1,r-grp-2613');
+    Route::get   ('/voice/dialer/calls/{id}/recording', [\App\Http\Controllers\Api\DialerController::class, 'recording'])->whereNumber('id')->middleware('throttle:30,1,r-grp-2614');
+    Route::get   ('/voice/dialer/settings', [\App\Http\Controllers\Api\DialerController::class, 'settings']);
+    Route::put   ('/voice/dialer/settings', [\App\Http\Controllers\Api\DialerController::class, 'saveSettings'])->middleware('throttle:20,1,r-grp-2616');
+    // Missed calls + voicemail on the toll-free line, scoped by App\Support\InboundCalls (2026-10-23).
+    Route::get   ('/voice/dialer/inbox', [\App\Http\Controllers\Api\DialerController::class, 'inbox'])->middleware('throttle:60,1,r-grp-2618');
+    Route::get   ('/voice/dialer/inbox/count', [\App\Http\Controllers\Api\DialerController::class, 'inboxCount'])->middleware('throttle:120,1,r-grp-2619');
+    Route::post  ('/voice/dialer/inbox/seen', [\App\Http\Controllers\Api\DialerController::class, 'inboxSeen'])->middleware('throttle:60,1,r-grp-2620');
+    // Texts on the KiddieTrac line (2026-10-23, App\Support\LineTexts).
+    Route::get   ('/voice/dialer/texts', [\App\Http\Controllers\Api\DialerController::class, 'texts'])->middleware('throttle:60,1,r-grp-2622');
+    Route::get   ('/voice/dialer/texts/{digits}', [\App\Http\Controllers\Api\DialerController::class, 'textThread'])->where('digits', '[0-9+]{10,12}')->middleware('throttle:120,1,r-grp-2623');
+    Route::post  ('/voice/dialer/texts/{digits}', [\App\Http\Controllers\Api\DialerController::class, 'textSend'])->where('digits', '[0-9+]{10,12}')->middleware('throttle:20,1,r-grp-2624');
+    // Meetings with attendees, like Outlook (2026-10-25): Sales Calendar, Bookings, agency Calendar.
+    Route::get   ('/meetings', [\App\Http\Controllers\Api\MeetingController::class, 'index']);
+    Route::get   ('/meetings/people', [\App\Http\Controllers\Api\MeetingController::class, 'people'])->middleware('throttle:90,1,r-grp-2627');
+    Route::get   ('/meetings/{id}', [\App\Http\Controllers\Api\MeetingController::class, 'show'])->whereNumber('id');
+    Route::post  ('/meetings', [\App\Http\Controllers\Api\MeetingController::class, 'store'])->middleware('throttle:30,1,r-grp-2629');
+    Route::put   ('/meetings/{id}', [\App\Http\Controllers\Api\MeetingController::class, 'update'])->whereNumber('id')->middleware('throttle:30,1,r-grp-2630');
+    Route::post  ('/meetings/{id}/cancel', [\App\Http\Controllers\Api\MeetingController::class, 'cancel'])->whereNumber('id')->middleware('throttle:30,1,r-grp-2631');
+    Route::post  ('/meetings/{id}/respond', [\App\Http\Controllers\Api\MeetingController::class, 'respond'])->whereNumber('id')->middleware('throttle:60,1,r-grp-2632');
+    Route::get   ('/voice/dialer/text-contacts', [\App\Http\Controllers\Api\DialerController::class, 'textContacts'])->middleware('throttle:60,1,r-grp-2633');   // new-text picker (2026-10-24)
+    Route::get   ('/voice/dialer/voicemails/{id}/audio', [\App\Http\Controllers\Api\DialerController::class, 'voicemailAudio'])->whereNumber('id')->middleware('throttle:60,1,r-grp-2634');
+    Route::post  ('/voice/dialer/voicemails/{id}/lead', [\App\Http\Controllers\Api\DialerController::class, 'voicemailLead'])->whereNumber('id')->middleware('throttle:30,1,r-grp-2635');
+    Route::delete('/voice/dialer/voicemails/{id}', [\App\Http\Controllers\Api\DialerController::class, 'voicemailDelete'])->whereNumber('id')->middleware('throttle:30,1,r-voice-dialer-voicemails-x');   // 2026-10-25
+    Route::get   ('/voice/dialer/alerts', [\App\Http\Controllers\Api\DialerController::class, 'alerts']);
+    Route::put   ('/voice/dialer/alerts', [\App\Http\Controllers\Api\DialerController::class, 'saveAlerts'])->middleware('throttle:20,1,r-grp-2638');
     Route::get   ('/platform/phone/voicemails/{id}/audio', [\App\Http\Controllers\Api\PhoneLineController::class, 'audio'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     Route::delete('/platform/phone/voicemails/{id}', [\App\Http\Controllers\Api\PhoneLineController::class, 'destroy'])->where('id', '[0-9]+')->middleware('role:platform_admin');
     
@@ -2225,6 +2504,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get   ('/invoices/{id}/document',           [InvoicePreviewController::class, 'previewExisting'])->where('id', '[0-9]+');
     /* The same document as a downloadable file, for the schedule kebab. */
     Route::get   ('/invoices/{id}/pdf',                [InvoicePreviewController::class, 'pdfExisting'])->where('id', '[0-9]+');
+    // Split billing: each guardian's own copy of a split invoice (INV-1234-A), 2026-10-30.
+    Route::get   ('/invoices/{id}/split-copies',                 [\App\Http\Controllers\Api\SplitInvoiceController::class, 'index'])->whereNumber('id');
+    Route::get   ('/invoices/{id}/split-copies/{guardian}/pdf',  [\App\Http\Controllers\Api\SplitInvoiceController::class, 'pdf'])->whereNumber('id')->whereNumber('guardian');
+    Route::post  ('/invoices/{id}/split-copies/{guardian}/send', [\App\Http\Controllers\Api\SplitInvoiceController::class, 'send'])->whereNumber('id')->whereNumber('guardian')->middleware('throttle:30,1,splitsend');
+    Route::post  ('/invoices/{id}/split-copies/send-all',        [\App\Http\Controllers\Api\SplitInvoiceController::class, 'sendAll'])->whereNumber('id')->middleware('throttle:10,1,splitsendall');
 
     // ---- PDF exports ----
     Route::get('/families/{family}/t4a/{year}', [\App\Http\Controllers\Api\PdfController::class, 't4a']);
@@ -2266,6 +2550,23 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // ---- Payroll ----
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get('/admin/payroll', [\App\Http\Controllers\Api\PayrollController::class, 'summary']);
+        // Pay periods (2026-10-31): one row per period the payslips carry, and one period's payslips with clock hours beside them.
+        Route::get('/admin/payroll/periods', [\App\Http\Controllers\Api\PayrollController::class, 'periods']);
+        Route::get('/admin/payroll/periods/detail', [\App\Http\Controllers\Api\PayrollController::class, 'periodDetail']);
+        // Required app notifications for staff (2026-10-31): readiness list for admins + directors, settings/instructions for admins (checked in the controller).
+        Route::get ('/admin/notify-readiness', [\App\Http\Controllers\Api\StaffNotifyController::class, 'readiness'])->middleware('throttle:60,1,r-notify-readiness');
+        Route::post('/admin/notify-readiness/instructions', [\App\Http\Controllers\Api\StaffNotifyController::class, 'instructions'])->middleware('throttle:10,1,r-notify-instructions');
+        Route::get ('/admin/staff-notify-settings', [\App\Http\Controllers\Api\StaffNotifyController::class, 'show']);
+        Route::post('/admin/staff-notify-settings', [\App\Http\Controllers\Api\StaffNotifyController::class, 'save'])->middleware('throttle:30,1,r-staff-notify-settings');
+        // Immunization + drill notices per role (2026-11-09, App\Support\StaffTopicNotify): admins only, checked in the controller.
+        Route::get ('/admin/topic-notifications', [\App\Http\Controllers\Api\StaffNotifyController::class, 'topicsShow']);
+        Route::post('/admin/topic-notifications', [\App\Http\Controllers\Api\StaffNotifyController::class, 'topicsSave'])->middleware('throttle:30,1,r-topic-notifications');
+        // Settings -> Notifications -> Staff certifications (2026-11-03): expiry alert steps, who is told, email.
+        Route::get ('/admin/cert-alerts', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'show']);
+        Route::post('/admin/cert-alerts', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'save'])->middleware('throttle:30,1,r-cert-alerts');
+        Route::post('/admin/cert-alerts/preview', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'preview'])->middleware('throttle:30,1,r-cert-alerts-preview');
+        // Reports → Payroll report (2026-10-31): the pay-period payslips, filtered and cut five ways.
+        Route::get('/admin/payroll/report', [\App\Http\Controllers\Api\PayrollController::class, 'report'])->middleware('throttle:60,1,r-payroll-report');
     });
 
     /* CURRENCY AND COUNTRY ARE READ BY EVERYONE.
@@ -2309,6 +2610,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/occms/roa/pdf',      [\App\Http\Controllers\Api\OccmsController::class, 'pdf']);
         Route::get  ('/occms/cwelcc',       [\App\Http\Controllers\Api\OccmsController::class, 'cwelcc']);
         Route::get  ('/occms/cwelcc/csv',   [\App\Http\Controllers\Api\OccmsController::class, 'cwelccCsv']);
+        Route::post ('/occms/cwelcc/fees',  [\App\Http\Controllers\Api\OccmsController::class, 'cwelccFees']);
+        // Monthly attendance & fees (2026-11-13): every enrolled child, hours per day, fees, space type (App\Support\MonthlyAttendance).
+        Route::get  ('/occms/attendance',      [\App\Http\Controllers\Api\OccmsController::class, 'attendance']);
+        Route::get  ('/occms/attendance/xlsx', [\App\Http\Controllers\Api\OccmsController::class, 'attendanceXlsx']);
+        Route::get  ('/occms/attendance/pdf',  [\App\Http\Controllers\Api\OccmsController::class, 'attendancePdf']);
         Route::post ('/occms/settings',     [\App\Http\Controllers\Api\OccmsController::class, 'settings']);
     });
     // Drill log (2026-10-09): admins, directors and educators; scoped to their centres in the controller.
@@ -2320,6 +2626,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Ontario s.68 / s.68.2 (2026-10-13): fire cadence per centre, cadence reminders switch.
         Route::post  ('/drills/cadence',           [\App\Http\Controllers\Api\DrillController::class, 'cadence']);
         Route::post  ('/drills/cadence-reminders', [\App\Http\Controllers\Api\DrillController::class, 'cadenceReminders']);
+        Route::post  ('/drills/requirement',      [\App\Http\Controllers\Api\DrillController::class, 'requirement']);
+        // Centre map (2026-11-09): upload / replace (anyone with the centre), remove (directors/admins).
+        Route::post  ('/drills/staff-dates', [\App\Http\Controllers\Api\DrillController::class, 'staffDatesSave']);
+        Route::post  ('/drills/staff-schedule', [\App\Http\Controllers\Api\DrillController::class, 'staffScheduleSave']);
+        Route::post  ('/drills/notify-settings', [\App\Http\Controllers\Api\DrillController::class, 'notifySettingsSave']);
+        Route::post  ('/drills/maps',      [\App\Http\Controllers\Api\DrillController::class, 'uploadMap']);
+        Route::delete('/drills/maps/{id}', [\App\Http\Controllers\Api\DrillController::class, 'removeMap'])->whereNumber('id');
     });
     /* HAZARD REGISTER (2026-10-13, Ontario s.24.3): anyone on staff reports; directors/admins
        manage and notify parents — checked per centre in HazardController. Its own group since
@@ -2339,6 +2652,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/admin/record-reminders', [\App\Http\Controllers\Api\RecordReminderController::class, 'show']);
         Route::post('/admin/record-reminders', [\App\Http\Controllers\Api\RecordReminderController::class, 'update']);
     });
+    /* WALKS (2026-10-21): Settings > Room Controls > Walks. Admins edit, directors read. */
+    Route::middleware('role:agency_admin,platform_admin,centre_director')->group(function () {
+        Route::get ('/admin/walk-settings', [\App\Http\Controllers\Api\WalkController::class, 'walkSettings']);
+        Route::post('/admin/walk-settings', [\App\Http\Controllers\Api\WalkController::class, 'updateWalkSettings']);
+    });
     /* POLICY LIBRARY + STAFF SIGN-OFFS + TRAINING MATRIX (2026-10-13; O. Reg. 137/15 s.6.1, s.46, s.58(1.1)).
        Managing: admins (agency) and directors (their centres) — scoped again in the controller.
        Reading and signing: every staff member the policy applies to. */
@@ -2352,14 +2670,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/policies/{id}',                  [\App\Http\Controllers\Api\PolicyController::class, 'show'])->whereNumber('id');
         Route::patch ('/policies/{id}',                  [\App\Http\Controllers\Api\PolicyController::class, 'update'])->whereNumber('id');
         Route::post  ('/policies/{id}/archive',          [\App\Http\Controllers\Api\PolicyController::class, 'archive'])->whereNumber('id');
-        Route::post  ('/policies/{id}/versions',         [\App\Http\Controllers\Api\PolicyController::class, 'publish'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post  ('/policies/{id}/versions',         [\App\Http\Controllers\Api\PolicyController::class, 'publish'])->whereNumber('id')->middleware('throttle:30,1,r-grp-2792');
         Route::post  ('/policies/{id}/reviewed',         [\App\Http\Controllers\Api\PolicyController::class, 'reviewed'])->whereNumber('id');
         Route::post  ('/policies/{id}/contraventions',   [\App\Http\Controllers\Api\PolicyController::class, 'recordContravention'])->whereNumber('id');
         Route::post  ('/policies/{id}/training',         [\App\Http\Controllers\Api\PolicyController::class, 'recordTraining'])->whereNumber('id');
     });
     Route::middleware('role:agency_admin,platform_admin,centre_director,educator,home_visitor')->group(function () {
         Route::get   ('/my-policies',                    [\App\Http\Controllers\Api\PolicyController::class, 'mine']);
-        Route::post  ('/my-policies/{id}/acknowledge',   [\App\Http\Controllers\Api\PolicyController::class, 'acknowledge'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::post  ('/my-policies/{id}/acknowledge',   [\App\Http\Controllers\Api\PolicyController::class, 'acknowledge'])->whereNumber('id')->middleware('throttle:60,1,r-grp-2799');
         Route::get   ('/policy-versions/{id}',           [\App\Http\Controllers\Api\PolicyController::class, 'version'])->whereNumber('id');
         Route::get   ('/policy-versions/{id}/file',      [\App\Http\Controllers\Api\PolicyController::class, 'file'])->whereNumber('id');
     });
@@ -2436,11 +2754,30 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::patch('/email/accounts/{id}', [\App\Http\Controllers\Api\EmailAccountController::class, 'update']);
         Route::delete('/email/accounts/{id}', [\App\Http\Controllers\Api\EmailAccountController::class, 'destroy']);
         Route::post('/email/accounts/{id}/test', [\App\Http\Controllers\Api\EmailAccountController::class, 'test']);
+        Route::get('/email/accounts/{id}/auto-replies', [\App\Http\Controllers\Api\EmailAccountController::class, 'autoReplies'])->middleware('throttle:60,1,r-email-auto-replies');
+        Route::put('/email/accounts/{id}/auto-replies', [\App\Http\Controllers\Api\EmailAccountController::class, 'saveAutoReplies'])->middleware('throttle:20,1,r-email-auto-replies-save');
+        Route::put('/email/accounts/{id}/alerts', [\App\Http\Controllers\Api\EmailAccountController::class, 'saveAlerts'])->middleware('throttle:60,1,r-email-alerts');
+        Route::post('/email/accounts/{id}/microsoft', [\App\Http\Controllers\Api\EmailAccountController::class, 'microsoftStart'])->middleware('throttle:20,1,r-email-accounts-x-microsoft-2876');
+        Route::post('/email/microsoft/finish', [\App\Http\Controllers\Api\EmailAccountController::class, 'microsoftFinish'])->middleware('throttle:20,1,r-email-microsoft-finish-2877');
+        // Sign in with Google + "which provider is this address?" (2026-11-04).
+        Route::post('/email/accounts/{id}/google', [\App\Http\Controllers\Api\EmailAccountController::class, 'googleStart'])->middleware('throttle:20,1,r-email-accounts-x-google-2');
+        Route::post('/email/discover', [\App\Http\Controllers\Api\EmailAccountController::class, 'discover'])->middleware('throttle:30,1,r-email-discover-2');
         Route::get('/email/folders', [\App\Http\Controllers\Api\EmailMailController::class, 'folders']);
         Route::get('/email/messages', [\App\Http\Controllers\Api\EmailMailController::class, 'messages']);
         Route::get('/email/messages/{uid}', [\App\Http\Controllers\Api\EmailMailController::class, 'message']);
         Route::get('/email/messages/{uid}/attachment', [\App\Http\Controllers\Api\EmailMailController::class, 'attachment']);
         Route::post('/email/messages/{uid}/action', [\App\Http\Controllers\Api\EmailMailController::class, 'action']);
+        Route::post('/email/messages/bulk', [\App\Http\Controllers\Api\EmailMailController::class, 'bulk'])->middleware('throttle:60,1,r-email-bulk');
+        Route::post('/email/send', [\App\Http\Controllers\Api\EmailMailController::class, 'send'])->middleware('throttle:30,1,r-email-send-own');   // own mailboxes send (2026-11-09)
+        // Emails on a person's record (2026-11-07, App\Support\PersonMail).
+        Route::get('/email/messages/{uid}/links', [\App\Http\Controllers\Api\EmailLinkController::class, 'show'])->middleware('throttle:60,1,r-email-links');
+        Route::post('/email/messages/{uid}/links', [\App\Http\Controllers\Api\EmailLinkController::class, 'store'])->middleware('throttle:60,1,r-email-links-save');
+        Route::delete('/email/links/{id}', [\App\Http\Controllers\Api\EmailLinkController::class, 'destroy'])->whereNumber('id')->middleware('throttle:60,1,r-email-links-save');
+        Route::get('/email/link-people', [\App\Http\Controllers\Api\EmailLinkController::class, 'people'])->middleware('throttle:120,1,r-email-link-people');
+        Route::get('/admin/email-links/person', [\App\Http\Controllers\Api\EmailLinkController::class, 'person'])->middleware('throttle:120,1,r-email-links-person');
+        Route::get('/admin/email-links/family/{id}', [\App\Http\Controllers\Api\EmailLinkController::class, 'family'])->whereNumber('id')->middleware('throttle:120,1,r-email-links-family');
+        Route::get('/admin/email-link-settings', [\App\Http\Controllers\Api\EmailLinkController::class, 'settings']);
+        Route::put('/admin/email-link-settings', [\App\Http\Controllers\Api\EmailLinkController::class, 'saveSettings'])->middleware('throttle:30,1,r-email-link-settings');
         // Email delivery control panel — hierarchical centre/room email switches (pre-boarding).
         Route::get  ('/admin/email-delivery',                [\App\Http\Controllers\Api\EmailDeliveryController::class, 'index']);
         Route::patch('/admin/email-delivery/centre/{centre}', [\App\Http\Controllers\Api\EmailDeliveryController::class, 'setCentre']);
@@ -2460,6 +2797,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         /* Does the stored Helcim token actually work? A button, rather than finding out
            when a parent cannot pay. Costs nothing: a zero-dollar verify session. */
         Route::post ('/admin/payment-providers/helcim/test', [\App\Http\Controllers\Api\HelcimController::class, 'test']);
+        Route::post ('/admin/payment-providers/stripe/wallet-domains', [\App\Http\Controllers\Api\WalletPayController::class, 'registerDomains']);   // Apple Pay domains (2026-11-03)
+        Route::post ('/admin/payment-providers/stripe/webhook', [\App\Http\Controllers\Api\PaymentProvidersController::class, 'connectStripeWebhook']);   // family payments recorded (2026-11-05)
+        /* Audit log -> Email log / Email errors for an AGENCY admin (2026-11-03): their own agency's mail only.
+           The controller pins the active agency and re-checks the role; /platform/email-logs stays super-admin. */
+        Route::get  ('/admin/email-logs', [\App\Http\Controllers\Api\AgencyEmailLogController::class, 'index']);
+        Route::get  ('/admin/email-logs/{id}/preview', [\App\Http\Controllers\Api\AgencyEmailLogController::class, 'preview'])->whereNumber('id');
+        Route::get  ('/admin/email-logs/{id}/attachments/{aid}', [\App\Http\Controllers\Api\AgencyEmailLogController::class, 'attachment'])->whereNumber('id')->whereNumber('aid');
+        Route::post ('/admin/email-logs/{id}/resend', [\App\Http\Controllers\Api\AgencyEmailLogController::class, 'resend'])->whereNumber('id')->middleware('throttle:20,1,r-agency-email-resend');
 
         /* Settings -> Backups. The controller re-checks platform_admin; there is NO route
            that serves a dump, deliberately — see the note on BackupController. */
@@ -2481,10 +2826,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/countersign-reminders/test',    [\App\Http\Controllers\Api\CountersignRemindersController::class, 'test'])->middleware('throttle:6,1,csremtest');
         // Temporary (forms-only) parents not on a family yet — App\Support\TempGuardians (2026-10-13).
         // Address autocomplete for address fields (2026-10-13) — App\Http\Controllers\Api\AddressController.
-        Route::get   ('/address/suggest', [\App\Http\Controllers\Api\AddressController::class, 'suggest'])->middleware('throttle:60,1');
+        Route::get   ('/address/suggest', [\App\Http\Controllers\Api\AddressController::class, 'suggest'])->middleware('throttle:60,1,r-grp-2923');
         Route::get   ('/admin/temp-guardians/settings', [\App\Http\Controllers\Api\TempGuardianController::class, 'settings']);
         Route::post  ('/admin/temp-guardians/settings', [\App\Http\Controllers\Api\TempGuardianController::class, 'saveSettings']);
-        Route::get   ('/admin/temp-guardians',          [\App\Http\Controllers\Api\TempGuardianController::class, 'index'])->middleware('throttle:120,1');
+        Route::get   ('/admin/temp-guardians',          [\App\Http\Controllers\Api\TempGuardianController::class, 'index'])->middleware('throttle:120,1,r-grp-2926');
         Route::delete('/admin/temp-guardians/{user}',   [\App\Http\Controllers\Api\TempGuardianController::class, 'destroy'])->whereNumber('user');
         // Settings → Notifications: reminders for providers to write their bio (2026-10-09).
         Route::get  ('/admin/bio-reminders',         [\App\Http\Controllers\Api\BioRemindersController::class, 'show']);
@@ -2494,6 +2839,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Settings → Notifications → Message Centre: who educators and home visitors may message (2026-10-09).
         Route::get  ('/admin/messaging-rules',       [\App\Http\Controllers\Api\MessagingRulesController::class, 'show']);
         Route::post ('/admin/messaging-rules',       [\App\Http\Controllers\Api\MessagingRulesController::class, 'update']);
+        // Settings → Notifications → Daily summaries (2026-10-29, App\Support\SummaryTiming).
+        Route::get  ('/admin/summary-timing',        [\App\Http\Controllers\Api\SummaryTimingController::class, 'show']);
+        Route::post ('/admin/summary-timing',        [\App\Http\Controllers\Api\SummaryTimingController::class, 'update']);
+        // Payroll settings → Lunch and breaks: paid or unpaid (2026-11-05, App\Support\StaffBreaks).
+        Route::get  ('/admin/staff-breaks',          [\App\Http\Controllers\Api\StaffBreaksController::class, 'show']);
+        Route::post ('/admin/staff-breaks',          [\App\Http\Controllers\Api\StaffBreaksController::class, 'update']);
         // Prospect NDAs (platform admins + sales reps; checked in the controller).
         Route::get   ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'index']);
         Route::post  ('/admin/prospect-ndas',              [\App\Http\Controllers\Api\ProspectNdaController::class, 'store'])->middleware('throttle:20,1,ndasend');
@@ -2515,6 +2866,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'show']);
         Route::patch('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
         Route::post ('/admin/birthday-settings', [\App\Http\Controllers\Api\BirthdaySettingsController::class, 'update']);
+        Route::get  ('/admin/moment-notify-settings', [\App\Http\Controllers\Api\MomentNotifySettingsController::class, 'show']);
+        Route::post ('/admin/moment-notify-settings', [\App\Http\Controllers\Api\MomentNotifySettingsController::class, 'save'])->middleware('throttle:30,1,r-moment-notify-settings');
         Route::get('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'show']);
         Route::post('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'update']);
         Route::post('/admin/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'set']);
@@ -2599,6 +2952,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/admin/immunization-records',   [\App\Http\Controllers\Api\ImmunizationRemindersController::class, 'records']);
 
         Route::get('/admin/billing-reminders', [\App\Http\Controllers\Api\BillingRemindersController::class, 'show']);
+        Route::get('/admin/billing-reminders/preview', [\App\Http\Controllers\Api\BillingRemindersController::class, 'preview']);
         Route::post('/admin/billing-reminders', [\App\Http\Controllers\Api\BillingRemindersController::class, 'update']);
     });
 
@@ -2614,6 +2968,28 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::get ('/parent/zum/status',        [\App\Http\Controllers\Api\ZumPaymentController::class, 'status']);
     Route::post('/parent/zum/bank-account',  [\App\Http\Controllers\Api\ZumPaymentController::class, 'saveBankAccount']);
     Route::post('/parent/zum/pay',           [\App\Http\Controllers\Api\ZumPaymentController::class, 'pay']);
+    // A family asking the centre to send them an Interac e-Transfer request (2026-10-30, EtransferRequestController).
+    Route::get ('/parent/etransfer-requests',               [\App\Http\Controllers\Api\EtransferRequestController::class, 'mine']);
+    Route::post('/parent/etransfer-requests',               [\App\Http\Controllers\Api\EtransferRequestController::class, 'create'])->middleware('throttle:10,1,etreq');
+    Route::post('/parent/etransfer-requests/{id}/cancel',   [\App\Http\Controllers\Api\EtransferRequestController::class, 'cancelMine'])->whereNumber('id');
+    Route::post('/parent/etransfer-requests/{id}/demo-pay', [\App\Http\Controllers\Api\EtransferRequestController::class, 'demoPay'])->whereNumber('id')->middleware('throttle:20,1,etreqpay');
+    // "I've sent it" with the bank's reference number, for the centre to confirm (2026-11-11).
+    Route::post('/parent/etransfer-reports',                [\App\Http\Controllers\Api\EtransferRequestController::class, 'report'])->middleware('throttle:10,1,etrep');
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
+        Route::get ('/billing/etransfer-requests',             [\App\Http\Controllers\Api\EtransferRequestController::class, 'index']);
+        Route::post('/billing/etransfer-requests/{id}/sent',   [\App\Http\Controllers\Api\EtransferRequestController::class, 'markSent'])->whereNumber('id');
+        Route::post('/billing/etransfer-requests/{id}/paid',   [\App\Http\Controllers\Api\EtransferRequestController::class, 'markPaid'])->whereNumber('id');
+        Route::post('/billing/etransfer-requests/{id}/cancel', [\App\Http\Controllers\Api\EtransferRequestController::class, 'cancel'])->whereNumber('id');
+        // A family's reported e-Transfer: Accounting -> e-Transfers to confirm (2026-11-11).
+        Route::get ('/billing/etransfer-reports',              [\App\Http\Controllers\Api\EtransferRequestController::class, 'reports']);
+        Route::post('/billing/etransfer-reports/{id}/approve', [\App\Http\Controllers\Api\EtransferRequestController::class, 'approve'])->whereNumber('id');
+        Route::post('/billing/etransfer-reports/{id}/reject',  [\App\Http\Controllers\Api\EtransferRequestController::class, 'reject'])->whereNumber('id');
+        // Accounting's invoice row menu: "Send e-Transfer request" (2026-11-02; kind = kt | ext).
+        Route::get ('/billing/etransfer/{kind}/{id}',           [\App\Http\Controllers\Api\EtransferRequestController::class, 'forInvoice'])->whereIn('kind', ['kt', 'ext'])->whereNumber('id');
+        Route::post('/billing/etransfer/{kind}/{id}/requested', [\App\Http\Controllers\Api\EtransferRequestController::class, 'markInvoiceRequested'])->whereIn('kind', ['kt', 'ext'])->whereNumber('id');
+    });
+    // The website demo's simulated payment - public demo parents only, no money moves (App\Support\WebDemoPayments, 2026-10-30).
+    Route::post('/parent/demo-pay',          [\App\Http\Controllers\Api\DemoPayController::class, 'pay'])->middleware('throttle:20,1,demopay');
 
     /* HELCIM - card payment on an invoice, through their hosted iframe.
 
@@ -2622,6 +2998,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
        rather than the browser. Nothing the page says about an amount is trusted. */
     Route::post('/parent/helcim/checkout', [\App\Http\Controllers\Api\HelcimController::class, 'checkout']);
     Route::post('/parent/helcim/complete', [\App\Http\Controllers\Api\HelcimController::class, 'complete']);
+    /* APPLE PAY + GOOGLE PAY on invoices (2026-11-03): the agency's own Stripe (browser Express Checkout or the
+       app's native sheet). Amount from the invoice; recorded only once Stripe says succeeded. */
+    Route::get ('/parent/wallet-pay/options',        [\App\Http\Controllers\Api\WalletPayController::class, 'options']);
+    Route::post('/parent/wallet-pay/stripe-intent',  [\App\Http\Controllers\Api\WalletPayController::class, 'stripeIntent'])->middleware('throttle:20,1,r-wallet-intent');
+    Route::post('/parent/wallet-pay/stripe-confirm', [\App\Http\Controllers\Api\WalletPayController::class, 'stripeConfirm'])->middleware('throttle:30,1,r-wallet-confirm');
+    // Test agency wallet demo (2026-11-04): simulated, no processor, undone nightly.
+    Route::post('/parent/wallet-pay/demo',           [\App\Http\Controllers\Api\WalletPayController::class, 'demoPay'])->middleware('throttle:20,1,r-wallet-demo');
 
     Route::get  ('/parent/billing/status',         [\App\Http\Controllers\Api\StripeParentPayController::class, 'status']);
     Route::post ('/parent/billing/setup-intent',   [\App\Http\Controllers\Api\StripeParentPayController::class, 'setupIntent']);
@@ -2635,6 +3018,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::post('/admin/sms/broadcast', [\App\Http\Controllers\Api\SmsController::class, 'broadcast']);
         Route::get ('/admin/sms/messages',  [\App\Http\Controllers\Api\SmsController::class, 'listMessages']);
+        // SMS -> Replies: texts in to the agency's number, the thread, read, reply (2026-11-02, App\Support\SmsReplies).
+        Route::get ('/admin/sms/replies',              [\App\Http\Controllers\Api\SmsRepliesController::class, 'index']);
+        Route::get ('/admin/sms/replies/{id}/thread',  [\App\Http\Controllers\Api\SmsRepliesController::class, 'thread'])->whereNumber('id');
+        Route::post('/admin/sms/replies/{id}/read',    [\App\Http\Controllers\Api\SmsRepliesController::class, 'markRead'])->whereNumber('id');
+        Route::post('/admin/sms/replies/{id}/reply',   [\App\Http\Controllers\Api\SmsRepliesController::class, 'reply'])->whereNumber('id')->middleware('throttle:30,1,sms-reply');
         // The audit log's SMS subtab: both directions, filters, errors in plain words (2026-10-19).
         Route::get ('/admin/sms/log',       [\App\Http\Controllers\Api\SmsController::class, 'logIndex']);
         /* Who a broadcast would reach, before anyone presses send. Read-only. */
@@ -2660,6 +3048,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/admin/sms/consent-invites',  [\App\Http\Controllers\Api\SmsConsentInviteController::class, 'invite']);
         Route::post('/admin/sms/consent/{user}',   [\App\Http\Controllers\Api\SmsConsentInviteController::class, 'record'])->whereNumber('user');
     });
+    /* TEXT REPLIES IN MESSAGE CENTRE (2026-11-02, Anthony: "Safia should see this response to her announcement in the
+       message centre"). Any staff member: the replies to texts THEY sent; admins / directors: the agency's (scoped).
+       No role middleware on purpose - App\Support\SmsReplies::visible() decides, and fails closed. */
+    Route::get ('/sms-replies',             [\App\Http\Controllers\Api\SmsRepliesController::class, 'index']);
+    Route::get ('/sms-replies/{id}/thread', [\App\Http\Controllers\Api\SmsRepliesController::class, 'thread'])->whereNumber('id');
+    Route::post('/sms-replies/{id}/read',   [\App\Http\Controllers\Api\SmsRepliesController::class, 'markRead'])->whereNumber('id');
+    Route::post('/sms-replies/{id}/reply',  [\App\Http\Controllers\Api\SmsRepliesController::class, 'reply'])->whereNumber('id')->middleware('throttle:30,1,sms-reply');
 
     /* ---- VOICE ANNOUNCEMENTS (2026-09-10) ----
        Gated exactly like the SMS broadcast beside it: a director can send one, because a
@@ -2746,6 +3141,17 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/operations/my-centres',        [\App\Http\Controllers\Api\OperationsController::class, 'myCentres']);
         Route::get  ('/operations/menu',              [\App\Http\Controllers\Api\OperationsController::class, 'getMenuWeek']);
         Route::post ('/operations/menu',              [\App\Http\Controllers\Api\OperationsController::class, 'saveMenuWeek']);
+        // Food photos on the menu (2026-10-31, App\Support\FoodPhotos): the shared library, local matching,
+        // an agency's own photo, and the "Add food photos automatically" setting (directors/admins).
+        Route::get  ('/operations/food-images',       [\App\Http\Controllers\Api\FoodPhotoController::class, 'index']);
+        Route::post ('/operations/food-images/match', [\App\Http\Controllers\Api\FoodPhotoController::class, 'match'])->middleware('throttle:60,1,foodmatch');
+        Route::post ('/operations/menu/photo',        [\App\Http\Controllers\Api\FoodPhotoController::class, 'upload'])->middleware('throttle:30,1,foodupload');
+        Route::put  ('/operations/menu/photo-settings', [\App\Http\Controllers\Api\FoodPhotoController::class, 'settings']);
+        // Reusable menu weeks (2026-11-03, MenuTemplateController): save a week, apply it to centres in your scope (drafts).
+        Route::get   ('/operations/menu/templates',            [\App\Http\Controllers\Api\MenuTemplateController::class, 'index']);
+        Route::post  ('/operations/menu/templates',            [\App\Http\Controllers\Api\MenuTemplateController::class, 'store']);
+        Route::post  ('/operations/menu/templates/{id}/apply', [\App\Http\Controllers\Api\MenuTemplateController::class, 'apply'])->whereNumber('id');
+        Route::delete('/operations/menu/templates/{id}',       [\App\Http\Controllers\Api\MenuTemplateController::class, 'destroy'])->whereNumber('id');
         // Educators also see allergy/dietary reminders for children at their
         // centre (tenant-scoped by assertCentreAccess + active-agency filter).
         Route::get  ('/operations/allergy-alerts',    [\App\Http\Controllers\Api\OperationsController::class, 'allergyAlerts']);
@@ -2756,7 +3162,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/parent/menu', [\App\Http\Controllers\Api\OperationsController::class, 'parentMenu']);
 
         // What a parent tells us about their own child at onboarding: a photo, what
-        // they are allergic to, and their immunisations. Every handler proves the
+        // they are allergic to, and their immunizations. Every handler proves the
         // child belongs to the signed-in guardian before reading or writing.
         Route::get ('/parent/onboarding/children', [\App\Http\Controllers\Api\ParentChildOnboardingController::class, 'index']);
         // Children added after the parent onboarded and still without a photo (sign-in catch-up).
@@ -2771,6 +3177,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get  ('/operations/field-trips',       [\App\Http\Controllers\Api\OperationsController::class, 'listFieldTrips']);
         Route::post ('/operations/field-trips',       [\App\Http\Controllers\Api\OperationsController::class, 'createFieldTrip']);
         Route::delete('/operations/field-trips/{id}', [\App\Http\Controllers\Api\OperationsController::class, 'deleteFieldTrip']);
+        Route::get  ('/operations/field-trips/{id}',  [\App\Http\Controllers\Api\OperationsController::class, 'showFieldTrip'])->where('id','[0-9]+');   // trip details view (2026-10-24)
         Route::get  ('/operations/field-trips/{id}/permissions', [\App\Http\Controllers\Api\OperationsController::class, 'listPermissionsForTrip']);
         Route::get  ('/operations/substitutes',       [\App\Http\Controllers\Api\OperationsController::class, 'listSubstitutes']);
         Route::post ('/operations/substitutes',       [\App\Http\Controllers\Api\OperationsController::class, 'upsertSubstitute']);
@@ -2789,6 +3196,48 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // fetch() can't read for CORS reasons) as an attachment, like the payslip PDF.
     Route::get ('/media/download',     [\App\Http\Controllers\Api\MediaController::class, 'download']);
     Route::post('/photos',             [\App\Http\Controllers\Api\PhotoFeedController::class, 'upload']);
+    // Change who is tagged in a shared photo (2026-10-20).
+    Route::patch('/photos/{id}/children', [\App\Http\Controllers\Api\PhotoFeedController::class, 'tagChildren'])->whereNumber('id');
+    /* PHOTO PERMISSIONS, PER CHILD (2026-11-06) - App\Support\MediaConsent. Every agency, no switch: a parent answers
+       for their own children; staff read the answers, admins and directors record a signed paper form. */
+    Route::get ('/me/photo-consent', [\App\Http\Controllers\Api\MediaConsentController::class, 'mine']);
+    Route::post('/me/photo-consent', [\App\Http\Controllers\Api\MediaConsentController::class, 'saveMine'])->middleware('throttle:30,1,photoconsent');
+    /* PRIVACY NOTICE, ACKNOWLEDGED (2026-11-10, PIPEDA review) - PrivacyNoticeController. A parent confirms reading each
+       of their agencies' notice; admins see who has and can ask again. */
+    Route::get ('/me/privacy-notice', [\App\Http\Controllers\Api\PrivacyNoticeController::class, 'mine']);
+    Route::post('/me/privacy-notice', [\App\Http\Controllers\Api\PrivacyNoticeController::class, 'acknowledge'])->middleware('throttle:30,1,privacynotice');
+    // Who of these people is sign-in locked - the status pills (directors too: they see these people already).
+    Route::get('/admin/sign-in-locks/people', [\App\Http\Controllers\Api\SignInLockController::class, 'lockedPeople'])
+        ->middleware('role:agency_admin,platform_admin,centre_director');
+    /* SIGN-IN LOCKS (2026-11-10) - SignInLockController: pause sign-in for a person, a centre / home provider, or (platform
+       only) a whole agency, and lift it. Not plan-gated: an account-safety control. */
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::get ('/admin/sign-in-locks',               [\App\Http\Controllers\Api\SignInLockController::class, 'index']);
+        Route::get ('/admin/sign-in-locks/targets',       [\App\Http\Controllers\Api\SignInLockController::class, 'targets']);
+        Route::get ('/admin/sign-in-locks/preview',       [\App\Http\Controllers\Api\SignInLockController::class, 'preview']);
+        Route::get ('/admin/sign-in-locks/status',        [\App\Http\Controllers\Api\SignInLockController::class, 'status']);
+        Route::get ('/admin/sign-in-locks/{lock}',        [\App\Http\Controllers\Api\SignInLockController::class, 'show'])->where('lock', '[0-9]+');
+        Route::post('/admin/sign-in-locks',               [\App\Http\Controllers\Api\SignInLockController::class, 'store'])->middleware('throttle:30,1,signinlock');
+        Route::post('/admin/sign-in-locks/{lock}/unlock', [\App\Http\Controllers\Api\SignInLockController::class, 'unlock'])->where('lock', '[0-9]+')->middleware('throttle:30,1,signinlock');
+        // One person let in past a centre lock, and ended (2026-11-10).
+        Route::post('/admin/sign-in-locks/{lock}/exceptions',        [\App\Http\Controllers\Api\SignInLockController::class, 'except'])->where('lock', '[0-9]+')->middleware('throttle:30,1,signinlock');
+        Route::post('/admin/sign-in-locks/exceptions/{exception}/end', [\App\Http\Controllers\Api\SignInLockController::class, 'endException'])->where('exception', '[0-9]+')->middleware('throttle:30,1,signinlock');
+    });
+    Route::middleware('role:agency_admin,platform_admin')->group(function () {
+        Route::get ('/admin/privacy-notice',       [\App\Http\Controllers\Api\PrivacyNoticeController::class, 'status']);
+        Route::post('/admin/privacy-notice/reask', [\App\Http\Controllers\Api\PrivacyNoticeController::class, 'reask']);
+    });
+    /* SAVED SIGNATURE + INITIALS (2026-11-06) - SavedSignatureController. Personal: a person's own, never another's;
+       applied to a document only on a tap (every apply is a recorded use). Viewing-as gets none. */
+    Route::get ('/me/saved-signatures', [\App\Http\Controllers\Api\SavedSignatureController::class, 'mine']);
+    Route::post('/me/saved-signatures', [\App\Http\Controllers\Api\SavedSignatureController::class, 'save'])->middleware('throttle:20,1,savedsig');
+    Route::delete('/me/saved-signatures/{kind}', [\App\Http\Controllers\Api\SavedSignatureController::class, 'remove'])->where('kind', 'signature|initials');
+    Route::post('/me/saved-signatures/{kind}/use', [\App\Http\Controllers\Api\SavedSignatureController::class, 'apply'])->where('kind', 'signature|initials')->middleware('throttle:60,1,savedsiguse');
+    Route::middleware('role:agency_admin,platform_admin,centre_director,educator')->group(function () {
+        Route::get ('/admin/photo-consent', [\App\Http\Controllers\Api\MediaConsentController::class, 'index']);
+        Route::post('/admin/photo-consent/{child}', [\App\Http\Controllers\Api\MediaConsentController::class, 'record'])->whereNumber('child');
+        Route::post('/admin/photo-consent/{child}/show-photos', [\App\Http\Controllers\Api\MediaConsentController::class, 'showPhotos'])->whereNumber('child');
+    });
     /* An educator sees only feedback RELEASED to them; a director releases the rest. */
     Route::get ('/feedback/mine-educator', [\App\Http\Controllers\Api\ParentFeedbackController::class, 'mine']);
     Route::post('/feedback/mine-educator/read', [\App\Http\Controllers\Api\ParentFeedbackController::class, 'markRead']);
@@ -2829,6 +3278,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         });
         Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/operations/ratio-status',      [\App\Http\Controllers\Api\OperationsV2Controller::class, 'ratioStatus']);
+        Route::put   ('/operations/ratio-alerts',      [\App\Http\Controllers\Api\OperationsV2Controller::class, 'saveRatioAlerts']);   // breach alerts: who is told (2026-10-30)
         Route::put   ('/operations/ratio-settings/{centre}', [\App\Http\Controllers\Api\OperationsV2Controller::class, 'saveRatioSettings'])->where('centre', '[0-9]+');   // Ontario ratio settings (2026-10-13)
         Route::get   ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'busRoutes']);
         Route::post  ('/operations/bus-routes',        [\App\Http\Controllers\Api\OperationsV2Controller::class, 'createBusRoute']);
@@ -2890,6 +3340,17 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/curriculum',             [\App\Http\Controllers\Api\GrowthController::class, 'listCurriculum']);
         Route::post('/curriculum',             [\App\Http\Controllers\Api\GrowthController::class, 'createCurriculum']);
         Route::post('/curriculum/{id}/use',    [\App\Http\Controllers\Api\GrowthController::class, 'useCurriculum']);
+    });
+    // Ontario curriculum library units (2026-11-03, CurriculumUnitController). Browse, preview and use:
+    // anyone who plans lessons (Use = the planner's own room/centre check, drafts only). Copy, edit and
+    // delete the agency's copy: directors and admins, checked in the controller.
+    Route::middleware(KT_PROVIDER_ROLES)->group(function () {
+        Route::get   ('/curriculum/units',           [\App\Http\Controllers\Api\CurriculumUnitController::class, 'index']);
+        Route::get   ('/curriculum/units/{id}',      [\App\Http\Controllers\Api\CurriculumUnitController::class, 'show'])->whereNumber('id');
+        Route::post  ('/curriculum/units/{id}/use',  [\App\Http\Controllers\Api\CurriculumUnitController::class, 'use'])->whereNumber('id')->middleware('throttle:30,1,curunituse');
+        Route::post  ('/curriculum/units/{id}/copy', [\App\Http\Controllers\Api\CurriculumUnitController::class, 'copy'])->whereNumber('id');
+        Route::put   ('/curriculum/units/{id}',      [\App\Http\Controllers\Api\CurriculumUnitController::class, 'update'])->whereNumber('id');
+        Route::delete('/curriculum/units/{id}',      [\App\Http\Controllers\Api\CurriculumUnitController::class, 'destroy'])->whereNumber('id');
     });
 
     // v22p58 — Procare-gap features
@@ -3038,6 +3499,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Report cards
     Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/report-cards/pending',         [\App\Http\Controllers\Api\ReportCardController::class, 'pending']);
+        Route::get ('/report-cards/requests',        [\App\Http\Controllers\Api\ReportCardController::class, 'requests']);
         Route::get ('/report-cards/child/{childId}', [\App\Http\Controllers\Api\ReportCardController::class, 'listForChild']);
         Route::post('/report-cards/generate',        [\App\Http\Controllers\Api\ReportCardController::class, 'generate']);
         Route::patch('/report-cards/{id}',           [\App\Http\Controllers\Api\ReportCardController::class, 'update']);
@@ -3057,6 +3519,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     });
     // Support tickets
     Route::get ('/tickets',                       [\App\Http\Controllers\Api\SupportTicketController::class, 'listMine']);
+    // Volumes, response/resolution times against the SLA, breaches, ageing and trends for the tickets screen (2026-10-28).
+    Route::get ('/tickets/stats',                 [\App\Http\Controllers\Api\SupportTicketController::class, 'stats']);
     Route::post('/tickets',                       [\App\Http\Controllers\Api\SupportTicketController::class, 'create']);
     Route::get ('/tickets/{id}',                  [\App\Http\Controllers\Api\SupportTicketController::class, 'show']);
     // Attachments. Both ends check the ticket is one this user may see, and files are
@@ -3064,6 +3528,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/tickets/{id}/files',            [\App\Http\Controllers\Api\SupportTicketController::class, 'uploadFile']);
     Route::get ('/tickets/{id}/files/{fileId}',   [\App\Http\Controllers\Api\SupportTicketController::class, 'downloadFile']);
     Route::post('/tickets/{id}/reply',            [\App\Http\Controllers\Api\SupportTicketController::class, 'reply']);
+    Route::post('/tickets/{id}/escalate',         [\App\Http\Controllers\Api\SupportTicketController::class, 'escalate']);   // 2026-10-21
     Route::patch('/tickets/{id}/status',          [\App\Http\Controllers\Api\SupportTicketController::class, 'updateStatus']);
 
 
@@ -3090,18 +3555,56 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/compliance/subsidies/{id}/documents/{doc}',  [\App\Http\Controllers\Api\SubsidyController::class, 'downloadDocument'])->where(['id' => '[0-9]+', 'doc' => '[0-9]+']);
         Route::delete('/compliance/subsidies/{id}/documents/{doc}',  [\App\Http\Controllers\Api\SubsidyController::class, 'removeDocument'])->where(['id' => '[0-9]+', 'doc' => '[0-9]+']);
     });
+    // Educator points & rewards (2026-10-20): earners see their own; directors/admins award.
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get   ('/educator-points/me',            [\App\Http\Controllers\Api\EducatorRewardsController::class, 'me']);
+        Route::get   ('/educator-points',               [\App\Http\Controllers\Api\EducatorRewardsController::class, 'index']);
+        // Award history (2026-11-02): who was awarded, month by month, kept for good. Directors: their centres.
+        Route::get   ('/educator-points/history',       [\App\Http\Controllers\Api\EducatorRewardsController::class, 'history']);
+        Route::get   ('/educator-points/settings',      [\App\Http\Controllers\Api\EducatorRewardsController::class, 'settings']);
+        Route::put   ('/educator-points/settings',      [\App\Http\Controllers\Api\EducatorRewardsController::class, 'saveSettings']);
+        Route::post  ('/educator-points/awards',        [\App\Http\Controllers\Api\EducatorRewardsController::class, 'award'])->middleware('throttle:30,1,r-grp-3568');
+        // The certificate of appreciation email, signed by the agency owner (2026-10-30).
+        Route::get   ('/educator-points/thanks',        [\App\Http\Controllers\Api\EducatorRewardsController::class, 'thanksInfo']);
+        Route::post  ('/educator-points/thanks',        [\App\Http\Controllers\Api\EducatorRewardsController::class, 'thanks'])->middleware('throttle:30,1,r-grp-3571');
+        Route::post  ('/educator-points/thanks/note',   [\App\Http\Controllers\Api\EducatorRewardsController::class, 'thanksNote'])->middleware('throttle:20,1,r-ty-note');
+        // Automatic monthly thank-you awards (2026-10-31): settings, drafts to review, history. Agency admins (checked in the controller).
+        Route::get   ('/educator-points/auto',                    [\App\Http\Controllers\Api\ThankYouAutoController::class, 'show']);
+        Route::put   ('/educator-points/auto',                    [\App\Http\Controllers\Api\ThankYouAutoController::class, 'save'])->middleware('throttle:30,1,r-ty-auto-save');
+        Route::post  ('/educator-points/auto/drafts/{id}',        [\App\Http\Controllers\Api\ThankYouAutoController::class, 'update'])->whereNumber('id')->middleware('throttle:60,1,r-ty-auto-edit');
+        Route::post  ('/educator-points/auto/drafts/{id}/send',   [\App\Http\Controllers\Api\ThankYouAutoController::class, 'send'])->whereNumber('id')->middleware('throttle:60,1,r-ty-auto-send');
+        Route::post  ('/educator-points/auto/drafts/{id}/skip',   [\App\Http\Controllers\Api\ThankYouAutoController::class, 'skip'])->whereNumber('id')->middleware('throttle:60,1,r-ty-auto-skip');
+        Route::post  ('/educator-points/auto/send-all',           [\App\Http\Controllers\Api\ThankYouAutoController::class, 'sendAll'])->middleware('throttle:6,1,r-ty-auto-all');
+        Route::delete('/educator-points/awards/{id}',   [\App\Http\Controllers\Api\EducatorRewardsController::class, 'cancel'])->whereNumber('id');
+        Route::post  ('/educator-points/awards/{id}/refresh', [\App\Http\Controllers\Api\EducatorRewardsController::class, 'refreshOne'])->whereNumber('id')->middleware('throttle:30,1,r-grp-3573');
+        // This agency's own Giftbit account and catalogue (2026-10-20).
+        Route::get   ('/educator-points/notify-preview',       [\App\Http\Controllers\Api\EducatorRewardsController::class, 'notifyPreview']);
+        Route::get   ('/educator-points/tango',                [\App\Http\Controllers\Api\EducatorRewardsController::class, 'tangoShow']);
+        Route::put   ('/educator-points/tango',                [\App\Http\Controllers\Api\EducatorRewardsController::class, 'tangoSave']);
+        Route::post  ('/educator-points/tango/test',           [\App\Http\Controllers\Api\EducatorRewardsController::class, 'tangoTest'])->middleware('throttle:6,1,r-grp-3578');
+        Route::get   ('/educator-points/giftbit',              [\App\Http\Controllers\Api\EducatorRewardsController::class, 'giftbitShow']);
+        Route::put   ('/educator-points/giftbit',              [\App\Http\Controllers\Api\EducatorRewardsController::class, 'giftbitSave']);
+        Route::post  ('/educator-points/giftbit/test',         [\App\Http\Controllers\Api\EducatorRewardsController::class, 'giftbitTest'])->middleware('throttle:6,1,r-grp-3581');
+        Route::get   ('/educator-points/giftbit/brands',       [\App\Http\Controllers\Api\EducatorRewardsController::class, 'brands'])->middleware('throttle:30,1,r-grp-3582');
+        Route::get   ('/educator-points/giftbit/brands/{code}',[\App\Http\Controllers\Api\EducatorRewardsController::class, 'brandDetail'])->where('code', '[A-Za-z0-9_-]+')->middleware('throttle:60,1,r-grp-3583');
+    });
     // Safe Arrival (2026-09-29): the day's board, closing a case, and the agency's settings.
     Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
         // Parent issues, staff side (2026-10-13): centre- and room-scoped in the controller.
         Route::get  ('/parent-issues',               [\App\Http\Controllers\Api\ParentIssueController::class, 'staffIndex']);
         Route::get  ('/parent-issues/{id}',          [\App\Http\Controllers\Api\ParentIssueController::class, 'staffShow'])->whereNumber('id');
         Route::patch('/parent-issues/{id}',          [\App\Http\Controllers\Api\ParentIssueController::class, 'staffUpdate'])->whereNumber('id');
-        Route::post ('/parent-issues/{id}/messages', [\App\Http\Controllers\Api\ParentIssueController::class, 'staffMessage'])->whereNumber('id')->middleware('throttle:30,1');
+        Route::post ('/parent-issues/{id}/messages', [\App\Http\Controllers\Api\ParentIssueController::class, 'staffMessage'])->whereNumber('id')->middleware('throttle:30,1,r-grp-3591');
         Route::get ('/safe-arrival/today',              [\App\Http\Controllers\Api\SafeArrivalController::class, 'today']);
+        Route::get ('/safe-arrival/history',            [\App\Http\Controllers\Api\SafeArrivalController::class, 'history']);   // past checks + who was alerted (2026-11-03)
         Route::post('/safe-arrival/{childId}/resolve',  [\App\Http\Controllers\Api\SafeArrivalController::class, 'resolve'])->where('childId', '[0-9]+');
+        Route::post  ('/safe-arrival/{childId}/late',   [\App\Http\Controllers\Api\SafeArrivalController::class, 'late'])->where('childId', '[0-9]+');        // running late (2026-11-06)
+        Route::delete('/safe-arrival/{childId}/late',   [\App\Http\Controllers\Api\SafeArrivalController::class, 'cancelLate'])->where('childId', '[0-9]+');
+        // End of day (Safe Departure, 2026-10-22): picked up at… / still here / other.
+        Route::post('/safe-arrival/departure/{childId}/resolve', [\App\Http\Controllers\Api\SafeArrivalController::class, 'resolveDeparture'])->where('childId', '[0-9]+');
         Route::get ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'settings']);
         Route::put ('/safe-arrival/settings',           [\App\Http\Controllers\Api\SafeArrivalController::class, 'saveSettings']);
-        Route::post('/safe-arrival/test-call',          [\App\Http\Controllers\Api\SafeArrivalController::class, 'testCall'])->middleware('throttle:5,60');
+        Route::post('/safe-arrival/test-call',          [\App\Http\Controllers\Api\SafeArrivalController::class, 'testCall'])->middleware('throttle:5,60,r-safe-arrival-test-call');
         // The family record's subsidy history, and CWELCC enrolment changes as dated periods.
         Route::get   ('/compliance/families/{id}/subsidies', [\App\Http\Controllers\Api\SubsidyController::class, 'familyHistory'])->where('id', '[0-9]+');
         Route::post  ('/compliance/families/{id}/cwelcc',    [\App\Http\Controllers\Api\SubsidyController::class, 'familyCwelcc'])->where('id', '[0-9]+');
@@ -3119,8 +3622,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     });
     // v22p94: payment plans are financial — NOT educators.
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        // Insights panel on Payment schedules (2026-11-02): read-only figures, active agency, director = own centres.
+        Route::get ('/payment-plans/stats',      [\App\Http\Controllers\Api\PaymentScheduleStatsController::class, 'stats']);
         Route::get ('/payment-plans/family/{id}',[\App\Http\Controllers\Api\PaymentPlanController::class, 'listForFamily']);
         Route::post('/payment-plans',            [\App\Http\Controllers\Api\PaymentPlanController::class, 'create']);
+        Route::get ('/payment-plans/description-default', [\App\Http\Controllers\Api\PaymentPlanController::class, 'descriptionDefault']);
         Route::post('/payment-plans/{id}/cancel',[\App\Http\Controllers\Api\PaymentPlanController::class, 'cancel']);
         // Edit an existing schedule - rewrites only its unissued tail. See update().
         Route::patch('/payment-plans/{id}',       [\App\Http\Controllers\Api\PaymentPlanController::class, 'update'])->where('id','[0-9]+');
@@ -3144,6 +3650,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin,educator')->group(function () {
         Route::post('/ai/tag-observation',                 [\App\Http\Controllers\Api\AiV2Controller::class, 'tagObservation']);
         Route::post('/ai/translate-message',               [\App\Http\Controllers\Api\AiV2Controller::class, 'translateMessage']);
+        // AI writing help beside announcement / message / email / incident boxes (2026-10-28, AI Bundle).
+        Route::post('/ai/assist/write',                    [\App\Http\Controllers\Api\AiAssistController::class, 'write'])->middleware('throttle:30,1,r-ai-assist-write');
+        // AI picks a library food photo for menu dishes local matching could not place (AI Bundle, 2026-10-31).
+        Route::post('/ai/assist/food-photo',               [\App\Http\Controllers\Api\FoodPhotoController::class, 'ai'])->middleware('throttle:20,1,foodai');
+        // AI finds a picture for a lesson plan activity (AI Bundle, 2026-11-02).
+        Route::post('/ai/assist/lesson-image',             [\App\Http\Controllers\Api\LessonPlanController::class, 'imageAi'])->middleware('throttle:20,1,lpimgai');
+    });
+    // Ask KiddieTrac - the admin AI assistant (AI Bundle, 2026-11-03). Read-only tools, scoped in AskScope/AskTools.
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::post('/ai/assist/ask', [\App\Http\Controllers\Api\AskController::class, 'ask'])->middleware('throttle:12,1,r-ai-ask');
     });
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::post('/ai/doc-extract/{id}/auto-link',      [\App\Http\Controllers\Api\AiV2Controller::class, 'autoLinkExtraction']);
@@ -3205,6 +3721,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/families/deactivate', [\App\Http\Controllers\Api\IntegrationController::class, 'deactivateFamily']);
         // ...and switching it back on. Restores rather than creating a second family.
         Route::post('/families/restore',    [\App\Http\Controllers\Api\IntegrationController::class, 'restoreFamilyExternal']);
+        // One family's open invoices, so the partner can say which one a payment pays (2026-11-03). Read-only.
+        Route::get ('/families/open-invoices', [\App\Http\Controllers\Api\IntegrationController::class, 'familyOpenInvoices']);
         Route::post('/invoices', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertInvoice']);
         Route::post('/payroll',  [\App\Http\Controllers\Api\IntegrationController::class, 'upsertPayroll']);
         Route::post('/waitlist', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertWaitlist']);
@@ -3233,14 +3751,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 // v22p5: kiosk mode — public endpoints (no auth; centre token in URL)
 Route::prefix('kiosk')->group(function () {
     Route::get('/{token}', [\App\Http\Controllers\Api\KioskController::class, 'lookup']);
-    Route::post('/{token}/check-event', [\App\Http\Controllers\Api\KioskController::class, 'checkEvent'])->middleware('throttle:120,1');
+    Route::post('/{token}/check-event', [\App\Http\Controllers\Api\KioskController::class, 'checkEvent'])->middleware('throttle:120,1,r-x-check-event');
 });
 
 // ===== v22p51 PUBLIC ROUTES =====
 
 
 // v22p51 — Stripe parent-pay webhook (no auth; signature-verified inside)
-Route::post('/stripe/parent-webhook', [\App\Http\Controllers\Api\StripeParentPayController::class, 'webhook'])->middleware('throttle:600,1');
+Route::post('/stripe/parent-webhook', [\App\Http\Controllers\Api\StripeParentPayController::class, 'webhook'])->middleware('throttle:600,1,r-stripe-parent-webhook');
 
 // v22p51 — Public agency landing pages (HTML)
 Route::get('/public/landing/{slug}', [\App\Http\Controllers\Api\LandingController::class, 'landing']);
@@ -3248,9 +3766,9 @@ Route::get('/public/landing/{slug}', [\App\Http\Controllers\Api\LandingControlle
 // v22p51 — QBO OAuth callback (no auth — state cookie identifies agency)
 Route::get('/qbo/callback', [\App\Http\Controllers\Api\QboController::class, 'callback']);
 // Xero OAuth callback (public — a one-use, server-held state identifies the agency and admin)
-Route::get('/xero/callback', [\App\Http\Controllers\Api\XeroController::class, 'callback'])->middleware('throttle:30,1');
+Route::get('/xero/callback', [\App\Http\Controllers\Api\XeroController::class, 'callback'])->middleware('throttle:30,1,r-xero-callback');
 // Sage Accounting OAuth callback (public — one-use, server-held state)
-Route::get('/sage/callback', [\App\Http\Controllers\Api\SageController::class, 'callback'])->middleware('throttle:30,1');
+Route::get('/sage/callback', [\App\Http\Controllers\Api\SageController::class, 'callback'])->middleware('throttle:30,1,r-sage-callback');
 
 // v22p51 — public locale bundles (no auth required so the login page can localize too)
 Route::get('/locale/public/{lang}', [\App\Http\Controllers\Api\LocaleController::class, 'strings']);
@@ -3258,7 +3776,7 @@ Route::get('/locale/public/{lang}', [\App\Http\Controllers\Api\LocaleController:
 
 // ===== v22p53 PUBLIC =====
 
-Route::post('/kiosk/{token}/signature', [\App\Http\Controllers\Api\OperationsController::class, 'captureSignature'])->middleware('throttle:120,1');
+Route::post('/kiosk/{token}/signature', [\App\Http\Controllers\Api\OperationsController::class, 'captureSignature'])->middleware('throttle:120,1,r-kiosk-x-signature');
 
 
 
@@ -3268,7 +3786,7 @@ Route::prefix('v1')->group(function () {
     Route::get ('/sso/providers',                [\App\Http\Controllers\Api\SsoController::class, 'providers']);
     Route::get ('/sso/{provider}',               [\App\Http\Controllers\Api\SsoController::class, 'redirect']);
     Route::get ('/sso/{provider}/callback',      [\App\Http\Controllers\Api\SsoController::class, 'callback']);
-    Route::post('/kiosk/{token}/temperature',    [\App\Http\Controllers\Api\KioskTemperatureController::class, 'record'])->middleware('throttle:120,1');
+    Route::post('/kiosk/{token}/temperature',    [\App\Http\Controllers\Api\KioskTemperatureController::class, 'record'])->middleware('throttle:120,1,r-kiosk-x-temperature');
 });
 
 /* v22p68 help routes */

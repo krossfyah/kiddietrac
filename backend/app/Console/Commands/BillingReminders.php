@@ -35,74 +35,32 @@ class BillingReminders extends Command
 
         $dry = (bool) $this->option('dry-run');
         $hour = (int) now()->format('G');
-        $today = now()->startOfDay();
+        $today = \App\Support\AgencyTime::todayDate();
         $sent = 0;
 
-        foreach (DB::table('agencies')->whereNull('deleted_at')->select('id', 'name', 'settings')->get() as $ag) {
-            $cfg = $this->cfg($ag->settings);
+        /* THE SCHEDULE NOW LIVES IN App\Support\InvoiceReminders (2026-10-31, Anthony: "when invoices are overdue
+           the emails should be sent everyday until paid ... cc admin/directors ... setup how often, who gets notified
+           and how many times"). Per agency, in its own send hour: before-due days, the due date itself, then overdue
+           daily / every N days / weekly / a fixed list, optionally capped at N reminders - one email per guardian with
+           their own share, a blind copy to the chosen staff, at most one per invoice per person per day (logged in
+           invoice_reminder_log). The two gates above and the agency's own switches are unchanged. */
+        foreach (DB::table('agencies')->whereNull('deleted_at')->select('id', 'name', 'settings', 'timezone')->get() as $ag) {
+            $cfg = \App\Support\InvoiceReminders::cfg((int) $ag->id);
             if ((! $cfg['invoice_enabled'] && ! $cfg['overdue_enabled']) || ! $cfg['channel_email']) {
                 continue;
             }
-            /* THE AGENCY'S OWN CLOCK. `$hour` is the server's, which runs UTC, so a
-               setting of 09:00 fired at 5am in Toronto and at 2am on the west coast.
-               Every other reminder in this codebase resolves the hour per agency; this
-               one compared against `now()` and did not. (2026-09-17) */
-            $tz = DB::table('agencies')->where('id', $ag->id)->value('timezone') ?: 'America/Toronto';
-            try { $nowLocal = Carbon::now($tz); } catch (Throwable $e) { $nowLocal = Carbon::now('America/Toronto'); }
-
+            // The agency's own clock: send_time is local to the agency, the server runs UTC. (2026-09-17)
+            try { $nowLocal = Carbon::now($ag->timezone ?: 'America/Toronto'); } catch (Throwable $e) { $nowLocal = Carbon::now('America/Toronto'); }
             if (! $this->option('force')) {
-                $sendHour = (int) explode(':', $cfg['send_time'])[0];
+                $sendHour = (int) explode(':', (string) $cfg['send_time'])[0];
                 if ($sendHour !== (int) $nowLocal->format('G')) {
                     continue;
                 }
             }
-
-            $am = AgencyMailer::forAgency((int) $ag->id);
-            $rules = [];
-            if ($cfg['invoice_enabled']) {
-                foreach ($this->days($cfg['invoice_days_before']) as $d) { $rules[] = ['upcoming', $d]; }
-            }
-            if ($cfg['overdue_enabled']) {
-                foreach ($this->days($cfg['overdue_days_after']) as $d) { $rules[] = ['overdue', $d]; }
-            }
-
-            foreach ($rules as [$kind, $d]) {
-                // The offset is from the agency's today, not the server's.
-                $target = $kind === 'upcoming'
-                    ? $nowLocal->copy()->startOfDay()->addDays($d)
-                    : $nowLocal->copy()->startOfDay()->subDays($d);
-
-                $invoices = $this->dueOn((int) $ag->id, $target->toDateString());
-
-                foreach ($invoices as $inv) {
-                    $emails = $this->billingEmails((int) $inv->family_id);
-                    if (empty($emails)) {
-                        continue;
-                    }
-                    $subject = $kind === 'upcoming' ? ('Upcoming payment — ' . $ag->name) : ('Payment overdue — ' . $ag->name);
-                    $body = $this->body($kind, $d, $inv, $ag, $cfg);
-
-                    foreach ($emails as $to) {
-                        if ($dry) {
-                            Log::info("[billing:reminders DRY] {$kind} d{$d} invoice#{$inv->id} family#{$inv->family_id} → {$to}");
-                            $sent++;
-                            continue;
-                        }
-                        try {
-                            // cc_admin was configurable and never read. The office gets a
-                            // blind copy, not a CC: a family must not be handed the
-                            // agency's internal address list on a payment chase.
-                            $adminTo = ! empty($cfg['cc_admin']) ? $this->adminCopy((int) $ag->id) : null;
-                            $am->raw($body, function ($m) use ($to, $subject, $adminTo) {
-                                $m->to($to)->subject($subject);
-                                if ($adminTo) { $m->bcc($adminTo); }
-                            });
-                            $sent++;
-                        } catch (Throwable $e) {
-                            Log::warning('billing:reminders send failed: ' . $e->getMessage());
-                        }
-                    }
-                }
+            foreach (\App\Support\InvoiceReminders::runAgency((int) $ag->id, $nowLocal, $dry) as $line) {
+                $dry ? Log::info('[billing:reminders DRY] agency ' . $ag->id . ' ' . $line) : null;
+                $this->line('agency ' . $ag->id . ': ' . $line);
+                $sent++;
             }
         }
 
@@ -137,9 +95,22 @@ class BillingReminders extends Command
             ->whereDate('i.due_at', $dueDate)
             ->whereNotIn('i.status', $skip)
             ->where('i.balance_due', '>', 0)
-            ->get(['i.id', 'i.family_id', 'i.balance_due', 'i.due_at',
+            ->get(['i.id', 'i.family_id', 'i.balance_due', 'i.due_at', 'i.total', 'i.status', 'i.issued_at', 'i.split_snapshot',
                 DB::raw('i.invoice_number as number')])
             ->all();
+        /* SPLIT BILLING (2026-10-30): one row per guardian with their own balance; a guardian whose share is paid is
+           left out. Before, every billing guardian was chased for the whole family balance. */
+        $rows = [];
+        foreach ($native as $n) {
+            $sh = \App\Support\BillingSplit::shares($n);
+            if (! $sh) { $rows[] = $n; continue; }
+            foreach ($sh as $s) {
+                if ($s['balance'] <= 0.004) continue;
+                $c = clone $n; $c->balance_due = $s['balance']; $c->only_guardian = $s['guardian_id'];
+                $rows[] = $c;
+            }
+        }
+        $native = $rows;
 
         $external = DB::table('external_invoices')
             ->where('agency_id', $agencyId)
@@ -167,11 +138,12 @@ class BillingReminders extends Command
        the mail layer would refuse them anyway, after the work was done.
 
        @return list<string> */
-    private function billingEmails(int $familyId): array
+    private function billingEmails(int $familyId, ?int $onlyGuardian = null): array
     {
         $rows = DB::table('guardians as g')
             ->join('users as u', 'u.id', '=', 'g.user_id')
             ->where('g.family_id', $familyId)
+            ->when($onlyGuardian, fn ($q) => $q->where('g.id', $onlyGuardian))
             ->whereNull('u.deleted_at')
             ->whereNotNull('u.email')
             ->whereNotIn('u.status', ['invited', 'not_invited', 'deactivated', 'suspended'])

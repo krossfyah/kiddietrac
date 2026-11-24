@@ -121,6 +121,7 @@
     + '.rv-pill{display:inline-block;border-radius:10px;padding:1px 8px;font-size:11.5px;font-weight:700;white-space:nowrap;vertical-align:middle}'
     + '.rv-h{font-size:15px;margin:4px 0 6px}'
     /* event cards */
+    + '.rv-evq{display:block;width:100%;box-sizing:border-box;margin:0 0 12px;padding:9px 14px;border:1px solid #E2E8F0;border-radius:8px;font-size:13.5px;background:#fff}'
     + '.rv-evcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}'
     + '.rv-evc{background:var(--kt-bg-elevated,#fff);border:1px solid var(--kt-border,#E2E8F0);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--kt-shadow-sm,none);min-width:0}'
     + '.rv-evc-img{display:block;width:100%;aspect-ratio:1200/400;object-fit:cover;background:#E2E8F0}'
@@ -325,6 +326,7 @@
   async function render(main) {
     Api = KT.Api;
     gmailReturn();
+    try { var _t = /[?&]tab=(events|templates|senders|reports)\b/.exec(location.hash || ''); if (_t) { state.tab = _t[1]; state.eventId = null; } } catch (e) {}
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = CSS + '<div class="rv-root" data-kt-self-live style="padding:14px 24px;max-width:1300px;">'
       + '<div class="kt-page-hero"><h2>🎟️ Event RSVPs</h2><p>Invite people to an event, collect their RSVPs, and see who was sent, who signed up and who opted out.</p></div>'
@@ -432,7 +434,9 @@
     /* A CARD LIST, not a table, so kt-row-actions cannot collapse these actions: the ⋮ here
        is the documented card exception, and the menu it opens is the house one
        (KT.openActionMenu), never a hand-built popup. */
-    body.innerHTML = '<div class="rv-evcards">' + rows.map(function (e) {
+    /* A search box over the cards, like the Templates and Reports tabs have (2026-11-06, sub-tab filter sweep). */
+    body.innerHTML = '<input type="search" class="rv-evq kt-table-filter-input" placeholder="🔍  Filter ' + rows.length + ' event' + (rows.length === 1 ? '' : 's') + '…" aria-label="Filter events" autocomplete="off">'
+      + '<div class="rv-evcards">' + rows.map(function (e) {
       var s = e.stats || {}, pa = primaryFor(e);
       return '<article class="rv-evc">'
         + (e.image_url ? '<img class="rv-evc-img" src="' + esc(e.image_url) + '" alt="" loading="lazy">' : '')
@@ -445,6 +449,11 @@
         + (e.status === 'open' ? '<button type="button" class="rv-btn ghost" data-kt-iconized="1" data-pa="report" data-id="' + e.id + '">View report</button>' : '')
         + '<span class="sp"></span><button type="button" class="kt-ka-kebab" data-kt-iconized="1" data-menu="' + e.id + '" title="More actions" aria-label="More actions for ' + esc(e.title) + '">⋮</button></div></article>';
     }).join('') + '</div>';
+    var evq = body.querySelector('.rv-evq');
+    evq.addEventListener('input', function () {
+      var q = (evq.value || '').trim().toLowerCase();
+      body.querySelectorAll('.rv-evc').forEach(function (c) { c.style.display = !q || (c.textContent || '').toLowerCase().indexOf(q) !== -1 ? '' : 'none'; });
+    });
     body.onclick = function (ev) {
       var b = ev.target.closest('[data-open],[data-pa],[data-menu]'); if (!b) { return; }
       ev.preventDefault();

@@ -48,7 +48,7 @@ class CriticalNotifier
                 } catch (\Throwable $e) {
                 }
             }
-            $when = now()->format('l, M j, Y \a\t g:i A T');
+            $when = \App\Support\AgencyTime::now()->format('l, M j, Y \a\t g:i A T');
             $req = request();
             $ip = $req ? substr((string) $req->ip(), 0, 45) : null;
             $ua = $req ? substr((string) $req->userAgent(), 0, 220) : null;
@@ -78,7 +78,7 @@ class CriticalNotifier
                     . '</ul>'
                 : '';
 
-            $slot = '<div style="background:#FEF2F2;border-left:4px solid #EF4444;border-radius:10px;padding:14px 16px;margin-bottom:14px;">'
+            $slot = '<div style="background:#FEF2F2;--kt-edge:#EF4444;border-radius:10px;padding:14px 16px;margin-bottom:14px;">'
                 . '<div style="font-size:18px;font-weight:800;color:#B91C1C;">🔐 Critical change</div>'
                 . '<div style="font-size:15px;color:#0F172A;margin-top:2px;">' . e($what) . '</div>'
                 . '</div>'
@@ -93,7 +93,7 @@ class CriticalNotifier
                 $html = View::make('emails.layout', [
                     'slot' => $slot,
                     'title' => 'Critical change · ' . $what,
-                    'preheader' => $what . ' — by ' . $actorName . ' at ' . now()->format('g:i A'),
+                    'preheader' => $what . ' — by ' . $actorName . ' at ' . \App\Support\AgencyTime::now()->format('g:i A'),
                 ])->render();
             } catch (\Throwable $e) {
                 // Fallback to unbranded if the template can't render — alert still goes out.
@@ -101,6 +101,7 @@ class CriticalNotifier
             }
 
             Mail::html($html, function ($m) use ($to, $what) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $first = array_shift($to);
                 $m->to($first)->subject('🔐 KiddieTrac critical change: ' . $what);
                 foreach ($to as $cc) {

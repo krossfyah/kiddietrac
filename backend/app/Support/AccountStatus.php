@@ -87,6 +87,55 @@ final class AccountStatus
     }
 
     /**
+     * WHICH OF A FAMILY'S GUARDIANS MAY HAVE THEIR WHOLE ACCOUNT CLOSED (2026-11-05 leak sweep).
+     *
+     * Suspending, removing or withdrawing a family set every guardian's users.status and closed
+     * EVERY role they held - in every agency, platform roles included. users.status is global and
+     * the login gate reads it, so one agency's decision about a family locked a person out of their
+     * job elsewhere: measured today, a platform admin is a guardian of a test-agency family, and four
+     * educators are parents at their own agency. An agency may close the PARENT; the person's other
+     * roles are not its to take.
+     *
+     * Returns the ids whose account may be closed as before: every active role they hold is a
+     * guardian row of this agency and they have no other live family. For everyone else only their
+     * guardian rows in this agency are closed (stamped, so reopenRoles() restores them); their account
+     * is left as it is.
+     */
+    public static function closeFamilyGuardians(array $userIds, int $familyId, int $agencyId): array
+    {
+        $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds))));
+        if (! $userIds) {
+            return [];
+        }
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->map(fn ($v) => (int) $v)->all() ?: [0];
+        $whole = [];
+        foreach ($userIds as $uid) {
+            $otherRoles = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+                ->where(fn ($w) => $w->where('role', '!=', 'guardian')
+                    ->orWhere(fn ($a) => $a->whereNotNull('agency_id')->where('agency_id', '!=', $agencyId))
+                    ->orWhere(fn ($c) => $c->whereNull('agency_id')->whereNotNull('centre_id')->whereNotIn('centre_id', $centres)))
+                ->exists();
+            // A second family in the SAME agency is this agency's to decide, as it always was; only a
+            // family elsewhere shields the account.
+            $familyElsewhere = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                ->where('g.user_id', $uid)->where('g.family_id', '!=', $familyId)->whereNull('f.deleted_at')
+                ->whereNotIn('f.centre_id', $centres)->exists();
+            if (! $otherRoles && ! $familyElsewhere) {
+                $whole[] = $uid;
+                continue;
+            }
+            try {
+                DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->where('role', 'guardian')
+                    ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $centres))
+                    ->update(['active' => 0, 'closed_with_account_at' => now()]);
+            } catch (Throwable $e) {
+            }
+        }
+
+        return $whole;
+    }
+
+    /**
      * Put back the roles that closeRoles() took — and nothing else.
      *
      * The stamp is the whole point. A role an administrator revoked deliberately before
@@ -94,7 +143,7 @@ final class AccountStatus
      * Re-activating every inactive assignment instead would hand someone back access they
      * had specifically been denied, which is the more expensive mistake of the two.
      */
-    public static function reopenRoles(array $userIds): int
+    public static function reopenRoles(array $userIds, ?int $agencyId = null): int
     {
         $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds))));
         if (! $userIds) {
@@ -102,9 +151,14 @@ final class AccountStatus
         }
 
         try {
+            /* With an agency, only that agency's rows (2026-11-05 leak sweep): closeFamilyGuardians()
+               stamps one agency's guardian rows, so restoring a family in agency A must not reopen the
+               rows agency B closed. */
+            $centres = $agencyId ? (DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all() ?: [0]) : null;
             return DB::table('role_assignments')
                 ->whereIn('user_id', $userIds)
                 ->whereNotNull('closed_with_account_at')
+                ->when($agencyId, fn ($q) => $q->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $centres)))
                 ->update(['active' => 1, 'closed_with_account_at' => null]);
         } catch (Throwable $e) {
             return 0;

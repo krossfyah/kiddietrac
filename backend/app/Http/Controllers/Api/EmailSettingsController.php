@@ -42,7 +42,7 @@ final class EmailSettingsController extends Controller
     private function assertAdmin(Request $request): void
     {
         $u = $request->user();
-        $ok = DB::table('role_assignments')
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $u->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'platform_admin', 'centre_director'])
             ->exists();

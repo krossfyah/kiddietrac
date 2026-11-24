@@ -16,15 +16,20 @@ use Illuminate\Validation\ValidationException;
  * - Complexity: 8+ chars with mixed case, a number, and a symbol (enforced
  *   server-side so weak passwords are rejected with a clear validation error,
  *   not silently accepted).
- * - No reuse within the last 6 months (checked against password_history + the
- *   current password).
+ * - No reuse (2026-10-22, Anthony: "do not allow last 3 passwords to be used for the
+ *   next 12 months (or whatever you suggest as per the norm)"): never the current
+ *   password, never any of the last REUSE_COUNT (4, the PCI DSS figure), and never one
+ *   used in the last REUSE_MONTHS (12), whichever reaches further back. Was 6 months.
  *
  * Used by every password-setting endpoint (invite set-password, reset, change,
  * admin reset) so the rules are identical everywhere.
  */
 final class PasswordPolicy
 {
-    public const REUSE_MONTHS = 6;
+    public const REUSE_MONTHS = 12;
+
+    /** Previous passwords refused however old they are. */
+    public const REUSE_COUNT = 4;
 
     /* ── AGE AND LOCKOUT (2026-09-21) ──────────────────────────────────────────
      *
@@ -203,8 +208,8 @@ final class PasswordPolicy
     }
 
     /**
-     * Reject a password that matches the user's current password or any used in
-     * the last 6 months. Throws a ValidationException keyed to $field so the API
+     * Reject a password that matches the user's current password, any of their last
+     * REUSE_COUNT, or any used in the last REUSE_MONTHS. Throws a ValidationException keyed to $field so the API
      * returns a normal 422 with a clear message.
      */
     public static function assertNotRecentlyUsed(int $userId, string $plain, string $field = 'password'): void
@@ -236,12 +241,18 @@ final class PasswordPolicy
         $hashes = DB::table('password_history')
             ->where('user_id', $userId)
             ->where('created_at', '>=', $since)
-            ->pluck('password_hash');
+            ->pluck('password_hash')
+            ->merge(DB::table('password_history')
+                ->where('user_id', $userId)
+                ->orderByDesc('created_at')->orderByDesc('id')
+                ->limit(self::REUSE_COUNT + 1)       // +1: the newest row is the current password
+                ->pluck('password_hash'))
+            ->unique();
 
         foreach ($hashes as $hash) {
             if ($matches($plain, $hash)) {
                 throw ValidationException::withMessages([
-                    $field => ['You have used this password in the last 6 months. Please choose a different one.'],
+                    $field => ['You have used this password recently. Please choose one that is not among your last 4 passwords or used in the past 12 months.'],
                 ]);
             }
         }
@@ -258,8 +269,12 @@ final class PasswordPolicy
             'password_hash' => $hash,
             'created_at'    => now(),
         ]);
-        // Keep history bounded — only the reuse window + a small buffer is needed.
+        // Keep history bounded: the reuse window + a buffer, but never the last few rows
+        // (the count rule needs them however old they are).
         $cutoff = now()->subMonths(self::REUSE_MONTHS + 6);
-        DB::table('password_history')->where('user_id', $userId)->where('created_at', '<', $cutoff)->delete();
+        $keep = DB::table('password_history')->where('user_id', $userId)
+            ->orderByDesc('created_at')->orderByDesc('id')->limit(self::REUSE_COUNT + 1)->pluck('id')->all();
+        DB::table('password_history')->where('user_id', $userId)->where('created_at', '<', $cutoff)
+            ->when($keep, fn ($q) => $q->whereNotIn('id', $keep))->delete();
     }
 }

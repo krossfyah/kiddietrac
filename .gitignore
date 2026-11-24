@@ -30,6 +30,8 @@ npm-debug.log*
 # ─── Database dumps & backups ────────────────────────────
 *.sql
 *.sql.gz
+*.sql.gz.gpg
+backend/backups/
 *.tar.gz
 *.zip
 kiddietrac-*-backup-*/

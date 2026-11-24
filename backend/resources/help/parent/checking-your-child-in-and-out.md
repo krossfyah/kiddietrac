@@ -10,20 +10,20 @@ Your child's day officially starts when they're **checked in** and ends when the
 
 ## The two ways it happens
 
-1. **You check in from your phone** — the preferred way. Fast, and it's clearly you.
+1. **You check in from your phone with One-Tap** (QR contactless check-in) — the preferred way. Fast, and it's clearly you.
 2. **An educator checks your child in** — a backup for when your hands are full or your phone is dead.
 
 Both produce the same record. Wherever possible, use your own phone — it's the most accurate.
 
-## Checking in with the QR scanner
+## Checking in with One-Tap
 
 At drop-off:
 
-1. Open the app and tap the **Check in** button in the centre of the bottom bar.
-2. Point your camera at the centre's check-in QR poster (usually by the door or sign-in desk).
+1. Open the app and tap the **One-Tap** button in the centre of the bottom bar.
+2. Point your camera at the centre's One-Tap QR code (usually on a poster by the door or sign-in desk).
 3. The app confirms with a green screen listing each child it signed in.
 
-The QR code **rotates every day** for security, so an old screenshot won't work — you need to scan the live poster.
+The One-Tap code **rotates every day** for security, so an old screenshot won't work — you need to scan the live poster.
 
 If your child is already checked in, scanning again checks them **out** — it toggles. So one scan in the morning, one at pickup.
 

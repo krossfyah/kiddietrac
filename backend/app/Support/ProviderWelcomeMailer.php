@@ -162,6 +162,13 @@ final class ProviderWelcomeMailer
             $s['provider_welcome'] = $draftBlocks;
         }
         $view = ProviderWelcomeTemplate::viewData($view, $s);
+        /* The Google Play card (2026-10-28, Anthony: "with all of the onboarding emails to users, parents, staff now add
+           the google play icon/link") - this is a family's first email. KiddieTrac's own brand only: a white-label
+           agency's families use that agency's app. */
+        try {
+            $view['appCard'] = (\App\Support\Brand::forAgency($agencyId)['source'] ?? 'kiddietrac') === 'kiddietrac'
+                ? \App\Support\PlayBadge::card() : '';
+        } catch (\Throwable $e) { $view['appCard'] = ''; }
 
         try {
             $html = view('emails.provider-welcome', $view)->render();
@@ -269,7 +276,7 @@ final class ProviderWelcomeMailer
      * colleague's face under the provider's name, which is worse than the avatar —
      * a parent would be introduced to the wrong person entirely.
      */
-    private static function providerPhoto(object $centre, int $centreId): ?string
+    public static function providerPhoto(object $centre, int $centreId): ?string
     {
         // An explicitly set centre logo wins: a real multi-room centre is a place,
         // not a person, and somebody chose that image on purpose.

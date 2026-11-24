@@ -58,10 +58,39 @@ class ProtectedMedia
         'photos',
         'videos',
         'avatars',
+        /* FOUR MORE THAT WERE OPEN (2026-11-05 leak sweep, measured: sms-consent answered 200 to a bare GET).
+           sms-consent: each person's signed texting-consent receipt, with their name and phone number.
+           file-requests: whatever a person uploads when the agency asks for a file (IDs, permits).
+           background-checks: police record check scans. ai-extractions: a document photographed for AI
+           to read (immunization cards, certificates, IDs). All four are only ever handed out through API
+           JSON, which SignProtectedMedia signs on the way out, so listing them here is the whole fix; each
+           folder also carries the same `Require all denied` .htaccess as the rest. */
+        'sms-consent',
+        'file-requests',
+        'background-checks',
+        'ai-extractions',
+        /* A centre's floor plan (2026-11-09, Drill log centre map): the layout of a childcare home, exits and all. */
+        'drill-maps',
+        /* TWO MORE (2026-11-10, PIPEDA review). contact-cards: a scanned business card - a person's name, phone
+           and email - answered 200 to a bare GET. user-documents: files an admin attaches to a staff member's
+           record (empty so far, open the moment one was added). Both only go out in API JSON. */
+        'contact-cards',
+        'user-documents',
     ];
 
     /** Long enough for a working day, short enough that a leaked link dies. */
     public const TTL_MINUTES = 720;
+
+    /* WHERE THE FOLDERS ABOVE ACTUALLY LIVE (2026-11-10, PIPEDA review). nginx serves static files straight
+       from the web root, so /kiddietrac/backend/public/storage/<folder>/<file> answered 200 for every one of
+       them: the `Require all denied` .htaccess is Apache's and nginx never reads it. Each folder is now here,
+       outside the web root, and public/storage/<folder> is a link to it - nginx will not follow the link, PHP
+       does. A NEW FOLDER ADDED ABOVE MUST BE MOVED HERE TOO: `php artisan kt:protect-media` does it and
+       reports any folder still sitting in the web root. */
+    public static function home(): string
+    {
+        return storage_path('app/protected');
+    }
 
     /**
      * The path relative to the public disk, when this is a protected file.
@@ -116,20 +145,31 @@ class ProtectedMedia
      * A signed, expiring URL for a protected file. Returns the input unchanged
      * when it is not ours to sign, so callers can pass anything through.
      */
-    public static function sign(?string $url): ?string
+    public static function sign(?string $url, ?string $downloadName = null): ?string
     {
         $rel = self::relative($url);
         if ($rel === null) {
             return $url;
         }
 
-        return URL::temporarySignedRoute(
-            'media.file',
-            self::stableExpiry(),
-            // base64url: the path has slashes and dots, and a query value keeps
-            // Laravel's signature covering it without route-pattern gymnastics.
-            ['p' => rtrim(strtr(base64_encode($rel), '+/', '-_'), '=')]
-        );
+        // base64url: the path has slashes and dots, and a query value keeps
+        // Laravel's signature covering it without route-pattern gymnastics.
+        $params = ['p' => rtrim(strtr(base64_encode($rel), '+/', '-_'), '=')];
+        /* The name a browser saves it under (Files repository, 2026-10-24). Signed with the
+           rest, so nobody can make a link that serves one file under another file's name. */
+        $n = self::safeName($downloadName);
+        if ($n !== null) {
+            $params['n'] = $n;
+        }
+
+        return URL::temporarySignedRoute('media.file', self::stableExpiry(), $params);
+    }
+
+    /** A file name safe for Content-Disposition, or null. */
+    public static function safeName(?string $name): ?string
+    {
+        $n = trim((string) preg_replace('~[/\\\\:*?"<>|\x00-\x1F]+~u', '-', (string) $name));
+        return $n === '' ? null : mb_substr($n, 0, 180);
     }
 
     /**

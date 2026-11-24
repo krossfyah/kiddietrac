@@ -35,9 +35,10 @@
   }
   KT.openNdaPdf = openNdaPdf;
 
-  async function render(main) {
+  async function render(main, opts) {
+    var embedded = !!(opts && opts.embedded);   // inside Forms Manager's tab body
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:14px 24px;max-width:1100px;"><div id="pn-body" style="color:#64748B;">Loading…</div></div>';
+    main.innerHTML = '<div style="' + (embedded ? '' : 'padding:14px 24px;max-width:1100px;') + '"><div id="pn-body" style="color:#64748B;">Loading…</div></div>';
     var body = main.querySelector('#pn-body');
     var data;
     try { data = await Api.get('/admin/prospect-ndas'); }
@@ -67,7 +68,7 @@
         }).join('') + '</tbody></table></div>'
         : '<div class="kt-card" style="text-align:center;color:#64748B;padding:30px;">No NDAs sent yet.</div>');
 
-    body.querySelector('#pn-new').addEventListener('click', function () { openSend(data.leads || [], function () { render(main); }); });
+    body.querySelector('#pn-new').addEventListener('click', function () { openSend(data.leads || [], function () { render(main, opts); }); });
     body.querySelectorAll('[data-pdf]').forEach(function (b) {
       b.addEventListener('click', function () { openNdaPdf(rows[+b.getAttribute('data-pdf')], 'pdf'); });
     });
@@ -80,7 +81,7 @@
         b.disabled = true;
         Api.post('/admin/prospect-ndas/' + r.id + '/resend', {}).then(function (x) {
           if (KT.Dom && KT.Dom.toast) KT.Dom.toast(x.email === 'sent' ? 'New link sent to ' + r.email : 'Link created; email: ' + x.email, x.email === 'sent' ? 'success' : 'error');
-          render(main);
+          render(main, opts);
         }).catch(function (e) { b.disabled = false; if (KT.Dom && KT.Dom.toast) KT.Dom.toast((e && e.message) || 'Could not resend', 'error'); });
       });
     });
@@ -89,7 +90,7 @@
         var r = rows[+b.getAttribute('data-cancel')];
         var ok = !(KT.confirm) || await KT.confirm({ title: 'Cancel the NDA to ' + r.name + '?', description: 'Their link stops working. You can send a new one later.', okLabel: 'Cancel NDA' });
         if (!ok) return;
-        Api.delete('/admin/prospect-ndas/' + r.id).then(function () { render(main); })
+        Api.delete('/admin/prospect-ndas/' + r.id).then(function () { render(main, opts); })
           .catch(function (e) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast((e && e.message) || 'Could not cancel', 'error'); });
       });
     });
@@ -134,6 +135,13 @@
     });
   }
 
+  KT.ProspectNda = { render: render };
   KT.openProspectNdaSend = function () { location.hash = '#prospect-ndas'; };
-  ['platform_admin', 'sales_rep'].forEach(function (r) { KT.Shell.registerScreen(r + ':prospect-ndas', render); });
+  /* A platform admin has Forms Manager, so the NDAs open there as a tab and the row of
+     Forms Manager tabs stays (2026-10-20). A sales rep has no Forms Manager: own page. */
+  KT.Shell.registerScreen('platform_admin:prospect-ndas', function (main) {
+    if (KT.openFormsManagerTab) { main.innerHTML = ''; KT.openFormsManagerTab('nda'); return; }
+    return render(main);
+  });
+  KT.Shell.registerScreen('sales_rep:prospect-ndas', function (main) { return render(main); });
 })(window);

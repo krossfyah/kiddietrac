@@ -176,6 +176,13 @@ final class ParentFeedbackController extends Controller
         if (! $agencyId || $centreAgency !== $agencyId) {
             return response()->json(['message' => 'No access to this feedback'], 403);
         }
+        /* A DIRECTOR's decision (2026-11-05 leak sweep): the route has no role gate, so any member of
+           the agency - a parent, the educator it names - could release held feedback. Director of the
+           feedback's centre, or an agency/platform admin of this agency. */
+        if (! array_intersect(\App\Support\AgencyRole::names($request), ['centre_director', 'agency_admin', 'platform_admin'])
+            || ! \App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, $agencyId), $row->centre_id)) {
+            return response()->json(['message' => 'Only a director of this centre can release feedback.'], 403);
+        }
 
         DB::table('parent_feedback')->where('id', $id)->update([
             'released_at' => now(),
@@ -211,13 +218,11 @@ final class ParentFeedbackController extends Controller
         $educators = [];
         try {
             if (Schema::hasTable('educator_rooms') && $child->primary_room_id) {
-                $educators = DB::table('educator_rooms as er')
-                    ->join('users as u', 'u.id', '=', 'er.user_id')
-                    ->where('er.room_id', $child->primary_room_id)
-                    ->whereNull('u.deleted_at')->where('u.status', 'active')
-                    ->distinct()
-                    ->get(['u.id', DB::raw("TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) as name")])
-                    ->all();
+                // The home's own team (App\Support\CentreTeam), not every account placed in the room.
+                $educators = array_values(array_map(
+                    fn ($m) => (object) ['id' => $m['user_id'], 'name' => $m['name']],
+                    \App\Support\CentreTeam::forRooms([(int) $child->primary_room_id])[(int) $child->primary_room_id] ?? []
+                ));
             }
         } catch (\Throwable $e) { /* the form still works without the praise picker */ }
 

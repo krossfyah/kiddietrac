@@ -1,0 +1,17 @@
+# Self-hosted MediaPipe Tasks Vision 0.10.14 (Apache-2.0) for the on-device profile-photo face check
+# (kt-face-check.js, 2026-10-30). The folder name carries the version, so its files never change at
+# the same address: cache for a year.
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+  AddType application/octet-stream .tflite
+  AddType text/javascript .js
+</IfModule>
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE application/wasm application/octet-stream text/javascript
+</IfModule>
+<IfModule mod_expires.c>
+  ExpiresActive Off
+</IfModule>
+<IfModule mod_headers.c>
+  Header set Cache-Control "public, max-age=31536000, immutable"
+</IfModule>

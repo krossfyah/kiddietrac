@@ -163,6 +163,10 @@
   async function openSend(isParent, base, done, pre) {
     var M = KT.Shell && KT.Shell.Modal;
     if (!M) return;
+    /* Its own styles (2026-11-04, Anthony: "under the child record with educator view and send a file the pop up and
+       layout is very messy"). The drop zone, labels, fields and room buttons are styled by ensureCss(), which only the
+       Files screen ran - opened from the child record the window had none: labels inline, raw boxes, a bare button. */
+    ensureCss();
     pre = pre || {};
     var rec = null;
     if (!isParent) {

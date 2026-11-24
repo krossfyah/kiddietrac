@@ -178,8 +178,16 @@
 
   /* Content grows and shrinks under us (a screen renders, a list loads), and that
      changes whether there is anything to indicate at all. */
+  /* PERF (2026-10-28, Anthony: "moving around from sections and from the tool bars - its slow and not instant").
+     This redrew on the animation frame after EVERY DOM change, and each redraw measured the page (scrollHeight,
+     dialog scan) and wrote the bar - a forced layout per frame while a screen was being built. Measured on a
+     phone-speed CPU, turning it off cut the main-thread blocking of four navigations from ~9s to ~1.4s. The bar
+     only matters once the content has settled (and while scrolling, which onScroll still draws live), so a change
+     now redraws once, 400ms after the screen stops changing. */
+  var settleT = 0;
+  function settled() { if (settleT) { w.clearTimeout(settleT); } settleT = w.setTimeout(function () { settleT = 0; draw(false); }, 400); }
   try {
-    new MutationObserver(function () { schedule(false); })
+    new MutationObserver(settled)
       .observe(d.documentElement, { childList: true, subtree: true });
   } catch (e) {
     w.setInterval(function () { draw(false); }, 1500);

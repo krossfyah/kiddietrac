@@ -114,15 +114,22 @@
     // Only a real tab key counts; anything else means "opened fresh" → To sign.
     var known = TABS.some(function (t) { return t[0] === tab; });
     if (!known) tab = 'todo';
-    main.innerHTML =
-      '<div style="padding:20px;max-width:640px;margin:0 auto;">'
-      + '<div style="text-align:center;margin-bottom:14px;"><div style="font-size:40px;line-height:1;">✍️</div>'
-      + '<h2 style="margin:6px 0 2px;color:#0F172A;">My forms</h2>'
-      + '<p style="color:#64748B;font-size:13.5px;margin:0;">Forms to sign, work you have saved, and everything you have submitted.</p></div>'
-      + '<div id="mf-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;"></div>'
+    /* THE BANNER STAYS (2026-10-21): this screen draws into its own root, created once, so a
+       tab switch or refresh never wipes #appMain and the banner the shell put above it. */
+    var root = main.querySelector('#mf-root');
+    if (!root) { main.innerHTML = '<div id="mf-root"></div>'; root = main.querySelector('#mf-root'); }
+    /* FULL WINDOW (2026-11-07, Anthony: "my forms in educator, home visitor etc view is not full screen"). This was a
+       640px column centred in the window, with its own emoji and subtitle repeating the banner above it. Now it uses
+       the whole width like every other work screen: tabs on the left, the forms in a grid of cards (one column on a
+       phone, as many 360px+ columns as fit on a desktop). Same screen for parents, educators and home visitors. */
+    ensureGridCss();
+    root.innerHTML =
+      '<div class="mf-wrap">'
+      + '<h2 style="margin:0 0 12px;color:#0F172A;font-size:20px;">✍️ My forms</h2>'
+      + '<div id="mf-tabs" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;"></div>'
       + '<div id="mf-list"><div style="padding:26px;text-align:center;color:#94A3B8;">Loading…</div></div></div>';
 
-    var tabsEl = main.querySelector('#mf-tabs');
+    var tabsEl = root.querySelector('#mf-tabs');
     TABS.forEach(function (t) {
       var on = t[0] === tab;
       var b = document.createElement('button');
@@ -135,9 +142,20 @@
       tabsEl.appendChild(b);
     });
 
-    var listEl = main.querySelector('#mf-list');
+    var listEl = root.querySelector('#mf-list');
     if (tab === 'todo') load(listEl);
     else loadMine(listEl, tab, main);
+  }
+
+  function ensureGridCss() {
+    if (document.getElementById('kt-mf-css')) return;
+    var st = document.createElement('style');
+    st.id = 'kt-mf-css';
+    st.textContent = '.mf-wrap{padding:16px 20px 24px;box-sizing:border-box;width:100%}'
+      + '.mf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr));gap:12px;align-items:start}'
+      + '.mf-grid>div{margin-bottom:0 !important}'
+      + '@media (max-width:768px){.mf-wrap{padding:12px 12px 20px}}';
+    document.head.appendChild(st);
   }
 
   /* WHEN, IN THE AGENCY'S ZONE — via KT.Fmt, which is the one place that knows how.
@@ -185,6 +203,56 @@
       + '</div></div>';
   }
 
+  /* SUBMITTED IS A TABLE (2026-11-09, Anthony: "I need the submitted subtab to show as a table view leave the rest
+     alone"). Every signed form carries the same facts, so one row each under headings, like Documents:
+     Form | Signed | Counter-signed | View my copy (the last cell folds into the standard ⋮ via kt-row-actions).
+     COUNTER-SIGNED, NOT ANSWERS (2026-11-09, Anthony: "remove the Answers column and replace with counter signed and
+     who counter signed if any"). The office's review comes from the server (SignedFormFiler::reviewOf, the same rule
+     as Documents): counter-signed by whom and when, sent back, replaced, not yet, or not needed. */
+  var REVIEW_TONE = {
+    countersigned: ['#ECFDF5', '#047857', '✅ Counter-signed'],
+    returned:      ['#FFFBEB', '#B45309', '↩️ Sent back for correction'],
+    corrected:     ['#F1F5F9', '#475569', '🔁 Replaced by a corrected copy'],
+    pending:       ['#F8FAFC', '#64748B', '⏳ Not counter-signed yet'],
+    not_required:  ['#F8FAFC', '#94A3B8', 'No counter-signature needed'],
+  };
+  var ROLE_WORD = { agency_admin: 'Admin', centre_director: 'Director', platform_admin: 'Admin', educator: 'Educator', home_visitor: 'Home visitor' };
+  function reviewCell(r) {
+    if (!r) return '<span style="color:#CBD5E1;">—</span>';
+    var t = REVIEW_TONE[r.state] || ['#F8FAFC', '#64748B', esc(r.state)];
+    var who = r.by ? esc(r.by) + (ROLE_WORD[r.role] ? ' (' + ROLE_WORD[r.role] + ')' : '') : '';
+    var line = [who ? 'by ' + who : '', r.at ? esc(fmtWhen(r.at)) : ''].filter(Boolean).join(' · ');
+    return '<div style="font-size:12.5px;line-height:1.4;">'
+      + '<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-weight:700;font-size:12px;background:' + t[0] + ';color:' + t[1] + ';white-space:nowrap;">' + t[2] + '</span>'
+      + (line ? '<div style="color:var(--kt-text-muted,#64748B);margin-top:3px;">' + line + '</div>' : '')
+      + (r.note && r.state !== 'corrected' ? '<div style="color:var(--kt-text-muted,#64748B);margin-top:2px;font-style:italic;overflow-wrap:anywhere;">“' + esc(r.note) + '”</div>' : '')
+      + '</div>';
+  }
+  function submittedTable(rows) {
+    var th = function (t) {
+      return '<th style="text-align:left;padding:10px 14px;font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;'
+        + 'letter-spacing:.4px;white-space:nowrap;border-bottom:1px solid var(--kt-border);">' + t + '</th>';
+    };
+    var td = 'padding:11px 14px;border-bottom:1px solid var(--kt-border);vertical-align:middle;';
+    return '<div style="overflow-x:auto;background:var(--kt-surface,#fff);border:1px solid var(--kt-border);border-radius:14px;">'
+      + '<table data-kt-paginate="25" style="width:100%;border-collapse:collapse;font-size:13.5px;min-width:560px;">'
+      + '<thead><tr style="background:#F8FAFC;">' + th('Form') + th('Signed') + th('Counter-signed') + th('') + '</tr></thead><tbody>'
+      + rows.map(function (f) {
+          return '<tr>'
+            + '<td style="' + td + '"><div style="display:flex;align-items:center;gap:10px;min-width:0;">'
+            + '<span style="flex:0 0 auto;width:30px;height:30px;border-radius:9px;background:var(--kt-bg);display:inline-flex;align-items:center;justify-content:center;font-size:15px;">📝</span>'
+            + '<div style="min-width:0;"><div style="font-weight:700;color:var(--kt-text);line-height:1.35;">' + esc(f.title) + '</div>'
+            + (f.reusable ? '<div style="font-size:12px;color:#C2410C;margin-top:1px;">Reusable · can be filled again</div>' : '')
+            + '</div></div></td>'
+            + '<td style="' + td + 'color:#475569;white-space:nowrap;">' + esc(fmtWhen(f.signed_at)) + '</td>'
+            + '<td style="' + td + '">' + reviewCell(f.review) + '</td>'
+            + '<td style="' + td + 'text-align:right;white-space:nowrap;"><button class="mf-view btn btn-secondary" data-u="' + esc(fileUrl(f.file_url)) + '" type="button" '
+            + 'style="padding:6px 13px;font-size:13px;font-weight:700;">👁 View my copy</button></td>'
+            + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  }
+
   function loadMine(el, kind, main) {
     Api.get('/managed-forms/mine').then(function (d) {
       var rows = (d && d[kind]) || [];
@@ -208,10 +276,12 @@
           + 'Your signed copies are kept in <a href="#my-documents" style="font-weight:800;color:#0369A1;">Documents</a>, '
           + 'where you can open or save them at any time.</div>'
         : '')
-        + rows.map(function (f) { return mineCard(f, kind); }).join('');
+        + (kind === 'submitted' ? submittedTable(rows)
+          : '<div class="mf-grid">' + rows.map(function (f) { return mineCard(f, kind); }).join('') + '</div>');
       el.querySelectorAll('.mf-view').forEach(function (b) {
         b.addEventListener('click', function () { openUrl(b.getAttribute('data-u')); });
       });
+      try { if (kind === 'submitted' && window.KT && KT.sweepRowActions) KT.sweepRowActions(); } catch (e) {}
       el.querySelectorAll('.mf-resume').forEach(function (b) {
         b.addEventListener('click', function () {
           if (!KT.formFiller) { if (KT.toast) KT.toast('⚠️', 'Unavailable', 'The form filler is not available.', '#B91C1C'); return; }
@@ -242,7 +312,7 @@
       var all = forms.concat(again);
       var againHtml = again.length
         ? '<div style="margin:18px 0 8px;font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;">Already signed — fill again only if you need to</div>'
-          + again.map(function (f) { return card(f, true); }).join('')
+          + '<div class="mf-grid">' + again.map(function (f) { return card(f, true); }).join('') + '</div>'
         : '';
       if (!forms.length) {
         /* Caught up means caught up. With a consent still to answer the cheerful
@@ -254,7 +324,7 @@
         wireCards(el, all);
         return;
       }
-      el.innerHTML = consentCard() + forms.map(function (f) { return card(f, false); }).join('') + againHtml;
+      el.innerHTML = consentCard() + '<div class="mf-grid">' + forms.map(function (f) { return card(f, false); }).join('') + '</div>' + againHtml;
       wireConsent(el);
       wireCards(el, all);
     }).catch(function (e) { el.innerHTML = '<div style="padding:24px;color:#B91C1C;">Could not load: ' + esc(e.message || '') + '</div>'; });
@@ -271,7 +341,7 @@
              exactly what they sent the first time. The reviewer's words are the only
              thing that makes the second attempt different from the first. */
           + (f.correction_note
-              ? '<div style="margin-top:9px;background:#FEF3C7;border:1px solid #FDE68A;border-left:3px solid #B45309;'
+              ? '<div style="margin-top:9px;background:#FEF3C7;border:1px solid #FDE68A;--kt-edge:#B45309;'
                 + 'border-radius:8px;padding:9px 11px;">'
                 + '<div style="font-size:11px;font-weight:800;color:#92400E;text-transform:uppercase;letter-spacing:.4px;">'
                 + 'Sent back for correction' + (f.returned_at ? ' · ' + esc(fmtWhen(f.returned_at)) : '') + '</div>'
@@ -354,16 +424,9 @@
     if (_cnt == null) return;
     // Tile badge (any role's home).
     document.querySelectorAll('a.kt-tile[href="#my-forms"]').forEach(function (a) {
-      var b = a.querySelector('.kt-mf-badge');
-      if (_cnt > 0) {
-        if (!b) {
-          b = document.createElement('span'); b.className = 'kt-mf-badge';
-          b.style.cssText = 'position:absolute;top:8px;right:8px;min-width:20px;height:20px;padding:0 5px;border-radius:11px;background:#DC2626;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(220,38,38,.45);z-index:2;';
-          if (getComputedStyle(a).position === 'static') a.style.position = 'relative';
-          a.appendChild(b);
-        }
-        b.textContent = _cnt > 9 ? '9+' : String(_cnt);
-      } else if (b) { b.remove(); }
+      var old = a.querySelector(':scope > .kt-mf-badge');   // the corner badge this drew before 2026-11-06
+      if (old) old.remove();
+      if (KT.tileBadge) KT.tileBadge(a, _cnt);   // the one tile badge (kt-badges.js)
     });
     // Educator "Today at a glance" alert banner.
     try {

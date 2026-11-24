@@ -276,7 +276,32 @@ class SmsSettingsController extends Controller
         /* Every billing record of one type for the last 30 days. Paged by Telnyx's own
            total_pages: it caps page[size] at 50 whatever is asked for, so "fewer than 250
            means last page" stopped after 50 records and silently dropped the rest. */
-        $records = function (string $type) use ($http, $first, $q): array {
+        /* THE LATER PAGES TOGETHER TOO (2026-10-28, "a page loaded slowly" in the audit log: telnyx-usage
+           4.3s). Page 2 onwards of each type went out one after another after the first wave - measured
+           429 + 594 + 253ms = 1.28s on every cold load. Every page still needed, for every type, is now one
+           pool: the wait is the slowest page, not the sum. Same pages, same order, same 10-page cap. */
+        $more = [];
+        $want = [];
+        foreach ($types as $t) {
+            $r = $first[$t];
+            if (! ($r instanceof \Illuminate\Http\Client\Response) || ! $r->successful()) {
+                continue;   // reported by $records() below, as before
+            }
+            for ($page = 2, $pages = min(10, (int) ($r->json('meta.total_pages') ?? 1)); $page <= $pages; $page++) {
+                $want[$t . ':' . $page] = [$t, $page];
+            }
+        }
+        if ($want) {
+            $more = \Illuminate\Support\Facades\Http::pool(function ($pool) use ($key, $base, $q, $want) {
+                $reqs = [];
+                foreach ($want as $name => [$t, $page]) {
+                    $reqs[] = $pool->as($name)->withToken($key)->acceptJson()->timeout(20)->get($base . 'detail_records', $q($t, $page));
+                }
+
+                return $reqs;
+            });
+        }
+        $records = function (string $type) use ($first, $more): array {
             $r = $first[$type];
             if (! ($r instanceof \Illuminate\Http\Client\Response) || ! $r->successful()) {
                 throw new \RuntimeException($type . ' records ' . (($r instanceof \Illuminate\Http\Client\Response) ? 'HTTP ' . $r->status() : 'unreachable'));
@@ -284,11 +309,11 @@ class SmsSettingsController extends Controller
             $out = $r->json('data') ?? [];
             $pages = min(10, (int) ($r->json('meta.total_pages') ?? 1));
             for ($page = 2; $page <= $pages; $page++) {
-                $more = $http()->get('detail_records', $q($type, $page));
-                if (! $more->successful()) {
-                    break;
+                $m = $more[$type . ':' . $page] ?? null;
+                if (! ($m instanceof \Illuminate\Http\Client\Response) || ! $m->successful()) {
+                    break;   // as before: stop at the first page that did not come back
                 }
-                $out = array_merge($out, $more->json('data') ?? []);
+                $out = array_merge($out, $m->json('data') ?? []);
             }
 
             return $out;

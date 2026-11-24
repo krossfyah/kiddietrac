@@ -48,23 +48,25 @@
 
   // ── clock / date / weather / greeting ──
   function fmtClock() {
-    var d = new Date(), h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM', hh = h % 12; if (hh === 0) hh = 12;
-    return hh + ':' + String(d.getMinutes()).padStart(2, '0') + ' ' + ap;
+    var t = (window.KT && KT.agencyHM) ? KT.agencyHM() : { h: new Date().getHours(), m: new Date().getMinutes() }, h = t.h, ap = h >= 12 ? 'PM' : 'AM', hh = h % 12; if (hh === 0) hh = 12;   // agency time (kt-tz.js)
+    return hh + ':' + String(t.m).padStart(2, '0') + ' ' + ap;
   }
   // Short weekday — byte-identical to the admin bar's date ("Tue, August 11, 2026").
-  function fmtDate() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }); } catch (e) { return ''; } }
+  // Repainted every tick, so translate at the source (2026-10-22); kt-i18n may not be loaded yet.
+  function ktT(s) { try { return (window.KT && KT.i18n && KT.i18n.t) ? KT.i18n.t(s) : s; } catch (e) { return s; } }
+  function fmtDate() { try { var tag = { fr: 'fr-CA', es: 'es-ES', hi: 'hi-IN' }[localStorage.getItem('kt_locale')]; var o = { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' }; return (window.KT && KT.agencyNowText) ? KT.agencyNowText(o, tag) : new Date().toLocaleDateString(tag, o); } catch (e) { return ''; } }
   // Time-of-day greeting WITH its icon. Deliberately the same words + emoji as
   // kt-topbar.js's greetEmoji() (the admin/director bar) — parents and educators
   // were getting the bare words while admins got "🌆 Good evening".
   function greetParts() {
-    var h = new Date().getHours();
+    var h = ((window.KT && KT.agencyHM) ? KT.agencyHM() : { h: new Date().getHours() }).h;   // the centre's hour
     if (h < 5) return { g: 'Good night', e: '🌙' };     // pre-dawn, not "morning"
     if (h < 12) return { g: 'Good morning', e: '🌅' };
     if (h < 17) return { g: 'Good afternoon', e: '☀️' };
     if (h < 22) return { g: 'Good evening', e: '🌆' };
     return { g: 'Good night', e: '🌙' };
   }
-  function greetWord() { var p = greetParts(); return p.e + ' ' + p.g; }
+  function greetWord() { var p = greetParts(); return p.e + ' ' + ktT(p.g); }
   function wxEmoji(c) {
     if (c === 0) return '☀️'; if (c <= 2) return '🌤'; if (c === 3) return '☁️';
     if (c === 45 || c === 48) return '🌫'; if (c >= 51 && c <= 67) return '🌧';
@@ -72,11 +74,26 @@
     if (c >= 85 && c <= 86) return '🌨'; if (c >= 95) return '⛈'; return '🌡';
   }
   function loadWeather(cb) {
-    try { var c = sessionStorage.getItem('kt_wx'); if (c) { var o = JSON.parse(c); if (o && o.t && (Date.now() - o.t < 1800000)) { cb(o.txt); return; } } } catch (e) {}
-    var done = function (txt) { try { sessionStorage.setItem('kt_wx', JSON.stringify({ t: Date.now(), txt: txt })); } catch (e) {} cb(txt); };
+    var tries = 0, sp0 = null;
+    try { sp0 = sessionStorage.getItem('kt_spelling'); } catch (e) {}
+    if (!sp0) {
+      (function wait() {
+        var v = null; try { v = sessionStorage.getItem('kt_spelling'); } catch (e) {}
+        if (v || ++tries > 100) loadWeatherNow(cb); else setTimeout(wait, 100);
+      })();
+      return;
+    }
+    loadWeatherNow(cb);
+  }
+  function loadWeatherNow(cb) {
+    var agF = false; try { agF = sessionStorage.getItem('kt_spelling') === 'us'; } catch (e) {}
+    try { var c = sessionStorage.getItem('kt_wx'); if (c) { var o = JSON.parse(c); if (o && o.t && (Date.now() - o.t < 1800000) && !!o.agF === agF) { cb(o.txt); return; } } } catch (e) {}
+    var done = function (txt) { try { sessionStorage.setItem('kt_wx', JSON.stringify({ t: Date.now(), txt: txt, agF: agF })); } catch (e) {} cb(txt); };
     fetch('https://ipapi.co/json/').then(function (r) { return r.json(); }).then(function (loc) {
-      return fetch('https://api.open-meteo.com/v1/forecast?latitude=' + loc.latitude + '&longitude=' + loc.longitude + '&current=temperature_2m,weather_code')
-        .then(function (r) { return r.json(); }).then(function (wx) { done(wxEmoji(wx.current.weather_code) + ' ' + Math.round(wx.current.temperature_2m) + '°C'); });
+      // Fahrenheit where the viewer is (2026-10-28: a US demo agency showed 13°C).
+      var fahr = agF || ['US', 'PR', 'GU', 'VI', 'AS', 'MP', 'LR', 'MM', 'BS', 'BZ', 'KY', 'PW', 'FM', 'MH'].indexOf(String(loc.country_code || loc.country || '').toUpperCase()) >= 0;
+      return fetch('https://api.open-meteo.com/v1/forecast?latitude=' + loc.latitude + '&longitude=' + loc.longitude + '&current=temperature_2m,weather_code' + (fahr ? '&temperature_unit=fahrenheit' : ''))
+        .then(function (r) { return r.json(); }).then(function (wx) { done(wxEmoji(wx.current.weather_code) + ' ' + Math.round(wx.current.temperature_2m) + (fahr ? '°F' : '°C')); });
     }).catch(function () { cb(null); });
   }
 
@@ -122,6 +139,7 @@
       // one row reading "<emoji> Good evening, <name>" followed by the role pill,
       // instead of the old stacked eyebrow / name / pill.
       '.kt-pc-navgreet{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#64748B;line-height:1.15;}',
+      '@media(max-width:768px){#appSidebar .kt-pc-navgreet.kt-pc-navgreet{display:flex !important;gap:3px;min-width:0;overflow:visible !important;text-overflow:clip !important;}#appSidebar .kt-pc-gw{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}#appSidebar .kt-pc-gt{flex:0 0 auto;white-space:nowrap;}}',
       '@media(min-width:769px){',
       '  body.role-guardian #appSidebar #navUser .nav-user-text,body.role-educator #appSidebar #navUser .nav-user-text,'
       + 'body.role-home-visitor #appSidebar #navUser .nav-user-text,body.role-sales-rep #appSidebar #navUser .nav-user-text'
@@ -153,14 +171,22 @@
       '.kt-agency-inbar > div[style*="position:absolute"]{top:calc(100% + 4px) !important;bottom:auto !important;}',
       // grouped cluster on the right
       '.kt-pc-wrap{display:flex;align-items:center;gap:9px;margin-left:auto;margin-right:12px;}',
+      // A tooltip hanging below the bar must not make the bar scroll (that shifted the shortcuts 15px on hover), and the
+      // floating Settings gear needs its own room at the right end instead of covering the clock.
+      '@media(min-width:769px){body.role-guardian #appSidebar,body.role-educator #appSidebar,body.role-home-visitor #appSidebar,body.role-sales-rep #appSidebar{overflow-x:clip !important;overflow-y:visible !important;}body.kt-pc-gear .kt-pc-wrap{margin-right:58px;}}',
+      /* SUPER-ADMIN PREVIEW (2026-11-04): row 1 is brand · name · the icon bar (right). The admin controls go on the
+         rows below at their own size; the shared sidebar foot gives each control width:100%, which stacked them into
+         full-width rows ABOVE the icon bar and pushed it onto a later line. */
+      /* Every role with this header (guardian, educator, home visitor, sales rep), not only body.kt-parentview -
+         that class is set for a guardian view alone, so the Educator preview stacked again (2026-11-04). */
+      pcBarCss(),
       // Match the super-admin top-bar icon sizing (kt-tb-ico): 31x31, 9px radius,
       // 15px glyph — so the action icons are the same size across every role.
       '.kt-pc-btn{position:relative;width:31px;height:31px;border-radius:9px;border:1px solid rgba(15,23,42,.10);',
       '  background:rgba(15,23,42,.03);font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;color:#334155;padding:0;',
       '  transition:background .12s,border-color .12s;}',
       '.kt-pc-btn:hover{background:#F1F5F9;border-color:#64748B;}',
-      // Custom tooltip below the icon — consistent with the super-admin top bar.
-      '.kt-pc-btn[data-kttip]:hover::after{content:attr(data-kttip);position:absolute;top:calc(100% + 7px);left:50%;transform:translateX(-50%);background:#0F172A;color:#fff;font-size:11px;font-weight:600;white-space:nowrap;padding:4px 9px;border-radius:6px;z-index:10001;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.28);}',
+      // Hover label: kt-tooltip-global.js draws it (one bubble portal-wide - a local ::after here doubled it).
       // Unread badge on the Messages icon — same look as the super-admin bar.
       '.kt-pc-badge{position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;',
       '  background:#EF4444;color:#fff;font-size:9.5px;font-weight:800;line-height:15px;text-align:center;box-shadow:0 0 0 2px rgba(255,255,255,.8);}',
@@ -240,8 +266,8 @@
 
   // The single "Good <time>" greeting, injected above the name in the user block.
   // Runs on desktop AND mobile (the app's own JS fills the name itself).
-  function fmtDateShort() { try { return new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }); } catch (e) { return ''; } }
-  function fmtDateShort2() { try { return new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch (e) { return ''; } }
+  function fmtDateShort() { try { var o = { weekday: 'short', month: 'short', day: 'numeric' }; return (window.KT && KT.agencyNowText) ? KT.agencyNowText(o) : new Date().toLocaleDateString(undefined, o); } catch (e) { return ''; } }
+  function fmtDateShort2() { try { var o = { month: 'short', day: 'numeric' }; return (window.KT && KT.agencyNowText) ? KT.agencyNowText(o) : new Date().toLocaleDateString(undefined, o); } catch (e) { return ''; } }
 
   // Mobile top header: a compact date + time (the desktop bar has weather/date/clock;
   // phones just get date + time, right-aligned before the floating settings gear).
@@ -328,7 +354,7 @@
          the raised button in the bottom bar; wider screens have no bottom bar, so the QR
          parents scan at drop-off could not be reached. Same overlay (kt-mobilenav). */
       if (role === 'educator') {
-        wrap.appendChild(iconBtn('📷', 'Check-in QR', function () {
+        wrap.appendChild(iconBtn('📷', 'One-Tap code', function () {
           if (window.KT && window.KT.showCheckinQr) window.KT.showCheckinQr();
         }));
       }
@@ -337,6 +363,7 @@
         // team + superadmins). Pipeline + Messages (unread indicator) + inbox.
         wrap.appendChild(iconBtn('📊', 'Pipeline', function () { location.hash = '#sales'; }));
         wrap.appendChild(iconBtn('💬', 'Messages', function () { if (window.KT && KT.SalesChat) KT.SalesChat.open(); else location.hash = '#sales-chat'; }, 'kt-sales-chat-badge'));
+        wrap.appendChild(iconBtn('📮', 'Sales email', function () { location.hash = '#sales-email'; }, 'kt-pc-salesmail-badge'));
         wrap.appendChild(iconBtn('🔔', 'Inbox', function () { location.hash = '#notifications'; }));
       } else {
         wrap.appendChild(iconBtn('💬', 'Messages', function () { location.hash = msgHash; }, 'kt-pc-msg-badge'));
@@ -344,7 +371,8 @@
         // messaging surface — Messages/chat above. The #team-messages screen is left
         // registered so any existing deep link or notification still resolves, but it
         // is no longer advertised anywhere in the UI.
-        wrap.appendChild(iconBtn('📣', 'Announcements', function () { location.hash = '#announcements'; }));
+        // With its unread count (2026-11-09): the 📣 had no badge, so new announcements never showed on this bar.
+        wrap.appendChild(iconBtn('📣', 'Announcements', function () { location.hash = '#announcements'; }, 'kt-pc-ann-badge'));
         /* What's new — for the STAFF roles that now have release notes of their own.
            The 🎁 button lives in kt-topbar, which returns early for these roles, so
            until now an educator could not open it at all: features written for them
@@ -407,7 +435,8 @@
     var em = document.getElementById('kt-pc-navemoji');
     if (isDesktop()) {
       if (em) em.textContent = p.e;              // 20px emoji in its own span
-      gr.textContent = p.g + ',';                // greeting text carries no emoji
+      gr.removeAttribute('data-k');
+      gr.textContent = ktT(p.g) + ',';                // greeting text carries no emoji
       // The admin bar greets by FIRST name ("Good evening, Sarah"), so the name
       // beside us must match. The shell renders the full name into .nav-user-name;
       // rewrite it each paint (idempotent, and survives the shell re-rendering).
@@ -417,8 +446,18 @@
       return;
     }
     if (em) em.textContent = '';                 // phones keep the compact eyebrow
-    // Phones: fold date + time into the eyebrow so the full name below keeps its width.
-    gr.textContent = greetWord() + ' \u00b7 ' + fmtClock();
+    /* Phones: the time rides in the eyebrow so the full name below keeps its width. The
+       eyebrow is one short line, and as plain text its ellipsis always ate the END - the
+       "AM/PM" (Anthony, iPhone 2026-10-29: "the clock at the top cut off"). Two spans: the
+       greeting words give way, the time never does. Written only when it changes. */
+    var gp = greetParts(), gw = gp.e + ' ' + ktT(gp.g) + ' ·', gt = fmtClock(), key = gw + '|' + gt;
+    gr.title = ktT(gp.g);   // the words on a long-press; on a phone the eyebrow is the emoji + the time
+    if (gr.getAttribute('data-k') === key) return;
+    gr.setAttribute('data-k', key);
+    gr.textContent = '';
+    var a = document.createElement('span'); a.className = 'kt-pc-gw'; a.textContent = gw;
+    var b = document.createElement('span'); b.className = 'kt-pc-gt'; b.textContent = gt;
+    gr.appendChild(a); gr.appendChild(b);
   }
 
   function tick() {
@@ -458,8 +497,8 @@
     var t; try { t = store('kt_token'); } catch (e) {}
     if (!t) return;
     var path = (role === 'guardian') ? '/parent/messages/unread-count' : '/chats/unread-count';
-    fetch(API + path, { headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + t } })
-      .then(function (r) { return r.ok ? r.json() : null; })
+    (window.KT && KT.badges ? KT.badges.get().then(function (b) { return b ? { unread: role === 'guardian' ? b.parent_messages : (KT.badges.msgs ? KT.badges.msgs(b) : b.chats) } : null; })
+      : fetch(API + path, { headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + t } }).then(function (r) { return r.ok ? r.json() : null; }))
       .then(function (d) {
         var n = 0;
         if (d) n = (d.unread_count != null ? d.unread_count : (d.count != null ? d.count : (d.unread != null ? d.unread : 0)));
@@ -476,24 +515,142 @@
   var _lastNotif = 0, _notifCount = 0;
   function applyNotifBadge() {
     var el = document.getElementById('kt-pc-notif-badge'); if (!el) return;
-    if (_notifCount > 0) { el.textContent = _notifCount > 99 ? '99+' : _notifCount; el.hidden = false; } else { el.hidden = true; }
+    /* Write only on a change: every write wakes the page-wide observers (tooltips, line icons, switches...). */
+    var txt = _notifCount > 99 ? '99+' : String(_notifCount), hide = !(_notifCount > 0);
+    if (!hide && el.textContent !== txt) el.textContent = txt;
+    if (el.hidden !== hide) el.hidden = hide;
   }
   function refreshNotif(force) {
     applyNotifBadge();
     if (! document.getElementById('kt-pc-notif-badge')) return;
     var now = Date.now(); if (! force && now - _lastNotif < 12000) return; _lastNotif = now;
     var t; try { t = store('kt_token'); } catch (e) {} if (! t) return;
+    if (window.KT && KT.badges) { KT.badges.get(force).then(function (b) { if (b) { _notifCount = b.notifications || 0; applyNotifBadge(); } }); return; }
     fetch(API + '/notifications', { headers: { 'Accept': 'application/json', 'Authorization': 'Bearer ' + t } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (! d) return; var rows = d.notifications || d.data || (Array.isArray(d) ? d : []); var n = 0; for (var i = 0; i < rows.length; i++) { if (! rows[i].read_at) n++; } _notifCount = n; applyNotifBadge(); })
       .catch(function () {});
   }
 
+  // Real time (kt-badges.js, 2026-10-30): any change repaints at once.
+  // The 📮 Sales email inbox's unread count (2026-11-04), from /badges like the others.
+  function refreshSalesMail() {
+    if (!document.getElementById('kt-pc-salesmail-badge') || !(window.KT && KT.badges)) return;
+    KT.badges.get().then(function (b) {
+      var el = document.getElementById('kt-pc-salesmail-badge'); if (!el || !b) return;
+      var n = parseInt(b.sales_email, 10) || 0;
+      if (n > 0) { el.textContent = n > 99 ? '99+' : n; el.hidden = false; } else { el.hidden = true; }
+    }).catch(function () {});
+  }
+  /* THE FREEZE (tickets #257-#264, 2026-11-24). This listener called refreshNotif(true) -> KT.badges.get(true). The
+     8s count cache in kt-live.js answers /badges at once, so apply() fired kt:badges again, which forced again: an
+     endless loop (~334 events/s, 0% idle main thread) for as long as #home was open, felt as 11-34s freezes on a
+     slower laptop. The event already CARRIES the counts - use them; never fetch from inside a kt:badges listener. */
+  window.addEventListener('kt:badges', function (e) {
+    try {
+      refreshUnread();
+      if (e && e.detail) { _notifCount = +e.detail.notifications || 0; applyNotifBadge(); }
+      refreshSalesMail();
+    } catch (x) {}
+  });
+  // 📣: the Announcements screen's own unread count, straight from the /badges answer.
+  window.addEventListener('kt:badges', function (e) {
+    var bd = document.getElementById('kt-pc-ann-badge'); if (!bd) return;
+    var n = parseInt((e.detail && e.detail.announcements) || 0, 10) || 0;
+    if (n > 0) { bd.textContent = n > 99 ? '99+' : String(n); bd.hidden = false; } else { bd.hidden = true; }
+    var btn = bd.parentNode; if (btn) btn.setAttribute('aria-label', 'Announcements' + (n > 0 ? ', ' + n + ' unread' : ''));
+  });
+
+  /* The preview bar rules, one per header role (see the style block). */
+  /* A function declaration, not a var: injectStyle() can run before this line on a phone (the var was still
+     undefined there, so the phone rules never landed). */
+  function pcBarCss() {
+    var R = ['role-guardian', 'role-educator', 'role-home-visitor', 'role-sales-rep'];
+    function sel(tail) { return R.map(function (r) { return 'body.' + r + ' #appSidebar > ' + tail; }).join(','); }
+    /* AT THE VERY TOP (2026-11-04, Anthony: "for impersonation add the viewing as, agency selector at the very top and
+       above the kiddietrac top bar" - the educator / parent / home visitor / sales rep previews). Row 1, one compact
+       line: the role being previewed, the agency, "View as..." (the person picker) and "Hide admin controls" at the
+       end. Row 2: brand, name, icon bar - the bar exactly as that person sees it. */
+    /* ONLY WITH THE PREVIEW CONTROLS (2026-11-04, phone header fix): body.kt-pc-tworow (syncRows) - a person's own header
+       is one row, and on a phone that row does not wrap, so a break there is not 0px: it took ~200px and pushed the logo
+       and the name off the screen. */
+    var brk = R.map(function (r) { return 'body.kt-pc-tworow.' + r + ' #appSidebar::after'; }).join(',');   // no :has() (phones); an empty break is 0px tall
+    return '@media(min-width:769px){'
+      // A line break (flex-basis 100%) between the two rows, so the admin controls always sit together on row 1.
+      + brk + '{content:"";order:-1;flex-basis:100%;height:0;}'
+      + sel('.kt-viewas-inbar') + ',' + sel('.kt-agency-inbar') + ',' + sel('#kt-sidebar-foot') + '{width:auto !important;margin:0 8px 6px 0 !important;align-self:center;}'
+      + sel('.kt-viewas-inbar') + '{order:-4;flex:0 0 auto !important;flex-wrap:nowrap !important;padding-top:4px !important;padding-bottom:4px !important;}'
+      + sel('.kt-viewas-inbar > span') + '{flex:0 0 auto !important;}'
+      + sel('.kt-viewas-inbar > select') + '{flex:0 0 auto !important;width:auto !important;min-width:170px;}'
+      + sel('.kt-agency-inbar') + '{order:-3;flex:0 0 auto !important;}'
+      + sel('#kt-sidebar-foot') + '{order:-2;flex:1 1 320px !important;flex-direction:row !important;align-items:center;gap:8px !important;padding:0 !important;margin-right:0 !important;}'
+      + sel('#kt-sidebar-foot > *') + '{flex:0 1 auto;width:auto !important;}'
+      + sel('#kt-sidebar-foot > #kt-adminctl') + '{flex:0 0 auto !important;order:2;margin-left:auto !important;}}'
+      // Phones: the same order - the admin controls (all inside the foot there) first, the header below them.
+      + '@media(max-width:768px){' + sel('#kt-sidebar-foot') + '{order:-2 !important;}' + brk + '{content:"";order:-1;flex-basis:100%;height:0;}'
+      + R.map(function (r) { return 'body.kt-pc-tworow.' + r + ' #appSidebar'; }).join(',') + '{flex-wrap:wrap !important;}}'
+      /* THE FIT GUARD's way out (guardHeaderFit): the header wraps and no break is drawn, so nothing stays off screen. */
+      + R.map(function (r) { return 'body.kt-pc-fitfix.' + r + ' #appSidebar'; }).join(',') + '{flex-wrap:wrap !important;}'
+      + R.map(function (r) { return 'body.kt-pc-fitfix.' + r + ' #appSidebar::after'; }).join(',') + '{display:none !important;}';
+  }
+
+  /* Two rows only while an admin is previewing this header (the view-as / agency / admin controls are in it). */
+  function syncRows() {
+    var bar = document.getElementById('appSidebar');
+    var on = !!bar && !!bar.querySelector('#kt-sidebar-foot, .kt-viewas-inbar, .kt-agency-inbar');
+    if (document.body.classList.contains('kt-pc-tworow') !== on) document.body.classList.toggle('kt-pc-tworow', on);
+  }
+
+  /* HEADER FIT GUARD (2026-11-04, "add guards to not allow this from happening again"). Whatever a future rule does, a
+     part of this header that ends up outside the window (the name, the role, the logo pushed off the right edge) is
+     caught here: the header is switched to wrapping (body.kt-pc-fitfix) so everything comes back on screen, and the
+     device says so once per page load in storage/app/scroll-diag.log ("HEADER-FIT"), with what was off and where, so
+     the rule behind it can be found and fixed. The admin top bar (kt-topbar.js) has its own fit logic. */
+  var _fitSent = false;
+  function guardHeaderFit() {
+    if (!roleOf()) return;
+    var bar = document.getElementById('appSidebar');
+    if (!bar || document.body.classList.contains('kt-pc-fitfix')) return;
+    var vw = w.innerWidth || document.documentElement.clientWidth, off = [];
+    /* NOT FROM A WINDOW WITH NO WIDTH (2026-11-06, Anthony's home visitor header stuck on two rows): a beacon read
+       "HEADER-FIT ... vw=1 off: navBrand 18-185 ..." - measured while the page had no real width (a device-mode switch
+       or a hidden frame), every part was "off screen", and the wrap stayed on for the rest of the session. No phone
+       is narrower than 240px, so a smaller window is not a layout to judge. */
+    if (vw < 240) return;
+    var els = bar.querySelectorAll('#navBrand, #navUser, #navUser .nav-user-text, #navRole, .kt-pc-gt, .kt-pc-wrap, .kt-pc-mobmeta, #kt-sidebar-foot');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (!el.offsetParent) continue;
+      var r = el.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      if (r.right > vw + 2 || r.left < -2) off.push((el.id || el.className.split(' ')[0]) + ' ' + Math.round(r.left) + '-' + Math.round(r.right));
+    }
+    if (!off.length) return;
+    document.body.classList.add('kt-pc-fitfix');
+    if (_fitSent) return;
+    _fitSent = true;
+    try {
+      var api = (w.KT_CONFIG && w.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
+      fetch(api + '/diag/scroll', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: ('HEADER-FIT ' + document.body.className + ' vw=' + vw + ' off: ' + off.join(', ')).slice(0, 900) }) }).catch(function () {});
+    } catch (e) {}
+  }
+
+  /* Room for the floating Settings gear (kt-mobilenav.js) only while it is actually on screen: a phone or tablet app.
+     A desktop browser hides it, and the bar then runs to the right edge like the staff top bar. No :has() (phones). */
+  function syncGear() {
+    var g = document.getElementById('kt-gear');
+    var on = !!g && w.getComputedStyle(g).display !== 'none';
+    if (document.body.classList.contains('kt-pc-gear') !== on) document.body.classList.toggle('kt-pc-gear', on);
+  }
+
   var _booting = false;
   function boot() {
     if (_booting) return;
     _booting = true;
-    try { ensureGreeting(); ensureMobileMeta(); ensure(); placeBack(); refreshUnread(); refreshNotif(); } catch (e) {} finally { _booting = false; }
+    try { ensureGreeting(); ensureMobileMeta(); ensure(); placeBack(); syncGear(); syncRows(); refreshUnread(); refreshNotif(); } catch (e) {} finally { _booting = false; }
+    // After layout settles: a header part pushed off screen is put back (and reported) - see guardHeaderFit.
+    try { (w.requestAnimationFrame || setTimeout)(function () { try { guardHeaderFit(); } catch (e) {} }); } catch (e) {}
   }
   boot();
 
@@ -514,8 +671,10 @@
   setInterval(tick, 15000);
   setInterval(refreshUnread, 15000);   // was 60s; matches the top bar so the two agree
   w.addEventListener('resize', function () {
+    // A new width is a new layout: the fit guard judges it again (boot() re-runs it) instead of keeping an old verdict.
+    document.body.classList.remove('kt-pc-fitfix');
     var wrap = document.getElementById('kt-pc-wrap');
-    if (!isDesktop()) { if (wrap) wrap.remove(); ensureGreeting(); }
+    if (!isDesktop()) { if (wrap) wrap.remove(); ensureGreeting(); try { (w.requestAnimationFrame || setTimeout)(function () { try { guardHeaderFit(); } catch (e) {} }); } catch (e) {} }
     else boot();
   });
 })(window);

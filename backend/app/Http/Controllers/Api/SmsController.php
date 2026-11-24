@@ -59,6 +59,7 @@ final class SmsController extends Controller
             ], 422);
         }
         BroadcastAudience::assertOwned($agencyId, $data);
+        $onlyPeople = $this->assertAudienceInScope($request, $agencyId, $data);
 
         // A kind of text this agency does not send is refused before anyone is looked up.
         $bcCat = (string) ($data['category'] ?? 'broadcast');
@@ -71,7 +72,11 @@ final class SmsController extends Controller
         }
 
         $recipients = $this->resolveRecipients($agencyId, $data);
+        if ($onlyPeople !== null) {
+            $recipients = $recipients->filter(fn ($r) => in_array((int) $r->id, $onlyPeople, true))->values();
+        }
         $sent = 0; $skipped = 0;
+        $firstRow = (int) DB::table('sms_messages')->max('id');
         foreach ($recipients as $r) {
             $ok = $this->sendOne($agencyId, (int) $r->id, (string) ($r->phone ?? ''), $data['body'], $data['category'] ?? 'broadcast');
             if ($ok) $sent++; else $skipped++;
@@ -85,6 +90,17 @@ final class SmsController extends Controller
            every other way a message can be dropped it left no skipped row and no reason
            anywhere. The breakdown is the reason. */
         $breakdown = BroadcastAudience::breakdown($agencyId, $data, 'sms');
+
+        /* WHO SENT IT (2026-11-02): a reply to this broadcast comes back to this person's Message Centre
+           (App\Support\SmsReplies::attribute reads sent_by_user_id). */
+        try {
+            DB::table('sms_messages')->where('id', '>', $firstRow)->where('agency_id', $agencyId)->where('direction', 'out')
+                ->where('category', $data['category'] ?? 'broadcast')->whereNull('sent_by_user_id')
+                ->whereIn('to_user_id', $recipients->pluck('id')->all() ?: [0])
+                ->update(['sent_by_user_id' => $request->user()->id]);
+        } catch (\Throwable $e) {
+            Log::warning('broadcast sender stamp failed', ['e' => $e->getMessage()]);
+        }
 
         if ($sent === 0) {
             Audit::write([
@@ -139,6 +155,7 @@ final class SmsController extends Controller
             return response()->json(['message' => 'Choose which one to send to first.', 'needs' => $missing], 422);
         }
         BroadcastAudience::assertOwned($agencyId, $data);
+        $this->assertAudienceInScope($request, $agencyId, $data);
 
         return response()->json(BroadcastAudience::breakdown(
             $agencyId, $data, $data['channel'] ?? 'sms', $data['category'] ?? null
@@ -295,6 +312,25 @@ final class SmsController extends Controller
         return $staff->merge($parents)->map(fn ($i) => (int) $i)->unique()->values()->all();
     }
 
+    /* A DIRECTOR TEXTS ONLY THEIR OWN CENTRES (2026-11-05 leak sweep). assertOwned checks the agency only, so a
+       centre director could name another centre, room or family, or pick the agency / a role, and text people at
+       centres they do not run. A named centre/room/family must be at one of their centres (403 otherwise); for the
+       agency and role audiences the returned user ids are the only people who may be texted. null = agency-wide. */
+    private function assertAudienceInScope(Request $request, int $agencyId, array $data): ?array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope === null) return null;
+        $centres = [];
+        if (! empty($data['centre_id'])) $centres[] = (int) $data['centre_id'];
+        if (! empty($data['room_id'])) $centres[] = (int) DB::table('rooms')->where('id', $data['room_id'])->value('centre_id');
+        if (! empty($data['family_id'])) $centres[] = (int) DB::table('families')->where('id', $data['family_id'])->value('centre_id');
+        foreach ($centres as $c) {
+            abort_unless(\App\Support\CentreScope::canWrite($scope, $c), 403, 'You can only text people at your own centres.');
+        }
+
+        return $this->scopedPeople($request, $agencyId);
+    }
+
     /**
      * Moved into App\Support\BroadcastAudience when voice announcements were added, so
      * that both channels ask the same question and get the same answer. The SMS rule is
@@ -305,8 +341,17 @@ final class SmsController extends Controller
         return BroadcastAudience::resolve($agencyId, $data, 'sms');
     }
 
-    public function sendOne(int $agencyId, int $userId, string $phone, string $body, string $category, ?string $mediaUrl = null): bool
+    public function sendOne(int $agencyId, int $userId, string $phone, string $body, string $category, ?string $mediaUrl = null, ?string $basis = null): bool
     {
+        // In this person's language (2026-10-22, MessageTranslator). A short time limit:
+        // if the translation is not ready, the English text goes as before.
+        if (($loc = \App\Support\MessageTranslator::forUser($userId)) !== null) {
+            $body = \App\Support\MessageTranslator::text($body, $loc, 6);
+        }
+        // The website demo phone (2026-10-30): a public demo agency's fictional person gets it in the demo's Messages.
+        if (\App\Support\WebDemoPhone::applies($agencyId, $userId)) {
+            return \App\Support\WebDemoPhone::text($agencyId, $userId, $phone, $body, $category);
+        }
         // Do-not-contact: never text a parent at a live agency while we are testing.
         if (\App\Support\Suppression::isUser($userId)) {
             \App\Support\Suppression::note('sms', $userId, $category);
@@ -361,11 +406,16 @@ final class SmsController extends Controller
         /* KINDS OF TEXT (2026-09-29, App\Support\ContactCategories). The agency's list
            of kinds it sends, then this person's own choice. Only the optional kinds are
            checked: consent confirmations, STOP/HELP replies and tests always go. */
+        /* ANNOUNCEMENTS HAVE THEIR OWN RULE (2026-10-21, Anthony): staff always, parents
+           unless they said no, nobody who replied STOP. See Handset::announcementSms. */
+        $ann = $category === 'announcement' ? \App\Support\Handset::announcementSms($agencyId, $userId, $phone) : null;
+
         if (\App\Support\ContactCategories::isOptionalSms($category)) {
             $why = null;
             if (! in_array($category, \App\Support\ContactCategories::smsAllowed($agencyId), true)) {
                 $why = 'switched off for this agency: ' . \App\Support\ContactCategories::SMS[$category][0];
-            } elseif (! \App\Support\ContactCategories::userWants($userId, 'sms', $category)) {
+            } elseif (! ($ann && $ann['ok'] && $ann['mode'] === 'staff')
+                && ! \App\Support\ContactCategories::userWants($userId, 'sms', $category)) {
                 $why = 'turned off by this person: ' . \App\Support\ContactCategories::SMS[$category][0];
             }
             if ($why !== null) {
@@ -400,6 +450,19 @@ final class SmsController extends Controller
         // later "no" on any of them wins, and the account whose consent was used is
         // recorded. See App\Support\Handset.
         $consent = \App\Support\Handset::smsConsent($agencyId, $userId, $phone);
+        if ($ann !== null) {
+            // The announcement rule replaces the opt-in requirement; the recorded consent
+            // account is still kept when there is one.
+            $consent = ['ok' => $ann['ok'], 'via' => $consent['ok'] ? $consent['via'] : null,
+                'reason' => $ann['ok'] ? '' : $ann['reason']];
+        }
+        /* THEY TEXTED US (2026-11-02, App\Support\SmsReplies::textedUs). A staff reply to someone who texted the
+           agency's number answers a conversation they started - the KiddieTrac line's 'texted_us' rule. Asked for by
+           the caller, and checked again HERE (STOP, do-not-contact, a later "no"), never taken on the caller's word. */
+        if (! $consent['ok'] && $ann === null && $basis === 'texted_us' && $category === 'chat_reply'
+            && \App\Support\SmsReplies::textedUs($agencyId, $userId, $phone)) {
+            $consent = ['ok' => true, 'via' => null, 'reason' => ''];
+        }
         if (! $consent['ok']) {
             $gateRow = DB::table('sms_messages')->insertGetId([
                 'agency_id' => $agencyId,

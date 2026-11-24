@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B1F3A">
+<meta name="robots" content="noindex, nofollow">
+<title>Tell us about your program — KiddieTrac</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
+<link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
+<style>
+  /* The prospect intake form (2026-10-23): the same look as KiddieTrac's sales emails -
+     navy, teal and warm white. ProspectIntakeController. */
+  :root { --navy:#0B1F3A; --teal:#1FA2A6; --teal-d:#178A8E; --cream:#F6F4EF; --ink:#0B1F3A; --text:#4A5568; --muted:#8A94A6; --line:#E7E3DA; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--cream); color:var(--ink); font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  .top { background:var(--navy); color:#fff; padding:22px 20px 34px; }
+  .top .in, main { max-width:760px; margin:0 auto; }
+  .top img { display:block; width:170px; height:auto; }
+  .eyebrow { font-size:11px; font-weight:700; letter-spacing:2.2px; text-transform:uppercase; color:#7FD3D5; margin-top:26px; }
+  h1 { font-size:32px; line-height:1.15; letter-spacing:-.6px; margin:12px 0 0; }
+  .lead { color:#C9D4E3; font-size:16px; line-height:1.65; margin:14px 0 0; max-width:600px; }
+  .meet[hidden] { display:none; }
+  .meet { display:inline-block; margin-top:16px; padding:8px 14px; border:1px solid rgba(255,255,255,.18); border-radius:999px; font-size:13.5px; color:#fff; background:rgba(255,255,255,.06); }
+  main { padding:0 16px 60px; margin-top:-18px; }
+  .card { background:#fff; border-radius:14px; box-shadow:0 1px 2px rgba(11,31,58,.06), 0 10px 30px -18px rgba(11,31,58,.35); padding:24px 24px 18px; margin-top:16px; }
+  .card h2 { font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--teal); margin:0 0 4px; }
+  .card .h { font-size:20px; font-weight:700; margin:0 0 14px; letter-spacing:-.3px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+  .full { grid-column:1 / -1; }
+  label.f { display:block; font-size:13px; font-weight:700; color:var(--ink); margin-bottom:6px; }
+  label.f .opt { font-weight:500; color:var(--muted); }
+  input[type=text], input[type=email], input[type=tel], input[type=url], textarea, select {
+    width:100%; font:inherit; font-size:16px; color:var(--ink); background:#fff; border:1.5px solid var(--line); border-radius:10px; padding:11px 12px; }
+  textarea { min-height:92px; resize:vertical; line-height:1.5; }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px rgba(31,162,166,.16); }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { position:relative; }
+  .chip input { position:absolute; opacity:0; inset:0; margin:0; cursor:pointer; }
+  .chip span { display:inline-block; padding:9px 14px; border:1.5px solid var(--line); border-radius:999px; font-size:14px; color:var(--text); background:#fff; transition:all .12s; user-select:none; }
+  .chip input:checked + span { border-color:var(--teal); background:#E8F7F7; color:var(--teal-d); font-weight:700; }
+  .chip input:checked + span::before { content:'✓ '; }
+  .chip input:focus-visible + span { box-shadow:0 0 0 3px rgba(31,162,166,.25); }
+  .hint { font-size:12.5px; color:var(--muted); margin:6px 0 0; }
+  .submit { margin-top:20px; display:flex; flex-wrap:wrap; align-items:center; gap:14px; }
+  button.go { appearance:none; border:0; background:var(--teal); color:#fff; font:inherit; font-weight:700; font-size:16px; padding:15px 28px; border-radius:8px; cursor:pointer; }
+  button.go:hover { background:var(--teal-d); }
+  button.go:disabled { opacity:.6; cursor:default; }
+  .msg { font-size:14px; }
+  .msg.err { color:#B91C1C; }
+  .privacy { font-size:12.5px; color:var(--muted); line-height:1.6; margin-top:14px; }
+  .hp { position:absolute; left:-9999px; }
+  .done { text-align:center; padding:44px 24px 40px; }
+  .done .big { font-size:46px; }
+  .done h3 { font-size:26px; margin:10px 0 0; }
+  .done p { color:var(--text); font-size:15.5px; line-height:1.7; max-width:520px; margin:12px auto 0; }
+  .bad { text-align:center; padding:40px 20px; color:var(--text); }
+  .test { background:#FEF3C7; color:#92400E; border-radius:10px; padding:10px 14px; font-size:13.5px; margin-top:16px; }
+  footer { text-align:center; color:var(--muted); font-size:12px; line-height:1.8; padding:10px 16px 30px; }
+  footer a { color:var(--muted); }
+  @media (max-width:620px) { .grid { grid-template-columns:1fr; } h1 { font-size:27px; } .card { padding:20px 16px 14px; } }
+</style>
+</head>
+<body>
+<div class="top"><div class="in">
+  <a href="https://www.kiddietrac.com"><img src="https://www.kiddietrac.com/email-logo-v4.png" alt="KiddieTrac — Smart Childcare Management Platform" width="170" height="80"></a>
+  <div class="eyebrow">#1 in North America &middot; Smart Childcare Management Platform</div>
+  <h1>Tell us about your program</h1>
+  <p class="lead">A few minutes now helps us shape our conversation and a proposal that fits your program, your families and your team. Answer what you can &mdash; nothing here is required except your name and email.</p>
+  <div class="meet" id="meet" hidden></div>
+</div></div>
+
+<main id="main">
+  <div class="card"><div class="bad">Loading your form&hellip;</div></div>
+</main>
+
+<footer>KiddieTrac &middot; <a href="tel:18554009996">1-855-400-9996</a> &middot; <a href="mailto:sales@kiddietrac.com">sales@kiddietrac.com</a> &middot; <a href="https://www.kiddietrac.com/privacy">Privacy</a></footer>
+
+<script src="/js/kt-net.js?v=20261025"></script>
+<script>
+(function () {
+  var API = 'https://api.kiddietrac.com/api/v1/marketing-site/intake/';
+  var q = new URLSearchParams(location.search), id = q.get('b'), sig = q.get('s');
+  var main = document.getElementById('main');
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var DRAFT = 'kt_intake_' + id;
+  function bad(t) { main.innerHTML = '<div class="card"><div class="bad">' + esc(t) + '<br><br>Please use the link in your latest email from KiddieTrac, or call us at <b>1-855-400-9996</b>.</div></div>'; }
+  if (!id || !sig) { bad('This form link is incomplete.'); return; }
+
+  fetch(API + encodeURIComponent(id) + '?s=' + encodeURIComponent(sig), { headers: { Accept: 'application/json' } })
+    .then(function (r) { if (!r.ok) throw new Error('This form link is not valid.'); return r.json(); })
+    .then(render).catch(function (e) { bad(e.message); });
+
+  function text(name, label, opt, type, val, full, ph) {
+    return '<div class="' + (full ? 'full' : '') + '"><label class="f" for="f_' + name + '">' + esc(label) + (opt ? ' <span class="opt">(optional)</span>' : '') + '</label>'
+      + '<input type="' + (type || 'text') + '" id="f_' + name + '" name="' + name + '" value="' + esc(val || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + '></div>';
+  }
+  function area(name, label, val, ph) {
+    return '<div class="full"><label class="f" for="f_' + name + '">' + esc(label) + ' <span class="opt">(optional)</span></label><textarea id="f_' + name + '" name="' + name + '" placeholder="' + esc(ph || '') + '">' + esc(val || '') + '</textarea></div>';
+  }
+  function chips(name, items, sel, single) {
+    sel = Array.isArray(sel) ? sel : (sel ? [sel] : []);
+    return '<div class="chips" role="group">' + items.map(function (it) {
+      return '<label class="chip"><input type="' + (single ? 'radio' : 'checkbox') + '" name="' + name + '" value="' + esc(it) + '"' + (sel.indexOf(it) !== -1 ? ' checked' : '') + '><span>' + esc(it) + '</span></label>';
+    }).join('') + '</div>';
+  }
+  function card(eyebrow, title, inner) { return '<div class="card"><h2>' + eyebrow + '</h2><div class="h">' + title + '</div>' + inner + '</div>'; }
+
+  function render(d) {
+    var b = d.booking || {}, L = d.lists || {}, a = d.answers || {};
+    try { var dr = JSON.parse(localStorage.getItem(DRAFT) || 'null'); if (dr && !d.submitted_at) a = dr; } catch (e) {}
+    var meet = document.getElementById('meet');
+    if (b.when_et) { meet.hidden = false; meet.textContent = '📅 ' + (b.type || 'Meeting') + ' · ' + b.when_et; }
+    main.innerHTML = '<form id="form" novalidate>'
+      + (d.test ? '<div class="test">This is a sample of the form KiddieTrac prospects receive. It works, but answers here are not saved.</div>' : '')
+      + (d.submitted_at ? '<div class="test" style="background:#ECFDF5;color:#065F46;">Thank you &mdash; we have your answers. Change anything below and send again.</div>' : '')
+      + card('About you', 'Who should we prepare for?', '<div class="grid">'
+          + text('name', 'Your name', false, 'text', a.name || b.name) + text('role', 'Your role', true, 'text', a.role, false, 'Owner, director, administrator…')
+          + text('email', 'Email', false, 'email', a.email || b.email) + text('phone', 'Phone', true, 'tel', a.phone || b.phone)
+          + text('best_time', 'Best time to reach you', true, 'text', a.best_time, true, 'e.g. weekday mornings') + '</div>')
+      + card('Your program', 'Tell us about your organisation', '<div class="grid">'
+          + text('org_name', 'Organisation name', true, 'text', a.org_name || b.agency, true)
+          + '<div class="full"><label class="f">Type of program</label>' + chips('program_type', L.program_type || [], a.program_type, true) + '</div>'
+          + text('locations', 'Number of locations / homes', true, 'text', a.locations) + text('region', 'Province / state', true, 'text', a.region)
+          + text('children', 'Children enrolled (approx.)', true, 'text', a.children || b.children) + text('staff', 'Staff (approx.)', true, 'text', a.staff)
+          + '<div class="full"><label class="f">Age groups you care for <span class="opt">(optional)</span></label>' + chips('age_groups', L.age_groups || [], a.age_groups) + '</div>'
+          + text('website', 'Website', true, 'url', a.website, true, 'https://') + '</div>')
+      + card('Today', 'Where does your time go?', '<div class="grid">'
+          + '<div class="full"><label class="f">What takes the most time today? <span class="opt">(choose any)</span></label>' + chips('pain_points', L.pain_points || [], a.pain_points) + '</div>'
+          + text('current_tools', 'Software or tools you use today', true, 'text', a.current_tools, true, 'e.g. paper sign-in, spreadsheets, another app')
+          + '</div>')
+      + card('What you need', 'What should KiddieTrac do for you?', '<div class="grid">'
+          + '<div class="full"><label class="f">Interested in <span class="opt">(choose any)</span></label>' + chips('interests', L.interests || [], a.interests) + '</div>'
+          + text('interests_other', 'Anything else you would like to see', true, 'text', a.interests_other, true)
+          + area('must_haves', 'Your must-haves', a.must_haves, 'The few things it absolutely has to do for you')
+          + '</div>')
+      + card('Next steps', 'Timing and decisions', '<div class="grid">'
+          + '<div class="full"><label class="f">When would you like to be up and running?</label>' + chips('timeline', L.timeline || [], a.timeline, true) + '</div>'
+          + text('decision_makers', 'Who else is involved in the decision?', true, 'text', a.decision_makers, true, 'e.g. owner, board, finance')
+          + area('notes', 'Anything else we should know?', a.notes)
+          + '</div>'
+          + '<input class="hp" type="text" name="website_url_hp" tabindex="-1" autocomplete="off" aria-hidden="true">'
+          + '<div class="submit"><button class="go" type="submit">' + (d.submitted_at ? 'Send my changes' : 'Send to KiddieTrac') + '</button><span class="msg" id="msg"></span></div>'
+          + '<p class="privacy">Your answers go only to the KiddieTrac sales team, to prepare for your meeting and proposal. We never sell or share your information.</p>')
+      + '</form>';
+    var form = document.getElementById('form');
+    form.addEventListener('input', function () { try { localStorage.setItem(DRAFT, JSON.stringify(collect())); } catch (e) {} });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var body = collect(), msg = document.getElementById('msg'), btn = form.querySelector('button.go');
+      if (!body.name || !/^\S+@\S+\.\S+$/.test(body.email || '')) { msg.className = 'msg err'; msg.textContent = 'Please add your name and a valid email address.'; return; }
+      body.s = sig; btn.disabled = true; msg.className = 'msg'; msg.textContent = 'Sending…';
+      fetch(API + encodeURIComponent(id) + '?s=' + encodeURIComponent(sig), { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.message || 'Something went wrong. Please try again.'); return j; }); })
+        .then(function (j) {
+          try { localStorage.removeItem(DRAFT); } catch (e) {}
+          main.innerHTML = '<div class="card done"><div class="big">🎉</div><h3>Thank you' + (body.name ? ', ' + esc(body.name.split(' ')[0]) : '') + '!</h3>'
+            + '<p>' + (j.test ? 'This was a sample, so nothing was saved &mdash; but this is exactly what your prospects will see.' : 'We have your answers. Our team will use them to prepare for our conversation and to shape a proposal around your program.') + '</p>'
+            + '<p>Questions before we meet? Reply to our email or call <b>1-855-400-9996</b>.</p></div>';
+          window.scrollTo(0, 0);
+        })
+        .catch(function (err) { btn.disabled = false; msg.className = 'msg err'; msg.textContent = err.message; });
+    });
+  }
+  function collect() {
+    var f = document.getElementById('form'), out = {};
+    Array.prototype.forEach.call(f.elements, function (el) {
+      if (!el.name || el.name === 'website_url_hp' && !el.value) return;
+      if (el.type === 'checkbox') { if (el.checked) { (out[el.name] = out[el.name] || []).push(el.value); } }
+      else if (el.type === 'radio') { if (el.checked) out[el.name] = el.value; }
+      else if (el.value.trim() !== '') out[el.name] = el.value.trim();
+    });
+    return out;
+  }
+})();
+</script>
+</body>
+</html>

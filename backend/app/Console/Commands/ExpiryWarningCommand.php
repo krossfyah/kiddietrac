@@ -23,7 +23,7 @@ final class ExpiryWarningCommand extends Command
     public function handle(): int
     {
         $days = (int) $this->option('days');
-        $cutoff = Carbon::now()->addDays($days)->endOfDay();
+        $cutoff = \App\Support\AgencyTime::todayDate()->addDays($days)->endOfDay();   // expires_at is a DATE: the agency's date + N
         $now = Carbon::now();
         $weekKey = Carbon::now()->format('o-W');
 
@@ -67,34 +67,12 @@ final class ExpiryWarningCommand extends Command
         }
         $this->info("Sent {$sent} expiry warnings");
 
-        /* CERTIFICATES TOO (2026-10-19). This command said "certifications" in its name and
-           description and only ever read background_checks, so a CPR card ran out with nobody
-           told. Same window, same weekly de-duplication, a bell to the holder pointing at
-           their own "My certificates" (where they can upload the renewed one). */
-        $certBells = 0;
-        $certs = DB::table('staff_certifications')->where('active', 1)
-            ->whereIn('user_id', fn ($q) => \App\Support\Audience::excludeOff($q->from('users as u')->whereNull('u.deleted_at'), 'u')->select('u.id'))
-            ->whereNotNull('expires_at')
-            ->where('expires_at', '<=', $cutoff->toDateString())
-            ->where('expires_at', '>=', $now->copy()->subDays(30)->toDateString())
-            ->get();
-        foreach ($certs as $c) {
-            $dedupe = "cert:{$c->id}:{$weekKey}";
-            if (DB::table('notifications')->where('user_id', $c->user_id)->where('body', 'like', "%[{$dedupe}]%")->exists()) continue;
-            $label = $c->title ?: str_replace('_', ' ', (string) $c->cert_type);
-            $exp = Carbon::parse($c->expires_at)->startOfDay();
-            $daysOut = (int) $now->copy()->startOfDay()->diffInDays($exp, false);
-            \App\Support\Notify::write([
-                'user_id' => $c->user_id,
-                'type' => 'compliance',
-                'title' => $daysOut < 0 ? "🎓 Your {$label} certificate has expired" : "🎓 Your {$label} certificate expires in {$daysOut} day" . ($daysOut === 1 ? '' : 's'),
-                'body' => 'Expires ' . $exp->format('M j, Y') . '. When you renew it, add the new certificate under My certificates. [' . $dedupe . ']',
-                'data' => json_encode(['hash' => 'my-certificates']),
-                'created_at' => now(),
-            ]);
-            $certBells++;
+        /* CERTIFICATES (2026-11-03, replaces the 2026-10-19 weekly holder-only bell): each agency's own steps
+           (Settings -> Notifications -> Staff certifications), to the holder, the centre's directors and the
+           agency admins, bell + push + email. See App\Support\CertExpiryAlerts. */
+        foreach (\App\Support\CertExpiryAlerts::run() as $r) {
+            $this->info("Certificates, agency {$r['agency_id']}: {$r['certificates']} at a step, {$r['holder_bells']} holder alerts, {$r['managers']} managers, {$r['emails']} emails");
         }
-        $this->info("Sent {$certBells} certificate expiry warnings");
 
         /* DEADLINES FROM HIRE DATE, AND TRAINING HOURS (2026-10-10). Where the agency's
            jurisdiction sets them (App\Support\StaffCompliance — Ohio today; Ontario sets none,
@@ -121,6 +99,7 @@ final class ExpiryWarningCommand extends Command
                 $dedupe = "staffdl:{$uid}:{$weekKey}";
                 if (DB::table('notifications')->where('user_id', $uid)->where('body', 'like', "%[{$dedupe}]%")->exists()) continue;
                 \App\Support\Notify::write([
+                    'agency_id' => (int) $agencyId,
                     'user_id' => $uid, 'type' => 'compliance',
                     'title' => count($lines) === 1 ? 'Training / checks: 1 item needs attention' : 'Training / checks: ' . count($lines) . ' items need attention',
                     'body' => implode(' · ', array_slice($lines, 0, 4)) . " [{$dedupe}]",

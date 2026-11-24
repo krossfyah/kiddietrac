@@ -160,7 +160,13 @@ class ParentImmunizationRecordController extends Controller
 
         $data = $request->validate([
             // Photos are the common case — a parent holding the card up to their phone.
-            'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic', 'max:10240'],
+            /* ONE OR SEVERAL (2026-11-13: "it won't allow multiple documents to be uploaded"). A card is often
+               two or three photographs - front, back, the page from the clinic - so `files[]` carries up to ten
+               in ONE request: one alert, one email, one audit row, rather than one per page. `file` still works
+               for a single upload and for older apps. */
+            'file' => ['required_without:files', 'file', 'mimes:pdf,jpg,jpeg,png,webp,heic', 'max:10240'],
+            'files' => ['nullable', 'array', 'max:10'],
+            'files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp,heic', 'max:10240'],
             'title' => ['nullable', 'string', 'max:200'],
             'notes' => ['nullable', 'string', 'max:2000'],
             /* A JSON STRING, not an array, because this request is multipart/form-data —
@@ -212,7 +218,7 @@ class ParentImmunizationRecordController extends Controller
 
         /* THE CLAIM. Parsed exactly like a dose and stored somewhere else entirely, so
            there is no path by which ticking a box on a phone becomes a recorded
-           immunisation. Capped so a crafted request cannot write an unbounded number of
+           immunization. Capped so a crafted request cannot write an unbounded number of
            rows against one upload. */
         $covers = [];
         foreach ((array) json_decode((string) ($data['covers'] ?? ''), true) as $c) {
@@ -231,25 +237,54 @@ class ParentImmunizationRecordController extends Controller
             ];
         }
 
-        $file = $request->file('file');
-        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-        $name = (string) Str::uuid() . '.' . $ext;
-        $file->storeAs('child-documents/' . $childId, $name, 'public');
-        $publicPath = '/storage/child-documents/' . $childId . '/' . $name;
+        /* THE DOSES ARE MANDATORY (2026-11-13, Anthony: "when uploading immunization make it mandatory to record the
+           doses/type of immunization - full sweep"). A record says what it covers or it is not filed: staff send
+           `doses` (recorded), a parent sends `covers` (a claim the centre confirms). Neither is a 422 before any file
+           is stored. A dose already on file still counts as covered here - it is skipped below, never doubled. */
+        if (! $doses && ! $covers) {
+            return response()->json([
+                'message' => $canRecord
+                    ? 'Tick at least one dose this record covers, or add it by name.'
+                    : 'Tick at least one immunization you can see on the record, or add it by name.',
+            ], 422);
+        }
 
+        $uploads = array_values(array_filter(array_merge(
+            $request->hasFile('file') ? [$request->file('file')] : [],
+            (array) ($request->file('files') ?: [])
+        )));
+        if (count($uploads) > 10) {
+            return response()->json(['message' => 'Up to 10 files at a time, please.'], 422);
+        }
+
+        /* Every file becomes its own document - each one opens, downloads and is deleted on its own. The doses and
+           the ticklist are read off the record as a whole and hang off the FIRST document, which is the one the
+           alert and the email point at. */
         $title = trim((string) ($data['title'] ?? '')) ?: 'Immunization record';
-        $docId = DB::table('documents')->insertGetId([
-            'scope_type' => 'child',
-            'scope_id' => $childId,
-            'category' => self::CATEGORY,
-            'title' => mb_substr($title, 0, 200),
-            'notes' => ($n = trim((string) ($data['notes'] ?? ''))) !== '' ? $n : null,
-            'file_url' => $publicPath,
-            'file_type' => $file->getClientMimeType() ?: 'application/octet-stream',
-            'file_size' => $file->getSize(),
-            'uploaded_by_id' => $request->user()->id,
-            'created_at' => now(),
-        ]);
+        $docIds = [];
+        $publicPath = null;
+        foreach ($uploads as $i => $file) {
+            $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+            $name = (string) Str::uuid() . '.' . $ext;
+            $file->storeAs('child-documents/' . $childId, $name, 'public');
+            $path = '/storage/child-documents/' . $childId . '/' . $name;
+            $publicPath = $publicPath ?? $path;
+            $docIds[] = DB::table('documents')->insertGetId([
+                'scope_type' => 'child',
+                'scope_id' => $childId,
+                'category' => self::CATEGORY,
+                'title' => mb_substr(count($uploads) > 1
+                    ? $title . ' (' . ($i + 1) . ' of ' . count($uploads) . ')'
+                    : $title, 0, 200),
+                'notes' => ($n = trim((string) ($data['notes'] ?? ''))) !== '' ? $n : null,
+                'file_url' => $path,
+                'file_type' => $file->getClientMimeType() ?: 'application/octet-stream',
+                'file_size' => $file->getSize(),
+                'uploaded_by_id' => $request->user()->id,
+                'created_at' => now(),
+            ]);
+        }
+        $docId = $docIds[0];
 
         /* THE TICKLIST, FILED AGAINST THE CARD. Written after the document so the claim
            can never point at nothing, and ignored quietly on failure: a parent who has
@@ -342,6 +377,7 @@ class ParentImmunizationRecordController extends Controller
                 'payload' => json_encode([
                     'child_name' => $childName,
                     'document_id' => $docId,
+                    'document_ids' => $docIds,
                     'title' => $title,
                     'uploaded_by' => $byParent ? 'parent' : 'staff',
                     'doses_recorded' => $recorded,
@@ -356,13 +392,14 @@ class ParentImmunizationRecordController extends Controller
 
         return response()->json([
             'id' => $docId,
+            'ids' => $docIds,
             'recorded' => $recorded,
             'skipped' => $skipped,
             'message' => $byParent
                 ? 'Immunization record received — your child\'s educator and centre have been notified.'
                 : ($recorded
                     ? 'Record filed and ' . count($recorded) . ' dose' . (count($recorded) === 1 ? '' : 's') . ' recorded.'
-                    : 'Record filed.'),
+                    : (count($docIds) > 1 ? count($docIds) . ' files filed.' : 'Record filed.')),
         ]);
     }
 
@@ -436,6 +473,9 @@ class ParentImmunizationRecordController extends Controller
                 'message' => 'Give the reason for the exemption - it is what makes it a record.',
                 'errors' => ['exemption_reason' => ['A reason is required.']],
             ], 422);
+        }
+        if ($asExemption && ($why = \App\Support\ImmunizationExemption::refusal($childId, $reason))) {
+            return response()->json(['message' => $why, 'errors' => ['exemption_reason' => [$why]]], 422);
         }
 
         /* The document has to belong to THIS child and be an immunization record.

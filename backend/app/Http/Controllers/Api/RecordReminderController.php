@@ -49,7 +49,7 @@ final class RecordReminderController extends Controller
         $agencyId = $this->agencyId($request);
         $scope = CentreScope::ids($request, $agencyId);
         $q = DB::table('record_reminders as r')->join('users as u', 'u.id', '=', 'r.user_id')->leftJoin('centres as c', 'c.id', '=', 'r.centre_id')
-            ->where('r.agency_id', $agencyId)->where('r.for_date', '>=', now()->subDays(14)->toDateString())
+            ->where('r.agency_id', $agencyId)->where('r.for_date', '>=', \App\Support\AgencyTime::todayDate()->subDays(14)->toDateString())
             ->whereRaw("JSON_LENGTH(COALESCE(r.missing, '[]')) > 0");
         if ($scope !== null) $q->whereIn('r.centre_id', $scope ?: [0]);
         $rows = $q->orderByDesc('r.for_date')->orderBy('u.first_name')->limit(300)

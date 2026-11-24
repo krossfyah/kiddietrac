@@ -343,7 +343,7 @@ class SubsidyController extends Controller
         $d = DB::table('subsidy_documents')->where('id', $doc)->where('subsidy_id', $row->id)->whereNull('removed_at')->first();
         abort_unless($d && \Illuminate\Support\Facades\Storage::disk('local')->exists($d->path), 404, 'That document was not found.');
 
-        return \Illuminate\Support\Facades\Storage::disk('local')->download($d->path, $d->original_name,
+        return \App\Support\FileResponse::download($d->path, $d->original_name,
             ['Content-Type' => $d->mime ?: 'application/octet-stream', 'Cache-Control' => 'private, no-store']);
     }
 

@@ -86,7 +86,9 @@ final class DailyEventController extends Controller
         $allowed = [];
         $refused = [];
         foreach ($ids as $cid) {
-            if (in_array($cid, $inRoom, true) && $this->canAccessChildId($user, $cid)) {
+            // Staff only, room at a centre you work at (2026-11-05 leak sweep; see ktStaffForChild/ktRoomFitsChild).
+            if (in_array($cid, $inRoom, true) && $this->canAccessChildId($user, $cid)
+                && $this->ktStaffForChild($user, $cid) && $this->ktRoomFitsChild($user, (int) $data['room_id'], $cid)) {
                 $allowed[] = $cid;
             } else {
                 $refused[] = $cid;
@@ -94,6 +96,13 @@ final class DailyEventController extends Controller
         }
         if (! $allowed) {
             return response()->json(['message' => 'None of those children are yours to log for.'], 403);
+        }
+        /* Signed in? (2026-11-04, Anthony: "children not signed in and logging a daily log etc" must be
+           apparent.) Not a hard block - catching up after sign-out is real - but the educator is asked
+           first, exactly as for care logs (App\Support\SignedInNow). */
+        if (! $request->boolean('confirm_absent')) {
+            $absent = \App\Support\SignedInNow::absentNames($allowed);
+            if ($absent) return \App\Support\SignedInNow::refusal($absent);
         }
 
         $occurredAt = ! empty($data['occurred_at']) ? Carbon::parse($data['occurred_at']) : now();
@@ -134,6 +143,16 @@ final class DailyEventController extends Controller
             return response()->json(['message' => 'Could not save these entries. Please try again.'], 422);
         }
 
+        // Each logged child's own family is told straight away (App\Support\ChildMomentNotify).
+        try {
+            $items = [];
+            foreach ($allowed as $cid) {
+                $it = \App\Support\ChildMomentNotify::momentItem((int) $cid, (string) $data['event_type'], $data['notes'] ?? null, $data['payload'] ?? []);
+                if ($it) $items[] = $it;
+            }
+            \App\Support\ChildMomentNotify::after($items);
+        } catch (\Throwable $e) { /* telling the family must never fail the log */ }
+
         // Today's digest is stale for everyone who was logged. Best-effort, as in store().
         try {
             DB::table('ai_daily_digests')->whereIn('child_id', $allowed)
@@ -169,6 +188,17 @@ final class DailyEventController extends Controller
         ]);
         // SECURITY (v22p94): only the child's centre staff (or guardian) may log.
         abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
+        /* Staff only, and the room must be this child's at a centre you work at (2026-11-05 leak sweep):
+           room_id was written unchecked and a parent with any staff role could log for their own child. */
+        abort_unless($this->ktStaffForChild($request->user(), (int) $data['child_id']), 403);
+        if (! $this->ktRoomFitsChild($request->user(), (int) $data['room_id'], (int) $data['child_id'])) {
+            return response()->json(['message' => 'That room is not one of this child\'s rooms at a centre you work at.'], 422);
+        }
+        // Signed in? Asked first, as for care logs and room logs (see storeBulk).
+        if (! $request->boolean('confirm_absent')) {
+            $absent = \App\Support\SignedInNow::absentNames([(int) $data['child_id']]);
+            if ($absent) return \App\Support\SignedInNow::refusal($absent);
+        }
 
         // The app sends ISO-8601 ("2026-08-10T15:50:00.000Z"); inserting that raw
         // string into a MySQL datetime column 500s (invalid format). Carbon
@@ -195,11 +225,17 @@ final class DailyEventController extends Controller
             return response()->json(['message' => 'Could not save this entry. Please try again.'], 422);
         }
 
+        // The child's family is told straight away (App\Support\ChildMomentNotify).
+        try {
+            $it = \App\Support\ChildMomentNotify::momentItem((int) $data['child_id'], (string) $data['event_type'], $data['notes'] ?? null, $data['payload'] ?? []);
+            if ($it) \App\Support\ChildMomentNotify::after([$it]);
+        } catch (\Throwable $e) { /* telling the family must never fail the log */ }
+
         // Invalidate today's digest since new info is available (best-effort).
         try {
             DB::table('ai_daily_digests')
                 ->where('child_id', $data['child_id'])
-                ->where('digest_date', now()->toDateString())
+                ->where('digest_date', \App\Support\AgencyTime::today())
                 ->delete();
         } catch (\Throwable $e) { /* non-fatal */ }
 
@@ -216,6 +252,8 @@ final class DailyEventController extends Controller
             return response()->json(['message' => 'Not found'], 404);
         }
         abort_unless($this->canAccessChildId($request->user(), (int) $event->child_id), 403);
+        // Staff only (2026-11-05 leak sweep): canAccessChildId() also lets the child's parent through.
+        abort_unless($this->ktStaffForChild($request->user(), (int) $event->child_id), 403);
 
         $data = $request->validate([
             'event_type' => ['in:meal,snack,nap_start,nap_end,diaper,bathroom,activity,mood,note,milestone,bottle,medication_given,outdoor'],
@@ -252,6 +290,8 @@ final class DailyEventController extends Controller
             return response()->json(['message' => 'Not found'], 404);
         }
         abort_unless($this->canAccessChildId($request->user(), (int) $event->child_id), 403);
+        // Staff only (2026-11-05 leak sweep): canAccessChildId() also lets the child's parent through.
+        abort_unless($this->ktStaffForChild($request->user(), (int) $event->child_id), 403);
         DB::table('daily_events')->where('id', $eventId)->delete();
 
         return response()->json(['message' => 'Deleted']);
@@ -265,7 +305,7 @@ final class DailyEventController extends Controller
         // SECURITY (v22p94): only the child's guardians/centre staff.
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
 
-        $date = $request->input('date', now()->toDateString());
+        $date = $request->input('date', \App\Support\AgencyTime::today());
         $tz = $this->tzForChild($childId);
 
         // v22p98: a "day" is the centre-LOCAL day, not the UTC day. whereDate()
@@ -409,7 +449,7 @@ final class DailyEventController extends Controller
         // 2. Decide whether to generate. Only auto-generate if it's:
         //    - Today AND it's past 4 PM (most of the day has happened)
         //    - OR a past date (anything in the past should be available on demand)
-        $isPastDate = Carbon::parse($date)->lt(now()->startOfDay());
+        $isPastDate = Carbon::parse($date)->lt(\App\Support\AgencyTime::todayDate());
         $isLateToday = Carbon::parse($date)->isToday() && now()->hour >= 16;
 
         if (!$isPastDate && !$isLateToday) {
@@ -428,7 +468,8 @@ final class DailyEventController extends Controller
            and each a log ERROR. After a failure the AI is left alone for 30 minutes and
            the templated story is served straight away. */
         $aiResting = \Illuminate\Support\Facades\Cache::has('ai-digest:resting');
-        if (!$this->ai->isConfigured() || $aiResting) {
+        // Without the AI Bundle (2026-10-28) the day story is the templated one, as when the AI is unavailable.
+        if (!$this->ai->isConfigured() || $aiResting || !\App\Support\AiBundle::forChild($childId)) {
             return response()->json([
                 'body' => $this->buildFallbackDigest($childId, $date),
                 'generated_at' => now()->toIso8601String(),
@@ -438,6 +479,7 @@ final class DailyEventController extends Controller
 
         try {
             $context = $this->buildDigestContext($childId, $date);
+            \App\Support\AiFresh::as('daily_digest', \App\Support\AiFresh::agencyFrom(['child_id' => $childId]));
             $body = $this->ai->generateDailyDigest($context);
 
             // Cache the result
@@ -446,7 +488,7 @@ final class DailyEventController extends Controller
                 'digest_date' => $date,
                 'body' => $body,
                 'generated_at' => now(),
-                'model' => config('services.anthropic.model'),
+                'model_used' => config('services.anthropic.model'),   // the column is model_used: 'model' failed every insert once the AI had credit again (2026-10-28)
                 'created_at' => now(),
             ]);
 
@@ -574,8 +616,10 @@ final class DailyEventController extends Controller
         };
 
         $tz = $this->tzForChild($childId);
-        $checkIn  = $checks->firstWhere('event_type', 'check_in');
-        $checkOut = $checks->where('event_type', 'check_out')->last();
+        // Visits, not first-in / last-out: the final sign-out only counts when the child is not back in (2026-11-05).
+        $visits   = \App\Support\ChildVisits::pair($checks);
+        $checkIn  = \App\Support\ChildVisits::firstIn($visits);
+        $checkOut = \App\Support\ChildVisits::finalOut($visits);
         $inT  = $checkIn  ? AgencyTime::fmt($checkIn->occurred_at, $tz)  : null;
         $outT = $checkOut ? AgencyTime::fmt($checkOut->occurred_at, $tz) : null;
 
@@ -613,7 +657,10 @@ final class DailyEventController extends Controller
             "Here's the story of {$name}'s day:",
         ]);
 
-        if ($inT && $outT) {
+        if ($inT && count($visits) > 1) {
+            // Signed in and out more than once: name each visit rather than one long day.
+            $parts[] = 'They were with us ' . \App\Support\ChildVisits::text($visits, $tz, 'now') . '.';
+        } elseif ($inT && $outT) {
             $parts[] = $pick([
                 "They arrived at {$inT} and headed home at {$outT}.",
                 "Signed in at {$inT} and signed out at {$outT}.",
@@ -738,5 +785,41 @@ final class DailyEventController extends Controller
             'notes' => $event->notes,
             'display' => $display,
         ];
+    }
+
+    /* A ROOM FOR THIS CHILD, AT A CENTRE YOU WORK AT (2026-11-05 leak sweep). room_id came from the
+       request and was written unchecked, so an entry could be filed into another centre's or agency's
+       room and show on that room's lists. The room must be at the child's centre or one the child is
+       placed in, and the caller must be staff at the room's centre (authorizeCentreAccess: a staff role
+       there, its agency's admin, a room there, or a platform admin switched into its agency). */
+    private function ktRoomFitsChild($user, int $roomId, int $childId): bool
+    {
+        $roomCentre = (int) DB::table('rooms')->where('id', $roomId)->value('centre_id');
+        if ($roomCentre <= 0 || ! $this->authorizeCentreAccess($user, $roomCentre)) return false;
+        $child = DB::table('children')->where('id', $childId)->first(['family_id', 'primary_room_id']);
+        if (! $child) return false;
+        if ((int) DB::table('families')->where('id', $child->family_id)->value('centre_id') === $roomCentre) return true;
+        if ((int) ($child->primary_room_id ?? 0) === $roomId) return true;
+        return DB::table('enrollments')->where('child_id', $childId)->whereNull('end_date')->where('room_id', $roomId)->exists();
+    }
+
+    /* STAFF, NOT ONLY A PARENT (2026-11-05 leak sweep). canAccessChildId() also says yes to the child's
+       own guardian, and these are staff writes: a parent who holds a staff role anywhere passed the route
+       gate and could write them for their own child. Call AFTER canAccessChildId() has passed: someone who
+       is not the child's guardian passed it as staff; a guardian passes here only if they are also staff
+       at the child's centre (or the centre of one of its open placements). */
+    private function ktStaffForChild($user, int $childId): bool
+    {
+        $child = DB::table('children')->where('id', $childId)->first(['family_id']);
+        if (! $child) return false;
+        $isGuardian = DB::table('guardians')->where('user_id', $user->id)->where('family_id', $child->family_id)->exists();
+        if (! $isGuardian) return true;
+        $centres = DB::table('enrollments as e')->join('rooms as r', 'r.id', '=', 'e.room_id')
+            ->where('e.child_id', $childId)->whereNull('e.end_date')->pluck('r.centre_id')->all();
+        $centres[] = DB::table('families')->where('id', $child->family_id)->value('centre_id');
+        foreach (array_unique(array_filter(array_map('intval', $centres))) as $cid) {
+            if ($this->authorizeCentreAccess($user, $cid)) return true;
+        }
+        return false;
     }
 }

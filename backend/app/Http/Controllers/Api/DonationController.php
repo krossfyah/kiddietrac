@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -250,7 +250,7 @@ class DonationController extends Controller
             'message' => ['nullable', 'string', 'max:1000'],
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
-        if ($data['status'] === 'received' && empty($data['received_on'])) $data['received_on'] = now()->toDateString();
+        if ($data['status'] === 'received' && empty($data['received_on'])) $data['received_on'] = \App\Support\AgencyTime::today();
         $data['advantage_amount'] = (float) ($data['advantage_amount'] ?? 0);
         $data['anonymous'] = (bool) ($data['anonymous'] ?? false);
         if (! empty($data['family_id'])) {
@@ -305,7 +305,7 @@ class DonationController extends Controller
                 'agency_id' => $agencyId, 'donation_id' => $d->id, 'serial' => $serial, 'kind' => $kind,
                 'amount' => $d->amount, 'advantage_amount' => $d->advantage_amount,
                 'eligible_amount' => round((float) $d->amount - (float) $d->advantage_amount, 2),
-                'currency' => $d->currency, 'received_on' => $d->received_on, 'issued_on' => now()->toDateString(),
+                'currency' => $d->currency, 'received_on' => $d->received_on, 'issued_on' => \App\Support\AgencyTime::today(),
                 'issued_at_location' => $s['receipt_location'] ?: null, 'donor_name' => $name, 'donor_address' => $addr ?: null,
                 'donor_email' => $d->donor_email,
                 'charity' => json_encode(['name' => $s['agency_name'], 'legal_name' => $s['legal_name'], 'address' => $s['receipt_address'],
@@ -450,7 +450,7 @@ class DonationController extends Controller
         $agency = DB::table('agencies')->where('id', $c->agency_id)->first(['name', 'brand_logo_url', 'logo_url', 'brand_primary_color']);
         $raised = (float) DB::table('donations')->where('campaign_id', $c->id)->where('status', 'received')->sum('amount');
         $donors = (int) DB::table('donations')->where('campaign_id', $c->id)->whereIn('status', ['received', 'pledged'])->count();
-        $open = $c->status === 'active' && (! $c->ends_on || $c->ends_on >= now()->toDateString()) && (! $c->starts_on || $c->starts_on <= now()->toDateString());
+        $open = $c->status === 'active' && (! $c->ends_on || $c->ends_on >= \App\Support\AgencyTime::today()) && (! $c->starts_on || $c->starts_on <= \App\Support\AgencyTime::today());
 
         return response()->json([
             'title' => $c->title, 'description' => $c->description, 'goal' => $c->goal_amount ? (float) $c->goal_amount : null,

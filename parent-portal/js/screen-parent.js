@@ -141,6 +141,35 @@
   }
   function bust(path) { delete apiCache[path]; }
 
+  /* ✨ THIS WEEK (2026-10-28, the AI Bundle: "weekly child recap for parents"). An extra under the day's story -
+     nothing about the card changes. Shown only when the agency has the bundle (/auth/me ai_bundle); the recap is
+     written on the first tap (not on every visit) and kept 6 hours on the server, so it costs one AI call. */
+  function weekRecapButton(card, child) {
+    var u = {};
+    try { u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {}; } catch (e) {}
+    if (!u.ai_bundle || !child || !card) return;
+    var wk = Dom.el('div', { style: 'margin-top:12px;' });
+    var btn = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', 'data-kt-btn-free': '1',
+      style: 'background:rgba(255,255,255,.16);color:inherit;border:1px solid rgba(255,255,255,.4);border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;' }, '✨ This week');
+    var out = Dom.el('div', { style: 'display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.25);white-space:pre-wrap;font-size:14px;line-height:1.55;' });
+    var loaded = false;
+    btn.addEventListener('click', function () {
+      if (loaded && out.style.display === 'block') { out.style.display = 'none'; btn.textContent = '✨ This week'; return; }
+      out.style.display = 'block';
+      btn.textContent = 'Hide this week';
+      if (loaded) return;
+      btn.disabled = true;
+      out.textContent = 'Putting ' + (child.display_name || 'the') + '’s week together…';
+      Api.get('/ai/weekly-recap/' + child.id)
+        .then(function (r) { out.textContent = (r && r.recap) || 'There is not enough from this week for a recap yet.'; loaded = true; })
+        .catch(function (e) { out.textContent = (e && e.message) || 'The weekly recap is not available right now.'; })
+        .then(function () { btn.disabled = false; });
+    });
+    wk.appendChild(btn);
+    wk.appendChild(out);
+    card.appendChild(wk);
+  }
+
   // Mark a notification category read so the bottom-nav badge clears (fire-and-forget).
   /* Called from the render path, so it must be safe to call on EVERY render.
      It was not: each render POSTed, and a POST is a data change, so the screen
@@ -168,7 +197,7 @@
   }
 
   // Send a parent message with an optional image — multipart (KT.Api is JSON-only).
-  function sendParentMessage(childId, body, file, emergency) {
+  function sendParentMessage(childId, body, file, emergency, to) {
     var t; try { t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) {}
     var base = (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1';
     var fd = new FormData();
@@ -176,6 +205,7 @@
     if (body) fd.append('body', body);
     if (file) fd.append('attachment', file);
     if (emergency) fd.append('emergency', '1');   // App\Support\EmergencyMessage
+    if (to === 'office') fd.append('to', 'office');   // the centre office thread (App\Support\MessagingRules::OFFICE)
     var h = { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' };
     try { var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid; var va = sessionStorage.getItem('kt_view_as'); if (va) h['X-View-As-Role'] = va; } catch (e) {}
     return fetch(base + '/parent/messages', { method: 'POST', headers: h, body: fd }).then(function (r) {
@@ -539,7 +569,7 @@
       + '</div>'
       + '<button type="button" id="kt-cr-close" aria-label="Close" style="position:absolute;top:14px;right:16px;background:rgba(255,255,255,.18);color:#fff;border:0;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;line-height:1;">&times;</button>'
       + '<span style="position:absolute;bottom:12px;right:18px;background:rgba(255,255,255,.16);color:#fff;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 9px;border-radius:20px;">VIEW ONLY</span></div>'
-      + section('Child', row('Full name', d.full_name) + row('Date of birth', d.date_of_birth) + row('Age', d.age && d.age.human) + row('Gender', gender) + row('Status', d.is_at_centre ? 'At the centre' : 'At home'))
+      + section('Child', row('Full name', d.full_name) + row('Date of birth', d.date_of_birth) + row('Age', d.age && d.age.human) + row('Gender', gender) + row('Status', d.is_at_centre ? 'At Centre' : 'Not at Centre'))
       + section('Enrolment', row('Room', d.room && d.room.name) + row((KT.centreWord ? KT.centreWord(false) : 'Centre'), d.centre && d.centre.name) + row('Schedule', sched) + row('Start date', d.enrollment && d.enrollment.start_date) + row('CWELCC', d.enrollment && d.enrollment.cwelcc_eligible ? 'Eligible' : ''))
       + section('Guardians', guardians)
       + section('Pick-ups & emergency contacts', ecs)
@@ -715,13 +745,14 @@
     const _todayAv = Dom.el('div', { style: 'flex-shrink:0;' });
     if (window.KT && KT.avatar) _todayAv.innerHTML = KT.avatar(child.display_name, { size: 60, photoUrl: child.photo_url ? absUrl(child.photo_url) : null });
     const _todayLeft = Dom.el('div', { style: 'display: flex; align-items: center; gap: 16px;' }, [
-      _todayAv,
+      // Running late, sick, not attending: the "+" on the photo (childActionsAvatar, 2026-11-06). Today only.
+      state.date === localToday() ? childActionsAvatar(child, _todayAv) : _todayAv,
       Dom.el('div', { style: 'min-width: 0;' }, [
         Dom.el('div', { style: 'display: flex; align-items: center; gap: 12px; margin-bottom: 6px; flex-wrap: wrap;' }, [
           Dom.el('h1', { style: 'margin: 0; font-size: 32px;' }, `Today with ${child.display_name}`),
           child.is_at_centre
             ? Dom.el('span', { style: 'background: var(--brand-green); color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;' }, 'AT CENTRE')
-            : Dom.el('span', { style: 'background: var(--ink-200); color: var(--ink-700); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;' }, 'AT HOME'),
+            : Dom.el('span', { style: 'background: var(--ink-200); color: var(--ink-700); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px;' }, 'NOT AT CENTRE'),
         ]),
         Dom.el('p', { style: 'color: var(--ink-600); margin: 0;' },
           `${child.display_name} · ${child.age?.human || '—'} · ${child.room_name || 'No room assigned'}`
@@ -738,6 +769,8 @@
     wrap.appendChild(Dom.el('div', { style: 'display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 24px;' }, [
       _todayLeft, buildDateNav(),
     ]));
+    // Supplies the centre has asked for (2026-10-23, kt-supplies.js).
+    if (window.KT && KT.Supplies) { const _sup = Dom.el('div'); wrap.appendChild(_sup); KT.Supplies.parentCard(_sup); }
     // minmax(0,…) so a long timeline detail can't blow the column out; the aside is
     // given a real floor because it now carries the walk route map.
     const grid = Dom.el('div', { style: 'display: grid; grid-template-columns: minmax(0,1.55fr) minmax(330px,1fr); gap: 24px;' });
@@ -746,6 +779,12 @@
     const aside = Dom.el('div', { style: 'display: flex; flex-direction: column; gap: 16px;' }); grid.appendChild(aside);
 
     // AI digest card (top of main column)
+    // The day's numbers lead (2026-11-06, as on a phone): the stats strip sits above the digest.
+    const statsRow = Dom.el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px;' });
+    main.appendChild(statsRow);
+    // Due now under the numbers (2026-11-06, as on a phone): this month's billing left the side column.
+    const billingCard = Dom.el('div', { class: 'card', style: 'margin-bottom: 24px;' });
+    main.appendChild(billingCard);
     const digestCard = Dom.el('div', {
       style: 'background: linear-gradient(135deg, #1F6080 0%, #2c7894 100%); color: white; padding: 24px; border-radius: 16px; margin-bottom: 24px;',
     });
@@ -753,10 +792,9 @@
     digestCard.appendChild(Dom.el('div', { style: 'font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #8EC73C; margin-bottom: 8px;' }, '✨ YOUR DAILY DIGEST'));
     const digestBody = Dom.el('div', { style: 'font-size: 15px; line-height: 1.6;' }, 'Loading...');
     digestCard.appendChild(digestBody);
+    weekRecapButton(digestCard, child);
 
-    // Stats strip + timeline (load in parallel)
-    const statsRow = Dom.el('div', { style: 'display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px;' });
-    main.appendChild(statsRow);
+    // Timeline (the stats strip is above the digest now)
 
     const timelineCard = Dom.el('div', { class: 'card' });
     main.appendChild(timelineCard);
@@ -767,9 +805,7 @@
     // ribbon left most of the card empty and pushed everything else down the page.
     const timelineBody = Dom.el('div', { class: 'kt-today-timeline' }); timelineCard.appendChild(timelineBody);
 
-    // Aside: this month's billing + recent observations
-    const billingCard = Dom.el('div', { class: 'card' });
-    aside.appendChild(billingCard);
+    // Aside: recent observations (billing is under the stats now)
     billingCard.appendChild(Dom.el('h3', { style: 'margin: 0 0 12px 0;' }, "This month's billing"));
     const billingBody = Dom.el('div'); billingCard.appendChild(billingBody);
     billingBody.appendChild(Dom.el('p', { style: 'color: var(--ink-600);' }, 'Loading...'));
@@ -784,7 +820,7 @@
     // Today rather than only on the separate Walks screen.
     const walkCard = Dom.el('div', { class: 'card' });
     aside.appendChild(walkCard);
-    walkCard.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;background:linear-gradient(135deg,#ECFEFF,#F0FDF4);border:1px solid rgba(13,148,136,.14);padding:9px 13px;border-radius:10px;font-size:15px;color:#0F766E;' }, '🚶 Walks & outings'));
+    walkCard.appendChild(Dom.el('h3', { style: 'margin:0 0 12px;background:linear-gradient(135deg,#ECFEFF,#F0FDF4);border:1px solid rgba(13,148,136,.14);padding:9px 13px;border-radius:10px;font-size:15px;color:#0F766E;' }, '🚶 Walk Watch'));
     const walkBody = Dom.el('div'); walkCard.appendChild(walkBody);
     walkBody.appendChild(Dom.el('p', { style: 'color: var(--ink-600);' }, 'Loading...'));
 
@@ -880,12 +916,17 @@
 
       // Billing
       Dom.clear(billingBody);
-      const inv = (invoices.invoices || [])[0];
+      /* Due now, from the server (2026-10-28): the newest invoice used to stand in for "balance due", and with a
+         schedule issued in advance that was an instalment not due for months. */
+      const _due = invoices.due_now;
+      const inv = _due ? ((_due.total > 0.004 || (invoices.invoices || []).length) ? { balance_due: _due.total, invoice_number: _due.count + ' invoice' + (_due.count === 1 ? '' : 's'), due_date: 'now', _due: true } : null) : (invoices.invoices || [])[0];
       if (inv) {
         const amtBox = Dom.el('div', { style: 'background:linear-gradient(135deg,#EEF0FF,#F5EEFF);border:1px solid rgba(109,40,217,.12);border-radius:14px;padding:14px 16px;' });
         amtBox.appendChild(Dom.el('div', { style: 'font-size: 30px; font-weight: 900; color:#6D28D9; line-height:1;' }, '$' + (inv.balance_due ?? inv.total).toFixed(2)));
         amtBox.appendChild(Dom.el('div', { style: 'font-size: 12px; font-weight:700; color:#7C3AED; opacity:.8; margin-top:5px; text-transform:uppercase; letter-spacing:.5px;' }, inv.is_estimate ? 'estimated this month' : 'balance due'));
-        if (!inv.is_estimate) {
+        if (inv._due) {
+          amtBox.appendChild(Dom.el('div', { style: 'font-size: 12px; color: var(--ink-600); margin-top:6px;' }, _due.total > 0.004 ? (_due.count + ' invoice' + (_due.count === 1 ? '' : 's') + ' due now') : 'Nothing due right now'));
+        } else if (!inv.is_estimate) {
           amtBox.appendChild(Dom.el('div', { style: 'font-size: 12px; color: var(--ink-600); margin-top:6px;' }, `Invoice ${inv.invoice_number} · due ${inv.due_date}`));
         }
         billingBody.appendChild(amtBox);
@@ -1137,7 +1178,9 @@
           const msgList = Dom.el('div', { style: 'flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px;' });
           thread.appendChild(msgList);
 
-          (msgData.messages || []).forEach(m => {
+          /* Drawn by a function so a send can refresh the messages alone (2026-11-11): the whole thread, box
+             included, used to be rebuilt after every send, which is what made the next message wait. */
+          const drawMsgs = (list) => { Dom.clear(msgList); (list || []).forEach(m => {
             const mine = m.is_mine;
             const bubble = Dom.el('div', {
               style: `max-width: 70%; padding: 10px 14px; border-radius: 16px; ${mine ? 'align-self: flex-end; background: #E1F3F6; color: #0D1B2A; border-bottom-right-radius: 4px;' : 'align-self: flex-start; background: var(--ink-100); color: var(--ink-900); border-bottom-left-radius: 4px;'}`,
@@ -1147,9 +1190,15 @@
             }
             if (m.is_emergency && window.KT && KT.emergency) bubble.insertBefore(KT.emergency.tagEl(), bubble.firstChild);
             bubble.appendChild(Dom.el('div', {}, m.body));
-            bubble.appendChild(Dom.el('div', { style: 'font-size: 11px; opacity: 0.7; margin-top: 4px;' }, m.time_display));
+            const tm = Dom.el('div', { style: 'font-size: 11px; opacity: 0.7; margin-top: 4px;' }, m.time_display);
+            // ⋯ on a message from the centre: report it, or block the person (kt-report-block.js, 2026-11-03).
+            if (!mine && !m.deleted && !m.is_system && m.sender_id && window.KT && KT.reportBlock) {
+              tm.appendChild(KT.reportBlock.btnEl({ kind: 'family', conv: convo.id, mid: m.id, uid: m.sender_id, name: m.sender_name, blocked: m.blocked }));
+            }
+            bubble.appendChild(tm);
             msgList.appendChild(bubble);
-          });
+          }); };
+          drawMsgs(msgData.messages);
           msgList.scrollTop = msgList.scrollHeight;
 
           // Compose box — send routes by child_id (find-or-create per child).
@@ -1160,25 +1209,31 @@
              missing control rather than missing capability. */
           const composeWrap = Dom.el('div', { style: 'border-top: 1px solid var(--ink-200);' });
           const attachBar = Dom.el('div', { style: 'display:none;padding:8px 12px 0;' });
-          const compose = Dom.el('form', { style: 'padding: 12px; display: flex; gap: 8px; align-items: center;' });
-          const fileInput = Dom.el('input', { class: 'kt-desk-attach', type: 'file', accept: 'image/*', style: 'display:none;' });
+          const compose = Dom.el('form', { class: 'kt-compose-row', style: 'padding: 10px 12px; display: flex; gap: 6px; align-items: center;' });
+          // 👋 beside the ＋ (kt-compose-plus.js): the centre team's phones ring (App\\Support\\ChatNudge).
+          if (childId) { compose.setAttribute('data-kt-nudge', '/parent/messages/nudge'); compose.setAttribute('data-kt-nudge-body', JSON.stringify({ child_id: childId })); }
+          const fileInput = Dom.el('input', { class: 'kt-desk-attach', type: 'file', accept: 'image/*', multiple: 'multiple', style: 'display:none;' });
           const attachBtn = Dom.el('button', {
             type: 'button', title: 'Attach a photo', 'aria-label': 'Attach a photo',
             style: 'background:transparent;border:none;cursor:pointer;font-size:22px;padding:4px 6px;line-height:1;flex-shrink:0;',
           }, '\u{1F4F7}');
           const input = Dom.el('input', { class: 'kt-compose-input', type: 'text', placeholder: childId ? 'Type a message…' : 'Read-only conversation', style: 'flex: 1; padding: 13px 16px; border: 1px solid var(--ink-300); border-radius: 24px; font-size: 16px;' });
-          const sendBtn = Dom.el('button', { type: 'submit', style: 'background: #159FB4; color: white; border: none; padding: 0 20px; border-radius: 24px; font-weight: 600; cursor: pointer;' }, 'Send');
+          // The ONE send button (kt-chat-composer.css): faded until there is something to send.
+          const sendBtn = Dom.el('button', { type: 'submit', class: 'kt-send-one', title: 'Send', 'aria-label': 'Send' }, '➤');
           if (!childId) { input.disabled = true; sendBtn.disabled = true; attachBtn.disabled = true; }
 
-          let deskFile = null;
+          let deskFile = null, deskMore = [], deskChain = Promise.resolve(), deskPending = [];   // deskMore: 2nd+ photos picked together
+          const syncSend = () => { if (childId) sendBtn.disabled = !input.value.trim() && !deskFile; };
+          input.addEventListener('input', syncSend);
           const clearFile = () => {
-            deskFile = null; fileInput.value = '';
+            deskFile = null; deskMore = []; fileInput.value = '';
             Dom.clear(attachBar); attachBar.style.display = 'none';
+            syncSend();
           };
           attachBtn.addEventListener('click', () => fileInput.click());
-          fileInput.addEventListener('change', () => {
-            if (!fileInput.files || !fileInput.files[0]) return;
-            deskFile = fileInput.files[0];
+          // One chip drawer: a picked photo, and a photo put back after a send that failed.
+          const setFile = (f) => {
+            deskFile = f;
             Dom.clear(attachBar);
             const chip = Dom.el('div', {
               style: 'display:inline-flex;align-items:center;gap:8px;background:#F1F5F9;border:1px solid var(--ink-200);'
@@ -1194,31 +1249,78 @@
             chip.appendChild(rm);
             attachBar.appendChild(chip);
             attachBar.style.display = 'block';
-          });
-
-          compose.appendChild(fileInput);
-          compose.appendChild(attachBtn);
-          compose.appendChild(input);
-          const deskEm = (window.KT && KT.emergency) ? KT.emergency.button() : null;
-          if (deskEm) compose.appendChild(deskEm);
-          compose.appendChild(sendBtn);
-          compose.addEventListener('submit', async (ev) => {
-            ev.preventDefault();
-            // A photo on its own is a message; it does not need a caption.
-            if ((!input.value.trim() && !deskFile) || !childId) return;
-            sendBtn.disabled = true;
-            try {
-              await sendParentMessage(childId, input.value.trim(), deskFile, !!(deskEm && KT.emergency.isOn(deskEm)));
-              if (deskEm) KT.emergency.reset(deskEm);
-              input.value = '';
-              clearFile();
-              loadThread(convo);
-            } catch (e) {
-              input.placeholder = 'Could not send — try again';
-            } finally {
-              sendBtn.disabled = false;
+            syncSend();
+          };
+          fileInput.addEventListener('change', () => {
+            const all = Array.prototype.slice.call(fileInput.files || [], 0, 10);
+            if (!all.length) return;
+            setFile(all[0]);
+            deskMore = all.slice(1);
+            if (deskMore.length) {
+              const nm = attachBar.querySelector('span');
+              if (nm) nm.textContent = all[0].name + ' + ' + deskMore.length + ' more';
             }
           });
+
+          // THE ONE COMPOSER ROW (.kt-compose-row, kt-chat-composer.css): tools, the box, the ➤ straight after it.
+          compose.appendChild(fileInput);
+          compose.appendChild(attachBtn);
+          const deskEm = (window.KT && KT.emergency) ? KT.emergency.button() : null;
+          if (deskEm) compose.appendChild(deskEm);
+          compose.appendChild(input);
+          compose.appendChild(sendBtn);
+          /* SEND AS FAST AS YOU TYPE (2026-11-11, Anthony: "make this real time to send multiple messages quickly").
+             The box and photo clear on tap, a faded bubble shows at once, and the next message can follow straight
+             away: sends queue (deskChain) in the order tapped. When the last one is in, only the messages refresh. */
+          const sendDesk = () => {
+            // A photo on its own is a message; it does not need a caption.
+            const text = input.value.trim(), file = deskFile;
+            if ((!text && !file) || !childId) return;
+            const em = !!(deskEm && KT.emergency.isOn(deskEm));
+            if (deskEm) KT.emergency.reset(deskEm);
+            input.value = '';
+            clearFile();
+            try { input.focus(); } catch (e0) {}
+            const ghost = Dom.el('div', { 'data-kt-pending': '1', style: 'max-width: 70%; padding: 10px 14px; border-radius: 16px; align-self: flex-end; background: #E1F3F6; color: #0D1B2A; border-bottom-right-radius: 4px; opacity: .6;' },
+              text || '📷 Photo · sending…');
+            msgList.appendChild(ghost);
+            msgList.scrollTop = msgList.scrollHeight;
+            deskPending.push(ghost);
+            sendBtn.setAttribute('aria-busy', 'true');
+            deskChain = deskChain.then(async () => {
+              try {
+                await sendParentMessage(childId, text, file, em, convo.channel === 'office' ? 'office' : null);
+                ghost.style.opacity = '';
+              } catch (e) {
+                if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+                if (text) input.value = text + (input.value ? ' ' + input.value : '');
+                if (file && !deskFile) setFile(file);
+                input.placeholder = 'Could not send — try again';
+                syncSend();
+              }
+              deskPending.splice(deskPending.indexOf(ghost), 1);
+              if (deskPending.length) return;
+              sendBtn.removeAttribute('aria-busy');
+              bust('/parent/messages');
+              try {
+                const fresh = await Api.get('/parent/messages/' + convo.id);
+                if (!msgList.isConnected) return;
+                const atBottom = msgList.scrollTop + msgList.clientHeight >= msgList.scrollHeight - 80;
+                drawMsgs(fresh.messages);
+                deskPending.forEach(g => msgList.appendChild(g));   // tapped while it refreshed: still last
+                if (atBottom) msgList.scrollTop = msgList.scrollHeight;
+              } catch (e) {}
+            });
+          };
+          /* SEVERAL PHOTOS AT ONCE (2026-11-13): the words go with the first, then one message per photo, queued in
+             the order picked by the same deskChain. */
+          compose.addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            const more = deskMore.splice(0);
+            sendDesk();
+            more.forEach((mf) => { deskFile = mf; sendDesk(); });
+          });
+          syncSend();
           composeWrap.appendChild(attachBar);
           composeWrap.appendChild(compose);
           thread.appendChild(composeWrap);
@@ -1354,6 +1456,12 @@
     body.appendChild(tot);
     opts = opts || {};
     var btnBase = 'width:100%;margin-top:12px;border-radius:12px;padding:13px;font-weight:800;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;';
+    // Pay by Interac e-Transfer (2026-10-28) — the agency's own address, this invoice's number.
+    if (!paid && (inv.balance_due || 0) > 0 && _ktPayInfo && _ktPayInfo.interac) {
+      var _ib = ktInteracButton(_ktPayInfo, [{ number: inv.number, amount: inv.balance_due, kind: 'ext', id: inv.id }], { block: true, label: 'Pay ' + _extMoney(inv.balance_due) + ' by Interac e-Transfer' });
+      _ib.style.marginTop = '12px'; _ib.style.height = '46px';
+      body.appendChild(_ib);
+    }
     // Pay online (Stripe) — only when the agency has it enabled AND there's a balance.
     if (opts.stripeEnabled && !paid && (inv.balance_due || 0) > 0) {
       var payBtn = Dom.el('button', { type: 'button', style: btnBase + 'border:0;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);' }, ['Pay ' + _extMoney(inv.balance_due) + ' now']);
@@ -1414,6 +1522,976 @@
     panel.querySelector('[data-close]').addEventListener('click', close);
   }
 
+
+  /* ═══ PAY BY INTERAC e-TRANSFER + "DUE NOW" (2026-10-28) ═══════════════════════════════════════════════════════
+     Anthony: "a interac etransfer button should show up with method of payment and once clicked it shows the ilearn
+     email address for the interac payment and references the invoice number and instructions on how to pay using
+     interac etransfer (use the interac logo where you can)" and "the total due bar is at the bottom on this page for
+     parents ... only show whats due now and the future dates/invoices can be hidden until they come up to due 2 weeks
+     in advance".
+
+     The address and the window come from the server (pay_info / due_now - App\Support\ParentBilling, set per agency
+     in Billing setup). No address means no button: a parent is never shown a guessed address to send money to. The
+     invoice number goes in the e-Transfer message because that is how the payment is matched to the invoice. */
+  var _ktPayInfo = null;
+  var INTERAC_LOGO = '/img/interac-logo.svg';
+  var _m2 = function (n) { return '$' + (Number(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+
+  function ktCopy(text, btn) {
+    var done = function () {
+      var was = btn.textContent; btn.textContent = 'Copied ✓'; btn.style.color = '#166534';
+      setTimeout(function () { btn.textContent = was; btn.style.color = ''; }, 1600);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text).then(done, function () {}); return; }
+    } catch (e) {}
+    try {
+      var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;'; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove(); done();
+    } catch (e) {}
+  }
+
+  /* items: [{number, amount}] - the invoices being paid. */
+  function ktOpenInterac(pay, items) {
+    if (!pay || !pay.interac) { return; }
+    items = (items || []).filter(function (i) { return Number(i.amount) > 0.004; });
+    var total = items.reduce(function (s, i) { return s + Number(i.amount); }, 0);
+    var memo = items.map(function (i) { return i.number; }).filter(Boolean).join(', ');
+    var who = pay.interac.recipient || pay.agency_name || 'your centre';
+
+    var ov = Dom.el('div', { class: 'kt-interac-sheet', style: 'position:fixed;inset:0;z-index:9700;background:rgba(8,17,33,.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;' });
+    var panel = Dom.el('div', { role: 'dialog', 'aria-label': 'Pay by Interac e-Transfer', style: 'background:#fff;width:100%;max-width:460px;max-height:calc(100vh - 32px);overflow:auto;border-radius:18px;box-shadow:0 24px 60px -20px rgba(0,0,0,.6);' });
+    var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:14px 16px;background:linear-gradient(135deg,#0B2545,#13315C);color:#fff;position:sticky;top:0;z-index:1;' });
+    head.appendChild(Dom.el('img', { src: INTERAC_LOGO, alt: 'Interac', width: '40', height: '40', style: 'width:40px;height:40px;border-radius:8px;flex:0 0 auto;background:#fff;' }));
+    head.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;' }, [
+      Dom.el('div', { style: 'font-weight:800;font-size:16px;line-height:1.2;' }, 'Pay by Interac e-Transfer'),
+      Dom.el('div', { style: 'font-size:12px;opacity:.8;margin-top:2px;' }, 'From your own online or mobile banking'),
+    ]));
+    var x = Dom.el('button', { type: 'button', 'aria-label': 'Close', style: 'background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;flex:0 0 auto;' }, '×');
+    head.appendChild(x);
+    panel.appendChild(head);
+
+    var body = Dom.el('div', { style: 'padding:16px;' });
+    function field(label, value, copyText, strong, note) {
+      var row = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;margin-bottom:10px;' + (strong ? 'background:#FFFBEB;border-color:#FCD34D;' : '') });
+      var top = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
+      top.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;' }, [
+        Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;' }, label),
+        Dom.el('div', { style: 'font-size:15px;font-weight:800;color:#0F172A;word-break:break-all;margin-top:2px;' }, value),
+      ]));
+      if (copyText) {
+        var c = Dom.el('button', { type: 'button', style: 'flex:0 0 auto;height:30px;padding:0 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:700;font-size:12.5px;cursor:pointer;' }, 'Copy');
+        c.addEventListener('click', function () { ktCopy(copyText, c); });
+        top.appendChild(c);
+      }
+      row.appendChild(top);
+      if (note) { row.appendChild(Dom.el('div', { style: 'font-size:12px;color:#92400E;margin-top:5px;line-height:1.45;' }, note)); }
+      body.appendChild(row);
+    }
+    field('Send to (e-Transfer email)', pay.interac.email, pay.interac.email);
+    field('Recipient name', who, null);
+    field('Amount', _m2(total), total.toFixed(2));
+    // Security question (2026-11-11, Payment providers -> Interac e-Transfer): only when the agency has no Autodeposit.
+    if (pay.interac.question) {
+      field('Security question', pay.interac.question, null);
+      field('Answer', pay.interac.answer || '', pay.interac.answer || '');
+    }
+    if (memo) {
+      field('Message (required)', memo, memo, true,
+        'Type the invoice number' + (items.length > 1 ? 's' : '') + ' in the e-Transfer message. That is how ' + (pay.agency_name || 'your centre') + ' matches your payment to your invoice.');
+    }
+    if (items.length > 1) {
+      var list = Dom.el('div', { style: 'font-size:12.5px;color:#475569;margin:-2px 2px 12px;line-height:1.6;' });
+      items.forEach(function (i) { list.appendChild(Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:8px;' }, [Dom.el('span', {}, i.number), Dom.el('span', { style: 'font-weight:700;' }, _m2(i.amount))])); });
+      body.appendChild(list);
+    }
+
+    var steps = [
+      'Sign in to your bank’s app or online banking.',
+      'Choose Interac e-Transfer, then Send money.',
+      'Add ' + who + ' as a recipient using ' + pay.interac.email + '.',
+      'Enter ' + _m2(total) + (memo ? ' and type ' + memo + ' in the message' : '') + '.',
+    ];
+    if (pay.interac.question) { steps.push('When your bank asks, use the security question and answer above.'); }
+    else if (pay.interac.autodeposit) { steps.push('Autodeposit is on, so your bank will not ask for a security question.'); }
+    steps.push('Review and send.');
+    var ol = Dom.el('ol', { style: 'margin:4px 0 12px;padding-left:20px;font-size:13.5px;color:#334155;line-height:1.6;' });
+    steps.forEach(function (t) { ol.appendChild(Dom.el('li', {}, t)); });
+    body.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:13px;color:#0F172A;margin-top:4px;' }, 'How to pay'));
+    body.appendChild(ol);
+    // The agency's own instructions, as it wrote them.
+    if (pay.interac.instructions) {
+      body.appendChild(Dom.el('div', { style: 'border:1px solid #BFDBFE;background:#EFF6FF;border-radius:10px;padding:10px 12px;margin:0 0 10px;' }, [
+        Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#1D4ED8;margin-bottom:3px;' }, 'From ' + (pay.agency_name || 'your centre')),
+        Dom.el('div', { style: 'font-size:13.5px;color:#1E293B;line-height:1.5;white-space:pre-line;' }, pay.interac.instructions),
+      ]));
+    }
+    body.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#475569;background:#F1F5F9;border-radius:10px;padding:10px 12px;line-height:1.5;' },
+      'Your invoice shows as paid once ' + (pay.agency_name || 'your centre') + ' receives the e-Transfer, usually within one business day.'));
+    ktInteracReport(pay, items, body);
+    ktInteracRequest(pay, items, body);
+    body.appendChild(Dom.el('div', { style: 'font-size:10.5px;color:#94A3B8;margin-top:12px;text-align:center;' }, 'Interac and Interac e-Transfer are registered trade-marks of Interac Corp.'));
+    panel.appendChild(body);
+    ov.appendChild(panel);
+
+    function close() { document.removeEventListener('keydown', onKey); if (window.KT && KT.popOverlay) { KT.popOverlay(ov); } else { ov.remove(); } }
+    function onKey(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onKey);
+    x.addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) { close(); } });
+    document.body.appendChild(ov);
+    if (window.KT && KT.pushOverlay) { KT.pushOverlay(ov); }
+  }
+
+  /* ═══ "SEND ME AN e-TRANSFER REQUEST" (2026-10-30) ═══════════════════════════════════════════════════════════
+     Anthony: "...a button that also allows them to pay by etransfer which can popup the etransfer instructions and or
+     send a request to have the etransfer link sent to them by the service provider".
+
+     Under the e-Transfer details: the family can instead ask the centre to send them an Interac e-Transfer REQUEST
+     ("Request money") - their bank then shows a ready-made payment to accept. It goes to one of the parent's OWN
+     contacts on file (never a typed address), one open request per invoice (EtransferRequestController). The centre
+     sends it from its own bank and marks it sent; the parent is told to look for it; the payment is recorded when
+     it arrives. On the website demo the bank is simulated on the demo phone. */
+  var _ktEtr = null;   // { requests, contacts } - this family's, refreshed after every change
+  var _ktEtrP = null;  // the load in flight, shared by every Interac button drawn at once
+  function ktEtrLoad(force) {
+    if (_ktEtr && !force) { return Promise.resolve(_ktEtr); }
+    if (_ktEtrP && !force) { return _ktEtrP; }
+    _ktEtrP = Api.get('/parent/etransfer-requests').then(function (r) { _ktEtr = r || { requests: [], contacts: [] }; _ktEtrP = null; return _ktEtr; },
+      function (e) { _ktEtrP = null; throw e; });
+    return _ktEtrP;
+  }
+  function ktEtrWhen(s) {
+    var d = s ? new Date(String(s).replace(' ', 'T')) : null;
+    return d && !isNaN(d) ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+  }
+  function ktEtrStatus(req, centre) {
+    // The server labels times on the agency's clock ("Oct 30, 8:44 AM"); the date part is enough here.
+    var at = String((req.status === 'sent' ? req.sent_label : req.requested_label) || '').replace(/,.*$/, '');
+    if (req.status === 'sent') {
+      return { icon: '📨', tone: '#065F46', bg: '#ECFDF5', br: '#A7F3D0', title: 'Request sent' + (at ? ' · ' + at : ''),
+        text: centre + ' sent you an Interac e-Transfer request for ' + _m2(req.amount) + '. Check your bank app or ' + (req.contact_type === 'email' ? 'email (' + req.contact + ')' : 'texts (' + req.contact + ')') + ' and accept it.' };
+    }
+    return { icon: '⏳', tone: '#1E40AF', bg: '#EFF6FF', br: '#BFDBFE', title: 'Requested' + (at ? ' · ' + at : ''),
+      text: centre + ' will send an Interac e-Transfer request for ' + _m2(req.amount) + ' to ' + req.contact + '. You will get a notification when it is on its way.' };
+  }
+  function ktEtrOpenFor(items) {
+    var keys = (items || []).map(function (i) { return i.kind + ':' + i.id; });
+    return ((_ktEtr && _ktEtr.requests) || []).filter(function (r) {
+      return (r.status === 'requested' || r.status === 'sent') && (r.items || []).some(function (it) { return keys.indexOf(it.kind + ':' + it.id) !== -1; });
+    })[0] || null;
+  }
+  /* ═══ "I'VE SENT IT" (2026-11-11) ═══════════════════════════════════════════════════════════════════════
+     Anthony: "add ability to add reference number when parent processes a payment through interac etransfer and mark
+     that invoice paid which will trigger an alert/email to admin/director to confirm/approve". He chose "pending until
+     approved": the parent enters the bank's reference number and the amount sent (all or part); the invoice says
+     "e-Transfer sent, waiting for the centre to confirm" and is paid once a person finds it in the bank
+     (POST /parent/etransfer-reports; EtransferRequestController::report). Reports come back in the same list as the
+     requests, with kind 'report'. */
+  function ktEtrReportFor(items) {
+    var keys = (items || []).map(function (i) { return i.kind + ':' + i.id; });
+    var rows = ((_ktEtr && _ktEtr.requests) || []).filter(function (r) {
+      return r.kind === 'report' && (r.items || []).some(function (it) { return keys.indexOf(it.kind + ':' + it.id) !== -1; });
+    });   // newest first
+    return { pending: rows.filter(function (r) { return r.status === 'reported'; })[0] || null, latest: rows[0] || null };
+  }
+  function ktInteracReport(pay, items, body) {
+    items = (items || []).filter(function (i) { return i.id && (i.kind === 'inv' || i.kind === 'ext') && Number(i.amount) > 0.004; });
+    if (!items.length) { return; }
+    var centre = pay.agency_name || 'your centre';
+    var total = items.reduce(function (s, i) { return s + Number(i.amount); }, 0);
+    var box = Dom.el('div', { style: 'margin-top:14px;border-top:1px solid #E2E8F0;padding-top:14px;' });
+    body.appendChild(box);
+    var INP = 'width:100%;box-sizing:border-box;height:40px;padding:0 12px;border:1px solid #CBD5E1;border-radius:10px;font-size:15px;color:#0F172A;background:#fff;';
+    function paint() {
+      Dom.clear(box);
+      var st = ktEtrReportFor(items);
+      box.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:13px;color:#0F172A;margin-bottom:4px;' }, 'Already sent it?'));
+      if (st.pending) {
+        var p = st.pending;
+        box.appendChild(Dom.el('div', { style: 'border:1px solid #FCD34D;background:#FFFBEB;color:#92400E;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;' }, [
+          Dom.el('div', { style: 'font-weight:800;' }, '⏳ Waiting for ' + centre + ' to confirm'),
+          Dom.el('div', { style: 'margin-top:2px;' }, 'You sent ' + _m2(p.amount) + (p.reported_label ? ' on ' + String(p.reported_label).replace(/,.*$/, '') : '') + ' · reference ' + (p.reference || '')
+            + '. Your invoice shows as paid once they find it in their bank.')]));
+        var wd = Dom.el('button', { type: 'button', style: 'margin-top:8px;height:32px;padding:0 12px;border-radius:9px;border:1px solid #CBD5E1;background:#fff;color:#475569;font-weight:700;font-size:12.5px;cursor:pointer;' }, 'I made a mistake - withdraw this');
+        wd.addEventListener('click', function () {
+          wd.disabled = true;
+          Api.post('/parent/etransfer-requests/' + p.id + '/cancel', {}).then(function () { return ktEtrLoad(true); }).then(paint)
+            .catch(function (e) { wd.disabled = false; if (KT.toast) { KT.toast('⚠️', 'Could not withdraw it', (e && e.message) || '', '#B91C1C'); } });
+        });
+        box.appendChild(wd);
+        return;
+      }
+      if (st.latest && st.latest.status === 'rejected') {
+        box.appendChild(Dom.el('div', { style: 'border:1px solid #FECACA;background:#FEF2F2;color:#991B1B;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;margin-bottom:10px;' }, [
+          Dom.el('div', { style: 'font-weight:800;' }, '⚠️ Not confirmed: reference ' + (st.latest.reference || '')),
+          Dom.el('div', { style: 'margin-top:2px;' }, (st.latest.reject_reason || 'The centre could not find it.') + ' Check your bank, then send the right reference below.')]));
+      }
+      box.appendChild(Dom.el('div', { style: 'font-size:13px;color:#475569;line-height:1.5;margin-bottom:10px;' },
+        'Once your bank shows the e-Transfer as sent, enter its reference number so ' + centre + ' can match it. Your invoice stays open until they confirm it.'));
+      var ref = Dom.el('input', { type: 'text', maxlength: '40', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', placeholder: 'e.g. C1AbCdEfGhIj', 'aria-label': 'e-Transfer reference number', style: INP });
+      var amt = Dom.el('input', { type: 'number', min: '0.01', step: '0.01', max: total.toFixed(2), inputmode: 'decimal', 'aria-label': 'Amount you sent', style: INP });
+      amt.value = total.toFixed(2);
+      var lab = function (t) { return Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin:0 0 4px;' }, t); };
+      box.appendChild(lab('Reference number'));
+      box.appendChild(ref);
+      box.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:4px 0 10px;' }, 'It is on your bank’s confirmation screen and in the confirmation email.'));
+      box.appendChild(lab('Amount you sent'));
+      box.appendChild(amt);
+      box.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:4px 0 10px;' }, 'Paid part of it? Enter what you sent; the rest stays owing.'));
+      var msg = Dom.el('div', { style: 'font-size:12.5px;color:#B91C1C;min-height:0;margin-bottom:6px;' });
+      box.appendChild(msg);
+      var go = Dom.el('button', { type: 'button', style: 'width:100%;height:44px;border-radius:11px;border:0;background:linear-gradient(135deg,#1B3A63,#2F8C86);color:#fff;font-weight:800;font-size:14px;cursor:pointer;' }, 'I’ve sent it - tell ' + centre);
+      go.addEventListener('click', function () {
+        var r = String(ref.value || '').replace(/\s+/g, '');
+        var a = Math.round(Number(amt.value) * 100) / 100;
+        msg.textContent = '';
+        if (!/^[A-Za-z0-9-]{4,40}$/.test(r)) { msg.textContent = 'Enter the reference number exactly as your bank shows it.'; ref.focus(); return; }
+        if (!(a >= 0.01) || a > Math.round(total * 100) / 100 + 0.004) { msg.textContent = 'Enter an amount up to ' + _m2(total) + '.'; amt.focus(); return; }
+        go.disabled = true; go.textContent = 'Sending…';
+        Api.post('/parent/etransfer-reports', { items: items.map(function (i) { return { kind: i.kind, id: i.id }; }), reference: r, amount: a })
+          .then(function () { return ktEtrLoad(true); })
+          .then(function () { paint(); if (KT.toast) { KT.toast('💸', 'Sent to ' + centre, 'They will confirm it once it shows in their bank.', '#1F6080'); } })
+          .catch(function (e) {
+            go.disabled = false; go.textContent = 'I’ve sent it - tell ' + centre;
+            msg.textContent = (e && e.message) || 'Could not send it. Please try again.';
+            ktEtrLoad(true).then(function () { if (ktEtrReportFor(items).pending) { paint(); } });
+          });
+      });
+      box.appendChild(go);
+    }
+    box.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#94A3B8;' }, 'Loading…'));
+    ktEtrLoad(true).then(paint, function () { Dom.clear(box); });
+  }
+  function ktInteracRequest(pay, items, body) {
+    if (!pay || !pay.interac || !pay.interac.requests) { return; }
+    items = (items || []).filter(function (i) { return i.id && (i.kind === 'inv' || i.kind === 'ext') && Number(i.amount) > 0.004; });
+    if (!items.length) { return; }
+    var centre = pay.agency_name || 'your centre';
+    var total = items.reduce(function (s, i) { return s + Number(i.amount); }, 0);
+    var box = Dom.el('div', { style: 'margin-top:14px;border-top:1px solid #E2E8F0;padding-top:14px;' });
+    body.appendChild(box);
+    function paint() {
+      Dom.clear(box);
+      var open = ktEtrOpenFor(items);
+      box.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:13px;color:#0F172A;margin-bottom:4px;' }, 'Or have ' + centre + ' request it'));
+      if (open) {
+        var st = ktEtrStatus(open, centre);
+        box.appendChild(Dom.el('div', { style: 'border:1px solid ' + st.br + ';background:' + st.bg + ';color:' + st.tone + ';border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;' }, [
+          Dom.el('div', { style: 'font-weight:800;' }, st.icon + ' ' + st.title), Dom.el('div', { style: 'margin-top:2px;' }, st.text)]));
+        var cx = Dom.el('button', { type: 'button', style: 'margin-top:8px;height:32px;padding:0 12px;border-radius:9px;border:1px solid #CBD5E1;background:#fff;color:#475569;font-weight:700;font-size:12.5px;cursor:pointer;' }, 'Cancel the request');
+        cx.addEventListener('click', function () {
+          cx.disabled = true;
+          Api.post('/parent/etransfer-requests/' + open.id + '/cancel', {}).then(function () { return ktEtrLoad(true); }).then(paint)
+            .catch(function (e) { cx.disabled = false; if (KT.toast) { KT.toast('⚠️', 'Could not cancel', (e && e.message) || '', '#B91C1C'); } });
+        });
+        box.appendChild(cx);
+        return;
+      }
+      box.appendChild(Dom.el('div', { style: 'font-size:13px;color:#475569;line-height:1.5;margin-bottom:10px;' },
+        'Prefer a ready-made payment in your bank app? ' + centre + ' can send you an Interac e-Transfer request for ' + _m2(total) + ' - you just review and accept it.'));
+      var ask = Dom.el('button', { type: 'button', style: 'width:100%;height:44px;border-radius:11px;border:1.5px solid #1F6080;background:#fff;color:#1F6080;font-weight:800;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;' },
+        [Dom.el('span', {}, '📨'), Dom.el('span', {}, 'Ask for an e-Transfer request')]);
+      ask.addEventListener('click', confirmStep);
+      box.appendChild(ask);
+    }
+    function confirmStep() {
+      Dom.clear(box);
+      box.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:13px;color:#0F172A;margin-bottom:6px;' }, 'Where should ' + centre + ' send the request?'));
+      var contacts = (_ktEtr && _ktEtr.contacts) || [];
+      if (!contacts.length) {
+        box.appendChild(Dom.el('div', { style: 'font-size:13px;color:#92400E;background:#FFFBEB;border:1px solid #FCD34D;border-radius:10px;padding:10px 12px;' }, 'Add your email or mobile number in My settings first.'));
+        return;
+      }
+      var pick = 0;
+      var list = Dom.el('div', { role: 'radiogroup', style: 'display:flex;flex-direction:column;gap:6px;margin-bottom:10px;' });
+      contacts.forEach(function (c, i) {
+        var r = Dom.el('label', { style: 'display:flex;align-items:center;gap:10px;border:1px solid #E2E8F0;border-radius:10px;padding:9px 12px;cursor:pointer;font-size:13.5px;color:#0F172A;' });
+        var inp = Dom.el('input', { type: 'radio', name: 'kt-etr-contact', value: String(i) });
+        if (i === 0) { inp.checked = true; }
+        inp.addEventListener('change', function () { pick = i; });
+        r.appendChild(inp);
+        r.appendChild(Dom.el('span', { style: 'flex:1;min-width:0;word-break:break-all;' }, (c.type === 'email' ? '✉️ ' : '📱 ') + c.label));
+        list.appendChild(r);
+      });
+      box.appendChild(list);
+      var sumBox = Dom.el('div', { style: 'font-size:12.5px;color:#475569;background:#F8FAFC;border-radius:10px;padding:9px 12px;margin-bottom:10px;line-height:1.55;' });
+      items.forEach(function (i) { sumBox.appendChild(Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:8px;' }, [Dom.el('span', {}, 'Invoice ' + (i.number || '')), Dom.el('span', { style: 'font-weight:700;color:#0F172A;' }, _m2(i.amount))])); });
+      if (items.length > 1) { sumBox.appendChild(Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:8px;border-top:1px solid #E2E8F0;margin-top:4px;padding-top:4px;font-weight:800;color:#0F172A;' }, [Dom.el('span', {}, 'Total'), Dom.el('span', {}, _m2(total))])); }
+      box.appendChild(sumBox);
+      var go = Dom.el('button', { type: 'button', style: 'width:100%;height:44px;border-radius:11px;border:0;background:linear-gradient(135deg,#1B3A63,#2F8C86);color:#fff;font-weight:800;font-size:14px;cursor:pointer;' }, 'Send my request to ' + centre);
+      var back = Dom.el('button', { type: 'button', style: 'width:100%;height:36px;margin-top:6px;border-radius:10px;border:0;background:transparent;color:#64748B;font-weight:700;font-size:13px;cursor:pointer;' }, 'Back');
+      back.addEventListener('click', paint);
+      go.addEventListener('click', function () {
+        go.disabled = true; go.textContent = 'Sending…';
+        var c = contacts[pick];
+        Api.post('/parent/etransfer-requests', { items: items.map(function (i) { return { kind: i.kind, id: i.id }; }), contact_type: c.type, contact: c.value })
+          .then(function () { return ktEtrLoad(true); })
+          .then(function () { paint(); if (KT.toast) { KT.toast('📨', 'Request sent to ' + centre, 'They will send the e-Transfer request to ' + c.label + '.', '#1F6080'); } })
+          .catch(function (e) {
+            go.disabled = false; go.textContent = 'Send my request to ' + centre;
+            ktEtrLoad(true).then(paint);
+            if (KT.toast) { KT.toast('⚠️', 'Could not ask for the request', (e && e.message) || 'Please try again.', '#B91C1C'); }
+          });
+      });
+      box.appendChild(go); box.appendChild(back);
+    }
+    box.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:#94A3B8;' }, 'Loading…'));
+    ktEtrLoad(true).then(paint, function () { Dom.clear(box); });
+  }
+  /* The due-now hero: where the newest open request stands, so the family is not left wondering. */
+  function ktEtrStatusLine(sum) {
+    var slot = Dom.el('div', { style: 'position:relative;' });
+    sum.appendChild(slot);
+    ktEtrLoad(true).then(function (d) {
+      var rows = (d && d.requests) || [];
+      var rep = rows.filter(function (r) { return r.kind === 'report' && r.status === 'reported'; })[0];
+      if (rep) {
+        slot.appendChild(Dom.el('div', { style: 'font-size:12.5px;margin-top:10px;border-top:1px solid rgba(255,255,255,.2);padding-top:8px;line-height:1.45;' }, [
+          Dom.el('b', {}, '⏳ e-Transfer sent: ' + _m2(rep.amount) + ' · ref ' + (rep.reference || '') + '. '),
+          Dom.el('span', { style: 'opacity:.9;' }, 'Waiting for ' + ((_ktPayInfo && _ktPayInfo.agency_name) || 'your centre') + ' to confirm it; the invoice shows as paid once they do.')]));
+        return;
+      }
+      var open = rows.filter(function (r) { return r.status === 'requested' || r.status === 'sent'; })[0];
+      if (!open) { return; }
+      var st = ktEtrStatus(open, (_ktPayInfo && _ktPayInfo.agency_name) || 'Your centre');
+      slot.appendChild(Dom.el('div', { style: 'font-size:12.5px;margin-top:10px;border-top:1px solid rgba(255,255,255,.2);padding-top:8px;line-height:1.45;' }, [
+        Dom.el('b', {}, st.icon + ' e-Transfer request: ' + st.title + '. '), Dom.el('span', { style: 'opacity:.9;' }, st.text)]));
+    }, function () {});
+  }
+
+  function ktInteracButton(pay, items, opts) {
+    opts = opts || {};
+    var b = Dom.el('button', { type: 'button', style: (opts.block ? 'width:100%;justify-content:center;' : '') + 'display:inline-flex;align-items:center;gap:9px;height:40px;padding:0 14px 0 6px;border-radius:11px;border:1px solid ' + (opts.onDark ? 'rgba(255,255,255,.35)' : '#E2E8F0') + ';background:#fff;color:#0F172A;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 6px 16px -10px rgba(15,23,42,.5);' });
+    b.appendChild(Dom.el('img', { src: INTERAC_LOGO, alt: '', width: '28', height: '28', style: 'width:28px;height:28px;border-radius:6px;' }));
+    var bl = Dom.el('span', {}, opts.label || 'Pay by Interac e-Transfer');
+    b.appendChild(bl);
+    var withIds = (items || []).filter(function (i) { return i.id && (i.kind === 'inv' || i.kind === 'ext'); });
+    if (withIds.length) {
+      ktEtrLoad(false).then(function () { if (ktEtrReportFor(withIds).pending) { bl.textContent = 'e-Transfer sent · waiting to be confirmed'; } }, function () {});
+    }
+    b.addEventListener('click', function (e) { e.stopPropagation(); ktOpenInterac(pay, items); });
+    return b;
+  }
+
+  /* ═══ PAYING ON THE WEBSITE DEMO (2026-10-30) ═══════════════════════════════════════════════════════════════════
+     Anthony: "including the ability to pay invoices (simulate the full experience)". For a public demo agency the
+     server sends pay_info.demo_pay (App\Support\WebDemoPayments) and every Pay button opens this sheet instead of a
+     real checkout: choose a method, the card or bank sheet, processing, success, a receipt, the balance at zero.
+     NO MONEY MOVES and NO CARD DATA LEAVES THE PHONE: the fields are prefilled with the published test number and are
+     read-only, sit in no form, and only the invoice ids and the method's name are posted to /parent/demo-pay. */
+  function ktDemoPay(invs, done) {
+    var pay = (_ktPayInfo && _ktPayInfo.demo_pay) || null;
+    if (!pay) { return; }
+    invs = (invs || []).filter(function (i) { return Number(i.balance_due) > 0.004 && i.id; });
+    if (!invs.length) { return; }
+    var total = invs.reduce(function (s, i) { return s + Number(i.balance_due); }, 0);
+    var methods = (pay.methods && pay.methods.length) ? pay.methods : [{ key: 'card', label: 'Credit or debit card' }];
+    var sel = methods[0].key, busy = false, finished = false, errBox = null;
+    var isCA = methods.some(function (m) { return m.key === 'interac'; });
+    var u = {}; try { u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {}; } catch (e) {}
+    var payer = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || 'Account holder';
+    var agencyName = (_ktPayInfo && _ktPayInfo.agency_name) || 'your centre';
+    var ICON = { card: '💳', ach: '🏦', pad: '🏦', interac: '⚡' };
+
+    var ov = Dom.el('div', { class: 'kt-demopay-sheet', style: 'position:fixed;inset:0;z-index:9750;background:rgba(8,17,33,.58);display:flex;align-items:center;justify-content:center;padding:14px;box-sizing:border-box;' });
+    var panel = Dom.el('div', { role: 'dialog', 'aria-label': 'Pay invoice', style: 'background:#fff;width:100%;max-width:440px;max-height:calc(100% - 24px);overflow:auto;border-radius:18px;box-shadow:0 24px 60px -20px rgba(0,0,0,.6);' });
+    var head = Dom.el('div', { style: 'display:flex;align-items:center;gap:12px;padding:14px 16px;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);border-bottom:3px solid #2DD4BF;color:#fff;position:sticky;top:0;z-index:1;' });
+    var title = Dom.el('div', { style: 'flex:1;min-width:0;' }, [
+      Dom.el('div', { style: 'font-weight:800;font-size:16px;line-height:1.2;' }, 'Pay ' + _m2(total)),
+      Dom.el('div', { style: 'font-size:12px;opacity:.85;margin-top:2px;' }, agencyName),
+    ]);
+    var x = Dom.el('button', { type: 'button', 'aria-label': 'Close', style: 'background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:50%;width:32px;height:32px;min-height:0;padding:0;font-size:18px;cursor:pointer;flex:0 0 auto;' }, '×');
+    head.appendChild(Dom.el('div', { style: 'width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:20px;flex:0 0 auto;' }, '💳'));
+    head.appendChild(title); head.appendChild(x);
+    panel.appendChild(head);
+    var body = Dom.el('div', { style: 'padding:14px 16px 16px;' });
+    panel.appendChild(body);
+    ov.appendChild(panel);
+
+    function lbl(t) { return Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;margin:0 0 4px;' }, t); }
+    function ro(value, extra) {
+      // Read-only on purpose: a visitor cannot type a real card here.
+      return Dom.el('input', { type: 'text', value: value, readonly: 'readonly', tabindex: '-1', autocomplete: 'off', 'aria-readonly': 'true',
+        style: 'width:100%;box-sizing:border-box;height:40px;border:1px solid #CBD5E1;border-radius:10px;padding:0 12px;font-size:15px;color:#0F172A;background:#F8FAFC;font-variant-numeric:tabular-nums;' + (extra || '') });
+    }
+    function row2(a, b) { return Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;' }, [a, b]); }
+    function fld(label, input) { return Dom.el('div', { style: 'min-width:0;' }, [lbl(label), input]); }
+
+    function form() {
+      Dom.clear(body);
+      body.appendChild(Dom.el('div', { style: 'display:flex;gap:9px;align-items:flex-start;background:#FFFBEB;border:1px solid #FCD34D;color:#92400E;border-radius:12px;padding:10px 12px;font-size:12.5px;line-height:1.45;margin-bottom:12px;' }, [
+        Dom.el('span', { style: 'font-size:16px;line-height:1;' }, '🧪'),
+        Dom.el('span', {}, 'Demo - no real payment is made. The card below is the published test card; never enter a real card here.'),
+      ]));
+      var list = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:12px;padding:8px 12px;margin-bottom:12px;' });
+      invs.forEach(function (i) {
+        list.appendChild(Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:4px 0;color:#334155;' }, [
+          Dom.el('span', {}, 'Invoice ' + (i.invoice_number || i.number || '')), Dom.el('span', { style: 'font-weight:700;color:#0F172A;' }, _m2(i.balance_due))]));
+      });
+      list.appendChild(Dom.el('div', { style: 'display:flex;justify-content:space-between;gap:10px;font-size:15px;padding:7px 0 3px;border-top:1px solid #E2E8F0;margin-top:4px;font-weight:800;color:#0F172A;' }, [
+        Dom.el('span', {}, 'Total'), Dom.el('span', {}, _m2(total))]));
+      body.appendChild(list);
+
+      body.appendChild(lbl('Pay with'));
+      var opts = Dom.el('div', { role: 'radiogroup', style: 'display:grid;gap:8px;margin-bottom:12px;' });
+      methods.forEach(function (m) {
+        var on = m.key === sel;
+        var b = Dom.el('button', { type: 'button', role: 'radio', 'aria-checked': on ? 'true' : 'false', 'data-kt-iconized': '1',
+          style: 'display:flex;align-items:center;gap:10px;width:100%;text-align:left;height:46px;min-height:0;padding:0 12px;border-radius:12px;cursor:pointer;font-size:14.5px;font-weight:700;color:#0F172A;'
+            + (on ? 'border:2px solid #1F6FB2;background:#EFF6FF;' : 'border:1px solid #CBD5E1;background:#fff;') }, [
+          Dom.el('span', { style: 'font-size:18px;' }, ICON[m.key] || '💳'), Dom.el('span', { style: 'flex:1;' }, m.label),
+          Dom.el('span', { style: 'width:18px;height:18px;border-radius:50%;box-sizing:border-box;' + (on ? 'border:5px solid #1F6FB2;' : 'border:2px solid #94A3B8;') })]);
+        b.addEventListener('click', function () { sel = m.key; form(); });
+        opts.appendChild(b);
+      });
+      body.appendChild(opts);
+
+      var det = Dom.el('div', { style: 'border:1px solid #E2E8F0;border-radius:12px;padding:12px;margin-bottom:12px;background:#fff;' });
+      if (sel === 'card') {
+        det.appendChild(fld('Name on card', ro(payer)));
+        var num = Dom.el('div', { style: 'position:relative;margin-top:10px;' }, [lbl('Card number'), ro('4242 4242 4242 4242', 'padding-right:58px;letter-spacing:.5px;'),
+          Dom.el('span', { style: 'position:absolute;right:10px;bottom:10px;font-size:11px;font-weight:900;font-style:italic;color:#1A1F71;background:#fff;border:1px solid #CBD5E1;border-radius:5px;padding:2px 6px;' }, 'VISA')]);
+        det.appendChild(num);
+        det.appendChild(row2(fld('Expiry', ro('12 / 28')), fld('CVC', ro('123'))));
+        det.appendChild(Dom.el('div', { style: 'margin-top:10px;' }, [fld(isCA ? 'Postal code' : 'ZIP code', ro(isCA ? 'M5V 2T6' : '90802'))]));
+      } else if (sel === 'ach' || sel === 'pad') {
+        det.appendChild(fld('Account holder', ro(payer)));
+        det.appendChild(row2(fld(sel === 'pad' ? 'Transit / institution' : 'Routing number', ro(sel === 'pad' ? '12345 / 001' : '110000000')), fld('Account number', ro('•••• 6789'))));
+        det.appendChild(Dom.el('div', { style: 'margin-top:10px;' }, [fld('Account type', ro('Checking'))]));
+        det.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:10px;line-height:1.45;' },
+          'You authorize ' + agencyName + ' to debit this account for the amount above. Bank payments usually settle in 1-3 business days.'));
+      } else {
+        det.appendChild(Dom.el('div', { style: 'font-size:13.5px;color:#334155;line-height:1.5;' }, 'Send ' + _m2(total) + ' by Interac e-Transfer from your bank. In the demo, your bank confirms it straight away.'));
+      }
+      body.appendChild(det);
+      var err = Dom.el('div', { style: 'font-size:13px;color:#B91C1C;min-height:0;margin:-4px 0 8px;line-height:1.45;' });
+      errBox = err;
+      body.appendChild(err);
+      var go = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: 'width:100%;border:0;cursor:pointer;height:50px;min-height:0;border-radius:13px;font-size:16px;font-weight:800;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);box-shadow:0 12px 24px -12px rgba(31,111,178,.55);' }, 'Pay ' + _m2(total));
+      go.addEventListener('click', function () { submit(err); });
+      body.appendChild(go);
+      body.appendChild(Dom.el('div', { style: 'text-align:center;font-size:11.5px;color:#94A3B8;margin-top:9px;' }, '🔒 Encrypted payment · Demo mode'));
+    }
+
+    function submit(err) {
+      if (busy) { return; }
+      busy = true; err.textContent = '';
+      Dom.clear(body);
+      var spin = Dom.el('div', { style: 'width:46px;height:46px;border-radius:50%;border:4px solid #DBEAFE;border-top-color:#1F6FB2;margin:26px auto 14px;animation:ktDemoSpin .8s linear infinite;' });
+      if (!document.getElementById('kt-demopay-css')) {
+        var st = document.createElement('style'); st.id = 'kt-demopay-css';
+        st.textContent = '@keyframes ktDemoSpin{to{transform:rotate(360deg)}}@keyframes ktDemoPop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}';
+        document.head.appendChild(st);
+      }
+      var msg = Dom.el('div', { style: 'text-align:center;font-weight:800;font-size:16px;color:#0F172A;' }, 'Processing payment…');
+      var sub = Dom.el('div', { style: 'text-align:center;font-size:13px;color:#64748B;margin:6px 0 28px;' }, sel === 'card' ? 'Contacting your card issuer' : 'Contacting your bank');
+      body.appendChild(spin); body.appendChild(msg); body.appendChild(sub);
+      x.style.opacity = '.35'; x.style.pointerEvents = 'none';
+      setTimeout(function () { sub.textContent = 'Confirming with ' + agencyName; }, 900);
+      var wait = new Promise(function (r) { setTimeout(r, 1800); });
+      // Only the invoice ids and the method's NAME - never a card or bank detail.
+      var req = Api.post('/parent/demo-pay', { invoice_ids: invs.map(function (i) { return i.id; }), method: sel });
+      Promise.all([req, wait]).then(function (res) { receipt(res[0]); }, function (e) {
+        busy = false; x.style.opacity = ''; x.style.pointerEvents = ''; form();
+        if (errBox) { errBox.textContent = (e && e.message) || 'The payment could not be completed. Please try again.'; }
+      });
+    }
+
+    function receipt(r) {
+      finished = true; busy = false; x.style.opacity = ''; x.style.pointerEvents = '';
+      title.firstChild.textContent = 'Payment successful';
+      Dom.clear(body);
+      body.appendChild(Dom.el('div', { style: 'width:64px;height:64px;border-radius:50%;background:#16A34A;color:#fff;font-size:34px;font-weight:900;display:flex;align-items:center;justify-content:center;margin:10px auto 10px;animation:ktDemoPop .45s ease-out;box-shadow:0 12px 26px -12px rgba(22,163,74,.8);' }, '✓'));
+      body.appendChild(Dom.el('div', { style: 'text-align:center;font-weight:900;font-size:24px;color:#0F172A;' }, _m2(r.total)));
+      body.appendChild(Dom.el('div', { style: 'text-align:center;font-size:13.5px;color:#475569;margin:4px 0 14px;' }, 'Paid to ' + (r.agency_name || agencyName) + '. Thank you!'));
+      // The receipt, as the email the family would get.
+      var rc = Dom.el('div', { class: 'kt-demo-receipt', style: 'border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;margin-bottom:12px;' });
+      rc.appendChild(Dom.el('div', { style: 'background:#F8FAFC;border-bottom:1px solid #E2E8F0;padding:10px 12px;font-size:12px;color:#64748B;line-height:1.5;' }, [
+        Dom.el('div', { style: 'font-weight:800;color:#0F172A;font-size:13.5px;' }, 'Receipt from ' + (r.agency_name || agencyName)),
+        Dom.el('div', {}, (r.centre_name ? r.centre_name + ' · ' : '') + r.paid_at)]));
+      var g = Dom.el('div', { style: 'padding:10px 12px;display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:13px;' });
+      function kv(k, v, strong) { g.appendChild(Dom.el('div', { style: 'color:#64748B;' }, k)); g.appendChild(Dom.el('div', { style: 'text-align:right;color:#0F172A;' + (strong ? 'font-weight:800;' : 'font-weight:600;') }, v)); }
+      kv('Receipt #', r.reference); g.lastChild.style.whiteSpace = 'nowrap'; g.lastChild.style.fontSize = '12px';
+      kv('Paid by', r.payer || payer);
+      kv('Paid with', r.method_label);
+      (r.invoices || []).forEach(function (i) { kv('Invoice ' + i.number, _m2(i.amount)); });
+      kv('Total paid', _m2(r.total), true);
+      kv('Balance now', _m2(0), true);
+      rc.appendChild(g);
+      rc.appendChild(Dom.el('div', { style: 'border-top:1px dashed #E2E8F0;padding:8px 12px;font-size:11.5px;color:#94A3B8;' }, 'A copy of this receipt is in your notifications. Demo receipt - no money moved.'));
+      body.appendChild(rc);
+      var btns = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;' });
+      var prt = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: 'height:46px;min-height:0;border-radius:12px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:800;font-size:14px;cursor:pointer;' }, '🧾 Save receipt');
+      prt.addEventListener('click', function () {
+        var html = '<!doctype html><html><head><meta charset="utf-8"><title>Receipt ' + r.reference + '</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px;color:#0F172A}div{font-size:14px}</style></head><body>' + rc.outerHTML + '</body></html>';
+        // One print path for phones, the apps and desktop (kt-doc-viewer.js, 2026-11-06).
+        if (window.KT && KT.printDoc) { KT.printDoc({ html: html }, { title: 'Receipt ' + r.reference }); return; }
+        try {
+          var f = document.createElement('iframe'); f.style.cssText = 'position:fixed;width:0;height:0;border:0;left:-9999px;';
+          document.body.appendChild(f);
+          f.contentDocument.open();
+          f.contentDocument.write(html);
+          f.contentDocument.close();
+          setTimeout(function () { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) {} setTimeout(function () { f.remove(); }, 2000); }, 300);
+        } catch (e) {}
+      });
+      var ok = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: 'height:46px;min-height:0;border-radius:12px;border:0;background:linear-gradient(135deg,#0FA3B1,#1F6FB2);color:#fff;font-weight:800;font-size:14px;cursor:pointer;' }, 'Done');
+      ok.addEventListener('click', close);
+      btns.appendChild(prt); btns.appendChild(ok);
+      body.appendChild(btns);
+    }
+
+    function close() {
+      if (busy) { return; }
+      document.removeEventListener('keydown', onKey);
+      if (window.KT && KT.popOverlay) { KT.popOverlay(ov); } else { ov.remove(); }
+      if (ov.parentNode) { ov.remove(); }
+      if (finished) {
+        Object.keys(apiCache).forEach(function (k) { if (/invoices|ledger|billing/.test(k)) { delete apiCache[k]; } });
+        if (typeof done === 'function') { try { done(); } catch (e) {} }
+        try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (e) {}
+      }
+    }
+    function onKey(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onKey);
+    x.addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) { close(); } });
+    form();
+    document.body.appendChild(ov);
+    if (window.KT && KT.pushOverlay) { KT.pushOverlay(ov); }
+  }
+
+  /* The invoices a demo "Pay now" covers: everything still owed in the list, oldest due first. */
+  function ktDueInvoices(invoices) {
+    return (invoices || []).filter(function (i) { return Number(i.balance_due) > 0.004 && i.status !== 'paid' && !i.is_estimate && i.id; })
+      .sort(function (a, b) { return String(a.due_date || a.due_at || '9999').localeCompare(String(b.due_date || b.due_at || '9999')); });
+  }
+
+  /* The invoices a "pay" covers: everything still owed in the list the server sent (already the due-now window). */
+  function ktDueItems(invoices) {
+    return (invoices || []).filter(function (i) { return Number(i.balance_due) > 0.004 && i.status !== 'paid' && !i.is_estimate; })
+      // Oldest due first: the overdue one is the one to name first in the message.
+      .sort(function (a, b) { return String(a.due_date || a.due_at || '9999').localeCompare(String(b.due_date || b.due_at || '9999')); })
+      .map(function (i) { return { number: i.invoice_number || i.number, amount: Number(i.balance_due), kind: (i.kind === 'ext' || i.external_source) ? 'ext' : 'inv', id: i.id }; });
+  }
+
+  /* TOTAL DUE, AT THE TOP. It used to come after every invoice card - the first thing a parent saw was a card per
+     invoice and the total sat at the bottom of the page, under a second copy of the same list. */
+
+  /* ═══ BILLING DASHBOARD + ACCOUNT LEDGER (2026-10-28) ═════════════════════════════════════════════════════════
+     Anthony: "add some stats, graphs and anything else useful under billing and add an account ledger section for
+     parents as well. Make this section look better than how it is currently".
+
+     Under the due-now summary: four figures a family actually asks about (what they have paid this year, their last
+     payment, what is due next, whether they pay on time), a 12-month billed-vs-paid chart, then two tabs - the
+     invoices, and an ACCOUNT LEDGER: every charge and payment with a running balance, filterable by year, printable
+     as a statement and downloadable as CSV. All of it from GET /parent/children/{id}/ledger, which follows the same
+     due-now rules as the rest of the screen, so the ledger's balance is the figure at the top.
+
+     Built from divs, not a <table>: the portal's table watchers (export bar, kebabs, card pager) decorate every table,
+     and a family's statement is not a dataset to manage. */
+  function ktD(d, opts) {
+    var m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) { return d ? String(d) : '—'; }
+    return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, opts || { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+
+  /* INVOICE ⋮ MENUS (2026-10-28, Anthony: "have the ability to see the invoice in a popup as well with the kebab
+     feature"). Ledger lines, the iLearn invoice list and KiddieTrac's own invoice cards each get a ⋮ with View invoice
+     (the same popup a row tap opens) and, while something is owed, Pay by Interac e-Transfer. Tables get it from
+     kt-row-actions (plain buttons in the last cell, collapsed for us); everything else - cards and div rows, which
+     nothing collapses - calls KT.openActionMenu on a .kt-ka-kebab anchor, per CONVENTIONS.md. */
+  function ktOpenInvRef(ref) {
+    if (!ref || !ref.id) { return; }
+    if (ref.kind === 'ext') {
+      openMergedExternalInvoice({ id: 'ext-' + ref.id, invoice_number: ref.number, status: '', total: 0, balance_due: ref.balance || 0 });
+    } else if (window.KT && KT.openInvoiceById) {
+      KT.openInvoiceById(ref.id);
+    }
+  }
+  /* Anthony (2026-10-28): "when using the kebab to view the invoice it should go straight to the invoice, add other
+     options in the kebab to download, print, email". View opens the invoice ITSELF - the PDF in the portal's document
+     viewer (it has its own ✕) - not the summary popup a row tap shows. Email goes only to the signed-in parent's own
+     address (the server takes it from their account; nothing here chooses a recipient). */
+  function ktInvPdfUrl(ref) {
+    var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    return ref.kind === 'ext' ? base + '/invoices/external/' + ref.id + '/pdf' : base + '/parent/invoices/' + ref.id + '/pdf';
+  }
+  function ktInvFile(ref) { return 'Invoice-' + String(ref.number || ref.id).replace(/[^A-Za-z0-9]+/g, '-') + '.pdf'; }
+  function ktViewInvoice(ref, thenPrint) {
+    if (!(window.KT && KT.openFile && KT.fetchFileBlob)) { ktOpenInvRef(ref); return; }
+    var h = KT.openFile(KT.fetchFileBlob(ktInvPdfUrl(ref)).then(function (b) { return new Blob([b], { type: 'application/pdf' }); }),
+      { title: 'Invoice ' + (ref.number || ''), label: 'Invoice', filename: ktInvFile(ref), mime: 'application/pdf' });
+    if (thenPrint) {
+      // The viewer prints once the pages are drawn - in the apps through their print service (2026-11-06).
+      Promise.resolve(h).then(function (v) { if (v && v.print) { v.print(); } });
+    }
+  }
+  function ktDownloadInvoice(ref) {
+    if (!(window.KT && KT.fetchFileBlob)) { return; }
+    KT.fetchFileBlob(ktInvPdfUrl(ref)).then(function (b) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([b], { type: 'application/pdf' }));
+      a.download = ktInvFile(ref);
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+    }).catch(function (e) { if (KT.toast) { KT.toast('⚠️', 'Could not download the invoice', (e && e.message) || 'Please try again.', '#B91C1C'); } });
+  }
+  function ktEmailInvoice(ref) {
+    var url = ref.kind === 'ext' ? '/parent/external-invoices/' + ref.id + '/email' : '/parent/invoices/' + ref.id + '/email';
+    if (KT.toast) { KT.toast('✉️', 'Sending…', 'Emailing you a copy of invoice ' + (ref.number || '') + '.', '#2C7BA0'); }
+    Api.post(url, {}).then(function (r) {
+      if (KT.toast) { KT.toast('✅', 'Invoice sent', 'A copy is on its way to ' + ((r && r.email) || 'your email') + '.', '#16A34A'); }
+    }).catch(function (e) {
+      if (KT.toast) { KT.toast('⚠️', 'Could not send the invoice', (e && e.message) || 'Please try again.', '#B91C1C'); }
+    });
+  }
+  function ktInvActions(ref) {
+    var acts = [];
+    function item(label, fn) {
+      var b = Dom.el('button', { type: 'button' }, label);
+      b.addEventListener('click', function (e) { if (e) { e.stopPropagation(); } fn(); });
+      acts.push(b);
+    }
+    item('👁 View invoice', function () { ktViewInvoice(ref, false); });
+    item('⬇ Download invoice', function () { ktDownloadInvoice(ref); });   // not "⬇ Download PDF": kt-table-export strips that label
+    item('🖨 Print', function () { ktViewInvoice(ref, true); });
+    item('✉️ Email me a copy', function () { ktEmailInvoice(ref); });
+    if (Number(ref.balance) > 0.004 && _ktPayInfo && _ktPayInfo.interac) {
+      item('💳 Pay by Interac e-Transfer', function () { ktOpenInterac(_ktPayInfo, [{ number: ref.number, amount: Number(ref.balance), kind: ref.kind === 'ext' ? 'ext' : 'inv', id: ref.id }]); });
+    }
+    return acts;
+  }
+  function ktKebab(ref) {
+    var k = Dom.el('button', { type: 'button', class: 'kt-ka-kebab', title: 'Invoice actions', 'aria-label': 'Invoice actions', 'aria-haspopup': 'menu' }, '⋮');
+    k.addEventListener('click', function (e) {
+      e.stopPropagation(); e.preventDefault();
+      if (window.KT && KT.openActionMenu) { KT.openActionMenu(k, ktInvActions(ref)); } else { ktOpenInvRef(ref); }
+    });
+    return k;
+  }
+
+  function ktBillingDashboard(container, child) {
+    var mobile = window.matchMedia('(max-width:700px)').matches;
+    var dash = Dom.el('div', { class: 'kt-bill-dash' });
+    container.appendChild(dash);
+    var statsEl = Dom.el('div', { 'data-kt-nosechead': '1', style: 'display:grid;grid-template-columns:repeat(' + (mobile ? 2 : 4) + ',minmax(0,1fr));gap:' + (mobile ? 10 : 12) + 'px;margin-bottom:14px;' });
+    for (var k = 0; k < 4; k++) {
+      statsEl.appendChild(Dom.el('div', { style: 'height:' + (mobile ? 92 : 98) + 'px;border-radius:16px;background:linear-gradient(90deg,#F1F5F9,#E2E8F0,#F1F5F9);background-size:200% 100%;animation:kt-shimmer 1.2s linear infinite;' }));
+    }
+    dash.appendChild(statsEl);
+    var chartEl = Dom.el('div', { 'data-kt-nosechead': '1', style: 'background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:14px 16px;margin-bottom:14px;min-height:60px;' });
+    dash.appendChild(chartEl);
+
+    // Tabs: Invoices | Account ledger.
+    var tabsBar = Dom.el('div', { role: 'tablist', style: 'display:inline-flex;gap:4px;padding:4px;background:#EEF2F7;border-radius:12px;margin:2px 0 14px;' });
+    var invPane = Dom.el('div', { role: 'tabpanel' });
+    var ledPane = Dom.el('div', { role: 'tabpanel' });
+    var saved = 'invoices';
+    try { saved = sessionStorage.getItem('kt_bill_tab') || 'invoices'; } catch (e) {}
+    var btns = {};
+    function show(which) {
+      invPane.hidden = which !== 'invoices'; ledPane.hidden = which !== 'ledger';
+      Object.keys(btns).forEach(function (k) {
+        var on = k === which; btns[k].setAttribute('aria-selected', on ? 'true' : 'false');
+        btns[k].style.background = on ? '#fff' : 'transparent'; btns[k].style.color = on ? '#4338CA' : '#475569';
+        btns[k].style.boxShadow = on ? '0 1px 4px rgba(15,23,42,.12)' : 'none';
+      });
+      try { sessionStorage.setItem('kt_bill_tab', which); } catch (e) {}
+    }
+    [['invoices', '🧾 Invoices'], ['ledger', '📒 Account ledger']].forEach(function (t) {
+      var b = Dom.el('button', { type: 'button', role: 'tab', style: 'height:32px;padding:0 14px;border:0;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;' }, t[1]);
+      b.addEventListener('click', function () { show(t[0]); });
+      btns[t[0]] = b; tabsBar.appendChild(b);
+    });
+    dash.appendChild(tabsBar);
+    dash.appendChild(invPane);
+    dash.appendChild(ledPane);
+    show(saved === 'ledger' ? 'ledger' : 'invoices');
+    ledPane.appendChild(Dom.el('div', { style: 'text-align:center;color:#64748B;padding:24px;font-size:13px;' }, 'Loading your account…'));
+
+    Api.get('/parent/children/' + child.id + '/ledger').then(function (L) {
+      paintStats(statsEl, L, mobile);
+      paintChart(chartEl, L, mobile);
+      Dom.clear(ledPane);
+      paintLedger(ledPane, L, mobile, child);
+    }).catch(function () {
+      statsEl.remove(); chartEl.remove();
+      Dom.clear(ledPane);
+      ledPane.appendChild(Dom.el('div', { style: 'text-align:center;color:#64748B;padding:24px;font-size:13px;' }, 'Your account ledger could not be loaded just now. Please try again shortly.'));
+    });
+    return invPane;
+  }
+
+  function paintStats(el, L, mobile) {
+    Dom.clear(el);
+    var s = L.stats || {};
+    var lp = s.last_payment;
+    var tiles = [
+      { icon: '💰', label: 'Paid in ' + (s.year || new Date().getFullYear()), value: _m2(s.paid_this_year), sub: s.paid_all_time > s.paid_this_year ? _m2(s.paid_all_time) + ' all time' : 'Thank you!', c1: '#86EFAC', c2: '#16A34A', tint: '#F0FDF4', ink: '#15803D' },
+      { icon: '🧾', label: 'Last payment', value: lp ? _m2(lp.amount) : '—', sub: lp ? ktD(lp.date, { month: 'short', day: 'numeric' }) + (lp.method ? ' · ' + String(lp.method).split(' · ')[0] : '') : 'None yet', c1: '#A5B4FC', c2: '#6366F1', tint: '#EEF2FF', ink: '#4338CA' },
+      { icon: '📅', label: 'Next due', value: s.next_due ? ktD(s.next_due, { month: 'short', day: 'numeric' }) : 'Nothing due', sub: s.overdue_count ? s.overdue_count + ' overdue · ' + _m2(s.overdue_total) : (s.due_now ? _m2(s.due_now) + ' due now' : 'You are all caught up'), c1: s.overdue_count ? '#FCA5A5' : '#FDBA74', c2: s.overdue_count ? '#DC2626' : '#F97316', tint: s.overdue_count ? '#FEF2F2' : '#FFF7ED', ink: s.overdue_count ? '#B91C1C' : '#C2410C' },
+      { icon: '⏱️', label: 'Paid on time', value: s.on_time_of ? (s.on_time_pct + '%') : '—', sub: s.on_time_of ? Math.round(s.on_time_pct * s.on_time_of / 100) + ' of ' + s.on_time_of + ' invoices by the due date' : 'Shows once an invoice is paid', c1: '#7DD3FC', c2: '#0EA5E9', tint: '#F0F9FF', ink: '#0369A1' },
+    ];
+    tiles.forEach(function (t) {
+      var tile = Dom.el('div', { style: 'position:relative;overflow:hidden;background:' + t.tint + ';border:1px solid rgba(15,23,42,.06);border-radius:16px;padding:' + (mobile ? '12px' : '14px 15px') + ';min-width:0;' });
+      var top = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+      top.appendChild(Dom.el('span', { style: 'width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:0 0 auto;background:linear-gradient(135deg,' + t.c1 + ',' + t.c2 + ');box-shadow:0 5px 11px -6px ' + t.c2 + ';' }, t.icon));
+      top.appendChild(Dom.el('span', { style: 'font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + t.ink + ';opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, t.label));
+      tile.appendChild(top);
+      tile.appendChild(Dom.el('div', { style: 'font-size:' + (mobile ? 20 : 24) + 'px;font-weight:900;color:' + t.ink + ';margin-top:8px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, t.value));
+      tile.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, t.sub));
+      el.appendChild(tile);
+    });
+  }
+
+  function paintChart(el, L, mobile) {
+    Dom.clear(el);
+    var months = L.months || [];
+    var max = 0;
+    months.forEach(function (m) { max = Math.max(max, m.billed, m.paid); });
+    var head = Dom.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;' });
+    head.appendChild(Dom.el('div', {}, [
+      Dom.el('div', { style: 'font-weight:800;font-size:14px;color:#0F172A;' }, 'Your last 12 months'),
+      Dom.el('div', { style: 'font-size:12px;color:#64748B;margin-top:1px;' }, (L.stats && L.stats.avg_monthly) ? 'About ' + _m2(L.stats.avg_monthly) + ' a month on average' : 'Billed and paid, month by month'),
+    ]));
+    var legend = Dom.el('div', { style: 'display:flex;gap:12px;font-size:12px;color:#475569;font-weight:600;' });
+    [['#8B5CF6', 'Billed'], ['#22C55E', 'Paid']].forEach(function (l) {
+      legend.appendChild(Dom.el('span', { style: 'display:inline-flex;align-items:center;gap:5px;' }, [Dom.el('span', { style: 'width:10px;height:10px;border-radius:3px;background:' + l[0] + ';' }), Dom.el('span', {}, l[1])]));
+    });
+    head.appendChild(legend);
+    el.appendChild(head);
+    if (!max) {
+      el.appendChild(Dom.el('div', { style: 'font-size:13px;color:#64748B;padding:14px 0 6px;' }, 'Your billing history will build up here month by month.'));
+      return;
+    }
+    var W = 600, H = mobile ? 150 : 150, padL = 6, padB = 2, padT = 10, n = months.length || 12;
+    var gw = (W - padL * 2) / n, bw = Math.min(16, gw * 0.3);
+    var y = function (v) { return padT + (H - padT - padB) * (1 - v / max); };
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '" preserveAspectRatio="none" role="img" aria-label="Billed and paid by month" style="display:block;overflow:visible">';
+    [0.25, 0.5, 0.75, 1].forEach(function (f) { var yy = y(max * f); svg += '<line x1="0" x2="' + W + '" y1="' + yy + '" y2="' + yy + '" stroke="#EEF2F7" stroke-width="1"/>'; });
+    svg += '<line x1="0" x2="' + W + '" y1="' + (H - padB) + '" y2="' + (H - padB) + '" stroke="#CBD5E1" stroke-width="1"/>';
+    months.forEach(function (m, i) {
+      var cx = padL + gw * i + gw / 2;
+      var tip = m.label + ' ' + String(m.month).slice(0, 4) + ' — billed ' + _m2(m.billed) + ', paid ' + _m2(m.paid);
+      svg += '<g><title>' + tip + '</title><rect x="' + (cx - gw / 2) + '" y="0" width="' + gw + '" height="' + H + '" fill="transparent"/>';
+      if (m.billed > 0) { svg += '<rect x="' + (cx - bw - 1) + '" y="' + y(m.billed) + '" width="' + bw + '" height="' + (H - padB - y(m.billed)) + '" rx="3" fill="#8B5CF6"/>'; }
+      if (m.paid > 0) { svg += '<rect x="' + (cx + 1) + '" y="' + y(m.paid) + '" width="' + bw + '" height="' + (H - padB - y(m.paid)) + '" rx="3" fill="#22C55E"/>'; }
+      svg += '</g>';
+    });
+    svg += '</svg>';
+    el.appendChild(Dom.el('div', { html: svg }));
+    // Month labels as text, not SVG: the chart stretches to the card's width and would stretch the letters with it.
+    var lab = Dom.el('div', { style: 'display:flex;padding:0 ' + (100 * padL / W) + '%;margin-top:5px;' });
+    months.forEach(function (m) { lab.appendChild(Dom.el('div', { style: 'flex:1;text-align:center;font-size:11px;color:#64748B;font-weight:600;' }, mobile ? m.label.charAt(0) : m.label)); });
+    el.appendChild(lab);
+  }
+
+  function paintLedger(pane, L, mobile, child) {
+    var all = (L.entries || []).slice();
+    var years = []; all.forEach(function (e) { var y = String(e.date || '').slice(0, 4); if (y && years.indexOf(y) === -1) { years.push(y); } });
+    years.sort().reverse();
+    var yearSel = 'all';
+
+    var bar = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;' });
+    var chips = Dom.el('div', { 'data-kt-noband': '1', style: 'display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0;' });
+    bar.appendChild(chips);
+    function btn(label, fn) {
+      var b = Dom.el('button', { type: 'button', style: 'height:32px;padding:0 12px;border-radius:9px;border:1px solid #CBD5E1;background:#fff;color:#1F2937;font-weight:700;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-family:inherit;' }, label);
+      b.addEventListener('click', fn); return b;
+    }
+    bar.appendChild(btn('🖨 Statement', function () { ktPrintStatement(L, rowsFor(), yearSel, child); }));
+    bar.appendChild(btn('⬇ Statement (CSV)', function () { ktLedgerCsv(rowsFor(), yearSel); }));
+    pane.appendChild(bar);
+    // A flex row, not a grid: the phone stylesheet folds 3-column grids into two, which left Balance on its own line.
+    var sumEl = Dom.el('div', { 'data-kt-nosechead': '1', style: 'display:flex;gap:8px;margin-bottom:10px;' });
+    pane.appendChild(sumEl);
+    var list = Dom.el('div', { 'data-kt-nosechead': '1', style: 'background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;' });
+    pane.appendChild(list);
+    pane.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#94A3B8;margin:8px 2px 14px;line-height:1.5;' },
+      'Upcoming invoices are added to your account ' + (L.window_days || 14) + ' days before they are due. A payment shows once your centre has received it.'));
+    try { ktReceiptsCard(pane, child); } catch (e) { /* optional */ }
+
+    function rowsFor() { return all.filter(function (e) { return yearSel === 'all' || String(e.date || '').slice(0, 4) === yearSel; }); }
+    function paintChips() {
+      Dom.clear(chips);
+      ['all'].concat(years).forEach(function (y) {
+        var on = y === yearSel;
+        var c = Dom.el('button', { type: 'button', style: 'height:30px;padding:0 12px;border-radius:999px;border:1px solid ' + (on ? '#6366F1' : '#E2E8F0') + ';background:' + (on ? '#EEF2FF' : '#fff') + ';color:' + (on ? '#4338CA' : '#475569') + ';font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit;' }, y === 'all' ? 'All' : y);
+        c.addEventListener('click', function () { yearSel = y; paintChips(); paintRows(); });
+        chips.appendChild(c);
+      });
+    }
+    function sumBox(label, v, ink) {
+      return Dom.el('div', { style: 'flex:1 1 0;background:#F8FAFC;border:1px solid #EEF2F7;border-radius:12px;padding:9px 11px;min-width:0;' }, [
+        Dom.el('div', { style: 'font-size:10.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;' }, label),
+        Dom.el('div', { style: 'font-size:' + (mobile ? 15 : 17) + 'px;font-weight:900;color:' + ink + ';margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, v),
+      ]);
+    }
+    function paintRows() {
+      var rows = rowsFor();
+      var ch = 0, cr = 0; rows.forEach(function (e) { ch += e.charge || 0; cr += e.credit || 0; });
+      Dom.clear(sumEl);
+      sumEl.appendChild(sumBox('Charges', _m2(ch), '#4338CA'));
+      sumEl.appendChild(sumBox('Payments', _m2(cr), '#15803D'));
+      sumEl.appendChild(sumBox('Balance', _m2(L.balance), L.balance > 0.004 ? '#B45309' : '#15803D'));
+      Dom.clear(list);
+      if (!rows.length) {
+        list.appendChild(Dom.el('div', { style: 'padding:22px;text-align:center;color:#64748B;font-size:13px;' }, 'Nothing on your account for this period.'));
+        return;
+      }
+      if (!mobile) {
+        list.appendChild(Dom.el('div', { style: 'display:grid;grid-template-columns:110px 1fr 120px 120px 120px 36px;gap:10px;padding:10px 14px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;' }, [
+          Dom.el('div', {}, 'Date'), Dom.el('div', {}, 'Details'), Dom.el('div', { style: 'text-align:right;' }, 'Charges'), Dom.el('div', { style: 'text-align:right;' }, 'Payments'), Dom.el('div', { style: 'text-align:right;' }, 'Balance'), Dom.el('div', {}),
+        ]));
+      }
+      rows.slice().reverse().forEach(function (e, i) {
+        var pay = e.kind === 'payment', pend = e.kind === 'pending', ref = e.kind === 'refund';
+        var icon = pay ? '✅' : (pend ? '⏳' : (ref ? '↩️' : '🧾'));
+        var amtTxt = pay ? '−' + _m2(e.credit) : (pend ? _m2(e.pending_amount) : '+' + _m2(e.charge));
+        var amtInk = pay ? '#15803D' : (pend ? '#94A3B8' : (ref ? '#B45309' : '#0F172A'));
+        var sub = [e.detail, pend ? 'not counted until it clears' : null].filter(Boolean).join(' · ');
+        var iref = e.inv_id ? { kind: e.inv_kind, id: e.inv_id, number: e.ref, balance: e.inv_balance } : null;
+        if (mobile) {
+          var r = Dom.el('div', { style: 'display:flex;gap:11px;align-items:flex-start;padding:11px 13px;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + (pend ? 'opacity:.75;' : '') });
+          r.appendChild(Dom.el('div', { style: 'width:32px;height:32px;border-radius:10px;background:' + (pay ? '#F0FDF4' : '#F5F3FF') + ';display:flex;align-items:center;justify-content:center;font-size:15px;flex:0 0 auto;' }, icon));
+          r.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;' }, [
+            Dom.el('div', { style: 'font-weight:700;font-size:13.5px;color:#0F172A;' }, e.title),
+            Dom.el('div', { style: 'font-size:11.5px;color:#64748B;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, ktD(e.date) + (sub ? ' · ' + sub : '')),
+          ]));
+          r.appendChild(Dom.el('div', { style: 'text-align:right;flex:0 0 auto;' }, [
+            Dom.el('div', { style: 'font-weight:800;font-size:14px;color:' + amtInk + ';' }, amtTxt),
+            Dom.el('div', { style: 'font-size:11px;color:#94A3B8;margin-top:1px;' }, 'bal ' + _m2(e.balance)),
+          ]));
+          if (iref) { var _k = ktKebab(iref); _k.style.alignSelf = 'center'; r.appendChild(_k); r.style.cursor = 'pointer'; r.addEventListener('click', function () { ktOpenInvRef(iref); }); }
+          list.appendChild(r);
+        } else {
+          var g = Dom.el('div', { style: 'display:grid;grid-template-columns:110px 1fr 120px 120px 120px 36px;gap:10px;align-items:center;padding:10px 14px;font-size:13.5px;' + (i ? 'border-top:1px solid #F1F5F9;' : '') + (pend ? 'opacity:.7;' : '') + (i % 2 ? 'background:#FCFDFE;' : '') });
+          g.appendChild(Dom.el('div', { style: 'color:#475569;' }, ktD(e.date)));
+          g.appendChild(Dom.el('div', { style: 'min-width:0;display:flex;gap:9px;align-items:center;' }, [
+            Dom.el('span', { style: 'font-size:15px;' }, icon),
+            Dom.el('div', { style: 'min-width:0;' }, [
+              Dom.el('div', { style: 'font-weight:700;color:#0F172A;' }, e.title),
+              sub ? Dom.el('div', { style: 'font-size:12px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' }, sub) : Dom.el('span', {}),
+            ]),
+          ]));
+          g.appendChild(Dom.el('div', { style: 'text-align:right;font-weight:700;color:' + (ref ? '#B45309' : '#0F172A') + ';' }, (e.charge ? _m2(e.charge) : '')));
+          g.appendChild(Dom.el('div', { style: 'text-align:right;font-weight:700;color:' + (pend ? '#94A3B8' : '#15803D') + ';' }, pay ? _m2(e.credit) : (pend ? _m2(e.pending_amount) + ' ⏳' : '')));
+          g.appendChild(Dom.el('div', { style: 'text-align:right;font-weight:800;color:#334155;' }, _m2(e.balance)));
+          g.appendChild(iref ? ktKebab(iref) : Dom.el('div', {}));
+          if (iref) { g.style.cursor = 'pointer'; g.addEventListener('click', function () { ktOpenInvRef(iref); }); }
+          list.appendChild(g);
+        }
+      });
+    }
+    paintChips(); paintRows();
+  }
+
+  function ktLedgerCsv(rows, year) {
+    var q = function (v) { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+    var out = [['Date', 'Type', 'Details', 'Reference', 'Charge', 'Payment', 'Balance'].join(',')];
+    rows.forEach(function (e) {
+      out.push([e.date, e.kind, e.title, e.detail || '', e.ref || '', e.charge ? e.charge.toFixed(2) : '', e.credit ? e.credit.toFixed(2) : '', (e.balance || 0).toFixed(2)].map(q).join(','));
+    });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + out.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'account-statement' + (year && year !== 'all' ? '-' + year : '') + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 30000);
+  }
+
+  function ktPrintStatement(L, rows, year, child) {
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+    var u = (function () { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } })();
+    var who = ((u.first_name || '') + ' ' + (u.last_name || '')).trim() || (u.name || '');
+    var ch = 0, cr = 0; rows.forEach(function (e) { ch += e.charge || 0; cr += e.credit || 0; });
+    var body = rows.map(function (e) {
+      return '<tr><td>' + esc(ktD(e.date)) + '</td><td>' + esc(e.title) + (e.detail ? '<div class="sub">' + esc(e.detail) + '</div>' : '') + '</td><td class="r">'
+        + (e.charge ? esc(_m2(e.charge)) : '') + '</td><td class="r">' + (e.credit ? esc(_m2(e.credit)) : (e.kind === 'pending' ? esc(_m2(e.pending_amount)) + ' (pending)' : '')) + '</td><td class="r b">' + esc(_m2(e.balance)) + '</td></tr>';
+    }).join('');
+    var html = '<!doctype html><html><head><meta charset="utf-8"><title>Account statement</title><style>'
+      + '*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:32px;font-size:12.5px}'
+      + '.hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #4338CA;padding-bottom:12px;margin-bottom:16px}'
+      + '.ag{font-size:20px;font-weight:800;color:#4338CA}.meta{text-align:right;color:#475569}h1{font-size:16px;margin:0 0 4px;color:#0f172a}'
+      + '.sum{display:flex;gap:10px;margin:0 0 14px}.sum div{flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}.sum b{display:block;font-size:15px;margin-top:2px}'
+      + 'table{width:100%;border-collapse:collapse}th,td{padding:7px 6px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}th{font-size:10.5px;text-transform:uppercase;color:#64748b}'
+      + '.r{text-align:right;white-space:nowrap}.b{font-weight:700}.sub{color:#64748b;font-size:11px;margin-top:2px}@media print{body{margin:12mm}}'
+      + '.logo{max-height:64px;max-width:200px;object-fit:contain;display:block;margin-bottom:8px}.adr{color:#475569;font-size:12px;line-height:1.5}'
+      + '.parties{display:flex;gap:16px;margin:0 0 14px}.parties>div{flex:1;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;line-height:1.5}'
+      + '.lbl{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#64748b;margin-bottom:3px}'
+      // A phone-width panel: the two boxes stack, and the page margin shrinks.
+      + '@media screen and (max-width:600px){body{margin:16px}.parties{flex-direction:column}.parties>div{min-width:0}.hd{flex-direction:column;gap:10px}.meta{text-align:left}}</style></head><body>'
+      /* THE STATEMENT'S HEADER (2026-10-28, Anthony: "the pdf should show the ilearn logo and full details of the
+         agency and parent's full info"): the agency's logo, legal name, address and contacts; then who it is for. */
+      + (function () {
+          var st = L.statement || {}, ag = st.agency || {}, pa = st.parent || {};
+          var line = function (v) { return v ? '<div>' + esc(v) + '</div>' : ''; };
+          var agency = (ag.logo ? '<img class="logo" src="' + ag.logo + '" alt="">' : '')
+            + '<div class="ag">' + esc(ag.name || L.agency_name || '') + '</div><div class="adr">'
+            + (ag.address || []).map(line).join('') + line(ag.phone) + line(ag.email) + line(ag.website)
+            + (ag.tax_registration ? line('Tax registration: ' + ag.tax_registration) : '') + '</div>';
+          var meta = '<h1>Account statement</h1><div>' + (year && year !== 'all' ? 'Year ' + esc(year) : 'All activity') + '</div><div>As of ' + esc(ktD(L.today)) + '</div>'
+            + (pa.reference ? '<div>Account ' + esc(pa.reference) + '</div>' : '');
+          var forWho = '<div><div class="lbl">Statement for</div><b>' + esc(pa.name || who) + '</b>' + (pa.family ? '<div>' + esc(pa.family) + '</div>' : '')
+            + (pa.address || []).map(line).join('') + line(pa.phone) + line(pa.email) + '</div>'
+            + '<div><div class="lbl">Children</div>' + ((pa.children || []).length ? pa.children.map(line).join('') : line(child && child.display_name))
+            + (pa.reference ? '<div style="margin-top:6px"><span class="lbl">Account no.</span> ' + esc(pa.reference) + '</div>' : '') + '</div>';
+          return '<div class="hd"><div>' + agency + '</div><div class="meta">' + meta + '</div></div><div class="parties">' + forWho + '</div>';
+        })()
+      + '<div class="sum"><div>Charges<b>' + esc(_m2(ch)) + '</b></div><div>Payments<b>' + esc(_m2(cr)) + '</b></div><div>Balance owing today<b>' + esc(_m2(L.balance)) + '</b></div></div>'
+      + '<table><thead><tr><th>Date</th><th>Details</th><th class="r">Charges</th><th class="r">Payments</th><th class="r">Balance</th></tr></thead><tbody>' + (body || '<tr><td colspan="5">Nothing on the account for this period.</td></tr>') + '</tbody></table>'
+      + '<div style="margin-top:18px;font-size:11px;color:#64748b">Upcoming invoices are added ' + esc(L.window_days || 14) + ' days before they are due.</div>'
+      /* No print-on-open: it opens in the portal's panel, which has its own Print button - a print dialog jumping up
+         over a statement the parent has not seen yet was not asked for. */
+      + '</body></html>';
+    var w = (window.KT && KT.docWindow) ? KT.docWindow({ title: 'Account statement', label: 'Statement' }) : window.open('', '_blank');
+    if (!w) { if (KT.toast) { KT.toast('⚠️', 'Pop-up blocked', 'Allow pop-ups to print your statement.', '#B45309'); } return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
+
+  function ktDueSummary(container, data) {
+    var due = data && data.due_now;
+    if (!due) { return; }
+    var pay = data.pay_info || null;
+    var sum = Dom.el('div', { style: 'position:relative;overflow:hidden;background:linear-gradient(135deg,#4338CA 0%,#6D28D9 55%,#9333EA 120%);color:#fff;border-radius:18px;padding:16px 18px;margin-bottom:14px;box-shadow:0 16px 34px -18px rgba(109,40,217,.7);' });
+    sum.appendChild(Dom.el('div', { style: 'position:absolute;top:-70px;right:-50px;width:210px;height:210px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.16),transparent 62%);pointer-events:none;' }));
+    sum.appendChild(Dom.el('div', { style: 'position:relative;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;opacity:.88;' }, (pay && pay.agency_name) || 'Billing'));
+    var row = Dom.el('div', { style: 'position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:6px;' });
+    var left = Dom.el('div', {});
+    if (due.total > 0.004) {
+      left.appendChild(Dom.el('div', { style: 'font-size:32px;font-weight:900;line-height:1;' }, _m2(due.total)));
+      left.appendChild(Dom.el('div', { style: 'font-size:12.5px;opacity:.88;margin-top:5px;' }, 'due now' + (due.count ? ' · ' + due.count + ' invoice' + (due.count === 1 ? '' : 's') : '')));
+    } else {
+      left.appendChild(Dom.el('div', { style: 'font-size:22px;font-weight:900;line-height:1.1;' }, 'Nothing due right now'));
+      left.appendChild(Dom.el('div', { style: 'font-size:12.5px;opacity:.88;margin-top:5px;' }, 'You are all paid up. Thank you!'));
+    }
+    row.appendChild(left);
+    var items = ktDueItems(data.invoices);
+    if (due.total > 0.004 && pay && pay.interac && items.length) {
+      row.appendChild(ktInteracButton(pay, items, { onDark: true }));
+    }
+    if (due.total > 0.004 && pay && pay.demo_pay && ktDueInvoices(data.invoices).length) {
+      var dp = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: 'display:inline-flex;align-items:center;gap:8px;height:42px;min-height:0;padding:0 18px;border-radius:12px;border:0;background:#fff;color:#4338CA;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 8px 20px -10px rgba(15,23,42,.6);' }, '💳 Pay now');
+      dp.addEventListener('click', function (e) { e.stopPropagation(); ktDemoPay(ktDueInvoices(data.invoices)); });
+      row.appendChild(dp);
+    }
+    sum.appendChild(row);
+    if (pay && pay.interac) { ktEtrStatusLine(sum); }
+    if (due.upcoming_count) {
+      sum.appendChild(Dom.el('div', { style: 'position:relative;font-size:12px;opacity:.85;margin-top:10px;border-top:1px solid rgba(255,255,255,.2);padding-top:8px;' },
+        due.upcoming_count + ' upcoming invoice' + (due.upcoming_count === 1 ? '' : 's') + ' will show here ' + (due.window_days || 14) + ' days before ' + (due.upcoming_count === 1 ? 'it is' : 'they are') + ' due.'));
+    }
+    // Split billing (2026-10-30): the reader's side of the split, read-only ("Your share: 60%").
+    if (data.my_split && data.my_split.text) {
+      sum.appendChild(Dom.el('div', { style: 'position:relative;font-size:12.5px;margin-top:10px;border-top:1px solid rgba(255,255,255,.22);padding-top:8px;line-height:1.45;' },
+        '💳 ' + (data.my_split.pct != null ? 'Your share: ' + data.my_split.pct + '% · ' : '') + data.my_split.text + ' The amount above is your share.'));
+    }
+    container.appendChild(sum);
+  }
+
   // iLearn (external) invoices — summary + compact, clickable, paged list.
   function startExternalPayment(inv) {
     // Placeholder — only reached when the agency has Stripe enabled. The
@@ -1421,11 +2499,13 @@
     if (KT.toast) KT.toast('💳', 'Secure checkout', 'Opening secure payment for ' + _extMoney(inv.balance_due) + '…', '#1F6FB2');
   }
 
-  async function appendExternalInvoices(container) {
+  async function appendExternalInvoices(container, xopts) {
+    xopts = xopts || {};
     const state = { page: 1, sort: '', dir: 'asc', search: '' };
     let first;
     try { first = await Api.get('/parent/external-invoices?page=1&per_page=8'); }
     catch (e) { return false; }
+    if (first && first.pay_info && !_ktPayInfo) { _ktPayInfo = first.pay_info; }
     if (!first || !first.invoices || (!first.invoices.length && !((first.meta || {}).total))) return false;
 
     const wrap = Dom.el('div', { style: 'margin-top:6px;' });
@@ -1457,7 +2537,9 @@
       // ── Summary: big total due + paid indicator ──
       // Deliberately an indigo→violet "statement" look, distinct from the teal
       // top/section banner so the two never read as the same block.
-      const sum = Dom.el('div', { style: 'position:relative;overflow:hidden;background:linear-gradient(135deg,#4338CA 0%,#6D28D9 55%,#9333EA 120%);color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:12px;box-shadow:0 16px 34px -18px rgba(109,40,217,.7);' });
+      // On the Billing tab the due-now summary is drawn at the TOP instead (ktDueSummary, 2026-10-28).
+      const sum = xopts.noSummary ? null : Dom.el('div', { style: 'position:relative;overflow:hidden;background:linear-gradient(135deg,#4338CA 0%,#6D28D9 55%,#9333EA 120%);color:#fff;border-radius:18px;padding:18px 20px;margin-bottom:12px;box-shadow:0 16px 34px -18px rgba(109,40,217,.7);' });
+      if (sum) {
       sum.appendChild(Dom.el('div', { style: 'position:absolute;top:-70px;right:-50px;width:210px;height:210px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.16),transparent 62%);pointer-events:none;' }));
       const sumTop = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;position:relative;' });
       sumTop.appendChild(Dom.el('span', { style: 'font-size:16px;' }, '💳'));
@@ -1474,6 +2556,9 @@
       ]));
       sum.appendChild(nums);
       wrap.appendChild(sum);
+      } else {
+        wrap.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-500,#64748b);margin:4px 2px 8px;' }, 'Invoices from ' + agency));
+      }
 
       // ── Controls: search (both) + sort dropdown (mobile) ──
       const controls = Dom.el('div', { style: 'display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;' });
@@ -1524,7 +2609,10 @@
           const stTd = Dom.el('td', { style: 'padding:11px 14px;' });
           stTd.appendChild(Dom.el('span', { style: 'background:' + _extStatusColor(_extStatusOf(inv)) + ';color:#fff;padding:3px 9px;border-radius:10px;font-size:10.5px;font-weight:800;text-transform:uppercase;' }, _extStatusOf(inv)));
           tr.appendChild(stTd);
-          tr.appendChild(Dom.el('td', { style: 'padding:11px 8px;color:#cbd5e1;' }, '›'));
+          // Plain buttons in the last cell: kt-row-actions collapses them into the portal's ⋮ (CONVENTIONS.md).
+          const actTd = Dom.el('td', { style: 'padding:8px 10px;text-align:center;white-space:nowrap;' });
+          ktInvActions({ kind: 'ext', id: inv.id, number: inv.number, balance: inv.balance_due }).forEach((b) => actTd.appendChild(b));
+          tr.appendChild(actTd);
           tb.appendChild(tr);
         });
         table.appendChild(tb); scroll.appendChild(table); wrap.appendChild(scroll);
@@ -1544,7 +2632,7 @@
             Dom.el('div', { style: 'font-weight:900;font-size:15px;color:' + (paid ? '#16a34a' : '#1F6FB2') + ';' }, _extMoney(inv.balance_due)),
             Dom.el('div', { style: 'font-size:11px;color:var(--ink-500,#64748b);' }, paid ? 'paid' : 'due'),
           ]));
-          row.appendChild(Dom.el('span', { style: 'flex:0 0 auto;color:var(--ink-300,#cbd5e1);font-size:18px;' }, '›'));
+          row.appendChild(ktKebab({ kind: 'ext', id: inv.id, number: inv.number, balance: inv.balance_due }));
           list.appendChild(row);
         });
         wrap.appendChild(list);
@@ -1679,8 +2767,10 @@
     try { st = await Api.get('/parent/zum/status'); } catch (e) { return; }
     if (!st || !st.configured) { return; }   // agency has not enabled it — say nothing
 
+    /* Native invoices only: an integrated (iLearn) invoice is "ext-<n>" and is paid to that agency, not through
+       this provider - pay() wants a KiddieTrac invoice id (2026-10-28). */
     var outstanding = (invoices || []).filter(function (i) {
-      return Number(i.balance_due || i.balance || 0) > 0;
+      return Number(i.balance_due || i.balance || 0) > 0 && !i.external && !/^ext-/.test(String(i.id));
     });
 
     var box = Dom.el('div', {
@@ -1694,8 +2784,8 @@
       box.appendChild(Dom.el('div', {
         style: 'background:#FEF3C7;color:#92400E;border-radius:9px;padding:9px 12px;'
           + 'font-size:12.5px;font-weight:700;margin-bottom:12px;',
-      }, '⚠ TEST MODE — this centre is set up against the payment provider’s sandbox. '
-       + 'Nothing you do here moves real money and no invoice will actually be paid.'));
+      }, '⚠ TEST MODE (staff only — families do not see this section while it is in test mode). '
+       + 'This centre is set up against the payment provider’s sandbox: nothing here moves real money.'));
     }
 
     box.appendChild(Dom.el('div', {
@@ -2005,13 +3095,20 @@
     try {
       const data = await Api.get(`/parent/children/${child.id}/invoices`);
       ktMyShare(data.invoices);
+      _ktPayInfo = data.pay_info || _ktPayInfo;
       Dom.clear(container);
 
-      // Above the list: the thing you came here to do.
-      try { await ktZumSection(container, data.invoices || []); } catch (e) { /* never block the invoices */ }
-      try { ktReceiptsCard(container, child); } catch (e) { /* optional */ }
+      // Above the list: what is due now, and how to pay it (2026-10-28).
+      try { ktDueSummary(container, data); } catch (e) { /* never block the invoices */ }
+      // Stats, chart, and the Invoices | Account ledger tabs; everything below goes in the Invoices tab.
+      const outer = container;
+      let invPane = outer;
+      try { invPane = ktBillingDashboard(outer, child); } catch (e) { invPane = outer; }
+      try { await ktZumSection(invPane, data.invoices || []); } catch (e) { /* never block the invoices */ }
 
-      (data.invoices || []).forEach(inv => {
+      /* Integrated (iLearn) invoices are listed once, by appendExternalInvoices below. They also arrive merged
+         into this list, and were drawn twice - a card each here, then again in the iLearn list (2026-10-28). */
+      (data.invoices || []).filter(inv => !inv.external).forEach(inv => {
         const _payable = (inv.balance_due || 0) > 0 && inv.status !== 'paid';
         const card = Dom.el('div', { class: 'card', style: 'margin-bottom: 16px;' + (_payable ? ' cursor: pointer;' : '') });
         if (_payable) card.addEventListener('click', () => openInvoiceDetail(inv, child));
@@ -2021,7 +3118,7 @@
           Dom.el('div', { style: 'color: var(--ink-600); font-size: 13px;' }, `Issued ${inv.issue_date} · Due ${inv.due_date}`),
         ]));
         const statusColor = inv.status === 'paid' ? 'var(--brand-green)' : (inv.status === 'overdue' ? '#c0392b' : 'var(--ink-600)');
-        head.appendChild(Dom.el('span', { style: `background: ${statusColor}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; text-transform: uppercase;` }, inv.status_label || inv.status));
+        head.appendChild(Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;flex-shrink:0;' }, [Dom.el('span', { style: `background: ${statusColor}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 700; text-transform: uppercase;` }, inv.status_label || inv.status), ktKebab({ kind: 'native', id: inv.id, number: inv.invoice_number, balance: inv.balance_due })]));
         card.appendChild(head);
 
         const breakdown = Dom.el('div', { style: 'background: var(--ink-50); padding: 16px; border-radius: 8px; display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 14px;' });
@@ -2040,19 +3137,19 @@
         if (_hist) { card.appendChild(_hist); }
 
         if (inv.balance_due > 0) {
-          const payRow = Dom.el('div', { style: 'display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background: #FEF3C7; border-left: 3px solid #F59E0B; padding: 12px 14px; margin-top: 12px; font-size: 13px; border-radius: 4px;' });
+          const payRow = Dom.el('div', { style: 'display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background: #FEF3C7; --kt-edge:#F59E0B; padding: 12px 14px; margin-top: 12px; font-size: 13px; border-radius: 4px;' });
           payRow.appendChild(Dom.el('div', {}, `Balance due: $${inv.balance_due.toFixed(2)} · due ${inv.due_date}`));
           const payBtn = Dom.el('button', { type: 'button', style: 'background: linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6); color:#fff; border:0; border-radius:10px; padding:9px 18px; font-weight:800; font-size:14px; cursor:pointer;' }, `Pay $${inv.balance_due.toFixed(2)}`);
           payBtn.addEventListener('click', (e) => { e.stopPropagation(); openInvoiceDetail(inv, child); });
           payRow.appendChild(payBtn);
           card.appendChild(payRow);
         }
-        container.appendChild(card);
+        invPane.appendChild(card);
       });
 
-      const hadExternal = await appendExternalInvoices(container);
+      const hadExternal = await appendExternalInvoices(invPane, { noSummary: !!data.due_now });
       if (!(data.invoices || []).length && !hadExternal) {
-        container.appendChild(emptyState('📄', 'No invoices yet', 'When your monthly invoice is generated, it will appear here.'));
+        invPane.appendChild(emptyState('📄', 'No invoices yet', 'When your monthly invoice is generated, it will appear here.'));
       }
     } catch (e) {
       Dom.clear(container);
@@ -2081,6 +3178,21 @@
     return renderTodayMobile(wrap);
   }
 
+  /* THE CHILD'S OWN PICTURE ON THE PHONE (2026-10-30, Anthony: "avatars and display pics in the emulator pop in and
+     out - not consistent"). The phone's child chips, the Today status card and the Messages list drew a bare initial
+     ("E") that kt-emoji-avatars swapped for an emoji AFTER the screen had painted - on every screen change the circle
+     showed a letter, then a face - and they never used the child's photo, which the desktop and the child record do.
+     Now the photo (or the child emoji, via KT.avatar) is in the markup from the first frame. Null when KT.avatar is not
+     loaded yet; callers keep their old circle then. */
+  function childAvatarEl(c, size) {
+    if (!c || !(window.KT && KT.avatar)) return null;
+    const holder = document.createElement('span');
+    holder.innerHTML = KT.avatar(c.display_name || c.first_name || '', { size: size, photoUrl: c.photo_url ? absUrl(c.photo_url) : null, kind: 'child', sex: c.gender || c.sex || null });
+    const el = holder.firstElementChild;
+    if (el) el.style.flexShrink = '0';
+    return el;
+  }
+
   // Horizontal, scrollable child selector (only when there's >1 child).
   function buildChildChips() {
     const bar = Dom.el('div', { style: 'display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;-webkit-overflow-scrolling:touch;scrollbar-width:none;' });
@@ -2090,7 +3202,7 @@
         style: `display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:5px 15px 5px 5px;border-radius:24px;cursor:pointer;font-weight:700;font-size:14px;`
           + `border:1.5px solid ${active ? 'var(--brand-blue)' : 'var(--ink-200)'};background:${active ? 'var(--brand-blue)' : '#fff'};color:${active ? '#fff' : 'var(--ink-700)'};`,
       }, [
-        Dom.el('span', { style: `width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;background:${active ? 'rgba(255,255,255,.25)' : 'var(--brand-green)'};` },
+        childAvatarEl(c, 30) || Dom.el('span', { style: `width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;background:${active ? 'rgba(255,255,255,.25)' : 'var(--brand-green)'};` },
           (c.display_name || 'C')[0].toUpperCase()),
         (c.first_name || c.display_name),
       ]);
@@ -2106,7 +3218,88 @@
   // Report an absence: a reason, an optional note, and a confirmation — because
   // this tells the whole centre, and telling them the wrong day is worse than
   // not telling them at all.
-  function openAbsenceSheet(child, sourceBtn) {
+  /* "+" ON THE CHILD (2026-11-06, Anthony: "make the child have a + for actions such as late, sick, not attending
+     today"). One "+" on the child's photo replaces the full-width "Running late" and "isn't attending today"
+     buttons down the page; the menu it opens holds all three. Today only - none of them means anything for another
+     day. Sick is "not attending" with Unwell already chosen. */
+  /* THE "+" IS ON THE CHILD'S PHOTO, as on the educator's roster (2026-11-06, Anthony: "the + has to be like how we
+     added it to the educator on the child"): the same small teal badge bottom-right of the photo (screen-educator.js
+     .kt-kr-plus), and tapping the photo opens the menu. avatarEl is the photo the card already draws; it is wrapped. */
+  function childActionsAvatar(child, avatarEl) {
+    /* TAPPING THE "+" DID NOTHING (2026-11-06, Anthony: "hitting the plus on the child icon does nothing and i have to
+       hit other areas near by"). The badge hung 3px outside the button at the right and bottom - where a finger
+       lands on a small badge - so those taps hit the card behind it. Now the button is the photo plus a 6px margin
+       all round (padding, cancelled by a negative margin so the layout does not move), and the badge sits inside it.
+       The photo's own name tooltip is dropped so the button is the one thing a tap or hover belongs to. */
+    const b = Dom.el('button', {
+      type: 'button', 'data-kt-iconized': '1', 'data-kt-btn-free': '1', 'data-kt-nospin': '1',
+      'aria-label': (child.first_name || child.display_name) + ': running late, sick or not attending today',
+      'data-kttip': 'Running late, sick or not attending',
+      style: 'position:relative;flex-shrink:0;padding:6px;margin:-6px;border:none;background:none;cursor:pointer;border-radius:12px;line-height:0;'
+        + 'touch-action:manipulation;-webkit-tap-highlight-color:transparent;',
+    });
+    [avatarEl].concat([].slice.call(avatarEl.querySelectorAll ? avatarEl.querySelectorAll('[title],[data-kttip]') : [])).forEach((el) => {
+      el.removeAttribute('title'); el.removeAttribute('data-kttip');
+    });
+    avatarEl.style.pointerEvents = 'none';
+    b.appendChild(avatarEl);
+    b.appendChild(Dom.el('span', {
+      'aria-hidden': 'true',
+      style: 'position:absolute;right:3px;bottom:3px;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:#0F6E80;color:#fff;'
+        + 'display:flex;align-items:center;justify-content:center;font:700 17px/1 system-ui,-apple-system,sans-serif;box-sizing:border-box;'
+        + 'box-shadow:0 2px 6px rgba(15,23,42,.25);pointer-events:none;',
+    }, '+'));
+    b.addEventListener('click', (e) => { e.stopPropagation(); openChildActions(child, b); });
+    return b;
+  }
+  /* The menu is the educator's floating card (2026-11-06, Anthony: "pressing the + should be the same type of popup
+     like we did on the educator for the child (dimmed background etc..)"): KT.kidFloat (kt-kid-float.js) opens it
+     beside the photo over a dimmed page, with the same head and round-icon rows. */
+  function openChildActions(child, anchor) {
+    const first = child.first_name || child.display_name;
+    const atCentre = !!child.is_at_centre;
+    const KF = window.KT && KT.kidFloat;
+    const body = Dom.el('div', { 'data-kt-noband': '1' });
+    const head = Dom.el('div', { class: 'kt-kr-pop-head' });
+    const ring = Dom.el('span', { class: 'kt-kr-ring' });
+    if (KF) ring.appendChild(KF.photo(child, 36));
+    head.appendChild(Dom.el('span', { class: 'kt-kr-kid', 'data-st': atCentre ? 'in' : 'away', style: 'padding:0;cursor:default;' }, [ring]));
+    head.appendChild(Dom.el('div', { style: 'min-width:0;' }, [
+      Dom.el('b', {}, child.display_name || first),
+      Dom.el('span', { class: 'sub' }, atCentre ? 'At ' + (KT.centreWord ? KT.centreWord(false, true) : 'centre') : 'At home'),
+    ]));
+    body.appendChild(head);
+    const note = Dom.el('div', { class: 'kt-kr-note', style: 'display:none;' });
+    body.appendChild(note);
+    const tiles = Dom.el('div', { class: 'kt-kr-tiles', role: 'menu', 'aria-label': 'Today' });
+    function tile(ico, label, tint, fn) {
+      const t = Dom.el('button', { type: 'button', class: 'kt-kr-tile', role: 'menuitem', 'aria-label': label, 'data-kt-iconized': '1' }, [
+        Dom.el('span', { class: 'ico', 'aria-hidden': 'true' }, ico),
+        Dom.el('span', { class: 'lbl' }, label),
+      ]);
+      t.style.setProperty('--kt-kr-tint', tint);
+      t.addEventListener('click', () => { if (KF) KF.close(); setTimeout(fn, 60); });
+      tiles.appendChild(t);
+    }
+    tile('⏰', atCentre ? 'Late pickup' : 'Running late', '#EDE9FE', () => openRunningLate(child.id));
+    if (!atCentre) {
+      tile('🤒', 'Sick today', '#FCE7F3', () => openAbsenceSheet(child, null, 'sick'));
+      tile('🚫', 'Not attending today', '#FEF3C7', () => openAbsenceSheet(child, null));
+      // Already told the centre today? Say so above the rows.
+      cget(`/parent/absences?child_id=${child.id}`).then((r) => {
+        const today = KT.agencyToday ? KT.agencyToday() : new Date().toISOString().slice(0, 10);
+        const hit = (r.absences || []).find(a => String(a.absent_on).slice(0, 10) === today);
+        if (!hit || !note.isConnected) return;
+        note.textContent = '✓ Reported away today' + (hit.reason ? ' · ' + hit.reason : '');
+        note.style.display = '';
+      }).catch(() => {});
+    }
+    body.appendChild(tiles);
+    if (KF) { KF.open(body, anchor, child.display_name || first); return; }
+    Shell.Modal.open({ title: first + ' today', body: body, actions: [{ label: 'Close', onClick: () => Shell.Modal.close() }] });
+  }
+
+  function openAbsenceSheet(child, sourceBtn, preReason) {
     const ov = Dom.el('div', {
       style: 'position:fixed;inset:0;z-index:9650;background:rgba(8,17,33,.6);display:flex;align-items:flex-end;',
     });
@@ -2117,7 +3310,7 @@
 
     sheet.innerHTML = `
       <div style="width:38px;height:4px;border-radius:99px;background:#E2E8F0;margin:0 auto 14px;"></div>
-      <div style="font-weight:800;font-size:17px;color:#0F172A;">${child.display_name} isn't attending today</div>
+      <div style="font-weight:800;font-size:17px;color:#0F172A;">${preReason === 'sick' ? child.display_name + ' is sick today' : child.display_name + " isn't attending today"}</div>
       <div style="font-size:13px;color:#64748B;line-height:1.5;margin-top:4px;">
         Your centre will be told straight away, and we'll stop reminding you to sign in today.
       </div>
@@ -2151,6 +3344,8 @@
       chips.push({ el: c, k: key });
       rWrap.appendChild(c);
     });
+    // Opened as "sick today" from the "+": Unwell is already chosen.
+    if (preReason) { const pre = chips.find(x => x.k === preReason); if (pre) pre.el.click(); }
 
     const close = () => { if (ov.parentNode) ov.parentNode.removeChild(ov); };
     sheet.querySelector('#kt-abs-cancel').addEventListener('click', close);
@@ -2183,15 +3378,140 @@
     document.body.appendChild(ov);
   }
 
+  /* PICKUP COUNTDOWN (2026-11-09, Anthony: "in the mobile app for parents add a set an alarm to pick up kids feature
+     with a count down clock and use the checkin/clocking in time as the starting point and match the scheduled time to
+     pick up child - allow user to add or decrease as optional"). A ring that fills from check-in to pickup (the time the
+     centre expects: the child's pickup time, else closing, moved later by a late-pickup notice), -15 / +15 to move
+     today's pickup for this parent only, and an alarm that rings the phone (parents:pickup-alarms pushes it, so it rings
+     with the app closed). GET/POST /parent/pickup-plan; App\Support\PickupPlan. The card hides itself while the child
+     is not signed in. */
+  function pickupCountdownCard(child) {
+    const box = Dom.el('div', { style: card('padding:14px 15px;margin-bottom:13px;display:none;') });
+    let plan = null, skew = 0, timer = null, busy = false;
+    const R = 34, C = 2 * Math.PI * R;
+    const fmtLeft = (ms) => {
+      const m = Math.max(0, Math.ceil(ms / 60000));
+      const h = Math.floor(m / 60);
+      return h ? h + 'h ' + String(m % 60).padStart(2, '0') + 'm' : m + ' min';
+    };
+    const chip = (label, aria, fn) => {
+      const b = Dom.el('button', { type: 'button', 'aria-label': aria, 'data-kt-btn-free': '1', 'data-kt-nospin': '1',
+        style: 'height:32px!important;min-height:0!important;padding:0 12px!important;border-radius:999px!important;border:1.5px solid #CBD5E1;background:#fff;color:#334155;font:inherit;font-size:12.5px;font-weight:800;line-height:1;cursor:pointer;' }, label);
+      b.addEventListener('click', fn);
+      return b;
+    };
+    async function save(patch) {
+      if (busy) return;
+      busy = true;
+      try {
+        const r = await Api.post('/parent/pickup-plan', Object.assign({ child_id: child.id }, patch));
+        take(r);
+      } catch (e) { ktToast('⚠️', (e && e.message) || 'Could not save. Try again.'); }
+      busy = false;
+    }
+    function take(r) {
+      plan = ((r && r.children) || [])[0] || null;
+      skew = plan && plan.server_now ? Date.parse(plan.server_now) - Date.now() : 0;
+      paint();
+    }
+    function paint() {
+      Dom.clear(box);
+      if (!plan || plan.status !== 'in' || !plan.pickup_at) { box.style.display = 'none'; return; }
+      box.style.display = '';
+      const now = Date.now() + skew;
+      const end = Date.parse(plan.pickup_at);
+      const start = plan.checked_in_at ? Date.parse(plan.checked_in_at) : null;
+      const left = end - now;
+      const late = left <= 0;
+      const frac = start && end > start ? Math.min(1, Math.max(0, (now - start) / (end - start))) : (late ? 1 : 0);
+      const col = late ? '#DC2626' : (left <= 15 * 60000 ? '#D97706' : '#0F6E80');
+
+      box.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1px;color:#0F6E80;margin-bottom:9px;' }, '⏰ PICKUP COUNTDOWN'));
+      const row = Dom.el('div', { style: 'display:flex;align-items:center;gap:14px;' });
+      const ring = Dom.el('div', { style: 'position:relative;width:84px;height:84px;flex-shrink:0;' });
+      ring.innerHTML = '<svg viewBox="0 0 84 84" width="84" height="84" aria-hidden="true" style="transform:rotate(-90deg)">'
+        + '<circle cx="42" cy="42" r="' + R + '" fill="none" stroke="#E2E8F0" stroke-width="8"/>'
+        + '<circle cx="42" cy="42" r="' + R + '" fill="none" stroke="' + col + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + C.toFixed(1)
+        + '" stroke-dashoffset="' + (C * (1 - frac)).toFixed(1) + '" style="transition:stroke-dashoffset .6s"/></svg>';
+      ring.appendChild(Dom.el('div', { style: 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.1;text-align:center;' }, [
+        Dom.el('b', { style: 'font-size:' + (late ? '13px' : '15px') + ';color:' + col + ';' }, late ? 'Pickup' : fmtLeft(left)),
+        Dom.el('span', { style: 'font-size:10.5px;color:var(--ink-500);font-weight:700;' }, late ? 'time' : 'left'),
+      ]));
+      row.appendChild(ring);
+
+      const txt = Dom.el('div', { style: 'flex:1;min-width:0;' });
+      txt.appendChild(Dom.el('div', { style: 'font-size:16px;font-weight:800;color:var(--ink-900);' }, 'Pick up at ' + plan.pickup_label));
+      const sub = [];
+      if (plan.checked_in_label) sub.push('Checked in ' + plan.checked_in_label);
+      if (plan.adjust_minutes) sub.push('usually ' + plan.usual_label);
+      else if (plan.source === 'late') sub.push('your late pickup time');
+      txt.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-top:2px;' }, sub.join(' · ')));
+      if (late) {
+        txt.appendChild(Dom.el('div', { style: 'font-size:12px;color:#DC2626;font-weight:700;margin-top:3px;' },
+          (child.first_name || child.display_name) + "'s pickup time was " + fmtLeft(-left) + ' ago'));
+      }
+      const adj = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;' });
+      const step = (d) => {
+        const n = Math.max(-plan.adjust_max, Math.min(plan.adjust_max, (plan.adjust_minutes || 0) + d));
+        if (n !== plan.adjust_minutes) save({ adjust_minutes: n });
+      };
+      adj.appendChild(chip('−15 min', 'Pick up 15 minutes earlier', () => step(-15)));
+      adj.appendChild(chip('+15 min', 'Pick up 15 minutes later', () => step(15)));
+      if (plan.adjust_minutes) adj.appendChild(chip('Reset', 'Back to the usual pickup time', () => save({ adjust_minutes: 0 })));
+      txt.appendChild(adj);
+      row.appendChild(txt);
+      box.appendChild(row);
+
+      // The alarm: on/off and how long before. It rings the phone even with the app closed.
+      const al = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:11px;border-top:1px solid var(--ink-100);' });
+      const on = !!(plan.alarm && plan.alarm.on);
+      const tog = Dom.el('button', { type: 'button', 'data-kt-btn-free': '1', 'data-kt-nospin': '1', 'aria-pressed': on ? 'true' : 'false',
+        style: 'height:32px!important;min-height:0!important;padding:0 13px!important;border-radius:999px!important;font:inherit;font-size:13px;font-weight:800;line-height:1;cursor:pointer;'
+          + (on ? 'background:#0F6E80;color:#fff;border:1.5px solid #0F6E80;' : 'background:#fff;color:#0F6E80;border:1.5px solid #0F6E80;') },
+        on ? '🔔 Alarm on' : '🔕 Set an alarm');
+      tog.addEventListener('click', () => save({ alarm_on: !on }));
+      al.appendChild(tog);
+      const sel = Dom.el('select', { 'aria-label': 'When the alarm rings',
+        style: 'height:32px!important;min-height:0!important;width:auto!important;border:1.5px solid #CBD5E1;border-radius:8px;padding:0 8px!important;font:inherit;font-size:13px;background:#fff;color:#0F172A;' });
+      (plan.leads || []).forEach((m) => {
+        const o = Dom.el('option', { value: String(m) }, m === 0 ? 'At pickup time' : (m >= 60 ? (m / 60) + ' hour before' : m + ' min before'));
+        if (m === plan.alarm.lead_minutes) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => save({ lead_minutes: parseInt(sel.value, 10), alarm_on: true }));
+      al.appendChild(sel);
+      if (on) al.appendChild(Dom.el('span', { style: 'font-size:12px;color:var(--ink-500);' }, 'Rings ' + plan.alarm_at_label));
+      box.appendChild(al);
+    }
+    // Redraw every 15 seconds while the card is on screen; stop once it is gone.
+    timer = setInterval(() => { if (!box.isConnected) { clearInterval(timer); return; } if (!busy) paint(); }, 15000);
+    Api.get('/parent/pickup-plan?child_id=' + encodeURIComponent(child.id)).then(take).catch(() => {});
+    return box;
+  }
+
   async function renderTodayMobile(wrap) {
     const child = state.children.find(c => c.id === state.selectedChildId);
     if (!child) return;
     const atCentre = child.is_at_centre;
 
+    /* THE DAY'S NUMBERS FIRST (2026-11-06, Anthony: "take the cards from the top out of there and move the cards from
+       the bottom to the top (meals, naps etc)"). The account strip above (status, balance, photos...) is gone for
+       parents (role-widgets.js); meals, naps, changes and play lead the screen. Tapping one still filters the
+       timeline further down. Filled in below with the timeline. One compact row: at the top they are a glance, not
+       the screen, so it is a flex row (a 5-across grid is folded to 2 big columns on phones by kt-mobile-app.css). */
+    const stats = Dom.el('div', { style: 'display:flex;gap:6px;margin-bottom:12px;' });
+    wrap.appendChild(stats);
+    /* DUE NOW UNDER THE NUMBERS (2026-11-06, Anthony: "move the due now below the stat cards"). It was the last card
+       on the screen; filled in below with the timeline (the same invoices call). */
+    const bill = Dom.el('a', { href: '#billing', style: card('display:flex;align-items:center;gap:12px;padding:12px 14px;text-decoration:none;margin-bottom:13px;') });
+    wrap.appendChild(bill);
+
     // 1 · Child status card
     const status = Dom.el('div', { style: card('padding:15px;display:flex;align-items:center;gap:13px;margin-bottom:13px;') });
-    status.appendChild(Dom.el('div', { style: 'width:52px;height:52px;border-radius:50%;background:var(--brand-green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;flex-shrink:0;' },
-      (child.display_name || 'C')[0].toUpperCase()));
+    const _av = childAvatarEl(child, 52) || Dom.el('div', { style: 'width:52px;height:52px;border-radius:50%;background:var(--brand-green);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;flex-shrink:0;' },
+      (child.display_name || 'C')[0].toUpperCase());
+    // Running late, sick, not attending: the "+" on the photo (childActionsAvatar). Today only.
+    status.appendChild(state.date === localToday() ? childActionsAvatar(child, _av) : _av);
     const info = Dom.el('div', { style: 'flex:1;min-width:0;' });
     info.appendChild(Dom.el('div', { style: 'font-size:19px;font-weight:800;color:var(--ink-900);line-height:1.15;' }, child.display_name));
     info.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:2px;' }, `${child.age?.human || '—'} · ${child.room_name || 'No room'}`));
@@ -2201,6 +3521,18 @@
     ]));
     status.appendChild(info);
     wrap.appendChild(status);
+    // Already reported away today: said on the card, beside the "+".
+    if (!atCentre && state.date === localToday()) {
+      cget(`/parent/absences?child_id=${child.id}`).then((r) => {
+        const today = KT.agencyToday ? KT.agencyToday() : new Date().toISOString().slice(0, 10);
+        const hit = (r.absences || []).find(a => String(a.absent_on).slice(0, 10) === today);
+        if (!hit || !info.isConnected) return;
+        info.appendChild(Dom.el('div', { style: 'margin-top:6px;font-size:12px;font-weight:700;color:#0E7C90;' }, '✓ Reported away today' + (hit.reason ? ' · ' + hit.reason : '')));
+      }).catch(() => {});
+    }
+    // Pickup countdown + alarm: today, while the child is in (pickupCountdownCard).
+    if (atCentre && state.date === localToday()) wrap.appendChild(pickupCountdownCard(child));
+    if (window.KT && KT.Supplies) { const _sup = Dom.el('div'); wrap.appendChild(_sup); KT.Supplies.parentCard(_sup); }
 
     // Your team & centre — who's caring for your child, and where.
     if (child.centre_name || (child.educators && child.educators.length)) {
@@ -2241,42 +3573,17 @@
 
     wrap.appendChild(buildDateNav());
 
-    // "Not attending today" — the centre has to chase every empty chair, and today
-    // that means a phone call at 9am. One tap here tells the room's educators, the
-    // director and the agency admin, and stops the sign-in reminders for the day.
-    if (!atCentre) {
-      const absWrap = Dom.el('div', { style: 'margin:-4px 0 13px;' });
-      const absBtn = Dom.el('button', {
-        type: 'button',
-        style: 'width:100%;background:#fff;border:1.5px solid #E2E8F0;color:#475569;border-radius:12px;'
-          + 'padding:11px;font-size:13.5px;font-weight:800;cursor:pointer;',
-      }, `🚫 ${child.display_name} isn't attending today`);
-      absBtn.addEventListener('click', () => openAbsenceSheet(child, absBtn));
-      absWrap.appendChild(absBtn);
-      wrap.appendChild(absWrap);
-
-      // If they already told us, say so instead of offering it again.
-      cget(`/parent/absences?child_id=${child.id}`).then((r) => {
-        const today = KT.agencyToday ? KT.agencyToday() : new Date().toISOString().slice(0, 10);
-        const hit = (r.absences || []).find(a => String(a.absent_on).slice(0, 10) === today);
-        if (!hit) return;
-        absBtn.textContent = `✓ Reported absent today${hit.reason ? ' · ' + hit.reason : ''}`;
-        absBtn.style.borderColor = '#159FB4';
-        absBtn.style.color = '#0E7C90';
-        absBtn.style.background = '#F0FBFD';
-      }).catch(() => {});
-    }
+    // Running late, sick and not attending live behind the "+" on the child's photo (childActionsAvatar, 2026-11-06).
 
     // 2 · Daily digest (the emotional centrepiece)
     const digest = Dom.el('div', { style: 'background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 6px 18px -8px rgba(31,96,128,.55);' });
     digest.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:800;letter-spacing:1.2px;color:#a3d977;margin-bottom:7px;' }, "✨ TODAY'S STORY"));
     const digestBody = Dom.el('div', { style: 'font-size:14.5px;line-height:1.55;opacity:.95;' }, 'Loading…');
     digest.appendChild(digestBody);
+    weekRecapButton(digest, child);
     wrap.appendChild(digest);
 
-    // 3 · At-a-glance stats (auto-fit so the 5th "days enrolled" tile fits a row)
-    const stats = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-bottom:18px;' });
-    wrap.appendChild(stats);
+    // 3 · At-a-glance stats: drawn at the top of the screen now (see "THE DAY'S NUMBERS FIRST").
 
     // 4 · Timeline — tinted title header to pop.
     wrap.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:800;color:#1F6080;margin:0 0 10px;background:linear-gradient(135deg,#EAF3FB,#F3F0FF);border:1px solid rgba(31,96,128,.10);padding:9px 13px;border-radius:10px;' }, "🕒 Today's timeline"));
@@ -2312,8 +3619,10 @@
         ['breakfast', 'morning_snack', 'lunch', 'afternoon_snack', 'dinner'].forEach(mt => {
           const it = map[mt]; if (!it) return;
           const meta = mealMeta[mt] || ['•', mt];
-          const row = Dom.el('div', { style: 'display:flex;gap:9px;align-items:baseline;padding:5px 0;border-top:1px solid var(--ink-100);' });
-          row.appendChild(Dom.el('span', { style: 'font-size:15px;flex-shrink:0;' }, meta[0]));
+          const row = Dom.el('div', { style: 'display:flex;gap:9px;align-items:' + (it.image_url ? 'center' : 'baseline') + ';padding:5px 0;border-top:1px solid var(--ink-100);' });
+          row.appendChild(it.image_url
+            ? Dom.el('img', { src: it.image_url, alt: it.name || '', loading: 'lazy', style: 'width:40px;height:30px;object-fit:cover;border-radius:7px;flex-shrink:0;background:#F1F5F9;' })
+            : Dom.el('span', { style: 'font-size:15px;flex-shrink:0;' }, meta[0]));
           const txt = Dom.el('div', { style: 'flex:1;min-width:0;' });
           txt.appendChild(Dom.el('span', { style: 'font-size:13.5px;color:var(--ink-900);font-weight:600;' }, it.name));
           if (it.allergens) txt.appendChild(Dom.el('span', { style: 'margin-left:6px;font-size:10.5px;color:#92400E;background:#FEF3C7;padding:1px 6px;border-radius:7px;' }, '⚠ ' + it.allergens));
@@ -2324,9 +3633,7 @@
       } catch (e) { Dom.clear(menuBody); menuBody.appendChild(Dom.el('div', {}, 'Tap to view the weekly menu →')); }
     })();
 
-    // 5 · Billing quick link
-    const bill = Dom.el('a', { href: '#billing', style: card('display:flex;align-items:center;gap:12px;padding:14px;text-decoration:none;margin-bottom:8px;') });
-    wrap.appendChild(bill);
+    // 5 · Billing: drawn under the numbers at the top now (see "DUE NOW UNDER THE NUMBERS").
 
     // Warm the sibling sections so tapping Photos/Messages/Billing is instant.
     prefetch([
@@ -2355,18 +3662,18 @@
         { icon: '😴', label: 'Naps',    types: ['nap_end'],            c1: '#A5B4FC', c2: '#6366F1', tint: '#EEF2FF', ink: '#4338CA' },
         { icon: '👶', label: 'Changes', types: ['diaper', 'bathroom'], c1: '#7DD3FC', c2: '#0EA5E9', tint: '#ECFEFF', ink: '#0369A1' },
         { icon: '✨', label: 'Play',    types: ['activity'],           c1: '#86EFAC', c2: '#16A34A', tint: '#F0FDF4', ink: '#15803D' },
-        { icon: '📆', label: 'Days enrolled', noFilter: true, value: _daysEnrM, c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
+        { icon: '📆', label: 'Days', tip: 'Days enrolled', noFilter: true, value: _daysEnrM, c1: '#5EEAD4', c2: '#0D9488', tint: '#F0FDFA', ink: '#0F766E' },
       ];
       const tileEls = [];
       TILES.forEach((t) => {
         const n = t.noFilter ? t.value : count(t.types);
         const el = Dom.el('button', {
-          type: 'button',
-          style: 'position:relative;overflow:hidden;background:' + t.tint + ';border:1.5px solid transparent;border-radius:16px;padding:12px 3px 11px;text-align:center;cursor:pointer;width:100%;font:inherit;',
+          type: 'button', 'data-kt-iconized': '1', 'data-kttip': t.tip || t.label,
+          style: 'position:relative;overflow:hidden;flex:1 1 0;min-width:0;background:' + t.tint + ';border:1.5px solid transparent;border-radius:13px;padding:7px 2px 6px;text-align:center;cursor:pointer;font:inherit;',
         }, [
-          Dom.el('div', { style: 'width:36px;height:36px;margin:0 auto 7px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;background:linear-gradient(135deg,' + t.c1 + ',' + t.c2 + ');box-shadow:0 5px 11px -5px ' + t.c2 + ';' }, t.icon),
-          Dom.el('div', { style: 'font-size:20px;font-weight:900;line-height:1;white-space:nowrap;color:' + t.ink + ';' }, String(n)),
-          Dom.el('div', { style: 'font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:' + t.ink + ';opacity:.72;margin-top:5px;' }, t.label),
+          Dom.el('div', { style: 'width:26px;height:26px;margin:0 auto 4px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;background:linear-gradient(135deg,' + t.c1 + ',' + t.c2 + ');box-shadow:0 4px 9px -5px ' + t.c2 + ';' }, t.icon),
+          Dom.el('div', { style: 'font-size:16px;font-weight:900;line-height:1;white-space:nowrap;color:' + t.ink + ';' }, String(n)),
+          Dom.el('div', { style: 'font-size:8.5px;font-weight:800;letter-spacing:0;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:clip;color:' + t.ink + ';opacity:.72;margin-top:3px;' }, t.label),
         ]);
         el.addEventListener('click', () => {
           if (t.noFilter || !n) return;         // "days enrolled" isn't a filter; nothing logged → nothing to show
@@ -2419,14 +3726,16 @@
       }
       renderTimeline(null, null);
 
-      const inv = (invoices.invoices || [])[0];
+      // Due now, from the server (2026-10-28) - see the desktop Today card.
+      const _due = invoices.due_now;
+      const inv = _due ? ((_due.total > 0.004 || (invoices.invoices || []).length) ? { balance_due: _due.total } : null) : (invoices.invoices || [])[0];
       Dom.clear(bill);
       bill.style.background = '#F5F3FF';
       bill.style.border = '1px solid rgba(124,58,237,.16)';
       bill.appendChild(Dom.el('div', { style: 'width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#C4B5FD,#7C3AED);color:#fff;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;box-shadow:0 5px 11px -5px #7C3AED;' }, '💳'));
       const bt = Dom.el('div', { style: 'flex:1;' });
       if (inv) {
-        bt.appendChild(Dom.el('div', { style: 'font-size:11px;color:#7C3AED;font-weight:800;text-transform:uppercase;letter-spacing:.4px;opacity:.85;' }, inv.is_estimate ? 'Estimated this month' : 'Balance due'));
+        bt.appendChild(Dom.el('div', { style: 'font-size:11px;color:#7C3AED;font-weight:800;text-transform:uppercase;letter-spacing:.4px;opacity:.85;' }, inv.is_estimate ? 'Estimated this month' : (_due ? 'Due now' : 'Balance due')));
         bt.appendChild(Dom.el('div', { style: 'font-size:20px;font-weight:900;color:#6D28D9;' }, '$' + (inv.balance_due ?? inv.total).toFixed(2)));
       } else {
         bt.appendChild(Dom.el('div', { style: 'font-size:14px;font-weight:700;color:var(--ink-900);' }, 'Billing'));
@@ -2494,9 +3803,14 @@
     try {
       const data = await cget(`/parent/children/${child.id}/invoices`);
       ktMyShare(data.invoices);
+      _ktPayInfo = data.pay_info || _ktPayInfo;
       Dom.clear(cont);
-      try { await ktZumSection(cont, data.invoices || []); } catch (e) { /* never block the invoices */ }
-      (data.invoices || []).forEach(inv => {
+      // What is due now + how to pay, first (2026-10-28) - see the desktop renderer.
+      try { ktDueSummary(cont, data); } catch (e) { /* never block the invoices */ }
+      let invPane = cont;
+      try { invPane = ktBillingDashboard(cont, child); } catch (e) { invPane = cont; }
+      try { await ktZumSection(invPane, data.invoices || []); } catch (e) { /* never block the invoices */ }
+      (data.invoices || []).filter(inv => !inv.external).forEach(inv => {
         const c = Dom.el('div', { style: card('padding:15px;margin-bottom:12px;cursor:pointer;') });
         c.addEventListener('click', () => openInvoiceDetail(inv, child));
         const head = Dom.el('div', { style: 'display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px;' });
@@ -2505,7 +3819,7 @@
           Dom.el('div', { style: 'color:var(--ink-500);font-size:12px;margin-top:2px;' }, `Due ${inv.due_date}`),
         ]));
         const sc = inv.status === 'paid' ? 'var(--brand-green)' : (inv.status === 'overdue' ? '#c0392b' : 'var(--ink-500)');
-        head.appendChild(Dom.el('span', { style: `background:${sc};color:#fff;padding:3px 11px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;flex-shrink:0;` }, inv.status_label || inv.status));
+        head.appendChild(Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;flex-shrink:0;' }, [Dom.el('span', { style: `background:${sc};color:#fff;padding:3px 11px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;flex-shrink:0;` }, inv.status_label || inv.status), ktKebab({ kind: 'native', id: inv.id, number: inv.invoice_number, balance: inv.balance_due })]));
         c.appendChild(head);
         const bd = Dom.el('div', { style: 'background:var(--ink-50);padding:13px;border-radius:12px;display:grid;grid-template-columns:1fr auto;gap:7px;font-size:13.5px;' });
         bd.appendChild(Dom.el('div', { style: 'color:var(--ink-600);' }, 'Subtotal'));
@@ -2523,18 +3837,18 @@
         var _h = ktPaymentHistory(inv);
         if (_h) { c.appendChild(_h); }
         if (inv.balance_due > 0) {
-          c.appendChild(Dom.el('div', { style: 'background:#FEF3C7;border-left:3px solid #F59E0B;padding:11px;margin-top:10px;font-size:12.5px;border-radius:6px;color:#92400e;' },
+          c.appendChild(Dom.el('div', { style: 'background:#FEF3C7;--kt-edge:#F59E0B;padding:11px;margin-top:10px;font-size:12.5px;border-radius:6px;color:#92400e;' },
             `Balance $${inv.balance_due.toFixed(2)} · please pay by ${inv.due_date}.`));
         }
         c.appendChild(Dom.el('div', { style: 'display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:11px;color:var(--brand-blue);font-weight:700;font-size:13px;' }, [
           Dom.el('span', {}, inv.balance_due > 0 ? 'View & pay' : 'View details'),
           Dom.el('span', { style: 'font-size:16px;' }, '›'),
         ]));
-        cont.appendChild(c);
+        invPane.appendChild(c);
       });
-      const hadExternal = await appendExternalInvoices(cont);
+      const hadExternal = await appendExternalInvoices(invPane, { noSummary: !!data.due_now });
       if (!(data.invoices || []).length && !hadExternal) {
-        cont.appendChild(emptyState('📄', 'No invoices yet', 'Your invoices will appear here.'));
+        invPane.appendChild(emptyState('📄', 'No invoices yet', 'Your invoices will appear here.'));
       }
     } catch (e) {
       Dom.clear(cont); cont.appendChild(emptyState('⚠️', 'Could not load billing', e.message));
@@ -2618,13 +3932,23 @@
     if (inv && (inv.external || /^ext-/.test(String(inv.id)))) { openMergedExternalInvoice(inv); return; }
     const appMain = document.getElementById('appMain');
     if (!appMain) return;
-    const tw = Dom.el('div', { class: 'kt-invoice-sheet', style: 'position:fixed;inset:0;z-index:9600;background:var(--ink-50,#F4F7FA);display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
+    /* A POP-UP, NOT A PAGE (2026-10-28, Anthony: "under payment schedules and viewing invoices should be a pop-up").
+       On anything wider than a phone the invoice opens as a dialog over the screen it was opened from - dimmed
+       backdrop, click outside or Escape to close - instead of a sheet replacing the whole window. Phones keep the
+       full-screen sheet, which is what a phone dialog is. */
+    const asPopup = window.matchMedia('(min-width:701px)').matches;
+    const tw = Dom.el('div', { class: 'kt-invoice-sheet', style: asPopup
+      ? 'position:relative;width:min(780px,100%);height:min(92vh,1000px);border-radius:16px;overflow:hidden;background:var(--ink-50,#F4F7FA);display:flex;flex-direction:column;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);'
+      : 'position:fixed;inset:0;z-index:9600;background:var(--ink-50,#F4F7FA);display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
+    const invScrim = asPopup ? Dom.el('div', { class: 'kt-invoice-pop', style: 'position:fixed;inset:0;z-index:9600;background:rgba(8,17,33,.55);display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;' }) : null;
+    if (invScrim) { invScrim.appendChild(tw); invScrim.addEventListener('click', (e) => { if (e.target === invScrim) { shutSheet(); } }); }
+    function shutSheet() { const el = invScrim || tw; if (window.KT && KT.popOverlay) { KT.popOverlay(el); } else { el.remove(); } if (invScrim && invScrim.parentNode) { invScrim.remove(); } }
 
-    const header = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 10px) 12px 12px;border-bottom:1px solid var(--ink-100);background:#fff;flex-shrink:0;' });
-    const back = Dom.el('button', { style: 'background:none;border:none;font-size:26px;color:var(--brand-blue);cursor:pointer;padding:0 6px;line-height:1;flex-shrink:0;' }, '‹');
-    back.addEventListener('click', () => { if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove(); });
+    const header = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 10px) 12px 12px;border-bottom:0;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);color:#fff;flex-shrink:0;' });   // the portal's popup header (2026-10-28)
+    const back = Dom.el('button', { style: 'background:none;border:none;font-size:26px;color:#fff;cursor:pointer;padding:0 6px;line-height:1;flex-shrink:0;' }, '‹');
+    back.addEventListener('click', () => { shutSheet(); });
     header.appendChild(back);
-    header.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;color:var(--ink-900);flex:1;min-width:0;' }, 'Invoice ' + (inv.invoice_number || '')));
+    header.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;color:#fff;flex:1;min-width:0;' }, 'Invoice ' + (inv.invoice_number || '')));
 
     /* A CLOSE CONTROL PEOPLE RECOGNISE (2026-09-17).
 
@@ -2638,7 +3962,7 @@
        answers Escape; this one silently did not. */
     const shut = () => {
       document.removeEventListener('keydown', onEsc);
-      if (window.KT && KT.popOverlay) { KT.popOverlay(tw); } else { tw.remove(); }
+      shutSheet();
     };
     function onEsc(e) { if (e.key === 'Escape') { shut(); } }
     document.addEventListener('keydown', onEsc);
@@ -2646,7 +3970,7 @@
 
     const xBtn = Dom.el('button', {
       title: 'Close', 'aria-label': 'Close',
-      style: 'border:none;background:var(--ink-100,#F1F5F9);color:var(--ink-600,#475569);'
+      style: 'border:none;background:rgba(255,255,255,.18);color:#fff;'
         + 'width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:18px;line-height:1;'
         + 'flex-shrink:0;display:flex;align-items:center;justify-content:center;',
     }, '✕');
@@ -2654,7 +3978,10 @@
     header.appendChild(xBtn);
     tw.appendChild(header);
 
-    const body = Dom.el('div', { style: 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px;' });
+    /* The phone's own bar (2026-11-06, Anthony: "the bottom is cut off make this better - full sweep"): on a phone this
+       sheet runs to the bottom of the screen, under the system navigation bar, and the body's 16px left the last lines
+       of "Pay this invoice" beneath it. The safe-area inset is added to the bottom padding so the end scrolls clear. */
+    const body = Dom.el('div', { style: 'flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 28px);' });
     tw.appendChild(body);
     if (inv.my_share) {
       const s = inv.my_share, m = function (v) { return '$' + Number(v || 0).toFixed(2); };
@@ -2668,9 +3995,10 @@
 
     // Summary
     const sum = Dom.el('div', { style: card('padding:18px;margin-bottom:14px;text-align:center;') });
-    sum.appendChild(Dom.el('span', { style: `display:inline-block;background:${sc};color:#fff;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;` }, inv.status_label || inv.status));
-    sum.appendChild(Dom.el('div', { style: 'font-size:34px;font-weight:800;color:var(--ink-900);line-height:1;' }, money(inv.balance_due > 0 ? inv.balance_due : inv.total)));
-    sum.appendChild(Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);margin-top:5px;' }, inv.balance_due > 0 ? `Balance due · by ${inv.due_date}` : 'Total'));
+    const sumPill = Dom.el('span', { style: `display:inline-block;background:${sc};color:#fff;padding:3px 12px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;margin-bottom:10px;` }, inv.status_label || inv.status);
+    const sumAmt = Dom.el('div', { style: 'font-size:34px;font-weight:800;color:var(--ink-900);line-height:1;' }, money(inv.balance_due > 0 ? inv.balance_due : inv.total));
+    const sumSub = Dom.el('div', { style: 'font-size:13px;color:var(--ink-500);margin-top:5px;' }, inv.balance_due > 0 ? `Balance due · by ${inv.due_date}` : 'Total');
+    sum.appendChild(sumPill); sum.appendChild(sumAmt); sum.appendChild(sumSub);
     if (child) sum.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:6px;' }, `${child.display_name} · ${inv.issue_date ? 'Issued ' + inv.issue_date : ''}`));
     body.appendChild(sum);
 
@@ -2689,11 +4017,25 @@
        Fetched rather than framed by URL because the endpoints need the bearer token.
        Staff read /invoices/{id}/document (centre-scoped); a guardian reads their own
        through /parent/…, and staff fall back to it for their own family's invoice. */
+    let reloadDoc = function () {};
     (function () {
       const docCard = Dom.el('div', { style: card('padding:0;margin-bottom:14px;overflow:hidden;') });
       const frame = Dom.el('iframe', {
         style: 'width:100%;height:520px;border:0;display:block;background:#fff;',
         title: 'Invoice ' + (inv.invoice_number || ''),
+        'data-kt-keep-height': '1',
+      });
+      /* THE WHOLE PAGE, NOT A WINDOW ONTO IT (2026-11-04, iPhone recording): the frame takes the document's own
+         height, and a document wider than the frame (the template is drawn for paper) is scaled down to fit. */
+      frame.addEventListener('load', function () {
+        try {
+          const d = frame.contentDocument; if (!d || !d.body) return;
+          d.documentElement.style.overflow = 'hidden';
+          const fw = frame.clientWidth, dw = Math.max(d.documentElement.scrollWidth, d.body.scrollWidth);
+          const z = dw > fw + 2 ? Math.max(0.3, fw / dw) : 1;
+          d.body.style.zoom = z === 1 ? '' : String(z);
+          frame.style.height = Math.ceil(d.documentElement.scrollHeight + 2) + 'px';   // read after the zoom: the scaled height
+        } catch (e) {}
       });
       docCard.appendChild(frame);
       body.appendChild(docCard);
@@ -2706,7 +4048,8 @@
         ? ['/invoices/' + inv.id + '/document', '/parent/invoices/' + inv.id + '/document']
         : ['/parent/invoices/' + inv.id + '/document'];
 
-      (async function load() {
+      reloadDoc = function () { load(); };
+      async function load() {
         for (const p of paths) {
           try {
             const r = await fetch(base + p, { headers: { Authorization: 'Bearer ' + tok } });
@@ -2718,7 +4061,8 @@
         /* No document is not an error worth a red box — the figures above are still
            correct and the invoice may simply be too new to render. */
         docCard.remove();
-      })();
+      }
+      load();
     })();
 
     // Breakdown
@@ -2746,35 +4090,73 @@
        family's invoice to look at it must not be handed a way to pay it on their own
        card by mistake; recording a payment they HAVE received is a different action, on
        the billing screen, with an audit trail. (2026-09-17) */
+    /* PAID MEANS PAID ON THE WHOLE SHEET (2026-11-04, iPhone recording: after Apple Pay the line under the button said
+       "Payment successful" while the top still read SCHEDULED / $120.50 balance due and the document UNPAID). */
+    function showPaid() {
+      sumPill.textContent = 'Paid'; sumPill.style.background = 'var(--brand-green,#16A34A)';
+      sumAmt.textContent = money(inv.total);
+      sumSub.textContent = 'Paid in full - thank you!';
+      setTimeout(function () { reloadDoc(); }, 800);   // the document again, now that the server has the payment
+    }
     if ((inv.balance_due || 0) > 0 && inv.status !== 'paid' && !ktIsStaff()) {
       const pay = Dom.el('div', { style: card('padding:16px;') });
       pay.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;margin-bottom:12px;color:var(--ink-900);' }, 'Pay this invoice'));
       const status = Dom.el('div', { style: 'font-size:13px;margin:0 0 10px;min-height:16px;line-height:1.5;' });
       const payBtn = Dom.el('button', { type: 'button', style: 'width:100%;border:0;cursor:pointer;padding:15px;border-radius:13px;font-size:16px;font-weight:800;color:#fff;background:linear-gradient(135deg,#0FA3B1,#1F6FB2 60%,#2456A6);box-shadow:0 12px 24px -12px rgba(31,111,178,.55);' }, `Pay ${money(inv.balance_due)} by card`);
+      if (_ktPayInfo && _ktPayInfo.demo_pay) { payBtn.textContent = `Pay ${money(inv.balance_due)}`; }
       payBtn.addEventListener('click', async () => {
+        if (_ktPayInfo && _ktPayInfo.demo_pay) { ktDemoPay([inv], function () { shutSheet(); }); return; }
         status.textContent = ''; payBtn.disabled = true; payBtn.textContent = 'Processing…';
         try {
           await Api.post(`/invoices/${inv.id}/charge`, {});
           status.style.color = '#16A34A'; status.textContent = '✓ Payment successful — thank you!';
           payBtn.style.display = 'none';
           bust(`/parent/children/${child.id}/invoices`); bust(`/parent/children/${child.id}/invoices?status=current`);
+          showPaid();
         } catch (e) {
           status.style.color = '#B45309';
           status.textContent = 'Card payments aren’t switched on for your centre yet. Please use e-transfer below, or ask your centre to enable online payments.';
           payBtn.disabled = false; payBtn.textContent = `Pay ${money(inv.balance_due)} by card`;
         }
       });
-      pay.appendChild(payBtn);
+      const walletSlot = Dom.el('div');
+      pay.appendChild(walletSlot);
+      /* NO CARD BUTTON FOR PARENTS (2026-11-04, Anthony: "turn off the card payments and don't let that show"). It
+         called /invoices/{id}/charge, which only staff may use, so a parent always got "Card payments aren't switched
+         on". A parent pays with their phone's wallet (above) or e-Transfer (below). The web demo keeps its button. */
+      if (_ktPayInfo && _ktPayInfo.demo_pay) pay.appendChild(payBtn);
       pay.appendChild(status);
-      pay.appendChild(Dom.el('div', { style: 'margin-top:12px;padding:12px;background:var(--ink-50);border-radius:10px;font-size:12.5px;color:var(--ink-600);line-height:1.5;' },
-        'Prefer e-Transfer? Send an Interac e-Transfer to your centre’s billing email and put your invoice number in the message. Your centre can confirm the exact address.'));
+      /* Apple Pay / Google Pay (2026-11-03): whatever this invoice's agency can take - the agency's Stripe
+         (browser or the app's native sheet) and Helcim (card + Google Pay). See kt-wallet-pay.js. */
+      if (!(_ktPayInfo && _ktPayInfo.demo_pay) && window.KT && KT.walletPay) {
+        KT.walletPay.mount(walletSlot, inv, {
+          cardBtn: payBtn,
+          say: function (t, ok) { status.style.color = ok ? '#16A34A' : '#B45309'; status.textContent = t || ''; },
+          onPaid: function () {
+            status.style.color = '#16A34A'; status.textContent = '✓ Payment successful — thank you!';
+            payBtn.style.display = 'none'; walletSlot.style.display = 'none';
+            bust(`/parent/children/${child.id}/invoices`); bust(`/parent/children/${child.id}/invoices?status=current`);
+            showPaid();
+          },
+        });
+      }
+      if (_ktPayInfo && _ktPayInfo.demo_pay) {
+        pay.appendChild(Dom.el('div', { style: 'margin-top:10px;font-size:12px;color:var(--ink-500);text-align:center;' }, 'Card or bank account · Demo - no real payment is made'));
+      } else if (_ktPayInfo && _ktPayInfo.interac) {
+        const _ib = ktInteracButton(_ktPayInfo, [{ number: inv.invoice_number, amount: inv.balance_due }], { block: true, label: 'Pay by Interac e-Transfer instead' });
+        _ib.style.marginTop = '12px'; _ib.style.height = '46px';
+        pay.appendChild(_ib);
+      } else {
+        pay.appendChild(Dom.el('div', { style: 'margin-top:12px;padding:12px;background:var(--ink-50);border-radius:10px;font-size:12.5px;color:var(--ink-600);line-height:1.5;' },
+          'Prefer e-Transfer? Send an Interac e-Transfer to your centre’s billing email and put your invoice number in the message. Your centre can confirm the exact address.'));
+      }
       body.appendChild(pay);
     } else if (inv.status === 'paid') {
       body.appendChild(Dom.el('div', { style: card('padding:18px;text-align:center;color:#16A34A;font-weight:800;font-size:15px;') }, '✓ Paid — thank you!'));
     }
 
-    appMain.appendChild(tw);
-    if (window.KT && KT.pushOverlay) KT.pushOverlay(tw);
+    appMain.appendChild(invScrim || tw);
+    if (window.KT && KT.pushOverlay) KT.pushOverlay(invScrim || tw);
   }
 
   // ─── MOBILE · MESSAGES (list → full-screen thread) ─────────────────
@@ -2805,7 +4187,8 @@
       const title = c.child_name || c.subject || 'Conversation';
       const subtitle = (c.child_name && c.subject) ? c.subject : '';
       const row = Dom.el('button', { style: 'width:100%;text-align:left;display:flex;align-items:center;gap:12px;border:none;cursor:pointer;padding:13px;margin-bottom:9px;' + card() });
-      row.appendChild(Dom.el('div', { style: 'width:44px;height:44px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;flex-shrink:0;background:#159FB4;' },
+      const _kid = (state.children || []).find(k => (c.child_id && Number(k.id) === Number(c.child_id)) || (!c.child_id && c.child_name && (k.display_name === c.child_name || k.first_name === c.child_name)));
+      row.appendChild((_kid && childAvatarEl(_kid, 44)) || Dom.el('div', { style: 'width:44px;height:44px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;flex-shrink:0;background:#159FB4;' },
         title[0].toUpperCase()));
       const mid = Dom.el('div', { style: 'flex:1;min-width:0;' });
       mid.appendChild(Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' }, [
@@ -2855,6 +4238,32 @@
   const KT_EMOJIS = ['😀','😄','😊','🥰','😍','😘','😉','🤗','🙂','😢','😭','😔','😴','🤒','🤧','🥳','🎉','👍','👏','🙏','💚','❤️','🔥','✨','⭐','🌟','👋','🤝','💪','🙌','👶','🍼','🧸','🎨','📸','🎵','☀️','🌈','🍎','🥪','💤','✅','❓','❗'];
 
   const QUICK_REACTS = ['👍','❤️','😂','😮','😢','🙏'];
+  /* One to three emoji and nothing else - shown big (same rule as screen-chat.js emojiOnly, 2026-11-05). new RegExp so
+     an old WebView without \p{} just skips it. */
+  let EMO_RE = null;
+  try { EMO_RE = [new RegExp('^(?:\\p{Extended_Pictographic}|\\p{Emoji_Component}|\\u200d|\\ufe0f|\\s)+$', 'u'), new RegExp('\\p{Extended_Pictographic}', 'gu')]; } catch (e) {}
+  function emojiOnly(t) {
+    t = String(t || '').trim();
+    if (!EMO_RE || !t || t.length > 40 || /[0-9A-Za-z#*]/.test(t) || !EMO_RE[0].test(t)) return false;
+    let n;
+    try { n = Array.from(new Intl.Segmenter().segment(t.replace(/\s+/g, ''))).length; }
+    catch (e) { n = (t.match(EMO_RE[1]) || []).length; }
+    return n >= 1 && n <= 3;
+  }
+  /* A TAP OUTSIDE CLOSES IT (2026-11-05, Anthony: "clicking outside of the emoji picker should close the emoji
+     picker"). The parent emoji panel never closed on a tap outside, and the reaction picker closed on a bubbling
+     'click' that the message buttons stop. A capture-phase pointerdown runs before any handler can stop it - the same
+     rule as screen-chat.js closeOnOutsideTap. keep: what a tap inside does not close (the popover, its button).
+     close() returning true = one-shot: the listener goes. It also goes once the popover has left the page. */
+  function closeOnOutsideTap(keep, close, isOpen) {
+    function h(ev) {
+      if (!keep[0] || !keep[0].isConnected) { document.removeEventListener('pointerdown', h, true); return; }
+      if (isOpen && !isOpen()) return;
+      for (var i = 0; i < keep.length; i++) if (keep[i] && keep[i].contains(ev.target)) return;
+      if (close() === true) document.removeEventListener('pointerdown', h, true);
+    }
+    document.addEventListener('pointerdown', h, true);
+  }
 
   function openThreadMobile(convo) {
     const appMain = document.getElementById('appMain');
@@ -2882,16 +4291,6 @@
     htxt.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;color:var(--ink-900);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, convoTitle));
     htxt.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);' }, (convo.child_name && convo.subject) ? convo.subject : 'Messages'));
     header.appendChild(htxt);
-    // Nudge — a gentle "please reply" ping to the centre team.
-    const nudge = Dom.el('button', { type: 'button', title: 'Nudge the team', style: 'background:var(--ink-100);border:none;width:40px;height:40px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;' }, '👋');
-    if (!childId) nudge.disabled = true;
-    nudge.addEventListener('click', async () => {
-      nudge.disabled = true;
-      try { await Api.post('/parent/messages/nudge', { child_id: childId }); ktToast('👋', 'Nudged the team — they’ll get a notification'); }
-      catch (e) { ktToast('⚠️', e.message || 'Could not send the nudge'); }
-      finally { setTimeout(() => { nudge.disabled = !childId; }, 4000); }
-    });
-    header.appendChild(nudge);
     // Desktop shows an explicit ✕ to close the floating chat panel (mobile uses the ‹ back).
     var closeX = Dom.el('button', { type: 'button', title: 'Close', class: 'kt-thread-close-desk', style: 'background:var(--ink-100);border:none;width:40px;height:40px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;color:var(--ink-600);line-height:1;align-items:center;justify-content:center;' }, '✕');
     closeX.addEventListener('click', closeThread);
@@ -2903,7 +4302,8 @@
     tw.appendChild(body);
 
     // Emoji panel (hidden until toggled).
-    const emojiPanel = Dom.el('div', { style: 'display:none;flex-wrap:wrap;gap:2px;padding:8px 10px;background:#fff;border-top:1px solid var(--ink-100);max-height:150px;overflow-y:auto;' });
+    // .kt-emoji-panel.kt-emoji-bar: the one emoji grid (kt-chat-composer.css), full width here, under the thread.
+    const emojiPanel = Dom.el('div', { class: 'kt-emoji-panel kt-emoji-bar', style: 'display:none;flex-wrap:wrap;gap:2px;padding:8px 10px;background:#fff;border-top:1px solid var(--ink-100);max-height:150px;overflow-y:auto;' });
     KT_EMOJIS.forEach(em => {
       const b = Dom.el('button', { type: 'button', style: 'background:none;border:none;font-size:22px;line-height:1;padding:6px;cursor:pointer;border-radius:8px;' }, em);
       b.addEventListener('click', () => { insertEmoji(em); });
@@ -2911,19 +4311,24 @@
     });
     tw.appendChild(emojiPanel);
 
-    const compose = Dom.el('form', { class: 'kt-thread-compose', style: 'display:flex;gap:6px;align-items:center;padding:10px 10px;border-top:1px solid var(--ink-100);background:#fff;' });
-    const fileInput = Dom.el('input', { type: 'file', accept: 'image/*', style: 'display:none;' });
+    const compose = Dom.el('form', { class: 'kt-thread-compose kt-compose-row', style: 'display:flex;gap:6px;align-items:center;padding:10px 12px;border-top:1px solid var(--ink-100);background:#fff;' });
+    // 👋 beside the ＋ (kt-compose-plus.js), where the header button used to be.
+    if (childId) { compose.setAttribute('data-kt-nudge', '/parent/messages/nudge'); compose.setAttribute('data-kt-nudge-body', JSON.stringify({ child_id: childId })); }
+    const fileInput = Dom.el('input', { type: 'file', accept: 'image/*', multiple: 'multiple', style: 'display:none;' });
     const emojiBtn = Dom.el('button', { type: 'button', title: 'Emoji', style: 'background:none;border:none;width:40px;height:44px;font-size:22px;cursor:pointer;flex-shrink:0;' }, '😊');
     emojiBtn.addEventListener('click', () => { emojiPanel.style.display = emojiPanel.style.display === 'none' ? 'flex' : 'none'; });
+    closeOnOutsideTap([emojiPanel, emojiBtn], () => { emojiPanel.style.display = 'none'; }, () => emojiPanel.style.display !== 'none');
     const attach = Dom.el('button', { type: 'button', title: 'Add a photo', style: 'background:none;color:#159FB4;border:none;width:40px;height:44px;font-size:22px;cursor:pointer;flex-shrink:0;' }, '📷');
     attach.addEventListener('click', () => fileInput.click());
     const input = Dom.el('input', { class: 'kt-compose-input', type: 'text', placeholder: 'Message…', style: 'flex:1;min-width:0;padding:13px 15px;border:1px solid var(--ink-200);border-radius:24px;font-size:16px;min-height:46px;box-sizing:border-box;' });
     // One button that is Mic when empty, Send when there's text, Stop while recording.
-    const action = Dom.el('button', { type: 'button', style: 'background:#159FB4;color:#fff;border:none;width:46px;height:46px;border-radius:50%;font-size:19px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;padding:0;' }, '🎤');
-    compose.appendChild(emojiBtn); compose.appendChild(attach); compose.appendChild(input); compose.appendChild(fileInput);
+    const action = Dom.el('button', { type: 'button', class: 'kt-send-one', title: 'Send', 'aria-label': 'Send' }, '🎤');
+    // THE ONE COMPOSER ROW (.kt-compose-row, kt-chat-composer.css): tools, the box, the ➤ straight after it.
+    compose.appendChild(emojiBtn); compose.appendChild(attach); compose.appendChild(fileInput);
     // 🚨 Emergency toggle (kt-emergency.js): rings on the centre's phones.
     const mobEm = (window.KT && KT.emergency) ? KT.emergency.button() : null;
     if (mobEm) compose.appendChild(mobEm);
+    compose.appendChild(input);
     compose.appendChild(action);
     tw.appendChild(compose);
 
@@ -3033,10 +4438,17 @@
       if (left + pw > window.innerWidth - 8) left = window.innerWidth - 8 - pw;
       if (left < 8) left = 8;
       pop.style.top = top + 'px'; pop.style.left = left + 'px';
-      setTimeout(() => document.addEventListener('click', closeReactPicker, { once: true }), 0);
+      closeOnOutsideTap([pop, anchor], () => { pop.remove(); return true; });
     }
 
+    /* Sends still on their way (2026-11-11): faded bubbles that stay last whenever the list redraws (load, poll,
+       a reaction), so a message typed straight after another never vanishes while the first one posts. */
+    var mobPending = [];
     function renderMsgs(msgs) {
+      renderMsgsAll(msgs);
+      mobPending.forEach(g => body.appendChild(g));
+    }
+    function renderMsgsAll(msgs) {
         currentMsgs = msgs;
         Dom.clear(body);
         if (!msgs.length) { body.appendChild(Dom.el('div', { style: 'text-align:center;color:var(--ink-500);font-size:13px;padding:24px;' }, 'No messages yet — say hello 👋')); return; }
@@ -3058,7 +4470,10 @@
           if (m.deleted) {
             b.appendChild(Dom.el('div', { style: `font-style:italic;opacity:.8;` }, '🚫 Message deleted'));
           } else {
-            if (m.body) b.appendChild(Dom.el('div', {}, m.body));
+            // A lone 😀 shows big, in a bubble with no fill (kt-chat-composer.css .kt-emo-big / .kt-emo-bubble).
+            const emo = !(m.attachments && m.attachments.length) && emojiOnly(m.body);
+            if (emo) b.classList.add('kt-emo-bubble');
+            if (m.body) b.appendChild(Dom.el('div', emo ? { class: 'kt-emo-big' } : {}, emo ? String(m.body).trim() : m.body));
             (m.attachments || []).forEach(a => {
               if (!a || !a.url) return;
               if (a.type === 'audio') {
@@ -3087,6 +4502,10 @@
             const reactBtn = Dom.el('button', { type: 'button', title: 'React', style: 'background:none;border:none;color:inherit;opacity:.7;font-size:14px;line-height:1;cursor:pointer;padding:0 2px;' }, '☺');
             reactBtn.addEventListener('click', (ev) => { ev.stopPropagation(); showReactPicker(reactBtn, m); });
             foot.appendChild(reactBtn);
+          }
+          // ⋯ on a message from the centre: report it, or block the person (kt-report-block.js, 2026-11-03).
+          if (!mine && !m.deleted && !m.is_system && m.sender_id && window.KT && KT.reportBlock) {
+            foot.appendChild(KT.reportBlock.btnEl({ kind: 'family', conv: convo.id, mid: m.id, uid: m.sender_id, name: m.sender_name, blocked: m.blocked }));
           }
           // Own, non-deleted messages get an edit/delete menu.
           if (mine && !m.deleted && (m.can_edit || m.can_delete)) {
@@ -3160,6 +4579,7 @@
         body.appendChild(Dom.el('div', { style: 'color:var(--ink-500);padding:20px;text-align:center;font-size:13px;' }, 'Could not load: ' + e.message));
       }
     };
+    if (window.KT && KT.reportBlock) KT.reportBlock.onChange = load;   // Report + Block: redraw after a block or unblock
     // Live updates: poll every few seconds so new messages appear with no refresh.
     // Keeps the user's scroll position unless they're already at the bottom.
     const poll = async () => {
@@ -3189,6 +4609,7 @@
       } catch (e) {}
     };
     if (!childId) { input.disabled = true; input.placeholder = 'Read-only conversation'; action.disabled = true; attach.disabled = true; emojiBtn.disabled = true; }
+    let mobChain = Promise.resolve();
     const doSend = async (file) => {
       // Editing an existing message (text only) → PATCH.
       if (editingId && !file) {
@@ -3200,15 +4621,48 @@
         return;
       }
       if ((!input.value.trim() && !file) || !childId) return;
-      action.disabled = true; attach.disabled = true;
-      const prevPh = input.placeholder;
-      if (file) input.placeholder = (file.type || '').indexOf('audio') === 0 ? 'Sending voice note…' : 'Sending photo…';
+      /* SEND AS FAST AS YOU TYPE (2026-11-11, Anthony: "make this real time to send multiple messages quickly").
+         The box used to lock until the server answered and then the whole list reloaded. Now it clears on tap,
+         a faded bubble goes in at once and the keyboard stays up; sends queue (mobChain) in the order tapped.
+         A failed one takes its bubble away and puts its words back. One reload when the last one is in. */
+      const text = input.value.trim();
+      const em = !!(mobEm && KT.emergency.isOn(mobEm));
+      if (mobEm) KT.emergency.reset(mobEm);
+      input.value = ''; input.placeholder = 'Message…'; updateAction();
       emojiPanel.style.display = 'none';
-      try { await sendParentMessage(childId, input.value.trim(), file, !!(mobEm && KT.emergency.isOn(mobEm))); if (mobEm) KT.emergency.reset(mobEm); bust('/parent/messages'); input.value = ''; input.placeholder = 'Message…'; updateAction(); await load(); }
-      catch (e) { input.placeholder = 'Could not send — try again'; }
-      finally { action.disabled = false; attach.disabled = false; }
+      if (!file) { try { input.focus(); } catch (e0) {} }
+      const isVoice = file && (file.type || '').indexOf('audio') === 0;
+      const ghost = Dom.el('div', { 'data-kt-pending': '1', style: 'align-self:flex-end;margin-left:auto;max-width:78%;background:#DCF1F4;color:#0D1B2A;padding:9px 13px;border-radius:16px;border-bottom-right-radius:4px;font-size:15px;line-height:1.35;white-space:pre-wrap;word-break:break-word;opacity:.6;' },
+        text || (isVoice ? '🎤 Voice note · sending…' : '📷 Photo · sending…'));
+      mobPending.push(ghost);
+      body.appendChild(ghost);
+      body.scrollTop = body.scrollHeight;
+      action.setAttribute('aria-busy', 'true');
+      mobChain = mobChain.then(async () => {
+        try {
+          await sendParentMessage(childId, text, file, em, convo.channel === 'office' ? 'office' : null);
+          ghost.style.opacity = '';
+          mobPending.splice(mobPending.indexOf(ghost), 1);
+        } catch (e) {
+          mobPending.splice(mobPending.indexOf(ghost), 1);
+          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+          if (text) input.value = text + (input.value ? ' ' + input.value : '');
+          input.placeholder = 'Could not send — try again';
+          updateAction();
+          ktToast('⚠️', (e && e.message) || 'Not sent — try again');
+        }
+        if (mobPending.length) return;
+        action.removeAttribute('aria-busy');
+        bust('/parent/messages');
+        await load();
+      });
     };
-    fileInput.addEventListener('change', () => { if (fileInput.files && fileInput.files[0]) { doSend(fileInput.files[0]); fileInput.value = ''; } });
+    // Several photos picked at once: one message each, queued in order (mobChain); the words go with the first.
+    fileInput.addEventListener('change', () => {
+      const all = Array.prototype.slice.call(fileInput.files || [], 0, 10);
+      fileInput.value = '';
+      all.forEach((f) => { doSend(f); });
+    });
     // Paste a screenshot / image straight into the chat (Ctrl/⌘-V) → sends it.
     input.addEventListener('paste', (ev) => {
       const items = (ev.clipboardData && ev.clipboardData.items) || [];
@@ -3231,54 +4685,83 @@
   function openComposeNew() {
     const appMain = document.getElementById('appMain');
     if (!appMain || !state.children.length) return;
-    const chipStyle = (active) => `display:inline-flex;align-items:center;padding:7px 14px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid ${active ? '#159FB4' : 'var(--ink-200)'};background:${active ? '#159FB4' : '#fff'};color:${active ? '#fff' : 'var(--ink-700)'};`;
+    const chipStyle = (active) => `display:inline-flex;align-items:center;padding:7px 14px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid ${active ? 'var(--kt-brand-accent,#159FB4)' : 'var(--ink-200)'};background:${active ? 'var(--kt-brand-accent,#159FB4)' : '#fff'};color:${active ? '#fff' : 'var(--ink-700)'};`;
 
-    /* On a phone a full-screen takeover is exactly right. On a desktop it was the same
-       thing: the entire window went white, the app chrome vanished, a small message box
-       sat at the top-left of an empty field and "Send message" stretched the full width
-       of the monitor. A wide screen gets a proper centred dialog instead; the phone keeps
-       precisely what it had. (Anthony, 2026-09-08) */
-    const wide = window.innerWidth > 768;
-    const tw = Dom.el('div', { style: wide
-      ? 'position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,.45);display:flex;align-items:center;'
-        + 'justify-content:center;padding:24px;box-sizing:border-box;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);'
-      : 'position:fixed;inset:0;z-index:9600;background:#fff;display:flex;flex-direction:column;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
-    // The card on desktop; on a phone the overlay IS the card, so nothing changes there.
-    const panel = wide
-      ? Dom.el('div', { style: 'width:min(620px,100%);max-height:min(86vh,100%);background:#fff;border-radius:18px;'
-          + 'box-shadow:0 24px 60px -20px rgba(15,23,42,.5);display:flex;flex-direction:column;overflow:hidden;' })
-      : tw;
-    if (wide) {
-      tw.appendChild(panel);
-      // Clicking the dimmed area closes, the way every other dialog here behaves.
-      tw.addEventListener('click', (e) => {
-        if (e.target !== tw) return;
-        if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove();
-      });
-    }
-    const header = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 10px) 12px 12px;border-bottom:1px solid var(--ink-100);flex-shrink:0;' });
-    const back = Dom.el('button', { style: 'background:none;border:none;font-size:26px;color:#159FB4;cursor:pointer;padding:0 6px;line-height:1;' }, '‹');
-    back.addEventListener('click', () => { if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove(); });
+    /* A POPUP ON EVERY SCREEN (2026-11-06, Anthony: "look at message centre under parent view and make this look
+       better as a popup instead ... when created a new message"). On a phone this was a white full-screen takeover
+       with a bare ‹ back, and the popup guard wrapped "About which child?" into a squashed header band. Now phone and
+       desktop get the same centred card over a dimmed screen: the standard navy-to-teal header with ✕ inside it,
+       one scroll region, and Emergency + Send pinned at the foot. (The desktop dialog dates from 2026-09-08.) */
+    const close = () => { if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove(); };
+    const tw = Dom.el('div', { 'data-kt-scroll': '1', style: 'position:fixed;inset:0;z-index:9600;background:rgba(15,23,42,.5);display:flex;align-items:center;'
+      + 'justify-content:center;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 16px) 12px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 16px);'
+      + 'box-sizing:border-box;animation:kt-screen-in .22s cubic-bezier(.22,.61,.36,1);' });
+    const panel = Dom.el('div', { role: 'dialog', 'aria-modal': 'true', 'aria-label': 'New message', 'data-kt-scroll': '1',
+      style: 'width:min(560px,100%);max-height:100%;background:#fff;border-radius:16px;'
+        + 'box-shadow:0 24px 60px -20px rgba(15,23,42,.5);display:flex;flex-direction:column;overflow:hidden;' });
+    tw.appendChild(panel);
+    // Clicking the dimmed area closes, the way every other dialog here behaves.
+    tw.addEventListener('click', (e) => { if (e.target === tw) close(); });
+    const header = Dom.el('div', { class: 'kt-dlg-head', style: 'display:flex;align-items:center;gap:10px;padding:13px 14px 15px 16px;flex-shrink:0;'
+      + 'background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);box-shadow:inset 0 -3px 0 #7FD3CC;color:#fff;' });
+    header.appendChild(Dom.el('div', { style: 'flex:1;min-width:0;font-weight:800;font-size:16px;color:#fff;' }, '✉️ New message'));
+    const back = Dom.el('button', { type: 'button', 'aria-label': 'Close', 'data-kt-iconized': '1',
+      style: 'background:rgba(255,255,255,.14);border:none;width:30px;height:30px;border-radius:8px;font-size:16px;color:#fff;cursor:pointer;line-height:1;flex-shrink:0;' }, '✕');
+    back.addEventListener('click', close);
     header.appendChild(back);
-    header.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;color:var(--ink-900);' }, 'New message'));
     panel.appendChild(header);
 
-    const bodyWrap = Dom.el('div', { style: 'flex:1;overflow-y:auto;padding:16px;' });
+    const bodyWrap = Dom.el('div', { 'data-kt-scroll': '1', style: 'flex:1;min-height:0;overflow-y:auto;padding:16px;' });
     panel.appendChild(bodyWrap);
 
     let chosenChild = state.children.find(c => c.id === state.selectedChildId) || state.children[0];
+    /* WHO IT GOES TO (2026-11-06, Anthony: "allow parent to message its educator(s) or agency (everyone at agency
+       admin/directors - would get the messages)"). Educators = the thread about the chosen child, as before. Centre
+       office = one family thread that only the centre's directors and the agency's admins see (to='office',
+       App\Support\MessagingRules::OFFICE on the server). */
+    let to = 'room';
+    bodyWrap.appendChild(Dom.el('label', { style: 'display:block;font-size:12.5px;font-weight:700;color:var(--ink-700);margin-bottom:7px;' }, 'Send to'));
+    const toRow = Dom.el('div', { role: 'radiogroup', 'aria-label': 'Send to', 'data-kt-noband': '1', style: 'display:flex;gap:8px;margin-bottom:6px;' });
+    const toHint = Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-bottom:16px;line-height:1.4;' });
+    const TO_OPTS = [
+      { k: 'room', ico: '👩‍🏫', lbl: 'Educators' },
+      { k: 'office', ico: '🏢', lbl: 'Centre office' },
+    ];
+    let childBlock = null;
+    const paintTo = () => {
+      [].forEach.call(toRow.children, (b) => {
+        const on = b.dataset.to === to;
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.setAttribute('style', 'flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;border-radius:10px;'
+          + 'font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;'
+          + (on ? 'border:1.5px solid var(--kt-brand-accent,#159FB4);background:var(--kt-brand-accent,#159FB4);color:#fff;' : 'border:1.5px solid var(--ink-200);background:#fff;color:var(--ink-700);'));
+      });
+      toHint.textContent = to === 'office'
+        ? "Goes to the centre's director and office team. Your child's educators won't see it."
+        : "Goes to your child's room team at the centre.";
+      if (childBlock) childBlock.style.display = to === 'office' ? 'none' : '';
+    };
+    TO_OPTS.forEach((o) => {
+      const b = Dom.el('button', { type: 'button', role: 'radio', 'data-to': o.k, 'data-kt-iconized': '1' }, [Dom.el('span', { 'aria-hidden': 'true' }, o.ico), Dom.el('span', {}, o.lbl)]);
+      b.addEventListener('click', () => { to = o.k; paintTo(); });
+      toRow.appendChild(b);
+    });
+    bodyWrap.appendChild(toRow);
+    bodyWrap.appendChild(toHint);
+    childBlock = Dom.el('div');
+    bodyWrap.appendChild(childBlock);
+    paintTo();
     if (state.children.length > 1) {
-      bodyWrap.appendChild(Dom.el('div', { style: 'font-size:12px;font-weight:800;color:var(--ink-500);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;' }, 'About which child?'));
-      const chips = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;' });
+      childBlock.appendChild(Dom.el('label', { style: 'display:block;font-size:12.5px;font-weight:700;color:var(--ink-700);margin-bottom:7px;' }, 'About which child?'));
+      const chips = Dom.el('div', { 'data-kt-noband': '1', style: 'display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;' });
       const paint = () => { [].forEach.call(chips.children, (b) => b.setAttribute('style', chipStyle(Number(b.dataset.id) === chosenChild.id))); };
       state.children.forEach(c => {
-        const chip = Dom.el('button', { type: 'button', 'data-id': String(c.id), style: chipStyle(c.id === chosenChild.id) }, (c.first_name || c.display_name));
+        const chip = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', 'data-id': String(c.id), style: chipStyle(c.id === chosenChild.id) }, (c.first_name || c.display_name));
         chip.addEventListener('click', () => { chosenChild = c; paint(); });
         chips.appendChild(chip);
       });
-      bodyWrap.appendChild(chips);
+      childBlock.appendChild(chips);
     }
-    bodyWrap.appendChild(Dom.el('div', { style: 'font-size:12px;color:var(--ink-500);margin-bottom:8px;line-height:1.4;' }, "This goes to your child's room team at the centre."));
 
     // display:block — a textarea is inline-block by default, which is why the
     // "Add a photo" button sat alongside it instead of underneath.
@@ -3288,39 +4771,108 @@
        form field and wrong for the box somebody writes a paragraph in. An inline
        !important is the one thing that outranks a stylesheet !important. */
     ta.rows = 5;
-    ta.style.setProperty('min-height', '150px', 'important');
+    ta.style.setProperty('min-height', '140px', 'important');
     ta.style.setProperty('height', 'auto', 'important');
     bodyWrap.appendChild(ta);
 
+    /* EMOJI + VOICE NOTE (2026-11-06, Anthony: "add emoji picker, voice note to the guardian chat - new message").
+       The same emoji grid and the same recorder (KT.recordVoiceNote) as an open conversation. One attachment per
+       message, as before: a photo or a voice note, and picking one replaces the other. */
     let pickedFile = null;
     const preview = Dom.el('div', { style: 'margin-top:10px;' });
-    const fileInput = Dom.el('input', { type: 'file', accept: 'image/*', style: 'display:none;' });
-    const attachRow = Dom.el('button', { type: 'button', style: 'display:inline-flex;align-items:center;gap:8px;margin-top:12px;background:var(--ink-50);border:1px solid var(--ink-200);border-radius:12px;padding:10px 14px;font-size:14px;font-weight:600;color:var(--ink-700);cursor:pointer;' }, [Dom.el('span', {}, '📷'), Dom.el('span', {}, 'Add a photo')]);
+    const fileInput = Dom.el('input', { type: 'file', accept: 'image/*', multiple: 'multiple', style: 'display:none;' });
+    let pickedMore = [];   // 2nd+ photos picked together; each follows as its own message (2026-11-13)
+    const TOOL = 'display:inline-flex;align-items:center;gap:6px;background:var(--ink-50);border:1px solid var(--ink-200);border-radius:9px;'
+      + 'height:32px;padding:0 11px;font-size:13px;font-weight:700;color:var(--ink-700);cursor:pointer;font-family:inherit;';
+    const tools = Dom.el('div', { style: 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;' });
+    const emojiBtn = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', 'aria-expanded': 'false', style: TOOL }, [Dom.el('span', {}, '😊'), Dom.el('span', {}, 'Emoji')]);
+    const attachRow = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: TOOL }, [Dom.el('span', {}, '📷'), Dom.el('span', {}, 'Photo')]);
+    const voiceBtn = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: TOOL }, [Dom.el('span', {}, '🎤'), Dom.el('span', {}, 'Voice note')]);
+    tools.appendChild(emojiBtn); tools.appendChild(attachRow); tools.appendChild(voiceBtn);
+    // .kt-emoji-panel.kt-emoji-bar: the one emoji grid (kt-chat-composer.css), as in an open conversation.
+    const emojiPanel = Dom.el('div', { class: 'kt-emoji-panel kt-emoji-bar', style: 'display:none;flex-wrap:wrap;gap:2px;margin-top:8px;padding:6px;'
+      + 'background:#fff;border:1px solid var(--ink-200);border-radius:10px;max-height:150px;overflow-y:auto;' });
+    KT_EMOJIS.forEach(em => {
+      const eb = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', 'aria-label': em, style: 'background:none;border:none;font-size:22px;line-height:1;padding:6px;cursor:pointer;border-radius:8px;' }, em);
+      eb.addEventListener('click', () => {
+        const a = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+        const z = ta.selectionEnd == null ? a : ta.selectionEnd;
+        ta.value = ta.value.slice(0, a) + em + ta.value.slice(z);
+        ta.selectionStart = ta.selectionEnd = a + em.length;
+        ta.focus();
+      });
+      emojiPanel.appendChild(eb);
+    });
+    const showEmoji = (on) => { emojiPanel.style.display = on ? 'flex' : 'none'; emojiBtn.setAttribute('aria-expanded', on ? 'true' : 'false'); };
+    emojiBtn.addEventListener('click', () => showEmoji(emojiPanel.style.display === 'none'));
+    closeOnOutsideTap([emojiPanel, emojiBtn], () => showEmoji(false), () => emojiPanel.style.display !== 'none');
+
+    const resetTools = () => { attachRow.lastChild.textContent = 'Photo'; voiceBtn.lastChild.textContent = 'Voice note'; };
+    const showPicked = () => {
+      Dom.clear(preview);
+      resetTools();
+      if (!pickedFile) return;
+      const isAudio = (pickedFile.type || '').indexOf('audio') === 0;
+      const row = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;' });
+      if (isAudio) {
+        row.appendChild(Dom.el('audio', { controls: '', preload: 'metadata', src: URL.createObjectURL(pickedFile), style: 'width:230px;max-width:100%;height:40px;' }));
+        voiceBtn.lastChild.textContent = 'Record again';
+      } else {
+        const img = Dom.el('img', { style: 'max-width:170px;border-radius:10px;display:block;' });
+        img.src = URL.createObjectURL(pickedFile);
+        row.appendChild(img);
+        pickedMore.forEach((mf) => {
+          const mi = Dom.el('img', { style: 'max-width:80px;max-height:80px;object-fit:cover;border-radius:10px;display:block;' });
+          mi.src = URL.createObjectURL(mf);
+          row.appendChild(mi);
+        });
+        row.style.flexWrap = 'wrap';
+        attachRow.lastChild.textContent = pickedMore.length ? 'Change photos' : 'Change photo';
+      }
+      const rm = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', 'aria-label': isAudio ? 'Remove voice note' : 'Remove photo', 'data-kttip': 'Remove',
+        style: 'flex-shrink:0;width:30px;height:30px;border-radius:8px;border:1px solid var(--ink-200);background:#fff;color:var(--ink-500);cursor:pointer;font-size:14px;' }, '\u2715');
+      rm.addEventListener('click', () => { pickedFile = null; pickedMore = []; showPicked(); });
+      row.appendChild(rm);
+      preview.appendChild(row);
+    };
     attachRow.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => {
-      if (fileInput.files && fileInput.files[0]) {
-        pickedFile = fileInput.files[0];
-        Dom.clear(preview);
-        const img = Dom.el('img', { style: 'max-width:170px;border-radius:10px;display:block;margin-top:4px;' });
-        img.src = URL.createObjectURL(pickedFile);
-        preview.appendChild(img);
-        attachRow.lastChild.textContent = 'Change photo';
-      }
+      const all = Array.prototype.slice.call(fileInput.files || [], 0, 10);
+      if (all.length) { pickedFile = all[0]; pickedMore = all.slice(1); fileInput.value = ''; showPicked(); }
     });
-    bodyWrap.appendChild(attachRow);
+    voiceBtn.addEventListener('click', async () => {
+      if (!(window.KT && KT.recordVoiceNote)) { ktToast('⚠️', 'Voice messages aren’t supported on this device'); return; }
+      showEmoji(false);
+      voiceBtn.disabled = true;
+      try {
+        // The recorder stands in for the tools row while it is up, then gives it back.
+        const file = await KT.recordVoiceNote({ anchor: tools, acceptLabel: 'Use' });
+        if (file) { pickedFile = file; pickedMore = []; showPicked(); }
+      } finally { voiceBtn.disabled = false; }
+    });
+    bodyWrap.appendChild(tools);
+    bodyWrap.appendChild(emojiPanel);
     bodyWrap.appendChild(fileInput);
     bodyWrap.appendChild(preview);
 
-    const status = Dom.el('div', { style: 'font-size:13px;color:#B45309;padding:0 16px;min-height:16px;' });
-    panel.appendChild(status);
-    const send = Dom.el('button', { type: 'button', style: 'margin:8px 16px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 14px);border:0;cursor:pointer;padding:15px;border-radius:14px;font-size:16px;font-weight:800;color:#fff;background:#159FB4;flex-shrink:0;' }, 'Send message');
+    // The foot: what went wrong, the Emergency switch and Send, always in view under the scroll region.
+    const foot = Dom.el('div', { style: 'flex-shrink:0;border-top:1px solid var(--ink-100);padding:10px 16px 14px;display:flex;flex-direction:column;gap:8px;background:#fff;' });
+    const status = Dom.el('div', { style: 'font-size:13px;color:#B45309;min-height:0;' });
+    foot.appendChild(status);
+    const send = Dom.el('button', { type: 'button', 'data-kt-iconized': '1', style: 'border:0;cursor:pointer;height:40px;border-radius:10px;font-size:15px;font-weight:800;color:#fff;background:#159FB4;' }, 'Send message');
     send.addEventListener('click', async () => {
-      if (!ta.value.trim() && !pickedFile) { status.textContent = 'Write a message or add a photo first.'; return; }
+      if (!ta.value.trim() && !pickedFile) { status.textContent = 'Write a message, or add a photo or voice note first.'; return; }
       send.disabled = true; send.textContent = 'Sending…'; status.textContent = '';
       try {
-        await sendParentMessage(chosenChild.id, ta.value.trim(), pickedFile, !!(newEm && KT.emergency.isOn(newEm)));
+        await sendParentMessage(chosenChild.id, ta.value.trim(), pickedFile, !!(newEm && KT.emergency.isOn(newEm)), to);
+        // The other photos picked with it, one message each. The first message is in, so a failure here only says so.
+        let lostMore = 0;
+        for (const mf of pickedMore) {
+          try { await sendParentMessage(chosenChild.id, '', mf, false, to); } catch (e2) { lostMore++; }
+        }
+        if (lostMore) ktToast('⚠️', 'Message sent, but ' + lostMore + ' photo' + (lostMore === 1 ? '' : 's') + ' did not go. Open the conversation to try again.');
         bust('/parent/messages');
-        if (window.KT && KT.popOverlay) KT.popOverlay(tw); else tw.remove();
+        close();
         if (location.hash === '#messages') Shell.renderScreen(); else location.hash = '#messages';
       } catch (e) {
         send.disabled = false; send.textContent = 'Send message';
@@ -3328,8 +4880,12 @@
       }
     });
     const newEm = (window.KT && KT.emergency) ? KT.emergency.button({ wide: true }) : null;
-    if (newEm) { newEm.style.margin = '6px 16px 0'; newEm.style.alignSelf = 'flex-start'; panel.appendChild(newEm); }
-    panel.appendChild(send);
+    const row = Dom.el('div', { style: 'display:flex;align-items:center;gap:10px;' });
+    if (newEm) { newEm.style.margin = '0'; newEm.style.flexShrink = '0'; row.appendChild(newEm); }
+    send.style.flex = '1';
+    row.appendChild(send);
+    foot.appendChild(row);
+    panel.appendChild(foot);
 
     appMain.appendChild(tw);
     if (window.KT && KT.pushOverlay) KT.pushOverlay(tw);
@@ -3348,6 +4904,7 @@
       'meal': '🍽️', 'snack': '🍎', 'nap_start': '😴', 'nap_end': '🌅',
       'diaper': '👶', 'bathroom': '🚽', 'activity': '✨', 'mood': '😊', 'outdoor': '🌳',
       'note': '📝', 'milestone': '🌟', 'bottle': '🍼',
+      'sunscreen': '☀️', 'medication': '💊', 'medicine': '💊', 'clothing': '👕',
       'check_in': '✅', 'check_out': '👋',
     })[type] || '•';
   }
@@ -3371,11 +4928,141 @@
     });
   }
 
+  /* ─── RUNNING LATE (2026-11-06) ─────────────────────────────────────
+     Anthony: "the late function should apply for parents dropping and picking up late to supress the safe arrival
+     alerts and notify the educator about the situation". A parent says the child will be dropped off (arrival) or
+     picked up (departure) by a time today. Until then Safe Arrival / the end-of-day check asks and alerts nobody, and
+     the centre's staff are told (who: the agency's Safe Arrival settings). GET/POST/DELETE /parent/running-late. */
+  const lateEsc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const lateHm = (t) => { const h = +t.slice(0, 2); return ((h % 12) || 12) + ':' + t.slice(3) + (h < 12 ? ' AM' : ' PM'); };
+  async function openRunningLate(childId, onDone) {
+    let info = null;
+    try { info = await Api.get('/parent/running-late'); } catch (e) { ktToast('⚠️', e.message || 'Could not load. Try again.'); return; }
+    const c = (info.children || []).find(x => String(x.child_id) === String(childId));
+    const first = c ? c.first_name : 'Your child';
+    if (!c || (!c.can_arrival && !c.can_departure)) {
+      const why = !c || c.status === 'none' ? ' is not expected at the centre today.'
+        : c.status === 'absent' ? ' is reported absent today.' : ' has already gone home today.';
+      ktToast('⏰', first + why);
+      return;
+    }
+    let kind = c.can_arrival && !c.late.arrival ? 'arrival' : (c.can_departure ? 'departure' : 'arrival');
+    if (c.status === 'in') kind = 'departure';
+    const body = document.createElement('div');
+    const BTN = 'flex:1;height:32px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;';
+    const LBL = 'display:block;font-size:12px;font-weight:700;color:#374151;margin:12px 0 4px;';
+    const FLD = 'width:100%;box-sizing:border-box;height:32px;padding:0 9px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;background:#fff;';
+    let h = null;
+    const dflt = () => {
+      const t = new Date(Date.now() + 30 * 60000); t.setMinutes(Math.ceil(t.getMinutes() / 5) * 5, 0, 0);
+      return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+    };
+    const paint = () => {
+      const had = c.late[kind];
+      const pickup = kind === 'departure';
+      body.innerHTML = (c.can_arrival && c.can_departure
+          ? '<div style="display:flex;gap:6px;margin-bottom:4px;" role="group" aria-label="Drop-off or pickup">'
+            + ['arrival', 'departure'].map(k => '<button type="button" data-kind="' + k + '" data-kt-iconized="1" aria-pressed="' + (k === kind) + '" style="' + BTN
+              + (k === kind ? 'border:0;background:#1F6080;color:#fff;' : 'border:1px solid #CBD5E1;background:#fff;color:#334155;') + '">'
+              + (k === 'arrival' ? '🚗 Drop-off' : '🏠 Pickup') + '</button>').join('') + '</div>'
+          : '')
+        + '<div style="font-size:13.5px;color:#475569;line-height:1.55;margin-top:6px;">' + (pickup
+          ? 'Tell the centre you\'ll pick ' + lateEsc(first) + ' up later today. Nobody is alerted before the time you give.'
+          : 'Tell the centre ' + lateEsc(first) + ' will be in later today. You won\'t be asked where ' + lateEsc(first) + ' is before the time you give.')
+        + ' ' + lateEsc(first) + '\'s educators are told.</div>'
+        + (had ? '<div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:#EEF2FF;color:#3730A3;font-size:13px;font-weight:700;">'
+          + (pickup ? 'Pickup by ' : 'Arriving by ') + lateEsc(had.by) + (had.note ? ' — ' + lateEsc(had.note) : '') + '</div>' : '')
+        + '<label style="' + LBL + '" for="pl-late-time">' + (pickup ? 'I\'ll pick up by' : 'We\'ll be there by') + '</label>'
+        + '<input type="time" id="pl-late-time" step="300" value="' + lateEsc(had ? had.by_hm : dflt()) + '" style="' + FLD + 'width:150px;">'
+        + '<label style="' + LBL + '" for="pl-late-note">Note for the centre (optional)</label>'
+        + '<input type="text" id="pl-late-note" maxlength="500" style="' + FLD + '" placeholder="' + (pickup ? 'e.g. Stuck in traffic' : 'e.g. Doctor\'s appointment') + '" value="' + lateEsc(had && had.note ? had.note : '') + '">'
+        + '<div data-err role="alert" style="color:#B91C1C;font-size:13px;font-weight:700;min-height:18px;margin-top:8px;"></div>';
+      body.querySelectorAll('[data-kind]').forEach(b => b.addEventListener('click', () => { kind = b.getAttribute('data-kind'); open(); }));
+    };
+    const err = () => body.querySelector('[data-err]');
+    const finish = (r, msg) => {
+      ktToast('⏰', msg);
+      if (onDone) { try { onDone(r); } catch (e) {} }
+    };
+    const open = () => {
+      paint();
+      const had = c.late[kind];
+      const actions = [{ label: 'Cancel' }];
+      if (had) {
+        actions.push({ label: 'We\'re on time', busyLabel: 'Saving…', handler: async () => {
+          let r;
+          try { r = await Api.delete('/parent/running-late/' + c.child_id + '/' + kind); } catch (e) { err().textContent = e.message; return false; }
+          finish(r, 'Thanks. The centre has been told ' + first + ' is on time.');
+        } });
+      }
+      actions.push({ label: had ? 'Save new time' : 'Tell the centre', primary: true, busyLabel: 'Sending…', handler: async () => {
+        const t = body.querySelector('#pl-late-time').value;
+        if (!/^\d{2}:\d{2}$/.test(t)) { err().textContent = 'Enter a time.'; return false; }
+        const note = body.querySelector('#pl-late-note').value.trim();
+        let r;
+        try { r = await Api.post('/parent/running-late', { child_id: c.child_id, kind: kind, time: t, note: note || null }); }
+        catch (e) { err().textContent = e.message; return false; }
+        finish(r, 'The centre knows ' + (kind === 'departure' ? 'you\'ll pick ' + first + ' up by ' : first + ' will be there by ') + lateHm(t) + '.');
+      } });
+      h = Shell.Modal.open({ title: '⏰ Running late: ' + first, body: body, actions: actions });
+      // The suggested time is ready to send (kt-dirty-save would hold a prefilled form as "no changes").
+      const save = h && h.backdrop && h.backdrop.querySelector('.modal-footer .btn-primary');
+      if (save) save.setAttribute('data-kt-always-save', '1');
+    };
+    open();
+  }
+  window.KT = window.KT || {};
+  window.KT.parentRunningLate = openRunningLate;
+
+  /* guardian:running-late - each child, where they are, and a button (the home tile opens this). */
+  async function renderRunningLate(main) {
+    Dom.clear(main);
+    const wrap = Dom.el('div', { style: 'padding:16px;' });
+    main.appendChild(wrap);
+    wrap.appendChild(Dom.el('h1', { style: 'margin:0 0 4px;font-size:22px;' }, '⏰ Running late'));
+    wrap.appendChild(Dom.el('p', { style: 'margin:0 0 14px;color:var(--ink-600);font-size:13.5px;line-height:1.5;' },
+      'Running late for drop-off or pickup today? Tell the centre here. Nobody chases you before the time you give, and your child\'s educators know.'));
+    const list = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;' });
+    wrap.appendChild(list);
+    const paint = (info) => {
+      Dom.clear(list);
+      const kids = (info && info.children) || [];
+      if (!kids.length) { list.appendChild(Dom.el('div', { style: 'color:var(--ink-500);font-size:13.5px;' }, 'No children on your account.')); return; }
+      kids.forEach((c) => {
+        const where = c.status === 'in' ? 'At the centre' : c.status === 'expected' ? 'Expected today' + (c.expected_in ? ' · usually in by ' + c.expected_in : '')
+          : c.status === 'absent' ? 'Reported absent today' : c.status === 'out' ? 'Gone home today' : 'Not expected today';
+        const row = Dom.el('div', { style: card('padding:14px;') });
+        row.appendChild(Dom.el('div', { style: 'font-weight:800;font-size:15px;color:var(--ink-900);' }, c.name));
+        row.appendChild(Dom.el('div', { style: 'font-size:12.5px;color:var(--ink-500);margin-top:2px;' }, where + (c.centre_name ? ' · ' + c.centre_name : '')));
+        ['arrival', 'departure'].forEach((k) => {
+          const l = c.late[k];
+          if (l) row.appendChild(Dom.el('div', { style: 'margin-top:8px;padding:7px 10px;border-radius:9px;background:#EEF2FF;color:#3730A3;font-size:12.5px;font-weight:700;' },
+            (k === 'departure' ? 'Pickup by ' : 'Arriving by ') + l.by + (l.note ? ' — ' + l.note : '')));
+        });
+        const can = c.can_arrival || c.can_departure;
+        const b = Dom.el('button', {
+          type: 'button', 'data-kt-iconized': '1',
+          style: 'margin-top:10px;width:100%;height:32px;border-radius:8px;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;'
+            + (can ? 'border:0;background:#1F6080;color:#fff;' : 'border:1px solid #E2E8F0;background:#F8FAFC;color:#94A3B8;'),
+        }, c.late.arrival || c.late.departure ? 'Change or take back' : (c.status === 'in' ? 'Late for pickup' : 'Running late'));
+        b.addEventListener('click', () => openRunningLate(c.child_id, (r) => paint(r)));
+        row.appendChild(b);
+        list.appendChild(row);
+      });
+    };
+    list.appendChild(Dom.el('div', { style: 'color:var(--ink-500);font-size:13px;' }, 'Loading…'));
+    try { paint(await Api.get('/parent/running-late')); }
+    catch (e) { Dom.clear(list); list.appendChild(Dom.el('div', { style: 'color:#B91C1C;font-size:13.5px;' }, e.message || 'Could not load. Try again.')); }
+  }
+
   window.KT = window.KT || {};
   window.KT.renderParent = renderParent;
+  // The same sheet, for the Interac e-Transfer tab's "Preview what families see" (screen-payment-providers.js).
+  window.KT.openInteracSheet = ktOpenInterac;
   Shell.registerScreen("guardian:dashboard", renderParent);
   Shell.registerScreen("guardian:today", renderParent);
   Shell.registerScreen("guardian:photos", renderParent);
   Shell.registerScreen("guardian:messages", renderParent);
   Shell.registerScreen("guardian:billing", renderParent);
+  Shell.registerScreen("guardian:running-late", renderRunningLate);
 })(window);

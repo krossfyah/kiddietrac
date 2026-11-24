@@ -104,17 +104,21 @@
     var wrap = d.createElement('div');
     wrap.className = 'kt-select-sheet';
     wrap.setAttribute('data-no-modal-guard', '1');
+    wrap.setAttribute('data-kt-tap-outside', '1');   // a tap outside the list closes it (kt-modal-safety)
+    /* A CENTRED LIST (2026-11-06, Anthony: "all pop ups and selections should be centered to the middle of the
+       screen"). It rose from the bottom edge as a sheet; it now opens as a card in the middle, like every popup. */
     wrap.style.cssText = 'position:fixed;inset:0;z-index:' + Z + ';background:rgba(15,23,42,.5);'
-      + 'display:flex;align-items:flex-end;justify-content:center;opacity:0;'
+      + 'display:flex;align-items:center;justify-content:center;opacity:0;'
+      + 'padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 16px) 12px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 16px);box-sizing:border-box;'
       + 'transition:opacity .17s ease;-webkit-tap-highlight-color:transparent;';
 
     var panel = d.createElement('div');
     // Every colour is stated outright. Inheriting is what made the native dialog
     // unreadable in the first place.
-    panel.style.cssText = 'background:#fff;color:#0F172A;width:100%;max-width:560px;'
-      + 'border-radius:18px 18px 0 0;max-height:78vh;display:flex;flex-direction:column;'
-      + 'box-shadow:0 -8px 30px rgba(15,23,42,.28);transform:translateY(14px);'
-      + 'transition:transform .17s ease;padding-bottom:var(--kt-safe-bottom, env(safe-area-inset-bottom,0px));';
+    panel.style.cssText = 'background:#fff;color:#0F172A;width:100%;max-width:440px;'
+      + 'border-radius:18px;max-height:min(78vh, 100%);display:flex;flex-direction:column;overflow:hidden;'
+      + 'box-shadow:0 12px 40px rgba(15,23,42,.3);transform:scale(.97);'
+      + 'transition:transform .17s ease;';
 
     var head = d.createElement('div');
     head.style.cssText = 'padding:15px 18px 11px;border-bottom:1px solid #E2E8F0;display:flex;'
@@ -290,7 +294,7 @@
 
     requestAnimationFrame(function () {
       wrap.style.opacity = '1';
-      panel.style.transform = 'translateY(0)';
+      panel.style.transform = 'none';
     });
 
     d.addEventListener('keydown', onKey, true);

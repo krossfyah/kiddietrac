@@ -44,6 +44,7 @@
   // needed by the row menu's dialogs, which open long after the render that loaded them.
   let tsCentres = [];
   let tsTimezone = null;
+  let tsPage = 1, tsQ = '', tsSort = null;
 
   async function getCentres() {
     // v21: hit /director/centres when user is a director, /admin/centres for agency_admin
@@ -59,7 +60,9 @@
     container.innerHTML = '<div style="padding:32px;text-align:center;color:#6B7280;">Loading…</div>';
     const centres = await getCentres();
     if (centres.length === 0) { container.innerHTML = '<div style="padding:24px;color:#DC2626;">No centres.</div>'; return; }
-    if (!activeCentreId) activeCentreId = centres[0].id;
+    if (!activeCentreId && centres.length === 1) activeCentreId = centres[0].id;
+    // Select a provider first (2026-10-24) — never the first one in the list.
+    if (!activeCentreId && window.KT && KT.selectFirst) { KT.selectFirst(container, { items: centres, onPick: function (id) { activeCentreId = id; renderCerts(container); } }); return; }
 
     let data;
     try { data = await api('GET', '/director/certifications?centre_id=' + activeCentreId); }
@@ -80,12 +83,12 @@
           </select>
         </div>
 
-        ${data.expired > 0 ? `<div style="background:#FEE2E2;border-left:4px solid #DC2626;padding:14px;border-radius:8px;margin-bottom:14px;">
+        ${data.expired > 0 ? `<div style="background:#FEE2E2;--kt-edge:#DC2626;padding:14px;border-radius:8px;margin-bottom:14px;">
           <strong style="color:#991B1B;">⚠ ${data.expired} certification(s) are expired</strong>
           <div style="font-size:13px;color:#7F1D1D;margin-top:4px;">Staff must renew before continuing to work in their certified role.</div>
         </div>` : ''}
 
-        ${data.expiring_soon > 0 ? `<div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:14px;border-radius:8px;margin-bottom:14px;">
+        ${data.expiring_soon > 0 ? `<div style="background:#FEF3C7;--kt-edge:#F59E0B;padding:14px;border-radius:8px;margin-bottom:14px;">
           <strong style="color:#92400E;">⏰ ${data.expiring_soon} cert(s) expiring in 30 days</strong>
         </div>` : ''}
 
@@ -223,8 +226,9 @@
     // A DEFAULT, not an override — whatever the reader typed into the date boxes wins,
     // and is kept across a re-render so correcting an old shift does not snap the screen
     // back to this month. See tsFrom/tsTo above.
-    const today = new Date();
-    const startWin = new Date(); startWin.setDate(today.getDate() - 30);
+    // The agency's date, stepped in UTC days (a device's UTC date is tomorrow from 8pm Toronto).
+    const today = new Date(((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + 'T00:00:00Z');
+    const startWin = new Date(today.getTime()); startWin.setUTCDate(today.getUTCDate() - 30);
     const from = tsFrom || startWin.toISOString().split('T')[0];
     const to = tsTo || today.toISOString().split('T')[0];
     tsFrom = from; tsTo = to;
@@ -251,6 +255,7 @@
               <option value="" ${!tsCentreId ? 'selected' : ''}>All centres</option>
               ${centres.map(c => `<option value="${c.id}" ${c.id == tsCentreId ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
             </select>
+            <input type="search" id="kt-ts-q" value="${esc(tsQ)}" placeholder="Search staff or date…" aria-label="Search staff or date" style="padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;min-width:170px;">
             <input type="date" id="kt-from" value="${from}" style="padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">
             <input type="date" id="kt-to" value="${to}" style="padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">
             <button id="kt-reload" class="kt-icon-tip" title="Reload" data-kttip="Reload" aria-label="Reload" style="width:38px;height:38px;box-sizing:border-box;background:#1F6080;color:#fff;border:none;border-radius:8px;font-size:16px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">🔄</button>
@@ -261,23 +266,14 @@
         ${(data.rows || []).length === 0
           ? '<div style="padding:48px;background:white;border-radius:14px;text-align:center;color:#6B7280;">No timesheets in this date range.</div>'
           : `<div style="background:white;border-radius:14px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.05);">
-              <table style="width:100%;border-collapse:collapse;font-size:14px;">
+              <table id="kt-ts-table" data-kt-server-paged="1" data-kt-rows-key="shifts" style="width:100%;border-collapse:collapse;font-size:14px;">
                 <thead style="background:#F9FAFB;">
                   <tr><th style="${th()}">Date</th><th style="${th()}">Staff</th><th style="${th()}">In</th><th style="${th()}">Out</th><th style="${th()}">Break</th><th style="${th()}">Hours</th><th style="${th()}"></th></tr>
                 </thead>
-                <tbody>
-                  ${data.rows.map((r, i) => `<tr style="border-top:1px solid #F3F4F6;">
-                    <td style="${td()}white-space:nowrap;">${esc(r.date_label || r.date || '—')}</td>
-                    <td style="${td()}">${esc(r.staff_name)}</td>
-                    <td style="${td()}white-space:nowrap;">${esc(r.clock_in_label || r.clock_in)}</td>
-                    <td style="${td()}white-space:nowrap;">${esc(r.clock_out_label || r.clock_out)}</td>
-                    <td style="${td()}">${r.break_min} min</td>
-                    <td style="${td()}"><strong>${r.worked_hours}h</strong></td>
-                    ${tsActionCell(r, i)}
-                  </tr>`).join('')}
-                </tbody>
+                <tbody id="kt-ts-body"></tbody>
               </table>
-            </div>`
+            </div>
+            <div id="kt-ts-pager"></div>`
         }
       </div>
     `;
@@ -289,6 +285,7 @@
       var f = $('#kt-from', container).value, t = $('#kt-to', container).value;
       if (f && t && f > t) { var sw = f; f = t; t = sw; }
       tsFrom = f || null; tsTo = t || null;
+      tsPage = 1;
       renderTimesheets(container);
     }
     $('#kt-reload', container).addEventListener('click', applyRange);
@@ -296,7 +293,11 @@
     // have to press Reload after is a filter people think is broken.
     $('#kt-from', container).addEventListener('change', applyRange);
     $('#kt-to', container).addEventListener('change', applyRange);
-    $('#kt-csv', container).addEventListener('click', () => downloadCsv(data));
+    $('#kt-csv', container).addEventListener('click', () => {
+      const q = (tsQ || '').trim().toLowerCase();
+      const list = (data.rows || []).filter(r => !q || [r.staff_name, r.staff_email, r.staff_ref, r.date_label, r.date].some(v => String(v || '').toLowerCase().indexOf(q) !== -1));
+      downloadCsv(Object.assign({}, data, { rows: list }));
+    });
 
     /* ── The row menu ──────────────────────────────────────────────────────────
 
@@ -314,24 +315,110 @@
        them into the one ⋮ and reads each button's data-kttip as the menu wording.
        (Anthony, 2026-09-16) */
     const rows = data.rows || [];
-    container.querySelectorAll('[data-ts-edit]').forEach(b => b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openShiftDialog(container, rows[+b.getAttribute('data-ts-edit')], 'edit');
-    }));
-    container.querySelectorAll('[data-ts-add]').forEach(b => b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openShiftDialog(container, rows[+b.getAttribute('data-ts-add')], 'add');
-    }));
-    container.querySelectorAll('[data-ts-del]').forEach(b => b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      removeShift(container, rows[+b.getAttribute('data-ts-del')]);
-    }));
-    if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
+    /* ONE PAGE IN THE PAGE (2026-10-30, speed follow-up). A month for a busy agency is ~500 shifts, and every one was
+       a table row: building them, then every sweep in the portal (row menus, contrast, icons, phone tables) walking
+       ~3,500 cells, was ~2.4 s of a phone's main thread before the screen settled. kt-table-filter's pager only HID
+       the rows past the first page - they were all still built and walked. Now only the page on screen is built
+       (25 by default; the reader's rows-per-page choice is kept, "All" included). The search, the column sort, the
+       totals above, the record count and every export (the CSV button and the bottom bar) still cover every shift
+       in the range. The table is marked server-paged, so kt-table-filter keeps only its header sorting, which is
+       re-applied here to the whole range. */
+    const tbl = $('#kt-ts-table', container), body = $('#kt-ts-body', container), pager = $('#kt-ts-pager', container);
+    const COLS = ['Date', 'Staff', 'In', 'Out', 'Break', 'Hours'];
+    const SORTKEY = {
+      Date: r => (r.in_local || r.date || '') + '|' + (r.staff_name || '').toLowerCase(),
+      Staff: r => (r.staff_name || '').toLowerCase() + '|' + (r.in_local || r.date || ''),
+      In: r => r.in_local || '', Out: r => r.out_local || '',
+      Break: r => +r.break_min || 0, Hours: r => +r.worked_min || 0,
+    };
+    let view = [];
+    function rebuildView() {
+      const q = (tsQ || '').trim().toLowerCase();
+      view = rows.map((r, i) => i).filter(i => {
+        if (!q) return true;
+        const r = rows[i];
+        return [r.staff_name, r.staff_email, r.staff_ref, r.date_label, r.date].some(v => String(v || '').toLowerCase().indexOf(q) !== -1);
+      });
+      if (tsSort && SORTKEY[tsSort.col]) {
+        const k = SORTKEY[tsSort.col], dir = tsSort.dir === 'desc' ? -1 : 1;
+        view.sort((a, b) => { const x = k(rows[a]), y = k(rows[b]); return (x < y ? -1 : x > y ? 1 : a - b) * dir; });
+      }
+    }
+    function rowHtml(i) {
+      const r = rows[i];
+      return `<tr style="border-top:1px solid #F3F4F6;">
+        <td style="${td()}white-space:nowrap;">${esc(r.date_label || r.date || '—')}</td>
+        <td style="${td()}">${esc(r.staff_name)}</td>
+        <td style="${td()}white-space:nowrap;">${esc(r.clock_in_label || r.clock_in)}</td>
+        <td style="${td()}white-space:nowrap;">${esc(r.clock_out_label || r.clock_out)}</td>
+        <td style="${td()}">${r.break_min} min</td>
+        <td style="${td()}"><strong>${r.worked_hours}h</strong></td>
+        ${tsActionCell(r, i)}
+      </tr>`;
+    }
+    const RPP = (window.KT && KT.rowsPerPage) ? KT.rowsPerPage : null;
+    const rppKey = RPP ? RPP.keyFor(tbl) : '';
+    function size() { const n = RPP ? RPP.get(rppKey) : null; return n === null || n === undefined ? 25 : n; }
+    function drawPage() {
+      if (!body || !body.isConnected) return;
+      const per = size(), pages = per ? Math.max(1, Math.ceil(view.length / per)) : 1;
+      tsPage = Math.min(Math.max(1, tsPage || 1), pages);
+      const slice = per ? view.slice((tsPage - 1) * per, tsPage * per) : view;
+      body.innerHTML = slice.length ? slice.map(rowHtml).join('')
+        : '<tr><td colspan="7" style="' + td() + 'text-align:center;color:#6B7280;padding:28px;">No shifts match “' + esc(tsQ) + '”.</td></tr>';
+      body.querySelectorAll('[data-ts-edit]').forEach(b => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openShiftDialog(container, rows[+b.getAttribute('data-ts-edit')], 'edit');
+      }));
+      body.querySelectorAll('[data-ts-add]').forEach(b => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openShiftDialog(container, rows[+b.getAttribute('data-ts-add')], 'add');
+      }));
+      body.querySelectorAll('[data-ts-del]').forEach(b => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeShift(container, rows[+b.getAttribute('data-ts-del')]);
+      }));
+      if (tbl) tbl.__ktRecordTotal = view.length;
+      if (pager && window.KT && KT.pagerBar) {
+        KT.pagerBar(pager, tsPage, pages, function (pg) { tsPage = pg; drawPage(); }, {
+          size: per, total: view.length, allowAll: true,
+          onSize: function (n) { if (RPP) RPP.set(rppKey, n); tsPage = 1; drawPage(); },
+        });
+      }
+      if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
+    }
+    if (tbl) {
+      // Every export of this table is the whole range (as filtered by the search), not the page on screen.
+      tbl.__ktExportAll = function () {
+        return { headers: COLS, rows: view.map(i => { const r = rows[i]; return [r.date_label || r.date || '', r.staff_name || '', r.clock_in_label || r.clock_in || '', r.clock_out_label || r.clock_out || '', r.break_min + ' min', r.worked_hours + 'h']; }) };
+      };
+      // The header click sorts the rows on screen (kt-polish); sort the whole range the same way, then redraw.
+      const head = tbl.querySelector('thead');
+      if (head) head.addEventListener('click', function () {
+        const on = Array.prototype.find.call(head.querySelectorAll('th'), th => th.dataset.ktSort === 'asc' || th.dataset.ktSort === 'desc');
+        if (!on) return;
+        const col = (on.textContent || '').replace(/[⇅↑↓]/g, '').trim();
+        if (!SORTKEY[col]) return;
+        tsSort = { col: col, dir: on.dataset.ktSort };
+        rebuildView(); tsPage = 1; drawPage();
+      });
+    }
+    const qBox = $('#kt-ts-q', container);
+    if (qBox) {
+      let qt = null;
+      qBox.addEventListener('input', function () {
+        clearTimeout(qt);
+        qt = setTimeout(function () { tsQ = qBox.value; rebuildView(); tsPage = 1; drawPage(); }, 180);
+      });
+    }
+    rebuildView();
+    drawPage();
     // Changing the centre re-runs immediately — a filter you have to press Reload after
     // is a filter people think is broken.
     $('#kt-ts-centre', container).addEventListener('change', (e) => {
       var v = e.target.value;
       tsCentreId = v ? parseInt(v, 10) : null;
+      tsPage = 1;
       renderTimesheets(container);
     });
   }

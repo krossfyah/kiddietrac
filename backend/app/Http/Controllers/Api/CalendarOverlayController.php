@@ -34,8 +34,8 @@ final class CalendarOverlayController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         abort_unless($agencyId, 403, 'No agency');
 
-        $from = Carbon::parse($request->query('from', now()->startOfMonth()->toDateString()))->startOfDay();
-        $to = Carbon::parse($request->query('to', now()->endOfMonth()->toDateString()))->startOfDay();
+        $from = Carbon::parse($request->query('from', \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString()))->startOfDay();
+        $to = Carbon::parse($request->query('to', \App\Support\AgencyTime::todayDate()->endOfMonth()->toDateString()))->startOfDay();
         if ($to->lt($from)) {
             [$from, $to] = [$to, $from];
         }
@@ -78,6 +78,65 @@ final class CalendarOverlayController extends Controller
     }
 
     /**
+     * GET /provider/calendar/me?from=&to= — an EDUCATOR's own calendar (2026-10-28, Anthony: "for educators and my
+     * calendar make this look better"). The educator screen showed only a list of upcoming shifts, because every
+     * other layer (closures, holidays, birthdays) lives behind the director-only overlays route. This is the same
+     * data, scoped to the caller: their shifts and their own time off, plus closures and birthdays for the centres
+     * they work in (assigned centres and their rooms' centres, open ones only), honouring the agency's calendar
+     * layer settings. Nobody else's time off, absences or departures - those are a manager's view.
+     */
+    public function mine(Request $request): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        $from = Carbon::parse($request->query('from', \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString()))->startOfDay();
+        $to = Carbon::parse($request->query('to', \App\Support\AgencyTime::todayDate()->endOfMonth()->toDateString()))->startOfDay();
+        if ($to->lt($from)) { [$from, $to] = [$to, $from]; }
+        if ($from->diffInDays($to) > 120) { $to = $from->copy()->addDays(120); }
+
+        $roleRows = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $uid)->where('active', 1)->get(['agency_id', 'centre_id']);
+        $centreIds = $roleRows->pluck('centre_id')->filter()->map(fn ($v) => (int) $v)->all();
+        $roomCentres = DB::table('educator_rooms as er')->join('rooms as r', 'r.id', '=', 'er.room_id')
+            ->where('er.user_id', $uid)->pluck('r.centre_id')->map(fn ($v) => (int) $v)->all();
+        $centreIds = \App\Support\Live::onlyOpenCentres(array_values(array_unique(array_merge($centreIds, $roomCentres))));
+        $agencyId = (int) ($roleRows->pluck('agency_id')->filter()->first()
+            ?: ($centreIds ? DB::table('centres')->where('id', $centreIds[0])->value('agency_id') : 0));
+
+        $events = [];
+        if ($agencyId && $centreIds) {
+            $cal = \App\Http\Controllers\Api\CalendarSettingsController::read($agencyId);
+            $events = array_merge(
+                $cal['show_closures'] ? $this->closures($centreIds, $from, $to) : [],
+                $cal['show_birthdays'] ? $this->birthdays($centreIds, $agencyId, $from, $to, $cal) : [],
+            );
+        }
+
+        // Their own time off, one entry per day, with its status.
+        foreach (DB::table('time_off_requests')->where('user_id', $uid)->whereIn('status', ['approved', 'pending'])
+            ->where('start_at', '<=', $to->toDateString())->where('end_at', '>=', $from->toDateString())->get() as $t) {
+            foreach ($this->eachDay($t->start_at, $t->end_at, $from, $to) as $day) {
+                $events[] = ['date' => $day, 'kind' => 'timeoff', 'icon' => '🌴',
+                    'title' => ucfirst(str_replace('_', ' ', (string) ($t->request_type ?: 'time off'))) . ($t->status === 'pending' ? ' (pending)' : ''),
+                    'detail' => (string) ($t->reason ?? ''), 'who' => 'me', 'tone' => $t->status === 'pending' ? 'pending' : 'away'];
+            }
+        }
+        usort($events, fn ($a, $b) => [$a['date'], $a['kind']] <=> [$b['date'], $b['kind']]);
+
+        $shifts = DB::table('shifts as s')->leftJoin('rooms as r', 'r.id', '=', 's.room_id')
+            ->leftJoin('centres as c', 'c.id', '=', 'r.centre_id')
+            ->where('s.user_id', $uid)
+            ->whereBetween('s.starts_at', [$from->copy()->subDay(), $to->copy()->addDays(2)])
+            ->orderBy('s.starts_at')
+            ->get(['s.id', 's.starts_at', 's.ends_at', 's.role', 's.status', 'r.name as room_name', 'r.color_hex as room_colour', 'c.name as centre_name']);
+
+        return response()->json([
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'shifts' => $shifts,
+            'events' => $events,
+        ]);
+    }
+
+    /**
      * Families leaving, and staff whose last day falls in this range.
      *
      * Three sources because a departure is recorded in three places and always has been:
@@ -90,7 +149,7 @@ final class CalendarOverlayController extends Controller
     private function departures(int $agencyId, array $centreIds, Carbon $from, Carbon $to): array
     {
         $out = [];
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $f = $from->toDateString();
         $t = $to->toDateString();
 

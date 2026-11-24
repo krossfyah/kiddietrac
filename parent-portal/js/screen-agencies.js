@@ -139,7 +139,7 @@
             <span style="background:${statusColor}22;color:${statusColor};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;text-transform:uppercase;">${esc(a.billing_status)}</span>
           </div>
           <div style="font-size:14px;color:#6B7280;display:flex;flex-wrap:wrap;gap:12px;">
-            <span>🌐 <a href="${esc(url)}" target="_blank" style="color:#1F6080;">${esc(url.replace(/^https?:\/\//, ''))}</a></span>
+            ${(!a.custom_domain && !a.subdomain && window.KT && KT.brand) ? '' : `<span>🌐 <a href="${esc(url)}" target="_blank" style="color:#1F6080;">${esc(url.replace(/^https?:\/\//, ''))}</a></span>`}
             <span>📦 Plan: ${esc(a.plan)}</span>
             <span>🏫 ${a.centre_count} centres</span>
             <span>👥 ${a.user_count} users</span>

@@ -17,16 +17,39 @@ use Illuminate\Support\Facades\DB;
  */
 final class DocumentWorkflowController extends Controller
 {
+    /* The trait was never used here (2026-11-05 leak sweep): show() and sign() called
+       isPlatformAdminUser()/userBelongsToAgency() from it, so both answered 500 on every id. */
+    use ResolvesCentreContext;
+
+    private const MANAGER_ROLES = ['agency_admin', 'centre_director', 'platform_admin'];
+
+    /** Admin / director (or a platform admin) in the ACTIVE agency. */
+    private function isManager(Request $request): bool
+    {
+        return (bool) array_intersect(\App\Support\AgencyRole::names($request), self::MANAGER_ROLES);
+    }
+
+    /** May this person sign THIS step: the named signer, or (unnamed step) holder of its role in the active agency. */
+    private function maySignStep(Request $request, object $w, object $step): bool
+    {
+        $uid = (int) $request->user()->id;
+        if ($step->signer_user_id) {
+            return (int) $step->signer_user_id === $uid && $this->userBelongsToAgency($uid, (int) $w->agency_id);
+        }
+        $agencyId = (int) ($this->resolveAgencyId($request) ?: 0);
+        return $agencyId > 0 && (int) $w->agency_id === $agencyId
+            && in_array((string) $step->signer_role, \App\Support\AgencyRole::names($request), true);
+    }
+
     public function listMine(Request $request): JsonResponse
     {
         $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
-            ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
-            ->where('active', 1)->exists();
+        $isStaff = $this->isManager($request);
         $q = DB::table('document_workflows')->orderByDesc('created_at');
         if ($isStaff) {
-            $agencyId = (int) ($request->header('X-Active-Agency-Id')
-                ?: DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('agency_id'));
+            /* The active agency, membership-checked (2026-11-05 leak sweep): the raw header, or the
+               first agency of ANY role, picked the list's agency; a platform admin with no agency gets none. */
+            $agencyId = (int) ($this->resolveAgencyId($request) ?: 0);
             $q->where('agency_id', $agencyId);
         } else {
             // For parents: workflows where they are a signer
@@ -51,8 +74,17 @@ final class DocumentWorkflowController extends Controller
             'steps.*.signer_label' => 'required|string|max:120',
         ]);
         $u = $request->user();
-        $agencyId = (int) ($request->header('X-Active-Agency-Id')
-            ?: DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)->value('agency_id'));
+        /* Only an admin/director starts a workflow, in the active agency, naming signers from that
+           agency (2026-11-05 leak sweep): the route has no role gate, so any signed-in person (a parent
+           too) could start one and push "awaiting your signature" to any user id in any agency. */
+        abort_unless($this->isManager($request), 403);
+        $agencyId = (int) ($this->resolveAgencyId($request) ?: 0);
+        abort_unless($agencyId > 0, 422, 'Pick an agency before starting a document workflow.');
+        foreach ($data['steps'] as $s) {
+            if (! empty($s['signer_user_id']) && ! $this->userBelongsToAgency((int) $s['signer_user_id'], $agencyId)) {
+                return response()->json(['message' => 'One of the signers is not part of this agency.'], 422);
+            }
+        }
 
         $workflowId = DB::table('document_workflows')->insertGetId([
             'agency_id' => $agencyId,
@@ -95,8 +127,19 @@ final class DocumentWorkflowController extends Controller
     {
         $w = DB::table('document_workflows')->where('id', $id)->first();
         abort_unless($w, 404);
-        // SECURITY (v22p94): the workflow must belong to the caller's agency.
-        abort_unless($this->isPlatformAdminUser($request->user()) || $this->userBelongsToAgency($request->user()->id, (int) $w->agency_id), 403);
+        /* Admins/directors of the workflow's agency (the ACTIVE one, so a platform admin only in the agency
+           they switched into), or a participant: the starter, a named signer, or a holder of an unnamed
+           step's role there (2026-11-05 leak sweep). It was "anyone with any role in that agency", so every
+           parent and educator of the agency could read every workflow's document text; platform was global. */
+        $uid = (int) $request->user()->id;
+        $agencyId = (int) ($this->resolveAgencyId($request) ?: 0);
+        $inActive = $agencyId > 0 && (int) $w->agency_id === $agencyId;
+        $named = (int) $w->started_by_user_id === $uid
+            || DB::table('document_workflow_steps')->where('workflow_id', $id)->where('signer_user_id', $uid)->exists();
+        $roleStep = $inActive && DB::table('document_workflow_steps')->where('workflow_id', $id)
+            ->whereNull('signer_user_id')->whereIn('signer_role', \App\Support\AgencyRole::names($request))->exists();
+        abort_unless(($inActive && $this->isManager($request)) || $roleStep
+            || ($named && $this->userBelongsToAgency($uid, (int) $w->agency_id)), 403);
         $steps = DB::table('document_workflow_steps as s')
             ->leftJoin('users as u', 'u.id', '=', 's.signer_user_id')
             ->where('s.workflow_id', $id)
@@ -116,16 +159,17 @@ final class DocumentWorkflowController extends Controller
         $u = $request->user();
         $workflow = DB::table('document_workflows')->where('id', $id)->first();
         abort_unless($workflow, 404);
-        // SECURITY (v22p94): only someone in the workflow's agency may sign/advance
-        // it (in addition to the per-step assigned-signer check below).
-        abort_unless($this->isPlatformAdminUser($u) || $this->userBelongsToAgency($u->id, (int) $workflow->agency_id), 403);
         abort_unless($workflow->status === 'in_progress', 422, 'Workflow already complete');
         abort_unless($workflow->current_step === $data['step_order'], 422, 'Not the current step');
 
         $step = DB::table('document_workflow_steps')->where('workflow_id', $id)
             ->where('step_order', $data['step_order'])->first();
         abort_unless($step, 404);
-        if ($step->signer_user_id && $step->signer_user_id !== $u->id) abort(403, 'Not the assigned signer');
+        /* Only this step's signer signs it (2026-11-05 leak sweep): the named person (still in the
+           workflow's agency), or for an unnamed step someone holding its signer_role in that agency.
+           An unnamed step could be signed by anyone with any role there (a parent signing as director),
+           and a platform admin could sign any agency's. */
+        abort_unless($this->maySignStep($request, $workflow, $step), 403, 'Not the assigned signer');
 
         $hash = hash('sha256', $workflow->document_text . '|' . $u->id . '|' . $step->id . '|' . microtime(true));
         DB::table('document_workflow_steps')->where('id', $step->id)->update([
@@ -169,6 +213,8 @@ final class DocumentWorkflowController extends Controller
                 'data' => json_encode(['link' => '#doc-workflows', 'workflow_id' => $id]),
                 'created_at' => now(),
             ]);
+            // And everyone gets the signed copy (2026-11-06): the bell alone handed nobody the document.
+            \App\Jobs\SendCompletedWorkflow::dispatch((int) $id)->onQueue('mail');
         }
 
         return response()->json(['status' => 'signed', 'workflow_status' => $nextStep ? 'in_progress' : 'complete']);

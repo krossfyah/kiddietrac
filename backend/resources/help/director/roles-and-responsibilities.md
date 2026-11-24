@@ -75,7 +75,7 @@ Sees **only their own family**:
 - Home, **Today**, photos & video
 - Message Centre with the centre
 - **My tasks** and **forms to sign**
-- **Check-in** (including the QR code), attendance
+- **Check-in** (including One-Tap, the QR contactless check-in), attendance
 - **Billing** — invoices, autopay, payment plans
 - Health and immunization records, news, documents
 - Asked for a missing **child photo** at sign-in — staff use it to recognise children at pickup

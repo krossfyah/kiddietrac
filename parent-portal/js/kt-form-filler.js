@@ -26,7 +26,25 @@
   var KT = (w.KT = w.KT || {});
 
   var PDFJS_URL = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js';
-  var PDFJS_WORKER = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+  /* WHERE THIS FILE CAME FROM, not where the page is. The no-login sign page lives on the API
+     host and loads this script from the app host; a bare '/js/vendor/...' asked the API host
+     for the PDF worker, got a 404, and pdf.js put "Setting up fake worker failed: Cannot load
+     script at ..." in front of a parent (2026-10-25). */
+  var ASSET = (function () {
+    try { var cs = document.currentScript; if (cs && cs.src) return new URL(cs.src, location.href).origin; } catch (e) {}
+    return '';
+  })();
+
+  /* An error for a person. Library and loading failures (a script that would not load, the
+     PDF worker, a damaged file) are never shown word for word: they name files and URLs. */
+  var LIB_RX = /fake worker|Cannot load script|Could not load\b|failed to load|importScripts|Invalid PDF|PDF header|PDFException|Unexpected server response|NetworkError|Failed to fetch|Worker/i;
+  function ktSaid(e, fallback) {
+    var m = (e && e.message) || (typeof e === 'string' ? e : '');
+    if (!m || LIB_RX.test(m)) return fallback;
+    return w.__ktCleanError ? w.__ktCleanError(m) : m;
+  }
+  var PDFJS_WORKER = ASSET + '/js/vendor/pdf.worker.compat.js?v=20261025';   // same 3.11.174 worker, local, with shims (tickets #175/#176)
   var PDFLIB_URL = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
 
   function loadScript(src) {
@@ -117,7 +135,7 @@
       st.textContent = [
         '#kt-ff .kt-ff-card{background:#F6F9FC;width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;}',
         '@media(min-width:769px){#kt-ff{padding:20px;}#kt-ff .kt-ff-card{max-width:900px;height:min(94vh,1000px);border-radius:16px;box-shadow:0 30px 80px -20px rgba(8,20,40,.6);}}',
-        '#kt-ff .kt-ff-scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:14px;touch-action:pan-x pan-y pinch-zoom;}',
+        '#kt-ff .kt-ff-scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:14px;touch-action:pan-x pan-y;}',
         // The page wrapper is positioned so pdf.js can place field widgets over it.
         '#kt-ff .kt-ff-page{position:relative;margin:0 auto 16px;background:#fff;box-shadow:0 2px 10px rgba(15,23,42,.14);border-radius:6px;overflow:hidden;width:fit-content;}',
         '#kt-ff .kt-ff-page canvas{display:block;}',
@@ -143,6 +161,15 @@
         '#kt-ff .kt-ff-btn--go{background:linear-gradient(135deg,#16A34A,#15803D);color:#fff;}',
         '@media(min-width:769px){#kt-ff .kt-ff-actions{justify-content:flex-end;}',
         '  #kt-ff .kt-ff-btn{flex:0 0 auto;min-height:40px;padding:0 20px;font-size:14px;}}',
+        '#kt-ff.kt-ff-kb #kt-ff-hint,#kt-ff.kt-ff-kb #kt-ff-msg,#kt-ff.kt-ff-kb .kt-ff-kicker{display:none !important;}',
+        '#kt-ff.kt-ff-kb .kt-ff-head{padding-top:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 6px) !important;padding-bottom:6px !important;}',
+        '#kt-ff.kt-ff-kb .kt-ff-foot{padding:6px 12px !important;}',
+        '#kt-ff.kt-ff-kb .kt-ff-btn{min-height:36px;font-size:14px;border-radius:10px;}',
+        '#kt-ff.kt-ff-kb .kt-ff-scroll{padding:8px;}',
+        /* Very little room above the keyboard (2026-10-28): the buttons step aside so the box being typed in keeps
+           the space; they are back the moment the keyboard closes. */
+        '#kt-ff.kt-ff-kb.kt-ff-tight .kt-ff-foot{display:none !important;}',
+        '#kt-ff.kt-ff-kb.kt-ff-tight .kt-ff-head{padding-top:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 3px) !important;padding-bottom:3px !important;}',
         '#kt-ff .annotationLayer input:focus,#kt-ff .annotationLayer textarea:focus{',
         '  outline:none !important;border-color:#0FA3B1 !important;background:#fff !important;',
         '  box-shadow:0 0 0 3px rgba(15,163,177,.22) !important;}',
@@ -156,16 +183,16 @@
       // the only way out of this sheet — sat behind the system clock, off-screen.
       // The footer already respected safe-area-inset-bottom; the top was missed.
       // env() resolves to 0px on desktop, so this is a no-op there.
-      + '<div style="background:#0B2545;color:#fff;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 13px) calc(env(safe-area-inset-right,0px) + 16px) 13px calc(env(safe-area-inset-left,0px) + 16px);">'
+      + '<div class="kt-ff-head" style="background:#0B2545;color:#fff;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 13px) calc(env(safe-area-inset-right,0px) + 16px) 13px calc(env(safe-area-inset-left,0px) + 16px);">'
       + '  <div style="min-width:0;flex:1;">'
-      + '    <div style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FILL &amp; SIGN</div>'
+      + '    <div class="kt-ff-kicker" style="font-size:10.5px;font-weight:800;letter-spacing:1.2px;opacity:.75;">FILL &amp; SIGN</div>'
       + '    <div style="font-size:16px;font-weight:800;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(title) + '</div>'
       + '  </div>'
       + '  <button id="kt-ff-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;width:34px;height:34px;font-size:17px;line-height:1;cursor:pointer;flex:0 0 auto;">✕</button>'
       + '</div>'
       + '<div id="kt-ff-hint" style="flex:0 0 auto;background:#EFF6FF;color:#1E40AF;font-size:12.5px;padding:9px 16px;border-bottom:1px solid #DBEAFE;">Tap a highlighted box to type. Scroll for more pages.</div>'
       + '<div class="kt-ff-scroll" id="kt-ff-scroll"><div style="padding:40px;text-align:center;color:#64748B;font-size:13.5px;">Opening the form…</div></div>'
-      + '<div style="flex:0 0 auto;background:#fff;border-top:1px solid #E7EDF3;padding:10px 14px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 12px);">'
+      + '<div class="kt-ff-foot" style="flex:0 0 auto;background:#fff;border-top:1px solid #E7EDF3;padding:10px 14px calc(var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)) + 12px);">'
       + '  <div id="kt-ff-msg" style="font-size:12.5px;color:#64748B;min-height:16px;margin-bottom:8px;"></div>'
       + '  <div class="kt-ff-actions">'
       + '    <button id="kt-ff-draft" type="button" class="kt-ff-btn kt-ff-btn--ghost">Save draft</button>'
@@ -272,11 +299,57 @@
       document.body.style.overflow = 'hidden';
 
       var scroll = ov.querySelector('#kt-ff-scroll');
+      // ── Keyboard: compact mode + keep the box being typed in visible ─────────
+      var coarse = !!(w.matchMedia && w.matchMedia('(pointer:coarse)').matches);
+      function typingBox() {
+        var a = document.activeElement;
+        return !!a && ov.contains(a) && (a.tagName === 'TEXTAREA'
+          || (a.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|file|range|color)$/i.test(a.type || '')));
+      }
+      function showFocused() {
+        var a = document.activeElement;
+        if (!typingBox() || !scroll.contains(a)) return;
+        var sr = scroll.getBoundingClientRect(), ar = a.getBoundingClientRect();
+        if (ar.top < sr.top + 8 || ar.bottom > sr.bottom - 8) {
+          scroll.scrollTop += Math.round((ar.top + ar.height / 2) - (sr.top + sr.height / 2));
+        }
+      }
+      /* THE SHEET ITSELF NEVER SCROLLS (2026-10-28, educator: "it will somehow go all the way to the top of the app and
+         can only see part of the form"). The card is overflow:hidden, and the browser still scrolls such a box to bring a
+         focused field into view. Whenever the sheet was shorter than its header + hint + footer (the keyboard taking
+         most of the screen) focusing a box scrolled the CARD: the header and the X went off the top, the buttons were
+         cut in half, and the scroll stayed after the sheet grew back. Only #kt-ff-scroll may scroll. */
+      var card = ov.querySelector('.kt-ff-card');
+      function unscroll() { if (card && card.scrollTop) card.scrollTop = 0; if (ov.scrollTop && ov.getAttribute('data-kt-fit') !== 'scroll-y') ov.scrollTop = 0; }
+      if (card) card.addEventListener('scroll', unscroll, { passive: true });
+      ov.addEventListener('scroll', unscroll, { passive: true });
+      function kbCheck() {
+        if (done) return;
+        var on = coarse && typingBox();
+        ov.classList.toggle('kt-ff-kb', on);
+        ov.classList.toggle('kt-ff-tight', on && (w.visualViewport ? w.visualViewport.height : w.innerHeight) < 340);
+        unscroll();
+        // Again once the sheet has been re-fitted to the space above the keyboard.
+        if (on) { (w.requestAnimationFrame || setTimeout)(showFocused); setTimeout(showFocused, 450); }
+      }
+      if (coarse) {
+        ov.addEventListener('focusin', function () { kbCheck(); setTimeout(kbCheck, 350); });
+        ov.addEventListener('focusout', function () { setTimeout(kbCheck, 120); });
+        if (w.visualViewport) w.visualViewport.addEventListener('resize', kbCheck);
+        w.addEventListener('resize', kbCheck);
+        /* Re-fit straight away rather than waiting on kt-dialog-fit's coalesced sweep, so the sheet follows the
+           keyboard the same frame it moves (2026-10-28). */
+        if (w.visualViewport) w.visualViewport.addEventListener('resize', refit);
+      }
+      function refit() { try { if (!done && w.KT && KT.dialogFit && KT.dialogFit.fit) KT.dialogFit.fit(ov); } catch (e) {} }
       // ── Zoom ──────────────────────────────────────────────────────────────
       // ONE transform on a single wrapper, not one per page: that keeps everything
       // on a single composited layer, so a pinch is a GPU transform rather than a
       // relayout of 100 field widgets every frame. Nothing that triggers layout
       // (margins, width) is touched during the gesture.
+      // Instant scroll (2026-10-28): the portal-wide scroll-behavior:smooth turned each pinch correction
+      // into an animation, so the form slid away from the fingers.
+      scroll.style.setProperty('scroll-behavior', 'auto', 'important');
       var zoomWrap = document.createElement('div');
       zoomWrap.id = 'kt-ff-zoomwrap';
       zoomWrap.style.cssText = 'transform-origin:0 0;will-change:transform;';
@@ -301,20 +374,33 @@
           zoomWrap.parentNode.appendChild(spacer);
         }
         spacer.style.height = Math.max(0, Math.round(h * (zoom - 1))) + 'px';
-        spacer.style.width = Math.max(0, Math.round(wdt * (zoom - 1))) + 'px';
+        // The FULL scaled width (2026-10-28): (zoom-1) x width put the right side of the form out of
+        // reach below 2x - a block spacer starts at the same left edge as the form.
+        spacer.style.width = zoom > 1 ? Math.round(wdt * zoom) + 'px' : '0px';
       }
       function applyZoom() { if (!zoomRaf) zoomRaf = (w.requestAnimationFrame || setTimeout)(paintZoom); }
       /** Zoom about a point in the scroller so the form grows where the fingers are. */
-      function zoomTo(next, cx, cy) {
-        next = Math.max(0.5, Math.min(3, next));
-        if (next === zoom) return;
-        var rect = scroll.getBoundingClientRect();
-        var px = (scroll.scrollLeft + (cx - rect.left)) / zoom;
-        var py = (scroll.scrollTop + (cy - rect.top)) / zoom;
-        zoom = next;
-        applyZoom();
-        scroll.scrollLeft = px * zoom - (cx - rect.left);
-        scroll.scrollTop = py * zoom - (cy - rect.top);
+      /* ACCURATE (2026-10-28, Anthony: "the pinch zoom on popup's with document isn't working
+         accurately"). The scroll used to be set BEFORE the new scale and spacer existed (they waited for
+         the next frame), so the browser clamped it and the form slid away from the fingers. Now the scale
+         and spacer are applied first, then the scroll is corrected by MEASURING where the anchored spot of
+         the form ended up. `a` is that spot in unscaled form pixels, fixed for a whole pinch, so moving both
+         fingers pans as well. */
+      function anchorAt(cx, cy) {
+        var wr = zoomWrap.getBoundingClientRect();
+        return { ux: (cx - wr.left) / zoom, uy: (cy - wr.top) / zoom };
+      }
+      function zoomTo(next, cx, cy, a) {
+        next = Math.max(1, Math.min(4, next));
+        a = a || anchorAt(cx, cy);
+        if (Math.abs(next - zoom) >= 0.002) {
+          zoom = next < 1.002 ? 1 : next;
+          if (zoomRaf) { (w.cancelAnimationFrame || clearTimeout)(zoomRaf); }
+          paintZoom();
+        }
+        var nr = zoomWrap.getBoundingClientRect();
+        scroll.scrollLeft += (nr.left + a.ux * zoom) - cx;
+        scroll.scrollTop += (nr.top + a.uy * zoom) - cy;
       }
       // The header's +/- buttons are gone: pinch-to-zoom is the gesture people already
       // use on a phone, and the two 34px buttons were crowding the ✕ — the only way
@@ -324,7 +410,7 @@
       // PINCH. The APK's WebView has built-in zoom disabled, so the browser gesture
       // never fires — we drive the same transform from raw touch points. Continuous
       // (no rounding to steps) and rAF-throttled, so it tracks the fingers smoothly.
-      var pinchStart = 0, zoomStart = 1, pinching = false;
+      var pinchStart = 0, zoomStart = 1, pinching = false, pinchAnchor = null, pinchPend = null, pinchRaf = 0;
       function dist(t) {
         var dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
         return Math.sqrt(dx * dx + dy * dy);
@@ -332,15 +418,23 @@
       function mid(t) { return { x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 }; }
       scroll.addEventListener('touchstart', function (e) {
         if (e.touches.length !== 2) return;
-        pinching = true; pinchStart = dist(e.touches); zoomStart = zoom;
+        var m0 = mid(e.touches);
+        pinching = true; pinchStart = dist(e.touches) || 1; zoomStart = zoom; pinchAnchor = anchorAt(m0.x, m0.y);
       }, { passive: true });
       scroll.addEventListener('touchmove', function (e) {
         if (!pinching || e.touches.length !== 2 || !pinchStart) return;
         e.preventDefault();                       // the sheet must not scroll mid-pinch
         var m = mid(e.touches);
-        zoomTo(zoomStart * (dist(e.touches) / pinchStart), m.x, m.y);
+        pinchPend = { z: zoomStart * (dist(e.touches) / pinchStart), x: m.x, y: m.y };
+        if (!pinchRaf) {
+          pinchRaf = (w.requestAnimationFrame || setTimeout)(function () {
+            pinchRaf = 0;
+            if (pinchPend && pinchAnchor) { zoomTo(pinchPend.z, pinchPend.x, pinchPend.y, pinchAnchor); pinchPend = null; }
+          });
+        }
       }, { passive: false });
-      function endPinch(e) { if (!e.touches || e.touches.length < 2) { pinching = false; pinchStart = 0; } }
+      scroll.addEventListener('gesturestart', function (e) { e.preventDefault(); });   // iOS: ours, not Safari's page zoom
+      function endPinch(e) { if (!e.touches || e.touches.length < 2) { pinching = false; pinchStart = 0; pinchAnchor = null; } }
       scroll.addEventListener('touchend', endPinch, { passive: true });
       scroll.addEventListener('touchcancel', endPinch, { passive: true });
       var msg = ov.querySelector('#kt-ff-msg');
@@ -358,6 +452,7 @@
       function close(result) {
         if (done) return; done = true;
         document.body.style.overflow = prevOverflow;
+        try { if (w.visualViewport) { w.visualViewport.removeEventListener('resize', kbCheck); w.visualViewport.removeEventListener('resize', refit); } w.removeEventListener('resize', kbCheck); } catch (e) {}
         ov.remove();
         resolve((result && typeof result === 'object') ? result : !!result);
       }
@@ -376,6 +471,66 @@
       // field name. Stored raw, the answers were unreadable and pdf-lib could not
       // find the fields to write into. Map id → fieldName while rendering.
       var fieldMap = {};
+
+      /* INITIALS (2026-11-06). A PDF field whose name says "initial" gets a tap that opens the
+         initials pad (saved initials are one tap there). One drawing serves every box the person
+         taps; it travels with the answers as __kt_initials (+ the fields it went in), so a draft,
+         the agency's review rebuild and the final PDF all carry it. Typing in the box still works. */
+      var ini = { img: null, fields: {} };
+      function valuesNow() {
+        var v = collectValues(annotationStorage, fieldMap);
+        var names = Object.keys(ini.fields);
+        if (ini.img && names.length) {
+          names.forEach(function (n) { delete v[n]; });
+          v.__kt_initials = ini.img;
+          v.__kt_initials_fields = names;
+        }
+        return v;
+      }
+      function wireInitials() {
+        var dv = form.draftValues || {};
+        var had = (dv.__kt_initials && Array.isArray(dv.__kt_initials_fields)) ? dv.__kt_initials_fields : [];
+        var els = scroll.querySelectorAll('.annotationLayer input, .annotationLayer textarea');
+        Array.prototype.forEach.call(els, function (el) {
+          if (!el.name || !/initial/i.test(el.name) || (el.type && el.type !== 'text' && el.tagName !== 'TEXTAREA')) { return; }
+          var sec = el.parentNode;
+          var mark = document.createElement('img');
+          mark.alt = '';
+          mark.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;display:none;';
+          sec.appendChild(mark);
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.setAttribute('data-kt-inpage', '1');
+          btn.style.cssText = 'position:absolute;right:-2px;top:50%;transform:translateY(-50%);z-index:3;font-size:10.5px;font-weight:800;line-height:1;padding:3px 6px;border:0;border-radius:6px;background:#2F8C86;color:#fff;cursor:pointer;white-space:nowrap;';
+          btn.textContent = '✍ Initial';
+          sec.appendChild(btn);
+          function apply(img) {
+            ini.img = img; ini.fields[el.name] = 1;
+            el.value = ''; el.readOnly = true; el.style.color = 'transparent';
+            mark.src = img; mark.style.display = '';
+            btn.textContent = '✕'; btn.title = 'Remove these initials';
+            dirty = true;
+          }
+          function unapply() {
+            delete ini.fields[el.name];
+            el.readOnly = false; el.style.color = ''; mark.style.display = 'none';
+            btn.textContent = '✍ Initial'; btn.title = '';
+            dirty = true;
+          }
+          if (had.indexOf(el.name) !== -1) { apply(dv.__kt_initials); dirty = false; }
+          // The agency reviewing a parent's form sees the parent's initials but does not change them.
+          if (form.reviewMode) { btn.style.display = 'none'; return; }
+          btn.addEventListener('click', function (ev) {
+            ev.preventDefault(); ev.stopPropagation();
+            if (ini.fields[el.name]) { unapply(); return; }
+            if (ini.img) { apply(ini.img); return; }
+            if (!KT.signaturePad) { return; }
+            KT.signaturePad({ kind: 'initials', context: 'managed_form:' + form.id, title: 'Your initials',
+              subtitle: 'Draw your initials once. Every initials box you tap on this form gets the same initials.',
+              okLabel: 'Initial' }).then(function (img) { if (img) { apply(img); } });
+          });
+        });
+      }
 
       // Re-read the draft from the server on open. The caller passes what it had
       // when the list was rendered, which goes stale the moment a draft is saved —
@@ -498,17 +653,18 @@
             });
           })
           .then(function () {
+            try { wireInitials(); } catch (x) { try { console.error('[kt-form] initials', x); } catch (y) {} }
             scroll.addEventListener('input', function () { dirty = true; }, true);
             scroll.addEventListener('change', function () { dirty = true; }, true);
           })
           .catch(function (e) {
             scroll.innerHTML = '<div style="padding:30px;text-align:center;color:#B91C1C;font-size:13.5px;">'
-              + esc((e && e.message) || 'Could not open this form.') + '</div>';
+              + esc(ktSaid(e, 'This form could not open just now. Please check your connection and try again — if it keeps happening, let your centre know.')) + '</div>';
             submitBtn.disabled = true;
           });
       }).catch(function (e) {
         scroll.innerHTML = '<div style="padding:30px;text-align:center;color:#B91C1C;font-size:13.5px;">'
-          + esc((e && e.message) || 'Could not load the PDF viewer.') + '</div>';
+          + esc(ktSaid(e, 'This form could not open just now. Please check your connection and try again — if it keeps happening, let your centre know.')) + '</div>';
         submitBtn.disabled = true;
       });
 
@@ -517,7 +673,7 @@
         draftBtn.disabled = true; draftBtn.textContent = 'Saving…';
         msg.style.color = '#64748B'; msg.textContent = '';
         ffPost(form, '/managed-forms/' + form.id + '/draft',
-               { field_values: collectValues(annotationStorage, fieldMap) },
+               { field_values: valuesNow() },
                form.links && form.links.draft)
           .then(function () {
             // Saving a draft ends the sitting — close the sheet rather than leaving
@@ -529,12 +685,12 @@
           .catch(function (e) {
             draftBtn.disabled = false; draftBtn.textContent = 'Save draft';
             msg.style.color = '#B91C1C';
-            msg.textContent = (e && e.message) || 'Could not save the draft.';
+            msg.textContent = ktSaid(e, 'Could not save the draft.');
           });
       });
 
       submitBtn.addEventListener('click', function () {
-        var values = collectValues(annotationStorage, fieldMap);
+        var values = valuesNow();
 
         /* ── REVIEW: rebuild the document and hand it back ───────────────────
 
@@ -556,7 +712,7 @@
             .catch(function (e) {
               submitBtn.disabled = false; submitBtn.textContent = 'Save changes';
               msg.style.color = '#B91C1C';
-              msg.textContent = (e && e.message) || 'Could not save the changes.';
+              msg.textContent = ktSaid(e, 'Could not save the changes.');
             });
           return;
         }
@@ -598,7 +754,7 @@
             .catch(function (e) {
               submitBtn.disabled = false; submitBtn.textContent = 'Sign & submit';
               msg.style.color = '#B91C1C';
-              msg.textContent = (e && e.message) || 'Could not submit — please try again.';
+              msg.textContent = ktSaid(e, 'Could not submit — please try again.');
             });
         });
       });
@@ -768,6 +924,44 @@
    * the submit still goes through with the raw values, so a PDF-writing problem
    * can never cost the user their answers.
    */
+  /* The initials image, fitted into every box it was tapped into (each box's own widget, on its own
+     page). A box that cannot be found is left as it is: never drawn somewhere else. */
+  function stampInitials(pdfDoc, formObj, values) {
+    var img = values && values.__kt_initials, names = (values && values.__kt_initials_fields) || [];
+    if (!img || !names.length || !formObj) { return Promise.resolve(); }
+    return pdfDoc.embedPng(img).then(function (png) {
+      var pages = pdfDoc.getPages();
+      function pageOf(wd) {
+        try {
+          var P = wd.P();
+          if (P) { for (var i = 0; i < pages.length; i++) { if (String(pages[i].ref) === String(P)) { return pages[i]; } } }
+        } catch (e) {}
+        try {
+          var ref = String(pdfDoc.context.getObjectRef(wd.dict));
+          for (var j = 0; j < pages.length; j++) {
+            var an = pages[j].node.Annots();
+            if (!an) { continue; }
+            for (var k = 0; k < an.size(); k++) { if (String(an.get(k)) === ref) { return pages[j]; } }
+          }
+        } catch (e) {}
+        return null;
+      }
+      names.forEach(function (name) {
+        try {
+          var f = formObj.getField(name);
+          try { if (f.setText) { f.setText(''); } } catch (e) {}
+          f.acroField.getWidgets().forEach(function (wd) {
+            var r = wd.getRectangle(), pg = pageOf(wd);
+            if (!pg || !r || r.width < 4 || r.height < 4) { return; }
+            var s = Math.min(r.width / png.width, r.height / png.height) * 0.9;
+            var dw = png.width * s, dh = png.height * s;
+            pg.drawImage(png, { x: r.x + (r.width - dw) / 2, y: r.y + (r.height - dh) / 2, width: dw, height: dh });
+          });
+        } catch (e) { /* a box we cannot place must not stop the form */ }
+      });
+    }).catch(function () {});
+  }
+
   function fillAndFlatten(originalBytes, values, sigDataUrl, signerName, signedOn) {
     return Promise.resolve().then(function () {
       var PDFLib = w.PDFLib;
@@ -777,6 +971,7 @@
         try { formObj = pdfDoc.getForm(); } catch (e) { formObj = null; }
         if (formObj) {
           Object.keys(values).forEach(function (name) {
+            if (name.indexOf('__kt_') === 0) { return; }   // initials etc.: not a field of the PDF
             var v = values[name];
             try {
               var f = formObj.getField(name);
@@ -808,7 +1003,9 @@
         // clear band at the foot (no form field within it, and the page is tall
         // enough) the block goes there; otherwise a dedicated page is appended.
         // Either way it is never drawn over anything.
-        return (sigDataUrl ? pdfDoc.embedPng(sigDataUrl) : Promise.resolve(null)).then(function (png) {
+        return stampInitials(pdfDoc, formObj, values).then(function () {
+          return sigDataUrl ? pdfDoc.embedPng(sigDataUrl) : null;
+        }).then(function (png) {
           return Promise.all([
             pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica),
             pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold),

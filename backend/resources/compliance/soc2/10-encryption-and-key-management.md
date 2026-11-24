@@ -29,9 +29,9 @@ It covers:
 | Certificate renewal | acme.sh runs a renewal check every day |
 | Expiry monitoring | A daily check emails when a certificate has fewer than 21 days left (`cert-check.log`) |
 | HSTS | Sent by the security-headers middleware |
-| Other headers | X-Frame-Options, X-Content-Type-Options: nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Resource-Policy and Content-Security-Policy |
+| Other headers | X-Content-Type-Options: nosniff, Referrer-Policy, Permissions-Policy, Cross-Origin-Resource-Policy and Content-Security-Policy. Clickjacking: the portal (app.kiddietrac.com) sends CSP `frame-ancestors 'self' https://www.kiddietrac.com https://kiddietrac.com` instead of X-Frame-Options (since 2026-10-31, so the website's live demo can frame it; X-Frame-Options cannot name an origin). The API still sends X-Frame-Options: DENY. The website (www.kiddietrac.com) allows geolocation only to itself and to the portal framed inside its demo phone (`geolocation=(self "https://app.kiddietrac.com")`, 2026-10-31; the browser still asks the visitor); microphone and camera stay off |
 | Traffic to sub-processors | HTTPS/TLS APIs |
-| Database connection | Local to the host. Confirm with GoDaddy whether it is a local socket or a network connection |
+| Database connection | Local to the server (MySQL host `localhost`); port 3306 is not reachable from the internet (verified 2026-10-30) |
 
 **Minimum:** TLS 1.2 or higher. The TLS versions and cipher suites should be checked against the live hosts and recorded as evidence. **Status: not yet recorded.**
 
@@ -44,13 +44,13 @@ It covers:
 | Staff payout details | Encrypted at the application level |
 | Passwords | One-way hashes (Laravel hashing); never stored in a reversible form |
 | Children and family personal information | **Not encrypted at field level.** Stored in plaintext in MySQL |
-| MySQL storage volume | **Encryption at rest not confirmed** with GoDaddy (shared hosting) |
+| MySQL storage volume | **Encryption at rest not yet confirmed in writing** with Cloudways / DigitalOcean. Sensitive fields are encrypted at application level (field encryption, key `KT_DATA_KEY`) |
 | Database backups | gzip only; **not encrypted**; kept on the same host in a 0700 directory |
 | Android app local storage | The app is a WebView wrapper. Tokens are held in web storage on the device and protected by the operating system |
 
 **Required:**
 
-1. Get written confirmation from GoDaddy about at-rest encryption of the shared MySQL storage and the file system.
+1. Get written confirmation from Cloudways / DigitalOcean about at-rest encryption of the server's storage (database and files).
 2. Encrypt backups before they are copied off-site. Use GPG or age with a public key, so the private key is never kept on the host.
 3. Assess field-level encryption for the most sensitive child fields, such as health, custody and incident notes. Weigh it against search and reporting needs, and record the decision.
 

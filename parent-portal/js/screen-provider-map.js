@@ -12,8 +12,12 @@
   var KT = window.KT;
   var Api = KT.Api;
 
-  var LEAFLET_CSS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-  var LEAFLET_JS = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+  /* SELF-HOSTED (2026-11-10, ticket #246): Leaflet 1.9.4 is served from our own domain (js/vendor/leaflet-1.9.4,
+     byte-identical to the npm package, checksum-verified). It used to come from unpkg.com, and when that request
+     failed on an educator's phone every map in the session was dead. A failed load is no longer cached either:
+     the next call tries again. */
+  var LEAFLET_CSS = '/js/vendor/leaflet-1.9.4/leaflet.css';
+  var LEAFLET_JS = '/js/vendor/leaflet-1.9.4/leaflet.js';
   var GEO_CACHE_PREFIX = 'kt_geo_v1_';
 
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
@@ -33,7 +37,7 @@
       var s = document.createElement('script');
       s.src = LEAFLET_JS;
       s.onload = function () { resolve(window.L); };
-      s.onerror = function () { reject(new Error('Could not load the map library.')); };
+      s.onerror = function () { _leafletPromise = null; s.remove(); reject(new Error('Could not load the map library.')); };
       document.head.appendChild(s);
     });
     return _leafletPromise;
@@ -228,7 +232,7 @@
       var rowId = 'kt-pm-row-' + c.id;
       var pcolor = providerColor(c);
       listPanel.insertAdjacentHTML('beforeend',
-        '<div id="' + rowId + '" data-cid="' + c.id + '" style="padding:12px 14px 12px 12px;border-bottom:1px solid #F3F4F6;border-left:4px solid ' + pcolor + ';cursor:pointer;">' +
+        '<div id="' + rowId + '" data-cid="' + c.id + '" style="padding:12px 14px 12px 12px;border-bottom:1px solid #F3F4F6;--kt-edge:' + pcolor + ';cursor:pointer;">' +
           '<div style="display:flex;align-items:center;gap:7px;">' +
             '<span style="width:10px;height:10px;border-radius:50%;background:' + pcolor + ';flex-shrink:0;"></span>' +
             '<span style="font-weight:700;font-size:14px;color:#111827;">' + esc(c.name) + '</span>' +

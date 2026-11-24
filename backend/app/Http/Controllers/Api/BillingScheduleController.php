@@ -46,7 +46,7 @@ final class BillingScheduleController extends Controller
                 'anchor_date' => $data['anchor_date'] ?? null,
                 'next_charge_at' => $next,
                 'active' => 1,
-                'created_at' => DB::raw('COALESCE(created_at, NOW())'),
+                'created_at' => DB::raw("COALESCE(created_at, '" . now()->toDateTimeString() . "')"),   // tz-ok: a UTC instant from PHP, not MariaDB's MST NOW()
                 'updated_at' => now(),
             ]
         );

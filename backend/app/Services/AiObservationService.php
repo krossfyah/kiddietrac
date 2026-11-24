@@ -106,7 +106,7 @@ class AiObservationService
             }
 
             $body = $response->json();
-            $text = $body['content'][0]['text'] ?? '';
+            $text = \App\Support\AiConfig::text($body) ?? '';
             $tokensUsed = ($body['usage']['input_tokens'] ?? 0) + ($body['usage']['output_tokens'] ?? 0);
 
             // Parse JSON from the model. The model should return only JSON.

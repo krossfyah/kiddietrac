@@ -23,7 +23,7 @@ final class CentreController extends Controller
             return response()->json(['message' => 'No centre assigned to this account.'], 404);
         }
 
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
 
         $rooms = DB::table('rooms')
             ->where('centre_id', $centre->id)
@@ -131,6 +131,13 @@ final class CentreController extends Controller
             return response()->json(['message' => 'Not found'], 404);
         }
 
+        /* Only the director of this centre, or an admin of its agency (2026-11-05 leak sweep): resolveCentre also
+           picks a centre where the caller is only an educator, so a director elsewhere who teaches here could
+           rename this centre and change its licence, hours and contact details. */
+        if (! $this->directsCentre($request, (int) $centre->id)) {
+            return response()->json(['message' => 'Only the director of this centre or an agency admin can change its details.'], 403);
+        }
+
         $data = $request->validate([
             'name' => ['string', 'max:180'],
             'license_number' => ['nullable', 'string', 'max:60'],
@@ -155,6 +162,24 @@ final class CentreController extends Controller
         ]);
     }
 
+    /* Director of this centre, or an admin of its agency; a platform admin only in the agency they switched into
+       (2026-11-05 leak sweep). */
+    private function directsCentre(Request $request, int $centreId): bool
+    {
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        if (! $agencyId) {
+            return false;
+        }
+        $roles = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+            ->get(['role', 'agency_id', 'centre_id']);
+        if ($roles->contains(fn ($r) => $r->role === 'platform_admin')) {
+            return (int) $this->resolveAgencyId($request) === $agencyId;
+        }
+
+        return $roles->contains(fn ($r) => ($r->role === 'agency_admin' && (int) $r->agency_id === $agencyId)
+            || ($r->role === 'centre_director' && (int) $r->centre_id === $centreId));
+    }
+
     public function compliance(Request $request): JsonResponse
     {
         $centre = $this->resolveCentre($request->user());
@@ -168,7 +193,7 @@ final class CentreController extends Controller
             ->where('active', true)
             ->get();
 
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $roomCompliance = $rooms->map(function ($room) use ($today) {
             $stats = $this->getRoomStats($room, $today);
             return [
@@ -199,12 +224,13 @@ final class CentreController extends Controller
             ->join('role_assignments', 'role_assignments.user_id', '=', 'staff_certifications.user_id')
             ->where('role_assignments.centre_id', $centre->id)
             ->where('staff_certifications.active', true)
+            // The agency's date, bound from PHP: MariaDB's NOW() runs on the server's MST.
             ->selectRaw("
-                SUM(CASE WHEN expires_at < NOW() THEN 1 ELSE 0 END) as expired,
-                SUM(CASE WHEN expires_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as expiring_30d,
-                SUM(CASE WHEN expires_at BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 90 DAY) THEN 1 ELSE 0 END) as expiring_90d,
+                SUM(CASE WHEN expires_at < ? THEN 1 ELSE 0 END) as expired,
+                SUM(CASE WHEN expires_at BETWEEN ? AND DATE_ADD(?, INTERVAL 30 DAY) THEN 1 ELSE 0 END) as expiring_30d,
+                SUM(CASE WHEN expires_at BETWEEN ? AND DATE_ADD(?, INTERVAL 90 DAY) THEN 1 ELSE 0 END) as expiring_90d,
                 COUNT(*) as total
-            ")
+            ", array_fill(0, 5, \App\Support\AgencyTime::today()))
             ->first();
 
         return response()->json([
@@ -272,8 +298,8 @@ final class CentreController extends Controller
             return response()->json(['message' => 'Not found'], 404);
         }
 
-        $from = $request->input('from', now()->startOfMonth()->toDateString());
-        $to = $request->input('to', now()->toDateString());
+        $from = $request->input('from', \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString());
+        $to = $request->input('to', \App\Support\AgencyTime::today());
 
         $byDay = DB::table('check_events as ce')
             ->join('rooms', 'rooms.id', '=', 'ce.room_id')

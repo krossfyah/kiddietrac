@@ -19,6 +19,15 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // A staging copy (KT_OUTBOUND_OFF=1) sends nothing: see App\Support\Outbound.
+        \App\Support\Outbound::register();
+        // AI tokens per agency, for the superadmin usage & spend summary.
+        \App\Support\UsageMeter::register();
+        // The Claude key and model set in Platform → AI usage win over .env (2026-10-28).
+        \App\Support\AiConfig::apply();
+        // Each Claude request says how (not) to think, per model - Haiku 5.5's default thinking left replies empty.
+        \App\Support\AiConfig::registerHttp();
+
         // Throttled last_used_at — see App\Models\PersonalAccessToken.
         \Laravel\Sanctum\Sanctum::usePersonalAccessTokenModel(
             \App\Models\PersonalAccessToken::class
@@ -47,17 +56,21 @@ class AppServiceProvider extends ServiceProvider
                     return true;                                    // the Android app
                 }
                 $uid = (int) $token->tokenable_id;
-                $parentOnly = \Illuminate\Support\Facades\Cache::remember('kt-parent-only:' . $uid, 300, function () use ($uid) {
+                /* Which session rule applies: parents (30 min idle, 12 h at most), and
+                   since 2026-10-21 Resellers (30 min idle). Staff and platform admins: none. */
+                $rule = \Illuminate\Support\Facades\Cache::remember('kt-session-rule:' . $uid, 300, function () use ($uid) {
                     $roles = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
                         ->pluck('role')->unique()->values()->all();
-
-                    return $roles === ['guardian'];
+                    if ($roles === ['guardian']) {
+                        return 'parent';
+                    }
+                    return in_array('reseller_admin', $roles, true) && ! in_array('platform_admin', $roles, true) ? 'reseller' : 'none';
                 });
-                if (! $parentOnly) {
+                if ($rule === 'none') {
                     return true;
                 }
                 $reason = null;
-                if ($token->created_at && $token->created_at->lt(now()->subHours(12))) {
+                if ($rule === 'parent' && $token->created_at && $token->created_at->lt(now()->subHours(12))) {
                     $reason = 'absolute';
                 } elseif (($token->last_used_at ?? $token->created_at) && ($token->last_used_at ?? $token->created_at)->lt(now()->subMinutes(30))) {
                     $reason = 'idle';
@@ -142,10 +155,45 @@ class AppServiceProvider extends ServiceProvider
             \Illuminate\Mail\Events\MessageSending::class,
             [\App\Listeners\EmailSubjectOverride::class, 'handle']
         );
+        // KiddieTrac's own people appear by first name only in every email (2026-11-07): before WhiteLabelMail, so a
+        // "First from KiddieTrac" sender is rebranded like the rest.
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\KiddieTracFirstNames::class, 'handle']
+        );
+        // White-label agencies: "KiddieTrac" in the words becomes their brand (2026-10-21).
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\WhiteLabelMail::class, 'handle']
+        );
+        // KiddieTrac's LinkedIn / YouTube / Facebook on every KiddieTrac-branded email (2026-11-02); never on a
+        // white-label or reseller agency's mail. Before AddPlainTextPart so the text part carries the links too.
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\SocialLinksMail::class, 'handle']
+        );
+        // Bare https://app.kiddietrac.com links get their "/" so the phone can open them in the app (2026-11-05).
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\AppLinksMail::class, 'handle']
+        );
+        // A confidentiality notice at the foot of every email (2026-11-06): before the text part, so it carries it too.
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\ConfidentialityNotice::class, 'handle']
+        );
+        // Every email gets a plain-text part (2026-10-30, deliverability): BEFORE the gate below, which stops the rest.
+        Event::listen(
+            \Illuminate\Mail\Events\MessageSending::class,
+            [\App\Listeners\AddPlainTextPart::class, 'handle']
+        );
         Event::listen(
             \Illuminate\Mail\Events\MessageSending::class,
             [\App\Listeners\SuppressAgencyMail::class, 'handle']
         );
+        // Outgoing email is translated into the recipients' language inside
+        // SuppressAgencyMail (2026-10-22, App\Support\MailTranslation): a listener here
+        // would never run, because that gate returns true and stops the rest.
 
         Event::listen(MessageSent::class, function (MessageSent $event) {
             try {
@@ -219,7 +267,30 @@ class AppServiceProvider extends ServiceProvider
                 // `mail:reconcile-logs` compares the email.sent audit rows above against
                 // email_logs and reports/backfills anything a sender fails to record.
                 if (! Schema::hasTable('email_logs')) return;
-                if ($msg->getHeaders() && $msg->getHeaders()->has('X-KT-Logged')) return;
+                /* TRUST, BUT CHECK (2026-10-22). X-KT-Logged was an honour system and twice a
+                   sender set it without writing its row, so the email never showed in the
+                   log; the nightly mail:reconcile-logs only caught it the next morning.
+                   Now the promise is checked as the email goes: the sender's row must
+                   already exist (same recipient + subject in the last 15 minutes), or this
+                   listener writes it after all. Anthony: "add a watcher or middleware to
+                   ensure this never happens again". */
+                if ($msg->getHeaders() && $msg->getHeaders()->has('X-KT-Logged')) {
+                    $selfLogged = false;
+                    try {
+                        $selfLogged = DB::table('email_logs')
+                            ->where('to_email', $addr($msg->getTo()) ?: '')
+                            ->where('subject', (string) $msg->getSubject())
+                            ->where('created_at', '>=', now()->subMinutes(15)->format(\App\Support\Audit::TS))
+                            ->orderByDesc('id')->value('id');
+                    } catch (\Throwable $e) { $selfLogged = true; }   // unsure: never risk a duplicate
+                    if ($selfLogged) {
+                        if (is_numeric($selfLogged)) \App\Support\EmailLogAttachments::store((int) $selfLogged, $msg);
+                        return;
+                    }
+                    \Illuminate\Support\Facades\Log::warning('Email promised its own log row and did not write one; logged by the listener', [
+                        'to' => $addr($msg->getTo()), 'subject' => (string) $msg->getSubject(),
+                    ]);
+                }
                 // Stamp the OWNING agency so the email log is strictly per-tenant (same
                 // rule as audit_logs). Prefer the recipient's agency; fall back to the
                 // acting user's. Self-contained so it never depends on the audit block.
@@ -231,12 +302,32 @@ class AppServiceProvider extends ServiceProvider
                         // recipient filed one agency's children under another whenever a
                         // person's address belonged elsewhere.
                         $logAgency = \App\Support\AgencyMail::agencyForMessage($msg, null);
+                        /* PLATFORM MAIL IS PLATFORM (2026-10-23, Anthony: "emails sent through
+                           the platform level are not showing up in the email log"). KiddieTrac
+                           writing as itself - MailScope::platform / X-KT-Platform, a sales /
+                           support / info send-as, or mail only to KiddieTrac's sales/support inboxes - is
+                           logged with no agency, and none of the guesses below run: the
+                           recipient's own agency filed the platform weekly summary under Test
+                           Agency, and the never-cleared AgencyMailer::$lastAgencyId filed crash
+                           alerts under whichever agency mailed last. */
+                        $hdrs = $msg->getHeaders();
+                        $toAll = collect(array_merge($msg->getTo() ?: [], $msg->getCc() ?: []))->map(fn ($a) => method_exists($a, 'getAddress') ? strtolower($a->getAddress()) : '')->filter();
+                        $platformMail = ! $logAgency && (
+                            ($hdrs && ($hdrs->has('X-KT-Platform') || $hdrs->has('X-KT-Send-As')))
+                            // KiddieTrac's own sales/support inboxes only - info@ and integration+...@
+                            // also receive AGENCY mail (an iLearn account, the integration copy).
+                            || ($toAll->isNotEmpty() && $toAll->every(fn ($a) => in_array($a, ['sales@kiddietrac.com', 'support@kiddietrac.com'], true))));
+                        if ($platformMail) {
+                            $logAgency = null;
+                            goto kt_log_agency_done;
+                        }
                         if (! $logAgency) $logAgency = \App\Services\AgencyMailer::$lastAgencyId;
                         if (! $logAgency) {
                             $ft = collect($msg->getTo() ?: [])->map(fn ($a) => method_exists($a, 'getAddress') ? $a->getAddress() : null)->filter()->first();
                             if ($ft) $logAgency = \App\Support\AgencyMail::agencyForMessage($msg, $ft);
                         }
                         if (! $logAgency && auth()->id()) $logAgency = \App\Support\AuditScope::resolve((int) auth()->id());
+                        kt_log_agency_done: ;
                     } catch (\Throwable $e) {}
                 }
                 /* The token the suppression listener minted when it put the pixel in.
@@ -251,7 +342,7 @@ class AppServiceProvider extends ServiceProvider
                     }
                 } catch (\Throwable $e) {}
 
-                DB::table('email_logs')->insert([
+                $logId = DB::table('email_logs')->insertGetId([
                     'to_email'   => $addr($msg->getTo()) ?: null,
                     'to_name'    => $name($msg->getTo()) ?: null,
                     // Copied recipients were never recorded, so "was the director
@@ -263,13 +354,18 @@ class AppServiceProvider extends ServiceProvider
                     'from_email' => $addr($msg->getFrom()) ?: null,
                     'subject'    => $msg->getSubject(),
                     'mailer'     => config('mail.default'),
-                    'status'     => 'sent',
+                    // A test capture (the array mailer) was never delivered: never call it sent.
+                    'status'     => config('mail.default') === 'array' ? 'captured' : 'sent',
                     'agency_id'  => $logAgency,
                     'tracking_token' => Schema::hasColumn('email_logs', 'tracking_token') ? $trackToken : null,
                     'opens'      => Schema::hasColumn('email_logs', 'opens') ? 0 : null,
                     'body_html'  => (function () use ($msg) { try { $h = $msg->getHtmlBody(); if (! is_string($h)) $h = $msg->getTextBody(); return (is_string($h) && $h !== '') ? mb_substr($h, 0, 500000) : null; } catch (\Throwable $e) { return null; } })(),
                     'created_at' => now()->format(\App\Support\Audit::TS),
                 ]);
+                // The files that went with it, viewable from the email log (2026-10-30).
+                \App\Support\EmailLogAttachments::store((int) $logId, $msg);
+                // The attribution was for THIS message; never let it ride on to the next.
+                \App\Services\AgencyMailer::$lastAgencyId = null;
             } catch (\Throwable $e) {
                 // swallow — logging must never interfere with sending
             }

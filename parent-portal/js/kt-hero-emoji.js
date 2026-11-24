@@ -69,10 +69,67 @@
        genuinely DIFFERENT screens still sharing a banner after the colour split.
        (Billing/Billing settings and Children/Children are one screen under two
        hashes, and should look the same.) */
-    'parent feedback': '🗣'
+    'parent feedback': '💭'   // not 🗣: Parent issues has that in the same sidebar (2026-10-28 sweep)
   };
 
+  /* PRODUCT BRANDS (2026-10-26). A banner whose title names a branded feature shows that feature's mark - next to
+     the title and as the large art - on the brand's own gradient, instead of an emoji on a hashed colour. */
+  var BRANDS = [
+    { re: /\bwalk watch\b/, mark: '/img/walk-watch.svg', art: '/img/walk-watch-ghost.svg', alt: 'Walk Watch',
+      bg: 'linear-gradient(135deg,#0A1E55 0%,#12307A 52%,#0E8F99 100%)' },
+    /* Safe Arrival (2026-10-27): the sidebar's green shield, not the 🛡 emoji. */
+    { re: /\bsafe arrival\b/, mark: '/img/safe-arrival.svg', art: '/img/safe-arrival-ghost.svg', alt: 'Safe Arrival',
+      bg: 'linear-gradient(135deg,#064E3B 0%,#047857 55%,#10B981 100%)' }
+  ];
+  function brandOf(hero) {
+    var t = heroTitle(hero);
+    for (var i = 0; i < BRANDS.length; i++) { if (BRANDS[i].re.test(t)) { return BRANDS[i]; } }
+    return null;
+  }
+  function applyBrand(hero, b) {
+    hero.style.setProperty('background', b.bg, 'important');
+    hero.style.setProperty('background-size', '200% 200%', 'important');
+    hero.setAttribute('data-kt-brand', b.alt);
+    // The emoji in front of the title becomes the mark.
+    var h = hero.querySelector('h1, h2');
+    if (h && !h.querySelector('.kt-hero-brandmark')) {
+      for (var n = h.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 3 && EMOJI_RE.test(n.nodeValue)) { n.nodeValue = n.nodeValue.replace(EMOJI_RE, '').replace(/^\s+/, ''); break; }
+        if (n.nodeType === 1 && EMOJI_RE.test(n.textContent || '') && (n.textContent || '').trim().length <= 3) { h.removeChild(n); break; }
+        if (n.nodeType === 3 && n.nodeValue.trim()) { break; }
+      }
+      var m = doc.createElement('img');
+      m.className = 'kt-hero-brandmark'; m.src = b.mark; m.alt = ''; m.setAttribute('aria-hidden', 'true');
+      m.style.cssText = 'display:inline-block !important;width:1.15em !important;height:1.15em !important;max-width:none !important;'
+        + 'position:static !important;opacity:1 !important;vertical-align:-0.2em;margin:0 .4em 0 0 !important;border-radius:.3em;box-shadow:0 0 0 1.5px rgba(255,255,255,.38),0 2px 8px rgba(0,0,0,.25);';
+      h.insertBefore(m, h.firstChild);
+    }
+    // The large art: the mark, in the SAME floating element every other banner uses for its emoji - so it sits
+    // far right, as large, as faint and floating exactly like theirs. Any emoji art already there goes.
+    [].forEach.call(hero.querySelectorAll('.kt-hero-emoji, .kt-banner-art, .kt-hero-brandart'), function (o) {
+      if (!o.hasAttribute('data-kt-brandart') && o.parentNode) { o.parentNode.removeChild(o); }
+    });
+    if (!hero.querySelector('[data-kt-brandart]')) {
+      var art = doc.createElement('div');
+      art.className = hero.classList.contains('kt-hero') ? 'kt-hero-emoji' : 'kt-banner-art';
+      art.setAttribute('data-kt-brandart', '1');
+      art.setAttribute('aria-hidden', 'true');
+      var im = doc.createElement('img');
+      im.src = b.art || b.mark; im.alt = '';
+      im.style.cssText = 'display:block;width:1em;height:1em;border-radius:.26em;';
+      art.appendChild(im);
+      hero.appendChild(art);
+    }
+  }
+
   function pickEmoji(hero) {
+    /* The screen's OWN icon first (2026-10-28 sweep, Anthony: "hero banners in educator view - make sure they are all
+       unique"): the sidebar icon for this role, or the shell's table for screens reached from home tiles. Reading the
+       title's emoji let screens that hard-code one clash (two 🗣, two 👀, two 🎓) and the rest fall to ✨. */
+    try {
+      var own = (window.KT && KT.Shell && KT.Shell.screenIcon) ? KT.Shell.screenIcon() : '';
+      if (own) { return own; }
+    } catch (e) { /* fall through */ }
     // A banner-specific glyph wins over the nav icon, where one is defined.
     var titled = BANNER_EMOJI[heroTitle(hero)];
     if (titled) return titled;
@@ -96,6 +153,16 @@
     if (!hero || hero.__ktEmoji) return;
     hero.__ktEmoji = 1;
 
+    // A page hero (.kt-page-hero) only ever gets a brand here; the rest of this file is for .kt-hero.
+    if (!hero.classList.contains('kt-hero')) {
+      var pb = brandOf(hero);
+      if (pb) { applyBrand(hero, pb); }
+      return;
+    }
+
+    var brand = brandOf(hero);
+    if (brand) { applyBrand(hero, brand); return; }
+
     // Its own colour first — this applies to EVERY hero, including the ones that
     // already carry their own emoji and return below.
     tint(hero);
@@ -117,7 +184,7 @@
   }
 
   function scan(root) {
-    var heroes = (root || doc).querySelectorAll ? (root || doc).querySelectorAll('.kt-hero') : [];
+    var heroes = (root || doc).querySelectorAll ? (root || doc).querySelectorAll('.kt-hero, .kt-page-hero') : [];
     for (var i = 0; i < heroes.length; i++) enhance(heroes[i]);
   }
 
@@ -130,8 +197,8 @@
           for (var j = 0; j < added.length; j++) {
             var n = added[j];
             if (n.nodeType !== 1) continue;
-            if (n.classList && n.classList.contains('kt-hero')) enhance(n);
-            else if (n.querySelector && n.querySelector('.kt-hero')) scan(n);
+            if (n.classList && (n.classList.contains('kt-hero') || n.classList.contains('kt-page-hero'))) enhance(n);
+            else if (n.querySelector && n.querySelector('.kt-hero, .kt-page-hero')) scan(n);
           }
         }
       }).observe(doc.body, { childList: true, subtree: true });

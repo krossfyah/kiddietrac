@@ -36,6 +36,9 @@ return [
             'serve' => true,
             'throw' => false,
             'report' => false,
+            // The web app and the scheduler run as different users sharing the www-data group: a folder
+            // made 0700 by one could not be read by the other (2026-10-30). Group-shared instead.
+            'permissions' => ['file' => ['public' => 0664, 'private' => 0660], 'dir' => ['public' => 0775, 'private' => 0770]],
         ],
 
         'public' => [

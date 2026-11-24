@@ -36,6 +36,11 @@ final class DrillRemindCommand extends Command
             $lastKey = 'drill_reminders_last';
             if (! $this->option('dry') && (($s[$lastKey] ?? null) === $now->toDateString())) continue;
 
+            /* ONE EMAIL PER PERSON (2026-11-05, Anthony: "fire drills should be one consolidated email to
+               admin/directors"). It was one email per centre to each recipient: iLearn's 8 homes with no
+               director sent each of its 3 admins 8 emails in one morning. Now each person gets one email
+               listing every centre they hear about, a section per centre. Who hears is unchanged. */
+            $perAddr = [];   // email => [centre name => owed rows]
             foreach (Live::centreIds((int) $a->id) as $cid) {
                 $owed = array_values(array_filter(DrillRules::status((int) $a->id, (int) $cid), fn ($r) => ! $r['optional']
                     && (($r['current']['owed'] && ! $r['current']['done_at']) || $r['previous']['missed'])));
@@ -47,25 +52,37 @@ final class DrillRemindCommand extends Command
                         ->where('ra.role', 'agency_admin')->where('ra.active', true)->whereNull('u.deleted_at')->pluck('u.email')->filter()->unique()->values()->all();
                 }
                 $to = array_values(array_filter($to, fn ($e) => filter_var($e, FILTER_VALIDATE_EMAIL) && ! \App\Support\ChatAudience::isServiceEmail($e)));
+                // Roles switched off for drill notices hear nothing (Settings → Notification settings, 2026-11-09).
+                $to = \App\Support\StaffTopicNotify::filterEmails((int) $a->id, 'drills', $to);
                 $centre = (string) DB::table('centres')->where('id', $cid)->value('name');
-                if ($this->option('dry')) { $this->line("agency {$a->id} {$centre}: " . count($owed) . ' owed → ' . count($to) . ' recipient(s)'); continue; }
-                if (! $to) continue;
-                $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-                $li = '';
-                foreach ($owed as $r) {
-                    $li .= '<li style="margin:4px 0">' . $e($r['label']) . ': '
-                        . ($r['previous']['missed'] ? '<b style="color:#B91C1C">missed in ' . $e($r['previous']['period']) . '</b>' . ($r['current']['owed'] && ! $r['current']['done_at'] ? ', and ' : '') : '')
-                        . ($r['current']['owed'] && ! $r['current']['done_at'] ? 'not yet done for ' . $e($r['current']['period']) : '') . '</li>';
+                if ($this->option('dry')) $this->line("agency {$a->id} {$centre}: " . count($owed) . ' owed → ' . count($to) . ' recipient(s)');
+                foreach ($to as $addr) $perAddr[mb_strtolower($addr)][(int) $cid] = ['name' => $centre, 'owed' => $owed];
+            }
+            $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+            foreach ($perAddr as $addr => $centres) {
+                uasort($centres, fn ($x, $y) => strnatcasecmp($x['name'], $y['name']));
+                $n = count($centres);
+                $firstName = (string) reset($centres)['name'];
+                if ($this->option('dry')) { $this->line('  → …@' . substr(strrchr($addr, '@'), 1) . ": one email, {$n} centre(s)"); continue; }
+                $body = '';
+                foreach ($centres as ['name' => $centre, 'owed' => $owed]) {
+                    $li = '';
+                    foreach ($owed as $r) {
+                        $li .= '<li style="margin:4px 0">' . $e($r['label']) . ': '
+                            . ($r['previous']['missed'] ? '<b style="color:#B91C1C">missed in ' . $e($r['previous']['period']) . '</b>' . ($r['current']['owed'] && ! $r['current']['done_at'] ? ', and ' : '') : '')
+                            . ($r['current']['owed'] && ! $r['current']['done_at'] ? 'not yet done for ' . $e($r['current']['period']) : '') . '</li>';
+                    }
+                    $body .= '<p style="margin:14px 0 4px;font-size:15px;font-weight:700;color:#0F172A">' . $e($centre) . '</p>'
+                        . '<ul style="margin:0;padding-left:18px;font-size:14.5px;color:#0F172A">' . $li . '</ul>';
                 }
-                $html = EmailTemplate::wrap((int) $a->id, '<p style="margin:0 0 10px;font-size:15px;color:#334155">Drills still owed at <b>' . $e($centre) . '</b>:</p>'
-                    . '<ul style="margin:0;padding-left:18px;font-size:14.5px;color:#0F172A">' . $li . '</ul>'
-                    . '<p style="margin:14px 0 0;font-size:14px;color:#334155">Record a drill in KiddieTrac → Drill log once it is done.</p>'
+                $html = EmailTemplate::wrap((int) $a->id, '<p style="margin:0 0 4px;font-size:15px;color:#334155">'
+                    . ($n === 1 ? 'Drills still owed:' : 'Drills still owed at ' . $n . ' centres:') . '</p>' . $body
+                    . '<p style="margin:16px 0 0;font-size:14px;color:#334155">Record a drill in KiddieTrac → Drill log once it is done.</p>'
                     . '<p style="margin:14px 0 0;font-size:12px;color:#94A3B8">Your agency switched these reminders on in the Drill log.</p>',
-                    ['eyebrow' => 'SAFETY', 'title' => 'Drills to do', 'subtitle' => $centre]);
-                foreach ($to as $addr) {
-                    try { AgencyMailer::forAgency((int) $a->id)->html($html, fn ($m) => $m->to($addr)->subject('Drills still owed at ' . $centre)); }
-                    catch (\Throwable $ex) { $this->error('mail failed: ' . $ex->getMessage()); }
-                }
+                    ['eyebrow' => 'SAFETY', 'title' => 'Drills to do', 'subtitle' => $n === 1 ? $firstName : $n . ' centres']);
+                $subject = $n === 1 ? 'Drills still owed at ' . $firstName : 'Drills still owed at ' . $n . ' centres';
+                try { AgencyMailer::forAgency((int) $a->id)->html($html, fn ($m) => $m->to($addr)->subject($subject)); }
+                catch (\Throwable $ex) { $this->error('mail failed: ' . $ex->getMessage()); }
             }
             if (! $this->option('dry')) {
                 DB::transaction(function () use ($a, $lastKey, $now) {   // re-read under a lock: only this key changes

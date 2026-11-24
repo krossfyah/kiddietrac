@@ -97,6 +97,28 @@
     });
   }
 
+  /* The agency's platform region and what every licence includes (2026-10-25). */
+  function regionHtml(r, inc) {
+    var h = '';
+    if (r && r.label) {
+      h += '<div data-kt-keep-brand="1" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px;padding:14px 18px;border-radius:14px;color:#fff;background:linear-gradient(135deg,#1DB9C3 0%,#2563EB 55%,#7C3AED 100%);">'
+        + '<div style="font-size:30px;line-height:1;">' + esc(r.flag || '🌐') + '</div>'
+        + '<div style="flex:1 1 220px;min-width:0;"><div style="font-size:11px;font-weight:800;letter-spacing:1.5px;opacity:.85;text-transform:uppercase;">Platform</div>'
+        + '<div style="font-size:19px;font-weight:800;">' + esc(r.label) + '</div>'
+        + (r.estimated ? '<div style="font-size:11.5px;opacity:.85;">Estimated from the time zone: no province or state on the agency or its centres.</div>' : '') + '</div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;">' + (r.facts || []).map(function (f) { return '<span style="background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.4);border-radius:999px;padding:4px 11px;font-size:12px;font-weight:700;white-space:nowrap;">' + esc(f.k + ': ' + f.v) + '</span>'; }).join('') + '</div></div>';
+    }
+    if (inc.length) {
+      h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:0 0 18px;">' + inc.map(function (x) {
+        var icon = { support: '🛠️', message_centre: '💬', one_tap: '📲' }[x.key] || '✓';
+        return '<div style="display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid ' + (x.on ? '#BFDBFE' : '#E2E8F0') + ';border-radius:12px;padding:11px 13px;">'
+          + '<div style="font-size:20px;line-height:1.1;">' + icon + '</div><div style="min-width:0;"><div style="font-weight:800;font-size:13.5px;color:#0F172A;">' + esc(x.label) + ' <span style="font-size:11px;font-weight:700;color:' + (x.on ? '#047857' : '#94A3B8') + ';">' + (x.on ? 'Included' : 'Off') + '</span></div>'
+          + '<div style="font-size:12px;color:#64748B;margin-top:2px;">' + esc(x.detail) + '</div></div></div>';
+      }).join('') + '</div>';
+    }
+    return h;
+  }
+
   async function loadAndRenderAgency(container, agencyId) {
     const body = $('#kt-flags-body', container);
     body.innerHTML = '<div style="padding:18px;color:#6B7280;">Loading agency settings…</div>';
@@ -139,14 +161,14 @@
     body.innerHTML = `
       <div style="background:white;border-radius:14px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.05);margin-bottom:18px;">
         <h3 style="margin:0 0 12px;font-size:15px;">Plan & billing</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-          <div>
+        <div style="display:flex;flex-wrap:wrap;gap:14px;">
+          <div style="flex:0 1 320px;min-width:0;">
             <label style="font-size:12px;font-weight:700;color:#6B7280;">Plan</label>
             <select id="kt-plan" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-top:6px;">
               ${plans.map(p => `<option value="${esc(p.code)}" ${p.code == data.plan_code ? 'selected' : ''}>${esc(p.name)} — ${money(p.monthly_cents, 'CAD')}/mo</option>`).join('')}
             </select>
           </div>
-          <div>
+          <div style="flex:0 1 220px;min-width:0;">
             <label style="font-size:12px;font-weight:700;color:#6B7280;">Billing status</label>
             <select id="kt-status" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-top:6px;">
               ${['trial','active','past_due','cancelled'].map(s => `<option value="${s}" ${s == data.billing_status ? 'selected' : ''}>${s}</option>`).join('')}
@@ -155,6 +177,7 @@
         </div>
       </div>
 
+      ${regionHtml(data.region, data.included || [])}
       <div class="kt-ff-panel">
         <div class="kt-ff-head">
           <div>
@@ -251,7 +274,7 @@
       '.kt-ff-gname{display:inline-flex;align-items:center;background:var(--c);color:#fff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:8px;padding:4px 10px;}',
       '.kt-ff-gcount{font-size:11.5px;font-weight:800;color:var(--c);background:var(--t);border-radius:999px;padding:2px 8px;}',
       '.kt-ff-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;}',
-      '.kt-ff-card{position:relative;background:var(--t);border:1px solid color-mix(in srgb,var(--c) 22%,#fff);border-left:4px solid var(--c);border-radius:12px;padding:11px 12px 10px;transition:background .15s,border-color .15s;}',
+      '.kt-ff-card{position:relative;background:var(--t);border:1px solid color-mix(in srgb,var(--c) 22%,#fff);--kt-edge:var(--c);border-radius:12px;padding:11px 12px 10px;transition:background .15s,border-color .15s;}',
       '.kt-ff-card[data-state="on"]{background:#F0FDF4;border-color:#BBF7D0;border-left-color:#16A34A;}',
       '.kt-ff-card[data-state="off"]{background:#FFF1F2;border-color:#FECDD3;border-left-color:#E11D48;}',
       '.kt-ff-name{font-weight:800;font-size:13.5px;color:#0F172A;}',
@@ -281,11 +304,11 @@
     const seg = (v, label) => `<button type="button" data-v="${v}" aria-pressed="${initial === v ? 'true' : 'false'}">${label}</button>`;
     return `<div class="kt-ff-card" data-state="${initial}">
       <div class="kt-ff-name">${esc(feature.name || feature.code)}</div>
-      <div class="kt-ff-meta"><code>${esc(feature.code)}</code>${feature.plan_min ? '<span class="kt-ff-plan">plan ≥ ' + esc(feature.plan_min) + '</span>' : ''}</div>
+      <div class="kt-ff-meta"><code>${esc(feature.code)}</code>${feature.plan_min ? '<span class="kt-ff-plan">' + (feature.plan_min === 'addon' ? 'add-on only' : 'plan ≥ ' + esc(feature.plan_min)) + '</span>' : ''}</div>
       <div class="kt-ff-hides">${(feature.hashes && feature.hashes.length)
         ? feature.hashes.map(h => '<span>' + esc(h) + '</span>').join('')
         : '<em>No menu item — gates the API only.</em>'}</div>
-      <div class="kt-ff-seg" role="group" aria-label="${esc(feature.name || feature.code)}">${seg('auto', 'Auto')}${seg('on', '✓ On')}${seg('off', '✗ Off')}</div>
+      <div class="kt-ff-seg" role="group" data-kt-tabsize="own" aria-label="${esc(feature.name || feature.code)}">${seg('auto', 'Auto')}${seg('on', '✓ On')}${seg('off', '✗ Off')}</div>
       <select id="kt-flag-${esc(feature.code)}" aria-hidden="true" tabindex="-1">
         <option value="auto" ${initial=='auto'?'selected':''}>Auto (plan default)</option>
         <option value="on"   ${initial=='on'?'selected':''}>✓ Force on</option>

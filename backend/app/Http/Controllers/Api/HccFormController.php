@@ -11,7 +11,7 @@ use App\Services\EmailTemplate;
 use App\Support\HccFormPdf;
 use App\Support\HccFormRenderer;
 use App\Support\HccFormSchemas;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -37,13 +37,37 @@ class HccFormController extends Controller
 
     private function agencyId(Request $request): ?int
     {
+        /* The agency you are working in (2026-11-05 leak sweep): a platform admin the one they named; anyone else
+           the membership-checked active agency. The old fallback took the first agency_id row held anywhere, so a
+           person with roles in two agencies could read and file forms in the one they were not working in. */
         $active = (int) $request->header('X-Active-Agency-Id');
         if ($active && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
-                ->where(function ($q) use ($active) { $q->where('role', 'platform_admin')->orWhere('agency_id', $active); })->exists()) {
+                ->where('role', 'platform_admin')->exists()) {
             return $active;
         }
-        return (int) (DB::table('role_assignments')->where('user_id', $request->user()->id)
-            ->where('active', true)->whereNotNull('agency_id')->value('agency_id')) ?: null;
+        return \App\Support\AgencyRole::activeAgency($request);
+    }
+
+    /* The centres a centre-scoped reviewer reviews (2026-11-05 leak sweep): null = agency-wide (admin /
+       platform); otherwise the centres where the caller is centre_director in this agency. CentreScope alone
+       also counted centres where they are only an educator, so a director of Y who teaches at X read X's forms. */
+    private function directorScope(Request $request, int $agencyId): ?array
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope === null) return null;
+        $dir = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
+            ->where('user_id', $request->user()->id)->where('role', 'centre_director')->where('active', true)
+            ->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->all();
+        return array_values(array_intersect($scope, $dir));
+    }
+
+    /* Which centres the caller may file a form against (2026-11-05 leak sweep). A home visitor works across the
+       agency by design (role stored with centre_id NULL), so null = any centre in the agency; a director only
+       their own centres. */
+    private function filingScope(Request $request, int $agencyId): ?array
+    {
+        if (in_array('home_visitor', \App\Support\AgencyRole::names($request), true)) return null;
+        return $this->directorScope($request, $agencyId);
     }
 
     /** Is the inspection-forms feature available to this account's active agency? */
@@ -54,7 +78,7 @@ class HccFormController extends Controller
 
     private function isReviewer(Request $request): bool
     {
-        return DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+        return \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('active', true)
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])->exists();
     }
 
@@ -66,13 +90,15 @@ class HccFormController extends Controller
     private function reviews(Request $request, int $agencyId, $centreId): bool
     {
         return $this->isReviewer($request)
-            && \App\Support\CentreScope::canRead(\App\Support\CentreScope::ids($request, $agencyId), $centreId);
+            && \App\Support\CentreScope::canRead($this->directorScope($request, $agencyId), $centreId);
     }
 
     /** null = every report in the agency; otherwise the centres a director reviews. */
     private function reviewScope(Request $request, ?int $agencyId): ?array
     {
-        return $agencyId ? \App\Support\CentreScope::ids($request, $agencyId) : null;
+        // Director centres only, and fail closed with no agency (2026-11-05 leak sweep): this returned null
+        // (= the whole agency) when no agency resolved.
+        return $agencyId ? $this->directorScope($request, $agencyId) : [];
     }
 
     public function schemas(Request $request): JsonResponse
@@ -101,7 +127,11 @@ class HccFormController extends Controller
         $agencyId = $this->agencyId($request);
         if (! $agencyId) return response()->json(['centres' => []]);
         // The picker for a NEW form: open providers only (2026-10-09); past forms still list.
-        $centres = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name', 'city', 'province']);
+        $cq = \App\Support\Live::centres(DB::table('centres'))->where('agency_id', $agencyId);
+        /* A director picks from their own centres only, the same ones store() accepts (2026-11-05 leak sweep). */
+        $fs = $this->filingScope($request, (int) $agencyId);
+        if ($fs !== null) $cq->whereIn('id', $fs ?: [0]);
+        $centres = $cq->orderBy('name')->get(['id', 'name', 'city', 'province']);
         return response()->json(['centres' => $centres]);
     }
 
@@ -175,6 +205,12 @@ class HccFormController extends Controller
             $ok = DB::table('centres')->where('id', $data['centre_id'])->where('agency_id', $agencyId)->exists();
             abort_unless($ok, 422, 'That centre is not in your agency.');
         }
+        /* A director files only against a centre they direct (2026-11-05 leak sweep): any centre in the agency
+           was accepted, so a form (and its reviewer email) landed on another centre. */
+        $fs = $this->filingScope($request, (int) $agencyId);
+        if ($fs !== null) {
+            abort_unless(! empty($data['centre_id']) && in_array((int) $data['centre_id'], $fs, true), 403, 'You can only file forms for a centre you direct.');
+        }
 
         $u = $request->user();
         $hvName = trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: ($u->email ?? 'Home visitor');
@@ -228,6 +264,16 @@ class HccFormController extends Controller
             'answers'        => 'required|array',
             'note'           => 'nullable|string|max:2000',
         ]);
+
+        /* A new centre_id must be in this form's agency and one the caller may file for (2026-11-05 leak sweep):
+           it was written unchecked, so a form could be moved to another agency's or another centre's centre. */
+        if (array_key_exists('centre_id', $data) && (int) ($data['centre_id'] ?? 0) !== (int) ($row->centre_id ?? 0)) {
+            if (! empty($data['centre_id'])) {
+                abort_unless(DB::table('centres')->where('id', $data['centre_id'])->where('agency_id', $row->agency_id)->exists(), 422, 'That centre is not in your agency.');
+            }
+            $fs = $this->filingScope($request, (int) $row->agency_id);
+            abort_unless($fs === null || (! empty($data['centre_id']) && in_array((int) $data['centre_id'], $fs, true)), 403, 'You can only file forms for a centre you direct.');
+        }
 
         $wasSubmitted = $row->status === 'submitted';
         $newStatus = $data['status'] ?? $row->status;

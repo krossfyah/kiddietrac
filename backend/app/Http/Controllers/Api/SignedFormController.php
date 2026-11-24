@@ -230,6 +230,16 @@ final class SignedFormController extends Controller
            check, and until now got nothing back at all. */
         \App\Support\FormSubmissionNotice::send($signoffId);
 
+        /* AND THE COMPLETED COPY to the address on the form, exactly as the portal route sends
+           it (2026-10-25). Missing here, so every link-signed form read "Not sent" on Forms
+           Manager -> Completed and the office never got the PDF. kt:form-copy-watch backs this
+           up. Best-effort: the signature is saved, so a mail problem must not fail the submit. */
+        try {
+            app(\App\Http\Controllers\Api\ManagedFormController::class)->sendCompletedCopy($signoffId);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         try {
             \App\Support\Audit::write([
                 'user_id'     => (int) $u,
@@ -424,6 +434,8 @@ final class SignedFormController extends Controller
             /* The portal's own modules, loaded from the app host so there is ONE filler,
                one signature pad and one flattening path — not a second implementation that
                drifts. */
+            // The no-raw-errors watcher, as on every portal page (2026-10-25).
+            . '<script src="' . $app . '/js/kt-net.js?v=' . $v . '"></script>'
             . '<script src="' . $app . '/js/kt-signature-pad.js?v=' . $v . '"></script>'
             . '<script src="' . $app . '/js/kt-form-filler.js?v=' . $v . '"></script>'
             . '<script>(function(){var CFG=' . $json . ';'

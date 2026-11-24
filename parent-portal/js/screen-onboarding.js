@@ -14,6 +14,15 @@
   function getUser() { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function setUser(u) { sessionStorage.setItem('kt_user', JSON.stringify(u)); }
   function role() { var u = getUser(); return (u && (u.primary_role || (u.roles && u.roles[0]))) || ''; }
+  /* A RESELLER IS NOT AN AGENCY ADMIN BEING SET UP (2026-10-21). It holds agency-admin
+     access in the agencies it owns, so the wizard took it for one and its last steps
+     rewrote the agency (country, currency, branding, team). A Reseller gets its own short
+     setup: its own profile only - never a step or a save that touches an agency. Two-step
+     sign-in follows from the shell's own gate. */
+  function isReseller() {
+    var u = getUser(), rs = (u && u.roles) || [];
+    return rs.indexOf('reseller_admin') !== -1 && rs.indexOf('platform_admin') === -1;
+  }
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
   // Best-effort device fingerprint for analytics (which device families onboard).
@@ -163,7 +172,8 @@
         { k: 'employer',           label: 'Employer (for emergency reach)',   type: 'text' },
         { k: 'work_phone',         label: 'Work phone',                       type: 'tel' },
         { k: 'authorized_pickups', label: 'Other people authorized to pick up (one per line)', type: 'textarea' },
-        { k: 'photo_consent',      label: 'OK with classroom photos?',        type: 'select', options: ['Yes', 'No, please do not photograph my child'] },
+        /* Photo permission is not a field here (2026-11-06): it was one answer per parent, saved where nothing read
+           it. It has its own step after the children, one answer per child (renderPhotoStep). */
       ],
     };
   }
@@ -179,7 +189,7 @@
     container.innerHTML = '<div style="max-width:760px;margin:48px auto;padding:40px;text-align:center;color:#64748B;font-size:14px;">Loading your setup…</div>';
     (async function () {
       var whiteLabel = false;
-      if (r === 'agency_admin' && user.agency_id) {
+      if (r === 'agency_admin' && user.agency_id && !isReseller()) {
         try {
           var f = await api('GET', '/admin/agencies/' + user.agency_id + '/features');
           whiteLabel = !!(f && f.flags && f.flags.white_label);
@@ -210,19 +220,32 @@
     overlay.id = 'kt-onboarding-overlay';
     overlay.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(8,15,30,0.74);'
       + '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);overflow-y:auto;overflow-x:hidden;'
-      + 'display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;';
+      + 'display:flex;align-items:flex-start;justify-content:center;'
+      /* Clear the status bar and the system nav bar (2026-10-20, Closed Testing Report issue 7):
+         the APK draws under both, so a flat 24px put the header under the clock and the last
+         fields under the back/home bar. */
+      + 'padding:calc(24px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 14px calc(32px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));';
     document.body.appendChild(overlay);
     container = overlay;
 
-    var steps = COMMON_STEPS.slice();
-    if (r === 'guardian') {
+    var steps = isReseller()
+      ? [{ id: 'profile', title: 'Your profile', subtitle: 'Just the basics - you can change them any time in Settings.' }]
+      : COMMON_STEPS.slice();
+    if (r === 'guardian' && !isReseller()) {
       steps.push({
         id: 'children',
         title: 'About your children',
         subtitle: 'A photo so staff recognise them, and what the room needs to know to keep them safe.',
       });
+      /* PHOTO PERMISSION IN SIGN-UP (2026-11-06, Anthony: "add this to the onboarding wizard with parents onboarding
+         to the system to ask these questions as well"). The same per-child question as the portal's own prompt
+         (kt-photo-consent.js), saved the same way (/me/photo-consent, source "onboarding"). Only the primary parent
+         chooses (App\Support\MediaConsent::decidersFor); another parent sees what applies, read only. */
+      if (window.KT && KT.photoConsent) {
+        steps.push({ id: 'photos', title: 'Photo permission', subtitle: 'What educators may do with photos and videos of each of your children.' });
+      }
     }
-    if (r === 'agency_admin') {
+    if (r === 'agency_admin' && !isReseller()) {
       steps.push({ id: 'team', title: 'Invite your team', subtitle: 'Add directors and educators (optional — you can do this anytime).' });
       if (whiteLabel) steps.push({ id: 'whitelabel', title: 'Make it yours', subtitle: 'Your plan includes white-label branding — add your logo and colours.' });
     }
@@ -340,6 +363,7 @@
       else if (id === 'address') body.appendChild(renderAddressStep(state));
       else if (id === 'role') body.appendChild(renderRoleStep(state, roleStep));
       else if (id === 'children') body.appendChild(renderChildrenStep(state));
+      else if (id === 'photos') body.appendChild(renderPhotoStep(state));
       else if (id === 'team') body.appendChild(renderTeamStep(state));
       else if (id === 'whitelabel') body.appendChild(renderWhiteLabelStep(state, container));
 
@@ -358,6 +382,7 @@
       // Validate the CURRENT step before moving on (previously validation only
       // ran at the very end, so users breezed past missing required fields).
       if (!validateStep(state, container)) return;
+      if (steps[state.step].id === 'photos' && !(await savePhotoStep(state, container))) return;
       if (state.step < steps.length - 1) {
         state.step++;
         drawStep();
@@ -438,7 +463,7 @@
     if (!(nav.mediaDevices && nav.mediaDevices.getUserMedia)) {
       // Fallback: native camera via a capture-enabled file input.
       var fi = document.createElement('input');
-      fi.type = 'file'; fi.accept = 'image/*'; fi.setAttribute('capture', 'user'); fi.style.display = 'none';
+      fi.type = 'file'; fi.accept = 'image/*'; fi.setAttribute('capture', 'user'); fi.style.display = 'none'; fi.setAttribute('data-kt-noface', '1');
       fi.addEventListener('change', function () { var f = fi.files && fi.files[0]; if (f) cb(f); });
       document.body.appendChild(fi); fi.click();
       setTimeout(function () { if (fi.parentNode) fi.parentNode.removeChild(fi); }, 60000);
@@ -450,25 +475,36 @@
       '<div style="color:#E2E8F0;font-size:14px;font-weight:700;">Center your face, then capture</div>'
       + '<video autoplay playsinline muted style="width:min(88vw,420px);aspect-ratio:1/1;object-fit:cover;border-radius:16px;background:#000;transform:scaleX(-1);"></video>'
       + '<div style="display:flex;gap:12px;">'
-      +   '<button data-cam="shot" style="padding:12px 22px;background:#22D3EE;color:#062B36;border:none;border-radius:10px;font-weight:800;cursor:pointer;">📸 Capture</button>'
+      +   '<button data-cam="shot" disabled style="padding:12px 22px;background:#22D3EE;color:#062B36;border:none;border-radius:10px;font-weight:800;cursor:pointer;opacity:.5;">Starting camera…</button>'
       +   '<button data-cam="cancel" style="padding:12px 18px;background:transparent;color:#CBD5E1;border:1.5px solid #475569;border-radius:10px;font-weight:700;cursor:pointer;">Cancel</button>'
       + '</div>';
     document.body.appendChild(ov);
     var video = ov.querySelector('video');
+    var shotBtn = ov.querySelector('[data-cam="shot"]');
     var stream = null;
+    // Capture only once the camera is actually delivering pictures.
+    function ready() { if (video.videoWidth > 0 && video.readyState >= 2) { shotBtn.disabled = false; shotBtn.style.opacity = '1'; shotBtn.textContent = '📸 Capture'; } }
+    video.addEventListener('loadeddata', ready); video.addEventListener('playing', ready);
     function stop() { try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} if (ov.parentNode) ov.parentNode.removeChild(ov); }
     nav.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 1280 } }, audio: false })
       .then(function (s) { stream = s; video.srcObject = s; })
       .catch(function () { stop(); alert('Could not access the camera. You can upload a photo instead.'); });
     ov.querySelector('[data-cam="cancel"]').addEventListener('click', stop);
-    ov.querySelector('[data-cam="shot"]').addEventListener('click', function () {
-      var vw = video.videoWidth || 720, vh = video.videoHeight || 720;
+    shotBtn.addEventListener('click', function () {
+      if (!(video.videoWidth > 0)) return;
+      var vw = video.videoWidth, vh = video.videoHeight;
       var side = Math.min(vw, vh);
       var cv = document.createElement('canvas'); cv.width = side; cv.height = side;
       var cx = cv.getContext('2d');
       // mirror horizontally to match the on-screen preview, center-crop to square
       cx.translate(side, 0); cx.scale(-1, 1);
       cx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, side, side);
+      // A covered lens or a camera still waking up gives one flat colour: ask again instead of saving it.
+      try {
+        var px = cx.getImageData(0, 0, side, side).data, step = Math.max(4, Math.floor(px.length / 4 / 400)) * 4, lo = 255, hi = 0;
+        for (var i = 0; i < px.length; i += step) { var v = (px[i] + px[i + 1] + px[i + 2]) / 3; if (v < lo) lo = v; if (v > hi) hi = v; }
+        if (hi - lo < 12) { shotBtn.textContent = 'That came out blank - try again'; return; }
+      } catch (e) {}
       cv.toBlob(function (blob) { stop(); if (blob) cb(blob); }, 'image/jpeg', 0.92);
     });
   }
@@ -486,11 +522,11 @@
         '<button type="button" id="kt-av-btn" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">Upload photo</button>' +
         '<button type="button" id="kt-av-cam" style="background:white;color:#1F6080;border:1.5px solid #1F6080;padding:8px 14px;border-radius:9px;font-weight:600;cursor:pointer;font-size:13px;">📷 Take photo</button>' +
         '</div>' +
-        '<input id="kt-av-file" type="file" accept="image/png,image/jpeg,image/webp" style="display:none;">' +
-        '<div id="kt-av-msg" style="font-size:11px;color:#64748B;margin-top:5px;">Required · upload one or take a photo now</div></div>';
+        '<input id="kt-av-file" type="file" data-kt-face accept="image/png,image/jpeg,image/webp" style="display:none;">' +
+        '<div id="kt-av-msg" style="font-size:11px;color:#64748B;margin-top:5px;">' + (isReseller() ? 'Optional' : 'Required · upload one or take a photo now') + '</div></div>';
     var avLabel = document.createElement('div');
     avLabel.style.cssText = 'font-size:13px;font-weight:700;color:#334155;margin-bottom:6px;';
-    avLabel.innerHTML = 'Profile photo <span style="color:#DC2626;font-weight:800;" title="Required">*</span>';
+    avLabel.innerHTML = isReseller() ? 'Profile photo (optional)' : 'Profile photo <span style="color:#DC2626;font-weight:800;" title="Required">*</span>';
     box.appendChild(avLabel);
     box.appendChild(av);
 
@@ -500,7 +536,7 @@
     row.appendChild(input('Last name',     'last_name',      state.data.last_name,  'text', null, null, true));
     box.appendChild(row);
     // Sex — mandatory. Drives the default avatar when no photo is uploaded.
-    box.appendChild(input('Sex', 'sex', state.data.sex, 'select', null, ['Male', 'Female'], true));
+    if (!isReseller()) box.appendChild(input('Sex', 'sex', state.data.sex, 'select', null, ['Male', 'Female'], true));
     /* DATE OF BIRTH — mandatory for educators (2026-10-09: "DOB and address info needs
        to be mandatory for educators being onboarded including emergency contact"). The
        server refuses to finish an educator's onboarding without it, too. */
@@ -520,7 +556,7 @@
     box.appendChild(langWrap);
     // Race / ethnicity — optional + self-reported (analytics only). Lands in
     // state.data.ethnicity → profile_extras on submit.
-    box.appendChild(input('Race / ethnicity (optional)', 'ethnicity', state.data.ethnicity, 'select', null,
+    if (!isReseller()) box.appendChild(input('Race / ethnicity (optional)', 'ethnicity', state.data.ethnicity, 'select', null,
       ['White', 'Black', 'South Asian', 'Chinese', 'Filipino', 'Latin American', 'Arab',
        'Southeast Asian', 'West Asian', 'Korean', 'Japanese',
        'Indigenous (First Nations, Métis, Inuit)', 'Mixed / multiple', 'Other', 'Prefer not to say'], false));
@@ -549,7 +585,8 @@
     var smsBox = document.createElement('input');
     smsBox.type = 'checkbox';
     smsBox.setAttribute('data-sms-consent', '1');
-    smsBox.style.cssText = 'width:18px;height:18px;margin:2px 0 0;flex:0 0 auto;cursor:pointer;';
+    smsBox.setAttribute('data-kt-switch', '1');
+    smsBox.style.cssText = 'margin:0;flex:0 0 auto;cursor:pointer;';   // a switch: kt-consistency-polish.css sizes it
     smsBox.checked = state.data.sms_opt_in === true;
     smsLab.appendChild(smsBox);
     var smsTxt = document.createElement('span');
@@ -560,7 +597,7 @@
       + '</span>';
     smsLab.appendChild(smsTxt);
     smsWrap.appendChild(smsLab);
-    box.appendChild(smsWrap);
+    if (!isReseller()) box.appendChild(smsWrap);
 
     var phRow = document.createElement('div');
     phRow.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;';
@@ -589,7 +626,12 @@
       var camBtn = box.querySelector('#kt-av-cam');
       if (camBtn) camBtn.addEventListener('click', function () { openCamera(handleImage); });
       fileEl.addEventListener('change', function () { handleImage(fileEl.files[0]); });
+      // A profile photo must show a face, checked on the device (KT.faceGate, 2026-10-30).
       function uploadAvatar(blob) {
+        if (!(window.KT && KT.faceGate)) { uploadAvatarNow(blob); return; }
+        KT.faceGate(blob, { who: 'self', retry: function () { fileEl.click(); } }).then(function (ok) { if (ok) uploadAvatarNow(blob); });
+      }
+      function uploadAvatarNow(blob) {
         msg.textContent = 'Uploading…'; msg.style.color = '#64748B';
         var fd = new FormData(); fd.append('avatar', blob, 'avatar.jpg');
         fetch(apiBase() + '/auth/me/avatar', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token() }, body: fd })
@@ -807,7 +849,7 @@
       bioWrap.innerHTML =
         '<div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:3px;">Your bio <span style="color:#DC2626;">*</span></div>'
         + '<div style="font-size:12px;color:#64748B;margin-bottom:10px;">Introduce yourself to the families in your care — your experience, your approach, what makes your home special. This appears on each family’s provider card and their welcome email.</div>'
-        + '<textarea data-bio="1" rows="5" placeholder="e.g. Hi, I’m Chearstine! I’ve run a licensed home daycare for 8 years and love nature walks, music, and cozy story time. Your little one will feel right at home…" style="' + inputStyle() + 'font-family:inherit;resize:vertical;">' + esc(state.data.provider_bio || '') + '</textarea>'
+        + '<textarea data-bio="1" rows="8" placeholder="e.g. Hi, I’m Chearstine! I’ve run a licensed home daycare for 8 years and love nature walks, music, and cozy story time. Your little one will feel right at home…" style="' + inputStyle() + 'min-height:220px;line-height:1.55;font-family:inherit;resize:vertical;">' + esc(state.data.provider_bio || '') + '</textarea>'
         + '<div id="kt-bio-count" style="font-size:11px;color:#94A3B8;margin-top:5px;text-align:right;"></div>';
       box.appendChild(bioWrap);
       setTimeout(function () {
@@ -891,12 +933,55 @@
 
   /* ── Children (guardian) ─────────────────────────────────────────────
      One card per child: a photo, what they are allergic to, and which of the
-     agency's expected immunisations they have had. Saved per child when the step
+     agency's expected immunizations they have had. Saved per child when the step
      is left, so a parent who gets three children in never loses the first two.
 
      The vaccines offered come from the agency's own schedule rather than a free
-     text box, so what a parent enters is something the immunisation report can
+     text box, so what a parent enters is something the immunization report can
      measure rather than prose somebody has to read. */
+  /* Photo permission, one answer per child (see the 'photos' step). The form is kt-photo-consent.js's own. */
+  function renderPhotoStep(state) {
+    var box = document.createElement('div');
+    var PC = window.KT && KT.photoConsent;
+    state.pc = { loading: true, read: null, all: false, data: null };
+    box.innerHTML = '<div style="color:#64748B;font-size:14px;padding:8px 0;">Loading your children…</div>';
+    api('GET', '/me/photo-consent').then(function (data) {
+      state.pc.loading = false;
+      state.pc.data = data;
+      if (!data.children || !data.children.length) {
+        box.innerHTML = '<div style="color:#64748B;font-size:14px;line-height:1.5;">Your children are not linked to your account yet. '
+          + 'Once your centre links them, you will be asked about photos then.</div>';
+        return;
+      }
+      box.innerHTML = PC.styles()
+        + '<p style="margin:0 0 12px;font-size:14px;color:#334155;line-height:1.5;">Educators share photos and videos of the day. '
+        + 'Choose what is right for each child. You can change it any time in My settings → Photos.</p>'
+        + '<div data-onb-pc>' + PC.formHtml(data) + '</div>';
+      if (PC.canAnswer(data) && !data.viewing_as) {
+        state.pc.read = PC.wire(box.querySelector('[data-onb-pc]'), function (all) { state.pc.all = all; });
+      }
+    }).catch(function () {
+      state.pc.loading = false;
+      box.innerHTML = '<div style="color:#64748B;font-size:14px;line-height:1.5;">We could not load your children just now. '
+        + 'You can carry on: you will be asked about photos once you are in.</div>';
+    });
+    return box;
+  }
+  async function savePhotoStep(state, container) {
+    if (!state.pc || !state.pc.read) return true;
+    var answers = state.pc.read();
+    if (!answers.length) return true;
+    var msg = container.querySelector('#kt-step-msg');
+    try {
+      await api('POST', '/me/photo-consent', { answers: answers, source: 'onboarding' });
+      return true;
+    } catch (e) {
+      msg.style.color = '#DC2626';
+      msg.textContent = 'Your photo choices did not save: ' + ((e && e.message) || 'try again.');
+      return false;
+    }
+  }
+
   function renderChildrenStep(state) {
     var wrap = document.createElement('div');
     wrap.innerHTML = '<div style="color:#64748B;font-size:13px;padding:8px 0;">Loading your children…</div>';
@@ -973,7 +1058,7 @@
         +     '<button type="button" data-kid-upload style="margin-top:6px;background:#1F6080;color:#fff;border:0;'
         +       'border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:700;cursor:pointer;">'
         +       (kid.photo_url ? 'Change photo' : 'Add photo') + '</button>'
-        +     '<input type="file" data-kid-file accept="image/png,image/jpeg,image/webp" style="display:none;">'
+        +     '<input type="file" data-kid-file data-kt-face accept="image/png,image/jpeg,image/webp" style="display:none;">'
         +     '<div data-kid-msg style="font-size:11.5px;margin-top:5px;color:'
         +       (kid.photo_url ? '#1E8E60' : '#DC2626') + ';">'
         +       (kid.photo_url ? 'Photo added' : 'Required — staff use this to recognise them') + '</div>'
@@ -1016,6 +1101,7 @@
       file.addEventListener('change', function () {
         var f = file.files && file.files[0];
         if (!f) { return; }
+        if (window.KT && KT.faceGateInput && !KT.faceGateInput(file, { who: 'child', name: kid.first_name })) { return; }
         note.style.color = '#64748B';
         note.textContent = 'Uploading…';
         var fd = new FormData();
@@ -1064,7 +1150,7 @@
           + '</div>';
       }).join('');
       return '<div style="margin-top:14px;border-top:1px solid #F1F5F9;padding-top:10px;">'
-        + '<div style="font-size:12.5px;font-weight:700;color:#334155;">Immunisations</div>'
+        + '<div style="font-size:12.5px;font-weight:700;color:#334155;">Immunizations</div>'
         + '<div style="font-size:11.5px;color:#64748B;margin-bottom:6px;">'
         + 'Add the date for any your child has had. Leave the rest blank — you can fill them in later.</div>'
         + rows + '</div>';
@@ -1304,7 +1390,13 @@
         return false;
       }
     }
-    if (id === 'profile' && !state.data.photo_url) {
+    // Photo permission: every child this parent chooses for needs an answer. A list that could not load does not hold
+    // up sign-up - the portal asks again on its own (kt-photo-consent.js).
+    if (id === 'photos' && state.pc) {
+      if (state.pc.loading) { msg.style.color = '#DC2626'; msg.textContent = 'Still loading your children. One moment.'; return false; }
+      if (state.pc.read && !state.pc.all) { msg.style.color = '#DC2626'; msg.textContent = 'Choose a photo option for each child.'; return false; }
+    }
+    if (id === 'profile' && !state.data.photo_url && !isReseller()) {
       missing.push('Profile photo');
       var avMsg = body.querySelector('#kt-av-msg');
       if (avMsg) { avMsg.textContent = 'Profile photo is required'; avMsg.style.color = '#DC2626'; }
@@ -1389,7 +1481,7 @@
       var ev = new CustomEvent('redraw'); container.dispatchEvent(ev);
       return;
     }
-    if (!state.data.sex) {
+    if (!state.data.sex && !isReseller()) {
       msg.textContent = 'Please select your sex.'; msg.style.color = '#DC2626';
       btn.disabled = false; btn.textContent = 'Save and continue';
       state.step = 0;
@@ -1397,7 +1489,7 @@
       return;
     }
     // A profile photo is mandatory (marked with a red asterisk in the form).
-    if (!state.data.photo_url) {
+    if (!state.data.photo_url && !isReseller()) {
       msg.textContent = 'A profile photo is required — tap “Upload avatar”.'; msg.style.color = '#DC2626';
       btn.disabled = false; btn.textContent = 'Save and continue';
       state.step = 0;
@@ -1422,14 +1514,14 @@
       try { if (state.data.locale) localStorage.setItem('kt_locale', state.data.locale); } catch (e) {}
       // v22p83: if an agency admin picked a country, apply its currency +
       // compliance to the agency. Best-effort — never block onboarding on it.
-      if (state.role_extras && state.role_extras.country) {
+      if (!isReseller() && state.role_extras && state.role_extras.country) {
         var picked = ONBOARD_COUNTRIES.filter(function (c) { return c.label === state.role_extras.country; })[0];
         if (picked) { try { await api('PATCH', '/admin/country', { country: picked.code }); } catch (e) { /* non-fatal */ } }
       }
 
       // v22p91 — agency-admin extras (best-effort; never block finishing).
       var notes = [];
-      if (state.team && state.team.length) {
+      if (!isReseller() && state.team && state.team.length) {
         var invited = 0;
         for (var i = 0; i < state.team.length; i++) {
           var m = state.team[i];
@@ -1445,7 +1537,7 @@
       // without this role gate an educator/director/parent finishing onboarding
       // silently PATCHed the admin endpoint → a 403 in the audit log.
       var wl = state.whitelabel || {};
-      if (role() === 'agency_admin' && state.agencyId && (wl.brand_logo_url || wl.brand_privacy_url || wl.brand_terms_url || wl.brand_support_email)) {
+      if (role() === 'agency_admin' && !isReseller() && state.agencyId && (wl.brand_logo_url || wl.brand_privacy_url || wl.brand_terms_url || wl.brand_support_email)) {
         try {
           await agencyPatch('/admin/agencies/' + state.agencyId + '/features', {
             brand_logo_url: wl.brand_logo_url || null,
@@ -1464,7 +1556,8 @@
       var landing = 'dashboard';
       try {
         var rr = role();
-        if (window.KT && KT.Shell && typeof KT.Shell.homeHashForRole === 'function') landing = KT.Shell.homeHashForRole(rr);
+        if (isReseller()) landing = 'reseller';
+        else if (window.KT && KT.Shell && typeof KT.Shell.homeHashForRole === 'function') landing = KT.Shell.homeHashForRole(rr);
         else landing = (rr === 'home_visitor') ? 'home' : ((rr === 'guardian' || rr === 'educator') ? 'today' : 'dashboard');
       } catch (e) {}
       msg.textContent = '✓ All set' + (notes.length ? ' — ' + notes.join(' · ') : '') + ' — taking you to your home…';
@@ -1562,7 +1655,7 @@
      added later never got the required photo (Anthony, 2026-10-06: Alessia and
      Adriana). Now, on every sign-in, an onboarded GUARDIAN whose enrolled children
      include any without a photo gets the same children step — photo, allergies,
-     immunisations — and cannot dismiss it until each listed child has a photo.
+     immunizations — and cannot dismiss it until each listed child has a photo.
      Sign out is always offered so nobody is trapped. Never for staff, "View as" or
      an impersonated session. The id starts kt-onboarding, so the navigation sweep
      leaves it open. */
@@ -1614,7 +1707,11 @@
     ov.setAttribute('aria-modal', 'true');
     ov.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(8,15,30,0.74);'
       + '-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);overflow-y:auto;overflow-x:hidden;'
-      + 'display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;';
+      + 'display:flex;align-items:flex-start;justify-content:center;'
+      /* Clear the status bar and the system nav bar (2026-10-20, Closed Testing Report issue 7):
+         the APK draws under both, so a flat 24px put the header under the clock and the last
+         fields under the back/home bar. */
+      + 'padding:calc(24px + var(--kt-safe-top, env(safe-area-inset-top, 0px))) 14px calc(32px + var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)));';
     ov.innerHTML =
       '<div style="background:#fff;border-radius:18px;width:100%;max-width:620px;margin:auto 0;'
       + 'box-shadow:0 30px 80px -20px rgba(8,20,40,.6);overflow:hidden;">'
@@ -1652,7 +1749,7 @@
           : 'Please add a photo of each child: ' + noPhoto.map(function (k) { return k.name; }).join(', ') + '.';
         return;
       }
-      // Allergies, dietary needs, notes and immunisations: saved the way onboarding saves them.
+      // Allergies, dietary needs, notes and immunizations: saved the way onboarding saves them.
       try { collectChildren(state, body); } catch (e) {}
       if (ov.parentNode) { ov.parentNode.removeChild(ov); }
       try { if (window.KT && KT.toast) { KT.toast('✅', 'Thank you', 'Your child’s details are saved.', '#16A34A'); } } catch (e) {}

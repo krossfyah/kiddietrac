@@ -6,7 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\EmailTemplate;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -24,6 +24,9 @@ use Illuminate\Support\Facades\DB;
  */
 class PayController extends Controller
 {
+    // resolveAgencyId - the active agency, membership-checked (2026-11-05 leak sweep).
+    use \App\Http\Concerns\ResolvesCentreContext;
+
     private const TZ = 'America/Toronto';
 
     /** Resolve a user's pay profile (rate + type, with a sensible default type). */
@@ -157,7 +160,7 @@ class PayController extends Controller
             . 'table.earn th{background:#1F6080;color:#fff;font-size:10px;text-transform:uppercase;padding:8px 10px;text-align:left;}'
             . 'table.earn td{padding:9px 10px;border-bottom:1px solid #E5E7EB;text-align:left;}'
             . '.tot{font-size:18px;font-weight:800;color:#1F6080;}'
-            . '.note{margin-top:16px;padding:11px 14px;background:#F1F6F9;border-left:3px solid #1F6080;border-radius:6px;color:#334155;font-size:11.5px;}'
+            . '.note{margin-top:16px;padding:11px 14px;background:#F1F6F9;--kt-edge:#1F6080;border-radius:6px;color:#334155;font-size:11.5px;}'
             . '.foot{margin-top:20px;color:#94A3B8;font-size:10px;line-height:1.5;border-top:1px solid #E5E7EB;padding-top:10px;}'
             . '</style></head><body>'
             . '<table class="hdr"><tr>'
@@ -211,17 +214,34 @@ class PayController extends Controller
             'pay_rate' => ['nullable', 'numeric', 'min:0', 'max:1000000'],
             'pay_type' => ['nullable', 'in:hourly,per_visit,salary'],
         ]);
-        // Tenant guard: the target must be a member of an agency the caller admins.
-        $caller = $request->user()->id;
-        $isPlatform = DB::table('role_assignments')->where('user_id', $caller)->where('role', 'platform_admin')->where('active', true)->exists();
-        if (! $isPlatform) {
-            $callerAgencies = DB::table('role_assignments')->where('user_id', $caller)
-                ->whereIn('role', ['agency_admin', 'centre_director'])->where('active', true)
-                ->whereNotNull('agency_id')->pluck('agency_id')->all();
-            $targetInAgency = DB::table('role_assignments')->where('user_id', $user)
-                ->whereIn('agency_id', $callerAgencies ?: [0])->where('active', true)->exists();
-            if (! $targetInAgency) return response()->json(['message' => 'Forbidden'], 403);
+        /* The target must be STAFF in the agency you are working in, and for a director, staff
+           at a centre you direct (2026-11-05 leak sweep). This used to accept any active role in
+           any agency where the caller was admin OR director - so a director of one centre could
+           set the pay of every person in the agency, parents included, and a platform admin
+           anybody's anywhere. */
+        $caller = (int) $request->user()->id;
+        $agencyId = (int) $this->resolveAgencyId($request);
+        if ($agencyId <= 0 || ! array_intersect(\App\Support\AgencyRole::names($request), ['platform_admin', 'agency_admin', 'centre_director'])) {
+            return response()->json(['message' => 'Forbidden'], 403);
         }
+        $agencyCentres = \App\Support\AgencyRole::centreIds($agencyId);
+        if (\App\Support\CentreScope::ids($request, $agencyId) === null) {
+            $targetCentres = null;   // agency-wide: anybody on the agency's staff
+        } else {
+            $targetCentres = DB::table('role_assignments')->where('user_id', $caller)->where('active', true)
+                ->where('role', 'centre_director')->whereIn('centre_id', $agencyCentres ?: [0])
+                ->pluck('centre_id')->map(fn ($v) => (int) $v)->all();
+        }
+        $targetIsStaff = DB::table('role_assignments')->where('user_id', $user)->where('active', true)
+            ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
+            ->where(function ($q) use ($agencyId, $agencyCentres, $targetCentres) {
+                if ($targetCentres === null) {
+                    $q->where('agency_id', $agencyId)->orWhereIn('centre_id', $agencyCentres ?: [0]);
+                } else {
+                    $q->whereIn('centre_id', $targetCentres ?: [0]);
+                }
+            })->exists();
+        if (! $targetIsStaff) return response()->json(['message' => 'Forbidden'], 403);
         DB::table('users')->where('id', $user)->update([
             'pay_rate' => $data['pay_rate'] ?? null,
             'pay_type' => $data['pay_type'] ?? null,
@@ -233,14 +253,15 @@ class PayController extends Controller
     /** Can this caller manage agency-wide payslip settings? platform_admin, or an
      *  agency_admin / centre_director of their own agency. Returns the agency id
      *  they manage (0 if not allowed / none). */
-    private function payAdminAgency(int $userId): int
+    private function payAdminAgency(Request $request): int
     {
-        $isPlatform = DB::table('role_assignments')->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists();
-        $agencyId = $this->agencyIdFor($userId);
-        if ($isPlatform) return $agencyId;
-        $ok = DB::table('role_assignments')->where('user_id', $userId)
-            ->whereIn('role', ['agency_admin', 'centre_director'])->where('active', true)
-            ->whereNotNull('agency_id')->exists();
+        /* The ACTIVE agency, and an admin/director role IN it (2026-11-05 leak sweep). This took
+           the caller's first role row's agency and an admin/director role anywhere, so somebody
+           who is admin in agency A and an educator in B could rewrite B's payslip wording, and a
+           platform admin always landed on their own first agency instead of the one selected. */
+        $agencyId = (int) $this->resolveAgencyId($request);
+        if ($agencyId <= 0) return 0;
+        $ok = array_intersect(\App\Support\AgencyRole::names($request), ['platform_admin', 'agency_admin', 'centre_director']);
         return $ok ? $agencyId : 0;
     }
 
@@ -249,8 +270,7 @@ class PayController extends Controller
     /** GET /api/v1/agency/payslip-settings — the configurable payslip wording (admin/director). */
     public function payslipSettings(Request $request): JsonResponse
     {
-        $uid = (int) $request->user()->id;
-        $agencyId = $this->payAdminAgency($uid);
+        $agencyId = $this->payAdminAgency($request);
         if (! $agencyId) return response()->json(['message' => 'Forbidden'], 403);
         $agency = DB::table('agencies')->where('id', $agencyId)->first();
         $settings = ($agency && $agency->settings) ? (json_decode($agency->settings, true) ?: []) : [];
@@ -264,8 +284,7 @@ class PayController extends Controller
     /** POST /api/v1/agency/payslip-settings — save the note + confidential wording (admin/director). */
     public function savePayslipSettings(Request $request): JsonResponse
     {
-        $uid = (int) $request->user()->id;
-        $agencyId = $this->payAdminAgency($uid);
+        $agencyId = $this->payAdminAgency($request);
         if (! $agencyId) return response()->json(['message' => 'Forbidden'], 403);
         $data = $request->validate([
             'note' => ['nullable', 'string', 'max:2000'],

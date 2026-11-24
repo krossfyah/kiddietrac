@@ -34,6 +34,7 @@ class ParentDailySummaryCommand extends Command
         {--child= : Only this child id}
         {--date= : YYYY-MM-DD in the agency timezone (default: today)}
         {--to= : Send to this address instead of the guardians (for testing)}
+        {--due : Scheduled mode: send each one only when due (App\Support\SummaryTiming), once a day}
         {--dry-run : Build it, print what would happen, send nothing}';
 
     protected $description = "Email each parent an end-of-day summary of their child's day";
@@ -43,6 +44,7 @@ class ParentDailySummaryCommand extends Command
         $onlyChild = $this->option('child') ? (int) $this->option('child') : null;
         $override = $this->option('to');
         $dry = (bool) $this->option('dry-run');
+        $due = (bool) $this->option('due');
 
         $children = DB::table('children as c')
             ->join('families as f', 'f.id', '=', 'c.family_id')
@@ -58,6 +60,8 @@ class ParentDailySummaryCommand extends Command
                 /* Needed by refer(): without them every child falls to they/them no
                    matter what the record says. */
                 'c.pronouns', 'c.gender',
+                // The "Good to know" schedule panel (remindersBlock) shows the usual times.
+                'c.expected_dropoff_time', 'c.expected_pickup_time',
                 'ce.id as centre_id', 'ce.name as centre_name',
                 'a.id as agency_id', 'a.name as agency_name', 'a.timezone as agency_tz',
             ])
@@ -74,6 +78,9 @@ class ParentDailySummaryCommand extends Command
             if (\App\Support\Suppression::isAgency((int) $child->agency_id)) {
                 continue;
             }
+            if (\App\Support\TestAgency::isAgency((int) $child->agency_id)) {
+                continue;   // test agency: no AI summary, nothing sent (2026-11-24)
+            }
             if (! \App\Support\Suppression::summariesEnabled((int) $child->agency_id)) {
                 continue;   // the agency's Summaries switch is off
             }
@@ -82,6 +89,15 @@ class ParentDailySummaryCommand extends Command
             $date = $this->option('date')
                 ? Carbon::parse((string) $this->option('date'), $tz)
                 : Carbon::now($tz);
+
+            /* SCHEDULED MODE (2026-10-29, App\Support\SummaryTiming): an hour (the agency's
+               setting) after the child's last check-out, or the agency's fallback time if nobody
+               checked them out - and claimed first, so it can only ever go once a day. */
+            if ($due) {
+                if (\App\Support\SummaryTiming::sent('parent', (int) $child->id, $date->toDateString())) continue;
+                if (! \App\Support\SummaryTiming::parentDue((int) $child->id, (int) $child->agency_id, $tz, $date)) continue;
+                if (! $dry && ! $override && ! \App\Support\SummaryTiming::claim('parent', (int) $child->id, $date->toDateString(), 'due')) continue;
+            }
 
             // Only email on the provider's OPERATING days — Mon–Fri by default (or the
             // centre's configured schedule), evaluated in the AGENCY's timezone. A
@@ -138,6 +154,12 @@ class ParentDailySummaryCommand extends Command
                 continue;
             }
 
+            // A hand-run (not --due, not a test address) takes the same one-a-day slot.
+            if (! $due && ! $override && ! $dry
+                && ! \App\Support\SummaryTiming::claim('parent', (int) $child->id, $date->toDateString(), 'run')) {
+                $this->line("· {$child->first_name}: already sent today, skipping");
+                continue;
+            }
             foreach ($recipients as $g) {
                 if ($dry) {
                     $this->info("[dry-run] would send \"{$subject}\" to {$g->email} ("
@@ -204,10 +226,15 @@ class ParentDailySummaryCommand extends Command
             ->orderBy('e.occurred_at')
             ->get([
                 'e.event_type', 'e.occurred_at', 'e.notes',
-                DB::raw("NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))),'') as by_name"),
+                DB::raw("NULLIF(TRIM(COALESCE(u.first_name,'')),'') as by_name"),   // staff: first name only in email
             ]);
-        $checkIn = $events->firstWhere('event_type', 'check_in');
-        $checkOut = $events->last(fn ($e) => $e->event_type === 'check_out');
+        /* VISITS, not first-in / last-out (2026-11-05). A child signed out at 10 and
+           back at 1 had one long day drawn over the gap, and a child who came back
+           after an earlier sign-out read as gone home. $checkOut is the FINAL
+           sign-out only: null while the child is back in. */
+        $visits = \App\Support\ChildVisits::pair($events);
+        $checkIn = \App\Support\ChildVisits::firstIn($visits);
+        $checkOut = \App\Support\ChildVisits::finalOut($visits);
 
         // Care logs — BOTH tables (the roster quick-log writes daily_events, the
         // "log a moment" screen writes daily_care_logs).
@@ -268,13 +295,17 @@ class ParentDailySummaryCommand extends Command
         $photos = DB::table('photos')
             ->where('centre_id', $child->centre_id)
             ->whereBetween('created_at', [$start, $end])
+            ->whereNull('hidden_at')
             ->orderBy('created_at')
-            ->get(['url', 'thumbnail_url', 'media_type', 'caption', 'taken_at', 'created_at', 'child_ids'])
+            ->get(['url', 'thumbnail_url', 'media_type', 'caption', 'taken_at', 'created_at', 'child_ids', 'hidden_at'])
             ->filter(function ($p) use ($child) {
                 $ids = json_decode((string) $p->child_ids, true);
                 return is_array($ids) && in_array((int) $child->id, array_map('intval', $ids), true);
             })
             ->values();
+        // PHOTO CONSENT (2026-11-06): only what this family may see (App\Support\MediaConsent).
+        $photos = \App\Support\MediaConsent::filter($photos, \App\Support\MediaConsent::familyChildren(
+            [(int) DB::table('children')->where('id', $child->id)->value('family_id')]));
 
         // The day's messages on this child's conversation.
         $messages = DB::table('messages as m')
@@ -286,7 +317,7 @@ class ParentDailySummaryCommand extends Command
             ->orderBy('m.created_at')
             ->get([
                 'm.body', 'm.created_at', 'm.is_system',
-                DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name,' ',u.last_name)),''),'Centre') as sender"),
+                DB::raw("COALESCE(NULLIF(TRIM(u.first_name),''),'Centre') as sender"),   // first name only in email
             ]);
 
         // Announcements sent to this child's centre (or agency) today.
@@ -308,7 +339,7 @@ class ParentDailySummaryCommand extends Command
             ->orderBy('aw.created_at')
             ->get([
                 'aw.title', 'aw.badge', 'aw.period', 'aw.note', 'aw.created_at',
-                DB::raw("NULLIF(TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))),'') as by_name"),
+                DB::raw("NULLIF(TRIM(COALESCE(u.first_name,'')),'') as by_name"),   // staff: first name only in email
             ]);
 
         // A late pickup logged today (if any) — shown gently, with the fee if charged.
@@ -325,7 +356,9 @@ class ParentDailySummaryCommand extends Command
         $digest = null;
         try {
             $anthropic = app(\App\Services\AnthropicService::class);
-            if ($anthropic->isConfigured()) {
+            // The AI note is an AI Bundle feature (2026-10-28); without it the email goes as it always did when the AI was unavailable.
+            if ($anthropic->isConfigured() && \App\Support\AiBundle::on((int) $child->agency_id)) {
+                \App\Support\AiFresh::as('parent_summary', (int) $child->agency_id);   // console: name the agency for AiFresh
                 $digest = $anthropic->generateParentSummary([
                     'child_name' => $child->preferred_name ?: $child->first_name,
                     'facts' => [
@@ -338,6 +371,11 @@ class ParentDailySummaryCommand extends Command
                             ? Carbon::parse($checkOut->occurred_at)->timezone($tz)->format('g:i A')
                               . \App\Support\SystemAction::label($checkOut->notes ?? null)
                             : null,
+                        // Every visit when there was more than one, so the note never reads as one unbroken day.
+                        'visits' => count($visits) > 1 ? array_map(fn ($v) => [
+                            'in' => $v['in'] ? Carbon::parse($v['in']->occurred_at)->timezone($tz)->format('g:i A') : null,
+                            'out' => $v['out'] ? Carbon::parse($v['out']->occurred_at)->timezone($tz)->format('g:i A') : null,
+                        ], $visits) : null,
                         'care_logs' => $logs->map(fn ($l) => [
                             'what' => $l->type,
                             'detail' => $l->detail,
@@ -371,7 +409,7 @@ class ParentDailySummaryCommand extends Command
         // better, but it costs money and it can be down — and a parent should never
         // get an email with an empty space where their child's day should be.
         if (!$digest) {
-            $digest = $this->writeSummary($child, $checkIn, $checkOut, $logs, $photos, $messages, $tz);
+            $digest = $this->writeSummary($child, $checkIn, $checkOut, $logs, $photos, $messages, $tz, $visits);
         }
 
         // Walks the child was taken on today, with the route map if there is one.
@@ -382,19 +420,74 @@ class ParentDailySummaryCommand extends Command
             ->whereBetween('occurred_at', [$start, $end])
             ->orderBy('occurred_at')
             ->get(['payload', 'notes', 'occurred_at'])
-            ->map(function ($w) {
+            ->map(function ($w) use ($child) {
                 $p = json_decode((string) $w->payload, true) ?: [];
-                $p['map_url'] = ! empty($p['trip_id']) ? \App\Support\WalkMap::urlFor((int) $p['trip_id']) : null;
+                $tripId = (int) ($p['trip_id'] ?? 0);
+                $p['map_url'] = $tripId ? \App\Support\WalkMap::urlFor($tripId) : null;
+
+                /* WHO WENT, AND THE WEATHER (2026-11-02, Anthony: "walk watch section with the children ... on the
+                   outing ... their real display pic ... educators real display pic as well. Add some details about
+                   the weather"). Other children are a COUNT only - never another family's name or face (Anthony's
+                   choice, same rule as group photos, PhotoFeedController 2026-10-20). Educators: the walk's lead plus
+                   everyone whose phone sent Walk Watch points on it. */
+                $p['friends'] = 0;
+                $p['educators'] = [];
+                $p['weather'] = null;
+                if ($tripId) {
+                    try {
+                        $p['friends'] = (int) DB::table('daily_events')
+                            ->where('event_type', 'walk')->whereNull('deleted_at')
+                            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(payload, '$.trip_id')) = ?", [(string) $tripId])
+                            ->where('child_id', '!=', (int) $child->id)
+                            ->distinct()->count('child_id');
+                        $trip = DB::table('field_trips')->where('id', $tripId)->first(['staff_lead_id', 'agency_id']);
+                        if ($trip && (int) $trip->agency_id === (int) $child->agency_id) {
+                            $ids = DB::table('field_trip_pings')->where('field_trip_id', $tripId)->distinct()->pluck('user_id')
+                                ->prepend($trip->staff_lead_id)->filter()->map(fn ($v) => (int) $v)->unique()->values();
+                            $p['educators'] = $ids->isEmpty() ? [] : DB::table('users')->whereIn('id', $ids)->whereNull('deleted_at')
+                                ->get(['id', 'first_name', 'preferred_name', 'photo_url'])
+                                ->sortBy(fn ($u) => $ids->search((int) $u->id))->values()->all();
+                        }
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('Daily summary: walk people failed', ['trip' => $tripId, 'error' => $e->getMessage()]);
+                    }
+                    $p['weather'] = \App\Support\WalkWeather::forTrip($tripId);
+                }
 
                 return $p;
             })
             ->values();
 
+        /* WHAT WAS ON THE MENU TODAY, with the food photos (2026-11-02, Anthony: the menu photos "also needs to show in
+           the parent summary email as well"). Only a PUBLISHED week - a draft is staff-only - for this child's own
+           centre, and only the agency-local day this email is about. */
+        $menu = []; $menuNotes = null;
+        try {
+            $mw = DB::table('menu_weeks')->where('centre_id', $child->centre_id)
+                ->whereDate('week_start', $date->copy()->startOfWeek(Carbon::MONDAY)->toDateString())
+                ->where('status', 'published')->orderByDesc('id')->first();
+            if ($mw) {
+                $menu = DB::table('menu_items')->where('menu_week_id', $mw->id)
+                    ->where('day_of_week', (int) $date->isoWeekday())
+                    ->orderByRaw("FIELD(meal_type,'breakfast','morning_snack','lunch','afternoon_snack','dinner')")
+                    ->get(['meal_type', 'name', 'description', 'allergens', 'image_url', 'image_source']);
+                \App\Support\FoodPhotos::forDisplay($menu, (int) $child->agency_id);
+                $menu = $menu->all();
+                // The week's notes from the menu (2026-11-04: staff notes never reached families).
+                $menuNotes = trim((string) ($mw->notes ?? '')) ?: null;
+            }
+        } catch (\Throwable $e) {
+            $menu = [];   // a menu problem must never cost a family their summary
+        }
+
         return [
             'date' => $date,
+            'menu' => $menu,
+            'menu_notes' => $menuNotes,
             'walks' => $walks,
             'check_in' => $checkIn,
             'check_out' => $checkOut,
+            'visits' => $visits,
             'logs' => $logs,
             'photos' => $photos,
             'messages' => $messages,
@@ -448,7 +541,7 @@ class ParentDailySummaryCommand extends Command
         return ['they', 'them', 'their'];
     }
 
-    private function writeSummary($child, $checkIn, $checkOut, $logs, $photos, $messages, string $tz): string
+    private function writeSummary($child, $checkIn, $checkOut, $logs, $photos, $messages, string $tz, array $visits = []): string
     {
         $name = $child->preferred_name ?: $child->first_name;
         [$sub, $obj, $pos] = $this->refer($child);
@@ -475,7 +568,22 @@ class ParentDailySummaryCommand extends Command
 
         // ── Opening: how the day ran ──
         $para1 = [];
-        if ($checkIn) {
+        if ($checkIn && count($visits) > 1) {
+            /* More than one visit: say each one in order, so a parent reads "left at
+               10:15 AM and came back at 1:05 PM" instead of one unbroken day. */
+            $bits = [];
+            foreach ($visits as $i => $v) {
+                if ($v['in']) $bits[] = ($i === 0 ? 'arrived at ' : 'came back at ') . $t($v['in']->occurred_at);
+                if ($v['out'] && $i < count($visits) - 1) $bits[] = 'left at ' . $t($v['out']->occurred_at);
+            }
+            $last = end($visits);
+            $para1[] = "{$name} " . $this->list($bits)
+                . ($last['out']
+                    ? (\App\Support\SystemAction::isAuto($last['out']->notes ?? null)
+                        ? ', and the day was closed automatically at ' . $t($last['out']->occurred_at) . ' because no sign-out was recorded.'
+                        : ', and went home at ' . $t($last['out']->occurred_at) . '.')
+                    : ', and is still with us.');
+        } elseif ($checkIn) {
             $para1[] = "{$name} arrived at " . $t($checkIn->occurred_at)
                 . ($checkOut
                     ? (\App\Support\SystemAction::isAuto($checkOut->notes ?? null)
@@ -680,7 +788,7 @@ class ParentDailySummaryCommand extends Command
         if (!empty($day['closed_today'])) {
             $reason = !empty($day['closure_reason']) ? (' — ' . e($day['closure_reason'])) : '';
             $body = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>'
-                . '<td style="background:#FEF3C7;border:1px solid #FCD34D;border-left:5px solid #F59E0B;border-radius:12px;padding:14px 16px;">'
+                . '<td style="background:#FEF3C7;border:1px solid #FCD34D;--kt-edge:#F59E0B;border-radius:12px;padding:14px 16px;">'
                 . '<div style="font-size:14.5px;font-weight:800;color:#92400E;">🚪 ' . e($child->centre_name) . ' was closed today' . $reason . '</div>'
                 . '<div style="font-size:13px;color:#92400E;margin-top:3px;line-height:1.5;">There were no activities to report. Your normal daily update resumes on the next open day.</div>'
                 . '</td></tr></table>' . $body;
@@ -713,7 +821,7 @@ class ParentDailySummaryCommand extends Command
             // family gave and the line telling them how to correct a mistake, so
             // that is all that is left.
             $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>'
-                . '<td style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:5px solid #94A3B8;border-radius:12px;padding:14px 16px;">'
+                . '<td style="background:#F8FAFC;border:1px solid #E2E8F0;--kt-edge:#94A3B8;border-radius:12px;padding:14px 16px;">'
                 . ($why !== ''
                     ? '<div style="font-size:14.5px;font-weight:800;color:#334155;">' . ucfirst(ltrim($why, ' —')) . '.</div>'
                       . '<div style="font-size:13px;color:#475569;margin-top:3px;line-height:1.5;">'
@@ -737,11 +845,31 @@ class ParentDailySummaryCommand extends Command
                 EmailTemplate::statTile('Signed out', $out, $outBy ? 'by ' . $outBy : '', '#1F6080')
             );
 
+            // Signed in and out more than once: list every visit under the tiles, so the
+            // time away in the middle of the day is on the record the parent reads.
+            $visits = $day['visits'] ?? [];
+            if (count($visits) > 1) {
+                $rows = '';
+                foreach ($visits as $i => $v) {
+                    $vin = $v['in'] ? $t($v['in']->occurred_at) . (($v['in']->by_name ?? null) ? ' <span style="color:#64748B;">by ' . e($v['in']->by_name) . '</span>' : '') : '—';
+                    $vout = $v['out']
+                        ? $t($v['out']->occurred_at) . e(\App\Support\SystemAction::label($v['out']->notes ?? null)) . (($v['out']->by_name ?? null) ? ' <span style="color:#64748B;">by ' . e($v['out']->by_name) . '</span>' : '')
+                        : 'Still at the centre';
+                    $rows .= '<tr><td style="padding:6px 0;border-top:' . ($i ? '1px solid #E2E8F0' : '0') . ';font-size:13px;font-weight:800;color:#334155;white-space:nowrap;vertical-align:top;">Visit ' . ($i + 1) . '</td>'
+                        . '<td style="padding:6px 0 6px 12px;border-top:' . ($i ? '1px solid #E2E8F0' : '0') . ';font-size:13px;color:#334155;line-height:1.5;">In ' . $vin . '<br>Out ' . $vout . '</td></tr>';
+                }
+                $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;border:1px solid #E2E8F0;--kt-edge:#94A3B8;border-radius:12px;margin:4px 0 16px;">'
+                    . '<tr><td style="padding:12px 16px;">'
+                    . '<div style="font-size:12px;font-weight:800;letter-spacing:.6px;color:#475569;margin-bottom:4px;">SIGNED IN ' . count($visits) . ' TIMES TODAY</div>'
+                    . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' . $rows . '</table>'
+                    . '</td></tr></table>';
+            }
+
             // "Still at the centre" on an evening email is not a status, it is a missed
             // sign-out — and a parent reading it at home knows that better than anyone.
             // Saying so, and saying who fixes it, turns a confusing line into an action.
             if ($day['check_in'] && ! $day['check_out']) {
-                $body .= '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-left:4px solid #F59E0B;'
+                $body .= '<div style="background:#FEF3C7;border:1px solid #FDE68A;--kt-edge:#F59E0B;'
                     . 'border-radius:0 12px 12px 0;padding:13px 15px;margin:4px 0 16px;">'
                     . '<div style="font-size:14px;font-weight:800;color:#92400E;">No sign-out was recorded today</div>'
                     . '<div style="font-size:13px;color:#78350F;line-height:1.55;margin-top:3px;">'
@@ -771,7 +899,7 @@ class ParentDailySummaryCommand extends Command
         // no events still produces confident prose, and prose about a child who was
         // at home is worse than sending nothing.
         if ($attended && !empty($day['digest'])) {
-            $body .= '<div style="background:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border-radius:14px;padding:18px;margin:18px 0;">'
+            $body .= '<div style="background-color:#1F6080;background-image:linear-gradient(135deg,#1F6080,#2c7894);color:#fff;border-radius:14px;padding:18px;margin:18px 0;">'
                 . '<div style="font-size:11px;font-weight:800;letter-spacing:1.2px;color:#a3d977;margin-bottom:7px;">✨ TODAY\'S STORY</div>'
                 . '<div style="font-size:14.5px;line-height:1.6;">' . nl2br(e($day['digest'])) . '</div>'
                 . '</div>';
@@ -780,7 +908,7 @@ class ParentDailySummaryCommand extends Command
         // Where they went. A walk is the part of the day a parent most wants to picture,
         // so it gets the map rather than a line of text in among the nappy changes.
         if (! empty($day['walks']) && count($day['walks'])) {
-            $body .= $this->section('🚶 ' . $name . ' went out today');
+            $body .= $this->section('🚶 ' . $name . ' went out today · Walk Watch');
             foreach ($day['walks'] as $w) {
                 $where = trim((string) ($w['destination'] ?? '')) ?: 'A walk';
                 $when = trim((string) ($w['started_at'] ?? '') . ' – ' . (string) ($w['ended_at'] ?? ''), ' –');
@@ -789,9 +917,34 @@ class ParentDailySummaryCommand extends Command
                 if (! empty($w['minutes'])) { $bits[] = (int) $w['minutes'] . ' min'; }
                 if (! empty($w['distance_km'])) { $bits[] = rtrim(rtrim(number_format((float) $w['distance_km'], 2), '0'), '.') . ' km'; }
 
-                $body .= '<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:13px 15px;margin-bottom:10px;">'
+                $body .= '<div class="kt-panel" style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:13px 15px;margin-bottom:10px;">'
                     . '<div style="font-size:15px;font-weight:800;color:#0C4A6E;">' . e($where) . '</div>'
                     . ($bits ? '<div style="font-size:13px;color:#0369A1;margin-top:3px;">' . e(implode(' · ', $bits)) . '</div>' : '');
+
+                // The weather where they walked (WalkWeather: Open-Meteo at the walk's first GPS point).
+                if (! empty($w['weather'])) {
+                    $body .= '<div class="kt-panel" style="font-size:13.5px;color:#0C4A6E;margin-top:8px;padding:7px 10px;background:#FFFFFF;'
+                        . 'border:1px solid #E0F2FE;border-radius:9px;">' . e(\App\Support\WalkWeather::line($w['weather'])) . '</div>';
+                }
+
+                // Who went: their own child (real photo when there is one) + a count of friends, then the educators.
+                $friends = (int) ($w['friends'] ?? 0);
+                $body .= '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:10px;border-collapse:collapse;"><tr>'
+                    . '<td style="padding-right:10px;vertical-align:middle;">' . $this->avatarChip($name, $child->photo_url ?? null, 40) . '</td>'
+                    . '<td style="vertical-align:middle;font-size:14px;color:#0C4A6E;"><b>' . $name . '</b>'
+                    . ($friends > 0 ? ' + ' . $friends . ' ' . ($friends === 1 ? 'friend' : 'friends') : '') . '</td></tr></table>';
+                if (! empty($w['educators'])) {
+                    $body .= '<div style="font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#0369A1;margin:10px 0 4px;">With</div>'
+                        . '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>';
+                    foreach ($w['educators'] as $ed) {
+                        $edName = trim((string) (($ed->preferred_name ?? '') ?: $ed->first_name));
+                        $body .= '<td style="padding:0 14px 0 0;vertical-align:middle;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>'
+                            . '<td style="padding-right:7px;vertical-align:middle;">' . $this->avatarChip($edName, $ed->photo_url ?? null, 32) . '</td>'
+                            . '<td style="vertical-align:middle;font-size:13.5px;color:#0C4A6E;font-weight:700;">' . e($edName) . '</td>'
+                            . '</tr></table></td>';
+                    }
+                    $body .= '</tr></table>';
+                }
 
                 // Raster, absolute URL, and a width — SVG and CID attachments render as
                 // broken images in several mail clients.
@@ -812,7 +965,7 @@ class ParentDailySummaryCommand extends Command
             foreach ($day['awards'] as $a) {
                 $badge = trim((string) ($a->badge ?? '')) ?: '🏆';
                 $period = $a->period ? ucfirst((string) $a->period) . ' award' : 'Award';
-                $body .= '<div style="background:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:1px solid #FDE68A;border-radius:12px;padding:13px 15px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;">'
+                $body .= '<div style="background-color:#FEF7DC;background-image:linear-gradient(135deg,#FFFBEB,#FEF3C7);border:1px solid #FDE68A;border-radius:12px;padding:13px 15px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;">'
                     . '<div style="font-size:30px;line-height:1;">' . e($badge) . '</div>'
                     . '<div>'
                     . '<div style="font-size:11px;font-weight:800;letter-spacing:.6px;color:#B45309;text-transform:uppercase;">' . e($period) . '</div>'
@@ -873,6 +1026,7 @@ class ParentDailySummaryCommand extends Command
             $icons = [
                 'diaper' => '🧷', 'bathroom' => '🚽', 'nap' => '😴', 'meal' => '🍽️',
                 'snack' => '🍎', 'bottle' => '🍼', 'sunscreen' => '☀️', 'mood' => '🙂',
+                'medicine' => '💊', 'clothing' => '👕',
             ];
             $body .= $this->section('📝 Moments and care');
             $body .= '<table role="presentation" style="width:100%;border-collapse:collapse;">';
@@ -890,11 +1044,48 @@ class ParentDailySummaryCommand extends Command
             $body .= '</table>';
         }
 
+        // Today's menu, with the dish photos (2026-11-02). Not on a day the child was away or the centre was shut.
+        if ($attended && empty($day['closed_today']) && ! empty($day['menu'])) {
+            $body .= $this->section('🍽️ On the menu today');
+            $body .= '<table role="presentation" class="kt-panel" width="100%" cellpadding="0" cellspacing="0" '
+                . 'style="width:100%;border-collapse:separate;background:#F8FAFC;border:1px solid #E7EDF3;border-radius:12px;">';
+            $n = count($day['menu']); $i = 0;
+            foreach ($day['menu'] as $mi) {
+                $i++;
+                $line = $i < $n ? 'border-bottom:1px solid #EDF2F7;' : '';
+                $meal = ucwords(str_replace('_', ' ', (string) $mi->meal_type));
+                $img = trim((string) ($mi->image_url ?? ''));
+                if ($img !== '') {
+                    $img = \App\Support\ProtectedMedia::isProtected($img)
+                        ? (string) \App\Support\ProtectedMedia::signForEmail($img)
+                        : $this->abs($img);
+                }
+                // Raster webp/jpg from our own host, absolute, with width/height attributes (Outlook ignores CSS sizes).
+                $pic = $img !== ''
+                    ? '<img src="' . e($img) . '" width="64" height="48" alt="' . e((string) $mi->name) . '"'
+                      . ' style="display:block;width:64px;height:48px;border:0;border-radius:8px;object-fit:cover;background:#E2E8F0;">'
+                    : '<div style="width:64px;height:48px;line-height:48px;text-align:center;font-size:22px;">🍽️</div>';
+                $body .= '<tr>'
+                    . '<td width="64" style="width:64px;padding:9px 0 9px 10px;vertical-align:middle;' . $line . '">' . $pic . '</td>'
+                    . '<td style="padding:9px 12px;vertical-align:middle;' . $line . '">'
+                    . '<div class="kt-muted" style="font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;">' . e($meal) . '</div>'
+                    . '<div class="kt-h" style="font-size:14px;font-weight:700;color:#0F172A;line-height:1.35;margin-top:1px;">' . e((string) $mi->name) . '</div>'
+                    . (! empty($mi->description) ? '<div class="kt-muted" style="font-size:12.5px;color:#475569;line-height:1.45;margin-top:2px;">' . nl2br(e((string) $mi->description)) . '</div>' : '')
+                    . (! empty($mi->allergens) ? '<div style="font-size:12px;color:#92400E;margin-top:2px;">⚠ ' . e((string) $mi->allergens) . '</div>' : '')
+                    . '</td></tr>';
+            }
+            $body .= '</table>';
+            if (! empty($day['menu_notes'])) {
+                $body .= '<div class="kt-panel" style="margin-top:8px;background:#F8FAFC;border:1px solid #E7EDF3;border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;color:#334155;">'
+                    . '<b class="kt-h" style="color:#0F172A;">📝 Notes from the kitchen:</b> ' . nl2br(e((string) $day['menu_notes'])) . '</div>';
+            }
+        }
+
         // Messages
         if (count($day['messages'])) {
             $body .= $this->section('💬 Messages today');
             foreach ($day['messages'] as $m) {
-                $body .= '<div style="background:#F8FAFC;border-left:3px solid #159FB4;border-radius:8px;padding:9px 11px;margin-bottom:7px;">'
+                $body .= '<div style="background:#F8FAFC;--kt-edge:#159FB4;border-radius:8px;padding:9px 11px;margin-bottom:7px;">'
                     . '<div style="font-size:11.5px;color:#64748B;font-weight:700;">' . e($m->sender) . ' · ' . $t($m->created_at) . '</div>'
                     . '<div style="font-size:13.5px;color:#0F172A;line-height:1.45;margin-top:2px;">' . e((string) $m->body) . '</div>'
                     . '</div>';
@@ -920,7 +1111,7 @@ class ParentDailySummaryCommand extends Command
         if ($attended && $eds->count()) {
             $chips = '';
             foreach ($eds->take(4) as $ed) {
-                $edName = trim(((string) $ed->first_name) . ' ' . ((string) $ed->last_name));
+                $edName = trim((string) $ed->first_name) ?: 'Your educator';   // no staff last names in email (2026-10-26 rule)
                 $chips .= '<td style="padding:0 14px 0 0;vertical-align:middle;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>'
                     . '<td style="padding-right:8px;vertical-align:middle;">' . $this->avatarChip($edName, $ed->photo_url ?? null, 34) . '</td>'
                     . '<td style="vertical-align:middle;font-size:13px;font-weight:700;color:#334155;white-space:nowrap;">' . e($edName) . '</td>'
@@ -935,7 +1126,7 @@ class ParentDailySummaryCommand extends Command
         // One idea for tomorrow. Rotates by child and by date, so siblings do not get
         // the same line on the same evening and nobody reads it twice in three weeks.
         $body .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 0;"><tr>'
-            . '<td style="background:#F0F7FF;border:1px solid #D8E8F7;border-left:5px solid #1F6FB2;border-radius:12px;padding:13px 15px;">'
+            . '<td style="background:#F0F7FF;border:1px solid #D8E8F7;--kt-edge:#1F6FB2;border-radius:12px;padding:13px 15px;">'
             . '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1F6FB2;text-transform:uppercase;margin-bottom:4px;">Something to try tomorrow</div>'
             . '<div style="font-size:14px;color:#0F172A;line-height:1.55;">' . $this->tomorrowTip((int) $child->id, $day['date'], $name) . '</div>'
             . '</td></tr></table>';
@@ -974,6 +1165,45 @@ class ParentDailySummaryCommand extends Command
             \Illuminate\Support\Facades\Log::warning('Daily summary: lesson plan block failed', ['error' => $e->getMessage()]);
         }
 
+        try {
+            $body .= $this->remindersBlock($child, $day['date']->copy());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Daily summary: reminders block failed', ['error' => $e->getMessage()]);
+        }
+
+        /* ── The week ahead (2026-11-02, Anthony: "add 5 day forecast in the parent emails and let AI predict if
+           they need to dress their kids appropriately going forward") ── WeatherForecast: the centre's next five
+           days, then the AI Bundle's what-to-wear note (rule-based without it). */
+        try {
+            $fc = \App\Support\WeatherForecast::forCentre((int) ($child->centre_id ?? 0), $day['date']->copy());
+            if ($fc) {
+                $body .= $this->section('🌤️ The next 5 days' . (! empty($fc['area']) ? ' in ' . e($fc['area']) : ''));
+                $body .= '<table role="presentation" class="kt-panel" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:separate;'
+                    . 'background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;"><tr>';
+                foreach ($fc['days'] as $d) {
+                    $rain = $d['rain_pct'] !== null && $d['rain_pct'] >= 20 ? '💧 ' . $d['rain_pct'] . '%' : '&nbsp;';
+                    $body .= '<td align="center" width="20%" style="width:20%;padding:10px 2px;text-align:center;vertical-align:top;">'
+                        . '<div style="font-size:12px;font-weight:800;color:#334155;letter-spacing:.4px;">' . e($d['dow']) . '</div>'
+                        . '<div style="font-size:24px;line-height:1.3;margin:2px 0;" title="' . e($d['summary']) . '">' . $d['emoji'] . '</div>'
+                        . '<div style="font-size:14px;font-weight:800;color:#0F172A;">' . $d['hi'] . '°</div>'
+                        . '<div style="font-size:12px;color:#64748B;">' . $d['lo'] . '°</div>'
+                        . '<div style="font-size:11px;color:#0369A1;margin-top:3px;">' . $rain . '</div></td>';
+                }
+                $body .= '</tr></table>'
+                    . '<div style="font-size:11px;color:#94A3B8;margin:4px 0 0;">Highs and lows in °' . e($fc['unit']) . '.</div>';
+                $note = \App\Support\WeatherForecast::dressNote((int) $child->agency_id, (int) $child->centre_id, $fc);
+                if ($note) {
+                    $body .= $note['ai']
+                        ? \App\Support\AiSummaries::box('WHAT TO WEAR THIS WEEK', $note['text'])
+                        : '<div class="kt-panel" style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:12px;padding:12px 14px;margin:12px 0;">'
+                            . '<div style="font-size:11px;font-weight:800;color:#0369A1;letter-spacing:.6px;margin-bottom:5px;">👕 WHAT TO WEAR THIS WEEK</div>'
+                            . '<div style="font-size:14px;color:#1E293B;line-height:1.55;">' . e($note['text']) . '</div></div>';
+                }
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Daily summary: forecast block failed', ['error' => $e->getMessage()]);
+        }
+
         /* ── "How was their day?" ─────────────────────────────────────────────
            A signed, login-free link to a four-question form. Asking a parent to sign
            in at 7pm on a phone to answer four questions produces almost no responses,
@@ -987,7 +1217,7 @@ class ParentDailySummaryCommand extends Command
                 now()->addDays(\App\Http\Controllers\Api\ParentFeedbackController::LINK_DAYS),
                 ['child' => (int) $child->id, 'd' => $day['date']->toDateString()]
             );
-            $body .= '<div style="background:#F0FDFA;border:1px solid #99F6E4;border-radius:14px;'
+            $body .= '<div class="kt-panel" style="background:#F0FDFA;border:1px solid #99F6E4;border-radius:14px;'
                 . 'padding:16px 18px;margin:18px 0;text-align:center;">'
                 . '<div style="font-size:15px;font-weight:800;color:#0F766E;margin-bottom:4px;">'
                 . 'How was ' . $name . '\'s day?</div>'
@@ -1005,6 +1235,9 @@ class ParentDailySummaryCommand extends Command
 
         // A warm daily inspirational quote (same for everyone that day, rotates daily).
         $body .= EmailTemplate::dailyQuote((int) $day['date']->format('Ymd'));
+
+        // Get the app: the Google Play card (KiddieTrac-branded agencies only, PlayBadge::forAgency).
+        $body .= \App\Support\PlayBadge::forAgency((int) $child->agency_id);
 
         $body .= '<p style="margin:22px 0 0;font-size:12px;color:#94A3B8;line-height:1.5;">'
             // $tz here held a DATE, so the footer read "All times are 2026-08-13
@@ -1038,9 +1271,17 @@ class ParentDailySummaryCommand extends Command
         $initial = $name !== '' ? mb_strtoupper(mb_substr($name, 0, 1)) : '?';
 
         $url = trim((string) $photoUrl);
+        /* NO PHOTO -> THE APP'S AVATAR (2026-11-02, Anthony: "child or educator with no pic default back to the avatar
+           in the emails"). The app's avatar is a DiceBear cartoon served as SVG, which mail clients will not show;
+           DiceBear serves the same seed and options as PNG, so ask for that. No avatar at all -> initials below,
+           exactly what the app shows. */
+        if (preg_match('~^https://api\.dicebear\.com/(\d+\.x)/([a-z0-9-]+)/svg(\?.*)?$~i', $url, $dm)) {
+            $q = ltrim((string) ($dm[3] ?? ''), '?');
+            $url = 'https://api.dicebear.com/' . $dm[1] . '/' . $dm[2] . '/png?' . ($q !== '' ? $q . '&' : '') . 'size=' . min(256, $size * 2);
+        }
         $isRaster = $url !== ''
             && ! str_contains(strtolower($url), 'svg')
-            && (bool) preg_match('~(\.(png|jpe?g|webp|gif)($|\?)|pravatar|gravatar)~i', $url);
+            && (bool) preg_match('~(\.(png|jpe?g|webp|gif)($|\?)|pravatar|gravatar|api\.dicebear\.com/[^/]+/[^/]+/png)~i', $url);
 
         if ($isRaster) {
             /* A protected upload is refused without a signature now. Signed for 30
@@ -1100,6 +1341,131 @@ class ParentDailySummaryCommand extends Command
         ];
         $i = ($childId + (int) $date->format('z')) % count($tips);
         return str_replace('{n}', e($name), $tips[$i]);
+    }
+
+    /**
+     * COMING UP + GOOD TO KNOW (2026-11-02, Anthony: "add reminders to parents emails about upcoming holidays,
+     * closures, children absences due to vacation or time off and reminders of their childrens schedules a note to
+     * contact their agency to adjust if required ... add a blurb about the safe arrival feature on how it works if
+     * children are clock in late or no show and or missing ... as a reminder to parents to log any absences, sick days
+     * etc through the parent app").
+     *
+     *   Coming up     - every summary, when there is something in the next 14 days: closures and holidays at the
+     *                   child's centre (Closures::map, same rule as everywhere else) and the absences already reported
+     *                   for THIS child (child_absences). Nothing about any other family.
+     *   Good to know  - once a week, on Fridays (so it lands as the family plans the week ahead; every day would be
+     *                   noise): the child's booked days (CareSchedule::week) and usual times, "contact us to change
+     *                   it", how Safe Arrival works (only when the agency has it on, worded from its own settings),
+     *                   and the reminder to report absences in the app.
+     */
+    private function remindersBlock($child, Carbon $date): string
+    {
+        $agencyId = (int) $child->agency_id;
+        $centreId = (int) ($child->centre_id ?? 0);
+        $name = e($child->preferred_name ?: $child->first_name);
+        $agencyName = e((string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'your centre'));
+        $appName = e(\App\Support\Brand::name($agencyId));
+        $out = '';
+
+        // ── Coming up: the next 14 days, from tomorrow.
+        $from = $date->copy()->addDay()->toDateString();
+        $to = $date->copy()->addDays(14)->toDateString();
+        $items = [];
+        $seen = [];
+        foreach ((\App\Support\Closures::map([$centreId], $from, $to)[$centreId] ?? []) as $d => $row) {
+            if (isset($seen['c' . $row->id])) continue;   // a multi-day closure is one line
+            $seen['c' . $row->id] = true;
+            $isHoliday = stripos((string) $row->closure_type, 'holiday') !== false;
+            $items[] = [$d, $isHoliday ? '🎉' : '🏫', ($isHoliday ? 'Holiday' : 'Centre closed') . ' · ' . \App\Support\Closures::dateLabel($row),
+                e(\App\Support\Closures::reason($row)) . ' — ' . $agencyName . ' is closed, so there is no care that day.'];
+        }
+        $why = ['sick' => ['🤒', 'Away sick'], 'appointment' => ['🩺', 'Appointment'], 'holiday' => ['🧳', 'Vacation'],
+            'family' => ['🏡', 'Family time'], 'other' => ['📝', 'Away']];
+        foreach (DB::table('child_absences')->where('child_id', (int) $child->id)->whereBetween('absent_on', [$from, $to])
+            ->orderBy('absent_on')->get(['absent_on', 'reason', 'note']) as $a) {
+            [$ic, $label] = $why[$a->reason] ?? $why['other'];
+            $items[] = [(string) $a->absent_on, $ic, $label . ' · ' . Carbon::parse($a->absent_on)->format('D j M'),
+                $name . ' is marked away' . ($a->note ? ' (' . e(mb_substr((string) $a->note, 0, 80)) . ')' : '') . '. We will not expect them that day.'];
+        }
+        if ($items) {
+            usort($items, fn ($x, $y) => strcmp($x[0], $y[0]));
+            $out .= $this->section('📅 Coming up');
+            $out .= '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:4px 14px;">';
+            foreach (array_slice($items, 0, 8) as $i => $it) {
+                // The line sits on the cells, so the dark-mode .kt-panel td rule recolours it.
+                $line = $i ? 'border-top:1px solid #E2E8F0;' : '';
+                $out .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>'
+                    . '<td width="34" style="width:34px;padding:10px 0;vertical-align:top;font-size:20px;line-height:1.2;' . $line . '">' . $it[1] . '</td>'
+                    . '<td style="padding:10px 0;vertical-align:top;' . $line . '">'
+                    . '<div style="font-size:14px;font-weight:800;color:#0F172A;">' . e($it[2]) . '</div>'
+                    . '<div style="font-size:13px;color:#475569;line-height:1.5;margin-top:2px;">' . $it[3] . '</div></td></tr></table>';
+            }
+            $out .= '</div>';
+        }
+
+        // ── Good to know: once a week, on Fridays.
+        if ((int) $date->isoWeekday() !== 5) return $out;
+
+        $out .= $this->section('💛 Good to know this week');
+
+        // Their schedule.
+        $week = \App\Support\CareSchedule::week((int) $child->id);
+        $labels = ['mon' => 'Mon', 'tue' => 'Tue', 'wed' => 'Wed', 'thu' => 'Thu', 'fri' => 'Fri', 'sat' => 'Sat', 'sun' => 'Sun'];
+        $cells = '';
+        foreach ($labels as $k => $lab) {
+            $on = ! empty($week[$k]);
+            if (! $on && in_array($k, ['sat', 'sun'], true)) continue;   // weekends only when booked
+            $cells .= '<td align="center" style="padding:3px;">'
+                . '<div style="width:44px;padding:7px 0;border-radius:10px;font-size:12.5px;font-weight:800;text-align:center;'
+                . ($on ? 'background:#0E7C90;color:#FFFFFF;' : 'background:#E2E8F0;color:#64748B;') . '">' . $lab . '</div></td>';
+        }
+        $t = fn ($v) => $v ? Carbon::parse((string) $v)->format('g:i A') : null;
+        $drop = $t($child->expected_dropoff_time ?? null);
+        $pick = $t($child->expected_pickup_time ?? null);
+        $times = $drop && $pick ? 'Usual times: drop-off ' . $drop . ', pick-up ' . $pick . '.'
+            : ($drop ? 'Usual drop-off: ' . $drop . '.' : ($pick ? 'Usual pick-up: ' . $pick . '.' : ''));
+        $out .= '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:13px 15px;margin-bottom:10px;">'
+            . '<div style="font-size:14px;font-weight:800;color:#0F172A;margin-bottom:6px;">🗓️ ' . $name . '\'s days with us</div>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>' . $cells . '</tr></table>'
+            . ($times ? '<div style="font-size:13px;color:#475569;margin-top:8px;">' . e($times) . '</div>' : '')
+            . '<div style="font-size:13px;color:#475569;line-height:1.55;margin-top:6px;">Need different days or times? '
+            . 'Just reach out to ' . $agencyName . ' and we will happily adjust ' . $name . '\'s schedule for you.</div></div>';
+
+        // Safe Arrival, worded from the agency's own settings - only when it is switched on.
+        if (\App\Support\SafeArrival::enabled($agencyId)) {
+            $s = \App\Support\SafeArrival::settings($agencyId);
+            $grace = (int) ($s['grace_minutes'] ?? 15);
+            $steps = ['If ' . $name . ' has not been signed in ' . $grace . ' minutes after ' . ($drop ? 'their usual drop-off time (' . $drop . ')' : 'their usual drop-off time')
+                . ', and we have not heard from you, we send you a quick message to check that everything is okay.'];
+            if (! empty($s['call_parents'])) {
+                $steps[] = 'If we do not hear back within ' . (int) ($s['call_after_minutes'] ?? 10) . ' minutes, we give you a call. '
+                    . 'Press 1 if ' . $name . ' is staying home, 2 if you are on the way, or 3 if you have already dropped them off.';
+            }
+            $steps[] = 'If we still cannot reach anyone, ' . $name . '\'s educators and the centre director are alerted straight away so they can follow up personally.';
+            if (! empty($s['departure_enabled'])) {
+                $steps[] = 'At the end of the day it works the same way: if ' . $name . ' has not been signed out a little after their usual pick-up time, we check in with you.';
+            }
+            $li = '';
+            foreach ($steps as $n => $st) {
+                $li .= '<tr><td width="26" style="width:26px;vertical-align:top;padding:4px 0;">'
+                    . '<div style="width:20px;height:20px;border-radius:20px;background:#0E7C90;color:#FFFFFF;font-size:11.5px;font-weight:800;line-height:20px;text-align:center;">' . ($n + 1) . '</div></td>'
+                    . '<td style="vertical-align:top;padding:4px 0;font-size:13.5px;color:#334155;line-height:1.55;">' . $st . '</td></tr>';
+            }
+            $out .= '<div class="kt-panel" style="background:#F0FDFA;border:1px solid #99F6E4;border-radius:12px;padding:13px 15px;margin-bottom:10px;">'
+                . '<div style="font-size:14px;font-weight:800;color:#0F766E;">🛡️ How Safe Arrival looks out for ' . $name . '</div>'
+                . '<div style="font-size:13.5px;color:#334155;line-height:1.55;margin:4px 0 6px;">Every day ' . $name . ' is booked in, we keep an eye out for their arrival. '
+                . 'If they are running late or do not arrive, here is what happens:</div>'
+                . '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">' . $li . '</table></div>';
+        }
+
+        // Tell us ahead of time.
+        $out .= '<div class="kt-panel" style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:13px 15px;margin-bottom:6px;">'
+            . '<div style="font-size:14px;font-weight:800;color:#92400E;">📲 Staying home? Let us know in the app</div>'
+            . '<div style="font-size:13.5px;color:#78350F;line-height:1.55;margin-top:4px;">Sick days, appointments, vacations or a day at home: '
+            . 'report it in the ' . $appName . ' app under <b>Today → Report an absence</b>. It only takes a few seconds, your educators know not to expect '
+            . $name . ', and ' . (\App\Support\SafeArrival::enabled($agencyId) ? 'Safe Arrival will not need to call you.' : 'everyone stays in the loop.') . '</div></div>';
+
+        return $out;
     }
 
     private function section(string $title): string

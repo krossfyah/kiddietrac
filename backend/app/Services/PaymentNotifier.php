@@ -164,7 +164,7 @@ class PaymentNotifier
             'amount' => self::money($txn->amount),
             'how' => self::how($txn),
             'payment_method' => self::how($txn),
-            'date' => now()->format('j M Y, g:i A'),
+            'date' => \App\Support\AgencyTime::now()->format('j M Y, g:i A'),
             'reference' => 'ZUM-' . substr((string) $txn->zum_transaction_id, 0, 8),
             'invoice_number' => $inv ? (string) ($inv->invoice_number ?: $inv->id) : null,
             'balance_now' => $hasBalance ? (float) $credited['balance_now'] : null,

@@ -32,7 +32,7 @@ class AttendanceReminder
         // Once a day. audit_logs is the ledger — no new table for a rate limit.
         $already = DB::table('audit_logs')->where('user_id', $educatorId)
             ->where('action', 'care.attendance_reminder')
-            ->where('created_at', '>=', now()->startOfDay())->exists();
+            ->where('created_at', '>=', \App\Support\AgencyTime::boundaryUtc())->exists();
         if ($already) {
             return;
         }
@@ -124,7 +124,7 @@ class AttendanceReminder
             'type' => 'attendance',
             'title' => 'Children not signed in',
             'body' => 'You logged daily moments for children who were not signed in. Please sign children in before logging.',
-            'data' => json_encode(['link' => '#care']),
+            'data' => json_encode(['link' => '#today']),   // no #care screen exists (2026-11-04)
             'created_at' => now(),
         ]);
 

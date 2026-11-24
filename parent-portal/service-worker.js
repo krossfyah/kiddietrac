@@ -29,7 +29,7 @@
         tokenless kt-polish-v22.css and a 13-token kt-tokens.css, losing seven
         values. Both cache names bumped to flush the lot exactly once.
    =================================================================== */
-const CACHE = 'kt-20261019vc';
+const CACHE = 'kt-20261124wv';
 // Persistent store for ?v= assets. Bumping this NAME force-deletes the old one on
 // activate → a one-time flush that re-fetches every versioned asset fresh. Do this
 // whenever stale assets need clearing wholesale (e.g. a ?v= bump was missed on a
@@ -101,6 +101,22 @@ self.addEventListener('fetch', (e) => {
   const accept = e.request.headers.get('accept') || '';
   const isDoc = e.request.mode === 'navigate' || accept.includes('text/html');
 
+  // ── SELF-HOSTED LIBRARIES (2026-10-30) ──
+  // /vendor/<name>-<version>/ never changes at the same address (the folder carries the version). The face
+  // check's WebAssembly is 9 MB; the network-first rule further down would download it again on every profile
+  // photo, so these are cache-first from STATIC with no background refetch.
+  if (!isDoc) {
+    let vu = null;
+    try { vu = new URL(e.request.url); } catch (err) {}
+    if (vu && vu.origin === self.location.origin && vu.pathname.startsWith('/vendor/')) {
+      e.respondWith(caches.open(STATIC).then((c) => c.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+        if (res && res.status === 200) { try { c.put(e.request, res.clone()); } catch (err) {} }
+        return res;
+      }))));
+      return;
+    }
+  }
+
   // ── FAST PATH: versioned static assets (cache-first, persistent) ──
   // /js/… or /css/… with a ?v= are immutable per version — a content change ships
   // a new ?v= (new URL). So a cache hit is ALWAYS the right bytes, served instantly
@@ -121,7 +137,21 @@ self.addEventListener('fetch', (e) => {
           // "some things old, some new" bug). With SWR a missed bump self-heals on
           // the NEXT load — no asset can stay frozen. {cache:'reload'} bypasses the
           // browser HTTP cache so the refetch is genuinely fresh.
-          const network = fetch(new Request(e.request, { cache: 'reload' })).then((res) => {
+          /* NOT ON EVERY LAUNCH (2026-10-29). Anthony: "on poor or slow internet connections
+             things don't load or very slow to load". The refetch below ran for EVERY cached
+             asset on EVERY page load - ~330 scripts and stylesheets re-downloaded behind the
+             page, on a 3G link competing with the API calls the person is waiting for. The
+             URLs are versioned (deploy.py stamps ?v=), so the refetch is only insurance
+             against a missed bump: it now runs when the cached copy is over 12 hours old,
+             and never on a slow or data-saver connection. */
+          let skip = false;
+          try {
+            const age = hit ? Date.now() - Date.parse(hit.headers.get('date') || '') : Infinity;
+            const nc = self.navigator && self.navigator.connection;
+            const slow = !!(nc && (nc.saveData || /(^|-)2g|3g/.test(nc.effectiveType || '')));
+            skip = !!hit && ((age >= 0 && age < 12 * 3600e3) || slow);
+          } catch (err) { skip = false; }
+          const network = skip ? Promise.resolve(null) : fetch(new Request(e.request, { cache: 'reload' })).then((res) => {
             if (res && res.status === 200) { try { c.put(e.request, res.clone()); } catch (err) {} }
             return res;
           }).catch(() => null);
@@ -209,11 +239,16 @@ self.addEventListener('push', (event) => {
     options.vibrate = [900, 300, 900, 300, 1200, 300, 1200];
   }
 
+  /* Every push also tells the open windows that something arrived (2026-11-05): kt-badges asks for the counts at once,
+     so a text reply or a chat shows in the open portal now instead of on the next 10 s poll. */
   event.waitUntil(Promise.all([
     self.registration.showNotification(payload.title || 'Kiddietrac', options),
-    em ? self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
-      list.forEach((c) => c.postMessage({ type: 'kt-emergency', title: payload.title, body: payload.body, url: payload.url }));
-    }) : Promise.resolve(),
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      list.forEach((c) => {
+        c.postMessage({ type: 'kt-push', url: payload.url || '' });
+        if (em) c.postMessage({ type: 'kt-emergency', title: payload.title, body: payload.body, url: payload.url });
+      });
+    }),
   ]));
 });
 

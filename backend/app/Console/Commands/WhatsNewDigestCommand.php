@@ -56,7 +56,9 @@ class WhatsNewDigestCommand extends Command
             $this->error("whats-new.json not found or unreadable at {$path}");
             return self::FAILURE;
         }
-        $all = array_values(array_filter($data['entries'], fn ($e) => ($e['type'] ?? '') === 'new' && ! empty($e['date'])));
+        // 'new' and 'improved' (2026-11-02): improvements were written as type "improved" and silently left out of both
+        // the panel and this email. Both go out now, exactly as the panel shows them.
+        $all = array_values(array_filter($data['entries'], fn ($e) => in_array($e['type'] ?? '', ['new', 'improved'], true) && ! empty($e['date'])));
         usort($all, fn ($a, $b) => strcmp($b['date'], $a['date']));
         $dry = (bool) $this->option('dry-run');
         $testTo = trim((string) $this->option('test-to'));

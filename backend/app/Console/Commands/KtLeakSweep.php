@@ -50,13 +50,14 @@ class KtLeakSweep extends Command
         '#^api/v1/provider/chats#',                  // past conversations keep their participants
         '#^api/v1/provider/observations#',           // the learning record of a child who has left
         '#^api/v1/integration/pull/new#',            // the feed TELLS the source system about departures
+        '#^api/v1/safe-arrival/history#',            // past Safe Arrival checks (2026-11-03): who was there then
     ];
 
     /** Mail that is about leaving, so it names what has closed. Regex on the subject.
         Also the platform's own alerts (this sweep and kt:integrity-check), which name the
         closed records BY DESIGN — counting them made every sweep re-find the previous
         day's alert and raise a CRITICAL forever (2026-10-13). */
-    public const LEGIT_MAIL = '/^\[KiddieTrac\] (Leak sweep|Data check)|leaving|de-?enrol|depart|off-?board|statement|receipt|invoice|refund|credit note|final|closed account|access (has been )?(paused|closed)|your records|withdraw/i';
+    public const LEGIT_MAIL = '/^\[KiddieTrac\] (Leak sweep|Data check)|leaving|de-?enrol|depart|off-?board|statement|receipt|invoice|refund|credit note|final|closed account|access (has been )?(paused|closed)|your records|withdraw|provider closed/i';
 
     private const PATHS = '#(roster|attendance|children|child|centres|centre|provider|staff|educator|famil|dashboard|today|ratio|check|report|summary|digest|people|users|directory|enrol|room|immuni|allerg|medic|birthday|safe|absence|closure|calendar|home|overview|stats|count|zone|late|pickup|option)#i';
     private const SKIP = '#(export|download|pdf|csv|xlsx|file|photo|avatar|image|logo|qr|ical|\.ics|stream|poll|callback|webhook|unsubscribe|oauth|google|track|pixel|preview|print|zip|backup|signed|token|logout|impersonat)#i';
@@ -64,6 +65,10 @@ class KtLeakSweep extends Command
     public function handle(): int
     {
         $agencies = $this->option('agency') ? [(int) $this->option('agency')] : $this->agenciesWithClosedRecords();
+        // TEST AGENCIES ARE NOT ALERTED ON (2026-11-09, Anthony: "alerts for test agency's should all be turnt off"): asked for by --agency, a test agency is still swept.
+        if (! $this->option('agency')) {
+            $agencies = array_values(array_diff($agencies, \App\Support\TestAgencies::ids()));
+        }
         $asId = (int) ($this->option('as') ?: DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.role', 'platform_admin')->where('ra.active', 1)->where('u.status', 'active')->whereNull('u.deleted_at')
             ->orderBy('u.id')->value('u.id'));
@@ -140,7 +145,13 @@ class KtLeakSweep extends Command
             if ($n === '' || isset($live[mb_strtolower($n)])) continue;   // a live child shares the name
             // Mail is only wrong once the withdrawal was RECORDED (a notice given in advance
             // has a future withdrawn_at, and the family may be told about it before then).
-            $since = max(array_filter([(string) $c->departure_applied_at, (string) $c->deleted_at,
+            /* ...and not before it was recorded either (2026-11-12): closing a provider on the 11th with a
+               last day of the 10th dates withdrawn_at the 10th, so every email on the morning of the 11th -
+               sent while the child was still enrolled - read as a leak. The decision time of the approved
+               withdrawal is when the system knew. */
+            $decided = (string) DB::table('withdrawal_requests')->where('child_id', $c->id)
+                ->where('status', 'approved')->max('decided_at');
+            $since = max(array_filter([(string) $c->departure_applied_at, (string) $c->deleted_at, $decided,
                 $c->withdrawn_at ? substr((string) $c->withdrawn_at, 0, 10) . ' 23:59:59' : '']) ?: [(string) $c->updated_at]);
             $children[$n] = ['what' => "withdrawn child #{$c->id}", 'since' => $since];
         }
@@ -179,7 +190,7 @@ class KtLeakSweep extends Command
                 foreach ($paths as $v) foreach ($vals as $val) $next[] = preg_replace('/\{' . $p . '\??\}/', (string) $val, $v);
                 $paths = $next;
             }
-            foreach ($paths as $path) {
+            $call = function (string $path) use ($kernel, $agencyId, $user, $all, $uri, &$hits, &$calls): ?string {
                 DB::beginTransaction();
                 try {
                     $req = Request::create('/' . $path, 'GET');
@@ -189,18 +200,33 @@ class KtLeakSweep extends Command
                     \Laravel\Sanctum\Sanctum::actingAs($user, ['*']);
                     $res = $kernel->handle($req);
                     $calls++;
-                    if ($res->getStatusCode() < 300) {
-                        $body = self::withoutHistoricalFields((string) $res->getContent());
-                        foreach ($all as $name => $info) {
-                            if (stripos($body, $name) !== false || stripos($body, trim(json_encode($name), '"')) !== false) {
-                                $hits[$uri][$info['what'] . ' ' . $name] = true;
-                            }
+                    if ($res->getStatusCode() >= 300) return null;
+                    $body = self::withoutHistoricalFields((string) $res->getContent());
+                    foreach ($all as $name => $info) {
+                        if (stripos($body, $name) !== false || stripos($body, trim(json_encode($name), '"')) !== false) {
+                            $hits[$uri][$info['what'] . ' ' . $name] = true;
                         }
                     }
+                    return $body;
                 } catch (Throwable $e) {
-                    // a crashing endpoint is not this check's subject
+                    return null;   // a crashing endpoint is not this check's subject
                 } finally {
                     DB::rollBack();
+                }
+            };
+            foreach ($paths as $path) {
+                $base = $call($path);
+                /* QUERY-STRING SCOPES (2026-11-03). Anthony: old children under Sukhman were back on the Provider Daily
+                   Overview's clock in/out list. /provider/day-activity takes ?centre_id= and answers 404 without it, so
+                   this sweep never saw that roster. Probe each endpoint once with ?centre_id= / ?room_id=; when the answer
+                   changes, it is scoped by the query string, so call it for every open centre (or room). */
+                if (! $m[1]) {
+                    foreach (['centre_id' => $centreIds, 'room_id' => $roomIds] as $qk => $vals) {
+                        if (! $vals) continue;
+                        $probe = $call($path . '?' . $qk . '=' . $vals[0]);
+                        if ($probe === null || $probe === $base) continue;
+                        foreach (array_slice($vals, 1) as $val) $call($path . '?' . $qk . '=' . $val);
+                    }
                 }
             }
         }
@@ -213,7 +239,11 @@ class KtLeakSweep extends Command
     /** JSON keys that are explicitly about the past inside an otherwise current response
      *  (the dashboard's archived_centres, the calendar's departures overlay). Dropped
      *  before scanning, so the rest of the response is still checked. */
-    public const HISTORICAL_KEYS = '/^(archived(_[a-z_]+)?|departures?|departed(_[a-z_]+)?|history|leaving(_[a-z_]+)?)$/i';
+    /* + deactivations (2026-10-20, support ticket #158): integration/pull/users lists staff who
+       have LEFT under "deactivations" so iLearn can close them; a home provider is named like
+       her closed centre, so the departure notice read as a leak. The current part is still checked. */
+    // recent_events / activity: a feed of what already happened (the platform overview's audit feed names a centre the day it closes). 2026-11-12
+    public const HISTORICAL_KEYS = '/^(archived(_[a-z_]+)?|departures?|departed(_[a-z_]+)?|deactivations?|history|leaving(_[a-z_]+)?|recent_events|activity(_feed)?)$/i';
 
     public static function withoutHistoricalFields(string $body): string
     {
@@ -224,10 +254,13 @@ class KtLeakSweep extends Command
         /* An item dated before today is the past by definition (a calendar's absences
            earlier this month, when the child was still enrolled). Today and later are
            still checked: a withdrawn child on a FUTURE date is exactly the leak. */
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $past = function ($x) use ($today) {
             if (! is_array($x)) return false;
-            foreach (['date', 'day', 'end_date'] as $dk) {
+            /* + period_end / last_period_end (2026-11-02, support ticket #208): a payslip whose pay period ended
+               before today is pay for work already done, like payroll-documents above. Reports → Payroll report
+               lists them by period; its centre picker is still checked. */
+            foreach (['date', 'day', 'end_date', 'period_end', 'last_period_end'] as $dk) {
                 if (isset($x[$dk]) && is_string($x[$dk]) && preg_match('/^\d{4}-\d{2}-\d{2}/', $x[$dk])) {
                     return substr($x[$dk], 0, 10) < $today;
                 }

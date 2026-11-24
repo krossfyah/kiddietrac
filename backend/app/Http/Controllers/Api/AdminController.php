@@ -343,7 +343,7 @@ final class AdminController extends Controller
             ->from(new \Symfony\Component\Mime\Address($cfg['from'], (string) ($cfg['from_name'] ?? '')))
             ->to($data['to'])
             ->subject('KiddieTrac white-label email test')
-            ->html('<p>This is a KiddieTrac test email sent ' . now()->format('M j, g:i A')
+            ->html('<p>This is a KiddieTrac test email sent ' . \App\Support\AgencyTime::now()->format('M j, g:i A')
                 . ' through your own <strong>' . ($cfg['provider'] === 'graph' ? 'Microsoft 365' : 'Google') . '</strong> email, from <strong>'
                 . e($cfg['from']) . '</strong>. If you received this, your white-label email is working.</p>');
 
@@ -417,12 +417,11 @@ final class AdminController extends Controller
                 ->whereNull('deleted_at')
                 ->count();
 
-            $staffCount = DB::table('role_assignments')
-                ->where('centre_id', $c->id)
-                ->whereIn('role', ['centre_director', 'educator'])
-                ->where('active', true)
-                ->distinct()
-                ->count('user_id');
+            /* Educators = the home's team (App\Support\CentreTeam, 2026-10-21) so agency office
+               accounts filed at a home stop inflating it; plus the centre's own directors. */
+            $staffCount = count(\App\Support\CentreTeam::forCentres([(int) $c->id])[(int) $c->id] ?? [])
+                + DB::table('role_assignments')->where('centre_id', $c->id)->where('role', 'centre_director')
+                    ->where('active', true)->distinct()->count('user_id');
 
             /* Resolved ONCE per centre. Inlined into the builder it ran a centres
                lookup per bound, and per-row fan-out is what saturates this host at 9am. */
@@ -836,8 +835,18 @@ final class AdminController extends Controller
      *   offset      — pagination offset
      */
     /** "post:api/v1/admin/centres" → "Created · admin › centres"; "user.deleted" → "User deleted". */
-    private function humanizeAuditAction(?string $action): string
+    private function humanizeAuditAction(?string $action, ?string $payload = null): string
     {
+        /* THE CATALOGUE FIRST (2026-10-20): a sentence per API route, so no row reads as a
+           URL. Anything it does not cover (named events) falls through to the rules below. */
+        try {
+            $decoded = $payload ? json_decode($payload, true) : null;
+            $label = \App\Support\AuditLabels::label((string) $action, is_array($decoded) ? $decoded : null);
+            if ($label !== null) {
+                return $label;
+            }
+        } catch (\Throwable $e) {
+        }
         $action = (string) $action;
         $failed = str_contains($action, '[fail]');
         $action = trim(str_replace('[fail]', '', $action));
@@ -899,6 +908,12 @@ final class AdminController extends Controller
             $pretty = trim(str_replace(['/', '-'], [' › ', ' '], implode('/', $segments)));
             return $verb . ' · ' . $pretty . ($failed ? '  (failed)' : '');
         }
+        // Named events have a written sentence (2026-10-21): "Could not start onboarding",
+        // not "Onboarding failed"; "Took a headcount", not "Headcount taken".
+        $written = \App\Support\AuditNarrator::verbFor($action);
+        if ($written !== null) {
+            return $written . ($failed ? ' (failed)' : '');
+        }
         return ucfirst(str_replace(['.', '_'], ' ', $action)) . ($failed ? ' (failed)' : '');
     }
 
@@ -906,8 +921,18 @@ final class AdminController extends Controller
     private function describeAuditEntity(?string $type, ?int $id, ?string $payload): ?string
     {
         $data = $payload ? (json_decode($payload, true) ?: []) : [];
+        // Some older rows hold a JSON STRING ("email: x"), not an object (ticket #162).
+        $data = is_array($data) ? $data : [];
         $input = is_array($data['input'] ?? null) ? $data['input'] : [];
-        $fromPayload = $data['name'] ?? $data['email'] ?? $data['to'] ?? ($input['name'] ?? $input['email'] ?? $input['family_name'] ?? null);
+        /* `to` is a list on most mail rows (email.suppressed, push) - it was skipped as
+           not-a-string, so "What" sat empty and Details read "to: 1 entry" (2026-10-21). */
+        $to = $data['to'] ?? null;
+        if (is_array($to)) {
+            $to = implode(', ', array_values(array_filter(array_map(
+                fn ($x) => is_string($x) ? $x : (is_array($x) ? (string) ($x['email'] ?? $x['address'] ?? '') : ''), $to))));
+        }
+        $fromPayload = $data['name'] ?? $data['email'] ?? ($to !== '' ? $to : null) ?? $data['account'] ?? $data['title'] ?? $data['file'] ?? $data['file_name']
+            ?? ($input['name'] ?? $input['email'] ?? $input['family_name'] ?? $input['title'] ?? null);
         if (is_string($fromPayload) && trim($fromPayload) !== '') {
             /* THE ENTITY COLUMN NAMES ONE THING, NOT A DISTRIBUTION LIST (2026-09-18).
 
@@ -954,7 +979,7 @@ final class AdminController extends Controller
             }
         }
         if (! $type || ! $id) {
-            return null;
+            return $this->auditEntityFromRefs($data, $input);
         }
         $map = ['users' => 'user', 'user' => 'user', 'agencies' => 'agency', 'agency' => 'agency', 'centres' => 'centre', 'centre' => 'centre', 'children' => 'child', 'child' => 'child', 'families' => 'family', 'family' => 'family', 'rooms' => 'room', 'room' => 'room',
             'managed-forms' => 'managed_form', 'managed_forms' => 'managed_form'];
@@ -980,6 +1005,35 @@ final class AdminController extends Controller
             }
         } catch (\Throwable $e) {
         }
+        return $this->auditEntityFromRefs($data, $input);
+    }
+
+    /**
+     * "What" from the ids a row carries in its body (2026-10-21): a care log for three
+     * children, a photo, a clock-in at a centre. Those names were already in Details but
+     * the What column sat empty. Resolved through resolveAuditRef(), so the same agency
+     * scoping applies - a name outside the reader's agency is never printed.
+     */
+    private function auditEntityFromRefs(array $data, array $input): ?string
+    {
+        foreach (['child_ids', 'child_id', 'children', 'family_id', 'guardian_id', 'user_id', 'educator_id',
+                  'target_user_id', 'room_id', 'centre_id'] as $k) {
+            foreach ([$input, $data] as $src) {
+                if (! array_key_exists($k, $src) || $src[$k] === null || $src[$k] === '' || $src[$k] === []) {
+                    continue;
+                }
+                $ref = $this->resolveAuditRef($k, $src[$k]);
+                if ($ref !== null && str_contains($ref, ': ')) {
+                    return explode(': ', $ref, 2)[1];
+                }
+            }
+        }
+        foreach (['centre', 'room', 'child', 'person'] as $k) {
+            if (isset($data[$k]) && is_string($data[$k]) && trim($data[$k]) !== '') {
+                return trim($data[$k]);
+            }
+        }
+
         return null;
     }
 
@@ -996,7 +1050,27 @@ final class AdminController extends Controller
         }
         $bits = [];
         if (isset($data['status']) && ((int) $data['status'] < 200 || (int) $data['status'] >= 300)) {
-            $bits[] = 'HTTP ' . $data['status'];
+            /* Why it failed, in words (2026-10-21) - "HTTP 403" told an administrator nothing. */
+            $code = (int) $data['status'];
+            $bits[] = match (true) {
+                $code === 401 => 'Refused: they were signed out',
+                $code === 403 => 'Refused: their role is not allowed to open this',
+                $code === 404 => 'Refused: the record or page does not exist',
+                $code === 409 => 'Refused: it clashed with a change made at the same time',
+                $code === 419 => 'Refused: the page had expired',
+                $code === 422 || $code === 400 => 'Refused: some details were missing or not valid',
+                $code === 429 => 'Refused: too many attempts in a short time',
+                $code >= 500 => 'Failed: a server error on our side (' . $code . ')',
+                default => 'Refused (' . $code . ')',
+            };
+        }
+        foreach (['to', 'cc', 'bcc'] as $__k) {
+            if (isset($data[$__k]) && is_array($data[$__k]) && $data[$__k]) {
+                $__list = array_values(array_filter(array_map(fn ($x) => is_string($x) ? $x : (is_array($x) ? (string) ($x['email'] ?? '') : ''), $data[$__k])));
+                if ($__list) {
+                    $data[$__k] = implode(', ', array_slice($__list, 0, 3)) . (count($__list) > 3 ? ' +' . (count($__list) - 3) . ' more' : '');
+                }
+            }
         }
         $input = is_array($data['input'] ?? null) ? $data['input'] : (isset($data['method']) ? [] : $data);
         $skip = ['method', 'path', 'status', 'input', 'active_agency_id', 'fields', 'user_agent', 'ip_address'];
@@ -1006,11 +1080,20 @@ final class AdminController extends Controller
         $fields = [];
         foreach ($input as $k => $v) {
             if (in_array($k, $skip, true) || $v === '' || $v === null || $v === []) continue;
+            /* Bookkeeping, not detail (2026-10-20): row ids, the actor's own id (the "Who"
+               column already names them), a child's name repeated next to the child, and
+               flags that are only interesting when true. */
+            if (in_array($k, ['event_id', 'by_user_id', 'actor_kind', 'pattern_id', 'enrolment_id', 'signoff_id', 'conversation_id', 'message_id'], true)) continue;
+            if ($k === 'on_behalf' && ! $v) continue;
+            if ($k === 'child_name' && (isset($input['child_id']) || isset($input['child']))) continue;
+            if ($k === 'by_name') { $fields[] = 'by: ' . (string) $v; if (count($fields) >= 6) break; continue; }
 
             // Resolve id references to the actual record's NAME so an auditor reads
             // "child: Aria Hosein" instead of "child_id: 6" — singly or as a list.
             $ref = $this->resolveAuditRef((string) $k, $v);
             if ($ref !== null) { $fields[] = $ref; if (count($fields) >= 6) break; continue; }
+            [$skipIt, $v] = $this->auditRawValue((string) $k, $v);
+            if ($skipIt) continue;
 
             $label = $this->auditFieldLabel((string) $k);
 
@@ -1032,6 +1115,8 @@ final class AdminController extends Controller
             if ($ts !== null) { $fields[] = $label . ': ' . $ts; if (count($fields) >= 6) break; continue; }
 
             $val = is_bool($v) ? ($v ? 'yes' : 'no') : (string) $v;
+            // check_in -> check in: a code value read as words.
+            if (preg_match('/^[a-z]+(_[a-z]+)+$/', $val)) $val = str_replace('_', ' ', $val);
             if (mb_strlen($val) > 60) $val = mb_substr($val, 0, 60) . '…';
             $fields[] = $label . ': ' . $val;
             if (count($fields) >= 6) break;
@@ -1043,6 +1128,69 @@ final class AdminController extends Controller
         return $bits ? implode(' · ', $bits) : null;
     }
 
+    /**
+     * Everything a row recorded, as [label, value] pairs a person can read (2026-10-31). The detail popup showed the
+     * raw payload JSON; this is the same data with ids resolved to names, times in the agency's zone and codes in
+     * words. Bookkeeping keys are left out.
+     */
+    private function auditDetails(?string $payload, ?string $tz = null): array
+    {
+        $data = $payload ? (json_decode($payload, true) ?: []) : [];
+        if (! is_array($data)) return [];
+        $src = $data;
+        if (is_array($data['input'] ?? null)) { $src = $data['input'] + array_diff_key($data, ['input' => 1]); }
+        $skip = ['summary', 'method', 'path', 'input', 'active_agency_id', 'user_agent', 'ip_address', 'to_user', 'route', 'ms',
+            'event_id', 'by_user_id', 'pattern_id', 'enrolment_id', 'signoff_id', 'conversation_id', 'message_id', 'mailer'];
+        $out = [];
+        foreach ($src as $k => $v) {
+            if (in_array($k, $skip, true) || $v === '' || $v === null || $v === []) continue;
+            $ref = $this->resolveAuditRef((string) $k, $v);
+            if ($ref !== null) { [$l, $val] = array_pad(explode(': ', $ref, 2), 2, ''); $out[] = [ucfirst($l), $val]; continue; }
+            [$skipIt, $v] = $this->auditRawValue((string) $k, $v);
+            if ($skipIt) continue;
+            $label = ucfirst($this->auditFieldLabel((string) $k));
+            if (is_string($v) && str_starts_with($v, 'data:')) { $out[] = [$label, '(attached file)']; continue; }
+            if (is_bool($v)) { $out[] = [$label, $v ? 'Yes' : 'No']; continue; }
+            if (is_array($v)) {
+                if (array_is_list($v)) {
+                    $items = array_map(fn ($x) => is_scalar($x) ? (string) $x : (is_array($x) ? (string) ($x['name'] ?? $x['email'] ?? (count($x) . ' fields')) : ''), $v);
+                    $out[] = [$label, mb_substr(implode(', ', array_filter($items)), 0, 400)];
+                } else {
+                    $bits = [];
+                    foreach ($v as $kk => $vv) {
+                        if (is_array($vv)) { $vv = array_is_list($vv) ? implode(', ', array_map('strval', array_filter($vv, 'is_scalar'))) : (isset($vv['from']) || isset($vv['to']) ? (json_encode($vv['from'] ?? null) . ' → ' . json_encode($vv['to'] ?? null)) : count($vv) . ' fields'); }
+                        if ($vv === null || $vv === '') continue;
+                        $bits[] = $this->auditFieldLabel((string) $kk) . ': ' . (is_bool($vv) ? ($vv ? 'yes' : 'no') : (string) $vv);
+                    }
+                    $out[] = [$label, mb_substr(implode(' · ', $bits), 0, 400)];
+                }
+                continue;
+            }
+            $ts = $this->formatAuditTs($v, $tz);
+            if ($ts !== null) { $out[] = [$label, $ts]; continue; }
+            $val = (string) $v;
+            // A browser's user-agent string -> "Chrome on Windows".
+            if (str_contains($val, 'Mozilla/') || str_contains($val, 'AppleWebKit')) {
+                $out[] = [$label, \App\Support\AuditDescriber::device($val)];
+                continue;
+            }
+            // Codes a person would not recognise, in words.
+            $codes = ['fcm' => 'Phone app', 'webpush' => 'Web browser', 'agency_router' => 'Agency mail', 'graph' => 'Microsoft 365 mail',
+                'telnyx' => 'Telnyx (texts)', 'twilio' => 'Twilio (texts)', 'web-demo' => 'Website demo phone', 'ilearn' => 'iLearn',
+                'web' => 'Web browser', 'android' => 'Android app', 'ios' => 'iPhone app'];
+            if (isset($codes[$val])) {
+                $val = $codes[$val];
+            } elseif (preg_match('/^#([a-z0-9-]+)/', $val, $mm)) {
+                $val = ucfirst(str_replace('-', ' ', $mm[1])) . ' screen';
+            } elseif (preg_match('/^[a-z]+(_[a-z]+)+$/', $val)) {
+                $val = str_replace('_', ' ', $val);
+            }
+            $out[] = [$label, mb_substr($val, 0, 400)];
+            if (count($out) >= 40) break;
+        }
+        return $out;
+    }
+
     /** Per-request cache of resolved id→name lookups so the audit list isn't N+1 heavy. */
     private array $auditRefCache = [];
 
@@ -1050,6 +1198,11 @@ final class AdminController extends Controller
        inside it - see auditRefName(). Null means "not established", which resolves
        nothing at all rather than everything. */
     private ?int $auditRefAgencyId = null;
+
+    /* The super admin's Platform tab (2026-10-21): rows that belong to no agency, read by
+       the one role that may see every agency. Without this every id on that tab stayed a
+       number, because the resolver above is pinned to the agency switched into. */
+    private bool $auditRefPlatform = false;
 
     /**
      * If a payload key is a reference to another record (child_id, family_id,
@@ -1085,6 +1238,35 @@ final class AdminController extends Controller
         if ((string) $id !== (string) $value || $id <= 0) return null;   // only plain positive ids
         $name = $this->auditRefName($spec[1], $id);
         return $name !== null ? ($spec[0] . ': ' . $name) : null;
+    }
+
+    /**
+     * What is left of a field once names could not be resolved (2026-11-02 audit sweep): [skip, value].
+     * A bare record id ("id", "medication_id", "token_id", "upload_id") means nothing to a reader and is
+     * left out; a list of ids becomes how many ("seen_ids" -> 3); a JSON string ("field_values") is read
+     * as the structure it is instead of printed as {"sap_provider":...}.
+     */
+    private function auditRawValue(string $key, $v): array
+    {
+        $k = strtolower($key);
+        if (preg_match('/(^|_)ids$/', $k)) {
+            $n = count($this->auditRefIds($v));
+            return $n > 0 ? [false, $n] : [true, $v];
+        }
+        if ($k === 'id' || preg_match('/_id$/', $k)) {
+            return [true, $v];
+        }
+        // A list of bare ids under another name ("participants": [1214, 1198, ...]) or of records -> how many.
+        if (is_array($v) && $v && array_is_list($v)) {
+            $allIds = count(array_filter($v, fn ($x) => is_int($x) || (is_string($x) && ctype_digit($x)))) === count($v);
+            $records = count(array_filter($v, fn ($x) => is_array($x) && ! isset($x['name']) && ! isset($x['email']))) === count($v);
+            if ($allIds || $records) return [false, count($v)];
+        }
+        if (is_string($v) && $v !== '' && ($v[0] === '{' || $v[0] === '[')) {
+            $d = json_decode($v, true);
+            if (is_array($d)) return [false, $d];
+        }
+        return [false, $v];
     }
 
     /** key → [display label, lookup table], singular or plural (child_id / child_ids). */
@@ -1213,7 +1395,7 @@ final class AdminController extends Controller
             'due_date' => 'due', 'amount' => 'amount', 'reason' => 'reason',
         ];
         if (isset($map[$key])) return $map[$key];
-        return str_replace('_', ' ', preg_replace('/_at$/', '', $key));
+        return str_replace('_', ' ', preg_replace('/(_at|_ids)$/', '', $key));
     }
 
     private function auditRefLabel(string $key): string
@@ -1249,8 +1431,28 @@ final class AdminController extends Controller
            unresolvable agency names nothing, and an id outside the agency returns null,
            which makes the summary omit the clause rather than print a foreign name. */
         $agencyId = $this->auditRefAgencyId;
-        $cacheKey = ($agencyId ?: 0) . ':' . $table . ':' . $id;
+        $cacheKey = ($this->auditRefPlatform ? 'P' : ($agencyId ?: 0)) . ':' . $table . ':' . $id;
         if (array_key_exists($cacheKey, $this->auditRefCache)) return $this->auditRefCache[$cacheKey];
+        if ($this->auditRefPlatform) {
+            $name = null;
+            try {
+                switch ($table) {
+                    case 'users':
+                        $r = DB::table('users')->where('id', $id)->first(['first_name', 'last_name', 'email']);
+                        if ($r) { $n = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')); $name = $n !== '' ? $n : $r->email; }
+                        break;
+                    case 'children':
+                        $r = DB::table('children')->where('id', $id)->first(['first_name', 'last_name']);
+                        if ($r) $name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: null;
+                        break;
+                    case 'families': $name = DB::table('families')->where('id', $id)->value('family_name') ?: null; break;
+                    case 'centres':  $name = DB::table('centres')->where('id', $id)->value('name') ?: null; break;
+                    case 'agencies': $name = DB::table('agencies')->where('id', $id)->value('name') ?: null; break;
+                    case 'rooms':    $name = DB::table('rooms')->where('id', $id)->value('name') ?: null; break;
+                }
+            } catch (\Throwable $e) { $name = null; }
+            return $this->auditRefCache[$cacheKey] = $name;
+        }
         if (! $agencyId) return $this->auditRefCache[$cacheKey] = null;
 
         $name = null;
@@ -1324,6 +1526,12 @@ final class AdminController extends Controller
            tab; anything else is the main log, which now excludes those rows. One
            definition drives both, so nothing is listed twice or lost between them. */
         $channel    = strtolower(trim((string) $request->input('channel', '')));
+        /* PLATFORM-LEVEL ROWS (2026-10-21). An event that belongs to no agency - a sign-in
+           attempt for an account that does not exist, sales/CRM work, platform settings,
+           system jobs - was written with agency_id NULL and then shown to NOBODY, super
+           admin included, because this view only ever lists one agency. A super admin can
+           now ask for exactly those rows; nobody else can. */
+        $platformScope = strtolower(trim((string) $request->input('scope', ''))) === 'platform';
         $limit      = min(200, max(1, (int) $request->input('limit', 50)));
         $offset     = max(0, (int) $request->input('offset', 0));
 
@@ -1338,9 +1546,9 @@ final class AdminController extends Controller
         if ($callerIsPlatformAdmin || $callerIsAgencyAdmin) {
             // Whole active agency: actors scoped by agency_id or any agency centre.
             $agencyId = $this->getAgencyId($request);
-            if (!$agencyId) return response()->json(['logs' => [], 'total' => 0]);
-            $activeAgencyId = (int) $agencyId;
-            $centreIds = $this->getCentreIds($agencyId);
+            if (!$agencyId && !($platformScope && $callerIsPlatformAdmin)) return response()->json(['logs' => [], 'total' => 0]);
+            $activeAgencyId = $agencyId ? (int) $agencyId : null;
+            $centreIds = $agencyId ? $this->getCentreIds($agencyId) : [];
             $scopedUserIds = DB::table('role_assignments')
                 ->where('active', true)
                 ->where(function ($x) use ($agencyId, $centreIds) {
@@ -1374,6 +1582,10 @@ final class AdminController extends Controller
                 cause can appear below its own effect — differently on each refresh. */
             ->orderByDesc('al.created_at')->orderByDesc('al.id');
 
+        if ($platformScope && $callerIsPlatformAdmin) {
+            $base->whereNull('al.agency_id');
+            $scopedUserIds = null;          // no agency, so no agency membership to check
+        }
         if ($scopedUserIds !== null) {
             // Primary, LEAK-PROOF filter: rows stamped with THIS agency's id only.
             // (agency_id is stamped at write time — see App\Support\AuditScope.)
@@ -1429,13 +1641,57 @@ final class AdminController extends Controller
         } else {
             \App\Support\PaymentAuditActions::except($base, 'al.action');
         }
-        if ($entityType) $base->where('al.entity_type', $entityType);
+        // Older rows stored the route parameter name ("childId") - include every spelling.
+        if ($entityType) $base->whereIn('al.entity_type', \App\Support\AuditLabels::entityVariants((string) $entityType));
         if ($action)     $base->where('al.action', $action);
-        if ($userId)     $base->where('al.user_id', $userId);
+        /* "This person" means what they DID and what was done TO them (2026-10-21): an
+           administrator resetting Rachel's password is an entry about Rachel. */
+        if ($userId)     $base->where(function ($w) use ($userId) {
+            $w->where('al.user_id', $userId)
+              ->orWhere(function ($s) use ($userId) {
+                  $s->whereIn('al.entity_type', \App\Support\AuditLabels::entityVariants('user'))
+                    ->where('al.entity_id', $userId);
+              });
+        });
         if ($since)      $base->where('al.created_at', '>=', $since);
         if ($until)      $base->where('al.created_at', '<=', $until);
-        if ($q !== '')   $base->where(function ($x) use ($q) {
-            $x->where('al.action', 'like', "%{$q}%")
+        /* SEARCH FINDS THE PERSON IT WAS ABOUT, NOT ONLY THE ONE WHO DID IT (2026-10-21).
+           Anthony: "the reset your password for rachel didnt show up in the audit log but
+           showed up in the email log". It was there - "User password reset - Rachel Blane -
+           by Safia Ali" - but search matched only the actor (Safia) and the payload, so
+           typing "Rachel" found nothing. Names of people, children and families this view
+           may see are matched to the record the entry is filed under. Scoped to the same
+           agency set as the rows themselves, so a name can never pull in another tenant. */
+        $subjUsers = $subjChildren = $subjFamilies = [];
+        if ($q !== '' && $scopedUserIds !== null) {
+            $like = "%{$q}%";
+            $subjUsers = DB::table('users')->whereIn('id', $scopedUserIds ?: [0])
+                ->where(function ($w) use ($like) {
+                    $w->where('first_name', 'like', $like)->orWhere('last_name', 'like', $like)
+                      ->orWhere('email', 'like', $like)->orWhere('username', 'like', $like)
+                      ->orWhereRaw("CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,'')) like ?", [$like]);
+                })->limit(500)->pluck('id')->all();
+            $subjChildren = DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+                ->whereIn('f.centre_id', $centreIds ?: [0])
+                ->where(function ($w) use ($like) {
+                    $w->where('c.first_name', 'like', $like)->orWhere('c.last_name', 'like', $like)
+                      ->orWhereRaw("CONCAT(COALESCE(c.first_name,''),' ',COALESCE(c.last_name,'')) like ?", [$like]);
+                })->limit(500)->pluck('c.id')->all();
+            $subjFamilies = DB::table('families')->whereIn('centre_id', $centreIds ?: [0])
+                ->where(function ($w) use ($like) {
+                    $w->where('family_name', 'like', $like)->orWhere('primary_email', 'like', $like);
+                })->limit(500)->pluck('id')->all();
+        }
+        if ($q !== '')   $base->where(function ($x) use ($q, $subjUsers, $subjChildren, $subjFamilies) {
+            foreach ([['user', $subjUsers], ['child', $subjChildren], ['family', $subjFamilies]] as [$kind, $ids]) {
+                if ($ids) {
+                    $x->orWhere(function ($s) use ($kind, $ids) {
+                        $s->whereIn('al.entity_type', \App\Support\AuditLabels::entityVariants($kind))
+                          ->whereIn('al.entity_id', $ids);
+                    });
+                }
+            }
+            $x->orWhere('al.action', 'like', "%{$q}%")
               ->orWhere('al.payload', 'like', "%{$q}%")
               ->orWhere('u.first_name', 'like', "%{$q}%")
               ->orWhere('u.last_name', 'like', "%{$q}%")
@@ -1444,13 +1700,19 @@ final class AdminController extends Controller
               ->orWhereRaw("CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,'')) like ?", ["%{$q}%"]);
         });
 
-        $total = (clone $base)->count('al.id');
+        /* Counting needs no names (2026-11-10, "why when going to audit log its slow?"): the users join only matters when
+           searching by a person, and it cannot change the number (users.id is unique). Without it, and with
+           idx_audit_agency_action_user, the count is read from the index instead of 60k rows with their payloads. */
+        $countQ = clone $base;
+        if ($q === '') $countQ->joins = null;
+        $countQ->orders = null;
+        $total = $countQ->count('al.id');
 
         $rows = $base->limit($limit)->offset($offset)->get([
             'al.id', 'al.action', 'al.entity_type', 'al.entity_id',
-            'al.payload', 'al.ip_address', 'al.created_at',
+            'al.payload', 'al.ip_address', 'al.user_agent', 'al.created_at',
             'al.user_id',
-            DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email, 'system') as actor_name"),
+            DB::raw("COALESCE(NULLIF(TRIM(CONCAT(u.first_name, ' ', u.last_name)), ''), u.email) as actor_name"),
             'u.email as actor_email',
         ]);
 
@@ -1471,12 +1733,20 @@ final class AdminController extends Controller
         /* Establish whose audit log this is BEFORE a single row is narrated, so the
            id-to-name resolver knows which agency's records it may name. */
         $this->auditRefAgencyId = $this->getAgencyId($request);
+        $this->auditRefPlatform = $platformScope && $callerIsPlatformAdmin;
         $this->auditRefCache = [];
 
         $rows = $rows->map(function ($r) use ($auditTz) {
-            $r->action_label = $this->humanizeAuditAction($r->action);
+            // Plain words for every row, raw request lines included (App\Support\AuditLabels).
+            $r->action_label = $this->humanizeAuditAction($r->action, $r->payload);
+            // "childId" / "u" (route parameter names) -> the record kind, so names resolve.
+            $r->entity_type  = \App\Support\AuditLabels::entityType($r->entity_type);
             $r->entity_name  = $this->describeAuditEntity($r->entity_type, $r->entity_id ? (int) $r->entity_id : null, $r->payload);
-            $r->summary      = $this->summarizeAuditPayload($r->payload, $auditTz);
+            $__pl = json_decode((string) $r->payload, true);
+            $r->summary      = \App\Support\AuditDescriber::describe((string) $r->action, is_array($__pl) ? $__pl : [], $auditTz)
+                ?? $this->summarizeAuditPayload($r->payload, $auditTz);
+            // Every recorded field in words, for the detail popup (it used to print the raw JSON).
+            $r->details      = $this->auditDetails($r->payload, $auditTz);
             // An IP address tells an auditor nothing. Where it came from does.
             // cache-only: warm() above resolved the whole page in one call. If that
             // failed, show the IP rather than making a blocking lookup per row.
@@ -1491,10 +1761,20 @@ final class AdminController extends Controller
         // the user's filters applied, so picking an action collapsed the dropdown
         // to that single action, and a filter with no results emptied it entirely.
         // That is the "sometimes it has options, sometimes it doesn't".
+        //
+        // And from the rows this view can show (2026-11-10): this agency's (no agency's on the platform tab), by the same
+        // actors as the list. They used to read every agency's rows by actor - 87k rows, 0.3-2 s on each open - and so
+        // also named other agencies' actions. Answered from idx_audit_agency_action_user / _entity_user, cached 5 minutes.
         $optionsBase = DB::table('audit_logs as al');
+        if ($platformScope && $callerIsPlatformAdmin) $optionsBase->whereNull('al.agency_id');
+        elseif ($activeAgencyId) $optionsBase->where('al.agency_id', $activeAgencyId);
+        else $optionsBase->whereRaw('1 = 0');
+        $optionActors = null;
         if ($scopedUserIds !== null) {
-            $optionsBase->where(function ($w) use ($scopedUserIds) {
-                $w->whereIn('al.user_id', $scopedUserIds ?: [0])->orWhereNull('al.user_id');
+            $optionActors = ($callerIsDirector && ! $callerIsAgencyAdmin && ! $callerIsPlatformAdmin) ? $scopedUserIds : ($permittedActors ?? $scopedUserIds);
+            sort($optionActors);
+            $optionsBase->where(function ($w) use ($optionActors) {
+                $w->whereIn('al.user_id', $optionActors ?: [0])->orWhereNull('al.user_id');
             });
         }
         /* Turn the raw rows into sentences. The middleware records HTTP verbs and
@@ -1505,15 +1785,21 @@ final class AdminController extends Controller
            Applied at read time so the ~10,800 rows already in the table become
            readable too, and the wording can be corrected later without a migration. */
         try {
-            $rows = \App\Support\AuditNarrator::narrate($rows);
+            /* Who may be NAMED on this page: everyone on the platform tab, otherwise only
+               this agency's own people (plus platform admins acting inside it). */
+            $__visible = $this->auditRefPlatform ? null : array_values(array_unique(array_merge(
+                $scopedUserIds ?: [], $permittedActors ?? [], [(int) $caller->id])));
+            $rows = \App\Support\AuditNarrator::narrate($rows, $__visible, (bool) $callerIsPlatformAdmin);
+            $rows = $rows->map(function ($r) { unset($r->user_agent); return $r; });
         } catch (\Throwable $e) {
             // Unreadable beats unavailable: show the raw rows rather than nothing.
         }
 
-        $distinctActions = (clone $optionsBase)->select('al.action')->distinct()
-            ->orderBy('al.action')->limit(80)->pluck('al.action')->filter()->values();
-        $distinctEntities = (clone $optionsBase)->select('al.entity_type')->distinct()
-            ->orderBy('al.entity_type')->limit(40)->pluck('al.entity_type')->filter()->values();
+        $optKey = 'kt-audit-opts:' . md5(json_encode([$activeAgencyId, $platformScope && $callerIsPlatformAdmin, $optionActors]));
+        [$distinctActions, $distinctEntities] = \Illuminate\Support\Facades\Cache::remember($optKey, 300, fn () => [
+            (clone $optionsBase)->select('al.action')->distinct()->orderBy('al.action')->limit(80)->pluck('al.action')->filter()->values()->all(),
+            (clone $optionsBase)->select('al.entity_type')->distinct()->orderBy('al.entity_type')->limit(40)->pluck('al.entity_type')->filter()->values()->all(),
+        ]);
 
         // v22p46: CSV export — pulls up to 5000 rows (above the 200 default)
         // so a date-range export can produce a full history slice in one shot.
@@ -1896,9 +2182,10 @@ final class AdminController extends Controller
             if ($allMode) {
                 $guardianUserIds = DB::table('guardians')->whereNotNull('user_id')->pluck('user_id')->all();
             } else {
+                $heldFam = ! empty($wide) ? \App\Support\AgencyWaitlist::familyIds((int) $agencyId) : [];   // waitlisted (2026-11-24)
                 $guardianUserIds = DB::table('guardians')
                     ->join('families', 'families.id', '=', 'guardians.family_id')
-                    ->whereIn('families.centre_id', $centreIds ?: [0])
+                    ->where(fn ($w) => $w->whereIn('families.centre_id', $centreIds ?: [0])->orWhereIn('families.id', $heldFam ?: [0]))
                     ->pluck('guardians.user_id')->all();
             }
             $userIds = array_unique(array_merge($userIds, $guardianUserIds));
@@ -1999,6 +2286,10 @@ final class AdminController extends Controller
             }
         } catch (\Throwable $e) {
         }
+
+        // Which of them have the KiddieTrac app on a phone (App\Support\AppInstalls, 2026-10-23).
+        $appInstalls = [];
+        try { $appInstalls = \App\Support\AppInstalls::forUsers($userIds); } catch (\Throwable $e) {}
 
         /* OTHER ACCOUNTS THE SAME PERSON HOLDS (2026-09-21).
 
@@ -2182,7 +2473,7 @@ final class AdminController extends Controller
         /* $deviceCount and $prefRows must be imported HERE as well: the comms closure
            below is nested inside this one, and PHP closures capture nothing implicitly.
            Missing them off this line is what 500'd the whole users list. */
-        $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks, $inviteBy, $deviceCount, $prefRows, $siblings) {
+        $result = $users->map(function ($u) use ($allAssignments, $allGuardianLinks, $inviteBy, $deviceCount, $prefRows, $siblings, $appInstalls) {
             $roles = ($allAssignments[$u->id] ?? collect())->pluck('role')->unique()->values()->all();
             $guardianLinks = $allGuardianLinks[$u->id] ?? collect();
             // Only a family that is still here makes someone a current guardian.
@@ -2235,6 +2526,8 @@ final class AdminController extends Controller
                    stays signed in, so it is not the question an admin is asking. */
                 'last_seen_at' => $u->last_seen_at ?? null,
                 'last_login_at' => $u->last_login_at,
+                // The KiddieTrac app on their phone: android / ios with build + last active, or null.
+                'app' => $appInstalls[$u->id] ?? null,
                 'onboarded_at' => $u->onboarded_at ?? null,
                 /* PASSWORD AGE (2026-09-21).
 
@@ -2349,6 +2642,21 @@ final class AdminController extends Controller
             unset($row);
         }
 
+        /* Sign-in locks (2026-11-10, Anthony: "two users are now locked but the status on those user accounts didn't
+           change"). A lock leaves users.status as it is, so it travels beside it: the Status badge and the export say so. */
+        if ($agencyId && $rows) {
+            $__locks = \App\Support\SignInLocks::lockMap(array_column($rows, 'id'), (int) $agencyId);
+            foreach ($rows as &$row) { $row['signin_lock'] = $__locks[(int) $row['id']] ?? null; }
+            unset($row);
+        }
+        // Guardians of a family held on the agency waitlist show Waitlisted (2026-11-24).
+        if ($agencyId && $rows && ($__held = \App\Support\AgencyWaitlist::familyIds((int) $agencyId))) {
+            $__hu = array_flip(DB::table('guardians')->whereIn('family_id', $__held)->whereNotNull('user_id')
+                ->pluck('user_id')->map(fn ($v) => (int) $v)->all());
+            foreach ($rows as &$row) { $row['waitlisted'] = isset($__hu[(int) $row['id']]); }
+            unset($row);
+        }
+
         // v22p45: CSV export — ?format=csv streams an Excel-friendly file
         if (strtolower((string) $request->query('format', '')) === 'csv') {
             // The person's reference ID at this agency (staff code preferred), 2026-10-14.
@@ -2357,7 +2665,7 @@ final class AdminController extends Controller
                 'ID', 'Name', 'Email', 'Phone', 'Status', 'Roles', 'Last login', 'Created',
             ], array_map(fn ($u) => [
                 $__uref[(int) $u['id']] ?? '', $u['name'], $u['email'], $u['phone'] ?? '',
-                $u['status'], implode(' / ', $u['roles']),
+                $u['status'] . (! empty($u['signin_lock']) ? ' (sign-in locked)' : ''), implode(' / ', $u['roles']),
                 $u['last_login_at'] ?? '', $u['created_at'],
             ], $rows));
         }
@@ -2372,7 +2680,7 @@ final class AdminController extends Controller
      */
     private function streamCsv(string $label, array $header, array $rows): StreamedResponse
     {
-        $filename = $label . '-' . now()->format('Y-m-d') . '.csv';
+        $filename = $label . '-' . \App\Support\AgencyTime::today() . '.csv';
         return new StreamedResponse(function () use ($header, $rows) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF");
@@ -2467,8 +2775,9 @@ final class AdminController extends Controller
             'username.min' => 'A username needs at least 3 characters.',
         ]);
 
-        // v22p23: only platform_admin can mint another platform_admin.
-        if ($data['role'] === 'platform_admin') {
+        // v22p23: only platform_admin can mint another platform_admin. sales_rep too (2026-11-05
+        // leak sweep), as in setUserRole: it opens the platform CRM, so an agency admin must not mint one.
+        if ($data['role'] === 'platform_admin' || $data['role'] === 'sales_rep') {
             $callerIsPlatform = DB::table('role_assignments')
                 ->where('user_id', $request->user()->id)
                 ->where('role', 'platform_admin')
@@ -2514,6 +2823,12 @@ final class AdminController extends Controller
         // deliberate SECOND account for the same person/email → create a new row.
         $activeSameEmail = DB::table('users')->where('email', $data['email'])->whereNull('deleted_at')->exists();
         $existing = $activeSameEmail ? null : DB::table('users')->where('email', $data['email'])->whereNotNull('deleted_at')->first();
+        /* Revive only someone who was THIS agency's (2026-11-05 leak sweep). Any agency typing an email
+           brought back another tenant's deleted person - same id, so their old messages, payments and
+           family links came with them into this agency. A person with history elsewhere gets a new row. */
+        if ($existing && $this->hasHistoryOutside((int) $existing->id, (int) $agencyId)) {
+            $existing = null;
+        }
         $isRevive = (bool) $existing;
         if ($isRevive) {
             $userId = (int) $existing->id;
@@ -2619,6 +2934,19 @@ final class AdminController extends Controller
                 ? 'An invite email with a set-password link has been sent.'
                 : 'Have the user click "Forgot password" on the login page to set their password.',
         ], 201);
+    }
+
+    /** Any role or family link of this user outside the agency (inactive rows count: they are history). */
+    private function hasHistoryOutside(int $userId, int $agencyId): bool
+    {
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all() ?: [0];
+        return DB::table('role_assignments')->where('user_id', $userId)
+                ->where(fn ($w) => $w->where(fn ($a) => $a->whereNotNull('agency_id')->where('agency_id', '!=', $agencyId))
+                    ->orWhere(fn ($c) => $c->whereNull('agency_id')->whereNotNull('centre_id')->whereNotIn('centre_id', $centres))
+                    ->orWhere('role', 'platform_admin'))
+                ->exists()
+            || DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                ->where('g.user_id', $userId)->whereNotIn('f.centre_id', $centres)->exists();
     }
 
     /**
@@ -2764,6 +3092,16 @@ final class AdminController extends Controller
 
         $before = DB::table('users')->where('id', $userId)->first();
         if (! $before) return response()->json(['message' => 'User not found'], 404);
+
+        /* The sign-in identity and the account switch of someone who is also outside this agency
+           are not this agency's to change (2026-11-05 leak sweep): a new email plus "forgot
+           password" takes the account over, and a closed status locks them out everywhere. */
+        $identity = array_filter(['email', 'username', 'status'], fn ($k) => array_key_exists($k, $data)
+            && (string) ($data[$k] ?? '') !== (string) ($before->{$k} ?? ''));
+        if ($identity && $userId !== (int) $request->user()->id && ($why = $this->closureCrossesTenants($request, $userId))) {
+            return response()->json(['message' => 'This person also has access outside your agency, so their '
+                . implode('/', $identity) . ' cannot be changed from here.'], 422);
+        }
 
         /* One email, several accounts — the sign-in needs a username to tell them apart
            (createUser enforces the same thing). Moving this account onto an address
@@ -3087,19 +3425,29 @@ final class AdminController extends Controller
             'active' => ['nullable', 'boolean'],
         ]);
 
+        $callerIsPlatform = DB::table('role_assignments')
+            ->where('user_id', $request->user()->id)
+            ->where('role', 'platform_admin')
+            ->where('active', true)
+            ->exists();
+
         // v22p23: platform_admin role can only be granted by a platform_admin.
-        if ($data['role'] === 'platform_admin') {
-            $callerIsPlatform = DB::table('role_assignments')
-                ->where('user_id', $request->user()->id)
-                ->where('role', 'platform_admin')
-                ->where('active', true)
-                ->exists();
-            if (! $callerIsPlatform) {
-                return response()->json([
-                    'message' => 'Only platform admins can grant the platform_admin role.',
-                    'errors' => ['role' => ['Insufficient privilege.']],
-                ], 403);
-            }
+        // sales_rep too (2026-11-05 leak sweep): it is KiddieTrac's own sales team and opens the
+        // platform CRM - every lead, prospect and bulk email - so an agency admin must not be able
+        // to hand it to anyone, themselves included.
+        if (in_array($data['role'], ['platform_admin', 'sales_rep'], true) && ! $callerIsPlatform) {
+            return response()->json([
+                'message' => 'Only platform admins can grant that role.',
+                'errors' => ['role' => ['Insufficient privilege.']],
+            ], 403);
+        }
+
+        /* The person must already be in this agency (2026-11-05 leak sweep). Any user id was
+           accepted, so an admin could pull another agency's parent or staff member into theirs and
+           then reach them with every "user in your agency" tool - reset password included. */
+        if (! $callerIsPlatform && $userId !== (int) $request->user()->id
+            && ! ($agencyId && $this->userBelongsToAgency($userId, (int) $agencyId))) {
+            return response()->json(['message' => 'That person is not in your agency.'], 403);
         }
 
         if (!empty($data['centre_id'])) {
@@ -3134,14 +3482,16 @@ final class AdminController extends Controller
 
     public function listFamilies(Request $request)
     {
-        [$agencyId, $centreIds] = $this->listScope($request);   // a director: own centres only
+        [$agencyId, $centreIds, $wideScope] = $this->listScope($request);   // a director: own centres only
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $centreFilter = $request->input('centre_id');
+        // Families held on the agency waitlist (their centre closed) stay listed for agency admins (2026-11-24).
+        $heldFamilies = $wideScope ? \App\Support\AgencyWaitlist::familyIds((int) $agencyId) : [];
 
         $query = DB::table('families')
             ->leftJoin('centres', 'centres.id', '=', 'families.centre_id')
-            ->whereIn('families.centre_id', $centreIds ?: [0])
+            ->where(fn ($w) => $w->whereIn('families.centre_id', $centreIds ?: [0])->orWhereIn('families.id', $heldFamilies ?: [0]))
             ->whereNull('families.deleted_at')
             ->select('families.*', 'centres.name as centre_name');
 
@@ -3254,7 +3604,7 @@ final class AdminController extends Controller
             }
         }
 
-        $result = $families->map(function ($f) use ($owedByFamily, $guardianState, $welcomeSent) {
+        $result = $families->map(function ($f) use ($owedByFamily, $guardianState, $welcomeSent, $heldFamilies) {
             $childCount = DB::table('children')
                 ->where('family_id', $f->id)
                 ->whereNull('deleted_at')
@@ -3310,6 +3660,7 @@ final class AdminController extends Controller
                 'child_count' => $childCount,
                 'guardian_count' => $guardianCount,
                 'suspended' => $suspendedGuardians > 0,
+                'waitlisted' => in_array((int) $f->id, $heldFamilies, true),
                 'outstanding_balance' => round((float) ($owedByFamily[(int) $f->id] ?? 0), 2),
                 'created_at' => $f->created_at,
             ];
@@ -3346,8 +3697,12 @@ final class AdminController extends Controller
 
     public function showFamily(Request $request, int $familyId): JsonResponse
     {
-        $agencyId = $this->getAgencyId($request);
-        $centreIds = $this->getCentreIds($agencyId);
+        /* listScope (2026-11-13): an agency admin exactly as before; a centre director - who now has the same
+           Families screen - only the families of their own centres. Fails closed. Reading only: every change
+           to a family stays an agency_admin route. */
+        [$agencyId, $centreIds, $wideScope] = $this->listScope($request);
+        if (! $agencyId) return response()->json(['message' => 'Not found'], 404);
+        $heldFamilies = $wideScope ? \App\Support\AgencyWaitlist::familyIds((int) $agencyId) : [];   // waitlisted (2026-11-24)
 
         /* A de-enrolled family is RETAINED, not deleted — the records outlive the
            enrolment by years, and an admin has to be able to read them or the
@@ -3357,7 +3712,7 @@ final class AdminController extends Controller
         $wantArchived = $request->boolean('archived');
 
         $family = DB::table('families')
-            ->whereIn('centre_id', $centreIds ?: [0])
+            ->where(fn ($w) => $w->whereIn('centre_id', $centreIds ?: [0])->orWhereIn('id', $heldFamilies ?: [0]))
             ->where('id', $familyId)
             ->when(! $wantArchived, fn ($q) => $q->whereNull('deleted_at'))
             ->first();
@@ -3385,7 +3740,7 @@ final class AdminController extends Controller
            a blank. Times are the agency's, never UTC. */
         $departure = null;
         if (($family->deleted_at ?? null) || ($family->departure_date ?? null)) {
-            $tz = \App\Support\AgencyTime::tz((int) $this->getAgencyId($request));
+            $tz = \App\Support\AgencyTime::tz((int) $agencyId);
             $byName = null;
             if ($family->departure_by_id ?? null) {
                 $by = DB::table('users')->where('id', $family->departure_by_id)
@@ -3523,7 +3878,7 @@ final class AdminController extends Controller
             $this->sendAccountEmail($email, (string) ($d['name'] ?? 'there'),
                 'Your KiddieTrac pick-up login',
                 "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person.\n\n"
-                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and your check-in/out QR code:\n\n"
+                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and check them in and out with One-Tap:\n\n"
                 . "Email: {$email}\n"
                 . "Temporary password: {$r['temp']}\n\n"
                 . "We recommend changing your password after you sign in, via 'Forgot password'.",
@@ -3636,7 +3991,7 @@ final class AdminController extends Controller
         $counts = \Illuminate\Support\Facades\DB::table('enrollments')
             ->whereIn('room_id', $roomIds)
             ->where(function ($q) {
-                $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString());
+                $q->whereNull('end_date')->orWhere('end_date', '>=', \App\Support\AgencyTime::today());
             })
             ->groupBy('room_id')
             ->pluck(\Illuminate\Support\Facades\DB::raw('COUNT(*)'), 'room_id');
@@ -4023,7 +4378,7 @@ final class AdminController extends Controller
                         'expected_pickup_time' => $c['expected_pickup_time'] ?? null,
                         'preferred_lang' => 'en-CA',
                         'enrollment_status' => $status,
-                        'enrolled_at' => $status === 'enrolled' ? now()->toDateString() : null,
+                        'enrolled_at' => $status === 'enrolled' ? \App\Support\AgencyTime::today() : null,
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
@@ -4147,7 +4502,7 @@ final class AdminController extends Controller
             $ok = $this->sendAccountEmail($pi['email'], $pi['name'] ?: 'there',
                 'Your KiddieTrac pick-up login',
                 "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person.\n\n"
-                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and your check-in/out QR code:\n\n"
+                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and check them in and out with One-Tap:\n\n"
                 . "Email: {$pi['email']}\n"
                 . "Temporary password: {$pi['temp']}\n\n"
                 . "We recommend changing your password after you sign in, via 'Forgot password'.",
@@ -4194,6 +4549,8 @@ final class AdminController extends Controller
             'family' => DB::table('families')->where('id', $result['family_id'])->first(),
             'guardians' => count($result['guardian_ids']),
             'children' => count($result['child_ids']),
+            // The new children's ids, in the order they were sent - the wizard files each one's immunization record (2026-10-28).
+            'child_ids' => array_values($result['child_ids']),
             'invited' => $invited,
             // So the confirmation can say "no email sent" instead of "0 invites sent",
             // which reads like a failure rather than the choice it was.
@@ -4241,9 +4598,15 @@ final class AdminController extends Controller
             'postal_code' => ['sometimes', 'nullable', 'string', 'max:12'],
             'country' => ['sometimes', 'nullable', 'in:CA,US'],
             'preferred_lang' => ['sometimes', 'nullable', 'string', 'max:10'],
-            'billing_split' => ['sometimes', 'in:single,split_50_50,custom'],
+            'billing_split' => ['sometimes', 'string', 'max:20'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
+        /* The split is set on its own endpoint now (Families -> Billing split, App\Support\BillingSplit, 2026-10-30): a
+           family form never overwrites it, and an older screen still sending the v1 field cannot undo a v2 setting. */
+        if (array_key_exists('billing_split', $data)
+            && (! in_array($data['billing_split'], ['single', 'split_50_50', 'custom'], true) || DB::table('family_billing_splits')->where('family_id', $familyId)->exists())) {
+            unset($data['billing_split']);
+        }
 
         /* A PROVIDER CHANGE IS A MOVE, NOT AN EDIT (2026-10-09: "when a child was enrolled
            to a provider initially and needs to move to a new provider dont allow the family
@@ -4303,7 +4666,8 @@ final class AdminController extends Controller
 
         if (!$callerIsPlatformAdmin) {
             $centreIds = $this->getCentreIds($agencyId);
-            if (!in_array($family->centre_id, $centreIds, true)) {
+            if (!in_array($family->centre_id, $centreIds, true)
+                && !in_array((int) $family->id, \App\Support\AgencyWaitlist::familyIds((int) $agencyId), true)) {   // waitlisted (2026-11-24)
                 return response()->json(['message' => 'Family not in your agency'], 403);
             }
         }
@@ -4452,10 +4816,14 @@ final class AdminController extends Controller
         $notified = $this->notifyFamilyDeparture($family, $guardianIds, $request, $owing, null, $lastDay);
 
         if ($guardianIds) {
-            DB::table('users')->whereIn('id', $guardianIds)->update(['status' => 'deactivated']);
+            // Only a parent-only account is closed; a guardian who also works somewhere, or
+            // has another family, loses just this agency's guardian access (2026-11-05 leak sweep).
+            $closeIds = \App\Support\AccountStatus::closeFamilyGuardians($guardianIds, (int) $familyId,
+                (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id'));
+            if ($closeIds) DB::table('users')->whereIn('id', $closeIds)->update(['status' => 'deactivated']);
             // ...and the guardian roles those accounts hold. Closing the account without
             // this left them listed as active guardians of an agency they had left.
-            \App\Support\AccountStatus::closeRoles($guardianIds);
+            \App\Support\AccountStatus::closeRoles($closeIds);
         }
 
         DB::table('families')->where('id', $familyId)->update([
@@ -4547,8 +4915,12 @@ final class AdminController extends Controller
 
         $userIds = DB::table('guardians')->where('family_id', $familyId)->whereNotNull('user_id')->pluck('user_id')->all();
         if ($userIds) {
-            DB::table('users')->whereIn('id', $userIds)->update(['status' => 'suspended']);
-            \App\Support\AccountStatus::closeRoles($userIds);
+            // Parent-only accounts are suspended; anyone else loses only this agency's guardian
+            // access, never their job or another tenant's (2026-11-05 leak sweep).
+            $closeIds = \App\Support\AccountStatus::closeFamilyGuardians($userIds, (int) $familyId,
+                (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id'));
+            if ($closeIds) DB::table('users')->whereIn('id', $closeIds)->update(['status' => 'suspended']);
+            \App\Support\AccountStatus::closeRoles($closeIds);
         }
         // Stamp the family itself, so the suspension is visible to the rosters the
         // educators work from and not only to the guardians' own logins. It also
@@ -4639,7 +5011,7 @@ final class AdminController extends Controller
                 ->where('status', 'deactivated')->update(['status' => 'active', 'updated_at' => now()]);
             // Only the assignments the de-boarding closed come back. One an administrator
             // had revoked before that has no stamp, and stays revoked.
-            $restored['roles'] = \App\Support\AccountStatus::reopenRoles($userIds);
+            $restored['roles'] = \App\Support\AccountStatus::reopenRoles($userIds, $this->familyAgencyId($familyId));
         }
 
         $this->audit($request->user()->id, 'family.restored', 'family', $familyId, [
@@ -4668,7 +5040,7 @@ final class AdminController extends Controller
         $userIds = DB::table('guardians')->where('family_id', $familyId)->whereNotNull('user_id')->pluck('user_id')->all();
         if ($userIds) {
             DB::table('users')->whereIn('id', $userIds)->where('status', 'suspended')->update(['status' => 'active']);
-            \App\Support\AccountStatus::reopenRoles($userIds);
+            \App\Support\AccountStatus::reopenRoles($userIds, $this->familyAgencyId($familyId));
         }
         DB::table('families')->where('id', $familyId)->update(['suspended_at' => null, 'updated_at' => now()]);
         $notified = $this->notifyFamilyAccess($family, $userIds, $request, true);
@@ -5009,7 +5381,7 @@ final class AdminController extends Controller
                     . e($kidList) . ' ' . ($plural ? 'are' : 'is')
                     . ' no longer in your care.</p>'
 
-                    . '<div style="background:#F8FAFC;border-left:3px solid #1F6080;border-radius:6px;'
+                    . '<div style="background:#F8FAFC;--kt-edge:#1F6080;border-radius:6px;'
                     . 'padding:12px 15px;margin:0 0 16px;">'
                     . '<div style="font-size:12px;font-weight:800;letter-spacing:.04em;'
                     . 'text-transform:uppercase;color:#64748B;margin-bottom:4px;">Last day</div>'
@@ -5194,7 +5566,7 @@ final class AdminController extends Controller
                 . 'and correct any claim already submitted past it.</li>'
                 . '<li><strong>Deposits, cheques and direct debits</strong> &mdash; cancel any '
                 . 'standing payment so the family is not charged again.</li>'
-                . '<li><strong>The child\'s file</strong> &mdash; medication, immunisation records '
+                . '<li><strong>The child\'s file</strong> &mdash; medication, immunization records '
                 . 'and anything of theirs still on site should be returned or filed.</li>'
                 . '<li><strong>Ratios and capacity</strong> &mdash; the space is now free; check '
                 . 'your waiting list.</li>'
@@ -5210,9 +5582,11 @@ final class AdminController extends Controller
                 'eyebrow' => $scheduled ? 'DE-ENROLMENT SCHEDULED' : 'DE-ENROLMENT RECORDED',
                 'title' => $family->family_name . ($scheduled ? ' is leaving' : ' has left'),
                 'subtitle' => $agencyName,
-                'preheader' => $family->family_name . ' &middot; last day ' . $last
-                    . ' &middot; by ' . $actorName
-                    . ($owed > 0 ? ' &middot; $' . number_format($owed, 2) . ' outstanding' : ''),
+                // Plain text: EmailTemplate::wrap() escapes the preheader itself, so an
+                // entity here went out as '&amp;middot;' (kt:text-check, 2026-10-23).
+                'preheader' => $family->family_name . ' · last day ' . $last
+                    . ' · by ' . $actorName
+                    . ($owed > 0 ? ' · $' . number_format($owed, 2) . ' outstanding' : ''),
             ]);
 
             $subject = ($scheduled ? 'De-enrolment scheduled: ' : 'De-enrolment recorded: ')
@@ -5432,7 +5806,7 @@ final class AdminController extends Controller
                    access "has now ended" while they are still attending would be both
                    wrong and alarming. The letter says which of the two it is. */
                 $leaveDate = $lastDay ? \Illuminate\Support\Carbon::parse($lastDay) : null;
-                $isFutureLeave = $leaveDate && $leaveDate->toDateString() > now()->toDateString();
+                $isFutureLeave = $leaveDate && $leaveDate->toDateString() > \App\Support\AgencyTime::today();
 
                 $opening = $isFutureLeave
                     ? e($kidList) . ' will be leaving ' . e($agencyName) . ' on <strong>'
@@ -5670,7 +6044,8 @@ final class AdminController extends Controller
         if (!$family) return response()->json(['message' => 'Not found'], 404);
         if (!$callerIsPlatformAdmin) {
             $centreIds = $this->getCentreIds($agencyId);
-            if (!in_array($family->centre_id, $centreIds, true)) {
+            if (!in_array($family->centre_id, $centreIds, true)
+                && !in_array((int) $family->id, \App\Support\AgencyWaitlist::familyIds((int) $agencyId), true)) {   // waitlisted (2026-11-24)
                 return response()->json(['message' => 'Family not in your agency'], 403);
             }
         }
@@ -5705,7 +6080,7 @@ final class AdminController extends Controller
             ->count();
 
         // Revenue this month
-        $monthStart = Carbon::now()->startOfMonth();
+        $monthStart = \App\Support\AgencyTime::boundaryUtc(null, 'month');
         $revenueThisMonth = DB::table('payments')
             ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
             ->whereIn('invoices.centre_id', $centreIds ?: [0])
@@ -5719,17 +6094,47 @@ final class AdminController extends Controller
             ->whereIn('status', ['sent', 'partial', 'overdue'])
             ->sum('balance_due');
 
-        // Total active users by role
-        $byRole = DB::table('role_assignments')
-            ->where('active', true)
+        /* USERS BY ROLE - EVERY ROLE, AS IT IS CREATED (2026-11-09, Anthony: "user by roles card on agency overview =
+           make sure it captures all new roles as they are created"). The card drew a fixed five (admins, directors,
+           educators, parents, auditors): home visitors, sales and every custom role were counted in the total but left
+           out of the circle and the legend. The list is now the agency's own role catalogue (the roles table: the
+           built-in roles and any it has created, named as the agency named them) plus anything actually assigned, so a
+           new role shows - at 0 - the moment it exists. Only open accounts count (a closed or suspended login is not a
+           user), and the total is people, not role rows: someone who is both a director and a parent is one user. */
+        $live = DB::table('role_assignments as ra')
+            ->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->whereNull('u.deleted_at')
+            ->whereNotIn('u.status', \App\Support\Audience::OFF_STATUSES)
+            ->where('ra.active', true)
+            ->where('ra.role', '!=', 'platform_admin')
             ->where(function ($q) use ($agencyId, $centreIds) {
-                $q->where('agency_id', $agencyId);
-                if (!empty($centreIds)) $q->orWhereIn('centre_id', $centreIds);
-            })
-            ->select('role', DB::raw('count(distinct user_id) as cnt'))
-            ->groupBy('role')
-            ->pluck('cnt', 'role')
-            ->all();
+                $q->where('ra.agency_id', $agencyId);
+                if (!empty($centreIds)) $q->orWhereIn('ra.centre_id', $centreIds);
+            });
+        $byRole = (clone $live)->select('ra.role', DB::raw('count(distinct ra.user_id) as cnt'))->groupBy('ra.role')
+            ->pluck('cnt', 'role')->map(fn ($v) => (int) $v)->all();
+        $usersTotal = (int) (clone $live)->distinct()->count('ra.user_id');
+        $catalogue = DB::table('roles')->whereNull('deleted_at')
+            ->where(fn ($q) => $q->where('agency_id', $agencyId)->orWhereNull('agency_id'))
+            ->orderByRaw('agency_id is null')   // the agency's own name for a role first
+            ->get(['key', 'name']);
+        $names = [];
+        foreach ($catalogue as $r) { if ($r->key !== 'platform_admin' && ! isset($names[$r->key])) $names[$r->key] = (string) $r->name; }
+        $plain = ['guardian' => 'Parents', 'agency_admin' => 'Admins', 'centre_director' => 'Directors', 'educator' => 'Educators',
+            'home_visitor' => 'Home visitors', 'auditor' => 'Auditors', 'sales_rep' => 'Sales'];
+        $order = array_keys($plain);
+        $keys = array_values(array_unique(array_merge(array_keys($names), array_keys($byRole))));
+        usort($keys, function ($a, $b) use ($order, $byRole) {
+            $ia = array_search($a, $order, true); $ib = array_search($b, $order, true);
+            if ($ia !== false || $ib !== false) return ($ia === false ? 99 : $ia) <=> ($ib === false ? 99 : $ib);
+            return ($byRole[$b] ?? 0) <=> ($byRole[$a] ?? 0) ?: strcmp($a, $b);
+        });
+        $roleList = array_map(fn ($k) => [
+            'key' => $k,
+            'label' => $plain[$k] ?? ($names[$k] ?? ucwords(str_replace('_', ' ', $k))),
+            'count' => $byRole[$k] ?? 0,
+            'custom' => ! isset($plain[$k]),
+        ], $keys);
 
         return response()->json([
             'last_30_days' => [
@@ -5742,6 +6147,8 @@ final class AdminController extends Controller
                 'outstanding' => (float) $outstanding,
             ],
             'users_by_role' => $byRole,
+            'roles' => $roleList,
+            'users_total' => $usersTotal,
         ]);
     }
 
@@ -5767,20 +6174,66 @@ final class AdminController extends Controller
     {
         $centreIds = $this->getCentreIds($agencyId);
 
-        $hasStaffRole = DB::table('role_assignments')
+        $here = DB::table('role_assignments')
             ->where('user_id', $userId)
             ->where(function ($q) use ($agencyId, $centreIds) {
                 $q->where('agency_id', $agencyId);
                 if (!empty($centreIds)) $q->orWhereIn('centre_id', $centreIds);
             })
-            ->exists();
-        if ($hasStaffRole) return true;
-
-        if (empty($centreIds)) return false;
-        return DB::table('guardians')
+            ->pluck('active');
+        $guardianHere = ! empty($centreIds) && DB::table('guardians')
             ->join('families', 'families.id', '=', 'guardians.family_id')
             ->where('guardians.user_id', $userId)
             ->whereIn('families.centre_id', $centreIds)
+            ->exists();
+        if ($guardianHere || $here->contains(fn ($a) => (bool) $a)) return true;
+        if ($here->isEmpty()) return false;
+
+        /* ONLY A FORMER MEMBER HERE (2026-11-05 leak sweep). Inactive rows kept a person "in" an
+           agency for ever, so the old agency's admin could still reset the password of, edit or
+           delete an account the person now uses at ANOTHER agency - taking over their access there.
+           A former member stays manageable here only while they are active nowhere else. */
+        return ! $this->activeInAnotherAgency($userId, $agencyId);
+    }
+
+    /** The agency a family (deleted or not) belongs to, through its centre. */
+    private function familyAgencyId(int $familyId): ?int
+    {
+        $a = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')->where('f.id', $familyId)->value('c.agency_id');
+        return $a ? (int) $a : null;
+    }
+
+    /* DELETING OR CLOSING AN ACCOUNT IS NOT ONE AGENCY'S CALL WHEN THE PERSON IS ALSO ELSEWHERE
+       (2026-11-05 leak sweep). Both close the whole account (users.status, every role, every
+       session), so an agency admin could lock a platform admin, or someone who also works or
+       parents at another agency, out of all of it. Such a person loses their role HERE instead
+       (User management -> role), which only this agency's access depends on. Null = allowed. */
+    private function closureCrossesTenants(Request $request, int $userId): ?string
+    {
+        if (in_array('platform_admin', \App\Support\AgencyRole::names($request), true)) return null;
+        $agencyId = (int) $this->getAgencyId($request);
+        $isPlatform = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+            ->whereIn('role', ['platform_admin', 'reseller_admin'])->exists();
+        if ($isPlatform || $this->activeInAnotherAgency($userId, $agencyId)) {
+            return 'This person also has access outside your agency, so their account cannot be closed from here. '
+                . 'Remove their role in your agency instead.';
+        }
+        return null;
+    }
+
+    private function activeInAnotherAgency(int $userId, int $agencyId): bool
+    {
+        $roleElsewhere = DB::table('role_assignments as ra')
+            ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
+            ->where('ra.user_id', $userId)->where('ra.active', true)->where('ra.role', '!=', 'platform_admin')
+            ->whereRaw('COALESCE(ra.agency_id, c.agency_id) IS NOT NULL')
+            ->whereRaw('COALESCE(ra.agency_id, c.agency_id) <> ?', [$agencyId])
+            ->exists();
+        if ($roleElsewhere) return true;
+
+        return DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('g.user_id', $userId)->whereNull('f.deleted_at')->where('c.agency_id', '!=', $agencyId)
             ->exists();
     }
 
@@ -5818,6 +6271,9 @@ final class AdminController extends Controller
         // Protected super-admin account — can never be deleted or deactivated.
         if ($this->isProtectedEmail($user->email ?? null)) {
             return response()->json(['message' => 'This is the protected super-admin account and cannot be deleted.'], 422);
+        }
+        if ($why = $this->closureCrossesTenants($request, $userId)) {
+            return response()->json(['message' => $why], 422);
         }
 
         /* Which rooms were theirs. Captured BEFORE the delete so it can go in the audit
@@ -5935,44 +6391,37 @@ final class AdminController extends Controller
                     . implode('', array_map(fn ($r) => '<li style="margin-bottom:7px;line-height:1.55;">' . $r . '</li>', $records))
                     . '</ul>';
 
-                $body = '<div style="margin:0;padding:0;background:#F1F5F9;">'
-                    . '<div style="max-width:620px;margin:0 auto;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">'
-                    . '<div style="background:linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);padding:22px 24px;border-radius:14px 14px 0 0;text-align:center;">'
-                    .   '<img src="https://app.kiddietrac.com/login-wordmark.png" alt="KiddieTrac" width="170" style="max-width:170px;height:auto;display:block;margin:0 auto 6px;">'
-                    // The tagline as TEXT, not the login-tagline.png asset: that image is
-                    // dark-on-light and would vanish against this navy header. Text also
-                    // survives a client that blocks remote images, which is most of them.
-                    .   '<div style="color:rgba(255,255,255,.82);font-size:11.5px;font-weight:600;letter-spacing:.4px;margin-bottom:12px;">Smart Childcare Management Platform</div>'
-                    .   '<div style="color:#fff;font-size:17px;font-weight:800;">Your access has been removed</div>'
-                    . '</div>'
-                    . '<div style="background:#fff;padding:22px 24px;border:1px solid #E2E8F0;border-top:0;font-size:14.5px;color:#1E293B;line-height:1.6;">'
-                    .   '<p style="margin:0 0 12px;">' . e($first) . ',</p>'
-                    .   '<p style="margin:0 0 12px;">Your KiddieTrac account with <strong>' . e($agencyName) . '</strong> was deactivated on '
-                    .     e($when->format('D, M j, Y')) . ' at ' . e($when->format('g:i A')) . ' (' . e($when->format('T')) . ').</p>'
-                    .   '<p style="margin:0 0 12px;">You can no longer sign in, and you have been signed out of any device where you were still signed in. '
-                    .     'No further emails or notifications will be sent to you from this agency.</p>'
-                    .   '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;margin:16px 0;">'
-                    .     '<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">What happens to your information</div>'
-                    .     '<p style="margin:0;font-size:13.5px;color:#334155;">Some records must be kept by law even after access ends. Those are retained for as long as the law requires'
+                /* On the standard shell (2026-10-27): the hand-built version had a CSS gradient
+                   header and light panels with no dark-mode rules, so it broke in dark mode. */
+                $p = 'margin:0 0 12px;font-size:14.5px;color:#1E293B;line-height:1.6;';
+                $inner = '<p style="' . $p . '">' . e($first) . ',</p>'
+                    . '<p style="' . $p . '">Your KiddieTrac account with <strong>' . e($agencyName) . '</strong> was deactivated on '
+                    .   e($when->format('D, M j, Y')) . ' at ' . e($when->format('g:i A')) . ' (' . e($when->format('T')) . ').</p>'
+                    . '<p style="' . $p . '">You can no longer sign in, and you have been signed out of any device where you were still signed in. '
+                    .   'No further emails or notifications will be sent to you from this agency.</p>'
+                    . '<table role="presentation" class="kt-panel" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;border-collapse:separate;">'
+                    .   '<tr><td class="kt-panel" bgcolor="#F8FAFC" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;">'
+                    .     '<div class="kt-muted" style="font-size:11px;font-weight:800;letter-spacing:1px;color:#64748B;text-transform:uppercase;margin-bottom:6px;">What happens to your information</div>'
+                    .     '<p style="margin:0;font-size:13.5px;color:#334155;line-height:1.6;">Some records must be kept by law even after access ends. Those are retained for as long as the law requires'
                     .       ($retention ? ', in line with this agency\'s retention policy of ' . (int) $retention . ' months' : '')
                     .       ', held securely, used for no other purpose, and then destroyed. Anything not covered by such an obligation is removed.</p>'
                     .     $recordsHtml
-                    .     '<p style="margin:10px 0 0;font-size:13.5px;color:#334155;">You may ask for a copy of the personal information held about you, ask for a correction, or ask what is kept and for how long. Write to the contact below and the agency will respond.</p>'
-                    .   '</div>'
-                    .   '<p style="margin:0 0 6px;">If this was not expected, please contact '
-                    .     ($contact ? '<a href="mailto:' . e($contact) . '" style="color:#1F6FB2;">' . e($contact) . '</a>' : 'your agency administrator')
-                    .     ' — it can be reversed.</p>'
-                    . '</div>'
-                    . '<div style="padding:16px 24px 26px;color:#94A3B8;font-size:11.5px;line-height:1.65;text-align:center;">'
-                    .   '<div style="font-weight:700;color:#64748B;">' . e($agencyName) . '</div>'
-                    .   ($contact ? '<div><a href="mailto:' . e($contact) . '" style="color:#94A3B8;">' . e($contact) . '</a>'
-                        . ($phone ? ' &middot; ' . e($phone) : '') . '</div>' : ($phone ? '<div>' . e($phone) . '</div>' : ''))
-                    .   '<div style="margin-top:8px;">This is an automated message about your account. It was sent because your '
-                    .   'access was removed, and it is not marketing — there is nothing to unsubscribe from.</div>'
-                    .   '<div style="margin-top:6px;">For questions about your information, or to request a copy, reply to this '
-                    .   'email or contact the agency directly.</div>'
-                    .   '<div style="margin-top:10px;color:#CBD5E1;">Sent ' . e($when->format('D, M j, Y g:i A T')) . ' &middot; powered by KiddieTrac</div>'
-                    . '</div></div></div>';
+                    .     '<p style="margin:10px 0 0;font-size:13.5px;color:#334155;line-height:1.6;">You may ask for a copy of the personal information held about you, ask for a correction, or ask what is kept and for how long. Write to the contact below and the agency will respond.</p>'
+                    .   '</td></tr></table>'
+                    . '<p style="margin:0 0 6px;font-size:14.5px;color:#1E293B;line-height:1.6;">If this was not expected, please contact '
+                    .   ($contact ? '<a href="mailto:' . e($contact) . '" style="color:#1F6FB2;">' . e($contact) . '</a>' : 'your agency administrator')
+                    .   ($phone ? ' or call ' . e($phone) : '')
+                    .   ' — it can be reversed.</p>'
+                    . '<p class="kt-muted" style="margin:16px 0 0;font-size:12px;color:#64748B;line-height:1.6;">This is an automated message about your account. '
+                    .   'It was sent because your access was removed, and it is not marketing — there is nothing to unsubscribe from. '
+                    .   'For questions about your information, or to request a copy, reply to this email or contact the agency directly. '
+                    .   'Sent ' . e($when->format('D, M j, Y g:i A T')) . '.</p>';
+                $body = \App\Services\EmailTemplate::wrap($agencyId, $inner, [
+                    'eyebrow' => 'ACCOUNT',
+                    'title' => 'Your access has been removed',
+                    'subtitle' => $agencyName,
+                    'preheader' => 'Your ' . $agencyName . ' account was deactivated. Here is what happens to your information.',
+                ]);
 
                 // BCC the people accountable for the decision: the agency's own contact
                 // address (the owner) and its admins and directors. BCC rather than CC
@@ -6246,6 +6695,7 @@ final class AdminController extends Controller
                 /* No IP. The pane does not show one, and a field nobody renders is a
                    field that leaks the day somebody logs the response. */
                 'last_login_at' => $user->last_login_at ?? null,
+                'app' => \App\Support\AppInstalls::forUsers([(int) $userId])[(int) $userId] ?? null,
             ],
         ]);
     }
@@ -6394,6 +6844,12 @@ final class AdminController extends Controller
             $emailed = $this->sendResetLink($request, $user, $userId);
 
             $this->audit($request->user()->id, 'user.password_reset', 'user', $userId, [
+                /* WHOSE PASSWORD, by name and address (2026-10-21). Rachel's reset was here
+                   all along, filed as "user #193": searching her name found nothing, while
+                   the email log showed her address. The row now carries both. */
+                'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+                'email' => $user->email,
+                'channel' => 'email',
                 'mode' => 'reset_link',
                 'email_sent' => $emailed,
                 'reason' => 'account_is_active_and_has_signed_in',
@@ -6446,6 +6902,9 @@ final class AdminController extends Controller
         }
 
         $this->audit($request->user()->id, 'user.password_reset', 'user', $userId, [
+            'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),
+            'email' => $user->email,
+            'channel' => $sendEmail ? 'email' : 'shown_to_admin',
             'mode' => 'temp_password',
             'forced' => $forceTemp,
             'email_sent' => $emailed,
@@ -6730,6 +7189,9 @@ final class AdminController extends Controller
         ]);
 
         $file = $request->file('avatar');
+        if (\App\Support\AvatarCheck::looksBlank($file->getRealPath())) {
+            return response()->json(['message' => \App\Support\AvatarCheck::MESSAGE, 'errors' => ['avatar' => [\App\Support\AvatarCheck::MESSAGE]]], 422);
+        }
         $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
         $name = (string) Str::uuid() . '.' . $ext;
         $file->storeAs('avatars', $name, 'public');
@@ -7281,7 +7743,7 @@ final class AdminController extends Controller
                 'type'       => 'user_invited',
                 'title'      => $title,
                 'body'       => mb_substr($body, 0, 500),
-                'data'       => json_encode(['role' => $role, 'invite_sent' => $inviteSent]),
+                'data'       => json_encode(['role' => $role, 'invite_sent' => $inviteSent, 'link' => '#admin-users']),
                 'created_at' => $now,
             ]);
         }
@@ -7465,6 +7927,9 @@ final class AdminController extends Controller
      */
     private function sendAccountEmail(string $to, string $name, string $subject, string $body, ?int $agencyId = null): bool
     {
+        /* Onboarding emails carry the Google Play card (2026-10-28): every caller here is a welcome, an invitation or a
+           pick-up login except the password reset, which is told apart by its subject. */
+        $showApp = ! preg_match('/password has been reset|reset your password/i', $subject);
         try {
             /* QUEUED, so the request context is gone by the time this sends — the
                sending agency travels on the mailable itself, as a scalar. A
@@ -7476,6 +7941,7 @@ final class AdminController extends Controller
                 ctaLabel:      'Sign in to Kiddietrac',
                 ctaUrl:        config('app.url', 'https://app.kiddietrac.com'),
                 agencyId:      $agencyId,
+                showApp:       $showApp,
             );
             $mailable->onQueue('mail');
             Mail::to($to, $name ?: null)->queue($mailable); // background — returns immediately

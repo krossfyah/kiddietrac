@@ -117,16 +117,21 @@
   }
 
   // ============================ Wellness digest (staff) ============================
+  let wdCentreId = null;
   async function renderWellnessDigest(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const _cr = await Api.get('/admin/centres').catch(() => ({})); const centres = _cr.centres || _cr.data || [];
     if (!centres.length) { main.innerHTML = '<div class="kt-card" style="margin:24px;padding:40px;text-align:center;color:#64748B;">No centres.</div>'; return; }
-    const r = await Api.get(`/wellness/digest?centre_id=${centres[0].id}`);
+    // Was fixed to the first centre with no way to reach the others (2026-10-24): select first, then switch.
+    if (!wdCentreId || !centres.some(c => +c.id === +wdCentreId)) wdCentreId = centres.length === 1 ? centres[0].id : null;
+    if (!wdCentreId && window.KT && KT.selectFirst) { KT.selectFirst(main, { items: centres, onPick: function (id) { wdCentreId = id; renderWellnessDigest(main); } }); return; }
+    const wdCentre = centres.find(c => +c.id === +wdCentreId) || centres[0];
+    const r = await Api.get(`/wellness/digest?centre_id=${wdCentre.id}`);
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🩺 Daily wellness</h2>
-        <p>${esc(centres[0].name)} · ${fmtDate(r.date)} · ${r.submitted_count}/${r.enrolled_count} screenings in</p>
+        <p>${esc(wdCentre.name)} · ${fmtDate(r.date)} · ${r.submitted_count}/${r.enrolled_count} screenings in</p>
       </div>
       <div class="kt-kpi-grid">
         <div class="kt-kpi kt-kpi-success"><div class="kt-kpi-label">Cleared</div><div class="kt-kpi-value">${r.counts.cleared || 0}</div></div>
@@ -150,14 +155,321 @@
         </table>
       </div>
     </div>`;
+    if (window.KT && KT.centreBar) KT.centreBar(main, { items: centres, current: wdCentre.id, onChange: function (id) { wdCentreId = id; renderWellnessDigest(main); } });
   }
+
+  // ===================== Payment schedules: Insights (2026-11-02) =====================
+  /* Anthony: "payment schedules section add stats, pie chart, graphs".
+
+     Staff only, above the family picker. Every figure comes from ONE server answer,
+     GET /payment-plans/stats?centre_id=&status= (PaymentScheduleStatsController): the
+     active agency only, a centre director only their own centres, closed families and
+     centres left out, months and weeks bucketed in the agency's timezone. Nothing is
+     computed from the family list in the browser.
+
+     Charts are inline SVG like the Careers Insights tab (no chart library is loaded in
+     the portal). Colours are tokens on .kt-psi; the portal's dark theme (html.kt-dark or
+     data-theme=dark on <html>) swaps them, the same hook Careers uses. Pies carry their
+     figures in the legend beside them, so no slice is read by colour alone. */
+  const PSI_CSS_ID = 'kt-psi-css';
+  function psiCss() {
+    if (document.getElementById(PSI_CSS_ID)) return;
+    const s = document.createElement('style'); s.id = PSI_CSS_ID;
+    const dark = '--psi-panel:#111C2B;--psi-line:#24344A;--psi-ink:#E2E8F0;--psi-mute:#94A3B8;--psi-track:#1E2D42;--psi-warn:#FBBF24;' +
+      '--psi-s1:#3987e5;--psi-s1l:#184f95;--psi-c1:#3987e5;--psi-c2:#d95926;--psi-c3:#199e70;--psi-c4:#c98500;--psi-c5:#d55181;--psi-c6:#9085e9;--psi-gray:#64748B;' +
+      '--psi-tipbg:#E2E8F0;--psi-tipink:#0D1B2A;';
+    s.textContent =
+      '.kt-psi{--psi-panel:#fff;--psi-line:#E7EBF0;--psi-ink:#0D1B2A;--psi-mute:#64748B;--psi-track:#EEF2F7;--psi-warn:#B45309;' +
+        '--psi-s1:#2a78d6;--psi-s1l:#9ec5f4;--psi-c1:#2a78d6;--psi-c2:#eb6834;--psi-c3:#1baf7a;--psi-c4:#eda100;--psi-c5:#e87ba4;--psi-c6:#6250d6;--psi-gray:#94A3B8;' +
+        '--psi-good:#0ca30c;--psi-serious:#ec835a;--psi-tipbg:#0D1B2A;--psi-tipink:#fff;color:var(--psi-ink);position:relative;margin:0 0 14px;}' +
+      'html.kt-dark .kt-psi,html[data-theme="dark"] .kt-psi{' + dark + '}' +
+      '.kt-psi-head{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;background:var(--psi-panel);border:1px solid var(--psi-line);border-radius:12px;padding:8px 12px;margin:0 0 10px;}' +
+      '.kt-psi-head h3{margin:0;font-size:14.5px;font-weight:800;color:var(--psi-ink);}' +
+      '.kt-psi .kt-psi-head label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--psi-mute) !important;min-width:0;margin:0;}' +
+      '.kt-psi-head select{height:30px;max-width:220px;padding:0 8px;border:1px solid #CBD5E1;border-radius:8px;background:#fff;color:#0D1B2A;font-size:13px;}' +
+      '.kt-psi-head .meta{margin-left:auto;font-size:12px;color:var(--psi-mute);}' +
+      '.kt-psi-head .tg{height:30px;padding:0 10px;border:1px solid var(--psi-line);border-radius:8px;background:transparent;color:var(--psi-ink);font-size:12.5px;font-weight:700;cursor:pointer;}' +
+      '.kt-psi-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:0 0 10px;}' +
+      '.kt-psi-tile{background:var(--psi-panel);border:1px solid var(--psi-line);border-radius:12px;padding:9px 12px;min-width:0;}' +
+      '.kt-psi-tile .l{font-size:11.5px;font-weight:700;color:var(--psi-mute);}' +
+      '.kt-psi-tile .v{font-size:22px;font-weight:800;line-height:1.2;margin:3px 0 2px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+      '.kt-psi-tile .s{font-size:12px;color:var(--psi-mute);line-height:1.35;}' +
+      '.kt-psi-tile.warn .v{color:var(--psi-warn);}' +
+      '.kt-psi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;margin:0 0 10px;}' +
+      '.kt-psi-grid.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));}' +
+      '.kt-psi-panel{background:var(--psi-panel);border:1px solid var(--psi-line);border-radius:12px;padding:10px 12px;min-width:0;}' +
+      '.kt-psi-panel .kt-psi-h{margin:0 0 2px;font-size:13.5px;font-weight:800;color:var(--psi-ink);}' +
+      '.kt-psi-panel .cap{font-size:12px;color:var(--psi-mute);margin:0 0 8px;line-height:1.4;}' +
+      '.kt-psi-pie{display:flex;gap:12px;align-items:center;}' +
+      '.kt-psi-pie svg{flex:0 0 112px;width:112px;height:112px;}' +
+      '.kt-psi-pie svg text{fill:var(--psi-ink);font-family:inherit;}' +
+      '.kt-psi-leg{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;font-size:12.5px;}' +
+      '.kt-psi-leg div{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:7px;align-items:center;cursor:default;}' +
+      '.kt-psi-leg i{width:10px;height:10px;border-radius:2px;}' +
+      '.kt-psi-leg span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
+      '.kt-psi-leg b{font-variant-numeric:tabular-nums;white-space:nowrap;}' +
+      '.kt-psi-leg b em{font-style:normal;font-weight:600;color:var(--psi-mute);margin-left:5px;}' +
+      '.kt-psi-legrow{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--psi-mute);margin:0 0 4px;}' +
+      '.kt-psi-legrow i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;}' +
+      '.kt-psi svg.col text{fill:var(--psi-mute);font-size:11px;font-family:inherit;}' +
+      '.kt-psi svg .gl{stroke:var(--psi-line);stroke-width:1;}' +
+      '.kt-psi svg .b1{fill:var(--psi-s1);} .kt-psi svg .b2{fill:var(--psi-s1l);}' +
+      '.kt-psi svg rect.hit{fill:transparent;} .kt-psi svg g[data-tip]:hover .b1,.kt-psi svg g[data-tip]:hover .b2{opacity:.8;}' +
+      '.kt-psi svg path.sl{stroke:var(--psi-panel);stroke-width:2;} .kt-psi svg path.sl:hover{opacity:.85;}' +
+      '.kt-psi-row{display:grid;grid-template-columns:minmax(90px,34%) minmax(0,1fr) auto;gap:8px;align-items:center;font-size:12.5px;margin:6px 0;}' +
+      '.kt-psi-row .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}' +
+      '.kt-psi-row .t{height:10px;border-radius:5px;background:var(--psi-track);overflow:hidden;}' +
+      '.kt-psi-row .t i{display:block;height:100%;border-radius:0 4px 4px 0;background:var(--psi-s1);}' +
+      '.kt-psi-row b{font-variant-numeric:tabular-nums;white-space:nowrap;}' +
+      '.kt-psi-empty{font-size:12.5px;color:var(--psi-mute);padding:14px;text-align:center;border:1px dashed var(--psi-line);border-radius:10px;}' +
+      '.kt-psi-note{font-size:11.5px;color:var(--psi-mute);margin:2px 2px 0;line-height:1.45;}' +
+      '.kt-psi-tip{position:absolute;z-index:5;pointer-events:none;background:var(--psi-tipbg);color:var(--psi-tipink);font-size:12px;font-weight:600;line-height:1.35;padding:5px 8px;border-radius:6px;max-width:240px;box-shadow:0 4px 14px rgba(0,0,0,.18);white-space:pre-line;}' +
+      '@media (max-width:600px){.kt-psi-tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}.kt-psi-tile .v{font-size:18px;}' +
+        '.kt-psi-head .meta{margin-left:0;width:100%;order:9;}.kt-psi-head label{flex:1 1 140px;}.kt-psi-head select{max-width:none;width:100%;}' +
+        '.kt-psi-pie svg{flex-basis:96px;width:96px;height:96px;}}';
+    document.head.appendChild(s);
+  }
+
+  let psiCur = 'CAD';
+  const psiMoney = (v, dp) => {
+    const n = Number(v) || 0;
+    try { return n.toLocaleString(undefined, { style: 'currency', currency: psiCur, currencyDisplay: 'narrowSymbol', minimumFractionDigits: dp == null ? 2 : dp, maximumFractionDigits: dp == null ? 2 : dp }); }
+    catch (e) { return '$' + n.toFixed(dp == null ? 2 : dp); }
+  };
+  const psiShort = (v) => {   // axis labels: $4.5k
+    const n = Number(v) || 0;
+    if (n >= 1000) return psiMoney(0, 0).replace(/[\d\s.,]/g, '') + (Math.round(n / 100) / 10) + 'k';
+    return psiMoney(n, 0);
+  };
+  const psiNum = (v) => Number(v || 0).toLocaleString();
+  const psiPct = (a, b) => b ? Math.round(a / b * 100) + '%' : '—';
+  /* A due date is a calendar day: read it at noon UTC and print it in UTC, so no device
+     zone can move it. */
+  const psiDay = (ymd, opt) => {
+    const d = new Date(String(ymd).slice(0, 10) + 'T12:00:00Z');
+    return isNaN(d) ? String(ymd) : d.toLocaleDateString(undefined, Object.assign({ timeZone: 'UTC' }, opt || { month: 'short', day: 'numeric' }));
+  };
+  const psiTile = (label, value, sub, warn) => '<div class="kt-psi-tile' + (warn ? ' warn' : '') + '"><div class="l">' + esc(label) + '</div><div class="v">' + value + '</div><div class="s">' + (sub || '&nbsp;') + '</div></div>';
+
+  /* Pie (as a ring). parts: [{label, value, color, shown}] — shown = the figure printed in the legend. */
+  function psiPie(parts, centre, aria) {
+    const live = parts.filter(p => p.value > 0);
+    const total = live.reduce((a, p) => a + p.value, 0);
+    if (!total) return '<div class="kt-psi-empty">Nothing to show for these filters.</div>';
+    const R = 54, r = 33, C = 56;
+    let a0 = -Math.PI / 2, out = '';
+    const pt = (rad, a) => (C + rad * Math.cos(a)).toFixed(2) + ' ' + (C + rad * Math.sin(a)).toFixed(2);
+    live.forEach(function (p) {
+      const tip = p.label + '\n' + p.shown + ' · ' + psiPct(p.value, total) + (p.tipExtra ? '\n' + p.tipExtra : '');
+      if (live.length === 1) {
+        out += '<g data-tip="' + esc(tip) + '"><path class="sl" fill="' + p.color + '" fill-rule="evenodd" d="M ' + pt(R, 0) + ' A ' + R + ' ' + R + ' 0 1 1 ' + pt(R, Math.PI) + ' A ' + R + ' ' + R + ' 0 1 1 ' + pt(R, 0) +
+          ' Z M ' + pt(r, 0) + ' A ' + r + ' ' + r + ' 0 1 0 ' + pt(r, Math.PI) + ' A ' + r + ' ' + r + ' 0 1 0 ' + pt(r, 0) + ' Z"/></g>';
+        return;
+      }
+      const a1 = a0 + p.value / total * Math.PI * 2, big = (a1 - a0) > Math.PI ? 1 : 0;
+      out += '<g data-tip="' + esc(tip) + '"><path class="sl" fill="' + p.color + '" d="M ' + pt(R, a0) + ' A ' + R + ' ' + R + ' 0 ' + big + ' 1 ' + pt(R, a1) +
+        ' L ' + pt(r, a1) + ' A ' + r + ' ' + r + ' 0 ' + big + ' 0 ' + pt(r, a0) + ' Z"/></g>';
+      a0 = a1;
+    });
+    const mid = centre ? '<text x="56" y="54" text-anchor="middle" font-size="15" font-weight="800">' + esc(centre[0]) + '</text><text x="56" y="69" text-anchor="middle" font-size="10" style="fill:var(--psi-mute)">' + esc(centre[1]) + '</text>' : '';
+    const leg = parts.filter(p => p.value > 0 || p.keep).map(p => '<div data-tip="' + esc(p.label + '\n' + p.shown + ' · ' + psiPct(p.value, total) + (p.tipExtra ? '\n' + p.tipExtra : '')) + '"><i style="background:' + p.color + '"></i><span>' + esc(p.label) + '</span><b>' + esc(p.shown) + '<em>' + psiPct(p.value, total) + '</em></b></div>').join('');
+    return '<div class="kt-psi-pie"><svg viewBox="0 0 112 112" role="img" aria-label="' + esc(aria) + '">' + out + mid + '</svg><div class="kt-psi-leg">' + leg + '</div></div>';
+  }
+
+  /* Column chart, measured to its box (painted after layout). series: [{label, short, a, b?, tip}].
+     b is drawn in front of a as the darker part (collected inside scheduled). */
+  let PSI_CH = [];
+  function psiCols(series, o) {
+    o = o || {};
+    if (!o.W) { PSI_CH.push([series, o]); return '<div class="kt-psi-chart" data-ch="' + (PSI_CH.length - 1) + '" style="height:' + (o.h || 170) + 'px"></div>'; }
+    const n = series.length;
+    const W = Math.max(240, o.W), H = o.h || 170, L = 44, R = 6, T = 10, B = 22;
+    let max = 0; series.forEach(p => { max = Math.max(max, p.a || 0, p.b || 0); });
+    const mag = Math.pow(10, Math.floor(Math.log10(Math.max(1, max / 4))));
+    const stepV = [1, 2, 2.5, 5, 10].map(m => m * mag).filter(s => s * 4 >= max)[0] || mag * 10;
+    const nice = Math.max(stepV * 4, 1);
+    const step = (W - L - R) / n, bw = Math.max(3, Math.min(30, step * 0.62));
+    let out = '';
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (f) {
+      const y = T + (H - T - B) * (1 - f);
+      out += '<line class="gl" x1="' + L + '" x2="' + (W - R) + '" y1="' + y + '" y2="' + y + '"/><text x="' + (L - 6) + '" y="' + (y + 4) + '" text-anchor="end">' + esc(psiShort(nice * f)) + '</text>';
+    });
+    const every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor((W - L) / (o.labelW || 46)))));
+    const bar = (cls, x, v) => {
+      const h = (v || 0) / nice * (H - T - B); if (h <= 0) return '';
+      const y = H - B - h, rr = Math.min(4, bw / 2, h);
+      /* rounded top only; the end on the baseline stays square */
+      return '<path class="' + cls + '" d="M' + x + ' ' + (H - B) + 'V' + (y + rr) + 'Q' + x + ' ' + y + ' ' + (x + rr) + ' ' + y + 'H' + (x + bw - rr) + 'Q' + (x + bw) + ' ' + y + ' ' + (x + bw) + ' ' + (y + rr) + 'V' + (H - B) + 'Z"/>';
+    };
+    series.forEach(function (p, i) {
+      const x = L + i * step + (step - bw) / 2;
+      out += '<g data-tip="' + esc(p.tip || '') + '"><rect class="hit" x="' + (L + i * step) + '" y="' + T + '" width="' + step + '" height="' + (H - T - B) + '"/>' +
+        bar(o.single ? 'b1' : 'b2', x, p.a) + (o.single ? '' : bar('b1', x, p.b)) + '</g>';
+      if (i % every === 0) out += '<text x="' + (L + i * step + step / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(p.short != null ? p.short : p.label) + '</text>';
+    });
+    return '<svg class="col" viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;height:' + H + 'px" role="img" aria-label="' + esc(o.aria || 'Chart') + '">' + out + '</svg>';
+  }
+
+  /* One hover/tap tooltip for every [data-tip] inside the panel. */
+  function psiTips(root) {
+    const tip = document.createElement('div'); tip.className = 'kt-psi-tip'; tip.hidden = true; root.appendChild(tip);
+    const place = function (e) {
+      const box = root.getBoundingClientRect();
+      let x = e.clientX - box.left + 12, y = e.clientY - box.top + 12;
+      if (x + tip.offsetWidth > box.width) x = Math.max(4, e.clientX - box.left - tip.offsetWidth - 12);
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    };
+    const show = function (e) {
+      const t = e.target.closest && e.target.closest('[data-tip]');
+      if (!t || !root.contains(t) || !t.getAttribute('data-tip')) { tip.hidden = true; return; }
+      tip.textContent = t.getAttribute('data-tip'); tip.hidden = false; place(e);
+    };
+    root.addEventListener('mousemove', show);
+    root.addEventListener('click', show);
+    root.addEventListener('mouseleave', function () { tip.hidden = true; });
+  }
+
+  const PSI_KEY = 'kt_pp_ins';
+  const psiSs = (k, d) => { try { return sessionStorage.getItem(k) || d; } catch (e) { return d; } };
+  const psiSsSet = (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) {} };
+  const psiCache = { key: '', at: 0, data: null };
+
+  async function renderPPInsights(host) {
+    if (!host) return;
+    psiCss();
+    const F = { centre_id: psiSs(PSI_KEY + '_c', ''), status: psiSs(PSI_KEY + '_s', '') };
+    let hidden = false; try { hidden = localStorage.getItem(PSI_KEY + '_hide') === '1'; } catch (e) {}
+    const agency = psiSs('kt_active_agency_id', '');
+    const qs = 'centre_id=' + encodeURIComponent(F.centre_id) + '&status=' + encodeURIComponent(F.status);
+    const key = agency + '|' + qs;
+    let d = psiCache.key === key && Date.now() - psiCache.at < 60000 ? psiCache.data : null;
+    if (!d) {
+      host.innerHTML = '<div class="kt-psi"><div class="kt-psi-head"><h3>📊 Insights</h3><span class="meta">Loading…</span></div></div>';
+      try { d = await Api.get('/payment-plans/stats?' + qs); }
+      catch (e) {
+        if (!host.isConnected) return;
+        host.innerHTML = '<div class="kt-psi"><div class="kt-psi-head"><h3>📊 Insights</h3><span class="meta" style="margin-left:0">'
+          + esc(e && e.status === 403 ? 'Insights are for directors and administrators of this agency.' : 'The figures could not be loaded.')
+          + '</span>' + (e && e.status === 403 ? '' : '<button type="button" class="tg" data-psi-retry>Try again</button>') + '</div></div>';
+        const rb = host.querySelector('[data-psi-retry]'); if (rb) rb.onclick = () => renderPPInsights(host);
+        return;
+      }
+      psiCache.key = key; psiCache.at = Date.now(); psiCache.data = d;
+    }
+    if (!host.isConnected) return;
+    psiCur = d.currency || 'CAD';
+    /* The server ignores a centre outside this person's scope (another agency's, say); follow its answer. */
+    F.centre_id = (d.filters && d.filters.centre_id) ? String(d.filters.centre_id) : '';
+    F.status = (d.filters && d.filters.status) || '';
+    const k = d.kpi || {};
+    const centres = d.centres || [];
+    const sel = (name, label, opts, val) => '<label>' + label + '<select data-psi="' + name + '">' + opts.map(o => '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(val || '') ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select></label>';
+    const head = '<div class="kt-psi-head"><h3>📊 Insights</h3>'
+      + (hidden ? '' : (centres.length > 1 ? sel('centre_id', 'Centre', [['', 'All centres']].concat(centres.map(c => [c.id, c.name])), F.centre_id) : '')
+        + sel('status', 'Status', [['', 'All schedules'], ['running', 'Running (on track + behind)'], ['active', 'On track'], ['behind', 'Behind'], ['completed', 'Completed'], ['cancelled', 'Cancelled']], F.status)
+        + '<span class="meta">' + esc(d.scope === 'centres' ? 'Your centres · ' : '') + 'Amounts in ' + esc(psiCur) + ' · dates in ' + esc(d.timezone || '') + '</span>')
+      + '<button type="button" class="tg" data-psi-toggle aria-expanded="' + (hidden ? 'false' : 'true') + '"' + (hidden ? ' style="margin-left:auto"' : '') + '>' + (hidden ? 'Show' : 'Hide') + '</button></div>';
+
+    let body = '';
+    if (hidden) {
+      body = '';
+    } else if (!k.schedules) {
+      body = '<div class="kt-psi-empty">' + (F.centre_id || F.status ? 'No payment schedules match these filters.' : 'No payment schedules yet. Once you set one up with “+ New payment schedule”, its figures appear here.') + '</div>';
+    } else {
+      const famN = k.families || 0;
+      const tiles =
+        psiTile('Active schedules', psiNum(k.running), psiNum(k.active) + ' on track · ' + psiNum(k.behind) + ' behind · ' + psiNum(k.completed) + ' completed') +
+        psiTile('Scheduled per month', psiMoney(k.monthly, 0), 'Running schedules, as a monthly amount') +
+        psiTile('Due in the next 30 days', psiMoney(k.next30, 0), psiNum(k.next30_count) + ' instalment' + (k.next30_count === 1 ? '' : 's') + ' still to be paid') +
+        psiTile('Average per family', k.avg_per_family == null ? '—' : psiMoney(k.avg_per_family, 0) + '<span style="font-size:13px;font-weight:700;color:var(--psi-mute)">/mo</span>', psiNum(famN) + ' famil' + (famN === 1 ? 'y' : 'ies') + ' with a running schedule') +
+        psiTile('Families on autopay', psiNum(k.autopay_families) + '<span style="font-size:13px;font-weight:700;color:var(--psi-mute)"> of ' + psiNum(famN) + '</span>', psiNum(k.manual_families) + ' pay by hand (e-Transfer, cheque, cash)') +
+        psiTile('Behind', psiNum(k.behind), k.behind ? psiNum(k.behind_families) + ' famil' + (k.behind_families === 1 ? 'y has' : 'ies have') + ' ' + psiMoney(k.overdue, 0) + ' overdue' : 'No schedule has a missed payment', k.behind > 0) +
+        psiTile('Missed, last 30 days', psiMoney(k.missed30, 0), psiNum(k.missed30_count) + ' instalment' + (k.missed30_count === 1 ? '' : 's') + ' unpaid past due · ' + psiNum(k.failed30) + ' failed charge' + (k.failed30 === 1 ? '' : 's'), k.missed30 > 0) +
+        psiTile('Still to collect', psiMoney(k.outstanding, 0), 'Every unpaid instalment, overdue included');
+
+      const C = ['var(--psi-c1)', 'var(--psi-c2)', 'var(--psi-c3)', 'var(--psi-c4)', 'var(--psi-c5)', 'var(--psi-c6)'];
+      const methods = (d.method_mix || []);
+      const mTotal = methods.reduce((a, m) => a + m.amount, 0);
+      const methodPie = '<div class="kt-psi-panel"><div class="kt-psi-h">How families paid</div><p class="cap">Payments against these schedules since ' + esc(psiDay(d.method_since, { month: 'short', day: 'numeric', year: 'numeric' })) + ', by amount.</p>'
+        + psiPie(methods.map((m, i) => ({ label: m.label, value: m.amount, color: C[i % C.length], shown: psiMoney(m.amount, 0) })), mTotal ? [psiShort(mTotal), 'received'] : null, 'Payment method mix') + '</div>';
+      const freqs = d.frequency_mix || [];
+      const freqPie = '<div class="kt-psi-panel"><div class="kt-psi-h">How often they pay</div><p class="cap">Running schedules by the spacing of their dates.</p>'
+        + psiPie(freqs.map((f, i) => ({ label: f.label, value: f.count, color: C[i % C.length], shown: psiNum(f.count), tipExtra: psiMoney(f.monthly) + ' a month' })), [psiNum(k.running), 'running'], 'Frequency mix') + '</div>';
+      const SC = { active: 'var(--psi-c1)', behind: 'var(--psi-serious)', completed: 'var(--psi-good)', cancelled: 'var(--psi-gray)' };
+      const SI = { active: '', behind: '⚠ ', completed: '✓ ', cancelled: '' };
+      const statusPie = '<div class="kt-psi-panel"><div class="kt-psi-h">Where schedules stand</div><p class="cap">Behind = an instalment is past due and unpaid.</p>'
+        + psiPie((d.status_mix || []).map(s => ({ label: SI[s.key] + s.label, value: s.count, color: SC[s.key], shown: psiNum(s.count), keep: s.key !== 'cancelled' })), [psiNum(k.schedules), 'schedules'], 'Status mix') + '</div>';
+
+      PSI_CH = [];
+      const weeks = d.upcoming_weeks || [];
+      const wkTotal = weeks.reduce((a, w) => a + w.amount, 0);
+      const upcoming = '<div class="kt-psi-panel"><div class="kt-psi-h">Expected collections, next 13 weeks</div><p class="cap">Unpaid instalments by the week they fall due (weeks start Monday). Overdue ones are not in this chart.</p>'
+        + (wkTotal ? psiCols(weeks.map(w => ({ label: psiDay(w.start), short: psiDay(w.start), a: w.amount,
+            tip: 'Week of ' + psiDay(w.start) + '\n' + psiMoney(w.amount) + ' · ' + w.count + ' instalment' + (w.count === 1 ? '' : 's') })), { single: 1, aria: 'Expected collections by week', labelW: 50 })
+          : '<div class="kt-psi-empty">Nothing falls due in the next 13 weeks.</div>') + '</div>';
+      const hist = d.history || [];
+      const hTotal = hist.reduce((a, h) => a + h.scheduled, 0);
+      const history = '<div class="kt-psi-panel"><div class="kt-psi-h">Collected vs scheduled, last 6 months</div><p class="cap">What fell due each month (light) and how much of it has been paid (dark).</p>'
+        + '<div class="kt-psi-legrow"><span><i style="background:var(--psi-s1l)"></i>Scheduled</span><span><i style="background:var(--psi-s1)"></i>Collected</span></div>'
+        + (hTotal ? psiCols(hist.map(h => {
+            const lab = psiDay(h.month + '-01', { month: 'short', year: 'numeric' });
+            return { label: lab, short: psiDay(h.month + '-01', { month: 'short' }), a: h.scheduled, b: h.collected,
+              tip: lab + '\nScheduled ' + psiMoney(h.scheduled) + '\nCollected ' + psiMoney(h.collected) + ' (' + psiPct(h.collected, h.scheduled) + ')' };
+          }), { aria: 'Collected versus scheduled by month', labelW: 40 })
+          : '<div class="kt-psi-empty">Nothing fell due in the last 6 months.</div>') + '</div>';
+
+      const bc = (d.by_centre || []).filter(c => c.monthly > 0);
+      let centrePanel = '';
+      if (!F.centre_id && bc.length > 1) {
+        const top = bc.slice(0, 8), max = top[0].monthly || 1;
+        centrePanel = '<div class="kt-psi-panel"><div class="kt-psi-h">Top centres by scheduled amount</div><p class="cap">Running schedules as a monthly amount' + (bc.length > 8 ? ' (top 8 of ' + bc.length + ')' : '') + '.</p>'
+          + top.map(c => '<div class="kt-psi-row" data-tip="' + esc(c.name + '\n' + psiMoney(c.monthly) + '/mo · ' + c.schedules + ' schedule' + (c.schedules === 1 ? '' : 's') + '\n' + psiMoney(c.outstanding) + ' still to collect') + '"><span class="n">' + esc(c.name) + '</span><span class="t"><i style="width:' + Math.max(2, Math.round(c.monthly / max * 100)) + '%"></i></span><b>' + psiMoney(c.monthly, 0) + '</b></div>').join('')
+          + '</div>';
+      }
+
+      body = '<div class="kt-psi-tiles">' + tiles + '</div>'
+        + '<div class="kt-psi-grid">' + methodPie + freqPie + statusPie + '</div>'
+        + '<div class="kt-psi-grid two">' + upcoming + history + '</div>'
+        + (centrePanel ? '<div class="kt-psi-grid two">' + centrePanel + '</div>' : '')
+        + '<p class="kt-psi-note">Per month: weekly × 52/12, every 2 weeks × 26/12, monthly × 1, quarterly ÷ 3; irregular dates spread over the months they cover; one-off schedules are left out. '
+        + 'Paid follows the invoice each instalment raised (or the iLearn invoice for the same due date). Closed families and centres are not counted. '
+        + (d.not_tracked && d.not_tracked.length ? 'Not recorded: ' + esc(d.not_tracked.join('; ')) + '.' : '') + '</p>';
+    }
+
+    const charts = PSI_CH; PSI_CH = [];
+    host.innerHTML = '<div class="kt-psi">' + head + body + '</div>';
+    const root = host.firstChild;
+    const paint = function () {
+      [].forEach.call(root.querySelectorAll('.kt-psi-chart'), function (box) {
+        const c = charts[+box.getAttribute('data-ch')], wv = Math.round(box.clientWidth);
+        if (!c || !wv || box._w === wv) return;
+        box._w = wv; c[1].W = wv; box.innerHTML = psiCols(c[0], c[1]); c[1].W = 0;
+      });
+    };
+    paint();
+    if (window.ResizeObserver) { const ro = new ResizeObserver(function () { if (!root.isConnected) { ro.disconnect(); return; } paint(); }); ro.observe(root); }
+    psiTips(root);
+    root.querySelectorAll('[data-psi]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        psiSsSet(PSI_KEY + (el.getAttribute('data-psi') === 'centre_id' ? '_c' : '_s'), el.value);
+        renderPPInsights(host);
+      });
+    });
+    const tg = root.querySelector('[data-psi-toggle]');
+    if (tg) tg.addEventListener('click', function () {
+      try { localStorage.setItem(PSI_KEY + '_hide', hidden ? '0' : '1'); } catch (e) {}
+      renderPPInsights(host);
+    });
+  }
+  KT.ppInsights = renderPPInsights;
 
   // ============================ Payment schedules ============================
   async function renderPaymentPlans(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
     const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
-    const isStaff = Array.isArray(u.roles) && u.roles.some(r => ['agency_admin', 'centre_director', 'platform_admin'].includes(r));
+    // The role on screen, not the account's (View as a parent = a parent's schedules).
+    const isStaff = (window.ktRoles ? window.ktRoles(u) : (u.roles || [])).some(r => ['agency_admin', 'centre_director', 'platform_admin'].includes(r));
     // Staff used to be met with an "Enter the family ID" prompt on arrival — and there
     // is nowhere in the app to look that number up, so the screen was unusable. Pick the
     // family by NAME instead, and remember the choice so returning here doesn't ask again.
@@ -200,6 +512,7 @@
         <p>${isStaff && !fid ? 'Choose a family to see their payment schedules.' : plans.length + ' schedule(s). Dated instalments, each raising its own invoice shortly before it falls due.'}</p>
         ${isStaff ? '<div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="pp-new">+ New payment schedule</button></div>' : ''}
       </div>
+      ${isStaff ? '<div id="pp-insights"></div>' : ''}
       ${picker}
       ${plans.map(p => `<div class="kt-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -242,6 +555,8 @@
     </div>`;
     plansRef.list = plans || [];
     ppDenseStyle();
+    /* Insights load on their own, so the schedules below never wait for the figures. */
+    if (isStaff) { renderPPInsights(main.querySelector('#pp-insights')); }
     /* kt-row-actions.js sweeps on its own schedule and this screen paints after an
        await, so it has already run by the time these rows exist. Nudging it is the
        documented step for an async render. */
@@ -289,21 +604,40 @@
               toast('None of those are still pending \u2014 nothing to issue.', 'error');
               return;
             }
+            /* Ask on issue, ticked (2026-10-31): one tick for the batch - each family's guardians get their own copy,
+               with this person's usual staff copies (as remembered by the Resend popup). */
+            const canEmail = !!KT.emailInvoiceDefault;
+            let mailCb = null, extraEl;
+            if (canEmail) {
+              extraEl = document.createElement('label');
+              extraEl.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13.5px;font-weight:700;color:#0F172A;cursor:pointer;';
+              mailCb = document.createElement('input'); mailCb.type = 'checkbox'; mailCb.checked = true;
+              mailCb.style.cssText = 'width:18px;height:18px;margin:0;accent-color:#1F6080;';
+              extraEl.appendChild(mailCb);
+              extraEl.appendChild(document.createTextNode('Email each guardian their copy (staff copies as usual)'));
+            }
             const ok = await KT.confirm({
               title: 'Issue ' + targets.length + ' invoice(s) now?',
               description: 'They become owed by the family straight away and start counting towards '
-                + 'due and overdue reminders. Due dates do not change, and no email is sent.'
+                + 'due and overdue reminders. Due dates do not change.'
                 + (skipped ? ' ' + skipped + ' selected row(s) are already issued and will be left alone.' : ''),
               okLabel: 'Issue ' + targets.length,
+              extra: extraEl,
             });
             if (!ok) { return; }
-            let done = 0, failed = 0;
+            const wantEmail = !!(mailCb && mailCb.checked);
+            let done = 0, failed = 0, mailed = 0, notMailed = 0;
             for (const t of targets) {
               try { await Api.post('/director/invoices/' + t.inv + '/issue', {}); done++; }
-              catch (e) { failed++; }
+              catch (e) { failed++; continue; }
+              if (wantEmail) {
+                try { const er = await KT.emailInvoiceDefault(t.inv); if (er && er.sent === false) { notMailed++; } else { mailed++; } }
+                catch (e) { notMailed++; }
+              }
             }
             toast(done + ' issued' + (failed ? ', ' + failed + ' failed' : '')
-              + (skipped ? ', ' + skipped + ' already issued' : ''), failed ? 'error' : 'success');
+              + (wantEmail ? ' · ' + mailed + ' emailed' + (notMailed ? ', ' + notMailed + ' not emailed' : '') : '')
+              + (skipped ? ', ' + skipped + ' already issued' : ''), (failed || notMailed) ? 'error' : 'success');
             renderPaymentPlans(main);
           },
         },
@@ -389,7 +723,8 @@
         const rows = editable.map(i => ({ due_date: String(i.due_date).slice(0, 10), amount: Number(i.amount) }));
         const label = (plan.family_name || plan.family || 'This family');
         openScheduleReview(plan.family_id, label,
-          rows.reduce((a, r) => a + r.amount, 0), scheduleNote(plan.notes) || '', rows, plan.id, kept);
+          rows.reduce((a, r) => a + r.amount, 0), scheduleNote(plan.notes) || '', rows, plan.id, kept,
+          plan.description || '');
       });
     });
     if (isStaff) {
@@ -677,8 +1012,8 @@
   function staffNow() {
     try {
       const u = JSON.parse(sessionStorage.getItem('kt_user') || '{}');
-      return Array.isArray(u.roles)
-        && u.roles.some(r => ['agency_admin', 'centre_director', 'platform_admin'].includes(r));
+      return (window.ktRoles ? window.ktRoles(u) : (u.roles || []))
+        .some(r => ['agency_admin', 'centre_director', 'platform_admin'].includes(r));
     } catch (e) { return false; }
   }
 
@@ -702,6 +1037,13 @@
         const on = iss.getAttribute('data-inv-on') || '';
         /* `description` and `okLabel` are what KT.confirm reads — a `body`/`confirmText`
            pair would render a bare title and an "OK". */
+        /* Ask on issue, ticked (2026-10-31): the confirm offers "Email each guardian their copy", ticked. */
+        if (KT.issueInvoice) {
+          const r0 = await KT.issueInvoice({ id: iss.getAttribute('data-inv-issue'), number: num,
+            scheduledText: on ? 'It is scheduled to issue on its own on ' + fmtDate(on) + '.' : '' });
+          if (r0) { renderPaymentPlans(main); }
+          return;
+        }
         const ok = await KT.confirm({
           title: 'Issue ' + num + ' now?',
           description: (on ? 'It is scheduled to issue on its own on ' + fmtDate(on) + '. ' : '')
@@ -756,6 +1098,8 @@
         e.preventDefault();
         e.stopPropagation();
         const num = rs.getAttribute('data-inv-num') || 'this invoice';
+        // The one resend popup: guardians ticked, admins/directors copied by default (2026-10-31).
+        if (window.KT && KT.resendInvoice) { KT.resendInvoice({ kind: 'native', id: rs.getAttribute('data-inv-resend'), number: num }); return; }
         const plan = (plansRef.list || []).filter(x => String(x.id) === rs.getAttribute('data-plan'))[0];
         const to = ((plan && plan.guardian_emails) || []).join(', ');
         /* KT.prompt resolves the raw STRING when there is a single field (an object only
@@ -823,6 +1167,16 @@
       const x = e.target.closest('[data-inv-ext]');
       if (!x) { return; }
       e.preventDefault();
+      /* In the portal's document pop-up, not a new tab (2026-10-28, Anthony: "under payment schedules and viewing
+         invoices should be a pop-up"). The PDF route serves a parent of the family or the agency's staff, and the
+         viewer has Close, Download and Print. The old new-tab path stays as the fallback. */
+      if (window.KT && KT.openFile && KT.fetchFileBlob) {
+        const apiB = (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+        const xid = x.getAttribute('data-inv-ext');
+        KT.openFile(KT.fetchFileBlob(apiB + '/invoices/external/' + xid + '/pdf').then(function (bl) { return new Blob([bl], { type: 'application/pdf' }); }),
+          { title: 'Invoice', label: 'Invoice', filename: 'invoice-' + xid + '.pdf', mime: 'application/pdf' });
+        return;
+      }
       /* Fetched through our API so the provider's token never sits in the page and the
          family check happens on our side. The tab is opened BEFORE the await — a popup
          blocker refuses a window opened after one. */
@@ -896,10 +1250,11 @@
       </div>
 
       <label for="ps-desc" style="${lbl}margin-top:12px;">What is this for? <span style="color:#DC2626;">*</span></label>
-      <input id="ps-desc" maxlength="200" placeholder="e.g. Full-time childcare, Sep 2026 – Feb 2027" style="${fld}">
+      <input id="ps-desc" maxlength="200" placeholder="e.g. Ava Thompson — Full-time child care (Mon–Fri)" style="${fld}">
       <div style="font-size:11.5px;color:#64748B;margin-top:4px;line-height:1.5;">
-        Printed on every invoice as the line the total is for. Left blank, each one reads
-        “Payment schedule instalment 3 of 7”, which tells a parent nothing.</div>
+        The invoice line description. Filled in with the child and their care when you pick the family — change it as
+        you like. Optional placeholders, filled on each invoice: <code>{child}</code> <code>{service}</code>
+        <code>{month}</code> <code>{period}</code>. If the wording doesn't name the child, the child's name is added.</div>
 
       <!-- WHEN THE MONEY IS ACTUALLY DUE. Anthony: "indicate due immediately or can
            choose date when are actually due (grace period)". The dates above are the DUE
@@ -1050,6 +1405,17 @@
       famId.value = id;
       famInput.value = label;
       closeList();
+      /* THE CHILD AND THE SERVICE, PREFILLED (2026-10-31, Anthony: invoices from a payment schedule "should include
+         the child's name and service under description"). Only fills an empty box, or one still holding the last
+         suggestion - never what somebody typed. */
+      const descEl = wrap.querySelector('#ps-desc');
+      if (descEl && (!descEl.value.trim() || descEl.value === descEl.dataset.auto)) {
+        Api.get('/payment-plans/description-default?family_id=' + encodeURIComponent(id)).then(function (r) {
+          if (!r || !r.text || +famId.value !== +id) return;
+          if (descEl.value.trim() && descEl.value !== descEl.dataset.auto) return;
+          descEl.value = r.text; descEl.dataset.auto = r.text;
+        }).catch(function () {});
+      }
     }
 
     famInput.addEventListener('input', function () {
@@ -1285,7 +1651,7 @@
         <p style="margin:0 0 12px;font-size:13.5px;color:#334155;line-height:1.6;">
           <strong>${esc(familyLabel)}</strong> — ${rows.length} instalment(s). Correct any date or
           amount before saving. Each line raises its own invoice${editPlanId || issueNow ? '' : ', issued a few days before it falls due'}.</p>
-        ${(description || (lineItems || []).length) ? `<p style="margin:-4px 0 10px;font-size:12.5px;color:#334155;background:#F8FAFC;border-left:3px solid #CBD5E1;padding:8px 10px;border-radius:0 6px 6px 0;line-height:1.55;">
+        ${(description || (lineItems || []).length) ? `<p style="margin:-4px 0 10px;font-size:12.5px;color:#334155;background:#F8FAFC;background:#F8FAFC;border-radius:8px;padding:8px 10px;border-radius:0 6px 6px 0;line-height:1.55;">
           ${description ? `Each invoice's main line will read <strong>${esc(description)}</strong>.` : ''}
           ${extraEvery ? `Every instalment also carries <strong>${money(extraEvery)}</strong> of extra charges, so
             a ${money(rows[0] ? rows[0].amount : 0)} instalment is invoiced at
@@ -1294,7 +1660,12 @@
           ${leadDays === 0 ? ' Each invoice is issued on its due date and owed the same day.'
             : (leadDays > 0 ? ' Each invoice goes out ' + leadDays + ' day(s) before it is due.' : '')}
           </p>` : ''}
-        ${editPlanId && keptCount ? `<p style="margin:-4px 0 12px;font-size:12.5px;color:#7C4A11;background:#FFF8EC;border-left:3px solid #B45309;padding:8px 10px;border-radius:0 6px 6px 0;line-height:1.55;">
+        ${editPlanId ? `<label for="ps-rdesc" style="display:block;font-size:12px;font-weight:700;color:#334155;margin:0 0 4px;">Invoice line description</label>
+          <input id="ps-rdesc" maxlength="200" value="${esc(description || '')}" placeholder="Blank = {child} — {service}"
+            style="width:100%;box-sizing:border-box;height:32px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;margin:0 0 4px;">
+          <div style="font-size:11.5px;color:#64748B;margin:0 0 12px;line-height:1.5;">Used for the instalments below; issued invoices keep theirs.
+            Placeholders: <code>{child}</code> <code>{service}</code> <code>{month}</code> <code>{period}</code>.</div>` : ''}
+        ${editPlanId && keptCount ? `<p style="margin:-4px 0 12px;font-size:12.5px;color:#7C4A11;background:#FFF8EC;--kt-edge:#B45309;padding:8px 10px;border-radius:0 6px 6px 0;line-height:1.55;">
           ${keptCount} instalment(s) have already been issued to this family and are left untouched — only the
           instalments below are rewritten.</p>` : ''}
         <div style="max-height:46vh;overflow:auto;border:1px solid #E2E8F0;border-radius:10px;">
@@ -1335,11 +1706,14 @@
             <span><strong>Keep as drafts</strong> — each invoice stays pending until shortly before
             its own due date, then issues automatically. Nothing is owed before then. (How many days'
             notice is set in Settings → Billing → Defaults &amp; fees.)</span></label>
-          ${issueNow ? `<p style="margin:10px 0 0;font-size:12.5px;color:#7C4A11;background:#FFF8EC;border-left:3px solid #B45309;padding:8px 10px;border-radius:0 6px 6px 0;line-height:1.55;">
+          ${issueNow ? `<p style="margin:10px 0 0;font-size:12.5px;color:#7C4A11;background:#FFF8EC;--kt-edge:#B45309;padding:8px 10px;border-radius:0 6px 6px 0;line-height:1.55;">
             Saving will issue ${rows.length} invoice(s) totalling <strong>${money(sum)}</strong> to
             ${esc(familyLabel)} immediately.</p>` : ''}
         </div>`}
         <div id="ps-rmsg" style="margin-top:10px;font-size:13px;color:#B91C1C;"></div>`;
+      // A repaint (rows edited) rebuilds the form: keep what was typed in the description.
+      const rdesc = wrap.querySelector('#ps-rdesc');
+      if (rdesc) { rdesc.addEventListener('input', function () { description = this.value; }); }
 
       wrap.querySelectorAll('input[name="ps-issue-mode"]').forEach(el => el.addEventListener('change', function () {
         issueNow = this.value === 'now'; paint();
@@ -1390,6 +1764,10 @@
               notes: notes || null,
               installments: rows.map(r => ({ due_date: r.due_date, amount: Number(r.amount) })),
             };
+            if (editPlanId) {
+              const rd = wrap.querySelector('#ps-rdesc');
+              if (rd) { payload.description = rd.value.trim(); }
+            }
             if (!editPlanId) {
               payload.family_id = familyId;
               payload.issue_now = issueNow;
@@ -1590,7 +1968,7 @@
       ${isMyTurn ? `
         <h4 style="margin-top:14px;color:#0F172A;font-size:14px;">Sign now</h4>
         <input id="dw-name" placeholder="Your full name" style="width:100%;padding:9px;border:1px solid #E2E8F0;border-radius:8px;margin-bottom:8px;">
-        <canvas id="dw-pad" width="500" height="150" style="border:2px dashed #CBD5E1;border-radius:8px;width:100%;background:#FAFCFE;cursor:crosshair;"></canvas>
+        <div id="dw-pad"></div>
         <button id="dw-clear" style="background:#F1F5F9;border:0;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;margin-top:4px;">Clear signature</button>
       ` : ''}
       <div style="margin-top:18px;text-align:right;">
@@ -1601,25 +1979,17 @@
     document.body.appendChild(m);
     m.querySelector('#dw-close').onclick = () => m.remove();
     if (isMyTurn) {
-      const c = m.querySelector('#dw-pad');
-      const ctx = c.getContext('2d');
-      ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2; ctx.lineCap = 'round';
-      let drawing = false;
-      const pos = (e) => { const r = c.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return [(t.clientX - r.left) * c.width / r.width, (t.clientY - r.top) * c.height / r.height]; };
-      c.addEventListener('mousedown', e => { e.preventDefault(); drawing = true; const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); });
-      c.addEventListener('mousemove', e => { if (!drawing) return; const [x, y] = pos(e); ctx.lineTo(x, y); ctx.stroke(); });
-      c.addEventListener('mouseup', () => drawing = false);
-      c.addEventListener('mouseleave', () => drawing = false);
-      c.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); });
-      c.addEventListener('touchmove', e => { e.preventDefault(); if (!drawing) return; const [x, y] = pos(e); ctx.lineTo(x, y); ctx.stroke(); });
-      c.addEventListener('touchend', () => drawing = false);
-      m.querySelector('#dw-clear').onclick = () => ctx.clearRect(0, 0, c.width, c.height);
+      // The shared pad (kt-signature-pad.js) since 2026-11-06: saved signatures included.
+      const pad = KT.signaturePadInline(m.querySelector('#dw-pad'), { height: 150, context: 'doc_workflow:' + id });
+      m.querySelector('#dw-clear').onclick = () => pad.clear();
       m.querySelector('#dw-sign').onclick = async () => {
         if (!m.querySelector('#dw-name').value.trim()) { toast('Name required', 'warning'); return; }
+        // An empty pad used to be accepted and filed as a blank signature.
+        if (pad.isEmpty()) { toast('Please sign first', 'warning'); return; }
         try {
           await Api.post(`/doc-workflows/${id}/sign`, {
             step_order: w.current_step,
-            signature_data: c.toDataURL('image/png'),
+            signature_data: pad.toDataURL(),
           });
           toast('Signed', 'success');
           m.remove();

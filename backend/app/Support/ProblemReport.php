@@ -139,7 +139,7 @@ final class ProblemReport
             if (! self::isServerFault($e)) {
                 return null;
             }
-            if (! self::isTheApplication()) {
+            if (! self::isTheApplication($e)) {
                 return null;
             }
             if (self::isFirstTransientBlip($e)) {
@@ -208,7 +208,7 @@ final class ProblemReport
      * not an incident. Filed on 2026-09-01: three high-priority tickets, all of them
      * a debugging script failing.
      */
-    private static function isTheApplication(): bool
+    private static function isTheApplication(?Throwable $e = null): bool
     {
         try {
             if (! app()->runningInConsole()) {
@@ -217,6 +217,20 @@ final class ProblemReport
             $entry = (string) ($_SERVER['argv'][0] ?? '');
             if ($entry === '') {
                 return true;                      // cannot tell — report it
+            }
+            /* `artisan tinker` is a person at the console too (tickets #237, #238, 2026-11-06: checking a staged copy
+               of a class in tinker - "Cannot declare class" - arrived as high-priority server faults). Nothing the
+               application runs goes through tinker. So is a fault thrown by a file outside the application (a staged
+               copy under ~/stage, a scratch file): nobody ships that file. */
+            if (($_SERVER['argv'][1] ?? '') === 'tinker') {
+                return false;
+            }
+            if ($e) {
+                $file = (string) $e->getFile();
+                $base = rtrim(base_path(), '/') . '/';
+                if ($file !== '' && $file[0] === '/' && ! str_starts_with($file, $base)) {
+                    return false;
+                }
             }
 
             return basename($entry) === 'artisan';

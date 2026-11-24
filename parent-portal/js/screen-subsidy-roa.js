@@ -8,7 +8,8 @@
    (P), reported absences (S sick, V holiday, A other), closures (H holiday, N other) and the
    child's schedule; staff correct any day, one person marks it reviewed, a SECOND person signs
    it off, and someone records the date it was entered in OCCMS. Then it is locked (Amend, with
-   a reason, reopens it). Tab 2 is the CWELCC monthly summary for the same month.
+   a reason, reopens it). Tab 2 is the CWELCC monthly summary for the same month. Tab 3 (2026-11-13) is Monthly
+   attendance & fees: every enrolled child, hours per day, fees and space type (App\Support\MonthlyAttendance).
 
    Admins (every centre) and directors (their own). Ontario agencies only: the menu item is
    hidden unless GET /occms/status says on.
@@ -161,17 +162,21 @@
       // Worded labels + data-kt-iconized: the platform strips bare "⬇ CSV" buttons and icon-ifies "print".
       + '<button class="roa-b" id="roa-csv" type="button" data-kt-iconized="1">ROA as CSV</button><button class="roa-b" id="roa-pdf" type="button" data-kt-iconized="1">Printable ROA (PDF)</button>'
       + '</div><div class="roa-tabs">'
-      + tabBtn('roa', 'Record of Attendance') + tabBtn('cwelcc', 'CWELCC summary') + (d.can_settings ? tabBtn('settings', 'Settings') : '')
+      + tabBtn('roa', 'Record of Attendance') + tabBtn('att', 'Monthly attendance & fees') + tabBtn('cwelcc', 'CWELCC summary') + (d.can_settings ? tabBtn('settings', 'Settings') : '')
       + '</div></div><div id="roa-pane"></div></div>';
     main.innerHTML = h;
     var $ = function (id) { return main.querySelector('#' + id); };
     $('roa-c').addEventListener('change', function () { state.centre = this.value; render(main); });
     $('roa-m').addEventListener('change', function () { if (this.value) { state.month = this.value; render(main); } });
     $('roa-csv').addEventListener('click', function () {
+      if (state.tab === 'att') { download('/occms/attendance/xlsx' + query(), 'Attendance-' + slug(d.centre.name) + '-' + state.month + '.xlsx'); return; }
       if (state.tab === 'cwelcc') download('/occms/cwelcc/csv' + query(), 'CWELCC-summary-' + state.month + '.csv');
       else download('/occms/roa/csv' + query(), 'ROA-' + slug(d.centre.name) + '-' + state.month + '.csv');
     });
-    $('roa-pdf').addEventListener('click', function () { download('/occms/roa/pdf' + query(), 'ROA-' + slug(d.centre.name) + '-' + state.month + '.pdf'); });
+    $('roa-pdf').addEventListener('click', function () {
+      if (state.tab === 'att') { download('/occms/attendance/pdf' + query(), 'Attendance-' + slug(d.centre.name) + '-' + state.month + '.pdf'); return; }
+      download('/occms/roa/pdf' + query(), 'ROA-' + slug(d.centre.name) + '-' + state.month + '.pdf');
+    });
     main.querySelectorAll('[data-tab]').forEach(function (b) {
       b.addEventListener('click', function () { state.tab = b.getAttribute('data-tab'); main.querySelectorAll('[data-tab]').forEach(function (x) { x.classList.toggle('on', x === b); }); pane(main); });
     });
@@ -183,9 +188,10 @@
 
   function pane(main) {
     var el = main.querySelector('#roa-pane'); if (!el) return;
-    var pdf = main.querySelector('#roa-pdf'); if (pdf) pdf.style.display = state.tab === 'roa' ? '' : 'none';
-    var csv = main.querySelector('#roa-csv'); if (csv) { csv.style.display = state.tab === 'settings' ? 'none' : ''; csv.textContent = state.tab === 'cwelcc' ? 'CWELCC summary as CSV' : 'ROA as CSV'; }
+    var pdf = main.querySelector('#roa-pdf'); if (pdf) { pdf.style.display = (state.tab === 'roa' || state.tab === 'att') ? '' : 'none'; pdf.textContent = state.tab === 'att' ? 'Printable sheet (PDF)' : 'Printable ROA (PDF)'; }
+    var csv = main.querySelector('#roa-csv'); if (csv) { csv.style.display = state.tab === 'settings' ? 'none' : ''; csv.textContent = state.tab === 'cwelcc' ? 'CWELCC summary as CSV' : (state.tab === 'att' ? 'Sheet as Excel' : 'ROA as CSV'); }
     if (state.tab === 'cwelcc') return paneCwelcc(main, el);
+    if (state.tab === 'att') return paneAttendance(main, el);
     if (state.tab === 'settings' && state.data.can_settings) return paneSettings(main, el);
     state.tab = 'roa';
     paneRoa(main, el);
@@ -387,6 +393,46 @@
     });
   }
 
+  // ── Monthly attendance & fees ─────────────────────────────────────────────────
+  /* The sheet centres keep by hand (2026-11-13): every child enrolled in the month, hours in care each operating day,
+     the month's hours, parent / government / total fees and the space type. Read-only - it is worked out from sign-ins,
+     absences, closures and invoices; fix those at the source. The printout adds a parent signature column. */
+  var MARK = { A: ['#FEE2E2', '#991B1B'], X: ['#EDE9FE', '#5B21B6'], x: ['#F8FAFC', '#94A3B8'], IN: ['#FEF3C7', '#92400E'] };
+  function money(v) { return '$' + (Math.round((+v || 0) * 100) / 100).toFixed(2); }
+  function hrs(v) { return String(Math.round((+v || 0) * 100) / 100); }
+  async function paneAttendance(main, el) {
+    el.innerHTML = '<div class="roa-card" style="color:#64748B;">Loading…</div>';
+    var a;
+    try { a = await Api.get('/occms/attendance' + query()); }
+    catch (e) { el.innerHTML = '<div class="roa-card" style="color:#B91C1C;">' + esc((e && e.message) || 'Could not load.') + '</div>'; return; }
+    if (!el.isConnected) return;
+    var h = '<div class="roa-card"><div class="roa-row" style="justify-content:space-between;margin-bottom:8px;"><div><div style="font-weight:800;font-size:15px;">' + esc(monthLabel(a.month)) + ' attendance · ' + esc(a.centre.name) + '</div>'
+      + '<div style="font-size:12.5px;color:#64748B;">' + a.children.length + ' child' + (a.children.length === 1 ? '' : 'ren') + ' enrolled · ' + hrs(a.totals.hours) + ' hours · ' + money(a.totals.total) + ' in fees</div></div>'
+      + '<div style="font-size:12px;color:#64748B;">Hours in care each day, from sign-in to sign-out.</div></div>';
+    if (!a.children.length) { el.innerHTML = h + '<div style="font-size:13px;color:#64748B;">No children were enrolled in this centre\'s rooms in ' + esc(monthLabel(a.month)) + '.</div></div>'; return; }
+    h += '<div class="roa-scroll kt-no-mcards" data-kt-allow-overflow><table class="roa-g" data-kt-no-filter data-kt-no-bulk data-kt-noexport data-kt-no-kebab><tbody><tr class="hd"><th class="nm">Child</th>';
+    a.days.forEach(function (x) { h += '<th class="dc' + (x.closure ? ' cl' : '') + '"' + (x.closure ? ' title="' + esc(x.closure) + '"' : '') + '>' + x.d + '<br>' + esc(x.dow) + '</th>'; });
+    h += '<th class="tot">Hours</th><th class="tot">Parent fees</th><th class="tot">Gov. fees</th><th class="tot">Total fees</th><th class="tot">Space type</th></tr>';
+    a.children.forEach(function (c) {
+      h += '<tr><td class="nm"><div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(c.last_name + ', ' + c.first_name) + '</div>'
+        + (c.left_on ? '<div class="roa-sub">left ' + esc(day(c.left_on)) + '</div>' : '') + '</td>';
+      c.cells.forEach(function (v, i) {
+        var x = a.days[i], t = MARK[v];
+        var inner = v === '' ? '' : (t ? '<span class="roa-code" data-kt-no-tone style="background:' + t[0] + ';color:' + t[1] + ';">' + esc(v) + '</span>' : esc(hrs(v)));
+        h += '<td class="dc' + (x.closure ? ' cl' : '') + '"' + (t ? ' title="' + esc(a.marks[v] || '') + '"' : '') + '>' + inner + '</td>';
+      });
+      h += '<td class="tot">' + hrs(c.hours) + '</td><td class="tot">' + money(c.parent_fees) + '</td><td class="tot">' + money(c.gov_fees) + '</td><td class="tot">' + money(c.total_fees) + '</td><td class="tot">' + esc(c.space_type) + '</td></tr>';
+    });
+    h += '<tr><td class="nm" style="font-weight:800;">Total</td>' + a.days.map(function () { return '<td class="dc"></td>'; }).join('')
+      + '<td class="tot">' + hrs(a.totals.hours) + '</td><td class="tot">' + money(a.totals.parent) + '</td><td class="tot">' + money(a.totals.gov) + '</td><td class="tot">' + money(a.totals.total) + '</td><td class="tot"></td></tr>';
+    h += '</tbody></table></div>'
+      + '<div class="roa-leg">' + Object.keys(a.marks).map(function (k) { var t = MARK[k]; return '<span><span class="roa-code" style="background:' + t[0] + ';color:' + t[1] + ';">' + esc(k) + '</span> ' + esc(a.marks[k]) + '</span>'; }).join('') + '</div>'
+      + '<div style="font-size:12px;color:#64748B;margin-top:6px;">Space type: IN infant, TO toddler, PS preschool, KG kindergarten, SA school age; FT booked five or more days a week, PT fewer. '
+      + 'Fees come from the family\'s invoices for the month; a charge that names no child is shared between the family\'s children. Gov. fees are the fee subsidy on the invoice, or the child\'s fee subsidy for the month. Since 2025 a CWELCC family pays the base fee, so CWELCC itself is not a government fee here. '
+      + 'The printable sheet adds a parent signature column. Also in Reports → Monthly attendance & fees.</div></div>';
+    el.innerHTML = h;
+  }
+
   // ── CWELCC summary ────────────────────────────────────────────────────────────
   async function paneCwelcc(main, el) {
     el.innerHTML = '<div class="roa-card" style="color:#64748B;">Loading…</div>';
@@ -410,7 +456,59 @@
       + c.ageing_out.map(function (a) { return '<li><b>' + esc(a.name) + '</b> (' + esc(a.group) + ') — eligible until ' + esc(day(a.until)) + '</li>'; }).join('') + '</ul></div>';
     if (c.check.length) h += '<div class="roa-card" style="border-color:#FCD34D;background:#FFFBEB;"><div style="font-weight:800;font-size:15px;margin-bottom:4px;">Check before you report</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;">'
       + c.check.map(function (a) { return '<li><b>' + esc(a.name) + '</b> (' + esc(a.group) + '): ' + esc(a.issue) + '</li>'; }).join('') + '</ul></div>';
+    if (c.fees) h += baseFees(c.fees);
     el.innerHTML = h;
+    if (c.fees) wireBaseFees(main, el, c);
+  }
+
+  /* BASE FEES (2026-11-13). Since January 1, 2025 a CWELCC child's fee is the base fee: the lower of $22 a day or the
+     centre's December 31, 2024 daily fee for the age group, never below $12 (App\Support\CwelccFees). Mandatory
+     charges count toward it; only optional services go on top. Closures: at most 10 business days in a row, 20 a year. */
+  var GROUP_LABEL = { infant: 'Infant', toddler: 'Toddler', preschool: 'Preschool', kindergarten: 'Kindergarten', school_age: 'School age' };
+  function baseFees(f) {
+    var can = !!(state.data && state.data.can_settings);
+    var h = '<div class="roa-card"><div class="roa-row" style="justify-content:space-between;"><div style="font-weight:800;font-size:15px;">CWELCC base fees</div>'
+      + (f.issues ? '<span class="roa-chip" style="background:#FEF3C7;color:#92400E;">⚠ ' + f.issues + ' to check</span>' : '<span class="roa-chip" style="background:#DCFCE7;color:#166534;">✓ Nothing over the limits</span>') + '</div>'
+      + '<div style="font-size:12.5px;color:#64748B;margin:4px 0 8px;">Base fee: the lower of $' + f.set.cap + ' a day or the December 31, 2024 daily fee, never below $' + f.set.floor + '. Mandatory fees count toward it; only optional services may be charged on top.</div>'
+      + '<div style="overflow-x:auto;"><table class="roa-t" data-kt-no-filter data-kt-no-bulk data-kt-noexport><thead><tr><th>Age group</th><th class="n">Dec 31, 2024 daily fee</th><th class="n">Base fee</th></tr></thead><tbody>'
+      + Object.keys(GROUP_LABEL).map(function (g) {
+          var dec = f.set.dec2024[g];
+          return '<tr><td>' + GROUP_LABEL[g] + '</td><td class="n">' + (can ? '<input class="roa-i" type="number" min="0" step="0.01" data-dec="' + g + '" value="' + (dec == null ? '' : dec) + '" placeholder="not entered" style="width:120px;text-align:right;">' : (dec == null ? '<span style="color:#94A3B8;">not entered</span>' : money(dec)))
+            + '</td><td class="n" style="font-weight:700;">' + (f.base[g] == null ? '<span style="color:#94A3B8;font-weight:500;">$' + f.set.cap + ' cap</span>' : money(f.base[g])) + '</td></tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      + (can ? '<div class="roa-row" style="margin-top:8px;"><button class="roa-b p" type="button" id="roa-bf-save">Save December 31, 2024 fees</button><span class="roa-sub">For this centre. Until a fee is entered, the $' + f.set.cap + ' cap is the limit.</span></div>' : '');
+    h += '<div style="font-weight:800;font-size:13.5px;margin:14px 0 4px;">Each CWELCC child\'s fee as a daily figure</div>'
+      + '<div style="overflow-x:auto;"><table class="roa-t" data-kt-no-filter data-kt-no-bulk data-kt-noexport><thead><tr><th>Child</th><th>Age group</th><th class="n">Monthly fee</th><th class="n">Days a week</th><th class="n">Daily</th><th class="n">Limit</th><th>Status</th></tr></thead><tbody>'
+      + (f.children.length ? f.children.map(function (r) {
+          var st = r.status === 'over' ? '<span style="color:#B91C1C;font-weight:700;">Over by ' + money(r.over_per_day) + '/day (' + money(r.over_per_month) + '/month)</span>'
+            : r.status === 'no_fee' ? '<span style="color:#94A3B8;">No fee on the enrolment</span>' : '<span style="color:#166534;">Within</span>';
+          return '<tr><td>' + esc(r.name) + '</td><td>' + esc(r.label) + '</td><td class="n">' + money(r.monthly_fee) + '</td><td class="n">' + r.days_per_week + '</td><td class="n">' + money(r.daily) + '</td><td class="n">' + money(r.limit) + (r.base_known ? '' : '*') + '</td><td>' + st + '</td></tr>';
+        }).join('') : '<tr><td colspan="7" style="color:#64748B;">No CWELCC children with a CWELCC-enrolled family this month.</td></tr>')
+      + '</tbody></table></div>'
+      + '<div class="roa-sub" style="margin-top:4px;">Daily = monthly fee ÷ (261 ÷ 12 × days a week ÷ 5). * The December 31, 2024 fee is not entered, so the $' + f.set.cap + ' cap is used.</div>';
+    if (f.fees.length) h += '<div style="font-weight:800;font-size:13.5px;margin:14px 0 4px;">Other charges to CWELCC families this month</div>'
+      + '<div class="roa-sub" style="margin-bottom:4px;">Allowed only for optional services the family chose (for example field trips or extra items). A mandatory fee must be inside the base fee.</div>'
+      + '<div style="overflow-x:auto;"><table class="roa-t" data-kt-no-filter data-kt-no-bulk data-kt-noexport><thead><tr><th>Family</th><th>Invoice</th><th>Description</th><th class="n">Amount</th></tr></thead><tbody>'
+      + f.fees.map(function (r) { return '<tr><td>' + esc(r.family) + '</td><td>' + esc(r.invoice) + '</td><td>' + esc(r.description) + '</td><td class="n">' + money(r.amount) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    var cl = f.closures, bad = cl.over_run || cl.over_year;
+    h += '<div style="margin-top:14px;padding:10px 12px;border-radius:10px;font-size:13px;' + (bad ? 'background:#FEF2F2;color:#991B1B;' : 'background:#F8FAFC;color:#334155;') + '">'
+      + '<b>Closure days this year:</b> ' + cl.year_total + ' of 20 · longest run ' + cl.longest_run + ' of 10 business days' + (cl.longest_from ? ' (from ' + esc(day(cl.longest_from)) + ')' : '')
+      + (bad ? '. Parents may not be charged for closure days past these limits.' : '. Parents may be charged for up to 10 business days in a row and 20 a year.')
+      + (cl.this_month.length ? '<div class="roa-sub" style="margin-top:3px;">This month: ' + cl.this_month.map(function (x) { return esc(day(x.date)) + (x.reason ? ' (' + esc(x.reason) + ')' : ''); }).join(', ') + '</div>' : '')
+      + '</div></div>';
+    return h;
+  }
+  function wireBaseFees(main, el, c) {
+    var btn = el.querySelector('#roa-bf-save');
+    if (!btn) return;
+    btn.addEventListener('click', async function () {
+      var dec = {};
+      el.querySelectorAll('input[data-dec]').forEach(function (i) { dec[i.getAttribute('data-dec')] = i.value === '' ? null : +i.value; });
+      btn.disabled = true;
+      try { await Api.post('/occms/cwelcc/fees', { centre_id: c.centre.id, dec2024: dec }); toast('🧾', 'Base fees saved', '', '#16A34A'); paneCwelcc(main, el); }
+      catch (e) { btn.disabled = false; toast('⚠️', 'Could not save', (e && e.message) || '', '#DC2626'); }
+    });
   }
 
   // ── Settings (agency admins) ──────────────────────────────────────────────────

@@ -18,6 +18,10 @@
   // Safety: even within a hero row, never icon-only these (meaning/safety needs words).
   var SKIP = /\b(save|cancel|send|submit|delete|remove|approve|confirm|discard|sign out|log ?out|pay|checkout)\b/i;
 
+  /* "I'm back" (ending a lunch or break) says the person is back; it is not a go-back control. Turned into ⬅️ on a
+     phone, the shell's back handler then took the tap and the break never ended (2026-11-06). Same rule as
+     isBackControl in app-v2-shell.js. */
+  var SAYS_BACK = /\b(i['’]?m|i am|we['’]?re|we are|be|come|came|welcome|right)\s+back\b/i;
   function iconFor(t) {
     t = t.toLowerCase();
     if (/refresh|reload/.test(t)) return '🔄';
@@ -31,7 +35,7 @@
     if (/\bview\b|\bopen\b|\bpreview\b|\bdetails\b/.test(t)) return 'ℹ️';
     if (/\bcopy\b|duplicate/.test(t)) return '📋';
     if (/settings|configure|\bmanage\b/.test(t)) return '⚙️';
-    if (/\bback\b/.test(t)) return '⬅️';
+    if (/\bback\b/.test(t) && !SAYS_BACK.test(t)) return '⬅️';
     // NOTE: add/new/create/invite are handled by applyAddStyle (a standard white
     // pill that keeps the label), NOT iconified — see the sweep loop.
     return null; // leave as a text button
@@ -54,10 +58,31 @@
     s.setProperty('box-shadow', 'none', 'important');
     s.setProperty('cursor', 'pointer', 'important');
     s.setProperty('width', 'auto', 'important');
+    /* NEVER NARROWER THAN ITS WORDS (2026-11-08, Anthony's phone: "look at the button that says passkey - full sweep").
+       min-width:0 let a row squeeze the pill below its label: beside a long description "Add a passkey" was crushed
+       to 68px and its words ran out of the box. It keeps its label's width now (the text beside it gives way), and
+       only a label wider than the whole row wraps. */
     s.setProperty('min-width', '0', 'important');
+    s.setProperty('flex-shrink', '0', 'important');
+    s.setProperty('max-width', '100%', 'important');
     s.setProperty('height', 'auto', 'important');
     s.setProperty('background-image', 'none', 'important');
     b.classList.add('kt-add-btn-std');
+  }
+  function isFilterChoice(b, label) {
+    if (/\S\s+\(?\d+\)?$/.test(label)) return true;                         // "Open 2", "Upcoming (2)"
+    if (b.getAttribute('role') === 'tab' || b.hasAttribute('aria-pressed') || b.hasAttribute('aria-selected')) return true;
+    for (var i = 0; i < b.attributes.length; i++) {
+      if (/^data-(v|view|filter|status|scope|mode|seg|tab|[a-z0-9-]*tab|[a-z0-9-]*filter)$/.test(b.attributes[i].name)) return true;
+    }
+    var p = b.parentElement;
+    if (p) {
+      var sib = p.children;
+      for (var j = 0; j < sib.length; j++) {
+        if (sib[j] !== b && sib[j].tagName === 'BUTTON' && /^\s*all\b/i.test(sib[j].textContent || '')) return true;
+      }
+    }
+    return false;
   }
   function isAddLabel(t) { return /^\s*\+/.test(t) || /\b(add|new|create|invite)\b/i.test(t); }
   // A "go back" control (not pagination). data-back / .kt-back always count; else
@@ -66,6 +91,7 @@
     if (b && ((b.hasAttribute && b.hasAttribute('data-back')) || (b.classList && b.classList.contains('kt-back')))) return true;
     var s = (t || '').toLowerCase();
     if (/\b(prev|next|newer|older|forward)\b/.test(s)) return false;
+    if (SAYS_BACK.test(s)) return false;
     return /\bback\b/.test(s) && t.length <= 14;
   }
 
@@ -94,6 +120,15 @@
     if (!document.getElementById('appMain')) return;
     var btns = document.querySelectorAll('#appMain button');
     ensureCss();
+    /* Asked once, before anything is written: inside the loop window.innerWidth forced a full layout for every
+       button after the previous one was restyled - 0.95 s of a phone Children render (PERF 2026-10-28). */
+    var WIDE = false;
+    try { WIDE = w.matchMedia ? !w.matchMedia('(max-width:768px)').matches : window.innerWidth > 768; } catch (e) {}
+    /* PARENTS GET WORDS (2026-11-06, Anthony: "awards under parent view instead of the icon to click to view the award
+       add a button - full sweep"). "🏆 View certificate", "📋 View Ava's record" and every other short View / Open /
+       Details button became a bare ℹ️ for parents, who do not know the staff icon set. In the parent view (a parent,
+       or someone viewing as one) buttons keep their label; only the add-button restyle still applies. */
+    var PARENT = !!(document.body && (document.body.classList.contains('kt-parentview') || document.body.classList.contains('role-guardian')));
     for (var i = 0; i < btns.length; i++) {
       var b = btns[i];
       if (b.dataset.ktIconized) continue;
@@ -104,6 +139,11 @@
       if (b.closest('form, .kt-modal, [role="dialog"], .modal, [role="tablist"], .kt-tabs, .kt-admin-tabs, .kt-segmented, .kt-toggle, .kt-help-wrap')) { b.dataset.ktIconized = '1'; continue; }
       var label = (b.textContent || '').replace(/\s+/g, ' ').trim();
       if (!label) { b.dataset.ktIconized = '1'; continue; }
+      /* FILTERS ARE NOT ACTIONS (2026-10-23, Anthony: Support tickets showed "Open 2" as a
+         clipped ℹ️ pill, so the Open filter could not be seen at all). A button that is one
+         choice of a filter or tab group keeps its words: it carries a count ("Open 2"), a
+         tab / filter / pressed marker, or sits in a row with an "All" choice. */
+      if (isFilterChoice(b, label)) { b.dataset.ktIconized = '1'; continue; }
       // Standard DELETE icon (matches the Closures 🗑): normalise any icon-only
       // trash button to the canonical 32px danger icon. Skip tiny inline deletes
       // inside chat message bubbles (their own micro-layout).
@@ -119,7 +159,7 @@
       // Back buttons → the standard "‹ Back" white pill (matches add/deactivate).
       // DESKTOP ONLY — mobile back controls (top-bar, thread header, bottom nav)
       // are left exactly as they are so the mobile view is unchanged.
-      if (window.innerWidth > 768 && isBackLabel(label, b)
+      if (WIDE && isBackLabel(label, b)
           && !b.closest('.kt-back-inbar, #kt-topbar, #kt-chat-dock, .kt-cd-body, .kt-thread-header, .kt-mobilenav')) {
         // Pure restyle — keep the existing label + click behaviour untouched (so we
         // never double-fire the global back handler); just give it the pill look.
@@ -139,6 +179,7 @@
       // Add / new / create / invite → ONE standard white pill (keeps its label),
       // applied regardless of length so every "add" action matches portal-wide.
       if (isAddLabel(label)) { applyAddStyle(b); b.dataset.ktIconized = '1'; continue; }
+      if (PARENT) { b.dataset.ktIconized = '1'; continue; }
       if (label.length > 26) { b.dataset.ktIconized = '1'; continue; } // long = descriptive/primary, keep text
       var icon = iconFor(label);
       if (!icon) { b.dataset.ktIconized = '1'; continue; } // no clean icon → leave as text
@@ -165,7 +206,7 @@
     // Back LINKS (<a>) too — many "← Back" controls are anchors, which the button
     // loop above never sees (e.g. the home-visit report view). Desktop only, same
     // mobile exclusions; pure restyle so the href / navigation is untouched.
-    if (window.innerWidth > 768) {
+    if (WIDE) {
       var alinks = document.querySelectorAll('#appMain a:not([data-ktbk])');
       for (var k = 0; k < alinks.length; k++) {
         var la = alinks[k];

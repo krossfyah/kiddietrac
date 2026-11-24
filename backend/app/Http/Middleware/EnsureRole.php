@@ -24,7 +24,8 @@ final class EnsureRole
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        $userRoles = \App\Support\UserRoles::names($request);
+        // Roles held in the agency this request is acting in (X-Active-Agency-Id), not anywhere (2026-10-31).
+        $userRoles = \App\Support\AgencyRole::names($request);
 
         // v22p21: platform_admin is above all standard tenant roles.
         // It passes any role check, no matter what is listed in the

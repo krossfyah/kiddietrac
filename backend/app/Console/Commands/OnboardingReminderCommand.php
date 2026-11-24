@@ -85,6 +85,11 @@ class OnboardingReminderCommand extends Command
 
             foreach ($users as $u) {
                 try {
+                    /* No usable address, nothing to send (2026-10-29, ticket #196). An empty
+                       string passes whereNotNull, and the queued send then failed on it. */
+                    if (! filter_var(trim((string) $u->email), FILTER_VALIDATE_EMAIL)) {
+                        continue;
+                    }
                     // Cadence guard. Without this the command re-emails EVERY pending
                     // user EVERY day for as long as they stay un-onboarded — a parent
                     // invited in June would be on their fiftieth identical reminder,

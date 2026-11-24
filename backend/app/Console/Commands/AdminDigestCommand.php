@@ -66,9 +66,19 @@ class AdminDigestCommand extends Command
                 ? 'this week at ' . $agency->name
                 : 'today at ' . $agency->name;
             $body = AdminDigestHtml::render($sections, $periodLabel);
+            /* "✨ The short version" - the AI Bundle (2026-10-28), above the sections it summarises. Additive: nothing
+               changes unless the agency has the bundle and the AI answered. */
+            if ($sections) {
+                $note = \App\Support\AiSummaries::write((int) $agency->id, 'director', ['period' => $periodLabel, 'items' => $sections]);
+                if ($note) {
+                    $body = \App\Support\AiSummaries::box('THE SHORT VERSION', $note) . $body;
+                }
+            }
             // The same rotating quote the parent and educator summaries carry, so the
             // three emails feel like they come from one product rather than three.
             $body .= EmailTemplate::dailyQuote((int) $to->format('Ymd'));
+            // Get the app: the Google Play card (KiddieTrac-branded agencies only, PlayBadge::forAgency).
+            $body .= \App\Support\PlayBadge::forAgency((int) $agency->id);
 
             $subject = ($weekly ? '📊 Weekly summary — ' : '📋 Daily summary — ') . $agency->name
                 . ' · ' . $to->format('D j M');
@@ -122,7 +132,7 @@ class AdminDigestCommand extends Command
         // Below the urgent four, above the fallback: a record nobody has read is
         // real work outstanding, but it is not today's emergency.
         if (! empty($s['immunRecords']['count'])) {
-            return $s['immunRecords']['count'] . ' immunisation record(s) waiting to be filled in';
+            return $s['immunRecords']['count'] . ' immunization record(s) waiting to be filled in';
         }
         return 'What needs your attention';
     }

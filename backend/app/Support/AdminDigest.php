@@ -174,7 +174,7 @@ final class AdminDigest
         ])->all()];
     }
 
-    /** Immunisations are reported by ABSENCE — the children with no record are the risk. */
+    /** Immunizations are reported by ABSENCE — the children with no record are the risk. */
     /**
      * Families with nobody to call.
      *
@@ -240,7 +240,7 @@ final class AdminDigest
                 ->whereNull('ch.deleted_at')->when($have, fn ($q) => $q->whereNotIn('ch.id', $have))->count(),
             'rows' => $missing->map(fn ($r) => [
                 'who' => trim($r->first_name . ' ' . $r->last_name),
-                'what' => 'No immunisation record',
+                'what' => 'No immunization record',
                 'detail' => 'nothing on file',
             ])->all(),
         ];

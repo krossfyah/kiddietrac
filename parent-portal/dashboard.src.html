@@ -1,13 +1,228 @@
 <!DOCTYPE html>
 <html lang="en-CA">
 <head>
+<script>
+/* NEVER RELOAD UNDER SOMEBODY WATCHING (2026-11-05, ticket #223). A parent on #photos was watching a clip when a
+   deploy landed; the app reloaded itself under her (access log: update check 16:31:09, reload 16:31:13) and the
+   cancelled page filed "AbortError: The operation was aborted.". On an iPhone the native full-screen player even
+   marks the page HIDDEN, which the update reloaders read as "nobody is looking - reload now". Every automatic
+   reload (this page's self-updater, kt-native-ui.js, kt-update-check.js) asks window.KT_mediaBusy() first: true
+   while any video or audio is playing or full screen, and for 20s after one starts, pauses, ends or leaves full
+   screen - coming back from the player is not a calm moment. */
+(function(){var last=0,d=document;
+  function mark(){last=Date.now();}
+  ['play','playing','pause','ended','webkitbeginfullscreen','webkitendfullscreen','fullscreenchange','webkitfullscreenchange'].forEach(function(e){try{d.addEventListener(e,mark,true);}catch(x){}});
+  window.KT_mediaBusy=function(){try{
+    if(Date.now()-last<20000)return true;
+    if(d.fullscreenElement||d.webkitFullscreenElement)return true;
+    var m=d.querySelectorAll('video,audio');
+    for(var i=0;i<m.length;i++){var v=m[i];if(v.webkitDisplayingFullscreen||(!v.paused&&!v.ended&&v.readyState>2))return true;}
+  }catch(x){}return false;};
+})();
+</script>
+<script>
+/* BOOT TIMING, NATIVE APPS ONLY (2026-11-01, Anthony: "the boot up for the ios app ... still too long to get
+   to the kiddietrac splash screens - full sweep"). There is no Safari inspector without a Mac, so the
+   app reports its own cold boot: navigation timing, when the native splash was told to hide, when the
+   intro / lock / sign-in redirect happened, and the slowest blocking files. One line per load in
+   storage/app/private/boot-diag.log (/diag/boot, log only). No names, no ids. */
+(function(){try{
+  var C=window.Capacitor,ua=navigator.userAgent||'';
+  var plat=C&&C.getPlatform?C.getPlatform():'';
+  var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative));
+  var iosShell=/iPhone|iPad/.test(ua)&&!/Safari/.test(ua);
+  if(!nat&&!iosShell&&!/; wv\)/.test(ua))return;
+  var B=window.__ktBoot={m:{},x:{}},t0=performance.now();
+  B.mark=function(k,v){if(!(k in B.m)){B.m[k]=Math.round(performance.now());if(v!==undefined)B.x[k]=v;}};
+  B.mark('head');
+  var send=function(why){if(B.sent)return;B.sent=1;try{
+    var n=(performance.getEntriesByType('navigation')||[])[0]||{},r=function(x){return x?Math.round(x):0;};
+    var res=(performance.getEntriesByType('resource')||[]).filter(function(e){return /\.(css|js)(\?|$)/.test(e.name);});
+    var slow=res.slice().sort(function(a,b){return b.responseEnd-a.responseEnd;}).slice(0,6).map(function(e){
+      return [e.name.replace(/^https?:\/\/[^\/]+/,'').replace(/\?.*$/,''),r(e.startTime),r(e.responseEnd),e.transferSize||0];});
+    var cached=0,bytes=0;res.forEach(function(e){if(!e.transferSize)cached++;bytes+=e.transferSize||0;});
+    var hs=0;try{hs=!!sessionStorage.getItem('kt_token');}catch(e){}
+    var bio=0;try{bio=localStorage.getItem('kt_biometric_enabled')==='1';}catch(e){}
+    var d={why:why,plat:plat,nat:nat,iosShell:iosShell,path:location.pathname,nav:n.type||'',
+      proto:n.nextHopProtocol||'',dns:r(n.domainLookupEnd-n.domainLookupStart),conn:r(n.connectEnd-n.connectStart),
+      req:r(n.requestStart),ttfb:r(n.responseStart),html:r(n.responseEnd),htmlBytes:n.transferSize||0,
+      inter:r(n.domInteractive),dcl:r(n.domContentLoadedEventStart),load:r(n.loadEventStart),
+      m:B.m,x:B.x,files:res.length,cached:cached,kb:Math.round(bytes/1024),slow:slow,
+      session:hs,bio:bio,mem:navigator.deviceMemory||0,cpu:navigator.hardwareConcurrency||0,at:Date.now(),to0:Math.round(performance.timeOrigin||0),nt:window.__ktNative||null,sp:(function(){try{return sessionStorage.getItem('kt_start');}catch(e){return 'x';}})(),wm:(function(){try{return sessionStorage.getItem('kt_warm');}catch(e){return null;}})()};/* wm (2026-11-05): what kt-dash-warm.js pre-loaded on the sign-in page *//* to0/nt/sp (2026-11-02 bn): this page's start on the epoch clock, the iPhone app's native launch marks (3.12.13+) and the app's start page decision */
+    var body=JSON.stringify({data:JSON.stringify(d)});
+    if(navigator.sendBeacon){try{if(navigator.sendBeacon('/api/v1/diag/boot',new Blob([body],{type:'application/json'})))return;}catch(e){}}
+    fetch('/api/v1/diag/boot',{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).catch(function(){});
+  }catch(e){}};
+  B.send=send;
+  addEventListener('pagehide',function(){B.mark('leave');send('leave');});
+  addEventListener('DOMContentLoaded',function(){B.mark('dcl');});
+  var iv=setInterval(function(){try{
+    var root=document.documentElement;
+    if(root.classList.contains('kti-go'))B.mark('intro');
+    if(document.getElementById('kt-bio-lock'))B.mark('lock');
+    if(document.querySelector('#kt-launch.go'))B.mark('scene');
+    var sp=document.getElementById('kt-splash');
+    if(B.m.hide!=null&&(!sp||sp.classList.contains('kt-hide')))B.mark('splashGone');
+    if(B.m.lock!=null||B.m.splashGone!=null||B.m.scene!=null){if(!B.w){B.w=1;setTimeout(function(){clearInterval(iv);send('done');},2500);}}
+    if(performance.now()-t0>25000){clearInterval(iv);send('timeout');}
+  }catch(e){}},50);
+}catch(e){}})();
+</script>
+  <script>/* THE PARENT'S PHONE BESIDE THE STAFF PHONE (2026-10-31): the website's Demo experience page can run TWO demo phones,
+   a staff one and the matching demo parent's, each the real portal in an iframe of this same origin in the same tab - so
+   they would share sessionStorage/localStorage (one sign-in for both) and BroadcastChannel. The parent's phone loads its
+   app in an iframe NAMED kt-ns-companion; here, before anything else reads storage, that frame gets its own prefixed
+   storage, its own storage events and its own broadcast channels. Nothing changes for any other page or frame. */
+(function (w) {
+  try {
+    if (w.name !== 'kt-ns-companion' || w.top === w.self || w.__ktNs) return;
+    w.__ktNs = 1;
+    var P = 'kt-ns-c:', rs = w.sessionStorage, rl = w.localStorage;
+    function mine(k) { return typeof k === 'string' && k.indexOf(P) === 0; }
+    function wrap(real) {
+      if (!real) return real;
+      function keys() { var a = []; for (var i = 0; i < real.length; i++) { var k = real.key(i); if (mine(k)) a.push(k.slice(P.length)); } return a; }
+      var api = {
+        getItem: function (k) { return real.getItem(P + k); },
+        setItem: function (k, v) { real.setItem(P + k, String(v)); },
+        removeItem: function (k) { real.removeItem(P + k); },
+        clear: function () { keys().forEach(function (k) { real.removeItem(P + k); }); },
+        key: function (n) { return keys()[n] === undefined ? null : keys()[n]; }
+      };
+      Object.defineProperty(api, 'length', { get: function () { return keys().length; } });
+      if (typeof Proxy !== 'function') return api;
+      return new Proxy(api, {
+        get: function (t, p) { if (p in t) return t[p]; if (typeof p !== 'string') return undefined; var v = real.getItem(P + p); return v === null ? undefined : v; },
+        set: function (t, p, v) { if (p in t) return true; real.setItem(P + String(p), String(v)); return true; },
+        deleteProperty: function (t, p) { real.removeItem(P + String(p)); return true; },
+        has: function (t, p) { return (p in t) || real.getItem(P + String(p)) !== null; },
+        ownKeys: function () { return keys(); },
+        getOwnPropertyDescriptor: function (t, p) { var v = real.getItem(P + String(p)); return v === null ? undefined : { value: v, writable: true, enumerable: true, configurable: true }; }
+      });
+    }
+    var ps = wrap(rs), pl = wrap(rl);
+    Object.defineProperty(w, 'sessionStorage', { configurable: true, get: function () { return ps; } });
+    Object.defineProperty(w, 'localStorage', { configurable: true, get: function () { return pl; } });
+    var ael = w.addEventListener, rel = w.removeEventListener;
+    w.addEventListener = function (t, f, o) {
+      if (t === 'storage' && typeof f === 'function') {
+        if (!f.__ktNs) f.__ktNs = function (e) {
+          if (!e || !mine(e.key)) return;
+          f.call(w, { type: 'storage', key: e.key.slice(P.length), newValue: e.newValue, oldValue: e.oldValue, url: e.url, storageArea: e.storageArea === rs ? ps : pl });
+        };
+        return ael.call(this, t, f.__ktNs, o);
+      }
+      return ael.apply(this, arguments);
+    };
+    w.removeEventListener = function (t, f, o) { if (t === 'storage' && f && f.__ktNs) return rel.call(this, t, f.__ktNs, o); return rel.apply(this, arguments); };
+    if (w.BroadcastChannel) {
+      var BC = w.BroadcastChannel;
+      var NB = function (n) { return new BC(String(n) + '::kt-ns-c'); };
+      NB.prototype = BC.prototype;
+      w.BroadcastChannel = NB;
+    }
+  } catch (e) {}
+})(window);
+</script>
+  <!-- SIGNED-OUT LAUNCH: LEAVE BEFORE THE HEAD LOADS (2026-10-31, Anthony's TestFlight recording: "the boot sequence
+       takes a long time"). Both apps open dashboard.html. With no session this page only bounces to the sign-in page,
+       but the bounce used to sit at the top of <body>, behind ~36 render-blocking stylesheets and scripts in this
+       head - each one a round trip before the redirect could run. On a cold start far from the server that was
+       seconds of plain navy before the sign-in page even started loading. It now runs here, after only the
+       companion-frame storage shim above (which must stay first), so nothing else is fetched on the way out.
+       The plain navy is the native splash's colour, which the sign-in page's launch scene also starts on. -->
+  <script>(function(){try{var t=null;try{t=sessionStorage.getItem('kt_token')||localStorage.getItem('kt_token');}catch(e){}if(t)return;var h=location.hash||'';if(h.indexOf('__demo=')!==-1||h.indexOf('kt_sso=')!==-1)return;document.documentElement.style.background='#0A1C3A';window.__ktSignedOutBounce=1;location.replace('/index.html');}catch(e){}})();</script>
+  <!-- ONE COLOUR FROM SIGN-IN TO SPLASH (2026-10-31, Anthony: "you had found a flash during the bootup with ios - did we fix this").
+       Measured on his iPhone (Little Steps): the sign-in faded to the brand's splash colour, then this page painted
+       (a) nothing - the web view's own white - while the head's blocking scripts loaded, then (b) KiddieTrac navy for ~1.7s
+       (the boot colour was only made the brand's by the branding block in the body), then the brand splash: light ->
+       navy -> light. Now the FIRST thing in the head paints the boot colour, resolved here from the cached brand with the
+       branding block's own rule (this session's agency, white-label only, kt_brand_a<id> first): KiddieTrac navy, or the
+       white-label splash colour, from the first frame to the splash. Signed-out loads are untouched (no token, no class). -->
+  <style>html.kt-booting,html.kt-booting body{background:var(--kt-boot-bg,#0A1C3A)!important}html.kt-boot-wl #kt-splash{background:var(--kt-boot-bg)}</style>
+  <script>try{if(sessionStorage.getItem('kt_token')||localStorage.getItem('kt_token')){var _b=document.documentElement;_b.classList.add('kt-booting');setTimeout(function(){_b.classList.remove('kt-booting');},16000);try{var _a=sessionStorage.getItem('kt_active_agency_id');if(_a==='all')_a=null;if(!_a){var _u=JSON.parse(sessionStorage.getItem('kt_user')||'null');_a=_u&&(_u.landing_agency_id||_u.agency_id);}var _t=null;if(_a){var _o=JSON.parse(localStorage.getItem('kt_brand_a'+_a)||'null');if(_o){_t=_o.theme;}else{var _c=JSON.parse(localStorage.getItem('kt_branding')||'null');if(_c&&String(_a)===String(_c.agency_id))_t=_c.theme;}}var _g=_t&&_t.white_label&&_t.splash_bg;if(_g&&/^(#[0-9a-f]{3,8}|rgba?\([0-9.,\s%]+\)|(radial|linear)-gradient\([#0-9a-z%,. ()]+\))$/i.test(_g)){_b.style.setProperty('--kt-boot-bg',_g);_b.classList.add('kt-boot-wl');}}catch(e){}}}catch(e){}</script>
+  <script>/* SAME-ORIGIN API (2026-10-31, Anthony approved: "route the app's data through app.kiddietrac.com"). On app.kiddietrac.com every call to https://api.kiddietrac.com/api/... goes to /api/... on this host instead (root .htaccess KT-SAMEAPI sends app.kiddietrac.com/api/* to the same Laravel app). Same-origin requests skip the CORS preflight, which cost a full extra round trip on almost every request (custom headers: Authorization, X-Active-Agency-Id), worst on phones far away. FIRST script on the page, so every later fetch/XHR wrapper still sees and keys on the absolute api.kiddietrac.com address; only the wire address changes. Safety: if this host ever answers an API call with Apache's own 404 page (the route missing), the call is repeated on api.kiddietrac.com once and this tab stops rewriting. Off switch per device: localStorage kt_api_direct = '1'. api.kiddietrac.com itself is unchanged (older apps, the marketing site). */
+(function (w) {
+  try {
+    if (location.hostname !== 'app.kiddietrac.com' || w.__ktSameApi) return;
+    try { if (localStorage.getItem('kt_api_direct') === '1' || sessionStorage.getItem('kt_api_direct') === '1') return; } catch (e) {}
+    w.__ktSameApi = 1;
+    var A = 'https://api.kiddietrac.com/api/', on = true;
+    function fix(u) { return (on && typeof u === 'string' && u.indexOf(A) === 0) ? '/api/' + u.slice(A.length) : u; }
+    function off() { on = false; try { sessionStorage.setItem('kt_api_direct', '1'); } catch (e) {} }
+    var F = w.fetch;
+    if (F) {
+      w.fetch = function (input, init) {
+        var orig = input, url = (typeof input === 'string') ? input : (input && input.href && !input.method) ? String(input) : (input && input.url) || '';
+        var to = fix(url);
+        if (to === url) return F.apply(this, arguments);
+        var req = (typeof input === 'string' || !input.method) ? to : new Request(to, input);
+        var self = this;
+        return F.call(self, req, init).then(function (res) {
+          if (res.status === 404 && /text\/html/i.test(res.headers.get('content-type') || '') && res.headers.get('content-type').indexOf('charset=iso-8859-1') !== -1) {
+            off();
+            return F.call(self, orig, init);
+          }
+          return res;
+        });
+      };
+    }
+    var X = w.XMLHttpRequest && XMLHttpRequest.prototype.open;
+    if (X) { XMLHttpRequest.prototype.open = function (m, u) { if (typeof u === 'string' || (u && u.href)) arguments[1] = fix(String(u)); return X.apply(this, arguments); }; }
+    if (navigator.sendBeacon) { var B = navigator.sendBeacon.bind(navigator); navigator.sendBeacon = function (u, d) { return B(fix(String(u)), d); }; }
+    if (w.EventSource) { var E = w.EventSource; w.EventSource = function (u, o) { return new E(fix(String(u)), o); }; w.EventSource.prototype = E.prototype; }
+  } catch (e) {}
+})(window);</script>
+
+  <script src="/js/kt-no-autofocus.js?v=20261023-nofocus"></script>
+  <script src="/js/vendor/kt-compat.js?v=20261022a"></script>
   <meta charset="UTF-8">
-  <script>/* SPACE OUT THE READS (2026-10-01). A fresh page - every reload, every agency switch - fired its whole boot at once: 14-15 API requests open together, 39 in the first three seconds for an admin. The hosting account caps how many PHP requests run at the same moment, and past it the server answers 508 with no CORS header, which the browser reports as "the request never completed" (Anthony, 4s after switching agency). FIRST script on the page and at the fetch() level, because half the boot requests are plain fetch() calls and some start before app.js loads. Per page: at most 6 API reads on the wire, the rest wait their turn; badge counts and polls go last and not in the first 2.5s; writes never wait; a read that never answers hands its slot back after 15s. */
+  <!-- NO LIGHT FRAME ON THE WAY IN (2026-10-21). A signed-in load could paint the portal's
+       light page background for a frame before #kt-splash existed - a white blink between
+       the sign-in fade and the logo intro. Splash colour until the splash or the reload
+       cover lifts (hide()/drop() below), capped so it can never stick. -->
+  <!-- FIRST BOOT IN A PHONE BROWSER (2026-10-21, kt-launch-scene.js). Anthony: "the bootup
+       sequence in the browser for the mobile phone is not there anymore with the first bootup
+       like the apk has with the lego blocks". A signed-in browser load came straight here and
+       only had the dashboard intro, and Chrome restores a tab WITH its sessionStorage, so the
+       once-per-session flag meant a first boot never came again. First boot = a new tab
+       session, or back after 30+ minutes away (kt_away_at, written when the page is hidden).
+       Then a touch phone/tablet browser (never the APK - unchanged) gets the blocks scene:
+       with a fingerprint/PIN lock it goes the APK's way (session handed back -> sign-in
+       page: scene, then the lock); signed in without one, the scene plays HERE in place of
+       the dashboard intro and dissolves into the portal (kt_boot_scene tells the scene). -->
+  <script>try{(function(){var S=sessionStorage,L=localStorage,n=Date.now(),w=window;
+    var away=parseInt(S.getItem('kt_away_at')||'0',10)||0;S.removeItem('kt_away_at');
+    if(S.getItem('kt_launch_seen')==='1'&&!(away&&n-away>18e5))return;
+    var C=w.Capacitor;if(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative||(C.Plugins&&C.Plugins.KtBio))){S.setItem('kt_boot_scene','1');S.removeItem('kt_launch_seen');return;}
+    var mm=function(q){try{return w.matchMedia(q).matches;}catch(e){return false;}};
+    var sc=w.screen||{},edge=(sc.width&&sc.height)?Math.min(sc.width,sc.height):(w.innerWidth||0);
+    var touch=(mm('(pointer: coarse)')&&mm('(hover: none)')&&edge>0&&edge<=1100)||mm('(display-mode: standalone)')||w.navigator.standalone===true;
+    if(!touch)return;
+    S.setItem('kt_boot_scene','1');S.removeItem('kt_launch_seen');
+    var locked=(L.getItem('kt_biometric_enabled')==='1'&&L.getItem('kt_bio_token'))||(L.getItem('kt_pin_enabled')==='1'&&L.getItem('kt_pin_vault'));
+    if(locked&&S.getItem('kt_token')){['kt_token','kt_user','kt_bio_session','kt_pin_session'].forEach(function(k){S.removeItem(k);});
+      document.documentElement.style.background='#0A1C3A';location.replace('/index.html');}
+  })();}catch(e){}</script>
+  <!-- CAN THIS PERSON DIAL? Known before the first paint (2026-10-30): the last answer for this person
+       and agency (kt-dialer.js stores it when the phone session replies) puts html.kt-can-dial on now,
+       so the Phone entries in the sidebar, top bar and tiles are drawn in place instead of popping in. -->
+  <script>/* PUBLIC WEBSITE DEMO (2026-10-31, App\Support\PublicDemo): the signed-in account is a fictional demo person
+     (auth user is_public_demo; the demo domains as a fallback - 2026-10-31: they stopped ending in .invalid on 10-30). Prompts that make no sense on a shared demo account check
+     window.KT_PUBLIC_DEMO; a small badge says it is a demo that resets nightly. */
+  try{(function(){var u=JSON.parse(sessionStorage.getItem('kt_user')||localStorage.getItem('kt_user')||'{}')||{};var e=String(u.email||(u.user&&u.user.email)||'');if(u.is_public_demo===true||(u.user&&u.user.is_public_demo===true)||/\.invalid$|@brightwood\.kiddietrac\.com$|@starlightkids\.example$/i.test(e)){window.KT_PUBLIC_DEMO=true;document.documentElement.classList.add('kt-public-demo');document.addEventListener('DOMContentLoaded',function(){var b=document.createElement('div');b.id='kt-demo-badge';b.setAttribute('aria-hidden','true');b.textContent='Demo · resets nightly';b.style.cssText='position:fixed;left:10px;bottom:calc(84px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));z-index:99990;pointer-events:none;background:rgba(10,30,44,.82);color:#fff;font:700 11px/1 system-ui,-apple-system,sans-serif;letter-spacing:.3px;padding:6px 10px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.25)';document.body.appendChild(b);});}})();}catch(e){}</script>
+  <script>try{(function(){var u=JSON.parse(sessionStorage.getItem('kt_user')||localStorage.getItem('kt_user')||'{}')||{};var a=sessionStorage.getItem('kt_active_agency_id')||localStorage.getItem('kt_active_agency_id')||'';if(u.id&&localStorage.getItem('kt_can_dial:'+u.id+':'+a)==='1')document.documentElement.classList.add('kt-can-dial');})();}catch(e){}</script>
+  <link rel="stylesheet" href="/css/kt-launch-scene.css?v=20261103ios">
+  <script>/* SPACE OUT THE READS (2026-10-01). A fresh page - every reload, every agency switch - fired its whole boot at once: 14-15 API requests open together, 39 in the first three seconds for an admin. The hosting account caps how many PHP requests run at the same moment, and past it the server answers 508 with no CORS header, which the browser reports as "the request never completed" (Anthony, 4s after switching agency). FIRST script on the page and at the fetch() level, because half the boot requests are plain fetch() calls and some start before app.js loads. SLOW CONNECTION (2026-10-29, kt-net-quality.js sets window.__ktSlowNet): badge counts and polls go two at a time at most, so the screen being opened gets the bandwidth. Per page: at most 6 API reads on the wire, the rest wait their turn; badge counts and polls go last and not in the first 2.5s; writes never wait; a read that never answers hands its slot back after 15s. */
   (function(){try{if(window.__ktReadLimiter||typeof window.fetch!=='function')return;window.__ktReadLimiter=true;var SLOTS=6,QUIET=2500,MAXMS=15000,API=/^https:\/\/api\.kiddietrac\.com\//,LOW=/unread-count|\/count(\?|$)|\/pulse(\?|$)|\/me\/markers(\?|$)/,L={open:0,hi:[],lo:[],timer:null};
-  function pump(){while(L.open<SLOTS){var n=L.hi.shift();if(!n){var w=QUIET-((window.performance&&performance.now())||QUIET);if(w>0&&L.lo.length){if(!L.timer)L.timer=setTimeout(function(){L.timer=null;pump();},w+10);break;}n=L.lo.shift();}if(!n)break;n();}}
-  function slot(u){return new Promise(function(res){(LOW.test(u)?L.lo:L.hi).push(function(){L.open++;var done=false,cap;function free(){if(!done){done=true;clearTimeout(cap);L.open--;pump();}}cap=setTimeout(free,MAXMS);res(free);});pump();});}
+  function pump(){while(L.open<SLOTS){var n=L.hi.shift();if(!n){var w=QUIET-((window.performance&&performance.now())||QUIET);if(w>0&&L.lo.length){if(!L.timer)L.timer=setTimeout(function(){L.timer=null;pump();},w+10);break;}if(window.__ktSlowNet&&L.open>=2&&L.lo.length){if(!L.timer)L.timer=setTimeout(function(){L.timer=null;pump();},400);break;}n=L.lo.shift();}if(!n)break;n();}}
+  function slot(u){return new Promise(function(res){(LOW.test(u)?L.lo:L.hi).push(function(){L.open++;var done=false,cap;function free(){if(!done){done=true;clearTimeout(cap);L.open--;L.held.splice(L.held.indexOf(rec)>>>0,1);pump();}}var rec={free:free,at:Date.now()};L.held.push(rec);cap=setTimeout(free,MAXMS);res(free);});pump();});}
+  L.held=[];L.hiddenAt=0;document.addEventListener('visibilitychange',function(){if(document.hidden){L.hiddenAt=Date.now();return;}if(!L.hiddenAt)return;var h=L.hiddenAt;L.hiddenAt=0;L.held.filter(function(r){return r.at<=h;}).forEach(function(r){r.free();});});
   var base=window.fetch;window.fetch=function(input,init){var u='',m='GET';try{u=String((input&&input.url)||input);m=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase();}catch(e){}if(m!=='GET'||!API.test(u))return base.apply(this,arguments);var self=this,args=arguments;return slot(u).then(function(free){var p;try{p=base.apply(self,args);}catch(e){free();throw e;}p.then(free,free);return p;});};}catch(e){}})();</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- The website's demo phone (kiddietrac.com/demo-phone.html): inert unless framed by kiddietrac.com with ?kt_frame. -->
+  <script src="/js/kt-demo-frame.js?v=20261102dm"></script>
+  <script src="/js/kt-brand-header.js?v=20261030bl"></script>
   <!-- Warm the API connection so the first boot call skips the TLS/DNS handshake. -->
   <link rel="preconnect" href="https://api.kiddietrac.com" crossorigin>
   <link rel="dns-prefetch" href="https://api.kiddietrac.com">
@@ -16,6 +231,15 @@
   <script>try{var _l=localStorage.getItem('kt_locale');if(_l&&_l!=='en')document.documentElement.lang=_l;}catch(e){}</script>
   <!-- App release version (single source of truth; shown in Settings → About + login footer). -->
   <script>window.KT_VERSION='4.64';</script>
+  <script>/* Placeholder until app-v2-shell.js publishes KT.Shell (ticket #181, 2026-10-23): a screen file that runs first queues its registration instead of crashing; the shell drains the queue. */window.KT=window.KT||{};if(!window.KT.Shell){(function(){var stub={__placeholder:true,registerScreen:function(n,f){var S=window.KT.Shell;if(S&&S!==stub&&S.registerScreen){return S.registerScreen(n,f);}(window.__ktPendingScreens=window.__ktPendingScreens||[]).push([n,f]);}};window.KT.Shell=stub;})();}</script>
+  <script>/* SCREENS LOAD ON DEMAND (2026-11-02, Anthony approved). The files below draw one screen each and are no
+     longer <script> tags: js/kt-screen-loader.js fetches them when their screen is first opened. Generated by a
+     census of what every file does while it loads; a file that adds a listener, timer, observer, nav item, badge,
+     gate or sweep, patches another file, or is called by an eager file stays a tag. deploy.py re-stamps these
+     entries exactly like tags. Here: preload the first screen's files (a guess from the stored role + hash; the
+     loader corrects it once the shell has run). */
+  window.__KT_LAZY={"js/kt-search-keys.js?v=20261113imz":{},"js/kt-stat-rings.js?v=20261109ft1":{},"js/kt-secret-field.js?v=20261009n2":{},"js/screen-parent.js?v=20261113mu1":{"k":["guardian:dashboard","guardian:today","guardian:photos","guardian:messages","guardian:billing","guardian:running-late"],"s":["KT.openInvoiceById"]},"js/screen-knowledge-base.js?v=20261009n2":{"k":["guardian:knowledge-base","educator:knowledge-base","home_visitor:knowledge-base","centre_director:knowledge-base","agency_admin:knowledge-base","platform_admin:knowledge-base","auditor:knowledge-base","sales_rep:knowledge-base"]},"js/screen-support.js?v=20261009n2":{"k":["guardian:support","educator:support"]},"js/kt-account-panes.js?v=20261106gd17":{"d":["screen-parent.js","screen-settings.js","screen-autopay.js","screen-mfa.js","screen-v22p58.js","kt-immunization-panel.js","screen-immunizations.js"]},"js/screen-settings.js?v=20261113sv3":{"k":["guardian:settings","home_visitor:settings","sales_rep:settings","platform_admin:settings","educator:settings","agency_admin:settings","centre_director:settings","auditor:settings","reseller_admin:settings","centre_director:my-profile","platform_admin:my-profile"],"d":["screen-parent.js","kt-account-panes.js","screen-autopay.js","screen-mfa.js","screen-v22p58.js","kt-immunization-panel.js","screen-immunizations.js"]},"js/screen-agency-admin.js?v=20261113dir1":{"k":["agency_admin:dashboard","agency_admin:centres","centre_director:dashboard"],"d":["screen-parent.js","kt-account-panes.js","screen-settings.js","kt-hero-brand.js","kt-mini-map.js","kt-billing-split.js","screen-admin.js","screen-email-seasons.js","screen-autopay.js","screen-admin-branding.js","screen-incidents.js","screen-child-detail.js","screen-mfa.js","screen-educator-points.js","kt-notify-readiness.js","screen-v22p58.js","kt-immunization-panel.js","screen-immunizations.js"]},"js/screen-email.js?v=20261113el3":{"k":["agency_admin:email","platform_admin:email","centre_director:email","educator:email","sales_rep:sales-email","platform_admin:sales-email","agency_admin:sales-email"]},"js/screen-provider-day.js?v=20261106ld":{"k":["agency_admin:provider-day","centre_director:provider-day","platform_admin:provider-day"],"d":["screen-attendance-fix.js"]},"js/screen-external-billing.js?v=20261111er1":{"k":["agency_admin:external-billing","centre_director:external-billing","platform_admin:external-billing"],"d":["screen-parent.js","kt-billing-split.js"]},"js/screen-external-waitlist.js?v=20261124wl":{"k":["agency_admin:synced-waitlist","centre_director:synced-waitlist","platform_admin:synced-waitlist"]},"js/screen-director.js?v=20261113dir1":{"k":["centre_director:children","centre_director:families","centre_director:staff","centre_director:today","centre_director:compliance"],"d":["screen-attendance-fix.js"],"p":["centre_director:compliance"]},"js/screen-attendance-fix.js?v=20261105visits":{},"js/screen-educator.js?v=20261109ob2":{"k":["educator:today","educator:dashboard"]},"js/screen-parent-feedback.js?v=20261030a":{"k":["educator:parent-feedback","home_visitor:parent-feedback"]},"js/kt-hero-brand.js?v=20261021-173215-hero2":{},"js/kt-mini-map.js?v=20261110lf1":{},"js/kt-billing-split.js?v=20261030sr":{},"js/screen-admin.js?v=20261124wv":{"k":["agency_admin:my-profile","agency_admin:admin","agency_admin:admin-centres","agency_admin:admin-users","agency_admin:admin-families","agency_admin:admin-branding","agency_admin:admin-billing","centre_director:admin-users","centre_director:admin-families"],"d":["kt-stat-rings.js","screen-parent.js","kt-account-panes.js","screen-settings.js","kt-hero-brand.js","kt-mini-map.js","kt-billing-split.js","screen-email-seasons.js","screen-autopay.js","screen-admin-branding.js","screen-incidents.js","screen-child-detail.js","screen-mfa.js","screen-v22p58.js","kt-immunization-panel.js","screen-immunizations.js","screen-director.js"],"p":["agency_admin:admin-branding"],"s":["KT.openUserRecord","KT.openMyAccount"]},"js/screen-marketing.js?v=20261020zoom":{"k":["agency_admin:marketing-campaigns","centre_director:marketing-campaigns","platform_admin:marketing-campaigns"],"p":["agency_admin:marketing-campaigns","centre_director:marketing-campaigns"]},"js/screen-provider-map.js?v=20261110lf1":{"h":["provider-map"]},"js/screen-marketing-site.js?v=20261109us1":{"k":["agency_admin:marketing-site","platform_admin:marketing-site"]},"js/screen-staff-calendar.js?v=20261030a":{"k":["agency_admin:staff-calendar","agency_admin:calendar","centre_director:staff-calendar","centre_director:calendar"],"p":["agency_admin:staff-calendar","centre_director:staff-calendar"]},"js/screen-audit-logs.js?v=20261103ael":{"k":["agency_admin:audit-logs","platform_admin:audit-logs","centre_director:audit-logs","auditor:audit-logs"],"d":["screen-platform.js"],"p":["agency_admin:audit-logs"]},"js/screen-bulk-invoices.js?v=20261021tz":{"k":["agency_admin:bulk-invoices","platform_admin:bulk-invoices"],"p":["agency_admin:bulk-invoices"]},"js/screen-forms.js?v=20261009n2":{"k":["agency_admin:admin-forms","centre_director:admin-forms","platform_admin:admin-forms","auditor:forms"],"p":["agency_admin:admin-forms","centre_director:admin-forms"]},"js/screen-forms-manager.js?v=20261113aud1":{"k":["platform_admin:forms-manager","agency_admin:forms-manager","centre_director:forms-manager","auditor:forms-manager"],"d":["kt-form-annotate.js"],"s":["KT.openFormsManagerTab"]},"js/screen-email-seasons.js?v=20261021hero":{"k":["platform_admin:email-seasons"]},"js/screen-fee-plans.js?v=20261009n2":{"k":["agency_admin:tuition-plans","centre_director:tuition-plans","platform_admin:tuition-plans"]},"js/screen-account-ledgers.js?v=20261031ir":{"k":["agency_admin:account-ledgers","platform_admin:account-ledgers"]},"js/screen-contacts.js?v=20261111et1":{"k":["agency_admin:contacts","centre_director:contacts","platform_admin:contacts"],"d":["screen-parent.js","kt-account-panes.js","screen-settings.js","kt-hero-brand.js","kt-mini-map.js","kt-billing-split.js","screen-admin.js","screen-email-seasons.js","screen-autopay.js","screen-admin-branding.js","screen-incidents.js","screen-child-detail.js","screen-mfa.js","screen-v22p58.js","kt-immunization-panel.js","screen-immunizations.js"]},"js/screen-expenses.js?v=20261030i":{"k":["agency_admin:expenses","platform_admin:expenses","centre_director:expenses"]},"js/screen-billing-setup.js?v=20261111ia2":{"k":["agency_admin:billing-setup","platform_admin:billing-setup","centre_director:billing-setup"]},"js/screen-report-issue.js?v=20261030a":{"k":["guardian:report-issue"]},"js/screen-parent-issues.js?v=20261030a":{"k":["agency_admin:parent-issues","centre_director:parent-issues","educator:parent-issues","platform_admin:parent-issues"]},"js/screen-notifications.js?v=20261113aud1":{"k":["agency_admin:notifications","centre_director:notifications","educator:notifications","guardian:notifications","platform_admin:notifications","home_visitor:notifications","sales_rep:notifications","auditor:notifications"],"p":["agency_admin:notifications","centre_director:notifications","educator:notifications","guardian:notifications"]},"js/screen-compliance.js?v=20261030a":{"k":["agency_admin:compliance","platform_admin:compliance","centre_director:compliance","auditor:compliance"],"p":["agency_admin:compliance","centre_director:compliance"]},"js/screen-care.js?v=20261113mu1":{"k":["agency_admin:time-clock","agency_admin:care-log","centre_director:time-clock","centre_director:care-log","educator:time-clock","educator:care-log","guardian:care-log","agency_admin:portfolio","agency_admin:milestones","centre_director:portfolio","centre_director:milestones","educator:portfolio","educator:milestones","guardian:portfolio","guardian:milestones","agency_admin:tours","centre_director:tours","platform_admin:tours"],"p":["agency_admin:time-clock","agency_admin:care-log","centre_director:time-clock","centre_director:care-log","educator:time-clock","educator:care-log","guardian:care-log","agency_admin:portfolio","agency_admin:milestones","centre_director:portfolio","centre_director:milestones","educator:portfolio","educator:milestones","guardian:portfolio","guardian:milestones","agency_admin:tours","centre_director:tours"]},"js/screen-agencies.js?v=20261021-174105-sweep":{"h":["agencies"]},"js/screen-waitlist.js?v=20261024-sel":{"h":["waitlist"]},"js/screen-announcements.js?v=20261109ar2":{"h":["announcements"],"d":["screen-parent.js"]},"js/screen-autopay.js?v=20261106gd15":{"h":["autopay"]},"js/screen-lesson-plans.js?v=20261103curr":{"h":["lesson-plans"]},"js/screen-schedule.js?v=20261030a":{"h":["schedule"]},"js/screen-admin-mrr.js?v=20261030r":{"h":["admin-mrr"]},"js/screen-usage-spend.js?v=20261028zw":{"k":["platform_admin:usage-spend"]},"js/screen-ai-usage.js?v=20261104arset":{"k":["platform_admin:ai-usage"]},"js/screen-admin-features.js?v=20261101tb":{"h":["admin-features"]},"js/screen-admin-branding.js?v=20261105del":{"h":["admin-branding"],"d":["screen-parent.js","kt-account-panes.js","screen-settings.js","kt-hero-brand.js","kt-mini-map.js","kt-billing-split.js","screen-admin.js","screen-email-seasons.js","screen-autopay.js","screen-incidents.js","screen-child-detail.js","screen-mfa.js","screen-v22p58.js","kt-immunization-panel.js","screen-immunizations.js"]},"js/screen-resellers.js?v=20261021-173215-hero2":{"k":["reseller_admin:home","reseller_admin:reseller-brand","reseller_admin:reseller-agencies","agency_admin:resellers","platform_admin:resellers"],"d":["kt-hero-brand.js"],"p":["reseller_admin:home"]},"js/screen-lesson-plans-ai.js?v=20261021tz":{"k":["centre_director:lesson-plans-ai","centre_director:lesson-plan-new","agency_admin:lesson-plans-ai","agency_admin:lesson-plan-new"]},"js/screen-observations.js?v=20261109ob4":{"k":["educator:observations","educator:observation-new","centre_director:observations","centre_director:observation-new","agency_admin:observations","agency_admin:observation-new"],"s":["KT.openObservation"]},"js/screen-incidents.js?v=20261106sig":{"k":["agency_admin:incidents","agency_admin:incident-detail","centre_director:incidents","centre_director:incident-detail","educator:incidents","educator:incident-detail","guardian:incidents","guardian:incident-detail","educator:incident-new","centre_director:incident-new","agency_admin:incident-new"]},"js/screen-awards.js?v=20261106pr":{"k":["educator:awards","centre_director:awards","agency_admin:awards","platform_admin:awards","guardian:awards"]},"js/screen-report-cards-parent.js?v=20261104rc":{"k":["guardian:report-cards"]},"js/screen-child-detail.js?v=20261113mu1":{"k":["centre_director:child-detail","agency_admin:child-detail"],"d":["screen-incidents.js","kt-immunization-panel.js"]},"js/screen-mfa.js?v=20261108tb2":{"k":["agency_admin:mfa","centre_director:mfa","educator:mfa","sales_rep:mfa","guardian:mfa","home_visitor:mfa","platform_admin:mfa"]},"js/screen-sibling-discounts.js?v=20261009n2":{"k":["agency_admin:sibling-discounts"]},"js/screen-roles.js?v=20261020ctr4":{"k":["agency_admin:admin-roles"]},"js/screen-admin-children.js?v=20261113dir1":{"k":["agency_admin:admin-children","auditor:children","centre_director:admin-children"],"d":["kt-stat-rings.js","screen-parent.js","kt-account-panes.js","screen-settings.js","kt-hero-brand.js","kt-mini-map.js","kt-billing-split.js","screen-admin.js","screen-email-seasons.js","screen-autopay.js","screen-admin-branding.js","screen-incidents.js","screen-child-detail.js","screen-mfa.js","screen-v22p58.js","kt-immunization-panel.js","screen-immunizations.js"]},"js/screen-platform.js?v=20261110sl1":{"k":["agency_admin:platform-overview","agency_admin:platform-agencies","centre_director:platform-overview","centre_director:platform-agencies","platform_admin:platform-overview","platform_admin:platform-agencies","platform_admin:maintenance"]},"js/screen-mail-settings.js?v=20261105ui":{"k":["platform_admin:mail-settings"]},"js/screen-backups.js?v=20261009n2":{"k":["platform_admin:backups"]},"js/screen-email-template.js?v=20261031hc":{"k":["agency_admin:email-templates","platform_admin:email-templates"]},"js/screen-digest-status.js?v=202610211655":{"k":["agency_admin:digest-status","centre_director:digest-status"]},"js/kt-menu-tools.js?v=20261109mp1":{},"js/screen-v22p53.js?v=20261113oc1":{"h":["menu","allergy-alerts","field-trips","substitutes","inspection","cwelcc","retention","forecast","anomalies","renewals"],"d":["kt-stat-rings.js","kt-menu-tools.js"]},"js/screen-safe-arrival.js?v=kt-20261110sa":{"k":["agency_admin:safe-arrival","centre_director:safe-arrival","educator:safe-arrival","platform_admin:safe-arrival"],"s":["KT.runningLate"]},"js/screen-educator-points.js?v=20261102gc":{"k":["educator:my-points","home_visitor:my-points","centre_director:my-points","agency_admin:educator-rewards","platform_admin:educator-rewards","centre_director:educator-rewards","agency_admin:educator-award-settings","platform_admin:educator-award-settings","centre_director:educator-award-settings"],"s":["KT.educatorGiftCards"]},"js/screen-learning-framework.js?v=20261009n2":{"k":["agency_admin:learning-framework","platform_admin:learning-framework"]},"js/screen-donations.js?v=20261021tz":{"k":["agency_admin:donations","platform_admin:donations"]},"js/screen-rsvp.js?v=20261106flt":{"k":["agency_admin:rsvp","platform_admin:rsvp"]},"js/screen-compliance-evidence.js?v=20261009n2":{"k":["platform_admin:compliance-evidence"]},"js/screen-grants.js?v=20261021tz":{"k":["agency_admin:grants","centre_director:grants","platform_admin:grants"]},"js/screen-payment-run.js?v=20261009n2":{"k":["agency_admin:payment-run","platform_admin:payment-run"]},"js/screen-phone-voicemail.js?v=20261023-vmreply":{"k":["platform_admin:phone-voicemail","agency_admin:phone-voicemail"]},"js/screen-drills.js?v=20261110do3":{"k":["agency_admin:drills","platform_admin:drills","centre_director:drills","educator:drills"]},"js/screen-hazards.js?v=20261015hz":{"k":["agency_admin:hazards","platform_admin:hazards","centre_director:hazards","educator:hazards","home_visitor:hazards"]},"js/kt-notify-readiness.js?v=20261102nl":{},"js/screen-v22p56.js?v=20261106sig":{"h":["closures","room-ratios","vacation-holds","tuition-increases","reenrollment","engagement","nps","signed-docs","bus-routes","room-rotations"]},"js/screen-curriculum-library.js?v=20261103unit3":{},"js/screen-v22p57.js?v=20261103curc":{"h":["pickup-auth","checkin","trends","referrals","ach-pay","drip-campaigns","curriculum","hdlh-gaps"],"d":["screen-lesson-plans.js","screen-curriculum-library.js"]},"js/screen-v22p58.js?v=20261113imz":{"h":["wallet","ledger","videos","refunds","reports","immun-schedule","cacfp","billing-schedule"],"d":["screen-parent.js","kt-immunization-panel.js","screen-immunizations.js"]},"js/screen-withdrawals.js?v=20261030a":{"k":["guardian:withdraw","centre_director:withdrawals","agency_admin:withdrawals","platform_admin:withdrawals"]},"js/kt-form-annotate.js?v=20261103ios":{},"js/screen-v22p59.js?v=20261109vr1":{"h":["directory","conferences","trip-gps","attendance-pattern","tickets","report-cards","zones","photo-tagging"],"a":["fix-screen-v22p69.js"]},"js/screen-walk-settings.js?v=20261021walk2":{},"js/screen-integrations-v22p72.js?v=20261106uv":{"k":["agency_admin:sms-settings","agency_admin:email-settings","platform_admin:sms-settings","platform_admin:email-settings","centre_director:sms-settings","centre_director:email-settings"],"d":["kt-secret-field.js","screen-billing-setup.js","screen-mail-settings.js","screen-phone-voicemail.js","screen-birthday-settings.js"],"a":["screen-quickbooks.js"]},"js/screen-xero.js?v=20261009wd":{"k":["agency_admin:xero","platform_admin:xero"]},"js/screen-sage.js?v=20261009wd":{"k":["agency_admin:sage","platform_admin:sage"]},"js/screen-reports.js?v=20261113occ2":{"k":["agency_admin:reports","platform_admin:reports","centre_director:reports","auditor:reports","educator:reports"]},"js/screen-social-settings.js?v=20261009n2":{"k":["agency_admin:social-settings","platform_admin:social-settings"]},"js/screen-security-alerts.js?v=20261030a":{"k":["agency_admin:security-alerts","platform_admin:security-alerts"]},"js/screen-server-health.js?v=20261109sk2":{"k":["agency_admin:server-health","platform_admin:server-health"]},"js/screen-platform-careers.js?v=20261104resview":{"k":["platform_admin:platform-careers","agency_admin:platform-careers"]},"js/screen-late-events.js?v=20261009n2":{"k":["agency_admin:late-pickups","agency_admin:late-events","platform_admin:late-pickups","platform_admin:late-events","centre_director:late-pickups","centre_director:late-events","educator:late-pickups","educator:late-events"]},"js/screen-billing-settings.js?v=20261009n2":{"k":["agency_admin:billing-settings","platform_admin:billing-settings"],"d":["screen-fee-plans.js","screen-billing-setup.js","screen-sibling-discounts.js"]},"js/screen-platform-invoices.js?v=20261111cn1":{"k":["platform_admin:sales-invoices"]},"js/screen-licences.js?v=20261111cn1":{"k":["platform_admin:licences","agency_admin:licence","platform_admin:licence"]},"js/screen-document-templates.js?v=20261009n2":{"k":["agency_admin:document-templates","platform_admin:document-templates"]},"js/screen-educator-rooms.js?v=20261021walk2":{"k":["agency_admin:educator-rooms","centre_director:educator-rooms","platform_admin:educator-rooms"],"d":["screen-walk-settings.js","screen-record-reminders.js","screen-clock-settings.js"]},"js/screen-record-reminders.js?v=20261015dr":{},"js/screen-calendar-settings.js?v=20261103calsw":{"k":["agency_admin:calendar-settings","platform_admin:calendar-settings","centre_director:calendar-settings"]},"js/screen-auto-signoff.js?v=20261009n2":{"k":["agency_admin:auto-signoff","platform_admin:auto-signoff","centre_director:auto-signoff"]},"js/screen-birthday-settings.js?v=20261009n2":{"k":["agency_admin:birthday-settings","platform_admin:birthday-settings"]},"js/screen-data-retention.js?v=20261110pn1":{"k":["agency_admin:data-retention","platform_admin:data-retention"]},"js/screen-privacy-breaches.js?v=20261113aud1":{"k":["agency_admin:privacy-breaches","platform_admin:privacy-breaches","centre_director:privacy-breaches"]},"js/screen-privacy-requests.js?v=20261110pr1":{"k":["agency_admin:privacy-requests","platform_admin:privacy-requests"]},"js/screen-photo-consent.js?v=20261106gd":{"k":["agency_admin:photo-permissions","platform_admin:photo-permissions","centre_director:photo-permissions","educator:photo-permissions"],"s":["KT.photoConsentPanel"]},"js/screen-payroll-settings.js?v=20261106bo":{"k":["agency_admin:payroll-settings","platform_admin:payroll-settings"]},"js/screen-clock-settings.js?v=20261106gd":{"k":["agency_admin:clock-settings","centre_director:clock-settings","platform_admin:clock-settings"]},"js/screen-notification-settings.js?v=20261109tn1":{"k":["agency_admin:notification-settings","platform_admin:notification-settings"],"d":["kt-notify-readiness.js"]},"js/screen-payment-providers.js?v=20261111ia3":{"k":["agency_admin:payment-providers","platform_admin:payment-providers"]},"js/screen-medications.js?v=20261030a":{"k":["agency_admin:medications","centre_director:medications","educator:medications","guardian:medications"]},"js/kt-immunization-panel.js?v=20261113mu2":{},"js/screen-immunizations.js?v=20261113mu2":{"k":["agency_admin:immunizations","centre_director:immunizations","educator:immunizations","guardian:immunizations","agency_admin:immun-schedule","centre_director:immun-schedule","platform_admin:immun-schedule"],"d":["screen-parent.js","screen-v22p58.js","kt-immunization-panel.js"]},"js/screen-invitation-codes.js?v=20261009n2":{"k":["agency_admin:invitation-codes","centre_director:invitation-codes"]},"js/screen-edocuments.js?v=20261106sig":{"k":["agency_admin:edocuments","centre_director:edocuments","guardian:edocuments"]},"js/screen-home-visitor.js?v=20261106gd20":{"k":["home_visitor:home","home_visitor:new-home-visit","agency_admin:new-home-visit","centre_director:new-home-visit","platform_admin:new-home-visit","home_visitor:home-visits","home_visitor:edit-home-visit","centre_director:edit-home-visit","agency_admin:edit-home-visit","platform_admin:edit-home-visit","agency_admin:home-visit-reports","centre_director:home-visit-reports","platform_admin:home-visit-reports","home_visitor:home-visit-view","agency_admin:home-visit-view","centre_director:home-visit-view","platform_admin:home-visit-view"]},"js/screen-sales-campaigns.js?v=20261111ad2":{"k":["sales_rep:sales-campaigns","sales_rep:sales-campaign","platform_admin:sales-campaigns","platform_admin:sales-campaign","agency_admin:sales-campaigns","agency_admin:sales-campaign"]},"js/screen-sales-insights.js?v=20261111qdl1":{"k":["sales_rep:sales-quotes","sales_rep:sales-expenses","platform_admin:sales-quotes","platform_admin:sales-expenses","agency_admin:sales-quotes","agency_admin:sales-expenses","sales_rep:sales-customers","platform_admin:sales-customers","agency_admin:sales-customers","platform_admin:platform-sales","agency_admin:platform-sales"]},"js/screen-my-pay.js?v=20261106pr":{"k":["educator:my-hours","home_visitor:my-pay","centre_director:my-hours"]},"js/screen-hcc-forms.js?v=20261030a":{"k":["home_visitor:inspection-forms","home_visitor:inspection-form","agency_admin:inspection-forms","agency_admin:inspection-form","centre_director:inspection-forms","centre_director:inspection-form","platform_admin:inspection-forms","platform_admin:inspection-form","home_visitor:hcc-form-view","agency_admin:hcc-form-view","centre_director:hcc-form-view","platform_admin:hcc-form-view","agency_admin:hcc-forms","centre_director:hcc-forms","platform_admin:hcc-forms"]}};
+  (function(){try{var M=window.__KT_LAZY,S=sessionStorage,L=localStorage,u=JSON.parse(S.getItem('kt_user')||L.getItem('kt_user')||'{}')||{},R=u.roles||[];if(!R.length)return;var va=S.getItem('kt_view_as'),r=(va&&R.indexOf('platform_admin')!==-1)?va:['agency_admin','platform_admin','centre_director','educator','guardian','home_visitor','sales_rep','reseller_admin','auditor'].filter(function(x){return R.indexOf(x)!==-1;})[0];if(r==='platform_admin')r='agency_admin';if(!r)return;var h=(location.hash||'').replace(/^#/,'').split('?')[0].split('/')[0];if(!h){var ph=window.__KT_PHONE===true||!window.matchMedia('(min-width: 601px)').matches;h=(!ph&&(r==='agency_admin'||r==='centre_director'))?'dashboard':'home';}var want={},byName={},k;for(k in M)byName[k.split('?')[0].slice(3)]=k;for(k in M){var e=M[k];if((e.k||[]).indexOf(r+':'+h)!==-1||(e.h||[]).indexOf(h)!==-1){want[k]=1;(e.d||[]).forEach(function(n){if(byName[n])want[byName[n]]=1;});}}for(k in want){var l=document.createElement('link');l.rel='preload';l.as='script';l.href='/'+k;document.head.appendChild(l);}}catch(e){}})();</script>
   <!-- Sales demo SSO: open Test Agency (#6) demo from a minted token (#__demo=). Runs before deferred app boot. -->
   <script>(function(){try{var m=(location.hash||'').match(/__demo=([^&]+)/);if(!m)return;var tk=decodeURIComponent(m[1]);var x=new XMLHttpRequest();x.open('GET','https://api.kiddietrac.com/api/v1/auth/me',false);x.setRequestHeader('Authorization','Bearer '+tk);x.setRequestHeader('X-Active-Agency-Id','6');try{x.send(null);}catch(e){}if(x.status===200){var u;try{u=JSON.parse(x.responseText);u=u.user||u;}catch(e){u=null;}if(u){sessionStorage.setItem('kt_token',tk);sessionStorage.setItem('kt_user',JSON.stringify(u));sessionStorage.setItem('kt_active_agency_id','6');try{localStorage.setItem('kt_token',tk);/* NOT localStorage: the active agency belongs to the SESSION, not the device. */localStorage.removeItem('kt_active_agency_id');}catch(e){}}}try{history.replaceState(null,'',location.pathname);}catch(e){}}catch(e){}})();</script>
   <script>/* kt_active_agency_id belongs to the session, not the device. An older build persisted it (as '6', the demo agency) to localStorage, where it outlived the session and was sent by whoever signed in next on that device — every write by six real staff went out scoped to the wrong agency. Runs unconditionally on every boot. */
@@ -35,7 +259,7 @@
        layer above) replaces it, and kt-biometric removes this the moment it decides.
        Failsafe: never longer than 20s. -->
   <style>html.kt-bio-pending::before{content:'';position:fixed;inset:0;z-index:2147481999;background:radial-gradient(120% 55% at 50% 0%,rgba(19,183,204,.18) 0%,rgba(19,183,204,0) 55%),linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);}</style>
-  <script>try{(function(){var L=localStorage,S=sessionStorage,d=document.documentElement;if(L.getItem('kt_biometric_enabled')!=='1'||!L.getItem('kt_bio_token'))return;if(S.getItem('kt_token')||S.getItem('kt_bio_session')==='1')return;if(L.getItem('kt_signed_out')==='1')return;if(Date.now()-(parseInt(L.getItem('kt_bio_unlocked_at')||'0',10)||0)<20000)return;if(!(window.__KT_NATIVE||window.__KT_PHONE))return;d.classList.add('kt-bio-pending');setTimeout(function(){d.classList.remove('kt-bio-pending');},20000);})();}catch(e){}</script>
+  <script>try{(function(){var L=localStorage,S=sessionStorage,d=document.documentElement;if(L.getItem('kt_biometric_enabled')!=='1'||!L.getItem('kt_bio_token'))return;if((S.getItem('kt_token')&&S.getItem('kt_locked')!=='1')||S.getItem('kt_bio_session')==='1')return;if(L.getItem('kt_signed_out')==='1')return;if(Date.now()-(parseInt(L.getItem('kt_bio_unlocked_at')||'0',10)||0)<20000)return;if(!(window.__KT_NATIVE||window.__KT_PHONE))return;d.classList.add('kt-bio-pending');setTimeout(function(){d.classList.remove('kt-bio-pending');},20000);})();}catch(e){}</script>
   <!-- Clear a STALE kt_view_as: only a platform_admin can "view as" another role.
        For everyone else a leftover kt_view_as (e.g. from previewing a parent account,
        persisting across logout/login in the same WebView) wrongly overrides their real
@@ -83,8 +307,9 @@
       if (_cur) {
         var _cu = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
         var _cr = (_cu && _cu.roles && _cu.roles.indexOf) ? _cu.roles : [];
+        var _mine = (_cu && _cu.agency_ids && _cu.agency_ids.map) ? _cu.agency_ids.map(String) : [];
         if (_cr.indexOf('platform_admin') === -1 && _cu && _cu.agency_id
-            && String(_cu.agency_id) !== String(_cur)) {
+            && String(_cu.agency_id) !== String(_cur) && _mine.indexOf(String(_cur)) === -1) {
           sessionStorage.removeItem('kt_active_agency_id');
           sessionStorage.removeItem('kt_active_agency_name');
         }
@@ -107,7 +332,9 @@
         // the user's own agency_id, which is always correct for them.
         var _roles = (_u && _u.roles && _u.roles.indexOf) ? _u.roles : [];
         var _isPlatformAdmin = _roles.indexOf('platform_admin') !== -1;
-        var _seed = (_isPlatformAdmin && _u && _u.default_agency_id) ? _u.default_agency_id : (_u && _u.agency_id);
+        // landing_agency_id (2026-10-21) is the server's answer to the same question, and the
+        // one the sign-in brand cache was written for. Older sessions fall back as before.
+        var _seed = (_u && _u.landing_agency_id) || ((_isPlatformAdmin && _u && _u.default_agency_id) ? _u.default_agency_id : (_u && _u.agency_id));
         if (_seed) sessionStorage.setItem('kt_active_agency_id', String(_seed));
       }
     } catch(e){}
@@ -117,13 +344,24 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
   <link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
-  <link rel="stylesheet" href="/css/styles.css?v=20260916tskebab2">
+  <link rel="stylesheet" href="/css/styles.css?v=20261030a">
   <link rel="stylesheet" href="/css/kt-tokens.css?v=v20260906hero3">
-  <link rel="stylesheet" href="/css/app-v2.css?v=20260921ios">
+  <link rel="stylesheet" href="/css/app-v2.css?v=20261101ns">
   <link rel="stylesheet" href="/css/kt-sidebar-v22.css?v=202609080011">
-  <link rel="stylesheet" href="/css/kt-polish-v22.css?v=20260827time2">
+  <link rel="stylesheet" href="/css/kt-polish-v22.css?v=20261106bio">
   <link rel="stylesheet" href="/css/kt-fonts.css?v=20261014net">
   <meta name="theme-color" content="#081C41">
+<script>/* KT-EARLY-STATUSBAR (2026-10-26). Android 15/16 ignores the native status-bar colour, so the app paints a navy
+   strip under the clock itself (kt-native-ui.js). That script is deferred behind ~160 others, so the strip stayed white
+   for seconds on launch. Painted here, first thing; kt-native-ui.js reuses #kt-statusfill. */
+(function(){try{var C=window.Capacitor;if(!C||(C.getPlatform&&C.getPlatform()==='web'))return;
+var SB=C.Plugins&&C.Plugins.StatusBar;if(SB){try{SB.setOverlaysWebView&&SB.setOverlaysWebView({overlay:true});}catch(e){}try{SB.setStyle&&SB.setStyle({style:'DARK'});}catch(e){}}
+if(!document.getElementById('kt-statusfill')){var d=document.createElement('div');d.id='kt-statusfill';
+d.style.cssText='position:fixed;top:0;left:0;right:0;height:var(--kt-safe-top, env(safe-area-inset-top, 0px));background:#081C41;z-index:2147483600;pointer-events:none;';
+document.documentElement.appendChild(d);}}catch(e){}})();</script>
+
+  <!-- One WebAuthn / fingerprint request at a time (passkey autofill vs unlock): first. -->
+  <script src="/js/kt-cred-mutex.js?v=202610212345cm"></script>
   <!-- The portal is a LIGHT UI. Without a document-level colour scheme the
        Android WebView still treats the page as dark-capable when the phone is
        in dark mode, and renders the OS-drawn <select> popup with dark-theme
@@ -132,27 +370,72 @@
        controls and algorithmic darkening. Element-level color-scheme on the
        <select> alone was NOT enough. -->
   <meta name="color-scheme" content="light only">
+  <!-- SAMSUNG INTERNET FORCES DARK (2026-11-03, Anthony: a parent's phone showed the portal inverted). Chrome honours
+       "light only" above (verified with Chrome's own darkening switched on). Samsung Internet ignores it: its
+       "dark mode for websites" leaves a page alone only when the page says it CAN do dark itself. So, for Samsung
+       only, the tag says "light dark" while every colour stays our light one (html background/text and form
+       controls pinned light below). If Samsung darkens the page anyway, the parent gets a one-time tip saying how
+       to turn it off. Chrome and the apps are untouched. -->
+  <script>(function () {
+    try {
+      if (!/SamsungBrowser\//.test(navigator.userAgent)) return;
+      var m = document.querySelector('meta[name="color-scheme"]');
+      if (m) m.setAttribute('content', 'light dark');
+      document.documentElement.className += ' kt-samsung';
+      var st = document.createElement('style');
+      st.textContent = 'html.kt-samsung{background:#F7F9FC;color:#0F172A}'
+        + 'html.kt-samsung input,html.kt-samsung textarea,html.kt-samsung select,html.kt-samsung button{color-scheme:light}';
+      document.head.appendChild(st);
+      var KEY = 'kt_samsung_dark_tip_v1';
+      try { if (localStorage.getItem(KEY)) return; } catch (e) {}
+      // Chrome's documented detector: a light-scheme box painted "Canvas" reads non-white when the browser darkens it.
+      function forcedDark() {
+        var d = document.createElement('div');
+        d.style.cssText = 'display:none;background-color:Canvas;color-scheme:light';
+        document.body.appendChild(d);
+        var bg = getComputedStyle(d).backgroundColor; d.remove();
+        var n = (bg.match(/\d+/g) || []).slice(0, 3).map(Number);
+        return n.length === 3 && (n[0] + n[1] + n[2]) < 600;
+      }
+      function tip() {
+        try { localStorage.setItem(KEY, '1'); } catch (e) {}
+        var w = document.createElement('div');
+        w.setAttribute('role', 'status');
+        w.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:2147483000;'
+          + 'background:#fff;color:#0F172A;border:1px solid #CBD5E1;border-radius:12px;box-shadow:0 8px 24px rgba(15,23,42,.18);'
+          + 'padding:12px 40px 12px 14px;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color-scheme:light';
+        w.innerHTML = '<b>Page looking dark?</b><br>Samsung Internet’s dark mode can make this page hard to read. If it does, '
+          + 'tap the <b>☰ menu</b> at the bottom of the screen and choose <b>Light mode</b>.'
+          + '<button type="button" aria-label="Close" style="position:absolute;top:6px;right:6px;width:30px;height:30px;border:0;background:none;font-size:20px;color:#475569;cursor:pointer">×</button>';
+        w.querySelector('button').onclick = function () { w.remove(); };
+        document.body.appendChild(w);
+        setTimeout(function () { if (w.parentNode) w.remove(); }, 20000);
+      }
+      window.addEventListener('load', function () { setTimeout(function () { try { if (forcedDark()) tip(); } catch (e) {} }, 2500); });
+    } catch (e) {}
+  })();</script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Kiddietrac">
   <link rel="manifest" href="/manifest.json">
-<link rel="stylesheet" href="/css/kt-design-v22p55.css?v=20260706p2">
-  <link rel="stylesheet" href="/css/kt-design-v22p64.css?v=20261006nopagein">
-  <link rel="stylesheet" href="/css/kt-design-v22p65.css?v=20260921media2">
-  <link rel="stylesheet" href="/css/kt-design-v22p66.css?v=20260921ios">
+  <link rel="stylesheet" href="/css/kt-boot-intro.css?v=20261101fi">
+<link rel="stylesheet" href="/css/kt-design-v22p55.css?v=20261030a">
+  <link rel="stylesheet" href="/css/kt-design-v22p64.css?v=20261030u">
+  <link rel="stylesheet" href="/css/kt-design-v22p65.css?v=20261102dw">
+  <link rel="stylesheet" href="/css/kt-design-v22p66.css?v=20261106ci">
   <link rel="stylesheet" href="/css/kt-consistency-v22p71.css?v=20260714n1">
   <link rel="stylesheet" href="/css/kt-cards-v22p72.css?v=20260706p2">
-  <link rel="stylesheet" href="/css/kt-topnav-fix.css?v=20260921ios">
+  <link rel="stylesheet" href="/css/kt-topnav-fix.css?v=20261031hc">
   <link rel="stylesheet" href="/css/kt-sidebar-brand.css?v=20260706p2">
   <link rel="stylesheet" href="/css/kt-hero-anim.css?v=20260706p2">
 
   <link rel="stylesheet" href="/css/kt-fullwidth.css?v=202609032022">
-  <link rel="stylesheet" href="/css/kt-consistency-polish.css?v=20261009pill">
+  <link rel="stylesheet" href="/css/kt-consistency-polish.css?v=20261102dw">
   <link rel="stylesheet" href="/css/kt-buttons.css?v=20260811actionbtn">
-  <script src="/js/kt-ios-safearea.js?v=20261016nav2"></script>
-  <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20261016ik2">
-  <link rel="stylesheet" href="/css/kt-mobile-tint.css?v=20261015ph">
+  <script src="/js/kt-ios-safearea.js?v=20261106gd14"></script>
+  <link rel="stylesheet" href="/css/kt-mobile-app.css?v=20261109gl2">
+  <link rel="stylesheet" href="/css/kt-mobile-tint.css?v=20261105emoji">
   <link rel="stylesheet" href="/css/kt-mobile-brand-fix.css?v=20260810restore">
   <!-- Reloads any stylesheet that failed to arrive (2026-10-13: the one-tile-per-row launcher). -->
   <script src="/js/kt-css-guard.js?v=20261013g2"></script>
@@ -171,8 +454,10 @@
        content cap is 1800px, so a 1000-1400px window (laptop, half-screen split,
        restored window) got the wide layout with no adaptation. Loaded last so it
        wins over the inline grids it corrects. -->
-  <link rel="stylesheet" href="/css/kt-desktop-fluid.css?v=20260814fluid3">
-  <link rel="stylesheet" href="/css/kt-chat-composer.css?v=20261019cmp3">
+  <link rel="stylesheet" href="/css/kt-desktop-fluid.css?v=20261029i">
+  <link rel="stylesheet" href="/css/kt-chat-composer.css?v=20261113li4">
+  <link rel="stylesheet" href="/css/kt-field-height.css?v=20261025zu">
+  <link rel="stylesheet" href="/css/kt-phone-compact.css?v=20261029m">
 </head>
 <body>
 <!-- ── Signed-out launch: leave immediately ──────────────────────────────────
@@ -190,31 +475,66 @@
     if (t) return;                                  // signed in: normal boot
     var h = (location.hash || '');
     if (h.indexOf('__demo=') !== -1 || h.indexOf('kt_sso=') !== -1) return;   // token handoff in the URL
-    document.documentElement.style.background = '#081C41';
+    /* #0A1C3A: the native splash's colour, which the sign-in page's launch scene also
+       starts on (kt-launch-scene.js) - one continuous colour, no icon flash. */
+    document.documentElement.style.background = '#0A1C3A';
     var cover = document.createElement('div');
     cover.setAttribute('style',
-      'position:fixed;inset:0;z-index:2147483600;background:#081C41;display:flex;'
+      'position:fixed;inset:0;z-index:2147483600;background:#0A1C3A;display:flex;'
       + 'align-items:center;justify-content:center;');
-    cover.innerHTML = '<img src="/icon-192.png" alt="" style="width:104px;height:104px;border-radius:24px;"'
-      + ' onerror="this.style.display=\'none\'">';
     (document.body || document.documentElement).appendChild(cover);
-    location.replace('/index.html');
+    if (!window.__ktSignedOutBounce) location.replace('/index.html');   // the head already left (2026-10-31)
   } catch (e) {}
 })();
 </script>
+<!-- The blocks scene on a first boot (see the head) - before the splash, so it is the first frame. -->
+<script src="/js/kt-launch-scene.js?v=20261105tix"></script>
 <!-- v17.2-shell -->
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
-<div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img src="/login-wordmark.png" alt="" data-brand-logo onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-spinner" aria-hidden="true"></div></div></div>
 <style>
+/* STYLES BEFORE THE SPLASH, CONTENTS HIDDEN UNTIL BUILT (2026-11-01, Anthony: "there is a flash when you
+   unlock"). This block sat AFTER <div id="kt-splash"> and the inline script below it; the app's WebView paints
+   at that script, so one frame showed the raw wordmark at full size in the top-left corner. Now the styles
+   come first, and the logo column stays hidden until the intro (html.kti) or a white-label brand (html.kt-wl)
+   has dressed it - nothing contentful until then, so the WebView keeps showing the previous screen (the
+   sign-in page's frame) instead of a half-built one. 2.5 s safety in case neither ever runs. */
+#kt-splash .kt-splash-in{visibility:hidden;animation:kt-si-show 0s linear 2.5s forwards}
+html.kti #kt-splash .kt-splash-in,html.kt-wl #kt-splash .kt-splash-in{visibility:visible;animation:none}
+@keyframes kt-si-show{to{visibility:visible}}
 /* NAVY post-login boot (2026-08-11). This splash now only ever runs AFTER sign-in,
    while the portal loads, so it wears the brand navy rather than the light ground
    it used to share with the login page. */
 #kt-splash{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(120% 70% at 50% 0%,#12315C 0%,#081C41 62%);transition:opacity .5s ease}
 #kt-splash.kt-hide{opacity:0;pointer-events:none}
+/* NO DOUBLE EXPOSURE ON THE WAY OUT (2026-10-31, Anthony's Samsung recording: "android boot loading on mobile still
+   has that flash"). The splash used to fade as one piece, so for a quarter of a second its logo, spinner and
+   "Signing you in..." sat half-transparent ON TOP of the home screen - the wordmark ghosted over the tiles (reproduced
+   on the Pixel 8 emulator; a white-label plate does the same over a light screen). The logo and words now go first,
+   on the splash's own ground, and only then does the ground lift. 0.5s in all, inside hide()'s 600ms removal. */
+/* THE SCREEN RISES OUT OF THE NAVY (2026-11-02, Anthony). The one-frame cut jumped from the navy splash to the
+   near-white home screen (his Samsung at 13.32s: luminance 104 -> 214 in a frame). The two softer looks he turned
+   down stay out: the whole splash fading as one piece ghosts the logo and spinner over the tiles, and the words
+   leaving first holds an empty navy frame. So the logo, spinner and words are gone IN the hide frame, and only the
+   ground fades, 0.2s with no delay - the home screen shows through it from the first frame. hide() removes the node
+   at 600ms, well after.
+   Only .kt-splash-in is content. The two .kti-glow layers are part of the GROUND and fade with it: hiding every
+   child at once (05:27 deploy) dropped the teal ground to flat navy for the length of the fade - on the fingerprint
+   unlock, Pixel 8 emulator frame RGB 31,117,136 -> 10,28,56, then the home screen: a dark flash. */
+#kt-splash.kt-hide{transition:opacity .2s ease-out 0s!important;opacity:0;pointer-events:none}
+#kt-splash.kt-hide .kt-splash-in,#kt-splash.kt-hide .kt-splash-in *{visibility:hidden!important;animation:none!important;transition:none!important}
 /* Reload gate — dim scrim + spinner shown on an in-session reload until the portal is ready. */
-#kt-reload-gate{position:fixed;inset:0;z-index:2147483100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(11,14,22,.94);-webkit-backdrop-filter:blur(10px) saturate(.9);backdrop-filter:blur(10px) saturate(.9);opacity:1;transition:opacity .35s ease}
+/* The original dark scrim, with the portal behind it DISTORTED (2026-10-25, Anthony): the page itself is blurred
+   hard while the gate is up, and the scrim adds its own blur on top, so only soft colour shows through - no
+   outlines of the sidebar, cards or text. */
+#kt-reload-gate{position:fixed;inset:0;z-index:2147483100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(11,14,22,.86);-webkit-backdrop-filter:blur(26px) saturate(.75);backdrop-filter:blur(26px) saturate(.75);opacity:1;transition:opacity .35s ease}
+html.kt-gating #appShell{filter:blur(22px) saturate(.7);transition:filter .3s ease}
 #kt-reload-gate.kt-hide{opacity:0;pointer-events:none}
-#kt-reload-gate .kt-rg-spin{width:44px;height:44px;border-radius:50%;border:4px solid rgba(255,255,255,.22);border-top-color:#22D3EE;animation:kt-spin .8s linear infinite}
+/* Same rule as the splash: the spinner and words leave first, then the cover (no ghost over the screen). */
+/* Same exit as the splash (2026-11-02): spinner and words gone in the hide frame, the cover fades 0.2s. drop()
+   removes it at 380ms. */
+#kt-reload-gate.kt-hide{transition:opacity .2s ease-out 0s!important;opacity:0;pointer-events:none}
+#kt-reload-gate.kt-hide *{visibility:hidden!important;animation:none!important;transition:none!important}
+#kt-reload-gate .kt-rg-spin{width:44px;height:44px;border-radius:50%;border:4px solid rgba(255,255,255,.22);border-top-color:var(--kt-wl-spin,#22D3EE);animation:kt-spin .8s linear infinite}
 #kt-reload-gate .kt-rg-txt{color:#E2E8F0;font:600 13.5px/1.3 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;letter-spacing:.2px;text-shadow:0 1px 3px rgba(0,0,0,.4)}
 @media(prefers-reduced-motion:reduce){#kt-reload-gate .kt-rg-spin{animation:kt-spin 1.3s linear infinite}}
 /* While the reload gate is up it is the ONLY spinner — suppress the portal's own
@@ -227,7 +547,8 @@ html.kt-gating .loading-state{visibility:hidden!important;}
 #kt-splash .kt-splash-in{display:flex;flex-direction:column;align-items:center;gap:30px;padding:0 28px}
 #kt-splash .kt-splash-logo-wrap{width:min(66vw,240px)}
 #kt-splash .kt-splash-logo{display:block;width:100%;height:auto;animation:kt-write 1.7s cubic-bezier(.62,.03,.2,1) both,kt-rise .7s ease both}
-#kt-splash .kt-spinner{width:40px;height:40px;border-radius:50%;border:3.5px solid rgba(255,255,255,.20);border-top-color:#13B7CC;opacity:0;animation:kt-spin .8s linear infinite,kt-fade .45s ease .95s forwards}
+#kt-splash .kt-splash-note{margin-top:-14px;font:600 13.5px/1.3 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;letter-spacing:.2px;color:#A9C2DC;opacity:0;animation:kt-fade .45s ease .95s forwards;text-align:center}
+#kt-splash .kt-spinner{width:40px;height:40px;border-radius:50%;border:3.5px solid rgba(255,255,255,.20);border-top-color:var(--kt-wl-spin,#13B7CC);opacity:0;animation:kt-spin .8s linear infinite,kt-fade .45s ease .95s forwards}
 @keyframes kt-write{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 @keyframes kt-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes kt-spin{to{transform:rotate(360deg)}}
@@ -235,6 +556,7 @@ html.kt-gating .loading-state{visibility:hidden!important;}
 @media(prefers-reduced-motion:reduce){#kt-splash .kt-splash-logo{animation:kt-rise .5s ease both;clip-path:none}#kt-splash .kt-spinner{opacity:1;animation:kt-spin 1.1s linear infinite}}
 /* ── Sparkle write-on (same treatment as the login splash) ── */
 #kt-splash .ktl-anim{position:relative;display:inline-block;line-height:0;width:min(74vw,300px);}
+html.kt-brand-pending #kt-splash .ktl-anim{visibility:hidden!important}
 /* NAVY splash wearing the real dark-ground lockup: login-wordmark.png is white
    'Kiddie' + teal 'Trac' (sampled: 49% white, 33% teal), where logo-wordmark-white
    is a 100% flat white silhouette that threw the teal away. It is also 701x275
@@ -264,6 +586,10 @@ html.kt-wl #kt-splash .ktl-anim>img{width:auto;max-width:100%;max-height:min(28v
 #navBrand img[data-kt-wl]{width:auto!important;max-width:200px;object-fit:contain}
 @media(max-width:768px){#navBrand img[data-kt-wl]{max-width:130px}}
 </style>
+<div id="kt-splash"><div class="kt-splash-in"><span class="ktl-anim"><img src="/login-wordmark.png" alt="" data-brand-logo onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span><div class="kt-spinner" aria-hidden="true"></div><div class="kt-splash-note" id="kt-splash-note" role="status">Please wait…</div></div></div>
+<script>try{(function(){var r=document.referrer||'',n=document.getElementById('kt-splash-note');if(!n)return;var path=r.replace(/^https?:\/\/[^\/]+/,'');
+var fr=r.indexOf(location.host)!==-1&&/^\/(index\.html)?([?#]|$)/.test(path);var bio=false;try{bio=!!sessionStorage.getItem('kt_bio_session');}catch(e){}
+if(fr||bio)n.textContent='Signing you in…';})();}catch(e){}</script>
 <script>
 /* Biometric early re-hydrate — runs BEFORE the deferred app.js. After a
    biometric unlock the app HARD-RELOADS so every module boots authenticated;
@@ -291,16 +617,97 @@ html.kt-wl #kt-splash .ktl-anim>img{width:auto;max-width:100%;max-height:min(28v
    false) AND the cached entry is for THIS session's agency — never another agency's.
    After the bio re-hydrate above, so an unlock reload already knows its agency. */
 (function(){try{
-  var c=JSON.parse(localStorage.getItem('kt_branding')||'null');if(!c||!c.branding)return;
-  var b=c.branding;if(b.powered_by_visible!==false||!b.logo_url)return;
-  var a=sessionStorage.getItem('kt_active_agency_id');
-  if(!a){var u=JSON.parse(sessionStorage.getItem('kt_user')||'null');a=u&&u.agency_id;}
-  if(!a||String(a)!==String(c.agency_id))return;
+  /* 2026-10-21: the resolved THEME (reseller -> agency -> KiddieTrac). White-label only,
+     and only for this session's agency - or, before sign-in, this app build's ?tenant=. */
+  var c=JSON.parse(localStorage.getItem('kt_branding')||'null');
+  var a=sessionStorage.getItem('kt_active_agency_id');if(a==='all')a=null;
+  if(!a){var u=JSON.parse(sessionStorage.getItem('kt_user')||'null');a=u&&(u.landing_agency_id||u.agency_id);}
+  var t=null;
+  /* The ACCOUNT's own brand first (kt_brand_a<id>, written at sign-in by KT.primeBrand), so
+     a reseller-link sign-in or an older session can never dress these frames wrongly. */
+  if(a){var own=JSON.parse(localStorage.getItem('kt_brand_a'+a)||'null');if(own){t=own.theme;}else if(c&&String(a)===String(c.agency_id)){t=c.theme;}}
+  else if(c){var slug=null;try{slug=new URLSearchParams(location.search).get('tenant')||sessionStorage.getItem('kt_tenant');}catch(e){}
+    if(slug&&(slug===c.agency_slug||slug===c.reseller_slug)){t=c.theme;}}
+  /* SIGNED IN, BRAND NOT YET KNOWN (2026-10-21). A cold load for someone who lands in an
+     agency whose brand this device has not cached yet (kt_brand_a<landing>, written by
+     KT.primeBrand at sign-in and by branding-loader on every load) started the KiddieTrac
+     intro and swapped to the agency's plate mid-splash. Hold a brand-less frame instead;
+     branding-loader lifts it once the real brand is applied (or after 3s, whatever happens). */
+  if(a&&!t&&(sessionStorage.getItem('kt_token')||localStorage.getItem('kt_token'))&&!localStorage.getItem('kt_brand_a'+a)){
+    document.documentElement.classList.add('kt-brand-pending');
+    setTimeout(function(){document.documentElement.classList.remove('kt-brand-pending');},3000);
+  }
+  if(!t||!t.white_label)return;
+  document.documentElement.classList.add('kt-wl');
+  if(/^#[0-9a-f]{6}$/i.test(t.accent_color||'')){document.documentElement.style.setProperty('--kt-wl-spin',t.accent_color);}
+  var sp=document.getElementById('kt-splash');if(sp&&t.splash_bg){sp.style.background=t.splash_bg;}
   var i=document.querySelector('#kt-splash .ktl-anim>img');if(!i)return;
-  var src=/^(https?:|data:)/i.test(b.logo_url)?b.logo_url:'https://api.kiddietrac.com'+(b.logo_url.charAt(0)==='/'?'':'/')+b.logo_url;
+  var abs=function(x){return !x?'':(/^(https?:|data:)/i.test(x)?x:'https://api.kiddietrac.com'+(x.charAt(0)==='/'?'':'/')+x);};
+  var src=abs(t.splash_logo_url);
   i.setAttribute('data-kt-default-src',i.getAttribute('src'));i.setAttribute('data-kt-default-alt','');
-  i.onerror=function(){i.onerror=null;i.src=i.getAttribute('data-kt-default-src');i.removeAttribute('data-kt-wl');document.documentElement.classList.remove('kt-wl');};
-  i.src=src;i.alt=b.product_name||'';i.setAttribute('data-kt-wl','1');document.documentElement.classList.add('kt-wl');
+  var txt=function(){i.style.display='none';var s=document.createElement('span');s.className='kt-wl-textlogo';s.textContent=t.name||'';
+    s.style.cssText='font-weight:900;font-size:34px;letter-spacing:-.5px;color:'+(t.primary_color||'#1F6080');i.parentNode.insertBefore(s,i.nextSibling);};
+  if(!src||/app\.kiddietrac\.com\/logo-wordmark/.test(src)){txt();}
+  else{i.onerror=function(){i.onerror=null;txt();};i.src=src;}
+  i.alt=t.name||'';i.setAttribute('data-kt-wl','1');
+  var ss=document.querySelectorAll('#kt-splash .ktl-pen,#kt-splash .ktl-sheen,#kt-splash .ktl-spk');for(var k=0;k<ss.length;k++){ss[k].style.display='none';}
+}catch(e){}})();
+</script>
+<script>
+/* BOOT INTRO (2026-10-21): the training videos' logo intro on the launch splash -
+   rays pop over the "d", the word rises, the swoosh wipes in. Styles and the full story
+   are in /css/kt-boot-intro.css. Runs AFTER the branding block above, so html.kt-wl
+   already says whether this session is white-labelled: then their logo plate gets the
+   same moves in their accent colour and none of our artwork. */
+(function(){try{
+  var sp=document.getElementById('kt-splash');if(!sp)return;
+  var a=sp.querySelector('.ktl-anim');if(!a)return;
+  var root=document.documentElement;
+  /* Straight after a sign-in the logo is already on screen (kt-launch-scene.js faded the
+     sign-in page to this exact frame), so it stays put instead of replaying the intro. */
+  try{if(sessionStorage.getItem('kt_carry_logo')==='1'){sessionStorage.removeItem('kt_carry_logo');root.classList.add('kti-carry');}}catch(e){}
+  if(root.classList.contains('kt-wl')){
+    try{if(sp.style.background)root.style.setProperty('--kt-boot-bg',sp.style.background);}catch(e){}
+    var acc='';try{var c=JSON.parse(localStorage.getItem('kt_branding')||'null');var t=c&&c.theme;acc=(t&&(t.accent_color||t.primary_color))||'';}catch(e){}
+    if(acc&&/^#[0-9a-f]{3,8}$|^rgba?\(/i.test(acc)){sp.style.setProperty('--kti-accent',acc);}
+    var w=document.createElement('div');w.className='kti-wl';
+    a.parentNode.insertBefore(w,a);w.appendChild(a);
+    var k=document.createElement('span');k.className='kti-wl-spk';k.setAttribute('aria-hidden','true');k.innerHTML='<b></b><b></b><b></b>';a.appendChild(k);
+    var sw=document.createElement('span');sw.className='kti-wl-swoosh';sw.setAttribute('aria-hidden','true');w.appendChild(sw);
+    return;
+  }
+  root.classList.add('kti');
+  var l=document.createElement('span');l.className='kti-logo';l.setAttribute('role','img');l.setAttribute('aria-label','KiddieTrac');
+  l.innerHTML='<i class="kti-word"></i><i class="kti-rays"></i><i class="kti-swoosh"></i><span class="kti-spk" aria-hidden="true"><b></b><b></b><b></b></span>';
+  a.appendChild(l);
+  var g1=document.createElement('div');g1.className='kti-glow a';g1.setAttribute('aria-hidden','true');
+  var g2=document.createElement('div');g2.className='kti-glow b';g2.setAttribute('aria-hidden','true');
+  sp.insertBefore(g2,sp.firstChild);sp.insertBefore(g1,sp.firstChild);
+  /* Start when the wordmark is decoded, so the rays' pop and the sparkle are SEEN
+     (kt-boot-intro.css, 2026-10-21); the portal waits for the intro (__ktIntroEnd). */
+  /* NOT WHILE THE BRAND IS UNKNOWN (2026-10-21). html.kt-brand-pending (the branding block
+     above) hides the logo until this account's brand is known; the intro used to run on
+     underneath and was over - or half over - by the time it showed ("NO logo at any
+     point" on a slow phone). It now starts when the hold lifts. And the hold is resolved
+     here, early: one /branding read for the landing agency - not white-label means the
+     KiddieTrac intro, at once, without waiting for the deferred branding-loader (which
+     still dresses a white-label agency; its 3 s safety stands). */
+  var goNow=function(){if(root.classList.contains('kti-go'))return;
+    if(root.classList.contains('kt-brand-pending')){
+      if(!goNow.w){goNow.w=1;try{new MutationObserver(function(m,o){if(!root.classList.contains('kt-brand-pending')){o.disconnect();goNow();}}).observe(root,{attributes:true,attributeFilter:['class']});}catch(e3){setTimeout(function(){root.classList.remove('kt-brand-pending');goNow();},1500);}}
+      return;}
+    root.classList.add('kti-go');window.__ktIntroEnd=Date.now()+1900;};
+  if(root.classList.contains('kt-brand-pending')){try{
+    var u0=JSON.parse(sessionStorage.getItem('kt_user')||'null');var aa=sessionStorage.getItem('kt_active_agency_id');
+    if(!aa||aa==='all')aa=u0&&(u0.landing_agency_id||u0.agency_id);
+    if(aa){fetch('https://api.kiddietrac.com/api/v1/branding?agency_id='+encodeURIComponent(aa)).then(function(r){return r.ok?r.json():null;}).then(function(d){
+      if(!d)return;var th=d.theme||null;
+      try{if(!localStorage.getItem('kt_brand_a'+aa))localStorage.setItem('kt_brand_a'+aa,JSON.stringify({theme:th,at:Date.now()}));}catch(e4){}
+      if(!(th&&th.white_label))root.classList.remove('kt-brand-pending');
+    }).catch(function(){});}
+  }catch(e5){}}
+  try{var im=new Image();im.onload=function(){(im.decode?im.decode():Promise.resolve()).then(goNow,goNow);};im.onerror=goNow;im.src='/login-wordmark.png';}catch(e2){goNow();}
+  setTimeout(goNow,1800);
 }catch(e){}})();
 </script>
 <script>
@@ -349,14 +756,17 @@ html.kt-wl #kt-splash .ktl-anim>img{width:auto;max-width:100%;max-height:min(28v
 (function(){
 /* Hand the NATIVE (Capacitor) splash off to this web splash immediately so the
    app shows ONE continuous boot instead of native-splash-then-web-splash. */
-try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.SplashScreen.hide();}catch(e){}
-function hide(){var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
+try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.SplashScreen.hide();}catch(e){}try{window.__ktBoot&&window.__ktBoot.mark('hide',!!(window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.SplashScreen));}catch(e){}
+function hide(){try{document.documentElement.classList.remove('kt-booting');}catch(e){}var s=document.getElementById('kt-splash');if(!s)return;s.classList.add('kt-hide');setTimeout(function(){if(s&&s.parentNode)s.parentNode.removeChild(s);},600);}
 /* Show the full animated splash only ONCE per app session. A service-worker update
    reload (which fires whenever a deploy bumps the SW cache) re-runs this page — without
    this guard the 2.3s splash replays on that reload, which is the APK's "loads 3x".
    sessionStorage survives the in-session reload but clears on a genuine app relaunch,
    so a real launch still gets exactly one splash. */
 var _seen;try{_seen=sessionStorage.getItem('kt_splash_seen')==='1';}catch(e){_seen=false;}
+/* A reload taken behind the boot splash (kt-native-ui.js, an app update that arrived while opening) continues the
+   same splash instead of switching to the dark reload cover - no change on screen at all (2026-10-31). */
+try{if(_seen&&sessionStorage.getItem('kt_boot_reload')==='1'){_seen=false;}sessionStorage.removeItem('kt_boot_reload');}catch(e){}
 try{sessionStorage.setItem('kt_splash_seen','1');}catch(e){}
 /* No session? Then this page is about to bounce to the login form, and there is no
    portal to wait for — drop the splash instantly so launching the app lands on the
@@ -372,7 +782,9 @@ else{
    when nothing is warm and every boot call is a cold round trip.
    portalReady() therefore waits for the placeholder to be REPLACED by real content, with
    a hard cap so a failed boot can never trap anyone behind the splash. */
-var MIN=2300,CAP=15000,t0=Date.now();
+/* After an unlock the intro already played on the sign-in page's frame (kt-launch-scene.js carryFrame), so the
+   held logo needs no 2.3 s of its own - just long enough not to blink (2026-11-01). */
+var MIN=document.documentElement.classList.contains('kti-carry')?600:2300,CAP=15000,t0=Date.now();
 function portalReady(){
   try{
     var m=document.getElementById('appMain');
@@ -389,7 +801,8 @@ function portalReady(){
 }
 function settle(){
   var waited=Date.now()-t0;
-  if(waited<MIN) return setTimeout(settle,120);               // minimum brand moment
+  if(waited<MIN) return setTimeout(settle,120);
+  if(window.__ktIntroEnd&&Date.now()<window.__ktIntroEnd&&waited<CAP) return setTimeout(settle,120);   // let the intro finish               // minimum brand moment
   if(portalReady()||waited>CAP) return hide();
   setTimeout(settle,150);
 }
@@ -411,7 +824,7 @@ function showReloadGate(){
   // portal's own #appMain loading-state spinner so there's a single spinner.
   document.documentElement.classList.add('kt-gating');
   var done=false;
-  function drop(){if(done)return;done=true;document.documentElement.classList.remove('kt-gating');ov.classList.add('kt-hide');setTimeout(function(){if(ov.parentNode)ov.parentNode.removeChild(ov);},380);}
+  function drop(){if(done)return;done=true;try{document.documentElement.classList.remove('kt-booting');}catch(e){}document.documentElement.classList.remove('kt-gating');ov.classList.add('kt-hide');setTimeout(function(){if(ov.parentNode)ov.parentNode.removeChild(ov);},380);}
   // Hold the cover until the portal is TRULY ready: page fully loaded AND the shell
   // has rendered its first real screen (the initial #appMain .loading-state is gone),
   // so the user never lands on a half-built portal. Hard-capped so it can't trap.
@@ -453,9 +866,12 @@ function showReloadGate(){
 
   <div id="modalRoot"></div>
 
-  <script src="/js/app.js?v=20261019cert" defer></script>
-  <script src="/js/kt-tz.js?v=20261009n2" defer></script>
-  <script src="/js/kt-tz-global.js?v=20261009n2" defer></script>
+  <script src="/js/kt-pw-gate.js?v=20261031s" defer></script>
+  <!-- Sign-out fade (window.KT_out): before app.js and the session timeout use it. -->
+  <script src="/js/kt-signout-fade.js?v=20261023-082945-idlelock"></script>
+  <script src="/js/app.js?v=20261113aud3" defer></script>
+  <script src="/js/kt-tz.js?v=20261105del" defer></script>
+  <script src="/js/kt-tz-global.js?v=20261029b" defer></script>
   <script src="/js/kt-closure-notice.js?v=20261009n2" defer></script>
   <script src="/js/kt-back.js?v=20261009n2" defer></script>
   <!-- A drag that merely ENDS on a backdrop must not close a dialog mid-edit. -->
@@ -464,14 +880,15 @@ function showReloadGate(){
   <!-- Tells a long-lived tab when it is running yesterday's app. A single-page app
        that never navigates never re-fetches its own shell; without this, a deploy
        reaches nobody who already has the page open. -->
-  <script src="/js/kt-update-check.js?v=20261013pop" defer></script>
-  <script src="/js/kt-secret-field.js?v=20261009n2" defer></script>
-  <script src="/js/kt-modal-safety.js?v=20261009n2" defer></script>
-  <script src="/js/kt-parent-chrome.js?v=20261009n2" defer></script>
-  <script src="/js/session-timeout.js?v=20261009n2" defer></script>
-  <script src="/js/kt-illustrations.js?v=20261009n2" defer></script>
+  <script src="/js/kt-update-check.js?v=20261105t223" defer></script>
+  <script src="/js/kt-modal-safety.js?v=20261020ctr3" defer></script>
+  <script src="/js/kt-parent-chrome.js?v=20261124fz" defer></script>
+  <script src="/js/session-timeout.js?v=20261113aud2" defer></script>
+  <script src="/js/kt-illustrations.js?v=20261105del" defer></script>
   <script src="/js/kt-settings-tabs.js?v=20261010st1" defer></script>
-  <script src="/js/app-v2-shell.js?v=20261019cert" defer></script>
+  <script src="/js/app-v2-shell.js?v=20261124fz2" defer></script>
+  <script src="/js/kt-cover-id-guard.js?v=20261110sl1" defer></script>
+  <script src="/js/kt-screen-loader.js?v=20261102lz3" defer></script>
   <!-- Off unless localStorage.kt_diag === "1". Records what TRIGGERED each
        re-render, how long the cover held, and which files were still writing
        afterwards. Exists because the automation browser is always document.hidden,
@@ -479,99 +896,77 @@ function showReloadGate(){
   <script src="/js/kt-rerender-diag.js?v=20261009n2" defer></script>
   <!-- Collapses six independent badge pollers into one request. -->
   <script src="/js/kt-poll-coalesce.js?v=20261009n2" defer></script>
+  <script src="/js/kt-wallet-pay.js?v=20261104cards" defer></script>
+  <script src="/js/kt-card-form.js?v=20261106gd16" defer></script>
+<script src="/js/kt-badges.js?v=20261109an1" defer></script>
+<script src="/js/kt-ann-popup.js?v=20261109an3" defer></script>
   <!-- Before the refreshers: it wraps KT.uiBusy() so a half-filled form counts as
        busy. Without it, an inspection form being filled was torn down by the next
        write-triggered re-render the moment focus left a field. -->
   <script src="/js/kt-unsaved-guard.js?v=20261009n2" defer></script>
   <script src="/js/kt-auto-refresh.js?v=20261009n2" defer></script>
-  <script src="/js/screen-parent.js?v=20261014ra" defer></script>
-  <script src="/js/kt-checkin-scan.js?v=20261009n2" defer></script>
-  <script src="/js/screen-role-home.js?v=20261013ff" defer></script>
+  <script src="/js/kt-checkin-scan.js?v=20261104atcentre" defer></script>
+  <script src="/js/kt-supplies.js?v=20261030su" defer></script>
+  <script src="/js/kt-audio-player.js?v=20261023-audioplayer" defer></script>
+  <script src="/js/kt-button-breathe.js?v=20261105emo3" defer></script>
+  <script src="/js/screen-role-home.js?v=20261106gd20" defer></script>
   <!-- The admin/director tile launcher. It registers agency_admin:home,
        centre_director:home and platform_admin:home, and exports KT.AdminHome, which
        kt-mobilenav asks before deciding whether to fall back to the old 94-item drawer.
        It was never listed here, so KT.AdminHome was always undefined: the phone bar
        showed the retired hamburger and #home was unregistered for those three roles.
        Listed in the SOURCE, not dashboard.html, or the next deploy regenerates it away. -->
-  <script src="/js/screen-admin-home.js?v=20261016qa3" defer></script>
-  <script src="/js/kt-forms-to-sign.js?v=20261009fv" defer></script>
-  <script src="/js/kt-emoji-avatars.js?v=20261009n2" defer></script>
-  <script src="/js/kt-avatar-zoom.js?v=20261009n2" defer></script>
-  <script src="/js/kt-media-viewer.js?v=20261009n2" defer></script>
-  <script src="/js/kt-doc-viewer.js?v=20261010gal" defer></script>
-  <script src="/js/kt-live.js?v=20261016up" defer></script>
+  <script src="/js/screen-admin-home.js?v=20261102gs" defer></script>
+  <script src="/js/kt-forms-to-sign.js?v=20261109cs2" defer></script>
+  <script src="/js/kt-emoji-avatars.js?v=20261030av2" defer></script>
+  <script src="/js/kt-avatar-zoom.js?v=20261103ios" defer></script>
+  <script src="/js/kt-pinch-zoom.js?v=20261028p" defer></script>
+  <script src="/js/kt-media-viewer.js?v=20261113dl1" defer></script>
+  <script src="/js/kt-doc-viewer.js?v=20261113el3" defer></script>
+  <script src="/js/kt-face-stickers.js?v=20261031hc" defer></script>
+  <script src="/js/kt-child-tagger.js?v=20261106pc" defer></script>
+  <script src="/js/kt-live.js?v=20261113pf1" defer></script>
   <script src="/js/kt-pulse.js?v=20261009n2" defer></script>
-  <script src="/js/screen-knowledge-base.js?v=20261009n2" defer></script>
-  <script src="/js/screen-support.js?v=20261009n2" defer></script>
-  <script src="/js/kt-account-panes.js?v=20261009n2" defer></script>
-  <script src="/js/screen-settings.js?v=20261014ra" defer></script>
-  <script src="/js/screen-agency-admin.js?v=20261015ab" defer></script>
-  <script src="/js/screen-dashboard-widgets.js?v=20261013zb" defer></script>
-  <script src="/js/screen-email.js?v=20261009n2" defer></script>
-  <script src="/js/screen-provider-day.js?v=20261013pdf" defer></script>
-  <script src="/js/screen-external-billing.js?v=20261009n2" defer></script>
-  <script src="/js/screen-external-waitlist.js?v=20261009n2" defer></script>
-  <script src="/js/screen-director.js?v=20261013onr" defer></script>
-  <script src="/js/screen-attendance-fix.js?v=20261013rs" defer></script>
+  <script src="/js/screen-dashboard-widgets.js?v=20261110sl1" defer></script>
   <script src="/js/kt-busy.js?v=20261009n2" defer></script>
   <!-- Patches fetch for FormData-with-a-file so every upload in the portal draws one
        progress bar. Loaded early: it must be in place before any screen uploads. -->
-  <script src="/js/kt-upload-progress.js?v=20261009n2" defer></script>
-  <script src="/js/kt-card-pager.js?v=20261009n2" defer></script>
-  <script src="/js/screen-educator.js?v=20261013onr" defer></script>
-  <script src="/js/screen-educator-v4.js?v=20261009n2" defer></script>
-  <script src="/js/screen-educator-me.js?v=20261014rs" defer></script>
-  <script src="/js/screen-parent-feedback.js?v=20261009n2" defer></script>
-  <script src="/js/screen-tasks.js?v=20261009n2" defer></script>
-  <script src="/js/screen-director-v5a.js?v=20261013cty" defer></script>
-  <script src="/js/screen-help-v22p68.js?v=20261009n2" defer></script>
-  <script src="/js/screen-training.js?v=20261009n2" defer></script>
-    <script src="js/kt-contextual-help.js?v=20261009n2" defer></script>
-    <script src="js/kt-onboarding-tour.js?v=20261009n2" defer></script>
-  <script src="/js/tooltips-v6.js?v=20261009n2" defer></script>
-  <script src="/js/app-v2-init.js?v=20261009n2" defer></script>
-  <script src="/js/branding-loader.js?v=20261015wl" defer></script>
+  <script src="/js/kt-upload-progress.js?v=20261022-171425-rawerr" defer></script>
+  <script src="/js/kt-card-pager.js?v=20261028zi" defer></script>
+  <script src="/js/screen-educator-v4.js?v=20261106ci" defer></script>
+  <script src="/js/screen-educator-me.js?v=20261109lm1" defer></script>
+  <script src="/js/screen-tasks.js?v=20261106rg" defer></script>
+  <script src="/js/screen-director-v5a.js?v=20261030a" defer></script>
+  <script src="/js/screen-help-v22p68.js?v=20261113aud1" defer></script>
+  <script src="/js/screen-training.js?v=20261021hero" defer></script>
+    <script src="js/kt-contextual-help.js?v=20261105tap" defer></script>
+    <script src="js/kt-onboarding-tour.js?v=20261020onetap" defer></script>
+  <script src="/js/tooltips-v6.js?v=20261105tap" defer></script>
+  <script src="/js/app-v2-init.js?v=20261023-shellstub2" defer></script>
+  <script src="/js/branding-loader.js?v=20261111ink1" defer></script>
   <script src="/js/api-helpers-v10.js?v=20261009n2" defer></script>
   <script src="/js/kt-avatar-cropper.js?v=20261009n2" defer></script>
-  <script src="/js/kt-mini-map.js?v=20261009n2" defer></script>
-  <script src="/js/screen-admin.js?v=20261019cert" defer></script>
-  <script src="/js/screen-marketing.js?v=20261009n2" defer></script>
-  <script src="/js/screen-provider-map.js?v=20261013pm2" defer></script>
-  <script src="/js/screen-marketing-site.js?v=20261016wc2" defer></script>
+  <script src="/js/kt-face-check.js?v=20261030fg" defer></script>
   <script src="/js/kt-addfrom.js?v=20261009n2" defer></script>
-  <script src="/js/screen-staff-calendar.js?v=20261009n2" defer></script>
-  <script src="/js/screen-audit-logs.js?v=20261019vc" defer></script>
-  <script src="/js/screen-bulk-invoices.js?v=20261009fv" defer></script>
-  <script src="/js/screen-forms.js?v=20261009n2" defer></script>
-  <script src="/js/screen-forms-manager.js?v=20261009fv" defer></script>
-  <script src="/js/screen-prospect-nda.js?v=20261009n2" defer></script>
-  <script src="/js/screen-email-seasons.js?v=20261015rc" defer></script>
-  <script src="/js/screen-fee-plans.js?v=20261009n2" defer></script>
-  <script src="/js/screen-account-ledgers.js?v=20261009fv" defer></script>
-  <script src="/js/screen-contacts.js?v=20261009n2" defer></script>
-  <script src="/js/screen-manual-payroll.js?v=wf202610131138" defer></script>
-  <script src="/js/screen-expenses.js?v=20261009n2" defer></script>
-  <script src="/js/screen-billing-setup.js?v=20261009n2" defer></script>
-  <script src="/js/screen-parent-forms.js?v=20261009fv" defer></script>
+  <script src="/js/screen-prospect-nda.js?v=202610201640f" defer></script>
+  <script src="/js/screen-manual-payroll.js?v=20261020pts" defer></script>
+  <script src="/js/kt-invoice-resend.js?v=20261031if" defer></script>
+  <script src="/js/screen-parent-forms.js?v=20261106sig" defer></script>
   <!-- The Documents screen. It has existed on disk since v23 and was never loaded:
        no script tag anywhere referenced it, so the "Documents" nav item registered
        no handler and opened nothing. Wired in 2026-09-09, when it became the place
        every role finds the forms they have signed. -->
-  <script src="/js/screen-my-documents.js?v=20261013sd" defer></script>
-  <script src="/js/screen-report-issue.js?v=20261013pi2" defer></script>
-  <script src="/js/screen-parent-issues.js?v=20261013pi" defer></script>
-  <script src="/js/screen-family-contacts.js?v=20261014ra" defer></script>
-  <script src="/js/kt-net.js?v=20261014net" defer></script>
-  <script src="/js/screen-notifications.js?v=20261009n2" defer></script>
-  <script src="/js/screen-compliance.js?v=20261010sc" defer></script>
-  <script src="/js/screen-care.js?v=20261009n2" defer></script>
+  <script src="/js/screen-my-documents.js?v=20261106pr" defer></script>
+  <script src="/js/screen-family-contacts.js?v=20261020onetap" defer></script>
+  <script src="/js/kt-net.js?v=20261105fw" defer></script>
+  <script src="/js/kt-net-quality.js?v=20261031hc" defer></script>
   <script src="/js/kt-refid.js?v=20261014rs" defer></script>
-  <script src="/js/search-palette.js?v=20261014rs" defer></script>
-  <script src="/js/role-widgets.js?v=20261009n2" defer></script>
-  <script src="/js/kt-animate.js?v=20261009n2" defer></script>
-  <script src="/js/mobile-helper-v11.js?v=20261009n2" defer></script>
+  <script src="/js/search-palette.js?v=20261109kw1" defer></script>
+  <script src="/js/role-widgets.js?v=20261106gd" defer></script>
+  <script src="/js/kt-animate.js?v=20261103ios" defer></script>
+  <script src="/js/mobile-helper-v11.js?v=20261031w" defer></script>
   <script>
-    if ('serviceWorker' in navigator) {
+    if (navigator.serviceWorker && navigator.serviceWorker.register) {  /* present but switched off in some browsers (ticket #166) */
       window.addEventListener('load', function () {
         navigator.serviceWorker.register('/service-worker.js').then(function (reg) { try { reg.update(); } catch (e) {} document.addEventListener('visibilitychange', function () { if (!document.hidden) { try { reg.update(); } catch (e) {} } }); }).catch(function (e) { console.warn('SW reg failed:', e); });
         /* Self-updating portal.
@@ -597,6 +992,7 @@ function showReloadGate(){
               .some(function (i) { return (i.value || '').trim() !== ''; });
             if (typed) { return true; }
             if (document.querySelector('.kt-modal,[role="dialog"],#kt-chat-dock:not([style*="display: none"])')) { return true; }
+            if (window.KT_mediaBusy && window.KT_mediaBusy()) { return true; }   // watching a clip (ticket #223)
             return false;
           }
 
@@ -625,88 +1021,68 @@ function showReloadGate(){
     }
   </script>
   <script src="/js/kt-clockout-reminder.js?v=20261009n2" defer></script>
-  <script src="/js/kt-chat-dock.js?v=20261019cmp3" defer></script>
+  <script src="/js/kt-line-icons.js?v=20261113li2" defer></script>
+  <script src="/js/kt-chat-dock.js?v=20261113li1" defer></script>
   <!-- The one voice-note recorder: level meter + review, for every composer. -->
-  <script src="/js/kt-voice-recorder.js?v=20261009n2" defer></script>
+  <script src="/js/kt-voice-recorder.js?v=20261103voice3" defer></script>
   <script src="/js/kt-emergency.js?v=20261013font" defer></script>
-  <script src="/js/screen-chat.js?v=20261016tabs" defer></script>
-  <script src="/js/screen-team-chat.js?v=20261013em" defer></script>
-  <script src="/js/screen-agencies.js?v=20261009n2" defer></script>
+  <script src="/js/kt-chat-reply.js?v=20261101cr" defer></script>
+  <script src="/js/kt-compose-plus.js?v=20261113li4" defer></script>
+<script src="/js/kt-chat-call.js?v=20261104cc" defer></script>
+  <script src="/js/kt-sms-replies.js?v=20261106flt" defer></script>
+  <script src="/js/screen-chat.js?v=20261113mu1" defer></script>
+  <script src="/js/screen-team-chat.js?v=20261110ca1" defer></script>
   <script src="/js/nav-additions-v12.js?v=20261009mc" defer></script>
-  <script src="/js/screen-waitlist.js?v=20261009n2" defer></script>
-  <script src="/js/screen-announcements.js?v=20261009n2" defer></script>
-  <script src="/js/screen-autopay.js?v=20261009n2" defer></script>
   <script src="/js/nav-additions-v13.js?v=20261009n2" defer></script>
-  <script src="/js/screen-lesson-plans.js?v=20261009n2" defer></script>
-  <script src="/js/screen-schedule.js?v=20261009n2" defer></script>
-  <script src="/js/screen-certifications.js?v=20261019cert" defer></script>
-  <script src="/js/push-client.js?v=20261009n2" defer></script>
-  <script src="/js/kt-push-nudge.js?v=20261009n2" defer></script>
-  <script src="/js/nav-additions-v14.js?v=20261009n2" defer></script>
-  <script src="/js/screen-admin-mrr.js?v=20261009n2" defer></script>
-  <script src="/js/screen-admin-features.js?v=20261013ff3" defer></script>
-  <script src="/js/screen-admin-branding.js?v=20261015rd" defer></script>
-  <script src="/js/screen-lesson-plans-ai.js?v=20261009n2" defer></script>
-  <script src="/js/screen-observations.js?v=20261009n2" defer></script>
-  <script src="/js/screen-incidents.js?v=20261013hc" defer></script>
-  <script src="/js/screen-awards.js?v=20261009n2" defer></script>
-  <script src="/js/screen-child-detail.js?v=20261016look" defer></script>
-  <script src="/js/search-widget.js?v=20261014rs" defer></script>
-  <script src="/js/screen-mfa.js?v=20261009n2" defer></script>
-  <script src="/js/screen-sibling-discounts.js?v=20261009n2" defer></script>
-  <script src="/js/screen-roles.js?v=20261009n2" defer></script>
-  <script src="/js/screen-admin-children.js?v=20261014ra" defer></script>
-  <script src="/js/agency-switcher.js?v=20261009n2" defer></script>
-  <script src="/js/screen-platform.js?v=20261015br" defer></script>
-  <script src="/js/screen-mail-settings.js?v=20261009n2" defer></script>
-  <script src="/js/screen-backups.js?v=20261009n2" defer></script>
-  <script src="/js/screen-email-template.js?v=20261009n2" defer></script>
-  <script src="/js/screen-digest-status.js?v=20261009n2" defer></script>
+  <script src="/js/screen-certifications.js?v=20261030ts" defer></script>
+  <script src="/js/push-client.js?v=20261102if" defer></script>
+  <script src="/js/kt-push-nudge.js?v=20261031nb" defer></script>
+  <script src="/js/nav-additions-v14.js?v=20261106bd" defer></script>
+  <script src="/js/screen-reseller-hub.js?v=20261021-175023-rsE2" defer></script>
+  <script src="/js/search-widget.js?v=20261109sk3" defer></script>
+  <script src="/js/agency-switcher.js?v=20261110cu1" defer></script>
   <script src="/js/nav-additions-v15.js?v=20261009n2" defer></script>
-  <script src="/js/screen-v22p51.js?v=20261016bg" defer></script>
-  <script src="/js/screen-v22p53.js?v=20261016anom" defer></script>
-  <script src="/js/screen-safe-arrival.js?v=20261013cfg" defer></script>
-  <script src="/js/screen-learning-framework.js?v=20261009n2" defer></script>
-  <script src="/js/screen-donations.js?v=20261009n2" defer></script>
-  <script src="/js/screen-rsvp.js?v=20261010hc" defer></script>
-  <script src="/js/screen-compliance-evidence.js?v=20261009n2" defer></script>
-  <script src="/js/screen-grants.js?v=20261009n2" defer></script>
-  <script src="/js/screen-payment-run.js?v=20261009n2" defer></script>
-  <script src="/js/screen-phone-voicemail.js?v=20261009n2" defer></script>
-  <script src="/js/screen-v22p54.js?v=20261009n2" defer></script>
+  <script src="/js/screen-v22p51.js?v=20261113sv3" defer></script>
+  <script src="/js/kt-portal-phone.js?v=20261102as" defer></script>
+  <script src="/js/kt-dialer.js?v=20261106gd20" defer></script>
+  <script src="/js/kt-minimized.js?v=20261023-010816-mindrag" defer></script>
+  <script src="/js/screen-v22p54.js?v=20261021tz" defer></script>
   <script src="/js/kt-sweep-bus.js?v=20261009n2" defer></script>
-  <script src="/js/kt-icon-buttons.js?v=20261009n2" defer></script>
-  <script src="/js/kt-switches.js?v=20261009n2" defer></script>
-  <script src="/js/kt-table-filter.js?v=20261014rs" defer></script>
-  <script src="/js/kt-polish.js?v=20261009n2" defer></script>
-  <script src="/js/kt-pill-tone.js?v=20261009n2" defer></script>
-  <script src="/js/kt-jurisdiction.js?v=20261009jur2" defer></script>
-  <script src="/js/screen-drills.js?v=20261016cc3" defer></script>
-  <script src="/js/screen-headcounts.js?v=20261019cert" defer></script>
+  <script src="/js/kt-icon-buttons.js?v=20261108tb1" defer></script>
+  <script src="/js/kt-switches.js?v=20261102dw" defer></script>
+  <script src="/js/kt-table-filter.js?v=20261106flt" defer></script>
+  <script src="/js/kt-polish.js?v=20261110df" defer></script>
+  <!-- Both signature pads (2026-11-06): straight after kt-polish, which used to hold the inline one, so the
+       agreement gate and every screen below still find KT.signaturePadInline when they run. -->
+  <script src="/js/kt-signature-pad.js?v=20261106sig" defer></script>
+  <script src="/js/kt-pill-tone.js?v=20261028zn" defer></script>
+  <script src="/js/kt-jurisdiction.js?v=20261028zzt" defer></script>
+  <script src="/js/screen-headcounts.js?v=20261104hcl" defer></script>
   <script src="/js/screen-policies.js?v=20261013pol2" defer></script>
-  <script src="/js/screen-sleep-room.js?v=20261015rcx" defer></script>
-  <script src="/js/screen-subsidy-roa.js?v=occms111511" defer></script>
-  <script src="/js/screen-hazards.js?v=20261015hz" defer></script>
+  <script src="/js/screen-sleep-room.js?v=20261030a" defer></script>
+  <script src="/js/screen-subsidy-roa.js?v=20261113oc1" defer></script>
   <script src="/js/screen-ohio.js?v=20261013pf" defer></script>
-  <script src="/js/kt-list-controls.js?v=20261009n2" defer></script>
-  <script src="/js/kt-mfa-nudge.js?v=20261009n2" defer></script>
-  <script src="/js/kt-mfa-gate.js?v=20261009n2" defer></script>
-  <script src="/js/kt-calculator.js?v=20261013calc2" defer></script>
-  <script src="/js/kt-topbar.js?v=20261013calc" defer></script>
-  <script src="/js/kt-pin.js?v=20261009n2" defer></script>
-  <script src="/js/kt-biometric.js?v=20261015wl" defer></script>
-  <script src="/js/kt-passkeys.js?v=20261010pk1" defer></script>
-  <script src="/js/kt-impersonate.js?v=20261009n2" defer></script>
-  <script src="/js/kt-crash-report.js?v=20261016fs" defer></script>
+  <script src="/js/kt-list-controls.js?v=20261028zze" defer></script>
+  <script src="/js/kt-mfa-nudge.js?v=kt-20261110pp1" defer></script>
+  <script src="/js/kt-mfa-gate.js?v=kt-20261110pp1" defer></script>
+  <script src="/js/kt-calculator.js?v=20261031hc" defer></script>
+  <script src="/js/kt-topbar.js?v=20261113aud3" defer></script>
+  <script src="/js/kt-pin.js?v=20261023-082945-idlelock" defer></script>
+  <script src="/js/kt-biometric.js?v=20261103ios" defer></script>
+  <script src="/js/kt-passkeys.js?v=20261104cm" defer></script>
+  <script src="/js/kt-devices.js?v=20261109dv2" defer></script>
+  <script src="/js/kt-impersonate.js?v=20261104toprow" defer></script>
+  <script src="/js/kt-crash-report.js?v=20261124fz" defer></script>
   <!-- Freeze watchdog: a heartbeat that notices the main thread being blocked, and
        reports a stall through the same pipe as a crash. Must load AFTER the crash
        reporter, whose KT.reportProblem it uses. -->
-  <script src="/js/kt-freeze-watch.js?v=20261009n2" defer></script>
-  <script src="/js/kt-progress.js?v=20261009n2" defer></script>
-  <script src="/js/kt-scroll-indicator.js?v=20261009n2" defer></script>
-  <script src="/js/kt-mobilenav.js?v=20261009mc" defer></script>
-  <script src="/js/kt-clockbar.js?v=20261009n2" defer></script>
-  <script src="/js/kt-mobile-tables.js?v=20261015mc" defer></script>
+  <script src="/js/kt-freeze-watch.js?v=202610211458" defer></script>
+  <script src="/js/kt-progress.js?v=20261113sv3" defer></script>
+  <script src="/js/kt-sounds.js?v=20261105alerts" defer></script>
+  <script src="/js/kt-scroll-indicator.js?v=20261029g" defer></script>
+  <script src="/js/kt-mobilenav.js?v=20261106gd20" defer></script>
+  <script src="/js/kt-clockbar.js?v=20261106br" defer></script>
+  <script src="/js/kt-mobile-tables.js?v=20261030pf" defer></script>
   <!-- Makes an open dialog FIT A PHONE. The dialogs themselves were fine; what did
        not fit was their contents - a flex or grid child keeps min-width:auto and so
        refuses to shrink, leaving a 498px row inside a 291px box with neither wrap nor
@@ -714,111 +1090,112 @@ function showReloadGate(){
        It measures each open dialog and repairs only what actually overflows, which is
        why it also covers the ~148 hand-rolled dialogs nobody will revisit. Phone only;
        loads after kt-mobilenav.js, whose dialog shape test it mirrors. -->
-  <script src="/js/kt-dialog-fit.js?v=20261016qa2" defer></script>
+  <script src="/js/kt-dialog-fit.js?v=20261030pu" defer></script>
+  <!-- Every popup can be moved (drag the title bar) and resized (corner grip) on desktop - 2026-10-20 -->
+  <script src="/js/kt-dialog-move.js?v=20261030j" defer></script>
+  <!-- Fields as wide as what they hold; one quiet look for every field - 2026-10-20 -->
+  <script src="/js/kt-field-fit.js?v=20261027zza" defer></script>
+  <!-- Every sub-tab strip as the family record's gradient band - 2026-10-20 -->
+  <script src="/js/kt-tab-band.js?v=20261113aud1" defer></script>
+  <!-- Settings cards fill the screen (columns, no empty right side) - 2026-11-06 -->
+  <script src="/js/kt-fill-cards.js?v=20261106uv" defer></script>
   <!-- Draws <option> lists in the page on touch devices. The native Android
        popup takes its text colour from the app theme, not from our CSS, and came
        out white-on-white in the APK. -->
   <!-- Same problem as the dropdowns, different control: Android draws the date
        picker itself from the app theme, so page CSS cannot reach it and it came
        out unreadable in the APK. Covers date, time, datetime-local and month. -->
-  <script src="/js/kt-date-sheet.js?v=20261009n2" defer></script>
-  <script src="/js/kt-select-sheet.js?v=20261009n2" defer></script>
-  <script src="/js/kt-row-actions.js?v=20261009n2" defer></script>
-  <script src="/js/kt-tooltip-global.js?v=20261009n2" defer></script>
-  <script src="/js/kt-urgent-alert.js?v=20261013em" defer></script>
-  <script src="/js/kt-agreement.js?v=20261009n2" defer></script>
-  <script src="/js/kt-native-push.js?v=20261013em" defer></script>
-  <script src="/js/kt-native-ui.js?v=20261009n2" defer></script>
-  <script src="/js/kt-appupdate.js?v=20261009n2" defer></script>
-  <script src="/js/kt-toasts.js?v=20261009n2" defer></script>
-  <script src="/js/kt-whatsnew.js?v=20261009n2" defer></script>
-  <script src="/js/kt-term.js?v=20261013mc" defer></script>
-  <script src="/js/kt-table-export.js?v=20261009n2" defer></script>
-  <script src="/js/kt-i18n.js?v=20261015rcx" defer></script>
-  <script src="/js/kt-banner-normalize.js?v=20261009amob3" defer></script>
-  <script src="/js/kt-overflow-guard.js?v=20261009n2" defer></script>
+  <script src="/js/kt-date-sheet.js?v=20261106tm" defer></script>
+  <script src="/js/kt-date-hint.js?v=202610212230dh" defer></script>
+  <script src="/js/kt-select-sheet.js?v=20261106ci" defer></script>
+  <script src="/js/kt-row-actions.js?v=20261028r" defer></script>
+  <script src="/js/kt-tooltip-global.js?v=20261104tips" defer></script>
+  <script src="/js/kt-urgent-alert.js?v=kt-20261110sa" defer></script>
+  <script src="/js/kt-agreement.js?v=20261106sig" defer></script>
+  <script src="/js/kt-native-push.js?v=20261105alink" defer></script>
+  <script src="/js/kt-notify-gate.js?v=20261106gd17" defer></script>
+  <!-- Photo permission per child (2026-11-06): asks a parent who has not answered; the parent screen. -->
+  <script src="/js/kt-photo-consent.js?v=20261106gd" defer></script>
+  <script src="/js/kt-privacy-notice.js?v=20261110pn1" defer></script>
+  <script src="/js/kt-signin-locks.js?v=20261110sl6" defer></script>
+  <script src="/js/kt-kid-float.js?v=20261106gd4" defer></script>
+  <script src="/js/kt-device-perms.js?v=20261102nr" defer></script>
+  <script src="/js/kt-report-block.js?v=20261103rb" defer></script>
+  <script src="/js/kt-native-ui.js?v=20261105t223" defer></script>
+  <script src="/js/kt-appupdate.js?v=20261102iv" defer></script>
+  <script src="/js/kt-toasts.js?v=20261105del" defer></script>
+  <script src="/js/kt-whatsnew.js?v=20261105wn" defer></script>
+  <script src="/js/kt-term.js?v=20261104term" defer></script>
+  <script src="/js/kt-table-export.js?v=20261104tips" defer></script>
+  <script src="/js/kt-i18n.js?v=20261113imz2" defer></script>
+  <!-- "Get the app" under the sign-in form + a one-time popup after a browser sign-in (2026-11-01). -->
+  <script src="/js/kt-get-app.js?v=20261106gd17" defer></script>
+  <script src="/js/kt-banner-normalize.js?v=20261103samd" defer></script>
+  <script src="/js/kt-overflow-guard.js?v=20261029p" defer></script>
   <script src="/js/kt-phone.js?v=20261013ph1" defer></script>
   <script src="/js/kt-address.js?v=20261013ad" defer></script>
   <script src="/js/kt-modal-fitpane.js?v=20261013fp" defer></script>
+  <script src="/js/kt-steady-dialog.js?v=20261023-padfloor" defer></script>
+  <script src="/js/kt-keep-tabs.js?v=20261023-sweepfix" defer></script>
+  <script src="/js/kt-smooth-tabs.js?v=20261112mc1" defer></script>
+  <script src="/js/kt-phone-filters.js?v=20261028zv" defer></script>
+  <script src="/js/kt-popup-rows.js?v=20261028h" defer></script>
+  <script src="/js/kt-button-fit.js?v=20261102sr3" defer></script>
+  <script src="/js/kt-ai-assist.js?v=20261109vr1" defer></script>
+  <script src="/js/kt-ask.js?v=20261103aione" defer></script>
+  <script src="/js/kt-compose-focus.js?v=20261023-composefocus" defer></script>
   <script src="/js/kt-pickup-only.js?v=20261013pu" defer></script>
-  <script src="/js/kt-phone-gutter.js?v=20261015ph2" defer></script>
+  <script src="/js/kt-phone-gutter.js?v=20261104vidfix" defer></script>
   <script src="/js/kt-sidebar-collapse.js?v=20261009n2" defer></script>
-  <script src="/js/kt-polish-v2.js?v=20261013calc" defer></script>
+  <script src="/js/kt-polish-v2.js?v=20261109tk1" defer></script>
   <script src="/js/kt-polish-v3.js?v=20261009n2" defer></script>
-  <script src="/js/kt-polish-v4.js?v=20261009mc" defer></script>
+  <script src="/js/kt-polish-v4.js?v=20261109vr1" defer></script>
   <script src="/js/kt-mailto.js?v=20261009n2" defer></script>
-  <script src="/js/kt-hero-emoji.js?v=20261015rcx" defer></script>
-  <script src="/js/kt-modal-guard.js?v=20261009n2" defer></script>
-  <script src="/js/kt-qr.js?v=20261009n2" defer></script>
-  <script src="/js/screen-v22p55.js?v=20261009wd" defer></script>
-  <script src="/js/screen-v22p56.js?v=20261016bus4" defer></script>
-  <script src="/js/screen-v22p57.js?v=20261009n2" defer></script>
-  <script src="/js/screen-v22p58.js?v=20261009jur2" defer></script>
-  <script src="/js/screen-withdrawals.js?v=20261009n2" defer></script>
-  <script src="/js/kt-signature-pad.js?v=20261009n2" defer></script>
-  <script src="/js/kt-form-filler.js?v=20261014rb" defer></script>
-  <script src="/js/kt-form-annotate.js?v=20261009n2" defer></script>
-  <script src="/js/screen-v22p59.js?v=20261009fv" defer></script>
-    <script src="/js/fix-screen-v22p69.js?v=20261009n2" defer></script>
-  <script src="/js/kt-walk-tracker.js?v=20261013hc" defer></script>
-  <script src="/js/screen-integrations-v22p72.js?v=20261009qb" defer></script>
-  <script src="/js/screen-xero.js?v=20261009wd" defer></script>
+  <script src="/js/kt-hero-emoji.js?v=20261028zzo" defer></script>
+  <script src="/js/kt-modal-guard.js?v=20261109mg1" defer></script>
+  <script src="/js/kt-dirty-save.js?v=20261109mp1" defer></script>
+  <script src="/js/kt-qr.js?v=202610211458" defer></script>
+  <script src="/js/screen-v22p55.js?v=20261106pc" defer></script>
+  <script src="/js/kt-form-filler.js?v=20261106sig" defer></script>
+    <script src="/js/fix-screen-v22p69.js?v=20261027p" defer></script>
+  <script src="/js/kt-walk-tracker.js?v=20261110lf1" defer></script>
+  <script src="/js/kt-walk-autodetect.js?v=20261109vr1" defer></script>
   <script src="/js/screen-quickbooks.js?v=20261009wd" defer></script>
-  <script src="/js/screen-sage.js?v=20261009wd" defer></script>
-  <script src="/js/kt-bio-nudge.js?v=20261009b1" defer></script>
-  <script src="/js/screen-files.js?v=20261013ff2" defer></script>
+  <script src="/js/kt-bio-nudge.js?v=20261031nb" defer></script>
+  <script src="/js/screen-files.js?v=20261104childrec" defer></script>
   <script src="/js/kt-child-notes.js?v=20261009n1" defer></script>
   <script src="/js/kt-staff-compliance.js?v=20261013pr" defer></script>
-  <script src="/js/kt-staff-certs.js?v=20261019cert2" defer></script>
+  <script src="/js/kt-staff-certs.js?v=20261030a" defer></script>
   <script src="/js/kt-nav-collapse-v22p72.js?v=20261009n2" defer></script>
-  <script src="/js/kt-quickadd-v22p72.js?v=20261009n2" defer></script>
+  <script src="/js/kt-nav-sort.js?v=20261104navsort" defer></script>
+  <script src="/js/kt-quickadd-v22p72.js?v=20261109obp" defer></script>
   <script src="/js/kt-money-v22p74.js?v=20261009n2" defer></script>
-  <script src="/js/screen-v22p63.js?v=20261009n2" defer></script>
-  <script src="/js/screen-legacy-shim.js?v=20261013pk" defer></script>
-  <script src="/js/screen-reports.js?v=20261009n2" defer></script>
-  <script src="/js/screen-social-settings.js?v=20261009n2" defer></script>
-  <script src="/js/screen-security-alerts.js?v=20261009n2" defer></script>
-  <script src="/js/screen-late-events.js?v=20261009n2" defer></script>
-  <script src="/js/screen-billing-settings.js?v=20261009n2" defer></script>
-  <script src="/js/screen-platform-invoices.js?v=20261009fv" defer></script>
-  <script src="/js/screen-document-templates.js?v=20261009n2" defer></script>
-  <script src="/js/screen-educator-rooms.js?v=20261015dr" defer></script>
-  <script src="/js/screen-record-reminders.js?v=20261015dr" defer></script>
-  <script src="/js/screen-calendar-settings.js?v=20261009n2" defer></script>
-  <script src="/js/screen-auto-signoff.js?v=20261009n2" defer></script>
-  <script src="/js/screen-birthday-settings.js?v=20261009n2" defer></script>
+  <script src="/js/screen-v22p63.js?v=20261109vr1" defer></script>
+  <script src="/js/kt-meeting.js?v=20261113mq1" defer></script>
+  <script src="/js/kt-select-first.js?v=20261024-sel" defer></script>
+  <script src="/js/screen-legacy-shim.js?v=20261106oi" defer></script>
+  <script src="/js/screen-reports-plus.js?v=20261102tk" defer></script>
+  <script src="/js/kt-webchat-strip.js?v=20261106web" defer></script>
   <!-- Loaded eagerly for the same reason as birthday settings: it is a TAB inside
        Email settings, not a screen with its own hash, so the lazy loader never
        fetches it and KT.ImmunizationSettings was simply never defined. -->
-  <script src="/js/screen-immunization-settings.js?v=20261009n2" defer></script>
-  <script src="/js/screen-data-retention.js?v=20261010st1" defer></script>
-  <script src="/js/screen-payroll-settings.js?v=wf202610131138" defer></script>
-  <script src="/js/screen-workforce-funding.js?v=wf202610131138" defer></script>
-  <script src="/js/screen-clock-settings.js?v=20261015dr" defer></script>
-  <script src="/js/screen-notification-settings.js?v=20261015rcx" defer></script>
-  <script src="/js/screen-payment-providers.js?v=20261009n2" defer></script>
-  <script src="/js/screen-medications.js?v=20261009n2" defer></script>
+  <script src="/js/screen-immunization-settings.js?v=20261104immsum" defer></script>
+  <script src="/js/screen-workforce-funding.js?v=20261021hero" defer></script>
   <!-- One immunization panel (what is due + the records + the upload), shared by the
        parent screen, the child record and the admin immunization section. -->
-  <script src="/js/kt-immunization-panel.js?v=20261009n2" defer></script>
   <!-- One editor for a child's allergies, dietary needs and health alerts, shared by the
        Allergy alerts screen and the child record. -->
-  <script src="/js/kt-health-editor.js?v=20261009n2" defer></script>
+  <script src="/js/kt-health-editor.js?v=20261031s" defer></script>
   <!-- Read positions for the bell, what's-new and sales chat — on the account rather
        than the browser. localStorage stays as a cache; see kt-markers.js. -->
   <script src="/js/kt-markers.js?v=20261009n2" defer></script>
-  <script src="/js/screen-immunizations.js?v=20261009n2" defer></script>
-  <script src="/js/screen-invitation-codes.js?v=20261009n2" defer></script>
-  <script src="/js/screen-edocuments.js?v=20261009n2" defer></script>
-  <script src="/js/screen-onboarding.js?v=20261013cty" defer></script>
-  <script src="/js/screen-home-visitor.js?v=20261015hz" defer></script>
-  <script src="/js/screen-sales.js?v=20261016rev3" defer></script>
-  <script src="/js/screen-my-pay.js?v=20261009fv" defer></script>
-  <script src="/js/screen-hcc-forms.js?v=20261009n2" defer></script>
+  <script src="/js/screen-onboarding.js?v=20261113imz" defer></script>
+  <script src="/js/screen-sales.js?v=20261111lrt4" defer></script>
+  <script src="/js/screen-sales-prospects.js?v=20261111ad2" defer></script>
   <!-- Clock-in status glow (educators): orange border when not clocked in, green when clocked in. -->
   <script src="/js/kt-no-autofill.js?v=20261009n2" defer></script>
-  <script src="/js/kt-spellcheck.js?v=20261009n2" defer></script>
-  <script src="/js/kt-clockglow.js?v=20261009n2" defer></script>
+  <script src="/js/kt-spellcheck.js?v=20261102sp" defer></script>
+  <script src="/js/kt-clockglow.js?v=20261106br" defer></script>
 
   <!-- Diagnostics overlay (support/troubleshooting): web version, WebView CSS size,
        native flag, nav, role, etc. HIDDEN by default — enable it from

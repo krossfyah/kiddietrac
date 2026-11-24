@@ -14,7 +14,7 @@ Keeping your details current means the centre can always reach you, your forms p
 1. Open your **profile** from the menu.
 2. Tap your photo to replace it, and edit your phone, email, address or language.
 3. Save.
-4. For your child's photo, allergies or immunisations, use the setup step you were shown
+4. For your child's photo, allergies or immunizations, use the setup step you were shown
    when you joined — or message your director.
 5. For emergency contacts and pick-up people, open **Family & pick-ups** from the menu.
    You can add, edit and remove them yourself, and the centre is told every time.
@@ -85,9 +85,9 @@ Please:
 
 ### A login of their own
 
-A pick-up person can have their own **pick-up login**: their own QR code to check your children in and out, without seeing any billing. Press **🔑 Request pick-up login** next to their name. See [Pick-up logins](pick-up-logins).
+A pick-up person can have their own **pick-up login**: One-Tap check-in and check-out from their own phone, without seeing any billing. Press **🔑 Request pick-up login** next to their name. See [Pick-up logins](pick-up-logins).
 
-## Your child's photo, allergies and immunisations
+## Your child's photo, allergies and immunizations
 
 You set these yourself. When you first set up your account you are asked for a photo of
 each child — it is required, because a clear, current photo is how every educator,
@@ -98,7 +98,7 @@ On the same step you can record:
 - **Allergies** — these become the alerts an educator sees at snack and mealtimes
 - **Dietary needs**
 - **Anything else the room should know** — medication, a condition to watch for, how they settle
-- **Immunisations** — a date against each vaccine your centre expects
+- **Immunizations** — a date against each vaccine your centre expects
 
 To change any of it afterwards, message your director. Allergies especially: tell them
 straight away rather than waiting, because that list is read every single day.

@@ -15,19 +15,22 @@ saying what fixed it.
 
 ## Raising a ticket
 
-1. Press **+ Raise ticket**.
-2. Pick a **Category** and a **Severity**. Each severity says what it means, from
-   **Low — a question, no rush** to **Urgent — we cannot run the day, or a child is
-   affected**. Choose honestly: if everything is urgent, nothing is.
-3. Give it a **Subject**. This is required, so the ticket can be found again.
-4. Under **What happened?**, say what you were doing, what you expected, and what
-   happened instead.
-5. Attach **Screenshots or logs** if you have them: images, PDFs, logs, CSV, JSON, XML
-   or a zip, up to 10 MB each. You can pick several at once.
-6. Press **Raise ticket**.
+1. Press **+ Raise ticket**. You see **What can we help you with?**
+2. Pick the card that fits. **Report a problem**, **How do I…?** and **Suggest an
+   improvement** go to the KiddieTrac team. **Account & sign-in**, **Billing & payments**,
+   **Enrollment & families**, **Maintenance / repair**, **Policy & compliance** and
+   **Something else** go to your agency's administrators.
+3. Answer that card's questions. A short summary is asked for first, so the ticket can be
+   found again.
+4. Under **How is this affecting you?**, choose honestly, from **Just a question or idea** to
+   **A child’s safety or care is affected**. If everything is urgent, nothing is.
+5. Add **Screenshots or files**: drop them, paste a screenshot (Ctrl+V) or choose files.
+   Images, PDFs, logs, CSV or zip, up to 10 MB each.
+6. Press **Send request**.
 
 The ticket is created first and the files are uploaded after. If a file fails, you are
-told, and the ticket itself still stands.
+told, and the ticket itself still stands. Step by step, for everyone:
+[Getting help: raise a ticket](raise-a-ticket).
 
 > **Tip:** A screenshot usually explains a problem faster than a paragraph.
 

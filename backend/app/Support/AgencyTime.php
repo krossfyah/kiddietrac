@@ -24,9 +24,83 @@ final class AgencyTime
     /** Cache so a request that formats many rows hits the DB once per agency. */
     private static array $cache = [];
 
+    /* ── THE REQUEST'S AGENCY (2026-10-21) ─────────────────────────────────────────
+       Anthony: "upcoming birthdays is showing a birthday occurring today but its actually
+       tomorrow ... is there a middleware setup to ensure this never happens again".
+
+       app.timezone is UTC (and must stay UTC: stored instants and kt-tz.js assume it), so
+       now()->toDateString() / today() / date('Y-m-d') name TOMORROW from 8pm Toronto, and
+       MariaDB's NOW()/CURDATE() run on the server's MST. The ResolveAgencyTimezone middleware
+       binds the request's agency (AuditScope rules: a platform admin's selected agency, else
+       the person's own), so tz(), today(), now(), todayDate() and boundaryUtc() called with
+       NO agency id use the agency of whoever is asking, and fall back to Toronto only in
+       console jobs or signed-out requests. `php artisan kt:tz-check` fails on new code that
+       reaches for the UTC "today" again. */
+    private static ?\Closure $requestResolver = null;
+    private static ?int $requestAgency = null;
+
+    /** Called by App\Http\Middleware\ResolveAgencyTimezone (lazy: resolved on first use). */
+    public static function bindRequest(?\Closure $resolver): void
+    {
+        self::$requestResolver = $resolver;
+        self::$requestAgency = null;
+    }
+
+    /** The agency of the current request, or null (console, signed out, platform level). */
+    public static function currentAgencyId(): ?int
+    {
+        if (self::$requestAgency === null && self::$requestResolver) {
+            try {
+                $id = (self::$requestResolver)();
+                // Only a real answer is kept: before authentication has run there is no
+                // user yet, and caching that null would pin the whole request to Toronto.
+                if ($id) {
+                    self::$requestAgency = (int) $id;
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return self::$requestAgency;
+    }
+
+    /** The agency's current wall-clock time (a Carbon in the agency zone). */
+    public static function now(?int $agencyId = null): Carbon
+    {
+        return Carbon::now(self::tz($agencyId));
+    }
+
+    /**
+     * The agency's current DATE as a Carbon at 00:00 UTC — for date arithmetic and for
+     * comparing with DATE columns (due dates, end dates), which Carbon::parse() also reads
+     * as UTC midnight. ->addDays(), ->startOfMonth(), ->diffInDays($dueDate) then all agree
+     * on the calendar without any instant ever crossing a zone.
+     */
+    public static function todayDate(?int $agencyId = null): Carbon
+    {
+        return Carbon::parse(self::today($agencyId), 'UTC');
+    }
+
+    /**
+     * An agency-local boundary as a UTC instant, for comparing with stored INSTANTS
+     * (occurred_at, created_at, punched_in_at …). $unit: day | week | month.
+     * boundaryUtc() = start of today; boundaryUtc(null, 'day', -30) = 30 days ago;
+     * boundaryUtc(null, 'day', 1) = start of tomorrow (an exclusive end).
+     */
+    public static function boundaryUtc(?int $agencyId = null, string $unit = 'day', int $offsetDays = 0): Carbon
+    {
+        $local = Carbon::now(self::tz($agencyId))->addDays($offsetDays);
+        $local = $unit === 'week' ? $local->startOfWeek() : ($unit === 'month' ? $local->startOfMonth() : $local->startOfDay());
+
+        return $local->setTimezone('UTC');
+    }
+
     /** Display timezone for an agency (settings.timezone, else Ontario default). */
     public static function tz(?int $agencyId = null): string
     {
+        if (! $agencyId) {
+            $agencyId = self::currentAgencyId();
+        }
         if (! $agencyId) {
             return self::DEFAULT_TZ;
         }

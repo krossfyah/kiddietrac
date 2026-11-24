@@ -96,7 +96,7 @@ final class ClockReminderCommand extends Command
         $this->dryRun = (bool) $this->option('dry-run');
         $this->scheduled = (bool) $this->option('scheduled');
         $mode = (string) $this->option('mode');
-        $today = Carbon::today();
+        $today = Carbon::today();   // tz-ok: not used to pick a day; each centre resolves its own date below
         $sent = 0;
 
         if ($mode === 'clock_out' || $mode === 'all') {
@@ -146,6 +146,13 @@ final class ClockReminderCommand extends Command
             // AGENCY's timezone, resolved from the centre the punch belongs to.
             $tz = AgencyTime::tzForCentre($e->centre_id !== null ? (int) $e->centre_id : null);
             $in = Carbon::parse($e->punched_in_at)->setTimezone($tz);
+            /* THE DAY, NOT THE ROW (2026-11-05). After an unpaid lunch the open row starts
+               at the return, so a day that began at 7 was measured from 1 PM and the
+               reminder came hours late. Measure from the first clock-in of that day. */
+            [$dFrom, $dTo] = AgencyTime::dayRangeForCentre($e->centre_id !== null ? (int) $e->centre_id : null, $in->toDateString());
+            $first = DB::table('time_punches')->where('user_id', $e->user_id)
+                ->where('punched_in_at', '>=', $dFrom)->where('punched_in_at', '<', $dTo)->min('punched_in_at');
+            if ($first) $in = Carbon::parse($first)->setTimezone($tz);
             $nowLocal = Carbon::now($tz);
             $todayLocal = Carbon::today($tz);
 
@@ -163,7 +170,7 @@ final class ClockReminderCommand extends Command
                 continue;
             }
 
-            $usual = $this->usualShiftHours((int) $e->user_id, $today);
+            $usual = $this->usualShiftHours((int) $e->user_id, $today, $tz);
             // Never more than 8 hours: this runs once an evening, and a later threshold
             // means the auto sign-off arrives first and nobody is ever reminded.
             $threshold = $usual === null ? 6.0 : min(8.0, max(5.0, $usual + 1.0));
@@ -173,28 +180,34 @@ final class ClockReminderCommand extends Command
             $shiftWindow = $this->shiftWindow($todayShift);
             $inAt = $in->format('g:i A');
 
+            /* NO "TODAY" IN A STORED REMINDER (2026-11-03, Anthony's iPhone Inbox: "You clocked in at 7:30 AM today
+               and have been on the clock 10.5 hours", read three days later). This text is also the in-app
+               notification, which stays in the Inbox for weeks, so "today" and "have been" stopped being true the
+               next morning. It names the day and the time it was measured instead. The Inbox rewrites the older
+               rows on display (screen-notifications.js datedText); stored rows are not changed. */
+            $dayName = $in->format('l j F');
+            $asOf = $nowLocal->format('g:i A');
             if ($in->isSameDay($todayLocal)) {
                 $howLong = number_format($in->floatDiffInHours($nowLocal), 1);
                 /* Prefer the ROSTERED day to the inferred one. "Longer than your usual
                    day of about 7.5 hours" invites an argument; "your shift was scheduled
                    to end at 6:00 PM" is a fact somebody can check and correct. */
                 $usualLine = $shiftWindow
-                    ? ' Your shift today was scheduled ' . $shiftWindow . '.'
+                    ? ' Your shift that day was scheduled ' . $shiftWindow . '.'
                     : ($usual === null
                         ? ''
                         : ' That is longer than your usual day of about ' . number_format($usual, 1) . ' hours.');
                 $subject = 'Reminder: you\'re still clocked in';
-                $bodyText = "You clocked in at {$inAt} today and have been on the clock for {$howLong} hours without clocking out.{$usualLine} Please clock out so your hours are recorded correctly. If you have already left, ask your administrator to correct the time — clocking out now would record the hours since you clocked in.";
+                $bodyText = "You clocked in at {$inAt} on {$dayName}. At {$asOf} you had been on the clock for {$howLong} hours without clocking out.{$usualLine} Please clock out so your hours are recorded correctly. If you have already left, ask your administrator to correct the time — clocking out now would record the hours since you clocked in.";
             } else {
                 // An older shift. Quoting the elapsed hours here would produce
                 // "on the clock for 732.0 hours", which reads as a broken system
                 // rather than a request. Give the date and ask for the out time.
-                $days = (int) $in->copy()->startOfDay()->diffInDays($todayLocal->copy()->startOfDay());
-                $when = $in->format('l j F') . ' at ' . $inAt;
+                // No "from yesterday" / "after N days": counted from when it was sent, it is wrong when read later.
+                $when = $dayName . ' at ' . $inAt;
                 $subject = 'Your shift on ' . $in->format('j F') . ' was never clocked out';
-                $bodyText = "You clocked in on {$when} and no clock-out was recorded, so that day's hours are still incomplete "
-                    . ($days === 1 ? 'from yesterday' : "after {$days} days")
-                    . ". Clocking out now would record every hour since then, so please ask your administrator to set the correct out time instead.";
+                $bodyText = "You clocked in on {$when} and no clock-out was recorded, so that day's hours are still incomplete."
+                    . " Clocking out now would record every hour since then, so please ask your administrator to set the correct out time instead.";
             }
 
             $this->sendReminder(
@@ -311,11 +324,14 @@ final class ClockReminderCommand extends Command
             }
 
             $window = $this->shiftWindow($shift);
+            // Named day and time, never "today": this text is kept in the Inbox (2026-11-03, see remindMissingClockOut).
+            $cDay = Carbon::parse($cDate, $tz)->format('l j F');
+            $cAsOf = Carbon::now($tz)->format('g:i A');
             $lead = $window
-                ? "You're scheduled today from {$window}, and no clock-in has been recorded yet. "
+                ? "You're scheduled on {$cDay} from {$window}, and no clock-in had been recorded by {$cAsOf}. "
                   . 'If you are working, please clock in now so your hours are captured.'
-                : "We noticed you're not clocked in today. If you're working, please clock in now "
-                  . 'so your hours are captured. If you\'re off today, you can ignore this.';
+                : "We noticed you had not clocked in by {$cAsOf} on {$cDay}. If you're working, please clock in now "
+                  . 'so your hours are captured. If you\'re off that day, you can ignore this.';
 
             $this->sendReminder(
                 (int) $s->user_id, (int) $s->centre_id, $s->email, $s->first_name,
@@ -373,7 +389,11 @@ final class ClockReminderCommand extends Command
             $q->join('rooms as r', 'r.id', '=', 's.room_id')->where('r.centre_id', $centreId);
         }
 
-        return $q->orderBy('s.starts_at')->select('s.starts_at', 's.ends_at')->first();
+        /* The whole rostered day (2026-11-05): a split shift is two rows, and the first
+           one's end is not when the day ends. */
+        $r = $q->selectRaw('MIN(s.starts_at) as starts_at, MAX(s.ends_at) as ends_at')->first();
+
+        return $r && $r->starts_at ? $r : null;
     }
 
     /**
@@ -414,7 +434,7 @@ final class ClockReminderCommand extends Command
      * entries over the last 28 days. Null when there is not enough history to say -
      * the caller then falls back to the flat minimum rather than inventing a number.
      */
-    private function usualShiftHours(int $userId, Carbon $today): ?float
+    private function usualShiftHours(int $userId, Carbon $today, string $tz = 'UTC'): ?float
     {
         $rows = DB::table('time_punches')
             ->where('user_id', $userId)
@@ -430,9 +450,18 @@ final class ClockReminderCommand extends Command
             ->get();
         if ($rows->count() < 3) return null;
 
-        $hours = [];
+        /* PER DAY, first in to last out (2026-11-05). Per row, a day split by an unpaid
+           lunch read as two half days, the "usual day" halved and the reminder fired
+           mid-afternoon. */
+        $days = [];
         foreach ($rows as $r) {
-            $h = Carbon::parse($r->punched_in_at)->floatDiffInHours(Carbon::parse($r->punched_out_at));
+            $in = Carbon::parse($r->punched_in_at); $out = Carbon::parse($r->punched_out_at);
+            $d = $in->copy()->setTimezone($tz)->toDateString();
+            $days[$d] = [isset($days[$d]) ? min($days[$d][0], $in) : $in, isset($days[$d]) ? max($days[$d][1], $out) : $out];
+        }
+        $hours = [];
+        foreach ($days as [$in, $out]) {
+            $h = $in->floatDiffInHours($out);
             if ($h > 0.5 && $h < 18) $hours[] = $h;       // ignore mis-punches at both ends
         }
         if (count($hours) < 3) return null;
@@ -454,6 +483,7 @@ final class ClockReminderCommand extends Command
         $chan = $cfgAgency ? \App\Http\Controllers\Api\ClockRemindersController::read($cfgAgency) : [];
         try {
             \App\Support\Notify::write([
+                'agency_id' => $cfgAgency ?: null,
                 'user_id' => $userId, 'type' => 'clock_reminder',
                 'title' => $subject, 'body' => $lead,
                 'data' => json_encode(['link' => '#dashboard']),
@@ -475,7 +505,7 @@ final class ClockReminderCommand extends Command
         $body = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111827;">'
             . '<p style="font-size:15px;line-height:1.6;">Hi ' . e($name) . ',</p>'
             . '<p style="font-size:15px;line-height:1.6;">' . e($lead) . '</p>'
-            . '<div style="background:#F3F8FB;border-left:4px solid #1F6080;border-radius:8px;padding:12px 16px;margin:16px 0;font-size:14px;line-height:1.6;">'
+            . '<div style="background:#F3F8FB;--kt-edge:#1F6080;border-radius:8px;padding:12px 16px;margin:16px 0;font-size:14px;line-height:1.6;">'
             . '<strong>Why clocking in and out matters:</strong>'
             . '<ul style="margin:8px 0 0;padding-left:18px;">'
             . '<li><strong>Compliance</strong> — licensing requires verifiable records of who was on the floor and when, to prove educator-to-child ratios.</li>'
@@ -631,6 +661,7 @@ final class ClockReminderCommand extends Command
         $cfg = \App\Http\Controllers\Api\ClockRemindersController::read($agencyId);
         try {
             \App\Support\Notify::write([
+                'agency_id' => $agencyId ?: null,
                 'user_id' => $userId, 'type' => 'children_still_in', 'title' => $subject, 'body' => $lead,
                 'data' => json_encode(['link' => '#dashboard']), 'created_at' => now(),
             ]);

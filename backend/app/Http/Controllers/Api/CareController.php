@@ -48,7 +48,8 @@ final class CareController extends Controller
             'child_id' => ['required_without:child_ids', 'integer'],
             'child_ids' => ['required_without:child_id', 'array', 'min:1'],
             'child_ids.*' => ['integer'],
-            'log_type' => ['required', 'in:diaper,bathroom,nap,meal,snack,bottle,sunscreen,mood,outdoor'],
+            // medicine + clothing: 2026-11-09, Anthony: "log a moment add medicine as an option as well as change of clothing"
+            'log_type' => ['required', 'in:diaper,bathroom,nap,meal,snack,bottle,sunscreen,mood,outdoor,medicine,clothing'],
             // Not in the future. A log describes what happened; a picker set to the
             // wrong day otherwise files an entry for a time that has not arrived,
             // which is what put a 21:30 meal on a parent's timeline at 10:26.
@@ -125,6 +126,17 @@ final class CareController extends Controller
             'created_at' => now(),
         ]);
         }
+
+        // Each child's own family is told straight away (App\Support\ChildMomentNotify).
+        try {
+            $items = [];
+            foreach ($allowed as $cid) {
+                $it = \App\Support\ChildMomentNotify::momentItem((int) $cid, (string) $data['log_type'], $data['notes'] ?? null, [],
+                    $data['occurred_at'] ?? null, $data['ended_at'] ?? null, $data['details'] ?? null);
+                if ($it) $items[] = $it;
+            }
+            \App\Support\ChildMomentNotify::after($items);
+        } catch (\Throwable $e) { /* telling the family must never fail the log */ }
 
         /* Catch-up logs are allowed, but somebody should know. One reminder per
            educator per day — a morning of catching up must not send six emails. */
@@ -454,6 +466,14 @@ final class CareController extends Controller
                 'updated_at' => now(),
             ]
         );
+        // A milestone reached or started is news for the family (App\Support\ChildMomentNotify).
+        try {
+            $st = ['emerging' => 'emerging', 'in_progress' => 'in progress', 'achieved' => 'achieved'][$data['status']] ?? $data['status'];
+            \App\Support\ChildMomentNotify::after([[
+                'child_id' => (int) $data['child_id'], 'kind' => 'milestones', 'emoji' => '🌟',
+                'label' => 'Milestone ' . $st, 'text' => (string) $data['milestone_label'], 'link' => '#today',
+            ]]);
+        } catch (\Throwable $e) {}
         return response()->json(['message' => 'Saved']);
     }
 
@@ -529,13 +549,45 @@ final class CareController extends Controller
            20 seconds of this person's last clock-in or clock-out answers with that same
            result and records nothing new. */
         $last = DB::table('time_punches')->where('user_id', $userId)->orderByDesc('id')->first(['id', 'punched_in_at', 'punched_out_at']);
-        if ($last) {
+        /* Only for presses with no intent (old clients, the blind toggle). A press that says
+           in or out is answered by the intent check below, and the guard here swallowed
+           "End my day" picked seconds after "Lunch" - leaving them on a break. (2026-11-05) */
+        if ($last && ! in_array($request->input('intent'), ['in', 'out'], true)) {
             $lastAt = \Illuminate\Support\Carbon::parse($last->punched_out_at ?: $last->punched_in_at);
             if (abs(now()->diffInSeconds($lastAt)) < 20) {
                 return response()->json($last->punched_out_at
                     ? ['action' => 'out', 'minutes_worked' => 0, 'message' => 'Already clocked out a moment ago', 'repeat' => true]
                     : ['action' => 'in', 'id' => (int) $last->id, 'message' => 'Already clocked in a moment ago', 'repeat' => true]);
             }
+        }
+
+        /* WHAT THE PERSON PRESSED (2026-11-05). The clock was a blind toggle: a strip
+           showing a stale "not clocked in" sent a press that the server took as a clock
+           OUT, and the other way round. Clients now send intent in|out; a press that no
+           longer matches the real state is answered with the state, not flipped. No
+           intent (an old client) keeps the toggle. */
+        $intent = in_array($request->input('intent'), ['in', 'out'], true) ? (string) $request->input('intent') : null;
+        $hasOpen = DB::table('time_punches')->where('user_id', $userId)->whereNull('punched_out_at')->exists();
+        $onBreak = $hasOpen ? null : \App\Support\StaffBreaks::current($userId);
+
+        /* ON A BREAK (2026-11-05): the shift row is closed but the day is not over.
+           Clocking in = back from the break; clocking out = the day ended when the break
+           began. Neither goes through the closure / rota guards below - they are for
+           starting a day, and this person already started theirs. */
+        if ($onBreak) {
+            if ($intent === 'out') {
+                $b = \App\Support\StaffBreaks::endDay($userId);
+                $this->auditClock($request, $userId, 'out', (int) ($b->centre_id ?? $centreId), null, ['from_break' => $b->kind ?? null]);
+                return response()->json(['action' => 'out', 'minutes_worked' => 0, 'from_break' => true,
+                    'message' => 'Clocked out. Your shift ended when your ' . strtolower(\App\Support\StaffBreaks::KINDS[$b->kind ?? 'break'] ?? 'break') . ' began.']);
+            }
+            return $this->backFromBreak($request, $userId, $centreId);
+        }
+        if ($intent === 'in' && $hasOpen) {
+            return response()->json(['message' => "You're already clocked in.", 'reason' => 'already_in', 'action' => 'in', 'repeat' => true], 409);
+        }
+        if ($intent === 'out' && ! $hasOpen) {
+            return response()->json(['message' => "You're not clocked in, so there is nothing to clock out of.", 'reason' => 'not_clocked_in', 'action' => 'out', 'repeat' => true], 409);
         }
 
         // The centre is shut — there is no shift to start.
@@ -589,7 +641,7 @@ final class CareController extends Controller
             ->first();
 
         if ($open) {
-            /* NOBODY CLOCKS OUT LEAVING A CHILD SIGNED IN.
+            /* NOBODY CLOCKS OUT LEAVING A CHILD SIGNED IN - UNWARNED.
 
                A child still marked present after the last adult has gone is the failure
                this exists to prevent: the roster says they are here, the ratio counts
@@ -602,73 +654,17 @@ final class CareController extends Controller
 
                The message names every child, because "sign the children out first" to
                somebody who believes they already did is not actionable. */
-            $myRooms = DB::table('educator_rooms')->where('user_id', $userId)
-                ->pluck('room_id')->map(fn ($i) => (int) $i)->all();
-            if (! $myRooms) {
-                $myRooms = DB::table('rooms')
-                    ->where('centre_id', (int) ($open->centre_id ?: $centreId))
-                    ->pluck('id')->map(fn ($i) => (int) $i)->all();
+            $children = $this->childrenStillIn($userId, (int) ($open->centre_id ?: $centreId));
+
+            /* WARN, THEN ALLOW (2026-11-05, Anthony). This refused outright, which also
+               refused the ordinary case: a colleague is covering the room and this person
+               is going to lunch or going home. The warning still names every child; the
+               person confirms (confirm_children) and the override is audited with the
+               list, so the record of who left children signed in is kept. */
+            if ($children->isNotEmpty() && ! $request->boolean('confirm_children')) {
+                return response()->json($this->childrenStillInBody($children, $userId, (int) ($open->centre_id ?: $centreId), 'clock out'), 409);
             }
-
-            $stillIn = $myRooms ? DB::table('check_events as ci')
-                ->join('children as ch', 'ch.id', '=', 'ci.child_id')
-                ->leftJoin('rooms as r', 'r.id', '=', 'ci.room_id')
-                ->whereIn('ci.room_id', $myRooms)
-                ->where('ci.event_type', 'check_in')
-                /* Agency day as instants. This is the guard that refuses a clock-out
-                   while children are still signed in; on the UTC date it found nobody
-                   from 8pm and let an educator leave a room still marked occupied. */
-                ->where('ci.occurred_at', '>=', \App\Support\AgencyTime::dayRangeForCentre((int) ($open->centre_id ?: $centreId))[0])
-                ->where('ci.occurred_at', '<', \App\Support\AgencyTime::dayRangeForCentre((int) ($open->centre_id ?: $centreId))[1])
-                /* Same tie-break as RoomController::presentCount: a check-out is "later"
-                   on a greater timestamp, or the same second with a higher id, so a rapid
-                   re-scan does not read as still-present. */
-                ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
-                    ->from('check_events as co')
-                    ->whereColumn('co.child_id', 'ci.child_id')
-                    ->where('co.event_type', 'check_out')
-                    ->where(fn ($w) => $w->whereColumn('co.occurred_at', '>', 'ci.occurred_at')
-                        ->orWhere(fn ($w2) => $w2->whereColumn('co.occurred_at', 'ci.occurred_at')
-                            ->whereColumn('co.id', '>', 'ci.id'))))
-                ->orderBy('ci.occurred_at')
-                ->get(['ci.child_id', 'ci.occurred_at', 'ch.first_name', 'ch.preferred_name',
-                       'ch.last_name', 'r.name as room_name'])
-                ->unique('child_id')->values() : collect();
-
-            if ($stillIn->isNotEmpty()) {
-                $tz = \App\Support\AgencyTime::tzForCentre((int) ($open->centre_id ?: $centreId));
-                $children = $stillIn->map(function ($c) use ($tz) {
-                    $name = trim(($c->preferred_name ?: $c->first_name) . ' ' . $c->last_name);
-                    $since = \App\Support\AgencyTime::fmt($c->occurred_at, $tz, 'g:i A');
-
-                    return [
-                        'child_id' => (int) $c->child_id,
-                        'name' => $name,
-                        'room' => $c->room_name,
-                        'since' => $since,
-                        'label' => $name . ($c->room_name ? ' — ' . $c->room_name : '')
-                            . ($since ? ' — in since ' . $since : ''),
-                    ];
-                })->values();
-
-                $n = $children->count();
-
-                return response()->json([
-                    'message' => $n . ' ' . ($n === 1 ? 'child is' : 'children are')
-                        . ' still signed in. Sign ' . ($n === 1 ? 'them' : 'them all')
-                        . ' out before you clock out — until you do, '
-                        . ($n === 1 ? 'they are' : 'they are')
-                        . ' counted as present and in your ratio.',
-                    'blocked' => true,
-                    'reason' => 'children_still_signed_in',
-                    'children' => $children,
-                    // Somebody who believes they already signed out needs a way forward,
-                    // not just a refusal.
-                    'what_to_do' => 'Sign each child out on the roster, then clock out. '
-                        . 'If a colleague is taking over, they must be signed over to that room first — '
-                        . 'a director can sign a child out if you cannot.',
-                ], 409);
-            }
+            $overrode = $children->isNotEmpty() ? $children->pluck('label')->values()->all() : null;
 
             DB::table('time_punches')->where('id', $open->id)->update([
                 'punched_out_at' => now(),
@@ -678,7 +674,7 @@ final class CareController extends Controller
             // positive int for both the audit (?int param) and the response.
             $mins = (int) abs(now()->diffInMinutes(\Carbon\Carbon::parse($open->punched_in_at)));
             $this->notifyClockEvent($request->user(), (int) ($open->centre_id ?: $centreId), 'out');
-            $this->auditClock($request, $userId, 'out', (int) ($open->centre_id ?: $centreId), $mins);
+            $this->auditClock($request, $userId, 'out', (int) ($open->centre_id ?: $centreId), $mins, $overrode ? ['children_still_signed_in' => $overrode] : []);
             return response()->json([
                 'action' => 'out',
                 'minutes_worked' => $mins,
@@ -697,6 +693,142 @@ final class CareController extends Controller
         $this->notifyClockEvent($request->user(), (int) $centreId, 'in');
         $this->auditClock($request, $userId, 'in', (int) $centreId, null);
         return response()->json(['action' => 'in', 'id' => $id, 'message' => 'Clocked in']);
+    }
+
+    /**
+     * Children still signed in to the rooms this person can act on (their assignments,
+     * otherwise their centre's) - the list the clock-out and break warnings name.
+     */
+    private function childrenStillIn(int $userId, int $centreId): \Illuminate\Support\Collection
+    {
+        $myRooms = DB::table('educator_rooms')->where('user_id', $userId)
+            ->pluck('room_id')->map(fn ($i) => (int) $i)->all();
+        if (! $myRooms) {
+            $myRooms = DB::table('rooms')
+                ->where('centre_id', $centreId)
+                ->pluck('id')->map(fn ($i) => (int) $i)->all();
+        }
+
+        $stillIn = $myRooms ? DB::table('check_events as ci')
+            ->join('children as ch', 'ch.id', '=', 'ci.child_id')
+            ->leftJoin('rooms as r', 'r.id', '=', 'ci.room_id')
+            ->whereIn('ci.room_id', $myRooms)
+            ->where('ci.event_type', 'check_in')
+            /* Agency day as instants. This is the guard that refuses a clock-out
+               while children are still signed in; on the UTC date it found nobody
+               from 8pm and let an educator leave a room still marked occupied. */
+            ->where('ci.occurred_at', '>=', \App\Support\AgencyTime::dayRangeForCentre($centreId)[0])
+            ->where('ci.occurred_at', '<', \App\Support\AgencyTime::dayRangeForCentre($centreId)[1])
+            /* Same tie-break as RoomController::presentCount: a check-out is "later"
+               on a greater timestamp, or the same second with a higher id, so a rapid
+               re-scan does not read as still-present. */
+            ->whereNotExists(fn ($q) => $q->select(DB::raw(1))
+                ->from('check_events as co')
+                ->whereColumn('co.child_id', 'ci.child_id')
+                ->where('co.event_type', 'check_out')
+                ->where(fn ($w) => $w->whereColumn('co.occurred_at', '>', 'ci.occurred_at')
+                    ->orWhere(fn ($w2) => $w2->whereColumn('co.occurred_at', 'ci.occurred_at')
+                        ->whereColumn('co.id', '>', 'ci.id'))))
+            ->orderBy('ci.occurred_at')
+            ->get(['ci.child_id', 'ci.occurred_at', 'ch.first_name', 'ch.preferred_name',
+                   'ch.last_name', 'r.name as room_name'])
+            ->unique('child_id')->values() : collect();
+
+        if ($stillIn->isEmpty()) return collect();
+        $tz = \App\Support\AgencyTime::tzForCentre($centreId);
+        $children = $stillIn->map(function ($c) use ($tz) {
+            $name = trim(($c->preferred_name ?: $c->first_name) . ' ' . $c->last_name);
+            $since = \App\Support\AgencyTime::fmt($c->occurred_at, $tz, 'g:i A');
+
+            return [
+                'child_id' => (int) $c->child_id,
+                'name' => $name,
+                'room' => $c->room_name,
+                'since' => $since,
+                'label' => $name . ($c->room_name ? ' — ' . $c->room_name : '')
+                    . ($since ? ' — in since ' . $since : ''),
+            ];
+        })->values();
+
+        return $children;
+    }
+
+    /** The 409 body for "children are still signed in" - a warning the person can confirm past. */
+    private function childrenStillInBody(\Illuminate\Support\Collection $children, int $userId, int $centreId, string $doing): array
+    {
+        $n = $children->count();
+        // Who else is on the clock here right now - "is anyone covering?" is the question being asked.
+        $covering = DB::table('time_punches as t')->join('users as u', 'u.id', '=', 't.user_id')
+            ->where('t.centre_id', $centreId)->whereNull('t.punched_out_at')->where('t.user_id', '<>', $userId)
+            ->where('t.punched_in_at', '>=', now()->subHours(16))
+            ->orderBy('u.first_name')->pluck('u.first_name')->filter()->unique()->values()->all();
+
+        return [
+            'message' => $n . ' ' . ($n === 1 ? 'child is' : 'children are') . ' still signed in to your '
+                . ($n === 1 ? 'room' : 'rooms') . '. Make sure ' . ($n === 1 ? 'they are' : 'they are all')
+                . ' signed out or that someone is covering before you ' . $doing . '.',
+            'blocked' => true,
+            'can_override' => true,
+            'reason' => 'children_still_signed_in',
+            'children' => $children,
+            'covering' => $covering,
+            'what_to_do' => $covering
+                ? 'Still on the clock here: ' . implode(', ', $covering) . '. If one of them has the room, you can go ahead.'
+                : 'Nobody else is clocked in here right now. Sign the children out, or hand the room over first.',
+        ];
+    }
+
+    /** POST /staff/break/start {kind: lunch|break} - off the floor without ending the day. */
+    public function breakStart(Request $request): JsonResponse
+    {
+        $userId = (int) $request->user()->id;
+        $kind = (string) $request->input('kind');
+        if (! isset(\App\Support\StaffBreaks::KINDS[$kind])) return response()->json(['message' => 'Pick lunch or break.'], 422);
+        if (\App\Support\StaffBreaks::current($userId)) return response()->json(['message' => "You're already on a break.", 'reason' => 'already_on_break'], 409);
+        $open = DB::table('time_punches')->where('user_id', $userId)->whereNull('punched_out_at')->orderByDesc('punched_in_at')->first();
+        if (! $open) return response()->json(['message' => "You're not clocked in, so there is no shift to take a break from.", 'reason' => 'not_clocked_in'], 409);
+        $centreId = (int) ($open->centre_id ?: $this->resolveCentreId($request->user()));
+
+        $children = $this->childrenStillIn($userId, $centreId);
+        $label = strtolower(\App\Support\StaffBreaks::KINDS[$kind]);
+        if ($children->isNotEmpty() && ! $request->boolean('confirm_children')) {
+            return response()->json($this->childrenStillInBody($children, $userId, $centreId, 'go on ' . $label), 409);
+        }
+
+        $r = \App\Support\StaffBreaks::start($userId, $kind);
+        if (! $r['ok']) return response()->json(['message' => $r['message']], 409);
+        $mins = (int) abs(now()->diffInMinutes(\Carbon\Carbon::parse($open->punched_in_at)));
+        $this->notifyClockEvent($request->user(), $centreId, 'break_' . $kind);
+        $this->auditClock($request, $userId, 'break_start', $centreId, $mins, ['kind' => $kind, 'paid' => (bool) $r['break']->paid]
+            + ($children->isNotEmpty() ? ['children_still_signed_in' => $children->pluck('label')->values()->all()] : []));
+
+        return response()->json(['action' => 'break', 'on_break' => \App\Support\StaffBreaks::present($r['break']),
+            'message' => 'Enjoy your ' . $label . '. Tap "Back" when you return.']);
+    }
+
+    /** POST /staff/break/end - back on the clock. */
+    public function breakEnd(Request $request): JsonResponse
+    {
+        $userId = (int) $request->user()->id;
+        if (! \App\Support\StaffBreaks::current($userId)) {
+            return response()->json(['message' => "You're not on a break.", 'reason' => 'not_on_break'], 409);
+        }
+
+        return $this->backFromBreak($request, $userId, (int) $this->resolveCentreId($request->user()));
+    }
+
+    private function backFromBreak(Request $request, int $userId, int $centreId): JsonResponse
+    {
+        $r = \App\Support\StaffBreaks::end($userId, (string) ($request->input('source') ?: 'web'));
+        if (! $r['ok']) return response()->json(['message' => $r['message'], 'reason' => 'not_on_break'], 409);
+        $b = $r['break'];
+        $centreId = (int) ($b->centre_id ?: $centreId);
+        $this->notifyClockEvent($request->user(), $centreId, 'back');
+        $this->auditClock($request, $userId, 'break_end', $centreId, $r['minutes'], ['kind' => $b->kind, 'paid' => (bool) $b->paid, 'break_minutes' => $r['minutes']]);
+        $label = strtolower(\App\Support\StaffBreaks::KINDS[$b->kind] ?? 'break');
+
+        return response()->json(['action' => 'in', 'id' => $r['punch_id'], 'from_break' => true, 'break_minutes' => $r['minutes'],
+            'message' => 'Welcome back. ' . ucfirst($label) . ' ' . $r['minutes'] . ' min' . ($b->paid ? ' (paid)' : '') . '.']);
     }
 
     /**
@@ -723,7 +855,7 @@ final class CareController extends Controller
     private function notRosteredToday(Request $request, int $userId, int $centreId): bool
     {
         try {
-            $roles = \App\Support\UserRoles::names($request);
+            $roles = \App\Support\AgencyRole::names($request);
             foreach (['platform_admin', 'agency_admin', 'centre_director'] as $senior) {
                 if (in_array($senior, $roles, true)) return false;
             }
@@ -760,18 +892,18 @@ final class CareController extends Controller
         }
     }
 
-    private function auditClock(Request $request, int $userId, string $action, int $centreId, ?int $minutes): void
+    private function auditClock(Request $request, int $userId, string $action, int $centreId, ?int $minutes, array $extra = []): void
     {
         try {
             $u        = $request->user();
             $name     = trim((($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))) ?: ($u->name ?? ('User #' . $userId));
             $centreNm = DB::table('centres')->where('id', $centreId)->value('name') ?: ('centre #' . $centreId);
-            $verb     = $action === 'in' ? 'clocked IN' : 'clocked OUT';
+            $verb     = ['in' => 'clocked IN', 'break_start' => 'started a ' . ($extra['kind'] ?? 'break'), 'break_end' => 'came back from ' . ($extra['kind'] ?? 'break')][$action] ?? 'clocked OUT';
             $summary  = $name . ' ' . $verb . ' at ' . $centreNm;
             $payload  = [
                 'summary'   => $summary,
                 'event'     => 'clock_' . $action,
-                'direction' => $action === 'in' ? 'in' : 'out',
+                'direction' => in_array($action, ['in', 'break_end'], true) ? 'in' : 'out',
                 'centre_id' => $centreId,
                 'centre'    => $centreNm,
                 'at'        => now()->toDateTimeString(),
@@ -780,7 +912,12 @@ final class CareController extends Controller
             if ($minutes !== null) {
                 $payload['minutes_worked'] = $minutes;
                 $payload['duration'] = intdiv($minutes, 60) . 'h ' . ($minutes % 60) . 'm';
-                $payload['summary'] = $summary . ' · shift ' . $payload['duration'];
+                $payload['summary'] = $summary . ($action === 'break_end' ? ' · break ' : ' · shift ') . $payload['duration'];
+            }
+            if ($extra) {
+                $payload += $extra;
+                if (! empty($extra['children_still_signed_in'])) $payload['summary'] .= ' · warned: ' . count($extra['children_still_signed_in']) . ' child(ren) still signed in';
+                if (! empty($extra['from_break'])) $payload['summary'] .= ' · from ' . $extra['from_break'];
             }
             \App\Support\Audit::write([
                 'user_id'     => $userId,
@@ -860,8 +997,8 @@ final class CareController extends Controller
                 })
                 ->pluck('user_id')->unique();
 
-            $inOut = $action === 'in' ? 'clocked in' : 'clocked out';
-            $icon  = $action === 'in' ? '🟢' : '🔴';
+            $inOut = ['in' => 'clocked in', 'break_lunch' => 'is on lunch', 'break_break' => 'is on a break', 'back' => 'is back from break'][$action] ?? 'clocked out';
+            $icon  = ['in' => '🟢', 'back' => '🟢', 'break_lunch' => '🍽️', 'break_break' => '☕'][$action] ?? '🔴';
             $title = $icon . ' ' . $name . ' ' . $inOut;
             $body  = $centreNm;
 
@@ -888,12 +1025,25 @@ final class CareController extends Controller
 
     public function myPunches(Request $request): JsonResponse
     {
+        $uid = (int) $request->user()->id;
+        /* 60 rows ran out before a month did for anybody taking breaks (each unpaid break
+           is another row), so My hours under-counted the month. Since the 1st of LAST
+           month, capped high. (2026-11-05) */
+        $since = now()->subMonthNoOverflow()->startOfMonth()->subDay();
         $rows = DB::table('time_punches')
-            ->where('user_id', $request->user()->id)
+            ->where('user_id', $uid)
+            ->where(fn ($q) => $q->where('punched_in_at', '>=', $since)->orWhereNull('punched_out_at'))
             ->orderByDesc('punched_in_at')
-            ->limit(60)
+            ->limit(600)
             ->get();
-        return response()->json(['punches' => $rows]);
+        if ($rows->count() < 20) {
+            $rows = DB::table('time_punches')->where('user_id', $uid)->orderByDesc('punched_in_at')->limit(60)->get();
+        }
+        $breaks = DB::table('time_punch_breaks')->where('user_id', $uid)->where('started_at', '>=', $since)
+            ->orderByDesc('started_at')->limit(300)->get(['id', 'punch_id', 'return_punch_id', 'kind', 'paid', 'started_at', 'ended_at', 'ended_how']);
+
+        return response()->json(['punches' => $rows, 'breaks' => $breaks,
+            'on_break' => \App\Support\StaffBreaks::present(\App\Support\StaffBreaks::current($uid))]);
     }
 
     public function centrePunches(Request $request): JsonResponse
@@ -985,7 +1135,7 @@ final class CareController extends Controller
     public function listTours(Request $request): JsonResponse
     {
         $userId = $request->user()->id;
-        $isAdmin = DB::table('role_assignments')->where('user_id', $userId)
+        $isAdmin = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $userId)
             ->whereIn('role', ['agency_admin', 'platform_admin'])->where('active', true)->exists();
         if (!$isAdmin) {
             return response()->json(['tours' => []]);
@@ -1013,7 +1163,7 @@ final class CareController extends Controller
         // way; the write was simply never asked. Without it, ANY authenticated user —
         // a parent included — could change any booking by guessing an id.
         $userId = $request->user()->id;
-        $isAdmin = DB::table('role_assignments')->where('user_id', $userId)
+        $isAdmin = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $userId)
             ->whereIn('role', ['agency_admin', 'platform_admin'])->where('active', true)->exists();
         abort_unless($isAdmin, 403, 'Not authorized to change tour bookings.');
 
@@ -1050,7 +1200,7 @@ final class CareController extends Controller
         // switched into (X-Active-Agency-Id) — not every child on the platform.
         // The prior unconditional `return true` leaked care logs / milestones /
         // portfolios across all tenants for a switched super-admin.
-        $isPlatform = DB::table('role_assignments')
+        $isPlatform = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))
             ->where('user_id', $userId)->where('role', 'platform_admin')
             ->where('active', true)->exists();
         if ($isPlatform) {
@@ -1072,7 +1222,9 @@ final class CareController extends Controller
             ->exists();
         if ($isGuardian) return true;
 
-        // Staff: anyone with an active role at the child's centre
+        // Staff: an active STAFF role at the child's centre. A guardian role row carries its
+        // family's centre_id too, and without the role filter every parent at the centre could
+        // read another family's care logs and portfolio (2026-11-05 leak sweep).
         $isCentreStaff = DB::table('children as c')
             ->join('families as f', 'f.id', '=', 'c.family_id')
             ->join('role_assignments as ra', function ($j) {
@@ -1080,6 +1232,7 @@ final class CareController extends Controller
             })
             ->where('c.id', $childId)
             ->where('ra.user_id', $userId)
+            ->whereIn('ra.role', \App\Support\Visibility::STAFF_ROLES)
             ->exists();
         if ($isCentreStaff) return true;
 

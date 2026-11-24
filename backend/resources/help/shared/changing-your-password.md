@@ -39,7 +39,8 @@ this screen):
 - **upper and lower case** letters
 - at least one **number**
 - at least one **symbol**
-- **not** your current password, and not one you have used in the **last 6 months**
+- **not** your current password, **not** any of your **last 4** passwords, and not one you
+  have used in the **last 12 months**
 
 As you type, a checklist under the box shows which rules you have met. The button refuses
 a password that does not meet them all yet.

@@ -49,7 +49,8 @@ class ManagedFormController extends Controller
 
     private function roles(int $uid): array
     {
-        $roles = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->pluck('role')->all();
+        // In the active agency only (2026-11-05 leak sweep): a role held in another agency counted here.
+        $roles = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $uid)->where('active', 1)->pluck('role')->all();
         if (DB::table('guardians')->where('user_id', $uid)->exists()) {
             $roles[] = 'guardian';
         }
@@ -102,7 +103,7 @@ class ManagedFormController extends Controller
      *
      * Returns the new user id, or null if the address is unusable.
      */
-    private function createPendingRecipient(int $agencyId, string $email, Request $request): ?int
+    private function createPendingRecipient(int $agencyId, string $email, Request $request, ?int $centreId = null): ?int
     {
         $email = mb_strtolower(trim($email));
         if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
@@ -136,6 +137,8 @@ class ManagedFormController extends Controller
             'user_id' => $userId,
             'role' => 'guardian',
             'agency_id' => $agencyId,
+            // A director's new parent belongs to their centre (2026-11-13); NULL = agency-wide, as before.
+            'centre_id' => $centreId,
             'active' => 1,
             'created_at' => now(),
         ]);
@@ -222,6 +225,60 @@ class ManagedFormController extends Controller
         return $this->isAdmin($request) || in_array('auditor', $this->roles((int) $request->user()->id), true);
     }
 
+    /* ───────────── CENTRE DIRECTORS: their own centres (2026-11-13) ─────────────
+
+       Anthony gave directors Forms Manager, "scoped to their centres". The rows here belong to PEOPLE (who
+       signed, who was sent a package), so a director's view is the people of their centres -
+       App\Support\CentreScope::people(): null for an agency-wide caller, who sees exactly what they did before.
+       A form itself may now belong to one centre (managed_forms.centre_id): a director's upload does, and
+       FormAudience then offers it only to that centre's people. Agency-wide forms (centre_id NULL) stay visible
+       to a director, who can send them to their own people but not change or delete them. Fails closed. */
+    private function peopleScope(Request $request, int $agencyId): ?array
+    {
+        return \App\Support\CentreScope::people($request, $agencyId);
+    }
+
+    /** 404 when a scoped caller asks about a sign-off by somebody outside their centres; null = carry on. */
+    private function signoffOutOfScope(Request $request, int $agencyId, int $signoffId): ?JsonResponse
+    {
+        $people = $this->peopleScope($request, $agencyId);
+        if ($people === null) {
+            return null;
+        }
+        $uid = (int) DB::table('managed_form_signoffs')->where('id', $signoffId)->value('user_id');
+        return ($uid && in_array($uid, $people, true)) ? null : response()->json(['message' => 'Not found'], 404);
+    }
+
+    /** A package is a scoped caller's when every person it went to is one of theirs. */
+    private function packageInScope(?array $people, $recipientIdsJson): bool
+    {
+        if ($people === null) {
+            return true;
+        }
+        $ids = array_map('intval', json_decode((string) $recipientIdsJson, true) ?: []);
+        return $ids && ! array_diff($ids, $people);
+    }
+
+    private function packageOutOfScope(Request $request, int $agencyId, int $packageId): ?JsonResponse
+    {
+        $people = $this->peopleScope($request, $agencyId);
+        if ($people === null) {
+            return null;
+        }
+        $r = DB::table('form_package_sends')->where('id', $packageId)->first(['recipient_ids']);
+        return ($r && $this->packageInScope($people, $r->recipient_ids)) ? null : response()->json(['message' => 'Not found'], 404);
+    }
+
+    /** The centre a scoped caller is acting for: the one they name (if theirs), or their only one. */
+    private function callerCentre(Request $request, array $scope): ?int
+    {
+        $want = (int) $request->input('centre_id');
+        if ($want) {
+            return in_array($want, $scope, true) ? $want : null;
+        }
+        return count($scope) === 1 ? (int) $scope[0] : null;
+    }
+
     /* ───────────── ADMIN: library ───────────── */
 
     /** GET /admin/managed-forms — the agency's uploaded forms + sign-off counts. */
@@ -231,10 +288,15 @@ class ManagedFormController extends Controller
             return response()->json(['forms' => []], 403);
         }
         $agencyId = $this->agencyId($request);
-        $forms = DB::table('managed_forms')->where('agency_id', $agencyId)->orderByDesc('id')->get();
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $people = $this->peopleScope($request, $agencyId);
+        $forms = DB::table('managed_forms')->where('agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('centre_id')->orWhereIn('centre_id', $scope ?: [0])))
+            ->orderByDesc('id')->get();
         $counts = DB::table('managed_form_signoffs as s')
             ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
             ->where('f.agency_id', $agencyId)
+            ->when($people !== null, fn ($q) => $q->whereIn('s.user_id', $people ?: [0]))
             ->select('s.managed_form_id', DB::raw('COUNT(*) as n'))
             ->groupBy('s.managed_form_id')->pluck('n', 's.managed_form_id');
         // Who uploaded each form. created_by_id was already stored but never
@@ -255,13 +317,19 @@ class ManagedFormController extends Controller
             ->groupBy('managed_form_id')
             ->map(fn ($g) => $g->pluck('user_id')->map(fn ($v) => (int) $v)->values()->all());
 
-        $out = $forms->map(function ($f) use ($counts, $uploaders, $named, $namedIds) {
+        $out = $forms->map(function ($f) use ($counts, $uploaders, $named, $namedIds, $people, $scope) {
             $f->audiences = $f->audiences ? (json_decode($f->audiences, true) ?: []) : [];
             $f->signoff_count = (int) ($counts[$f->id] ?? 0);
             $u = $uploaders[$f->created_by_id] ?? null;
             $f->uploaded_by = $u ? trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) : null;
             $f->named_count = (int) ($named[$f->id] ?? 0);
             $f->recipient_ids = $namedIds[$f->id] ?? [];
+            if ($people !== null) {   // a director sees the people of their own centres only
+                $f->recipient_ids = array_values(array_intersect($f->recipient_ids, $people));
+                $f->named_count = count($f->recipient_ids);
+            }
+            // May this caller edit/delete it? A director: only their own centres' forms.
+            $f->can_manage = \App\Support\CentreScope::canWrite($scope, $f->centre_id ?? null);
             $f->notify_email = $f->notify_email ?? null;
             $f->fillable = (bool) ($f->fillable ?? false);
             $f->reusable = (bool) ($f->reusable ?? false);
@@ -317,9 +385,31 @@ class ManagedFormController extends Controller
             ], 422);
         }
 
+        /* WHICH CENTRE (2026-11-13). A director's form is their centre's: the one they pick, or their only one.
+           An agency-wide caller is unchanged (agency-wide) unless they name a centre of this agency. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $centreId = null;
+        if ($request->filled('centre_id')) {
+            $centreId = (int) $request->input('centre_id');
+            if (! DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists()
+                || ! \App\Support\CentreScope::canWrite($scope, $centreId)) {
+                return response()->json(['message' => 'That centre is not one of yours.', 'errors' => ['centre_id' => ['That centre is not one of yours.']]], 422);
+            }
+        } elseif ($scope !== null) {
+            $centreId = $this->callerCentre($request, $scope);
+            if (! $centreId) {
+                return response()->json(['message' => 'Choose which of your centres this form is for.', 'errors' => ['centre_id' => ['Choose which of your centres this form is for.']]], 422);
+            }
+        }
+        $people = $this->peopleScope($request, $agencyId);
+        if ($people !== null && array_diff($recipientIds, $people)) {
+            return response()->json(['message' => 'Some of the people you picked are not at your centre.', 'errors' => ['recipient_ids' => ['Some of the people you picked are not at your centre.']]], 422);
+        }
+
         $path = $request->file('file')->store('managed-forms/' . $agencyId, 'public');
         $id = DB::table('managed_forms')->insertGetId([
             'agency_id'     => $agencyId,
+            'centre_id'     => $centreId,
             'title'         => $data['title'],
             'description'   => $data['description'] ?? null,
             'file_url'      => '/storage/' . $path,
@@ -380,21 +470,70 @@ class ManagedFormController extends Controller
             'emails.*'   => ['string', 'max:190'],
             'notify'     => ['sometimes', 'boolean'],
             'note'       => ['nullable', 'string', 'max:600'],
+            // keep = the role audience keeps the form AND these people get it; narrow = only them.
+            'audience_choice' => ['sometimes', 'nullable', 'in:keep,narrow'],
         ]);
 
         $agencyId = $this->agencyId($request);
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $people = $this->peopleScope($request, $agencyId);
 
         /* Scoped to THIS agency before anything is written. The ids arrive from a browser,
-           and without this an admin could attach their family to another tenant's form. */
+           and without this an admin could attach their family to another tenant's form.
+           A director (2026-11-13): agency-wide forms and their own centres' forms. */
         $forms = DB::table('managed_forms')
             ->whereIn('id', $data['form_ids'])
             ->where('agency_id', $agencyId)
             ->where('active', 1)
+            ->when($scope !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('centre_id')->orWhereIn('centre_id', $scope ?: [0])))
             // `fillable` travels with them: the email says "Fill & sign" or "Read & sign"
             // so nobody opens a link expecting to type and finds they cannot.
-            ->get(['id', 'title', 'description', 'fillable']);
+            ->get(['id', 'title', 'description', 'fillable', 'audiences', 'named_extends_audience', 'centre_id']);
         if ($forms->isEmpty()) {
             return response()->json(['message' => 'None of those forms are available.'], 422);
+        }
+
+        /* ASK BEFORE NARROWING (2026-10-20). A form that is open to a role and names nobody
+           becomes the named people's ALONE the moment anyone is named (FormAudience rule 1).
+           Sending a parent their paperwork took Daily Sleep Chart and Daily Supervision Check
+           away from every provider that way, mid-shift. So when this send would do that,
+           nothing is written and the admin is asked: keep the role AND add these people,
+           or make the forms only theirs. Checked before any placeholder account is made. */
+        $namedNow = \App\Support\FormAudience::namedMap($forms->pluck('id')->all());
+        $wouldNarrow = $forms->filter(fn ($f) => \App\Support\FormAudience::audiencesOf($f)
+            && empty($namedNow[(int) $f->id])
+            && ! \App\Support\FormAudience::extendsAudience($f))->values();
+        $choice = $data['audience_choice'] ?? null;
+        /* A director cannot narrow an agency-wide form to their own people: that would take it away from every
+           other centre. "Keep" (the role keeps it, these people get it too) is theirs to choose. */
+        if ($scope !== null && $choice === 'narrow' && $wouldNarrow->contains(fn ($f) => empty($f->centre_id))) {
+            return response()->json([
+                'message' => 'Some of these forms are shared across the agency, so they cannot be made only theirs. Choose to keep the form open to its audience.',
+            ], 422);
+        }
+        if ($wouldNarrow->isNotEmpty() && ! $choice) {
+            return response()->json([
+                'code'    => 'would_narrow',
+                'message' => 'Some of these forms are open to everyone in a role. Choose whether they keep that.',
+                'forms'   => $wouldNarrow->map(function ($f) use ($agencyId) {
+                    $aud = \App\Support\FormAudience::audiencesOf($f);
+                    $people = null;
+                    try {
+                        $q = DB::table('role_assignments')->whereIn('role', $aud)->where('active', 1);
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('role_assignments', 'agency_id')) {
+                            $q->where('agency_id', $agencyId);
+                        }
+                        $people = $q->distinct()->count('user_id');
+                    } catch (\Throwable $e) {
+                    }
+
+                    return ['id' => (int) $f->id, 'title' => $f->title, 'audiences' => $aud, 'people' => $people];
+                })->all(),
+            ], 409);
+        }
+        if ($choice === 'keep' && $wouldNarrow->isNotEmpty()) {
+            DB::table('managed_forms')->whereIn('id', $wouldNarrow->pluck('id')->all())
+                ->update(['named_extends_audience' => 1, 'updated_at' => now()]);
         }
 
         /* Picked people AND typed addresses resolve to the same thing: a user who can
@@ -489,11 +628,32 @@ class ManagedFormController extends Controller
 
            Every creation is audited and named back to the caller, because an admin who
            mistypes an address should be able to see that a placeholder was made. */
+        /* A DIRECTOR SENDS TO THEIR OWN PEOPLE (2026-11-13). Ticked people and typed addresses that matched an
+           account are checked here, before anything is written or anyone emailed. A new parent with no account
+           yet is made at the director's centre, so their signed forms come back to that director. */
+        $placeCentre = null;
+        if ($people !== null) {
+            $outside = array_diff($ids, $people);
+            if ($outside) {
+                $names = DB::table('users')->whereIn('id', $outside)->get(['first_name', 'last_name', 'email'])
+                    ->map(fn ($u) => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: $u->email)->all();
+                return response()->json([
+                    'message' => implode(', ', $names) . (count($names) === 1 ? ' is' : ' are') . ' not at your centre, so nothing was sent.',
+                ], 422);
+            }
+            if ($unmatched) {
+                $placeCentre = $this->callerCentre($request, $scope);
+                if (! $placeCentre) {
+                    return response()->json(['message' => 'Choose which of your centres the new parent belongs to.'], 422);
+                }
+            }
+        }
+
         $created = [];
         if ($unmatched) {
             foreach ($unmatched as $addr) {
                 try {
-                    $newId = $this->createPendingRecipient($agencyId, $addr, $request);
+                    $newId = $this->createPendingRecipient($agencyId, $addr, $request, $placeCentre);
                     if ($newId) {
                         $ids[] = $newId;
                         $created[] = $addr;
@@ -658,6 +818,11 @@ class ManagedFormController extends Controller
         $agencyId = $this->agencyId($request);
         $rows = DB::table('form_package_sends')->where('agency_id', $agencyId)
             ->orderByDesc('created_at')->orderByDesc('id')->limit(300)->get();
+        // A director: only packages that went to their own people (2026-11-13).
+        $people = $this->peopleScope($request, $agencyId);
+        if ($people !== null) {
+            $rows = $rows->filter(fn ($r) => $this->packageInScope($people, $r->recipient_ids))->values();
+        }
 
         /* HOW MUCH OF EACH PACKAGE HAS COME BACK.
 
@@ -721,8 +886,12 @@ class ManagedFormController extends Controller
                 ->where('agency_id', $agencyId)
                 ->whereIn(DB::raw('LOWER(TRIM(to_email))'), array_keys($sendWindows))
                 ->where(function ($q) {
-                    $q->where('subject', 'like', '%need your signature%')
-                      ->orWhere('subject', 'like', '%forms need%');
+                    /* "%your signature%", not "%need your signature%" (2026-10-25): a ONE-form send
+                       is "A form needs your signature", which the old pattern never matched, so every
+                       single-form package read "Not delivered" though it had gone (Safia -> Sheldon). */
+                    $q->where('subject', 'like', '%your signature%')
+                      ->orWhere('subject', 'like', '%forms need%')
+                      ->orWhere('subject', 'like', '%to sign%');
                 })
                 ->orderBy('created_at')
                 ->get(['to_email', 'subject', 'status', 'opened_at', 'opens', 'created_at']);
@@ -772,13 +941,16 @@ class ManagedFormController extends Controller
                 $sendTs = strtotime((string) $r->created_at);
                 $read = 0;
                 $delivered = 0;
-                $people = array_map(function ($person) use ($opens, $sendTs, &$read, &$delivered) {
+                $undelivered = 0;
+                $people = array_map(function ($person) use ($opens, $sendTs, &$read, &$delivered, &$undelivered) {
                     $addr = mb_strtolower(trim((string) ($person['email'] ?? '')));
                     $hit = $opens[$addr . '|' . $sendTs] ?? null;
                     $person['delivery'] = $hit['status'] ?? null;       // sent | suppressed | failed
                     $person['opened_at'] = $hit['opened_at'] ?? null;
                     $person['opens'] = $hit['opens'] ?? 0;
                     if (($hit['status'] ?? '') === 'sent') { $delivered++; }
+                    // Only a log that SAYS it was held or failed counts against delivery; no log is "unknown".
+                    if (in_array($hit['status'] ?? '', ['suppressed', 'failed'], true)) { $undelivered++; }
                     if (! empty($hit['opened_at'])) { $read++; }
 
                     return $person;
@@ -791,6 +963,7 @@ class ManagedFormController extends Controller
                     /* Counted here so the table does not have to walk the recipients. */
                     'read_count'      => $read,
                     'delivered_count' => $delivered,
+                    'undelivered_count' => $undelivered,
                     'forms'       => $titles,
                     'form_count'  => (int) $r->form_count,
                     'recipients'  => $people,
@@ -831,6 +1004,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->packageOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('form_package_sends')->where('id', $id)->where('agency_id', $agencyId)->first();
         if (! $r) {
             return response()->json(['message' => 'Not found'], 404);
@@ -934,6 +1110,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->packageOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('form_package_sends')->where('id', $id)->where('agency_id', $agencyId)->first();
         if (! $r) {
             return response()->json(['message' => 'Not found'], 404);
@@ -1079,6 +1258,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->signoffOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
 
         $row = DB::table('managed_form_signoffs as s')
             ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
@@ -1098,8 +1280,9 @@ class ManagedFormController extends Controller
             ?: ($row->signer_name ?: ($row->email ?: 'Someone'));
 
         // The filed copy on the signer's own record.
+        // ...and every copy shared with staff: the document they were given no longer stands.
         $docs = DB::table('documents')
-            ->where('source_type', \App\Support\SignedFormFiler::SOURCE)
+            ->whereIn('source_type', [\App\Support\SignedFormFiler::SOURCE, \App\Support\SignedFormFiler::SHARE])
             ->where('source_id', $id)
             ->get(['id', 'file_url']);
         foreach ($docs as $d) {
@@ -1170,6 +1353,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->packageOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('form_package_sends')->where('id', $id)->where('agency_id', $agencyId)->first();
         if (! $r) {
             return response()->json(['message' => 'Not found'], 404);
@@ -1251,6 +1437,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->packageOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('form_package_sends')->where('id', $id)->where('agency_id', $agencyId)->first();
         if (! $r) {
             return response()->json(['message' => 'Not found'], 404);
@@ -1346,6 +1535,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Not allowed'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->packageOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $r = DB::table('form_package_sends')->where('id', $id)->where('agency_id', $agencyId)->first();
         if (! $r) {
             return response()->json(['message' => 'Not found'], 404);
@@ -1412,7 +1604,7 @@ class ManagedFormController extends Controller
             . '<tr><td style="font-size:14px;line-height:1.6;color:#334155;padding:0 0 14px;">'
             . 'There ' . ($count === 1 ? 'is <strong>1 form</strong>' : 'are <strong>' . $count . ' forms</strong>')
             . ' waiting for you to review and sign.</td></tr>'
-            . ($note !== '' ? '<tr><td style="padding:0 0 14px;font-size:14px;line-height:1.6;color:#334155;background:#F8FAFC;border-left:3px solid #CBD5E1;padding-left:12px;">' . $e($note) . '</td></tr>' : '')
+            . ($note !== '' ? '<tr><td style="padding:0 0 14px;font-size:14px;line-height:1.6;color:#334155;background:#F8FAFC;background:#F8FAFC;border-radius:8px;padding-left:12px;">' . $e($note) . '</td></tr>' : '')
             . '<tr><td><table width="100%" cellpadding="0" cellspacing="0" role="presentation">' . $rows . '</table></td></tr>'
             . '<tr><td style="padding:20px 0 0;">'
             . '<a href="https://app.kiddietrac.com/dashboard.html#my-forms" '
@@ -1466,6 +1658,13 @@ class ManagedFormController extends Controller
         if (! $form) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if (! \App\Support\CentreScope::canRead($scope, $form->centre_id ?? null, true)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (! \App\Support\CentreScope::canWrite($scope, $form->centre_id ?? null)) {
+            return response()->json(['message' => 'This form is shared across the agency. Only an agency admin can change it.'], 403);
+        }
         $patch = ['updated_at' => now()];
         if ($request->has('active')) {
             $patch['active'] = $request->boolean('active') ? 1 : 0;
@@ -1507,6 +1706,10 @@ class ManagedFormController extends Controller
             $ids = $request->input('recipient_ids');
             if (is_string($ids)) $ids = json_decode($ids, true);
             $newRecipients = array_values(array_unique(array_filter(array_map('intval', (array) $ids))));
+            $people = $this->peopleScope($request, $agencyId);
+            if ($people !== null && array_diff($newRecipients, $people)) {
+                return response()->json(['message' => 'Some of the people you picked are not at your centre.'], 422);
+            }
         }
 
         // Check BEFORE writing: an edit must not leave the form with nobody to sign
@@ -1556,6 +1759,13 @@ class ManagedFormController extends Controller
         if (! $form) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if (! \App\Support\CentreScope::canRead($scope, $form->centre_id ?? null, true)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (! \App\Support\CentreScope::canWrite($scope, $form->centre_id ?? null)) {
+            return response()->json(['message' => 'This form is shared across the agency. Only an agency admin can change it.'], 403);
+        }
         DB::table('managed_form_signoffs')->where('managed_form_id', $id)->delete();
         DB::table('managed_forms')->where('id', $id)->delete();
         return response()->json(['ok' => true]);
@@ -1586,6 +1796,8 @@ class ManagedFormController extends Controller
                row. */
             ->leftJoin('users as du', 'du.id', '=', 'doc.scope_id')
             ->where('f.agency_id', $agencyId)
+            // A director: the people of their own centres only (2026-11-13).
+            ->when(($people = $this->peopleScope($request, $agencyId)) !== null, fn ($q) => $q->whereIn('s.user_id', $people ?: [0]))
             /* A DRAFT IS NOT A COMPLETED FORM.
 
                This list had no signed_at filter, so forms somebody opened and abandoned
@@ -1606,7 +1818,7 @@ class ManagedFormController extends Controller
                 /* The counter-signature state, so the Completed table can say whether a
                    form is still waiting on the agency rather than looking finished. */
                 's.countersigned_at', 's.countersigner_name', 's.countersigner_role',
-                's.countersigned_file_url', 's.returned_at', 's.returned_to',
+                's.countersigned_file_url', 's.returned_at', 's.returned_to', 's.shared_at', 's.shared_to',
                 /* Sent back to the signer for correction, and whether they have since
                    resubmitted. Without this the Completed tab shows a form as finished
                    while everyone is waiting on the parent. */
@@ -1636,6 +1848,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->signoffOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
         $row = DB::table('managed_form_signoffs as s')
             ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
             ->leftJoin('users as u', 'u.id', '=', 's.user_id')
@@ -1666,6 +1881,37 @@ class ManagedFormController extends Controller
     }
 
     /**
+     * THE COMPLETED COPY FOR ONE SIGN-OFF, from any signing route (2026-10-25).
+     *
+     * The portal route sent it; the emailed no-login link did not, so every form a parent
+     * signed before claiming an account read "Not sent" on Forms Manager -> Completed and the
+     * office never got the PDF. Both routes call this now, and kt:form-copy-watch calls it
+     * for any copy that is still missing. False when the form has no address (nothing to do).
+     */
+    public function sendCompletedCopy(int $signoffId): bool
+    {
+        $row = DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->leftJoin('users as u', 'u.id', '=', 's.user_id')
+            ->where('s.id', $signoffId)->whereNotNull('s.signed_at')
+            ->select(['s.id', 's.user_id', 's.signer_name', 's.filled_file_url',
+                      'f.id as form_id', 'f.agency_id', 'f.title', 'f.description', 'f.notify_email',
+                      'u.email as signer_email'])
+            ->first();
+        if (! $row || ! filter_var(trim((string) $row->notify_email), FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+        $form = (object) [
+            'id' => $row->form_id, 'agency_id' => $row->agency_id, 'title' => $row->title,
+            'description' => $row->description, 'notify_email' => $row->notify_email,
+        ];
+        $this->emailCompletedForm($form, $row->signer_name, $row->filled_file_url,
+            (string) ($row->signer_email ?? ''), (int) $row->user_id, (int) $row->id);
+
+        return true;
+    }
+
+    /**
      * POST /admin/managed-forms/signoffs/{id}/return
      *
      * Send a completed form back to the person who signed it, with a note saying what
@@ -1687,6 +1933,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->signoffOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
 
         $data = $request->validate([
             'note' => ['required', 'string', 'min:3', 'max:2000'],
@@ -1857,6 +2106,8 @@ class ManagedFormController extends Controller
             AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $who, $title, $agencyId) {
                 $m->to($to, $who ?: null)->subject('Please correct and resubmit: ' . $title);
                 try { $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId); } catch (\Throwable $e) {}
+                // Form mail: reaches a parent who has not claimed an account yet (2026-10-25).
+                try { $m->getHeaders()->addTextHeader('X-KT-Form-Package', '1'); } catch (\Throwable $e) {}
             });
 
             return true;
@@ -1883,6 +2134,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if (\App\Support\CentreScope::ids($request, $agencyId) !== null) {
+            return response()->json(['message' => 'Filing every signed form is done for the whole agency. Ask an agency admin.'], 403);
+        }
 
         $before = \App\Support\SignedFormFiler::unfiledCount($agencyId);
         \App\Support\SignedFormFiler::backfill($agencyId);
@@ -1917,6 +2171,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->signoffOutOfScope($request, $agencyId, $signoffId)) {
+            return $deny;
+        }
         $row = DB::table('managed_form_signoffs as s')
             ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
             ->leftJoin('users as u', 'u.id', '=', 's.user_id')
@@ -1988,7 +2245,7 @@ class ManagedFormController extends Controller
            educators, done for today (it is due again tomorrow); for anyone else, done once
            signed. It is still offered, but in `again`, not in the pending list or the
            count: "already signed — fill again only if you need to". */
-        $reusable = DB::table('managed_forms')->where('reusable', 1)->get(['id', 'audiences'])->keyBy('id');
+        $reusable = DB::table('managed_forms')->where('reusable', 1)->get(['id', 'audiences', 'named_extends_audience'])->keyBy('id');
         $tz = \App\Support\AgencyTime::tz((int) $agencyId) ?: 'America/Toronto';
         $todayStart = \Illuminate\Support\Carbon::now($tz)->startOfDay()->utc()->toDateTimeString();
         $signedAt = [];
@@ -2120,8 +2377,9 @@ class ManagedFormController extends Controller
             ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
             ->where('s.user_id', $uid)->where('f.agency_id', $agencyId)
             ->orderByDesc('s.updated_at')
-            ->get(['s.id', 's.managed_form_id', 's.signed_at', 's.updated_at', 's.field_values',
-                   's.filled_file_url', 'f.title', 'f.description', 'f.file_url', 'f.fillable', 'f.reusable']);
+            ->get(array_merge(['s.id', 's.managed_form_id', 's.signed_at', 's.updated_at', 's.field_values',
+                   's.filled_file_url', 'f.title', 'f.description', 'f.file_url', 'f.fillable', 'f.reusable'],
+                   \App\Support\SignedFormFiler::REVIEW_COLUMNS));
 
         $shape = function ($r) {
             $vals = $r->field_values ? (json_decode($r->field_values, true) ?: []) : [];
@@ -2137,6 +2395,8 @@ class ManagedFormController extends Controller
                 'answers'      => count($vals),
                 'signed_at'    => $r->signed_at,
                 'updated_at'   => $r->updated_at,
+                // Counter-signed, by whom and when (same rule as Documents).
+                'review'       => $r->signed_at ? \App\Support\SignedFormFiler::reviewOf($r) : null,
             ];
         };
 
@@ -2420,6 +2680,8 @@ class ManagedFormController extends Controller
                    email (support tickets #113, #114). Without the file, send without it. */
                 if ($absPdf && is_file($absPdf)) $m->attach($absPdf, ['as' => $attachName, 'mime' => 'application/pdf']);
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
+                // Named form mail (SuppressAgencyMail): signing mail, not left to the subject guard.
+                $m->getHeaders()->addTextHeader('X-KT-Form-Package', '1');
             });
             // Stamped only once the send has actually returned, so the Completed tab
             // reports what happened rather than what was queued.
@@ -2452,6 +2714,9 @@ class ManagedFormController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
         $agencyId = $this->agencyId($request);
+        if ($deny = $this->signoffOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
 
         $data = $request->validate([
             'signature' => ['required', 'string', 'max:400000'],   // base64 PNG data URL
@@ -2470,7 +2735,14 @@ class ManagedFormController extends Controller
             'annotations' => ['nullable', 'array', 'max:80'],
             'annotations.*.page' => ['required_with:annotations', 'integer', 'min:1', 'max:500'],
             'annotations.*.text' => ['required_with:annotations', 'string', 'max:2000'],
-        ]);
+        ] + self::SHARE_RULES);
+
+        /* Recipients are checked before the signature is recorded: a typo in an address
+           must not leave a counter-signed form that was only half sent. */
+        $share = $this->shareTargets($request, $agencyId, $data);
+        if ($share instanceof JsonResponse) {
+            return $share;
+        }
 
         if (! preg_match('#^data:image/(png|jpe?g);base64,#i', $data['signature'])) {
             return response()->json(['message' => 'That signature could not be read.'], 422);
@@ -2523,15 +2795,8 @@ class ManagedFormController extends Controller
         $counterRole = (string) (DB::table('role_assignments')->where('user_id', $me->id)
             ->where('active', true)->orderByRaw("role = 'platform_admin' DESC")
             ->value('role') ?? '');
-        $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?? 'The agency');
         $signerName = $row->signer_name
             ?: trim(($row->signer_first ?? '') . ' ' . ($row->signer_last ?? ''));
-
-        /* ── stamp the PDF, if we can ────────────────────────────────────────
-           A failure here is NOT a failure of the counter-signature. It is recorded
-           either way and the original is sent instead, with the email saying plainly
-           who counter-signed and when. A missing page beats a missing record. */
-        $storedUrl = null;
 
         /* THE REVIEWED COPY IS A NEW FILE. THE PARENT'S IS NEVER OVERWRITTEN.
 
@@ -2539,8 +2804,9 @@ class ManagedFormController extends Controller
            document with those additions drawn on. That becomes the base for the
            counter-signature page, and it is written alongside the original - which
            `filled_file_url` still points at, unchanged. Merging the two would destroy
-           the only record of what the parent actually signed. */
-        $reviewedAbs = null;
+           the only record of what the parent actually signed. Its path is kept on the
+           row so the worker (and any later rebuild) stamps exactly this file. */
+        $reviewedUrl = null;
         if (! empty($data['annotated_pdf'])) {
             $bin = base64_decode(preg_replace('#^data:application/pdf;base64,#i', '', (string) $data['annotated_pdf']), true);
             /* A truncated upload, or anything that is not a PDF, must not silently
@@ -2548,7 +2814,7 @@ class ManagedFormController extends Controller
             if ($bin !== false && strncmp($bin, '%PDF', 4) === 0 && strlen($bin) > 500) {
                 $relR = 'managed-forms/' . $agencyId . '/reviewed/' . \Illuminate\Support\Str::random(40) . '.pdf';
                 Storage::disk('public')->put($relR, $bin);
-                $reviewedAbs = Storage::disk('public')->path($relR);
+                $reviewedUrl = '/storage/' . $relR;
             } else {
                 \Illuminate\Support\Facades\Log::warning('countersign: reviewed PDF rejected', [
                     'signoff' => $row->id, 'bytes' => $bin === false ? 0 : strlen((string) $bin),
@@ -2556,21 +2822,20 @@ class ManagedFormController extends Controller
             }
         }
 
-        if ($reviewedAbs || $row->filled_file_url) {
-            $abs = $reviewedAbs ?: Storage::disk('public')->path(preg_replace('#^/storage/#', '', (string) $row->filled_file_url));
-            $made = \App\Support\ManagedFormCountersign::append(
-                $abs, (string) $row->title, (string) $signerName, (string) $row->signed_at,
-                $counterName, str_replace('_', ' ', $counterRole), (string) $data['signature'],
-                $data['note'] ?? null, $agencyName, $data['annotations'] ?? null
-            );
-            if ($made) {
-                $rel = 'managed-forms/' . $agencyId . '/countersigned/' . \Illuminate\Support\Str::random(40) . '.pdf';
-                Storage::disk('public')->put($rel, (string) file_get_contents($made));
-                @unlink($made);
-                $storedUrl = '/storage/' . $rel;
-            }
-        }
+        $annotations = array_values(array_map(fn ($a) => [
+            'page' => (int) ($a['page'] ?? 1),
+            'text' => (string) ($a['text'] ?? ''),
+        ], $data['annotations'] ?? []));
 
+        /* THE STAMP IS MADE BY THE QUEUE WORKER, NOT HERE (2026-11-06).
+
+           The web server's PHP has proc_open switched off, so Ghostscript - which the
+           stamp needs - can never run inside a request. From 2026-10-26 every
+           counter-signature recorded fine and then emailed the parent's ORIGINAL with no
+           counter-signature page (46 forms). The worker runs on the command-line PHP,
+           where it works. So this request records the signature and what to do with it
+           (send, share), and FinishCountersign does the rest within about a minute.
+           kt:countersign-finish re-runs anything the worker did not finish. */
         DB::table('managed_form_signoffs')->where('id', $row->id)->update([
             'countersigned_at' => now(),
             'countersigned_by_id' => (int) $me->id,
@@ -2578,64 +2843,245 @@ class ManagedFormController extends Controller
             'countersigner_role' => $counterRole ?: null,
             'countersignature' => mb_substr((string) $data['signature'], 0, 400000),
             'countersign_note' => $data['note'] ?? null,
-            'countersigned_file_url' => $storedUrl,
+            'countersigned_file_url' => null,
+            'countersign_reviewed_url' => $reviewedUrl,
+            'countersign_annotations' => $annotations ? json_encode($annotations) : null,
+            'countersign_options' => json_encode([
+                'send' => (bool) ($data['send'] ?? true),
+                'share_user_ids' => array_values(array_map('intval', array_keys($share['staff']))),
+                'share_emails' => $share['emails'],
+                'share_message' => $data['share_message'] ?? null,
+            ]),
+            'countersign_finished_at' => null,
             'updated_at' => now(),
         ]);
 
-        /* APPROVED -> THE SIGNER'S OWN COPY BECOMES THE APPROVED ONE.
+        \App\Jobs\FinishCountersign::dispatch((int) $row->id)->onQueue('mail');
 
-           SignedFormFiler already put a documents row on their record when they signed,
-           so the form is in their Documents section - but pointing at what THEY sent,
-           not at what the agency approved. Once it is counter-signed the copy they keep
-           should be the counter-signed one, or the family's record and the agency's
-           disagree about the same document. Same row, updated in place: two rows would
-           drift the moment one is deleted. */
-        /* SignedFormFiler now knows a counter-signed sign-off files its approved copy, so
-           this is one call, not a second copy of the rule -- and it FILES the form if no
-           row existed yet, where the old in-place update silently did nothing. */
-        if ($storedUrl) {
-            \App\Support\SignedFormFiler::file((int) $row->id);
-        }
-
-        $sent = [];
+        // Who it is going to, so the reviewer is told before it lands rather than never.
+        $willSend = [];
         if (($data['send'] ?? true)) {
-            $sent = $this->returnCountersigned($row, $storedUrl, $counterName, $data['note'] ?? null, $agencyName);
+            $parentTo = trim((string) ($row->signer_email ?? ''));
+            $agencyTo = trim((string) ($row->notify_email ?? ''));
+            if ($parentTo && filter_var($parentTo, FILTER_VALIDATE_EMAIL) && ! \App\Support\Suppression::isUser((int) $row->user_id)) {
+                $willSend[] = $parentTo;
+            }
+            if ($agencyTo && filter_var($agencyTo, FILTER_VALIDATE_EMAIL) && strcasecmp($agencyTo, $parentTo) !== 0) {
+                $willSend[] = $agencyTo;
+            }
         }
+        $willShare = array_merge(array_map(fn ($u) => $u->name, array_values($share['staff'])), $share['emails']);
 
         $this->audit($request, 'managed_form.countersigned', (int) $row->id, [
             'summary' => $counterName . ' counter-signed "' . $row->title . '" completed by '
                 . ($signerName ?: 'a parent') . '.'
-                . ($storedUrl ? ' A counter-signed PDF was produced.' : ' The PDF could not be stamped, so the original stands with the signature recorded here.')
-                . (! empty($data['annotations'])
-                    ? ' ' . count($data['annotations']) . ' addition(s) were made to the form during review: '
+                . ($annotations
+                    ? ' ' . count($annotations) . ' addition(s) were made to the form during review: '
                       . implode('; ', array_map(function ($a) {
-                            return 'p' . ($a['page'] ?? '?') . ' "' . mb_substr((string) ($a['text'] ?? ''), 0, 120) . '"';
-                        }, $data['annotations'])) . '.'
+                            return 'p' . $a['page'] . ' "' . mb_substr($a['text'], 0, 120) . '"';
+                        }, $annotations)) . '.'
                     : '')
-                . ($sent ? ' Sent to: ' . implode(', ', $sent) . '.' : ' Not sent.'),
+                . ' The counter-signed copy is made and sent in the background'
+                . ($willSend ? ' (to ' . implode(', ', $willSend) . ')' : '') . '.'
+                . ($willShare ? ' To be shared with: ' . implode(', ', $willShare) . '.' : ''),
             'form_id' => (int) $row->form_id,
             'signoff_id' => (int) $row->id,
-            'stamped' => (bool) $storedUrl,
-            'sent_to' => $sent,
+            'will_send_to' => $willSend,
             /* Named individually, not counted: "3 additions" cannot answer which line
                on the form the agency wrote. */
             'annotations' => array_map(function ($a) {
-                return 'p' . ($a['page'] ?? '?') . ': ' . mb_substr((string) ($a['text'] ?? ''), 0, 160);
-            }, $data['annotations'] ?? []),
+                return 'p' . $a['page'] . ': ' . mb_substr($a['text'], 0, 160);
+            }, $annotations),
         ]);
 
         return response()->json([
             'ok' => true,
-            'stamped' => (bool) $storedUrl,
-            'file_url' => $storedUrl,
-            'sent_to' => $sent,
-            /* Said out loud rather than implied by a silent success: if the stamp failed
-               the reviewer should know the attachment is the original. */
-            'message' => $storedUrl
-                ? ('Counter-signed' . ($sent ? ' and sent to ' . implode(' and ', $sent) : '') . '.')
-                : ('Counter-signature recorded. The PDF could not be stamped, so the original was '
-                   . ($sent ? 'sent instead' : 'left as it is') . '.'),
+            'pending' => true,
+            'stamped' => false,
+            'file_url' => null,
+            'sent_to' => [],
+            'will_send_to' => $willSend,
+            'will_share' => $willShare,
+            'shared' => ['filed' => [], 'emailed' => [], 'skipped' => []],
+            /* Said as what is true now: recorded, and on its way - not "sent". */
+            'message' => 'Counter-signed. The counter-signed copy is being prepared'
+                . ($willSend ? ' and will be emailed to ' . implode(' and ', $willSend) : '')
+                . ' within a minute or two.',
         ]);
+    }
+
+    /**
+     * Stamp, file, send and share a counter-signature (run by the queue worker).
+     *
+     * Called by App\Jobs\FinishCountersign right after countersign(), and by
+     * kt:countersign-finish for anything left unfinished or for a corrected resend.
+     * It needs the command-line PHP: the stamp shells out to Ghostscript.
+     *
+     * Options:
+     *   allow_unstamped  send the original if the stamp cannot be made (the guard, after an hour)
+     *   corrected        the email says it replaces a copy sent earlier without the page
+     *   only_to          send ONE copy to this address and change nothing (a sample)
+     *
+     * @return array{status: string, stamped: bool, sent: string[], shared: array}
+     */
+    public function finishCountersign(int $signoffId, array $opt = []): array
+    {
+        $onlyTo = isset($opt['only_to']) && $opt['only_to'] ? (string) $opt['only_to'] : null;
+        $persist = $onlyTo === null;
+        $corrected = ! empty($opt['corrected']);
+        $out = ['status' => 'skipped', 'stamped' => false, 'sent' => [], 'shared' => ['filed' => [], 'emailed' => [], 'skipped' => []]];
+
+        $row = DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->leftJoin('users as u', 'u.id', '=', 's.user_id')
+            ->where('s.id', $signoffId)
+            ->first([
+                's.id', 's.user_id', 's.signer_name', 's.signed_at', 's.filled_file_url',
+                's.countersigned_at', 's.countersigned_by_id', 's.countersigner_name', 's.countersigner_role',
+                's.countersignature', 's.countersign_note', 's.countersigned_file_url',
+                's.countersign_reviewed_url', 's.countersign_annotations', 's.countersign_options',
+                's.countersign_finished_at', 's.returned_at',
+                'f.id as form_id', 'f.title', 'f.description', 'f.notify_email', 'f.agency_id',
+                'u.email as signer_email', 'u.first_name as signer_first', 'u.last_name as signer_last',
+            ]);
+        if (! $row || ! $row->countersigned_at) {
+            return $out;
+        }
+        if ($persist && ! $corrected && $row->countersign_finished_at) {
+            return $out;   // already done - a retried job must not email twice
+        }
+        $agencyId = (int) $row->agency_id;
+        $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?? 'The agency');
+        $signerName = (string) ($row->signer_name ?: trim(($row->signer_first ?? '') . ' ' . ($row->signer_last ?? '')));
+        $counterName = (string) ($row->countersigner_name ?: 'Agency');
+        $options = json_decode((string) ($row->countersign_options ?? ''), true) ?: [];
+        $annotations = json_decode((string) ($row->countersign_annotations ?? ''), true) ?: null;
+        if (! $persist) {
+            // A sample of a past form whose reviewed copy and additions were recovered, not stored.
+            $row->countersign_reviewed_url = $row->countersign_reviewed_url ?: ($opt['reviewed_url'] ?? null);
+            $annotations = $annotations ?: ($opt['annotations'] ?? null);
+        }
+
+        // ── the stamp ──
+        $storedUrl = $row->countersigned_file_url ?: null;
+        $attachAbs = null;
+        $base = null;
+        foreach ([$row->countersign_reviewed_url, $row->filled_file_url] as $u) {
+            if ($u) {
+                $cand = Storage::disk('public')->path(preg_replace('#^/storage/#', '', (string) $u));
+                if (is_file($cand)) {
+                    $base = $cand;
+                    break;
+                }
+            }
+        }
+        if (! $storedUrl && $base && $row->countersignature) {
+            $made = \App\Support\ManagedFormCountersign::append(
+                $base, (string) $row->title, $signerName, (string) $row->signed_at,
+                $counterName, str_replace('_', ' ', (string) $row->countersigner_role), (string) $row->countersignature,
+                $row->countersign_note, $agencyName, $annotations,
+                (string) $row->countersigned_at
+            );
+            if ($made) {
+                if ($persist) {
+                    $rel = 'managed-forms/' . $agencyId . '/countersigned/' . \Illuminate\Support\Str::random(40) . '.pdf';
+                    Storage::disk('public')->put($rel, (string) file_get_contents($made));
+                    $storedUrl = '/storage/' . $rel;
+                } else {
+                    // A sample: kept out of the public disk and off the row.
+                    $rel = 'countersign-samples/' . $row->id . '-' . \Illuminate\Support\Str::random(12) . '.pdf';
+                    Storage::disk('local')->put($rel, (string) file_get_contents($made));
+                    $attachAbs = Storage::disk('local')->path($rel);
+                }
+                @unlink($made);
+            }
+        }
+        $stamped = (bool) ($storedUrl || $attachAbs);
+        $out['stamped'] = $stamped;
+
+        /* No stamp but there is a document to stamp: try again later rather than send
+           the parent's original as if it were the approved copy. The guard sends the
+           original only after an hour, and tells the platform admins. */
+        if (! $stamped && $base && empty($opt['allow_unstamped'])) {
+            $out['status'] = 'deferred';
+            return $out;
+        }
+
+        if ($persist && $storedUrl && $storedUrl !== $row->countersigned_file_url) {
+            DB::table('managed_form_signoffs')->where('id', $row->id)->update([
+                'countersigned_file_url' => $storedUrl, 'updated_at' => now(),
+            ]);
+            /* APPROVED -> THE SIGNER'S OWN COPY BECOMES THE APPROVED ONE. SignedFormFiler
+               points the family's Documents row at the counter-signed file (and files it
+               if no row existed yet). */
+            \App\Support\SignedFormFiler::file((int) $row->id);
+        }
+
+        // ── both sides ──
+        if ($onlyTo) {
+            $out['sent'] = $this->returnCountersigned($row, $storedUrl, $counterName, $row->countersign_note, $agencyName,
+                $corrected, $onlyTo, $attachAbs);
+        } elseif ($corrected || ($options['send'] ?? true)) {
+            $out['sent'] = $this->returnCountersigned($row, $storedUrl, $counterName, $row->countersign_note, $agencyName, $corrected);
+        }
+
+        // ── sharing, as the reviewer chose it (checked against their team at the time) ──
+        $actor = $row->countersigned_by_id
+            ? DB::table('users')->where('id', $row->countersigned_by_id)->first(['id', 'first_name', 'last_name'])
+            : null;
+        if ($persist && ! $corrected && $actor && (! empty($options['share_user_ids']) || ! empty($options['share_emails']))) {
+            $staff = [];
+            foreach (DB::table('users')->whereIn('id', array_map('intval', $options['share_user_ids'] ?? []))
+                         ->whereNull('deleted_at')->get(['id', 'first_name', 'last_name', 'email']) as $u) {
+                $staff[(int) $u->id] = (object) [
+                    'id' => (int) $u->id,
+                    'name' => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: ($u->email ?: 'Staff member'),
+                    'email' => $u->email,
+                ];
+            }
+            $out['shared'] = $this->shareCountersigned($actor, (int) $row->id, $agencyId,
+                ['staff' => $staff, 'emails' => array_values($options['share_emails'] ?? [])], $options['share_message'] ?? null);
+        }
+
+        if (! $persist) {
+            $out['status'] = 'sample';
+            return $out;
+        }
+
+        DB::table('managed_form_signoffs')->where('id', $row->id)->update([
+            'countersign_finished_at' => now(), 'updated_at' => now(),
+        ]);
+
+        try {
+            \App\Support\Audit::write([
+                'user_id' => $actor ? (int) $actor->id : null,
+                'agency_id' => $agencyId,
+                'action' => $corrected ? 'managed_form.countersign_corrected_copy' : 'managed_form.countersign_sent',
+                'entity_type' => 'managed_form_signoff',
+                'entity_id' => (int) $row->id,
+                'payload' => json_encode([
+                    'summary' => ($corrected
+                            ? 'A corrected copy of the counter-signed "' . $row->title . '" (now with the counter-signature page) was'
+                            : 'The counter-signed "' . $row->title . '" was')
+                        . ($stamped ? ' produced' : ' NOT stamped (the original was used)')
+                        . ($out['sent'] ? ' and sent to: ' . implode(', ', $out['sent']) . '.' : ', and not emailed.')
+                        . ($out['shared']['filed'] ? ' Shared to the Documents of: ' . implode(', ', $out['shared']['filed']) . '.' : '')
+                        . ($out['shared']['emailed'] ? ' Copy emailed to: ' . implode(', ', $out['shared']['emailed']) . '.' : '')
+                        . ($out['shared']['skipped'] ? ' Not emailed: ' . implode('; ', $out['shared']['skipped']) . '.' : ''),
+                    'form_id' => (int) $row->form_id,
+                    'signoff_id' => (int) $row->id,
+                    'stamped' => $stamped,
+                    'sent_to' => $out['sent'],
+                    'shared' => $out['shared'],
+                ]),
+                'ip_address' => null,
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+        }
+
+        $out['status'] = 'done';
+        return $out;
     }
 
     /**
@@ -2647,21 +3093,23 @@ class ManagedFormController extends Controller
      * person somebody decided must not be emailed, and a counter-signature is not a
      * reason to overrule that.
      */
-    private function returnCountersigned(object $row, ?string $storedUrl, string $counterName, ?string $note, string $agencyName): array
+    private function returnCountersigned(object $row, ?string $storedUrl, string $counterName, ?string $note, string $agencyName,
+                                         bool $corrected = false, ?string $onlyTo = null, ?string $attachAbs = null): array
     {
         $agencyTo = trim((string) ($row->notify_email ?? ''));
         $parentTo = trim((string) ($row->signer_email ?? ''));
 
-        $absPdf = null;
+        $absPdf = $attachAbs && is_file($attachAbs) ? $attachAbs : null;
         $useUrl = $storedUrl ?: $row->filled_file_url;
-        if ($useUrl) {
+        if (! $absPdf && $useUrl) {
             $cand = Storage::disk('public')->path(preg_replace('#^/storage/#', '', (string) $useUrl));
             if (is_file($cand)) {
                 $absPdf = $cand;
             }
         }
+        $stampedCopy = (bool) ($storedUrl || $absPdf && $attachAbs);
         $attachName = preg_replace('/[^A-Za-z0-9._-]+/', '-', (string) $row->title)
-            . ($storedUrl ? '-countersigned' : '') . '.pdf';
+            . ($stampedCopy ? '-countersigned' : '') . '.pdf';
 
         /* BUILT THE SAME WAY AS THE COMPLETED-FORM MAIL, deliberately.
 
@@ -2670,7 +3118,9 @@ class ManagedFormController extends Controller
            exchange reads as a different system talking, so it uses the same callout
            boxes, the same agency-timezone stamps and the same dated subject line. */
         $tz = \App\Support\AgencyTime::tz((int) $row->agency_id);
-        $now = now()->setTimezone($tz);
+        /* The counter-signature's own time, not the send time: the worker (or a later
+           corrected copy) sends after the fact. */
+        $now = \Illuminate\Support\Carbon::parse($row->countersigned_at ?? now())->setTimezone($tz);
         $stamp = $now->format('D, M j, Y');
         $stampFull = $now->format('D, M j, Y') . ' at ' . $now->format('g:i A')
             . ' (' . $now->format('T') . ')';
@@ -2688,9 +3138,14 @@ class ManagedFormController extends Controller
 
         /* The date belongs in the subject: these accumulate in one inbox and without it
            two counter-signatures of the same form are indistinguishable unopened. */
-        $subject = 'Counter-signed: ' . $row->title . " \u{2014} " . $stamp;
+        $subject = ($corrected ? "Corrected copy \u{2014} " : '') . 'Counter-signed: ' . $row->title . " \u{2014} " . $stamp;
 
-        $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
+        $body = ($corrected
+                ? \App\Services\EmailTemplate::calloutBox('<strong>This replaces the copy sent earlier.</strong><br>'
+                    . 'The copy emailed when this form was counter-signed was missing the counter-signature page. '
+                    . 'This one has it on the final page. Nothing else on the form has changed.', 'warning')
+                : '')
+            . '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
             . e($agencyName) . ' has reviewed and counter-signed <strong>' . e((string) $row->title)
             . '</strong> on ' . e($stampFull) . '.</p>'
             . \App\Services\EmailTemplate::calloutBox(
@@ -2711,19 +3166,28 @@ class ManagedFormController extends Controller
                     '<strong>Note from the reviewer</strong><br>' . nl2br(e(trim($note))), 'success')
                 : '')
             . '<p style="margin:14px 0 0;font-size:13.5px;color:#64748B;line-height:1.6;">'
-            . ($storedUrl
+            . ($stampedCopy
                 ? 'The completed form is attached, with the counter-signature on the final page.'
                 : 'The completed form is attached. The counter-signature is recorded in KiddieTrac.')
             . ' Please keep this for your records.</p>';
 
         $html = \App\Services\EmailTemplate::wrap((int) $row->agency_id, $body, [
-            'eyebrow' => 'COUNTER-SIGNED',
+            'eyebrow' => $corrected ? 'CORRECTED COPY' : 'COUNTER-SIGNED',
             'title' => (string) $row->title,
             'subtitle' => 'Reviewed by ' . $counterName,
             'preheader' => $agencyName . ' counter-signed ' . $row->title . '.',
         ]);
 
         $sent = [];
+
+        // A sample: one copy to the address asked for, nothing recorded.
+        if ($onlyTo) {
+            if (filter_var($onlyTo, FILTER_VALIDATE_EMAIL)) {
+                $this->queueCountersignMail((int) $row->agency_id, $onlyTo, $subject, $html, $absPdf, $attachName, false);
+                $sent[] = $onlyTo;
+            }
+            return $sent;
+        }
 
         /* The parent first: they are the side that has never been told anything. */
         if ($parentTo && filter_var($parentTo, FILTER_VALIDATE_EMAIL)) {
@@ -2776,8 +3240,330 @@ class ManagedFormController extends Controller
                 if ($bypassSuppression) {
                     $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
                 }
+                // Form mail: reaches a parent who has not claimed an account yet (2026-10-25, Sheldon's countersigned copies).
+                $m->getHeaders()->addTextHeader('X-KT-Form-Package', '1');
             });
         })->onQueue('mail');
+    }
+
+    /* ───────────── SHARING A COUNTER-SIGNED FORM (2026-10-20) ─────────────
+
+       Anthony: "with counter signing a form under forms manager add option to send form
+       to a staff member/educator or to a specific email. If sent to staff such as
+       educator send a brief email indicating new counter signed documents available
+       under documents".
+
+       Two kinds of recipient, treated differently on purpose:
+
+         - STAFF get the document FILED to their own Documents (a documents row scoped
+           to them, source managed_form_share) plus a short email and a bell notice
+           saying it is there. No attachment: the document lives behind their sign-in,
+           which is the point of filing it rather than mailing a parent's form around.
+         - A TYPED ADDRESS has no account to file to, so it gets the counter-signed PDF
+           attached, in the same layout as the copy the family received.
+
+       Only staff of this agency can be picked (a centre director: their own centres),
+       checked server-side whatever the picker offered. */
+    private const SHARE_ROLES = ['educator', 'home_visitor', 'centre_director', 'agency_admin'];
+    private const SHARE_RULES = [
+        'share_user_ids'   => ['nullable', 'array', 'max:40'],
+        'share_user_ids.*' => ['integer', 'min:1'],
+        'share_emails'     => ['nullable', 'array', 'max:10'],
+        'share_emails.*'   => ['string', 'max:190'],
+        'share_message'    => ['nullable', 'string', 'max:1000'],
+    ];
+
+    /** Staff this caller may share a form with, keyed by user id. */
+    private function shareableStaff(Request $request, int $agencyId): \Illuminate\Support\Collection
+    {
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);   // null = the whole agency
+        $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        $rows = DB::table('role_assignments as ra')
+            ->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', 1)
+            ->whereIn('ra.role', self::SHARE_ROLES)
+            ->whereNull('u.deleted_at')
+            ->whereNotIn('u.status', \App\Support\Audience::OFF_STATUSES)
+            ->when($scope === null,
+                fn ($q) => $q->where(fn ($w) => $w->where('ra.agency_id', $agencyId)->orWhereIn('ra.centre_id', $centreIds ?: [0])),
+                fn ($q) => $q->whereIn('ra.centre_id', $scope ?: [0]))
+            // System inboxes hold real roles but are not people (same rule as the Users list).
+            ->where(fn ($q) => $q->whereNull('u.email')->orWhere(fn ($w) => $w
+                ->where('u.email', 'not like', '%integration+%')
+                ->where('u.email', 'not like', 'noreply@%')
+                ->where('u.email', 'not like', 'no-reply@%')))
+            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.email', 'ra.role']);
+
+        $order = array_flip(self::SHARE_ROLES);
+        return $rows->groupBy('id')->map(function ($g) use ($order) {
+            $u = $g->first();
+            $roles = $g->pluck('role')->unique()->sortBy(fn ($r) => $order[$r] ?? 9)->values()->all();
+            return (object) [
+                'id' => (int) $u->id,
+                'name' => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: ($u->email ?: 'Staff member'),
+                'email' => $u->email,
+                'role' => $roles[0] ?? null,
+            ];
+        })->sortBy(fn ($u) => mb_strtolower($u->name))->keyBy('id');
+    }
+
+    /** GET /admin/managed-forms/share-recipients — who the share picker may offer. */
+    public function shareRecipients(Request $request): JsonResponse
+    {
+        if (! $this->isAdmin($request)) {
+            return response()->json(['staff' => []], 403);
+        }
+        $staff = $this->shareableStaff($request, $this->agencyId($request))
+            ->reject(fn ($u) => $u->id === (int) $request->user()->id)
+            ->values();
+        return response()->json(['staff' => $staff]);
+    }
+
+    /**
+     * Turn the request's share fields into checked targets, or a 422 naming the problem.
+     *
+     * @return array{staff: array<int, object>, emails: string[]}|JsonResponse
+     */
+    private function shareTargets(Request $request, int $agencyId, array $data)
+    {
+        $ids = array_values(array_unique(array_map('intval', $data['share_user_ids'] ?? [])));
+        $staff = [];
+        if ($ids) {
+            $allowed = $this->shareableStaff($request, $agencyId);
+            foreach ($ids as $uid) {
+                if (! isset($allowed[$uid])) {
+                    return response()->json(['message' => 'One of the staff members chosen is not on your team, so the form was not shared. Please choose again.'], 422);
+                }
+                $staff[$uid] = $allowed[$uid];
+            }
+        }
+        $emails = [];
+        foreach ($data['share_emails'] ?? [] as $e) {
+            $e = mb_strtolower(trim((string) $e));
+            if ($e === '') {
+                continue;
+            }
+            if (! filter_var($e, FILTER_VALIDATE_EMAIL)) {
+                return response()->json(['message' => '"' . $e . '" is not a valid email address.'], 422);
+            }
+            $emails[$e] = $e;
+        }
+        // An address that belongs to a chosen staff member is covered by their Documents copy.
+        foreach ($staff as $u) {
+            unset($emails[mb_strtolower((string) $u->email)]);
+        }
+        return ['staff' => $staff, 'emails' => array_values($emails)];
+    }
+
+    /** POST /admin/managed-forms/signoffs/{id}/share — share an already counter-signed form. */
+    public function share(Request $request, int $id): JsonResponse
+    {
+        if (! $this->isAdmin($request)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $agencyId = $this->agencyId($request);
+        if ($deny = $this->signoffOutOfScope($request, $agencyId, $id)) {
+            return $deny;
+        }
+        $data = $request->validate(self::SHARE_RULES);
+
+        $row = DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->where('s.id', $id)->where('f.agency_id', $agencyId)
+            ->first(['s.id', 's.countersigned_at', 'f.id as form_id', 'f.title']);
+        if (! $row) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+        if (! $row->countersigned_at) {
+            return response()->json(['message' => 'Only a counter-signed form can be shared. Counter-sign it first.'], 422);
+        }
+
+        $share = $this->shareTargets($request, $agencyId, $data);
+        if ($share instanceof JsonResponse) {
+            return $share;
+        }
+        if (! $share['staff'] && ! $share['emails']) {
+            return response()->json(['message' => 'Choose a staff member or type an email address.'], 422);
+        }
+
+        $shared = $this->shareCountersigned($request->user(), (int) $row->id, $agencyId, $share, $data['share_message'] ?? null);
+
+        $this->audit($request, 'managed_form.shared', (int) $row->id, [
+            'summary' => 'Shared the counter-signed "' . $row->title . '".'
+                . ($shared['filed'] ? ' Filed to the Documents of: ' . implode(', ', $shared['filed']) . '.' : '')
+                . ($shared['emailed'] ? ' Copy emailed to: ' . implode(', ', $shared['emailed']) . '.' : '')
+                . ($shared['skipped'] ? ' Not emailed: ' . implode('; ', $shared['skipped']) . '.' : ''),
+            'form_id' => (int) $row->form_id,
+            'signoff_id' => (int) $row->id,
+            'shared' => $shared,
+        ]);
+
+        return response()->json(['ok' => true, 'shared' => $shared]);
+    }
+
+    /**
+     * File the counter-signed copy to each staff member's Documents (+ brief email and a
+     * bell notice) and email the PDF to each typed address.
+     *
+     * @return array{filed: string[], emailed: string[], skipped: string[]}
+     */
+    private function shareCountersigned(object $me, int $signoffId, int $agencyId, array $share, ?string $message): array
+    {
+        $out = ['filed' => [], 'emailed' => [], 'skipped' => []];
+        $row = DB::table('managed_form_signoffs as s')
+            ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+            ->leftJoin('users as u', 'u.id', '=', 's.user_id')
+            ->where('s.id', $signoffId)->where('f.agency_id', $agencyId)
+            ->first([
+                's.id', 's.user_id', 's.signer_name', 's.signed_at', 's.filled_file_url',
+                's.countersigned_at', 's.countersigner_name', 's.countersigned_file_url', 's.countersign_note',
+                's.shared_to',
+                'f.title', 'f.description', 'f.file_url', 'f.file_type',
+                'u.first_name as signer_first', 'u.last_name as signer_last',
+            ]);
+        if (! $row || ! $row->countersigned_at) {
+            return $out;
+        }
+
+        $byName = trim(($me->first_name ?? '') . ' ' . ($me->last_name ?? '')) ?: 'The office';
+        $agencyName = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?? 'Your agency');
+        $signer = (string) ($row->signer_name ?: trim(($row->signer_first ?? '') . ' ' . ($row->signer_last ?? '')) ?: 'the parent');
+        $message = $message !== null && trim($message) !== '' ? trim($message) : null;
+
+        $url = $row->countersigned_file_url ?: ($row->filled_file_url ?: $row->file_url);
+        $abs = null;
+        if ($url) {
+            $cand = Storage::disk('public')->path(preg_replace('#^/storage/#', '', (string) $url));
+            if (is_file($cand)) {
+                $abs = $cand;
+            }
+        }
+        $size = $abs ? (int) filesize($abs) : null;
+        $title = (string) $row->title;
+
+        $tz = \App\Support\AgencyTime::tz($agencyId);
+        $now = now()->setTimezone($tz);
+        $stamp = $now->format('D, M j, Y');
+        $csWhen = '';
+        try {
+            $c = \Illuminate\Support\Carbon::parse($row->countersigned_at)->setTimezone($tz);
+            $csWhen = $c->format('D, M j, Y') . ' at ' . $c->format('g:i A');
+        } catch (\Throwable $e) {
+        }
+
+        $facts = '<strong>Form:</strong> ' . e($title)
+            . '<br><strong>Completed by:</strong> ' . e($signer)
+            . '<br><strong>Counter-signed by:</strong> ' . e((string) ($row->countersigner_name ?: 'the office'))
+            . ($csWhen ? '<br><strong>Counter-signed at:</strong> ' . e($csWhen) : '')
+            . '<br><strong>Shared by:</strong> ' . e($byName);
+        $messageBox = $message
+            ? \App\Services\EmailTemplate::calloutBox('<strong>Message from ' . e($byName) . '</strong><br>' . nl2br(e($message)), 'success')
+            : '';
+
+        // ── staff: file to their Documents, then tell them it is there ──
+        if ($url && $share['staff']) {
+            $docsLink = 'https://app.kiddietrac.com/dashboard.html#my-documents';
+            $html = \App\Services\EmailTemplate::wrap($agencyId,
+                '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($byName) . ' shared a counter-signed form with you. '
+                . 'It is now in <strong>Documents</strong> in KiddieTrac, where you can open, download or print it any time.</p>'
+                . \App\Services\EmailTemplate::calloutBox($facts, 'info')
+                . $messageBox
+                . \App\Services\EmailTemplate::button('Open my Documents', $docsLink)
+                . '<p style="margin:14px 0 0;font-size:12.5px;color:#64748B;line-height:1.6;">For privacy the form is not attached to this email. '
+                . 'Sign in to KiddieTrac and go to Documents to view it.</p>',
+                [
+                    'eyebrow' => 'NEW DOCUMENT',
+                    'title' => 'New counter-signed document',
+                    'subtitle' => $title,
+                    'preheader' => $title . ' is now in your Documents.',
+                ]);
+            $subject = 'New counter-signed document in your Documents: ' . $title;
+
+            foreach ($share['staff'] as $u) {
+                DB::table('documents')->updateOrInsert(
+                    ['source_type' => \App\Support\SignedFormFiler::SHARE, 'source_id' => (int) $row->id,
+                     'scope_type' => 'user', 'scope_id' => (int) $u->id],
+                    [
+                        'category'       => 'shared_form',
+                        'title'          => mb_substr($title, 0, 200),
+                        'file_url'       => mb_substr((string) $url, 0, 500),
+                        'file_type'      => mb_substr((string) ($row->file_type ?: 'application/pdf'), 0, 20),
+                        'file_size'      => $size,
+                        'signed_at'      => $row->signed_at,
+                        'notes'          => mb_substr('Shared by ' . $byName . ' on ' . $stamp . '. Completed by ' . $signer
+                            . ', counter-signed by ' . ($row->countersigner_name ?: 'the office') . '.'
+                            . ($message ? ' Message: ' . $message : ''), 0, 1000),
+                        'signed_by_id'   => $row->user_id ? (int) $row->user_id : null,
+                        'uploaded_by_id' => (int) $me->id,
+                        'created_at'     => now(),
+                    ]
+                );
+                $out['filed'][] = $u->name;
+
+                \App\Support\Notify::write([
+                    'user_id' => (int) $u->id,
+                    'type' => 'document_shared',
+                    'title' => 'New counter-signed document',
+                    'body' => mb_substr($title . ' was shared with you by ' . $byName . '. Open it under Documents.', 0, 240),
+                    'data' => json_encode(['link' => '#my-documents', 'signoff_id' => (int) $row->id]),
+                ]);
+
+                $to = trim((string) $u->email);
+                if (! $to || ! filter_var($to, FILTER_VALIDATE_EMAIL)) {
+                    $out['skipped'][] = $u->name . ' (no email address)';
+                } elseif (\App\Support\Suppression::isUser((int) $u->id)) {
+                    \App\Support\Suppression::note('email', (int) $u->id, 'form_shared');
+                    $out['skipped'][] = $u->name . ' (email turned off)';
+                } else {
+                    $this->queueCountersignMail($agencyId, $to, $subject, $html, null, '', false);
+                }
+            }
+        } elseif (! $url && $share['staff']) {
+            foreach ($share['staff'] as $u) {
+                $out['skipped'][] = $u->name . ' (this form has no PDF to file)';
+            }
+        }
+
+        // ── typed addresses: the PDF itself ──
+        if ($share['emails']) {
+            $attachName = trim(preg_replace('/[^A-Za-z0-9._-]+/', '-', $title), '-') . ($row->countersigned_file_url ? '-countersigned' : '') . '.pdf';
+            $html = \App\Services\EmailTemplate::wrap($agencyId,
+                '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($agencyName) . ' has shared a counter-signed form with you.</p>'
+                . \App\Services\EmailTemplate::calloutBox($facts, 'info')
+                . $messageBox
+                . '<p style="margin:14px 0 0;font-size:13.5px;color:#64748B;line-height:1.6;">'
+                . ($abs ? 'The form is attached' . ($row->countersigned_file_url ? ', with the counter-signature on the final page' : '') . '.' : 'The counter-signature is recorded in KiddieTrac.')
+                . '</p>',
+                [
+                    'eyebrow' => 'COUNTER-SIGNED',
+                    'title' => $title,
+                    'subtitle' => 'Shared by ' . $byName,
+                    'preheader' => $agencyName . ' shared ' . $title . '.',
+                ]);
+            $subject = 'Counter-signed: ' . $title . " \u{2014} " . $stamp;
+            foreach ($share['emails'] as $to) {
+                // An address that is a person who asked for no email stays unemailed.
+                $uid = (int) (DB::table('users')->whereRaw('LOWER(email) = ?', [$to])->whereNull('deleted_at')->value('id') ?? 0);
+                if ($uid && \App\Support\Suppression::isUser($uid)) {
+                    \App\Support\Suppression::note('email', $uid, 'form_shared');
+                    $out['skipped'][] = $to . ' (email turned off)';
+                    continue;
+                }
+                $this->queueCountersignMail($agencyId, $to, $subject, $html, $abs, $attachName, false);
+                $out['emailed'][] = $to;
+            }
+        }
+
+        // Who has it, on the row itself, so the Completed tab can say so.
+        $names = array_merge($out['filed'], $out['emailed']);
+        if ($names) {
+            $prev = array_filter(array_map('trim', explode(',', (string) ($row->shared_to ?? ''))));
+            DB::table('managed_form_signoffs')->where('id', $row->id)->update([
+                'shared_at' => now(),
+                'shared_to' => mb_substr(implode(', ', array_values(array_unique(array_merge($prev, $names)))), 0, 1000),
+            ]);
+        }
+        return $out;
     }
 
     private function audit(Request $request, string $action, ?int $entityId, array $payload): void

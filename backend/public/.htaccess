@@ -10,6 +10,16 @@
     </IfModule>
 </FilesMatch>
 
+# KT-HTTPS (2026-10-21): every plain-HTTP request goes to HTTPS. Without this the portal
+# and the API answered on http:// too, so a first visit, an old bookmark or a captive Wi-Fi
+# could carry a sign-in unencrypted (HSTS only protects browsers that have already been here).
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=308]
+</IfModule>
+
 # ─── Subdomain isolation ───────────────────────────────────────
 # Prevent inheritance of parent .htaccess rewrite rules.
 # This is critical on GoDaddy shared hosting where the main

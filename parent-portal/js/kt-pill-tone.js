@@ -112,7 +112,28 @@
   function schedule() { if (timer) return; timer = setTimeout(function () { timer = null; try { sweep(document); } catch (e) {} }, 120); }   // not rAF: it never fires on a hidden tab
   function start() {
     schedule();
-    try { new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+    /* NEW PILLS ARE PAINTED BEFORE THE FRAME (2026-10-28, Anthony: "when moving from subtabs the screen
+       flashes"). [data-kt-pretty] .kt-pill draws its background in currentColor, so an unpainted pill is a solid
+       bar the colour of its own text; painting it 120ms after it appeared showed that bar for a frame or more on
+       every render (Audit log > Chat conversations, the Type column). A MutationObserver callback runs before
+       the browser paints, and sweep() only writes styles (it measures nothing), so the added nodes are painted
+       right here; the delayed whole-document pass stays as the safety net. */
+    try {
+      new MutationObserver(function (recs) {
+        var roots = [];   // one sweep per distinct root, however many nodes a render added under it
+        for (var i = 0; i < recs.length; i++) {
+          var add = recs[i].addedNodes;
+          for (var j = 0; j < add.length; j++) {
+            var n = add[j];
+            if (n.nodeType !== 1) continue;
+            var r = (n.matches && n.matches('.kt-pill, span') && n.parentElement) ? n.parentElement : n;
+            if (roots.indexOf(r) === -1) roots.push(r);
+          }
+        }
+        for (var k = 0; k < roots.length && k < 200; k++) { try { sweep(roots[k]); } catch (e) {} }
+        schedule();
+      }).observe(document.body, { childList: true, subtree: true });
+    } catch (e) {}
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })(window, document);

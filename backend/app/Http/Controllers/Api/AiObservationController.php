@@ -149,6 +149,16 @@ class AiObservationController extends Controller
             'framework'            => \App\Support\LearningFrameworks::forAgency($this->agencyOfChild((int) $data['child_id']))['key'],
         ]);
 
+        if (! empty($data['shared_with_family'])) {
+            try {
+                \App\Support\ChildMomentNotify::after([[
+                    'child_id' => (int) $data['child_id'], 'kind' => 'observations', 'emoji' => '🌱',
+                    'label' => 'New learning observation',
+                    'text' => mb_substr((string) $data['structured']['parent_summary'], 0, 120), 'link' => '#today',
+                ]]);
+            } catch (\Throwable $e) {}
+        }
+
         return response()->json(['data' => $observation], 201);
     }
 
@@ -190,7 +200,7 @@ class AiObservationController extends Controller
         // v22p98: educators see their OWN observations; an agency_admin /
         // centre_director / platform_admin gets a centre-wide oversight view
         // (scoped to the active agency's centres), so demo data is visible.
-        $isAdminView = DB::table('role_assignments')->where('user_id', $user->id)
+        $isAdminView = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $user->id)
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
             ->where('active', true)->exists();
         if ($isAdminView) {
@@ -207,11 +217,11 @@ class AiObservationController extends Controller
 
             // A director oversees their own centre rather than the whole agency; an
             // agency admin or platform admin oversees all of it.
-            $isAgencyWide = DB::table('role_assignments')->where('user_id', $user->id)
+            $isAgencyWide = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $user->id)
                 ->whereIn('role', ['agency_admin', 'platform_admin'])
                 ->where('active', true)->exists();
             if (! $isAgencyWide) {
-                $own = DB::table('role_assignments')->where('user_id', $user->id)
+                $own = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $user->id)
                     ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
                 if ($own) {
                     $centreIds = array_values(array_intersect($centreIds, $own)) ?: $own;

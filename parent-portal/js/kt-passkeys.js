@@ -32,8 +32,22 @@
     try { return sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e) { return null; }
   }
 
+  /* THE iPHONE APP (2026-10-30 iOS sweep). Its WKWebView exposes PublicKeyCredential, but WebKit only lets an app
+     use WebAuthn for a domain it is associated with: an Associated Domains "webcredentials:kiddietrac.com"
+     entitlement in the app AND https://kiddietrac.com/.well-known/apple-app-site-association listing the app (served
+     without a redirect). Neither exists yet, so the button could only fail. Off in the iOS app until both ship;
+     Face ID unlock (KtBio) is unaffected. To turn on: set KT.IOS_PASSKEYS = true once the build with the
+     entitlement is live. */
+  function iosAppWithoutWebCredentials() {
+    try {
+      var C = window.Capacitor;
+      return !!(C && C.isNativePlatform && C.isNativePlatform() && C.getPlatform && C.getPlatform() === 'ios' && KT.IOS_PASSKEYS !== true);
+    } catch (e) { return false; }
+  }
+
   function supported() {
     try {
+      if (iosAppWithoutWebCredentials()) return false;
       if (typeof window.PublicKeyCredential !== 'function') return false;
       if (!navigator.credentials || typeof navigator.credentials.create !== 'function') return false;
       return window.isSecureContext !== false;
@@ -71,7 +85,21 @@
     var h = { 'Accept': 'application/json' };
     if (body) h['Content-Type'] = 'application/json';
     if (auth) { var t = token(); if (t) h.Authorization = 'Bearer ' + t; }
-    var r = await fetch(apiBase() + path, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined });
+    /* The challenge ("options") is safe to ask for twice, so it is retried through a bad
+       connection; a "verify" spends the passkey's signature and is sent once. A request
+       that never got an answer is marked .network, so the sign-in page can tell "no
+       connection" from "the server said no" (2026-10-22). */
+    var init = { method: method, headers: h, body: body ? JSON.stringify(body) : undefined };
+    var r;
+    try {
+      r = (window.KT && KT.net)
+        ? await KT.net.fetch(apiBase() + path, init, { path: path.replace(/^\//, ''), retries: /options$/.test(path) ? 2 : 0 })
+        : await fetch(apiBase() + path, init);
+    } catch (e) {
+      var ne = new Error((window.KT && KT.net) ? KT.net.message(e) : 'We couldn’t reach KiddieTrac. Check your internet connection, then try again.');
+      ne.network = true;
+      throw ne;
+    }
     var d = await r.json().catch(function () { return {}; });
     if (!r.ok) {
       var e = new Error(d.message || ('Request failed (' + r.status + ')'));
@@ -88,9 +116,19 @@
     if (n === 'NotAllowedError' || n === 'AbortError') {
       var c = new Error('Cancelled — nothing was changed.'); c.cancelled = true; return c;
     }
-    if (n === 'InvalidStateError') return new Error('This device already has a passkey for your account.');
+    /* The phone (or its Google / iCloud password manager, which syncs between devices)
+       already holds one of this account's passkeys, so it will not make a second. Say
+       what to do instead of only that it refused (2026-10-22). */
+    if (n === 'InvalidStateError') return new Error('This device already has a passkey for your account (it may be saved in your Google or iCloud password manager). Use “Sign in with a passkey” — there is no need to add another.');
     if (n === 'SecurityError') return new Error('Passkeys can only be used on app.kiddietrac.com.');
     if (n === 'NotSupportedError') return new Error('This device or browser cannot make a passkey.');
+    /* THE PHONE'S PASSWORD MANAGER DID NOT ANSWER (2026-11-04). Android's Credential Manager (Google Password Manager,
+       Samsung Pass) fails with UnknownError "An unknown error occurred while talking to the credential manager." when
+       no passkey provider is set up or it is busy. That sentence means nothing to a parent; say what to do. */
+    if (n === 'UnknownError' || /credential manager/i.test(String((e && e.message) || ''))) {
+      var u = new Error('This phone\u2019s password manager did not answer. Sign in with your email and password instead, or try the passkey again in a moment.');
+      u.device = true; return u;
+    }
     return e instanceof Error ? e : new Error(String(e));
   }
 
@@ -119,14 +157,16 @@
   async function signIn(opts) {
     opts = opts || {};
     if (!supported()) throw new Error('Passkeys are not available in this browser or app.');
-    var o = await call('POST', '/auth/passkey/options', {}, false);
+    // Marked, so the sign-in page can tell "could not get a challenge" (nobody acted yet) from a refused passkey.
+    var o;
+    try { o = await call('POST', '/auth/passkey/options', {}, false); } catch (e) { e.phase = 'options'; throw e; }
     var cred;
     try {
       var req = { publicKey: decodeOptions(o.options) };
       if (opts.conditional) { req.mediation = 'conditional'; }
       if (opts.signal) { req.signal = opts.signal; }
       cred = await navigator.credentials.get(req);
-    } catch (e) { throw explain(e); }
+    } catch (e) { var x = explain(e); x.phase = 'get'; throw x; }   // the browser / phone, not our server
     if (!cred) throw new Error('No passkey was chosen.');
     var r = cred.response;
     var userHandle = null;
@@ -139,7 +179,8 @@
       signature: bufToB64u(r.signature),
       user_handle: userHandle,
       device_name: navigator.userAgent.substring(0, 100),
-      device_platform: 'web',
+      // The app says it is the app (2026-11-02: the iPhone app's sign-in was filed as a browser).
+      device_platform: (function () { try { var C = window.Capacitor; if (C && C.isNativePlatform && C.isNativePlatform()) { var p = C.getPlatform(); if (p === 'ios' || p === 'android') return p; } } catch (e) {} return 'web'; })(),
     }, false);
   }
 
@@ -208,6 +249,7 @@
     try { flagged = sessionStorage.getItem('kt_pk_offer') === '1'; sessionStorage.removeItem('kt_pk_offer'); } catch (e) {}
     if (!flagged || !supported() || !token() || hasHere()) return;
     try { if (sessionStorage.getItem('kt_force_password_change') === '1') return; } catch (e) {}
+    if (window.KT_PUBLIC_DEMO) return;   // a shared public demo account: passkeys are switched off there (2026-10-31)
     // The account's snooze may live on the server: wait for the markers to land.
     if (KT.markers && KT.markers.onSync) { await new Promise(function (r) { KT.markers.onSync(r); setTimeout(r, 4000); }); }
     if (snoozed()) return;

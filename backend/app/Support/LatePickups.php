@@ -126,6 +126,7 @@ final class LatePickups
             foreach (DB::table('guardians')->where('family_id', $family->id)->pluck('user_id') as $gid) {
                 try {
                     Notify::write([
+                        'agency_id' => Notify::agencyOfFamily((int) $family->id),
                         'user_id' => $gid, 'type' => 'late_pickup',
                         'title' => "{$what} fee {$money}",
                         'body' => "{$ev->minutes} minute(s) late on {$day}. " . ($invoice ? 'Added to your invoice.' : 'It will appear on your next invoice.'),

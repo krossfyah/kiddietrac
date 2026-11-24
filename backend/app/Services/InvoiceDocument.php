@@ -106,7 +106,38 @@ final class InvoiceDocument
     {
         $doc = self::render($invoiceId, $forPdf);
 
-        return $doc === null ? null : self::withPaidMark($invoiceId, $doc);
+        return $doc === null ? null : self::withPaidMark($invoiceId, self::withPayInfo($invoiceId, $doc));
+    }
+
+    /* HOW TO PAY + THE PARENT APP ON EVERY TEMPLATE (2026-10-31, Anthony). Added here, like the PAID mark, so the
+       twelve renderers stay in step: App\Support\InvoicePayInfo decides what is offered and writes it. */
+    private static function withPayInfo(int $invoiceId, string $html): string
+    {
+        try {
+            $i = \Illuminate\Support\Facades\DB::table('invoices')->where('id', $invoiceId)->first(['invoice_number', 'family_id', 'balance_due', 'status']);
+            if (! $i || (string) $i->status === 'void') {
+                return $html;
+            }
+            $block = \App\Support\InvoicePayInfo::pdfHtml(self::agencyOfInvoice($invoiceId), (string) ($i->invoice_number ?? ''),
+                $i->family_id ? (int) $i->family_id : null, null, (float) ($i->balance_due ?? 0));
+            if ($block === '') {
+                return $html;
+            }
+            /* Inside the page card where the template has one: before the iLearn footer line, else before the card's
+               closing tag, else before </body>. */
+            foreach (['<div class="foot">', '</div></body>', '</body>'] as $mark) {
+                $pos = strripos($html, $mark);
+                if ($pos !== false) {
+                    return substr($html, 0, $pos) . $block . substr($html, $pos);
+                }
+            }
+
+            return $html . $block;
+        } catch (Throwable $e) {
+            report($e);
+
+            return $html;
+        }
     }
 
     /** True once the balance is cleared and something was actually paid. */
@@ -135,13 +166,30 @@ final class InvoiceDocument
         if (! self::isSettled($invoiceId)) {
             return $html;
         }
+        $paidOn = \Illuminate\Support\Facades\DB::table('payments')->where('invoice_id', $invoiceId)
+            ->where('status', 'succeeded')->max('paid_at');
 
-        $mark = '<div style="position:fixed;top:38%;left:0;width:100%;text-align:center;'
+        return self::paidStamp($html, $paidOn ? substr((string) $paidOn, 0, 10) : null);
+    }
+
+    /**
+     * The diagonal PAID stamp, with the date it was paid (2026-10-31: "invoices with watermark PAID"). Public so the
+     * split guardian copy and the iLearn-synced invoices get exactly the same mark.
+     */
+    public static function paidStamp(string $html, ?string $paidOn = null): string
+    {
+        $date = '';
+        if ($paidOn) {
+            try { $date = \Illuminate\Support\Carbon::parse($paidOn)->format('M j, Y'); } catch (Throwable $e) { $date = ''; }
+        }
+        $mark = '<div style="position:fixed;top:36%;left:0;width:100%;text-align:center;'
             . 'z-index:0;transform:rotate(-28deg);-webkit-transform:rotate(-28deg);'
             . 'pointer-events:none;">'
-            . '<span style="font-size:96px;font-weight:800;letter-spacing:14px;'
-            . 'color:#16A34A;opacity:.14;border:7px solid #16A34A;border-radius:18px;'
-            . 'padding:10px 42px;">PAID</span></div>';
+            . '<div style="display:inline-block;color:#16A34A;opacity:.22;border:7px solid #16A34A;border-radius:18px;'
+            . 'padding:10px 42px;text-align:center;">'
+            . '<div style="font-size:96px;font-weight:800;letter-spacing:14px;line-height:1;">PAID</div>'
+            . ($date !== '' ? '<div style="font-size:22px;font-weight:700;letter-spacing:3px;margin-top:6px;">' . e($date) . '</div>' : '')
+            . '</div></div>';
 
         /* Injected after <body> where there is one, so it sits in the page rather than
            before the document starts; appended otherwise, which still renders because it
@@ -184,13 +232,24 @@ final class InvoiceDocument
      */
     public static function pdf(int $invoiceId): ?string
     {
+        /* A parent's document in the parent's language (2026-10-22): when it is made to be
+           SENT (an email, the billing run), the family's guardians' language; when it is
+           viewed, the viewer's (KtDompdf / MessageTranslator::pdfLocale). */
+        return \App\Support\MessageTranslator::forDocument(
+            (int) (\Illuminate\Support\Facades\DB::table('invoices')->where('id', $invoiceId)->value('family_id') ?: 0),
+            fn () => self::renderPdf($invoiceId)
+        );
+    }
+
+    private static function renderPdf(int $invoiceId): ?string
+    {
         try {
             $html = self::html($invoiceId, true);
             if (! $html) {
                 return null;
             }
             // Remote images enabled for the agency's own logo in the letterhead.
-            $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => true]);
+            $dompdf = new \App\Support\KtDompdf(['isRemoteEnabled' => true]);
             $dompdf->loadHtml($html, 'UTF-8');
             $dompdf->setPaper('letter', 'portrait');
             $dompdf->render();

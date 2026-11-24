@@ -70,6 +70,8 @@ final class DrillCadenceRemindCommand extends Command
                 }
             }
 
+            // Roles switched off for drill notices hear nothing (Settings → Notification settings, 2026-11-09).
+            $perUser = array_filter($perUser, fn ($uid) => \App\Support\StaffTopicNotify::allows($agencyId, 'drills', (int) $uid), ARRAY_FILTER_USE_KEY);
             foreach ($perUser as $uid => $lines) {
                 $u = DB::table('users')->where('id', $uid)->first(['id', 'email', 'first_name']);
                 if ($dry) { $this->line("agency {$agencyId} → user {$uid}: " . implode('; ', array_map(fn ($l) => $l['centre'] . ' ' . $this->text($l), $lines))); continue; }

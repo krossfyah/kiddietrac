@@ -1,0 +1,109 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   BOOT INTRO (2026-10-21) — the app's launch splash plays the same logo intro as the
+   training videos. Anthony: "with our training videos at the very beginning where the
+   logo loads with the swoosh and the sparkle over the d - can you make that with the
+   mobile apk load".
+
+   Same recipe as tools/training/recorder/brand.js: ONE image (login-wordmark.png, white
+   "Kiddie" + teal "Trac" + teal rays and swoosh) cut into three layers by horizontal
+   bands, each with the video's own keyframes and curves:
+     rays   (top 22%)    pop in from scale .3 / -25deg, transform-origin over the "d"
+     word   (middle)     rises 28px from 96% and fades in
+     swoosh (bottom 22%) wipes in left to right
+   Timings are the video's, shifted to start sooner (the native splash already covered
+   the black-in). Finishes at ~1.6s, inside the splash's existing 2.3s minimum, so it
+   never adds load time.
+
+   html.kti     KiddieTrac brand (set by the inline hook in dashboard.src.html)
+   html.kt-wl   white-label: their logo/name on its plate (styled by the branding block),
+                given the same choreography in THEIR accent colour, no KiddieTrac artwork.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── KiddieTrac ── */
+html.kti #kt-splash{background:radial-gradient(120% 90% at 20% 15%,#1F6080 0%,#0F2E52 45%,#0A1C3A 100%);overflow:hidden}
+html.kti #kt-splash .ktl-anim>img,
+html.kti #kt-splash .ktl-pen,
+html.kti #kt-splash .ktl-sheen,
+html.kti #kt-splash .ktl-spk{display:none!important}
+html.kti #kt-splash .ktl-anim{width:auto}
+html.kti #kt-splash .kti-glow{position:absolute;border-radius:50%;filter:blur(60px);opacity:0;pointer-events:none;
+  animation:kti-glow-in .8s ease both,kti-drift 6s ease-in-out both}
+html.kti #kt-splash .kti-glow.a{width:90vmax;height:90vmax;left:-25vmax;top:-35vmax;background:#159FB4}
+html.kti #kt-splash .kti-glow.b{width:70vmax;height:70vmax;right:-20vmax;bottom:-30vmax;background:#2D7BA8}
+html.kti #kt-splash .kt-splash-in{position:relative;z-index:1}
+html.kti #kt-splash .kti-logo{position:relative;display:block;width:min(64vw,250px);height:calc(min(64vw,250px) * 275 / 701)}
+@media (min-width:700px){html.kti #kt-splash .kti-logo{width:min(34vw,360px);height:calc(min(34vw,360px) * 275 / 701)}}
+html.kti #kt-splash .kti-logo>i{position:absolute;inset:0;background:url(/login-wordmark.png) center/contain no-repeat;
+  animation-duration:.9s;animation-fill-mode:both;animation-timing-function:cubic-bezier(.2,.9,.25,1.15);will-change:transform,opacity}
+html.kti #kt-splash .kti-word{clip-path:inset(20% 0 21% 0);animation-name:kti-rise;animation-delay:.12s}
+html.kti #kt-splash .kti-rays{clip-path:inset(0 0 78% 0);transform-origin:44% 10%;animation-name:kti-rays;animation-delay:.27s}
+html.kti #kt-splash .kti-swoosh{clip-path:inset(79% 100% 0 0);animation-name:kti-wipe;animation-delay:.57s;
+  animation-timing-function:cubic-bezier(.6,0,.2,1)!important}
+/* the spinner waits until the logo has finished drawing */
+html.kti #kt-splash .kt-spinner{animation:kt-spin .8s linear infinite,kt-fade .45s ease 1.55s forwards!important}
+
+@keyframes kti-rays{0%{opacity:0;transform:scale(.3) rotate(-25deg)}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes kti-rise{0%{opacity:0;transform:translateY(28px) scale(.96)}100%{opacity:1;transform:none}}
+@keyframes kti-wipe{0%{clip-path:inset(79% 100% 0 0)}100%{clip-path:inset(79% 0 0 0)}}
+@keyframes kti-glow-in{0%{opacity:0}100%{opacity:.35}}
+@keyframes kti-drift{0%{transform:translate(0,0) scale(.9)}100%{transform:translate(40px,-30px) scale(1.1)}}
+
+/* ── White-label: same moves, their colours, no KiddieTrac artwork ── */
+html.kt-wl #kt-splash .kti-wl{position:relative;display:flex;flex-direction:column;align-items:center}
+html.kt-wl #kt-splash .kti-wl .ktl-anim{animation:kti-rise .9s cubic-bezier(.2,.9,.25,1.15) .12s both}
+html.kt-wl #kt-splash .kti-wl-swoosh{display:block;height:6px;width:72%;margin-top:16px;border-radius:6px;
+  background:linear-gradient(90deg,transparent,var(--kti-accent,#13B7CC) 18%,var(--kti-accent,#13B7CC) 82%,transparent);
+  clip-path:inset(0 100% 0 0);animation:kti-wl-wipe .9s cubic-bezier(.6,0,.2,1) .57s both}
+html.kt-wl #kt-splash .kti-wl-spk{position:absolute;top:-6px;right:-6px;width:0;height:0;pointer-events:none}
+html.kt-wl #kt-splash .kti-wl-spk b{position:absolute;width:4px;height:13px;border-radius:3px;background:var(--kti-accent,#13B7CC);
+  transform-origin:50% 100%;opacity:0;animation:kti-wl-ray .9s cubic-bezier(.2,.9,.25,1.15) both}
+html.kt-wl #kt-splash .kti-wl-spk b:nth-child(1){left:-14px;top:-4px;--r:-40deg;animation-delay:.27s}
+html.kt-wl #kt-splash .kti-wl-spk b:nth-child(2){left:-2px;top:-12px;--r:0deg;animation-delay:.33s}
+html.kt-wl #kt-splash .kti-wl-spk b:nth-child(3){left:10px;top:-4px;--r:40deg;animation-delay:.39s}
+@keyframes kti-wl-wipe{0%{clip-path:inset(0 100% 0 0)}100%{clip-path:inset(0 0 0 0)}}
+@keyframes kti-wl-ray{0%{opacity:0;transform:rotate(var(--r)) scale(.2)}60%{opacity:1}100%{opacity:1;transform:rotate(var(--r)) scale(1)}}
+
+/* Reduced motion: the finished logo, still. */
+@media (prefers-reduced-motion:reduce){
+  html.kti #kt-splash .kti-logo>i,html.kti #kt-splash .kti-glow,
+  html.kt-wl #kt-splash .kti-wl .ktl-anim,html.kt-wl #kt-splash .kti-wl-swoosh,html.kt-wl #kt-splash .kti-wl-spk b{animation:none!important;clip-path:none!important;opacity:1!important}
+  html.kti #kt-splash .kti-word{clip-path:inset(20% 0 21% 0)!important}
+  html.kti #kt-splash .kti-rays{clip-path:inset(0 0 78% 0)!important}
+  html.kti #kt-splash .kti-swoosh{clip-path:inset(79% 0 0 0)!important}
+  html.kti #kt-splash .kti-glow{opacity:.35!important}
+  html.kt-wl #kt-splash .kti-wl-spk b{transform:rotate(var(--r))!important}
+}
+
+/* ── Carry (2026-10-21): arriving from a sign-in, the sign-in page has already faded to
+   this frame (kt-launch-scene.js #kt-portal-fade). Hold the finished logo still; the
+   portal fades in over it when its first screen has settled. ── */
+html.kti-carry #kt-splash .kti-logo>i,html.kti-carry #kt-splash .kti-wl .ktl-anim,
+html.kti-carry #kt-splash .kti-wl-swoosh,html.kti-carry #kt-splash .kti-wl-spk b{animation:none!important;opacity:1!important;transform:none!important}
+html.kti-carry #kt-splash .kti-word{clip-path:inset(20% 0 21% 0)!important}
+html.kti-carry #kt-splash .kti-rays{clip-path:inset(0 0 78% 0)!important}
+html.kti-carry #kt-splash .kti-swoosh{clip-path:inset(79% 0 0 0)!important}
+html.kti-carry #kt-splash .kti-wl-swoosh{clip-path:none!important}
+html.kti-carry #kt-splash .kti-wl-spk b{transform:rotate(var(--r))!important}
+html.kti-carry #kt-splash .kti-glow{animation:kti-drift 6s ease-in-out both!important;opacity:.35!important}
+html.kti-carry #kt-splash .kt-spinner{animation:kt-spin .8s linear infinite,kt-fade .3s ease .15s forwards!important}
+
+/* ── WAIT FOR THE LOGO, AND THE SPARKLE (2026-10-21) ──────────────────────────────────
+   Anthony on his phone: "the logo and the swoosh is working but not the sparkle where the 3
+   lines are over the d - we had this working in the past". The CSS animations started the
+   moment the logo element was built, BEFORE login-wordmark.png had arrived: on a phone the
+   image landed after the rays' pop (done by 1.2 s) and only the later swoosh was seen moving.
+   Measured on the Android 15 emulator: the logo appeared already complete. Everything now
+   waits, paused on its first frame, until the image is decoded (capped). And the sparkle
+   burst from the old write-on - three glowing particles flying off the ticks - is back,
+   timed to fire as the rays land. */
+html.kti:not(.kti-go) #kt-splash .kti-logo>i,html.kti:not(.kti-go) #kt-splash .kti-spk b,
+html.kti:not(.kti-go) #kt-splash .kt-spinner{animation-play-state:paused!important}
+html.kti #kt-splash .kti-spk{position:absolute;top:4%;left:46%;width:0;height:0;pointer-events:none;z-index:2}
+html.kti #kt-splash .kti-spk b{position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,#fff 0%,#8EC73C 42%,rgba(142,199,60,0) 72%);animation:kti-spk .8s ease both}
+html.kti #kt-splash .kti-spk b:nth-child(1){--tx:-26px;--ty:-20px;animation-delay:.72s}
+html.kti #kt-splash .kti-spk b:nth-child(2){--tx:2px;--ty:-30px;animation-delay:.8s}
+html.kti #kt-splash .kti-spk b:nth-child(3){--tx:26px;--ty:-18px;animation-delay:.88s}
+@keyframes kti-spk{0%{transform:translate(0,0) scale(.2);opacity:0}35%{opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0}}
+html.kti-carry #kt-splash .kti-spk{display:none}
+@media (prefers-reduced-motion:reduce){html.kti #kt-splash .kti-spk{display:none}}

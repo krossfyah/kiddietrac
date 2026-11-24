@@ -37,7 +37,7 @@ final class LedgerController extends Controller
                 $daysLate = 0;
                 $unpaid = ! in_array(strtolower((string) $inv->status), ['paid', 'void', 'cancelled', 'refunded']);
                 if ($unpaid && $inv->due_at && Carbon::parse($inv->due_at)->isPast()) {
-                    $daysLate = (int) Carbon::parse($inv->due_at)->startOfDay()->diffInDays(now()->startOfDay());
+                    $daysLate = (int) Carbon::parse($inv->due_at)->startOfDay()->diffInDays(\App\Support\AgencyTime::todayDate());
                 }
                 $entries->push([
                     'date' => $inv->issued_at,
@@ -87,7 +87,7 @@ final class LedgerController extends Controller
                 $issued = $inv->issued_at ?: ($inv->due_at ?: $inv->external_updated_at);
                 $daysLate = 0;
                 if ((float) $inv->balance_due > 0.005 && $inv->due_at && Carbon::parse($inv->due_at)->isPast()) {
-                    $daysLate = (int) Carbon::parse($inv->due_at)->startOfDay()->diffInDays(now()->startOfDay());
+                    $daysLate = (int) Carbon::parse($inv->due_at)->startOfDay()->diffInDays(\App\Support\AgencyTime::todayDate());
                 }
 
                 $entries->push([
@@ -230,13 +230,13 @@ final class LedgerController extends Controller
             'totals' => $payload,
         ])->render();
 
-        $dompdf = new \Dompdf\Dompdf();
+        $dompdf = new \App\Support\KtDompdf();
         $dompdf->loadHtml($html, 'UTF-8');
         $dompdf->setPaper('letter', 'portrait');
         $dompdf->render();
         return new \Symfony\Component\HttpFoundation\Response($dompdf->output(), 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="Statement-' . preg_replace('/[^A-Za-z0-9]/', '-', $family['family_name']) . '-' . now()->format('Y-m-d') . '.pdf"',
+            'Content-Disposition' => 'attachment; filename="Statement-' . preg_replace('/[^A-Za-z0-9]/', '-', $family['family_name']) . '-' . \App\Support\AgencyTime::today() . '.pdf"',
         ]);
     }
 
@@ -329,9 +329,11 @@ final class LedgerController extends Controller
     public function myInvoicePdf(Request $request, int $invoice): \Symfony\Component\HttpFoundation\Response
     {
         $inv = $this->assertGuardianOwnsInvoice($request, $invoice);
-        $pdf = $this->renderInvoicePdf($invoice);
+        $pdf = \App\Support\SplitInvoiceCopy::pdfForUser($inv, (int) $request->user()->id) ?? $this->renderInvoicePdf($invoice);
         abort_unless($pdf !== null, 404, 'Invoice not found');
-        $num = preg_replace('/[^A-Za-z0-9]/', '-', (string) ($inv->number ?? $inv->id));
+        $splitNo = (property_exists($inv, 'invoice_number') && ! empty($inv->family_id))
+            ? \App\Support\SplitInvoiceCopy::numberFor($inv, (int) (\App\Support\BillingSplit::guardianFor((int) $request->user()->id, (int) $inv->family_id) ?? 0)) : null;
+        $num = preg_replace('/[^A-Za-z0-9]/', '-', (string) ($splitNo ?: ($inv->number ?? $inv->invoice_number ?? $inv->id)));
 
         return new \Symfony\Component\HttpFoundation\Response($pdf, 200, [
             'Content-Type' => 'application/pdf',
@@ -350,7 +352,7 @@ final class LedgerController extends Controller
             return response()->json(['message' => 'Your account has no email address on file.'], 422);
         }
 
-        $pdf = $this->renderInvoicePdf($invoice);
+        $pdf = \App\Support\SplitInvoiceCopy::pdfForUser($inv, (int) $request->user()->id) ?? $this->renderInvoicePdf($invoice);
         if ($pdf === null) {
             return response()->json(['message' => 'Invoice could not be rendered.'], 500);
         }

@@ -59,6 +59,7 @@
     drawer.style.cssText = `
       position: fixed; top: 0; right: 0; bottom: 0;
       width: min(520px, 92vw);
+      padding-top: var(--kt-safe-top, env(safe-area-inset-top, 0px)); padding-bottom: var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)); box-sizing: border-box;
       background: white; box-shadow: -8px 0 32px rgba(0,0,0,0.25);
       z-index: 11000; display: flex; flex-direction: column;
       animation: kt-drawer-in 0.22s ease-out;
@@ -103,15 +104,18 @@
 
     document.body.appendChild(drawer);
 
-    // Click-out closes
+    // A tap outside closes it. Capture-phase pointerdown (2026-11-05): a bubbling click never arrived from a button
+    // that stops its click. The listener goes with the drawer, however it closed.
+    const mine = drawer;
     setTimeout(() => {
-      const bgClick = (ev) => {
-        if (!drawer.contains(ev.target)) {
-          drawer.remove();
-          document.removeEventListener('click', bgClick);
+      const bgDown = (ev) => {
+        if (!mine.isConnected) { document.removeEventListener('pointerdown', bgDown, true); return; }
+        if (!mine.contains(ev.target)) {
+          mine.remove();
+          document.removeEventListener('pointerdown', bgDown, true);
         }
       };
-      document.addEventListener('click', bgClick);
+      document.addEventListener('pointerdown', bgDown, true);
     }, 50);
 
     getApi().get('/help/' + slug)

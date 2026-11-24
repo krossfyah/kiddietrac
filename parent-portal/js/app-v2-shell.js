@@ -128,6 +128,21 @@
   }
 
   // ──────────────── Role detection ─────────────────────────────
+  /* THE ROLES THIS SCREEN IS FOR (2026-11-09, Anthony: "check the guardian as a user and see why are some subtabs
+     pulling up as if he is a staff"). While a super admin previews a role (View as), every screen must answer as
+     that role. Screens that read kt_user.roles directly saw the real account - platform admin, agency admin and,
+     for Anthony, guardian too - so Payment schedules opened its staff family picker, Conferences its staff view,
+     Support its staff tickets, and staff pollers kept asking staff routes, all inside the parent preview.
+     ktRoles(u) is the same rule as Roles.primaryRoleOf: the previewed role when a platform admin is previewing,
+     otherwise the account's own roles. Ask it instead of u.roles whenever the answer changes what is DRAWN. */
+  window.ktRoles = function (u) {
+    try { if (!u) u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {}; } catch (e) { u = {}; }
+    if (u && u.user && !u.roles) u = u.user;
+    var roles = (u && Array.isArray(u.roles)) ? u.roles.slice() : [];
+    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    if (va && (roles.indexOf('platform_admin') !== -1 || (u && u.is_platform_admin))) return [va];
+    return roles;
+  };
   const Roles = {
     primaryRoleOf(user) {
       if (!user || !user.roles) return null;
@@ -146,6 +161,8 @@
       if (user.roles.includes('guardian'))        return 'guardian';
       if (user.roles.includes('home_visitor'))    return 'home_visitor';
       if (user.roles.includes('sales_rep'))       return 'sales_rep';
+      // A reseller admin manages one reseller's brand (2026-10-21, screen-resellers.js).
+      if (user.roles.includes('reseller_admin'))  return 'reseller_admin';
       if (user.roles.includes('auditor'))         return 'auditor';
       return null;
     },
@@ -255,105 +272,114 @@
       var hccEnabled_v = (!_hccAg_v) || _hccAg_v === 2 || _hccAg_v === 6 || isPlatformAdmin_v22p34;
       var overviewItems = [{ hash: 'dashboard', label: 'Agency overview', icon: '🏠' }, { hash: 'admin-centres', label: 'Centres', icon: '🏫' }, { hash: 'provider-day', label: 'Daily Overview', icon: '🗓️' }, { hash: 'provider-map', label: 'Provider map', icon: '🗺️' }];
       if (!isPlatformAdmin_v22p34) overviewItems.push({ hash: 'agencies', label: 'My agency', icon: '🏢' });   // an agency admin sees only their own (2026-10-05)
+      // A Reseller works as agency admin inside the agencies it owns; its own section leads (2026-10-21).
+      var isReseller_v = !isPlatformAdmin_v22p34 && Array.isArray(u_v22p34.roles) && u_v22p34.roles.indexOf('reseller_admin') !== -1
+        && (viewAs_v22p98 === '' || viewAs_v22p98 === 'reseller_admin');
       return [
+        ...(isReseller_v ? [{ label: 'Reseller', items: [
+          { hash: 'reseller',          label: 'All my agencies', icon: '🏪' },
+          { hash: 'reseller-onboard',  label: 'Onboard an agency', icon: '➕' },
+          { hash: 'reseller-billing',  label: 'Billing & commissions', icon: '💳' },
+          { hash: 'reseller-support',  label: 'Support desk',  icon: '🎧' },
+          { hash: 'reseller-brand',    label: 'Branding',        icon: '🎨' },
+          { hash: 'reseller-agencies', label: 'Agencies',        icon: '🏢' },
+        ]}] : []),
         { label: 'Overview', items: overviewItems },
         { label: 'Operations', items: [
-          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
           { hash: 'safe-arrival',   label: 'Safe Arrival',    icon: '🛡️' },
+          { hash: 'educator-rewards', label: 'Educator rewards', icon: '⭐' },
           { hash: 'parent-issues',  label: 'Parent issues',   icon: '🗣️' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
-          { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
-          { hash: 'schedule',       label: 'Schedule',         icon: '📅' },
+          { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
-          { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
+          { hash: 'timesheets',     label: 'Timesheets',       icon: '🕘' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
-          { hash: 'drills',        label: 'Drill log',        icon: '🚒' },
-          { hash: 'headcounts',    label: 'Headcounts',       icon: '👀' },
+          { hash: 'headcounts',    label: 'Headcounts',       icon: '🔢' },
           // Ontario sleep supervision (2026-10-13): hidden unless sleep checks are on (screen-sleep-room.js).
           { hash: 'sleep-room',    label: 'Sleep room',       icon: '😴' },
           { hash: 'hazards',       label: 'Hazards',         icon: '🚧' },
           // Ohio (2026-10-10): shown only for US-OH agencies or where switched on (screen-ohio.js).
-          { hash: 'pfcc',          label: 'Ohio PFCC',        icon: '🏛️' },
-          { hash: 'sutq',          label: 'Step Up To Quality', icon: '⭐' },
+          { hash: 'pfcc',          label: 'Ohio PFCC',        icon: '🎗️' },
+          { hash: 'sutq',          label: 'Step Up To Quality', icon: '🌟' },
           { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
         ]},
         { label: 'Growth', items: [
-          { hash: 'marketing-campaigns', label: 'Marketing',   icon: '📣' },
+          { hash: 'marketing-campaigns', label: 'Marketing',   icon: '📯' },
           { hash: 'tours',               label: 'Tours',       icon: '🚪' },
-          { hash: 'sms',                 label: 'SMS broadcast', icon: '📱' },
+          { hash: 'sms',                 label: 'SMS broadcast', icon: '📱', badgeKey: 'sms_replies' },
           { hash: 'ai-churn',            label: 'Churn risk',  icon: '📉' },
           { hash: 'ai-docs',             label: 'AI doc extract', icon: '🪄' },
           { hash: 'forecast',            label: 'Enrolment forecast', icon: '📈' },
         ]},
         { label: 'Programs', items: [
+          { hash: 'lesson-plans',      label: 'Lesson plans',    icon: '📚' },   // moved from the main list (2026-10-24)
           { hash: 'menu',                label: 'Weekly menu',     icon: '🍽' },
           { hash: 'field-trips',         label: 'Field trips',     icon: '🚐' },
-          { hash: 'allergy-alerts',      label: 'Allergy alerts',  icon: '⚠' },
+          { hash: 'allergy-alerts',      label: 'Allergy alerts',  icon: '🥜' },
         ]},
         { label: 'Staff', items: [
-          { hash: 'tasks',              label: 'Tasks',              icon: '📋' },
+          { hash: 'tasks',              label: 'Tasks',              icon: '☑️' },
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
-          { hash: 'background-checks',  label: 'Background checks',  icon: '🛡' },
-          { hash: 'substitutes',        label: 'Substitutes',        icon: '🔄' },
+          { hash: 'background-checks',  label: 'Background checks',  icon: '🪪' },
+          { hash: 'substitutes',        label: 'Substitutes',        icon: '🙋' },
+          // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
+          { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
         ]},
         // Home Visitors — own section (moved out of Compliance for clarity).
         { label: 'Home Visitors', items: [
-          { hash: 'home-visit-reports', label: 'Home visit reports', icon: '📋' },
+          { hash: 'home-visit-reports', label: 'Home visit reports', icon: '🏘️' },
           ...(hccEnabled_v ? [{ hash: 'hcc-forms', label: 'Inspection forms', icon: '🏡' }] : []),
         ]},
         { label: 'Compliance', items: [
           { hash: 'policies',           label: 'Policies',             icon: '📘' },
-          { hash: 'inspection',         label: 'Inspection checklist', icon: '✅' },
-          { hash: 'renewals',           label: 'Renewals calendar',    icon: '📅' },
+          { hash: 'inspection',         label: 'Inspection checklist', icon: '🔎' },
+          { hash: 'renewals',           label: 'Renewals calendar',    icon: '♻️' },
           { hash: 'cwelcc',             label: 'Subsidies',           icon: '💵' },
           // Ontario OCCMS reporting (2026-10-13): hidden unless an Ontario agency (screen-subsidy-roa.js).
-          { hash: 'subsidy-roa',        label: 'OCCMS reporting',     icon: '🧾' },
+          { hash: 'subsidy-roa',        label: 'OCCMS reporting',     icon: '🏷️' },
           { hash: 'retention',          label: 'Retention',          icon: '📊' },
           { hash: 'anomalies',          label: 'Anomalies',          icon: '🔍' },
         ]},
         // v22p98: the Reseller section (MRR, feature flags, branding, platform
         // tooling) is super-admin only — hide it from tenant agency admins.
         ...(isPlatformAdmin_v22p34 ? [{ label: 'Reseller', items: [
-          { hash: 'admin-mrr',      label: 'MRR dashboard',    icon: '💰' },
-          /* Beside MRR: the same money from the other side — MRR is what is owed in
-             aggregate, this is the individual invoices behind it. Reseller because that
-             is a platform_admin section, and the API is guarded role:platform_admin. */
-          { hash: 'sales-invoices', label: 'Invoices',         icon: '🧾' },
-          { hash: 'admin-features', label: 'Feature flags',    icon: '⚙️' },
-          { hash: 'admin-branding', label: 'Branding',         icon: '🎨' },
-          { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
-          { hash: 'maintenance',   label: 'Maintenance',      icon: '🛠️' },
-          { hash: 'mail-settings', label: 'Email',            icon: '✉️' },
-          { hash: 'phone-voicemail', label: 'Phone & voicemail', icon: '📞' },
+          { hash: 'resellers',      label: 'Resellers',        icon: '🤝' },   // 2026-10-21
+          { hash: 'reseller',       label: 'Reseller overview', icon: '🏪' },
+          // Invoices moved to the Platform section, beside Licences (2026-10-25).
+          // MRR, Usage & spend, Feature flags, Branding, Maintenance, Email and AI digest status moved to the
+          // Platform section (agency-switcher.js injectPlatformNav), 2026-10-25.
+          // Phone & voicemail moved to Settings → Phone & carriers (#sms-settings), 2026-10-22.
         ]}] : []),
-        ...(isPlatformAdmin_v22p34 ? [{ label: 'Website', items: [{ hash: 'marketing-site', label: 'Website', icon: '🌐' }] }] : []),
+        // Website now sits in the Platform section (agency-switcher.js injectPlatformNav), 2026-10-23.
         { label: 'Enrollment', items: [
-          { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
-          { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
+          { hash: 'invitation-codes', label: 'Invitation codes', icon: '🔖' },
+          { hash: 'edocuments',       label: 'eDocuments',       icon: '🖋️' },
           { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
         ]},
         { label: 'Finance', items: [
-          { hash: 'late-pickups',     label: 'Late pickups',     icon: '⏰' },
+          { hash: 'late-pickups',     label: 'Late pickups',     icon: '🌙' },
           { hash: 'bulk-invoices',    label: 'Bulk invoice run', icon: '💸' },
           { hash: 'payment-run',      label: 'Payment run',      icon: '💳' },
-          { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
-          { hash: 'payment-plans',    label: 'Payment schedules', icon: '📅' },
+          { hash: 'billing-schedule', label: 'Billing schedule', icon: '🧮' },
+          { hash: 'payment-plans',    label: 'Payment schedules', icon: '🏧' },
           { hash: 'refunds',          label: 'Refunds',          icon: '↩' },
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'expenses',         label: 'Expenses',         icon: '🧾' },
-          { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
-          { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '💰' },
+          { hash: 'external-billing', label: 'Accounting',        icon: '🗃️' },
+          { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '📔' },
           { hash: 'donations',        label: 'Donations',        icon: '💝' },
           { hash: 'grants',           label: 'Grants',           icon: '🏛️' },
           { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
@@ -361,82 +387,94 @@
           { hash: 'workforce-funding',  label: 'Workforce funding',  icon: '🍁' },
         ]},
         { label: 'Administration', items: [
-          { hash: 'admin-users',      label: 'User management',  icon: '👥' },
+          { hash: 'admin-users',      label: 'User management',  icon: '🆔' },
           { hash: 'admin-families',   label: 'Families',         icon: '👪' },
           { hash: 'admin-children',   label: 'Children',         icon: '🧒' },
-          { hash: 'admin-forms',      label: 'Custom forms',     icon: '📝' },
+          { hash: 'admin-forms',      label: 'Custom forms',     icon: '🗳️' },
           { hash: 'compliance',       label: 'Compliance',       icon: '✅' },
           // Staff training & household residents (2026-10-10): shown only where the jurisdiction has rules (kt-staff-compliance.js).
-          { hash: 'household',        label: 'Household residents', icon: '🏠' },
+          { hash: 'household',        label: 'Household residents', icon: '🛋️' },
           { hash: 'audit-logs',       label: 'Audit log',        icon: '📜' },
-          { hash: 'closures',         label: 'Closures',         icon: '🗓' },
-          { hash: 'room-ratios',      label: 'Room ratios',      icon: '👥' },
+          { hash: 'privacy-breaches', label: 'Privacy breaches', icon: '🔓' },   // PIPEDA breach register (2026-11-06)
+          { hash: 'privacy-requests', label: 'Privacy requests', icon: '📬' },   // PIPEDA s. 8 access / correction requests (2026-11-10)
+          { hash: 'photo-permissions', label: 'Photo permissions', icon: '🤳' },  // per-child photo consent (2026-11-06)
+          { hash: 'closures',         label: 'Closures',         icon: '🚫' },
+          { hash: 'room-ratios',      label: 'Room ratios',      icon: '⚖️' },
           { hash: 'vacation-holds',   label: 'Vacation holds',   icon: '🏖' },
-          { hash: 'bus-routes',       label: 'Bus routes',       icon: '🚐' },
+          { hash: 'bus-routes',       label: 'Bus routes',       icon: '🚌' },
           { hash: 'room-rotations',   label: 'Room rotations',   icon: '🔄' },
           { hash: 'reports',          label: 'Reports',          icon: '📋' },
 
-          { hash: 'cacfp',            label: 'CACFP meals',      icon: '🍽' },
+          { hash: 'cacfp',            label: 'CACFP meals',      icon: '🥕' },
           { hash: 'report-cards',     label: 'Report cards',    icon: '📑' },
-          { hash: 'zones',            label: 'Activity zones',  icon: '🎨' },
+          { hash: 'zones',            label: 'Activity zones',  icon: '🧩' },
           { hash: 'tickets',          label: 'Support tickets', icon: '🎫' },
-          { hash: 'attendance-pattern',label: 'Attendance days', icon: '📅' },
-          { hash: 'trip-gps',         label: 'Field trip GPS',  icon: '📍' },
+          { hash: 'attendance-pattern',label: 'Attendance days', icon: '📍' },
+          { hash: 'trip-gps',         label: 'Walk Watch',      icon: '📍' },   // brand, 2026-10-26 (route unchanged)
           { hash: 'wellness-digest',  label: 'Wellness digest', icon: '🩺' },
-          { hash: 'doc-workflows',    label: 'Doc workflows',   icon: '📜' },
+          { hash: 'doc-workflows',    label: 'Doc workflows',   icon: '🔀' },
         ]},
         { label: 'Engagement', items: [
           { hash: 'reenrollment',     label: 'Re-enrollment',  icon: '🔁' },
           { hash: 'engagement',       label: 'Engagement score', icon: '💚' },
-          { hash: 'nps',              label: 'NPS', icon: '📊' },
+          { hash: 'nps',              label: 'NPS', icon: '💯' },
           { hash: 'signed-docs',      label: 'Signed documents', icon: '✍' },
           { hash: 'drip-campaigns',   label: 'Drip campaigns',  icon: '💧' },
-          { hash: 'curriculum',       label: 'Curriculum',      icon: '📚' },
-          { hash: 'hdlh-gaps',        label: 'Framework gaps',  icon: '🎯' },
+          { hash: 'curriculum',       label: 'Curriculum',      icon: '🌱' },
+          { hash: 'hdlh-gaps',        label: 'Framework gaps',  icon: '🔬' },
           { hash: 'videos',           label: 'Video feed',      icon: '🎬' },
-          { hash: 'photo-tagging',    label: 'Photo AI tagging',icon: '🪄' },
-          { hash: 'conferences',      label: 'Conferences',     icon: '🗣' },
+          { hash: 'conferences',      label: 'Conferences',     icon: '🪑' },
           { hash: 'rsvp',             label: 'Event RSVPs',     icon: '🎟️' },
           { hash: 'forms-manager',    label: 'Forms Manager',   icon: '🗂️' },
         ]},
         { label: 'Settings', items: [
-          { hash: 'billing-settings',  label: 'Billing', icon: '🧾' },
+          /* YOUR OWN SETTINGS (2026-10-21). Anthony: "where in the desktop view can I change
+             the notification sounds". Everything else in this group is the AGENCY's; your
+             notification sounds, two-step and profile panes live at #settings, which an
+             admin could only reach by typing it. */
+          { hash: 'settings', label: 'My settings', icon: '⚙️' },
+          { hash: 'billing-settings',  label: 'Billing', icon: '💱' },
+          // The agency's licence is NOT here: it sits in the sidebar foot beside the build line
+          // (2026-10-25, Anthony). See installBuildFoot().
           { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
+          // Automatic monthly thank-you awards (2026-11-02, Anthony: "the automatic awards should be a setting in the settings section").
+          { hash: 'educator-award-settings', label: 'Educator awards',  icon: '🏅' },
           // Scheduled reminders to the agency's own reviewers (2026-10-09).
-          { hash: 'notification-settings', label: 'Notifications',         icon: '🔔' },
-          { hash: 'payment-providers',  label: 'Payment providers',       icon: '💳' },
+          // The AGENCY's scheduled reminders, named so it is not mistaken for your own.
+          { hash: 'notification-settings', label: 'Agency notifications',  icon: '📳' },
+          { hash: 'payment-providers',  label: 'Payment providers',       icon: '🔌' },
           { hash: 'learning-framework', label: 'Learning framework',      icon: '🧭' },
           /* SETTINGS, not Reseller. Backups are platform-level (one database sits behind
              every agency, so the controller still requires platform_admin) but "where do
              I check the backups" is a settings question, and Reseller is where the
              billing-the-agencies screens live. Anthony went to Settings and did not find
              it, which is the whole argument. */
-          ...(isPlatformAdmin_v22p34
-            ? [{ hash: 'backups', label: 'Backups', icon: '🗄️' }, { hash: 'compliance-evidence', label: 'Compliance evidence', icon: '🛡️' }]
-            : []),
+          // Backups and Compliance evidence moved to the Platform section (2026-10-25, Anthony's choice).
           /* No "My profile" here (2026-10-01, Anthony): your name in the top bar opens
              it, so Settings holds agency settings only. #my-profile still routes. */
           { hash: 'educator-rooms', label: 'Room Controls', icon: '🎛️' },
-          { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '📅' },
-          { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛡' },
-          { hash: 'email-settings',     label: 'Email settings',      icon: '✉️' },
+          { hash: 'calendar-settings',     label: 'Calendar settings',           icon: '🕰️' },
+          { hash: 'admin-roles',        label: 'Roles & permissions', icon: '🛂' },
+          { hash: 'email-settings',     label: 'Email settings',      icon: '📩' },
           /* Two carriers and two channels live behind this now, so naming it after
              one of them was already wrong and naming it after SMS alone hides the
              voice half. The HASH is untouched — it is in bookmarks and in the
              screen registry. */
-          { hash: 'sms-settings',       label: 'Carrier settings',    icon: '📡' },
+          /* Super admins also manage KiddieTrac's toll-free line here (its Toll-free line
+             tab, moved from Reseller → Phone & voicemail on 2026-10-22). */
+          { hash: 'sms-settings',       label: isPlatformAdmin_v22p34 ? 'Phone & carriers' : 'Carrier settings', icon: '📡' },
           { hash: 'email-templates',    label: 'Email templates',     icon: '📧' },
           // Seasonal email headers moved to Branding › Seasonal email headers (2026-10-15).
-          { hash: 'document-templates', label: 'Document templates', icon: '📄' },
+          { hash: 'document-templates', label: 'Document templates', icon: '📐' },
           { hash: 'quickbooks',         label: 'QuickBooks (Intuit)', icon: '📒' },
           { hash: 'xero',               label: 'Xero',                icon: '📗' },
-          { hash: 'sage',               label: 'Sage',                icon: '📘' },
+          { hash: 'sage',               label: 'Sage',                icon: '🌿' },
 
 
 
-          { hash: 'data-retention',     label: 'Data retention & compliance', icon: '🗄️' },
+          { hash: 'data-retention',     label: 'Data retention & compliance', icon: '📦' },
           { hash: 'help',               label: 'Help & guides',       icon: '📖' },
-        ].concat(isPlatformAdmin_v22p34 ? [{ hash: 'social-settings', label: 'Sign-in methods', icon: '🔑' }, { hash: 'security-alerts', label: 'Security alerts', icon: '🛡️' }] : []) },
+        ] },   // Sign-in methods and Security alerts moved to the Platform section (2026-10-25).
       ];
     }
     if (role === 'centre_director') {
@@ -446,111 +484,124 @@
            account ledgers) left this menu. Their APIs are agency_admin only, so they
            showed a 403 or fell back to the dashboard. Expenses and Tuition plans
            joined: their APIs now admit a director for their own centres. */
+        /* 2026-11-13: the SAME screens an agency admin has (Anthony: "things need to be consistent across
+           roles"), scoped to the director's centres by the server: the agency overview with every room, roster
+           and clock-in; Children; Families; User management (their staff and parents - the old thin Staff list
+           folded in here; #children, #families and #staff still land on these). */
         { label: 'Overview', items: [
           { hash: 'dashboard',      label: 'Dashboard',        icon: '🏠' },
-          { hash: 'children',       label: 'Children',         icon: '🧒' },
-          { hash: 'families',       label: 'Families',         icon: '👨‍👩‍👧' },
-          { hash: 'staff',          label: 'Staff',            icon: '👥' },
+          { hash: 'admin-children', label: 'Children',         icon: '🧒' },
+          { hash: 'admin-families', label: 'Families',         icon: '👪' },
           // 2026-10-07: their own centre's staff and parents — Manage edits details, not sign-in.
-          { hash: 'admin-users',    label: 'User management',  icon: '🪪' },
+          { hash: 'admin-users',    label: 'User management',  icon: '🆔' },
         ]},
         // Home Visitors — directors review their agency's home-visit reports +
         // inspection forms (screens are registered for centre_director too).
         { label: 'Home Visitors', items: [
-          { hash: 'home-visit-reports', label: 'Home visit reports', icon: '📋' },
+          { hash: 'home-visit-reports', label: 'Home visit reports', icon: '🏘️' },
           { hash: 'hcc-forms',          label: 'Inspection forms',   icon: '🏡' },
         ]},
         { label: 'Operations', items: [
-          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
           { hash: 'safe-arrival',   label: 'Safe Arrival',    icon: '🛡️' },
+          { hash: 'educator-rewards', label: 'Educator rewards', icon: '⭐' },
           { hash: 'parent-issues',  label: 'Parent issues',   icon: '🗣️' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
-          { hash: 'closures',       label: 'Closures',         icon: '🗓' },
-          { hash: 'today',          label: 'Today',            icon: '✨' },
+          { hash: 'closures',       label: 'Closures',         icon: '🚫' },
+          { hash: 'today',          label: 'Today',            icon: '🌤️' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
-          { hash: 'lesson-plans',   label: 'Lesson plans',     icon: '📚' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
-          { hash: 'schedule',       label: 'Schedule',         icon: '📅' },
+          { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
-          { hash: 'timesheets',     label: 'Timesheets',       icon: '📊' },
+          { hash: 'timesheets',     label: 'Timesheets',       icon: '🕘' },
           { hash: 'audit-logs',     label: 'Audit log',        icon: '📜' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
-          { hash: 'drills',        label: 'Drill log',        icon: '🚒' },
-          { hash: 'headcounts',    label: 'Headcounts',       icon: '👀' },
+          { hash: 'headcounts',    label: 'Headcounts',       icon: '🔢' },
           // Ontario sleep supervision (2026-10-13): hidden unless sleep checks are on (screen-sleep-room.js).
           { hash: 'sleep-room',    label: 'Sleep room',       icon: '😴' },
           { hash: 'hazards',       label: 'Hazards',         icon: '🚧' },
           // Ohio (2026-10-10): shown only for US-OH agencies or where switched on (screen-ohio.js).
-          { hash: 'pfcc',          label: 'Ohio PFCC',        icon: '🏛️' },
-          { hash: 'sutq',          label: 'Step Up To Quality', icon: '⭐' },
+          { hash: 'pfcc',          label: 'Ohio PFCC',        icon: '🎗️' },
+          { hash: 'sutq',          label: 'Step Up To Quality', icon: '🌟' },
           { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
-          { hash: 'digest-status', label: 'AI digest status', icon: '🤖' },
-          { hash: 'maintenance',   label: 'Maintenance',      icon: '🛠️' },
+          { hash: 'privacy-breaches', label: 'Privacy breaches', icon: '🔓' },   // read-only, own centres (2026-11-06)
+          { hash: 'photo-permissions', label: 'Photo permissions', icon: '🤳' },  // own centres; records paper forms (2026-11-06)
+          // Their centres' forms, sign-offs and file requests; uploads tie to their centre (CentreScope::people, 2026-11-13).
+          { hash: 'forms-manager',     label: 'Forms Manager',     icon: '🗂️' },
+          { hash: 'digest-status', label: 'AI digest status', icon: '📰' },
         ]},
         { label: 'Growth', items: [
-          { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📣' },
+          { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📯' },
           { hash: 'tours',              label: 'Tours',       icon: '🚪' },
-          { hash: 'sms',                label: 'SMS broadcast', icon: '📱' },
+          { hash: 'sms',                label: 'SMS broadcast', icon: '📱', badgeKey: 'sms_replies' },
           { hash: 'ai-churn',           label: 'Churn risk',  icon: '📉' },
           { hash: 'ai-docs',            label: 'AI doc extract', icon: '🪄' },
         ]},
         { label: 'Staff', items: [
-          { hash: 'tasks',             label: 'Tasks',              icon: '📋' },
+          { hash: 'tasks',             label: 'Tasks',              icon: '☑️' },
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
           { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
-          { hash: 'background-checks', label: 'Background checks',  icon: '🛡' },
-          { hash: 'substitutes',       label: 'Substitutes',        icon: '🔄' },
+          { hash: 'background-checks', label: 'Background checks',  icon: '🪪' },
+          { hash: 'substitutes',       label: 'Substitutes',        icon: '🙋' },
+          // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
+          { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
         ]},
         { label: 'Programs', items: [
+          { hash: 'lesson-plans',      label: 'Lesson plans',    icon: '📚' },   // moved from the main list (2026-10-24)
+          { hash: 'curriculum',        label: 'Curriculum library', icon: '🌱' },   // Ontario units (2026-11-03)
           { hash: 'menu',              label: 'Weekly menu',     icon: '🍽' },
           { hash: 'field-trips',       label: 'Field trips',     icon: '🚐' },
-          { hash: 'conferences',       label: 'Conferences',     icon: '🗣' },
-          { hash: 'allergy-alerts',    label: 'Allergy alerts',  icon: '⚠' },
+          { hash: 'conferences',       label: 'Conferences',     icon: '🪑' },
+          { hash: 'allergy-alerts',    label: 'Allergy alerts',  icon: '🥜' },
         ]},
         { label: 'Compliance', items: [
           { hash: 'compliance',        label: 'Compliance',           icon: '✅' },
           { hash: 'policies',          label: 'Policies',             icon: '📘' },
           { hash: 'my-policies',       label: 'Policies to review',   icon: '✍️' },
-          { hash: 'my-training',       label: 'My training',          icon: '🎓' },
+          { hash: 'my-training',       label: 'My training',          icon: '🎒' },
           { hash: 'my-certificates',   label: 'My certificates',      icon: '❤️' },
-          { hash: 'household',         label: 'Household residents',  icon: '🏠' },
-          { hash: 'inspection',        label: 'Inspection checklist', icon: '✅' },
-          { hash: 'renewals',          label: 'Renewals calendar',    icon: '📅' },
+          { hash: 'household',         label: 'Household residents',  icon: '🛋️' },
+          { hash: 'inspection',        label: 'Inspection checklist', icon: '🔎' },
+          { hash: 'renewals',          label: 'Renewals calendar',    icon: '♻️' },
           { hash: 'cwelcc',            label: 'Subsidies',         icon: '💵' },
           // Ontario OCCMS reporting (2026-10-13): hidden unless an Ontario agency (screen-subsidy-roa.js).
-          { hash: 'subsidy-roa',        label: 'OCCMS reporting',     icon: '🧾' },
+          { hash: 'subsidy-roa',        label: 'OCCMS reporting',     icon: '🏷️' },
           { hash: 'retention',         label: 'Retention',        icon: '📊' },
           { hash: 'forecast',          label: 'Enrolment forecast',icon: '📈' },
           { hash: 'anomalies',         label: 'Anomalies',        icon: '🔍' },
         ]},
         { label: 'Enrollment', items: [
-          { hash: 'invitation-codes', label: 'Invitation codes', icon: '✉️' },
+          { hash: 'invitation-codes', label: 'Invitation codes', icon: '🔖' },
           { hash: 'vacation-holds',   label: 'Vacation holds',   icon: '🏖' },
-          { hash: 'edocuments',       label: 'eDocuments',       icon: '📄' },
+          { hash: 'edocuments',       label: 'eDocuments',       icon: '🖋️' },
           { hash: 'synced-waitlist',  label: 'Waitlist',          icon: '⏳' },
         ]},
         { label: 'Finance', items: [
-          { hash: 'late-pickups',     label: 'Late pickups',     icon: '⏰' },
-          { hash: 'billing-schedule', label: 'Billing schedule', icon: '📅' },
-          { hash: 'payment-plans',    label: 'Payment schedules', icon: '📅' },
-          { hash: 'tuition-plans',    label: 'Tuition plans',    icon: '🏷' },
+          { hash: 'late-pickups',     label: 'Late pickups',     icon: '🌙' },
+          { hash: 'billing-schedule', label: 'Billing schedule', icon: '🧮' },
+          { hash: 'payment-plans',    label: 'Payment schedules', icon: '🏧' },
+          { hash: 'tuition-plans',    label: 'Tuition plans',    icon: '🧷' },
           { hash: 'expenses',         label: 'Expenses',         icon: '🧾' },
           { hash: 'refunds',          label: 'Refunds',          icon: '↩' },
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
-          { hash: 'external-billing', label: 'Accounting',        icon: '🧾' },
+          { hash: 'external-billing', label: 'Accounting',        icon: '🗃️' },
           { hash: 'grants',           label: 'Grants',           icon: '🏛️' },
           { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Settings', items: [
+          { hash: 'settings', label: 'My settings', icon: '⚙️' },
           { hash: 'educator-rooms', label: 'Room Controls', icon: '🎛️' },
+          // Read only for a director: how the agency's automatic thank-you awards are set up (2026-11-02).
+          { hash: 'educator-award-settings', label: 'Educator awards', icon: '🏅' },
           /* No "My profile" here either: a director's name in the top bar opens
              #my-profile (kt-topbar openProfile). */
 
@@ -566,28 +617,33 @@
       return [
         { label: 'Menu', items: [
           { hash: 'home',          label: 'Home',          icon: '🏠' },
-          { hash: 'today',         label: 'Today',         icon: '✨' },
+          { hash: 'today',         label: 'Today',         icon: '🌤️' },
           { hash: 'my-tasks',      label: 'My tasks',      icon: '📋' },
-          { hash: 'parent-feedback', label: 'Parent Feedback', icon: '💬' },
+          { hash: 'parent-feedback', label: 'Parent Feedback', icon: '💭' },
           { hash: 'parent-issues', label: 'Parent issues', icon: '🗣️' },
           // v22p98: educators clock in/out here — needed for ratio compliance,
           // payroll and reporting. The time-clock screen was already built and
           // registered for the educator role; it was just missing from this nav.
           { hash: 'time-clock',    label: 'Clock in/out',  icon: '⏱' },
-          { hash: 'care-log',      label: 'Daily log',     icon: '✅' },
+          { hash: 'care-log',      label: 'Daily log',     icon: '📝' },
           { hash: 'observations',  label: 'Observations',  icon: '👀' },
+          { hash: 'photo-permissions', label: 'Photo permissions', icon: '🤳' },   // who may be photographed (2026-11-06)
           { hash: 'lesson-plans',  label: 'Lesson plans',  icon: '📚' },
+          { hash: 'curriculum',    label: 'Curriculum library', icon: '🌱' },   // Ontario units (2026-11-03)
           { hash: 'chat',          label: 'Message Centre',      icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'incidents',     label: 'Incidents',     icon: '⚠️' },
           { hash: 'drills',        label: 'Drill log',        icon: '🚒' },
-          { hash: 'headcounts',    label: 'Headcounts',       icon: '👀' },
+          { hash: 'headcounts',    label: 'Headcounts',       icon: '🔢' },
+          // Who is due in and who is running late, for their own rooms (2026-11-06; the screen was always open to educators).
+          { hash: 'safe-arrival',  label: 'Safe Arrival',     icon: '🛡️' },
           // Ontario sleep supervision (2026-10-13): hidden unless sleep checks are on (screen-sleep-room.js).
           { hash: 'sleep-room',    label: 'Sleep room',       icon: '😴' },
           { hash: 'hazards',       label: 'Report a hazard', icon: '🚧' },
-          { hash: 'late-pickups',  label: 'Late pickups',  icon: '⏰' },
+          { hash: 'late-pickups',  label: 'Late pickups',  icon: '🌙' },
           { hash: 'medications',   label: 'Medications',   icon: '💊' },
-          { hash: 'announcements', label: 'News',          icon: '📢' },
+          { hash: 'announcements', label: 'News',          icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'time-off',      label: 'Time off',      icon: '🌴' },
           // 2026-08-30: the canned Reports screen, scoped server-side to this
           // educator's own rooms and their own clock-ins.
@@ -601,13 +657,15 @@
              Terms/Privacy/NDA and anything an admin attached to their record.
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
-          { hash: 'my-training',   label: 'My training',  icon: '🎓' },
+          { hash: 'my-training',   label: 'My training',  icon: '🎒' },
           { hash: 'my-certificates', label: 'My certificates', icon: '❤️' },
+          { hash: 'my-points',     label: 'My points',    icon: '⭐' },
           { hash: 'my-policies',   label: 'Policies to review', icon: '📘' },
-          { hash: 'household',     label: 'Household residents', icon: '🏠' },
+          { hash: 'household',     label: 'Household residents', icon: '🛋️' },
         ]},
         { label: 'Account', items: [
-          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
+          { hash: 'settings', label: 'My settings', icon: '⚙️' },
           { hash: 'help',          label: 'Help',          icon: '📖' },
         ]},
       ];
@@ -630,15 +688,16 @@
              Terms/Privacy/NDA and anything an admin attached to their record.
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
-          { hash: 'my-training',   label: 'My training',  icon: '🎓' },
+          { hash: 'my-training',   label: 'My training',  icon: '🎒' },
           { hash: 'my-certificates', label: 'My certificates', icon: '❤️' },
+          { hash: 'my-points',     label: 'My points',    icon: '⭐' },
           { hash: 'my-policies',   label: 'Policies to review', icon: '📘' },
-          { hash: 'household',     label: 'Household residents', icon: '🏠' },
+          { hash: 'household',     label: 'Household residents', icon: '🛋️' },
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'hazards',        label: 'Report a hazard', icon: '🚧' },   // 2026-10-15
         ]},
         { label: 'Account', items: [
-          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'settings',      label: 'Settings',      icon: '⚙️' },
           { hash: 'help',          label: 'Help',          icon: '📖' },
         ]},
@@ -650,17 +709,40 @@
         { label: 'Sales', items: [
           { hash: 'home',            label: 'Home',            icon: '🏠' },
           { hash: 'sales',           label: 'Pipeline',        icon: '📊' },
-          { hash: 'sales-webchat',   label: 'Website chat',    icon: '💬' },
+          { hash: 'sales-webchat',   label: 'Website chat',    icon: '🗨️' },
+          { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'sales-leads',     label: 'Leads',           icon: '🎯' },
-          { hash: 'sales-new',       label: 'New lead',        icon: '➕', sub: true },
-          { hash: 'sales-followups', label: 'Follow-ups',      icon: '⏰' },
+          { hash: 'sales-quotes',    label: 'Proposals',       icon: '📄' },
+          { hash: 'sales-customers', label: 'Customers',       icon: '🏆' },   // every won lead, its services (2026-11-10)   // every proposal, stats + charts (2026-10-24)
+          { hash: 'sales-expenses',  label: 'Expenses',        icon: '🪙' },   // their own expenses, for approval (2026-10-24)
+          { hash: 'sales-campaigns', label: 'Campaigns',       icon: '📣' },   // intro emails to prospects, tracked (2026-10-26)
+          { hash: 'sales-email',     label: 'Sales email',     icon: '📮' },   // the shared sales@ mailbox (2026-10-26)
+          { hash: 'sales-bookings',  label: 'Bookings',        icon: '📌' },   // website meeting requests (2026-10-23)
+          { hash: 'sales-calendar',  label: 'Calendar',        icon: '📆' },   // bookings, hours, time off, whereabouts (2026-10-23)
           { hash: 'prospect-ndas',   label: 'Prospect NDAs',   icon: '🤝' },   // 2026-10-09
           { hash: 'sales-demo',      label: 'Launch demo',     icon: '🚀' },
         ]},
         { label: 'Account', items: [
-          { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+          { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'help',          label: 'Help',          icon: '❓' },
           { hash: 'settings',      label: 'Settings',      icon: '⚙️' },
+        ]},
+      ];
+    }
+    if (role === 'reseller_admin') {
+      // Its own brand and the names of its agencies - nothing inside them (2026-10-21).
+      return [
+        { label: 'Your brand', items: [
+          { hash: 'reseller',          label: 'All my agencies', icon: '🏪' },
+          { hash: 'reseller-onboard',  label: 'Onboard an agency', icon: '➕' },
+          { hash: 'reseller-billing',  label: 'Billing & commissions', icon: '💳' },
+          { hash: 'reseller-support',  label: 'Support desk',  icon: '🎧' },
+          { hash: 'reseller-brand',    label: 'Branding',  icon: '🎨' },
+          { hash: 'reseller-agencies', label: 'Agencies',  icon: '🏢' },
+        ]},
+        { label: 'Account', items: [
+          { hash: 'help',     label: 'Help',     icon: '❓' },
+          { hash: 'settings', label: 'Settings', icon: '⚙️' },
         ]},
       ];
     }
@@ -670,11 +752,32 @@
         { label: 'Menu', items: [
           { hash: 'home',       label: 'Home',       icon: '🏠' },
           { hash: 'compliance', label: 'Compliance', icon: '✅' },
-          { hash: 'audit-logs', label: 'Audit logs', icon: '📋' },
+          { hash: 'audit-logs', label: 'Audit logs', icon: '📜' },
           { hash: 'children',   label: 'Children',   icon: '🧒' },
           { hash: 'forms',      label: 'Forms',      icon: '📝' },
           { hash: 'forms-manager', label: 'Forms Manager', icon: '🗂️' },
           { hash: 'help',       label: 'Help',       icon: '📖' },
+        ]},
+        { label: 'Account', items: [
+          { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
+          { hash: 'settings', label: 'My settings', icon: '⚙️' },
+        ]},
+      ];
+    }
+    /* A parent the agency has not linked to a family yet (user.family_pending) gets only
+       what works without one: the waiting screen, forms and documents sent to them, and
+       their own account. See familyPending() below. */
+    if (familyPending()) {
+      return [
+        { label: 'Menu', items: [
+          { hash: 'pending',      label: 'Account status', icon: '⏳' },
+          { hash: 'my-forms',     label: 'Forms to sign',  icon: '✍️' },
+          { hash: 'my-documents', label: 'Documents',      icon: '📄', badgeKey: 'my_documents' },
+        ]},
+        { label: 'Account', items: [
+          { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
+          { hash: 'settings', label: 'My settings', icon: '⚙️' },
+          { hash: 'help',          label: 'Help',          icon: '📖' },
         ]},
       ];
     }
@@ -683,8 +786,8 @@
     return [
       { label: 'Menu', items: [
         { hash: 'home',               label: 'Home',       icon: '🏠' },
-        { hash: 'today',              label: 'Today',      icon: '✨' },
-        { hash: 'photos',             label: 'Photos & video', icon: '📸' },
+        { hash: 'today',              label: 'Today',      icon: '🌈' },
+        { hash: 'photos',             label: 'Photos & video', icon: '📸', badgeKey: 'photos_new' },
         { hash: 'messages',           label: 'Message Centre',   icon: '💬', badgeKey: 'chat_unread' },
         { hash: 'files',          label: 'Files',          icon: '📎' },
         { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
@@ -694,14 +797,18 @@
            sidebar IS the navigation, there was no way to reach it. */
         { hash: 'my-forms',           label: 'Forms to sign', icon: '✍️' },
         { hash: 'checkin',            label: 'Check-in',   icon: '☀' },
-        { hash: 'billing',            label: 'Billing',    icon: '💳' },
-        { hash: 'attendance-pattern', label: 'Attendance', icon: '📅' },
+        /* Running late for drop-off or pickup: tells the centre, holds Safe Arrival back (2026-11-06). */
+        { hash: 'running-late',       label: 'Running late', icon: '⏰' },
+        { hash: 'billing',            label: 'Billing',    icon: '💳', badgeKey: 'billing_due' },
+        { hash: 'attendance-pattern', label: 'Attendance', icon: '📍' },
         { hash: 'medications',        label: 'Health',     icon: '💊' },
         /* The screen was registered for guardians but reachable by nobody — it was
            in the staff nav only, so a parent had no route to it from desktop or
            mobile. That is where the upload lives. */
         { hash: 'immunizations',      label: 'Immunization', icon: '🩹' },
-        { hash: 'announcements',      label: 'News',       icon: '📢' },
+        { hash: 'announcements',      label: 'News',       icon: '📢', badgeKey: 'announcement_unread' },
+        /* The family's report cards, and asking for this quarter's (2026-11-04). */
+        { hash: 'report-cards',       label: 'Report cards', icon: '📑' },
         /* Reports the centre has shared — incident reports today. Filed copies a
            family can come back to, rather than an email they have to keep. */
         { hash: 'my-documents',       label: 'Documents',  icon: '📄', badgeKey: 'my_documents' },
@@ -712,7 +819,8 @@
         { hash: 'family-contacts',    label: 'Family & pick-ups', icon: '👪' },
       ]},
       { label: 'Account', items: [
-        { hash: 'notifications', label: 'Notifications', icon: '🔔' },
+        { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
+        { hash: 'settings', label: 'My settings', icon: '⚙️' },   // Photo permissions is its Photos tab (2026-11-06)
         { hash: 'help',          label: 'Help',          icon: '📖' },
       ]},
     ];
@@ -746,13 +854,47 @@
   function footIsSidebarColumn() {
     var sb = document.getElementById('appSidebar');
     if (!sb) { return false; }
-    var w = sb.getBoundingClientRect().width;
     var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    // Narrower than 981px it is never a column: answered without measuring the sidebar, which forced a layout on
+    // every phone navigation (300 ms on the Users screen at 4x CPU, phone speed sweep 2026-10-30).
+    if (!(vw >= 981)) { return false; }
+    var w = sb.getBoundingClientRect().width;
     if (!(w > 0) || !(vw > 0)) { return false; }
     return vw >= 981 && w <= vw * 0.5;
   }
 
+  var NAV_MARK = {
+    'safe-arrival': '<svg width="18" height="18" viewBox="0 0 100 100" style="display:block;margin:0 auto;"><defs><linearGradient id="saNavMark" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#047857"/></linearGradient></defs>'
+      + '<path d="M50 4 88 18v30c0 25-16 41-38 49C28 89 12 73 12 48V18z" fill="url(#saNavMark)"/><path d="M50 4 88 18v30c0 25-16 41-38 49" fill="none" stroke="#065f46" stroke-opacity=".25" stroke-width="3"/>'
+      + '<circle cx="58" cy="31" r="8.5" fill="#fff"/><path d="M30 54l15 15 27-27" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>'
+      + '<circle cx="78" cy="22" r="7" fill="#fbbf24" stroke="#fff" stroke-width="2.5"/></svg>',
+    /* WALK WATCH (2026-10-26): the walks & outings brand, the same mark as the website and the film. */
+    'trip-gps': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
+    'walk': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
+    'walks': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
+  };
+
+  /* THE FOOT, QUIETER (2026-10-25, Anthony: "tighten up where it shows the agency plan, build number
+     and show admin controls tighter and less apparent"). Small muted type, little padding, one
+     tight stack - present when looked for, not competing with the navigation above it. */
+  function footCss() {
+    if (document.getElementById('kt-foot-tight')) { return; }
+    var st = document.createElement('style'); st.id = 'kt-foot-tight';
+    st.textContent = ''
+      + '#kt-sidebar-foot{gap:1px !important;padding-bottom:6px !important;}'
+      + '#kt-adminctl .kt-ac-link{font-size:10px !important;font-weight:600 !important;color:#B4BFCD !important;padding:1px 0 !important;line-height:1.3 !important;}'
+      + '#kt-adminctl .kt-ac-link:hover,#kt-adminctl .kt-ac-link:focus-visible{color:#64748B !important;}'
+      + '#kt-adminctl .kt-ac-hide{font-size:10px !important;color:#94A3B8 !important;padding:1px 0 !important;}'
+      + '#kt-foot-build{gap:0 !important;}'
+      + 'button#kt-foot-build,#kt-foot-build > button{font-size:10px !important;color:#B4BFCD !important;padding:1px 0 !important;line-height:1.3 !important;}'
+      + 'button#kt-foot-build:hover,#kt-foot-build > button:hover{color:#64748B !important;}'
+      + '#kt-foot-build .kt-foot-plan{font-size:9.5px !important;font-weight:700 !important;padding:0 !important;background:none !important;color:#94A3B8 !important;line-height:1.4 !important;letter-spacing:.2px;}'
+      + '#kt-foot-build a.kt-foot-plan:hover{color:#1F6080 !important;text-decoration:underline;}';
+    document.head.appendChild(st);
+  }
+
   function installBuildFoot() {
+    footCss();
     var existing = document.getElementById('kt-foot-build');
     /* Removes as well as adds: a desktop window dragged narrow, or a tablet turned, has
        to lose the line the same way it never gets one on a phone. */
@@ -773,7 +915,43 @@
     b.textContent = 'KiddieTrac' + (v ? ' · build ' + v : '') + ' · About';
     b.title = 'Build, licensing and diagnostics';
     b.addEventListener('click', function () { window.location.hash = '#settings/about'; });
-    if (!KT.sidebarFoot(40, b)) { return; }
+    /* THE LICENCE, BESIDE THE BUILD (2026-10-25, Anthony: "License should show for
+       admins/directors by the side tool bar where it shows kiddie trac build"). It was a
+       Settings menu item; it is a fact about the account, like the build, so it lives here.
+       Admins and directors only (Roles.isDirector covers both, and a superadmin). */
+    /* (2026-10-25, second pass: "should show the license type and not a button ... only the
+       superadmin and agency admin should have a clickable"). The plan's NAME, from /auth/me
+       licence_label; admins (and a superadmin) can open the Licence page from it, a director
+       just reads it. */
+    var foot = b, u = null;
+    try { u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || 'null'); } catch (e) {}
+    var planName = u && u.licence_label;
+    if (u && planName && Roles.isDirector(u)) {
+      var canOpen = Roles.primaryRoleOf(u) === 'agency_admin';
+      b.removeAttribute('id');
+      /* Stacked (2026-10-25, Anthony: "sidebar at the bottom no longer shows the version
+         information"): side by side, the plan label squeezed the build line to "build…". */
+      b.style.maxWidth = '100%';
+      foot = document.createElement('div');
+      foot.id = 'kt-foot-build';
+      foot.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;max-width:100%;';
+      var lic = document.createElement(canOpen ? 'a' : 'span');
+      lic.setAttribute('data-kt-iconized', '1');
+      lic.className = 'kt-foot-plan';
+      lic.textContent = planName;
+      lic.style.cssText = 'font-size:11px;font-weight:700;line-height:1.4;color:#475569;white-space:nowrap;flex:0 0 auto;'
+        + 'padding:1px 8px;border-radius:999px;background:#EEF4F8;' + (canOpen ? 'cursor:pointer;text-decoration:none;' : '');
+      if (canOpen) {
+        lic.href = '#licence';
+        lic.title = 'Your licence: plan, dates, features and account summary';
+        lic.setAttribute('aria-label', planName + ' — open your licence');
+      } else {
+        lic.title = 'Your agency\'s KiddieTrac plan';
+      }
+      foot.appendChild(b);
+      foot.appendChild(lic);
+    }
+    if (!KT.sidebarFoot(40, foot)) { return; }
   }
 
   /* AND PUT ITSELF BACK IF SOMETHING TAKES IT AWAY.
@@ -871,7 +1049,15 @@
     // The collapsed rail zeroes side padding, so the indent only shows when expanded.
     if (item.sub) a.style.paddingLeft = '30px';
     if (item.icon) {
-      a.appendChild(Dom.el('span', { class: 'nav-icon' }, item.icon));
+      /* A brand mark where the product has one (2026-10-25, Anthony: "safe arrival on the side bar
+         does not show us the right safe arrival icon"): the same shield as the website and brochure. */
+      if (NAV_MARK[item.hash]) {
+        var mk = Dom.el('span', { class: 'nav-icon', 'data-kt-iconized': '1', 'aria-hidden': 'true' });
+        mk.innerHTML = NAV_MARK[item.hash];
+        a.appendChild(mk);
+      } else {
+        a.appendChild(Dom.el('span', { class: 'nav-icon' }, item.icon));
+      }
     }
     a.appendChild(Dom.el('span', { class: 'nav-label' }, item.label));
     if (item.badgeKey) {
@@ -887,24 +1073,87 @@
   // ──────────────── Badge updater ──────────────────────────────
   // External code (push-client, chat polling, announcement polling)
   // can call KT.Shell.setBadge('chat_unread', 4) to update a count.
+  /* WRITE ONLY ON A CHANGE (2026-11-24, freeze tickets #257-#264). A same-value write is still a DOM mutation:
+     screen-my-documents.js watches the page and repaints this badge on every mutation, so rewriting the same
+     number woke it again (~16 cycles/s on an idle screen, each one re-running updateActiveNav). */
   function setBadge(key, count) {
     document.querySelectorAll('[data-badge-key="' + key + '"]').forEach(el => {
       if (count > 0) {
-        el.textContent = count > 99 ? '99+' : String(count);
-        el.style.display = '';
-      } else {
+        const txt = count > 99 ? '99+' : String(count);
+        if (el.textContent !== txt) el.textContent = txt;
+        if (el.style.display !== '') el.style.display = '';
+      } else if (el.style.display !== 'none') {
         el.style.display = 'none';
       }
     });
   }
 
+  const navKey = (h) => String(h || '').replace(/^#/, '').split('?')[0].split('&')[0].split('/')[0];
+  let lastNavKey = '';
+  /* SUBTABS KEEP THEIR SECTION (2026-10-30). Anthony: "when i click on leads and from leads i click on a subtab the
+     sidebar changes to another section that is totally unrelated with the highlight - full sweep". A screen with no menu
+     item of its own was matched to the LONGEST MENU ITEM ITS NAME STARTS WITH, so Leads → Cold reach (#sales-prospects)
+     lit "Sales pipeline" (#sales), and #email-seasons lit the Email client. Now, in order:
+       1. the screen's own menu item;
+       2. its declared parent (NAV_PARENT below - add one when a subtab screen gets its own hash);
+       3. the "detail of a list" guess (incident-new -> incidents);
+       4. reached by a link or subtab INSIDE the page: the section you were in stays lit;
+       5. only then the name-prefix guess (a deep link straight to a screen), and last the section you came from.
+     Swept against every registered screen hash. */
+  const NAV_PARENT = {
+    'sales-prospects': 'sales-leads',
+    'sales-followups': 'sales-leads',   // a Leads sub-tab (2026-11-04)
+    'sales-lead': 'sales-leads',
+    'email-seasons': 'mail-settings',
+    'inspection-form': 'hcc-forms',
+    'inspection-forms': 'hcc-forms',
+    'payroll-report': 'reports',
+    'campaign-report': 'reports',
+    'kt-reports': 'reports',
+  };
+  let inPageNavAt = 0;
+  document.addEventListener('click', function (e) {
+    const a = e.target && e.target.closest ? e.target.closest('#appMain a[href^="#"], #appMain [data-kt-inpage]') : null;
+    if (a) inPageNavAt = Date.now();
+  }, true);
   function updateActiveNav() {
-    const hash = (window.location.hash || '#dashboard').replace('#', '');
-    Dom.$$('.nav-link').forEach(link => {
-      const isActive = link.dataset.hash === hash || (hash === '' && link.dataset.hash === 'dashboard');
-      link.classList.toggle('active', isActive);
+    const base = navKey(window.location.hash) || 'dashboard';
+    const links = Array.from(document.querySelectorAll('.nav-link'));
+    const keys = links.map((l) => navKey(l.dataset.hash || l.getAttribute('href')));
+    const has = (k) => k && keys.indexOf(k) !== -1;
+    let want = has(base) ? base : '';
+    if (!want && NAV_PARENT[base] && has(NAV_PARENT[base])) want = NAV_PARENT[base];
+    if (!want) {
+      // A detail screen lights the list it belongs to.
+      const cands = [base + 's', base.replace(/-(detail|details|edit|view|new|profile)$/, ''), base.replace(/-(detail|details|edit|view|new|profile)$/, '') + 's'];
+      want = cands.find(has) || '';
+    }
+    // Reached from inside the page (a subtab, a "view" link): stay in the section you were in.
+    if (!want && has(lastNavKey) && Date.now() - inPageNavAt < 4000) want = lastNavKey;
+    if (!want) {
+      // Else the longest menu item the screen name starts with ("platform-agency-x" -> "platform-agencies" will not, "admin-users-import" -> "admin-users" will).
+      keys.forEach((k) => { if (k && base.indexOf(k + '-') === 0 && k.length > want.length) want = k; });
+    }
+    if (!want && has(lastNavKey)) want = lastNavKey;   // a screen with no menu item of its own: keep the section you came from
+    if (want) lastNavKey = want;
+    links.forEach((link, i) => {
+      const on = !!want && keys[i] === want;
+      link.classList.toggle('active', on);
+      if (on) { if (link.getAttribute('aria-current') !== 'page') link.setAttribute('aria-current', 'page'); }   // no same-value write (see setBadge)
+      else if (link.getAttribute('aria-current') === 'page') link.removeAttribute('aria-current');
     });
   }
+  // Groups added or rebuilt after the screen drew (Platform / Sales, every few seconds) are marked again.
+  (function watchSidebarLinks() {
+    let t = null;
+    const kick = () => { if (!t) t = setTimeout(() => { t = null; try { updateActiveNav(); } catch (e) {} }, 60); };
+    const attach = () => {
+      const sb = document.querySelector('#appSidebar, .app-sidebar');
+      if (!sb) { setTimeout(attach, 500); return; }
+      try { new MutationObserver((muts) => { if (muts.some((m) => m.addedNodes.length)) kick(); }).observe(sb, { childList: true, subtree: true }); } catch (e) {}
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', attach); else attach();
+  })();
 
   // ──────────────── Screen router ──────────────────────────────
   const screens = {}; // populated by individual screen modules
@@ -948,8 +1197,28 @@
     return 'dashboard';
   }
 
+  /* THE SIDEBAR AS DRAWN (2026-11-03, Anthony: "sales email hero banner not unique and matching the sidebar icon -
+     full sweep"). Other files add sidebar sections this shell's lists never see: agency-switcher.js draws the whole
+     Platform section, and a super admin's Sales section comes from the sales-rep list. Those screens fell through to
+     a title-cased hash and the generic ✨ ("✨ Sales Email" beside 📮 Sales email). What the person can see in the
+     sidebar is what the banner must say, so it is read first. */
+  function drawnNavItem(base) {
+    try {
+      var sb = document.getElementById('appSidebar');
+      if (!sb || !base) return null;
+      var a = sb.querySelector('a[data-hash="' + base + '"], a[href="#' + base + '"]');
+      if (!a) return null;
+      var ic = a.querySelector('.nav-icon'), lb = a.querySelector('.nav-label');
+      var icon = ic && !ic.querySelector('img,svg') ? (ic.textContent || '').trim() : '';
+      var label = (lb ? lb.textContent : '').trim();
+      return (icon || label) ? { icon: icon, label: label || base, section: 'drawn' } : null;
+    } catch (e) { return null; }
+  }
+
   function navItemFor(role, hash) {
     var base = String(hash || '').split('/')[0];
+    var drawn = drawnNavItem(base);
+    if (drawn && drawn.icon) return drawn;
     var secs = navItemsForRole(role) || [];
     for (var i = 0; i < secs.length; i++) {
       var items = secs[i].items || [];
@@ -957,9 +1226,33 @@
         if (items[j].hash === base) return { icon: items[j].icon || '', label: items[j].label || base, section: secs[i].label || '' };
       }
     }
+    /* Drawn with a picture rather than an emoji (Growth plan, Safe Arrival, Walk Watch): keep its sidebar name, and
+       take the banner emoji from the table below, never from another role's list (that is how Growth plan's banner
+       came out 🔑, the same as Licences). */
+    /* Another role's sidebar names this screen (a super admin opening a sales-rep screen on a phone, with no sidebar
+       to read): one screen, one icon, wherever it is opened from. */
+    var OTHER = ['agency_admin', 'sales_rep', 'centre_director', 'educator', 'home_visitor', 'reseller_admin', 'guardian'];
+    for (var r = 0; r < (drawn ? 0 : OTHER.length); r++) {
+      if (OTHER[r] === role) continue;
+      var os = [];
+      try { os = navItemsForRole(OTHER[r]) || []; } catch (e) { os = []; }
+      for (var oi = 0; oi < os.length; oi++) {
+        var oit = os[oi].items || [];
+        for (var oj = 0; oj < oit.length; oj++) {
+          if (oit[oj].hash === base && oit[oj].icon) return { icon: oit[oj].icon, label: oit[oj].label || base, section: os[oi].label || '' };
+        }
+      }
+    }
     // Icons for screens reached outside the sidebar nav (home tiles, deep links)
     // so their auto-banner gets a unique glyph instead of the generic ✨ default.
-    var EXTRA_ICONS = { 'awards': '🏆', 'walk': '🚶' };
+    /* my-hours / my-pay: the staff pay screen (2026-10-28, Anthony: "payroll hero in educator and staff view needs to be
+       unique") - it fell through to the generic ✨, the same banner as every unlisted screen. */
+    var EXTRA_ICONS = { 'awards': '🏆', 'walk': '🚶', 'walks': '🚶', 'prospect-ndas': '🤝', 'server-health': '🖥️', 'marketing-site': '🌍', 'ai-usage': '🤖', 'usage-spend': '📶', 'ask': '✨', 'licence': '🪴', 'billing-setup': '🧰',
+      'my-hours': '💵', 'my-pay': '💵',
+      /* 2026-10-28 sweep (Anthony: "hero banners in educator view - make sure they are all unique, check the parent view
+         as well"): screens reached from home tiles, not the sidebar, that were all ✨. */
+      'my-schedule': '📅', 'children': '🧒', 'menu': '🍽️', 'support': '🛟', 'scan': '📷', 'pickup-auth': '🔐',
+      'ledger': '📒', 'trends': '📈', 'conferences': '🪑', 'directory': '📇', 'payment-plans': '🏧', 'wellness': '🩺' };
 
     /* And a NAME, where the hash is not one. The fallback below turns "my-hours"
        into "My Hours" — which is where the banner title came from, so renaming the
@@ -976,20 +1269,47 @@
        screen would break every one of them. */
     /* #forms is "Documents" for staff (2026-10-09): their tile says Documents and the
        screen is the shared Documents table, so the banner must say so too. */
-    var EXTRA_LABELS = { educator: { 'my-hours': 'Payroll', 'forms': 'Documents' }, home_visitor: { 'forms': 'Documents' } };
-    var override = (EXTRA_LABELS[role] || {})[base];
-    if (override === 'Documents') { EXTRA_ICONS[base] = '📄'; }
+    var EXTRA_LABELS = { educator: { 'my-hours': 'Payroll', 'forms': 'Documents' }, home_visitor: { 'forms': 'Documents', 'my-pay': 'Payroll' },
+      centre_director: { 'my-hours': 'My pay' } };
+    /* Names the title-case fallback gets wrong ("Prospect Ndas"), for every role. */
+    /* Website (2026-10-23): it moved into the Platform section, which this list does not read,
+       so its banner fell back to "Marketing Site" with the default ✨ (Anthony: "not unique"). */
+    var EXTRA_NAMES = { 'prospect-ndas': 'Prospect NDAs', 'marketing-site': 'Website', 'walk': 'Walk Watch', 'walks': 'Walk Watch',
+      'ai-usage': 'AI usage', 'usage-spend': 'Usage & spend', 'ask': 'Ask KiddieTrac' };   // were "Ai Usage" / "Usage Spend" (2026-10-28)
+    var override = (EXTRA_LABELS[role] || {})[base] || EXTRA_NAMES[base];
+    // 🗂️, not 📄: "My documents" already has 📄 in the same sidebar (2026-10-28 sweep).
+    if (override === 'Documents' && base !== 'my-documents') { EXTRA_ICONS[base] = '🗂️'; }
 
     return {
       icon: EXTRA_ICONS[base] || '',
-      label: override || base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }),
+      label: (drawn && drawn.label) || override || base.replace(/-/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }),
       section: '',
     };
   }
   // One-line description under each banner. Keyed by screen hash, so the wording lives
   // in one place instead of being re-invented per screen (which is why some banners had
   // a description and some had none).
-  var SCREEN_DESC = {
+  var SCREEN_DESC = window.__ktScreenDesc = {
+    // 2026-10-28 sweep: banners that had a title and nothing under it.
+    // 2026-10-30 hero sweep: the rest.
+    'sales-campaigns': 'Email campaigns to leads and prospects, with opens, clicks and replies.',
+    'sales-email': 'The sales@ mailbox: read, reply and file emails against leads.',
+    'provider-day': 'Today across your rooms: attendance, ratios, logs and what still needs doing.',
+    'email': 'Your mailbox inside KiddieTrac: read, reply and send.',
+    'withdrawals': 'Children leaving care: notice dates, final invoices and records.',
+    'email-templates': 'The wording of every email KiddieTrac sends for you.',
+    'settings': 'Your profile, sign-in, notifications and language.',
+    'support': 'Ask the KiddieTrac team for help, and follow your requests.',
+    'scan': 'Scan a One-Tap code to sign a child in or out.',
+    'pickup-auth': 'Who may collect your child, and one-time pick-up permissions.',
+    'ledger': 'Every charge and payment on your account, with a running balance.',
+    'menu': 'This week\'s meals and snacks.',
+    'children': 'The children in your rooms.',
+    'walk': 'Live GPS walks & outings.',
+    'walks': 'Live GPS walks & outings.',
+    'trends': 'How your child\'s days have looked over time.',
+    'my-hours': 'What you have been paid, what is still owed to you, your payslips and your pay ledger.',
+    'my-pay': 'What you have been paid, what is still owed to you, your payslips and your pay ledger.',
     'dashboard': 'Today at a glance: enrolment, attendance, staffing and receivables.',
     'platform-overview': 'Every agency on the platform, with usage and revenue.',
     'platform-agencies': 'Create, configure and suspend agencies.',
@@ -1003,7 +1323,7 @@
     'awards': 'Celebrate a child’s effort — daily, weekly or monthly. Parents see it too, and you can print a certificate.',
     'lesson-plans': 'Weekly plans for each room.',
     'observations': 'Learning stories and developmental observations for each child.',
-    'curriculum': 'Curriculum framework and coverage.',
+    'curriculum': 'Ontario units built on How Does Learning Happen?, ready to plan with.',
     'hdlh-gaps': 'Where your programme is light against your learning framework.',
     'learning-framework': 'The framework you plan and report against: HDLH, ELECT, BC ELF, Flight, EYFS and more.',
     'schedule': 'Who is working, and where.',
@@ -1012,7 +1332,7 @@
     'auto-signoff': 'Close shifts and days somebody forgot to close.',
     'clock-settings': 'Reminders about the time clock, and closing what somebody forgot.',
     'notification-settings': 'Reminders and notices, one tab each: counter-signature reminders, provider bios, shared files and who staff can message.',
-    'payment-providers': 'Your own Zum Rails and Stripe accounts, per agency.',
+    'payment-providers': 'Your own Zum Rails, Stripe and Helcim accounts, plus the Giftbit / Tango Card gift card accounts for educator awards.',
     'billing-settings': 'Tax rate and other invoicing defaults.',
     'phone-voicemail': 'The toll-free greeting (voice and wording) and the voicemails callers leave.',
     'calendar-settings': 'Choose which layers the calendar draws.',
@@ -1025,7 +1345,7 @@
     'substitutes': 'Cover for absent staff.',
     'payroll': 'Pay runs and hours.',
     'workforce-funding': 'Ontario WEG and workforce compensation: wage components, the 32-day check and the year-end report.',
-    'background-checks': 'Police checks and vulnerable-sector screening.',
+    'background-checks': 'Criminal record and background screening for every staff member.',
 
     'waitlist': 'Families waiting for a space.',
     'tours': 'Prospective families who booked a centre tour.',
@@ -1036,17 +1356,18 @@
     'pfcc': 'Ohio publicly funded child care: authorizations, copays, absent days and the weekly TAP reconciliation.',
     'sutq': 'Step Up To Quality: screening and assessment timers, referrals, the improvement plan and the evidence binder.',
     'medications': 'Medication authorised, given and outstanding.',
-    'immunizations': 'Immunisation records and what is missing.',
-    'immun-schedule': 'Children with an immunisation due.',
+    'immunizations': 'Immunization records and what is missing.',
+    'immun-schedule': 'Children with an immunization due.',
+    'running-late': 'Running late for drop-off or pickup? Tell the centre, and nobody chases you before the time you give.',
     /* Read by parents as well as staff — "the roster" is not a thing a parent has. */
-    'immunizations': 'Where each child stands against the immunisation schedule, the records on file, and a place to send one in.',
+    'immunizations': 'Where each child stands against the immunization schedule, the records on file, and a place to send one in.',
     'allergy-alerts': 'Allergies and dietary requirements, by room.',
     'room-ratios': 'Live child-to-educator ratios against licensing.',
     'room-rotations': 'Which educator is in which room.',
     'closures': 'Holidays and unplanned closures.',
     'late-pickups': 'Late pickups and arrivals: log them, then approve the fee, waive it or decline.',
     'field-trips': 'Outings, consent and headcounts.',
-    'trip-gps': 'Live location of a bus or a trip in progress.',
+    'trip-gps': 'Live GPS walks & outings: who is out, who has them, and where they are.',
     'bus-routes': 'Routes, stops and riders.',
     'zones': 'Activity zones within each room.',
     'menu': 'This week on the menu.',
@@ -1067,7 +1388,17 @@
     'admin-roles': 'What each role is allowed to do.',
     'admin-forms': 'Forms families and staff are asked to complete.',
     'forms-manager': 'Upload a form, assign it to parents, educators or home visitors, and track who has signed it.',
+    'ask': 'Ask about your centres in plain words: who owes money, who is not in yet, expiring certifications, room numbers and more.',
+    'usage-spend': 'Texts, phone calls and AI spend per agency, the rates behind it, and the weekly thresholds for the superadmin summary.',
+    'ai-usage': 'The Claude (AI) connection, its estimated credits and every AI call KiddieTrac makes - by agency, feature and model.',
     'admin-branding': 'Your logo, colours and the name families see.',
+    'resellers': 'Partners who sell under their own brand.',
+    'reseller-brand': 'The logos, colours and name your agencies show.',
+    'reseller': 'Every agency and centre you brought to the platform, as of right now.',
+    'reseller-onboard': 'Add an agency under your brand and invite its first admin.',
+    'reseller-billing': 'What the platform billed your agencies, what was collected, and your commission.',
+    'reseller-support': 'Tickets from all your agencies: answer them, or send them to the platform team.',
+    'reseller-agencies': 'The agencies that carry your brand.',
     'admin-features': 'Turn features on and off per agency.',
     'admin-mrr': 'Recurring revenue across the platform.',
     'invitation-codes': 'Codes that let a family or educator join.',
@@ -1088,11 +1419,19 @@
     'cwelcc': 'CWELCC and provincial fee subsidies.',
     'subsidy-roa': 'Monthly fee subsidy Record of Attendance and CWELCC summary to enter in OCCMS.',
     'safe-arrival': 'Every scheduled child, accounted for.',
+    'my-points': 'Points for every observation, log, walk and photo. Rewards arrive at month end.',
+    'educator-rewards': 'Each educator\'s points for the month, and the bonuses, payouts and gift cards they earned.',
+    'educator-award-settings': 'Automatic monthly thank-you awards: when they run, who qualifies, and who is told.',
     'audit-logs': 'Every change made in the portal, and by whom.',
     'security-alerts': 'Sign-in anomalies and security events.',
+    'server-health': 'The server behind KiddieTrac: load, memory, disk, database, jobs, errors and backups.',
     'birthday-settings': 'Warm notes when a child or colleague has a birthday coming up.',
     'payroll-settings': 'When payroll is next due, so the overview can count down to it.',
     'data-retention': 'How long records are kept before deletion.',
+    'privacy-breaches': 'The record of every privacy breach, kept 24 months as PIPEDA requires.',
+    'privacy-requests': 'Requests to see, correct or delete personal information, with the 30-day deadline.',
+    'signin-locks': 'Pause sign-in for a person, a centre or provider, and lift it when ready.',
+    'photo-permissions': 'What each family allows for photos and videos of their child.',
     'anomalies': 'Unusual activity worth a second look.',
 
 
@@ -1131,9 +1470,10 @@
 
     'marketing-campaigns': 'Campaigns to fill your empty spaces.',
     'drip-campaigns': 'Automated follow-up with prospective families.',
-    'marketing-site': 'Your public website.',
+    'marketing-site': 'www.kiddietrac.com: subscribers, website chat, content, SEO, the announcement bar, analytics and translations.',
     'sms': 'Send a one-off text to staff or families.',
     'email-settings': 'The mailbox your agency sends from.',
+    'mail-settings': 'How the platform sends email, and the fallback that keeps it going.',   // Reseller › Email settings (platform)
     'backups': 'The nightly copy of the platform database — when it last ran, and how many are kept.',
     'sms-settings': 'The carriers your agency texts and calls through.',
     'notifications': 'What the app tells people about, and how.',
@@ -1142,6 +1482,12 @@
     'mfa': 'Two-factor authentication for your team.',
     'help': 'Guides for every part of KiddieTrac.',
     'reports-canned': 'Ready-made reports you can print or export.'
+  };
+
+  var SCREEN_DESC_ROLE = {
+    'dashboard:guardian': 'Your child’s day at a glance: check-in, photos, messages and what is due.',
+    'dashboard:educator': 'Your rooms today: who is here, ratios, daily logs and tasks.',
+    'dashboard:home_visitor': 'Your visits today, and what still needs doing.'
   };
 
   function buildAutoHero(info, hash) {
@@ -1153,6 +1499,12 @@
 
     var key = String(hash || '').split('/')[0].split('?')[0];
     var desc = SCREEN_DESC[key] || (info.label === 'Documents' ? SCREEN_DESC['my-documents'] : null);
+    /* The same screen means different things to different people: the dashboard line ("enrolment, attendance,
+       staffing and receivables") was shown to parents too (2026-10-30 iOS sweep). */
+    try {
+      var _rk = Roles.primaryRoleOf(Auth.user()) || '';
+      if (SCREEN_DESC_ROLE[key + ':' + _rk]) { desc = SCREEN_DESC_ROLE[key + ':' + _rk]; }
+    } catch (e) {}
     if (desc) {
       var sub = document.createElement('div');
       sub.className = 'kt-hero-sub';
@@ -1234,6 +1586,15 @@
   // that merely re-renders a lot does not starve itself, while a screen that fights us
   // over its banner still runs out and is left alone.
   function bannerSpend(hash) { bannerSync(hash); _bannerRuns++; }
+  // Putting back a banner that is missing: a RATE, like the top bar's remount guard.
+  var _heroStamps = [];
+  function heroInsertAllowed() {
+    var now = Date.now();
+    _heroStamps = _heroStamps.filter(function (t) { return now - t < 2000; });
+    if (_heroStamps.length >= 3) return false;
+    _heroStamps.push(now);
+    return true;
+  }
 
   // Strip emoji/punctuation so "\ud83d\udcda Lesson Plans" and "Lesson plans" compare equal.
   function heroKey(t) {
@@ -1343,6 +1704,207 @@
     return changed;
   }
 
+  /* ONE BANNER PER SCREEN — THE RULE IN ONE PLACE (2026-10-21).
+
+     Anthony: "security alerts section has two hero banners - look into this and full sweep
+     to make sure this never happens again throughout the portal".
+
+     Two functions answered "did the screen bring its own banner?" differently. __hasHero()
+     ignored .kt-page-hero (so the shell added its automatic banner), and normaliseBanners()
+     counted it (so the shell removed that banner again). Every timer tick and every
+     mutation repeated the insert-and-remove - 9 times per visit to Security alerts - and
+     each removal spent the per-screen budget of 15. One in-place refresh (kt-auto-refresh,
+     kt-live) spent the rest; from then on the automatic banner was still put back (a missing
+     banner is restored whatever the budget says) but nothing took it away again, and the
+     page showed two.
+
+     ownBanner() is now the single answer, used by both: any .kt-hero the screen drew (as
+     before), or a .kt-page-hero that LEADS the screen - among the first content slots at
+     each of the top few levels. A .kt-page-hero further in is a section header (Settings'
+     Wallet tab), which is why that class was taken out of __hasHero on 2026-08-31; leading
+     position keeps that fix while counting the real page banners.
+
+     enforceOneBanner() is the guarantee: it runs on every pass, outside the budget, and only
+     ever removes banners the SHELL made - never markup a screen rendered - so it is
+     idempotent and cannot ping-pong. */
+  function bannerChrome(el) {
+    return el.id === 'kt-topbar' || (el.classList && el.classList.contains('kt-page-actions'))
+      || /^(SCRIPT|STYLE|LINK|TEMPLATE)$/.test(el.tagName);
+  }
+  function leadsMain(main, el) {
+    var depth = 0, n = el;
+    while (n && n !== main) {
+      if (++depth > 4) return false;
+      var par = n.parentElement;
+      if (!par) return false;
+      if (n.hidden || (n.style && n.style.display === 'none')) return false;
+      var pos = 0;
+      for (var c = par.firstElementChild; c && c !== n; c = c.nextElementSibling) { if (!bannerChrome(c)) pos++; }
+      if (pos > 2) return false;
+      n = par;
+    }
+    return n === main;
+  }
+  function ownBanner(main) {
+    var own = main.querySelector('.kt-hero:not(.kt-hero-auto)');
+    if (own) return own;
+    var ph = main.querySelectorAll('.kt-page-hero');
+    for (var i = 0; i < ph.length; i++) {
+      if (leadsMain(main, ph[i])) {
+        /* The page banner LOOKS like one wherever it is (2026-10-21, Reseller section): the
+           gradient for .kt-page-hero only applied under [data-kt-pretty], which screens set
+           themselves - Resellers did not, so its banner was a plain white card. The class
+           is a hook for kt-consistency-polish.css; set once (a class change is not a
+           childList mutation, so the banner observer does not re-fire). */
+        if (!ph[i].classList.contains('kt-hero-lead')) { ph[i].classList.add('kt-hero-lead'); }
+        return ph[i];
+      }
+    }
+    return null;
+  }
+  /* THE AUTOMATIC BANNER LINES UP WITH THE PAGE (2026-10-21).
+     Anthony: "reseller section is not consistent with the size of the view like other
+     sections". The shell's banner sits directly in #appMain (20px in) while nearly every
+     screen pads its own content another 24px, so on every automatic-banner screen (MRR,
+     Feature flags, Usage & spend, Schedule ...) the banner was wider than the page under it.
+     Measured, not assumed: the banner and its action bar take the left/right edges of the
+     screen's own content box, so this holds for any wrapper, and phones (where
+     kt-phone-gutter.js removes wrapper padding) get 0. Margins only: no childList change,
+     so the banner observer does not re-fire. */
+  /* THE PAGE LINES UP WITH THE BANNER, NOT THE OTHER WAY ROUND (2026-11-09, Anthony: "look at settings under
+     educator as example and you will see the hero banner and body is not sized like the other sections - full sweep").
+     The 10-21 rule above pulled the banner IN to each screen's own padding, so 13 educator screens (Settings, Help,
+     Medications, Alerts, Safe Arrival, Lesson plans, Payroll ...) had a banner and body 14-24px narrower on each side
+     than every other screen. Now the banner always sits at the page edge (#appMain's padding, like every screen that
+     draws its own) and a PLAIN wrapper under it - no background, border or shadow - drops its side padding and any
+     centred max-width, so the body takes the banner's edges. A card keeps its own inner padding; its box lines up.
+     Inline styles only: no childList change, so the banner observer does not re-fire. */
+  function plainBox(cs) {
+    return (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') && cs.backgroundImage === 'none'
+      && !(parseFloat(cs.borderLeftWidth) > 0) && !(parseFloat(cs.borderRightWidth) > 0) && cs.boxShadow === 'none';
+  }
+  function flattenInset(el) {
+    if (el.hasAttribute('data-kt-keep-inset')) { return; }
+    var cs = getComputedStyle(el);
+    if (cs.position === 'fixed' || cs.position === 'absolute') { return; }
+    var st = el.style;
+    if (parseFloat(cs.marginLeft) > 0) { st.setProperty('margin-left', '0', 'important'); }
+    if (parseFloat(cs.marginRight) > 0) { st.setProperty('margin-right', '0', 'important'); }
+    if (cs.maxWidth !== 'none') { st.setProperty('max-width', 'none', 'important'); }
+    if (plainBox(cs)) {
+      if (parseFloat(cs.paddingLeft) > 0) { st.setProperty('padding-left', '0', 'important'); }
+      if (parseFloat(cs.paddingRight) > 0) { st.setProperty('padding-right', '0', 'important'); }
+    }
+  }
+  function alignAutoHero(main) {
+    if (!main) { return; }
+    var hero = null, c;
+    for (c = main.firstElementChild; c; c = c.nextElementSibling) {
+      if (c.classList && c.classList.contains('kt-hero-auto')) { hero = c; break; }
+    }
+    /* A screen's OWN leading banner inside its padded wrapper (Drills, Files, Payment run ...): the plain wrappers
+       between it and #appMain lose their side inset, so the banner and the body under it take the page edges. */
+    if (!hero) {
+      var own = main.querySelector('.kt-hero, .kt-page-hero');
+      if (own && own.parentElement !== main && leadsMain(main, own)) {
+        for (var n = own.parentElement; n && n !== main; n = n.parentElement) { flattenInset(n); }
+      }
+      return;
+    }
+    var targets = [hero];
+    for (c = hero.nextElementSibling; c; c = c.nextElementSibling) {
+      if (c.classList && c.classList.contains('kt-page-actions')) { targets.push(c); break; }
+      if (!bannerChrome(c)) { break; }
+    }
+    targets.forEach(function (t) {
+      if (t.style.marginLeft) { t.style.marginLeft = ''; }
+      if (t.style.marginRight) { t.style.marginRight = ''; }
+      if (t.style.getPropertyValue('width') === 'auto') { t.style.removeProperty('width'); }
+    });
+    for (c = hero.nextElementSibling; c; c = c.nextElementSibling) {
+      if (bannerChrome(c) || c.hidden || !c.offsetWidth) { continue; }
+      flattenInset(c);
+    }
+  }
+  /* NO SECOND COPY OF THE BANNER UNDER IT (2026-11-09, Anthony: "under tasks (educator view) you will see under the
+     hero banner repetitive words as to what the hero banner shows - clean this up (full sweep with all sections)").
+     Screens written before the shell drew banners still open with their own heading and intro line ("Tasks assigned
+     to you by your childcare agency." under "My tasks · Tasks assigned to you"). One rule, for every screen now and
+     later: a heading or plain line sitting on the page (not in a card, no buttons or fields) within the first ~200px
+     under the banner that repeats the banner's title or subtitle is hidden. data-kt-keep-intro keeps one. */
+  function echoWords(t) {
+    return String(t || '').toLowerCase().replace(/[\u2600-\u27BF\uFE0F\u200D]|[\uD83C-\uDBFF][\uDC00-\uDFFF]/g, '')
+      .replace(/[^a-z0-9\u00C0-\u024F ]+/g, ' ').split(/\s+/).filter(function (w) { return w.length > 2; });
+  }
+  function echoes(a, b, heading) {
+    var A = echoWords(a), B = echoWords(b);
+    if (!A.length || !B.length) { return false; }
+    var inB = A.filter(function (w) { return B.indexOf(w) >= 0; }).length;
+    // "Documents" under "My documents", "Support & Feedback" under "Support": one holds the other, one word to spare.
+    if (heading) { var inA0 = B.filter(function (w) { return A.indexOf(w) >= 0; }).length; return (inB === A.length || inA0 === B.length) && Math.abs(A.length - B.length) <= 1; }
+    var inA = B.filter(function (w) { return A.indexOf(w) >= 0; }).length;
+    return Math.min(inB, inA) >= 3 && Math.min(inB, inA) / Math.min(A.length, B.length) >= 0.5;
+  }
+  function dropEchoes(main) {
+    if (!main) { return; }
+    var hero = null, c;
+    for (c = main.firstElementChild; c; c = c.nextElementSibling) {
+      if (c.classList && c.classList.contains('kt-hero-auto')) { hero = c; break; }
+    }
+    if (!hero) { var own = main.querySelector('.kt-hero, .kt-page-hero'); if (own && leadsMain(main, own)) { hero = own; } }
+    if (!hero || !hero.offsetWidth) { return; }
+    var tEl = hero.querySelector('h1, h2'), sEl = hero.querySelector('.kt-hero-sub, p');
+    var title = tEl ? tEl.textContent : '', sub = sEl ? sEl.textContent : '';
+    if (!title && !sub) { return; }
+    var bottom = hero.getBoundingClientRect().bottom;
+    var all = main.querySelectorAll('h1, h2, h3, p, div, span');
+    for (var i = 0; i < all.length; i++) {
+      var e = all[i];
+      if (hero.contains(e) || e.contains(hero) || e.hasAttribute('data-kt-echo') || !e.offsetWidth) { continue; }
+      var r = e.getBoundingClientRect();
+      if (r.top < bottom - 2) { continue; }
+      if (r.top > bottom + 200) { break; }
+      if (e.closest('[data-kt-keep-intro], button, a, label, table, nav, [role="tab"], [role="tablist"], [role="dialog"]')) { continue; }
+      if (e.querySelector('button, a, input, select, textarea, img, svg, canvas, table')) { continue; }
+      var blocky = false;
+      for (var k = 0; k < e.children.length; k++) { if (/^(DIV|P|H\d|UL|OL|SECTION|FORM)$/.test(e.children[k].tagName)) { blocky = true; break; } }
+      if (blocky) { continue; }
+      var txt = (e.textContent || '').trim();
+      if (!txt || txt.length > 240) { continue; }
+      // On the page itself, not inside a card or panel.
+      var onPage = true;
+      for (var n = e.parentElement; n && n !== main; n = n.parentElement) { if (!plainBox(getComputedStyle(n))) { onPage = false; break; } }
+      if (!onPage) { continue; }
+      var cs = getComputedStyle(e);
+      var heading = /^H[1-3]$/.test(e.tagName) || (parseFloat(cs.fontSize) >= 17 && parseInt(cs.fontWeight, 10) >= 600);
+      if ((heading && echoes(txt, title, true)) || (!heading && (echoes(txt, sub, false) || echoes(txt, title + ' ' + sub, false)))) {
+        e.setAttribute('data-kt-echo', '1');
+        e.style.setProperty('display', 'none', 'important');
+      }
+    }
+  }
+  (function () {
+    var tm = null;
+    try {
+      window.addEventListener('resize', function () {
+        clearTimeout(tm);
+        tm = setTimeout(function () { try { alignAutoHero(document.getElementById('appMain')); } catch (e) {} }, 150);
+      });
+    } catch (e) {}
+  })();
+
+  function enforceOneBanner(main) {
+    if (!main) return false;
+    var autos = main.querySelectorAll('.kt-hero-auto');
+    if (!autos.length) return false;
+    var keep = ownBanner(main) ? null : autos[0];
+    var changed = false;
+    for (var i = 0; i < autos.length; i++) {
+      if (autos[i] !== keep && autos[i].parentNode) { autos[i].parentNode.removeChild(autos[i]); changed = true; }
+    }
+    return changed;
+  }
+
   function normaliseBanners(main, hash) {
     var hero = main.querySelector('.kt-hero-auto');
 
@@ -1351,7 +1913,7 @@
     // the more specific one, and otherwise two banners stack. We only ever remove the
     // element we created, never one the screen owns.
     if (hero) {
-      var own = main.querySelector('.kt-hero:not(.kt-hero-auto), .kt-page-hero');
+      var own = ownBanner(main);
       if (own) { hero.parentNode.removeChild(hero); tidyOwnBanner(main); return true; }
     }
     // No auto-banner: the screen brought its own (role-home's greeting, or a
@@ -1546,7 +2108,9 @@
        closed on its own"). The New family wizard's "← Back" was claimed here, its own
        step-back handler never ran, and the hash navigation that followed closed the
        dialog. Explicit back controls (data-back / .kt-back, above) still count. */
-    if (el.closest && el.closest('#modalRoot, [role="dialog"], .kt-modal, .modal')) return false;
+    /* KT.confirm cards are role="alertdialog" (.kt-cf): its "Yes, I'm back" was swallowed here, so nobody could
+       come back from lunch (2026-11-06). */
+    if (el.closest && el.closest('#modalRoot, [role="dialog"], [role="alertdialog"], .kt-cf, .kt-modal, .modal')) return false;
 
     /* A link with a real destination already says where it goes; honouring the href is
        always at least as correct as guessing history. */
@@ -1556,8 +2120,19 @@
     }
 
     var s = (t || '').toLowerCase();
+    /* A LABEL, NOT CONTENT (2026-11-03, Anthony: "in dialpad when in text messages and trying to view text
+       messages it doesnt show me that text message and it leaves the page"). A conversation row is a button
+       whose text includes the last message - "...I'll get back to you" - and the word test below claimed it:
+       the row's own click never ran and the page went back to the dashboard. The same goes for any list row
+       that shows what people wrote (chats, email, leads). A real back control is a short label ("‹ Back",
+       "Back to inbox", "← Back to incidents"), so the word only counts on one. */
+    if (s.replace(/\s+/g, ' ').trim().length > 32 || s.trim().split(/\s+/).length > 5) return false;
     // Paging and check-in/out are actions on the page, never navigation history.
     if (/\b(prev|previous|next|newer|older|forward)\b/.test(s)) return false;
+    /* "I'm back" (the end of a lunch or break, kt-clockbar.js + the Clock in/out screen) says the person is back,
+       it does not ask to go back: claimed here, the Time clock's "I'm back" went to the previous screen and the
+       break never ended (2026-11-06, Anthony). */
+    if (/\b(i['’]?m|i am|we['’]?re|we are|be|come|came|welcome|right)\s+back\b/.test(s)) return false;
     if (/\bback\b/.test(s)) return true;
 
     /* A bare long arrow, alone — with an optional U+FE0F, because kt-icon-buttons.js
@@ -1769,14 +2344,21 @@
     var collapsed = false; try { collapsed = localStorage.getItem(ADMINCTL_KEY) === '1'; } catch (e) {}
     if (!document.getElementById('kt-adminctl-style')) {
       var st = document.createElement('style'); st.id = 'kt-adminctl-style';
-      st.textContent = 'body.kt-adminctl-collapsed #kt-view-as,body.kt-adminctl-collapsed #kt-agency-switcher,'
+      // ...and the "View as…" button with them (2026-10-23); the orange bar shown WHILE viewing as stays.
+      st.textContent = 'body.kt-adminctl-collapsed #kt-view-as,body.kt-adminctl-collapsed #kt-agency-switcher,body.kt-adminctl-collapsed #kt-imp-fab,'
         + 'body.kt-adminctl-collapsed .kt-tb-selectors{display:none !important;}'
         + '#kt-adminctl{display:flex;align-items:center;gap:6px;font-family:inherit;}'
-        + '#kt-adminctl .kt-ac-chip{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;height:32px;padding:0 10px;'
+        + '#kt-adminctl .kt-ac-chip{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:6px;height:auto;padding:6px 10px;'
         + 'border-radius:8px;border:1px solid rgba(31,96,128,.18);background:rgba(31,96,128,.06);color:#1F6080;font-weight:700;font-size:12px;line-height:1;'
-        + 'font-family:inherit;cursor:pointer;min-height:0 !important;text-align:left;}'
+        + 'font-family:inherit;cursor:pointer;min-height:32px !important;text-align:left;}'
         + '#kt-adminctl .kt-ac-chip.on{background:#7C3AED;border-color:#7C3AED;color:#fff;}'
-        + '#kt-adminctl .kt-ac-chip span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}'
+        + '#kt-adminctl .kt-ac-chip span{white-space:normal;overflow-wrap:anywhere;line-height:1.3;min-width:0;}'
+        /* Hidden = gone, with one small link to bring them back (Anthony, 2026-10-23:
+           "completely hide and only show a link to restore the controls"). */
+        + '#kt-adminctl .kt-ac-link{background:none;border:0;padding:3px 0;margin:0;color:#A0AEC0;font-weight:600;font-size:11.5px;line-height:1.3;'
+        + 'font-family:inherit;cursor:pointer;min-height:0 !important;text-align:left;text-decoration:none;box-shadow:none;}'
+        + '#kt-adminctl .kt-ac-link:hover,#kt-adminctl .kt-ac-link:focus-visible{color:#64748B;text-decoration:underline;text-underline-offset:2px;}'
+        + '#kt-adminctl .kt-ac-link .kt-ac-va{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;background:#7C3AED;color:#fff;text-decoration:none;font-size:10.5px;}'
         + '#kt-adminctl .kt-ac-hide{margin-left:auto;background:none;border:0;color:#64748B;font-weight:700;font-size:11px;line-height:1;font-family:inherit;'
         + 'cursor:pointer;padding:4px 2px;min-height:0 !important;}'
         + 'body.kt-sidebar-collapsed #kt-adminctl{display:none !important;}'
@@ -1798,14 +2380,15 @@
       document.body.classList.toggle('kt-adminctl-collapsed', collapsed);
       box.innerHTML = '';
       if (collapsed) {
-        var chip = document.createElement('button');
-        chip.type = 'button'; chip.className = 'kt-ac-chip' + (viewingAs ? ' on' : '');
-        chip.setAttribute('data-kt-iconized', '1'); chip.setAttribute('aria-expanded', 'false');
-        chip.title = 'Show View as and the agency switcher';
-        var a = agencyName();
-        chip.innerHTML = '<span>👁 ' + (viewingAs ? 'Viewing as ' : '') + _escAC(roleName()) + (a ? ' · 🏢 ' + _escAC(a) : '') + '</span><b style="margin-left:auto;">▸</b>';
-        chip.addEventListener('click', function () { collapsed = false; save(); paint(); });
-        box.appendChild(chip);
+        /* Only a link. While a role is being previewed it says so (purple), so hiding the
+           controls can never hide the fact that this is not your own view. */
+        var link = document.createElement('button');
+        link.type = 'button'; link.className = 'kt-ac-link';
+        link.setAttribute('data-kt-iconized', '1'); link.setAttribute('aria-expanded', 'false');
+        link.title = 'Show View as and the agency switcher';
+        link.innerHTML = '▸ Show admin controls' + (viewingAs ? '<span class="kt-ac-va">Viewing as ' + _escAC(roleName()) + '</span>' : '');
+        link.addEventListener('click', function () { collapsed = false; save(); paint(); });
+        box.appendChild(link);
       } else {
         var hide = document.createElement('button');
         hide.type = 'button'; hide.className = 'kt-ac-hide'; hide.setAttribute('data-kt-iconized', '1');
@@ -1823,10 +2406,9 @@
     var foot = box.parentNode;
     if (foot && window.MutationObserver && !foot.__ktAcObs) {
       foot.__ktAcObs = new MutationObserver(function () {
-        if (!collapsed) return;
-        var c = box.querySelector('.kt-ac-chip span'); if (!c) return;
-        var a = agencyName(), r = roleName();
-        var want = '👁 ' + (viewingAs ? 'Viewing as ' : '') + r + (a ? ' · 🏢 ' + a : '');
+        if (!collapsed || !viewingAs) return;
+        var c = box.querySelector('.kt-ac-va'); if (!c) return;
+        var want = 'Viewing as ' + roleName();
         if (c.textContent !== want) c.textContent = want;
       });
       foot.__ktAcObs.observe(foot, { childList: true, subtree: true, characterData: true });
@@ -1882,6 +2464,19 @@
           if (main.children[_bi].id === 'kt-topbar') { _barTop = main.children[_bi].getBoundingClientRect().top; break; }
         }
       } catch (e) {}
+      /* EVERY STICKY THING, not just the bar (2026-10-26): where each one is on screen right now, by its
+         index in the subtree, so its copy can be put back on the same spot below. */
+      var _stk = [];
+      try {
+        var _la = main.querySelectorAll('*');
+        if (_la.length <= 6000) {
+          for (var _li = 0; _li < _la.length; _li++) {
+            var _le = _la[_li];
+            if (_le.id === 'kt-topbar') { continue; }
+            if (getComputedStyle(_le).position === 'sticky') { _stk.push([_li, _le.getBoundingClientRect().top]); }
+          }
+        }
+      } catch (e) { _stk = []; }
       var snap = main.cloneNode(true);
       /* THE COVER KEEPS THE NAME #appMain (2026-09-29).
 
@@ -1905,12 +2500,42 @@
       snap.setAttribute('data-no-modal-guard', '1');
       snap.setAttribute('aria-hidden', 'true');
       try { snap.inert = true; } catch (e) {}
-      snap.removeAttribute('data-kt-pretty');
+      /* THE CLONE KEEPS data-kt-pretty (2026-10-25). Anthony's video of the email log: every
+         background refresh, the page "zoomed" for half a second - bolder, bigger text, wider
+         tabs, browser-drawn dropdowns - then snapped back. That was this cover: dropping the
+         attribute took ~250 [data-kt-pretty] rules off the picture, so it was a picture of an
+         unstyled screen. It was dropped so the [data-kt-pretty] JS sweeps would leave the
+         clone alone, but every one of them (bulk select, pagination, mobile labels, counters,
+         tooltips, empty states) skips a node carrying its own data-kt-* marker, and the clone
+         is a copy of a screen that has already been swept, markers included.
+
+         AND THE LIVE VALUES. cloneNode copies attributes, not state: every <select> in the
+         picture fell back to its first option ("Whose: Platform-level" read "All - every
+         agency" under the cover), typed text vanished and charts went blank. Copied across
+         pairwise below. */
+      try {
+        var _lf = main.querySelectorAll('input, select, textarea, canvas');
+        var _sf = snap.querySelectorAll('input, select, textarea, canvas');
+        if (_lf.length === _sf.length) {
+          for (var _fi = 0; _fi < _lf.length; _fi++) {
+            var _a = _lf[_fi], _b = _sf[_fi];
+            if (_a.tagName === 'CANVAS') {
+              try { _b.width = _a.width; _b.height = _a.height; _b.getContext('2d').drawImage(_a, 0, 0); } catch (e) {}
+            } else if (_a.tagName === 'SELECT') {
+              _b.selectedIndex = _a.selectedIndex;
+            } else if (_a.type === 'checkbox' || _a.type === 'radio') {
+              _b.checked = _a.checked;
+            } else if (_a.type !== 'file') {
+              _b.value = _a.value;
+            }
+          }
+        }
+      } catch (e) {}
       var _mcs = getComputedStyle(main);
       var _bg = _mcs.backgroundColor || '#fff';
       snap.style.cssText = '';
-      /* THE SAME BOX, PADDING INCLUDED (2026-10-06). Dropping data-kt-pretty (so the
-         page-wide [data-kt-pretty] table sweeps leave the picture alone) also dropped the
+      /* THE SAME BOX, PADDING INCLUDED (2026-10-06). Dropping data-kt-pretty (undone
+         2026-10-25, see above) also dropped the
          rules that give #appMain its compact 12px padding, so the clone fell back to 28px:
          everything in the picture — the top bar first — sat 16px lower than the live page
          (bar at y=34 under the cover, y=12 live) and jumped up when the cover came off.
@@ -1946,6 +2571,23 @@
             var _d = _barTop - _sb.getBoundingClientRect().top;
             if (Math.abs(_d) > 0.5) { _sb.style.setProperty('top', _d + 'px', 'important'); }
           }
+        }
+      } catch (e) {}
+      /* The same for every other sticky element (a bottom save bar, a table's sticky header): inside the clone
+         they stick to the clone and land somewhere else - Educator rooms' save bar dropped out of view for the
+         whole refresh. Measured live above; moved here. */
+      try {
+        if (_stk.length) {
+          var _sa = snap.querySelectorAll('*');
+          _stk.forEach(function (it) {
+            var c = _sa[it[0]];
+            if (!c) { return; }
+            c.style.setProperty('position', 'relative', 'important');
+            c.style.setProperty('top', '0px', 'important');
+            c.style.setProperty('bottom', 'auto', 'important');
+            var dd = it[1] - c.getBoundingClientRect().top;
+            if (Math.abs(dd) > 0.5) { c.style.setProperty('top', dd + 'px', 'important'); }
+          });
         }
       } catch (e) {}
       window.__ktSnapGen = (gen == null ? null : gen);
@@ -2127,6 +2769,14 @@
   /* See "A NEW SCREEN APPEARS ONCE, FINISHED" in renderScreenOnce. */
   var NAV_REVEAL_MS = 800;
   var NAV_REVEAL_FAILSAFE_MS = 1200;
+  /* A PHONE ANSWERS THE TAP AT ONCE (2026-10-28, Anthony: "with mobile when moving around from sections and from the
+     tool bars - its slow and not instant and very poor experience - full sweep and fix this once and for all").
+     Measured at phone speed: the old screen stayed up 0.6-2.7s after a tap while the new one "settled" behind it
+     (the 800ms cap is counted in a main thread that is busy building the screen, so it stretched). On a phone the new
+     screen now shows within 350ms, finished if it is quick, otherwise with its own loading state; desktop keeps 800. */
+  try {
+    if (window.matchMedia && window.matchMedia('(max-width:768px)').matches) { NAV_REVEAL_MS = 350; NAV_REVEAL_FAILSAFE_MS = 600; }
+  } catch (e) {}
   var NAV_REVEAL_HANG_MS = 6000;
   function __ktStampSettled() {
     try {
@@ -2140,12 +2790,99 @@
       var st = document.createElement('style');
       st.id = 'kt-reveal-style';
       st.textContent = '#appMain[data-kt-revealing] > :not(#kt-topbar){opacity:0 !important;}'
-        + '#appMain.kt-revealing-in > :not(#kt-topbar){transition:opacity .16s ease-out;}';
+        + '#appMain.kt-revealing-in > :not(#kt-topbar){transition:opacity .16s ease-out;}'
+        /* A PHONE SCREEN ARRIVES ONCE (2026-10-28 PM, Anthony: "its jumps and its not smooth at all ... add
+           guards"). Measured: after the cross-fade showed the new screen in full, kt-screen-in (a 0 -> 1 slide) ran
+           AGAIN from opacity 0, because it had only been suspended by classes that were removed later - and
+           taking animation:none away starts an animation from its first frame. A screen that has been revealed
+           carries data-kt-nav-shown for the rest of its life (each render gets a new #appMain), and under it no
+           entrance animation of any kind can run: not kt-screen-in, not kt-enter-soft on its blocks, and the
+           banner keeps only its slow shimmer. The doubled [attribute] out-ranks #appMain > .kt-screen-in. */
+        + '#appMain[data-kt-nav-shown][data-kt-nav-shown] > *{animation:none !important;}'
+        + '#appMain[data-kt-nav-shown][data-kt-nav-shown] .kt-banner-fx{animation:kt-hero-breathe 16s ease-in-out infinite !important;}'
+        /* The one entrance: 140ms from .82, after the old screen is gone (never both at once, never from blank).
+           transition:none so the reveal's opacity 0 -> 1 does not also run as a transition, which out-ranks
+           animations in the cascade. */
+        + '@keyframes ktNavIn{from{opacity:.82}to{opacity:1}}'
+        + '#appMain[data-kt-nav-shown].kt-nav-in > :not(#kt-topbar){animation:ktNavIn .14s ease-out both !important;transition:none !important;}'
+        // The copy is a still picture: nothing in it moves, and it is never faded - it is removed in one frame.
+        + '#appMain[data-kt-nav-cover], #appMain[data-kt-nav-cover] *{animation:none !important;transition:none !important;}';
       document.head.appendChild(st);
     } catch (e) {}
   }
 
-  function __ktWaitSettled(main, done, maxMs) {
+  /* ── THE CROSS-FADE ON A PHONE (2026-10-28, Anthony: "on mobile when moving from one section to the next etc
+     needs to be smooth transition or a fade - full sweep"). Measured: the tap emptied the screen (a fresh #appMain),
+     the new screen was held invisible until it settled (data-kt-revealing, up to NAV_REVEAL_MS), then appeared -
+     a white page in between, every time. The cover is a copy of the old screen, fixed exactly where it was, that
+     dims a little at once (the tap is acknowledged) and fades away when _ktReveal shows the new screen, which
+     fades in underneath it: one screen dissolving into the next, never a blank. Phones only (<=768px); it can
+     never outlive NAV_REVEAL_HANG_MS, takes no taps, and a newer navigation replaces it. */
+  var __ktNavCoverEl = null, __ktNavCoverKill = null;
+  function __ktNavCoverDrop(now) {
+    var c = __ktNavCoverEl;
+    __ktNavCoverEl = null;
+    try { clearTimeout(__ktNavCoverKill); } catch (e) {}
+    if (!c) { return; }
+    /* Always in one frame (2026-10-28 PM): fading it out over the new screen was the double exposure. */
+    try { c.remove(); } catch (e) {}
+  }
+  function __ktNavCover(main) {
+    __ktNavCoverDrop(true);
+    try {
+      if (window.__ktNoNavFade || !window.matchMedia || !window.matchMedia('(max-width:768px)').matches) { return; }
+      var r = main.getBoundingClientRect();
+      if (!r || r.width < 50 || r.height < 50) { return; }
+      if (main.getElementsByTagName('*').length > 8000) { return; }   // a giant page: not worth the copy
+      var top = main.scrollTop || 0;
+      /* ONLY WHAT IS ON SCREEN (2026-10-28, PERF). The cover was a deep copy of the WHOLE old screen - a long list
+         or table meant thousands of new nodes for every page-wide watcher to walk, on the tap itself. Blocks that are
+         off screen are copied as empty spacers of the same height, so what you see is identical and positions hold. */
+      var c = main.cloneNode(false);
+      var vb = r.bottom + 40, vt = r.top - 40;
+      for (var ci = 0; ci < main.children.length; ci++) {
+        var ch = main.children[ci], cr = ch.getBoundingClientRect();
+        if (cr.bottom < vt || cr.top > vb) {
+          var sp = document.createElement('div');
+          sp.style.cssText = 'height:' + ch.offsetHeight + 'px;margin:0;padding:0;';
+          c.appendChild(sp);
+        } else {
+          c.appendChild(ch.cloneNode(true));
+        }
+      }
+      /* KEEPS the id, like the refresh cover (__ktSnapshot): hundreds of rules are written against #appMain, and
+         without it the copy would render as a different screen. It is appended after the live node, so
+         getElementById / querySelector still find the live one first. */
+      __ktRevealStyle();
+      c.setAttribute('data-kt-nav-cover', '1');
+      /* No live id inside the picture that a script looks up while the real one is mid-render: the clock strip's
+         copy was found by getElementById and moved onto the screen with no click handler (2026-10-28). */
+      try { [].forEach.call(c.querySelectorAll('#kt-clockpill'), function (n) { n.removeAttribute('id'); n.setAttribute('data-kt-cover-copy', 'kt-clockpill'); }); } catch (e) {}
+      // The decorators (tooltips, modal guard, overflow guard, top bar) already leave a refresh cover alone.
+      c.setAttribute('data-kt-refresh-snap', 'nav');
+      c.setAttribute('aria-hidden', 'true');
+      c.removeAttribute('data-kt-revealing');
+      var cs = getComputedStyle(main);
+      c.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px;'
+        + 'margin:0;overflow:hidden;pointer-events:none;z-index:40;box-sizing:border-box;'
+        + 'padding:' + cs.padding + ';background:' + (cs.backgroundColor && cs.backgroundColor !== 'rgba(0, 0, 0, 0)' ? cs.backgroundColor : 'var(--kt-page-bg,#F4F7FA)') + ';'
+        + 'opacity:1;will-change:opacity;';
+      document.body.appendChild(c);
+      try { c.scrollTop = top; } catch (e) {}
+      __ktNavCoverEl = c;
+      /* Not dimmed (2026-10-28 PM): the dim held the old screen at 72% while the next loaded - the washed-out,
+         laggy look. The tap is acknowledged by the bottom bar's own highlight. */
+      __ktNavCoverKill = setTimeout(function () { if (__ktNavCoverEl === c) { __ktNavCoverDrop(); } }, NAV_REVEAL_HANG_MS);
+    } catch (e) { __ktNavCoverDrop(true); }
+  }
+  // A touch, a scroll or the Back key while the cover is up: show the real screen now.
+  try {
+    ['touchstart', 'wheel', 'keydown'].forEach(function (t) {
+      window.addEventListener(t, function () { if (__ktNavCoverEl) { __ktNavCoverDrop(); } }, { passive: true, capture: true });
+    });
+  } catch (e) {}
+
+  function __ktWaitSettled(main, done, maxMs, screenOnly) {
     var holdMs = maxMs || __KT_MAX_HOLD_MS;
     var finished = false;
     var started = Date.now();
@@ -2196,7 +2933,9 @@
       var now = Date.now();
       if (now - started >= holdMs) { finish(true); return; }
       var pending = 0;
-      try { pending = window.__ktInflight || 0; } catch (e) {}
+      /* screenOnly: count only requests made from a screen file (app.js __ktScreenInflight), not the
+         background modules that keep calling for seconds after boot. Used by the phone boot cover. */
+      try { pending = (screenOnly ? window.__ktScreenInflight : window.__ktInflight) || 0; } catch (e) {}
       if (pending > 0) { sawRequest = true; lastBusy = now; return; }
       if (sawRequest) {
         if (now - lastBusy >= __KT_REQ_GRACE_MS) { finish(); }
@@ -2460,6 +3199,11 @@
        navigation. The resets below are correct for navigation and stay as they are;
        this records where you were so the same-screen case can be put back. */
     var _ktSameScreen = (location.hash === window.__ktLastHash);
+    /* A background refresh of a screen that has since written its tab into the address
+       (#admin-roles -> #admin-roles?tab=roles) is still the same screen: it must keep the
+       reader's tab, search and place, not land them back at the top (2026-10-23 sweep). */
+    if (!_ktSameScreen && window.__ktSilentRefresh && window.__ktLastHash
+        && (location.hash || '').split('?')[0] === String(window.__ktLastHash).split('?')[0]) { _ktSameScreen = true; }
     var _ktPrevScroll = _ktSameScreen ? __ktScrollPos() : 0;
     var _ktScrollCtl = null;
     var _ktNavAt = Date.now();
@@ -2551,6 +3295,14 @@
        visibility:hidden on it, and the swap copies every attribute across — so the new
        node inherits that hidden style and stays covered. __ktDropSnapshot re-queries
        #appMain by id, so it un-hides whichever node is live by then. */
+    /* A PHONE SWITCHES AT ONCE (2026-10-28, Anthony: "slow and not instant ... fix this once and for all"). Filmed at
+       phone speed (Dashboard -> Families): with the cover (a copy of the old screen held up while the new one settles)
+       the new screen appeared at ~1.05s and its rows at ~2.2s - building the copy and holding it cost more than it hid.
+       Without it: the new screen at ~0.17s, its rows at ~1.5s. On a phone there is no cover and no hold; the desktop
+       keeps the cross-fade (it costs nothing there). */
+    var _ktPhoneNow = false;
+    try { _ktPhoneNow = !!(window.matchMedia && window.matchMedia('(max-width:768px)').matches); } catch (e) {}
+    if (!_ktSameScreen && !_ktSilent && !window.__ktNoNavReveal && !_ktPhoneNow) { __ktNavCover(main); }
     main = __ktSwapMain(main, !_ktSameScreen);
     try { if (window.__ktBannerObs) window.__ktBannerObs.disconnect(); } catch (e) {}
 
@@ -2572,7 +3324,7 @@
        any touch/scroll/key reveals it at once. The top bar is never hidden. */
     var _ktRevealDone = true;
     var _ktReveal = function () {};
-    if (!_ktSameScreen && !window.__ktNoNavReveal) {
+    if (!_ktSameScreen && !window.__ktNoNavReveal && !_ktPhoneNow) {
       __ktRevealStyle();
       _ktRevealDone = false;
       var _revealMain = main;
@@ -2586,14 +3338,27 @@
            had not drawn yet (measured: "settled" at 1.8s, content at 4.0s). */
         if (settled === true) { __ktStampSettled(); }
         try {
-          _revealMain.classList.add('kt-revealing-in');
+          var _phoneNav = false;
+          try { _phoneNav = !!(window.matchMedia && window.matchMedia('(max-width:768px)').matches); } catch (e) {}
+          if (_phoneNav) {
+            // Marked BEFORE it is shown, so not one frame of an entrance animation can run (see the style above).
+            _revealMain.setAttribute('data-kt-nav-shown', '1');
+            _revealMain.classList.add('kt-nav-in');
+          } else {
+            _revealMain.classList.add('kt-revealing-in');
+          }
           _revealMain.removeAttribute('data-kt-revealing');
-          setTimeout(function () { try { _revealMain.classList.remove('kt-revealing-in'); } catch (e) {} }, 260);
-        } catch (e) {}
+          __ktNavCoverDrop(true);   // the old screen goes in the same frame the new one appears: never both
+          setTimeout(function () { try { _revealMain.classList.remove('kt-revealing-in', 'kt-nav-in'); } catch (e) {} }, 220);
+        } catch (e) { __ktNavCoverDrop(true); }
       };
       try { main.setAttribute('data-kt-revealing', '1'); } catch (e) { _ktRevealDone = true; }
       // Absolute backstop for a screen that throws or hangs before it returns.
       setTimeout(_ktReveal, NAV_REVEAL_HANG_MS);
+      /* ON A PHONE THE CAP COUNTS FROM THE TAP (2026-10-28). Counted from when the screen's code returns, it came
+         after the screen's data (Families: ~1.4s at phone speed) plus the settle wait - the old screen stayed up 2.5s.
+         From the tap, the new screen is on screen 350ms later whatever it is still waiting for. */
+      try { if (window.matchMedia && window.matchMedia('(max-width:768px)').matches) setTimeout(_ktReveal, NAV_REVEAL_MS); } catch (e) {}
     }
 
     /* THIS RENDER'S GENERATION. Every deferred banner pass carries the number it was
@@ -2637,6 +3402,7 @@
        no user, so no role, and painted "This account has no access yet" to someone
        whose only problem was being signed out. Paint nothing; the navigation is coming. */
     if (!role && !_isPlatformAdmin && !Auth.token()) {
+      _ktReveal(true);   // a finished panel: show it now, not after the 6s backstop
       __ktDropSnapshot();
       return;
     }
@@ -2649,12 +3415,54 @@
         + 'here for it to open. Ask your administrator to assign a role — or sign in with '
         + 'the account you normally use.'
       ));
+      _ktReveal(true);   // a finished panel: show it now, not after the 6s backstop
       __ktDropSnapshot();
       return;
     }
 
+    /* e-Transfer requests moved onto the invoice (2026-11-02): the old list screen is gone and its
+       links (old bell rows, bookmarks) open Accounting, where each invoice's ⋮ menu sends one. */
+    if (/^#etransfer-requests(?:[/?]|$)/.test(window.location.hash || '')) {
+      try { history.replaceState(null, '', location.pathname + location.search + '#external-billing'); } catch (e) { location.hash = '#external-billing'; }
+    }
     const hash = (window.location.hash || ('#' + homeHashForRole(role))).replace('#', '').split('?')[0];
     _trackNav(hash);
+
+    /* NO LICENCE, NO OPERATION (2026-10-25, Anthony's rule). /auth/me licence_lapsed is set
+       when the agency's plan licence has ended past its grace; the API refuses everything but
+       sign-in, the licence and help (EnforcePlanFeatures), so the shell shows why instead of
+       a page of errors. Never for a superadmin (the server leaves it false for them). */
+    var LAPSED_OK = ['licence', 'help', 'notifications', 'settings', 'my-profile', 'profile'];
+    if (user && user.licence_lapsed && LAPSED_OK.indexOf(hash.split('/')[0]) === -1) {
+      ensureTopbar('licence');
+      updateActiveNav();
+      var isAdm = role === 'agency_admin';
+      var lw = Dom.el('div', { style: 'margin:36px auto;padding:0 16px;' });
+      lw.innerHTML = '<div style="max-width:600px;margin:0 auto;background:#fff;border:1px solid #FECACA;border-radius:18px;padding:28px 24px;text-align:center;box-shadow:0 12px 30px -20px rgba(153,27,27,.45)">'
+        + '<div style="font-size:44px;line-height:1;margin-bottom:10px">🔒</div>'
+        + '<h2 style="margin:0 0 8px;font-size:22px;color:#0F172A">This account is paused</h2>'
+        + '<p style="margin:0 auto 16px;max-width:470px;color:#475569;font-size:14.5px;line-height:1.6">'
+        + (isAdm ? 'Your licence has ended, so the portal is paused for everyone at your agency. Every record is kept safe — renew and everything switches straight back on.'
+                 : 'Your agency’s licence has ended, so the portal is paused for now. Your records are safe. Please contact your agency’s administrator.') + '</p>'
+        + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'
+        + (isAdm ? '<a class="kt-btn" href="#licence" style="font-size:13.5px">🔑 View your licence</a>' : '')
+        + '<a class="kt-btn" href="#help" style="font-size:13.5px">💬 Contact support</a></div></div>';
+      main.appendChild(lw);
+      _ktReveal(true);   // a finished panel: show it now, not after the 6s backstop
+      __ktDropSnapshot();
+      return;
+    }
+
+    /* Not linked to a family yet: anything but the screens that work without one shows
+       the waiting screen instead (see familyPending). */
+    if (role === 'guardian' && familyPending(user) && PENDING_OK.indexOf(hash.split('/')[0]) === -1) {
+      ensureTopbar('pending');
+      updateActiveNav();
+      main.appendChild(pendingScreen(user));
+      _ktReveal(true);   // a finished panel: show it now, not after the 6s backstop
+      __ktDropSnapshot();
+      return;
+    }
 
     /* A hidden menu item is not a closed door — the hash still works if you type it,
        and several screens are linked to from other screens. Say so plainly instead of
@@ -2670,6 +3478,7 @@
           'This section is switched off for your agency. Your administrator can turn it '
           + 'back on, or contact your account manager about adding it.'
         ));
+        _ktReveal(true);   // a finished panel: show it now, not after the 6s backstop
         __ktDropSnapshot();
         return;
       }
@@ -2688,13 +3497,29 @@
        flight. Resolves immediately once loaded, and resolves anyway if the loader
        is absent or a file 404s, which leaves the original behaviour intact. */
     if (window.KT && KT.screenLoader) {
-      try { await KT.screenLoader.ensure(role, hash); } catch (e) {}
+      var _ktGot = true;
+      try { _ktGot = await KT.screenLoader.ensure(role, hash); } catch (e) {}
       /* CHECKPOINT. Fetching a role's screen files can take a while on a cold cache,
          and navigation supersedes rather than queues — so by the time this resolves the
          reader may be two screens along. Painting now would drop this screen's content
          into theirs. Our cover goes with us — if a newer render raised its own, the
          generation test leaves that one alone. */
       if (__ktGen !== window.__ktRenderGen) { __ktDropSnapshot(__ktGen); return; }
+      /* SCREENS LOAD ON DEMAND (2026-11-02). This screen's file could not be fetched (offline,
+         or a deploy mid-flight). Say so, with a way to try again, rather than falling through
+         to the dashboard as if that were the page asked for. The next visit fetches again. */
+      if (_ktGot === false) {
+        var _ktFail = emptyState('📶', 'This page didn’t load', 'Check your connection, then try again.');
+        var _ktRetry = document.createElement('button');
+        _ktRetry.type = 'button'; _ktRetry.className = 'kt-btn'; _ktRetry.textContent = 'Try again';
+        _ktRetry.style.marginTop = '12px';
+        _ktRetry.addEventListener('click', function () { renderScreen(); });
+        _ktFail.appendChild(_ktRetry);
+        main.appendChild(_ktFail);
+        _ktReveal(true);
+        __ktDropSnapshot();
+        return;
+      }
     }
 
     // Route based on role + hash
@@ -2723,6 +3548,7 @@
 
     const fn = screens[screenKey]
       || (isPlatform ? screens['platform_admin:' + hash] : null)
+      || (user && Array.isArray(user.roles) && user.roles.indexOf('reseller_admin') !== -1 ? screens['reseller_admin:' + hash] : null)
       || (baseHash ? screens[role + ':' + baseHash] : null)
       || (baseHash && isPlatform ? screens['platform_admin:' + baseHash] : null)
       || screens[fallbackKey] || screens['guardian:today'];
@@ -2731,6 +3557,7 @@
       main.appendChild(emptyState('🤔', 'Screen not available', 'No screen registered for this role + page.'));
       // Early return: uncover, or the reader stares at a picture of the old screen until
       // the safety timeout fires.
+      _ktReveal(true);   // a finished panel: show it now, not after the 6s backstop
       __ktDropSnapshot();
       return;
     }
@@ -2745,6 +3572,22 @@
          deferred banner passes already carried this test; the work that runs right here
          did not. */
       if (__ktGen !== window.__ktRenderGen) { __ktDropSnapshot(__ktGen); return; }
+      /* SAME SCREEN, SAME TAB (2026-10-23): a re-render of the screen you are on rebuilds it
+         on its first tab; put back the tabs you had chosen (kt-keep-tabs.js) before the
+         refresh is uncovered and before the scroll restore below lands. */
+      if (_ktSameScreen && window.KT && KT.__keepTabs) {
+        try { await KT.__keepTabs.restore(main); } catch (e) {}
+        if (__ktGen !== window.__ktRenderGen) { __ktDropSnapshot(__ktGen); return; }
+      }
+      /* The phone has no hold (see _ktPhoneNow), but the boot cover still waits for the first screen to settle. */
+      if (_ktPhoneNow && !_ktSameScreen && !window.__ktScreenSettledAt) {
+        /* ...for the SCREEN's own requests only, and no second round (2026-11-02). It waited on every request
+           on the page, then up to 3s more: the home screen was drawn at 0.56s and the cover lifted at 3.3s
+           (Anthony's Samsung, all files cached: dcl 0.4s, splash gone 3.7s). Show the screen once it has
+           painted and its first data is in; anything still arriving (quick-access sync, gates, pulse) lands
+           on a screen people can already see. */
+        __ktWaitSettled(main, function () { __ktStampSettled(); }, NAV_REVEAL_MS + 900, true);
+      }
       if (!_ktRevealDone) {
         var _settleMain = main;
         __ktWaitSettled(main, function (capped) {
@@ -2830,7 +3673,7 @@
           // matches things which are not banners. .kt-hero is the component; a legacy
           // .kt-page-hero gets folded into the auto-hero by normaliseBanners(), which is
           // what the comment above always said would happen.
-          return !!main.querySelector('.kt-hero, [data-kt-no-autohero]');
+          return !!main.querySelector('.kt-hero, [data-kt-no-autohero]') || !!ownBanner(main);
         };
         var __ensure = function () {
           // Belongs to a screen that is no longer on display — do nothing at all.
@@ -2842,8 +3685,18 @@
           // shared budget the worst case is that we stop touching the screen and it
           // simply keeps its own banner.
           ensureTopbar(hash);   // capped — see below
+          /* A MISSING BANNER GOES BACK WHATEVER THE BUDGET SAYS (2026-10-21).
+             Anthony: "educator rewards the hero banner disappears when navigating to the
+             subtabs". Subtabs that change the hash (#x/settings) re-render through here and
+             share one per-screen budget, so after a few tab switches it ran out and the
+             banner was simply not put back. The budget exists to stop a ping-pong over
+             normalising; adding a banner that is not there at all is rate-capped instead
+             (3 within 2s), which is what actually stops a self-re-rendering screen looping. */
+          if (!__hasHero() && heroInsertAllowed()) { main.insertBefore(buildAutoHero(__info, hash), heroAnchor(main)); }
+          try { enforceOneBanner(main); } catch (e) {}
+          try { alignAutoHero(main); } catch (e) {}
+          try { dropEchoes(main); } catch (e) {}
           if (!bannerBudgetLeft(hash)) return;
-          if (!__hasHero()) { main.insertBefore(buildAutoHero(__info, hash), heroAnchor(main)); bannerSpend(hash); }
           try { if (normaliseBanners(main, hash)) bannerSpend(hash); } catch (e) {}
         };
         __ensure();
@@ -3137,6 +3990,52 @@
   })();
 
   // ──────────────── Generic helpers ────────────────────────────
+  /* WAITING FOR THE AGENCY (2026-10-21). /auth/me sets family_pending on a parent account
+     that holds the guardian role but belongs to no family yet — typically one made so a
+     form could be sent before the family was set up. Every other parent screen needs a
+     family, so they are not offered: the server would refuse them anyway. */
+  var PENDING_OK = ['pending', 'my-forms', 'my-documents', 'notifications', 'help',
+    'settings', 'my-profile', 'profile', 'whats-new'];
+  function familyPending(user) {
+    try {
+      var u = user || JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      if (!u || !u.family_pending) return false;
+      // A super admin previewing the parent view is not this account.
+      var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+      return !va;
+    } catch (e) { return false; }
+  }
+
+  function pendingScreen(user) {
+    var ag = (user && user.pending_agency) || {};
+    var name = ag.name || 'your agency';
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var phone = String(ag.phone || '').replace(/\D/g, '');
+    var phoneShow = phone.length === 10 ? '(' + phone.slice(0, 3) + ') ' + phone.slice(3, 6) + '-' + phone.slice(6) : (ag.phone || '');
+    var first = (user && (user.preferred_name || user.first_name)) || '';
+    var wrap = Dom.el('div', { class: 'kt-pending', style: 'margin:28px auto;padding:0 16px;' });
+    wrap.innerHTML =
+      '<div style="max-width:600px !important;margin:0 auto;background:#fff;border:1px solid #FDE68A;border-radius:18px;padding:26px 24px;box-shadow:0 10px 26px -18px rgba(146,64,14,.45);text-align:center;">'
+      + '<div style="font-size:42px;line-height:1;margin-bottom:10px;">⏳</div>'
+      + '<h2 style="margin:0 0 8px;font-size:21px;color:#0F172A;">Your account is pending approval</h2>'
+      + '<p style="margin:0 auto 14px;max-width:470px;color:#475569;font-size:14.5px;line-height:1.55;">'
+      + (first ? 'Welcome, ' + esc(first) + '. ' : '') + 'Your sign-in works, but <b>' + esc(name) + '</b> hasn’t finished setting up your family yet. '
+      + 'Once they link your account to your family, your child’s updates, photos, messages and billing will appear here.</p>'
+      + '<p style="margin:0 auto 18px;max-width:470px;color:#92400E;background:#FFFBEB;border-radius:10px;padding:10px 12px;font-size:14px;line-height:1.5;">'
+      + 'If you’ve been waiting a while, please reach out to your agency administrator at ' + esc(name) + '.</p>'
+      + ((ag.email || phoneShow) ? '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:18px;">'
+        + (ag.email ? '<a class="kt-btn" href="mailto:' + esc(ag.email) + '" style="font-size:13px;">✉️ ' + esc(ag.email) + '</a>' : '')
+        + (phoneShow ? '<a class="kt-btn" href="tel:' + esc(phone || ag.phone) + '" style="font-size:13px;">📞 ' + esc(phoneShow) + '</a>' : '')
+        + '</div>' : '')
+      + '<div style="border-top:1px solid #F1F5F9;padding-top:16px;color:#64748B;font-size:13px;margin-bottom:10px;">In the meantime you can:</div>'
+      + '<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">'
+      + '<a class="kt-btn kt-btn-primary" href="#my-forms" style="font-size:13px;">✍️ Forms to sign</a>'
+      + '<a class="kt-btn" href="#my-documents" style="font-size:13px;">📄 Documents</a>'
+      + '<a class="kt-btn" href="#settings" style="font-size:13px;">👤 My account</a>'
+      + '</div></div>';
+    return wrap;
+  }
+
   function emptyState(emoji, title, sub) {
     return Dom.el('div', { class: 'empty-large' },
       Dom.el('div', { class: 'empty-emoji' }, emoji),
@@ -3305,6 +4204,7 @@
       const _roles = (user.roles || []);
       const roleLabel = _roles.indexOf('platform_admin') !== -1
         ? 'Platform admin'
+        : _roles.indexOf('reseller_admin') !== -1 ? 'Reseller'   // works as agency admin in its agencies (2026-10-21)
         : ({
             agency_admin:    'Agency admin',
             centre_director: 'Director',
@@ -3312,6 +4212,7 @@
             guardian:        'Parent',
             home_visitor:    'Home visitor',
             sales_rep:       'Sales rep',
+            reseller_admin:  'Reseller',
             auditor:         'Auditor',
           }[role] || role);
       navRole.textContent = roleLabel;
@@ -3409,6 +4310,19 @@
 
   // Export
   window.KT.Shell = {
+    /* The icon this screen goes by - its sidebar icon for this role, else the shell's table for screens reached
+       another way (2026-10-28). kt-banner-normalize puts it on every banner, so a screen's banner always matches its
+       sidebar entry and no screen falls through to the generic sparkle. */
+    screenIcon: function (hash) {
+      try {
+        var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+        var h = String(hash || location.hash || '').replace(/^#/, '').split('?')[0];
+        return (navItemFor(Roles.primaryRoleOf(u), h) || {}).icon || '';
+      } catch (e) { return ''; }
+    },
+    // A registered screen's render function, so one screen can host another (2026-10-25, Accounting AR/AP -> Expenses).
+    screenFn: function (name) { return screens[name] || null; },
+    enforceOneBanner: function (m) { try { return enforceOneBanner(m || document.getElementById('appMain')); } catch (e) { return false; } },
     registerScreen,
     renderScreen,
     navigate,
@@ -3436,4 +4350,13 @@
       catch (e) { return false; }
     },
   };
+  /* SCREENS THAT ARRIVED FIRST (2026-10-23, ticket #181). A screen file that runs before this
+     one - a page loaded in the middle of a deploy - registered itself with the placeholder
+     set up in dashboard.html's <head> instead of crashing on "registerScreen of undefined".
+     Hand those registrations to the real shell now. */
+  try {
+    var _pend = window.__ktPendingScreens || [];
+    window.__ktPendingScreens = [];
+    _pend.forEach(function (p) { try { registerScreen(p[0], p[1]); } catch (e) {} });
+  } catch (e) {}
 })(window);

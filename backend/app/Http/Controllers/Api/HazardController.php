@@ -302,7 +302,8 @@ final class HazardController extends Controller
      * Live staff to tell: the given roles AT this centre, plus (when $withAdmins) the
      * agency admins. One row per person, service and switched-off accounts excluded.
      */
-    private static function staffAt(int $agencyId, int $centreId, array $centreRoles, bool $withAdmins)
+    /** Also used by DrillController::store (2026-11-03) - the same people manage drills. */
+    public static function staffAt(int $agencyId, int $centreId, array $centreRoles, bool $withAdmins)
     {
         $q = Audience::excludeService(Audience::excludeOff(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
             ->where('ra.active', true)->whereNull('u.deleted_at')

@@ -445,6 +445,18 @@ class SalesController extends Controller
         };
         $qBefore = [];
         foreach ($qLabels as $k => $lb) { $qBefore[$k] = $qFmt($k, $q->getAttribute($k)); }
+        $linesSig = fn () => json_encode(SalesQuoteItem::where('quote_id', $q->id)->orderBy('sort')->orderBy('id')->get(['description', 'qty', 'unit_price', 'product_id'])
+            ->map(fn ($i) => [(string) $i->description, (float) $i->qty, (float) $i->unit_price, (int) $i->product_id])->all());
+        $linesBefore = $linesSig();
+        // The lines themselves, so the history can say WHICH line changed and how (2026-11-10).
+        $lineRows = fn () => SalesQuoteItem::where('quote_id', $q->id)->orderBy('sort')->orderBy('id')->get(['description', 'qty', 'unit_price', 'product_id', 'discount_type', 'discount_value'])
+            ->map(fn ($i) => ['d' => (string) $i->description, 'q' => (float) $i->qty, 'p' => (float) $i->unit_price, 'pid' => (int) $i->product_id,
+                'dt' => $i->discount_type, 'dv' => $i->discount_value === null ? null : (float) $i->discount_value])->all();
+        $rowsBefore = $lineRows();
+        $issuedBefore = ! empty($q->revised_at) ? \Illuminate\Support\Carbon::parse($q->revised_at) : ($q->sent_at ?: $q->created_at);
+        $validBefore = $q->valid_until ? $q->valid_until->copy() : null;
+        $revisedBefore = ! empty($q->revised_at) ? \Illuminate\Support\Carbon::parse($q->revised_at) : null;
+        $wentOutBefore = collect([$q->sent_at, $q->email_sent_at])->filter()->map(fn ($t) => \Illuminate\Support\Carbon::parse($t))->max();
 
         $q->fill(array_intersect_key($data, array_flip(['title', 'billing_period', 'currency', 'valid_until', 'discount', 'notes', 'terms', 'conditions'])));
         if (array_key_exists('taxes', $data)) {
@@ -478,25 +490,139 @@ class SalesController extends Controller
             $this->recomputeTotals($q);   // discount or taxes may have changed
         }
 
-        // Log field-level edits to the lead's change history (Salesforce-style).
-        if ($lead = SalesLead::find($q->lead_id)) {
-            $qLines = [];
-            foreach ($qLabels as $k => $lb) {
-                $after = $qFmt($k, $q->getAttribute($k));
-                if ($qBefore[$k] !== $after) {
-                    $qLines[] = $lb . ': ' . $qBefore[$k] . ' → ' . $after;
-                }
+        // What changed: the lead's change history (Salesforce-style) and the issued date both go by it.
+        $qLines = [];
+        foreach ($qLabels as $k => $lb) {
+            $after = $qFmt($k, $q->getAttribute($k));
+            if ($qBefore[$k] !== $after) {
+                $qLines[] = $lb . ': ' . $qBefore[$k] . ' → ' . $after;
             }
-            if ($r->has('items')) {
-                $qLines[] = 'Line items updated';
+        }
+        if ($r->has('items') && $linesSig() !== $linesBefore) {
+            $qLines = array_merge($qLines, self::lineChanges($rowsBefore, $lineRows(), $q->currency) ?: ['Line items updated']);
+        }
+        /* A CHANGED PROPOSAL GETS A NEW NUMBER (2026-11-07, Anthony: "when proposals changed or edited increment the
+           proposal # or iteration"). KT-Q-000022 becomes KT-Q-000022-R2, then -R3. The number column itself changes,
+           so the editor, list, PDF, emails, signing page, reports and lead history all show the version without each
+           reader knowing about revisions. It moves once per version the customer has had: the first real change after
+           the proposal went out (marked sent or emailed) starts the next revision; more edits before it is sent again
+           stay in that revision. A draft that never went out keeps its number. */
+        if ($qLines && $wentOutBefore && (! $revisedBefore || $wentOutBefore->gt($revisedBefore))) {
+            $rev = max(1, (int) ($q->revision ?? 1)) + 1;
+            $num = 'KT-Q-' . str_pad((string) $q->id, 6, '0', STR_PAD_LEFT) . '-R' . $rev;
+            DB::table('sales_quotes')->where('id', $q->id)->update(['revision' => $rev, 'number' => $num]);
+            $qLines[] = 'Proposal number: ' . $q->number . ' → ' . $num;
+            $q->revision = $rev;
+            $q->number = $num;
+        }
+        if ($qLines && ($lead = SalesLead::find($q->lead_id))) {
+            $this->logActivity($lead, 'edit', "Proposal {$q->number} updated
+" . implode("
+", $qLines), null);
+        }
+        /* THE DATE MOVES WITH THE CONTENT (2026-11-07, Anthony: "update date if proposal changes"). A real change (not
+           a save with nothing different, not a status change) makes today the issued date. A "valid until" left as it
+           was moves forward by the same number of days it had from the old issued date, so a 90-day proposal is still
+           valid for 90 days. */
+        if ($qLines) {
+            $upd = ['revised_at' => now()];
+            if ($validBefore && $issuedBefore && $qBefore['valid_until'] === $qFmt('valid_until', $q->valid_until)) {
+                $days = (int) $issuedBefore->copy()->startOfDay()->diffInDays($validBefore->copy()->startOfDay(), false);
+                if ($days > 0 && ! $issuedBefore->isToday()) $upd['valid_until'] = now()->startOfDay()->addDays($days)->toDateString();
             }
-            if ($qLines) {
-                $this->logActivity($lead, 'edit', "Proposal {$q->number} updated\n" . implode("\n", $qLines), null);
-            }
+            DB::table('sales_quotes')->where('id', $q->id)->update($upd);
         }
         $this->syncLeadValueForQuote($q);
 
         return response()->json($q->fresh('items'));
+    }
+
+    /* PROPOSAL HISTORY (2026-11-10, Anthony: "when editing and saving an existing proposal ... add the history on what
+       changed and the current status of the edited proposal"). Everything about a proposal is already logged on its
+       lead naming its number (edits, emails, opens, follow-ups, signing, value); every revision shares the base number
+       KT-Q-000022, so this is that lead's log filtered to it, all revisions, newest first, plus where it stands now. */
+    public function quoteHistory(int $quote)
+    {
+        $q = SalesQuote::findOrFail($quote);
+        $base = 'KT-Q-' . str_pad((string) $q->id, 6, '0', STR_PAD_LEFT);
+        $rows = SalesActivity::with('user:id,first_name,last_name')->where('lead_id', $q->lead_id)
+            ->whereRaw('body REGEXP ?', [$base . '([^0-9]|$)'])->orderByDesc('created_at')->orderByDesc('id')->limit(300)->get();
+        $iso = fn ($t) => $t ? \Illuminate\Support\Carbon::parse($t)->toIso8601String() : null;
+        $events = $rows->map(fn ($a) => ['at' => $iso($a->created_at), 'type' => $a->type, 'body' => (string) $a->body,
+            'by' => $a->user ? trim($a->user->first_name . ' ' . $a->user->last_name) : null])->values()->all();
+        $events[] = ['at' => $iso($q->created_at), 'type' => 'created', 'body' => 'Proposal ' . $base . ' created', 'by' => null];
+
+        return response()->json(['history' => $events, 'state' => self::quoteState($q)]);
+    }
+
+    /** Where a proposal stands now: for its card and its History. */
+    public static function quoteState(SalesQuote $q): array
+    {
+        $iso = fn ($t) => $t ? \Illuminate\Support\Carbon::parse($t)->toIso8601String() : null;
+        return [
+            'status' => $q->status, 'number' => $q->number, 'revision' => max(1, (int) ($q->revision ?? 1)),
+            'revised_at' => $iso($q->revised_at ?? null), 'sent_at' => $iso($q->sent_at), 'email_sent_at' => $iso($q->email_sent_at ?? null),
+            'email_open_count' => (int) ($q->email_open_count ?? 0), 'sign_viewed_at' => $iso($q->sign_viewed_at),
+            'client_signed_at' => $iso($q->client_signed_at), 'client_signer_name' => $q->client_signer_name,
+            'countersigned_at' => $iso($q->countersigned_at), 'countersigner_name' => $q->countersigner_name,
+            'declined_at' => $iso($q->declined_at ?? null), 'decline_reason' => $q->decline_reason ?? null,
+            'valid_until' => optional($q->valid_until)->toDateString(),
+            'changed_since_sent' => self::changedSinceSent($q),
+        ];
+    }
+
+    /** Changed after the customer last received it (and not signed or declined): they have the earlier version. */
+    public static function changedSinceSent(SalesQuote $q): bool
+    {
+        if ($q->client_signed_at || $q->status === 'declined' || empty($q->revised_at)) return false;
+        $out = collect([$q->sent_at, $q->email_sent_at ?? null])->filter()->map(fn ($t) => \Illuminate\Support\Carbon::parse($t))->max();
+        return $out !== null && \Illuminate\Support\Carbon::parse($q->revised_at)->gt($out);
+    }
+
+    /** What changed in the lines, one sentence each: added, removed, quantity, price, a discount's rate, text, order. */
+    private static function lineChanges(array $a, array $b, ?string $cur): array
+    {
+        $name = function ($l) {
+            $t = trim((string) preg_replace('/\s+/', ' ', (string) strtok((string) $l['d'], "\n")));
+            return '“' . mb_strimwidth($t !== '' ? $t : 'line', 0, 60, '…') . '”';
+        };
+        $rate = function ($t, $v) use ($cur) {
+            if (! $t) return '—';
+            return $t === 'percent' ? rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.') . '% off' : self::money((float) $v, $cur) . ' off';
+        };
+        $isDisc = fn ($l) => ! empty($l['dt']) || ((float) $l['p'] < 0 && $l['pid']);
+        $out = []; $usedB = []; $pairs = [];
+        foreach ($a as $i => $l) {
+            $hit = null;
+            foreach ($b as $j => $m) { if (! isset($usedB[$j]) && $l['pid'] && $m['pid'] === $l['pid']) { $hit = $j; break; } }
+            if ($hit === null) foreach ($b as $j => $m) { if (! isset($usedB[$j]) && ! $l['pid'] && ! $m['pid'] && $m['d'] === $l['d']) { $hit = $j; break; } }
+            if ($hit === null) { $out[] = 'Removed line: ' . $name($l); continue; }
+            $usedB[$hit] = true; $pairs[] = [$i, $hit];
+            $m = $b[$hit];
+            // A discount's "(10% off)" follows its rate: that is the rate change below, not a text change.
+            $bare = fn ($t) => trim((string) preg_replace('/\s*\([^()]*\boff\b[^()]*\)/u', '', (string) $t));
+            if ($m['d'] !== $l['d'] && ! ($isDisc($m) && $bare($m['d']) === $bare($l['d']))) $out[] = 'Text of ' . $name($l) . ' changed to ' . $name($m);
+            if (abs($m['q'] - $l['q']) > 0.0001 && ! $isDisc($m)) $out[] = 'Quantity on ' . $name($m) . ': ' . rtrim(rtrim(number_format($l['q'], 2, '.', ''), '0'), '.') . ' → ' . rtrim(rtrim(number_format($m['q'], 2, '.', ''), '0'), '.');
+            if (abs($m['p'] - $l['p']) > 0.004 && ! $isDisc($m)) $out[] = 'Price on ' . $name($m) . ': ' . self::money($l['p'], $cur) . ' → ' . self::money($m['p'], $cur);
+            if ($isDisc($m)) {
+                // A line saved before rates were kept has none: compare with its catalogue discount instead.
+                $bt = $l['dt']; $bv = $l['dv'];
+                if (! $bt && $l['pid'] && ($pr = SalesProduct::find($l['pid'])) && ($pr->kind ?? '') === 'discount') { $bt = $pr->discount_type; $bv = (float) $pr->price; }
+                if ($bt && $m['dt'] && ($bt !== $m['dt'] || abs((float) $bv - (float) $m['dv']) > 0.004)) {
+                    $out[] = 'Discount rate on ' . $name($m) . ': ' . $rate($bt, $bv) . ' → ' . $rate($m['dt'], $m['dv']);
+                }
+            }
+        }
+        foreach ($b as $j => $m) {
+            if (isset($usedB[$j])) continue;
+            $out[] = 'Added line: ' . $name($m) . ($isDisc($m) ? ' (' . $rate($m['dt'], $m['dv']) . ')' : ' — ' . rtrim(rtrim(number_format($m['q'], 2, '.', ''), '0'), '.') . ' × ' . self::money($m['p'], $cur));
+        }
+        // Same lines, new order.
+        $order = array_column($pairs, 1);
+        $sorted = $order; sort($sorted);
+        if (count($a) === count($b) && count($pairs) === count($a) && $order !== $sorted) $out[] = 'Line order changed';
+
+        return count($out) > 15 ? array_merge(array_slice($out, 0, 14), [(count($out) - 14) . ' more line changes']) : $out;
     }
 
     public function quoteShow(int $quote)
@@ -662,6 +788,9 @@ class SalesController extends Controller
     public function quoteDestroy(int $quote)
     {
         $q = SalesQuote::findOrFail($quote);
+        /* A proposal that set up a customer is that customer's record of what they bought (2026-11-11). */
+        abort_if($q->converted_agency_id || DB::table('sales_customers')->where('quote_id', $q->id)->exists(), 422,
+            'This proposal set up a customer, so it stays. Change the customer instead.');
         $q->delete();   // soft delete
         if ($lead = SalesLead::find($q->lead_id)) {
             $this->logActivity($lead, 'note', "Proposal {$q->number} deleted", null);
@@ -733,7 +862,7 @@ TXT;
         'sales_phone' => '1-855-400-9996',
     ];
 
-    public const FOR_KEYS = ['company', 'name', 'title', 'address', 'email', 'phone'];
+    public const FOR_KEYS = ['company', 'name', 'title', 'address', 'city', 'province', 'postal_code', 'email', 'phone'];
     public const BY_KEYS = ['name', 'title', 'email', 'phone'];
 
     /** Known keys only, trimmed; all empty = NULL (falls back to the lead / defaults). */
@@ -746,16 +875,35 @@ TXT;
     }
 
     /** Who the proposal is for: what was typed on it, else the lead's details. */
+    /** "Wasaga Beach, Ontario  L9Z 0A1" from the address parts ('' when none are set). */
+    public static function cityLine(array $pf): string
+    {
+        $cp = implode(', ', array_filter([trim((string) ($pf['city'] ?? '')), trim((string) ($pf['province'] ?? ''))], 'strlen'));
+        $pc = trim((string) ($pf['postal_code'] ?? ''));
+        return trim($cp . ($cp !== '' && $pc !== '' ? '  ' : '') . $pc);
+    }
+
     private static function preparedFor(SalesQuote $q, ?SalesLead $lead): array
     {
-        if (is_array($q->prepared_for) && $q->prepared_for) {
-            return array_merge(array_fill_keys(self::FOR_KEYS, ''), $q->prepared_for);
-        }
         $lead = $lead ?: new SalesLead();
+        // The contact's job title / phone, else the owner's when the owner IS the contact (same
+        // name or email, or no separate owner named) - website leads file them there (2026-10-27).
+        $same = fn ($a, $b) => mb_strtolower(trim((string) $a)) === mb_strtolower(trim((string) $b));
+        $ownerIsContact = ! ($lead->owner_name ?? null) || $same($lead->owner_name, $lead->name)
+            || (($lead->owner_email ?? null) && $same($lead->owner_email, $lead->email));
+        $title = (string) (($lead->title ?? '') ?: ($ownerIsContact ? ($lead->owner_title ?? '') : ''));
+        $phone = (string) (($lead->phone ?? '') ?: ($ownerIsContact ? ($lead->owner_phone ?? '') : ''));
+        if (is_array($q->prepared_for) && $q->prepared_for) {
+            $pf = array_merge(array_fill_keys(self::FOR_KEYS, ''), $q->prepared_for);
+            if (trim((string) $pf['title']) === '' && $title !== '') $pf['title'] = $title;   // blanks only
+            if (trim((string) $pf['phone']) === '' && $phone !== '') $pf['phone'] = $phone;
+            return $pf;
+        }
         return [
-            'company' => (string) ($lead->company ?? ''), 'name' => (string) ($lead->name ?? ''), 'title' => (string) ($lead->title ?? ''),
-            'address' => trim(implode(', ', array_filter([$lead->address ?? null, $lead->city ?? null, $lead->province ?? null, $lead->postal_code ?? null]))),
-            'email' => (string) ($lead->email ?? ''), 'phone' => (string) ($lead->phone ?? ''),
+            'company' => (string) ($lead->company ?? ''), 'name' => (string) ($lead->name ?? ''), 'title' => $title,
+            'address' => (string) ($lead->address ?? ''), 'city' => (string) ($lead->city ?? ''),
+            'province' => (string) ($lead->province ?? ''), 'postal_code' => (string) ($lead->postal_code ?? ''),
+            'email' => (string) ($lead->email ?? ''), 'phone' => $phone,
         ];
     }
 
@@ -763,16 +911,37 @@ TXT;
     private static function preparedBy(SalesQuote $q): array
     {
         if (is_array($q->prepared_by) && $q->prepared_by) {
-            return array_merge(array_fill_keys(self::BY_KEYS, ''), $q->prepared_by);
+            $pb = array_merge(array_fill_keys(self::BY_KEYS, ''), $q->prepared_by);
+            $pb['name'] = self::staffFirstName((string) $pb['name'], $q->created_by ? (int) $q->created_by : null);
+            return $pb;
         }
         return self::defaultPreparedBy($q->created_by ? \App\Models\User::find($q->created_by) : null);
+    }
+
+    /* FIRST NAMES ONLY (2026-10-23, Anthony: "with lead proposals sent out never add my last
+       name or my staffs with sales last name"). Whatever is on a proposal, PDF, email or sign
+       page as "prepared by": a staff member's full name becomes their first name. Proposals
+       saved earlier kept the full name typed in, so this is applied when it is shown, not only
+       when it is saved. A name that is not one of ours ("KiddieTrac Sales") is left alone. */
+    public static function staffFirstName(string $name, ?int $authorId = null): string
+    {
+        $name = trim(preg_replace('/\s+/', ' ', $name));
+        if ($name === '' || ! str_contains($name, ' ')) return $name;
+        $first = strtok($name, ' ');
+        $u = DB::table('users')->whereRaw("LOWER(TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,'')))) = ?", [mb_strtolower($name)])->first(['first_name']);
+        if ($u && trim((string) $u->first_name) !== '') return trim((string) $u->first_name);
+        if ($authorId) {
+            $a = DB::table('users')->where('id', $authorId)->first(['first_name', 'last_name']);
+            if ($a && mb_strtolower(trim((string) $a->first_name)) === mb_strtolower($first)) return trim((string) $a->first_name);
+        }
+        return $name;
     }
 
     private static function defaultPreparedBy($user): array
     {
         $d = self::proposalDefaultValues();
         return [
-            'name'  => $user ? trim($user->first_name . ' ' . $user->last_name) : 'KiddieTrac Sales',
+            'name'  => $user ? (trim((string) $user->first_name) ?: 'KiddieTrac Sales') : 'KiddieTrac Sales',   // first name only (2026-10-23)
             'title' => (string) ($d['sales_title'] ?? ''), 'email' => (string) ($d['sales_email'] ?? ''), 'phone' => (string) ($d['sales_phone'] ?? ''),
         ];
     }
@@ -807,9 +976,65 @@ TXT;
         return self::$oddsMemo = $out;
     }
 
+    /* RECURRING AND ONE-TIME, APART (2026-10-27, Anthony: "the one time plans that are added to
+       the proposal shows up in the monthly and not as a one time cost on the proposal"). The
+       stored total adds a $500 setup fee into "Total per month". Every view of a proposal now
+       shows the subscription and the one-time fees as two totals, each with its own tax. Same
+       rule as annualValueOf: one-time = a one-time catalogue item, or a discount that applies to
+       one-time items; the proposal's own discount comes off the subscription. */
+    public static function splitTotals(SalesQuote $q): array
+    {
+        $q->loadMissing('items');
+        $ids = $q->items->pluck('product_id')->filter()->unique()->values()->all();
+        $prods = $ids ? SalesProduct::whereIn('id', $ids)->get()->keyBy('id') : collect();
+        $rec = 0.0; $once = 0.0; $onceIds = []; $discAll = 0.0;
+        foreach ($q->items as $it) {
+            $pr = $it->product_id ? $prods->get($it->product_id) : null;
+            $isDisc = $pr && ($pr->kind ?? '') === 'discount';
+            // A discount on the WHOLE proposal is shared out below (10% off a $500 setup is
+            // $50 off the setup, not $50 more off every month).
+            if ($isDisc && ! in_array($pr->applies_to ?? 'all', ['one-time', 'recurring'], true)) { $discAll += (float) $it->line_total; continue; }
+            $isOnce = $pr && ($pr->unit === 'one-time' || ($isDisc && ($pr->applies_to ?? '') === 'one-time'));
+            if ($isOnce) { $once += (float) $it->line_total; $onceIds[] = (int) $it->id; }
+            else { $rec += (float) $it->line_total; }
+        }
+        if ($discAll != 0.0) {
+            $base = max(0.0, $rec) + max(0.0, $once);
+            $share = $base > 0 ? max(0.0, $rec) / $base : 1.0;
+            $rec += round($discAll * $share, 2);
+            $once += round($discAll - round($discAll * $share, 2), 2);
+        }
+        $recSub = round($rec, 2); $onceSub = round($once, 2);
+        $disc = (float) $q->discount;
+        $recNet = $rec - $disc; $onceNet = $once;
+        if ($recNet < 0) { $onceNet += $recNet; $recNet = 0.0; }
+        $recNet = round(max(0, $recNet), 2); $onceNet = round(max(0, $onceNet), 2);
+        $rt = []; $ot = []; $rs = 0.0; $os = 0.0;
+        foreach ((array) ($q->taxes ?: []) as $t) {
+            $rate = (float) ($t['rate'] ?? 0);
+            $a = round($recNet * $rate / 100, 2); $b = round($onceNet * $rate / 100, 2);
+            $rt[] = ['label' => $t['label'] ?? 'Tax', 'rate' => $rate, 'amount' => $a]; $rs += $a;
+            $ot[] = ['label' => $t['label'] ?? 'Tax', 'rate' => $rate, 'amount' => $b]; $os += $b;
+        }
+        return [
+            // Only when the one-time lines come to something: a \/usr/bin/bash complimentary line is not a fee.
+            'has_once' => count($onceIds) > 0 && abs($onceSub) >= 0.005 && in_array($q->billing_period, ['month', 'year'], true),
+            'once_item_ids' => $onceIds,
+            'recurring_subtotal' => $recSub, 'discount' => round($disc, 2), 'recurring_net' => $recNet,
+            'recurring_taxes' => $rt, 'recurring_total' => round($recNet + $rs, 2),
+            'one_time_subtotal' => $onceSub, 'one_time_net' => $onceNet,
+            'one_time_taxes' => $ot, 'one_time_total' => round($onceNet + $os, 2),
+        ];
+    }
+
     /** A proposal's annual value before tax: recurring x12 (monthly) or x1, plus one-time fees. */
     public static function annualValueOf(SalesQuote $q): float
     {
+        $s = self::splitTotals($q);
+        $periods = $q->billing_period === 'month' ? 12 : 1;
+        if (in_array($q->billing_period, ['month', 'year'], true)) {
+            return round($s['recurring_net'] * $periods + $s['one_time_net'], 2);
+        }
         $q->loadMissing('items');
         $ids = $q->items->pluck('product_id')->filter()->unique()->values()->all();
         $prods = $ids ? SalesProduct::whereIn('id', $ids)->get()->keyBy('id') : collect();
@@ -980,7 +1205,11 @@ TXT;
             'active'      => 'nullable|boolean',
             'sort'        => 'nullable|integer',
             // A discount plan (2026-10-14): % off or $ off, on all / recurring / one-time items.
-            'kind'        => 'nullable|in:plan,discount',
+            // Licensing (2026-10-24): plans, add-ons, one-time services and discounts.
+            'kind'        => 'nullable|in:plan,addon,service,discount',
+            'plan_code'   => 'nullable|in:starter,growth,enterprise',
+            'feature_keys' => 'nullable|array',
+            'feature_keys.*' => 'string|max:40',
             'discount_type' => 'nullable|required_if:kind,discount|in:percent,amount',
             'applies_to'  => 'nullable|in:all,recurring,one-time',
         ]);
@@ -991,11 +1220,18 @@ TXT;
             $data['applies_to'] = $data['applies_to'] ?? 'all';
             $data['unit'] = 'discount';
         } else {
-            $data['kind'] = 'plan';
+            $data['kind'] = in_array($data['kind'] ?? 'plan', ['plan', 'addon', 'service'], true) ? ($data['kind'] ?? 'plan') : 'plan';
+            if ($data['kind'] === 'service') $data['unit'] = 'one-time';
             $data['discount_type'] = null;
             $data['applies_to'] = null;
         }
+        $data['plan_code'] = ($data['kind'] ?? '') === 'plan' ? ($data['plan_code'] ?? null) : null;
+        $data['feature_keys'] = ($data['kind'] ?? '') === 'addon' && ! empty($data['feature_keys']) ? json_encode(array_values(array_unique($data['feature_keys']))) : null;
         $p = $product ? SalesProduct::findOrFail($product) : new SalesProduct();
+        /* A PART NUMBER FOR EVERY ITEM (2026-10-24): given once, when the item is created (or the
+           first time an older item is saved), and never changed, so reports and past proposals
+           and invoices keep pointing at the same thing. */
+        if (empty($p->part_number)) $data['part_number'] = \App\Support\Licences::nextPart($data['kind'] ?? 'plan');
         $p->fill($data)->save();
 
         return response()->json($p, $product ? 200 : 201);
@@ -1128,9 +1364,34 @@ TXT;
     }
 
     /** The proposal PDF: letter size, with "Page n of m" in the footer of every page. */
+    /** The proposal PDF, for App\Support\ProposalFollowUp. */
+    public function pdfBytesOf(SalesQuote $q): string
+    {
+        return $this->quotePdfBytes($q);
+    }
+
+    /** PATCH /sales/quotes/{id}/followup {days, max} — change or stop (days 0) automatic follow-ups. */
+    public function quoteFollowup(Request $r, int $quote)
+    {
+        $q = SalesQuote::findOrFail($quote);
+        $d = $r->validate(['days' => 'required|integer|min:0|max:60', 'max' => 'nullable|integer|min:1|max:5']);
+        if ($d['days'] > 0 && ($q->client_signed_at || $q->status === 'declined' || $q->status === 'draft')) {
+            return response()->json(['message' => $q->status === 'draft' ? 'Email the proposal first; follow-ups start from there.' : 'This proposal is already ' . ($q->client_signed_at ? 'signed' : 'declined') . '.'], 422);
+        }
+        \App\Support\ProposalFollowUp::schedule($q, (int) $d['days'], (int) ($d['max'] ?? 2), (int) auth()->id());
+        $lead = SalesLead::find($q->lead_id);
+        if ($lead) {
+            $this->logActivity($lead, 'edit', $d['days'] > 0 ? 'Automatic follow-up on proposal ' . ($q->number ?: '') . ': every ' . $d['days'] . ' days, up to ' . ($d['max'] ?? 2) . ' times'
+                : 'Automatic follow-up on proposal ' . ($q->number ?: '') . ' stopped', null);
+        }
+        $q = $q->fresh();
+        return response()->json(['ok' => true, 'followup_days' => $q->followup_days, 'followup_max' => $q->followup_max, 'followups_sent' => (int) $q->followups_sent,
+            'followup_next_at' => optional($q->followup_next_at ? \Illuminate\Support\Carbon::parse($q->followup_next_at) : null)->toIso8601String()]);
+    }
+
     private function quotePdfBytes(SalesQuote $q): string
     {
-        $pdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
+        $pdf = new \App\Support\KtDompdf(['isRemoteEnabled' => false, 'defaultFont' => 'DejaVu Sans']);
         $pdf->loadHtml($this->quoteHtml($q, true));
         $pdf->setPaper('letter');
         $pdf->render();
@@ -1162,6 +1423,12 @@ TXT;
         if (count($cc) > 10 || count($bcc) > 10) {
             return response()->json(['message' => 'Up to 10 CC and 10 BCC addresses.'], 422);
         }
+        /* A NOTE IN THE EMAIL, AND AUTOMATIC FOLLOW-UP (2026-10-23, Anthony: "allow me to add a
+           note before emailing to the body of the email, add feature to follow up with proposal
+           based on x timeframe"). App\Support\ProposalFollowUp. */
+        $note = mb_substr(trim((string) $r->input('note', '')), 0, 2000);
+        $fuDays = max(0, min(60, (int) $r->input('followup_days', 0)));
+        $fuMax = max(1, min(5, (int) $r->input('followup_max', 2)));
         $toLc = strtolower(trim($lead->email));
         $cc = array_values(array_diff($cc, [$toLc]));
         $bcc = array_values(array_diff($bcc, [$toLc], $cc));
@@ -1171,7 +1438,7 @@ TXT;
         $bytes = $this->quotePdfBytes($q);
 
         try {
-            $body = $this->proposalEmailHtml($q, $lead);
+            $body = $this->proposalEmailHtml($q, $lead, $note !== '' ? $note : null);
             Mail::html($body, function ($m) use ($lead, $q, $bytes, $cc, $bcc) {
                 \App\Support\MailScope::platform($m);   // sales, not tenant mail
                 $m->to($lead->email, $lead->name ?: null)->subject('Your KiddieTrac proposal ' . ($q->number ?: ''));
@@ -1183,8 +1450,10 @@ TXT;
                 $m->attachData($bytes, ($q->number ?: 'proposal') . '.pdf', ['mime' => 'application/pdf']);
             });
         } catch (\Throwable $e) {
+            \App\Support\ProposalTracking::sent((int) $q->id, false, $e->getMessage());
             return response()->json(['message' => 'Could not send the email: ' . $e->getMessage()], 500);
         }
+        \App\Support\ProposalTracking::sent((int) $q->id, true);   // accepted for delivery (2026-10-23)
 
         if ($q->status === 'draft') {
             $q->status = 'sent';
@@ -1193,7 +1462,15 @@ TXT;
         }
         $this->proposalWentOut($q, 'emailed');
         $this->logActivity($lead, 'email', 'Proposal ' . ($q->number ?: '') . ' emailed to ' . $lead->email
-            . ($cc ? ' · CC ' . implode(', ', $cc) : '') . ($bcc ? ' · BCC ' . implode(', ', $bcc) : ''), null);
+            . ($cc ? ' · CC ' . implode(', ', $cc) : '') . ($bcc ? ' · BCC ' . implode(', ', $bcc) : '')
+            . ($note !== '' ? "\nNote in the email: " . $note : '')
+            . ($fuDays ? "\nAutomatic follow-up every " . $fuDays . ' day' . ($fuDays === 1 ? '' : 's') . ', up to ' . $fuMax . ' time' . ($fuMax === 1 ? '' : 's') . ', until it is signed.' : ''), null);
+        // Remembered for "Resend proposal" (2026-10-23): the note, CC and BCC come back prefilled.
+        DB::table('sales_quotes')->where('id', $q->id)->update(['email_note' => $note !== '' ? $note : null,
+            'email_cc' => $cc ? json_encode(array_values($cc)) : null, 'email_bcc' => $bcc ? json_encode(array_values($bcc)) : null]);
+        if ($fuDays) {
+            \App\Support\ProposalFollowUp::schedule($q->fresh(), $fuDays, $fuMax, (int) auth()->id());
+        }
 
         return response()->json(['ok' => true]);
     }
@@ -1206,7 +1483,7 @@ TXT;
      * dates here — they live only in the attached PDF. Email-client safe: tables, inline styles,
      * hosted https images, no background images.
      */
-    private function proposalEmailHtml(SalesQuote $q, SalesLead $lead): string
+    private function proposalEmailHtml(SalesQuote $q, SalesLead $lead, ?string $note = null): string
     {
         $navy = '#1E2A5E'; $teal = '#1F6080'; $muted = '#5B6B7C';
         $first = trim((string) strtok((string) ($lead->name ?: ''), ' ')) ?: 'there';
@@ -1238,7 +1515,7 @@ TXT;
             // Logo + brand bar. Light-on-navy wordmark on a band that is navy in both schemes
             // (Outlook dark mode darkened the card under the dark-ink logo and it went speckled).
             . '<tr><td bgcolor="#081C41" class="kt-band" style="background:#081C41;padding:22px 24px;text-align:center"><img src="https://api.kiddietrac.com/email/wordmark-tagline-navy.png" width="250" alt="KiddieTrac - Smart Childcare Management Platform" style="display:block;margin:0 auto;border:0;width:250px;max-width:78%;height:auto"></td></tr>'
-            . '<tr><td style="font-size:0;line-height:0"><img src="https://api.kiddietrac.com/email/brand-gradient.png" width="600" height="6" alt="" style="display:block;border:0;width:100%;max-width:600px;height:6px"></td></tr>'
+            . '<tr><td bgcolor="#1FA2A6" style="font-size:0;line-height:0;background:#1FA2A6"><img src="https://api.kiddietrac.com/email/brand-gradient.png" width="600" height="6" alt="" style="display:block;border:0;width:100%;height:6px"></td></tr>'
 
             // Graphic 1: photo.
             . '<tr><td><img src="https://www.kiddietrac.com/images/life/colouring-800.jpg" width="600" alt="An educator and a child colouring a butterfly together" style="display:block;border:0;width:100%;max-width:600px;height:auto"></td></tr>'
@@ -1247,6 +1524,9 @@ TXT;
             . '<tr><td class="kt-pad" style="padding:28px 40px 6px">'
             . '<div class="kt-h" style="font-size:24px;line-height:1.3;font-weight:bold;color:' . $navy . ';margin:0 0 14px">Thank you for considering KiddieTrac</div>'
             . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65">Hi ' . e($first) . ',</p>'
+            // The sender's own words, when they added some (2026-10-23).
+            . ($note ? '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;background:#F4F9FB;--kt-edge:#1FA2A6;border-radius:0 10px 10px 0"><tr><td style="padding:14px 18px;font-size:15px;line-height:1.65;color:#0D1B2A">'
+                . nl2br(e($note)) . '<div style="margin-top:8px;font-size:13px;color:' . $muted . '">— ' . e($rep) . '</div></td></tr></table>' : '')
             . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65">Thank you for your interest in working with us. Every early-years team we meet shares the same purpose we do: making a real difference for children, and for the parents who trust you with them every day. We are genuinely glad to be talking with ' . e($org) . '.</p>'
             . '<p style="margin:0 0 6px;font-size:15px;line-height:1.65">KiddieTrac, the <strong style="color:' . $teal . '">Smart Childcare Management Platform</strong>, is built around that purpose. It brings the whole day together in one place, so your educators spend less time on paperwork and more time with the children, and families feel close to their child\'s day even when they are apart.</p>'
             . '</td></tr>'
@@ -1262,7 +1542,7 @@ TXT;
 
             // The proposal + next steps.
             . '<tr><td class="kt-pad" style="padding:22px 40px 4px">'
-            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-left:4px solid #2C8AAC;background:#F4F9FB;border-radius:0 10px 10px 0"><tr><td style="padding:16px 18px;font-size:14.5px;line-height:1.6">'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="--kt-edge:#2C8AAC;background:#F4F9FB;border-radius:0 10px 10px 0"><tr><td style="padding:16px 18px;font-size:14.5px;line-height:1.6">'
             . '<div style="font-weight:bold;color:' . $navy . ';margin-bottom:4px">&#128206; Your proposal is attached</div>'
             . 'We have put together a proposal for ' . e($org) . ', attached to this email as a PDF together with our terms and conditions.'
             . '</td></tr></table>'
@@ -1274,6 +1554,9 @@ TXT;
             . '<p style="margin:18px 0 26px;font-size:15px;line-height:1.6">Warm regards,<br><strong style="color:' . $navy . '">' . e($rep) . '</strong><br><span style="color:' . $muted . ';font-size:13.5px">' . $repLine . '</span></p>'
             . '</td></tr>'
 
+            // Now on Google Play (2026-10-25).
+            . '<tr><td class="kt-pad" style="padding:0 40px 20px">' . \App\Support\PlayBadge::card('font-family:Arial,Helvetica,sans-serif;', $navy, $muted) . '</td></tr>'
+
             // Confidentiality.
             . '<tr><td class="kt-pad" style="padding:0 40px 26px">'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FFF8E6;border:1px solid #F3DFA6;border-radius:10px"><tr><td style="padding:14px 16px;font-size:12.5px;line-height:1.55;color:#5C4A12">'
@@ -1282,11 +1565,11 @@ TXT;
 
             // Footer.
             . '<tr><td style="background:' . $navy . ';padding:18px 32px;text-align:center;font-size:12px;line-height:1.6;color:#C9D3E6">'
-            . '<strong style="color:#ffffff">KiddieTrac</strong> · Smart Childcare Management Platform<br>'
+            . '<strong style="color:#ffffff">' . e(\App\Support\Company::legalName()) . '</strong> · Smart Childcare Management Platform<br>'
             . '<a href="https://www.kiddietrac.com" style="color:#9FE0F0;text-decoration:none">kiddietrac.com</a> · <a href="mailto:info@kiddietrac.com" style="color:#9FE0F0;text-decoration:none">info@kiddietrac.com</a>'
             . '</td></tr>'
 
-            . '</table></td></tr></table></body></html>';
+            . '</table>' . \App\Support\ProposalTracking::pixel((int) $q->id, 'email') . '</td></tr></table></body></html>';
     }
 
     private function brandBarHtml(): string
@@ -1301,7 +1584,7 @@ TXT;
     private function preparedByName(SalesQuote $q): ?string
     {
         $u = $q->created_by ? \App\Models\User::find($q->created_by) : null;
-        return $u ? trim($u->first_name . ' ' . $u->last_name) : null;
+        return $u ? (trim((string) $u->first_name) ?: null) : null;   // first name only (2026-10-23)
     }
 
     /** Currencies a proposal can be priced in (code => name). Prices are typed in that currency; nothing is converted. */
@@ -1341,7 +1624,10 @@ TXT;
             $logo = '<div style="font-size:24px;font-weight:bold;color:' . $navy . '">KiddieTrac</div>';
         }
 
-        $issued = $q->sent_at ?: $q->created_at;
+        /* ISSUED = THE LAST CHANGE TO WHAT THE CUSTOMER READS (2026-11-07, Anthony: "update date if proposal changes").
+           revised_at is set by quoteUpdate when the wording, prices, lines or terms change; before any change it is
+           the day it went out (or was made). */
+        $issued = ! empty($q->revised_at) ? \Illuminate\Support\Carbon::parse($q->revised_at) : ($q->sent_at ?: $q->created_at);
         $issuedTxt = $issued ? $issued->format('F j, Y') : '';
         $validTxt = $q->valid_until ? $q->valid_until->format('F j, Y') : '—';
         $billing = ['month' => 'Monthly', 'year' => 'Annual'][$q->billing_period] ?? 'One-time';
@@ -1355,6 +1641,7 @@ TXT;
         $for = '<div style="font-size:13px;font-weight:bold;color:' . $navy . '">' . e($head) . '</div>'
             . ($who !== '' ? '<div>' . e($who) . '</div>' : '')
             . ($pf['address'] !== '' ? '<div>' . e($pf['address']) . '</div>' : '')
+            . (($cityLine = self::cityLine($pf)) !== '' ? '<div>' . e($cityLine) . '</div>' : '')
             . ($pf['email'] !== '' ? '<div>' . e($pf['email']) . '</div>' : '')
             . ($pf['phone'] !== '' ? '<div>' . e($pf['phone']) . '</div>' : '');
         $by = '<div style="font-size:13px;font-weight:bold;color:' . $navy . '">' . e($pb['name'] ?: 'KiddieTrac Sales') . '</div>'
@@ -1366,21 +1653,29 @@ TXT;
         $label = fn ($t) => '<div style="font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:' . $muted . ';font-weight:bold;margin-bottom:5px">' . $t . '</div>';
 
         // Line items.
+        $split = self::splitTotals($q);
+        $perShort = ['month' => '/month', 'year' => '/year'][$q->billing_period] ?? '';
         $rows = '';
         $i = 0;
         foreach ($q->items as $it) {
+            $isOnceRow = in_array((int) $it->id, $split['once_item_ids'], true);
+            $unitTag = ($split['has_once'] && (float) $it->line_total >= 0)   // a discount line is shared: no tag
+                ? '<br><span style="font-size:8.5px;font-weight:bold;letter-spacing:.3px;color:' . ($isOnceRow ? '#B45309' : $muted) . '">' . ($isOnceRow ? 'ONE-TIME' : strtoupper(ltrim($perShort, '/'))) . '</span>'
+                : '';
             $qty = rtrim(rtrim(number_format((float) $it->qty, 2), '0'), '.');
             $neg = (float) $it->line_total < 0 ? 'color:#047857;' : '';
             $bg = $i++ % 2 ? 'background:#F8FAFC;' : '';
-            $desc = e($it->description);
+            $desc = nl2br(e($it->description), false);   // a new line typed in the editor stays a new line
             // "Plan — description" from a preset: the plan name in bold, the description under it.
             if (strpos($it->description, ' — ') !== false) {
                 [$name, $rest] = explode(' — ', $it->description, 2);
-                $desc = '<span style="font-weight:bold;color:' . $navy . '">' . e($name) . '</span><br><span style="color:' . $muted . ';font-size:10.5px">' . e($rest) . '</span>';
+                $desc = '<span style="font-weight:bold;color:' . $navy . '">' . nl2br(e($name), false) . '</span><br><span style="color:' . $muted . ';font-size:10.5px">' . nl2br(e($rest), false) . '</span>';
             }
+            // Part number under the item (2026-10-24, licensing).
+            if (! empty($it->part_number)) $desc .= '<br><span style="color:' . $muted . ';font-size:9.5px;letter-spacing:.3px">Part # ' . e($it->part_number) . '</span>';
             $rows .= '<tr style="' . $bg . '"><td style="padding:9px 10px;border-bottom:1px solid ' . $line . ';' . $neg . '">' . $desc . '</td>'
                 . '<td style="padding:9px 10px;border-bottom:1px solid ' . $line . ';text-align:center">' . $qty . '</td>'
-                . '<td style="padding:9px 10px;border-bottom:1px solid ' . $line . ';text-align:right;white-space:nowrap;' . $neg . '">' . $money($it->unit_price) . '</td>'
+                . '<td style="padding:9px 10px;border-bottom:1px solid ' . $line . ';text-align:right;white-space:nowrap;' . $neg . '">' . $money($it->unit_price) . $unitTag . '</td>'
                 . '<td style="padding:9px 10px;border-bottom:1px solid ' . $line . ';text-align:right;white-space:nowrap;' . $neg . '">' . $money($it->line_total) . '</td></tr>';
         }
         if ($rows === '') {
@@ -1401,6 +1696,23 @@ TXT;
         }
         $tot .= '<tr><td style="padding:10px;background:' . $navy . ';color:#fff;font-weight:bold">Total ' . e($cur) . ($perWord ? ' <span style="font-weight:normal;font-size:10px">' . $perWord . '</span>' : '') . '</td>'
             . '<td style="padding:10px;background:' . $navy . ';color:#fff;font-weight:bold;text-align:right;font-size:14px;white-space:nowrap">' . $money($q->total) . '</td></tr>';
+        if ($split['has_once']) {
+            $periodName = $q->billing_period === 'year' ? 'Annual' : 'Monthly';
+            $tot = $tr($periodName . ' subtotal', $money($split['recurring_subtotal']));
+            if ((float) $q->discount > 0) $tot .= $tr('Discount', $money(-(float) $q->discount));
+            foreach ($split['recurring_taxes'] as $t) {
+                $tot .= $tr(e($t['label']) . ' (' . rtrim(rtrim(number_format((float) $t['rate'], 3), '0'), '.') . '%)', $money($t['amount']));
+            }
+            $tot .= '<tr><td style="padding:10px;background:' . $navy . ';color:#fff;font-weight:bold">Total ' . e($cur) . ' <span style="font-weight:normal;font-size:10px">' . $perWord . '</span></td>'
+                . '<td style="padding:10px;background:' . $navy . ';color:#fff;font-weight:bold;text-align:right;font-size:14px;white-space:nowrap">' . $money($split['recurring_total']) . '</td></tr>'
+                . '<tr><td colspan="2" style="height:10px"></td></tr>'
+                . $tr('One-time fees', $money($split['one_time_net']));
+            foreach ($split['one_time_taxes'] as $t) {
+                $tot .= $tr(e($t['label']) . ' (' . rtrim(rtrim(number_format((float) $t['rate'], 3), '0'), '.') . '%)', $money($t['amount']));
+            }
+            $tot .= '<tr><td style="padding:10px;background:#B45309;color:#fff;font-weight:bold">One-time total ' . e($cur) . ' <span style="font-weight:normal;font-size:10px">due on acceptance</span></td>'
+                . '<td style="padding:10px;background:#B45309;color:#fff;font-weight:bold;text-align:right;font-size:14px;white-space:nowrap">' . $money($split['one_time_total']) . '</td></tr>';
+        }
 
         // A one-time preset (setup, onboarding) inside a monthly/annual total is said out loud.
         $oneTime = 0;
@@ -1408,7 +1720,7 @@ TXT;
         foreach ($q->items as $it) {
             if ($it->product_id && ($units[$it->product_id] ?? null) === 'one-time') $oneTime += (float) $it->line_total;
         }
-        $oneTimeNote = ($perWord && $oneTime > 0)
+        $oneTimeNote = ($perWord && $oneTime > 0 && ! $split['has_once'])
             ? '<div style="text-align:right;font-size:9.5px;color:' . $muted . ';margin-top:5px">Includes one-time fees of ' . $money($oneTime) . ' (before tax), charged once on the first invoice.</div>'
             : '';
 
@@ -1431,14 +1743,16 @@ TXT;
         // Acceptance: signature lines for both sides, filled in as each side signs online.
         $tzHq = 'America/Toronto';
         $sigDate = fn ($d) => $d ? $d->copy()->setTimezone($tzHq)->format('M j, Y') : '';
-        $sig = fn ($who, ?string $img = null, string $nameTitle = '', string $date = '') => '<td style="width:50%;padding:0 10px 0 0;vertical-align:top">'
+        // Print name, Title and Date each on their own line under the signature (2026-11-10: "print your name").
+        $sigLine = fn (string $w, string $val, string $cap, string $pad) => '<td style="width:' . $w . ';padding:0 ' . $pad . ' 0 0"><div style="border-bottom:1px solid #94a3b8;height:16px;padding-bottom:3px;font-size:9.5px;line-height:15px;white-space:nowrap;overflow:hidden">'
+            . e($val) . '</div><div style="font-size:8.5px;color:' . $muted . ';margin-top:2px">' . $cap . '</div></td>';
+        $sig = fn ($who, ?string $img = null, string $name = '', string $title = '', string $date = '') => '<td style="width:50%;padding:0 10px 0 0;vertical-align:top">'
             . $label($who)
             . ($img ? '<div style="border-bottom:1px solid #94a3b8;height:36px"><img src="' . e($img) . '" alt="Signature" style="height:34px;max-width:210px"></div>'
                     : '<div style="border-bottom:1px solid #94a3b8;height:26px"></div>')
             . '<div style="font-size:8.5px;color:' . $muted . ';margin:2px 0 6px">Signature</div>'
             . '<table style="width:100%;border-collapse:collapse"><tr>'
-            . '<td style="width:64%;padding:0 8px 0 0"><div style="border-bottom:1px solid #94a3b8;height:16px;padding-bottom:3px;font-size:9.5px;line-height:15px;white-space:nowrap;overflow:hidden">' . e($nameTitle) . '</div><div style="font-size:8.5px;color:' . $muted . ';margin-top:2px">Name and title</div></td>'
-            . '<td style="width:36%;padding:0"><div style="border-bottom:1px solid #94a3b8;height:16px;padding-bottom:3px;font-size:9.5px;line-height:15px;white-space:nowrap">' . e($date) . '</div><div style="font-size:8.5px;color:' . $muted . ';margin-top:2px">Date</div></td>'
+            . $sigLine('42%', $name, 'Print name', '8px') . $sigLine('30%', $title, 'Title', '8px') . $sigLine('28%', $date, 'Date', '0')
             . '</tr></table></td>';
         $cName = trim((string) $q->client_signer_name . ($q->client_signer_title ? ', ' . $q->client_signer_title : ''));
         $kName = trim((string) $q->countersigner_name . ($q->countersigner_title ? ', ' . $q->countersigner_title : ''));
@@ -1457,8 +1771,8 @@ TXT;
             . '<div style="font-size:12px;font-weight:bold;color:' . $navy . ';margin-bottom:4px">Acceptance</div>'
             . '<div style="font-size:10px;color:#334155;margin-bottom:10px">By signing, the customer accepts this proposal' . ($conditions !== '' ? ' and the Terms &amp; Conditions above' : '') . ($q->valid_until ? ', before ' . e($validTxt) : '') . '.</div>'
             . '<table class="r-stack" style="width:100%;border-collapse:collapse"><tr>'
-            . $sig('For ' . e($q->client_signer_org ?: ($pf['company'] ?: ($pf['name'] ?: 'the customer'))), $q->client_signature, $cName, $sigDate($q->client_signed_at))
-            . $sig('For KiddieTrac', $q->countersignature, $kName, $sigDate($q->countersigned_at))
+            . $sig('For ' . e($q->client_signer_org ?: ($pf['company'] ?: ($pf['name'] ?: 'the customer'))), $q->client_signature, (string) $q->client_signer_name, (string) $q->client_signer_title, $sigDate($q->client_signed_at))
+            . $sig('For KiddieTrac', $q->countersignature, (string) $q->countersigner_name, (string) $q->countersigner_title, $sigDate($q->countersigned_at))
             . '</tr></table>' . $record . '</div>';
 
         $css = '@page{margin:34px 40px 50px}'
@@ -1474,7 +1788,7 @@ TXT;
                 . '.r-tot{width:100% !important;margin-left:0 !important}}');
 
         return '<html><head><meta charset="utf-8"><style>' . $css . '</style></head><body>'
-            . ($forPdf ? '<div class="foot"><strong style="color:#64748b">Private &amp; confidential. Not for distribution.</strong> · KiddieTrac · kiddietrac.com · info@kiddietrac.com</div>' : '')
+            . ($forPdf ? '<div class="foot"><strong style="color:#64748b">Private &amp; confidential. Not for distribution.</strong> · ' . e(\App\Support\Company::legalName()) . ' · kiddietrac.com · info@kiddietrac.com</div>' : '')
             // Header: logo left, PROPOSAL + number + dates right.
             . '<table class="r-stack r-head" style="width:100%;border-collapse:collapse"><tr>'
             . '<td style="vertical-align:middle">' . $logo . '</td>'
@@ -1498,7 +1812,8 @@ TXT;
             . '<table class="r-stack r-sum" style="width:100%;border-collapse:collapse;margin-top:14px;border:1px solid ' . $line . '"><tr>'
             . '<td style="padding:10px 14px;border-right:1px solid ' . $line . '">' . $label('Billing') . '<div style="font-size:12px;font-weight:bold;color:' . $navy . '">' . $billing . '</div></td>'
             . '<td style="padding:10px 14px;border-right:1px solid ' . $line . '">' . $label('Currency') . '<div style="font-size:12px;font-weight:bold;color:' . $navy . '">' . e($cur) . ' <span style="font-weight:normal;color:' . $muted . ';font-size:10px">' . e(self::CURRENCIES[$cur] ?? '') . '</span></div></td>'
-            . '<td style="padding:10px 14px;text-align:right">' . $label('Total' . ($perWord ? ' ' . $perWord : '')) . '<div style="font-size:16px;font-weight:bold;color:#047857">' . $money($q->total) . '</div></td>'
+            . '<td style="padding:10px 14px;text-align:right">' . $label('Total' . ($perWord ? ' ' . $perWord : '')) . '<div style="font-size:16px;font-weight:bold;color:#047857">' . $money($split['has_once'] ? $split['recurring_total'] : $q->total) . '</div>'
+            . ($split['has_once'] ? '<div style="font-size:10.5px;font-weight:bold;color:#B45309;margin-top:2px">+ ' . $money($split['one_time_total']) . ' one-time</div>' : '') . '</td>'
             . '</tr></table>'
             // Items.
             . '<table class="r-items" style="width:100%;border-collapse:collapse;margin-top:18px;font-size:11px">'
@@ -1509,7 +1824,7 @@ TXT;
             . $notes . $terms
             . $tc
             . $accept
-            . ($forPdf ? '' : '<div style="margin-top:18px;font-size:9px;color:#94a3b8"><strong style="color:#64748b">Private &amp; confidential. Not for distribution.</strong> · KiddieTrac · kiddietrac.com · info@kiddietrac.com</div>')
+            . ($forPdf ? '' : '<div style="margin-top:18px;font-size:9px;color:#94a3b8"><strong style="color:#64748b">Private &amp; confidential. Not for distribution.</strong> · ' . e(\App\Support\Company::legalName()) . ' · kiddietrac.com · info@kiddietrac.com</div>')
             . '</body></html>';
     }
 
@@ -1589,6 +1904,9 @@ TXT;
             'prepared_for.name'   => 'nullable|string|max:150',
             'prepared_for.title'  => 'nullable|string|max:150',
             'prepared_for.address' => 'nullable|string|max:300',
+            'prepared_for.city' => 'nullable|string|max:120',
+            'prepared_for.province' => 'nullable|string|max:120',
+            'prepared_for.postal_code' => 'nullable|string|max:20',
             'prepared_for.email'  => 'nullable|email|max:190',
             'prepared_for.phone'  => 'nullable|string|max:60',
             'prepared_by'         => 'nullable|array',
@@ -1600,15 +1918,24 @@ TXT;
             'taxes.*.label'       => 'nullable|string|max:40',
             'taxes.*.rate'        => 'nullable|numeric|min:0|max:100',
             'items'               => 'nullable|array',
-            'items.*.description' => 'required|string|max:255',
+            'items.*.description' => 'required|string|max:20000',   // was 255 (2026-11-07): long part descriptions
             'items.*.qty'         => 'nullable|numeric|min:0',
             'items.*.unit_price'  => 'nullable|numeric',
             'items.*.product_id'  => 'nullable|integer',
+            // A discount line's own rate on this proposal (2026-11-10); the catalogue gives the starting rate.
+            'items.*.discount_type'  => 'nullable|in:percent,amount',
+            'items.*.discount_value' => 'nullable|numeric|min:0|max:1000000',
         ]);
     }
 
     private function syncItems(SalesQuote $q, array $items): void
     {
+        // A percentage discount above 100% would take off more than the lines come to.
+        foreach (array_values($items) as $i => $it) {
+            if (($it['discount_type'] ?? null) === 'percent' && (float) ($it['discount_value'] ?? 0) > 100) {
+                throw \Illuminate\Validation\ValidationException::withMessages(["items.$i.discount_value" => 'A percentage discount can be at most 100%.']);
+            }
+        }
         SalesQuoteItem::where('quote_id', $q->id)->delete();
         $subtotal = 0;
         foreach (array_values($items) as $i => $it) {
@@ -1619,11 +1946,16 @@ TXT;
             SalesQuoteItem::create([
                 'quote_id'    => $q->id,
                 'product_id'  => $it['product_id'] ?? null,
+                // The item's part number, kept on the line so the proposal never changes after the fact.
+                'part_number' => ! empty($it['product_id']) ? SalesProduct::where('id', $it['product_id'])->value('part_number') : null,
                 'description' => $it['description'],
                 'qty'         => $qty,
                 'unit_price'  => $price,
                 'line_total'  => $line,
                 'sort'        => $i,
+                // Kept only on a discount line: the rate it was set to on this proposal (2026-11-10).
+                'discount_type'  => ! empty($it['discount_type']) ? $it['discount_type'] : null,
+                'discount_value' => ! empty($it['discount_type']) && isset($it['discount_value']) ? round((float) $it['discount_value'], 2) : null,
             ]);
         }
         $q->subtotal = round($subtotal, 2);
@@ -1704,6 +2036,12 @@ TXT;
         return (string) $v;
     }
 
+    /** For SalesConversionController (2026-10-23): an entry on the lead, with the team email. */
+    public function logExternal(SalesLead $lead, string $type, string $body): void
+    {
+        $this->logActivity($lead, $type, $body, null);
+    }
+
     private function logActivity(SalesLead $lead, string $type, ?string $body, ?string $due): SalesActivity
     {
         $lead->last_activity_at = now();
@@ -1757,6 +2095,52 @@ TXT;
             $when = \Illuminate\Support\Carbon::parse($act->created_at)->setTimezone($tz)->format('D j M Y, g:i A T');
             $due = $act->due_date ? \Illuminate\Support\Carbon::parse($act->due_date)->format('D j M Y') : null;
 
+            /* THE WHOLE LEAD, EVERY TIME (2026-10-23, Anthony: "when a lead stage or activity
+               changes - the email should have everything related to the lead broken into readable
+               sections to keep a trail of what the lead is about and what has changed"). What
+               changed comes first (the message above); then who they are, the business, where it
+               stands, the proposals, what is open, and the recent history. */
+            $d = fn ($v) => $v ? \Illuminate\Support\Carbon::parse($v)->setTimezone($tz)->format('D j M Y') : null;
+            $money = fn ($v, $cur) => $v !== null ? self::money($v, $cur ?: 'CAD') . ($cur && $cur !== 'CAD' ? ' ' . $cur : '') : null;
+            $owner = $lead->owner_id ? User::find($lead->owner_id) : null;
+            $place = implode(', ', array_filter([$lead->address, $lead->city, $lead->province, $lead->postal_code, $lead->country]));
+            $sections = [
+                ['heading' => 'Contact', 'rows' => ['Name' => $lead->name, 'Title' => $lead->title, 'Email' => $lead->email, 'Phone' => $lead->phone]],
+                ['heading' => 'Business', 'rows' => ['Company' => $lead->company, 'Website' => $lead->website, 'Address' => $place ?: null,
+                    'Children' => $lead->num_children, 'Locations' => $lead->num_locations, 'Uses today' => $lead->current_solution, 'Came from' => $lead->source]],
+                ['heading' => 'Owner / decision maker', 'rows' => ['Name' => $lead->owner_name, 'Title' => $lead->owner_title, 'Email' => $lead->owner_email, 'Phone' => $lead->owner_phone]],
+                ['heading' => 'Where it stands', 'rows' => ['Stage' => self::STAGES[$lead->stage] ?? $lead->stage,
+                    'Sales rep' => $owner ? trim($owner->first_name . ' ' . $owner->last_name) : null,
+                    'Est. annual revenue' => $money($lead->value, $lead->value_currency),
+                    'Expected close' => $d($lead->expected_close), 'Next follow-up' => $d($lead->follow_up_date),
+                    'Lost because' => $lead->lost_reason, 'Lead since' => $d($lead->created_at)]],
+            ];
+            $qrows = [];
+            foreach (\App\Models\SalesQuote::where('lead_id', $lead->id)->orderByDesc('id')->limit(8)->get() as $q) {
+                $state = $q->countersigned_at ? 'Signed by both sides ' . $d($q->countersigned_at)
+                    : ($q->client_signed_at ? 'Signed by ' . ($q->client_signer_name ?: 'the client') . ' ' . $d($q->client_signed_at) . ' · waiting for our countersignature'
+                    : ($q->declined_at ? 'Declined ' . $d($q->declined_at) . ($q->decline_reason ? ' — ' . $q->decline_reason : '')
+                    : ($q->status === 'draft' ? 'Draft' : 'Sent ' . $d($q->sent_at ?: $q->email_sent_at)
+                        . ((int) $q->email_open_count ? ' · opened ' . (int) $q->email_open_count . '×' : ' · not opened yet')
+                        . ($q->sign_viewed_at ? ' · viewed online' : ''))));
+                $qrows[$q->number ?: ('#' . $q->id)] = trim(($q->title ? $q->title . "\n" : '') . $money($q->total, $q->currency)
+                    . ($q->billing_period ? ' / ' . $q->billing_period : '') . "\n" . $state);
+            }
+            if ($qrows) $sections[] = ['heading' => 'Proposals', 'rows' => $qrows];
+            $open = [];
+            foreach (SalesActivity::where('lead_id', $lead->id)->where('type', 'followup')->where('done', false)->orderBy('due_date')->limit(6)->get() as $f) {
+                $open[($d($f->due_date) ?: 'No date') . (isset($open[$d($f->due_date) ?: 'No date']) ? ' (' . $f->id . ')' : '')] = mb_strimwidth((string) $f->body, 0, 200, '…');
+            }
+            if ($open) $sections[] = ['heading' => 'Open follow-ups', 'rows' => $open];
+            if ($lead->notes) $sections[] = ['heading' => 'Notes on the lead', 'rows' => ['Notes' => mb_strimwidth((string) $lead->notes, 0, 1500, '…')]];
+            $history = SalesActivity::with('user')->where('lead_id', $lead->id)->where('id', '!=', $act->id)->where('type', '!=', 'edit')
+                ->orderByDesc('created_at')->limit(10)->get()->map(function ($h) use ($tz) {
+                    $lbl = ['note' => '📝 Note', 'call' => '📞 Call', 'email' => '📧 Email', 'meeting' => '🤝 Meeting', 'followup' => '⏰ Follow-up', 'stage' => '↗️ Stage', 'text' => '💬 Text'][$h->type] ?? ucfirst($h->type);
+                    return ['who' => $lbl . ' · ' . ($h->user ? trim($h->user->first_name . ' ' . $h->user->last_name) : 'KiddieTrac'),
+                        'at' => \Illuminate\Support\Carbon::parse($h->created_at)->setTimezone($tz)->format('D j M, g:i A'),
+                        'text' => mb_strimwidth((string) $h->body, 0, 400, '…')];
+                })->all();
+
             // KiddieTrac-branded (2026-10-16): App\Support\SalesMail, the proposal email's frame.
             [$icon, $word] = array_pad(explode(' ', $label, 2), 2, '');
             $html = \App\Support\SalesMail::render([
@@ -1767,10 +2151,10 @@ TXT;
                 'meta' => $when . ' · ' . $who,
                 'message' => $act->body ? (mb_strlen($act->body) > 6000 ? mb_substr($act->body, 0, 6000) . "\n… (continues on the lead)" : $act->body) : null,
                 'alert' => $due ? '⏰ Due ' . $due : null,
-                'sections' => [['heading' => 'Lead', 'rows' => [
-                    'Contact' => $lead->name, 'Email' => $lead->email, 'Phone' => $lead->phone,
-                    'Est. annual revenue' => $lead->value !== null ? self::money($lead->value, $lead->value_currency ?: 'CAD') . ($lead->value_currency && $lead->value_currency !== 'CAD' ? ' ' . $lead->value_currency : '') : null,
-                ]]],
+                'message_label' => 'What changed',
+                'sections' => $sections,
+                'html_heading' => $history ? 'Recent history' : null,
+                'html' => $history ? \App\Support\SalesMail::bubbles($history) : null,
                 'button' => ['label' => 'Open lead', 'url' => 'https://app.kiddietrac.com/dashboard.html#sales-lead?id=' . $lead->id . '&tab=activity'],
             ]);
             $subject = $label . ': ' . $leadName . ' — ' . $who;
@@ -1824,7 +2208,10 @@ TXT;
 
     private function leadDetail(SalesLead $l): array
     {
+        $cust = DB::table('sales_customers')->where('lead_id', $l->id)->first(['id', 'customer_number', 'status', 'quote_id']);
         return array_merge($this->leadRow($l), [
+            // Sales -> Customers (2026-11-10).
+            'customer'         => $cust ? ['id' => (int) $cust->id, 'number' => $cust->customer_number, 'status' => $cust->status, 'no_services' => ! $cust->quote_id] : null,
             'title'            => $l->title,
             'website'          => $l->website,
             'address'          => $l->address,
@@ -1856,7 +2243,7 @@ TXT;
             })(),
             'quotes' => $l->quotes->map(fn ($q) => [
                 'id' => $q->id, 'number' => $q->number, 'title' => $q->title,
-                'status' => $q->status, 'total' => $q->total, 'subtotal' => $q->subtotal,
+                'status' => $q->status, 'total' => $q->total, 'subtotal' => $q->subtotal, 'split' => self::splitTotals($q),
                 'discount' => $q->discount, 'billing_period' => $q->billing_period, 'currency' => $q->currency ?: 'CAD',
                 'taxes' => $q->taxes ?: [], 'tax_total' => $q->tax_total, 'terms' => $q->terms, 'conditions' => $q->conditions,
                 'prepared_for' => self::preparedFor($q, $l), 'prepared_by' => self::preparedBy($q),
@@ -1868,9 +2255,33 @@ TXT;
                 'declined_at' => optional($q->declined_at)->toIso8601String(), 'decline_reason' => $q->decline_reason,
                 'valid_until' => optional($q->valid_until)->toDateString(),
                 'notes' => $q->notes,
+                'followup_days' => $q->followup_days, 'followup_max' => $q->followup_max, 'followups_sent' => (int) $q->followups_sent,
+                // Received / opened tracking (2026-10-23, App\Support\ProposalTracking).
+                'email_sent_at' => $q->email_sent_at ? \Illuminate\Support\Carbon::parse($q->email_sent_at)->toIso8601String() : null,
+                'email_send_status' => $q->email_send_status, 'email_send_error' => $q->email_send_error, 'email_open_count' => (int) $q->email_open_count,
+                'email_opened_at' => $q->email_opened_at ? \Illuminate\Support\Carbon::parse($q->email_opened_at)->toIso8601String() : null,
+                'email_last_opened_at' => $q->email_last_opened_at ? \Illuminate\Support\Carbon::parse($q->email_last_opened_at)->toIso8601String() : null,
+                'pdf_downloaded_at' => $q->pdf_downloaded_at ? \Illuminate\Support\Carbon::parse($q->pdf_downloaded_at)->toIso8601String() : null,
+                // Last change and whether the customer has that version (2026-11-10, proposal history).
+                'revised_at' => ! empty($q->revised_at) ? \Illuminate\Support\Carbon::parse($q->revised_at)->toIso8601String() : null,
+                'sent_at' => $q->sent_at ? \Illuminate\Support\Carbon::parse($q->sent_at)->toIso8601String() : null,
+                'revision' => max(1, (int) ($q->revision ?? 1)), 'changed_since_sent' => self::changedSinceSent($q),
+                'email_note' => $q->email_note, 'email_cc' => json_decode((string) $q->email_cc, true) ?: [], 'email_bcc' => json_decode((string) $q->email_bcc, true) ?: [],
+                // Approval + conversion (2026-10-23, SalesConversionController).
+                'approval_status' => $q->approval_status, 'reject_reason' => $q->reject_reason,
+                'approved_at' => $q->approved_at ? \Illuminate\Support\Carbon::parse($q->approved_at)->toIso8601String() : null,
+                'rejected_at' => $q->rejected_at ? \Illuminate\Support\Carbon::parse($q->rejected_at)->toIso8601String() : null,
+                'contract_name' => $q->contract_name,
+                'contract_uploaded_at' => $q->contract_uploaded_at ? \Illuminate\Support\Carbon::parse($q->contract_uploaded_at)->toIso8601String() : null,
+                'converted_agency_id' => $q->converted_agency_id ? (int) $q->converted_agency_id : null,
+                'converted_agency_name' => $q->converted_agency_id ? DB::table('agencies')->where('id', $q->converted_agency_id)->value('name') : null,
+                'invite_sent_at' => $q->invite_sent_at ? \Illuminate\Support\Carbon::parse($q->invite_sent_at)->toIso8601String() : null,
+                'followup_next_at' => $q->followup_next_at ? \Illuminate\Support\Carbon::parse($q->followup_next_at)->toIso8601String() : null,
+                'last_followup_at' => $q->last_followup_at ? \Illuminate\Support\Carbon::parse($q->last_followup_at)->toIso8601String() : null,
                 'items' => $q->items->map(fn ($it) => [
                     'id' => $it->id, 'description' => $it->description, 'qty' => $it->qty,
                     'unit_price' => $it->unit_price, 'line_total' => $it->line_total, 'product_id' => $it->product_id,
+                    'discount_type' => $it->discount_type, 'discount_value' => $it->discount_value,
                 ])->values(),
             ])->values(),
         ]);
@@ -1926,7 +2337,7 @@ TXT;
                 return $c ? round((float) $q->sum('value') / $c, 2) : 0.0;
             })(),
             'followups_due'  => SalesActivity::where('type', 'followup')->where('done', false)
-                                    ->whereDate('due_date', '<=', now()->toDateString())->count(),
+                                    ->whereDate('due_date', '<=', \App\Support\AgencyTime::today())->count(),
         ];
     }
 

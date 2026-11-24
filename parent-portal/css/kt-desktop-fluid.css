@@ -74,13 +74,15 @@
    failure. The page body itself must never scroll sideways — only the
    table's own container. */
 @media (min-width: 769px) and (max-width: 1500px) {
+  /* 2026-10-26: not card grids that carry the list marker (the educator roster became one card per row, with
+     1300px buttons) and not fixed-layout tables, which are built to fit (as a block, Announcements grew to 1473px). */
   #appMain .kt-table-wrap,
-  #appMain [data-kt-list],
-  #appMain table[data-kt-filtered] {
+  #appMain [data-kt-list]:not(table):has(table),
+  #appMain table[data-kt-filtered]:not([style*="table-layout:fixed"]):not([style*="table-layout: fixed"]),
+  #appMain table[data-kt-list]:not([style*="table-layout:fixed"]):not([style*="table-layout: fixed"]) {
     display: block;
     max-width: 100%;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
 }
 

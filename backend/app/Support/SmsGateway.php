@@ -104,6 +104,22 @@ final class SmsGateway
      */
     public static function deliver(int $agencyId, string $to, string $body, ?string $mediaUrl = null): array
     {
+        // A white-label agency's texts say its brand, never "KiddieTrac" (2026-10-21).
+        $body = \App\Support\Brand::rename($body, $agencyId);
+        // The public website demo never texts anyone (2026-10-31, App\Support\PublicDemo).
+        if (\App\Support\PublicDemo::isAgency($agencyId) || \App\Support\PublicDemo::isSession()) {
+            return ['ok' => false, 'provider' => null, 'ref' => null, 'error' => 'Public website demo: texts are switched off.', 'attempts' => null];
+        }
+        // A test agency never texts anyone (2026-11-24, App\Support\TestAgency).
+        if (\App\Support\TestAgency::blocks($agencyId)) {
+            \App\Support\TestAgency::note('text', ['agency' => $agencyId]);
+            return ['ok' => false, 'provider' => null, 'ref' => null, 'error' => 'Test agency: texts are not sent.', 'attempts' => null];
+        }
+        if (\App\Support\Outbound::off()) {
+            \App\Support\Outbound::note('text message', ['agency' => $agencyId]);
+            return ['ok' => false, 'provider' => null, 'ref' => null,
+                'error' => 'Blocked on this staging copy (KT_OUTBOUND_OFF): nothing is sent from here.', 'attempts' => null];
+        }
         $tried = [];
         $order = self::order($agencyId);
 

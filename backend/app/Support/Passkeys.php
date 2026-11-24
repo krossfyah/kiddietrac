@@ -59,7 +59,15 @@ final class Passkeys
     }
 
     /** base64url(SHA-256) of the Android app's signing certificates. */
-    private const ANDROID_KEY_HASHES = ['nhgy6btAL8WKqLRsZR-VzshtOub8dFDuBaIYsG9pv8E'];
+    /* Two keys (2026-10-22). The hosted APKs are signed with our release key (nhgy…);
+       the Play Store build is RE-SIGNED by Google Play App Signing (16:BD:63…:5E:3D, Play
+       Console -> App integrity -> App signing). Without Google's, every passkey sign-in
+       from the Play app was refused "invalid origin" (Anthony, 3.12.3 from Play). Both
+       must also be in kiddietrac.com/.well-known/assetlinks.json. */
+    private const ANDROID_KEY_HASHES = [
+        'nhgy6btAL8WKqLRsZR-VzshtOub8dFDuBaIYsG9pv8E',   // release key: hosted APKs
+        'Fr1jmSqDjF-lpsusc_RAbJaxTgN1OulMUCUy0Gq0Xj0',   // Google Play App Signing key
+    ];
 
     /**
      * Stash a challenge and hand back the opaque handle the client must return with it.

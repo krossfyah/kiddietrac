@@ -24,7 +24,12 @@ use Illuminate\Support\Facades\Schema;
  */
 final class ChatArchiveController extends Controller
 {
-    private const KINDS = ['family', 'staff'];
+    /* 'web' = a website chat (web_chats), 2026-11-01, Anthony: "chat messenger I dont have the X to close
+       website chat like i did for other chat types". Same meaning: off MY list, nothing ends for the visitor. */
+    /* 'sms' = a text conversation (SmsRepliesController::conversations), 2026-11-04, Anthony: "anthony home visitor
+       chat which I cannot x to close". Its ref_id is the conversation's id, which is the number's NEWEST incoming
+       text - so when they text again the conversation has a new id and is back on the list by itself (no wake). */
+    private const KINDS = ['family', 'staff', 'web', 'sms'];
 
     private function ensureTable(): void
     {
@@ -80,6 +85,20 @@ final class ChatArchiveController extends Controller
                 ]);
             }
         }
+        // A website chat wakes when the VISITOR writes again (web_chats has no last_message_at).
+        try {
+            $stale = DB::table('chat_archives as a')
+                ->join('web_chats as t', 't.id', '=', 'a.ref_id')
+                ->where('a.user_id', $uid)->where('a.kind', 'web')
+                ->whereNotNull('t.last_visitor_at')
+                ->whereColumn('t.last_visitor_at', '>', 'a.archived_at')
+                ->pluck('a.ref_id')->all();
+            if ($stale) {
+                DB::table('chat_archives')->where('user_id', $uid)->where('kind', 'web')->whereIn('ref_id', $stale)->delete();
+            }
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('chat archive wake failed', ['user' => $uid, 'kind' => 'web', 'error' => $e->getMessage()]);
+        }
     }
 
     /** GET /provider/chat-archive — what this person has archived. */
@@ -97,6 +116,8 @@ final class ChatArchiveController extends Controller
         return response()->json([
             'family' => $rows->where('kind', 'family')->pluck('ref_id')->values(),
             'staff' => $rows->where('kind', 'staff')->pluck('ref_id')->values(),
+            'web' => $rows->where('kind', 'web')->pluck('ref_id')->values(),
+            'sms' => $rows->where('kind', 'sms')->pluck('ref_id')->values(),
         ]);
     }
 
@@ -115,9 +136,14 @@ final class ChatArchiveController extends Controller
         // You can only archive something you are actually part of. Without this the
         // endpoint would happily record an archive row against any id in the system —
         // harmless on its own, but it leaks which ids exist.
-        $allowed = $data['kind'] === 'staff'
-            ? DB::table('staff_thread_participants')->where('thread_id', $data['id'])->where('user_id', $uid)->exists()
-            : $this->inFamilyConversation($uid, (int) $data['id']);
+        $allowed = match ($data['kind']) {
+            'staff' => DB::table('staff_thread_participants')->where('thread_id', $data['id'])->where('user_id', $uid)->exists(),
+            // Website chats are seen by KiddieTrac super admins only (the /sales inbox), so only they can tidy one away.
+            'web'   => DB::table('web_chats')->where('id', $data['id'])->exists()
+                       && DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->where('role', 'platform_admin')->exists(),
+            'sms'   => $this->seesText($request, (int) $data['id']),
+            default => $this->inFamilyConversation($uid, (int) $data['id']),
+        };
         abort_unless($allowed, 404, 'Not found');
 
         if ($data['archived']) {
@@ -134,6 +160,18 @@ final class ChatArchiveController extends Controller
         return response()->json(['ok' => true, 'archived' => $data['archived']]);
     }
 
+    /** A text this person can see in the active agency (the same rule as the Texts list: SmsReplies::visible). */
+    private function seesText(Request $request, int $id): bool
+    {
+        // A text in on the KiddieTrac line, listed in Message Centre for the line's people (LineTexts::inboxRow).
+        if (\App\Support\LineTexts::inboxRow((int) $request->user()->id, $id)) return true;
+        $agencyId = \App\Support\SmsReplies::agencyFor($request);
+        if (! $agencyId) return false;
+        $v = \App\Support\SmsReplies::visible($request, $agencyId);
+
+        return $v && (clone $v[0])->where('m.id', $id)->exists();
+    }
+
     /**
      * A family conversation is reachable if you are a guardian of its family, or staff at
      * its centre. Mirrors how the chat list decides what to show rather than inventing a
@@ -141,12 +179,13 @@ final class ChatArchiveController extends Controller
      */
     private function inFamilyConversation(int $uid, int $conversationId): bool
     {
-        $c = DB::table('conversations')->where('id', $conversationId)->first(['family_id', 'centre_id']);
+        $c = DB::table('conversations')->where('id', $conversationId)->first(['id', 'family_id', 'centre_id', 'channel']);
         if (! $c) return false;
 
         if (DB::table('guardians')->where('family_id', $c->family_id)->where('user_id', $uid)->exists()) {
             return true;
         }
+        if (\App\Support\MessagingRules::officeHiddenFrom($uid, $c)) return false;   // office thread: directors/admins only
 
         return DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
             ->where(function ($q) use ($c) {

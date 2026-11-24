@@ -33,8 +33,8 @@ class ComplianceEvidenceController extends Controller
         $since = now()->subDays(30);
         $admins = $this->adminRows();
         $users = DB::table('users')->whereNull('deleted_at');
-        $backupDir = base_path('../backups');
-        $files = glob($backupDir . '/kiddietrac-*.sql.gz') ?: [];
+        $backupDir = \App\Support\BackupPaths::dir();
+        $files = glob($backupDir . '/kiddietrac-*.sql.gz*') ?: [];
         rsort($files);
         $lastReview = DB::table('access_reviews')->orderByDesc('reviewed_at')->first();
 
@@ -86,7 +86,7 @@ class ComplianceEvidenceController extends Controller
         $rows = $this->adminRows();
         $this->audited($request, 'access-review.csv', $rows->count());
 
-        return $this->csv('access-review-' . now()->format('Y-m-d') . '.csv',
+        return $this->csv('access-review-' . \App\Support\AgencyTime::today() . '.csv',
             ['User ID', 'Name', 'Email', 'Role', 'Agency', 'Centre', 'Active', 'Role granted', 'Last sign-in', 'Last sign-in IP', 'MFA', 'Passkeys', 'Password changed', 'Must change password', 'Account status'],
             $rows->map(fn ($r) => [$r->user_id, $r->name, $r->email, $r->role, $r->agency, $r->centre, $r->active ? 'yes' : 'no', $r->granted_at,
                 $r->last_login_at ?: 'never', $r->last_login_ip, $r->two_factor_enabled ? 'yes' : 'no', $r->passkeys, $r->password_changed_at,
@@ -107,7 +107,7 @@ class ComplianceEvidenceController extends Controller
             ->get(['a.created_at', 'a.action', 'a.user_id', 'u.email', 'a.agency_id', 'a.ip_address', 'a.user_agent', 'a.payload']);
         $this->audited($request, 'auth-events.csv', $rows->count(), ['days' => $days]);
 
-        return $this->csv('security-events-' . $days . 'd-' . now()->format('Y-m-d') . '.csv',
+        return $this->csv('security-events-' . $days . 'd-' . \App\Support\AgencyTime::today() . '.csv',
             ['When (UTC)', 'Action', 'User ID', 'User email', 'Agency ID', 'IP', 'User agent', 'Detail'],
             $rows->map(function ($r) {
                 $p = json_decode((string) $r->payload, true);
@@ -119,16 +119,21 @@ class ComplianceEvidenceController extends Controller
     public function backupsCsv(Request $request): Response
     {
         $this->assertPlatformAdmin($request);
-        $files = glob(base_path('../backups') . '/kiddietrac-*.sql.gz') ?: [];
+        $files = glob(\App\Support\BackupPaths::dir() . '/kiddietrac-*.sql.gz*') ?: [];
         rsort($files);
         $this->audited($request, 'backups.csv', count($files));
 
-        return $this->csv('backups-' . now()->format('Y-m-d') . '.csv', ['File', 'Taken (server time)', 'Size (MB)', 'Integrity (gzip header)'],
+        return $this->csv('backups-' . \App\Support\AgencyTime::today() . '.csv', ['File', 'Taken (server time)', 'Size (MB)', 'Integrity / encryption'],
             array_map(function ($f) {
                 $h = @fopen($f, 'rb');
                 $magic = $h ? bin2hex((string) fread($h, 2)) : '';
                 if ($h) fclose($h);
-                return [basename($f), date('Y-m-d H:i:s', (int) filemtime($f)), round(filesize($f) / 1048576, 2), $magic === '1f8b' ? 'ok' : 'NOT GZIP'];
+                /* An encrypted backup is an OpenPGP message (first byte 0x84/0x85/0xc1): verified
+                   and gzip-checked before it was encrypted, unreadable without the off-server key. */
+                $state = str_ends_with($f, '.gpg')
+                    ? (in_array(substr($magic, 0, 2), ['84', '85', 'c1'], true) ? 'encrypted (OpenPGP)' : 'NOT OPENPGP')
+                    : ($magic === '1f8b' ? 'ok (not encrypted)' : 'NOT GZIP');
+                return [basename($f), date('Y-m-d H:i:s', (int) filemtime($f)), round(filesize($f) / 1048576, 2), $state];
             }, $files));
     }
 
@@ -144,7 +149,7 @@ class ComplianceEvidenceController extends Controller
         $this->audited($request, 'schedule.txt', substr_count($out, "\n"));
 
         return new Response("KiddieTrac scheduled jobs — generated " . now()->toDateTimeString() . " UTC\n\n" . $out, 200,
-            ['Content-Type' => 'text/plain; charset=utf-8', 'Content-Disposition' => 'attachment; filename="scheduled-jobs-' . now()->format('Y-m-d') . '.txt"']);
+            ['Content-Type' => 'text/plain; charset=utf-8', 'Content-Disposition' => 'attachment; filename="scheduled-jobs-' . \App\Support\AgencyTime::today() . '.txt"']);
     }
 
     public function changesTxt(Request $request): Response
@@ -165,7 +170,7 @@ class ComplianceEvidenceController extends Controller
         $this->audited($request, 'changes.txt', substr_count($out, "\n") + 1, ['days' => $days]);
 
         return new Response("KiddieTrac code changes, last {$days} days — generated " . now()->toDateTimeString() . " UTC\n\n" . $out . "\n", 200,
-            ['Content-Type' => 'text/plain; charset=utf-8', 'Content-Disposition' => 'attachment; filename="code-changes-' . $days . 'd-' . now()->format('Y-m-d') . '.txt"']);
+            ['Content-Type' => 'text/plain; charset=utf-8', 'Content-Disposition' => 'attachment; filename="code-changes-' . $days . 'd-' . \App\Support\AgencyTime::today() . '.txt"']);
     }
 
     public function document(Request $request, string $file): Response

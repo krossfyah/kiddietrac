@@ -19,7 +19,7 @@ final class FeedbackController extends Controller
     public function index(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $isStaff = DB::table('role_assignments')->where('user_id', $request->user()->id)
+        $isStaff = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
             ->where('active', 1)->exists();
         if (!$isStaff) {
@@ -119,7 +119,7 @@ final class FeedbackController extends Controller
         // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
         // fall through to their first role's agency (iLearn) — require an explicit
         // choice, else agency-scoped data leaked to a super-admin on a header-less call.
-        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
+        if (\App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)
             ->where('active', true)

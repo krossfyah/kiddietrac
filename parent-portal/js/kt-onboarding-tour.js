@@ -21,7 +21,7 @@
       { icon: '🗺️', title: 'Provider map', body: 'Under Overview — every provider/centre plotted on a map by address, with capacity, phone, and (for home providers) DOB. Great for a quick geographic view of your agency.', img: 'https://api.kiddietrac.com/help-img/provider-map.png' },
       { icon: '🧒', title: 'Children', body: 'Administration → Children lists every child across all your centres. Filter by centre/status, open a child for the full record: enrollment history, daily reports, live feed, attachments, and the emergency card.', img: 'https://api.kiddietrac.com/help-img/tour/children.png' },
       { icon: '👨‍👩‍👧', title: 'Families', body: 'Administration → Families. Add families and invite guardians by email — they get a parent-portal login to see their child\'s day, photos, and invoices.', img: 'https://api.kiddietrac.com/help-img/tour/families.png' },
-      { icon: '📝', title: 'Daily log & check-in', body: 'The Daily log captures attendance and day events. Turn on QR/kiosk check-in per centre so families sign in/out from a poster at the door.', img: 'https://api.kiddietrac.com/help-img/tour/daily-log.png' },
+      { icon: '📝', title: 'Daily log & check-in', body: 'The Daily log captures attendance and day events. Turn on One-Tap (QR contactless check-in) and kiosk check-in per centre so families sign in/out from a poster at the door.', img: 'https://api.kiddietrac.com/help-img/tour/daily-log.png' },
       { icon: '📣', title: 'Marketing campaigns', body: 'Compose rich newsletters and open-house invites, preview them (with your white-label header + Powered-by footer), and send by email or in-portal. Sidebar → Campaigns.', img: 'https://api.kiddietrac.com/help-img/campaigns.png' },
       { icon: '💳', title: 'Billing & invoices', body: 'Settings → Billing for defaults, late fees, payment methods, languages, and tuition plans. Generate invoices in a click; white-label invoices pull your full agency info.', img: 'https://api.kiddietrac.com/help-img/tour/billing.png' },
       { icon: '🎨', title: 'Branding', body: 'Sidebar → Branding is where your agency identity lives: logo, colours, business address, bank details, and your privacy/terms links. These appear on invoices and campaigns.', img: 'https://api.kiddietrac.com/help-img/tour/branding.png' },
@@ -56,6 +56,7 @@
 
     const overlay = document.createElement('div');
     overlay.id = 'kt-onboard-overlay';
+    overlay.setAttribute('data-no-modal-guard', '1');   // Skip is its close; no second X on top of it
     overlay.style.cssText = `
       position: fixed; inset: 0; background: rgba(15, 30, 45, 0.72);
       z-index: 12000; display: flex; align-items: center; justify-content: center;

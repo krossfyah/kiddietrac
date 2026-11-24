@@ -42,10 +42,14 @@
       '@media (max-height:560px){#kt-chat-dock{min-height:0;height:calc(100dvh - 60px);top:52px;bottom:0;}}',
       '@keyframes kt-cd-rise{from{transform:translateY(24px);opacity:0;}to{transform:none;opacity:1;}}',
       // Expanded control strip (minimise / close)
+      /* THE ONE POPUP HEADER (2026-11-02, kiddietrac-popup-header-rule): navy-to-teal band, teal line, white title
+         and buttons - the dock is a popup like every other, and its X sits inside this header. */
       '#kt-chat-dock .kt-cd-ctrl{cursor:grab;flex:0 0 auto;display:flex;align-items:center;gap:6px;justify-content:flex-end;',
-      '  padding:6px 8px;background:linear-gradient(135deg,#EAF3FB,#F3F0FF);border-bottom:1px solid rgba(31,96,128,.10);}',
-      '#kt-chat-dock .kt-cd-ctrl .kt-cd-ct-title{flex:1;min-width:0;font-weight:800;font-size:13px;color:#0F172A;',
+      '  padding:7px 8px 9px;background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);box-shadow:inset 0 -3px 0 #7FD3CC;border-bottom:0;}',
+      '#kt-chat-dock .kt-cd-ctrl .kt-cd-ct-title{flex:1;min-width:0;font-weight:800;font-size:13px;color:#FFFFFF;',
       '  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-left:4px;}',
+      '#kt-chat-dock .kt-cd-ctrl .kt-cd-btn,#kt-chat-dock .kt-cd-min .kt-cd-btn{background:rgba(255,255,255,.16);color:#FFFFFF;}',
+      '#kt-chat-dock .kt-cd-ctrl .kt-cd-btn:hover,#kt-chat-dock .kt-cd-min .kt-cd-btn:hover{background:rgba(255,255,255,.30);}',
       '#kt-chat-dock .kt-cd-btn{width:26px;height:26px;border:none;border-radius:7px;background:rgba(15,23,42,.06);',
       '  color:#334155;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}',
       '#kt-chat-dock .kt-cd-btn:hover{background:rgba(15,23,42,.14);}',
@@ -100,19 +104,28 @@
       // (the dock owns those). The parent thread\'s back is a class-less first button.
       '#kt-chat-dock .kt-back,#kt-chat-dock .kt-thread-close-desk,#kt-chat-dock .kt-thread-header > button:first-child{display:none !important;}',
       // Minimised bar — the whole dock collapses to this slim, clickable strip.
-      '#kt-chat-dock .kt-cd-min{display:none;align-items:center;gap:8px;padding:11px 12px;cursor:pointer;',
-      '  background:linear-gradient(135deg,#EAF3FB,#F3F0FF);}',
-      '#kt-chat-dock .kt-cd-min .kt-cd-mtitle{flex:1;min-width:0;font-weight:800;font-size:14px;color:#0F172A;',
+      '#kt-chat-dock .kt-cd-min{display:none;align-items:center;gap:8px;padding:11px 12px 13px;cursor:pointer;',
+      '  background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);box-shadow:inset 0 -3px 0 #7FD3CC;}',
+      '#kt-chat-dock .kt-cd-min .kt-cd-mtitle{flex:1;min-width:0;font-weight:800;font-size:14px;color:#FFFFFF;',
       '  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
       '#kt-chat-dock.kt-cd-mini{height:auto !important;min-height:0 !important;max-height:none !important;top:auto !important;left:auto !important;right:16px !important;bottom:16px !important;width:min(300px,calc(100vw - 20px)) !important;}',
       '#kt-chat-dock.kt-cd-mini .kt-cd-ctrl,#kt-chat-dock.kt-cd-mini .kt-cd-body,#kt-chat-dock.kt-cd-mini .kt-cd-main{display:none !important;}',
       '#kt-chat-dock.kt-cd-mini .kt-cd-min{display:flex;}',
       // Flash the minimised bar when a new message lands while collapsed.
       '#kt-chat-dock.kt-cd-flash .kt-cd-min{animation:kt-cd-flash 1s ease-in-out infinite;}',
-      '@keyframes kt-cd-flash{0%,100%{background:linear-gradient(135deg,#EAF3FB,#F3F0FF);}',
+      '@keyframes kt-cd-flash{0%,100%{background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);}',
       '  50%{background:linear-gradient(135deg,#159FB4,#7C6BB0);}}',
       '#kt-chat-dock.kt-cd-flash .kt-cd-min .kt-cd-mtitle,#kt-chat-dock.kt-cd-flash .kt-cd-min .kt-cd-dot{transition:color .3s;}',
-      '#kt-chat-dock .kt-cd-dot{width:9px;height:9px;border-radius:50%;background:#159FB4;flex-shrink:0;}',
+      '#kt-chat-dock .kt-cd-dot{width:9px;height:9px;border-radius:50%;background:#7FD3CC;flex-shrink:0;}',
+      /* GLOW (2026-10-22, Anthony: "if chat is minimized and a message comes in can it glow
+         or something to catch the attention"): a pulsing ring around the whole bar on top
+         of the colour pulse, and a "2 new" badge. Stops when the dock is opened. */
+      '#kt-chat-dock.kt-cd-mini.kt-cd-flash{animation:kt-cd-glow 1.3s ease-out infinite;}',
+      '@keyframes kt-cd-glow{0%{box-shadow:0 0 0 0 rgba(21,159,180,.75),0 10px 30px rgba(15,23,42,.25);}70%{box-shadow:0 0 0 14px rgba(21,159,180,0),0 10px 30px rgba(15,23,42,.25);}100%{box-shadow:0 0 0 0 rgba(21,159,180,0),0 10px 30px rgba(15,23,42,.25);}}',
+      '#kt-chat-dock .kt-cd-new{display:none;background:#DC2626;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap;flex-shrink:0;}',
+      '#kt-chat-dock.kt-cd-flash .kt-cd-new{display:inline-block;}',
+      '#kt-chat-dock.kt-cd-flash .kt-cd-min .kt-cd-mtitle{color:#fff;}',
+      '@media (prefers-reduced-motion:reduce){#kt-chat-dock.kt-cd-mini.kt-cd-flash,#kt-chat-dock.kt-cd-flash .kt-cd-min{animation:none;box-shadow:0 0 0 3px #159FB4;}#kt-chat-dock.kt-cd-flash .kt-cd-min{background:linear-gradient(135deg,#159FB4,#7C6BB0);}}',
       '#kt-chat-dock.kt-cd-flash .kt-cd-min .kt-cd-dot{background:#fff;}',
       // Resize grips: the bottom-right corner, plus thin strips down the right edge
       // and along the bottom for one-axis resizing. The dock is positioned from its
@@ -528,7 +541,7 @@
     dock.id = 'kt-chat-dock';
     dock.innerHTML =
       '<div class="kt-cd-min" role="button" tabindex="0" title="Open chat">'
-        + '<span class="kt-cd-dot"></span><span class="kt-cd-mtitle">Chat</span>'
+        + '<span class="kt-cd-dot"></span><span class="kt-cd-mtitle">Chat</span><span class="kt-cd-new" aria-live="polite"></span>'
         + '<button class="kt-cd-btn kt-cd-restore" title="Expand">↗</button>'
         + '<button class="kt-cd-btn kt-cd-x2" title="Close">×</button></div>'
       + '<div class="kt-cd-ctrl"><span class="kt-cd-ct-title"></span>'
@@ -767,7 +780,7 @@
             b.className = 'kt-cd-conv';
             b.innerHTML = '<span style="display:block;font-size:12px;font-weight:600;color:#0D1B2A;'
               + 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(p.name) + '</span>'
-              + '<span style="display:block;font-size:10.5px;color:#94A3B8;">' + esc(p.role || 'Staff') + '</span>';
+              + '<span style="display:block;font-size:10.5px;color:#94A3B8;">' + esc((p.role || 'Staff') + (p.account ? ' · ' + p.account : '')) + '</span>';   // account: same person, several accounts
             b.onclick = function () { compose(p); };
             body.appendChild(b);
           });
@@ -783,19 +796,30 @@
       list.innerHTML = '<button type="button" class="kt-cd-back">\u2190 Back</button>'
         + '<div class="kt-cd-compose">'
         + '<div style="font-size:12px;font-weight:800;color:#0D1B2A;">' + esc(person.name) + '</div>'
-        + '<textarea placeholder="Write your message\u2026"></textarea>'
-        + '<button type="button" class="kt-cd-send">Send</button>'
+        /* THE ONE COMPOSER ROW (.kt-compose-row, kt-chat-composer.css): the round box, the ➤ beside it */
+        + '<div class="kt-compose-row"><textarea class="kt-compose-input" rows="1" placeholder="Write your message\u2026" aria-label="Message"></textarea>'
+        + '<button type="button" class="kt-cd-send kt-send-one" title="Send" aria-label="Send" disabled>\u27A4</button></div>'
         + '<div class="kt-cd-err" style="font-size:11px;color:#B91C1C;"></div>'
         + '</div>';
       list.querySelector('.kt-cd-back').onclick = function () { openNewChat(); };
       var ta = list.querySelector('textarea');
       var send = list.querySelector('.kt-cd-send');
       var err = list.querySelector('.kt-cd-err');
+      // The ONE send button (kt-chat-composer.css): faded until there is something to send.
+      var busy = false;
+      var sync = function () { send.disabled = busy || !String(ta.value || '').trim(); };
+      ta.addEventListener('input', sync);
+      var done = function () { busy = false; send.removeAttribute('aria-busy'); sync(); };
       ta.focus();
+      // Enter sends, Shift+Enter is a new line - like every other typing bar (its hint says so, 2026-11-13).
+      ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!send.disabled) send.click(); } });
       send.onclick = function () {
         var text = String(ta.value || '').trim();
         if (!text) { err.textContent = 'Write a message first.'; return; }
+        if (busy) { return; }
+        busy = true;
         send.disabled = true;
+        send.setAttribute('aria-busy', 'true');
         err.textContent = '';
         fetch(dockApiBase() + '/provider/team-threads/start', {
           method: 'POST', headers: dockHeaders(),
@@ -804,7 +828,7 @@
           return r.json().then(function (j) { return { ok: r.ok, j: j }; });
         }).then(function (res) {
           if (!res.ok) {
-            send.disabled = false;
+            done();
             err.textContent = (res.j && res.j.message) || 'Could not start that conversation.';
             return;
           }
@@ -818,7 +842,7 @@
             } catch (e) {}
           }
         }).catch(function () {
-          send.disabled = false;
+          done();
           err.textContent = 'Could not start that conversation.';
         });
       };
@@ -830,8 +854,9 @@
       posts archived:false, which is the same call that restored the inbox after this
       control quietly emptied it. */
   function offerUndo(b, c) {
-    var kind = String(c.id).indexOf('staff:') === 0 ? 'staff' : 'family';
-    var refId = kind === 'staff' ? parseInt(String(c.id).slice(6), 10) : parseInt(String(c.id), 10);
+    var kind = String(c.id).indexOf('staff:') === 0 ? 'staff' : (String(c.id).indexOf('web:') === 0 ? 'web'
+      : (String(c.id).indexOf('sms:') === 0 ? 'sms' : 'family'));
+    var refId = kind === 'family' ? parseInt(String(c.id), 10) : parseInt(String(c.id).slice(kind === 'staff' ? 6 : 4), 10);
 
     b.style.opacity = '';
     b.classList.add('kt-cd-undone');
@@ -875,6 +900,8 @@
     var provider = w.KT && w.KT.Chat && w.KT.Chat.conversationsForSwitcher;
     if (!provider) { list.innerHTML = '<div style="padding:12px 10px;font-size:12px;color:#94A3B8;">Open Message Centre once.</div>'; return; }
     Promise.resolve(provider()).then(function (rows) {
+      /* A repaint that started before a ✕ lands after it: keep the pending "Removed - Undo" row. */
+      if (list.querySelector('.kt-cd-undone')) { return; }
       if (!rows || !rows.length) { list.innerHTML = '<div style="padding:12px 10px;font-size:12px;color:#94A3B8;">No conversations yet.</div>'; return; }
       list.innerHTML = '';
       rows.slice(0, 60).forEach(function (c) {
@@ -902,6 +929,16 @@
            Offline draws nothing: a grey dot on every row is noise, and an absent
            dot already reads as "not around". The ring is the list's own background
            colour, so the dot reads as sitting on top of the avatar. */
+        var isWeb = String(c.id).indexOf('web:') === 0;
+        var isSms = String(c.id).indexOf('sms:') === 0;
+        if (isSms) {
+          pic = '<span style="flex:0 0 26px;width:26px;height:26px;border-radius:50%;background:#E0EEF4;color:#1F6080;'
+            + 'font-size:13px;display:flex;align-items:center;justify-content:center;">\uD83D\uDCF1</span>';
+        }
+        if (isWeb) {
+          pic = '<span style="flex:0 0 26px;width:26px;height:26px;border-radius:50%;background:#E0EEF4;color:#1F6080;'
+            + 'font-size:13px;display:flex;align-items:center;justify-content:center;">\uD83C\uDF10</span>';
+        }
         var dotColour = c.presence === 'online' ? '#22C55E'
           : (c.presence === 'away' ? '#F59E0B' : '');
         if (dotColour) {
@@ -919,10 +956,16 @@
           + 'color:#0D1B2A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(c.name)
           + (unread ? ' <span style="background:#8EC73C;color:#fff;font-size:9.5px;font-weight:800;padding:0 5px;border-radius:8px;">' + c.unread_count + '</span>' : '')
           + '</span><span style="display:block;font-size:10.5px;color:#94A3B8;overflow:hidden;'
-          + 'text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">' + esc(c.preview || '') + '</span>'
+          + 'text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">'
+          + (isWeb ? '<b style="color:#1F6080;font-weight:800;">Website</b> \u00B7 ' : '')
+          + (isSms ? '<b style="color:#1F6080;font-weight:800;">Text</b> \u00B7 ' : '') + esc(c.preview || '') + '</span>'
           + '</span>'
           /* Remove from the list. Archives rather than destroys — a care record should
              not vanish because somebody tidied their inbox. */
+          /* Website chats too (2026-11-01, Anthony: "I dont have the X to close website chat like i did for
+             other chat types"): off this person's list, the visitor's chat carries on.
+             Text conversations too (2026-11-04, "anthony home visitor chat which I cannot x to close"): they come
+             back on their own when that number texts again (ChatArchiveController, kind 'sms'). */
           + '<span class="kt-cd-conv-x" title="Remove from list" role="button" '
           + 'style="flex:0 0 auto;color:#CBD5E1;font-size:15px;line-height:1;padding:2px 4px;">&times;</span>';
         b.onclick = function (ev) {
@@ -932,10 +975,15 @@
           if (ev && ev.target && ev.target.classList.contains('kt-cd-conv-x')) {
             ev.stopPropagation();
             b.style.opacity = '.4';
+            b.classList.add('kt-cd-undone');   // pending from the click on, so nothing repaints it away mid-request
             var isStaff = String(c.id).indexOf('staff:') === 0;
             var payload = isStaff
               ? { kind: 'staff', id: parseInt(String(c.id).slice(6), 10), archived: true }
-              : { kind: 'family', id: parseInt(String(c.id), 10), archived: true };
+              : isWeb
+                ? { kind: 'web', id: parseInt(String(c.id).slice(4), 10), archived: true }
+                : isSms
+                  ? { kind: 'sms', id: parseInt(String(c.id).slice(4), 10), archived: true }
+                  : { kind: 'family', id: parseInt(String(c.id), 10), archived: true };
             var tok = null;
             try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e2) {}
             fetch(((w.KT && w.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1') + '/chat-archive', {
@@ -952,11 +1000,12 @@
                  removed the row, and the conversation reappeared on the next open. */
               if (res && res.ok) { offerUndo(b, c); return; }
               b.style.opacity = '';
+              b.classList.remove('kt-cd-undone');
               try {
                 if (w.KT && w.KT.toast) { w.KT.toast('Could not remove that conversation.'); }
               } catch (e3) {}
             })
-              .catch(function () { b.style.opacity = ''; });
+              .catch(function () { b.style.opacity = ''; b.classList.remove('kt-cd-undone'); });
             return;
           }
           try { if (w.KT && w.KT.Chat && w.KT.Chat.openThread) { w.KT.Chat.openThread(c.id, contentEl()); } } catch (e) {}
@@ -988,9 +1037,12 @@
        rememberThread(key, title) owns the session, and takes both together. */
     var wasHidden = dock.style.display === 'none' || !dock.__ktPlaced;
     minimized = false;
+    stopWatch();
     dock.classList.remove('kt-cd-mini', 'kt-cd-flash');
     dock.style.display = '';
-    try { fillSideList(); } catch (e) {}
+    /* An open thread calls show() again as it re-renders (a website chat on every poll), and
+       repainting the list here wiped a pending "Removed - Undo" row, as refreshList already knows. */
+    if (!dock.querySelector('.kt-cd-undone')) { try { fillSideList(); } catch (e) {} }
     // After display, never before: a hidden element measures as zero and every
     // clamp below would collapse the restored position to the top-left corner.
     // Only when it was hidden: a re-render of an open thread must not move or resize it.
@@ -1003,11 +1055,43 @@
     dock.classList.add('kt-cd-mini');
     session.minimized = true;
     saveSession();
+    watchUnread();
+  }
+
+  /* While minimised: the unread total, every 15 s, from the same count the top bar polls
+     (KT.Api.get is coalesced, so this adds no traffic of its own). A rise above what it
+     was when you minimised = new messages → glow, with how many. */
+  var unreadBase = null, unreadTimer = null, newCount = 0;
+  function unreadPath() {
+    // The view on screen decides, as the top bar's badge does (kt-parent-chrome roleOf).
+    return /\brole-guardian\b/.test(document.body.className || '') ? '/parent/messages/unread-count' : '/chats/unread-count';
+  }
+  function checkUnread() {
+    if (!dock || !minimized || document.hidden || !(w.KT && w.KT.Api && w.KT.Api.get)) return;
+    var guardian = /parent\/messages/.test(unreadPath());
+    (w.KT.badges ? w.KT.badges.get().then(function (b) { return b ? { unread: guardian ? b.parent_messages : b.chats } : null; })
+      : w.KT.Api.get(unreadPath())).then(function (d) {
+      if (!d || !minimized) return;
+      var n = Number(d.unread_count != null ? d.unread_count : (d.count != null ? d.count : (d.unread != null ? d.unread : 0))) || 0;
+      if (unreadBase === null || n < unreadBase) { unreadBase = n; return; }
+      if (n > unreadBase) { flashIncoming(n - unreadBase); }
+    }).catch(function () {});
+  }
+  function watchUnread() {
+    unreadBase = null; newCount = 0;
+    clearInterval(unreadTimer);
+    checkUnread();
+    unreadTimer = setInterval(checkUnread, 15000);
+  }
+  function stopWatch() {
+    clearInterval(unreadTimer); unreadTimer = null; unreadBase = null; newCount = 0;
+    var b = dock && dock.querySelector('.kt-cd-new'); if (b) b.textContent = '';
   }
 
   function restore() {
     if (!dock) return;
     minimized = false;
+    stopWatch();
     dock.classList.remove('kt-cd-mini', 'kt-cd-flash');
     session.minimized = false;
     saveSession();
@@ -1021,11 +1105,18 @@
     var cb = onClose; onClose = null;
     if (dock) { dock.classList.remove('kt-cd-mini', 'kt-cd-flash'); dock.style.display = 'none'; if (bodyEl) bodyEl.innerHTML = ''; }
     minimized = false;
+    stopWatch();
     try { if (cb) cb(); } catch (e) {}
   }
 
   // Called by the screens' pollers when a fresh INCOMING message arrives.
-  function flashIncoming() { if (dock && minimized) dock.classList.add('kt-cd-flash'); }
+  function flashIncoming(n) {
+    if (!dock || !minimized) return;
+    dock.classList.add('kt-cd-flash');
+    newCount = Math.max(newCount + (n ? 0 : 1), n || 0, 1);
+    var b = dock.querySelector('.kt-cd-new');
+    if (b) b.textContent = newCount + ' new';
+  }
 
   function isActive() { return !!(dock && dock.style.display !== 'none' && bodyEl && bodyEl.children.length); }
   function isMinimized() { return minimized; }
@@ -1035,7 +1126,7 @@
      grows with what is typed (up to the CSS max-height in kt-chat-composer.css) and drops
      back to one line once the message is sent and the box is emptied. */
   function fitBox(t) {
-    if (!t || t.tagName !== 'TEXTAREA' || t.id !== 'kt-st-input') return;
+    if (!t || t.tagName !== 'TEXTAREA' || (t.id !== 'kt-st-input' && !(t.classList.contains('kt-compose-input') && t.closest('.kt-cd-compose')))) return;
     // !important: kt-polish-v22.css sets every textarea to height:auto !important.
     t.style.setProperty('height', 'auto', 'important');
     var max = parseFloat(w.getComputedStyle(t).maxHeight) || 156;

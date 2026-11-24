@@ -128,7 +128,7 @@ final class FamilyOperationsController extends Controller
     public function todayCheckin(Request $request, int $childId): JsonResponse
     {
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
-        $today = Carbon::now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $row = DB::table('daily_checkins')
             ->where('child_id', $childId)
             ->where('checkin_date', $today)
@@ -147,7 +147,7 @@ final class FamilyOperationsController extends Controller
             'parent_notes' => 'nullable|string|max:2000',
         ]);
         abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
-        $today = Carbon::now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         DB::table('daily_checkins')->updateOrInsert(
             ['child_id' => $data['child_id'], 'checkin_date' => $today],
             [
@@ -295,7 +295,7 @@ final class FamilyOperationsController extends Controller
             . '<tr><td style="padding:4px 14px 4px 0;color:#64748B;">Email</td><td style="padding:4px 0;font-weight:600;">' . e($refEmail) . '</td></tr>'
             . ($refPhone ? '<tr><td style="padding:4px 14px 4px 0;color:#64748B;">Phone</td><td style="padding:4px 0;font-weight:600;">' . e($refPhone) . '</td></tr>' : '')
             . '</table>'
-            . ($note ? '<p style="background:#EEF1F8;border-left:3px solid #3BBBBE;padding:12px 16px;border-radius:6px;">' . nl2br(e($note)) . '</p>' : '');
+            . ($note ? '<p style="background:#EEF1F8;--kt-edge:#3BBBBE;padding:12px 16px;border-radius:6px;">' . nl2br(e($note)) . '</p>' : '');
         $content = '<h1>🎁 New family referral</h1>'
             . '<p>A family in your agency has referred someone who may be interested in enrolling. Here are the details for your review:</p>'
             . $rows

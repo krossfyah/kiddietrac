@@ -25,7 +25,7 @@ final class ChatbotController extends Controller
             'question' => 'required|string|min:3|max:1000',
             'session_id' => 'nullable|string|max:40',
         ]);
-        $key = env('ANTHROPIC_API_KEY');
+        $key = config('services.anthropic.key');
         abort_unless($key, 503, 'Chatbot not configured');
 
         $u = $request->user();
@@ -42,6 +42,7 @@ final class ChatbotController extends Controller
         if (is_dir($helpDir)) {
             $files = glob($helpDir . '/*.md');
             foreach ($files as $f) {
+                if (preg_match('/\.(fr|es|hi)\.md$/', $f)) continue;   // translations of another article (2026-10-22)
                 $body = file_get_contents($f);
                 // strip front-matter
                 $body = preg_replace('/^---[\s\S]*?---\n/', '', $body);
@@ -80,7 +81,7 @@ final class ChatbotController extends Controller
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-                'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+                'model' => config('services.anthropic.model'),
                 'max_tokens' => 600,
                 'system' => $sys,
                 'messages' => $messages,
@@ -90,7 +91,7 @@ final class ChatbotController extends Controller
                 $msg = $b['error']['message'] ?? $b['message'] ?? 'AI request failed';
                 return response()->json(['error' => $msg, 'upstream_status' => $res->status()], 502);
             }
-            $answer = trim($res->json('content.0.text') ?? '');
+            $answer = trim(\App\Support\AiConfig::text($res->json()) ?? '');
             DB::table('chatbot_messages')->insert([
                 'user_id' => $u->id, 'agency_id' => $agencyId, 'session_id' => $sessionId,
                 'role' => 'assistant', 'body' => $answer, 'created_at' => now(),

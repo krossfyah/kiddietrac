@@ -123,6 +123,10 @@ final class AgencyMailer
                 if ($agencyId && ! $m->getHeaders()->has('X-KT-Agency-Id')) {
                     $m->getHeaders()->addTextHeader('X-KT-Agency-Id', (string) $agencyId);
                 }
+                // forAgency(null): no tenant is writing - the email log files it under Platform.
+                if (! $agencyId && ! $m->getHeaders()->has('X-KT-Agency-Id') && ! $m->getHeaders()->has('X-KT-Platform')) {
+                    $m->getHeaders()->addTextHeader('X-KT-Platform', '1');
+                }
             } catch (\Throwable $e) {
                 // A header must never be the reason a notice fails to send.
             }

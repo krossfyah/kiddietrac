@@ -55,7 +55,7 @@
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
         .then(function (blob) {
           var url = URL.createObjectURL(blob);
-          var a = document.createElement('a'); a.href = url; a.download = 'invoices-' + (new Date()).toISOString().slice(0,10) + '.csv';
+          var a = document.createElement('a'); a.href = url; a.download = 'invoices-' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '.csv';
           document.body.appendChild(a); a.click();
           setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 500);
         })

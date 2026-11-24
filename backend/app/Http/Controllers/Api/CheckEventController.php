@@ -28,6 +28,25 @@ final class CheckEventController extends Controller
         return AgencyTime::tzForCentre($centreId ? (int) $centreId : null);
     }
 
+    /* THE ROOM MUST BE THIS CHILD'S, AT A CENTRE YOU WORK AT (2026-11-05 leak sweep). room_id came from
+       the request and was written unchecked, so a check-in/out could be filed into another centre's or
+       agency's room (its roster, ratios and day range). The room must be at the child's centre or one the
+       child is placed in, and the caller staff at the room's centre or assigned to that room. */
+    private function roomFitsChild(int $userId, int $roomId, int $childId): bool
+    {
+        $roomCentre = (int) DB::table('rooms')->where('id', $roomId)->value('centre_id');
+        if ($roomCentre <= 0) return false;
+        if (! $this->mayAccessCentre($userId, $roomCentre)
+            && ! DB::table('educator_rooms')->where('user_id', $userId)->where('room_id', $roomId)->exists()) {
+            return false;
+        }
+        $child = DB::table('children')->where('id', $childId)->first(['family_id', 'primary_room_id']);
+        if (! $child) return false;
+        if ((int) DB::table('families')->where('id', $child->family_id)->value('centre_id') === $roomCentre) return true;
+        if ((int) ($child->primary_room_id ?? 0) === $roomId) return true;
+        return DB::table('enrollments')->where('child_id', $childId)->whereNull('end_date')->where('room_id', $roomId)->exists();
+    }
+
     public function checkIn(Request $request): JsonResponse
     {
         if ($resp = $this->requireClockIn($request->user()->id)) return $resp;
@@ -72,6 +91,13 @@ final class CheckEventController extends Controller
         // Before the check_events lookup: otherwise the 422 below reports whether a
         // child at another agency is currently checked in.
         $this->assertChild((int) $request->user()->id, (int) $data['child_id']);
+        // The room too (2026-11-05 leak sweep, see roomFitsChild()).
+        if (! $this->roomFitsChild((int) $request->user()->id, (int) $data['room_id'], (int) $data['child_id'])) {
+            $this->auditRefusal($request->user()->id, 'check_out', 'room_not_for_child', [
+                'child_id' => (int) $data['child_id'], 'room_id' => (int) $data['room_id'],
+            ]);
+            return response()->json(['message' => 'That room is not one of this child\'s rooms at a centre you work at.'], 422);
+        }
 
         /* The agency's day, as instants. This lookup decides whether a check-OUT is
            allowed, and on the UTC date it found nothing from 8pm Toronto onward —
@@ -198,6 +224,10 @@ final class CheckEventController extends Controller
            checkInBatch cannot throw away the whole room's check-in. */
         if (! $this->mayAccessChild($userId, $childId)) {
             return ['error' => 'Child not found'];
+        }
+        // The room too (2026-11-05 leak sweep, see roomFitsChild()).
+        if (! $this->roomFitsChild($userId, $roomId, $childId)) {
+            return ['error' => 'That room is not one of this child\'s rooms at a centre you work at.'];
         }
 
         // Same agency-day bound as checkOut() — see the note there.

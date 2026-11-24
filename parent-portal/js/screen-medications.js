@@ -158,7 +158,7 @@
         '<label style="font-size:12px;font-weight:700;color:#6B7280;">Reason</label>' +
         '<input id="kt-reason" placeholder="fever / pain" style="padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;">' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
-          '<div><label style="font-size:12px;font-weight:700;color:#6B7280;">Starts on</label><input type="date" id="kt-starts" value="' + new Date().toISOString().split('T')[0] + '" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;"></div>' +
+          '<div><label style="font-size:12px;font-weight:700;color:#6B7280;">Starts on</label><input type="date" id="kt-starts" value="' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;"></div>' +
           '<div><label style="font-size:12px;font-weight:700;color:#6B7280;">Expires on (optional)</label><input type="date" id="kt-expires" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;"></div>' +
         '</div>' +
         '<label style="font-size:12px;font-weight:700;color:#6B7280;">Special instructions (optional)</label>' +
@@ -221,7 +221,7 @@
         'Record that the parent/guardian has signed authorization for this standing medication. ' +
         'CCEYA requires written parental consent before any dose can be administered.' +
       '</p>' +
-      '<div style="margin-top:12px;background:#FEF3C7;border-left:3px solid #F59E0B;padding:10px 14px;border-radius:6px;font-size:13px;color:#92400E;">' +
+      '<div style="margin-top:12px;background:#FEF3C7;--kt-edge:#F59E0B;padding:10px 14px;border-radius:6px;font-size:13px;color:#92400E;">' +
         'For v22p1, the director records this on behalf of the parent. v22p2 will add the parent-side e-signature flow.' +
       '</div>' +
       '<label style="display:block;margin-top:14px;font-size:12px;font-weight:700;color:#6B7280;">Authorizing parent user ID</label>' +

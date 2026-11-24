@@ -158,7 +158,7 @@ final class SmsConsentRecord
             . 'h1{font-size:17px;margin:0 0 2px;} h2{font-size:12.5px;margin:16px 0 5px;}'
             . '.muted{color:#64748B;font-size:10px;}'
             . '.box{border:1px solid #CBD5E1;border-radius:6px;padding:11px;margin-top:10px;}'
-            . '.quote{background:#F8FAFC;border-left:3px solid #1F6080;padding:10px 12px;margin:8px 0;}'
+            . '.quote{background:#F8FAFC;--kt-edge:#1F6080;padding:10px 12px;margin:8px 0;}'
             . 'td{font-size:11.5px;padding:2px 0;vertical-align:top;}'
             . '</style></head><body>'
             . '<h1>Text message consent</h1>'
@@ -183,8 +183,9 @@ final class SmsConsentRecord
             . 'given above. It is also held on the account it belongs to.</p>'
             . '</body></html>';
 
-        $dompdf = new \Dompdf\Dompdf(['isRemoteEnabled' => false]);
-        $dompdf->loadHtml($html);
+        $dompdf = new \App\Support\KtDompdf(['isRemoteEnabled' => false]);
+        // White-label agencies: the record names their brand, not KiddieTrac (2026-10-21).
+        $dompdf->loadHtml(\App\Support\Brand::rename($html, self::agencyOf((int) $user->id)));
         $dompdf->setPaper('letter');
         $dompdf->render();
 

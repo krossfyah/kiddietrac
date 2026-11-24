@@ -53,9 +53,9 @@ final class StripeBillingController extends Controller
             if ($activeId && DB::table('agencies')->where('id', $activeId)->whereNull('deleted_at')->exists()) {
                 return $activeId;
             }
-            // platform_admin without header — default to the first agency.
-            $first = DB::table('agencies')->whereNull('deleted_at')->orderBy('id')->value('id');
-            if ($first) return (int) $first;
+            /* No agency chosen = not some other tenant (2026-11-05 leak sweep). This defaulted to the first agency by id, so a
+               platform admin's header-less call read, connected or cancelled a real tenant's Stripe billing. Now it
+               falls through: only an agency they themselves administer, or none (403). */
         }
         if ($activeId && DB::table('role_assignments')
                 ->where('user_id', $request->user()->id)

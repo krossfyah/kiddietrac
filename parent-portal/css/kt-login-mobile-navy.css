@@ -16,7 +16,7 @@
       radial-gradient(90% 60% at 50% 8%, #16407a 0%, rgba(22,64,122,0) 60%),
       linear-gradient(168deg, #0a1f44 0%, #0c2857 46%, #0a1f44 100%) !important;
     justify-content: flex-start !important;
-    padding-top: calc(env(safe-area-inset-top, 0px) + 8vh) !important;
+    padding-top: calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 8vh) !important;
   }
 
   /* ── Logo: the dedicated WHITE wordmark (kiddietrac-logo-white.png, 306×177 —
@@ -178,7 +178,7 @@ html.kt-native .ktl-wrap #submitBtn { background: linear-gradient(135deg,#13b7cc
 /* ═══ Tighten to fit one screen (NO scroll) + readable MFA row on navy ═══ */
 @media (max-width: 768px) {
   .ktl-form-side {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 3.2vh) !important;
+    padding-top: calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 3.2vh) !important;
     padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 12px) !important;
     justify-content: center !important;
   }

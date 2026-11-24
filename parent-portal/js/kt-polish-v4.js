@@ -19,7 +19,7 @@
 
     // Pick role-appropriate items
     const user = (function () { try { return JSON.parse(sessionStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } })();
-    const roles = user.roles || [];
+    const roles = window.ktRoles ? window.ktRoles(user) : (user.roles || []);
     const isParent = roles.includes('guardian') && !roles.some(r => ['agency_admin', 'centre_director', 'educator'].includes(r));
 
     const items = isParent ? [

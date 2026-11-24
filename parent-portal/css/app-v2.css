@@ -109,9 +109,9 @@
   position: relative;
 }
 
-.stat-tile.stat-good { border-left: 4px solid var(--kt-success); }
-.stat-tile.stat-warn { border-left: 4px solid var(--kt-warn); }
-.stat-tile.stat-bad  { border-left: 4px solid var(--kt-danger); }
+.stat-tile.stat-good { --kt-edge:var(--kt-success); }
+.stat-tile.stat-warn { --kt-edge:var(--kt-warn); }
+.stat-tile.stat-bad  { --kt-edge:var(--kt-danger); }
 
 .stat-tile .stat-tile-label {
   font-size: 11px;
@@ -330,7 +330,7 @@
      dropdown opened inside a modal still renders above it. (Anthony, 2026-09-07) */
   z-index: 100000;
   /* Keep clear of the notch and the home indicator. */
-  padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+  padding: max(24px, var(--kt-safe-top, env(safe-area-inset-top, 0px))) max(16px, env(safe-area-inset-right))
            max(24px, var(--kt-safe-bottom, env(safe-area-inset-bottom))) max(16px, env(safe-area-inset-left));
   animation: fade-in 0.15s ease;
 }
@@ -486,7 +486,7 @@
 }
 
 .child-card.at-centre {
-  border-left: 4px solid var(--kt-success);
+  --kt-edge:var(--kt-success);
 }
 
 .child-card:hover {
@@ -970,19 +970,28 @@ body.layout-sidebar .app-main {
    v17 — Centre card polish (extends existing .room-tile pattern)
    ==================================================================== */
 
+/* THE PROVIDER MARKER (2026-11-01). The thin line along the top of each provider card is
+   that provider's own colour: screen-agency-admin.js sets --kt-edge-line (brand + 22 alpha)
+   on the card and this rule draws it. It used to be an inline box-shadow, which any phone
+   rule with box-shadow !important erased (kt-mobile-app.css did, and painted one fixed
+   teal bar over every card instead), so phone and desktop disagreed. Every layout that
+   restyles the card's shadow must keep this inset first. */
 .centre-card-v17 {
   background: var(--kt-surface);
   border: 1px solid var(--kt-border);
   border-radius: var(--kt-radius);
   padding: 0;
   overflow: hidden;
+  box-shadow: inset 0 3px 0 var(--kt-edge-line, transparent);
   transition: transform .15s ease, box-shadow .15s ease;
   display: flex;
   flex-direction: column;
 }
-.centre-card-v17:hover {
+/* .app-main lifts this over kt-polish-v22.css's generic [class*="centre-card"]:hover shadow,
+   which loads later and would otherwise drop the provider line while the pointer is on the card. */
+.app-main .centre-card-v17:hover {
   transform: translateY(-2px);
-  box-shadow: var(--kt-shadow);
+  box-shadow: inset 0 3px 0 var(--kt-edge-line, transparent), var(--kt-shadow);
 }
 
 .centre-card-v17 .head {
@@ -1159,3 +1168,13 @@ body.layout-sidebar .app-main {
 .app-shell:not(.app-shell--sidebar) .director-shell {
   /* leave alone — original grid-template-columns: 240px 1fr applies */
 }
+
+/* THE PHONE ENTRY IS IN THE MENU FROM THE START (2026-10-30). Anthony: "phone icon on the side bar
+   pops in with a delay as well - full sweep to find root cause". It was not in the menu at all:
+   kt-dialer.js cloned a neighbouring link and inserted it once the phone session answered (a request
+   queued behind the boot reads), with a 4-second timer to put it back after every sidebar redraw.
+   It is now a normal entry (app-v2-shell.js navItemsForRole), and every link to the Phone screen
+   (sidebar, Everything tiles) is hidden unless html.kt-can-dial - which kt-dialer.js sets from the
+   last known answer before the first paint and corrects when the session replies. */
+html:not(.kt-can-dial) a[href="#phone"],
+html:not(.kt-can-dial) a.nav-link[data-hash="phone"] { display: none !important; }

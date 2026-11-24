@@ -83,29 +83,78 @@ final class DayBriefController extends Controller
         }
 
         // ── Attendance: expected / in / out / late pickups ──────────────
+        /* THIS TILE IS THE WHOLE CENTRE, AND NOW SAYS SO (2026-11-03).
+
+           Saurav's Today screen read "0 in · 3 not in yet · 7 left · 10 enrolled today" right
+           above a headcount of "0 of 2 here now" for his room, and nothing said that one was
+           Sunny Meadows and the other Discovery Preschool. The scope is unchanged (the
+           centres on the caller's own role_assignments); the label now names it.
+
+           Three computation fixes, each of which can only REMOVE children or events:
+             - closed centres and families that have left are not "enrolled" (App\Support\Live);
+             - an event stamped later than now cannot say where a child is now (the roster's rule);
+             - "not in yet" counts only children BOOKED today (App\Support\ScheduledToday, the
+               rule the provider cards and Daily Overview use). A child not booked today is
+               neither late nor absent; they are counted on the detail line instead.
+           After the centre's closing time nobody is "not in yet" any more: they did not come in.
+           "left" becomes "picked up", the word the roster under it uses for the same thing. */
         try {
-            $childIds = DB::table('children as c')
-                ->join('families as f', 'f.id', '=', 'c.family_id')
-                ->whereIn('f.centre_id', $centreIds ?: [0])
+            $liveCentres = \App\Support\Live::onlyOpenCentres(array_map('intval', (array) $centreIds));
+            $kidRows = \App\Support\Live::families(DB::table('children as c')
+                ->join('families as f', 'f.id', '=', 'c.family_id'), 'f')
+                ->whereIn('f.centre_id', $liveCentres ?: [0])
                 ->where('c.enrollment_status', 'enrolled')
                 ->whereNull('f.suspended_at')
                 ->whereNull('c.deleted_at')
-                ->pluck('c.id')->all();
+                ->get(['c.id', 'f.centre_id']);
+            $childIds = $kidRows->pluck('id')->map(fn ($v) => (int) $v)->all();
             $expected = count($childIds);
             $lastByChild = [];
             if ($childIds) {
                 foreach (DB::table('check_events')->whereIn('child_id', $childIds)
-                    ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)->orderBy('occurred_at')
+                    ->where('occurred_at', '>=', $dayFrom)->where('occurred_at', '<', $dayTo)
+                    ->where('occurred_at', '<=', now())
+                    ->orderBy('occurred_at')->orderBy('id')
                     ->get(['child_id', 'event_type', 'occurred_at']) as $e) {
-                    $lastByChild[$e->child_id] = $e;
+                    $lastByChild[(int) $e->child_id] = $e;
                 }
             }
             $present = 0; $out = 0;
             foreach ($lastByChild as $e) { $e->event_type === 'check_in' ? $present++ : $out++; }
-            $notInYet = $expected - count($lastByChild);
-            $add('attendance', '👶', 'Attendance',
-                "{$present} in · {$notInYet} not in yet · {$out} left",
-                "{$expected} enrolled today", $present > 0 ? 'good' : 'info', '#today');
+
+            // Of those who have not been in at all today: booked today, or not booked?
+            $byCentre = [];
+            foreach ($kidRows as $r) { $byCentre[(int) $r->centre_id][] = (int) $r->id; }
+            $sched = [];
+            try {
+                $open = \App\Support\ScheduledToday::centresOpen(array_keys($byCentre), $todayStr);
+                foreach (\App\Support\ScheduledToday::children($byCentre, $todayStr, $open) as $m) {
+                    foreach ($m as $cid => $yes) { $sched[(int) $cid] = (bool) $yes; }
+                }
+            } catch (\Throwable $e3) { $sched = []; }   // no schedule answer -> everyone counts as booked, as before
+            $notInYet = 0; $notBooked = 0;
+            foreach ($childIds as $cid) {
+                if (isset($lastByChild[$cid])) continue;
+                (array_key_exists($cid, $sched) && ! $sched[$cid]) ? $notBooked++ : $notInYet++;
+            }
+
+            // Past closing time (the latest close of the caller's centres), "not in yet" is over.
+            $closed = false;
+            try {
+                $closes = DB::table('centres')->whereIn('id', $liveCentres ?: [0])->pluck('close_time')->filter()->all();
+                if ($closes) {
+                    $nowLocal = now($tz);
+                    $closed = $nowLocal->gt(Carbon::parse($todayStr . ' ' . max($closes), $tz));
+                }
+            } catch (\Throwable $e4) { $closed = false; }
+
+            // Fixed wording (no centre name) so kt-i18n's number templates still translate it.
+            $one = count($liveCentres) <= 1;
+            $detail = $one ? "{$expected} enrolled at centre" : "{$expected} enrolled at your centres";
+            if ($notBooked > 0) $detail .= " · {$notBooked} not booked today";
+            $add('attendance', '👶', $one ? 'At Centre' : 'At your centres',
+                "{$present} at Centre · {$out} not at Centre · {$notInYet} " . ($closed ? 'did not come' : 'not arrived yet'),
+                $detail, $present > 0 ? 'good' : 'info', '#today');
 
             // Late pickups: still checked in and past the centre close time.
             $closeCandidates = 0;
@@ -226,11 +275,24 @@ final class DayBriefController extends Controller
 
         // ── Recent announcements (last 3 days) ──────────────────────────
         try {
+            /* Scoped like AnnouncementController's staff feed (2026-10-31): agency-wide news of the ACTIVE agency
+               only (this counted every agency's agency-wide announcements), the caller's centres and rooms, and
+               personal announcements only when they are the caller's own. */
+            $annAgency = (int) ($this->callerAgencyId($request) ?: 0);
+            $annCentres = $centreIds instanceof \Illuminate\Support\Collection ? $centreIds->all() : (array) $centreIds;
+            $annRooms = $roomIds instanceof \Illuminate\Support\Collection ? $roomIds->all() : (array) $roomIds;
             $ann = DB::table('announcements')
                 ->whereNotNull('sent_at')->where('sent_at', '>=', now($tz)->subDays(3))
-                ->where(function ($q) use ($centreIds) {
-                    $q->where('scope_type', 'agency')->orWhere(function ($qq) use ($centreIds) {
-                        $qq->where('scope_type', 'centre')->whereIn('scope_id', $centreIds ?: [0]);
+                ->where(function ($q) use ($annAgency, $annCentres, $annRooms, $user) {
+                    $q->where(function ($qq) use ($annAgency) {
+                        $qq->where('scope_type', 'agency')->where('scope_id', $annAgency);
+                    })->orWhere(function ($qq) use ($annCentres) {
+                        $qq->where('scope_type', 'centre')->whereIn('scope_id', $annCentres ?: [0]);
+                    })->orWhere(function ($qq) use ($annRooms) {
+                        $qq->where('scope_type', 'room')->whereIn('scope_id', $annRooms ?: [0]);
+                    })->orWhere(function ($qq) use ($user, $annAgency) {
+                        $qq->where('scope_type', 'user')->where('scope_id', (int) $user->id)
+                            ->where(function ($w) use ($annAgency) { $w->whereNull('agency_id')->orWhere('agency_id', $annAgency); });
                     });
                 })->count();
             if ($ann > 0) $add('announcements', '📣', 'News', $ann . ' new', 'In the last 3 days', 'info', '#announcements');
@@ -311,6 +373,13 @@ final class DayBriefController extends Controller
         $children = DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
             ->where('f.centre_id', $centreId)->whereNull('c.deleted_at')
             ->whereNull('f.suspended_at')
+            /* ONLY CHILDREN STILL HERE (2026-11-03). Anthony: "old children under her care is showing up again in the
+               list under clock in/out". This filtered deleted children and suspended families only, so every withdrawn
+               child whose family had left stayed on the roster. App\Support\Live is the one definition; the one exception
+               is a day they were actually signed in or out, which is that day's attendance record (an older date). */
+            ->where(fn ($w) => $w->where(fn ($live) => \App\Support\Live::families(\App\Support\Live::children($live, 'c'), 'f'))
+                ->orWhereExists(fn ($x) => $x->from('check_events as ce')->whereColumn('ce.child_id', 'c.id')
+                    ->whereBetween('ce.occurred_at', [$dayStart, $dayEnd])))
             /* primary_room_id so the roster can offer a manual sign in/out —
                POST /provider/check-in needs a room, and the Daily Overview is the only
                attendance screen an agency admin can actually reach. (2026-08-26) */
@@ -375,7 +444,7 @@ final class DayBriefController extends Controller
             // ALSO the "Log a moment" entries — these write to daily_care_logs, a
             // SEPARATE table from the roster quick-log's daily_events. Reading only
             // daily_events meant a provider's logged moments never showed here.
-            $CICON = ['diaper' => '🧷', 'bathroom' => '🚽', 'nap' => '😴', 'meal' => '🍽️', 'snack' => '🍎', 'bottle' => '🍼', 'sunscreen' => '☀️', 'mood' => '🙂', 'outdoor' => '🌳'];
+            $CICON = ['diaper' => '🧷', 'bathroom' => '🚽', 'nap' => '😴', 'meal' => '🍽️', 'snack' => '🍎', 'bottle' => '🍼', 'sunscreen' => '☀️', 'mood' => '🙂', 'outdoor' => '🌳', 'medicine' => '💊', 'clothing' => '👕'];
             foreach (DB::table('daily_care_logs')->whereIn('child_id', $childIds)
                 ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('id')
                 ->get(['id', 'child_id', 'log_type', 'occurred_at', 'created_at', 'details', 'notes']) as $e) {
@@ -457,7 +526,7 @@ final class DayBriefController extends Controller
         if ($childIds) {
             foreach (DB::table('check_events')->whereIn('child_id', $childIds)
                 ->whereBetween('occurred_at', [$dayStart, $dayEnd])->orderBy('occurred_at')
-                ->get(['child_id', 'event_type', 'occurred_at', 'kiosk_source']) as $ce) {
+                ->get(['child_id', 'event_type', 'occurred_at', 'kiosk_source', 'is_automatic', 'correction_source', 'original_auto_at']) as $ce) {
                 $checksByChild[$ce->child_id][] = $ce;
             }
         }
@@ -503,6 +572,12 @@ final class DayBriefController extends Controller
                 ->pluck('child_id')->map(fn ($v) => (int) $v)->flip()->all()
             : [];
 
+        /* ONE RULE WITH THE OVERVIEW CARD (2026-11-01): App\Support\ScheduledToday also
+           knows the centre's operating days and closures and which provider a split-week
+           child is with that day. The unplaced child (no enrolment) stays expected, as above. */
+        $__open = \App\Support\ScheduledToday::centresOpen([$centreId], $date);
+        $__kidSched = \App\Support\ScheduledToday::children([$centreId => $childIds], $date, $__open)[$centreId] ?? [];
+
         $roster = [];
         $qr = 0; $manual = 0;
         foreach ($children as $c) {
@@ -537,11 +612,42 @@ final class DayBriefController extends Controller
                    the wrong provider's list on the days they are elsewhere. */
                 'room_id' => ($roomByChild[$c->id] ?? null) ?: $c->primary_room_id,
                 'status' => $status,
-                'scheduled' => ! isset($hasEnrolment[(int) $c->id]) || isset($scheduledIds[(int) $c->id]),
+                'scheduled' => $__kidSched[(int) $c->id] ?? (! isset($hasEnrolment[(int) $c->id]) || isset($scheduledIds[(int) $c->id])),
                 'in' => $inEv ? AgencyTime::fmt($inEv->occurred_at, $tz) : null,
                 'out' => $outEv ? AgencyTime::fmt($outEv->occurred_at, $tz) : null,
                 'source' => $inEv ? ((int) ($inEv->kiosk_source ?? 0) > 0 ? 'QR' : 'Manual') : null,
+                /* How the departure was recorded (2026-10-22): automatic, or the real time
+                   entered by a parent from the automatic sign-out email, or by staff. */
+                'out_how' => ! $outEv ? null : (($outEv->correction_source ?? null) === 'parent_email' ? 'parent_email'
+                    : (($outEv->correction_source ?? null) ? 'corrected' : ((int) ($outEv->is_automatic ?? 0) ? 'automatic' : null))),
+                'out_auto' => ($outEv && ($outEv->original_auto_at ?? null)) ? AgencyTime::fmt($outEv->original_auto_at, $tz) : null,
+                /* Every visit, when there was more than one (2026-11-05): the in/out above
+                   answers "where are they now", this keeps the earlier visits on the row. */
+                'visits' => count($__v = \App\Support\ChildVisits::pair($evs)),
+                'visits_text' => count($__v) > 1 ? \App\Support\ChildVisits::text($__v, $tz, 'now') : null,
+                // Each visit for the table (2026-11-05: "if there are multiple clock in and out it needs to show here too for each child").
+                'visit_list' => count($__v) > 1 ? array_map(fn ($v) => [
+                    'in' => $v['in'] ? AgencyTime::fmt($v['in']->occurred_at, $tz) : null,
+                    'out' => $v['out'] ? AgencyTime::fmt($v['out']->occurred_at, $tz) : null,
+                    'out_how' => ! $v['out'] ? null : ((($v['out']->correction_source ?? null) === 'parent_email') ? 'parent_email'
+                        : (($v['out']->correction_source ?? null) ? 'corrected' : ((int) ($v['out']->is_automatic ?? 0) ? 'automatic' : null))),
+                ], $__v) : null,
             ];
+        }
+        // Running late (2026-11-06): staff logged "here by …" today (SafeArrivalController::late). Today, not-arrived children only.
+        if ($date === now($tz)->toDateString() && \Illuminate\Support\Facades\Schema::hasTable('safe_arrival_late')) {
+            $__late = \App\Support\SafeArrival::lateQuery($childIds, $date, 'arrival')->get(['child_id', 'arrive_by', 'note'])->keyBy('child_id');
+            $__out = \App\Support\SafeArrival::lateQuery($childIds, $date, 'departure')->get(['child_id', 'arrive_by', 'note'])->keyBy('child_id');
+            $__fmt = fn ($l) => ['by' => \Illuminate\Support\Carbon::parse(substr((string) $l->arrive_by, 0, 5), $tz)->format('g:i A'),
+                'by_hm' => substr((string) $l->arrive_by, 0, 5), 'note' => $l->note];
+            foreach ($roster as &$__r) {
+                $__l = $__r['status'] === 'away' ? $__late->get($__r['id']) : null;
+                $__r['running_late'] = $__l ? $__fmt($__l) : null;
+                // Late pickup: still to be picked up (in now, or not here yet).
+                $__p = $__r['status'] !== 'out' ? $__out->get($__r['id']) : null;
+                $__r['late_pickup'] = $__p ? $__fmt($__p) : null;
+            }
+            unset($__r);
         }
         $ord = ['in' => 0, 'out' => 1, 'away' => 2];
         usort($roster, fn ($a, $b) => ($ord[$a['status']] <=> $ord[$b['status']]) ?: strcmp((string) $a['name'], (string) $b['name']));
@@ -551,32 +657,143 @@ final class DayBriefController extends Controller
         foreach (DB::table('time_punches as tp')->join('users as u', 'u.id', '=', 'tp.user_id')
             ->where('tp.centre_id', $centreId)->whereBetween('tp.punched_in_at', [$dayStart, $dayEnd])
             ->orderBy('tp.punched_in_at')
-            ->get(['u.id as uid', 'u.first_name', 'u.last_name', 'u.photo_url', 'u.sex', 'tp.punched_in_at', 'tp.punched_out_at', 'tp.source']) as $tp) {
+            ->get(['u.id as uid', 'u.first_name', 'u.last_name', 'u.photo_url', 'u.sex', 'tp.id as pid', 'tp.punched_in_at', 'tp.punched_out_at', 'tp.out_reason', 'tp.source', 'tp.correction_source', 'tp.original_auto_at']) as $tp) {
             $staff[] = [
-                'user_id' => (int) $tp->uid,
+                'user_id' => (int) $tp->uid, 'punch_id' => (int) $tp->pid,
                 'name' => trim(($tp->first_name ?? '') . ' ' . ($tp->last_name ?? '')) ?: 'Staff',
                 'photo_url' => $tp->photo_url, 'sex' => $tp->sex,
                 'in' => AgencyTime::fmt($tp->punched_in_at, $tz),
                 'out' => $tp->punched_out_at ? AgencyTime::fmt($tp->punched_out_at, $tz) : null,
                 'source' => $tp->source,
+                // 'lunch' / 'break': this row closed for a break (StaffBreaks, 2026-11-05), not the end of the day.
+                'out_how' => in_array($tp->out_reason ?? null, ['lunch', 'break'], true) ? $tp->out_reason
+                    : (($tp->correction_source ?? null) === 'educator_email' ? 'educator_email'
+                    : (($tp->correction_source ?? null) ? 'corrected' : ($tp->source === 'auto' && $tp->punched_out_at ? 'automatic' : null))),
+                'out_auto' => ($tp->original_auto_at ?? null) ? AgencyTime::fmt($tp->original_auto_at, $tz) : null,
             ];
         }
+        // Who is on a break right now (their last row closed for it and they are not back yet).
+        $__brk = \App\Support\StaffBreaks::currentFor(array_column($staff, 'user_id'));
         // Presence: green = actively using the app now, amber = on shift but idle.
         // Clocked-out staff get no dot (presence null).
         $__pres = \App\Support\Presence::forUsers(array_column($staff, 'user_id'));
-        foreach ($staff as &$__s) { $__s['presence'] = $__s['out'] ? null : ($__pres[$__s['user_id']] ?? 'idle'); }
+        foreach ($staff as &$__s) { $__s['presence'] = $__s['out'] ? null : ($__pres[$__s['user_id']] ?? 'idle'); $__s['on_break'] = (isset($__s['punch_id'], $__brk[$__s['user_id']]) && (int) $__brk[$__s['user_id']]->punch_id === $__s['punch_id']) ? $__brk[$__s['user_id']]->kind : null; }
         unset($__s);
+
+        /* EVERYONE ASSIGNED TO THIS HOME, not only who clocked in (2026-10-21). Anthony:
+           "if two educators are assigned to the same centre, does this show up ... Bruni's
+           centre has her as a provider and one other". It did not — this list came from
+           time_punches alone, so Rachel Blane (assigned, never clocked in) was invisible.
+           Members with no punch that day follow as `not_in` rows; `scheduled` says whether
+           they were rostered, so "not working today" never reads as "absent". The provider
+           is always expected, as on the overview card. Agency office accounts are left out
+           (see App\Support\CentreTeam) unless they actually clocked in here. */
+        $__clocked = array_flip(array_column($staff, 'user_id'));
+        foreach ((\App\Support\CentreTeam::forCentres([$centreId], $date)[$centreId] ?? []) as $__uid => $__m) {
+            if (isset($__clocked[$__uid])) { continue; }
+            $staff[] = [
+                'user_id' => (int) $__uid, 'name' => $__m['name'],
+                'photo_url' => $__m['photo_url'], 'sex' => $__m['sex'],
+                'in' => null, 'out' => null, 'source' => null, 'presence' => null,
+                'not_in' => true, 'is_provider' => $__m['is_provider'],
+                // The provider by the shared rule, no longer "always expected" (2026-11-01).
+                'scheduled' => $__m['is_provider']
+                    ? \App\Support\ScheduledToday::provider($centreId, (int) $__uid, $date, ! empty($__open[$centreId]), $__m['scheduled'])
+                    : $__m['scheduled'],
+            ];
+        }
+
+        /* ── Last headcount, per educator, on the date (2026-10-20) ──
+           Anthony: "on the daily overview for each educator add a new section that shows the
+           last head count with time stamp and number of kids". One line per person who took
+           a headcount here that day (their latest: when, how many of how many, anyone
+           missing), plus anyone on shift who has not taken one - the gap a director is
+           looking for. */
+        $headcounts = [];
+        try {
+            $byUser = [];
+            foreach (DB::table('headcounts as h')->leftJoin('users as u', 'u.id', '=', 'h.taken_by')
+                ->leftJoin('rooms as r', 'r.id', '=', 'h.room_id')
+                ->where('h.centre_id', $centreId)->whereBetween('h.taken_at', [$dayStart, $dayEnd])
+                ->orderBy('h.taken_at')
+                ->get(['h.taken_by', 'h.taken_at', 'h.context', 'h.expected_count', 'h.counted_count', 'h.all_accounted',
+                    'h.missing_child_ids', 'h.resolved_at', 'r.name as room_name', 'u.first_name', 'u.last_name', 'u.photo_url', 'u.sex']) as $h) {
+                $k = (int) $h->taken_by;
+                $byUser[$k] = ['n' => ($byUser[$k]['n'] ?? 0) + 1, 'last' => $h];
+            }
+            $contexts = \App\Http\Controllers\Api\HeadcountController::CONTEXTS;
+            foreach ($byUser as $uid => $b) {
+                $h = $b['last'];
+                $missingIds = array_map('intval', json_decode((string) $h->missing_child_ids, true) ?: []);
+                $missingNames = $missingIds ? DB::table('children')->whereIn('id', array_slice($missingIds, 0, 8))
+                    ->get(['first_name', 'preferred_name', 'last_name'])
+                    ->map(fn ($c) => trim(($c->preferred_name ?: $c->first_name) . ' ' . mb_substr((string) $c->last_name, 0, 1)))->all() : [];
+                $headcounts[] = [
+                    'user_id' => $uid,
+                    'name' => trim(($h->first_name ?? '') . ' ' . ($h->last_name ?? '')) ?: 'Staff',
+                    'photo_url' => $h->photo_url, 'sex' => $h->sex,
+                    'time' => AgencyTime::fmt($h->taken_at, $tz),
+                    'at' => Carbon::parse($h->taken_at, 'UTC')->toIso8601String(),
+                    'counted' => (int) $h->counted_count,
+                    'expected' => (int) $h->expected_count,
+                    'all_accounted' => (bool) $h->all_accounted,
+                    'missing' => $missingNames,
+                    'missing_count' => count($missingIds),
+                    'resolved' => ! empty($h->resolved_at),
+                    'context' => $contexts[$h->context] ?? ucfirst(str_replace('_', ' ', (string) $h->context)),
+                    'room' => $h->room_name,
+                    'count_today' => $b['n'],
+                ];
+            }
+            usort($headcounts, fn ($a, $b) => strcmp($b['at'], $a['at']));
+            // On shift now (no clock-out) but no headcount on this day.
+            $seenStaff = [];
+            foreach ($staff as $st) {
+                if ($st['out'] || ! empty($st['not_in']) || isset($byUser[$st['user_id']]) || isset($seenStaff[$st['user_id']])) { continue; }
+                $seenStaff[$st['user_id']] = true;
+                $headcounts[] = ['user_id' => $st['user_id'], 'name' => $st['name'], 'photo_url' => $st['photo_url'], 'sex' => $st['sex'], 'none' => true];
+            }
+        } catch (\Throwable $e) {
+            $headcounts = [];
+        }
+
+        /* MISSED HEADCOUNTS = STRIKES (2026-11-03, HeadcountStrikesCommand). Per educator: how many, and when/where. */
+        $headcountStrikes = [];
+        try {
+            $byU = [];
+            foreach (\App\Console\Commands\HeadcountStrikesCommand::between((int) $centreId, null, (string) $dayStart, (string) $dayEnd) as $s) {
+                $byU[$s['user_id']][] = ['time' => AgencyTime::fmt($s['due_at'], $tz), 'room' => $s['room']];
+            }
+            if ($byU) {
+                foreach (DB::table('users')->whereIn('id', array_keys($byU))->get(['id', 'first_name', 'last_name', 'photo_url', 'sex']) as $u) {
+                    $headcountStrikes[] = ['user_id' => (int) $u->id, 'name' => trim($u->first_name . ' ' . $u->last_name) ?: 'Staff',
+                        'photo_url' => $u->photo_url, 'sex' => $u->sex, 'count' => count($byU[$u->id]), 'items' => $byU[$u->id]];
+                }
+                usort($headcountStrikes, fn ($a, $b) => $b['count'] <=> $a['count']);
+            }
+        } catch (\Throwable $e) {
+            $headcountStrikes = [];
+        }
 
         // ── Weekly meal plan (menu) for the week containing the date ────
         $monday = Carbon::parse($date, $tz)->startOfWeek(Carbon::MONDAY)->toDateString();
-        $menu = [];
+        $menu = []; $menuNotes = null;
         $menuWeek = DB::table('menu_weeks')->where('centre_id', $centreId)
             ->whereDate('week_start', $monday)->orderByDesc('id')->first();
         if ($menuWeek) {
-            foreach (DB::table('menu_items')->where('menu_week_id', $menuWeek->id)
-                ->get(['day_of_week', 'meal_type', 'name']) as $mi) {
-                $menu[(string) $mi->day_of_week][] = ['meal' => $mi->meal_type, 'name' => $mi->name];
+            /* Food photos (2026-11-02): image_url was not selected, so the Daily Overview could never show one. Same
+               photo the Weekly menu shows, including the not-yet-saved match for older weeks (FoodPhotos::forDisplay). */
+            $menuRows = DB::table('menu_items')->where('menu_week_id', $menuWeek->id)
+                ->orderBy('day_of_week')->orderByRaw("FIELD(meal_type,'breakfast','morning_snack','lunch','afternoon_snack','dinner')")
+                ->get(['day_of_week', 'meal_type', 'name', 'description', 'allergens', 'image_url', 'image_source']);
+            \App\Support\FoodPhotos::forDisplay($menuRows, (int) $centre->agency_id);
+            // The notes staff write on the menu travel with it (2026-11-04, Anthony: "this weeks meal plan doesnt show
+            // any of the notes that an educator would enter in the daily overview and parent daily email").
+            foreach ($menuRows as $mi) {
+                $menu[(string) $mi->day_of_week][] = ['meal' => $mi->meal_type, 'name' => $mi->name, 'image_url' => $mi->image_url ?: null,
+                    'notes' => $mi->description ?: null, 'allergens' => $mi->allergens ?: null];
             }
+            $menuNotes = trim((string) ($menuWeek->notes ?? '')) ?: null;
         }
 
         // ── Per-child care detail: nap windows, meals (with times), diapers ──
@@ -607,7 +824,7 @@ final class DayBriefController extends Controller
         // ── Photos & videos captured today ──────────────────────────────
         $mediaAbs = fn ($u) => $u ? (preg_match('#^https?://#', (string) $u) ? $u : ('https://api.kiddietrac.com' . $u)) : null;
         $photos = [];
-        foreach (DB::table('photos')->where('centre_id', $centreId)
+        foreach (DB::table('photos')->where('centre_id', $centreId)->whereNull('hidden_at')   // no photo consent: shown to nobody
             ->whereBetween('taken_at', [$dayStart, $dayEnd])->orderByDesc('taken_at')->limit(60)
             ->get(['url', 'thumbnail_url', 'media_type', 'caption', 'taken_at']) as $ph) {
             $photos[] = [
@@ -737,6 +954,8 @@ final class DayBriefController extends Controller
             'summary' => [
                 'enrolled' => count($childIds),
                 'attended' => count($seen),
+                // Not booked that day and never came: left out of "absent" (2026-11-01).
+                'not_scheduled' => count(array_filter($roster, fn ($r) => $r['status'] === 'away' && $r['scheduled'] === false)),
                 'still_in' => $present,
                 'went_home' => $out,
                 'meals' => $meals, 'naps' => $naps, 'activities' => $activities, 'incidents' => $incidents,
@@ -764,7 +983,10 @@ final class DayBriefController extends Controller
                 }
             })(),
             'staff' => $staff,
+            'headcounts' => $headcounts,
+            'headcount_strikes' => $headcountStrikes,
             'menu' => $menu,
+            'menu_notes' => $menuNotes,
             'photos' => $photos,
             'chat' => $chat,
             'observations' => $observations,
@@ -829,7 +1051,7 @@ final class DayBriefController extends Controller
     /** [centreIds, roomIds] the caller works in. */
     private function scope(Request $request, $user): array
     {
-        $assignedCentres = DB::table('role_assignments')->where('user_id', $user->id)
+        $assignedCentres = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $user->id)
             ->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->unique()->all();
 
         $agencyId = $this->callerAgencyId($request);

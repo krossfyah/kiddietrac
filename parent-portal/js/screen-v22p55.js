@@ -354,11 +354,19 @@
           <div style="padding:14px 18px;">
             <div style="font-size:12.5px;color:#475569;">${fmtDate(p.taken_at)} · ${esc(p.uploader_name || '')}</div>
             <div style="font-size:13.5px;color:#0F172A;margin-top:6px;">${esc(p.caption || '')}</div>
-            ${(p.child_names || []).length ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">${p.child_names.map(n => `<span class="kt-pill kt-pill-info">${esc(n)}</span>`).join('')}</div>` : ''}
+            ${(p.child_names || []).length ? `<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">${p.child_names.map((n, i) => { const fo = p.consent && Array.isArray(p.child_ids) && p.consent[p.child_ids[i]] === 'family'; return `<span class="kt-pill kt-pill-info"${fo ? ' data-kttip="Family-only photos: other families do not see this photo"' : ''}>${esc(n)}${fo ? ' 👪' : ''}</span>`; }).join('')}</div>` : ''}
+            ${Array.isArray(p.child_ids) ? `<button type="button" class="kt-btn kt-btn-ghost pf-tag" data-kt-iconized="1" data-pf-id="${esc(p.id)}" style="margin-top:10px;padding:5px 12px;font-size:12.5px;">🏷 ${(p.child_ids || []).length ? 'Edit tags' : 'Tag children'}</button>` : ''}
           </div></div>`).join('') || '<div class="kt-card" style="text-align:center;color:#64748B;padding:60px;grid-column:1/-1;">No photos shared yet.</div>'}
       </div>
     </div>`;
     document.getElementById('pf-upload').onclick = () => openPhotoUpload();
+    // Staff change who is tagged on a photo already shared (2026-10-20). Only staff get child_ids.
+    main.querySelectorAll('.pf-tag').forEach((b) => {
+      b.onclick = () => {
+        const ph = photos.find((x) => String(x.id) === b.getAttribute('data-pf-id'));
+        if (ph && window.KT && KT.childTagger) { KT.childTagger.edit(ph, () => renderPhotoFeed(document.querySelector('main'))); }
+      };
+    });
     // Tap a photo to see it full size; ‹ › and swipe step through the feed (2026-10-01).
     if (main.getAttribute('data-pf-viewer') !== '1') {
       main.setAttribute('data-pf-viewer', '1');
@@ -376,6 +384,7 @@
       <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;">Photo file</label>
       <input id="pf-file" type="file" accept="image/*,video/mp4,video/quicktime,video/webm,video/3gpp" capture style="width:100%;padding:9px;border:2px dashed #CBD5E1;border-radius:8px;background:#F8FAFC;">
       <div style="font-size:11.5px;color:#64748B;margin-top:5px;">Photos, or a short video clip (up to about 30 seconds).</div>
+      <div id="pf-tags" style="margin-top:14px;"><div style="font-size:12.5px;color:#94A3B8;">Loading children…</div></div>
       <label style="display:block;font-size:13px;font-weight:600;margin-top:14px;">Caption</label>
       <textarea id="pf-caption" rows="3" placeholder="What were they up to?" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;"></textarea>
       <div style="margin-top:20px;display:flex;justify-content:flex-end;gap:8px;">
@@ -383,13 +392,26 @@
         <button id="pf-submit" style="background:linear-gradient(180deg,#1F6080,#154057);color:#fff;border:0;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;">Share</button>
       </div></div>`;
     document.body.appendChild(m);
+    m.firstElementChild.style.maxHeight = '92vh'; m.firstElementChild.style.overflow = 'auto';
+    /* Tag the children in it (2026-10-20). Until now this upload sent no children at all,
+       so a photo shared from here reached no family and no child's timeline. */
+    let tagger = null;
+    if (window.KT && KT.childTagger) {
+      KT.childTagger.load().then((kids) => {
+        const host = m.querySelector('#pf-tags'); host.innerHTML = '';
+        tagger = KT.childTagger.mount(host, { children: kids });
+      }).catch(() => { m.querySelector('#pf-tags').innerHTML = '<div style="font-size:12.5px;color:#B91C1C;">Could not load the children to tag.</div>'; });
+    }
     m.querySelector('#pf-cancel').onclick = () => m.remove();
     m.querySelector('#pf-submit').onclick = async () => {
       const f = m.querySelector('#pf-file').files[0];
       if (!f) { alert('Pick a file'); return; }
+      const tagged = tagger ? tagger.value() : [];
+      if (!tagged.length) { alert('Tag at least one child so their family sees it.'); return; }
       const fd = new FormData();
       fd.append('photo', f);
       fd.append('caption', m.querySelector('#pf-caption').value);
+      fd.append('child_ids', JSON.stringify(tagged));
       try {
         const apiBase = (KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
         const r = await fetch(apiBase + '/photos', {
@@ -408,7 +430,10 @@
           throw new Error(detail);
         }
         m.remove();
-        if (window.KT && window.KT.toast) window.KT.toast('Photo shared', 'success');
+        // Photo permissions (2026-11-06): say which families will not see it, and why (first names only).
+        let notice = '';
+        try { notice = ((await r.json()) || {}).notice || ''; } catch (e) {}
+        if (window.KT && window.KT.toast) window.KT.toast(notice || 'Photo shared', notice ? 'info' : 'success', notice ? 9000 : undefined);
         renderPhotoFeed(document.querySelector('main'));
       } catch (e) { if (window.KT && window.KT.toast) window.KT.toast(e.message || 'Upload failed', 'error', 7000); else alert(e.message); }
     };

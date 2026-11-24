@@ -40,7 +40,7 @@
   function card(f) {
     var unread = !f.educator_read_at;
     var box = el('div', 'background:#fff;border:1px solid ' + (unread ? '#BFDBFE' : '#EEF0F3')
-      + ';border-left:4px solid ' + (unread ? '#2563EB' : '#E2E8F0')
+      + ';--kt-edge:' + (unread ? '#2563EB' : '#E2E8F0')
       + ';border-radius:12px;padding:14px 16px;margin-bottom:10px;');
 
     var head = el('div', 'display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px;');

@@ -39,7 +39,7 @@ final class IssueScheduledInvoices extends Command
 
     public function handle(): int
     {
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $dry = (bool) $this->option('dry-run');
 
         $rows = DB::table('invoices as i')
@@ -92,6 +92,7 @@ final class IssueScheduledInvoices extends Command
                     continue;
                 }
                 $issued++;
+                try { \App\Support\SplitInvoiceCopy::notifyIssued((int) $r->id); } catch (Throwable $e) { report($e); }
 
                 $agencyId = DB::table('centres')->where('id', $r->centre_id)->value('agency_id');
                 Audit::write([

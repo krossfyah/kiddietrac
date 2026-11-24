@@ -1,0 +1,198 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LAUNCH SCENE + SIGN-IN FADE (2026-10-21). Anthony: "i want a smooth fade once the
+   login occurs in the mobile app's and the initial launch of the mobile app should have
+   a nice kiddietrac image with our logo and then transition to the login/biometrics or
+   passkey prompt."
+
+   #kt-launch       cold, signed-out app launch, over the sign-in page: the alphabet-blocks
+                    photo from the marketing site (no people) fades up from the native
+                    splash's #0A1C3A, the training-video logo intro plays over it, then the
+                    whole scene dissolves into the sign-in page. ~1.95s. The fingerprint
+                    prompt waits for it (kt-biometric.js awaits window.__ktLaunchScene).
+   #kt-portal-fade  after any successful sign-in: the sign-in page fades to the exact first
+                    frame of the dashboard's boot splash (same background, glows, logo and
+                    position), so the page change is invisible and the portal then fades in
+                    from it (dashboard: html.kti-carry, kt-boot-intro.css).
+   White-label: their splash colour and their logo on its plate, never our photo or logo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#kt-launch,#kt-portal-fade{position:fixed;inset:0;z-index:2147483600;overflow:hidden;background:transparent;
+  display:flex;align-items:center;justify-content:center;pointer-events:all;-webkit-tap-highlight-color:transparent}
+
+/* ── launch: background layers (they melt away while the logo glides) ── */
+#kt-launch .ktl-bg{position:absolute;inset:0;background:var(--ktls-bg,#0A1C3A)}
+#kt-launch .ktl-bg,#kt-launch .ktl-photo,#kt-launch .ktl-shade{transition:opacity .6s cubic-bezier(.4,0,.2,1)}
+/* ── launch: photo ── */
+#kt-launch .ktl-photo{position:absolute;inset:-4%;background:#0A1C3A center/cover no-repeat;opacity:0;
+  background-image:url(/img/launch/blocks-portrait.jpg);
+  background-image:image-set(url(/img/launch/blocks-portrait.webp) type("image/webp"),url(/img/launch/blocks-portrait.jpg) type("image/jpeg"));
+  animation:ktls-photo-in .6s ease .05s both,ktls-kenburns 2.4s cubic-bezier(.2,.6,.3,1) both;will-change:transform,opacity}
+@media (min-aspect-ratio:1/1){#kt-launch .ktl-photo{background-image:url(/img/launch/blocks-wide.jpg);background-image:image-set(url(/img/launch/blocks-wide.webp) type("image/webp"),url(/img/launch/blocks-wide.jpg) type("image/jpeg"))}}
+#kt-launch .ktl-shade{position:absolute;inset:0;
+  background:radial-gradient(90% 60% at 50% 45%,rgba(10,28,58,.50) 0%,rgba(10,28,58,.80) 100%),linear-gradient(180deg,rgba(10,28,58,.25) 0%,rgba(10,28,58,.70) 100%)}
+#kt-launch .ktl-stage{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center}
+#kt-launch .ktl-tag{margin-top:22px;font:800 12px/1 'Nunito','Segoe UI',system-ui,sans-serif;letter-spacing:.18em;text-transform:uppercase;
+  color:#9BE7EF;opacity:0;animation:ktls-fadeup .7s ease .85s both}
+/* Leaving with nothing to land on (the fingerprint lock is up, or the portal): the logo and tag line go FIRST, on the
+   scene's own ground, then the ground lifts (2026-10-31). Fading it all as one piece laid a half-transparent logo over
+   the lock's own logo and "Welcome back" - two logos at once, the double exposure in Anthony's Samsung recording.
+   Still done inside OUT (600ms in kt-launch-scene.js; 750 until 2026-11-02 if - every fade here ends inside it). */
+#kt-launch.out{animation:ktls-out .44s cubic-bezier(.4,0,.2,1) .16s both}
+#kt-launch.out .ktl-stage{animation:ktls-out .24s ease both}
+/* Gliding onto the sign-in logo: the photo goes (a wrapper fade - the photo's own entrance
+   animation holds its opacity, so it cannot be transitioned directly). */
+#kt-launch.glide .ktl-bg{opacity:0}
+#kt-launch.glide .ktl-photo{animation:ktls-out .6s cubic-bezier(.4,0,.2,1) both}
+#kt-launch.glide .ktl-shade{opacity:0}
+#kt-launch.glide .ktl-tag{animation:ktls-out .3s ease both}
+/* The sign-in page's own logo waits for the scene: one logo on screen, never two. */
+html.ktls-playing .ktl-mhero-card,html.ktls-playing .auth-logo{visibility:hidden!important}
+html.ktls-reveal .ktl-mhero-card,html.ktls-reveal .auth-logo{animation:ktls-in .35s ease both}
+@keyframes ktls-in{0%{opacity:0}100%{opacity:1}}
+
+/* ── the logo intro (training videos: tools/training/recorder/brand.js) ── */
+.ktls-logo{position:relative;display:block;width:min(64vw,250px);height:calc(min(64vw,250px) * 275 / 701)}
+@media (min-width:700px){.ktls-logo{width:min(34vw,360px);height:calc(min(34vw,360px) * 275 / 701)}}
+.ktls-logo>i{position:absolute;inset:0;background:url(/login-wordmark.png) center/contain no-repeat;
+  animation-duration:.9s;animation-fill-mode:both;animation-timing-function:cubic-bezier(.2,.9,.25,1.15);will-change:transform,opacity}
+.ktls-logo .w{clip-path:inset(20% 0 21% 0);animation-name:ktls-rise;animation-delay:.15s}
+.ktls-logo .r{clip-path:inset(0 0 78% 0);transform-origin:44% 10%;animation-name:ktls-rays;animation-delay:.3s}
+.ktls-logo .s{clip-path:inset(79% 100% 0 0);animation-name:ktls-wipe;animation-delay:.6s;animation-timing-function:cubic-bezier(.6,0,.2,1)!important}
+.ktls-static .ktls-logo>i{animation:none!important;opacity:1!important;transform:none!important}
+.ktls-static .ktls-logo .s{clip-path:inset(79% 0 0 0)!important}
+
+/* ── white-label: their plate, their accent ── */
+.ktls-wl{position:relative;display:flex;flex-direction:column;align-items:center}
+.ktls-plate{position:relative;background:#fff;border-radius:22px;padding:22px 28px;box-shadow:0 18px 50px -18px rgba(0,0,0,.55);line-height:0;
+  max-width:min(74vw,300px);animation:ktls-rise .9s cubic-bezier(.2,.9,.25,1.15) .15s both}
+.ktls-plate img{max-width:100%;max-height:min(28vh,150px);width:auto;height:auto;object-fit:contain}
+.ktls-plate .ktls-name{font:900 34px/1.1 'Nunito','Segoe UI',system-ui,sans-serif;letter-spacing:-.5px}
+.ktls-wl-sw{display:block;height:6px;width:72%;margin-top:16px;border-radius:6px;
+  background:linear-gradient(90deg,transparent,var(--ktls-accent,#13B7CC) 18%,var(--ktls-accent,#13B7CC) 82%,transparent);
+  clip-path:inset(0 100% 0 0);animation:ktls-wl-wipe .9s cubic-bezier(.6,0,.2,1) .6s both}
+.ktls-wl-spk{position:absolute;top:-6px;right:-6px;width:0;height:0}
+.ktls-wl-spk b{position:absolute;width:4px;height:13px;border-radius:3px;background:var(--ktls-accent,#13B7CC);transform-origin:50% 100%;
+  opacity:0;animation:ktls-wl-ray .9s cubic-bezier(.2,.9,.25,1.15) both}
+.ktls-wl-spk b:nth-child(1){left:-14px;top:-4px;--r:-40deg;animation-delay:.3s}
+.ktls-wl-spk b:nth-child(2){left:-2px;top:-12px;--r:0deg;animation-delay:.36s}
+.ktls-wl-spk b:nth-child(3){left:10px;top:-4px;--r:40deg;animation-delay:.42s}
+.ktls-static .ktls-plate,.ktls-static .ktls-wl-sw,.ktls-static .ktls-wl-spk b{animation:none!important;opacity:1!important;clip-path:none!important}
+.ktls-static .ktls-wl-spk b{transform:rotate(var(--r))!important}
+
+/* ── sign-in → portal: the dashboard boot splash's first frame, exactly ── */
+#kt-portal-fade{opacity:0;transition:opacity .42s cubic-bezier(.4,0,.2,1),background .3s ease}
+/* UNDER THE STATUS-BAR BAND (2026-11-03, Anthony's iPhone recording: white clock on a white bar after Log in). The
+   frame shared the band's z-index (#kt-statusfill, 2147483600) and came later in the page, so it covered the navy
+   band and a white-label's light splash colour sat under the phone's white status icons. One below: the band stays
+   navy over the frame, as it does over the dashboard's splash (z 2147483000) - the same bar from sign-in to portal. */
+#kt-portal-fade{z-index:2147483599}
+/* The sign-in frame (signFrame): the splash's spinner and note line, shown - the dashboard splash's finished pose. */
+#kt-portal-fade .ktpf-spin.on{box-sizing:border-box;border-radius:50%;border:3.5px solid rgba(255,255,255,.20);border-top-color:var(--ktpf-spin,#13B7CC);animation:ktpf-spin .8s linear infinite}
+#kt-portal-fade .ktpf-note.on{visibility:visible;letter-spacing:.2px;color:#A9C2DC;text-align:center}
+@keyframes ktpf-spin{to{transform:rotate(360deg)}}
+#kt-portal-fade.now{transition:none}
+#kt-portal-fade.in{opacity:1}
+#kt-portal-fade.wl{background:var(--ktls-bg,#0A1C3A)}
+#kt-portal-fade .ktpf-glow{position:absolute;border-radius:50%;filter:blur(60px);opacity:.35;pointer-events:none;transform:scale(.9)}
+#kt-portal-fade .ktpf-glow.a{width:90vmax;height:90vmax;left:-25vmax;top:-35vmax;background:#159FB4}
+#kt-portal-fade .ktpf-glow.b{width:70vmax;height:70vmax;right:-20vmax;bottom:-30vmax;background:#2D7BA8}
+/* Same column as #kt-splash .kt-splash-in: logo, 30px gap, 40px spinner slot. */
+#kt-portal-fade .ktpf-col{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:30px;padding:0 28px}
+#kt-portal-fade .ktpf-spin{width:40px;height:40px}
+/* The unlock's logo (2026-11-01) is the launch scene's layered .ktls-logo - the same size and spot as the
+   splash's .kti-logo (kt-boot-intro.css); it waits on its first frame until the frame is up (.go), then
+   plays the intro. Below the spinner, the splash note's line, unseen, so the column matches. */
+#kt-portal-fade:not(.go) .ktls-logo>i,#kt-portal-fade:not(.go) .ktls-spk b{animation-play-state:paused!important}
+#kt-portal-fade .ktls-logo .w{animation-name:ktpf-rise;animation-delay:.05s}
+@keyframes ktpf-rise{0%{transform:translateY(28px) scale(.96)}100%{transform:none}}
+#kt-portal-fade .ktpf-note{margin-top:-14px;font:600 13.5px/1.3 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;visibility:hidden}
+
+@keyframes ktls-photo-in{0%{opacity:0}100%{opacity:1}}
+@keyframes ktls-kenburns{0%{transform:scale(1.08)}100%{transform:scale(1.01)}}
+@keyframes ktls-fadeup{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}
+@keyframes ktls-out{0%{opacity:1}100%{opacity:0}}
+@keyframes ktls-lift{0%{transform:none}100%{transform:scale(1.04)}}
+@keyframes ktls-rays{0%{opacity:0;transform:scale(.3) rotate(-25deg)}60%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes ktls-rise{0%{opacity:0;transform:translateY(28px) scale(.96)}100%{opacity:1;transform:none}}
+@keyframes ktls-wipe{0%{clip-path:inset(79% 100% 0 0)}100%{clip-path:inset(79% 0 0 0)}}
+@keyframes ktls-wl-wipe{0%{clip-path:inset(0 100% 0 0)}100%{clip-path:inset(0 0 0 0)}}
+@keyframes ktls-wl-ray{0%{opacity:0;transform:rotate(var(--r)) scale(.2)}60%{opacity:1}100%{opacity:1;transform:rotate(var(--r)) scale(1)}}
+
+@media (prefers-reduced-motion:reduce){
+  #kt-launch .ktl-photo,#kt-launch .ktl-tag{animation:none!important;opacity:1!important;transform:none!important}
+  #kt-launch.out{animation:ktls-out .4s ease both}
+  html.ktls-reveal .ktl-mhero-card,html.ktls-reveal .auth-logo{animation:none}
+  #kt-launch.out .ktl-stage{animation:none}
+  #kt-portal-fade{transition-duration:.2s}
+}
+
+/* The sign-in page's parse-time "fingerprint pending" cover (inline in index.html <head>)
+   painted a lighter navy with a teal glow for a frame before the launch scene drew - a
+   visible blink between two dark screens. Same colour as the native splash and the scene. */
+html.kt-bio-pending::before{background:#0A1C3A!important}
+
+/* ── WAIT FOR THE LOGO, AND THE SPARKLE (2026-10-21) ──────────────────────────────────
+   Anthony on his phone: "the logo and the swoosh is working but not the sparkle where the 3
+   lines are over the d - we had this working in the past". The CSS animations started the
+   moment the logo element was built, BEFORE login-wordmark.png had arrived: on a phone the
+   image landed after the rays' pop (done by 1.2 s) and only the later swoosh was seen moving.
+   Measured on the Android 15 emulator: the logo appeared already complete. Everything now
+   waits, paused on its first frame, until the image is decoded (capped). And the sparkle
+   burst from the old write-on - three glowing particles flying off the ticks - is back,
+   timed to fire as the rays land. */
+#kt-launch:not(.go) .ktls-logo>i,#kt-launch:not(.go) .ktls-spk b,#kt-launch:not(.go) .ktl-tag,
+#kt-launch:not(.go) .ktl-photo{animation-play-state:paused!important}
+.ktls-spk{position:absolute;top:4%;left:46%;width:0;height:0;pointer-events:none;z-index:2}
+.ktls-spk b{position:absolute;left:-4px;top:-4px;width:8px;height:8px;border-radius:50%;opacity:0;
+  background:radial-gradient(circle,#fff 0%,#8EC73C 42%,rgba(142,199,60,0) 72%);animation:ktls-spk .8s ease both}
+.ktls-spk b:nth-child(1){--tx:-26px;--ty:-20px;animation-delay:.75s}
+.ktls-spk b:nth-child(2){--tx:2px;--ty:-30px;animation-delay:.83s}
+.ktls-spk b:nth-child(3){--tx:26px;--ty:-18px;animation-delay:.91s}
+@keyframes ktls-spk{0%{transform:translate(0,0) scale(.2);opacity:0}35%{opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0}}
+.ktls-static .ktls-spk,#kt-launch.glide .ktls-spk{display:none}
+@media (prefers-reduced-motion:reduce){.ktls-spk{display:none}}
+
+/* ── THE SLOGAN LOCKUP (2026-10-21) ─────────────────────────────────────────────────────
+   "Smart Childcare Management Platform" in the brand face, and "#1 in North America" as a
+   small pill with a green star. Live text, so it is crisp at any density. Under the
+   launch-scene logo it rises in after the swoosh, the pill pops once the sparkle has
+   landed; the phone sign-in shows the same lockup still. White-label: never shown (the
+   brand's own tagline, if any, replaces it). */
+.kt-lockup{display:flex;flex-direction:column;align-items:center;gap:9px;text-align:center}
+.kt-slogan{font:700 15.5px/1.22 'Baloo 2','Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:.015em;color:#fff;
+  max-width:min(300px,86vw);text-wrap:balance;text-shadow:0 1px 2px rgba(0,0,0,.35),0 4px 14px rgba(4,16,40,.45)}
+.kt-no1{display:inline-flex;align-items:center;gap:6px;padding:4px 11px 4px 8px;border-radius:999px;white-space:nowrap;
+  font:800 10.5px/1.1 'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#EAF8D6;
+  background:linear-gradient(135deg,rgba(142,199,60,.24),rgba(19,183,204,.2));border:1px solid rgba(142,199,60,.55);
+  box-shadow:0 4px 14px rgba(4,16,40,.35),inset 0 1px 0 rgba(255,255,255,.12)}
+.kt-no1 svg{width:12px;height:12px;flex:none;filter:drop-shadow(0 0 4px rgba(142,199,60,.6))}
+@keyframes ktls-pop{0%{opacity:0;transform:translateY(4px) scale(.86)}100%{opacity:1;transform:none}}
+#kt-launch .ktl-tag.kt-lockup{margin-top:20px;font:inherit;letter-spacing:normal;text-transform:none;color:inherit;opacity:1;animation:none}
+#kt-launch .kt-lockup .kt-slogan{opacity:0;animation:ktls-fadeup .6s ease .95s both}
+#kt-launch .kt-lockup .kt-no1{opacity:0;animation:ktls-pop .5s cubic-bezier(.2,.9,.25,1.15) 1.3s both}
+#kt-launch:not(.go) .kt-lockup>*{animation-play-state:paused!important}
+#kt-launch.glide .ktl-tag.kt-lockup{animation:ktls-out .3s ease both}
+.ktls-static .kt-lockup>*{animation:none!important;opacity:1!important;transform:none!important}
+@media (prefers-reduced-motion:reduce){#kt-launch .kt-lockup>*{animation:none!important;opacity:1!important;transform:none!important}}
+/* the phone sign-in: replaces the old image strip (238 px wide - soft on a 3x screen) */
+html .ktl-mobile-hero .ktl-mhero-tag.kt-lockup{display:flex!important;background:none!important;width:auto!important;aspect-ratio:auto!important;
+  height:auto!important;margin:14px auto 0!important;text-indent:0!important;overflow:visible!important;color:inherit!important;
+  font-size:inherit!important;filter:none!important}
+html.kt-wl .ktl-mobile-hero .ktl-mhero-tag.kt-lockup{display:none!important}
+.kt-wl-tagline{margin:14px auto 0;max-width:min(300px,86vw);text-align:center;text-wrap:balance;
+  font:700 15.5px/1.22 'Baloo 2','Plus Jakarta Sans',system-ui,sans-serif;color:rgba(255,255,255,.92);text-shadow:0 2px 10px rgba(4,16,40,.4)}
+
+/* The lock screen's logo waits for the launch scene to go, then fades in - one logo at a time. */
+html.ktls-playing .kt-lock-logo{visibility:hidden!important}
+html.ktls-reveal .kt-lock-logo{animation:ktls-in .35s ease both}
+
+/* The blocks scene on the dashboard (a first boot): the splash's own logo, spinner and the
+   reload cover's spinner stay hidden - the scene's logo is the only one on the way in. */
+html.ktls-boot #kt-splash .ktl-anim,html.ktls-boot #kt-splash .kt-spinner,html.ktls-boot #kt-splash .kti-glow,
+html.ktls-boot #kt-reload-gate>*{visibility:hidden!important}
+#kt-launch.pend .ktl-stage,#kt-launch.pend .ktl-photo,#kt-launch.pend .ktl-shade{visibility:hidden}
+html.ktls-boot #kt-launch{z-index:2147483647}   /* above the greeting toast and the portal's overlays until it has gone */
+
+/* The sign-out spinner, carried onto the sign-in page (kt-signout-fade.js, arrive()). */
+@keyframes ktso-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.ktso-spin{animation-duration:1.6s!important}}

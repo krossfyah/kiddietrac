@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\CheckEventNotifier;
+use App\Support\NotifyAudience;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,10 +22,26 @@ use Illuminate\Support\Facades\DB;
  */
 class NotificationPrefsController extends Controller
 {
-    private const EVENTS = [
+    public const EVENTS = [
         CheckEventNotifier::EVENT_KEY => [
             'label' => 'Sign in and sign out',
             'hint' => 'Tell me when my child is signed in or out, and who by.',
+        ],
+        // Instant moments (2026-10-31): in-app + phone only - an email per nap would be noise.
+        \App\Support\ChildMomentNotify::PREF_MOMENTS => [
+            'label' => 'Daily moments',
+            'hint' => 'Meals, naps, diapers, moods, activities, medication and milestones, as soon as they are logged.',
+            'channels' => ['push'],
+        ],
+        \App\Support\ChildMomentNotify::PREF_OBSERVATIONS => [
+            'label' => 'Learning observations',
+            'hint' => 'When an educator shares an observation about my child\'s learning.',
+            'channels' => ['push'],
+        ],
+        \App\Support\ChildMomentNotify::PREF_PHOTOS => [
+            'label' => 'Photos & videos',
+            'hint' => 'When a new photo or video of my child is shared.',
+            'channels' => ['push'],
         ],
     ];
 
@@ -33,12 +50,24 @@ class NotificationPrefsController extends Controller
         $user = $request->user();
         $notifier = app(CheckEventNotifier::class);
 
+        // These are all about a parent's own children (NotifyAudience::PREF_EVENTS): staff-only accounts get none.
+        $sides = NotifyAudience::sides($request);
         $out = [];
         foreach (self::EVENTS as $key => $meta) {
-            $out[] = array_merge(['key' => $key], $meta, $notifier->prefsFor((int) $user->id));
+            $meta['for'] = NotifyAudience::PREF_EVENTS[$key] ?? 'all';
+            if (! NotifyAudience::shows($meta['for'], $sides)) {
+                continue;
+            }
+            if ($key === CheckEventNotifier::EVENT_KEY) {
+                $out[] = array_merge(['key' => $key], $meta, $notifier->prefsFor((int) $user->id));
+                continue;
+            }
+            $out[] = array_merge(['key' => $key], $meta, [
+                'email' => false, 'sms' => false, 'push' => \App\Support\ChildMomentNotify::wants((int) $user->id, $key),
+            ]);
         }
 
-        return response()->json(['preferences' => $out]);
+        return response()->json(['preferences' => $out, 'sides' => $sides]);
     }
 
     public function update(Request $request): JsonResponse
@@ -50,6 +79,13 @@ class NotificationPrefsController extends Controller
             'sms' => 'required|boolean',
         ]);
 
+        abort_unless(NotifyAudience::shows(NotifyAudience::PREF_EVENTS[$data['key']] ?? 'all', NotifyAudience::sides($request)),
+            422, 'That kind of notification is not sent to you.');
+
+        if ($data['key'] !== CheckEventNotifier::EVENT_KEY) {   // in-app/phone-only categories
+            $data['email'] = false;
+            $data['sms'] = false;
+        }
         DB::table('notification_prefs')->updateOrInsert(
             ['user_id' => $request->user()->id, 'event_key' => $data['key']],
             [

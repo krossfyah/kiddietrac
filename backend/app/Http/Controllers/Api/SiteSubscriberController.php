@@ -63,6 +63,27 @@ class SiteSubscriberController extends Controller
     }
 
     /** Record an unsubscribe made through the portal on somebody's behalf. */
+    /**
+     * GET /platform/site-subscribers/status?email= - where one address stands, for the email client's quick
+     * Subscribe / Unsubscribe pill (2026-11-09, Anthony: "add to each email on the email client a subscribe or
+     * unsubscribe button that is wired up to the kiddietrac subscriber feature"). state: subscribed | unsubscribed | none.
+     */
+    public function status(Request $request): JsonResponse
+    {
+        $this->assertPlatform($request);
+        $d = $request->validate(['email' => 'required|email|max:190']);
+        $email = strtolower(trim($d['email']));
+        $row = DB::table('site_subscribers')->whereRaw('LOWER(email) = ?', [$email])->first(['id', 'subscribed_at', 'unsubscribed_at']);
+        $tz = 'America/Toronto';
+        $day = fn ($t) => $t ? \Carbon\Carbon::parse($t, 'UTC')->tz($tz)->format('M j, Y') : null;
+        return response()->json([
+            'email' => $email,
+            'state' => ! $row ? 'none' : ($row->unsubscribed_at ? 'unsubscribed' : 'subscribed'),
+            'id' => $row ? (int) $row->id : null,
+            'since' => $row ? $day($row->unsubscribed_at ?: $row->subscribed_at) : null,
+        ]);
+    }
+
     public function unsubscribe(Request $request, int $id): JsonResponse
     {
         $this->assertPlatform($request);
@@ -137,6 +158,59 @@ class SiteSubscriberController extends Controller
         DB::table('site_subscribers')->where('id', $id)->delete();
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Put somebody on the unsubscribed list by hand (2026-11-09, Anthony: "the unsubscriber subtab add ability to
+     * manually add someone to this list") — a request by phone or email, or an address that must never be mailed.
+     * A subscriber is unsubscribed in place; an address we have never seen gets a row that starts unsubscribed, so
+     * the list shows when and why. Either way the address joins the suppression list the mail layer reads. The
+     * confirmation email is only sent when asked for: an address that never subscribed did not expect one.
+     */
+    public function suppress(Request $request): JsonResponse
+    {
+        $this->assertPlatform($request);
+        $data = $request->validate([
+            'email' => 'required|email|max:190',
+            'name' => 'nullable|string|max:120',
+            'note' => 'nullable|string|max:190',
+            'notify' => 'nullable|boolean',
+        ]);
+        $email = strtolower(trim($data['email']));
+        $note = trim((string) ($data['note'] ?? ''));
+        $note = $note !== '' ? mb_substr($note, 0, 190) : null;
+
+        $existing = DB::table('site_subscribers')->whereRaw('LOWER(email) = ?', [$email])->first();
+        if ($existing && $existing->unsubscribed_at) {
+            MarketingSiteController::suppressEmail($email);
+
+            return response()->json(['ok' => true, 'id' => $existing->id, 'already' => true]);
+        }
+        if ($existing) {
+            DB::table('site_subscribers')->where('id', $existing->id)->update([
+                'unsubscribed_at' => now(), 'unsubscribed_by' => 'admin', 'unsubscribe_note' => $note, 'updated_at' => now(),
+            ]);
+            $id = (int) $existing->id;
+        } else {
+            $id = DB::table('site_subscribers')->insertGetId([
+                'email' => $email, 'name' => $data['name'] ?? null, 'source' => 'added-by-admin',
+                'unsubscribed_at' => now(), 'unsubscribed_by' => 'admin', 'unsubscribe_note' => $note,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        MarketingSiteController::suppressEmail($email);
+
+        if (! empty($data['notify'])) {
+            try {
+                \Illuminate\Support\Facades\Mail::to($email)
+                    ->send((new \App\Mail\SubscriberUnsubscribed($email, (string) ($existing->name ?? $data['name'] ?? ''), 'admin'))
+                        ->withSymfonyMessage(function ($msg) { \App\Support\MailScope::platform($msg); }));
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Unsubscribe confirmation failed', ['email' => $email, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return response()->json(['ok' => true, 'id' => $id, 'was_subscribed' => (bool) $existing], $existing ? 200 : 201);
     }
 
     /** Add somebody by hand — a signup taken over the phone, or an import. */

@@ -213,7 +213,7 @@
 /* Alert rows (allergy alerts etc.) ======================================== */
 [data-kt-pretty] .kt-alert {
   background: linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%);
-  border-left: 5px solid var(--kt-danger);
+  --kt-edge:var(--kt-danger);
   border-radius: 0 12px 12px 0;
   padding: 16px 22px;
   margin-bottom: 12px;

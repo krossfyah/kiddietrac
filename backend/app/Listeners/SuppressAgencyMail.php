@@ -78,11 +78,70 @@ class SuppressAgencyMail
 
         $send = $this->decide($event);
         if ($send) {
+            // In the recipients' language (2026-10-22) — here, because a separate
+            // MessageSending listener after this one never runs. Before the pixel.
+            \App\Support\MailTranslation::apply($event);
+            $this->ensurePlainText($event);
             $this->attachOpenPixel($event);
         }
         self::$decided[$msg] = $send;
 
         return $send;
+    }
+
+    /**
+     * EVERY EMAIL CARRIES A PLAIN-TEXT VERSION (2026-10-23). Almost every KiddieTrac email
+     * is built as HTML only. An HTML-only message is one of the things spam filters score,
+     * Outlook's most of all, and announcements were landing in junk for some families.
+     * When a message has HTML and no text, the text is made from the HTML here: links kept
+     * as "words (address)", paragraphs and list items on their own lines. A sender that
+     * wrote its own text part is left alone. Best-effort: never worth a failed send.
+     */
+    private function ensurePlainText(MessageSending $event): void
+    {
+        try {
+            $m = $event->message;
+            if (! $m instanceof \Symfony\Component\Mime\Email) {
+                return;
+            }
+            $html = $m->getHtmlBody();
+            $text = $m->getTextBody();
+            if (! is_string($html) || trim($html) === '' || (is_string($text) && trim($text) !== '')) {
+                return;
+            }
+            $plain = self::htmlToText($html);
+            if ($plain !== '') {
+                $m->text($plain);
+            }
+        } catch (\Throwable $e) {
+        }
+    }
+
+    public static function htmlToText(string $html): string
+    {
+        $h = preg_replace('#<(style|script|head|title)\b[^>]*>.*?</\1>#is', '', $html);
+        $h = preg_replace('#<!--.*?-->#s', '', (string) $h);
+        // A hidden preheader is for the inbox preview, not the reader.
+        $h = preg_replace('#<(div|span)\b[^>]*display\s*:\s*none[^>]*>.*?</\1>#is', '', (string) $h);
+        $h = preg_replace_callback('#<a\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\'][^>]*>(.*?)</a>#is', function ($m) {
+            $label = trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+            $url = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            if (stripos($url, 'mailto:') === 0 || stripos($url, 'tel:') === 0) {
+                return $label !== '' ? $label : preg_replace('/^(mailto|tel):/i', '', $url);
+            }
+            if ($label === '' || $label === $url) {
+                return $url;
+            }
+            return $label . ' (' . $url . ')';
+        }, (string) $h);
+        $h = preg_replace('#<br\s*/?>#i', "\n", (string) $h);
+        $h = preg_replace('#<li\b[^>]*>#i', "\n- ", (string) $h);
+        $h = preg_replace('#</(p|div|h[1-6]|tr|li|table|blockquote|ul|ol)>#i', "\n", (string) $h);
+        $t = html_entity_decode(strip_tags((string) $h), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $t = preg_replace("/[ \t\x{00A0}]+/u", ' ', (string) $t);
+        $t = preg_replace("/ *\n */", "\n", (string) $t);
+        $t = preg_replace("/\n{3,}/", "\n\n", (string) $t);
+        return trim((string) $t);
     }
 
     /** @var \WeakMap<object, bool>|null */
@@ -151,8 +210,72 @@ class SuppressAgencyMail
         }
     }
 
+    /** Subjects of form mail a not-yet-onboarded parent must still receive. Shared with kt:mail-gate-watch. */
+    /* Widened 2026-10-25 after "Counter-signed: ..." slipped past the list of exact openings: any subject that is
+       about a form, a signature, a countersignature or a document. Word-bounded, so "uniform" does not count. */
+    // "signed" but not "signed-out"/"signed in" (attendance reminders are not form mail).
+    public const FORM_MAIL_RX = '/\b(forms?|signed(?![- ]?(out|in)\b)|signatures?|counter-?signed|countersign(ed|ature)?|e-?signatures?|documents?|upload|resubmit)\b/iu';
+
     private function decide(MessageSending $event): bool
     {
+        /* THE PUBLIC WEBSITE DEMO NEVER MAILS ANYONE (2026-10-31, App\Support\PublicDemo). Before every other rule and
+           every bypass (X-KT-Bypass-Suppression included): a message sent during a public demo session, from a public
+           demo agency, or to a demo-only person is cancelled. Visitors type freely into that demo; this is what stops
+           an "invite" or a "forward" reaching a real inbox. */
+        try {
+            $pdAgency = null;
+            $pdH = $event->message->getHeaders();
+            if ($pdH && $pdH->has('X-KT-Agency-Id')) {
+                $raw = trim((string) $pdH->get('X-KT-Agency-Id')->getBodyAsString());
+                if ($raw !== '' && ctype_digit($raw)) $pdAgency = (int) $raw;
+            }
+            $pdTo = [];
+            foreach (array_merge($event->message->getTo() ?: [], $event->message->getCc() ?: [], $event->message->getBcc() ?: []) as $pdA) {
+                if (method_exists($pdA, 'getAddress')) $pdTo[] = $pdA->getAddress();
+            }
+            $pdHit = \App\Support\PublicDemo::isSession() || \App\Support\PublicDemo::isAgency($pdAgency);
+            if (! $pdHit) { foreach ($pdTo as $pdE) { if (\App\Support\PublicDemo::isDemoEmail($pdE)) { $pdHit = true; break; } } }
+            if ($pdHit && \App\Support\PublicDemo::agencyIds()) {
+                // The demo phone's Mail app shows what a demo person WOULD have received (only demo-only people; 2026-10-31).
+                \App\Support\WebDemoMail::capture($event->message, $pdTo);
+                $this->cancel($event, $pdTo, 'Public website demo: demo accounts never send email.');
+                return false;
+            }
+        } catch (\Throwable $e) { /* never break the mail layer */ }
+        /* TEST AGENCIES NEVER MAIL ANYONE (2026-11-24, App\Support\TestAgency; Anthony: "not send anything out to
+           anyone"). Also before every bypass: mail stamped for a test agency (X-KT-Agency-Id), sent while working in a
+           test agency, or addressed only to test-only people is cancelled. A test-only person among real recipients is
+           dropped per person further down (Suppression::isUser). */
+        try {
+            $taAgency = null;
+            $taH = $event->message->getHeaders();
+            if ($taH && $taH->has('X-KT-Agency-Id')) {
+                $raw = trim((string) $taH->get('X-KT-Agency-Id')->getBodyAsString());
+                if ($raw !== '' && ctype_digit($raw)) $taAgency = (int) $raw;
+            }
+            $taTo = [];
+            foreach (array_merge($event->message->getTo() ?: [], $event->message->getCc() ?: [], $event->message->getBcc() ?: []) as $taA) {
+                if (method_exists($taA, 'getAddress')) $taTo[] = $taA->getAddress();
+            }
+            $taHit = \App\Support\TestAgency::isAgency($taAgency) || \App\Support\TestAgency::isSession();
+            if (! $taHit && $taTo) {
+                $taHit = true;
+                foreach ($taTo as $taE) { if (! \App\Support\TestAgency::isEmail($taE)) { $taHit = false; break; } }
+            }
+            // The one exception (Anthony, 2026-11-24): a support-ticket alert to the platform admins / HQ inbox only.
+            if ($taHit && \App\Support\TicketAlerts::allowsAddresses($taTo)) {
+                $taHit = false;
+            }
+            // And Anthony's own preview inbox, when it is the ONLY recipient (Anthony, 2026-11-24: "Allow your Gmail only").
+            if ($taHit && \App\Support\TestAgency::previewOnly($taTo)) {
+                $taHit = false;
+            }
+            if ($taHit) {
+                \App\Support\TestAgency::note('email', ['to' => $taTo, 'agency' => $taAgency, 'subject' => (string) $event->message->getSubject()]);
+                $this->cancel($event, $taTo, 'Test agency: nothing is sent from a test agency.');
+                return false;
+            }
+        } catch (\Throwable $e) { /* never break the mail layer */ }
 /* X-KT-Bypass-Suppression SKIPS THE SWITCHES, NEVER THE PERSON.
 
            It used to return here outright, which skipped every gate below — including
@@ -211,7 +334,9 @@ class SuppressAgencyMail
         $deadEnd = array_values(array_filter($recipients, [self::class, 'isUndeliverable']));
         if ($deadEnd) {
             if (count($deadEnd) === count($recipients)) {
-                $this->cancel($event, $deadEnd, 'Demo / non-existent address (demo.*, example.*, .invalid, .test) - never sent.');
+                $this->cancel($event, $deadEnd, count(array_filter($deadEnd, [self::class, 'isIntegrationAccount'])) === count($deadEnd)
+                    ? 'Integration account (no mailbox) - never sent.'
+                    : 'Demo / non-existent address (demo.*, example.*, .invalid, .test) - never sent.');
                 return false;
             }
             try {
@@ -231,6 +356,44 @@ class SuppressAgencyMail
             return true;   // never suppressed: see the note at the top of decide()
         }
 
+        /* KIDDIETRAC'S OWN CAMPAIGNS ANSWER TO THEIR OWN UNSUBSCRIBE LIST, NOTHING ELSE (2026-11-11).
+
+           Anthony: "when sending out campaigns why are you supressing emails to users ... (has nothing to do with
+           accessing kiddietrac)". A Sales campaign or subscriber email (X-KT-Campaign sales-* / subscribers-*, sent as
+           platform mail) is KiddieTrac writing to its own subscriber or prospect. Whether that person ever accepted
+           an agency's portal invite, or still has a portal login, says nothing about whether they asked to stop
+           hearing from KiddieTrac. The invite gate and the account gates below were cancelling it: 14 iLearn
+           parents (status invited / not_invited, two with closed portal accounts) missed One-Tap, Halloween,
+           Diwali and Remembrance Day while the campaign counted them as sent.
+
+           So for this mail only: the public demo and dead-end addresses above still apply, then the one question
+           that matters, has this address unsubscribed (sales_suppressions or site_subscribers.unsubscribed_at).
+           Agency switches are not consulted either, since this is not the agency's mail. Fails closed. */
+        try {
+            $hdrsCamp = $event->message->getHeaders();
+            $campTag = ($hdrsCamp && $hdrsCamp->has('X-KT-Campaign')) ? trim((string) $hdrsCamp->get('X-KT-Campaign')->getBodyAsString()) : '';
+            $isKtCampaign = $hdrsCamp && $hdrsCamp->has('X-KT-Platform') && preg_match('/^(sales|subscribers)-[a-z0-9_-]+$/i', $campTag);
+        } catch (\Throwable $e) {
+            $isKtCampaign = false;
+        }
+        if ($isKtCampaign) {
+            try {
+                $gone = DB::table('sales_suppressions')->whereIn('email', $recipients)->pluck('email')
+                    ->merge(Schema::hasTable('site_subscribers')
+                        ? DB::table('site_subscribers')->whereIn('email', $recipients)->whereNotNull('unsubscribed_at')->pluck('email')
+                        : [])
+                    ->map(fn ($e) => mb_strtolower(trim((string) $e)))->unique()->values()->all();
+            } catch (\Throwable $e) {
+                $this->cancel($event, $recipients, 'Campaign held: the unsubscribe list could not be checked.');
+                return false;
+            }
+            if ($gone) {
+                $this->cancel($event, $gone, 'Unsubscribed from KiddieTrac emails.');
+                return false;
+            }
+            return true;
+        }
+
         // 0) NOT-ONBOARDED gate. A parent/user who hasn't accepted their invite yet
         //    (users.status = 'invited') must receive NOTHING except the invite /
         //    welcome email itself — no digests, reminders or announcements. The
@@ -242,6 +405,7 @@ class SuppressAgencyMail
         $isInvite = false;
         $isEngagement = false;
         $isFormPackage = false;
+        $isBilling = false;
         try {
             $hdrs2 = $event->message->getHeaders();
             $isInvite = (bool) ($hdrs2 && $hdrs2->has('X-KT-Invite'));
@@ -262,8 +426,26 @@ class SuppressAgencyMail
                X-KT-Invite so the audit log and this file both say which rule let it
                through. */
             $isFormPackage = (bool) ($hdrs2 && $hdrs2->has('X-KT-Form-Package'));
+            /* GUARD (2026-10-25): form mail is recognised by its subject too, so a sender that forgets
+               X-KT-Form-Package can never again withhold a parent's form receipt, correction request or
+               signing request (Sheldon's Consent Form receipt was cancelled here). Logged when it
+               rescues one, so the sender gets fixed; kt:mail-gate-watch reports any that still slip. */
+            if (! $isFormPackage && preg_match(self::FORM_MAIL_RX, (string) $event->message->getSubject())) {
+                $isFormPackage = true;
+                \Illuminate\Support\Facades\Log::warning('Form mail let through by the subject guard (sender is missing X-KT-Form-Package)', ['subject' => (string) $event->message->getSubject()]);
+            }
             if ($isFormPackage && $hdrs2) {
                 $hdrs2->remove('X-KT-Form-Package');
+            }
+            /* BILLING MAIL TO AN UNCLAIMED BILLING CONTACT (2026-11-06). Agreed with Anthony, asked against the rule
+               below: "Yes, billing mail only". An iLearn family with $1,890 invoiced had two billing guardians who had
+               not accepted their invite, so no invoice, reminder or receipt ever reached anyone. Money owed or paid
+               is transactional, like a form package. NARROW ON PURPOSE: only mail stamped by MailScope::billing
+               (invoices, payment reminders, receipts, refunds, failed payments) skips the not-onboarded gate below;
+               every other gate still applies, and every other kind of mail is still withheld. */
+            $isBilling = (bool) ($hdrs2 && $hdrs2->has('X-KT-Billing'));
+            if ($isBilling && $hdrs2) {
+                $hdrs2->remove('X-KT-Billing');
             }
             /* Engagement mail = digests, summaries, chat round-ups: the
                "come and use the portal" family. Only THIS is withheld from
@@ -297,7 +479,7 @@ class SuppressAgencyMail
            everything that was not an invite -- which cancelled password resets,
            NDA receipts and "your child arrived" notices for anyone still marked
            'invited'. It now cancels only what is explicitly engagement mail. */
-        if (! $isInvite && ! $isFormPackage) {
+        if (! $isInvite && ! $isFormPackage && ! $isBilling) {
             try {
                 $pending = DB::table('users')
                     // Not-yet-onboarded states: 'invited' (invite sent, awaiting
@@ -713,8 +895,19 @@ class SuppressAgencyMail
     {
         $d = mb_strtolower((string) substr(strrchr((string) $addr, '@') ?: '', 1));
         if ($d === '') return false;
+        if (self::isIntegrationAccount($addr)) return true;
 
         return (bool) preg_match('/^demo\.|^(example\.(com|org|net)|localhost)$|\.(invalid|test|example|localhost|local)$/', $d);
+    }
+
+    /* INTEGRATION ACCOUNTS HAVE NO MAILBOX (2026-11-01, Anthony: "stop emailing
+       integration+ilearn"). integration+<agency>@kiddietrac.com is the sign-in an outside
+       system uses; it holds an agency_admin role, so it was sent every admin digest and
+       notice (116 in 30 days) and each one bounced off our own domain. The account keeps
+       working; it just never gets mail. */
+    public static function isIntegrationAccount(?string $addr): bool
+    {
+        return (bool) preg_match('/^integration(\+[^@]*)?@kiddietrac\.com$/i', trim((string) $addr));
     }
 
     private function cancel(MessageSending $event, array $hits, ?string $reason = null): void

@@ -101,7 +101,7 @@
     [/provider\/check-in-batch/, 'Signed children in (batch)'],
     [/provider\/check-in/, 'Signed a child in'],
     [/provider\/check-out/, 'Signed a child out'],
-    [/parent\/checkin\/scan/, 'Parent scanned the check-in QR'],
+    [/parent\/checkin\/scan/, 'Parent checked in or out with One-Tap'],
     [/parent\/absences/, 'Parent reported an absence'],
     [/staff\/punch/, 'Clocked in / out'],
     [/attendance\/pattern/, 'Updated an attendance pattern'],
@@ -123,6 +123,11 @@
    * rows an older API build didn't enrich.
    */
   function rowActionLabel(l) {
+    /* A hand-written label for a NAMED event ("staff.clock_in" -> "Clocked IN") is better
+       than the server's generic "Staff clock in"; for everything else the server's
+       sentence wins (it covers every API route - App\Support\AuditLabels). */
+    var a = String((l && l.action) || '').replace(/ \[fail\]$/i, '').trim();
+    if (a && ACTION_LABELS[a]) return actionLabel(l.action);
     if (l && typeof l.action_label === 'string' && l.action_label.trim() !== '') return l.action_label;
     return actionLabel(l && l.action);
   }
@@ -181,6 +186,9 @@
     // thing — printing them gave rows like "test 8  Id". Say nothing instead.
     var raw = String(t).trim().toLowerCase();
     if (raw === 'id' || raw === 'ids' || /^\d+$/.test(raw)) return '';
+    // Older rows kept the route parameter name: "childId", "family_id", "u".
+    t = String(t).replace(/([a-z])Id$/, '$1').replace(/_id$/i, '');
+    if (String(t).toLowerCase() === 'u') t = 'user';
     var MAP = {
       user: 'User', users: 'User', child: 'Child', children: 'Child',
       family: 'Family', families: 'Family', centre: 'Centre', centres: 'Centre',
@@ -336,6 +344,10 @@
       + '.kt-al-tabs{scrollbar-width:none;}'
       + '.kt-al-tabs::-webkit-scrollbar{display:none;}'
       + '.kt-al-tab{white-space:nowrap;flex:0 0 auto;}'
+      /* Wider than a phone the tabs WRAP (2026-10-29 resize sweep): one row of nine never-shrinking
+         tabs ran ~470px past a 1024px laptop and the whole page scrolled sideways. Phones keep the
+         sideways-scrolling strip below. */
+      + '@media (min-width:601px){.kt-al-tabs{flex-wrap:wrap;row-gap:2px;}}'
       + '@media (max-width:600px){'
       +   '.kt-al-wrap{padding:6px 0 14px !important;}'
       +   '.kt-al-tabs{padding:2px 0 0 !important;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}'
@@ -422,11 +434,21 @@
        runs the agency's money, so the bar now appears whenever there is more than one
        tab to show — an agency admin gets Audit log + Payments, a platform admin gets
        all four. */
-    var hasEmail = isPlatform && window.KT && KT.EmailLog && KT.EmailLog.render;
+    /* Agency admins get their own agency's Email log + Email errors (2026-11-03, Anthony: "email log in audit
+       log and email errors are not present for each agency"): /admin/email-logs, pinned to the active agency. */
+    var hasEmail = (isPlatform || isAgencyAdmin) && window.KT && KT.EmailLog && KT.EmailLog.render;
+    var emailAsAgency = !isPlatform;
 
     ensureAuditCss();
     var tabsRow = Dom.el('div', { class: 'kt-al-tabs', style: 'display:flex;gap:4px;border-bottom:1px solid #E5E7EB;padding:16px 24px 0;max-width:1800px;margin:0 auto;' });
     var pane = Dom.el('div', {});
+    /* ONE PICTURE TO THE NEXT (2026-10-28, Anthony's video: "when moving from subtabs the screen flashes and its
+       not smooth"). A tab tap used to empty this pane - banner, filters, table - and rebuild it around a
+       "Loading..." line, so every switch showed a blank or greyed page and then faded the rows in. Now the tab
+       you are on stays on screen while the next one is built underneath, out of sight but laid out (so the
+       decorators measure it properly), and the two swap in one frame once its data has arrived - capped, so a
+       slow tab still appears with its loading line rather than never. */
+    var shownPane = pane, alSwapGen = 0;
     var mkTab = function (label) { return Dom.el('button', { class: 'kt-al-tab', style: 'background:none;border:none;border-bottom:3px solid transparent;color:#64748B;font-weight:700;font-size:14px;padding:10px 16px;cursor:pointer;margin-bottom:-1px;' }, label); };
     var tabScroll = tabScroller(tabsRow);
     var tA = mkTab('📜 Audit log');
@@ -440,11 +462,16 @@
     // Text messages: everyone who can open this screen (directors see their own centres' people).
     var tS = mkTab('📱 Text messages');
     var tV = mkTab('📞 Voice calls');
+    /* PLATFORM-LEVEL (super admins, 2026-10-21): events that belong to no agency - sign-in
+       attempts for accounts that do not exist, sales/CRM work, platform settings, system
+       jobs. They were written but shown nowhere, because every other view is one agency. */
+    var tL = mkTab('🌐 Platform-level');
     var activate = function (which) {
+      tL.style.borderBottomColor = which === 'platform' ? '#7C2D12' : 'transparent'; tL.style.color = which === 'platform' ? '#7C2D12' : '#64748B';
       tV.style.borderBottomColor = which === 'calls' ? '#3730A3' : 'transparent'; tV.style.color = which === 'calls' ? '#3730A3' : '#64748B';
       tS.style.borderBottomColor = which === 'sms' ? '#0F766E' : 'transparent'; tS.style.color = which === 'sms' ? '#0F766E' : '#64748B';
       tC.style.borderBottomColor = which === 'chats' ? '#7C3AED' : 'transparent'; tC.style.color = which === 'chats' ? '#7C3AED' : '#64748B';
-      var openTab = { audit: tA, payments: tP, email: tE, errors: tX, chats: tC, sms: tS, calls: tV }[which];
+      var openTab = { audit: tA, payments: tP, email: tE, errors: tX, chats: tC, sms: tS, calls: tV, platform: tL }[which];
       setTimeout(function () { tabScroll.show(openTab); }, 0);
       tA.style.borderBottomColor = which === 'audit' ? '#1F6080' : 'transparent'; tA.style.color = which === 'audit' ? '#1F6080' : '#64748B';
       tP.style.borderBottomColor = which === 'payments' ? '#12805F' : 'transparent'; tP.style.color = which === 'payments' ? '#12805F' : '#64748B';
@@ -453,10 +480,28 @@
       /* The banner normaliser moves this row to just under the hero — which lives INSIDE
          the pane. Bring it home before the pane is emptied, or it is emptied with it (the
          "subtabs not visible" on a phone); it is placed under the new hero again after. */
-      if (tabsRow.parentNode && tabsRow.parentNode !== container && pane.parentNode === container) { container.insertBefore(tabsRow, pane); }
-      Dom.clear(pane);
+      var gen = ++alSwapGen;
+      var front = shownPane;
+      if (pane !== shownPane && pane.parentNode) { pane.parentNode.removeChild(pane); }   // a swap still being built
+      var buffered = !!(front.firstChild && front.parentNode === container);
+      if (buffered) {
+        if (getComputedStyle(container).position === 'static') { container.style.position = 'relative'; }
+        pane = Dom.el('div', {});
+        pane.setAttribute('data-kt-al-next', '1');
+        pane.setAttribute('aria-hidden', 'true');
+        pane.style.cssText = 'position:absolute;left:0;right:0;top:' + front.offsetTop + 'px;height:' + front.offsetHeight + 'px;'
+          + 'overflow:hidden;visibility:hidden;pointer-events:none;';
+        container.appendChild(pane);
+      } else {
+        pane = front;
+        if (tabsRow.parentNode && tabsRow.parentNode !== container && pane.parentNode === container) { container.insertBefore(tabsRow, pane); }
+        Dom.clear(pane);
+      }
+      /* SAME FRAME ON EVERY TAB (2026-10-28, Anthony: "screen is jumpy when moving from the subtabs
+         in desktop view"). The two email tabs padded their wrapper 20px where every other tab pads
+         24px, so the banner and the strip under it hopped 4px each time you crossed between them. */
       if (which === 'errors') {
-        var xInner = Dom.el('div', { class: 'kt-al-wrap kt-al-email', style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
+        var xInner = Dom.el('div', { class: 'kt-al-wrap kt-al-email', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
         var xHero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#3F0D0A 0%,#8A1D16 60%,#B91C1C 100%);' });
         xHero.innerHTML = '<div class="kt-hero-greet">⚠️ ADMIN</div><h1>Email errors</h1>'
           + '<div class="kt-hero-sub">Every message that did not reach the person it was addressed to — bounced, '
@@ -466,10 +511,10 @@
         var xBody = Dom.el('div', { style: 'margin-top:16px;' });
         xInner.appendChild(xBody);
         pane.appendChild(xInner);
-        KT.EmailLog.render(xBody, { status: 'problems' });
+        KT.EmailLog.render(xBody, { status: 'problems', agency: emailAsAgency });
       }
       else if (which === 'email') {
-        var inner = Dom.el('div', { class: 'kt-al-wrap kt-al-email', style: 'padding:20px 24px;max-width:1800px;margin:0 auto;' });
+        var inner = Dom.el('div', { class: 'kt-al-wrap kt-al-email', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
         // The Email log had no banner at all, so it opened straight onto a table while
         // its sibling tab had the gradient hero. Same construction as renderAudit's
         // hero, so kt-banner-normalize treats them identically.
@@ -481,15 +526,50 @@
         var eBody = Dom.el('div', { style: 'margin-top:16px;' });
         inner.appendChild(eBody);
         pane.appendChild(inner);
-        KT.EmailLog.render(eBody);
+        KT.EmailLog.render(eBody, { agency: emailAsAgency });
       }
       else if (which === 'payments') { renderAudit(pane, { channel: 'payments' }); }
+      else if (which === 'platform') { renderAudit(pane, { scope: 'platform' }); }
       else if (which === 'chats') { renderChats(pane); }
       else if (which === 'sms') { renderSms(pane); }
       else if (which === 'calls') { renderCalls(pane); }
       else { renderAudit(pane); }
 
-      // Re-run the banner normaliser by hand. It observes #appMain with
+      var next = pane;
+      var finish = function () {
+        if (gen !== alSwapGen) { return; }
+        if (buffered) {
+          // The strip may have been moved under the old banner (phones): bring it home before that pane goes.
+          if (tabsRow.parentNode !== container) { container.insertBefore(tabsRow, front); }
+          if (front.parentNode) { front.parentNode.removeChild(front); }
+          next.style.cssText = '';
+          next.removeAttribute('data-kt-al-next');
+          next.removeAttribute('aria-hidden');
+        }
+        shownPane = next;
+        try { if (window.KT && KT.normalizeBanner) KT.normalizeBanner(); } catch (e) {}
+      };
+      if (buffered) {
+        var t0 = Date.now();
+        var waitReady = function () {
+          if (gen !== alSwapGen) { return; }
+          var loading = false;
+          try {
+            loading = [].some.call(next.querySelectorAll('div,td,p,span'), function (n) {
+              return !n.children.length && /^Loading\b/.test((n.textContent || '').trim());
+            });
+          } catch (e) {}
+          var busy = (window.__ktInflight || 0) > 0;
+          var waited = Date.now() - t0;
+          if ((!loading && (!busy || waited > 450)) || waited > 1200) { finish(); return; }
+          setTimeout(waitReady, 40);
+        };
+        setTimeout(waitReady, 30);
+      } else {
+        finish();
+      }
+
+      // Re-run the banner normaliser by hand (finish() above does it again on the swap). It observes #appMain with
       // { childList: true } and NO subtree flag, so a tab swap inside `pane` — a
       // descendant — never reaches it. Without this the new hero would sit flat until
       // the periodic sweep wandered past, which is also why the Audit tab can look
@@ -512,14 +592,16 @@
     tC.addEventListener('click', function () { pick('chats'); });
     tS.addEventListener('click', function () { pick('sms'); });
     tV.addEventListener('click', function () { pick('calls'); });
+    tL.addEventListener('click', function () { pick('platform'); });
     tabsRow.appendChild(tA);
     tabsRow.appendChild(tP);
     if (hasChats) { tabsRow.appendChild(tC); }
     tabsRow.appendChild(tS);
     tabsRow.appendChild(tV);
-    // The email tabs read /platform/* and would 403 for anybody else, so they are
-    // only built for the people who can actually load them.
+    // The email tabs are built only for people who can load them: platform admins (/platform/*) and
+    // agency admins (/admin/email-logs, their own agency).
     if (hasEmail) { tabsRow.appendChild(tE); tabsRow.appendChild(tX); }
+    if (isPlatform) { tabsRow.appendChild(tL); }
     container.appendChild(tabsRow);
     container.appendChild(pane);
 
@@ -542,7 +624,11 @@
     // this user cannot see, must fall back rather than render nothing.
     if (! hasEmail && /^(email|errors)$/.test(remembered)) { remembered = ''; }
     if (! hasChats && remembered === 'chats') { remembered = ''; }
-    activate(/^(audit|payments|email|errors|chats|sms|calls)$/.test(remembered) ? remembered : 'audit');
+    if (! isPlatform && remembered === 'platform') { remembered = ''; }
+    // The bell for a reported message opens #audit-logs?tab=chats (ContentReportController, 2026-11-03).
+    var askedTab = (/[?&]tab=(\w+)/.exec(location.hash) || [])[1];
+    if (askedTab === 'chats' && hasChats) { remembered = 'chats'; }
+    activate(/^(audit|payments|email|errors|chats|sms|calls|platform)$/.test(remembered) ? remembered : 'audit');
   }
 
   /* CHAT CONVERSATIONS (2026-10-09, Anthony: "add to audit log a subtab for chat
@@ -562,6 +648,7 @@
       + 'with the full transcript, including messages that were deleted or edited. Opening a transcript is recorded in the '
       + 'audit log. Times are in your agency timezone (' + auditTz() + ').</div>';
     wrap.appendChild(hero);
+    wrap.appendChild(reportsPanel());
 
     var toolbar = Dom.el('div', { class: 'kt-al-toolbar', style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:16px 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
     var fToggle = filterToggle(toolbar, function () {
@@ -587,7 +674,7 @@
     chatSearch.classList.add('kt-al-full');
     toolbar.appendChild(chatSearch);
     toolbar.appendChild(filterInput('Active from', chatState.since, 'date', function (v) { chatState.since = v; chatState.offset = 0; load(); }));
-    toolbar.appendChild(filterInput('Started by', chatState.until, 'date', function (v) { chatState.until = v; chatState.offset = 0; load(); }));
+    toolbar.appendChild(filterInput('Active until', chatState.until, 'date', function (v) { chatState.until = v; chatState.offset = 0; load(); }));
 
     function load() {
       if (fToggle.ktPaint) fToggle.ktPaint();
@@ -650,9 +737,56 @@
     load();
   }
 
+  /* REPORTED MESSAGES (2026-11-03, App Store Guideline 1.2 - ContentReportController). A message somebody reported,
+     what it said when they reported it, and whether they also blocked the sender. Open the conversation, then mark it
+     handled with a note of what was done. Shows only when there is something to see. */
+  function reportsPanel() {
+    var box = Dom.el('div', { style: 'display:none;background:#fff;border:1px solid #FECACA;border-radius:12px;margin:16px 0 0;overflow:hidden;' });
+    var showAll = false;
+    function draw() {
+      Api.get('/admin/content-reports?status=' + (showAll ? 'all' : 'open')).then(function (d) {
+        var rows = (d && d.reports) || [];
+        if (!rows.length && !showAll) { box.style.display = 'none'; return; }
+        box.style.display = '';
+        box.innerHTML = '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#FEF2F2;border-bottom:1px solid #FECACA;">'
+          + '<b style="color:#991B1B;font-size:14px;">🚩 Reported messages</b><span style="font-size:12.5px;color:#B91C1C;">' + (d.open || 0) + ' open</span>'
+          + '<button type="button" class="kt-rp-all" style="margin-left:auto;height:28px;padding:0 10px;border:1px solid #FCA5A5;background:#fff;color:#991B1B;border-radius:8px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;">'
+          + (showAll ? 'Open only' : 'Show handled too') + '</button></div>'
+          + (rows.length ? rows.map(function (r, i) {
+              return '<div style="padding:12px 14px;border-bottom:1px solid #F1F5F9;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">'
+                + '<div style="flex:1 1 320px;min-width:0;font-size:13px;color:#334155;line-height:1.5;">'
+                + '<div><b>' + esc(r.reporter || 'Someone') + '</b> reported <b>' + esc(r.reported || 'someone') + '</b> · ' + esc(r.reason)
+                + (r.blocked ? ' · <span style="color:#B91C1C;font-weight:700;">blocked them</span>' : '') + ' · <span style="color:#94A3B8;">' + esc(fmtTime(r.created_at)) + '</span></div>'
+                + '<div style="margin-top:4px;padding:8px 10px;background:#F8FAFC;border-left:3px solid #FCA5A5;border-radius:6px;white-space:pre-wrap;word-break:break-word;">' + esc(r.excerpt || '') + '</div>'
+                + (r.note ? '<div style="margin-top:4px;color:#64748B;">Their note: ' + esc(r.note) + '</div>' : '')
+                + (r.status === 'handled' ? '<div style="margin-top:4px;color:#047857;">✓ Handled by ' + esc(r.handled_by || '') + ' · ' + esc(fmtTime(r.handled_at)) + (r.handled_note ? ' — ' + esc(r.handled_note) : '') + '</div>' : '')
+                + '</div><div style="display:flex;gap:6px;flex-wrap:wrap;">'
+                + '<button type="button" data-rp-open="' + i + '" style="height:30px;padding:0 12px;border:1px solid #CBD5E1;background:#fff;border-radius:8px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">Open conversation</button>'
+                + (r.status === 'open' ? '<button type="button" data-rp-done="' + i + '" style="height:30px;padding:0 12px;border:none;background:#047857;color:#fff;border-radius:8px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;">Mark handled</button>' : '')
+                + '</div></div>';
+            }).join('') : '<div style="padding:14px;font-size:13px;color:#94A3B8;">No reported messages.</div>');
+        box.querySelector('.kt-rp-all').onclick = function () { showAll = !showAll; draw(); };
+        box.querySelectorAll('[data-rp-open]').forEach(function (b) {
+          b.onclick = function () { var r = rows[+b.getAttribute('data-rp-open')]; openTranscript({ kind: r.kind, id: r.conversation_id, title: (r.reported || 'Conversation') + ' (reported)' }); };
+        });
+        box.querySelectorAll('[data-rp-done]').forEach(function (b) {
+          b.onclick = async function () {
+            var r = rows[+b.getAttribute('data-rp-done')];
+            var note = window.KT && KT.prompt ? await KT.prompt('What was done? (optional)', '') : '';
+            if (note === null) return;
+            Api.patch('/admin/content-reports/' + r.id, { status: 'handled', note: note || '' }).then(draw)
+              .catch(function (e) { if (window.KT && KT.toast) KT.toast('⚠️', 'Could not update', (e && e.message) || '', '#DC2626'); });
+          };
+        });
+      }).catch(function () { box.style.display = 'none'; });
+    }
+    draw();
+    return box;
+  }
+
   function openTranscript(r) {
     var M = window.KT && KT.Shell && KT.Shell.Modal;
-    var body = Dom.el('div', { style: 'height:min(62vh,640px);overflow:auto;background:#F8FAFC;border-radius:10px;padding:12px;' });
+    var body = Dom.el('div', { 'data-kt-keep-brand': '1', style: 'height:min(62vh,640px);overflow:auto;background:#F8FAFC;border-radius:10px;padding:12px;' });
     body.appendChild(Dom.el('div', { style: 'color:#94A3B8;font-size:13px;padding:12px;' }, 'Loading transcript…'));
     var data = null;
     function asText() {
@@ -682,6 +816,12 @@
       var msgs = d.messages || [];
       if (!msgs.length) { body.appendChild(Dom.el('div', { style: 'color:#94A3B8;font-size:13px;padding:12px;' }, 'No messages in this conversation.')); return; }
       var lastDay = '';
+      /* One colour per person, in the order they first speak; the first person on the left,
+         everyone else on the right, like a messenger. System notes stay grey and centred. */
+      var PALETTE = [['#ECFEFF', '#A5F3FC', '#0E7490'], ['#F5F3FF', '#DDD6FE', '#6D28D9'], ['#FFF7ED', '#FED7AA', '#C2410C'],
+        ['#F0FDF4', '#BBF7D0', '#15803D'], ['#FDF2F8', '#FBCFE8', '#BE185D'], ['#EFF6FF', '#BFDBFE', '#1D4ED8']];
+      var who = {}, nWho = 0;
+      function personOf(m) { return String(m.sender_id || m.sender || '?'); }
       msgs.forEach(function (m) {
         var when = fmtTime(m.created_at).replace(/\.\d{3}/, '');
         var day = when.replace(/,?\s*\d{1,2}:\d{2}.*$/, '');
@@ -689,9 +829,13 @@
           lastDay = day;
           body.appendChild(Dom.el('div', { style: 'text-align:center;color:#94A3B8;font-size:11.5px;font-weight:700;margin:10px 0 6px;' }, day));
         }
-        var tone = m.side === 'family' ? ['#ECFEFF', '#A5F3FC', '#0E7490'] : m.side === 'system' ? ['#F1F5F9', '#E2E8F0', '#64748B'] : ['#F5F3FF', '#DDD6FE', '#6D28D9'];
+        var sys = m.side === 'system', k = personOf(m);
+        if (!sys && !(k in who)) who[k] = nWho++;
+        var idx = sys ? -1 : who[k];
+        var tone = sys ? ['#F1F5F9', '#E2E8F0', '#64748B'] : PALETTE[idx % PALETTE.length];
+        var place = sys ? 'margin:0 auto 6px;max-width:90%;' : (idx === 0 ? 'margin:0 auto 6px 0;max-width:82%;' : 'margin:0 0 6px auto;max-width:82%;');
         var card = Dom.el('div', { style: 'background:' + (m.deleted_at ? '#FEF2F2' : tone[0]) + ';border:1px solid ' + (m.deleted_at ? '#FECACA' : tone[1])
-          + ';border-radius:10px;padding:8px 11px;margin:0 0 6px;' });
+          + ';--kt-edge:' + (m.deleted_at ? '#F87171' : tone[2]) + ';border-radius:10px;padding:8px 11px;width:fit-content;min-width:min(260px,100%);box-sizing:border-box;' + place });
         card.innerHTML = '<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:12px;">'
           + '<strong style="color:' + tone[2] + ';">' + esc(m.sender) + '</strong>'
           + '<span style="color:#94A3B8;">' + esc(m.side === 'family' ? 'Family' : m.side === 'system' ? 'System' : 'Staff') + '</span>'
@@ -745,7 +889,7 @@
       + 'to each one and, when a text did not go, why. Times are in your agency timezone (' + auditTz() + ').</div>';
     wrap.appendChild(hero);
 
-    var cards = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin:16px 0 0;' });
+    var cards = Dom.el('div', { 'data-kt-noband': '1', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin:16px 0 0;' });  /* tiles, not tabs (2026-10-26) */
     wrap.appendChild(cards);
 
     var toolbar = Dom.el('div', { class: 'kt-al-toolbar', style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:14px 0 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
@@ -889,7 +1033,7 @@
         });
         var a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
-        a.download = 'text-messages-' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.download = 'text-messages-' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '.csv';
         document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
       } catch (e) {
         if (KT.toast) KT.toast('⚠️', 'Could not export', (e && e.message) || '', '#DC2626');
@@ -950,7 +1094,7 @@
       + 'with how each one ended, any key pressed, and why a call did not connect. Times are in your agency timezone (' + auditTz() + ').</div>';
     wrap.appendChild(hero);
 
-    var cards = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin:16px 0 0;' });
+    var cards = Dom.el('div', { 'data-kt-noband': '1', style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin:16px 0 0;' });  /* tiles, not tabs (2026-10-26) */
     wrap.appendChild(cards);
     var toolbar = Dom.el('div', { class: 'kt-al-toolbar', style: 'background:white;border-radius:12px;padding:14px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin:14px 0 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;' });
     var fToggle = filterToggle(toolbar, function () {
@@ -1085,7 +1229,7 @@
         });
         var a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' }));
-        a.download = 'voice-calls-' + new Date().toISOString().slice(0, 10) + '.csv';
+        a.download = 'voice-calls-' + ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) + '.csv';
         document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
       } catch (e) {
         if (KT.toast) KT.toast('⚠️', 'Could not export', (e && e.message) || '', '#DC2626');
@@ -1122,6 +1266,7 @@
   function renderAudit(container, opts) {
     opts = opts || {};
     var isPayments = opts.channel === 'payments';
+    var isPlatformScope = opts.scope === 'platform';
     Dom.clear(container);
     var wrap = Dom.el('div', { class: 'kt-al-wrap', style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
@@ -1138,6 +1283,10 @@
         + 'providers — Zūm Rails and Stripe. Money instructed, settled, refused or refunded, plus '
         + 'the cards and bank accounts behind it. All times in your agency timezone ('
         + auditTz() + ').</div>'
+      : isPlatformScope
+      ? '<div class="kt-hero-greet">🌐 SUPER ADMIN</div><h1>Platform-level audit</h1>'
+        + '<div class="kt-hero-sub">Events that belong to no agency: sign-in attempts for accounts that do not exist, '
+        + 'sales and CRM work, platform settings and system jobs. Agency activity is on the Audit log tab.</div>'
       : '<div class="kt-hero-greet">📜 ADMIN</div><h1>Audit log</h1>'
         + '<div class="kt-hero-sub">Every meaningful action on your agency — who did what, when, and from where. '
         + 'Payment-provider activity has its own tab. '
@@ -1192,14 +1341,16 @@
       holdHeight();
       if (fToggle.ktPaint) fToggle.ktPaint();
       Dom.clear(listWrap);
-      listWrap.appendChild(Dom.el('div', { style: 'padding:32px;text-align:center;color:#64748B;font-size:13px;' }, 'Loading audit log…'));
+      listWrap.appendChild(Dom.el('div', { style: 'padding:32px;text-align:center;color:#64748B;font-size:13px;' }, isPayments ? 'Loading payment activity…' : 'Loading audit log…'));
 
       var qs = new URLSearchParams();
       Object.keys(state.filters).forEach(function (k) { if (state.filters[k]) qs.set(k, state.filters[k]); });
+      state.limit = ((window.KT && KT.rowsPerPage && KT.rowsPerPage.get('audit-logs:events')) || state.limit);   // rows per page (2026-10-20)
       qs.set('limit', String(state.limit));
       qs.set('offset', String(state.offset));
       // The server owns the split; this only says which half is wanted.
       if (isPayments) { qs.set('channel', 'payments'); }
+      if (isPlatformScope) { qs.set('scope', 'platform'); }
 
       Api.get('/admin/audit-logs?' + qs.toString()).then(function (data) {
         state.total = data.total || 0;
@@ -1329,6 +1480,7 @@
         Object.keys(state.filters).forEach(function (k) { if (state.filters[k]) qs.set(k, state.filters[k]); });
         qs.set('format', 'csv');
         if (isPayments) { qs.set('channel', 'payments'); }
+        if (isPlatformScope) { qs.set('scope', 'platform'); }
         var apiBase = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
         var token = sessionStorage.getItem('kt_token');
         var activeAgencyId = sessionStorage.getItem('kt_active_agency_id') || '';
@@ -1360,7 +1512,9 @@
       var lim = state.limit || 50;
       if (window.KT && KT.pagerBar) KT.pagerBar(nav, Math.floor(state.offset / lim) + 1, Math.ceil(state.total / lim), function (p) {
         state.offset = (p - 1) * lim; jumpToTop = true; reload();
-      });
+      }, { size: lim, total: state.total, max: 200, onSize: function (n) {
+        KT.rowsPerPage.set('audit-logs:events', n); state.limit = n; state.offset = 0; jumpToTop = true; reload();
+      } });
     }
 
     buildToolbar();
@@ -1529,12 +1683,29 @@
     modal.appendChild(row('Actor', l.actor_name + (l.actor_email ? ' — ' + l.actor_email : '')));
     modal.appendChild(row('IP address', l.ip_address));
 
-    var prettyPayload = l.payload;
+    /* NO RAW RECORD (2026-10-31, Anthony: "we had a rule to never use raw logging and to put as much detail as we
+       can to understand what and who"). Everything the row recorded is listed in words (the server resolves ids to
+       names, times to the agency's zone, codes to words: l.details). The raw JSON is kept only for the platform team,
+       folded away under "Technical record". */
+    if (l.details && l.details.length) {
+      modal.appendChild(Dom.el('div', { style: 'margin-top:14px;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:2px;' }, 'Everything recorded · times in ' + auditTz()));
+      l.details.forEach(function (d) { if (d && d.length === 2) modal.appendChild(row(String(d[0]), d[1])); });
+    }
+    var __plat = false;
     try {
-      if (typeof l.payload === 'string') prettyPayload = JSON.stringify(localiseTimes(JSON.parse(l.payload)), null, 2);
+      var __u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      __plat = (__u.roles && __u.roles.indexOf('platform_admin') > -1) || sessionStorage.getItem('kt_is_platform_admin') === '1';
     } catch (e) {}
-    modal.appendChild(Dom.el('div', { style: 'margin-top:14px;font-size:12px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;' }, 'Payload · times in ' + auditTz()));
-    modal.appendChild(Dom.el('pre', { style: 'background:#0F172A;color:#E2E8F0;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.4;max-height:240px;' }, prettyPayload || '(empty)'));
+    if (__plat && l.payload) {
+      var prettyPayload = l.payload;
+      try {
+        if (typeof l.payload === 'string') prettyPayload = JSON.stringify(localiseTimes(JSON.parse(l.payload)), null, 2);
+      } catch (e) {}
+      var tech = Dom.el('details', { style: 'margin-top:14px;font-size:12px;color:#6B7280;' });
+      tech.appendChild(Dom.el('summary', { style: 'cursor:pointer;font-weight:700;' }, 'Technical record (platform team only)'));
+      tech.appendChild(Dom.el('pre', { style: 'background:#0F172A;color:#E2E8F0;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.4;max-height:240px;margin-top:8px;' }, prettyPayload));
+      modal.appendChild(tech);
+    }
 
     document.body.appendChild(overlay);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });

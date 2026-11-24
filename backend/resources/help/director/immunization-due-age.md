@@ -20,7 +20,7 @@ cards by hand.
   it in. See [Filing an immunization record](filing-an-immunization-record).
 - **Schedule defaults** — the schedule itself.
 
-On a child's row, the name or **View immunisations** opens their full schedule next to what
+On a child's row, the name or **View immunizations** opens their full schedule next to what
 is recorded, and **📄 Records on file** goes straight to the cards filed for them.
 
 ## The schedule

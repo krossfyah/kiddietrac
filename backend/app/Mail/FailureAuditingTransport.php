@@ -105,6 +105,9 @@ final class FailureAuditingTransport implements TransportInterface
             if (Schema::hasTable('audit_logs')) {
                 \App\Support\Audit::write([
                     'user_id'     => optional(auth()->user())->id,
+                    // Filed under the agency the message belonged to (the same answer the
+                    // email log uses), or no agency's audit view could show it (2026-10-21).
+                    'agency_id'   => isset($failAgency) ? $failAgency : null,
                     'action'      => 'email.failed',
                     'entity_type' => 'email',
                     'entity_id'   => null,

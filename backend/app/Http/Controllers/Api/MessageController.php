@@ -31,6 +31,7 @@ final class MessageController extends Controller
         }
 
         $conversations = DB::table('conversations')
+            ->whereNull('deleted_at')
             ->whereIn('family_id', $familyIds)
             ->orderByDesc('last_message_at')
             ->get();
@@ -73,6 +74,7 @@ final class MessageController extends Controller
                     'subject' => $c->subject ?? ($child ? 'About ' . ($child->preferred_name ?: $child->first_name) : 'General'),
                     'child_id' => $c->child_id,
                     'child_name' => $child ? ($child->preferred_name ?: $child->first_name) : null,
+                    'channel' => $c->channel ?? null,   // 'office' = the centre office thread (replies go back to it)
                     'last_message_at' => $c->last_message_at,
                     'last_message_display' => $c->last_message_at ? Carbon::parse($c->last_message_at)->diffForHumans() : null,
                     'last_message_preview' => $lastMsg ? \Illuminate\Support\Str::limit($lastMsg->body, 80) : null,
@@ -130,7 +132,9 @@ final class MessageController extends Controller
                 $mine = (int) $m->sender_id === (int) $user->id;
                 $deleted = !empty($m->deleted_at);
                 $system = !empty($m->is_system);
-                $atts = ($deleted || !$m->attachments) ? [] : (json_decode($m->attachments, true) ?: []);
+                // Someone this parent blocked (App\Support\UserBlocks, 2026-11-03): hidden for them alone, never an emergency.
+                $hidden = !$deleted && \App\Support\UserBlocks::hides((int) $user->id, (int) $m->sender_id, (bool) ($m->is_emergency ?? false), $system);
+                $atts = ($deleted || $hidden || !$m->attachments) ? [] : (json_decode($m->attachments, true) ?: []);
                 return [
                     'id' => $m->id,
                     'sender_id' => $m->sender_id,
@@ -139,9 +143,10 @@ final class MessageController extends Controller
                     'is_mine' => $mine,
                     'is_system' => $system,
                     'is_emergency' => (bool) ($m->is_emergency ?? false),
-                    'body' => $deleted ? null : $m->body,
+                    'body' => $deleted ? null : ($hidden ? \App\Support\UserBlocks::hiddenText($m->sender_first ?? '') : $m->body),
                     'attachments' => $atts,
                     'deleted' => $deleted,
+                    'blocked' => $hidden,
                     'edited' => !empty($m->edited_at),
                     'can_edit' => $mine && !$deleted && !$system && empty($atts),
                     'can_delete' => $mine && !$deleted && !$system,
@@ -210,8 +215,12 @@ final class MessageController extends Controller
             // Accept a photo OR a voice note (webm/ogg/mp4/mpeg audio from the browser recorder).
             'attachment' => ['nullable', 'file', 'mimetypes:image/jpeg,image/png,image/webp,image/gif,audio/webm,audio/ogg,audio/mp4,audio/mpeg,audio/aac,audio/wav,video/webm', 'max:16384'],
             'emergency' => ['sometimes', 'boolean'],   // App\Support\EmergencyMessage
+            // room = the child's educators (the thread about that child); office = the centre's directors and the
+            // agency's admins (App\Support\MessagingRules::OFFICE, one thread per family).
+            'to' => ['sometimes', 'in:room,office'],
         ]);
         $emergency = \App\Support\EmergencyMessage::requested($request);
+        $office = ($data['to'] ?? 'room') === 'office';
 
         $child = DB::table('children')->where('id', $data['child_id'])->first();
         if (!$child) return response()->json(['message' => 'Child not found'], 404);
@@ -223,12 +232,27 @@ final class MessageController extends Controller
 
         $family = DB::table('families')->where('id', $child->family_id)->first();
 
-        // Find or create conversation for this family+child
-        $convoId = DB::table('conversations')
+        // Find or create conversation for this family+child (or the family's office thread)
+        $convoId = $office
+            ? DB::table('conversations')->whereNull('deleted_at')->where('family_id', $child->family_id)
+                ->where('centre_id', $family->centre_id)->where('channel', \App\Support\MessagingRules::OFFICE)->value('id')
+            : DB::table('conversations')
+            ->whereNull('deleted_at')
             ->where('family_id', $child->family_id)
             ->where('child_id', $child->id)
             ->value('id');
 
+        if (!$convoId && $office) {
+            $convoId = DB::table('conversations')->insertGetId([
+                'centre_id' => $family->centre_id,
+                'family_id' => $child->family_id,
+                'child_id' => null,
+                'subject' => 'Centre office',
+                'channel' => \App\Support\MessagingRules::OFFICE,
+                'last_message_at' => now(),
+                'created_at' => now(),
+            ]);
+        }
         if (!$convoId) {
             $convoId = DB::table('conversations')->insertGetId([
                 'centre_id' => $family->centre_id,
@@ -267,13 +291,18 @@ final class MessageController extends Controller
 
         DB::table('conversations')->where('id', $convoId)->update(['last_message_at' => now()]);
 
+        $fanOut = function () use ($data, $attachments, $office, $convoId, $family, $user, $child, $emergency, $msgId) {
         // Notify the centre's staff (educators / director) of the parent's message.
         $preview = !empty($data['body'])
             ? mb_substr($data['body'], 0, 120)
             : (($attachments[0]['type'] ?? '') === 'audio' ? '🎤 Voice note' : '📷 Photo');
-        $staffIds = DB::table('role_assignments')->where('centre_id', $family->centre_id)->where('active', true)
+        $staffIds = $office
+            ? collect(\App\Support\ChatAudience::staffIds(DB::table('conversations')->where('id', $convoId)->first()))
+            : DB::table('role_assignments')->where('centre_id', $family->centre_id)->where('active', true)
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin'])->pluck('user_id')->unique();
-        $who = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) . ' · ' . ($child->first_name ?? 'a child');
+        $who = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) . ' · ' . ($office ? 'to the office' : ($child->first_name ?? 'a child'));
+        // Not the staff who blocked this parent (App\Support\UserBlocks) - unless it is an emergency.
+        $staffIds = collect(\App\Support\UserBlocks::keep((int) $user->id, $staffIds, $emergency));
         if ($emergency) {
             \App\Support\EmergencyMessage::audit((int) $user->id, (int) (DB::table('centres')->where('id', $family->centre_id)->value('agency_id') ?: 0) ?: null,
                 'conversation', (int) $convoId, (int) $msgId, $staffIds->all());
@@ -301,8 +330,18 @@ final class MessageController extends Controller
                 }
             } catch (\Throwable $e) {}
         }
+        };
+        /* AFTER THE REPLY (2026-11-11, Anthony: "there is a pause before it actually gets sent"). The texts,
+           pushes and bell rows used to go out before the sender heard back, so every send waited on the SMS
+           relay, web push and FCM in turn. The message is saved above; the fan-out runs once the answer has
+           gone (inline from the console, where there is no response to wait for) - TeamChatController's way. */
+        if (app()->runningInConsole()) {
+            $fanOut();
+        } else {
+            try { dispatch($fanOut)->afterResponse(); } catch (\Throwable $de) { $fanOut(); }
+        }
 
-        $this->audit($request, 'message.sent', $convoId, ['message_id' => $msgId, 'child_id' => $child->id, 'has_attachment' => !empty($attachments)]);
+        $this->audit($request, 'message.sent', $convoId, ['message_id' => $msgId, 'child_id' => $child->id, 'has_attachment' => !empty($attachments), 'to' => $office ? 'office' : 'room']);
         return response()->json(['conversation_id' => $convoId, 'message_id' => $msgId], 201);
     }
 
@@ -315,10 +354,10 @@ final class MessageController extends Controller
         $user = $request->user();
         $familyIds = DB::table('guardians')->where('user_id', $user->id)->pluck('family_id')->all();
         if (empty($familyIds)) return response()->json(['unread' => 0]);
-        $convoIds = DB::table('conversations')->whereIn('family_id', $familyIds)->pluck('id')->all();
+        $convoIds = DB::table('conversations')->whereNull('deleted_at')->whereIn('family_id', $familyIds)->pluck('id')->all();
         if (empty($convoIds)) return response()->json(['unread' => 0]);
         $n = DB::table('messages')->whereIn('conversation_id', $convoIds)
-            ->where('sender_id', '!=', $user->id)->whereNull('read_at')->count();
+            ->where('sender_id', '!=', $user->id)->whereNull('read_at')->whereNull('deleted_at')->count();
         return response()->json(['unread' => (int) $n]);
     }
 
@@ -326,6 +365,12 @@ final class MessageController extends Controller
      * POST /api/v1/parent/messages/nudge  { child_id }
      * A gentle "please reply" ping to the child's centre team (in-app + push). Throttled.
      */
+    /** POST /parent/messages/call {child_id} - the nudge's find-or-create, then a call (App\Support\ChatCall). */
+    public function call(Request $request): JsonResponse
+    {
+        return $this->nudge($request);
+    }
+
     public function nudge(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -341,7 +386,7 @@ final class MessageController extends Controller
         $childName = $child->preferred_name ?: $child->first_name;
 
         // Find or create the conversation so the nudge is recorded in the thread.
-        $convoId = DB::table('conversations')->where('family_id', $child->family_id)->where('child_id', $child->id)->value('id');
+        $convoId = DB::table('conversations')->whereNull('deleted_at')->where('family_id', $child->family_id)->where('child_id', $child->id)->value('id');
         if (!$convoId) {
             $convoId = DB::table('conversations')->insertGetId([
                 'centre_id' => $family->centre_id, 'family_id' => $child->family_id, 'child_id' => $child->id,
@@ -349,30 +394,18 @@ final class MessageController extends Controller
             ]);
         }
 
-        // Log the nudge AS a message in the chat history (system message, timestamped).
-        $msgId = DB::table('messages')->insertGetId([
-            'conversation_id' => $convoId, 'sender_id' => $user->id,
-            'body' => '👋 ' . $parentName . ' nudged the team for a reply.',
-            'is_system' => 1, 'created_at' => now(), 'delivered_at' => now(),
-        ]);
-        DB::table('conversations')->where('id', $convoId)->update(['last_message_at' => now()]);
-
-        $staffIds = DB::table('role_assignments')->where('centre_id', $family->centre_id)->where('active', true)
-            ->whereIn('role', ['educator', 'centre_director', 'agency_admin'])->pluck('user_id')->unique();
-        $body = $parentName . ' is waiting to hear back about ' . $childName . '.';
-        foreach ($staffIds as $sid) {
-            if ((int) $sid === (int) $user->id) continue;
-            \App\Support\Notify::write([
-                'user_id' => $sid, 'type' => 'nudge',
-                'title' => '👋 Nudge from ' . $parentName . ' · ' . $childName,
-                'body' => $body,
-                'data' => json_encode(['link' => '#chat', 'conversation_id' => $convoId]),
-                'created_at' => now(),
-            ]);
-            try { app(\App\Services\FcmService::class)->sendToUser((int) $sid, '👋 Nudge from ' . $parentName, $body, '#chat', true); } catch (\Throwable $e) {}
+        // 📞 A call from this screen (POST /parent/messages/call): same conversation, App\Support\ChatCall.
+        if (str_ends_with($request->path(), '/messages/call')) {
+            return \App\Support\ChatCall::family((int) $convoId, (int) $user->id, true);
         }
-        $this->audit($request, 'message.nudge', $convoId, ['message_id' => $msgId, 'child_id' => $child->id, 'notified' => $staffIds->count()]);
-        return response()->json(['success' => true, 'notified' => $staffIds->count(), 'message_id' => $msgId]);
+        // 👋 The same nudge as every other chat (App\Support\ChatNudge): cooldown, urgent push, the shake.
+        $res = \App\Support\ChatNudge::family((int) $convoId, (int) $user->id, true);
+        if ($res->getStatusCode() === 200) {
+            $d = $res->getData(true);
+            $this->audit($request, 'message.nudge', $convoId, ['message_id' => $d['id'] ?? null, 'child_id' => $child->id, 'notified' => $d['notified'] ?? 0]);
+            return response()->json($d + ['success' => true, 'message_id' => $d['id'] ?? null]);
+        }
+        return $res;
     }
 
     /**
@@ -489,7 +522,7 @@ final class MessageController extends Controller
     public function educatorConversations(Request $request): JsonResponse
     {
         $user = $request->user();
-        $centreId = DB::table('role_assignments')
+        $centreId = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
             ->where('user_id', $user->id)
             ->where('active', true)
             ->whereNotNull('centre_id')
@@ -499,10 +532,17 @@ final class MessageController extends Controller
             return response()->json(['conversations' => []]);
         }
 
-        $conversations = DB::table('conversations')
-            ->where('centre_id', $centreId)
-            ->orderByDesc('last_message_at')
-            ->get();
+        $q = DB::table('conversations')
+            ->whereNull('deleted_at')
+            ->where('centre_id', $centreId);
+        \App\Support\MessagingRules::scopeOffice($q, (int) $user->id);   // office threads: directors/admins only
+        // Same Message Centre rules as /provider/chats: other rooms' families are not listed.
+        $rules = \App\Support\MessagingRules::forUser((int) $user->id);
+        $allowedFams = $rules ? \App\Support\MessagingRules::familyIds((int) $user->id, $rules) : null;
+        if ($allowedFams !== null) {
+            \App\Support\MessagingRules::scopeConversations($q, (int) $user->id, $rules, $allowedFams);
+        }
+        $conversations = $q->orderByDesc('last_message_at')->get();
 
         $convoIds = $conversations->pluck('id')->all();
         $unreadCounts = empty($convoIds) ? [] : DB::table('messages')
@@ -606,11 +646,13 @@ final class MessageController extends Controller
            to already be looking at, and no notification at all.
            ChatController has done both since v23 and says why in its own comment; the
            fix simply never reached this second backend. (Anthony, 2026-08-26) */
+        $fanOut = function () use ($convo, $data, $user, $emergency, $msgId) {
         if ($convo->family_id) {
             $preview = mb_substr($data['body'], 0, 120);
             $guardianIds = [];
             foreach (DB::table('guardians')->where('family_id', $convo->family_id)->pluck('user_id') as $gid) {
                 if ((int) $gid === (int) $user->id) continue;
+                if (! \App\Support\UserBlocks::keep((int) $user->id, [(int) $gid], $emergency)) continue;   // blocked this sender
                 $guardianIds[] = (int) $gid;
                 \App\Support\Notify::write([
                     'user_id' => $gid, 'type' => 'message',
@@ -654,6 +696,16 @@ final class MessageController extends Controller
                 }
             }
         }
+        };
+        /* AFTER THE REPLY (2026-11-11, Anthony: "there is a pause before it actually gets sent"). The texts,
+           pushes and bell rows used to go out before the sender heard back, so every send waited on the SMS
+           relay, web push and FCM in turn. The message is saved above; the fan-out runs once the answer has
+           gone (inline from the console, where there is no response to wait for) - TeamChatController's way. */
+        if (app()->runningInConsole()) {
+            $fanOut();
+        } else {
+            try { dispatch($fanOut)->afterResponse(); } catch (\Throwable $de) { $fanOut(); }
+        }
 
         return response()->json(['message_id' => $msgId], 201);
     }
@@ -669,11 +721,15 @@ final class MessageController extends Controller
             if ($isGuardian) return true;
         }
 
-        // Staff path — same centre
+        // Staff path — a STAFF role at the same centre. A guardian role row carries the
+        // centre_id as well, so without the role filter a parent could open, react in and
+        // post into any other family's conversation at their centre (2026-11-05 leak sweep).
         if ($convo->centre_id) {
+            if (\App\Support\MessagingRules::officeHiddenFrom((int) $user->id, $convo)) return false;
             return DB::table('role_assignments')
                 ->where('user_id', $user->id)
                 ->where('active', true)
+                ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
                 ->where('centre_id', $convo->centre_id)
                 ->exists();
         }

@@ -158,7 +158,7 @@ final class BroadcastAudience
                 ->where('e.room_id', $roomId)
                 ->whereNull('ch.deleted_at')
                 ->where(function ($w) {
-                    $w->whereNull('e.end_date')->orWhere('e.end_date', '>=', now()->toDateString());
+                    $w->whereNull('e.end_date')->orWhere('e.end_date', '>=', \App\Support\AgencyTime::today());
                 })
                 ->pluck('g.user_id');
 

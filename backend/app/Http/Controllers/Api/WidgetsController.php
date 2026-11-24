@@ -78,7 +78,7 @@ final class WidgetsController extends Controller
         }
 
         // Latest check event today for any of the user's children
-        $today = Carbon::now()->startOfDay();
+        $today = \App\Support\AgencyTime::boundaryUtc();   // the agency's midnight as a UTC instant (occurred_at is UTC)
         /* Same rule as the roster: a future-dated row cannot describe where a child
            is now, and this one would have told a PARENT their child was signed out
            hours before it happened. */
@@ -89,8 +89,9 @@ final class WidgetsController extends Controller
             ->orderByDesc('occurred_at')
             ->first();
         $statusValue = $latest
-            ? ($latest->event_type === 'check_in' ? 'Signed in' : 'Signed out')
-            : 'Not yet today';
+            // The child-status words used everywhere (2026-11-04 At Centre sweep; this parent tile was missed).
+            ? ($latest->event_type === 'check_in' ? 'At Centre' : 'Not at Centre')
+            : 'Not arrived';
         $statusHint = $latest
             ? \App\Support\AgencyTime::fmt($latest->occurred_at, \App\Support\AgencyTime::tzForCentre(
                 DB::table('families as f')->join('children as ch', 'ch.family_id', '=', 'f.id')->where('ch.id', $latest->child_id)->value('f.centre_id')
@@ -130,14 +131,15 @@ final class WidgetsController extends Controller
         $sinceWeek = Carbon::now()->subDays(7);
         $photoCount = 0;
         if (! empty($childIds)) {
-            $photoCount = (int) DB::table('photos')
+            // Photo permissions (2026-11-06): count only what the family's feed shows - App\Support\MediaConsent.
+            $photoCount = \App\Support\MediaConsent::filter(DB::table('photos')->whereNull('hidden_at')
                 ->where('taken_at', '>=', $sinceWeek)
                 ->where(function ($q) use ($childIds) {
                     foreach ($childIds as $cid) {
                         $q->orWhereJsonContains('child_ids', (int) $cid);
                     }
                 })
-                ->count();
+                ->get(['id', 'child_ids', 'hidden_at']), array_map('intval', $childIds))->count();
         }
 
         $childCount = count($childIds);
@@ -235,46 +237,57 @@ final class WidgetsController extends Controller
         $today = Carbon::now($tz)->startOfDay()->setTimezone(config('app.timezone', 'UTC'));
         $tomorrow = (clone $today)->addDay();
 
-        // Children currently signed in (last event today is check_in, no check_out after it)
-        $signedIn = DB::table('check_events as ce1')
-            ->where('ce1.occurred_at', '>=', $today)
-            ->where('ce1.event_type', 'check_in')
-            ->whereNotExists(function ($sq) use ($tomorrow) {
-                $sq->select(DB::raw(1))->from('check_events as ce2')
-                    ->whereColumn('ce2.child_id', 'ce1.child_id')
-                    ->where('ce2.occurred_at', '>', DB::raw('ce1.occurred_at'))
-                    ->where('ce2.event_type', 'check_out')
-                    ->where('ce2.occurred_at', '<', $tomorrow);
-            });
+        /* ONE SET OF CHILDREN FOR BOTH HALVES OF "0 / 2" (2026-11-03).
 
-        if ($byRoom) {
-            $signedIn->whereIn('ce1.room_id', $roomIds);
-        } else {
-            $signedIn->join('children as c', 'c.id', '=', 'ce1.child_id')
-                ->join('families as f', 'f.id', '=', 'c.family_id')
-                ->where('f.centre_id', $centreId);
-        }
-        $signedInCount = $signedIn->distinct()->count('ce1.child_id');
+           Saurav (room 28) read "0 / 2" here while the Today roster said "0 of 2 here now"
+           and the ratio card counted a third set. The denominator was the children ENROLLED
+           in his rooms; the numerator was any check-in whose check_events.room_id was one
+           of his rooms - a different population. On Test Agency that numerator counted a
+           waitlisted child and two children enrolled in other rooms who had been signed in
+           to room 28, so earlier in the day the card could read "3 / 2".
 
-        // The denominator has to match the numerator, or the percentage is nonsense.
+           Now the enrolled set is built first and "signed in" is the part of THAT set whose
+           latest event today (that has already happened) is a check-in - the rule the
+           roster uses (RoomController::roster). The numerator is a subset of the
+           denominator, so this can only ever count fewer children than before, never more. */
         if ($byRoom) {
-            $enrolledCount = DB::table('enrollments as e')
+            $enrolledIds = DB::table('enrollments as e')
                 ->join('children as c', 'c.id', '=', 'e.child_id')
                 ->whereIn('e.room_id', $roomIds)
                 ->whereNull('c.deleted_at')
                 ->where('c.enrollment_status', 'enrolled')
-                ->where(function ($w) {
-                    $w->whereNull('e.end_date')->orWhere('e.end_date', '>=', now()->toDateString());
+                ->where(function ($w) use ($tz) {
+                    $w->whereNull('e.end_date')->orWhere('e.end_date', '>=', Carbon::now($tz)->toDateString());
                 })
-                ->distinct()->count('c.id');
+                ->distinct()->pluck('c.id')->map(fn ($v) => (int) $v)->all();
         } else {
-            $enrolledCount = DB::table('children as c')
+            $enrolledIds = DB::table('children as c')
                 ->join('families as f', 'f.id', '=', 'c.family_id')
                 ->where('f.centre_id', $centreId)
                 ->where('c.enrollment_status', 'enrolled')
                 ->whereNull('c.deleted_at')
-                ->count();
+                ->pluck('c.id')->map(fn ($v) => (int) $v)->all();
         }
+        $enrolledCount = count($enrolledIds);
+
+        $lastToday = [];
+        if ($enrolledIds) {
+            foreach (DB::table('check_events')->whereIn('child_id', $enrolledIds)
+                ->where('occurred_at', '>=', $today)->where('occurred_at', '<', $tomorrow)
+                ->where('occurred_at', '<=', Carbon::now())          // a future-dated row is not "now"
+                ->orderBy('occurred_at')->orderBy('id')
+                ->get(['child_id', 'event_type']) as $ev) {
+                $lastToday[(int) $ev->child_id] = $ev->event_type;
+            }
+        }
+        $signedInCount = count(array_filter($lastToday, fn ($t) => $t === 'check_in'));
+
+        // Say WHICH children these are: "Enrolled at centre" over a count of one room
+        // was the label Saurav's Home showed. Only his own rooms' names are read.
+        $roomNames = $byRoom
+            ? DB::table('rooms')->whereIn('id', $roomIds)->orderBy('name')->pluck('name')->all()
+            : [];
+        $scopeName = count($roomNames) === 1 ? (string) $roomNames[0] : '';
 
         // medication_administrations carries completed admins (administered_at).
         // Count today's dose log to surface what's already been given. If you
@@ -295,7 +308,7 @@ final class WidgetsController extends Controller
             ->count();
 
         // Hours worked so far this week (completed time-clock punches only).
-        $weekStart = Carbon::now()->startOfWeek();
+        $weekStart = \App\Support\AgencyTime::boundaryUtc(null, 'week');
         $myPunches = DB::table('time_punches')
             ->where('user_id', $user->id)
             ->whereNotNull('punched_out_at')
@@ -313,13 +326,13 @@ final class WidgetsController extends Controller
         return [
             [
                 'id' => 'signed-in',
-                'label' => 'Signed in now',
+                'label' => 'At Centre now',
                 'value' => $signedInCount . ' / ' . $enrolledCount,
                 /* Say which set this is. "2 of 3" with no scope is exactly how the card
                    and the roster came to disagree without anybody being able to tell. */
                 'hint' => $enrolledCount > 0
                     ? round(($signedInCount / max($enrolledCount, 1)) * 100) . '% present'
-                        . ($byRoom ? ' in your room' . (count($roomIds) === 1 ? '' : 's') : ' at your centre')
+                        . ($byRoom ? ($scopeName !== '' ? ' · ' . $scopeName : ' in your rooms') : ' at your centre')
                     : ($byRoom ? 'No children enrolled in your rooms' : 'No enrolled children'),
                 'accent' => '#16A34A',
                 'icon' => '✅',
@@ -342,11 +355,12 @@ final class WidgetsController extends Controller
             ],
             [
                 'id' => 'enrolled',
-                'label' => 'Enrolled at centre',
+                // The same children as "Signed in now", so say so: in his room(s), not the centre.
+                'label' => $byRoom ? (count($roomIds) === 1 ? 'Enrolled in your room' : 'Enrolled in your rooms') : 'Enrolled at centre',
                 'value' => (string) $enrolledCount,
-                'hint' => 'Children on roll',
+                'hint' => $byRoom ? ($scopeName !== '' ? $scopeName : count($roomNames) . ' rooms') : 'Children on roll',
                 'accent' => '#1F6080',
-                'icon' => '👶',
+                'icon' => '🧒',
             ],
             [
                 'id' => 'my-hours',
@@ -354,7 +368,7 @@ final class WidgetsController extends Controller
                 'value' => $hoursDisplay,
                 'hint' => $shiftCount > 0 ? ($shiftCount . ' shift' . ($shiftCount === 1 ? '' : 's') . ' logged') : 'No shifts logged yet',
                 'accent' => '#4F46E5',
-                'icon' => '⏱',
+                'icon' => '💵',
             ],
             $this->openTasksCard($user->id),
         ];
@@ -423,8 +437,9 @@ final class WidgetsController extends Controller
             ->count();
 
         // Children not checked in by 9:30 AM (a soft compliance signal)
-        $today = Carbon::now()->startOfDay();
-        $cutoff = $today->copy()->setTime(9, 30);
+        $today = \App\Support\AgencyTime::boundaryUtc();
+        // 9:30 on the AGENCY's clock (it was 9:30 UTC, i.e. 5:30am in Toronto).
+        $cutoff = \App\Support\AgencyTime::now()->startOfDay()->setTime(9, 30);
         $missingCheckIn = 0;
         if (Carbon::now()->greaterThan($cutoff)) {
             $missingCheckIn = DB::table('children as c')
@@ -456,7 +471,7 @@ final class WidgetsController extends Controller
                 'value' => '$' . number_format($openBalance, 0),
                 'hint' => $openCount . ' open · sent/partial/overdue',
                 'accent' => $openBalance > 0 ? '#DC2626' : '#16A34A',
-                'icon' => '🧾',
+                'icon' => '🧰',
             ],
             [
                 'id' => 'missing-checkin',
@@ -472,7 +487,7 @@ final class WidgetsController extends Controller
                 'value' => (string) $enrolled,
                 'hint' => 'Children on roll',
                 'accent' => '#1F6080',
-                'icon' => '👶',
+                'icon' => '🧒',
             ],
         ];
     }

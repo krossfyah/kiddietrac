@@ -16,7 +16,50 @@
     staff:    { icon: '👤', label: 'Staff' },
     parents:  { icon: '👨‍👩‍👧', label: 'Parents' },
     rooms:    { icon: '🚪', label: 'Rooms' },
+    // Labels and icons now come from the server (App\Support\SearchRegistry); these are the fallback.
+    invoices: { icon: '🧾', label: 'Invoices' },
+    provider_invoices: { icon: '📄', label: 'Synced invoices' },
+    payee_invoices: { icon: '📑', label: 'Payee invoices' },
+    payments: { icon: '💵', label: 'Payments & receipts' },
+    expense_bills: { icon: '🧮', label: 'Supplier bills' },
   };
+
+  /* RECORD GROUPS, BEST MATCH FIRST (2026-11-02). Anthony: "make the search on the portal pull
+     up invoices, receipts (global search) - keep this current with any new changes as well".
+
+     /admin/search returns `groups` in rank order (an exact invoice number puts Invoices on
+     top, not wherever a fixed list put them), each with its label and icon from
+     App\Support\SearchRegistry. Drawing from that, rather than from GROUP_META's own key
+     list, is what keeps this box current: a new searchable type appears here the day its
+     registry entry ships, with nothing to add on this side. Shared by the three boxes
+     (this widget, the ⌘K palette, the phone launcher) so they cannot drift. */
+  function searchGroups(data) {
+    var r = (data && data.results) || {};
+    var gs = (data && data.groups) || null;
+    if (!gs) {
+      gs = Object.keys(r).map(function (k) { return { key: k }; });
+    }
+    return gs.map(function (g) {
+      var m = GROUP_META[g.key] || {};
+      return {
+        key: g.key, label: g.label || m.label || g.key, icon: g.icon || m.icon || '•',
+        best: (typeof g.best === 'number') ? g.best : 3, items: r[g.key] || [],
+      };
+    }).filter(function (g) { return g.items.length > 0; });
+  }
+  try { (window.KT = window.KT || {}).searchGroups = searchGroups; } catch (e) {}
+
+  /* Who may ask /admin/search at all. Anyone else got a 403 for every keystroke, which is
+     noise in the audit log and a request that can only fail. */
+  function canSearchRecords() {
+    try {
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}');
+      return Array.isArray(u.roles) && u.roles.some(function (x) {
+        return x === 'agency_admin' || x === 'centre_director' || x === 'platform_admin';
+      });
+    } catch (e) { return false; }
+  }
+  try { window.KT.canSearchRecords = canSearchRecords; } catch (e) {}
 
   /* ── FINDING A SCREEN BY NAME ────────────────────────────────────────────────
 
@@ -129,11 +172,26 @@
      exists to find something where the literal reading finds nothing. */
   var ALIAS_PENALTY = 250;
 
+  /* WHAT A SCREEN IS FOR (2026-10-30): a match only in its description ("backups", "certificates" ->
+     Server health) counts, but below any match in its name or hash. */
+  function descScore(item, qRaw) {
+    if (!item.desc) { return 0; }
+    var q = normWords(qRaw); if (!q) { return 0; }
+    var words = normWords(item.desc).split(/\s+/).filter(Boolean);
+    var qWords = q.split(/\s+/).filter(Boolean);
+    for (var i = 0; i < qWords.length; i++) {
+      var qw = stem(qWords[i]), ok = false;
+      for (var j = 0; j < words.length; j++) { if (stem(words[j]).indexOf(qw) === 0) { ok = true; break; } }
+      if (!ok) { return 0; }
+    }
+    return 150;
+  }
+
   function scoreNav(item, qRaw) {
-    var literal = scoreOne(item, qRaw);
+    var literal = scoreOne(item, qRaw) || descScore(item, qRaw);
     var aliased = applyAliases(qRaw);
     if (normWords(aliased) === normWords(qRaw)) { return literal; }
-    var viaAlias = scoreOne(item, aliased);
+    var viaAlias = scoreOne(item, aliased) || descScore(item, aliased);
     if (viaAlias > 0) { viaAlias = Math.max(1, viaAlias - ALIAS_PENALTY); }
     return Math.max(literal, viaAlias);
   }
@@ -194,6 +252,144 @@
     return Math.round((hit / qWords.length) * 120) - Math.min(40, h.label.length);
   }
 
+  /* KEYWORDS ON EVERY SCREEN (2026-11-09, Anthony: "when you do a global search can it pick up key words throughout
+     the portal as well - full sweep"). kt-search-keys.js holds, per role, the words drawn on each screen and subtab
+     (headings, field labels, column headers, buttons; no record text). A screen the person can open whose words match
+     is found too, scored BELOW any match on a screen's name (120-140, under the descriptions' 150), with what matched
+     as the line under it ("In Settings: Fire drill"). Opening it opens that subtab and highlights the words
+     (kwJump). The file is lazy: asked for on the first search or the first focus on a search box, then the query is
+     run again. Roles without their own list read the agency admin's (their menu still decides what can match). */
+  var KW_ROLE = { platform_admin: 'agency_admin', reseller_admin: 'agency_admin', auditor: 'agency_admin' };
+  var kwAsked = false;
+  var KW_PENDING = {};   // hash -> {tab, phrase, at}: the keyword hits of the latest search, for kwJump
+  /* LEARNED FROM USE (2026-11-09, Anthony: "wire up a middleware to add new words for the global search as they
+     become available and to monitor"). The words now come from GET /search-keys (App\Support\SearchKeywords: the
+     crawl, plus every word a screen has shown since), kept for the session in KW_LIVE. kt-search-keys.js is only the
+     fallback when that call fails. kwHarvest below reports what each screen shows, once a day. */
+  var KW_LIVE = {};      // role -> {hash: [[phrase, subtab?]]}
+  var kwLiveAsked = {};
+  function kwApi(path, opts) {
+    var token = ''; try { token = sessionStorage.getItem('kt_token') || ''; } catch (e) {}
+    if (!token) { return Promise.reject(new Error('no token')); }
+    var h = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' };
+    var ag = ''; try { ag = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+    if (ag) { h['X-Active-Agency-Id'] = ag; }
+    if (opts && opts.body) { h['Content-Type'] = 'application/json'; }
+    var base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    return fetch(base + path, { method: (opts && opts.method) || 'GET', headers: h, body: opts && opts.body })
+      .then(function (r) { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); });
+  }
+  function kwRerun() {
+    // Run whatever is typed again, now with the keywords.
+    var a = document.activeElement;
+    if (a && a.tagName === 'INPUT' && a.value) { a.dispatchEvent(new Event('input', { bubbles: true })); }
+  }
+  function kwStatic() {
+    if (!kwAsked && window.KT && KT.screenLoader && KT.screenLoader.load) {
+      kwAsked = true;
+      KT.screenLoader.load('kt-search-keys.js').then(function () { if (window.__ktScreenKeys) { kwRerun(); } }, function () { kwAsked = false; });
+    }
+  }
+  function screenKeys(role) {
+    if (KW_LIVE[role]) { return KW_LIVE[role]; }
+    if (!kwLiveAsked[role]) {
+      kwLiveAsked[role] = true;
+      var cached = null; try { cached = JSON.parse(sessionStorage.getItem('kt_sk_' + role) || 'null'); } catch (e) {}
+      if (cached && cached.keys) { KW_LIVE[role] = cached.keys; return cached.keys; }
+      kwApi('/search-keys?role=' + encodeURIComponent(role)).then(function (d) {
+        if (!d || !d.keys) { throw new Error('empty'); }
+        KW_LIVE[role] = d.keys;
+        try { sessionStorage.setItem('kt_sk_' + role, JSON.stringify({ version: d.version, keys: d.keys })); } catch (e) {}
+        kwRerun();
+      }).catch(function () { kwStatic(); });
+    }
+    var all = window.__ktScreenKeys;
+    return all ? (all[role] || all[KW_ROLE[role]] || null) : null;
+  }
+  function kwScore(rows, qRaw) {
+    var q = normWords(qRaw);
+    if (q.length < 3) { return null; }
+    var qWords = q.split(/\s+/).filter(Boolean), best = null;
+    rows.forEach(function (row) {
+      var p = normWords(row[0]), sc = 0;
+      if (p === q) { sc = 140; }
+      else if (p.indexOf(q) === 0) { sc = 136; }
+      else if ((' ' + p).indexOf(' ' + q) !== -1) { sc = 130; }
+      else {
+        var words = p.split(/\s+/);
+        var every = qWords.every(function (qw) { qw = stem(qw); return words.some(function (w) { return stem(w).indexOf(qw) === 0; }); });
+        if (every) { sc = 120; }
+      }
+      if (!sc) { return; }
+      sc -= Math.min(10, Math.floor(p.length / 6));   // the shorter phrase is the closer one
+      if (!best || sc > best.score) { best = { score: sc, phrase: row[0], tab: row[1] || '' }; }
+    });
+    return best;
+  }
+  // Ask for the keywords as soon as somebody starts to search, so they are usually here by the first letter.
+  document.addEventListener('focusin', function (e) {
+    var t = e.target;
+    if (t && t.tagName === 'INPUT' && /search|find|jump/i.test((t.getAttribute('placeholder') || '') + ' ' + (t.getAttribute('aria-label') || '') + ' ' + (t.type || ''))) {
+      screenKeys(getRole() || 'agency_admin');
+    }
+  });
+
+  /* Opening a keyword hit: click its subtab (when it has one), then scroll to the words and highlight them. Only for
+     the screen just found by a search; any other page change forgets it. */
+  window.addEventListener('hashchange', function () {
+    var h = (location.hash || '').replace(/^#/, '').split('?')[0], p = KW_PENDING[h];
+    KW_PENDING = {};
+    if (p && Date.now() - p.at < 120000) { kwJump(p); }
+  });
+  function kwText(s) { return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase().replace(/^[^a-z0-9]+/, '').replace(/[\s:*·•›»…]+$/, ''); }
+  function kwJump(p) {
+    var tries = 0, tabDone = !p.tab;
+    var TABS = '[role="tab"], .kt-tabbtn, .kt-tabband button, .kt-tab-band button, .kt-subtabs button, .kt-tabbar button';
+    (function step() {
+      var main = document.getElementById('appMain');
+      if (main && !tabDone) {
+        var want = kwText(p.tab);
+        var tab = [].slice.call(main.querySelectorAll(TABS)).filter(function (e) {
+          return e.getClientRects().length && kwText((e.innerText || '').split('\n')[0]).replace(/\s*\(?\d+\)?$/, '') === want;
+        })[0];
+        if (tab) {
+          tabDone = true; tries = 0;
+          if (tab.getAttribute('aria-selected') !== 'true' && !tab.classList.contains('active')) { tab.click(); }
+          setTimeout(step, 450);
+          return;
+        }
+      } else if (main) {
+        var hit = kwFind(main, p.phrase);
+        if (hit) { kwFlash(hit); return; }
+      }
+      if (++tries < 16) { setTimeout(step, 250); return; }
+      if (!tabDone) { tabDone = true; tries = 0; setTimeout(step, 0); }   // no such subtab here: still look for the words
+    })();
+  }
+  function kwFind(main, phrase) {
+    var want = kwText(phrase), exact = null, part = null;
+    var w = document.createTreeWalker(main, NodeFilter.SHOW_TEXT, null);
+    for (var n = w.nextNode(); n && !exact; n = w.nextNode()) {
+      var el = n.parentElement;
+      if (!el || !el.getClientRects().length || el.closest('[role="dialog"], .kt-modal')) { continue; }
+      var t = kwText(el.textContent);
+      if (t === want) { exact = el; } else if (!part && t.length < want.length + 40 && t.indexOf(want) !== -1) { part = el; }
+    }
+    return exact || part;
+  }
+  function kwFlash(el) {
+    if (!document.getElementById('kt-kw-flash-css')) {
+      var st = document.createElement('style'); st.id = 'kt-kw-flash-css';
+      st.textContent = '.kt-kw-flash{outline:2px solid #F59E0B !important;outline-offset:3px;border-radius:4px;animation:ktKwFlash 2.6s ease-out}'
+        + '@keyframes ktKwFlash{0%,35%{background-color:rgba(245,158,11,.22)}100%{background-color:transparent}}'
+        + '@media (prefers-reduced-motion:reduce){.kt-kw-flash{animation:none}}';
+      document.head.appendChild(st);
+    }
+    try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+    el.classList.add('kt-kw-flash');
+    setTimeout(function () { el.classList.remove('kt-kw-flash'); }, 2800);
+  }
+
   /* Public: KT.navSearch('audit logs') -> [{label, hash, section, icon, score}, …] */
   function navSearch(q, opts) {
     opts = opts || {};
@@ -201,9 +397,9 @@
     if (!normWords(q)) { return []; }
 
     var items = [], seen = {};
+    var role = opts.role || getRole() || 'agency_admin';
     try {
       var S = window.KT && window.KT.Shell;
-      var role = opts.role || getRole() || 'agency_admin';
       var secs = (S && S.navItemsForRole) ? S.navItemsForRole(role) : null;
       if (secs) {
         secs.forEach(function (sec) {
@@ -227,25 +423,42 @@
       items.push({ label: it.label || eh, hash: '#' + eh, icon: it.icon, section: it.section || '' });
     });
 
-    if (!items.length) {
-      // No Shell (or no nav for this role) — read whatever the page is showing.
-      var links = document.querySelectorAll('a.nav-link[data-hash], #navLinks a[href^="#"]');
+    /* EVERYTHING IN THE MENU IS FINDABLE (2026-10-30, Anthony: "the search under the mobile app not
+       finding some sections - wire this up where it finds anything net new added"). The role's nav above
+       is not the whole menu: the Platform and Sales blocks (Server health, Licences, Careers...) and the
+       Phone entry are added to the sidebar by other scripts, and were only read when the nav was empty -
+       so on the phone they could not be found. Every link actually in the menu is now merged in, so
+       anything added there, by any script, is searchable the moment it exists. */
+    {
+      var links = document.querySelectorAll('#appSidebar a.nav-link[data-hash], #navLinks a[href^="#"], #kt-mobilenav-drawer a.nav-link[data-hash]');
       for (var i = 0; i < links.length; i++) {
         var a = links[i];
         var hh = a.getAttribute('href');
         if (!hh || hh.charAt(0) !== '#') { hh = '#' + (a.getAttribute('data-hash') || ''); }
-        if (hh === '#' || hh.length < 2 || seen[hh]) { continue; }
-        seen[hh] = 1;
+        var hk = hh.replace(/^#/, '').split('?')[0];
+        if (hh === '#' || hh.length < 2 || seen[hk]) { continue; }
+        seen[hk] = 1;
         var le = a.querySelector('.nav-label');
         var lb = (le ? le.textContent : (a.textContent || '')).replace(/^[^A-Za-z0-9]+/, '').trim();
-        if (lb) { items.push({ label: lb, hash: hh, section: '' }); }
+        if (lb && a.offsetParent !== null || (lb && getComputedStyle(a).display !== 'none')) {
+          var sl = a.closest('.nav-section, .nav-group, [data-section]');
+          var st = sl && sl.querySelector('.nav-section-label, .nav-group-label, .nav-section-title');
+          items.push({ label: lb, hash: hh, section: st ? st.textContent.replace(/^[^A-Za-z]+/, '').trim() : '' });
+        }
       }
     }
+    var DESC = window.__ktScreenDesc || {};
+    items.forEach(function (it) { var k = String(it.hash || '').replace(/^#/, '').split('?')[0]; if (DESC[k]) { it.desc = DESC[k]; } });
 
+    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    var KEYS = screenKeys(va || role);   // previewing a role: that role's words
     var scored = [];
     items.forEach(function (it) {
       var sc = scoreNav(it, q);
-      if (sc > 0) { scored.push({ item: it, score: sc }); }
+      var rows = KEYS && KEYS[String(it.hash || '').replace(/^#/, '').split('?')[0]];
+      var kw = rows ? kwScore(rows, q) : null;
+      if (kw && kw.score > sc) { scored.push({ item: it, score: kw.score, kw: kw }); }
+      else if (sc > 0) { scored.push({ item: it, score: sc }); }
     });
     if (!scored.length) {
       items.forEach(function (it) {
@@ -255,11 +468,18 @@
     }
     // SORT, THEN CAP. The other way round is how the exact match got cut.
     scored.sort(function (x, y) { return y.score - x.score || x.item.label.localeCompare(y.item.label); });
+    KW_PENDING = {};
     return scored.slice(0, limit).map(function (r) {
-      return {
+      var out = {
         label: r.item.label, hash: r.item.hash, icon: r.item.icon,
         section: r.item.section, score: r.score, sublabel: 'Open section',
       };
+      if (r.kw) {
+        out.kwPhrase = r.kw.phrase; out.kwTab = r.kw.tab;
+        out.sublabel = (r.kw.tab ? 'In ' + r.kw.tab + ': ' : 'On this screen: ') + r.kw.phrase;
+        KW_PENDING[String(r.item.hash || '').replace(/^#/, '').split('?')[0]] = { tab: r.kw.tab, phrase: r.kw.phrase, at: Date.now() };
+      }
+      return out;
     });
   }
 
@@ -356,13 +576,15 @@
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
-  function renderResults(dropdown, results, q) {
+  function renderResults(dropdown, data, q, pages) {
     dropdown.innerHTML = '';
+    /* Records in the server's rank order; the screens ("Go to") first unless a record IS
+       what was typed (rank 0/1), in which case that record leads. */
+    var recs = searchGroups(data);
+    var pageGroup = (pages && pages.length) ? [{ key: 'pages', label: GROUP_META.pages.label, icon: GROUP_META.pages.icon, items: pages }] : [];
+    var ordered = (recs.length && recs[0].best <= 1) ? recs.concat(pageGroup) : pageGroup.concat(recs);
     var totalHits = 0;
-    Object.keys(GROUP_META).forEach(function (group) {
-      var rs = (results && results[group]) || [];
-      totalHits += rs.length;
-    });
+    ordered.forEach(function (g) { totalHits += g.items.length; });
 
     if (totalHits === 0) {
       dropdown.innerHTML = '<div style="padding:14px;color:#6B7280;font-size:13px;text-align:center;">No results for "' + esc(q) + '"</div>';
@@ -370,10 +592,10 @@
       return;
     }
 
-    Object.keys(GROUP_META).forEach(function (group) {
-      var rs = (results && results[group]) || [];
+    ordered.forEach(function (g) {
+      var rs = g.items;
       if (!rs.length) return;
-      var meta = GROUP_META[group];
+      var meta = g;
       var header = document.createElement('div');
       header.setAttribute('style', 'padding:8px 14px 4px;font-size:11px;font-weight:700;color:#6B7280;letter-spacing:1px;text-transform:uppercase;');
       header.textContent = meta.icon + ' ' + meta.label + ' (' + rs.length + ')';
@@ -434,16 +656,18 @@
       // Nav/section matches are instant + client-side; merge them with the
       // backend record results (and keep working if the backend search fails).
       var pages = searchNav(q);
+      var asked = q;
       fetch(apiBase + '/admin/search?q=' + encodeURIComponent(q), { headers: headers }).then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       }).then(function (data) {
-        var results = data.results || {};
-        results.pages = pages;
-        renderResults(dropdown, results, data.q || q);
+        // A slower answer to an older keystroke must not replace the newer one.
+        if ((input.value || '').trim() !== asked.trim()) return;
+        renderResults(dropdown, data, data.q || q, pages);
       }).catch(function () {
         // Backend record search failed — still show the section matches.
-        renderResults(dropdown, { pages: pages }, q);
+        if ((input.value || '').trim() !== asked.trim()) return;
+        renderResults(dropdown, null, q, pages);
       });
     }
 
@@ -461,9 +685,10 @@
         input.blur();
       }
     });
-    document.addEventListener('click', function (e) {
+    // Capture-phase pointerdown (2026-11-05): a bubbling click never arrived from a button that stops its click.
+    document.addEventListener('pointerdown', function (e) {
       if (!widget.wrap.contains(e.target)) dropdown.style.display = 'none';
-    });
+    }, true);
   }
 
   function tryMount() {
@@ -505,6 +730,77 @@
     if (MOUNT_ATTEMPTS > MAX_MOUNT_ATTEMPTS) clearInterval(savedInterval);
   }, 200);
 
+  /* HARVEST: once a day per screen + subtab, this browser reports the words the screen shows (headings, labels,
+     column titles, buttons, tabs) to POST /diag/search-words. The server keeps only phrases that are written in the
+     portal's own code and hold no real name (SearchKeywords gates); new ones join this session's index at once.
+     Never while previewing another role ("view as"), never record text (no table cells, inputs or dialogs), and a
+     phrase the server turned down is remembered by a short fingerprint and never sent again (reset monthly). */
+  var KW_TAKE = 'h1, h2, h3, h4, h5, th, label, legend, summary, button, [role="tab"], .kt-tabbtn, .card-title, .kt-card-title, .section-title, .kt-section-title';
+  var KW_TABS = '[role="tab"], .kt-tabbtn, .kt-tabband button, .kt-tab-band button, .kt-subtabs button, .kt-tabbar button';
+  function kwFp(t) { var h = 5381; for (var i = 0; i < t.length; i++) { h = ((h << 5) + h + t.charCodeAt(i)) | 0; } return (h >>> 0).toString(36); }
+  function kwStore(k, fallback) { try { return JSON.parse(localStorage.getItem(k) || 'null') || fallback; } catch (e) { return fallback; } }
+  function kwSave(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function kwDay() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
+  function kwClean(t) {
+    t = String(t || '').split('\n')[0].replace(/\s+/g, ' ').replace(/^[^A-Za-z\u00C0-\u024F]+/, '').replace(/[\s:*\u203A>\u2192]+$/, '').trim();
+    t = t.replace(/\s*\(?\d+\)?$/, '').trim();   // "Open (3)": the count is not part of the words
+    t = t.replace(/(\u2026|\.{3})$/, '').trim();   // "Send setup instructions\u2026"
+    return (t.length >= 4 && t.length <= 48 && /[A-Za-z]{3}/.test(t) && !/\d/.test(t)) ? t : '';
+  }
+  var kwTimer = null;
+  function kwHarvest() {
+    var va = ''; try { va = sessionStorage.getItem('kt_view_as') || ''; } catch (e) {}
+    var role = getRole(), main = document.getElementById('appMain');
+    if (va || !role || !main || document.hidden) { return; }
+    var hash = (location.hash || '').replace(/^#/, '').split('?')[0];
+    if (!/^[a-z0-9][a-z0-9-]{0,58}$/.test(hash)) { return; }
+    var tabEl = [].slice.call(main.querySelectorAll(KW_TABS)).filter(function (e) {
+      return e.getClientRects().length && (e.getAttribute('aria-selected') === 'true' || e.classList.contains('active'));
+    })[0];
+    var tab = tabEl ? kwClean(tabEl.innerText || tabEl.textContent) : '';
+    var day = kwDay(), key = role + '|' + hash + '|' + tab;
+    var sent = kwStore('kt_sk_sent', {});
+    if (sent[key] === day) { return; }
+    var rej = kwStore('kt_sk_rej', { since: Date.now(), fp: [] });
+    if (!rej.fp || Date.now() - (rej.since || 0) > 30 * 864e5) { rej = { since: Date.now(), fp: [] }; }
+    var seen = {}, phrases = [];
+    [].slice.call(main.querySelectorAll(KW_TAKE)).forEach(function (el) {
+      if (phrases.length >= 60 || !el.getClientRects().length) { return; }
+      if (el.closest('[role="dialog"], .kt-modal, td, input, textarea, select, [contenteditable="true"], [data-kt-private]')) { return; }
+      // textContent, not innerText: the words as the code writes them, not as CSS shows them (UPPERCASE headers).
+      var t = kwClean(el.textContent), l = t.toLowerCase();
+      if (!t || seen[l] || rej.fp.indexOf(kwFp(l)) !== -1) { return; }
+      seen[l] = 1; phrases.push(t);
+    });
+    if (phrases.length < 3) { return; }   // still drawing (or an empty state): try on the next change
+    sent[key] = day;
+    Object.keys(sent).forEach(function (k) { if (sent[k] !== day) { delete sent[k]; } });
+    kwSave('kt_sk_sent', sent);
+    kwApi('/diag/search-words', { method: 'POST', body: JSON.stringify({ role: role, hash: hash, tab: tab, phrases: phrases }) }).then(function (d) {
+      (d.rejected || []).forEach(function (i) { if (phrases[i]) { rej.fp.push(kwFp(phrases[i].toLowerCase())); } });
+      if (rej.fp.length > 3000) { rej.fp = rej.fp.slice(-3000); }
+      kwSave('kt_sk_rej', rej);
+      if (d.accepted && d.accepted.length && KW_LIVE[role]) {
+        var list = KW_LIVE[role][hash] || (KW_LIVE[role][hash] = []);
+        d.accepted.forEach(function (row) { list.push(row); });
+        try { sessionStorage.removeItem('kt_sk_' + role); } catch (e) {}
+      }
+    }).catch(function () { delete sent[key]; kwSave('kt_sk_sent', sent); });
+  }
+  var kwSince = 0;
+  function kwSchedule() {
+    // Settled = 3s without changes; a screen with a ticking clock never settles, so at most 10s after the first change.
+    var now = Date.now();
+    if (!kwSince) { kwSince = now; }
+    clearTimeout(kwTimer);
+    kwTimer = setTimeout(function () { kwSince = 0; kwHarvest(); }, now - kwSince > 7000 ? 0 : 3000);
+  }
+  (function kwBind(n) {
+    if (window.KT && KT.observeMain) { KT.observeMain(kwSchedule, { childList: true, subtree: true }); kwSchedule(); return; }
+    if (n < 40) { setTimeout(function () { kwBind(n + 1); }, 500); }
+  })(0);
+  window.addEventListener('hashchange', kwSchedule);
+
   // Expose for debug.
-  if (window.KT) window.KT.SearchWidget = { mount: tryMount };
+  if (window.KT) window.KT.SearchWidget = { mount: tryMount, harvest: kwHarvest };
 })(window);

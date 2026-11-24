@@ -93,6 +93,21 @@ class PlatformSettings
         // else through the platform failover. Registered in AppServiceProvider.
         config(['mail.mailers.agency_router' => ['transport' => 'agency_router']]);
 
+        /* THE MICROSOFT 365 SIGN-IN APP (2026-10-26): saved in Platform -> Email settings and used ahead of .env by
+           mailbox sign-in (Email, Sales email) and by "Sign in with Microsoft" on the login page. */
+        if (! empty($s['mailbox.microsoft.client_id'])) {
+            config(['services.microsoft.client_id' => $s['mailbox.microsoft.client_id']]);
+            $msSecret = self::getSecret('mailbox.microsoft.client_secret');
+            if ($msSecret) config(['services.microsoft.client_secret' => $msSecret]);
+            /* ANY MICROSOFT ACCOUNT MAY SIGN IN (2026-11-05, Anthony: "we want any email to be able to sign in through the email
+           client easily and not setting up secret ids"). info@ilearnhcc.com was refused (AADSTS50020: "does not exist in
+           tenant kiddietrac com") because the saved tenant was KiddieTrac's own directory ID, which shut every other
+           organisation out. KiddieTrac's app is registered for any work, school or personal Microsoft account (checked
+           against Microsoft the same day), so sign-in always goes through 'common'. The directory ID is only needed
+           for KiddieTrac's own sending (mail.graph.tenant), which is separate. */
+            config(['services.microsoft.tenant' => 'common']);
+        }
+
         $graphReady = $graph['tenant'] && $graph['client_id'] && $graph['client_secret'] && $graph['from'];
         $chosen = $s['mail.mailer'] ?? null;   // 'sendmail' | 'graph' | 'failover'
         if (($chosen === 'graph' || $chosen === 'failover') && $graphReady) {

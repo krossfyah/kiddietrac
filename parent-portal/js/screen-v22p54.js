@@ -118,7 +118,7 @@
   }
 
   function mapHashToExportType(hash) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10));
     const map = {
       'admin-users': { path: '/exports/users', filename: `users-${today}.xlsx`, importType: 'users', label: 'Users' },
       'admin-families': { path: '/exports/families', filename: `families-${today}.xlsx`, importType: 'families', label: 'Families' },

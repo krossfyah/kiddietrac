@@ -89,7 +89,7 @@
     if (t.centre_name) meta.push('<span>🏫 ' + esc(t.centre_name) + '</span>');
     if (t.assigned_by_name) meta.push('<span>From ' + esc(t.assigned_by_name) + '</span>');
     return '<div class="kt-task-card" data-id="' + t.id + '" style="background:#fff;border:1px solid #E2E8F0;'
-      + (od ? 'border-left:4px solid #DC2626;' : 'border-left:4px solid ' + (STATUS[t.status] ? STATUS[t.status].fg : '#94A3B8') + ';')
+      + (od ? '--kt-edge:#DC2626;' : '--kt-edge:' + (STATUS[t.status] ? STATUS[t.status].fg : '#94A3B8') + ';')
       + 'border-radius:14px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 2px rgba(15,23,42,.05);">'
       + '<div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;">'
         + '<div style="font-weight:800;font-size:15.5px;color:#0F172A;line-height:1.3;flex:1;' + (t.status === 'done' ? 'text-decoration:line-through;color:#64748B;' : '') + '">' + esc(t.title) + '</div>'
@@ -178,9 +178,12 @@
         + '<td style="padding:11px 10px;vertical-align:top;">'
           + '<div style="font-weight:800;color:#0F172A;' + (t.status === 'done' ? 'text-decoration:line-through;color:#64748B;' : '') + '">' + esc(t.title) + '</div>'
           + (t.description ? '<div style="color:#64748B;font-size:12.5px;margin-top:3px;max-width:360px;white-space:pre-wrap;">' + esc(t.description) + '</div>' : '')
+          + reminderLine(t)
         + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;color:#334155;font-size:13px;">' + esc(t.assigned_to_name || '—') + (t.centre_name ? '<div style="color:#64748B;font-size:11.5px;">' + esc(t.centre_name) + '</div>' : '') + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;">' + chip(PRIO, t.priority) + '</td>'
+        // Date created (2026-11-04, Anthony: "tasks section in the table add a date created column"), in the agency's time zone.
+        + '<td style="padding:11px 10px;vertical-align:top;font-size:12.5px;color:#475569;white-space:nowrap;"' + (t.created_local ? ' data-kttip="' + esc(fmtDate(t.created_local) + ' · ' + String(t.created_local).slice(11, 16)) + '"' : '') + '>' + (t.created_local ? esc(fmtDate(t.created_local)) : '—') + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;font-size:12.5px;' + (od ? 'color:#B91C1C;font-weight:800;' : 'color:#475569;') + '">' + (t.due_date ? esc(fmtDate(t.due_date)) + (od ? ' ⚠' : '') : '—') + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;">' + chip(STATUS, t.status) + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;white-space:nowrap;text-align:right;">'
@@ -191,10 +194,10 @@
       + '</tr>';
     }).join('');
     return '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;">'
-      + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:640px;">'
+      + '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:720px;">'
       + '<thead><tr style="background:#F8FAFC;text-align:left;font-size:11.5px;letter-spacing:.4px;color:#64748B;text-transform:uppercase;">'
         + '<th style="padding:10px;">Task</th><th style="padding:10px;">Assigned to</th><th style="padding:10px;">Priority</th>'
-        + '<th style="padding:10px;">Due</th><th style="padding:10px;">Status</th><th style="padding:10px;"></th>'
+        + '<th style="padding:10px;">Created</th><th style="padding:10px;">Due</th><th style="padding:10px;">Status</th><th style="padding:10px;"></th>'
       + '</tr></thead><tbody>' + rows + '</tbody></table></div></div>';
   }
 
@@ -225,33 +228,114 @@
   }
 
   // View (read-only) or Edit a task. Edit PATCHes /tasks/{id} (backend supports it).
+  /* THE REMINDER BLOCK (2026-10-27). p = id prefix ('tf' assign, 'te' edit), t = the task (edit) or null. */
+  var CH = [['app', '📱 App'], ['email', '✉️ Email'], ['sms', '💬 Text'], ['voice', '📞 Voice call']];
+  function reminderBlock(p, t, dis) {
+    var at = t && t.remind_at_local ? t.remind_at_local : '';
+    var chans = t ? (t.remind_channels || []) : ['app'];
+    if (!chans.length) chans = ['app'];
+    var sent = t && t.reminded_at ? '<div style="margin-top:8px;font-size:12.5px;color:#047857;">✓ Reminder sent'
+      + (t.remind_result ? ': ' + Object.keys(t.remind_result).map(function (k) { var v = String(t.remind_result[k] || ''); return esc((CH.filter(function (c) { return c[0] === k; })[0] || [k, k])[1].replace(/^\S+\s/, '')) + ' ' + (v === 'sent' ? '✓' : '— ' + esc(v.replace(/^skipped: /, ''))); }).join(' · ') : '')
+      + '. Change the time to send it again.</div>' : '';
+    return '<div class="full" style="border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px;background:#F8FAFC;">'
+      + '<div style="font-size:12px;font-weight:800;color:#475569;margin-bottom:8px;">⏰ Reminder</div>'
+      + '<div class="kt-task-grid">'
+        + field('When', '<select id="' + p + '-rwhen" ' + dis + ' style="' + inp() + '">'
+          + '<option value="none"' + (at ? '' : ' selected') + '>No reminder</option>'
+          + '<option value="before">The day before it is due, 8:00 AM</option>'
+          + '<option value="due">The morning it is due, 8:00 AM</option>'
+          + '<option value="custom"' + (at ? ' selected' : '') + '>Pick a date and time…</option></select>')
+        + '<div id="' + p + '-ratwrap"' + (at ? '' : ' style="display:none"') + '>' + field('Date and time', '<input id="' + p + '-rat" type="datetime-local" value="' + esc(at) + '" ' + dis + ' style="' + inp() + '">') + '</div>'
+      + '</div>'
+      + '<div id="' + p + '-rch" style="display:' + (at ? 'flex' : 'none') + ';flex-wrap:wrap;gap:8px 14px;margin-top:10px;">'
+        + CH.map(function (c) { return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:#334155;cursor:pointer;"><input type="checkbox" value="' + c[0] + '"' + (chans.indexOf(c[0]) >= 0 ? ' checked' : '') + ' ' + dis + '> ' + c[1] + '</label>'; }).join('')
+      + '</div>'
+      + '<div style="margin-top:6px;font-size:11.5px;color:#64748B;">Texts and calls follow each person\'s own settings and consent. Times are in the agency\'s time zone.</div>'
+      + sent
+      + '</div>';
+  }
+  function wireReminder(root, p) {
+    var w = root.querySelector('#' + p + '-rwhen'); if (!w) return;
+    var sync = function () {
+      root.querySelector('#' + p + '-ratwrap').style.display = w.value === 'custom' ? '' : 'none';
+      root.querySelector('#' + p + '-rch').style.display = w.value === 'none' ? 'none' : 'flex';
+    };
+    w.addEventListener('change', sync);
+  }
+  // { remind_at_local, remind_channels } from the block, or an error message.
+  function readReminder(root, p, due) {
+    var w = root.querySelector('#' + p + '-rwhen'); if (!w) return {};
+    if (w.value === 'none') return { remind_at_local: null, remind_channels: [] };
+    var at = '';
+    if (w.value === 'custom') at = root.querySelector('#' + p + '-rat').value || '';
+    else {
+      if (!due) return { error: 'Set a due date, or pick a date and time for the reminder' };
+      var d = new Date(due + 'T12:00:00'); if (w.value === 'before') d.setDate(d.getDate() - 1);
+      at = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) + 'T08:00';
+    }
+    if (!at) return { error: 'Pick the date and time for the reminder' };
+    var ch = [].map.call(root.querySelectorAll('#' + p + '-rch input:checked'), function (i) { return i.value; });
+    if (!ch.length) return { error: 'Choose how to send the reminder' };
+    return { remind_at_local: at, remind_channels: ch };
+  }
+  function reminderLine(t) {
+    if (t.reminded_at) return '<div style="margin-top:4px;font-size:11.5px;color:#047857;">✓ Reminder sent</div>';
+    if (!t.remind_at_local) return '';
+    var d = new Date(t.remind_at_local);
+    var when = isNaN(d) ? t.remind_at_local.replace('T', ' ') : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ', ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    var how = (t.remind_channels || []).map(function (k) { return ({ app: 'App', email: 'Email', sms: 'Text', voice: 'Voice' })[k] || k; }).join(', ');
+    return '<div style="margin-top:4px;font-size:11.5px;color:#0369A1;">⏰ ' + esc(when) + (how ? ' · ' + esc(how) : '') + '</div>';
+  }
+
+  /* One popup for the task dialogs: title row with ✕, the body, the buttons. Closes on ✕, Cancel,
+     a tap outside or Escape. Returns { ov, close }. */
+  function taskPopup(title, bodyHtml, actionsHtml) {
+    if (!document.getElementById('kt-task-pop-css')) {
+      var st = document.createElement('style'); st.id = 'kt-task-pop-css';
+      st.textContent = '.kt-task-pop .kt-task-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}'
+        + '.kt-task-pop .kt-task-grid > .full{grid-column:1 / -1;}'
+        + '@media (max-width:560px){.kt-task-pop .kt-task-grid{grid-template-columns:1fr;}.kt-task-pop .kt-task-acts button{flex:1 1 0;}}';
+      document.head.appendChild(st);
+    }
+    var ov = document.createElement('div');
+    ov.className = 'kt-task-pop';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:560px;width:100%;padding:22px;max-height:90vh;overflow:auto;box-sizing:border-box;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
+        + '<div style="font-weight:800;font-size:18px;color:#0F172A;">' + esc(title) + '</div>'
+        + '<button type="button" data-x aria-label="Close" style="background:none;border:none;font-size:22px;cursor:pointer;color:#94A3B8;line-height:1;">×</button>'
+      + '</div>' + bodyHtml
+      + '<div class="kt-task-acts" style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">' + actionsHtml + '</div>'
+      + '</div>';
+    document.body.appendChild(ov);
+    var close = function () { document.removeEventListener('keydown', onKey, true); if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    var onKey = function (e) { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey, true);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    ov.querySelectorAll('[data-x]').forEach(function (b) { b.addEventListener('click', close); });
+    return { ov: ov, close: close };
+  }
+  var BTN_GHOST = 'background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:10px 18px;font-weight:800;cursor:pointer;';
+  var BTN_MAIN = 'background:#0EA5A6;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:800;cursor:pointer;';
+
   function openTaskEditor(main, t, readOnly) {
     if (!t) return;
     var dis = readOnly ? 'disabled' : '';
-    var ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;z-index:9999;padding:16px;';
-    ov.innerHTML = '<div style="background:#fff;border-radius:14px;max-width:520px;width:100%;padding:22px;max-height:90vh;overflow:auto;">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">'
-        + '<div style="font-weight:800;font-size:18px;color:#0F172A;">' + (readOnly ? 'Task details' : 'Edit task') + '</div>'
-        + '<button type="button" data-x style="background:none;border:none;font-size:22px;cursor:pointer;color:#94A3B8;line-height:1;">×</button>'
-      + '</div>'
-      + '<div style="display:grid;gap:12px;">'
-        + field('Title', '<input id="te-title" type="text" maxlength="200" value="' + esc(t.title || '') + '" ' + dis + ' style="' + inp() + '">')
-        + field('Details', '<textarea id="te-desc" rows="3" maxlength="4000" ' + dis + ' style="' + inp() + 'resize:vertical;">' + esc(t.description || '') + '</textarea>')
-        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
-          + field('Priority', '<select id="te-prio" ' + dis + ' style="' + inp() + '">' + optList(['low', 'normal', 'high'], t.priority) + '</select>')
-          + field('Due date', '<input id="te-due" type="date" value="' + esc(String(t.due_date || '').slice(0, 10)) + '" ' + dis + ' style="' + inp() + '">')
-        + '</div>'
+    var pop = taskPopup(readOnly ? 'Task details' : 'Edit task',
+      '<div class="kt-task-grid">'
+        + '<div class="full">' + field('Title', '<input id="te-title" type="text" maxlength="200" value="' + esc(t.title || '') + '" ' + dis + ' style="' + inp() + '">') + '</div>'
+        + '<div class="full">' + field('Details', '<textarea id="te-desc" rows="3" maxlength="4000" ' + dis + ' style="' + inp() + 'resize:vertical;">' + esc(t.description || '') + '</textarea>') + '</div>'
+        + field('Priority', '<select id="te-prio" ' + dis + ' style="' + inp() + '">' + optList(['low', 'normal', 'high'], t.priority) + '</select>')
+        + field('Due date', '<input id="te-due" type="date" value="' + esc(String(t.due_date || '').slice(0, 10)) + '" ' + dis + ' style="' + inp() + '">')
         + field('Status', '<select id="te-status" ' + dis + ' style="' + inp() + '">' + optList(['open', 'in_progress', 'done'], t.status) + '</select>')
         + (t.assigned_to_name ? field('Assigned to', '<input type="text" value="' + esc(t.assigned_to_name) + '" disabled style="' + inp() + '">') : '')
-      + '</div>'
-      + (readOnly ? '<div style="display:flex;justify-content:flex-end;margin-top:16px;"><button type="button" data-x style="background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:9px 18px;font-weight:800;cursor:pointer;">Close</button></div>'
-        : '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;"><button type="button" data-x style="background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:9px 16px;font-weight:800;cursor:pointer;">Cancel</button><button type="button" id="te-save" style="background:#0EA5A6;color:#fff;border:none;border-radius:10px;padding:9px 18px;font-weight:800;cursor:pointer;">Save changes</button></div>')
-      + '</div>';
-    document.body.appendChild(ov);
-    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
-    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
-    ov.querySelectorAll('[data-x]').forEach(function (b) { b.addEventListener('click', close); });
+        + reminderBlock('te', t, dis)
+      + '</div>',
+      readOnly ? '<button type="button" data-x style="' + BTN_GHOST + '">Close</button>'
+        : '<button type="button" data-x style="' + BTN_GHOST + '">Cancel</button><button type="button" id="te-save" style="' + BTN_MAIN + '">Save changes</button>');
+    var ov = pop.ov, close = pop.close;
+    wireReminder(ov, 'te');
     var save = ov.querySelector('#te-save');
     if (save) save.addEventListener('click', function () {
       var payload = {
@@ -262,6 +346,9 @@
         due_date: ov.querySelector('#te-due').value || null,
       };
       if (!payload.title) { toast('Title is required', false); return; }
+      var rem = readReminder(ov, 'te', payload.due_date);
+      if (rem.error) { toast(rem.error, false); return; }
+      payload.remind_at_local = rem.remind_at_local; payload.remind_channels = rem.remind_channels;
       save.disabled = true;
       Api.patch('/tasks/' + t.id, payload).then(function () { toast('Task updated'); close(); loadManage(main); })
         .catch(function (e) { toast(e && e.message || 'Could not save', false); save.disabled = false; });
@@ -269,22 +356,25 @@
   }
 
   function toggleForm(main) {
-    var host = main.querySelector('#kt-tasks-form');
-    if (host.dataset.open === '1') { host.innerHTML = ''; host.dataset.open = '0'; return; }
-    host.dataset.open = '1';
-    host.innerHTML = '<div style="background:#fff;border:1px solid #E2E8F0;border-radius:14px;padding:16px;margin-bottom:16px;">'
-      + '<div style="font-weight:800;color:#0F172A;margin-bottom:12px;">New task</div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+    var pop = taskPopup('Assign a task',
+      '<div class="kt-task-grid">'
         + field('Assign to', '<select id="tf-assignee" style="' + inp() + '"><option value="">Loading…</option></select>')
         + field('Due date', '<input id="tf-due" type="date" style="' + inp() + '">')
-        + '<div style="grid-column:1/-1;">' + field('Title', '<input id="tf-title" type="text" maxlength="200" placeholder="e.g. Update the allergy board" style="' + inp() + '">') + '</div>'
-        + '<div style="grid-column:1/-1;">' + field('Details (optional)', '<textarea id="tf-desc" rows="3" maxlength="4000" style="' + inp() + 'resize:vertical;"></textarea>') + '</div>'
+        + '<div class="full">' + field('Title', '<input id="tf-title" type="text" maxlength="200" placeholder="e.g. Update the allergy board" style="' + inp() + '">') + '</div>'
+        + '<div class="full">' + field('Details (optional)', '<textarea id="tf-desc" rows="3" maxlength="4000" style="' + inp() + 'resize:vertical;"></textarea>') + '</div>'
         + field('Priority', '<select id="tf-prio" style="' + inp() + '"><option value="normal">Normal</option><option value="high">High</option><option value="low">Low</option></select>')
-      + '</div>'
-      + '<div style="display:flex;gap:8px;margin-top:14px;">'
-        + '<button id="tf-save" type="button" style="background:#0EA5A6;color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:800;cursor:pointer;">Assign task</button>'
-        + '<button id="tf-cancel" type="button" style="background:#F1F5F9;color:#475569;border:none;border-radius:10px;padding:10px 18px;font-weight:800;cursor:pointer;">Cancel</button>'
-      + '</div></div>';
+        + '<div class="full" style="border:1px solid #E2E8F0;border-radius:12px;padding:12px 14px;background:#F8FAFC;">'
+          + '<div style="font-size:12px;font-weight:800;color:#475569;margin-bottom:8px;">📣 Let them know now</div>'
+          + '<div id="tf-notify" style="display:flex;flex-wrap:wrap;gap:8px 14px;">'
+            + CH.map(function (c) { return '<label style="display:inline-flex;align-items:center;gap:6px;font-size:13.5px;color:#334155;cursor:pointer;"><input type="checkbox" value="' + c[0] + '"' + (c[0] === 'app' ? ' checked' : '') + '> ' + c[1] + '</label>'; }).join('')
+          + '</div>'
+          + '<div style="margin-top:6px;font-size:11.5px;color:#64748B;">Sent the moment you assign it. Leave all off to assign quietly.</div>'
+        + '</div>'
+        + reminderBlock('tf', null, '')
+      + '</div>',
+      '<button type="button" data-x style="' + BTN_GHOST + '">Cancel</button><button id="tf-save" type="button" style="' + BTN_MAIN + '">Assign task</button>');
+    var host = pop.ov;
+    wireReminder(host, 'tf');
 
     var sel = host.querySelector('#tf-assignee');
     Api.get('/tasks/assignees').then(function (d) {
@@ -304,7 +394,6 @@
       sel.innerHTML = a.length ? html : '<option value="">No assignable people in this agency</option>';
     }).catch(function () { sel.innerHTML = '<option value="">Could not load people</option>'; });
 
-    host.querySelector('#tf-cancel').addEventListener('click', function () { host.innerHTML = ''; host.dataset.open = '0'; });
     host.querySelector('#tf-save').addEventListener('click', function () {
       var payload = {
         assigned_to: parseInt(sel.value, 10),
@@ -313,12 +402,19 @@
         priority: host.querySelector('#tf-prio').value,
         due_date: host.querySelector('#tf-due').value || null,
       };
-      if (!payload.assigned_to) { toast('Pick an educator', false); return; }
+      if (!payload.assigned_to) { toast('Pick who the task is for', false); return; }
       if (!payload.title) { toast('Give the task a title', false); return; }
+      var rem = readReminder(host, 'tf', payload.due_date);
+      if (rem.error) { toast(rem.error, false); return; }
+      if (rem.remind_at_local) { payload.remind_at_local = rem.remind_at_local; payload.remind_channels = rem.remind_channels; }
+      payload.notify_channels = [].map.call(host.querySelectorAll('#tf-notify input:checked'), function (i) { return i.value; });
       var save = host.querySelector('#tf-save'); save.disabled = true; save.textContent = 'Assigning…';
-      Api.post('/tasks', payload).then(function () {
-        toast('Task assigned');
-        host.innerHTML = ''; host.dataset.open = '0';
+      Api.post('/tasks', payload).then(function (res) {
+        var n = res && res.notified, names = { app: 'app', email: 'email', sms: 'text', voice: 'call' };
+        var sent = n ? Object.keys(n).filter(function (k) { return n[k] === 'sent'; }).map(function (k) { return names[k]; }) : [];
+        var miss = n ? Object.keys(n).filter(function (k) { return n[k] !== 'sent'; }).map(function (k) { return names[k]; }) : [];
+        toast('Task assigned' + (sent.length ? ' · sent by ' + sent.join(', ') : '') + (miss.length ? ' · not sent by ' + miss.join(', ') + ' (their settings or consent)' : ''), !miss.length);
+        pop.close();
         loadManage(main);
       }).catch(function (e) {
         toast(e && e.message || 'Could not assign task', false);
@@ -341,20 +437,7 @@
     if (!tile) return;
     Api.get('/tasks/mine').then(function (d) {
       var n = (d && d.open_count) || 0;
-      var icon = tile.querySelector('.kt-tile-icon');
-      if (!icon) return;
-      var old = icon.querySelector('.kt-task-badge');
-      if (old) old.remove();
-      if (n > 0) {
-        icon.style.position = 'relative';
-        var b = document.createElement('span');
-        b.className = 'kt-task-badge';
-        b.textContent = n > 99 ? '99+' : n;
-        b.style.cssText = 'position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;padding:0 5px;'
-          + 'background:#DC2626;color:#fff;border-radius:999px;font-size:11px;font-weight:900;line-height:20px;'
-          + 'text-align:center;box-shadow:0 0 0 2px #fff;box-sizing:border-box;';
-        icon.appendChild(b);
-      }
+      if (KT.tileBadge) KT.tileBadge(tile, n);   // the one tile badge (kt-badges.js)
     }).catch(function () {});
   }
   // The prominent "open tasks" summary is now a KPI stat card in the role-widget

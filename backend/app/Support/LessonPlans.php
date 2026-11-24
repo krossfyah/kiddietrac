@@ -67,16 +67,27 @@ final class LessonPlans
             if (! is_array($i)) continue;
             $title = trim((string) ($i['title'] ?? ''));
             if ($title === '') continue;   // a blank row is not an activity
+            // The activity's picture (2026-11-02, App\Support\LessonImages); the web-demo seeds used a bare "image".
+            $img = trim((string) ($i['image_url'] ?? '')) ?: trim((string) ($i['image'] ?? ''));
+            $lib = $img !== '' ? LessonImages::byId(isset($i['lesson_image_id']) ? (int) $i['lesson_image_id'] : null) : null;
             $clean[] = [
                 'time' => trim((string) ($i['time'] ?? '')) ?: null,
                 'time_label' => self::formatTime($i['time'] ?? null),
                 'title' => $title,
                 'domain' => trim((string) ($i['domain'] ?? '')) ?: null,
                 'notes' => trim((string) ($i['notes'] ?? '')) ?: null,
+                'image_url' => $img !== '' ? $img : null,
+                'thumb_url' => $img !== '' ? (trim((string) ($i['thumb_url'] ?? '')) ?: $img) : null,
+                'image_credit' => $lib && ! empty($lib['attribution_required']) ? LessonImages::credit($lib) : null,
             ];
         }
 
-        return ['theme' => trim((string) ($plan->theme ?? '')) ?: null, 'items' => $clean, 'inherited' => $inherited];
+        $cover = trim((string) ($plan->image_url ?? ''));
+        $coverLib = $cover !== '' ? LessonImages::byId(isset($plan->lesson_image_id) ? (int) $plan->lesson_image_id : null) : null;
+
+        return ['theme' => trim((string) ($plan->theme ?? '')) ?: null, 'items' => $clean, 'inherited' => $inherited,
+            'image_url' => $cover !== '' ? $cover : null,
+            'image_credit' => $coverLib && ! empty($coverLib['attribution_required']) ? LessonImages::credit($coverLib) : null];
     }
 
     /**
@@ -123,7 +134,7 @@ final class LessonPlans
         // Fall back to a current enrolment — primary_room_id is not always set.
         return DB::table('enrollments')->where('child_id', $childId)
             ->where(function ($q) {
-                $q->whereNull('end_date')->orWhereDate('end_date', '>=', now()->toDateString());
+                $q->whereNull('end_date')->orWhereDate('end_date', '>=', \App\Support\AgencyTime::today());
             })
             ->orderByDesc('id')->value('room_id');
     }
@@ -237,17 +248,58 @@ final class LessonPlans
                 . e($plan['theme']) . '</div>';
         }
 
+        /* THE PICTURE (2026-11-02). One large picture: the theme's cover, else the first activity that has one; the
+           other activities with a picture get a small one beside them. Raster WebP from our own host, absolute, with
+           width/height attributes (Outlook ignores CSS sizes); uploads are signed for email like every protected photo.
+           Nothing at all when there is no picture - never a broken image. */
+        $heroIdx = null;
+        $hero = ! empty($plan['image_url']) ? ['url' => $plan['image_url'], 'alt' => (string) ($plan['theme'] ?: $heading), 'credit' => $plan['image_credit'] ?? null] : null;
+        if (! $hero) {
+            foreach ($plan['items'] as $k => $i) {
+                if (! empty($i['image_url'])) {
+                    $hero = ['url' => $i['image_url'], 'alt' => (string) ($plan['theme'] ?: $i['title']), 'credit' => $i['image_credit'] ?? null];
+                    $heroIdx = $k;
+                    break;
+                }
+            }
+        }
+        if ($hero && ($src = self::emailUrl($hero['url']))) {
+            $html .= '<img src="' . e($src) . '" width="560" alt="' . e($hero['alt']) . '"'
+                . ' style="display:block;width:100%;max-width:560px;height:auto;border:0;border-radius:12px;margin:0 0 6px;background:#E2E8F0;">';
+            $html .= $hero['credit']
+                ? '<div class="kt-muted" style="font-size:10.5px;color:#94A3B8;margin:0 0 10px;">Picture: ' . e($hero['credit']) . '</div>'
+                : '<div style="height:6px;line-height:6px;font-size:0;">&nbsp;</div>';
+        }
+
         $html .= '<div class="kt-panel" style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:12px 14px;">';
-        foreach ($plan['items'] as $i) {
+        foreach ($plan['items'] as $k => $i) {
             $meta = array_filter([self::formatTime($i['time']), self::domainLabel($i['domain'])]);
-            $html .= '<div style="padding:6px 0;border-top:1px solid #EEF2F7;">'
-                . '<div style="font-size:14px;font-weight:700;color:#0F172A;">' . e($i['title']) . '</div>'
+            $text = '<div class="kt-h" style="font-size:14px;font-weight:700;color:#0F172A;">' . e($i['title']) . '</div>'
                 . ($meta ? '<div class="kt-muted" style="font-size:12px;color:#64748B;margin-top:1px;">' . e(implode(' · ', $meta)) . '</div>' : '')
                 . ($i['notes'] ? '<div style="font-size:13px;color:#475569;margin-top:3px;line-height:1.5;">' . e($i['notes']) . '</div>' : '')
-                . '</div>';
+                . (! empty($i['image_credit']) && $k !== $heroIdx ? '<div class="kt-muted" style="font-size:10.5px;color:#94A3B8;margin-top:2px;">Picture: ' . e($i['image_credit']) . '</div>' : '');
+            $thumb = ($k !== $heroIdx && ! empty($i['thumb_url'])) ? self::emailUrl($i['thumb_url']) : null;
+            $html .= '<div style="padding:6px 0;border-top:1px solid #EEF2F7;">';
+            $html .= $thumb
+                ? '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;"><tr>'
+                    . '<td width="64" style="width:64px;padding:2px 10px 2px 0;vertical-align:top;"><img src="' . e($thumb) . '" width="64" height="48" alt="' . e($i['title']) . '"'
+                    . ' style="display:block;width:64px;height:48px;border:0;border-radius:8px;object-fit:cover;background:#E2E8F0;"></td>'
+                    . '<td style="vertical-align:top;">' . $text . '</td></tr></table>'
+                : $text;
+            $html .= '</div>';
         }
         $html .= '</div>';
 
         return $html;
+    }
+
+    /** A picture URL an email can load: library files are already absolute; agency uploads are signed for email. */
+    private static function emailUrl(?string $url): ?string
+    {
+        $u = trim((string) $url);
+        if ($u === '') return null;
+        if (ProtectedMedia::isProtected($u)) return ((string) ProtectedMedia::signForEmail($u)) ?: null;
+        if (str_starts_with($u, '/')) return rtrim((string) (config('app.url') ?: 'https://api.kiddietrac.com'), '/') . $u;
+        return preg_match('#^https://#i', $u) ? $u : null;
     }
 }

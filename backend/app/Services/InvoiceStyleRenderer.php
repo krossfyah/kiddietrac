@@ -154,7 +154,7 @@ final class InvoiceStyleRenderer
             'number' => 'PREVIEW-' . date('Ymd'),
             'status' => 'Unpaid',
             'is_paid' => false,
-            'issued' => date('Y-m-d'),
+            'issued' => \App\Support\AgencyTime::today(),
             'due' => date('Y-m-d', strtotime('+14 days')),
             'bill_to' => 'The Thompson Family',
             'address' => "12 Example Street\nToronto ON M5V 1A1",

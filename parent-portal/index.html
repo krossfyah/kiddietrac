@@ -1,8 +1,177 @@
 <!DOCTYPE html>
 <html lang="en-CA">
 <head>
+<script>
+/* BOOT TIMING, NATIVE APPS ONLY (2026-11-01, Anthony: "the boot up for the ios app ... still too long to get
+   to the kiddietrac splash screens - full sweep"). There is no Safari inspector without a Mac, so the
+   app reports its own cold boot: navigation timing, when the native splash was told to hide, when the
+   intro / lock / sign-in redirect happened, and the slowest blocking files. One line per load in
+   storage/app/private/boot-diag.log (/diag/boot, log only). No names, no ids. */
+(function(){try{
+  var C=window.Capacitor,ua=navigator.userAgent||'';
+  var plat=C&&C.getPlatform?C.getPlatform():'';
+  var nat=!!(C&&((typeof C.isNativePlatform==='function'&&C.isNativePlatform())||C.isNative));
+  var iosShell=/iPhone|iPad/.test(ua)&&!/Safari/.test(ua);
+  if(!nat&&!iosShell&&!/; wv\)/.test(ua))return;
+  var B=window.__ktBoot={m:{},x:{}},t0=performance.now();
+  B.mark=function(k,v){if(!(k in B.m)){B.m[k]=Math.round(performance.now());if(v!==undefined)B.x[k]=v;}};
+  B.mark('head');
+  var send=function(why){if(B.sent)return;B.sent=1;try{
+    var n=(performance.getEntriesByType('navigation')||[])[0]||{},r=function(x){return x?Math.round(x):0;};
+    var res=(performance.getEntriesByType('resource')||[]).filter(function(e){return /\.(css|js)(\?|$)/.test(e.name);});
+    var slow=res.slice().sort(function(a,b){return b.responseEnd-a.responseEnd;}).slice(0,6).map(function(e){
+      return [e.name.replace(/^https?:\/\/[^\/]+/,'').replace(/\?.*$/,''),r(e.startTime),r(e.responseEnd),e.transferSize||0];});
+    var cached=0,bytes=0;res.forEach(function(e){if(!e.transferSize)cached++;bytes+=e.transferSize||0;});
+    var hs=0;try{hs=!!sessionStorage.getItem('kt_token');}catch(e){}
+    var bio=0;try{bio=localStorage.getItem('kt_biometric_enabled')==='1';}catch(e){}
+    var d={why:why,plat:plat,nat:nat,iosShell:iosShell,path:location.pathname,nav:n.type||'',
+      proto:n.nextHopProtocol||'',dns:r(n.domainLookupEnd-n.domainLookupStart),conn:r(n.connectEnd-n.connectStart),
+      req:r(n.requestStart),ttfb:r(n.responseStart),html:r(n.responseEnd),htmlBytes:n.transferSize||0,
+      inter:r(n.domInteractive),dcl:r(n.domContentLoadedEventStart),load:r(n.loadEventStart),
+      m:B.m,x:B.x,files:res.length,cached:cached,kb:Math.round(bytes/1024),slow:slow,
+      session:hs,bio:bio,mem:navigator.deviceMemory||0,cpu:navigator.hardwareConcurrency||0,at:Date.now(),to0:Math.round(performance.timeOrigin||0),nt:window.__ktNative||null,sp:(function(){try{return sessionStorage.getItem('kt_start');}catch(e){return 'x';}})()};/* to0/nt/sp (2026-11-02 bn): this page's start on the epoch clock, the iPhone app's native launch marks (3.12.13+) and the app's start page decision */
+    var body=JSON.stringify({data:JSON.stringify(d)});
+    if(navigator.sendBeacon){try{if(navigator.sendBeacon('/api/v1/diag/boot',new Blob([body],{type:'application/json'})))return;}catch(e){}}
+    fetch('/api/v1/diag/boot',{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).catch(function(){});
+  }catch(e){}};
+  B.send=send;
+  addEventListener('pagehide',function(){B.mark('leave');send('leave');});
+  addEventListener('DOMContentLoaded',function(){B.mark('dcl');});
+  var iv=setInterval(function(){try{
+    var root=document.documentElement;
+    if(root.classList.contains('kti-go'))B.mark('intro');
+    if(document.getElementById('kt-bio-lock'))B.mark('lock');
+    if(document.querySelector('#kt-launch.go'))B.mark('scene');
+    var sp=document.getElementById('kt-splash');
+    if(B.m.hide!=null&&(!sp||sp.classList.contains('kt-hide')))B.mark('splashGone');
+    if(B.m.lock!=null||B.m.splashGone!=null||B.m.scene!=null){if(!B.w){B.w=1;setTimeout(function(){clearInterval(iv);send('done');},2500);}}
+    if(performance.now()-t0>25000){clearInterval(iv);send('timeout');}
+  }catch(e){}},50);
+}catch(e){}})();
+</script>
+  <script>/* THE PARENT'S PHONE BESIDE THE STAFF PHONE (2026-10-31): the website's Demo experience page can run TWO demo phones,
+   a staff one and the matching demo parent's, each the real portal in an iframe of this same origin in the same tab - so
+   they would share sessionStorage/localStorage (one sign-in for both) and BroadcastChannel. The parent's phone loads its
+   app in an iframe NAMED kt-ns-companion; here, before anything else reads storage, that frame gets its own prefixed
+   storage, its own storage events and its own broadcast channels. Nothing changes for any other page or frame. */
+(function (w) {
+  try {
+    if (w.name !== 'kt-ns-companion' || w.top === w.self || w.__ktNs) return;
+    w.__ktNs = 1;
+    var P = 'kt-ns-c:', rs = w.sessionStorage, rl = w.localStorage;
+    function mine(k) { return typeof k === 'string' && k.indexOf(P) === 0; }
+    function wrap(real) {
+      if (!real) return real;
+      function keys() { var a = []; for (var i = 0; i < real.length; i++) { var k = real.key(i); if (mine(k)) a.push(k.slice(P.length)); } return a; }
+      var api = {
+        getItem: function (k) { return real.getItem(P + k); },
+        setItem: function (k, v) { real.setItem(P + k, String(v)); },
+        removeItem: function (k) { real.removeItem(P + k); },
+        clear: function () { keys().forEach(function (k) { real.removeItem(P + k); }); },
+        key: function (n) { return keys()[n] === undefined ? null : keys()[n]; }
+      };
+      Object.defineProperty(api, 'length', { get: function () { return keys().length; } });
+      if (typeof Proxy !== 'function') return api;
+      return new Proxy(api, {
+        get: function (t, p) { if (p in t) return t[p]; if (typeof p !== 'string') return undefined; var v = real.getItem(P + p); return v === null ? undefined : v; },
+        set: function (t, p, v) { if (p in t) return true; real.setItem(P + String(p), String(v)); return true; },
+        deleteProperty: function (t, p) { real.removeItem(P + String(p)); return true; },
+        has: function (t, p) { return (p in t) || real.getItem(P + String(p)) !== null; },
+        ownKeys: function () { return keys(); },
+        getOwnPropertyDescriptor: function (t, p) { var v = real.getItem(P + String(p)); return v === null ? undefined : { value: v, writable: true, enumerable: true, configurable: true }; }
+      });
+    }
+    var ps = wrap(rs), pl = wrap(rl);
+    Object.defineProperty(w, 'sessionStorage', { configurable: true, get: function () { return ps; } });
+    Object.defineProperty(w, 'localStorage', { configurable: true, get: function () { return pl; } });
+    var ael = w.addEventListener, rel = w.removeEventListener;
+    w.addEventListener = function (t, f, o) {
+      if (t === 'storage' && typeof f === 'function') {
+        if (!f.__ktNs) f.__ktNs = function (e) {
+          if (!e || !mine(e.key)) return;
+          f.call(w, { type: 'storage', key: e.key.slice(P.length), newValue: e.newValue, oldValue: e.oldValue, url: e.url, storageArea: e.storageArea === rs ? ps : pl });
+        };
+        return ael.call(this, t, f.__ktNs, o);
+      }
+      return ael.apply(this, arguments);
+    };
+    w.removeEventListener = function (t, f, o) { if (t === 'storage' && f && f.__ktNs) return rel.call(this, t, f.__ktNs, o); return rel.apply(this, arguments); };
+    if (w.BroadcastChannel) {
+      var BC = w.BroadcastChannel;
+      var NB = function (n) { return new BC(String(n) + '::kt-ns-c'); };
+      NB.prototype = BC.prototype;
+      w.BroadcastChannel = NB;
+    }
+  } catch (e) {}
+})(window);
+</script>
+  <script>/* SAME-ORIGIN API (2026-10-31, Anthony approved: "route the app's data through app.kiddietrac.com"). On app.kiddietrac.com every call to https://api.kiddietrac.com/api/... goes to /api/... on this host instead (root .htaccess KT-SAMEAPI sends app.kiddietrac.com/api/* to the same Laravel app). Same-origin requests skip the CORS preflight, which cost a full extra round trip on almost every request (custom headers: Authorization, X-Active-Agency-Id), worst on phones far away. FIRST script on the page, so every later fetch/XHR wrapper still sees and keys on the absolute api.kiddietrac.com address; only the wire address changes. Safety: if this host ever answers an API call with Apache's own 404 page (the route missing), the call is repeated on api.kiddietrac.com once and this tab stops rewriting. Off switch per device: localStorage kt_api_direct = '1'. api.kiddietrac.com itself is unchanged (older apps, the marketing site). */
+(function (w) {
+  try {
+    if (location.hostname !== 'app.kiddietrac.com' || w.__ktSameApi) return;
+    try { if (localStorage.getItem('kt_api_direct') === '1' || sessionStorage.getItem('kt_api_direct') === '1') return; } catch (e) {}
+    w.__ktSameApi = 1;
+    var A = 'https://api.kiddietrac.com/api/', on = true;
+    function fix(u) { return (on && typeof u === 'string' && u.indexOf(A) === 0) ? '/api/' + u.slice(A.length) : u; }
+    function off() { on = false; try { sessionStorage.setItem('kt_api_direct', '1'); } catch (e) {} }
+    var F = w.fetch;
+    if (F) {
+      w.fetch = function (input, init) {
+        var orig = input, url = (typeof input === 'string') ? input : (input && input.href && !input.method) ? String(input) : (input && input.url) || '';
+        var to = fix(url);
+        if (to === url) return F.apply(this, arguments);
+        var req = (typeof input === 'string' || !input.method) ? to : new Request(to, input);
+        var self = this;
+        return F.call(self, req, init).then(function (res) {
+          if (res.status === 404 && /text\/html/i.test(res.headers.get('content-type') || '') && res.headers.get('content-type').indexOf('charset=iso-8859-1') !== -1) {
+            off();
+            return F.call(self, orig, init);
+          }
+          return res;
+        });
+      };
+    }
+    var X = w.XMLHttpRequest && XMLHttpRequest.prototype.open;
+    if (X) { XMLHttpRequest.prototype.open = function (m, u) { if (typeof u === 'string' || (u && u.href)) arguments[1] = fix(String(u)); return X.apply(this, arguments); }; }
+    if (navigator.sendBeacon) { var B = navigator.sendBeacon.bind(navigator); navigator.sendBeacon = function (u, d) { return B(fix(String(u)), d); }; }
+    if (w.EventSource) { var E = w.EventSource; w.EventSource = function (u, o) { return new E(fix(String(u)), o); }; w.EventSource.prototype = E.prototype; }
+  } catch (e) {}
+})(window);</script>
+
   <meta charset="UTF-8">
+  <!-- Back from a sign-out: the cover's colour from the very first frame, before any CSS - never white. -->
+  <script>try{var _ob=sessionStorage.getItem('kt_out_fade');if(_ob&&/^(#[0-9a-f]{3,8}|(radial|linear)-gradient\([#0-9a-z%,. ()]+\))$/i.test(_ob))document.documentElement.style.background=_ob;}catch(e){}</script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- The website's demo phone (kiddietrac.com/demo-phone.html): inert unless framed by kiddietrac.com with ?kt_frame. -->
+  <script src="/js/kt-demo-frame.js?v=20261102dm"></script>
+  <script src="/js/kt-brand-header.js?v=20261030bl"></script>
+  <!-- KT-BRAND-BOOT (2026-10-30, Anthony: "the white label on the emulator should be a full white label with no kiddietrac
+       logo during bootup replaced with white label logo and colour scheme"). A white-label app (?tenant=<slug>, or the tab's
+       kt_tenant) with no cached brand for that tenant loads /branding/boot.js HERE, parser-blocking, so kt_branding holds the
+       partner's brand before anything paints: the launch scene, the sign-in scheme and the logo below all read it. Then the
+       brand's name, title, favicon and logo replace KiddieTrac's in the markup as it is parsed. KiddieTrac's own sign-in
+       (no tenant) is untouched. -->
+  <script>(function(w,d){try{var q=new URLSearchParams(w.location.search),slug=String(q.get('tenant')||w.sessionStorage.getItem('kt_tenant')||'').toLowerCase();
+    if(!/^[a-z0-9-]{1,80}$/.test(slug))return;var c=null;try{c=JSON.parse(w.localStorage.getItem('kt_branding')||'null');}catch(e){}
+    if(!(c&&c.theme&&c.theme.white_label&&(c.agency_slug===slug||c.reseller_slug===slug)))d.write('<script src="https://api.kiddietrac.com/api/v1/branding/boot.js?slug='+slug+'"><\/script>');}catch(e){}})(window,document);</script>
+  <script>(function(w,d){try{var q=new URLSearchParams(w.location.search),slug=String(q.get('tenant')||w.sessionStorage.getItem('kt_tenant')||'').toLowerCase();
+    if(!slug)return;var c=JSON.parse(w.localStorage.getItem('kt_branding')||'null'),t=c&&c.theme;
+    if(!(t&&t.white_label&&(c.agency_slug===slug||c.reseller_slug===slug)))return;
+    var abs=function(x){return !x?'':(/^(https?:|data:)/i.test(x)?x:'https://api.kiddietrac.com'+(x.charAt(0)==='/'?'':'/')+x);};
+    var name=String(t.name||''),logo=abs(t.logo_wordmark_url),fav=abs(t.favicon_url||t.logo_square_url);
+    d.documentElement.classList.add('kt-wl','kt-wl-boot');
+    w.KT_WL_BOOT={slug:slug,name:name,logo:logo,favicon:fav};
+    var title=function(){if(name&&(!d.title||/kiddie\s*trac/i.test(d.title)))d.title='Sign in · '+name;};
+    var sweep=function(n){
+      if(n.tagName==='TITLE'){title();return;}
+      if(n.tagName==='LINK'&&/icon/i.test(n.rel||'')&&fav){n.href=fav;n.removeAttribute('type');return;}
+      if(n.tagName==='META'&&n.name==='description'){n.content='Sign in to '+name;return;}
+      if(n.tagName==='IMG'&&n.hasAttribute('data-brand-logo')&&logo){n.src=logo;n.alt=name;return;}
+    };
+    new MutationObserver(function(ms){ms.forEach(function(m){[].forEach.call(m.addedNodes,function(n){if(n.nodeType===1){sweep(n);if(n.querySelectorAll)[].forEach.call(n.querySelectorAll('title,link,meta,img[data-brand-logo]'),sweep);}});});}).observe(d.documentElement,{childList:true,subtree:true});
+    d.addEventListener('DOMContentLoaded',function(){title();[].forEach.call(d.querySelectorAll('title,link,meta,img[data-brand-logo]'),sweep);
+      var cp=d.getElementById('ktl-copy');if(cp)cp.textContent='© '+new Date().getFullYear()+' '+name;});
+  }catch(e){}})(window,document);</script>
   <script>window.KT_VERSION='4.24';</script>
   <title>Sign in · Kiddietrac</title>
   <meta name="description" content="Sign in to your Kiddietrac parent account">
@@ -11,26 +180,80 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
   <!-- Preload the login hero art so it's ready the instant the splash lifts —
        the screen then appears all at once (logo + fields together). -->
+  <link rel="preload" as="image" href="/login-wordmark.png" fetchpriority="high"><!-- first: the launch scene waits for it (2026-11-02) -->
   <link rel="preload" as="image" href="/logo-wordmark-large.png">
-  <link rel="preload" as="image" href="/login-wordmark.png">
   <link rel="preload" as="image" href="/login-tagline.png">
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="/css/kt-fonts.css?v=20261014net">
   <meta name="theme-color" content="#081C41">
+<script>/* KT-EARLY-STATUSBAR (2026-10-26). Android 15/16 ignores the native status-bar colour, so the app paints a navy
+   strip under the clock itself (kt-native-ui.js). That script is deferred behind ~160 others, so the strip stayed white
+   for seconds on launch. Painted here, first thing; kt-native-ui.js reuses #kt-statusfill. */
+(function(){try{var C=window.Capacitor;if(!C||(C.getPlatform&&C.getPlatform()==='web'))return;
+var SB=C.Plugins&&C.Plugins.StatusBar;if(SB){try{SB.setOverlaysWebView&&SB.setOverlaysWebView({overlay:true});}catch(e){}try{SB.setStyle&&SB.setStyle({style:'DARK'});}catch(e){}}
+if(!document.getElementById('kt-statusfill')){var d=document.createElement('div');d.id='kt-statusfill';
+d.style.cssText='position:fixed;top:0;left:0;right:0;height:var(--kt-safe-top, env(safe-area-inset-top, 0px));background:#081C41;z-index:2147483600;pointer-events:none;';
+document.documentElement.appendChild(d);}}catch(e){}})();</script>
+
   <!-- Light-only document: stops the Android WebView treating this page as
        dark-capable on a phone in dark mode, which painted native <select>
        popups and date pickers with white-on-white text. -->
   <meta name="color-scheme" content="light only">
+  <!-- SAMSUNG INTERNET FORCES DARK (2026-11-03, Anthony: a parent's phone showed the portal inverted). Chrome honours
+       "light only" above (verified with Chrome's own darkening switched on). Samsung Internet ignores it: its
+       "dark mode for websites" leaves a page alone only when the page says it CAN do dark itself. So, for Samsung
+       only, the tag says "light dark" while every colour stays our light one (html background/text and form
+       controls pinned light below). If Samsung darkens the page anyway, the parent gets a one-time tip saying how
+       to turn it off. Chrome and the apps are untouched. -->
+  <script>(function () {
+    try {
+      if (!/SamsungBrowser\//.test(navigator.userAgent)) return;
+      var m = document.querySelector('meta[name="color-scheme"]');
+      if (m) m.setAttribute('content', 'light dark');
+      document.documentElement.className += ' kt-samsung';
+      var st = document.createElement('style');
+      st.textContent = 'html.kt-samsung{background:#F7F9FC;color:#0F172A}'
+        + 'html.kt-samsung input,html.kt-samsung textarea,html.kt-samsung select,html.kt-samsung button{color-scheme:light}';
+      document.head.appendChild(st);
+      var KEY = 'kt_samsung_dark_tip_v1';
+      try { if (localStorage.getItem(KEY)) return; } catch (e) {}
+      // Chrome's documented detector: a light-scheme box painted "Canvas" reads non-white when the browser darkens it.
+      function forcedDark() {
+        var d = document.createElement('div');
+        d.style.cssText = 'display:none;background-color:Canvas;color-scheme:light';
+        document.body.appendChild(d);
+        var bg = getComputedStyle(d).backgroundColor; d.remove();
+        var n = (bg.match(/\d+/g) || []).slice(0, 3).map(Number);
+        return n.length === 3 && (n[0] + n[1] + n[2]) < 600;
+      }
+      function tip() {
+        try { localStorage.setItem(KEY, '1'); } catch (e) {}
+        var w = document.createElement('div');
+        w.setAttribute('role', 'status');
+        w.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:2147483000;'
+          + 'background:#fff;color:#0F172A;border:1px solid #CBD5E1;border-radius:12px;box-shadow:0 8px 24px rgba(15,23,42,.18);'
+          + 'padding:12px 40px 12px 14px;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color-scheme:light';
+        w.innerHTML = '<b>Page looking dark?</b><br>Samsung Internet’s dark mode can make this page hard to read. If it does, '
+          + 'tap the <b>☰ menu</b> at the bottom of the screen and choose <b>Light mode</b>.'
+          + '<button type="button" aria-label="Close" style="position:absolute;top:6px;right:6px;width:30px;height:30px;border:0;background:none;font-size:20px;color:#475569;cursor:pointer">×</button>';
+        w.querySelector('button').onclick = function () { w.remove(); };
+        document.body.appendChild(w);
+        setTimeout(function () { if (w.parentNode) w.remove(); }, 20000);
+      }
+      window.addEventListener('load', function () { setTimeout(function () { try { if (forcedDark()) tip(); } catch (e) {} }, 2500); });
+    } catch (e) {}
+  })();</script>
   <link rel="stylesheet" href="/css/kt-select-fix.css?v=20260811scheme">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Kiddietrac">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/css/kt-brand-v16.css">
+  <!-- One WebAuthn / fingerprint request at a time (passkey autofill vs unlock): first. -->
+  <script src="/js/kt-cred-mutex.js?v=202610212345cm"></script>
   <link rel="stylesheet" href="/css/kt-login-v22.css">
   <link rel="stylesheet" href="/css/kt-login-pop.css">
-  <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20260921ios">
+  <link rel="stylesheet" href="/css/kt-login-redesign.css?v=20261030dm">
   <!-- Mark the native APK on <html> as early as possible. kt-app = the app at any
        size; kt-native = the app on a PHONE-shaped device, which is what the navy
        mobile login below is keyed to. A tablet gets neither the phone login nor a
@@ -46,11 +269,109 @@
   <style>html.kt-bio-pending::before{content:'';position:fixed;inset:0;z-index:2147481999;background:radial-gradient(120% 55% at 50% 0%,rgba(19,183,204,.18) 0%,rgba(19,183,204,0) 55%),linear-gradient(168deg,#0a1f44 0%,#0c2857 46%,#0a1f44 100%);}</style>
   <script>try{(function(){var L=localStorage,S=sessionStorage,d=document.documentElement;if(L.getItem('kt_biometric_enabled')!=='1'||!L.getItem('kt_bio_token'))return;if(S.getItem('kt_token')||S.getItem('kt_bio_session')==='1')return;if(L.getItem('kt_signed_out')==='1')return;if(Date.now()-(parseInt(L.getItem('kt_bio_unlocked_at')||'0',10)||0)<20000)return;if(!(window.__KT_NATIVE||window.__KT_PHONE))return;d.classList.add('kt-bio-pending');setTimeout(function(){d.classList.remove('kt-bio-pending');},20000);})();}catch(e){}</script>
   <!-- Bold navy mobile/APK login (layered over the redesign above). -->
-  <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20260921ios">
-  <script src="/js/kt-net.js?v=20261014net"></script>
-<script src="/js/kt-ios-safearea.js?v=20261016nav2"></script>
+  <link rel="stylesheet" href="/css/kt-login-mobile-navy.css?v=20261030dm">
+  <!-- Launch scene + sign-in fade (2026-10-21): /js/kt-launch-scene.js, first thing in <body>. -->
+  <link rel="stylesheet" href="/css/kt-launch-scene.css?v=20261103ios">
+  <!-- A RESELLER'S OWN SIGN-IN PAGE WEARS ITS SCHEME (2026-10-21). Anthony: "with whitelabel
+       use the colour scheme chosen". Only for a reseller's own app / link (?tenant=, kt_tenant);
+       the plain sign-in stays KiddieTrac navy. The background follows the SAME rule as the
+       sign-out cover (kt-signout-fade.js brandBg): the hero gradient when white text reads on
+       both stops (3:1), else a dark-enough splash colour, else the gradient's darker stop or the
+       primary, else navy - never pale - so cover -> sign-in hands off with no colour jump.
+       Applied here at parse time from the cached brand, and again by branding-loader once the
+       fresh brand arrives (first visit). -->
+  <style id="kt-tenant-signin">
+html.kt-tenant,html.kt-tenant body{background:var(--ktt-solid)!important}
+html.kt-tenant .ktl-blob{display:none!important}
+html.kt-tenant #submitBtn,html.kt-tenant #kt-bio-unlock{background:var(--ktt-btn)!important;color:var(--ktt-btn-ink)!important;border-color:transparent!important}
+html.kt-tenant #kt-bio-unlock{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
+html.kt-tenant input:focus,html.kt-tenant select:focus{border-color:var(--ktt-accent)!important;box-shadow:0 0 0 3px var(--ktt-ring)!important;outline:none}
+html.kt-tenant #kt-launch .ktl-bg{background:var(--ktt-bg)!important}
+html.kt-tenant #kt-launch .ktl-photo,html.kt-tenant #kt-launch .ktl-shade{display:none!important}
+html.kt-tenant #kt-bio-lock,html.kt-tenant #kt-pin-lock{background:var(--ktt-bg)!important}
+html.kt-tenant.kt-bio-pending::before{background:var(--ktt-bg)!important}
+@media (max-width:768px){
+  html.kt-tenant .auth-body{background:var(--ktt-bg)!important}
+  html.kt-tenant .ktl-form-side{background:transparent!important}
+  html.kt-tenant .ktl-form-side a{color:var(--ktt-accent)!important}
+  /* On the brand background the button takes the brand colour that is NOT the background. */
+  html.kt-tenant #submitBtn{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
+  /* The logo sits on a white plate, as on the app's splash, so a logo in the primary colour reads. */
+  html.kt-tenant .ktl-mhero-card{background:#fff!important;border-radius:22px!important;padding:14px 22px!important;box-shadow:0 18px 50px -18px rgba(0,0,0,.45)!important;
+    aspect-ratio:auto!important;height:auto!important;width:fit-content!important;max-width:min(80vw,320px)!important;margin-left:auto!important;margin-right:auto!important}
+  /* ...and the logo itself shows on it (2026-10-28): kt-login-mobile-navy.css hides this img to paint KiddieTrac's wordmark as the card background, so on a phone every white-label sign-in showed an empty white plate. */
+  html.kt-tenant .ktl-mhero-card img{display:block!important;height:64px!important;width:auto!important;max-width:100%!important;margin:0 auto!important}
+}
+/* IN THE APP (2026-10-30, white-label website demo): kt-login-mobile-navy.css paints KiddieTrac's navy on html.kt-native
+   with stronger selectors (body.auth-body, .ktl-wrap #submitBtn) and outside any media query, so a white-label app's
+   sign-in kept the navy ground and the KiddieTrac button under its own logo. The partner's scheme wins there too. */
+html.kt-tenant body.auth-body{background:var(--ktt-bg)!important}
+html.kt-tenant.kt-native .ktl-form-side,html.kt-tenant .ktl-wrap .ktl-form-side{background:transparent!important}
+html.kt-tenant.kt-native .ktl-wrap #submitBtn{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
+html.kt-tenant.kt-native .ktl-form-side a{color:var(--ktt-accent)!important}
+html.kt-tenant.kt-native .ktl-mhero-card{background:#fff!important;border-radius:22px!important;padding:14px 22px!important;box-shadow:0 18px 50px -18px rgba(0,0,0,.45)!important;filter:none!important;
+  aspect-ratio:auto!important;height:auto!important;width:fit-content!important;max-width:min(80vw,320px)!important;margin-left:auto!important;margin-right:auto!important}
+html.kt-tenant.kt-native .ktl-mhero-card img{display:block!important;height:64px!important;width:auto!important;max-width:100%!important;margin:0 auto!important}
+@media (max-width:768px){
+  html.kt-tenant .ktl-wrap #submitBtn{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
+}
+/* No KiddieTrac words or artwork under a partner's brand (2026-10-30): the slogan lockup and its tagline image (the
+   partner's own tagline is added by kt-launch-scene's kt:brand handler), and "(c) KiddieTrac Inc." */
+html.kt-tenant .ktl-mhero-tag.kt-lockup,html.kt-tenant.kt-native .ktl-mhero-tag.kt-lockup,html.kt-wl-boot .ktl-mhero-tag.kt-lockup{display:none!important}
+html.kt-tenant .kt-copyright,html.kt-wl .kt-copyright{display:none!important}
+@media (min-width:769px){
+  html.kt-tenant .ktl-brand-side{background:var(--ktt-bg)!important}
+  html.kt-tenant .ktl-title,html.kt-tenant .ktl-title *{background:none!important;color:var(--ktt-primary)!important;-webkit-text-fill-color:var(--ktt-primary)!important}
+  html.kt-tenant .ktl-form-side a{color:var(--ktt-primary)!important}
+}
+  </style>
+  <script>(function(w){
+  function hex(c){return (typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c.trim()))?c.trim():null;}
+  function lum(c){var n=parseInt(c.slice(1),16),f=function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);};return 0.2126*f(n>>16)+0.7152*f((n>>8)&255)+0.0722*f(n&255);}
+  function onWhite(c){return !!c&&lum(c)<=0.30;}
+  /* The sign-in scheme for a white-label theme: {bg, solid, primary, accent, btn, btnInk, ring}. */
+  w.KT_signinScheme=function(t){
+    var h=t.hero||{},hf=hex(h.from),ht=hex(h.to),sb=hex(t.splash_bg),pc=hex(t.primary_color)||'#1F6080',ac=hex(t.accent_color)||pc;
+    var bg,solid;
+    if(onWhite(hf)&&onWhite(ht)){bg='linear-gradient('+((+h.angle)||135)+'deg,'+hf+' 0%,'+ht+' 100%)';solid=lum(hf)<=lum(ht)?hf:ht;}
+    else if(onWhite(sb)){bg=solid=sb;}
+    else{var dk=[hf,ht].filter(onWhite).sort(function(a,b){return lum(a)-lum(b);})[0];bg=solid=dk||(onWhite(pc)?pc:'#0A1C3A');}
+    var n=parseInt(ac.slice(1),16),ink=function(c){return onWhite(c)?'#FFFFFF':'#0F172A';};
+    // On the white form (desktop): the gradient when white reads on both colours, else the primary.
+    var btn=(onWhite(pc)&&onWhite(ac))?'linear-gradient(135deg,'+pc+','+ac+')':pc;
+    // On the brand background (phone, unlock): whichever brand colour is not the background.
+    var on=(solid.toLowerCase()===pc.toLowerCase()||Math.abs(lum(pc)-lum(solid))<0.06)?ac:pc;   /* a primary as dark as the ground does not read as a button (2026-10-30) */
+    return {bg:bg,solid:solid,primary:pc,accent:ac,btn:btn,btnInk:ink(pc),btnOn:on,btnOnInk:ink(on),
+      ring:'rgba('+(n>>16)+','+((n>>8)&255)+','+(n&255)+',.28)'};
+  };
+  /* Wear it (t = a white-label theme for this page's tenant), or take it off (null). */
+  w.KT_applySigninScheme=function(t){
+    var d=document.documentElement;
+    if(!t||!t.white_label){d.classList.remove('kt-tenant');return;}
+    var s=w.KT_signinScheme(t),st=d.style;
+    st.setProperty('--ktt-bg',s.bg);st.setProperty('--ktt-solid',s.solid);st.setProperty('--ktt-primary',s.primary);st.setProperty('--ktt-accent',s.accent);
+    st.setProperty('--ktt-btn',s.btn);st.setProperty('--ktt-btn-ink',s.btnInk);st.setProperty('--ktt-ring',s.ring);
+    st.setProperty('--ktt-btn-on',s.btnOn);st.setProperty('--ktt-btn-on-ink',s.btnOnInk);
+    d.classList.add('kt-tenant');
+    try{var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',s.solid);}catch(e){}
+  };
+  try{
+    var S=w.sessionStorage,L=w.localStorage,slug=null;
+    try{slug=new URLSearchParams(w.location.search).get('tenant')||S.getItem('kt_tenant');}catch(e){}
+    if(!slug)return;
+    var c=JSON.parse(L.getItem('kt_branding')||'null');
+    if(c&&c.theme&&c.theme.white_label&&(slug===c.agency_slug||slug===c.reseller_slug))w.KT_applySigninScheme(c.theme);
+  }catch(e){}
+})(window);</script>
+  <link rel="preload" as="image" href="/img/launch/blocks-portrait.webp" type="image/webp" media="(max-aspect-ratio: 1/1)">
+  <script src="/js/kt-net.js?v=20261105fw"></script>
+  <!-- A notification tap that wakes a signed-out phone lands HERE first (dashboard.html sends it to sign in before it can listen); kt-native-push.js remembers the link so the dashboard opens it after sign-in. -->
+  <script src="/js/kt-native-push.js?v=20261105alink" defer></script>
+<script src="/js/kt-ios-safearea.js?v=20261106gd14"></script>
+<script src="/js/kt-login-fit.js?v=20261031li"></script>
 </head>
 <body class="auth-body">
+<script src="/js/kt-launch-scene.js?v=20261105tix"></script>
 <!-- Launch splash REMOVED (2026-08-11): opening the app must land on the login
      form immediately. The boot animation now belongs AFTER sign-in, where there is
      actually a portal being loaded to wait for. -->
@@ -114,7 +435,7 @@ html.kt-wl .ktl-anim > img[data-kt-wl]{width:auto !important;max-width:min(70vw,
 /* Hand the NATIVE (Capacitor) splash off to this web splash immediately so the
    APK shows ONE continuous logo boot instead of native-splash → web-splash →
    login-page-logo (the "triple logo" flash). */
-try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.SplashScreen.hide();}catch(e){}
+try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.SplashScreen.hide();}catch(e){}try{window.__ktBoot&&window.__ktBoot.mark('hide',!!(window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.SplashScreen));}catch(e){}
 })();
 </script>
 <script>
@@ -151,7 +472,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
     <section class="ktl-form-side">
       <div class="ktl-mobile-hero" aria-hidden="true">
         <div class="ktl-mhero-card"><span class="ktl-anim"><img src="/logo-wordmark-large.png" alt="KiddieTrac" data-brand-logo onerror="this.style.display='none'"><span class="ktl-pen" aria-hidden="true"></span><span class="ktl-sheen" aria-hidden="true"></span><span class="ktl-spk" aria-hidden="true"><b></b><b></b><b></b></span></span></div>
-        <p class="ktl-mhero-tag">Every moment, beautifully captured.</p>
+        <p class="ktl-mhero-tag kt-lockup"><span class="kt-slogan">Smart Childcare Management Platform</span><span class="kt-no1"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#8EC73C" d="M12 2.6l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.0l-5.7 3.1 1.2-6.4L2.8 9.3l6.4-.8z"/></svg>#1 in North America</span></p>
       </div>
       <div class="ktl-form-inner">
         <div class="auth-logo">
@@ -239,9 +560,9 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
       </div>
       <div class="ktl-legal">
         <span class="ktl-legal-links"><a href="https://www.kiddietrac.com/terms">Terms of Service</a> · <a href="https://www.kiddietrac.com/privacy">Privacy Policy</a></span><br>
-        © 2021–2026 KiddieTrac. All rights reserved. · <span id="ktl-ver"></span>
+        <span class="kt-copyright"><span id="ktl-copy">© 2026 KiddieTrac Inc. All Rights Reserved.</span> · </span><span id="ktl-ver"></span>
       </div>
-      <script>(function(){var v=document.getElementById('ktl-ver');if(v)v.textContent='v'+(window.KT_VERSION||'');})();</script>
+      <script>(function(){var v=document.getElementById('ktl-ver');if(v)v.textContent='v'+(window.KT_VERSION||'');var c=document.getElementById('ktl-copy');if(c)c.textContent='\u00a9 '+new Date().getFullYear()+' KiddieTrac Inc. All Rights Reserved.';})();</script>
     </section>
 
     <!-- ── Brand showcase ── -->
@@ -276,13 +597,20 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
     // v22p31: surface why the user was bounced here when session-timeout
     // (or 401 elsewhere) appended ?signed_out=… to the URL.
     (function () {
-      var reason = new URLSearchParams(window.location.search).get('signed_out');
+      var _q = new URLSearchParams(window.location.search);
+      var reason = _q.get('signed_out') || (_q.get('reason') === 'roles-changed' ? 'roles' : null);
       if (!reason) return;
       var banner = document.getElementById('signedOutBanner');
       var msg = {
         idle: 'You were signed out after a period of inactivity. Sign in again to continue.',
         absolute: 'For security, sessions are capped at 12 hours. Please sign in again.',
         'signed out': 'You signed out. See you next time!',
+        expired: 'Your session has ended. Please sign in again.',
+        other_tab: 'You were signed out in another window. Sign in again to continue.',
+        roles: 'Your access has changed. Please sign in again.',
+        // Sign-in locks (2026-11-10): the agency's own words on who to contact, saved by app.js on the 423.
+        locked: (function () { try { return sessionStorage.getItem('kt_locked_msg'); } catch (e) { return null; } })()
+          || 'Your access is paused for now. Please contact your childcare provider.',
       }[reason] || 'Your session ended. Please sign in again.';
       if (banner) { banner.textContent = msg; banner.hidden = false; }
     })();
@@ -299,6 +627,11 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
       // Store securely — use httpOnly cookies in production; for SPA we use sessionStorage + short-lived token
       sessionStorage.setItem('kt_token', body.token);
       sessionStorage.setItem('kt_user', JSON.stringify(body.user));
+      /* A "change your password" flag from an EARLIER sign-in in this tab must not
+         survive this one (2026-10-22: Anthony changed his password on his phone, signed
+         in again on his desktop and was asked again). The reply below sets it afresh
+         when the server really wants a change. */
+      try { sessionStorage.removeItem('kt_force_password_change'); sessionStorage.removeItem('kt_force_password_reason'); } catch (e) {}
 
       // Language follows the USER: apply their server-saved locale (chosen at
       // onboarding or in Settings) authoritatively on every sign-in. So a changed
@@ -333,23 +666,26 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
          in, landed on a dashboard, and every request came back 403. From where she sat
          the sign-in worked and the app was broken. */
       if (body.must_change_password) {
-        try { sessionStorage.setItem('kt_force_password_change', '1'); } catch (e) {}
-        /* The Security tab, not just Settings: landing on Profile and expecting
-           somebody to find the password form is the same failure as a notification
-           that drops you on a list. */
-        window.location.href = '/dashboard.html#settings?tab=security';
+        try {
+          sessionStorage.setItem('kt_force_password_change', '1');
+          sessionStorage.setItem('kt_force_password_reason', body.password_change_reason || 'admin_reset');
+        } catch (e) {}
+        /* Straight to the dashboard, where kt-pw-gate.js locks everything behind the
+           "choose a new password" dialog before any screen can be used (2026-10-22).
+           It used to land on Settings > Security with the whole menu still open. */
+        (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html');
         return;
       }
 
       // Redirect based on role
       if (body.user.roles.includes('guardian')) {
-        window.location.href = '/dashboard.html';
+        (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html');
       } else if (body.user.roles.includes('centre_director')) {
-        window.location.href = '/dashboard.html';
+        (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html');
       } else if (body.user.roles.includes('agency_admin')) {
-        window.location.href = '/dashboard.html';
+        (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html');
       } else {
-        window.location.href = '/dashboard.html';
+        (window.KT_portalFade || function (u, r) { if (r) location.replace(u); else window.location.href = u; })('/dashboard.html');
       }
     }
 
@@ -363,7 +699,8 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
         email: document.getElementById('email').value.trim().toLowerCase(),
         password: document.getElementById('password').value,
         device_name: navigator.userAgent.substring(0, 100),
-        device_platform: 'web',
+        // The app says it is the app (2026-11-02: the iPhone app's sign-in was filed as a browser).
+        device_platform: (function () { try { var C = window.Capacitor; if (C && C.isNativePlatform && C.isNativePlatform()) { var p = C.getPlatform(); if (p === 'ios' || p === 'android') return p; } } catch (e) {} return 'web'; })(),
       };
 
       // If the username row is showing (shared email), send the username too.
@@ -431,7 +768,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
           errorMsg.style.color = '#1F6080';
           errorMsg.hidden = false;
           submitBtn.disabled = false;
-          submitBtn.textContent = 'Sign in';
+          submitBtn.textContent = 'Log in';
           setTimeout(function () { if (uEl) { uEl.value = ''; uEl.focus(); } }, 50);
           return;
         }
@@ -442,7 +779,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
         errorMsg.style.color = '';
         errorMsg.hidden = false;
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Sign in';
+        submitBtn.textContent = 'Log in';
       }
     });
 
@@ -455,7 +792,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
          browser's own suggestions — one tap, nothing typed. It waits in the background,
          so the button aborts it first (one request at a time), and it is renewed before
          the server's 2-minute challenge runs out. */
-      var ac = null, renew = null;
+      var ac = null, renew = null, getFails = 0;
       function stopAutofill() { clearTimeout(renew); if (ac) { try { ac.abort(); } catch (e) {} ac = null; } }
       async function startAutofill() {
         if (!(window.KT && KT.passkeys) || !(await KT.passkeys.conditionalAvailable())) return;
@@ -469,6 +806,38 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
           ktFinishSignIn(body, 'passkey');
         } catch (err) {
           if (mine !== ac || (err && err.cancelled)) return;   // aborted or dismissed: quietly wait again
+          /* NOT THE PERSON'S DOING (2026-10-22). This runs by itself as the page opens —
+             typically just after a laptop wakes, before its Wi-Fi is back — and it printed
+             "Failed to fetch" under a form nobody had touched yet. A background helper that
+             cannot reach the server says nothing: it tries again when the connection
+             returns, or in 20 seconds. Pressing "Log in" or the passkey button still
+             reports a real failure, in words. */
+          if (err && (err.network || err.name === 'TypeError')) {
+            clearTimeout(renew); ac = null;
+            var again = function () { window.removeEventListener('online', again); startAutofill(); };
+            window.addEventListener('online', again);
+            renew = setTimeout(again, 20000);
+            return;
+          }
+          /* NOR A SERVER REFUSAL BEFORE ANYONE ACTED (2026-10-31). This background passkey offer asked for a
+             challenge on every page open, and a busy shared Wi-Fi (or many reloads) got "Too Many Attempts."
+             printed under a form nobody had touched. Only something the person did - a passkey actually chosen
+             and then refused by the server - is worth words here; anything else waits and quietly tries again. */
+          if (!err || err.phase === 'options') {
+            clearTimeout(renew); ac = null;
+            renew = setTimeout(startAutofill, err && err.status === 429 ? 65000 : 30000);
+            return;
+          }
+          /* NOR THE PHONE'S OWN PASSWORD MANAGER (2026-11-04). On Android the app's background passkey offer goes
+             through Credential Manager, and on a phone with no passkey provider ready it fails by itself with
+             "An unknown error occurred while talking to the credential manager." That printed OVER the real answer:
+             a parent pressed Log in, the server said wrong password, and the box showed the credential-manager line
+             instead. The browser's refusal of a request nobody made is never shown; after two, it stops asking. */
+          if (err.phase === 'get') {
+            clearTimeout(renew); ac = null;
+            if (++getFails < 2) renew = setTimeout(startAutofill, 30000);
+            return;
+          }
           errorMsg.style.color = '';
           errorMsg.textContent = err.message || 'Passkey sign-in failed.';
           errorMsg.hidden = false;
@@ -491,7 +860,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
           ktFinishSignIn(body, 'passkey');
         } catch (err) {
           errorMsg.style.color = err.cancelled ? '#1F6080' : '';
-          errorMsg.textContent = err.cancelled ? 'Passkey sign-in was cancelled.' : (err.message || 'Passkey sign-in failed.');
+          errorMsg.textContent = err.cancelled ? 'Passkey sign-in was cancelled.' : (err.status === 429 ? 'Too many sign-in tries from this network. Wait a minute, then try again.' : (err.message || 'Passkey sign-in failed.'));
           errorMsg.hidden = false;
           pk.disabled = false;
           label.textContent = was;
@@ -501,8 +870,8 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
     })();
   </script>
   <script src="/js/login-v7.js?v=20261015rc" defer></script>
-  <script src="/js/session-timeout.js?v=20261001pt" defer></script>
-  <script src="/js/branding-loader.js?v=20261015wl" defer></script>
+  <script src="/js/session-timeout.js?v=20261102id" defer></script>
+  <script src="/js/branding-loader.js?v=20261105del" defer></script>
   <script src="/js/api-helpers-v10.js" defer></script>
   <script src="/js/mobile-helper-v11.js" defer></script>
 <script>
@@ -512,31 +881,24 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
     });
   }
 </script>
-  <script src="/js/screen-chat.js" defer></script>
-  <script src="/js/nav-additions-v12.js" defer></script>
-  <script src="/js/screen-waitlist.js" defer></script>
-  <script src="/js/screen-announcements.js" defer></script>
-  <script src="/js/screen-autopay.js" defer></script>
-  <script src="/js/nav-additions-v13.js" defer></script>
-  <script src="/js/screen-lesson-plans.js" defer></script>
-  <script src="/js/screen-schedule.js" defer></script>
-  <script src="/js/screen-certifications.js" defer></script>
-  <script src="/js/push-client.js" defer></script>
-  <script src="/js/nav-additions-v14.js" defer></script>
-  <script src="/js/screen-admin-mrr.js" defer></script>
-  <script src="/js/screen-admin-features.js" defer></script>
-  <script src="/js/screen-admin-branding.js" defer></script>
-  <script src="/js/screen-marketing-site.js" defer></script>
-  <script src="/js/nav-additions-v15.js" defer></script>
-  <script src="/js/kt-social-login.js?v=20261013app"></script>
-  <script src="/js/kt-pin.js?v=20260809navy" defer></script>
-  <script src="/js/kt-biometric.js?v=20261015wl" defer></script>
-  <script src="/js/kt-passkeys.js?v=20261010pk1" defer></script>
-  <script src="/js/kt-crash-report.js?v=20261016fs" defer></script>
+  <!-- FIFTEEN DASHBOARD SCREENS NO LONGER LOAD HERE (2026-11-02). Chat, waitlist, announcements, autopay, lesson
+       plans, schedule, certifications, the admin MRR/features/branding screens, the marketing-site editor and
+       nav-additions v12-v15 were all listed on the sign-in page too - ~630 KB of script nobody signed out can use
+       (a sign-in always continues to dashboard.html, which loads every one of them). They ran ahead of
+       kt-biometric.js in defer order, so the Face ID / fingerprint lock waited on them: measured on an iPhone
+       profile, the lock came up 0.26 s sooner without them. push-client.js stays (it subscribes at sign-in). -->
+  <script src="/js/push-client.js?v=20261102if" defer></script>
+  <script src="/js/kt-social-login.js?v=20261026zk"></script>
+  <script src="/js/kt-pin.js?v=202610220030logo" defer></script>
+  <script src="/js/kt-biometric.js?v=20261103ios" defer></script>
+  <script src="/js/kt-passkeys.js?v=20261104cm" defer></script>
+  <script src="/js/kt-crash-report.js?v=20261124fz" defer></script>
   <!-- Freeze watchdog on the sign-in page too: a lock-up before anybody is signed in
        is still a lock-up, and it was the one screen it could not see. -->
   <script src="/js/kt-freeze-watch.js?v=20260831frz2" defer></script>
-  <script src="/js/kt-i18n.js?v=20260808i24" defer></script>
+  <script src="/js/kt-i18n.js?v=20261113imz2" defer></script>
+  <!-- "Get the app" under the sign-in form + a one-time popup after a browser sign-in (2026-11-01). -->
+  <script src="/js/kt-get-app.js?v=20261106gd17" defer></script>
   <!-- A dialog is left on purpose, not by tapping past it (2026-09-21).
        kt-modal-safety stops a backdrop click (and a text-selection drag that merely
        ENDED on the backdrop) from closing a popup that offers a way out; kt-modal-guard
@@ -547,7 +909,47 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
        signed-out page, the password-reset dialog on this one included, still closed on a
        stray click and lost whatever had been typed. Both files are standalone (no shell,
        no Api, no Dom), so they load anywhere. -->
-  <script src="/js/kt-modal-guard.js?v=20260921ms" defer></script>
+  <script src="/js/kt-modal-guard.js?v=20261102wn" defer></script>
+  <script src="/js/kt-appupdate.js?v=20261102iv" defer></script>
   <script src="/js/kt-modal-safety.js?v=20260921ms" defer></script>
+<!-- KEYBOARD TRACE, iPhone app only (2026-11-02 kd). The verify lane (iOS Simulator, iOS 27) showed the sign-in form not
+     compacting while the keyboard was up and Log in under the keyboard's bar after an empty submit on the 4.7" SE.
+     What WebKit reports there (window vs visual viewport, scroll, html.kt-kb-open) cannot be read from a test, so
+     the page reports it: viewport numbers, class state and which field (by id) has focus - no values, no names.
+     One short report per keyboard episode, at most 12 per page, to storage/app/private/boot-diag.log. -->
+<script>
+(function (w, d) {
+  try {
+    var C = w.Capacitor;
+    if (!(C && C.isNativePlatform && C.isNativePlatform() && C.getPlatform && C.getPlatform() === 'ios')) return;
+    var vv = w.visualViewport; if (!vv) return;
+    var t0 = Date.now(), rows = [], sent = 0, timer = null;
+    function snap(ev) {
+      if (rows.length >= 70) return;
+      var ae = d.activeElement, se = d.scrollingElement || d.documentElement, sb = d.getElementById('submitBtn');
+      var r = sb && sb.getBoundingClientRect();
+      rows.push([Date.now() - t0, ev, w.innerHeight, Math.round(vv.height), Math.round(vv.offsetTop || 0), Math.round(se.scrollTop || 0),
+        d.documentElement.classList.contains('kt-kb-open') ? 1 : 0, (ae && ae.id) || (ae && ae.tagName) || '', r ? Math.round(r.bottom) : -1,
+        d.documentElement.clientHeight]);
+      clearTimeout(timer); timer = setTimeout(send, 2500);
+    }
+    function send() {
+      if (!rows.length || sent >= 12) return; sent++;
+      var body = JSON.stringify({ data: JSON.stringify({ k: 'kb', v: 1, fix: w.__ktKbFix || '', sw: screen.width, sh: screen.height,
+        cols: 't,ev,ih,vh,vt,sy,open,ae,btnBottom,ch', rows: rows }) });
+      rows = [];
+      try { if (navigator.sendBeacon && navigator.sendBeacon('/api/v1/diag/boot', new Blob([body], { type: 'application/json' }))) return; } catch (e) {}
+      try { fetch('/api/v1/diag/boot', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true }); } catch (e) {}
+    }
+    vv.addEventListener('resize', function () { snap('r'); });
+    vv.addEventListener('scroll', function () { snap('s'); });
+    d.addEventListener('focusin', function () { snap('fi'); }, true);
+    d.addEventListener('focusout', function () { snap('fo'); }, true);
+    w.addEventListener('pagehide', send);
+  } catch (e) {}
+})(window, document);
+</script>
+<!-- Dashboard files into the app cache while the person signs in (2026-11-02 dw). -->
+<script src="/js/kt-dash-warm.js?v=20261105del" defer></script>
 </body>
 </html>

@@ -1,3 +1,9 @@
+/* NO -webkit-overflow-scrolling (2026-10-29). On iPhone, WebKit gives any scroller carrying it its
+   own stacking layer (z-index 0), so everything fixed inside #appMain - a full-screen chat thread
+   at z 9400, popups - painted UNDER the sticky header (#appSidebar, z 50). An educator opened a
+   conversation, the header covered its back arrow, the bottom bar was hidden for the thread, and
+   there was no way out ("it froze"). Momentum scrolling is the default since iOS 13, so the
+   property bought nothing. Removed from every rule; do not add it back. */
 /* ═══════════════════════════════════════════════════════════════════
    KiddieTrac — true mobile-app experience (2026-07-09). Phones & APK ≤768px (the APK WebView reports an inflated ~601-768 width).
    Applies to EVERY section and role (it styles the shared shell + common
@@ -36,7 +42,7 @@
     display: flex !important; flex-direction: column !important; grid-template-columns: none !important;
   }
   #appShell > #appSidebar { flex: 0 0 auto !important; }
-  #appShell > #appMain, #appMain, .app-main { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  #appShell > #appMain, #appMain, .app-main { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow-y: auto !important; }
   /* When the slide-in menu is open the sidebar becomes a fixed overlay (out of the
      flex flow) — let #appMain take the full height behind it. */
   body.kt-mnav-open #appSidebar { flex: 0 0 auto; }
@@ -46,9 +52,10 @@
      every section. #appMain's 62px is the only clearance the fixed bar needs. */
   body { padding-bottom: 0 !important; }
 
-  /* Parent screens ship their own headers, so drop the generic auto-hero
-     ("dashboard"/"today"/…) the shell prepends — it's pure clutter for them. */
-  body.kt-parentview #appMain > .kt-hero-auto { display: none !important; }
+  /* PARENT SCREENS KEEP THEIR BANNER (2026-11-06, Anthony: "no hero banner on this page and multiple of other pages
+     in guardian view"). This used to hide the auto-hero for parents on the idea that their screens had their own
+     headers - but the auto-hero is built FROM the screen's own h1, so hiding it hid the title too: My tasks, Billing,
+     Medications, Settings, Help and seven more opened with no name at all. The banner shows, as on every other role. */
 
   /* ── Shell density — reclaim the wasted outer padding ── */
   .app-shell--sidebar .app-main,
@@ -88,7 +95,6 @@
     flex-wrap: nowrap !important;
     overflow-x: auto;
     overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     padding-bottom: 4px !important;
   }
@@ -130,6 +136,8 @@
     margin-bottom: 11px !important;
     box-shadow: 0 1px 4px rgba(15, 23, 42, .06) !important;
   }
+  /* Provider cards keep their own provider-coloured top line, as on desktop (see app-v2.css). */
+  #appMain .centre-card-v17 { box-shadow: inset 0 3px 0 var(--kt-edge-line, transparent), 0 1px 4px rgba(15, 23, 42, .06) !important; }
 
   /* ── Parent icon-tile launcher (#home): compact 3-across grid so the whole
         thing fits with far less scrolling; the big 76px icon wells + 138px tiles
@@ -196,14 +204,14 @@
   .kt-modal-actions button:not([role="switch"]):not([aria-pressed]) { min-height: 42px; }
   #appMain form button[type="submit"] { width: 100% !important; }
 
-  /* ── Modals behave like app bottom-sheets ── */
+  /* ── Modals are cards in the middle of the screen (2026-11-06; were bottom sheets) ── */
   .kt-modal-card, .kt-modal > div:not(.kt-modal-backdrop) {
-    max-width: 100% !important; width: 100% !important;
-    max-height: 92vh !important; border-radius: 18px 18px 0 0 !important;
+    max-width: calc(100% - 24px) !important; width: calc(100% - 24px) !important;
+    max-height: 92vh !important; border-radius: 18px !important; align-self: center !important;
   }
 
   /* ── Wide tables scroll horizontally instead of breaking the page ── */
-  #appMain table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #appMain table { display: block; overflow-x: auto; }
 
   /* ── Drop desktop-only chrome on phones ── */
   #kt-search-widget { display: none !important; }
@@ -226,7 +234,7 @@
   }
   body:has(.kt-thread-compose) #kt-mobilenav { display: none !important; }
   .kt-thread-header { flex: 0 0 auto !important; padding-top: calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 10px) !important; }
-  .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; }
   .kt-thread-compose { flex-shrink: 0 !important; padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 8px) !important; }
   .kt-compose-input { font-size: 16px !important; }  /* no iOS zoom while typing */
 
@@ -236,7 +244,12 @@
   /* !important + the id/class specificity beats kt-consistency-polish.css's
      `#appMain > * { animation: kt-fade-in … !important }` so real navigations get
      the horizontal swipe; in-place re-renders (no .kt-screen-in) keep the quick fade. */
-  #appMain > .kt-screen-in { animation: kt-screen-in .3s cubic-bezier(.33, 1, .68, 1) both !important; }
+  /* `backwards`, not `both` (2026-10-20): a forwards fill holds the end frame, and even
+     `transform:none` interpolates to translateX(0) there, a transform that makes every
+     slid-in node the containing block for position:fixed popups drawn inside it. */
+  #appMain > *, #appMain > .kt-screen-in { animation: none !important; }   /* phones switch in place, in one frame */
+  #appMain .kt-hero.kt-banner-fx, #appMain .kt-page-hero.kt-banner-fx, #appMain > .kt-hero, #appMain > .kt-page-hero,
+  #appMain > .kt-screen-in > .kt-hero, #appMain > .kt-screen-in > .kt-page-hero { animation: kt-hero-breathe 16s ease-in-out infinite !important; }
 
   /* ── EMAIL client: on phones, drop the fixed-height 3-pane box (it overflowed
         far under the nav) and let the active pane flow as a normal scrolling
@@ -247,8 +260,8 @@
 }
 
 @keyframes kt-screen-in {
-  from { opacity: 0; transform: translateX(34px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from { opacity: .85; }
+  to   { opacity: 1; }   /* no movement and no fill-forward: see #appMain > .kt-screen-in */
 }
 /* Respect users who ask the OS to minimise motion. */
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
@@ -752,25 +765,27 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (min-width: 601px) { body.role-guardian .kt-thread-close-desk { display: inline-flex !important; align-items: center; justify-content: center; } }
 
 
-/* ── Parent/educator mobile top header (2026-07-14): the parent name + its greeting
+/* ── Parent/educator mobile top header (2026-07-14)
+      Home visitor + sales rep added 2026-11-06: they use the same parent-chrome header (kt-parent-chrome roleOf),
+      but these rules named only parent/educator, so their phone header wrapped the logo onto its own row. Original note: the parent name + its greeting
       sit right next to the KiddieTrac logo on ONE slim row, to maximise space. ── */
 @media (max-width: 768px) {
-  body.role-guardian #appSidebar, body.role-educator #appSidebar { flex-wrap: nowrap !important; padding: 8px 12px !important; }
-  body.role-guardian #appSidebar #navBrand, body.role-educator #appSidebar #navBrand { flex-shrink: 0 !important; }
-  body.role-guardian #appSidebar #navBrand img, body.role-educator #appSidebar #navBrand img { height: 34px !important; }
-  body.role-guardian #appSidebar #navUser, body.role-educator #appSidebar #navUser { margin-left: 10px !important; flex: 1 1 0 !important; min-width: 0 !important; overflow: hidden !important; }
-  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { min-width: 0 !important; overflow: hidden !important; }
+  body.role-guardian #appSidebar, body.role-educator #appSidebar, body.role-home-visitor #appSidebar, body.role-sales-rep #appSidebar { flex-wrap: nowrap !important; padding: 8px 12px !important; }
+  body.role-guardian #appSidebar #navBrand, body.role-educator #appSidebar #navBrand, body.role-home-visitor #appSidebar #navBrand, body.role-sales-rep #appSidebar #navBrand { flex-shrink: 0 !important; }
+  body.role-guardian #appSidebar #navBrand img, body.role-educator #appSidebar #navBrand img, body.role-home-visitor #appSidebar #navBrand img, body.role-sales-rep #appSidebar #navBrand img { height: 34px !important; }
+  body.role-guardian #appSidebar #navUser, body.role-educator #appSidebar #navUser, body.role-home-visitor #appSidebar #navUser, body.role-sales-rep #appSidebar #navUser { margin-left: 10px !important; flex: 1 1 0 !important; min-width: 0 !important; overflow: hidden !important; }
+  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text, body.role-home-visitor #appSidebar #navUser .nav-user-text, body.role-sales-rep #appSidebar #navUser .nav-user-text { min-width: 0 !important; overflow: hidden !important; }
   /* Role now shown as a pill (styled by kt-parent-chrome) — no longer hidden. */
-  body.role-guardian #appSidebar #navUser .nav-user-name, body.role-educator #appSidebar #navUser .nav-user-name { font-size: 13px !important; font-weight: 800 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.role-guardian #appSidebar #navUser .nav-user-name, body.role-educator #appSidebar #navUser .nav-user-name, body.role-home-visitor #appSidebar #navUser .nav-user-name, body.role-sales-rep #appSidebar #navUser .nav-user-name { font-size: 13px !important; font-weight: 800 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Admins and directors get the same eyebrow now (kt-parent-chrome roleOfGreet), so
      they need the same sizing — it is the line that carries the clock. */
-  body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet,
+  body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet, body.role-home-visitor #appSidebar .kt-pc-navgreet, body.role-sales-rep #appSidebar .kt-pc-navgreet,
   body.role-agency-admin #appSidebar .kt-pc-navgreet,
   body.role-centre-director #appSidebar .kt-pc-navgreet,
   body.role-platform-admin #appSidebar .kt-pc-navgreet { font-size: 9.5px !important; letter-spacing: 0 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The top bar already greets the parent — drop the repetitive greeting line on the home banner. */
-  body.role-guardian #appMain .kt-tilehome .kt-hero-greet, body.role-educator #appMain .kt-tilehome .kt-hero-greet { display: none !important; }
-  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { flex: 1 1 0 !important; }
+  body.role-guardian #appMain .kt-tilehome .kt-hero-greet, body.role-educator #appMain .kt-tilehome .kt-hero-greet, body.role-home-visitor #appMain .kt-tilehome .kt-hero-greet, body.role-sales-rep #appMain .kt-tilehome .kt-hero-greet { display: none !important; }
+  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text, body.role-home-visitor #appSidebar #navUser .nav-user-text, body.role-sales-rep #appSidebar #navUser .nav-user-text { flex: 1 1 0 !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -784,8 +799,7 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (max-width: 768px) {
   /* 1) Always-on, bolder top accent bar on EVERY card (was opacity:0 til hover) */
   #appMain .card::before, #appMain .kt-card::before, #appMain .kt-kpi::before,
-  #appMain .stat-tile::before, #appMain .dash-card::before, #appMain .widget::before,
-  #appMain .centre-card-v17::before {
+  #appMain .stat-tile::before, #appMain .dash-card::before, #appMain .widget::before {
     content: '' !important; opacity: 1 !important; height: 5px !important;
     position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important;
     background: linear-gradient(90deg,#2D7BA8 0%,#4A90B8 40%,#F97316 100%) !important;
@@ -828,9 +842,9 @@ body.kt-parentview [data-export] { display: none !important; }
   #appMain .kt-kpi:nth-of-type(6n)::before, #appMain .stat-tile:nth-of-type(6n)::before { background:#06B6D4 !important; }
   #appMain .kt-kpi:nth-of-type(6n) .kt-kpi-value, #appMain .stat-tile:nth-of-type(6n) .stat-value, #appMain .stat-tile:nth-of-type(6n) .value { color:#0891B2 !important; }
 
-  /* 4) Centre cards — a friendly teal identity + tint */
-  #appMain .centre-card-v17 { background: linear-gradient(180deg,#EAF6FA,#FFFFFF) !important; border-color:#CFE6EE !important; }
-  #appMain .centre-card-v17::before { background: linear-gradient(90deg,#159FB4,#2D7BA8) !important; }
+  /* 4) Centre / provider cards: no phone-only bar or tint. Each card already carries its
+        provider's own colour line (app-v2.css, --kt-edge-line); a fixed teal bar here hid
+        it and made the phone disagree with desktop (Anthony, 2026-11-01). */
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1487,7 +1501,7 @@ html.kt-ios-inset-fallback #appMain {
     display: flex !important; flex-direction: column !important; grid-template-columns: none !important;
   }
   #appShell > #appSidebar { flex: 0 0 auto !important; }
-  #appShell > #appMain, #appMain, .app-main { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  #appShell > #appMain, #appMain, .app-main { flex: 1 1 auto !important; height: auto !important; min-height: 0 !important; max-height: none !important; overflow-y: auto !important; }
   /* When the slide-in menu is open the sidebar becomes a fixed overlay (out of the
      flex flow) — let #appMain take the full height behind it. */
   body.kt-mnav-open #appSidebar { flex: 0 0 auto; }
@@ -1497,9 +1511,10 @@ html.kt-ios-inset-fallback #appMain {
      every section. #appMain's 62px is the only clearance the fixed bar needs. */
   body { padding-bottom: 0 !important; }
 
-  /* Parent screens ship their own headers, so drop the generic auto-hero
-     ("dashboard"/"today"/…) the shell prepends — it's pure clutter for them. */
-  body.kt-parentview #appMain > .kt-hero-auto { display: none !important; }
+  /* PARENT SCREENS KEEP THEIR BANNER (2026-11-06, Anthony: "no hero banner on this page and multiple of other pages
+     in guardian view"). This used to hide the auto-hero for parents on the idea that their screens had their own
+     headers - but the auto-hero is built FROM the screen's own h1, so hiding it hid the title too: My tasks, Billing,
+     Medications, Settings, Help and seven more opened with no name at all. The banner shows, as on every other role. */
 
   /* ── Shell density — reclaim the wasted outer padding ── */
   .app-shell--sidebar .app-main,
@@ -1539,7 +1554,6 @@ html.kt-ios-inset-fallback #appMain {
     flex-wrap: nowrap !important;
     overflow-x: auto;
     overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     padding-bottom: 4px !important;
   }
@@ -1581,6 +1595,8 @@ html.kt-ios-inset-fallback #appMain {
     margin-bottom: 11px !important;
     box-shadow: 0 1px 4px rgba(15, 23, 42, .06) !important;
   }
+  /* Provider cards keep their own provider-coloured top line, as on desktop (see app-v2.css). */
+  #appMain .centre-card-v17 { box-shadow: inset 0 3px 0 var(--kt-edge-line, transparent), 0 1px 4px rgba(15, 23, 42, .06) !important; }
 
   /* ── Parent icon-tile launcher (#home): compact 3-across grid so the whole
         thing fits with far less scrolling; the big 76px icon wells + 138px tiles
@@ -1647,14 +1663,14 @@ html.kt-ios-inset-fallback #appMain {
   .kt-modal-actions button:not([role="switch"]):not([aria-pressed]) { min-height: 42px; }
   #appMain form button[type="submit"] { width: 100% !important; }
 
-  /* ── Modals behave like app bottom-sheets ── */
+  /* ── Modals are cards in the middle of the screen (2026-11-06; were bottom sheets) ── */
   .kt-modal-card, .kt-modal > div:not(.kt-modal-backdrop) {
-    max-width: 100% !important; width: 100% !important;
-    max-height: 92vh !important; border-radius: 18px 18px 0 0 !important;
+    max-width: calc(100% - 24px) !important; width: calc(100% - 24px) !important;
+    max-height: 92vh !important; border-radius: 18px !important; align-self: center !important;
   }
 
   /* ── Wide tables scroll horizontally instead of breaking the page ── */
-  #appMain table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  #appMain table { display: block; overflow-x: auto; }
 
   /* ── Drop desktop-only chrome on phones ── */
   #kt-search-widget { display: none !important; }
@@ -1677,7 +1693,7 @@ html.kt-ios-inset-fallback #appMain {
   }
   body:has(.kt-thread-compose) #kt-mobilenav { display: none !important; }
   .kt-thread-header { flex: 0 0 auto !important; padding-top: calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 10px) !important; }
-  .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  .kt-thread-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; }
   .kt-thread-compose { flex-shrink: 0 !important; padding-bottom: calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 8px) !important; }
   .kt-compose-input { font-size: 16px !important; }  /* no iOS zoom while typing */
 
@@ -1687,7 +1703,12 @@ html.kt-ios-inset-fallback #appMain {
   /* !important + the id/class specificity beats kt-consistency-polish.css's
      `#appMain > * { animation: kt-fade-in … !important }` so real navigations get
      the horizontal swipe; in-place re-renders (no .kt-screen-in) keep the quick fade. */
-  #appMain > .kt-screen-in { animation: kt-screen-in .3s cubic-bezier(.33, 1, .68, 1) both !important; }
+  /* `backwards`, not `both` (2026-10-20): a forwards fill holds the end frame, and even
+     `transform:none` interpolates to translateX(0) there, a transform that makes every
+     slid-in node the containing block for position:fixed popups drawn inside it. */
+  #appMain > *, #appMain > .kt-screen-in { animation: none !important; }   /* phones switch in place, in one frame */
+  #appMain .kt-hero.kt-banner-fx, #appMain .kt-page-hero.kt-banner-fx, #appMain > .kt-hero, #appMain > .kt-page-hero,
+  #appMain > .kt-screen-in > .kt-hero, #appMain > .kt-screen-in > .kt-page-hero { animation: kt-hero-breathe 16s ease-in-out infinite !important; }
 
   /* ── EMAIL client: on phones, drop the fixed-height 3-pane box (it overflowed
         far under the nav) and let the active pane flow as a normal scrolling
@@ -1698,8 +1719,8 @@ html.kt-ios-inset-fallback #appMain {
 }
 
 @keyframes kt-screen-in {
-  from { opacity: 0; transform: translateX(34px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from { opacity: .85; }
+  to   { opacity: 1; }   /* no movement and no fill-forward: see #appMain > .kt-screen-in */
 }
 /* Respect users who ask the OS to minimise motion. */
 @media (max-width: 768px) and (prefers-reduced-motion: reduce) {
@@ -2203,25 +2224,27 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (min-width: 601px) { body.role-guardian .kt-thread-close-desk { display: inline-flex !important; align-items: center; justify-content: center; } }
 
 
-/* ── Parent/educator mobile top header (2026-07-14): the parent name + its greeting
+/* ── Parent/educator mobile top header (2026-07-14)
+      Home visitor + sales rep added 2026-11-06: they use the same parent-chrome header (kt-parent-chrome roleOf),
+      but these rules named only parent/educator, so their phone header wrapped the logo onto its own row. Original note: the parent name + its greeting
       sit right next to the KiddieTrac logo on ONE slim row, to maximise space. ── */
 @media (max-width: 768px) {
-  body.role-guardian #appSidebar, body.role-educator #appSidebar { flex-wrap: nowrap !important; padding: 8px 12px !important; }
-  body.role-guardian #appSidebar #navBrand, body.role-educator #appSidebar #navBrand { flex-shrink: 0 !important; }
-  body.role-guardian #appSidebar #navBrand img, body.role-educator #appSidebar #navBrand img { height: 34px !important; }
-  body.role-guardian #appSidebar #navUser, body.role-educator #appSidebar #navUser { margin-left: 10px !important; flex: 1 1 0 !important; min-width: 0 !important; overflow: hidden !important; }
-  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { min-width: 0 !important; overflow: hidden !important; }
+  body.role-guardian #appSidebar, body.role-educator #appSidebar, body.role-home-visitor #appSidebar, body.role-sales-rep #appSidebar { flex-wrap: nowrap !important; padding: 8px 12px !important; }
+  body.role-guardian #appSidebar #navBrand, body.role-educator #appSidebar #navBrand, body.role-home-visitor #appSidebar #navBrand, body.role-sales-rep #appSidebar #navBrand { flex-shrink: 0 !important; }
+  body.role-guardian #appSidebar #navBrand img, body.role-educator #appSidebar #navBrand img, body.role-home-visitor #appSidebar #navBrand img, body.role-sales-rep #appSidebar #navBrand img { height: 34px !important; }
+  body.role-guardian #appSidebar #navUser, body.role-educator #appSidebar #navUser, body.role-home-visitor #appSidebar #navUser, body.role-sales-rep #appSidebar #navUser { margin-left: 10px !important; flex: 1 1 0 !important; min-width: 0 !important; overflow: hidden !important; }
+  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text, body.role-home-visitor #appSidebar #navUser .nav-user-text, body.role-sales-rep #appSidebar #navUser .nav-user-text { min-width: 0 !important; overflow: hidden !important; }
   /* Role now shown as a pill (styled by kt-parent-chrome) — no longer hidden. */
-  body.role-guardian #appSidebar #navUser .nav-user-name, body.role-educator #appSidebar #navUser .nav-user-name { font-size: 13px !important; font-weight: 800 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.role-guardian #appSidebar #navUser .nav-user-name, body.role-educator #appSidebar #navUser .nav-user-name, body.role-home-visitor #appSidebar #navUser .nav-user-name, body.role-sales-rep #appSidebar #navUser .nav-user-name { font-size: 13px !important; font-weight: 800 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* Admins and directors get the same eyebrow now (kt-parent-chrome roleOfGreet), so
      they need the same sizing — it is the line that carries the clock. */
-  body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet,
+  body.role-guardian #appSidebar .kt-pc-navgreet, body.role-educator #appSidebar .kt-pc-navgreet, body.role-home-visitor #appSidebar .kt-pc-navgreet, body.role-sales-rep #appSidebar .kt-pc-navgreet,
   body.role-agency-admin #appSidebar .kt-pc-navgreet,
   body.role-centre-director #appSidebar .kt-pc-navgreet,
   body.role-platform-admin #appSidebar .kt-pc-navgreet { font-size: 9.5px !important; letter-spacing: 0 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The top bar already greets the parent — drop the repetitive greeting line on the home banner. */
-  body.role-guardian #appMain .kt-tilehome .kt-hero-greet, body.role-educator #appMain .kt-tilehome .kt-hero-greet { display: none !important; }
-  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text { flex: 1 1 0 !important; }
+  body.role-guardian #appMain .kt-tilehome .kt-hero-greet, body.role-educator #appMain .kt-tilehome .kt-hero-greet, body.role-home-visitor #appMain .kt-tilehome .kt-hero-greet, body.role-sales-rep #appMain .kt-tilehome .kt-hero-greet { display: none !important; }
+  body.role-guardian #appSidebar #navUser .nav-user-text, body.role-educator #appSidebar #navUser .nav-user-text, body.role-home-visitor #appSidebar #navUser .nav-user-text, body.role-sales-rep #appSidebar #navUser .nav-user-text { flex: 1 1 0 !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2235,8 +2258,7 @@ body.kt-parentview [data-export] { display: none !important; }
 @media (max-width: 768px) {
   /* 1) Always-on, bolder top accent bar on EVERY card (was opacity:0 til hover) */
   #appMain .card::before, #appMain .kt-card::before, #appMain .kt-kpi::before,
-  #appMain .stat-tile::before, #appMain .dash-card::before, #appMain .widget::before,
-  #appMain .centre-card-v17::before {
+  #appMain .stat-tile::before, #appMain .dash-card::before, #appMain .widget::before {
     content: '' !important; opacity: 1 !important; height: 5px !important;
     position: absolute !important; top: 0 !important; left: 0 !important; right: 0 !important;
     background: linear-gradient(90deg,#2D7BA8 0%,#4A90B8 40%,#F97316 100%) !important;
@@ -2279,9 +2301,9 @@ body.kt-parentview [data-export] { display: none !important; }
   #appMain .kt-kpi:nth-of-type(6n)::before, #appMain .stat-tile:nth-of-type(6n)::before { background:#06B6D4 !important; }
   #appMain .kt-kpi:nth-of-type(6n) .kt-kpi-value, #appMain .stat-tile:nth-of-type(6n) .stat-value, #appMain .stat-tile:nth-of-type(6n) .value { color:#0891B2 !important; }
 
-  /* 4) Centre cards — a friendly teal identity + tint */
-  #appMain .centre-card-v17 { background: linear-gradient(180deg,#EAF6FA,#FFFFFF) !important; border-color:#CFE6EE !important; }
-  #appMain .centre-card-v17::before { background: linear-gradient(90deg,#159FB4,#2D7BA8) !important; }
+  /* 4) Centre / provider cards: no phone-only bar or tint. Each card already carries its
+        provider's own colour line (app-v2.css, --kt-edge-line); a fixed teal bar here hid
+        it and made the phone disagree with desktop (Anthony, 2026-11-01). */
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -3090,7 +3112,6 @@ html.kt-ios-inset-fallback #appMain {
      selects the one wrapping this grid. */
   #appMain div:has(> [style*="grid-template-columns:64px repeat(7"]) {
     overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
   }
   #appMain [style*="grid-template-columns:64px repeat(7"] {
     min-width: 620px !important;
@@ -3265,12 +3286,20 @@ html.kt-ios-inset-fallback #appMain {
      A full-screen thread MUST keep its own scroller: the composer is pinned to the bottom
      of the panel, so the messages have to scroll independently of the page. Same for the
      dock and the emoji panels. (Anthony, 2026-09-09) */
-  #appMain [style*="overflow:auto"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow: auto"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow-y:auto"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow-y: auto"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow:scroll"]:not([data-kt-scroll]):not(.kt-thread-body),
-  #appMain [style*="overflow-y:scroll"]:not([data-kt-scroll]):not(.kt-thread-body) {
+  /* ...except inside a position:fixed popup: its panel must keep max-height + its own
+     scroller, or a tall form runs off the bottom of the phone (2026-10-20).
+     ...and never an absolutely positioned box (2026-11-05): that is a popover over the page (the chat emoji panels,
+     the dialer's search results, the sales autocomplete), not a card in the flow. Flattened, the emoji picker drew
+     all ~50 emojis at 365-529px tall and changed height as the emoji pictures loaded ("opens with all the emoji's and
+     then shrinks"). The emoji rule further down could not win back: it is !important too but LESS SPECIFIC
+     ((1,1,0) against this rule's (1,5,0)), and among !important rules specificity beats order - "restated LAST"
+     never applied. */
+  #appMain [style*="overflow:auto"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *):not([style*="position:absolute"]):not([style*="position: absolute"]),
+  #appMain [style*="overflow: auto"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *):not([style*="position:absolute"]):not([style*="position: absolute"]),
+  #appMain [style*="overflow-y:auto"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *):not([style*="position:absolute"]):not([style*="position: absolute"]),
+  #appMain [style*="overflow-y: auto"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *):not([style*="position:absolute"]):not([style*="position: absolute"]),
+  #appMain [style*="overflow:scroll"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *):not([style*="position:absolute"]):not([style*="position: absolute"]),
+  #appMain [style*="overflow-y:scroll"]:not([data-kt-scroll]):not(.kt-thread-body):not([style*="position:fixed"] *):not([style*="position: fixed"] *):not([style*="position:absolute"]):not([style*="position: absolute"]) {
     max-height: none !important;
     overflow: visible !important;
     /* Belt and braces: if anything here keeps a scroll region for a reason of its own,
@@ -3285,7 +3314,6 @@ html.kt-ios-inset-fallback #appMain {
   #appMain #kt-st-body,
   #appMain [data-kt-scroll] {
     overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
   }
   #appMain .kt-emoji-panel,
   #appMain #kt-st-emoji {
@@ -3337,7 +3365,7 @@ html.kt-ios-inset-fallback #appMain {
   .modal-body { padding: 14px !important; }
   .modal-footer { padding: 12px 14px !important; flex-wrap: wrap; }
   .modal-backdrop:has(> .modal-large) {
-    padding: env(safe-area-inset-top) 0 0 0 !important;
+    padding: var(--kt-safe-top, env(safe-area-inset-top)) 0 0 0 !important;
     align-items: stretch !important;
   }
   .modal.modal-large {
@@ -3361,4 +3389,112 @@ html.kt-ios-inset-fallback #appMain {
   #appMain [data-kt-keep-size], .kt-modal [data-kt-keep-size], .modal [data-kt-keep-size] {
     min-height: 0 !important;
   }
+}
+
+/* ── Closed Testing Report fixes (2026-10-20) ────────────────────────────────────────── */
+/* Issue 3: with the keyboard up the bottom bar sat on top of it, over the form. */
+html.kt-kb-open #kt-mobilenav,
+html.kt-kb-open #kt-role-back { display: none !important; }
+
+/* Copy-ID buttons beside reference IDs: the phone tap height (42px) in 29px rows made each
+   button's tap area overlap the next ID's, so a tap could copy the wrong one. */
+@media (max-width: 768px) {
+  #appMain .kt-ref button { min-height: 0 !important; height: 24px !important; width: 24px !important; }
+}
+
+/* Fields never wider than their box on a phone (full sweep, 2026-10-20). A <select> will not
+   shrink below its longest option (min-width:auto) and date/time inputs carried 150px+
+   minimums, so in a flex row or a narrow label they ran off the screen: Drills' frequency,
+   Today's centre picker, Payroll's period dates overlapping "Run", Maintenance's schedule. */
+@media (max-width: 768px) {
+  #appMain select,
+  #appMain textarea,
+  #appMain input[type="date"], #appMain input[type="datetime-local"],
+  #appMain input[type="time"], #appMain input[type="month"] {
+    min-width: 0 !important; max-width: 100% !important;
+  }
+}
+/* ...and the box holding a select, when that box is a flex item sized to its content
+   (Lesson plans' room picker, 443px in a 351px row). Ignored where :has() is unsupported. */
+@media (max-width: 768px) {
+  #appMain :is(div, label, span):has(> select) { max-width: 100% !important; }
+}
+
+/* Issue 2: the filter / sort / count bar ran off the screen ("ort…" at the left edge, the
+   count jammed against the right). The sort group was max-content and right-aligned, so
+   when a phone rule widened the dropdown it overflowed to the LEFT. On phones: filter on
+   its own row, sort + count on the next, both the full width of the card. */
+/* 2026-10-23 (Anthony: "why does the sort drop down in mobile have to be so big"): filter and
+   a compact Sort share ONE row; the count sits beside Sort. Still never runs off the screen:
+   the filter is the part that gives way. */
+@media (max-width: 768px) {
+  .kt-list-controls { gap: 8px !important; margin: 10px 0 !important; flex-wrap: nowrap !important; align-items: center !important; }
+  .kt-list-controls > .kt-lc-filter { flex: 1 1 0 !important; min-width: 0 !important; max-width: none !important; }
+  .kt-list-controls > .kt-lc-right {
+    flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; gap: 6px !important;
+    justify-content: flex-end !important;
+  }
+  /* #appMain: the phone rule for every select (#appMain select, padding 11px) outranks a class. */
+  #appMain .kt-list-controls .kt-lc-sort, .kt-list-controls .kt-lc-sort {
+    flex: 0 0 auto !important; width: 96px !important; min-width: 0 !important; max-width: 96px !important;
+    height: 38px !important; min-height: 38px !important; padding: 0 22px 0 9px !important; font-size: 15px !important; line-height: normal !important;
+  }
+  #appMain .kt-list-controls .kt-lc-filter input, .kt-list-controls .kt-lc-filter input { height: 38px !important; min-height: 38px !important; padding-top: 0 !important; padding-bottom: 0 !important; }
+  .kt-list-controls .kt-list-count { flex: 0 0 auto !important; font-size: 12px !important; }
+}
+
+/* THE BRAND NAME IS NOT A LINK LOOK (2026-11-02, Anthony's iPhone recording): after a tap, iOS keeps :hover on
+   the header's a.nav-brand, so styles.css "a:hover { underline }" left the white-label name ("Little Steps")
+   underlined on the next screens. */
+a.nav-brand, a.nav-brand:hover, a.nav-brand:focus, a.nav-brand:active,
+a.nav-brand .kt-wl-textlogo { text-decoration: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ICONS GLOW ON HOVER (2026-11-09, Anthony: "when hovering over the icons in educator view as an example - make it
+   glow vs how it is currently - full sweep"). A tile only lifted 4px; the icon itself did nothing. Now every icon a
+   pointer can hover lights up in its OWN colour:
+     - launcher tiles (every role's Home): the round icon glows in its tile colour (--kt-glow, set per colour below),
+       keeping its white ring;
+     - header icon buttons (.kt-pc-btn educator/parent bar, .kt-tb-ico staff top bar) and banner icon buttons: a teal
+       halo and a lit emoji;
+     - the desktop sidebar (.nav-link .nav-icon): the emoji glows.
+   Hover devices only (phones have no hover, and a sticky :hover after a tap would leave an icon lit).
+   ═══════════════════════════════════════════════════════════════════ */
+.kt-tile-grid .kt-tile:nth-child(8n+1) { --kt-glow: 249,115,22; }
+.kt-tile-grid .kt-tile:nth-child(8n+2) { --kt-glow: 45,123,168; }
+.kt-tile-grid .kt-tile:nth-child(8n+3) { --kt-glow: 16,185,129; }
+.kt-tile-grid .kt-tile:nth-child(8n+4) { --kt-glow: 139,92,246; }
+.kt-tile-grid .kt-tile:nth-child(8n+5) { --kt-glow: 236,72,153; }
+.kt-tile-grid .kt-tile:nth-child(8n+6) { --kt-glow: 6,182,212; }
+.kt-tile-grid .kt-tile:nth-child(8n+7) { --kt-glow: 245,158,11; }
+.kt-tile-grid .kt-tile:nth-child(8n)   { --kt-glow: 239,68,68; }
+@media (hover: hover) and (pointer: fine) {
+  .kt-tile .kt-tile-icon { transition: box-shadow .2s ease, filter .2s ease, transform .2s ease !important; }
+  #appMain .kt-tile-grid .kt-tile:hover .kt-tile-icon,
+  #appMain .kt-tile-grid .kt-tile:focus-visible .kt-tile-icon,
+  .kt-tile:hover .kt-tile-icon,
+  .kt-tile:focus-visible .kt-tile-icon {
+    box-shadow: 0 0 0 3px #fff, 0 0 18px 6px rgba(var(--kt-glow, 15,163,177), .55), 0 0 36px 10px rgba(var(--kt-glow, 15,163,177), .28) !important;
+    filter: brightness(1.08) saturate(1.15);
+    transform: scale(1.06);
+  }
+  .kt-tile:hover .kt-tile-label { color: rgb(var(--kt-glow, 15,163,177)); text-decoration: none; transition: color .2s ease; }
+  .kt-tile:hover, .kt-tile:focus-visible { text-decoration: none !important; }
+
+  .kt-pc-btn, .kt-tb-ico, .kt-hero-iconbtn { transition: box-shadow .18s ease, background .18s ease, text-shadow .18s ease, filter .18s ease !important; }
+  .kt-pc-btn:hover, .kt-tb-ico:hover, .kt-hero-iconbtn:hover,
+  .kt-pc-btn:focus-visible, .kt-tb-ico:focus-visible, .kt-hero-iconbtn:focus-visible {
+    background: #fff !important;
+    box-shadow: 0 0 0 1px rgba(15,163,177,.45), 0 0 14px 3px rgba(15,163,177,.42) !important;
+    text-shadow: 0 0 10px rgba(15,163,177,.9);
+    filter: brightness(1.06) saturate(1.15);
+  }
+
+  .nav-link .nav-icon { transition: filter .18s ease; }
+  .nav-link:hover .nav-icon, .nav-link:focus-visible .nav-icon {
+    filter: drop-shadow(0 0 5px rgba(15,163,177,.95)) drop-shadow(0 0 10px rgba(15,163,177,.55)) brightness(1.08);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kt-tile:hover .kt-tile-icon { transform: none; }
 }

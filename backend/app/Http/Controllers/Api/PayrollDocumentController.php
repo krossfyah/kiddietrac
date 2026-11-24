@@ -7,7 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\EmailTemplate;
 use App\Support\Payroll;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -46,10 +46,45 @@ class PayrollDocumentController extends Controller
         abort(403, 'No agency access.');
     }
 
+    /**
+     * WHO MAY SEE OR CHANGE OTHER PEOPLE'S PAY (P0, 2026-10-30). These routes sit in the provider group, which also
+     * admits educators, home visitors and auditors - and nothing here checked the role, so any of them could list the
+     * whole agency's payslips (names, emails, gross, net), mark them paid or email them out. Now: platform admin or
+     * agency admin of THIS agency see everything; a centre director of this agency sees only documents filed to their
+     * centres or belonging to staff who work there; everyone else is refused. A person's own payslips stay on
+     * /auth/me/payroll-documents and the pdf() own-document path.
+     *
+     * @return int[]|null  null = agency-wide; int[] = the director's reach (docs filed to these centres or these staff)
+     */
+    private function payrollScope(Request $request, int $agencyId, bool $agencyWideOnly = false): ?array
+    {
+        $uid = (int) $request->user()->id;
+        $roles = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)->get(['role', 'agency_id']);
+        if ($roles->contains(fn ($r) => $r->role === 'platform_admin')
+            || $roles->contains(fn ($r) => $r->role === 'agency_admin' && (int) $r->agency_id === $agencyId)) {
+            return null;
+        }
+        $isDirector = $roles->contains(fn ($r) => $r->role === 'centre_director' && (int) $r->agency_id === $agencyId);
+        abort_unless($isDirector && ! $agencyWideOnly, 403, 'Only payroll staff can do this.');
+        $centres = \App\Support\Visibility::centreIds($agencyId, $request->user());
+        return $centres;
+    }
+
+    /** May a director with this reach touch this document? (agency already matched) */
+    private function inScope(?array $centres, object $doc): bool
+    {
+        if ($centres === null) return true;
+        if ($doc->centre_id && in_array((int) $doc->centre_id, $centres, true)) return true;
+        if (! $doc->user_id) return false;
+        return DB::table('role_assignments')->where('user_id', (int) $doc->user_id)->where('active', 1)
+            ->whereIn('centre_id', $centres ?: [0])->exists();
+    }
+
     /** Admin ledger, split into the two payrolls. */
     public function index(Request $request): JsonResponse
     {
         $agencyId = $this->agency($request);
+        $centres = $this->payrollScope($request, $agencyId);
 
         /* The payee's own address travels with the row so "email this payslip" can be
            PREFILLED rather than typed from memory. leftJoin because a synced document can
@@ -60,6 +95,14 @@ class PayrollDocumentController extends Controller
             ->leftJoin('centres as c', 'c.id', '=', 'pd.centre_id')
             ->leftJoin('users as pu', 'pu.id', '=', 'pd.user_id')
             ->where('pd.agency_id', $agencyId);
+        if ($centres !== null) {
+            // A director: documents filed to their centres, or belonging to staff who work there.
+            $staff = DB::table('role_assignments')->whereIn('centre_id', $centres ?: [0])->where('active', 1)
+                ->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->all();
+            $q->where(function ($w) use ($centres, $staff) {
+                $w->whereIn('pd.centre_id', $centres ?: [0])->orWhereIn('pd.user_id', $staff ?: [0]);
+            });
+        }
 
         if ($from = $request->query('from')) {
             $q->whereDate('pd.period_start', '>=', $from);
@@ -143,8 +186,9 @@ class PayrollDocumentController extends Controller
         $status = (string) $request->input('status');
         abort_unless(in_array($status, ['issued', 'paid', 'void'], true), 422, 'Unknown status.');
 
+        $centres = $this->payrollScope($request, $agencyId);
         $doc = DB::table('payroll_documents')->where('id', $id)->where('agency_id', $agencyId)->first();
-        abort_unless($doc, 404, 'Not found.');
+        abort_unless($doc && $this->inScope($centres, $doc), 404, 'Not found.');
 
         DB::table('payroll_documents')->where('id', $id)->update([
             'status' => $status,
@@ -172,11 +216,25 @@ class PayrollDocumentController extends Controller
         $data = $request->validate([
             'to' => 'required|email|max:180',
             'message' => 'nullable|string|max:800',
+            /* "Also send to" (2026-10-31, Anthony: resend a payslip from Pay periods). A COPY to one more address,
+               typed by an agency admin - never a default, never offered to directors or to a person's own copy. */
+            'also' => 'nullable|email|max:180',
         ]);
+        $also = trim((string) ($data['also'] ?? ''));
+        if ($also !== '' && strcasecmp($also, (string) $data['to']) === 0) { $also = ''; }
 
         $agencyId = $this->agency($request);
+        // emailMine() re-enters here for a person's OWN document; anyone else needs payroll rights over it.
         $doc = DB::table('payroll_documents')->where('id', $id)->where('agency_id', $agencyId)->first();
+        $own = $doc && (int) $doc->user_id === (int) $request->user()->id && $request->attributes->get('kt_own_payslip') === true;
+        $fullPayroll = false;
+        if (! $own) {
+            $centres = $this->payrollScope($request, $agencyId);
+            abort_unless($doc && $this->inScope($centres, $doc), 404, 'Not found.');
+            $fullPayroll = $centres === null;
+        }
         abort_unless($doc, 404, 'Not found.');
+        abort_if($also !== '' && ! $fullPayroll, 403, 'Only an agency admin can send a copy to another address.');
 
         if (! \App\Support\Suppression::agencyNotificationsEnabled($agencyId)) {
             return response()->json([
@@ -191,6 +249,15 @@ class PayrollDocumentController extends Controller
         if ($who === '' && $doc->user_id) {
             $u = DB::table('users')->where('id', $doc->user_id)->first(['first_name', 'last_name']);
             $who = $u ? trim($u->first_name . ' ' . $u->last_name) : '';
+        }
+        /* FIRST NAME ONLY in the email itself (standing rule: no last names in KiddieTrac email). $who stays the
+           full name for the audit line, where the office needs to know exactly whose pay went where. */
+        $greet = '';
+        if ($doc->user_id) {
+            $greet = trim((string) DB::table('users')->where('id', $doc->user_id)->value('first_name'));
+        }
+        if ($greet === '' && $who !== '') {
+            $greet = (string) strtok($who, ' ');
         }
         $period = trim((string) $doc->period_start) === trim((string) $doc->period_end)
             ? (string) $doc->period_end
@@ -208,7 +275,7 @@ class PayrollDocumentController extends Controller
         }
 
         $note = trim((string) ($data['message'] ?? ''));
-        $body = '<p>Hello' . ($who !== '' ? ' ' . e($who) : '') . ',</p>'
+        $body = '<p>Hello' . ($greet !== '' ? ' ' . e($greet) : '') . ',</p>'
             . '<p>Your ' . $label . ' for <strong>' . e($period) . '</strong> is attached.</p>'
             . ($note !== '' ? '<p>' . nl2br(e($note)) . '</p>' : '')
             . '<p style="color:#64748b;font-size:13px;">Net pay on this ' . $label . ': <strong>$'
@@ -222,13 +289,20 @@ class PayrollDocumentController extends Controller
         ]);
 
         $subject = ucfirst($label) . ' — ' . $period . ' — ' . $agencyName;
+        /* ONE PAYSLIP EMAIL (2026-11-03): a resent payslip is the same email as the automatic notice - the pay itself in
+           the body (period, hours, Gross, deductions, Net pay, year to date), the office's note under the greeting. The
+           payroll invoice keeps its short note above. */
+        if ($doc->kind !== 'invoice') {
+            [$subject, $html] = \App\Support\PayslipNotices::render($agencyId, $doc, $greet, $agencyName, 'new',
+                $pdfBytes !== null, true, $note);
+        }
         $to = $data['to'];
         $sentAt = now();
 
         try {
             \App\Services\AgencyMailer::forAgency($agencyId)->html($html,
-                function ($m) use ($to, $who, $subject, $pdfBytes, $doc, $label) {
-                    $m->to($to, $who !== '' ? $who : null)->subject($subject);
+                function ($m) use ($to, $greet, $subject, $pdfBytes, $doc, $label) {
+                    $m->to($to, $greet !== '' ? $greet : null)->subject($subject);
                     if ($pdfBytes !== null) {
                         $m->attachData($pdfBytes,
                             str_replace(' ', '-', $label) . '-' . ($doc->period_end ?: $doc->id) . '.pdf',
@@ -239,6 +313,29 @@ class PayrollDocumentController extends Controller
             report($e);
 
             return response()->json(['sent' => false, 'reason' => 'The mail server refused it: ' . $e->getMessage()], 502);
+        }
+
+        // The copy, as its own message: the payee's address is never shown to the copy's reader, and the reverse.
+        $alsoSent = null;
+        if ($also !== '') {
+            $alsoAt = now();
+            try {
+                \App\Services\AgencyMailer::forAgency($agencyId)->html($html,
+                    function ($m) use ($also, $subject, $pdfBytes, $doc, $label) {
+                        $m->to($also)->subject('Copy: ' . $subject);
+                        if ($pdfBytes !== null) {
+                            $m->attachData($pdfBytes,
+                                str_replace(' ', '-', $label) . '-' . ($doc->period_end ?: $doc->id) . '.pdf',
+                                ['mime' => 'application/pdf']);
+                        }
+                    });
+                $cv = DB::table('email_logs')->whereRaw('LOWER(to_email) = ?', [mb_strtolower($also)])
+                    ->where('created_at', '>=', $alsoAt->copy()->subMinutes(2))->orderByDesc('id')->first(['status']);
+                $alsoSent = ! ($cv && strtolower((string) $cv->status) === 'suppressed');
+            } catch (\Throwable $e) {
+                report($e);
+                $alsoSent = false;
+            }
         }
 
         /* WHAT HAPPENED, not what was attempted. The suppression listener sits on
@@ -266,11 +363,14 @@ class PayrollDocumentController extends Controller
                 'net' => (float) $doc->net,
                 'attachment' => $pdfBytes !== null,
                 'delivered' => ! $blocked,
+                'also' => $also !== '' ? $also : null,
+                'also_delivered' => $alsoSent,
             ]),
         ]);
 
         return response()->json([
             'sent' => ! $blocked,
+            'also_sent' => $alsoSent,
             'attachment' => $pdfBytes !== null,
             'reason' => $blocked
                 ? 'The mail layer held it back: ' . ($verdict->error ?: 'a delivery switch is off for this recipient.')
@@ -278,10 +378,35 @@ class PayrollDocumentController extends Controller
         ]);
     }
 
+    /**
+     * POST /me/payroll-documents/{id}/email — a copy of MY OWN payslip to MY OWN address (2026-10-28, the staff pay
+     * screen's ⋮ "Email me a copy"). The address comes from the signed-in account, never from the request, and the
+     * document must be theirs; everything else is the same send as the office's, with its delivery check and audit.
+     */
+    public function emailMine(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+        $doc = DB::table('payroll_documents')->where('id', $id)->first(['id', 'user_id', 'agency_id']);
+        abort_unless($doc && (int) $doc->user_id === (int) $user->id, 404, 'Not found.');
+        $to = trim((string) ($user->email ?? ''));
+        if ($to === '' || ! filter_var($to, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['sent' => false, 'reason' => 'Your account has no email address on file.'], 422);
+        }
+        $request->merge(['to' => $to, 'message' => null]);
+        $request->headers->set('X-Active-Agency-Id', (string) $doc->agency_id);
+        $request->attributes->set('kt_own_payslip', true);
+        $res = $this->email($request, $id);
+        $d = $res->getData(true);
+        $d['email'] = $to;
+
+        return response()->json($d, $res->getStatusCode());
+    }
+
     /** Re-run the backfill for this agency. Idempotent, so it is safe to press twice. */
     public function backfill(Request $request): JsonResponse
     {
         $agencyId = $this->agency($request);
+        $this->payrollScope($request, $agencyId, true);
         $weeks = max(1, min(260, (int) $request->input('weeks', 104)));
         $work = Payroll::backfillFromWork($agencyId, $weeks);
         $inv = Payroll::syncPayeeInvoices($agencyId);
@@ -361,7 +486,7 @@ class PayrollDocumentController extends Controller
                 'rate' => $l['rate'] !== null ? $money($l['rate']) : '', 'amount' => $money($l['amount']),
             ], self::payLines($doc)),
             'notes' => $doc->notes ?? ($settings['payslip_note'] ?? ''),
-            'generated_at' => now()->format('M j, Y g:i A'),
+            'generated_at' => \App\Support\AgencyTime::now()->format('M j, Y g:i A'),
         ];
     }
 
@@ -381,6 +506,8 @@ class PayrollDocumentController extends Controller
                 'rate' => isset($l['rate']) && $l['rate'] !== null && $l['rate'] !== '' ? round((float) $l['rate'], 2) : null,
                 'amount' => round((float) ($l['amount'] ?? 0), 2),
                 'component' => isset($l['component']) ? (string) $l['component'] : null,
+                // An educator reward bonus paid on this payslip (educator_rewards.id).
+                'reward' => ! empty($l['reward_award_id']),
             ];
         }
 
@@ -414,9 +541,8 @@ class PayrollDocumentController extends Controller
         if ((int) $doc->user_id !== $uid) {
             $agencyId = $this->agency($request);
             abort_unless((int) $doc->agency_id === $agencyId, 404, 'Not found.');
-            $isAdmin = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
-                ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])->exists();
-            abort_unless($isAdmin, 403, 'Not permitted.');
+            $centres = $this->payrollScope($request, $agencyId);
+            abort_unless($this->inScope($centres, $doc), 404, 'Not found.');
         }
 
         /* IF THE SOURCE SYSTEM MADE THE DOCUMENT, SERVE THAT DOCUMENT.
@@ -537,8 +663,14 @@ class PayrollDocumentController extends Controller
         $hasFunding = (bool) array_filter($payLines, fn ($l) => ! empty($l['component']));
         // Only a payslip that carries Ontario workforce-funding lines changes layout; every
         // other payslip prints exactly as before (Anthony, 2026-10-13).
-        if (! $hasFunding) {
+        /* An educator reward bonus prints too (2026-10-20): it is money on this payslip, and
+           folded into "Agreed amount" nobody could tell a bonus had been paid. Other lines
+           still print only with workforce funding, as before. */
+        $hasReward = (bool) array_filter($payLines, fn ($l) => ! empty($l['reward']));
+        if (! $hasFunding && ! $hasReward) {
             $payLines = [];
+        } elseif (! $hasFunding) {
+            $payLines = array_values(array_filter($payLines, fn ($l) => ! empty($l['reward'])));
         }
         $linesSum = round(array_sum(array_column($payLines, 'amount')), 2);
         $firstAmount = $payLines ? round((float) $doc->gross - $linesSum, 2) : (float) $doc->gross;
@@ -567,9 +699,10 @@ class PayrollDocumentController extends Controller
             . '<td style="border:0;padding-top:14px;" class="r"><div class="muted">Pay period</div>' . e($period) . '</td></tr></table>'
             . '<table><thead><tr><th>Description</th><th class="r">' . e(ucfirst((string) $doc->unit_label)) . '</th>'
             . '<th class="r">Rate</th><th class="r">Amount</th></tr></thead><tbody>'
-            . '<tr><td>' . e($firstLabel)
+            // A flat payslip that is nothing but its lines (a bonus-only payslip) has no first row to show.
+            . (($payLines && $doc->unit_label === 'flat' && abs($firstAmount) < 0.005) ? '' : '<tr><td>' . e($firstLabel)
             . '</td><td class="r">' . e((string) (float) $doc->units) . '</td><td class="r">' . $fmt($doc->rate)
-            . '</td><td class="r">' . $fmt($firstAmount) . '</td></tr>'
+            . '</td><td class="r">' . $fmt($firstAmount) . '</td></tr>')
             . $lineRows
             . '<tr><td colspan="3" class="r"><strong>Gross pay</strong></td><td class="r"><strong>' . $fmt($doc->gross) . '</strong></td></tr>'
             . (function () use ($doc, $fmt) {

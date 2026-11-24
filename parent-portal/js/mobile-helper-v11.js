@@ -63,7 +63,16 @@
     });
   }
 
+  /* Inside the KiddieTrac app (Capacitor) there is nothing to install: it IS the app. A WKWebView reports neither
+     display-mode: standalone nor navigator.standalone, so the iPhone prompt ("tap Share in Safari, Add to Home
+     Screen") showed inside the App Store app (2026-10-30 iOS sweep). */
+  function inNativeShell() {
+    try { var C = window.Capacitor; return !!(C && C.isNativePlatform && C.isNativePlatform()); } catch (e) { return false; }
+  }
+
   function showInstallBanner() {
+    if (inNativeShell()) return;
+    if (window.KT_PUBLIC_DEMO) return;   // the public website demo is not something to install (2026-10-31)
     if (document.getElementById('kt-install-banner')) return;
     if (sessionStorage.getItem('kt_install_dismissed')) return;
 
@@ -110,10 +119,11 @@
 
   // ─── iOS-only fallback PWA install instructions ──────────────
   function maybeShowIOSInstructions() {
+    if (window.KT_PUBLIC_DEMO) return;
     const ua = navigator.userAgent;
     const isIOS = /iPhone|iPad|iPod/.test(ua) && !window.MSStream;
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    if (!isIOS || isStandalone) return;
+    if (!isIOS || isStandalone || inNativeShell()) return;
 
     const user = readUser();
     if (user.primary_role !== 'guardian') return;

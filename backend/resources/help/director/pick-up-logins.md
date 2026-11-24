@@ -5,7 +5,7 @@ order: 47
 ---
 # Pick-up logins for emergency contacts
 
-A grandparent, nanny or other trusted adult who collects a child can have their own **pick-up login**. They sign in like a parent: their own QR code to check the children in and out, daily reports, photos and messages. They never see billing — invoices, payments, statements, receipts and subsidies are refused for them by the system, not just hidden from the menu.
+A grandparent, nanny or other trusted adult who collects a child can have their own **pick-up login**. They sign in like a parent: One-Tap check-in and check-out from their own phone, daily reports, photos and messages. They never see billing — invoices, payments, statements, receipts and subsidies are refused for them by the system, not just hidden from the menu.
 
 Agency admins and centre directors set these up. Parents can ask for one, but only staff can create it.
 
@@ -41,7 +41,7 @@ On the child's record, the contact shows **⏳ … asked for a pick-up login →
 - On the child's record, press **Remove** next to **🚸 Has login**, or
 - In **Edit** → **Emergency**, untick **Has a pick-up login**.
 
-They can no longer sign in for this family or use their QR code to pick up. Their contact details stay on file. A login also stops working if a parent removes the contact or unticks **Allowed to pick up the children**.
+They can no longer sign in for this family or use One-Tap to pick up. Their contact details stay on file. A login also stops working if a parent removes the contact or unticks **Allowed to pick up the children**.
 
 ## Guardians who have never signed in
 

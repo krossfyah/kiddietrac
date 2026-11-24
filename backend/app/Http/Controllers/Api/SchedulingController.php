@@ -36,7 +36,7 @@ final class SchedulingController extends Controller
             /* Sunday, matching the calendars. Only the DEFAULT: week_starting is honoured
                whenever it is given, so the grid decides its own range and this just
                chooses where an unparameterised call lands. */
-            $week = Carbon::now()->startOfWeek(Carbon::SUNDAY)->toDateString();
+            $week = \App\Support\AgencyTime::todayDate()->startOfWeek(Carbon::SUNDAY)->toDateString();
         }
 
         if (! $this->hasCentreAccess($request->user()->id, $centreId)) {
@@ -151,8 +151,8 @@ final class SchedulingController extends Controller
         $raw = (string) $request->input('centre_id');
         $allCentres = ($raw === 'all');
         $centreId = (int) $request->input('centre_id');
-        $start = Carbon::parse($request->input('start', Carbon::now()->startOfMonth()->toDateString()))->startOfDay();
-        $end   = Carbon::parse($request->input('end',   Carbon::now()->endOfMonth()->toDateString()))->endOfDay();
+        $start = Carbon::parse($request->input('start', \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString()))->startOfDay();
+        $end   = Carbon::parse($request->input('end',   \App\Support\AgencyTime::todayDate()->endOfMonth()->toDateString()))->endOfDay();
         // Hard cap at 100 days to keep the response bounded
         if ($start->diffInDays($end) > 100) {
             $end = $start->copy()->addDays(100);
@@ -280,6 +280,12 @@ final class SchedulingController extends Controller
         if (! $room) return response()->json(['message' => 'Room not found'], 404);
         if (! $this->hasCentreAccess($request->user()->id, $room->centre_id)) {
             return response()->json(['message' => 'Forbidden'], 403);
+        }
+        /* The person must be staff the picker offers for this centre (2026-11-05 leak sweep):
+           user_id was written unchecked, so a director could put anyone - a parent, or staff of
+           another agency - on their rota and onto that person's "my shifts". */
+        if (! $this->mayBeRostered((int) $data['user_id'], (int) $room->centre_id)) {
+            return response()->json(['message' => 'That person is not staff at this centre.'], 422);
         }
 
         $shiftId = DB::table('shifts')->insertGetId([
@@ -436,6 +442,146 @@ final class SchedulingController extends Controller
     }
 
     /**
+     * GET /api/v1/director/schedule/standing?centre_id=X
+     *
+     * The home's team (App\Support\CentreTeam) with each person's standing hours, if any
+     * (App\Support\StandingShifts). Anthony, 2026-10-21: "allow us to define her shift as
+     * well when required" — about Rachel Blane, Bruni Meeser's second educator.
+     */
+    public function standing(Request $request): JsonResponse
+    {
+        $centreId = (int) $request->query('centre_id');
+        if (! $centreId || ! $this->hasCentreAccess($request->user()->id, $centreId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $centre = DB::table('centres')->where('id', $centreId)->whereNull('deleted_at')->first();
+        if (! $centre) {
+            return response()->json(['message' => 'Centre not found'], 404);
+        }
+        $patterns = \App\Support\StandingShifts::patterns($centre);
+        $team = \App\Support\CentreTeam::forCentres([$centreId])[$centreId] ?? [];
+        $provider = $this->designatedProviderFor($centre);
+        $as = json_decode((string) DB::table('agencies')->where('id', $centre->agency_id)->value('settings'), true);
+        $cs = json_decode((string) ($centre->settings ?? ''), true);
+
+        $people = [];
+        foreach ($team as $uid => $m) {
+            $people[] = [
+                'user_id' => (int) $uid,
+                'name' => $m['name'],
+                'is_provider' => $m['is_provider'] || $provider === (int) $uid,
+                'pattern' => $patterns[$uid] ?? null,
+            ];
+        }
+
+        return response()->json([
+            'centre' => [
+                'id' => $centreId, 'name' => $centre->name,
+                'open_time' => $centre->open_time ? substr((string) $centre->open_time, 0, 5) : null,
+                'close_time' => $centre->close_time ? substr((string) $centre->close_time, 0, 5) : null,
+                'open_days' => $this->openDaysFor($centre),
+            ],
+            'auto_nightly' => (bool) (is_array($as) ? ($as['schedule_autofill'] ?? false) : false),
+            'filled_through' => is_array($cs) ? ($cs['schedule_autofill_through'] ?? null) : null,
+            'people' => $people,
+        ]);
+    }
+
+    /**
+     * PUT /api/v1/director/schedule/standing
+     * Body: centre_id, user_id, keep (bool), start "HH:MM", end "HH:MM", days [1-7], role,
+     *       apply (bool) — also rewrite this person's shifts from tomorrow on.
+     *
+     * keep=false removes the pattern. For the provider that means "back to the centre's
+     * hours"; for anyone else it means the nightly fill stops rostering them, and with
+     * apply their upcoming scheduled shifts here are removed too.
+     */
+    public function saveStanding(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'centre_id' => ['required', 'integer'],
+            'user_id' => ['required', 'integer'],
+            'keep' => ['required', 'boolean'],
+            'start' => ['nullable', 'date_format:H:i'],
+            'end' => ['nullable', 'date_format:H:i'],
+            'days' => ['nullable', 'array'],
+            'days.*' => ['integer', 'between:1,7'],
+            'role' => ['nullable', 'in:lead,support,floater,volunteer'],
+            'apply' => ['nullable', 'boolean'],
+        ]);
+        $centreId = (int) $data['centre_id'];
+        $uid = (int) $data['user_id'];
+        if (! $this->hasCentreAccess($request->user()->id, $centreId)) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $centre = DB::table('centres')->where('id', $centreId)->whereNull('deleted_at')->first();
+        if (! $centre) {
+            return response()->json(['message' => 'Centre not found'], 404);
+        }
+        $team = \App\Support\CentreTeam::forCentres([$centreId])[$centreId] ?? [];
+        if (! isset($team[$uid])) {
+            return response()->json(['message' => 'That person is not on this home\'s team.'], 422);
+        }
+
+        $pattern = null;
+        if ($data['keep']) {
+            $pattern = \App\Support\StandingShifts::normalise($data);
+            if (! $pattern) {
+                return response()->json(['message' => 'Choose a start time, a later end time and at least one day.'], 422);
+            }
+        }
+        $was = \App\Support\StandingShifts::patterns($centre)[$uid] ?? null;
+        \App\Support\StandingShifts::put($centreId, $uid, $pattern);
+
+        $isProvider = $team[$uid]['is_provider'] || $this->designatedProviderFor($centre) === $uid;
+        // What the nightly fill will use for this person from now on.
+        $effective = $pattern ?: ($isProvider && $centre->open_time && $centre->close_time ? [
+            'start' => substr((string) $centre->open_time, 0, 5), 'end' => substr((string) $centre->close_time, 0, 5),
+            'days' => $this->openDaysFor($centre), 'role' => 'lead',
+        ] : null);
+
+        /* From tomorrow in the agency's zone (today may already be part-worked) up to the
+           horizon the nightly fill has reached, or four weeks when it has not run here. */
+        $result = ['created' => 0, 'removed' => 0];
+        if (! empty($data['apply'])) {
+            $tz = \App\Support\AgencyTime::tzForCentre($centreId);
+            $from = Carbon::now($tz)->startOfDay()->addDay();
+            $cs = json_decode((string) ($centre->settings ?? ''), true);
+            $through = is_array($cs) ? ($cs['schedule_autofill_through'] ?? null) : null;
+            $to = $through ? Carbon::parse($through)->startOfDay() : $from->copy()->addDays(27);
+            if ($to->lt($from->copy()->addDays(27))) {
+                $to = $from->copy()->addDays(27);
+            }
+            $result = \App\Support\StandingShifts::fill($centre, $uid, $effective, $from, $to, true);
+        }
+
+        \App\Support\Audit::write([
+            'user_id' => $request->user()->id,
+            'agency_id' => (int) $centre->agency_id,
+            'action' => 'shift.standing_saved',
+            'entity_type' => 'user',
+            'entity_id' => $uid,
+            'payload' => json_encode([
+                'centre' => $centre->name, 'person' => $team[$uid]['name'],
+                'was' => $was, 'now' => $pattern, 'applied' => ! empty($data['apply']),
+                'created' => $result['created'], 'removed' => $result['removed'],
+            ]),
+            'created_at' => now(),
+        ]);
+
+        $who = $team[$uid]['name'];
+        $msg = $pattern
+            ? $who . ' saved: ' . $pattern['start'] . '–' . $pattern['end'] . '.'
+            : ($isProvider ? $who . ' is back on the centre\'s hours.' : $who . '\'s standing hours were removed.');
+        if (! empty($data['apply'])) {
+            $msg .= ' ' . $result['created'] . ' upcoming shift' . ($result['created'] === 1 ? '' : 's') . ' written'
+                . ($result['removed'] ? ', ' . $result['removed'] . ' replaced' : '') . '.';
+        }
+
+        return response()->json(['ok' => true, 'pattern' => $pattern] + $result + ['message' => $msg]);
+    }
+
+    /**
      * POST /api/v1/director/schedule/autofill
      *
      * Fill a date range from the centre's own hours: a shift on every open day, nothing
@@ -454,6 +600,9 @@ final class SchedulingController extends Controller
             'user_ids.*' => ['integer'],
             'room_id' => ['nullable', 'integer'],
             'role' => ['nullable', 'in:lead,support,floater,volunteer'],
+            // Optional hours for this fill (2026-10-21); the centre's hours otherwise.
+            'start_time' => ['nullable', 'date_format:H:i'],
+            'end_time' => ['nullable', 'date_format:H:i', 'after:start_time'],
         ]);
 
         $centreId = (int) $data['centre_id'];
@@ -552,6 +701,10 @@ final class SchedulingController extends Controller
 
         $open  = substr((string) $centre->open_time, 0, 8);
         $close = substr((string) $centre->close_time, 0, 8);
+        if (! empty($data['start_time']) && ! empty($data['end_time'])) {
+            $open = $data['start_time'] . ':00';
+            $close = $data['end_time'] . ':00';
+        }
 
         $rows = [];
         $skipClosed = 0;
@@ -651,6 +804,22 @@ final class SchedulingController extends Controller
         $room = DB::table('rooms')->where('id', $shift->room_id)->first();
         if (! $this->hasCentreAccess($request->user()->id, $room->centre_id)) {
             return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        /* The destination must be in scope too (2026-11-05 leak sweep): room_id and user_id
+           were written unchecked, so a director could move their shift into another centre's
+           (or agency's) room, or hand it to somebody who is not staff there. */
+        $destCentre = (int) $room->centre_id;
+        if (! empty($data['room_id']) && (int) $data['room_id'] !== (int) $shift->room_id) {
+            $destCentre = (int) DB::table('rooms')->where('id', $data['room_id'])->value('centre_id');
+            if ($destCentre <= 0 || ! $this->hasCentreAccess($request->user()->id, $destCentre)) {
+                return response()->json(['message' => 'That room is not at a centre you manage.'], 403);
+            }
+        }
+        $destUser = ! empty($data['user_id']) ? (int) $data['user_id'] : (int) $shift->user_id;
+        if ((! empty($data['user_id']) || $destCentre !== (int) $room->centre_id)
+            && ! $this->mayBeRostered($destUser, $destCentre)) {
+            return response()->json(['message' => 'That person is not staff at this centre.'], 422);
         }
 
         $update = array_filter($data, fn($v) => $v !== null);
@@ -829,8 +998,8 @@ final class SchedulingController extends Controller
     public function timesheets(Request $request): JsonResponse
     {
         $centreId = (int) $request->input('centre_id');
-        $from = $request->input('from', Carbon::now()->startOfMonth()->toDateString());
-        $to = $request->input('to', Carbon::now()->toDateString());
+        $from = $request->input('from', \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString());
+        $to = $request->input('to', \App\Support\AgencyTime::today());
 
         // No centre asked for? Use the ones this person can see.
         //
@@ -1289,14 +1458,21 @@ final class SchedulingController extends Controller
 
     private function hasCentreAccess(int $userId, int $centreId): bool
     {
+        /* Only an agency ADMIN is agency-wide (2026-11-05 leak sweep): a director's role row
+           carries the agency_id as well as its centre_id, so the agency branch let a director
+           of centre Y open, roster and edit centre X of the same agency. A director now
+           passes for the centre on their own role row only, as Visibility::centreIds() says. */
         $has = DB::table('role_assignments')
             ->where('user_id', $userId)
             ->whereIn('role', ['centre_director', 'agency_admin'])
             ->where('active', true)
             ->where(function ($q) use ($centreId) {
                 $q->where('centre_id', $centreId)
-                  ->orWhereIn('agency_id', function ($qq) use ($centreId) {
-                      $qq->select('agency_id')->from('centres')->where('id', $centreId);
+                  ->orWhere(function ($w) use ($centreId) {
+                      $w->where('role', 'agency_admin')
+                        ->whereIn('agency_id', function ($qq) use ($centreId) {
+                            $qq->select('agency_id')->from('centres')->where('id', $centreId);
+                        });
                   });
             })
             ->exists();
@@ -1309,6 +1485,31 @@ final class SchedulingController extends Controller
             return $centreAgency > 0 && $centreAgency === (int) request()->header('X-Active-Agency-Id');
         }
         return false;
+    }
+
+    /**
+     * May this person be put on a shift at this centre? (2026-11-05 leak sweep)
+     *
+     * Exactly the set staffList() offers in the picker: an active rota role (self::STAFF_ROLES)
+     * at this centre, or a role row in this centre's agency. A guardian, a closed account, or
+     * somebody from another agency is refused.
+     */
+    private function mayBeRostered(int $userId, int $centreId): bool
+    {
+        if ($userId <= 0 || $centreId <= 0) return false;
+        $agencyId = (int) DB::table('centres')->where('id', $centreId)->value('agency_id');
+        return DB::table('users')
+            ->join('role_assignments', 'role_assignments.user_id', '=', 'users.id')
+            ->where('users.id', $userId)
+            ->where(function ($q) use ($centreId, $agencyId) {
+                $q->where('role_assignments.centre_id', $centreId)
+                  ->orWhere('role_assignments.agency_id', $agencyId ?: -1);
+            })
+            ->whereIn('role_assignments.role', self::STAFF_ROLES)
+            ->where('role_assignments.active', true)
+            ->whereNotIn('users.status', \App\Support\AccountStatus::CLOSED)
+            ->whereNull('users.deleted_at')
+            ->exists();
     }
 
     /**

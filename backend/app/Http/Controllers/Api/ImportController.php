@@ -202,7 +202,18 @@ final class ImportController extends Controller
         if (!in_array($row['role'], ['agency_admin', 'centre_director', 'educator', 'guardian'])) {
             throw new \RuntimeException('invalid role');
         }
+        if (! empty($row['centre_id']) && ! $this->centreInAgency((int) $row['centre_id'], $agencyId)) {
+            throw new \RuntimeException('centre_id not in your agency');
+        }
         $existing = DB::table('users')->where('email', $row['email'])->whereNull('deleted_at')->first();
+        /* AN ACCOUNT OUTSIDE THIS AGENCY IS NOT YOURS TO EDIT (2026-11-05 leak sweep). A row matching
+           ANY account by email overwrote its name and phone and granted it a role here - another
+           agency's parent, or a platform owner - which then put it in reach of this agency's
+           reset-password and edit tools. An existing account is updated only when it is already in
+           this agency; otherwise the row is refused and the person is invited the normal way. */
+        if ($existing && ! $this->memberOf((int) $existing->id, $agencyId)) {
+            throw new \RuntimeException('this email already has an account outside your agency - invite them from Users instead');
+        }
         if ($existing) {
             DB::table('users')->where('id', $existing->id)->update([
                 'first_name' => $row['first_name'],
@@ -231,6 +242,22 @@ final class ImportController extends Controller
             'centre_id' => $row['centre_id'] ?? null, 'active' => 1, 'created_at' => now(),
         ]);
         return 'inserted';
+    }
+
+    private function centreInAgency(int $centreId, int $agencyId): bool
+    {
+        return DB::table('centres')->where('id', $centreId)->where('agency_id', $agencyId)->exists();
+    }
+
+    /** An active role in this agency (agency-level or at one of its centres), or a parent of one of its families. */
+    private function memberOf(int $userId, int $agencyId): bool
+    {
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        return DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+                ->where('role', '!=', 'platform_admin')
+                ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $centres ?: [0]))->exists()
+            || DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+                ->where('g.user_id', $userId)->whereIn('f.centre_id', $centres ?: [0])->exists();
     }
 
     private function insertChild(array $row, int $agencyId): string
@@ -278,7 +305,10 @@ final class ImportController extends Controller
         }
         $centre = DB::table('centres')->where('id', $row['centre_id'])->where('agency_id', $agencyId)->first();
         if (!$centre) throw new \RuntimeException('centre_id not in your agency');
-        $existing = DB::table('families')->where('primary_email', $row['primary_email'])->whereNull('deleted_at')->first();
+        // Only THIS agency's family with that email is updated (2026-11-05 leak sweep): matching any
+        // agency's family moved it - children and all - into the importing agency's centre.
+        $existing = DB::table('families')->where('primary_email', $row['primary_email'])->whereNull('deleted_at')
+            ->whereIn('centre_id', DB::table('centres')->where('agency_id', $agencyId)->select('id'))->first();
         if ($existing) {
             DB::table('families')->where('id', $existing->id)->update([
                 'family_name' => $row['family_name'],
@@ -309,6 +339,9 @@ final class ImportController extends Controller
 
     private function insertMenuItem(array $row, int $agencyId): string
     {
+        if (empty($row['centre_id']) || ! $this->centreInAgency((int) $row['centre_id'], $agencyId)) {
+            throw new \RuntimeException('centre_id not in your agency');
+        }
         $week = DB::table('menu_weeks')
             ->where('centre_id', $row['centre_id'])
             ->where('week_start', $this->normDate($row['week_start']))
@@ -334,6 +367,9 @@ final class ImportController extends Controller
 
     private function insertInspection(array $row, int $agencyId): string
     {
+        if (! empty($row['centre_id']) && ! $this->centreInAgency((int) $row['centre_id'], $agencyId)) {
+            throw new \RuntimeException('centre_id not in your agency');
+        }
         DB::table('inspection_checklist_items')->insert([
             'agency_id' => $agencyId,
             'centre_id' => !empty($row['centre_id']) ? (int) $row['centre_id'] : null,

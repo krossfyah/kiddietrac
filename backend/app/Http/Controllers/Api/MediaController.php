@@ -43,9 +43,26 @@ final class MediaController extends Controller
         // SECURITY (v22p94): the uploader must have access to EVERY tagged child.
         foreach ($childIds as $cid) {
             abort_unless($this->canAccessChildId($request->user(), (int) $cid), 403);
+            // Staff only (2026-11-05 leak sweep): canAccessChildId() also lets the child's parent through.
+            abort_unless($this->ktStaffForChild($request->user(), (int) $cid), 403);
+        }
+        // Photo permissions (2026-11-06, App\Support\MediaConsent): never a photo of a child whose family said no.
+        if ($why = \App\Support\MediaConsent::untaggable(array_map('intval', $childIds))) {
+            return response()->json(['message' => $why, 'reason' => 'no_photo_consent'], 422);
         }
 
         $roomId = $request->input('room_id');
+        /* A picked room must be one of a tagged child's rooms, at a centre you work at (2026-11-05 leak
+           sweep): room_id was written unchecked, so a photo could land on another centre's room feed. */
+        if ($roomId) {
+            $fits = false;
+            foreach ($childIds as $cid) {
+                if ($this->ktRoomFitsChild($request->user(), (int) $roomId, (int) $cid)) { $fits = true; break; }
+            }
+            if (! $fits) {
+                return response()->json(['message' => 'That room is not one of these children\'s rooms at a centre you work at.'], 422);
+            }
+        }
         if (!$roomId) {
             // The room they are in today — a photo belongs to the day it was taken.
             $roomId = DB::table('enrollments')
@@ -108,9 +125,20 @@ final class MediaController extends Controller
         // the whole time. Videos (media_type = 'video') come through here too.
         $rows = DB::table('photos')
             ->whereJsonContains('child_ids', (int) $childId)
+            ->whereNull('hidden_at')   // no photo consent: shown to nobody (App\Support\MediaConsent)
             ->orderByDesc('taken_at')
-            ->limit($limit)
-            ->get(['id', 'url', 'thumbnail_url', 'media_type', 'caption', 'taken_at']);
+            ->limit($limit * 3)
+            ->get(['id', 'url', 'thumbnail_url', 'media_type', 'caption', 'taken_at', 'child_ids', 'hidden_at']);
+        /* PHOTO CONSENT (2026-11-06): a parent sees only the photos their family may see - none of a child at "do not
+           photograph", and no group photo with another family's child who is not cleared for group photos. */
+        $familyId = (int) DB::table('children')->where('id', $childId)->value('family_id');
+        if (DB::table('guardians')->where('family_id', $familyId)->where('user_id', $request->user()->id)->exists()) {
+            $rows = \App\Support\MediaConsent::filter($rows, \App\Support\MediaConsent::familyChildren([$familyId]));
+        }
+        $rows = $rows->take($limit)->values();
+        // Stored in UTC; shown in the centre's own time (agency-timezone rule, 2026-10-30).
+        $tz = \App\Support\AgencyTime::tzForCentre((int) DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->where('ch.id', $childId)->value('f.centre_id'));
 
         return response()->json([
             'photos' => $rows->map(fn ($m) => [
@@ -120,7 +148,7 @@ final class MediaController extends Controller
                 'media_type' => $m->media_type ?: 'image',
                 'caption' => $m->caption,
                 'taken_at' => $m->taken_at,
-                'date_display' => Carbon::parse($m->taken_at)->format('M j, g:i A'),
+                'date_display' => Carbon::parse($m->taken_at, 'UTC')->setTimezone($tz)->format('M j, g:i A'),
             ])->all(),
         ]);
     }
@@ -163,6 +191,14 @@ final class MediaController extends Controller
             'observed_at' => ['nullable', 'date'],
         ]);
         abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403); // v22p94
+        /* Staff only, and a linked photo must be one of this child's (2026-11-05 leak sweep): a parent
+           with any staff role could record observations on their own child, and media_id was stored
+           unchecked, attaching any photo id (another family's) to the observation the family is shown. */
+        abort_unless($this->ktStaffForChild($request->user(), (int) $data['child_id']), 403);
+        if (! empty($data['media_id']) && ! DB::table('media_child_tags')->where('media_id', (int) $data['media_id'])
+                ->where('child_id', (int) $data['child_id'])->exists()) {
+            return response()->json(['message' => 'That photo is not tagged with this child.'], 422);
+        }
 
         $id = DB::table('observations')->insertGetId([
             'child_id' => $data['child_id'],
@@ -171,11 +207,18 @@ final class MediaController extends Controller
             'title' => $data['title'],
             'body' => $data['body'],
             'media_ids' => isset($data['media_id']) ? json_encode([$data['media_id']]) : null,
-            'observed_at' => $data['observed_at'] ?: now(),
+            'observed_at' => ! empty($data['observed_at']) ? \Illuminate\Support\Carbon::parse($data['observed_at']) : now(),   // was ?: on a missing key → 500 (2026-10-31)
             'recorded_by_id' => $request->user()->id,
             'shared_with_family' => true,
             'created_at' => now(),
         ]);
+
+        try {
+            \App\Support\ChildMomentNotify::after([[
+                'child_id' => (int) $data['child_id'], 'kind' => 'observations', 'emoji' => '🌱',
+                'label' => 'New learning observation', 'text' => (string) $data['title'], 'link' => '#today',
+            ]]);
+        } catch (\Throwable $e) {}
 
         return response()->json(['id' => $id, 'message' => 'Observation recorded'], 201);
     }
@@ -238,5 +281,41 @@ final class MediaController extends Controller
             'Content-Disposition' => 'attachment; filename="' . $name . '"',
             'Cache-Control'       => 'private, max-age=0',
         ]);
+    }
+
+    /* A ROOM FOR THIS CHILD, AT A CENTRE YOU WORK AT (2026-11-05 leak sweep). room_id came from the
+       request and was written unchecked, so an entry could be filed into another centre's or agency's
+       room and show on that room's lists. The room must be at the child's centre or one the child is
+       placed in, and the caller must be staff at the room's centre (authorizeCentreAccess: a staff role
+       there, its agency's admin, a room there, or a platform admin switched into its agency). */
+    private function ktRoomFitsChild($user, int $roomId, int $childId): bool
+    {
+        $roomCentre = (int) DB::table('rooms')->where('id', $roomId)->value('centre_id');
+        if ($roomCentre <= 0 || ! $this->authorizeCentreAccess($user, $roomCentre)) return false;
+        $child = DB::table('children')->where('id', $childId)->first(['family_id', 'primary_room_id']);
+        if (! $child) return false;
+        if ((int) DB::table('families')->where('id', $child->family_id)->value('centre_id') === $roomCentre) return true;
+        if ((int) ($child->primary_room_id ?? 0) === $roomId) return true;
+        return DB::table('enrollments')->where('child_id', $childId)->whereNull('end_date')->where('room_id', $roomId)->exists();
+    }
+
+    /* STAFF, NOT ONLY A PARENT (2026-11-05 leak sweep). canAccessChildId() also says yes to the child's
+       own guardian, and these are staff writes: a parent who holds a staff role anywhere passed the route
+       gate and could write them for their own child. Call AFTER canAccessChildId() has passed: someone who
+       is not the child's guardian passed it as staff; a guardian passes here only if they are also staff
+       at the child's centre (or the centre of one of its open placements). */
+    private function ktStaffForChild($user, int $childId): bool
+    {
+        $child = DB::table('children')->where('id', $childId)->first(['family_id']);
+        if (! $child) return false;
+        $isGuardian = DB::table('guardians')->where('user_id', $user->id)->where('family_id', $child->family_id)->exists();
+        if (! $isGuardian) return true;
+        $centres = DB::table('enrollments as e')->join('rooms as r', 'r.id', '=', 'e.room_id')
+            ->where('e.child_id', $childId)->whereNull('e.end_date')->pluck('r.centre_id')->all();
+        $centres[] = DB::table('families')->where('id', $child->family_id)->value('centre_id');
+        foreach (array_unique(array_filter(array_map('intval', $centres))) as $cid) {
+            if ($this->authorizeCentreAccess($user, $cid)) return true;
+        }
+        return false;
     }
 }

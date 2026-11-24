@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -23,6 +23,26 @@ use Symfony\Component\HttpFoundation\Response;
 final class ReportCardController extends Controller
 {
     use ResolvesCentreContext;
+
+    /** Parents' open requests for a report card (2026-11-04), the children the caller can write for, oldest first,
+     *  plus the recent quarters for the term picker (App\Support\ReportCardQuarter). */
+    public function requests(Request $request): JsonResponse
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $rows = DB::table('report_card_requests as q')
+            ->join('children as ch', 'ch.id', '=', 'q.child_id')
+            ->leftJoin('rooms as r', 'r.id', '=', 'ch.primary_room_id')
+            ->leftJoin('users as u', 'u.id', '=', 'q.requested_by_user_id')
+            ->where('q.agency_id', $agencyId)->where('q.status', 'requested')
+            ->whereNull('ch.deleted_at')->whereNull('ch.withdrawn_at')
+            ->orderBy('q.created_at')
+            ->get(['q.id', 'q.child_id', 'q.term', 'q.created_at', 'ch.first_name', 'ch.last_name', 'r.name as room',
+                'u.first_name as parent_first_name']);
+        $u = $request->user();
+        $rows = $rows->filter(fn ($r) => $this->canAccessChildId($u, (int) $r->child_id))->values();
+        $q = \App\Support\ReportCardQuarter::recent($agencyId ?: null, 4);
+        return response()->json(['data' => $rows, 'quarters' => $q, 'current' => $q[0] ?? null]);
+    }
 
     /** Cards awaiting the caller's (director/admin) approval, in their agency. */
     public function pending(Request $request): JsonResponse
@@ -154,6 +174,7 @@ final class ReportCardController extends Controller
                     . "Mention 1-2 concrete moments from the observations + 1 growth area.\n\n"
                     . "Observations feeding this area:\n" . ($obsLines ?: '(none logged)');
                 try {
+                    \App\Support\AiFresh::as('report_card', \App\Support\AiFresh::agencyFrom(['child_id' => $childId]));   // fresh writing (AiFresh)
                     $res = Http::withHeaders([
                         'x-api-key' => $key, 'anthropic-version' => '2023-06-01', 'content-type' => 'application/json',
                     ])->timeout(45)->post('https://api.anthropic.com/v1/messages', [
@@ -161,7 +182,7 @@ final class ReportCardController extends Controller
                         'max_tokens' => 500,
                         'messages' => [['role' => 'user', 'content' => $prompt]],
                     ]);
-                    $text = $res->ok() ? trim($res->json('content.0.text') ?? '') : '';
+                    $text = $res->ok() ? trim(\App\Support\AiConfig::text($res->json()) ?? '') : '';
                 } catch (\Throwable $e) {
                     $text = '';
                 }
@@ -177,6 +198,7 @@ final class ReportCardController extends Controller
         if ($key) {
             $nextPrompt = "Based on this child's profile, write 3 specific next-steps suggestions for {$child->first_name}'s continued growth. Return as a short numbered list.";
             try {
+                \App\Support\AiFresh::as('report_next_steps', \App\Support\AiFresh::agencyFrom(['child_id' => $childId]));
                 $res = Http::withHeaders([
                     'x-api-key' => $key, 'anthropic-version' => '2023-06-01', 'content-type' => 'application/json',
                 ])->timeout(45)->post('https://api.anthropic.com/v1/messages', [
@@ -184,7 +206,7 @@ final class ReportCardController extends Controller
                     'max_tokens' => 400,
                     'messages' => [['role' => 'user', 'content' => $nextPrompt]],
                 ]);
-                $nextSteps = $res->ok() ? trim($res->json('content.0.text') ?? '') : '';
+                $nextSteps = $res->ok() ? trim(\App\Support\AiConfig::text($res->json()) ?? '') : '';
             } catch (\Throwable $e) {
                 $nextSteps = '';
             }
@@ -347,6 +369,11 @@ final class ReportCardController extends Controller
             'narratives' => 'nullable|array',
             'narratives.*' => 'nullable|string|max:5000',
         ]);
+        /* Marking a card sent is an approval (2026-11-05 leak sweep): PATCH status=sent let an educator skip the
+           director's review and publish a card to the family. Only an approver of this child's centre may. */
+        if (($data['status'] ?? null) === 'sent' && ($row->status ?? '') !== 'sent') {
+            abort_unless($this->mayApproveCard($request, $row), 403, 'Report cards must be approved by a director or admin before sending.');
+        }
         // Per-area narratives (2026-09-29). Merged into what is stored; HDLH keys are
         // mirrored into the legacy columns so older readers stay in step.
         if (array_key_exists('narratives', $data)) {
@@ -369,6 +396,8 @@ final class ReportCardController extends Controller
         // A report card must be approved by a director/admin before it reaches a
         // parent — an educator can only submit it for review (see submit()).
         abort_unless($this->isApprover($request->user()), 403, 'Report cards must be approved by a director or admin before sending.');
+        // A director of THIS child's centre, not of any centre (2026-11-05 leak sweep; see mayApproveCard).
+        abort_unless($this->mayApproveCard($request, $row), 403, 'Report cards must be approved by a director or admin before sending.');
         $this->sendToGuardians($row);
         DB::table('report_cards')->where('id', $id)->update([
             'status' => 'sent', 'sent_at' => now(), 'updated_at' => now(),
@@ -403,6 +432,8 @@ final class ReportCardController extends Controller
         abort_unless($row, 404);
         abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403);
         abort_unless($this->isApprover($request->user()), 403, 'Only a director or admin can approve report cards.');
+        // A director of THIS child's centre, not of any centre (2026-11-05 leak sweep; see mayApproveCard).
+        abort_unless($this->mayApproveCard($request, $row), 403, 'Only a director or admin of this child\'s centre can approve this report card.');
         $data = $request->validate(['admin_signature' => 'required|string']);
         DB::table('report_cards')->where('id', $id)->update([
             'status' => 'sent',
@@ -433,6 +464,9 @@ final class ReportCardController extends Controller
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
         abort_unless($this->isApprover($request->user()), 403, 'Only a director or admin can review report cards.');
+        /* The card's child must be at a centre you direct (2026-11-05 leak sweep): reject never looked at the
+           child, so any director or admin could wipe the signature on, and send back, another agency's card. */
+        abort_unless($this->mayApproveCard($request, $row), 403, 'Only a director or admin of this child\'s centre can review this report card.');
         $data = $request->validate(['note' => 'nullable|string|max:1000']);
         $note = $data['note'] ?? 'Please revise and resubmit.';
         DB::table('report_cards')->where('id', $id)->update([
@@ -451,10 +485,30 @@ final class ReportCardController extends Controller
         return response()->json(['status' => 'draft']);
     }
 
+    /* May this caller approve / send / send back THIS card? (2026-11-05 leak sweep). isApprover() only asks
+       "director somewhere in this agency", so a director of one centre who is an educator at another passed
+       for the other centre's cards. Here: the child is in the active agency and the caller is an agency-wide
+       admin there, or holds centre_director at the child's own centre. */
+    private function mayApproveCard(Request $request, object $row): bool
+    {
+        $childId = (int) $row->child_id;
+        $agencyId = (int) $this->resolveAgencyId($request);
+        if (! $agencyId || $this->agencyOfChild($childId) !== $agencyId || ! $this->canAccessChildScoped($request, $childId)) {
+            return false;
+        }
+        if (\App\Support\CentreScope::ids($request, $agencyId) === null) {
+            return true;
+        }
+        $centreId = (int) DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+            ->where('c.id', $childId)->value('f.centre_id');
+        return $centreId > 0 && DB::table('role_assignments')->where('user_id', $request->user()->id)
+            ->where('active', 1)->where('role', 'centre_director')->where('centre_id', $centreId)->exists();
+    }
+
     /** True for director / agency-admin / platform-admin (the approvers). */
     private function isApprover($user): bool
     {
-        return DB::table('role_assignments')->where('user_id', $user->id)
+        return \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $user->id)
             ->whereIn('role', ['centre_director', 'agency_admin', 'platform_admin'])
             ->where('active', 1)->exists();
     }
@@ -498,6 +552,14 @@ final class ReportCardController extends Controller
         if (! $child) {
             return;
         }
+        foreach (DB::table('report_card_requests')->where('child_id', $child->id)->where('status', 'requested')->get() as $ask) {
+            $short = preg_replace('/\s*\(.*\)$/u', '', (string) $ask->term);
+            if ((string) $row->term === (string) $ask->term || ($short !== '' && stripos((string) $row->term, $short) === 0)) {
+                DB::table('report_card_requests')->where('id', $ask->id)->update([
+                    'status' => 'fulfilled', 'report_card_id' => $row->id, 'fulfilled_at' => now(), 'updated_at' => now(),
+                ]);
+            }
+        }
         $gids = DB::table('guardians')->where('family_id', $child->family_id)->pluck('user_id');
         foreach ($gids as $gid) {
             if (! $gid) {
@@ -523,6 +585,19 @@ final class ReportCardController extends Controller
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
         abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
+        /* 2026-11-04: canAccessChildId lets a guardian of the family in - which reached drafts, cards in review and
+           the de-enrolment leaving drafts by id. Anyone who is not staff of the agency sees an approved card only. */
+        if (($row->status ?? '') !== 'sent') {
+            $staff = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)
+                ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'platform_admin'])->where('active', 1)->exists();
+            abort_unless($staff, 404);
+        }
+        return $this->pdfResponse($row);
+    }
+
+    /** The card as a PDF. Callers check access first. $inline: shown in the browser (the parent's signed link). */
+    public function pdfResponse(object $row, bool $inline = false): Response
+    {
         $child = DB::table('children')->where('id', $row->child_id)->first();
         $family = DB::table('families')->where('id', $child->family_id)->first();
         $agency = DB::table('agencies')->where('id',
@@ -547,14 +622,15 @@ final class ReportCardController extends Controller
         $dompdf->render();
         return new Response($dompdf->output(), 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="ReportCard-' . preg_replace('/[^A-Za-z0-9]/', '-', $child->first_name) . '-' . $row->term . '.pdf"',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment') . '; filename="ReportCard-' . preg_replace('/[^A-Za-z0-9]/', '-', $child->first_name) . '-'
+                . trim(preg_replace('/[^A-Za-z0-9]+/', '-', (string) $row->term), '-') . '.pdf"',
         ]);
     }
 
     private function assertStaff(Request $request): void
     {
         $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
+        $isStaff = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'platform_admin'])
             ->where('active', 1)->exists();
         abort_unless($isStaff, 403);

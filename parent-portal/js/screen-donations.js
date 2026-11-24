@@ -178,7 +178,7 @@
   async function act(a, id, main) {
     var g = cache.gifts.find(function (x) { return +x.id === id; });
     if (a === 'edit') { return giftDialog(g, main); }
-    if (a === 'receive') { return giftDialog(Object.assign({}, g, { status: 'received', received_on: new Date().toISOString().slice(0, 10) }), main, 'Mark gift as received'); }
+    if (a === 'receive') { return giftDialog(Object.assign({}, g, { status: 'received', received_on: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)) }), main, 'Mark gift as received'); }
     if (a === 'issue') {
       var k = g.receipt_kind || {};
       var ok = await KT.confirm({ title: k.kind === 'official' ? 'Issue an official tax receipt?' : 'Issue an acknowledgement?',
@@ -209,7 +209,7 @@
     }
   }
   function giftDialog(g, main, title) {
-    g = g || { status: 'received', method: 'etransfer', received_on: new Date().toISOString().slice(0, 10), campaign_id: filt.campaign_id };
+    g = g || { status: 'received', method: 'etransfer', received_on: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)), campaign_id: filt.campaign_id };
     var camps = [['', '— General donation —']].concat(cache.campaigns.map(function (c) { return [c.id, c.title]; }));
     var html = '<div class="dn-f">'
       + field('donor_first_name', 'First name *', g.donor_first_name) + field('donor_last_name', 'Last name', g.donor_last_name)

@@ -41,7 +41,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class TrackFailedRequests
 {
     /** Paths whose failures are already recorded in full by their own handler. */
-    private const ALREADY_LOGGED = ['diag/crash', 'diag/client-error'];
+    private const ALREADY_LOGGED = ['diag/crash', 'diag/client-error', 'v1/cal/'];   // v1/cal/: the path is a secret calendar link (cal1103)
 
     public function handle(Request $request, Closure $next): Response
     {

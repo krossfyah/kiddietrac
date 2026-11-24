@@ -280,7 +280,7 @@ final class PickupLoginController extends Controller
         try {
             $centreId = (int) DB::table('families')->where('id', $familyId)->value('centre_id');
             $roomIds = DB::table('enrollments')->whereIn('child_id', $children->pluck('id'))
-                ->where(fn ($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString()))
+                ->where(fn ($q) => $q->whereNull('end_date')->orWhere('end_date', '>=', \App\Support\AgencyTime::today()))
                 ->pluck('room_id')->unique()->all();
             $educators = $roomIds ? DB::table('educator_rooms as er')->join('users as u', 'u.id', '=', 'er.user_id')
                 ->whereIn('er.room_id', $roomIds)->whereNull('u.deleted_at')->where('u.status', 'active')->pluck('u.id')->all() : [];
@@ -365,14 +365,14 @@ final class PickupLoginController extends Controller
             ? $this->accountEmail($email, (string) $contact->name, 'Your KiddieTrac pick-up login',
                 "You've been added to KiddieTrac by your childcare provider as an authorised pick-up person"
                 . ($family !== '' ? " for the {$family} family" : '') . ".\n\n"
-                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and your check-in/out QR code:\n\n"
+                . "Sign in at https://app.kiddietrac.com to see the children you can pick up and check them in and out with One-Tap:\n\n"
                 . "Email: {$email}\n"
                 . "Temporary password: {$r['temp']}\n\n"
                 . "We recommend changing your password after you sign in, via 'Forgot password'.", $agencyId)
             : $this->accountEmail($email, (string) $contact->name, 'You can now pick up with KiddieTrac',
                 "Your childcare provider has added you as an authorised pick-up person"
                 . ($family !== '' ? " for the {$family} family" : '') . ".\n\n"
-                . "Sign in at https://app.kiddietrac.com with your existing KiddieTrac account to see the children and your check-in/out QR code.", $agencyId);
+                . "Sign in at https://app.kiddietrac.com with your existing KiddieTrac account to see the children and check them in and out with One-Tap.", $agencyId);
 
         return response()->json(['ok' => true, 'user_id' => $r['user_id'], 'reused' => $r['reused'], 'emailed' => $emailed]);
     }
@@ -477,6 +477,7 @@ final class PickupLoginController extends Controller
                 recipientName: $name ?: 'there', subjectLine: $subject, bodyText: $body,
                 ctaLabel: 'Sign in to KiddieTrac', ctaUrl: config('app.url', 'https://app.kiddietrac.com'),
                 agencyId: $agencyId,
+                showApp: true,   // every one of these is a pick-up login's first email: Google Play card (2026-10-28)
             );
             $m->onQueue('mail');
             Mail::to($to, $name ?: null)->queue($m);
@@ -522,7 +523,7 @@ final class PickupLoginController extends Controller
                 . ($contact->relationship ? ' (' . e((string) $contact->relationship) . ')' : '')
                 . ($family !== '' ? ', an emergency contact of the ' . e($family) . ' family' : '') . '.</p>'
                 . '<p style="margin:0 0 14px;">Email to send the login to: <strong>' . e($email) . '</strong></p>'
-                . '<p style="margin:0 0 14px;">A pick-up login lets them check the children in and out with their own QR code and see the parent view. They never see billing.</p>'
+                . '<p style="margin:0 0 14px;">A pick-up login lets them check the children in and out with One-Tap from their own phone and see the parent view. They never see billing.</p>'
                 . '<p style="margin:0;">Open the child\'s record in KiddieTrac → <em>Family record</em> to approve or decline it.</p>';
             $html = \App\Services\EmailTemplate::wrap($agencyId, $body, ['eyebrow' => 'Families', 'title' => $title, 'preheader' => $line]);
             \App\Services\AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $title, $agencyId) {

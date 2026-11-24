@@ -76,6 +76,11 @@ final class SmsInbound
 
             self::audit($id);
 
+            /* WHOSE TEXT DOES IT ANSWER (2026-11-02): filed on the row now, so the reply reaches the Message
+               Centre of whoever sent the text it answers (an announcement's author, a staff reply). */
+            $attr = SmsReplies::file($id) ?: [];
+            $ownerId = (int) ($attr['owner_user_id'] ?? 0);
+
             /* INTO THE CHAT THREAD FIRST (2026-09-24).
 
                Anthony: "can this be wired up to the chat system and show up as a chat
@@ -99,8 +104,20 @@ final class SmsInbound
             if (! $keyword && $userId) {
                 $bridged = SmsChatBridge::relayIn($userId, $body);
             }
+            if ($bridged && $ownerId && $ownerId !== (int) $userId) {
+                /* The family's chat thread tells the staff who follow that family. The person whose announcement
+                   or text this answers may not be one of them, so they are told directly. */
+                self::notify($agencyId, $userId, $fromPhone, $body, $keyword, $id, $ownerId, [$ownerId]);
+            }
             if (! $bridged) {
-                self::notify($agencyId, $userId, $fromPhone, $body, $keyword);
+                /* A stranger texting the KiddieTrac line (2026-10-23): a prospect, not agency
+                   correspondence - it goes to Phone → Texts and the line's people, and is
+                   filed on their lead. It used to reach agency 2's own admins instead. */
+                if (! $userId && ! $keyword && $agencyId === LineTexts::AGENCY) {
+                    LineTexts::incoming($fromPhone, $body, (int) $id);
+                } else {
+                    self::notify($agencyId, $userId, $fromPhone, $body, $keyword, $id, $ownerId);
+                }
             }
 
             return $id;
@@ -262,11 +279,31 @@ final class SmsInbound
         return array_map('intval', array_keys($ids));
     }
 
-    private static function notify(int $agencyId, ?int $senderId, string $fromPhone, string $body, ?string $keyword): void
+    private static function notify(int $agencyId, ?int $senderId, string $fromPhone, string $body, ?string $keyword, int $rowId = 0, int $ownerId = 0, ?array $only = null): void
     {
-        $audience = self::audienceFor($agencyId, $senderId);
+        /* THE LINK OPENS THE REPLY (2026-11-02). It was '#sms', the broadcast SEND screen, where a reply
+           was one row at the bottom of a log - Anthony tapped "Text reply from Bruni Meeser" and could
+           not find it. Now Message Centre -> Texts opens with this conversation open (#chat?sms=<row>). */
+        $link = $rowId > 0 ? ('#chat?sms=' . $rowId) : '#chat';
+
+        $audience = $only ?? self::audienceFor($agencyId, $senderId);
+        // The person whose text this answers hears about it - if they are staff of this agency.
+        if ($ownerId && $ownerId !== (int) $senderId && ! in_array($ownerId, $audience, true) && self::staffOf($agencyId, $ownerId)) {
+            $audience[] = $ownerId;
+        }
+        if ($only !== null) {
+            $audience = array_values(array_filter($audience, fn ($u) => self::staffOf($agencyId, (int) $u)));
+        }
         if (! $audience) {
             return;
+        }
+        // Who can open it in Message Centre: its owner, and the agency's admins / directors (SmsReplies::visible).
+        // An educator told because the sender's child is in their room gets the alert without a dead link.
+        $overseers = self::overseersOf($agencyId);
+        $annTitle = '';
+        if ($ownerId && $rowId) {
+            $aid = DB::table('sms_messages')->where('id', $rowId)->value('announcement_id');
+            if ($aid) $annTitle = (string) DB::table('announcements')->where('id', $aid)->value('title');
         }
 
         $who = $senderId
@@ -286,13 +323,20 @@ final class SmsInbound
         $preview = mb_substr(trim($body), 0, 140);
 
         $rows = [];
+        $linkFor = [];
+        $titleFor = [];
         foreach ($audience as $uid) {
+            $canOpen = ((int) $uid === $ownerId) || in_array((int) $uid, $overseers, true);
+            $linkFor[$uid] = $canOpen ? $link : '#notifications';
+            $titleFor[$uid] = ((int) $uid === $ownerId && ! $keyword && $annTitle !== '')
+                ? ('Text reply from ' . $who . ' to your announcement')
+                : $title;
             $rows[] = [
                 'user_id' => $uid,
                 'type' => 'sms_reply',
-                'title' => $title,
-                'body' => $keyword ? ('Sent from ' . $fromPhone) : $preview,
-                'data' => json_encode(['link' => '#sms', 'from' => $fromPhone, 'user_id' => $senderId]),
+                'title' => $titleFor[$uid],
+                'body' => $keyword ? ('Sent from ' . $fromPhone) : (((int) $uid === $ownerId && $annTitle !== '') ? ('Re: ' . mb_substr($annTitle, 0, 60) . ' - ' . $preview) : $preview),
+                'data' => json_encode(['link' => $linkFor[$uid], 'from' => $fromPhone, 'user_id' => $senderId, 'sms_id' => $rowId ?: null]),
                 'created_at' => now(),
             ];
         }
@@ -309,11 +353,33 @@ final class SmsInbound
         if (! $keyword) {
             foreach ($audience as $uid) {
                 try {
-                    app(\App\Services\FcmService::class)->sendToUser($uid, $title, $preview, '#sms');
+                    app(\App\Services\FcmService::class)->sendToUser($uid, $titleFor[$uid] ?? $title, $preview, $linkFor[$uid] ?? $link);
                 } catch (Throwable $e) {
                     // logged inside the service; a push is never worth failing a webhook
                 }
             }
         }
+    }
+
+    /** Active staff of this agency (a role in it or in one of its centres). */
+    private static function staffOf(int $agencyId, int $userId): bool
+    {
+        if ($userId <= 0) return false;
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+
+        return DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)
+            ->whereIn('role', ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'auditor'])
+            ->where(fn ($w) => $w->where('agency_id', $agencyId)->orWhereIn('centre_id', $centres ?: [0]))->exists();
+    }
+
+    /** @return int[] agency admins and centre directors of this agency */
+    private static function overseersOf(int $agencyId): array
+    {
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+
+        return DB::table('role_assignments')->where('active', 1)
+            ->where(fn ($w) => $w->where(fn ($x) => $x->where('agency_id', $agencyId)->where('role', 'agency_admin'))
+                ->orWhere(fn ($x) => $x->where('role', 'centre_director')->where(fn ($y) => $y->where('agency_id', $agencyId)->orWhereIn('centre_id', $centres ?: [0]))))
+            ->pluck('user_id')->map(fn ($i) => (int) $i)->unique()->values()->all();
     }
 }

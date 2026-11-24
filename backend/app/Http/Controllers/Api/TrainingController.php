@@ -72,7 +72,7 @@ final class TrainingController extends Controller
             $s['assignment_id'] = (int) $r->assignment_id;
             $s['due_on'] = $r->due_on;
             $s['note'] = $r->note;
-            $s['overdue'] = $r->due_on && ! $s['completed'] && $r->due_on < now()->toDateString();
+            $s['overdue'] = $r->due_on && ! $s['completed'] && $r->due_on < \App\Support\AgencyTime::today();
             $mine[] = $s;
         }
 
@@ -117,10 +117,23 @@ final class TrainingController extends Controller
                 'updated_at' => now(),
             ]);
         } else {
-            DB::table('training_progress')->insert([
-                'user_id' => $uid, 'video_id' => $id, 'position_sec' => $pos,
-                'completed_at' => $done ? now() : null, 'created_at' => now(), 'updated_at' => now(),
-            ]);
+            /* Two progress saves can arrive together (ticket #165): both see no row and
+               both insert. The unique key keeps one; the loser becomes an update. */
+            try {
+                DB::table('training_progress')->insert([
+                    'user_id' => $uid, 'video_id' => $id, 'position_sec' => $pos,
+                    'completed_at' => $done ? now() : null, 'created_at' => now(), 'updated_at' => now(),
+                ]);
+            } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+                $row = DB::table('training_progress')->where(['user_id' => $uid, 'video_id' => $id])->first();
+                if ($row) {
+                    DB::table('training_progress')->where('id', $row->id)->update([
+                        'position_sec' => max($pos, (int) $row->position_sec),
+                        'completed_at' => $row->completed_at ?? ($done ? now() : null),
+                        'updated_at' => now(),
+                    ]);
+                }
+            }
         }
 
         return response()->json(['completed' => $done || ($row && $row->completed_at)]);
@@ -234,7 +247,7 @@ final class TrainingController extends Controller
             ->orderByDesc('ta.created_at')
             ->get(['ta.id', 'ta.user_id', 'ta.due_on', 'ta.note', 'ta.created_at', 'ta.emailed_at', 'v.title', 'v.duration_sec',
                    'p.position_sec', 'p.completed_at', 'p.updated_at as watched_at', DB::raw("CONCAT_WS(' ', b.first_name, b.last_name) as assigned_by_name")]);
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
         $out = [];
         foreach ($rows as $r) {
             $pct = $r->completed_at ? 100 : ($r->duration_sec ? min(99, (int) round(100 * (int) $r->position_sec / max(1, (int) $r->duration_sec))) : 0);

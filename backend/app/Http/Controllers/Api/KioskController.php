@@ -201,6 +201,11 @@ final class KioskController extends Controller
             'kiosk_token' => $newToken,
             'updated_at' => now(),
         ]);
+        // A new link signs every kiosk tablet on the old one out (2026-11-09: "Sign out all kiosk tablets").
+        try {
+            \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => (int) $centre->agency_id, 'action' => 'kiosk.signed_out', 'entity_type' => 'centre', 'entity_id' => (int) $centre->id,
+                'payload' => json_encode(['summary' => ($centre->kiosk_token ? 'Signed out all kiosk tablets at ' : 'Kiosk link made for ') . $centre->name]), 'ip_address' => substr((string) $request->ip(), 0, 45), 'created_at' => now()]);
+        } catch (\Throwable $e) {}
 
         return response()->json([
             'message' => 'Token rotated',

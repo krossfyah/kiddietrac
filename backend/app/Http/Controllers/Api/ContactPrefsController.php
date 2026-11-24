@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Support\BroadcastAudience;
 use App\Support\ContactCategories;
+use App\Support\NotifyAudience;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,19 +40,24 @@ class ContactPrefsController extends Controller
         $smsOn = $agencyId ? ContactCategories::smsAllowed($agencyId) : [];
         $voiceOn = $agencyId ? \App\Http\Controllers\Api\VoiceController::allowedCategories($agencyId) : [];
 
+        // Only the kinds sent to this person, each marked with who it is for (2026-11-06, NotifyAudience).
+        $sides = NotifyAudience::sides($request);
         $sms = [];
         foreach (ContactCategories::SMS as $k => [$label, $hint]) {
-            if (! in_array($k, $smsOn, true)) {
+            $for = NotifyAudience::SMS[$k] ?? 'all';
+            if (! in_array($k, $smsOn, true) || ! NotifyAudience::shows($for, $sides)) {
                 continue;
             }
-            $sms[] = ['key' => $k, 'label' => $label, 'hint' => $hint, 'on' => ContactCategories::userWants($uid, 'sms', $k)];
+            $sms[] = ['key' => $k, 'label' => $label, 'hint' => $hint, 'for' => $for, 'on' => ContactCategories::userWants($uid, 'sms', $k)];
         }
         $voice = [];
         foreach (ContactCategories::voice() as $k => $label) {
-            if (! in_array($k, $voiceOn, true)) {
+            $for = NotifyAudience::VOICE[$k] ?? 'all';
+            $roles = NotifyAudience::VOICE_ROLES[$k] ?? null;
+            if (! in_array($k, $voiceOn, true) || ! NotifyAudience::shows($for, $sides, $roles)) {
                 continue;
             }
-            $voice[] = ['key' => $k, 'label' => $label, 'urgent' => BroadcastAudience::isEmergency($k),
+            $voice[] = ['key' => $k, 'label' => $label, 'urgent' => BroadcastAudience::isEmergency($k), 'for' => $for, 'roles' => $roles,
                 'on' => ContactCategories::userWants($uid, 'voice', $k)];
         }
 
@@ -62,6 +68,7 @@ class ContactPrefsController extends Controller
             'sms_opted_in' => (int) ($row->sms_opt_in ?? 0) === 1,
             'voice_opt_out' => (int) ($row->voice_opt_out ?? 0) === 1,
             'agency_voice_enabled' => (bool) ($agencyId ? DB::table('agencies')->where('id', $agencyId)->value('voice_enabled') : false),
+            'sides' => $sides,
             'sms' => $sms,
             'voice' => $voice,
         ]);
@@ -77,6 +84,9 @@ class ContactPrefsController extends Controller
         ]);
         $valid = $data['channel'] === 'sms' ? array_keys(ContactCategories::SMS) : array_keys(ContactCategories::voice());
         abort_unless(in_array($data['key'], $valid, true), 422, 'Unknown kind of message.');
+        $for = $data['channel'] === 'sms' ? (NotifyAudience::SMS[$data['key']] ?? 'all') : (NotifyAudience::VOICE[$data['key']] ?? 'all');
+        $roles = $data['channel'] === 'voice' ? (NotifyAudience::VOICE_ROLES[$data['key']] ?? null) : null;
+        abort_unless(NotifyAudience::shows($for, NotifyAudience::sides($request), $roles), 422, 'That kind of message is not sent to you.');
 
         ContactCategories::setUserWants((int) $request->user()->id, $data['channel'], $data['key'], (bool) $data['on']);
         $this->audit($request, 'contact_prefs.' . $data['channel'], ['key' => $data['key'], 'on' => (bool) $data['on']]);

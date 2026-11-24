@@ -363,6 +363,8 @@
      inbox is worse than one nobody resent ([[never-default-a-recipient]]). */
   async function openResendInvoice(inv) {
     var kind = inv.kt_source === 'kiddietrac' ? 'native' : 'external';
+    // The one resend popup: guardians ticked, admins/directors copied by default (2026-10-31).
+    if (KT.resendInvoice) { KT.resendInvoice({ kind: kind, id: inv.id, number: inv.number }); return; }
     var to = '';
     try {
       if (inv.family_id) {
@@ -393,6 +395,209 @@
     } catch (e) {
       if (KT.Dom && KT.Dom.toast) { KT.Dom.toast((e && e.message) || 'Could not send that invoice.', 'error'); }
     }
+  }
+
+  /* SEND e-TRANSFER REQUEST (2026-11-02). Anthony chose "remove the section, add a kebab
+     action": the old "e-Transfer requests" screen is gone, and sending one is an act on
+     the invoice, from its row menu here. KiddieTrac never sends the request - the centre
+     does, from its own bank's "Request money" - so the popup lays out exactly what that
+     form asks for, each with a Copy button, and "Mark as requested" records it on the
+     invoice ("e-Transfer requested Nov 2 by Safia"). A family who asked from their own
+     billing screen is the same record: their chosen contact is ticked here, and marking
+     it tells them to look in their bank app. Only contacts already on a billing
+     guardian's profile are offered - a money request never goes to a typed-in address.
+     kind = 'kt' (a KiddieTrac invoice) | 'ext' (a synced one). */
+  function etCopy(text, btn) {
+    var done = function () {
+      var was = btn.textContent; btn.textContent = 'Copied'; btn.disabled = true;
+      setTimeout(function () { btn.textContent = was; btn.disabled = false; }, 1400);
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { etCopyOld(text) && done(); });
+        return;
+      }
+    } catch (e) { /* the old way below */ }
+    if (etCopyOld(text)) { done(); }
+  }
+  function etCopyOld(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;left:-9999px;top:0;';
+    document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove(); return ok;
+  }
+
+  async function openEtransferRequest(container, kind, id) {
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;'
+      + 'display:flex;align-items:flex-start;justify-content:center;padding:32px 14px;overflow:auto;';
+    var m = document.createElement('div');
+    m.style.cssText = 'background:#fff;border-radius:16px;max-width:520px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.35);';
+    ov.appendChild(m); document.body.appendChild(ov);
+
+    var close = function () { document.removeEventListener('keydown', onKey); ov.remove(); };
+    function onKey(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('click', function (ev) { if (ev.target === ov) { close(); } });
+
+    /* The header is drawn ONCE and only the body below it is repainted: kt-modal-guard bands
+       the first title row it sees and takes over its ✕, so replacing the header after the
+       load left a plain white header with two ✕ (seen in the first test, 2026-11-02). */
+    m.innerHTML = '<div style="padding:16px 22px;border-bottom:1px solid #E5E7EB;display:flex;align-items:flex-start;gap:12px;">'
+      + '<div style="flex:1;min-width:0;"><h3 style="margin:0;font-size:17px;color:#0F172A;">Send e-Transfer request</h3>'
+      + '<div data-et-sub style="font-size:12.5px;color:#64748B;margin-top:2px;"></div></div>'
+      + '<button type="button" data-et-x title="Close" aria-label="Close" style="border:none;background:#F1F5F9;'
+      + 'color:#475569;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:17px;line-height:1;flex:none;">✕</button></div>'
+      + '<div data-et-body><div style="padding:36px;text-align:center;color:#94A3B8;">Loading…</div></div>';
+    var bodyEl = m.querySelector('[data-et-body]');
+    function wireX() { m.querySelectorAll('[data-et-x]').forEach(function (b) { if (!b.__et) { b.__et = 1; b.addEventListener('click', close); } }); }
+    wireX();
+
+    var d;
+    try { d = await Api.get('/billing/etransfer/' + kind + '/' + id); }
+    catch (e) {
+      bodyEl.innerHTML = '<div style="padding:24px 22px;color:#B91C1C;font-size:13.5px;">'
+        + esc((e && e.message) || 'Could not open that invoice.') + '</div>';
+      wireX();
+      return;
+    }
+
+    var inv = d.invoice || {};
+    var gs = d.guardians || [];
+    var note = d.note || null;
+    var asked = (d.requests || []).filter(function (r) { return r.status === 'requested'; })[0] || null;
+    var owing = Number(inv.balance_due) || 0;
+    var amtText = owing.toFixed(2);
+
+    var box = 'display:flex;align-items:center;gap:10px;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px 8px 12px;margin-bottom:8px;';
+    var cbtn = 'flex:none;border:1px solid #CBD5E1;background:#fff;color:#0F766E;font-weight:700;font-size:12px;'
+      + 'border-radius:8px;padding:5px 10px;cursor:pointer;min-height:28px;';
+    function field(label, value, copy, extra) {
+      return '<div style="' + box + '"><div style="flex:1;min-width:0;">'
+        + '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;">' + esc(label) + '</div>'
+        + '<div style="font-size:14px;color:#0F172A;font-weight:700;overflow-wrap:anywhere;">' + esc(value) + (extra || '') + '</div></div>'
+        + (copy != null ? '<button type="button" data-et-copy="' + esc(copy) + '" style="' + cbtn + '">Copy</button>' : '')
+        + '</div>';
+    }
+
+    var pick = null;
+    var who = '';
+    gs.forEach(function (g, gi) {
+      who += '<div style="margin:0 0 8px;"><div style="font-size:13px;font-weight:800;color:#0F172A;margin-bottom:4px;">'
+        + esc(g.name) + '<span style="font-weight:600;color:#64748B;">'
+        + esc((g.relationship ? ' · ' + g.relationship : '') + (g.primary ? ' · Primary' : '')) + '</span></div>';
+      if (!(g.contacts || []).length) {
+        who += '<div style="font-size:12.5px;color:#94A3B8;padding:2px 0 4px;">No email or mobile on their profile.</div>';
+      }
+      (g.contacts || []).forEach(function (c, ci) {
+        var key = gi + ':' + ci;
+        var isAsked = asked && asked.contact_type === c.type && String(asked.contact).toLowerCase() === String(c.value).toLowerCase();
+        if (isAsked || (!asked && pick == null)) { pick = key; }
+        who += '<div style="' + box + 'margin-bottom:6px;">'
+          + '<label style="flex:1;min-width:0;display:flex;align-items:center;gap:9px;cursor:pointer;font-size:13.5px;color:#0F172A;">'
+          + '<input type="radio" name="et-to" value="' + key + '" style="margin:0;flex:none;">'
+          + '<span style="overflow-wrap:anywhere;"><span style="font-size:11px;font-weight:800;color:#64748B;margin-right:6px;">'
+          + (c.type === 'email' ? 'EMAIL' : 'MOBILE') + '</span>' + esc(c.value)
+          + (isAsked ? ' <span style="font-size:11px;font-weight:800;color:#B45309;background:#FFF7ED;border-radius:999px;padding:1px 7px;">Family asked here</span>' : '')
+          + '</span></label>'
+          + '<button type="button" data-et-copy="' + esc(c.value) + '" style="' + cbtn + '">Copy</button></div>';
+      });
+      who += '</div>';
+    });
+    if (!gs.length) {
+      who = '<div style="font-size:13px;color:#B45309;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:10px 12px;">'
+        + 'This family has no guardian set to receive billing. Add one on the family\'s profile first.</div>';
+    }
+
+    var ia = d.interac;
+    var banner = '';
+    if (note && note.status === 'sent') {
+      banner = '<div style="font-size:13px;color:#166534;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;padding:9px 12px;margin-bottom:12px;">✓ '
+        + esc(note.label) + '.</div>';
+    } else if (asked) {
+      banner = '<div style="font-size:13px;color:#7C2D12;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:9px 12px;margin-bottom:12px;">'
+        + 'The family asked for this on ' + esc(asked.requested_label || '') + ', to ' + esc(asked.contact) + '.</div>';
+    }
+    var canMark = gs.length && pick != null && owing >= 0.005 && !(note && note.status === 'sent');
+
+    m.querySelector('[data-et-sub]').textContent = (inv.number || '') + ' · ' + (inv.family || '');
+    bodyEl.innerHTML = '<div style="padding:16px 22px;">'
+      + banner
+      + '<p style="margin:0 0 12px;font-size:13px;color:#475569;line-height:1.5;">In the centre\'s bank, open <strong>Interac e-Transfer → Request money</strong> and fill it in with these.</p>'
+      + field('Amount', money(owing), amtText)
+      + field('Message', inv.number || '', inv.number || '')
+      + (ia && ia.email
+        ? field('Deposit to (your e-Transfer email)', ia.email, ia.email,
+          ia.recipient ? '<div style="font-size:12px;color:#64748B;font-weight:600;">' + esc(ia.recipient) + '</div>' : '')
+        : '<div style="font-size:12.5px;color:#7C2D12;background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:9px 12px;margin-bottom:8px;">'
+          + 'No e-Transfer email is set up for this agency, so families are not shown one. Add it under Billing setup.</div>')
+      + '<div style="font-size:11px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px;">Request it from</div>'
+      + who
+      + '<div id="et-msg" style="font-size:12.5px;min-height:18px;margin:6px 0 8px;"></div>'
+      + '<div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">'
+      + '<button type="button" data-et-x style="padding:9px 16px;border:1px solid #E2E8F0;border-radius:9px;background:#fff;font-weight:700;cursor:pointer;">Close</button>'
+      + (canMark ? '<button type="button" id="et-mark" class="kt-btn kt-btn-primary" style="padding:9px 18px;">Mark as requested</button>' : '')
+      + '</div></div>';
+    wireX();
+
+    if (pick != null) {
+      var r0 = m.querySelector('input[name="et-to"][value="' + pick + '"]');
+      if (r0) { r0.checked = true; }
+    }
+    m.querySelectorAll('[data-et-copy]').forEach(function (b) {
+      b.addEventListener('click', function () { etCopy(b.getAttribute('data-et-copy'), b); });
+    });
+
+    var mark = m.querySelector('#et-mark');
+    if (!mark) { return; }
+    mark.addEventListener('click', async function () {
+      var sel = m.querySelector('input[name="et-to"]:checked');
+      var msg = m.querySelector('#et-msg');
+      if (!sel) { msg.style.color = '#B91C1C'; msg.textContent = 'Choose who the request goes to.'; return; }
+      var p = sel.value.split(':');
+      var g = gs[+p[0]], c = g && (g.contacts || [])[+p[1]];
+      if (!c) { return; }
+      mark.disabled = true; mark.textContent = 'Saving…';
+      try {
+        var r = await Api.post('/billing/etransfer/' + kind + '/' + id + '/requested',
+          { guardian_id: g.guardian_id, contact_type: c.type, contact: c.value });
+        close();
+        if (KT.Dom && KT.Dom.toast) {
+          KT.Dom.toast((r && r.note && r.note.label) || ('e-Transfer request recorded for ' + (inv.number || 'the invoice')), 'success');
+        }
+        load(container);
+      } catch (e) {
+        mark.disabled = false; mark.textContent = 'Mark as requested';
+        msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not record that.';
+      }
+    });
+  }
+
+  /* A notification's link (#external-billing?invoice=ID, or ?ext=ID for a synced one)
+     opens that invoice's e-Transfer popup once, then the query is dropped so a reload
+     or Back does not open it again. */
+  function openFromHash(container) {
+    var q = String(location.hash || '').split('?')[1] || '';
+    /* ?view=ID (2026-11-02): the global search's link to a KiddieTrac invoice opens its sheet
+       here, over Accounting, so the screen loader has run and closing it leaves the reader on
+       the money screen rather than wherever they searched from. */
+    var vv = q.match(/(?:^|&)view=(\d+)/);
+    if (vv) {
+      try { history.replaceState(null, '', location.pathname + location.search + '#external-billing'); } catch (e) { /* the sheet still opens */ }
+      if (window.KT && KT.openInvoiceById) { KT.openInvoiceById(vv[1]); }
+      return;
+    }
+    var ec = q.match(/(?:^|&)etconfirm=(\d+)/);
+    if (ec) {
+      try { history.replaceState(null, '', location.pathname + location.search + '#external-billing'); } catch (e) { /* the popup still opens */ }
+      openEtConfirm(container, ec[1], null);
+      return;
+    }
+    var mm = q.match(/(?:^|&)(invoice|ext)=(\d+)/);
+    if (!mm) { return; }
+    try { history.replaceState(null, '', location.pathname + location.search + '#external-billing'); } catch (e) { /* the popup still opens */ }
+    openEtransferRequest(container, mm[1] === 'ext' ? 'ext' : 'kt', mm[2]);
   }
 
   async function openKtInvoiceEdit(container, inv) {
@@ -529,7 +734,7 @@
         + '<h3 style="margin:0;font-size:17px;color:#0F172A;">✏️ Invoice ' + esc(i.invoice_number || '') + '</h3>'
         + '<div style="font-size:12.5px;color:#64748B;margin-top:2px;">' + esc(fam.family_name || '')
         + (i.due_at ? ' · due ' + fmtDate(i.due_at) : '') + '</div></div>'
-        + '<button type="button" id="kie-x" title="Close" aria-label="Close"'
+        + '<button type="button" id="kie-x" class="modal-close" title="Close" aria-label="Close"'
         + ' style="border:none;background:#F1F5F9;color:#475569;width:30px;height:30px;border-radius:50%;'
         + 'cursor:pointer;font-size:17px;line-height:1;flex-shrink:0;">✕</button></div>'
 
@@ -713,7 +918,37 @@
     /* The list behind the dialog only reloads if something actually changed — a reload
        on plain Close would throw away the reader's page and scroll for nothing. */
     var dirty = false;
+    /* A CHARGE OR CREDIT TYPED BUT NEVER ADDED (2026-11-01). Safia typed a closure credit
+       into "Add a charge or credit" and pressed Done; only "Add line" writes it, so the
+       dialog closed and the credit was gone with nothing said. Every way out (Done, ✕,
+       Escape, a click outside) now stops once and says so: Add it, or Discard. */
+    function unaddedLine() {
+      var d = m.querySelector('#kie-desc'), a = m.querySelector('#kie-amt');
+      return !!((d && d.value.trim()) || (a && a.value.trim()));
+    }
+    function warnUnadded() {
+      var add = m.querySelector('#kie-add');
+      var bar = m.querySelector('#kie-unadded');
+      if (!bar && add) {
+        bar = document.createElement('div');
+        bar.id = 'kie-unadded';
+        bar.style.cssText = 'margin-top:10px;padding:9px 12px;border:1px solid #FCD34D;background:#FFFBEB;'
+          + 'border-radius:10px;font-size:12.5px;color:#92400E;display:flex;gap:10px;align-items:center;flex-wrap:wrap;';
+        bar.innerHTML = '<span style="flex:1;min-width:180px;"><strong>This charge or credit has not been added yet.</strong> '
+          + 'Press Add line to put it on the invoice, or discard it.</span>'
+          + '<button type="button" data-unadded="add" class="kt-btn kt-btn-primary" style="padding:6px 12px;">Add line</button>'
+          + '<button type="button" data-unadded="discard" style="padding:6px 12px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;font-weight:700;cursor:pointer;">Discard</button>';
+        add.parentNode.parentNode.appendChild(bar);
+        bar.querySelector('[data-unadded="add"]').addEventListener('click', function () { add.click(); });
+        bar.querySelector('[data-unadded="discard"]').addEventListener('click', function () {
+          ['#kie-desc', '#kie-amt', '#kie-tax'].forEach(function (s) { var f = m.querySelector(s); if (f) { f.value = ''; } });
+          finish();
+        });
+      }
+      if (bar) { bar.scrollIntoView({ block: 'nearest' }); }
+    }
     async function finish() {
+      if (unaddedLine()) { warnUnadded(); return; }
       for (var n = 0; n < pendingSaves.length; n++) {
         try { await pendingSaves[n](); } catch (e) { /* reported on the field itself */ }
       }
@@ -875,12 +1110,190 @@
     btn.disabled = false; btn.textContent = label;
   }
 
+  /* E-TRANSFERS TO CONFIRM (2026-11-11). A family enters the bank's reference number after sending an Interac
+     e-Transfer (screen-parent.js "Already sent it?"); the invoice waits as "e-Transfer sent · to confirm" until a person
+     here finds the money in the bank. Anthony chose to approve from the alert and email (#external-billing?etconfirm=ID),
+     from the invoice's row, and from this tab. Approve records the payment through the normal record-payment code with
+     the reference; reject needs a reason, which the family is sent, and the invoice is open again. */
+  var etFilter = 'reported';
+  var IA_LOGO = '/img/interac-logo.svg';
+  function setEtCount(container, n) {
+    state.etCount = +n || 0;
+    var b = container.querySelector('[data-xb-tab="etconfirm"]');
+    if (b) { b.textContent = 'e-Transfers to confirm' + (state.etCount ? ' (' + state.etCount + ')' : ''); }
+  }
+  function etStatusHtml(r) {
+    if (r.status === 'reported') { return '<span style="color:#B45309;font-weight:800;">To confirm</span>'; }
+    if (r.status === 'paid') {
+      return '<span style="color:#15803D;font-weight:800;">Approved</span><div style="font-size:11.5px;color:#64748B;">'
+        + esc((r.paid_by_name ? r.paid_by_name + ' · ' : '') + (r.paid_label || '')) + (r.approved_amount != null && Math.abs(r.approved_amount - r.amount) > 0.004 ? ' · ' + esc(money(r.approved_amount)) + ' received' : '') + '</div>';
+    }
+    if (r.status === 'rejected') {
+      return '<span style="color:#B91C1C;font-weight:800;">Rejected</span><div style="font-size:11.5px;color:#64748B;max-width:260px;">'
+        + esc((r.rejected_by_name ? r.rejected_by_name + ': ' : '') + (r.reject_reason || '')) + '</div>';
+    }
+    return '<span style="color:#64748B;font-weight:700;">Withdrawn by the family</span>';
+  }
+  async function loadConfirm(container) {
+    var body = container.querySelector('#xb-body');
+    if (!body) { return; }
+    body.innerHTML = '<div style="padding:36px;text-align:center;color:#94A3B8;">Loading…</div>';
+    var d;
+    try { d = await Api.get('/billing/etransfer-reports?status=' + etFilter); }
+    catch (e) { body.innerHTML = '<div class="kt-card" style="text-align:center;color:#DC2626;padding:30px;">Could not load: ' + esc((e && e.message) || 'error') + '</div>'; return; }
+    setEtCount(container, (d.counts || {}).reported || 0);
+    var rows = d.reports || [];
+    var chips = [['reported', 'To confirm'], ['paid', 'Approved'], ['rejected', 'Rejected'], ['all', 'All']];
+    var td = 'padding:10px 12px;border-bottom:1px solid #F1F5F9;vertical-align:top;font-size:13.5px;';
+    var th = 'padding:9px 12px;text-align:left;font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;background:#F8FAFC;border-bottom:1px solid #E2E8F0;';
+    var html = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 12px;">'
+      + chips.map(function (c) {
+        var on = etFilter === c[0];
+        return '<button type="button" data-etc-chip="' + c[0] + '" style="height:30px;padding:0 12px;border-radius:999px;font-size:12.5px;font-weight:700;cursor:pointer;border:1px solid '
+          + (on ? '#1F6FB2;background:#EFF6FF;color:#1F6FB2;' : '#E2E8F0;background:#fff;color:#475569;') + '">' + esc(c[1]) + '</button>';
+      }).join('')
+      + '<span style="font-size:12.5px;color:#64748B;margin-left:6px;">Families who say they sent an Interac e-Transfer. Check your bank, then approve or reject.</span></div>';
+    if (!rows.length) {
+      html += '<div class="kt-card" style="text-align:center;color:#64748B;padding:36px;">'
+        + (etFilter === 'reported' ? 'Nothing to confirm. When a family enters an e-Transfer reference number, it appears here.' : 'None yet.') + '</div>';
+    } else {
+      html += '<div class="kt-card" style="padding:0;overflow:auto;"><table style="width:100%;border-collapse:collapse;">'
+        + '<thead><tr><th style="' + th + '">Sent</th><th style="' + th + '">Family</th><th style="' + th + '">Invoices</th><th style="' + th + 'text-align:right;">Amount</th>'
+        + '<th style="' + th + '">Reference</th><th style="' + th + '">Status</th><th style="' + th + '"></th></tr></thead><tbody>'
+        + rows.map(function (r) {
+          return '<tr>'
+            + '<td style="' + td + 'white-space:nowrap;color:#475569;">' + esc(r.reported_label || r.requested_label || '') + '</td>'
+            + '<td style="' + td + '"><div style="font-weight:700;color:#0F172A;">' + esc(r.family || '—') + '</div><div style="font-size:12px;color:#64748B;">' + esc(r.parent || '') + (r.centre ? ' · ' + esc(r.centre) : '') + '</div></td>'
+            + '<td style="' + td + '">' + esc(r.numbers || '') + '</td>'
+            + '<td style="' + td + 'text-align:right;font-weight:800;font-variant-numeric:tabular-nums;">' + esc(money(r.amount)) + '</td>'
+            + '<td style="' + td + 'font-family:ui-monospace,monospace;">' + esc(r.reference || '') + '</td>'
+            + '<td style="' + td + '">' + etStatusHtml(r) + '</td>'
+            + '<td style="' + td + 'text-align:right;white-space:nowrap;">' + (r.status === 'reported'
+              ? '<button type="button" data-etc-open="' + r.id + '" style="height:30px;padding:0 12px;border-radius:8px;border:0;background:#1F6080;color:#fff;font-weight:700;font-size:12.5px;cursor:pointer;">Review</button>' : '')
+            + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+    body.innerHTML = html;
+    body.querySelectorAll('[data-etc-chip]').forEach(function (b) {
+      b.addEventListener('click', function () { etFilter = b.getAttribute('data-etc-chip'); loadConfirm(container); });
+    });
+    body.querySelectorAll('[data-etc-open]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-etc-open');
+        openEtConfirm(container, id, rows.filter(function (x) { return String(x.id) === id; })[0] || null);
+      });
+    });
+  }
+  function etRefresh(container) {
+    if (state.status === 'etconfirm') { loadConfirm(container); return; }
+    load(container);
+    Api.get('/billing/etransfer-reports?status=reported').then(function (d) { setEtCount(container, ((d && d.counts) || {}).reported || 0); }, function () {});
+  }
+  async function openEtConfirm(container, id, row) {
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10000;'
+      + 'display:flex;align-items:flex-start;justify-content:center;padding:32px 14px;overflow:auto;';
+    var m = document.createElement('div');
+    m.style.cssText = 'background:#fff;border-radius:16px;max-width:520px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.35);';
+    ov.appendChild(m); document.body.appendChild(ov);
+    var close = function () { document.removeEventListener('keydown', onKey); ov.remove(); };
+    function onKey(e) { if (e.key === 'Escape') { close(); } }
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('click', function (ev) { if (ev.target === ov) { close(); } });
+    // The header is drawn once (kt-modal-guard bands the first title row and takes over its ✕), as in openEtransferRequest.
+    m.innerHTML = '<div style="padding:16px 22px;border-bottom:1px solid #E5E7EB;display:flex;align-items:flex-start;gap:12px;">'
+      + '<div style="flex:1;min-width:0;"><h3 style="margin:0;font-size:17px;color:#0F172A;">Confirm Interac e-Transfer</h3>'
+      + '<div data-etc-sub style="font-size:12.5px;color:#64748B;margin-top:2px;"></div></div>'
+      + '<button type="button" data-etc-x title="Close" aria-label="Close" style="border:none;background:#F1F5F9;'
+      + 'color:#475569;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:17px;line-height:1;flex:none;">✕</button></div>'
+      + '<div data-etc-body><div style="padding:36px;text-align:center;color:#94A3B8;">Loading…</div></div>';
+    m.querySelector('[data-etc-x]').addEventListener('click', close);
+    var bodyEl = m.querySelector('[data-etc-body]');
+    if (!row) {
+      try { row = ((await Api.get('/billing/etransfer-reports?id=' + encodeURIComponent(id))).reports || [])[0] || null; } catch (e) { row = null; }
+    }
+    if (!row) { bodyEl.innerHTML = '<div style="padding:24px 22px;color:#B91C1C;font-size:13.5px;">That e-Transfer no longer exists.</div>'; return; }
+    m.querySelector('[data-etc-sub]').textContent = (row.family || '') + (row.numbers ? ' · ' + row.numbers : '');
+    var line = function (k, v, copy) {
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #F1F5F9;">'
+        + '<div style="width:118px;flex:none;font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;">' + esc(k) + '</div>'
+        + '<div style="flex:1;min-width:0;font-size:14px;font-weight:700;color:#0F172A;word-break:break-word;">' + v + '</div>'
+        + (copy ? '<button type="button" data-etc-copy="' + esc(copy) + '" style="height:28px;padding:0 10px;border-radius:7px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:700;font-size:12px;cursor:pointer;">Copy</button>' : '')
+        + '</div>';
+    };
+    var html = '<div style="padding:16px 22px;">'
+      + '<div style="display:flex;gap:12px;align-items:center;background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:10px 12px;margin-bottom:12px;">'
+      + '<img src="' + IA_LOGO + '" alt="Interac" width="36" height="36" style="width:36px;height:36px;border-radius:7px;flex:none;">'
+      + '<div style="font-size:13px;color:#92400E;line-height:1.45;">Check your bank for this e-Transfer before you approve it. Approving records the payment on the invoice' + ((row.items || []).length > 1 ? 's' : '') + '.</div></div>'
+      + line('From', esc(row.parent || row.family || '—') + (row.family && row.parent ? '<div style="font-size:12px;color:#64748B;font-weight:600;">' + esc(row.family) + '</div>' : ''))
+      + line('Amount sent', esc(money(row.amount)))
+      + line('Reference', '<span style="font-family:ui-monospace,monospace;">' + esc(row.reference || '') + '</span>', row.reference || '')
+      + line('Reported', esc(row.reported_label || row.requested_label || ''))
+      + line('Invoices', (row.items || []).map(function (it) { return esc((it.number || '') + ' · ' + money(it.amount)); }).join('<br>') || esc(row.numbers || ''))
+      + '</div>';
+    if (row.status !== 'reported') {
+      bodyEl.innerHTML = html + '<div style="padding:0 22px 20px;font-size:13.5px;">' + etStatusHtml(row) + '</div>';
+    } else {
+      bodyEl.innerHTML = html
+        + '<div style="padding:0 22px 20px;">'
+        + '<label style="display:block;font-size:12px;font-weight:700;color:#334155;margin:0 0 4px;">Amount received</label>'
+        + '<input data-etc-amt type="number" min="0.01" step="0.01" value="' + esc(Number(row.amount).toFixed(2)) + '" style="width:180px;height:34px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;">'
+        + '<div style="font-size:12px;color:#64748B;margin:4px 0 14px;">Change it only if your bank shows a different amount.</div>'
+        + '<div data-etc-msg style="font-size:13px;margin-bottom:8px;"></div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        + '<button type="button" data-etc-ok style="height:38px;padding:0 16px;border-radius:9px;border:0;background:#15803D;color:#fff;font-weight:800;font-size:13.5px;cursor:pointer;">✅ Approve &amp; record payment</button>'
+        + '<button type="button" data-etc-no style="height:38px;padding:0 16px;border-radius:9px;border:1px solid #FCA5A5;background:#fff;color:#B91C1C;font-weight:800;font-size:13.5px;cursor:pointer;">Reject</button></div>'
+        + '<div data-etc-rej style="display:none;margin-top:12px;">'
+        + '<label style="display:block;font-size:12px;font-weight:700;color:#334155;margin:0 0 4px;">Why? The family is sent this</label>'
+        + '<textarea data-etc-why maxlength="255" rows="3" style="width:100%;box-sizing:border-box;min-height:72px;padding:8px 10px;border:1px solid #CBD5E1;border-radius:8px;font:inherit;font-size:14px;" placeholder="e.g. No e-Transfer with this reference has arrived."></textarea>'
+        + '<button type="button" data-etc-rejgo style="margin-top:8px;height:36px;padding:0 14px;border-radius:9px;border:0;background:#B91C1C;color:#fff;font-weight:800;font-size:13px;cursor:pointer;">Reject and tell the family</button></div>'
+        + '</div>';
+      var msg = bodyEl.querySelector('[data-etc-msg]');
+      var say = function (t, c) { msg.textContent = t; msg.style.color = c || '#334155'; };
+      var ok = bodyEl.querySelector('[data-etc-ok]');
+      ok.addEventListener('click', async function () {
+        var a = Math.round(Number(bodyEl.querySelector('[data-etc-amt]').value) * 100) / 100;
+        if (!(a >= 0.01)) { say('Enter the amount you received.', '#B91C1C'); return; }
+        ok.disabled = true; say('Recording…');
+        try {
+          await Api.post('/billing/etransfer-reports/' + row.id + '/approve', { amount: a });
+          if (KT.Dom && KT.Dom.toast) { KT.Dom.toast('e-Transfer approved · ' + money(a) + ' recorded on ' + (row.numbers || 'the invoice'), 'success'); }
+          close(); etRefresh(container);
+        } catch (e) { ok.disabled = false; say((e && e.message) || 'Could not approve it.', '#B91C1C'); }
+      });
+      bodyEl.querySelector('[data-etc-no]').addEventListener('click', function () {
+        bodyEl.querySelector('[data-etc-rej]').style.display = 'block';
+        bodyEl.querySelector('[data-etc-why]').focus();
+      });
+      var rj = bodyEl.querySelector('[data-etc-rejgo]');
+      rj.addEventListener('click', async function () {
+        var why = String(bodyEl.querySelector('[data-etc-why]').value || '').trim();
+        if (!why) { say('Say why, so the family knows what to check.', '#B91C1C'); bodyEl.querySelector('[data-etc-why]').focus(); return; }
+        rj.disabled = true; say('Sending…');
+        try {
+          await Api.post('/billing/etransfer-reports/' + row.id + '/reject', { reason: why });
+          if (KT.Dom && KT.Dom.toast) { KT.Dom.toast('Rejected · the family has been told', 'success'); }
+          close(); etRefresh(container);
+        } catch (e) { rj.disabled = false; say((e && e.message) || 'Could not reject it.', '#B91C1C'); }
+      });
+    }
+    bodyEl.querySelectorAll('[data-etc-copy]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var t = b.getAttribute('data-etc-copy');
+        var done = function () { b.textContent = 'Copied ✓'; setTimeout(function () { b.textContent = 'Copy'; }, 1500); };
+        try { if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(t).then(done, function () {}); return; } } catch (e) {}
+      });
+    });
+  }
+
   async function load(container) {
+    if (state.status === 'etconfirm') { loadConfirm(container); return; }
     if (state.busy) return;
     state.busy = true;
     var body = container.querySelector('#xb-body');
     if (body) body.innerHTML = '<div style="padding:36px;text-align:center;color:#94A3B8;">Loading…</div>';
-    var qs = '?page=' + state.page + '&per_page=20'
+    state.per_page = ((window.KT && KT.rowsPerPage && KT.rowsPerPage.get('external-billing:invoices')) || 20);   // rows per page (2026-10-20); the server allows up to 50
+    var qs = '?page=' + state.page + '&per_page=' + state.per_page
       + (state.family_id ? '&family_id=' + state.family_id : '')
       + (state.search ? '&search=' + encodeURIComponent(state.search) : '')
       + (state.sort ? '&sort=' + state.sort + '&dir=' + state.dir : '')
@@ -895,6 +1308,7 @@
     }
     state.busy = false;
     renderTable(container, d);
+    openFromHash(container);
   }
 
   function renderTable(container, d) {
@@ -986,7 +1400,7 @@
           + '<td style="' + td + '">' + roleCell(i.role) + '</td>'
           + '<td style="' + td + 'font-variant-numeric:tabular-nums;">' + esc(i.number || '—')
             + '<div style="font-size:10.5px;color:#94A3B8;font-weight:700;letter-spacing:.3px;">KIDDIETRAC</div></td>'
-          + '<td style="' + td + '">' + statusBadge(i.status, i.is_open, i.due_at) + '</td>'
+          + '<td style="' + td + '">' + statusBadge(i.status, i.is_open, i.due_at) + (i.etransfer ? '<div style="font-size:11.5px;font-weight:700;margin-top:3px;white-space:nowrap;color:' + (i.etransfer.status === 'sent' ? '#15803D' : '#B45309') + ';">' + esc(i.etransfer.label) + '</div>' : '') + '</td>'
           + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.issued_at) + '</td>'
           + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.due_at) + '</td>'
           + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;">' + money(i.total, i.currency) + '</td>'
@@ -1002,6 +1416,10 @@
             + ' style="border:none;background:none;cursor:pointer;color:#15803D;font-weight:600;font-size:12.5px;padding:3px 7px;">Record payment</button>'
             + '<button type="button" class="xb-act" data-act="resend" data-id="' + esc(String(i.id)) + '"'
             + ' style="border:none;background:none;cursor:pointer;color:#7C3AED;font-weight:600;font-size:12.5px;padding:3px 7px;">Resend invoice</button>'
+            + ((Number(i.balance_due) > 0.004 && ['void', 'paid', 'draft', 'refunded'].indexOf(String(i.status || '').toLowerCase()) === -1) ? '<button type="button" class="xb-act" data-act="etreq" data-kind="kt" data-id="' + esc(String(i.id)) + '"'
+              + ' style="border:none;background:none;cursor:pointer;color:#0F766E;font-weight:600;font-size:12.5px;padding:3px 7px;">Send e-Transfer request</button>' : '')
+            + (i.etransfer && i.etransfer.status === 'reported' && i.etransfer.report_id ? '<button type="button" class="xb-act" data-act="etconfirm" data-rid="' + esc(String(i.etransfer.report_id)) + '"'
+              + ' style="border:none;background:none;cursor:pointer;color:#B45309;font-weight:700;font-size:12.5px;padding:3px 7px;">Confirm e-Transfer</button>' : '')
             + '<button type="button" class="xb-act" data-act="ktedit" data-id="' + esc(String(i.id)) + '"'
             + ' style="border:none;background:none;cursor:pointer;color:#334155;font-weight:600;font-size:12.5px;padding:3px 7px;">Edit</button>'
             /* DOWNLOAD AND VOID LIVE HERE NOW (2026-09-17). Anthony: "under accounting you
@@ -1009,6 +1427,8 @@
                payment schedules." Voiding is an accounting act — it withdraws a document
                and moves money off a family's balance — and it belongs where the ledger is
                read, not on the screen for planning instalments. */
+            + (i.split ? '<button type="button" class="xb-act" data-act="ktsplit" data-id="' + esc(String(i.id)) + '"'
+              + ' style="border:none;background:none;cursor:pointer;color:#075985;font-weight:600;font-size:12.5px;padding:3px 7px;">Guardian copies</button>' : '')
             + '<button type="button" class="xb-act" data-act="ktpdf" data-id="' + esc(String(i.id)) + '"'
             + ' data-num="' + esc(String(i.number || '')) + '"'
             + ' style="border:none;background:none;cursor:pointer;color:#0F766E;font-weight:600;font-size:12.5px;padding:3px 7px;">Download invoice</button>'
@@ -1033,6 +1453,14 @@
         acts += '<button type="button" class="xb-act" data-act="pay" data-id="' + i.id + '"'
           + ' style="border:none;background:none;cursor:pointer;color:#15803D;font-weight:600;font-size:12.5px;padding:3px 7px;">Record payment</button>';
       }
+      if (i.etransfer && i.etransfer.status === 'reported' && i.etransfer.report_id) {
+        acts += '<button type="button" class="xb-act" data-act="etconfirm" data-rid="' + esc(String(i.etransfer.report_id)) + '"'
+          + ' style="border:none;background:none;cursor:pointer;color:#B45309;font-weight:700;font-size:12.5px;padding:3px 7px;">Confirm e-Transfer</button>';
+      }
+      if ((Number(i.balance_due) > 0.004 && ['void', 'paid', 'draft', 'refunded'].indexOf(String(i.status || '').toLowerCase()) === -1)) {
+        acts += '<button type="button" class="xb-act" data-act="etreq" data-kind="ext" data-id="' + i.id + '"'
+          + ' style="border:none;background:none;cursor:pointer;color:#0F766E;font-weight:600;font-size:12.5px;padding:3px 7px;">Send e-Transfer request</button>';
+      }
       if (String(i.status || '').toLowerCase() !== 'void') {
         acts += '<button type="button" class="xb-act" data-act="extvoid" data-id="' + i.id + '"'
           + ' data-num="' + esc(String(i.number || '')) + '" data-total="' + esc(String(i.total || 0)) + '"'
@@ -1048,7 +1476,7 @@
         + '<td style="' + td + 'font-weight:700;color:#0F172A;">' + esc(i.family || '—') + '</td>'
         + '<td style="' + td + '">' + roleCell(i.role) + '</td>'
         + '<td style="' + td + 'font-variant-numeric:tabular-nums;">' + esc(i.number || '—') + '</td>'
-        + '<td style="' + td + '">' + statusBadge(i.status, i.is_open, i.due_at) + '</td>'
+        + '<td style="' + td + '">' + statusBadge(i.status, i.is_open, i.due_at) + (i.etransfer ? '<div style="font-size:11.5px;font-weight:700;margin-top:3px;white-space:nowrap;color:' + (i.etransfer.status === 'sent' ? '#15803D' : '#B45309') + ';">' + esc(i.etransfer.label) + '</div>' : '') + '</td>'
         + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.issued_at) + '</td>'
         + '<td style="' + td + 'white-space:nowrap;color:#64748B;">' + fmtDate(i.due_at) + '</td>'
         + '<td style="' + td + 'text-align:right;font-variant-numeric:tabular-nums;">' + money(i.total, i.currency) + '</td>'
@@ -1084,7 +1512,8 @@
       + '</tr></thead><tbody>' + rows + '</tbody></table></div>' + pager + '</div>';
 
     var pg = body.querySelector('#xb-pager');
-    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); });
+    if (pg && window.KT && KT.pagerBar) KT.pagerBar(pg, meta.page, meta.pages, function (p) { state.page = p; load(container); },
+      { size: state.per_page, total: meta.total, max: 50, onSize: function (n) { KT.rowsPerPage.set('external-billing:invoices', n); state.per_page = n; state.page = 1; load(container); } });
     body.querySelectorAll('th[data-sort]').forEach(function (thEl) {
       var k = thEl.getAttribute('data-sort');
       if (!k) return;
@@ -1303,6 +1732,11 @@
           })();
           return;
         }
+        if (act === 'ktsplit') {
+          // Each guardian's own copy of a split invoice (kt-billing-split.js).
+          if (window.KT && KT.splitCopies) { KT.splitCopies(parseInt(b.getAttribute('data-id'), 10)); }
+          return;
+        }
         if (act === 'ktpdf') {
           /* Fetched with the caller's token, because the PDF route is authenticated and
              a plain <a href> carries no Authorization header. The object URL is revoked
@@ -1366,6 +1800,14 @@
           })();
           return;
         }
+        if (act === 'etconfirm') {
+          openEtConfirm(container, b.getAttribute('data-rid'), null);
+          return;
+        }
+        if (act === 'etreq') {
+          openEtransferRequest(container, b.getAttribute('data-kind') === 'ext' ? 'ext' : 'kt', b.getAttribute('data-id'));
+          return;
+        }
         if (act === 'ktedit') {
           var ktId = b.getAttribute('data-id');
           var kinv = (d.invoices || []).find(function (x) { return String(x.id) === String(ktId); });
@@ -1383,6 +1825,21 @@
   async function render(container) {
     container.setAttribute('data-kt-pretty', '1');
     state = { page: 1, family_id: 0, search: '', sort: '', dir: 'asc', busy: false, status: '' };
+    /* FROM THE GLOBAL SEARCH (2026-11-02): ?q=<invoice number>&family=<id>&tab=void opens this
+       list already filtered to that invoice (a synced or payee invoice has no sheet of its
+       own here). The query is dropped from the address once read, unless ?view= or ?invoice=
+       still has to open something after the first load. */
+    (function () {
+      var hq = String(location.hash || '').split('?')[1] || '';
+      if (!hq) { return; }
+      var get = function (k) { var m = hq.match(new RegExp('(?:^|&)' + k + '=([^&]*)')); if (!m) { return ''; } try { return decodeURIComponent(m[1].replace(/\+/g, ' ')); } catch (e) { return m[1]; } };
+      if (get('q')) { state.search = get('q').slice(0, 120); }
+      if (/^\d+$/.test(get('family'))) { state.family_id = +get('family'); }
+      if (['paid', 'overdue', 'void', 'etconfirm'].indexOf(get('tab')) !== -1) { state.status = get('tab'); }
+      if (!/(?:^|&)(view|invoice|ext|etconfirm)=/.test(hq)) {
+        try { history.replaceState(null, '', location.pathname + location.search + '#external-billing'); } catch (e) { /* the filter still applies */ }
+      }
+    })();
     container.innerHTML =
       // Left-aligned like every other billing screen; `margin:0 auto` centred it.
       '<div style="padding:24px;max-width:1400px;">'
@@ -1416,6 +1873,7 @@
       { key: 'paid', label: 'Paid' },
       { key: 'overdue', label: 'Overdue' },
       { key: 'void', label: 'Voided', hint: 'Raised, then cancelled' },
+      { key: 'etconfirm', label: 'e-Transfers to confirm', hint: 'Families who say they sent an Interac e-Transfer' },
     ];
     var tabBar = container.querySelector('#xb-tabs');
     function paintTabs() {
@@ -1424,7 +1882,7 @@
         return '<button type="button" data-xb-tab="' + t.key + '"' + (t.hint ? ' title="' + esc(t.hint) + '"' : '')
           + ' style="background:none;border:0;border-bottom:2px solid ' + (on ? '#1F6FB2' : 'transparent')
           + ';padding:9px 13px;font-size:13.5px;font-weight:700;color:' + (on ? '#0F172A' : '#64748B')
-          + ';cursor:pointer;border-radius:8px 8px 0 0;">' + esc(t.label) + '</button>';
+          + ';cursor:pointer;border-radius:8px 8px 0 0;">' + esc(t.label + (t.key === 'etconfirm' && state.etCount ? ' (' + state.etCount + ')' : '')) + '</button>';
       }).join('');
       tabBar.querySelectorAll('[data-xb-tab]').forEach(function (b) {
         b.addEventListener('click', function () {
@@ -1436,6 +1894,7 @@
       });
     }
     paintTabs();
+    Api.get('/billing/etransfer-reports?status=reported').then(function (d) { setEtCount(container, ((d && d.counts) || {}).reported || 0); }, function () {});
 
     var partySel = container.querySelector('#xb-party');
     if (partySel) {
@@ -1452,6 +1911,7 @@
     var famSel = container.querySelector('#xb-family');
     famSel.addEventListener('change', function () { state.family_id = +famSel.value || 0; state.page = 1; load(container); });
     var searchEl = container.querySelector('#xb-search');
+    if (state.search) { searchEl.value = state.search; }
     var t = null;
     searchEl.addEventListener('input', function () {
       clearTimeout(t);

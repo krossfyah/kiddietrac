@@ -118,14 +118,29 @@ final class AiController extends Controller
     /** Anthropic-powered weekly recap for a child. */
     public function weeklyRecap(Request $request, int $childId): JsonResponse
     {
-        $key = env('ANTHROPIC_API_KEY');
+        $key = config('services.anthropic.key');
         abort_unless($key, 503, 'AI not configured');
         $child = DB::table('children')->where('id', $childId)->whereNull('deleted_at')->first();
         abort_unless($child, 404);
         // SECURITY (v22p94): only the child's guardians/centre staff.
         abort_unless($this->canAccessChildId($request->user(), $childId), 403);
+        /* THE PARENTS' "✨ THIS WEEK" (2026-10-28, AI Bundle). The child's OWN agency must have the bundle (the
+           route gate reads the signed-in user's agency), the call is metered to that agency, the recap is kept for
+           6 hours so a parent opening it twice is one AI call, and a failure says so in words - it returned the
+           raw exception text before (see [[kiddietrac-no-raw-errors]]). */
+        abort_unless(\App\Support\AiBundle::forChild($childId), 403, 'The weekly recap is part of the AI Bundle.');
+        $recapKey = 'ai-weekly-recap:' . $childId . ':' . now()->format('o-W');
+        if ($hit = \Illuminate\Support\Facades\Cache::get($recapKey)) {
+            return response()->json($hit + ['cached' => true]);
+        }
+        try {
+            $agencyForMeter = DB::table('children as ch')->join('families as fa', 'fa.id', '=', 'ch.family_id')
+                ->join('centres as ce', 'ce.id', '=', 'fa.centre_id')->where('ch.id', $childId)->value('ce.agency_id');
+            \App\Support\UsageMeter::forAgency($agencyForMeter ? (int) $agencyForMeter : null);
+        } catch (\Throwable $e) {
+        }
 
-        $weekStart = Carbon::now()->startOfWeek();
+        $weekStart = \App\Support\AgencyTime::boundaryUtc(null, 'week');
         $observations = DB::table('observations')
             ->where('child_id', $childId)
             ->where('observed_at', '>=', $weekStart)
@@ -145,26 +160,35 @@ final class AiController extends Controller
         $prompt = "Write a warm 1-paragraph weekly recap (4-6 sentences) for {$child->first_name}'s parent. Friendly, specific, uses {$child->first_name}'s name. Highlight one growth moment and one fun memory. Avoid generic phrases.\n\nObservations this week:\n{$obsText}\n\nActivities tracked: {$logCounts}";
 
         try {
+            \App\Support\AiFresh::as('weekly_recap', \App\Support\AiFresh::agencyFrom(['child_id' => $childId]));   // fresh writing: never this agency's last recaps again
             $res = Http::withHeaders([
                 'x-api-key' => $key,
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(45)->post('https://api.anthropic.com/v1/messages', [
-                'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+                'model' => config('services.anthropic.model'),
                 'max_tokens' => 600,
                 'messages' => [['role' => 'user', 'content' => $prompt]],
             ]);
-            if (!$res->ok()) return response()->json(['error' => 'AI call failed', 'status' => $res->status()], 502);
-            $text = $res->json('content.0.text') ?? '';
-            return response()->json([
-                'recap' => trim($text),
+            if (!$res->ok()) {
+                Log::warning('AI recap failed', ['child' => $childId, 'status' => $res->status(), 'body' => mb_substr($res->body(), 0, 300)]);
+                return response()->json(['message' => 'The weekly recap is not available right now. Please try again later.'], 503);
+            }
+            $text = trim((string) (\App\Support\AiConfig::text($res->json()) ?? ''));
+            if ($text === '') {
+                return response()->json(['message' => 'There is not enough from this week for a recap yet.'], 422);
+            }
+            $out = [
+                'recap' => $text,
                 'observations_count' => $observations->count(),
                 'activities_count' => $logs->count(),
                 'week_start' => $weekStart->toDateString(),
-            ]);
+            ];
+            \Illuminate\Support\Facades\Cache::put($recapKey, $out, now()->addHours(6));
+            return response()->json($out);
         } catch (\Throwable $e) {
             Log::warning('AI recap failed', ['child' => $childId, 'msg' => $e->getMessage()]);
-            return response()->json(['error' => $e->getMessage()], 502);
+            return response()->json(['message' => 'The weekly recap is not available right now. Please try again later.'], 503);
         }
     }
 
@@ -174,7 +198,7 @@ final class AiController extends Controller
      */
     public function docExtract(Request $request): JsonResponse
     {
-        $key = env('ANTHROPIC_API_KEY');
+        $key = config('services.anthropic.key');
         abort_unless($key, 503, 'AI not configured');
         $hasFile = $request->hasFile('file');
         $data = $request->validate([
@@ -225,7 +249,7 @@ final class AiController extends Controller
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-                'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+                'model' => config('services.anthropic.model'),
                 'max_tokens' => 800,
                 'messages' => [[
                     'role' => 'user',
@@ -241,7 +265,7 @@ final class AiController extends Controller
                 ]);
                 return response()->json(['error' => 'AI extraction failed', 'status' => $res->status()], 502);
             }
-            $raw = $res->json('content.0.text') ?? '';
+            $raw = \App\Support\AiConfig::text($res->json()) ?? '';
             $jsonStart = strpos($raw, '{');
             $jsonEnd = strrpos($raw, '}');
             $jsonStr = $jsonStart !== false && $jsonEnd !== false ? substr($raw, $jsonStart, $jsonEnd - $jsonStart + 1) : $raw;

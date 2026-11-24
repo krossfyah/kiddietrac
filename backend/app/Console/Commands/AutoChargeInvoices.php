@@ -41,7 +41,7 @@ final class AutoChargeInvoices extends Command
             ->whereNotNull('families.autopay_payment_method_id')
             ->whereIn('invoices.status', ['sent', 'partial', 'overdue'])
             ->where('invoices.balance_due', '>', 0)
-            ->whereDate('invoices.due_at', '<=', now()->addDays(2)->toDateString())
+            ->whereDate('invoices.due_at', '<=', \App\Support\AgencyTime::todayDate()->addDays(2)->toDateString())
             ->select(
                 'invoices.id', 'invoices.invoice_number', 'invoices.balance_due',
                 'invoices.family_id', 'invoices.centre_id',

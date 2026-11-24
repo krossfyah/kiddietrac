@@ -149,7 +149,7 @@ final class ConferenceController extends Controller
         // SECURITY (v22p98): a platform_admin with no valid SELECTED agency must NOT
         // fall through to their first role's agency (iLearn) — require an explicit
         // choice, else agency-scoped data leaked to a super-admin on a header-less call.
-        if (DB::table('role_assignments')->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
+        if (\App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('role', 'platform_admin')->where('active', true)->exists()) abort(400, 'Select an agency first.');
         $first = DB::table('role_assignments')
             ->where('user_id', $request->user()->id)->where('active', true)
             ->value('agency_id');
@@ -166,7 +166,7 @@ final class ConferenceController extends Controller
     private function assertStaff(Request $request): void
     {
         $u = $request->user();
-        $isStaff = DB::table('role_assignments')->where('user_id', $u->id)
+        $isStaff = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $u->id)
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'platform_admin'])
             ->where('active', 1)->exists();
         abort_unless($isStaff, 403);

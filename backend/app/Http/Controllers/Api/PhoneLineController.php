@@ -36,7 +36,7 @@ class PhoneLineController extends Controller
         'greeting' => 'Thank you for calling KiddieTrac. Our team is available Monday to Friday, 9 a.m. to 5 p.m. Eastern time. Please leave your name, phone number and a short message after the beep, and we will get back to you within one business day.',
         'no_message' => 'We did not receive a message. Please call again, or email info at kiddietrac dot com. Goodbye.',
         'goodbye' => 'Thank you. We will be in touch soon. Goodbye.',
-        'max_length' => 180,
+        'max_length' => 600,   // 10 minutes (2026-10-23, Anthony: "make voicemails longer"); was 3
     ];
 
     /** Current settings (falling back to what the line said before this screen existed). */
@@ -63,13 +63,60 @@ class PhoneLineController extends Controller
         return '<Say' . $attr . '>' . htmlspecialchars($text, ENT_XML1, 'UTF-8') . '</Say>';
     }
 
-    public static function script(array $c): string
+    /** The general voicemail: greeting, recording, "no message" line. */
+    public static function voicemailBlock(array $c): string
     {
         $cb = htmlspecialchars('https://api.kiddietrac.com/api/v1/voice/voicemail/' . PlatformSettings::get('voice.voicemail_token'), ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        return self::say($c['greeting'], $c['voice']) . "\n"
+            . '<Record action="' . $cb . '" method="POST" recordingStatusCallback="' . $cb . '" recordingStatusCallbackMethod="POST" maxLength="' . (int) $c['max_length'] . '" timeout="15" playBeep="true" finishOnKey="*9" />' . "\n"
+            . self::say($c['no_message'], $c['voice']) . "\n";
+    }
+
+    /**
+     * The hosted script Telnyx answers with. With the call menu on (2026-10-22,
+     * App\Support\PhoneMenu) it first offers the departments; a caller who presses nothing
+     * gets the general voicemail exactly as before.
+     */
+    public static function script(array $c): string
+    {
+        $menu = \App\Support\PhoneMenu::config();
+        $hasDept = (bool) array_filter($menu['departments'], fn ($d) => $d['enabled']);
         return '<?xml version="1.0" encoding="UTF-8"?>' . "\n<Response>\n"
-            . self::say($c['greeting'], $c['voice']) . "\n"
-            . '<Record action="' . $cb . '" method="POST" recordingStatusCallback="' . $cb . '" recordingStatusCallbackMethod="POST" maxLength="' . (int) $c['max_length'] . '" timeout="8" playBeep="true" finishOnKey="*9" />' . "\n"
-            . self::say($c['no_message'], $c['voice']) . "\n</Response>\n";
+            . ($menu['enabled'] && $hasDept ? \App\Support\PhoneMenu::gather($menu, (string) $c['voice'], true) . "\n" : '')
+            . self::voicemailBlock($c) . "</Response>\n";
+    }
+
+    /**
+     * Upload the script to Telnyx and confirm it is what Telnyx now serves. Null when it is
+     * live; otherwise the reason, in words. The previous live copy is kept as a backup.
+     */
+    public static function publish(array $c): ?string
+    {
+        $key = Telnyx::apiKey(self::LINE_AGENCY);
+        if ($key === '') return 'The Telnyx account for the phone line is not connected.';
+        $xml = self::script($c);
+        $url = 'https://api.telnyx.com/v2/media/' . self::MEDIA;
+        try {
+            $old = Http::withToken($key)->timeout(20)->get($url . '/download');
+            if ($old->successful() && strlen($old->body()) > 50) {
+                Storage::put('voice/KiddieTrac.xml.bak-' . now()->format('Ymd-His'), $old->body());
+            }
+        } catch (\Throwable $e) {
+        }
+        try {
+            $r = Http::withToken($key)->timeout(30)->attach('media', $xml, self::MEDIA, ['Content-Type' => 'application/xml'])->put($url);
+            if (! $r->successful()) {
+                return 'Telnyx did not accept the new script (HTTP ' . $r->status() . '). The line still plays the previous one.';
+            }
+            $live = Http::withToken($key)->timeout(20)->get($url . '/download')->body();
+        } catch (\Throwable $e) {
+            return 'Telnyx could not be reached just now. The line still plays the previous script.';
+        }
+        if (trim($live) !== trim($xml)) {
+            return 'Telnyx accepted the upload but is serving something different. Check again in a minute.';
+        }
+        Storage::put('voice/KiddieTrac.xml', $xml);
+        return null;
     }
 
     public function show(): JsonResponse
@@ -84,6 +131,30 @@ class PhoneLineController extends Controller
         ]);
     }
 
+    /** GET /platform/phone/voicemail-reply — the text a caller gets after leaving a voicemail. */
+    public function replyShow(): JsonResponse
+    {
+        $c = \App\Support\VoicemailReply::config();
+        $c['preview_sales'] = \App\Support\VoicemailReply::render($c['text'], 'Sales');
+        $c['preview_general'] = \App\Support\VoicemailReply::render($c['text'], null);
+        $c['sent_30d'] = (int) \Illuminate\Support\Facades\DB::table('sms_messages')->where('category', 'voicemail_reply')->where('created_at', '>=', now()->subDays(30))->where('status', 'sent')->count();
+        return response()->json($c);
+    }
+
+    /** PUT /platform/phone/voicemail-reply {enabled, text} */
+    public function replySave(Request $request): JsonResponse
+    {
+        $d = $request->validate(['enabled' => ['required', 'boolean'], 'text' => ['nullable', 'string', 'max:480']]);
+        \App\Support\VoicemailReply::save((bool) $d['enabled'], $d['text'] ?? null);
+        try {
+            \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => null, 'action' => 'voice.voicemail_reply',
+                'entity_type' => 'phone_line', 'entity_id' => null,
+                'payload' => json_encode(['summary' => 'Voicemail reply text ' . ($d['enabled'] ? 'on' : 'off')]), 'created_at' => now()]);
+        } catch (\Throwable $e) {
+        }
+        return $this->replyShow();
+    }
+
     public function save(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -91,7 +162,7 @@ class PhoneLineController extends Controller
             'greeting' => ['required', 'string', 'min:10', 'max:1000'],
             'no_message' => ['required', 'string', 'min:5', 'max:500'],
             'goodbye' => ['required', 'string', 'min:3', 'max:300'],
-            'max_length' => ['required', 'integer', 'min:30', 'max:300'],
+            'max_length' => ['required', 'integer', 'min:30', 'max:1800'],
         ]);
         $data['voice'] = (string) ($data['voice'] ?? '');
         $ids = array_column($this->voices(), 'id');
@@ -99,27 +170,10 @@ class PhoneLineController extends Controller
             return response()->json(['message' => 'That voice is not in Telnyx\'s list. Pick one from the menu.'], 422);
         }
 
-        $key = Telnyx::apiKey(self::LINE_AGENCY);
-        if ($key === '') return response()->json(['message' => 'The Telnyx account for the phone line is not connected.'], 503);
-        $xml = self::script($data);
-        $url = 'https://api.telnyx.com/v2/media/' . self::MEDIA;
-
-        // Keep what is live now, so a bad greeting can be put back by hand.
-        try {
-            $old = Http::withToken($key)->timeout(20)->get($url . '/download');
-            if ($old->successful() && strlen($old->body()) > 50) {
-                Storage::put('voice/KiddieTrac.xml.bak-' . now()->format('Ymd-His'), $old->body());
-            }
-        } catch (\Throwable $e) {
-        }
-
-        $r = Http::withToken($key)->timeout(30)->attach('media', $xml, self::MEDIA, ['Content-Type' => 'application/xml'])->put($url);
-        if (! $r->successful()) {
-            return response()->json(['message' => 'Telnyx did not accept the greeting (HTTP ' . $r->status() . '). The line still plays the previous one.'], 502);
-        }
-        $live = Http::withToken($key)->timeout(20)->get($url . '/download')->body();
-        if (trim($live) !== trim($xml)) {
-            return response()->json(['message' => 'Telnyx accepted the upload but is serving something different. Nothing was saved here; check again in a minute.'], 502);
+        // Keeps the previous live copy, uploads, and confirms Telnyx serves the new one.
+        $err = self::publish($data);
+        if ($err !== null) {
+            return response()->json(['message' => $err], 502);
         }
 
         foreach (['voice', 'greeting', 'no_message', 'goodbye', 'max_length'] as $k) {
@@ -128,7 +182,6 @@ class PhoneLineController extends Controller
         $who = trim(($request->user()->first_name ?? '') . ' ' . ($request->user()->last_name ?? ''));
         PlatformSettings::set('voice.voicemail.published_at', now()->toIso8601String());
         PlatformSettings::set('voice.voicemail.published_by', $who);
-        Storage::put('voice/KiddieTrac.xml', $xml);
         try {
             \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => null, 'action' => 'voice.greeting_published',
                 'entity_type' => 'phone_line', 'entity_id' => null,
@@ -157,7 +210,7 @@ class PhoneLineController extends Controller
         $stats['unheard'] = $base()->whereNull('listened_at')->whereNull('deleted_at')->count();
         $rows = $base()->leftJoin('users as u', 'u.id', '=', 'voicemails.deleted_by')->leftJoin('users as l', 'l.id', '=', 'voicemails.listened_by')
             ->orderByDesc('voicemails.id')->limit(200)
-            ->get(['voicemails.id', 'voicemails.from_number', 'voicemails.duration', 'voicemails.email_status', 'voicemails.emailed_at', 'voicemails.stored_path',
+            ->get(['voicemails.id', 'voicemails.department', 'voicemails.from_number', 'voicemails.duration', 'voicemails.email_status', 'voicemails.emailed_at', 'voicemails.stored_path',
                 'voicemails.listened_at', 'voicemails.deleted_at', 'voicemails.created_at',
                 'u.first_name as deleted_by_first', 'l.first_name as listened_by_first']);
         foreach ($rows as $r) {

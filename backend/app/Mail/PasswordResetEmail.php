@@ -84,7 +84,7 @@ final class PasswordResetEmail extends Mailable
             . 'Click the button below to choose a new one.') . '</p>'
             . ($label === '' ? '' :
                 '<p style="margin:0 0 16px;padding:11px 13px;border-radius:9px;background:#F1F5F9;'
-                . 'border-left:3px solid #159FB4;font-size:13px;color:#334155;">'
+                . '--kt-edge:#159FB4;font-size:13px;color:#334155;">'
                 . 'You have more than one Kiddietrac account on this email address, so we sent a '
                 . 'separate link for each one. <strong>This link resets the account with the '
                 . 'username ' . $label . '.</strong> Use that username to sign in afterwards.</p>')

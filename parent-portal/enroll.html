@@ -56,9 +56,9 @@
       .enroll-grid { grid-template-columns: 1fr; }
     }
   </style>
-  <script src="/js/kt-net.js?v=20261014net"></script>
+  <script src="/js/kt-net.js?v=20261022raw"></script>
 </head>
-<body class="auth-body">
+<body class="auth-body" data-kt-lang-picker>
   <div class="auth-page">
     <div class="auth-card">
       <div class="auth-logo">
@@ -208,9 +208,11 @@
       }
 
       function showInvalid(msg) {
-        statusEl.innerHTML = '<div class="invalid-state"><b>Invalid invitation link.</b><br>' +
-          (msg || 'This link is no longer valid.') +
-          ' Please contact your childcare centre for a new link.</div>';
+        // Each sentence in its own element, so the page translator matches each (2026-10-22);
+        // the server's message is text, not HTML.
+        var _m = document.createElement('span'); _m.textContent = msg || 'This link is no longer valid.';
+        statusEl.innerHTML = '<div class="invalid-state"><b>Invalid invitation link.</b><br>' + _m.outerHTML +
+          ' <span>Please contact your childcare centre for a new link.</span></div>';
       }
 
       function showBanner(info) {
@@ -314,7 +316,7 @@
        signed-out page, the password-reset dialog on this one included, still closed on a
        stray click and lost whatever had been typed. Both files are standalone (no shell,
        no Api, no Dom), so they load anywhere. -->
-  <script src="/js/kt-modal-guard.js?v=20260921ms" defer></script>
+  <script src="/js/kt-modal-guard.js?v=20261026g" defer></script>
   <script src="/js/kt-modal-safety.js?v=20260921ms" defer></script>
 <script src="/js/kt-phone.js?v=20261013ph1"></script>
 <script>
@@ -330,5 +332,7 @@
   });
 })();
 </script>
+<script src="/js/kt-date-hint.js?v=20261021dh" defer></script>
+  <script src="/js/kt-i18n.js?v=20261113imz2" defer></script>
 </body>
 </html>

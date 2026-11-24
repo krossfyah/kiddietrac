@@ -56,6 +56,13 @@ final class ManualPayrollController extends Controller
             abort_unless($centreIds->contains((int) $data['centre_id']), 422, 'That centre is not in this agency.');
             $centreIds = collect([(int) $data['centre_id']]);
         }
+        /* A director pays only their own centres' staff (2026-11-05 leak sweep): this listed every
+           staff member in the agency with their hours, admins and other centres included. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        if ($scope !== null) {
+            $centreIds = $centreIds->filter(fn ($c) => in_array((int) $c, $scope, true))->values();
+            abort_if(! empty($data['centre_id']) && $centreIds->isEmpty(), 403, 'That centre is not one of yours.');
+        }
 
         /* Everyone who holds a STAFF role in this agency — the people who can be paid.
            Guardians are excluded by the role list, not by hoping none appear. */
@@ -63,6 +70,7 @@ final class ManualPayrollController extends Controller
         $roles = DB::table('role_assignments')
             ->where('agency_id', $agencyId)->where('active', 1)
             ->whereIn('role', $staffRoles)
+            ->when($scope !== null, fn ($q) => $q->whereIn('centre_id', $centreIds->isEmpty() ? [0] : $centreIds))
             ->get(['user_id', 'role', 'centre_id']);
 
         $userIds = $roles->pluck('user_id')->unique()->values();
@@ -159,6 +167,28 @@ final class ManualPayrollController extends Controller
                 ];
             })->values();
 
+        /* EDUCATOR REWARD BONUSES (2026-10-20). A director's "bonus in the next pay" for a
+           month's points waits here until a run pays it: offered as a line on that person,
+           and marked paid by commit() when the payslip carrying it is written. */
+        try {
+            if (\Illuminate\Support\Facades\Schema::hasTable('educator_rewards')) {
+                $bonus = DB::table('educator_rewards')->where('agency_id', $agencyId)
+                    ->where('status', 'pending_payroll')->whereIn('user_id', $userIds)
+                    ->orderBy('month')->get(['id', 'user_id', 'month', 'points', 'amount'])->groupBy('user_id');
+                $staff = $staff->map(function ($s) use ($bonus) {
+                    $s['rewards'] = ($bonus[$s['user_id']] ?? collect())->map(fn ($b) => [
+                        'reward_award_id' => (int) $b->id,
+                        'label' => 'Rewards bonus (' . Carbon::parse($b->month . '-01')->format('M Y') . ', ' . (int) $b->points . ' pts)',
+                        'amount' => (float) $b->amount,
+                    ])->values()->all();
+
+                    return $s;
+                })->values();
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+
         /* ONTARIO WORKFORCE FUNDING (2026-10-13). Where it is switched on, each person
            carries their WEG / WCF / wage-floor rates and the hours x rate lines to put on
            the payslip — every pay cheque, never a lump sum. Never allowed to break a run. */
@@ -236,6 +266,8 @@ final class ManualPayrollController extends Controller
             'rows.*.lines.*.component' => 'nullable|string|in:gof,weg,wcf_increase,wcf_floor,stability',
             'rows.*.lines.*.hours' => 'nullable|numeric|min:0|max:1000',
             'rows.*.lines.*.rate' => 'nullable|numeric|min:0|max:100',
+            // An educator reward bonus this line pays (educator_rewards.id).
+            'rows.*.lines.*.reward_award_id' => 'nullable|integer',
             'rows.*.hours_detail' => 'nullable|array|max:200',
             'rows.*.staff_group' => 'nullable|string|max:16',
             'rows.*.centre_id' => 'nullable|integer',
@@ -245,8 +277,21 @@ final class ManualPayrollController extends Controller
         /* Every person paid must hold a staff role in THIS agency. Checked against the
            database rather than trusted from the payload — a user id is just a number a
            client can send, and this one moves money. */
+        /* And for a director, staff at their own centres only, filed against one of those centres
+           (2026-11-05 leak sweep). A payslip's centre_id must be a centre of this agency. */
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
+        $agencyCentres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->map(fn ($v) => (int) $v)->all();
+        foreach ($data['rows'] as $row) {
+            if (! empty($row['centre_id']) && ! in_array((int) $row['centre_id'], $agencyCentres, true)) {
+                return response()->json(['message' => 'A payslip names a centre that is not in this agency.'], 422);
+            }
+            if ($scope !== null && ! \App\Support\CentreScope::canWrite($scope, $row['centre_id'] ?? null)) {
+                return response()->json(['message' => 'You can only pay staff at your own centres.'], 403);
+            }
+        }
         $allowed = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'home_visitor', 'auditor'])
+            ->when($scope !== null, fn ($q) => $q->whereIn('centre_id', $scope ?: [0]))
             ->pluck('user_id')->unique()->flip();
 
         $people = DB::table('users')->whereIn('id', collect($data['rows'])->pluck('user_id')->filter())
@@ -310,6 +355,20 @@ final class ManualPayrollController extends Controller
                 // that does its own deductions enters the net it actually paid.
                 $net = isset($row['net']) && $row['net'] !== null ? round((float) $row['net'], 2) : $gross;
                 $hours = isset($row['hours']) ? round((float) $row['hours'], 2) : null;
+                $rate = isset($row['rate']) ? round((float) $row['rate'], 2) : null;
+                /* A PAYSLIP WITH NO HOURS IS A FLAT PAYMENT (2026-10-20).
+
+                   payroll_documents.units and .rate are NOT NULL (default 0), and this wrote
+                   an explicit NULL into both whenever a row had no hours or no rate, which
+                   MySQL refuses: "Column 'units' cannot be null". Every contractor row (they
+                   never have hours) and every staff row with no shifts and no rate -- a
+                   bonus-only payslip, such as an educator reward bonus for someone who did
+                   not clock in that period -- failed the whole run.
+
+                   Stored the way the 93 iLearn flat payslips already are: unit_label 'flat',
+                   units 0, rate 0, the amount in gross. Hours worked at a rate stay 'hours'.
+                   The hours/rate actually typed still go to WorkforceFunding as given. */
+                $flat = $hours === null || ($hours <= 0 && ! $rate);
 
                 $id = DB::table('payroll_documents')->insertGetId([
                     /* external_key is NOT NULL + UNIQUE (it keys the iLearn backfill). The
@@ -330,9 +389,9 @@ final class ManualPayrollController extends Controller
                                          : str_pad((string) $uid, 4, '0', STR_PAD_LEFT)),
                     'period_start' => $from,
                     'period_end' => $to,
-                    'units' => $hours,
-                    'unit_label' => $hours !== null ? 'hours' : 'flat',
-                    'rate' => isset($row['rate']) ? round((float) $row['rate'], 2) : null,
+                    'units' => $flat ? 0 : $hours,
+                    'unit_label' => $flat ? 'flat' : 'hours',
+                    'rate' => $rate ?? 0,
                     'pay_frequency' => $data['pay_frequency'] ?? 'Manual run',
                     'gross' => $gross,
                     'net' => $net,
@@ -355,6 +414,15 @@ final class ManualPayrollController extends Controller
                     \App\Support\WorkforceFunding::recordLines($agencyId, (int) $id, $uid,
                         isset($row['centre_id']) ? (int) $row['centre_id'] : null, $from, $to,
                         $hours, isset($row['rate']) ? (float) $row['rate'] : null, array_values($row['lines']));
+                }
+
+                /* The reward bonuses this payslip pays: only this person's, only this
+                   agency's, only ones still waiting, so a stale screen cannot pay twice. */
+                $rewardIds = array_values(array_filter(array_map(fn ($l) => (int) ($l['reward_award_id'] ?? 0), $row['lines'] ?? [])));
+                if (! $isContractor && $rewardIds && \Illuminate\Support\Facades\Schema::hasTable('educator_rewards')) {
+                    DB::table('educator_rewards')->whereIn('id', $rewardIds)->where('agency_id', $agencyId)
+                        ->where('user_id', $uid)->where('status', 'pending_payroll')
+                        ->update(['status' => 'paid', 'payroll_document_id' => $id, 'paid_at' => now(), 'updated_at' => now()]);
                 }
 
                 $created[] = [

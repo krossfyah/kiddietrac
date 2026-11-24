@@ -62,7 +62,7 @@ final class AutoSignOffNotices
     {
         $rows = [];
         foreach ($people as $p) {
-            $rows[] = ['user_id' => (int) $p->id, 'type' => $type, 'title' => $bellTitle, 'body' => mb_substr($bellBody, 0, 1000),
+            $rows[] = ['agency_id' => $agencyId, 'user_id' => (int) $p->id, 'type' => $type, 'title' => $bellTitle, 'body' => mb_substr($bellBody, 0, 1000),
                 'data' => json_encode(['link' => $link])];
         }
         if ($rows) Notify::write($rows);
@@ -104,7 +104,10 @@ final class AutoSignOffNotices
             $html = EmailTemplate::wrap($agencyId, '<p style="margin:0 0 12px;font-size:15px;color:#334155;line-height:1.6">Hi ' . self::e($u->first_name ?: 'there')
                 . ', no clock-out was recorded for your shift on <b>' . self::e($day) . '</b>, so KiddieTrac closed it automatically at <b>'
                 . self::e($out->format('g:i A')) . '</b>. That time is a placeholder, not when you left.</p>' . $box
-                . '<p style="margin:14px 0 0;font-size:14px;color:#334155;line-height:1.6"><b>Please tell your director or administrator the time you actually left</b> so they can correct it.</p>'
+                . (($fixUrl = AutoTimeFix::issue('staff', $punchId, $userId, $agencyId, $centreId, $out))
+                    ? '<p style="margin:14px 0 0;font-size:14px;color:#334155;line-height:1.6"><b>When did you actually leave?</b> Enter it here and your timesheet is updated straight away — your director is told.</p>'
+                        . AutoTimeFix::buttonHtml($fixUrl, 'Enter my actual clock-out time', $agencyId)
+                    : '<p style="margin:14px 0 0;font-size:14px;color:#334155;line-height:1.6"><b>Please tell your director or administrator the time you actually left</b> so they can correct it.</p>')
                 . self::whyStaff(),
                 ['eyebrow' => 'TIME CLOCK', 'title' => 'You were clocked out automatically', 'subtitle' => $day, 'preheader' => 'No clock-out was recorded on ' . $day . '.']);
             self::send($agencyId, collect([$u]), 'You were clocked out automatically — ' . $day, $html,
@@ -123,8 +126,10 @@ final class AutoSignOffNotices
 
             // 3. A habit, not a slip: escalate once a day.
             $dates = DB::table('time_punches')->where('user_id', $userId)->where('source', 'auto')
-                ->where('punched_in_at', '>=', now()->subDays(self::REPEAT_DAYS))->orderBy('punched_in_at')->pluck('punched_in_at');
-            if ($dates->count() >= self::REPEAT_COUNT && Cache::add('kt-autoclock-esc:' . $userId . ':' . now()->toDateString(), 1, now()->addDay())) {
+                ->where('punched_in_at', '>=', now()->subDays(self::REPEAT_DAYS))->orderBy('punched_in_at')->pluck('punched_in_at')
+                /* DAYS, not rows (2026-11-05): two auto-closed rows on one day is one missed clock-out. */
+                ->unique(fn ($d) => Carbon::parse($d, 'UTC')->setTimezone(AgencyTime::tz($agencyId) ?: 'America/Toronto')->toDateString())->values();
+            if ($dates->count() >= self::REPEAT_COUNT && Cache::add('kt-autoclock-esc:' . $userId . ':' . now()->toDateString(), 1, now()->addDay())) {   // tz-ok: a dedupe key, deliberately on the server clock
                 $tz = AgencyTime::tz($agencyId) ?: 'America/Toronto';
                 $list = $dates->map(fn ($d) => Carbon::parse($d, 'UTC')->setTimezone($tz)->format('D j M'))->implode(', ');
                 $ehtml = EmailTemplate::wrap($agencyId, '<p style="margin:0 0 12px;font-size:15px;color:#334155;line-height:1.6"><b>' . self::e($name) . '</b> has been clocked out automatically <b>'
@@ -192,16 +197,31 @@ final class AutoSignOffNotices
                     $lines .= '<strong>' . self::e($k['name']) . ':</strong> signed in ' . self::e($k['in']->format('g:i A, l j F'))
                         . ' · sign-out recorded automatically at ' . self::e($k['out']->format('g:i A')) . '<br>';
                 }
-                $phtml = EmailTemplate::wrap($agencyId, '<p style="margin:0 0 12px;font-size:15px;color:#334155;line-height:1.6">No sign-out was recorded for <b>'
-                    . self::e($names) . '</b> at ' . self::e($centre) . ', so our system filled one in automatically. That time is not when you picked up.</p>'
-                    . EmailTemplate::calloutBox($lines, 'info')
-                    . '<p style="margin:14px 0 0;font-size:14px;color:#334155;line-height:1.6"><b>Could you let the centre know the time you actually picked up?</b> It keeps your child\'s attendance record accurate'
-                    . ' — it is used for ratios, your statements and any subsidy or CWELCC claim.' . ($contact ? ' Please ' . $contact . '.' : '') . '</p>'
-                    . '<p style="margin:12px 0 0;font-size:13px;color:#64748B">Nothing is wrong and you do not need to do anything else. Thank you!</p>',
-                    ['eyebrow' => 'ATTENDANCE', 'title' => 'Please confirm your pick-up time', 'subtitle' => $centre,
-                     'preheader' => 'No sign-out was recorded for ' . $names . '.']);
-                self::send($agencyId, $parents, 'Please confirm ' . $names . '\'s pick-up time — ' . $fk[0]['in']->format('l j F'), $phtml,
-                    'Please confirm your pick-up time', 'No sign-out was recorded for ' . $names . ' on ' . $fk[0]['in']->format('l j F') . '. Please let the centre know when you picked up.', '#home', 'attendance');
+                /* ONE EMAIL PER PARENT (2026-10-22): each carries its own links, bound to that
+                   parent and that child's sign-out, so a forwarded email cannot be used by
+                   someone else and one parent's answer spends the other parent's link too. */
+                foreach ($parents as $parent) {
+                    $buttons = '';
+                    foreach ($fk as $k) {
+                        if (empty($k['event_id'])) continue;
+                        $url = AutoTimeFix::issue('child', (int) $k['event_id'], (int) $parent->id, $agencyId, $centreId, $k['out']);
+                        $buttons .= AutoTimeFix::buttonHtml($url, count($fk) > 1 ? 'Tell us ' . $k['name'] . '\'s actual pick-up time' : 'Tell us the actual pick-up time', $agencyId);
+                    }
+                    $phtml = EmailTemplate::wrap($agencyId, '<p style="margin:0 0 12px;font-size:15px;color:#334155;line-height:1.6">No sign-out was recorded for <b>'
+                        . self::e($names) . '</b> at ' . self::e($centre) . ', so our system filled one in automatically. That time is not when you picked up.</p>'
+                        . EmailTemplate::calloutBox($lines, 'info')
+                        . ($buttons
+                            ? '<p style="margin:14px 0 0;font-size:14px;color:#334155;line-height:1.6"><b>When did you actually pick up?</b> It takes a few seconds, updates the attendance record straight away, and the centre is told.'
+                                . ' It keeps your child\'s record accurate — it is used for ratios, your statements and any subsidy or CWELCC claim.</p>' . $buttons
+                                . ($contact ? '<p style="margin:12px 0 0;font-size:13px;color:#64748B">Questions? Please ' . $contact . '.</p>' : '')
+                            : '<p style="margin:14px 0 0;font-size:14px;color:#334155;line-height:1.6"><b>Could you let the centre know the time you actually picked up?</b> It keeps your child\'s attendance record accurate'
+                                . ' — it is used for ratios, your statements and any subsidy or CWELCC claim.' . ($contact ? ' Please ' . $contact . '.' : '') . '</p>')
+                        . '<p style="margin:12px 0 0;font-size:13px;color:#64748B">Nothing is wrong and you do not need to do anything else. Thank you!</p>',
+                        ['eyebrow' => 'ATTENDANCE', 'title' => 'Please confirm your pick-up time', 'subtitle' => $centre,
+                         'preheader' => 'No sign-out was recorded for ' . $names . '.']);
+                    self::send($agencyId, collect([$parent]), 'Please confirm ' . $names . '\'s pick-up time — ' . $fk[0]['in']->format('l j F'), $phtml,
+                        'Please confirm your pick-up time', 'No sign-out was recorded for ' . $names . ' on ' . $fk[0]['in']->format('l j F') . '. Tap the link in the email to enter when you picked up.', '#home', 'attendance');
+                }
             }
         } catch (\Throwable $e) {
             Log::warning('Auto sign-off children notice failed', ['centre' => $centreId, 'error' => $e->getMessage()]);

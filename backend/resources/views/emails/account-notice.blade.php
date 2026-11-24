@@ -7,6 +7,8 @@
   if (!empty($ctaUrl)) {
       $bodyHtml .= '<p style="margin-top:20px;"><a href="' . e($ctaUrl) . '" class="btn">' . e($ctaLabel ?: 'Continue') . '</a></p>';
   }
+  // The Google Play card on onboarding emails (AccountNotice::$showApp, 2026-10-28).
+  $bodyHtml .= $appCard ?? '';
 @endphp
 @include('emails.layout', [
     'title'     => $subjectLine,

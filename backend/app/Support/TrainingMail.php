@@ -52,7 +52,7 @@ final class TrainingMail
         $html = EmailTemplate::wrap($agencyId,
             '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">Hi ' . e(trim((string) $u->first_name) ?: 'there') . ', ' . $lead . '</p>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">' . $rows . '</table>'
-            . ($note ? '<p style="margin:0 0 16px;padding:10px 14px;background:#F8FAFC;border-left:3px solid #0E7C90;font-size:14px;color:#334155;line-height:1.5;">' . nl2br(e($note)) . '</p>' : '')
+            . ($note ? '<p style="margin:0 0 16px;padding:10px 14px;background:#F8FAFC;--kt-edge:#0E7C90;font-size:14px;color:#334155;line-height:1.5;">' . nl2br(e($note)) . '</p>' : '')
             . '<p style="margin:0 0 18px;"><a href="' . self::LINK . '" style="display:inline-block;background:#0E7C90;color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:12px 22px;border-radius:10px;">Start training</a></p>'
             . '<p style="margin:0;font-size:13px;color:#64748B;line-height:1.6;">Open KiddieTrac, go to <strong>Help &amp; guides → Training</strong>. Each video is a few minutes long; '
             . 'your progress is saved, and it counts as done once you have watched it through.</p>',

@@ -228,7 +228,7 @@
         + '<button type="button" data-add data-kt-iconized="1" style="height:34px;padding:0 14px;border-radius:9px;border:0;background:#1F6080;color:#fff;font-size:13.5px;font-weight:800;cursor:pointer;">＋ Add certificate</button></div>'
         + (rows.length ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:12px;">' + rows.map(function (c, i) {
             var edge = c.status === 'expired' ? '#DC2626' : c.status === 'expiring_soon' ? '#F59E0B' : c.status === 'warning' ? '#EAB308' : '#10B981';
-            return '<div style="position:relative;background:#fff;border:1px solid #E2E8F0;border-left:4px solid ' + edge + ';border-radius:12px;padding:14px 14px 12px;min-width:0;">'
+            return '<div style="position:relative;background:#fff;border:1px solid #E2E8F0;--kt-edge:' + edge + ';border-radius:12px;padding:14px 14px 12px;min-width:0;">'
               + '<div style="display:flex;gap:10px;align-items:flex-start;">'
               + '<div style="font-size:24px;line-height:1;flex:0 0 auto;">' + icon(c.cert_type) + '</div>'
               + '<div style="min-width:0;flex:1;"><div style="font-weight:800;font-size:15px;color:#0F172A;overflow-wrap:anywhere;padding-right:30px;">' + esc(c.label) + '</div>'

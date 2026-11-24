@@ -243,11 +243,11 @@
     var list = Dom.el('div', { 'data-kt-list': '1', 'data-kt-sort': 'amount:Amount:num,due:Due date:date,status:Status', style: 'background:white;border:1px solid #EEF0F3;border-radius:12px;overflow:hidden;' });
     content.appendChild(list);
     function load() {
-      Dom.clear(list); list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
+      Dom.clear(list); list.appendChild(Dom.el('div', { class: 'kt-list-empty', style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
       Api.get('/admin/expense-invoices' + (filter.value ? '?status=' + filter.value : '')).then(function (d) {
         var bills = d.expense_invoices || [];
         Dom.clear(list);
-        if (!bills.length) { list.appendChild(Dom.el('div', { style: 'padding:44px;text-align:center;color:#6B7280;' }, 'No bills yet. Click + New bill to add one.')); return; }
+        if (!bills.length) { list.appendChild(Dom.el('div', { class: 'kt-list-empty', style: 'padding:44px;text-align:center;color:#6B7280;' }, 'No bills yet. Click + New bill to add one.')); return; }
         bills.forEach(function (b) { list.appendChild(billRow(b, container)); });
       }).catch(function (e) { Dom.clear(list); list.appendChild(Dom.el('div', { style: 'padding:20px;color:#DC2626;' }, e.message || 'error')); });
     }
@@ -273,6 +273,12 @@
     if (Number(b.balance) > 0 && b.status !== 'void') amt.appendChild(Dom.el('div', { style: 'font-size:12px;color:#B45309;' }, money(b.balance) + ' due'));
     else if (b.status === 'paid') amt.appendChild(Dom.el('div', { style: 'font-size:12px;color:#166534;' }, 'Paid'));
     row.appendChild(amt);
+    row.appendChild(actBar([
+      ['👁 View', function () { openBillDetail(b.id, container); }],
+      b.status !== 'paid' && b.status !== 'void' ? ['✏️ Edit', function () { Api.get('/admin/expense-invoices/' + b.id).then(function (d) { if (d && d.expense_invoice) openBillEditor(d.expense_invoice, container); }).catch(function (e) { toast((e && e.message) || 'Could not open', 'error'); }); }] : null,
+      b.status !== 'paid' && b.status !== 'void' ? ['🚫 Void', function () { confirmThen('Void bill ' + (b.reference || '') + '? It stays on record as void.', function () { return Api.post('/admin/expense-invoices/' + b.id + '/void', {}); }, 'Bill voided', container); }] : null,
+      ['🗑 Delete', function () { confirmThen('Delete bill ' + (b.reference || '') + '?', function () { return Api.delete('/admin/expense-invoices/' + b.id); }, 'Bill deleted', container); }],
+    ]));
     return row;
   }
 
@@ -353,7 +359,7 @@
   }
 
   function openBillEditor(existing, container) {
-    var b = existing || { supplier_id: '', centre_id: '', invoice_number: '', category: '', issue_date: new Date().toISOString().slice(0, 10), due_date: '', notes: '', lines: [], tax: 0 };
+    var b = existing || { supplier_id: '', centre_id: '', invoice_number: '', category: '', issue_date: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)), due_date: '', notes: '', lines: [], tax: 0 };
     var body = Dom.el('div', { style: 'width:min(660px,90vw);' });
     var g1 = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;' });
     var supWrap = Dom.el('div', {}); supWrap.appendChild(label('Supplier *')); var sup = supplierSelect(b.supplier_id); supWrap.appendChild(sup); g1.appendChild(supWrap);
@@ -391,10 +397,10 @@
     bar.appendChild(add); content.appendChild(bar);
     var list = Dom.el('div', { 'data-kt-list': '1', 'data-kt-sort': 'amount:Amount:num,status:Status', style: 'background:white;border:1px solid #EEF0F3;border-radius:12px;overflow:hidden;' });
     content.appendChild(list);
-    list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
+    list.appendChild(Dom.el('div', { class: 'kt-list-empty', style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
     Api.get('/admin/purchase-orders').then(function (d) {
       var pos = d.purchase_orders || []; Dom.clear(list);
-      if (!pos.length) { list.appendChild(Dom.el('div', { style: 'padding:44px;text-align:center;color:#6B7280;' }, 'No purchase orders yet.')); return; }
+      if (!pos.length) { list.appendChild(Dom.el('div', { class: 'kt-list-empty', style: 'padding:44px;text-align:center;color:#6B7280;' }, 'No purchase orders yet.')); return; }
       pos.forEach(function (po) { list.appendChild(poRow(po, container)); });
     }).catch(function (e) { Dom.clear(list); list.appendChild(Dom.el('div', { style: 'padding:20px;color:#DC2626;' }, e.message || 'error')); });
   }
@@ -411,6 +417,12 @@
     main.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:2px;' }, po.po_number + ' · ordered ' + fmtDate(po.order_date) + (po.category ? ' · ' + po.category : '')));
     row.appendChild(main);
     row.appendChild(Dom.el('div', { style: 'font-weight:800;color:#111827;font-size:15px;' }, money(po.total)));
+    row.appendChild(actBar([
+      ['👁 View', function () { openPoDetail(po.id, container); }],
+      po.status !== 'received' && po.status !== 'cancelled' ? ['✏️ Edit', function () { Api.get('/admin/purchase-orders/' + po.id).then(function (d) { if (d && d.purchase_order) openPoEditor(d.purchase_order, container); }).catch(function (e) { toast((e && e.message) || 'Could not open', 'error'); }); }] : null,
+      po.status !== 'received' && po.status !== 'cancelled' ? ['🚫 Cancel order', function () { confirmThen('Cancel ' + po.po_number + '?', function () { return Api.post('/admin/purchase-orders/' + po.id + '/status', { status: 'cancelled' }); }, 'Purchase order cancelled', container); }] : null,
+      ['🗑 Delete', function () { confirmThen('Delete ' + po.po_number + '?', function () { return Api.delete('/admin/purchase-orders/' + po.id); }, 'Purchase order deleted', container); }],
+    ]));
     return row;
   }
   function openPoDetail(id, container) {
@@ -442,7 +454,7 @@
     }).catch(function (e) { toast(e.message || 'Could not open PO', 'error'); });
   }
   function openPoEditor(existing, container) {
-    var po = existing || { supplier_id: '', centre_id: '', status: 'draft', order_date: new Date().toISOString().slice(0, 10), category: '', notes: '', lines: [], tax: 0 };
+    var po = existing || { supplier_id: '', centre_id: '', status: 'draft', order_date: ((window.KT && KT.agencyToday) ? KT.agencyToday() : new Date().toISOString().slice(0, 10)), category: '', notes: '', lines: [], tax: 0 };
     var body = Dom.el('div', { style: 'width:min(640px,90vw);' });
     var g1 = Dom.el('div', { style: 'display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;' });
     var supWrap = Dom.el('div', {}); supWrap.appendChild(label('Supplier *')); var sup = supplierSelect(po.supplier_id); supWrap.appendChild(sup); g1.appendChild(supWrap);
@@ -470,6 +482,35 @@
     });
   }
 
+  /* ROW ACTIONS (2026-10-30, Anthony: "in expense tab ... add kebab to view, edit, delete, archive -
+     full sweep"). Plain labelled buttons as the row's last child; kt-row-actions.js folds them into
+     the platform ⋮ on every list here (Suppliers, Bills, Purchase orders). Each stops the click so the
+     row's own open-on-click does not fire as well. */
+  function actBar(items) {
+    var bar = Dom.el('div', { style: 'display:flex;gap:6px;flex-shrink:0;' });
+    items.filter(Boolean).forEach(function (it) {
+      var b = Dom.el('button', { type: 'button', title: it[0].replace(/^\S+\s/, ''), style: 'font-size:12px;padding:5px 9px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;cursor:pointer;' }, it[0]);
+      b.addEventListener('click', function (e) { e.stopPropagation(); e.preventDefault(); it[1](); });
+      bar.appendChild(b);
+    });
+    return bar;
+  }
+  function confirmThen(msg, req, okMsg, container) {
+    return Promise.resolve(KT.confirm ? KT.confirm(msg) : window.confirm(msg)).then(function (yes) {
+      if (!yes) return;
+      return req().then(function () { toast(okMsg); invalidateRefs(); render(container); })
+        .catch(function (e) { toast((e && e.message) || 'That did not work', 'error'); });
+    });
+  }
+  function openSupplierView(s, container) {
+    var body = Dom.el('div', { style: 'width:min(480px,88vw);' });
+    [['Contact', s.contact_name], ['Email', s.email], ['Phone', s.phone], ['Centre', s.centre_id ? centreName(s.centre_id) : 'All centres'],
+     ['Default category', s.default_category], ['Tax / business #', s.tax_number], ['Address', s.address],
+     ['Outstanding', Number(s.outstanding) > 0 ? money(s.outstanding) : '—'], ['Status', s.is_active ? 'Active' : 'Archived']]
+      .forEach(function (r) { body.appendChild(kvRow(Dom.el('span', { style: 'font-size:13px;color:#64748B;' }, r[0]), r[1] || '—')); });
+    Shell.Modal.open({ title: s.name, body: body, actions: [{ label: 'Close' }, { label: 'Edit', primary: true, handler: function () { openSupplierEditor(s, container); return false; } }] });
+  }
+
   // ── Suppliers tab ───────────────────────────────────────────────────
   function drawSuppliers(content, container) {
     var bar = Dom.el('div', { style: 'display:flex;justify-content:flex-end;margin-bottom:14px;' });
@@ -478,10 +519,10 @@
     bar.appendChild(add); content.appendChild(bar);
     var list = Dom.el('div', { 'data-kt-list': '1', 'data-kt-sort': 'outstanding:Outstanding:num', style: 'background:white;border:1px solid #EEF0F3;border-radius:12px;overflow:hidden;' });
     content.appendChild(list);
-    list.appendChild(Dom.el('div', { style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
+    list.appendChild(Dom.el('div', { class: 'kt-list-empty', style: 'padding:36px;text-align:center;color:#64748B;' }, 'Loading…'));
     Api.get('/admin/suppliers').then(function (d) {
       var sups = d.suppliers || []; Dom.clear(list);
-      if (!sups.length) { list.appendChild(Dom.el('div', { style: 'padding:44px;text-align:center;color:#6B7280;' }, 'No suppliers yet. Add your first vendor.')); return; }
+      if (!sups.length) { list.appendChild(Dom.el('div', { class: 'kt-list-empty', style: 'padding:44px;text-align:center;color:#6B7280;' }, 'No suppliers yet. Add your first vendor.')); return; }
       sups.forEach(function (s) { list.appendChild(supplierRow(s, container)); });
     }).catch(function (e) { Dom.clear(list); list.appendChild(Dom.el('div', { style: 'padding:20px;color:#DC2626;' }, e.message || 'error')); });
   }
@@ -494,12 +535,20 @@
     var main = Dom.el('div', { style: 'flex:1;min-width:0;' });
     var t = Dom.el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap;' });
     t.appendChild(Dom.el('span', { style: 'font-weight:700;color:#111827;font-size:14px;' }, s.name));
-    if (!s.is_active) t.appendChild(Dom.el('span', { style: 'background:#F3F4F6;color:#6B7280;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;' }, 'INACTIVE'));
+    if (!s.is_active) t.appendChild(Dom.el('span', { style: 'background:#F3F4F6;color:#6B7280;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;' }, 'ARCHIVED'));
     main.appendChild(t);
     var sub = [s.contact_name, s.email, s.phone].filter(Boolean).join(' · ') || (s.default_category || 'Vendor');
     main.appendChild(Dom.el('div', { style: 'font-size:12px;color:#6B7280;margin-top:2px;' }, sub));
     row.appendChild(main);
     if (Number(s.outstanding) > 0) row.appendChild(Dom.el('div', { style: 'text-align:right;color:#B45309;font-weight:700;font-size:13px;' }, money(s.outstanding) + ' due'));
+    row.appendChild(actBar([
+      ['👁 View', function () { openSupplierView(s, container); }],
+      ['✏️ Edit', function () { openSupplierEditor(s, container); }],
+      s.is_active
+        ? ['🗄 Archive', function () { confirmThen('Archive supplier “' + s.name + '”? It stays on past bills and can be restored.', function () { return Api.patch('/admin/suppliers/' + s.id, { is_active: false }); }, 'Supplier archived', container); }]
+        : ['♻️ Restore', function () { Api.patch('/admin/suppliers/' + s.id, { is_active: true }).then(function () { toast('Supplier restored'); invalidateRefs(); render(container); }).catch(function (e) { toast((e && e.message) || 'Failed', 'error'); }); }],
+      ['🗑 Delete', function () { confirmThen('Delete supplier “' + s.name + '”?', function () { return Api.delete('/admin/suppliers/' + s.id); }, 'Supplier deleted', container); }],
+    ]));
     return row;
   }
   function openSupplierEditor(existing, container) {

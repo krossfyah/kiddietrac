@@ -344,7 +344,7 @@ final class ParentIssueController extends Controller
     {
         $rooms = DB::table('educator_rooms')->where('user_id', $userId)->pluck('room_id')->all();
         if (! $rooms) return [];
-        $today = now()->toDateString();
+        $today = \App\Support\AgencyTime::today();
 
         return DB::table('enrollments')->whereIn('room_id', $rooms)
             ->where(function ($q) use ($today) { $q->whereNull('end_date')->orWhere('end_date', '>=', $today); })
@@ -381,7 +381,7 @@ final class ParentIssueController extends Controller
                   ->orWhere(fn ($x) => $x->where('ra.role', 'centre_director')->where('ra.centre_id', $issue->centre_id));
                 if ($issue->child_id && ! in_array($issue->category, self::SENSITIVE, true)) {
                     $rooms = DB::table('enrollments')->where('child_id', $issue->child_id)
-                        ->where(fn ($e) => $e->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString()))->pluck('room_id')->all();
+                        ->where(fn ($e) => $e->whereNull('end_date')->orWhere('end_date', '>=', \App\Support\AgencyTime::today()))->pluck('room_id')->all();
                     if ($rooms) {
                         $q->orWhereIn('u.id', DB::table('educator_rooms')->whereIn('room_id', $rooms)->pluck('user_id')->all() ?: [0]);
                     }
@@ -411,7 +411,7 @@ final class ParentIssueController extends Controller
         $edu = [];
         if ($issue->child_id && ! in_array($issue->category, self::SENSITIVE, true)) {
             $rooms = DB::table('enrollments')->where('child_id', $issue->child_id)
-                ->where(fn ($e) => $e->whereNull('end_date')->orWhere('end_date', '>=', now()->toDateString()))->pluck('room_id')->all();
+                ->where(fn ($e) => $e->whereNull('end_date')->orWhere('end_date', '>=', \App\Support\AgencyTime::today()))->pluck('room_id')->all();
             if ($rooms) {
                 $edu = DB::table('educator_rooms as er')->join('users as u', 'u.id', '=', 'er.user_id')
                     ->whereIn('er.room_id', $rooms)->whereNull('u.deleted_at')->where('u.status', 'active')
@@ -451,7 +451,7 @@ final class ParentIssueController extends Controller
                 $html .= '<tr><td style="padding:6px 12px 6px 0;color:#64748B;white-space:nowrap;vertical-align:top;">' . e($k) . '</td>'
                     . '<td style="padding:6px 0;color:#0F172A;font-weight:600;">' . e((string) $v) . '</td></tr>';
             }
-            $html .= '</table><div style="background:#F8FAFC;border-left:3px solid #1F6080;padding:10px 14px;margin:0 0 14px;white-space:pre-wrap;font-size:14px;">'
+            $html .= '</table><div style="background:#F8FAFC;--kt-edge:#1F6080;padding:10px 14px;margin:0 0 14px;white-space:pre-wrap;font-size:14px;">'
                 . e($issue->notes) . '</div>'
                 . '<p style="margin:0;font-size:13px;color:#475569;">Reply to the family, assign it or close it in KiddieTrac → Parent issues.'
                 . (in_array($issue->category, self::SENSITIVE, true) ? ' This is a concern about a staff member, so it has gone to directors and admins only.' : '') . '</p>';
@@ -492,7 +492,7 @@ final class ParentIssueController extends Controller
                 . '<p style="margin:0 0 14px;">' . e($centre) . ' has '
                 . ($reply !== '' ? 'replied to' : 'updated') . ' the issue you reported: <strong>' . e($this->label($issue)) . '</strong>.</p>'
                 . ($newStatus ? '<p style="margin:0 0 14px;">Status: <strong>' . e(self::STATUSES[$newStatus]) . '</strong></p>' : '')
-                . ($reply !== '' ? '<div style="background:#F8FAFC;border-left:3px solid #1F6080;padding:10px 14px;margin:0 0 14px;white-space:pre-wrap;font-size:14px;">' . e($reply) . '</div>' : '')
+                . ($reply !== '' ? '<div style="background:#F8FAFC;--kt-edge:#1F6080;padding:10px 14px;margin:0 0 14px;white-space:pre-wrap;font-size:14px;">' . e($reply) . '</div>' : '')
                 . '<p style="margin:0;font-size:13px;color:#475569;">Open KiddieTrac → Report an issue to read the whole conversation or add more.</p>';
             $this->mail((int) $issue->agency_id, [(string) $u->email], $title, $html, 'Your report');
         } catch (\Throwable $e) {

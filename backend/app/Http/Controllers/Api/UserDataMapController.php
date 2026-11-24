@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Api\PrivacyNoticeController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -39,6 +40,12 @@ class UserDataMapController extends Controller
     {
         $agencyId = $this->resolveAgencyId($request);
         if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
+        /* An admin's privacy tool (2026-11-05 leak sweep): the route has no role gate, and any
+           member - a parent, an educator - could read another person's full data map by id.
+           The screen only offers it outside director mode, so admins of THIS agency only. */
+        if (! array_intersect(\App\Support\AgencyRole::names($request), ['agency_admin', 'platform_admin'])) {
+            return response()->json(['message' => 'Only an agency admin can open this.'], 403);
+        }
         if (! $this->userBelongsToAgency($userId, $agencyId)) {
             return response()->json(['message' => 'User not in your agency'], 403);
         }
@@ -152,7 +159,28 @@ class UserDataMapController extends Controller
             }
         }
 
+        /* PRIVACY NOTICE (2026-11-10, Anthony: "add this for each user"): every time this parent confirmed reading
+           this agency's privacy notice (privacy_acknowledgments, PrivacyNoticeController), newest first, in agency
+           time. Only for a parent at this agency - staff are not asked. */
+        $notice = null;
+        $isParentHere = DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->where('g.user_id', $userId)->where('ce.agency_id', $agencyId)->whereNull('f.deleted_at')->exists();
+        if ($isParentHere && Schema::hasTable('privacy_acknowledgments')) {
+            $n = PrivacyNoticeController::notice(DB::table('agencies')->where('id', $agencyId)->first(['id', 'settings']));
+            $tz = \App\Support\AgencyTime::tz($agencyId);
+            $acks = DB::table('privacy_acknowledgments')->where('user_id', $userId)->where('agency_id', $agencyId)->orderByDesc('version')->get();
+            $notice = [
+                'required' => $n['required'], 'current_version' => $n['version'],
+                'read_current' => $acks->contains(fn ($r) => (int) $r->version === $n['version']),
+                'history' => $acks->map(fn ($r) => [
+                    'version' => (int) $r->version, 'url' => $r->notice_url, 'source' => $r->source,
+                    'at' => Carbon::parse($r->acknowledged_at, 'UTC')->setTimezone($tz)->format('M j, Y g:i A'),
+                ])->values(),
+            ];
+        }
+
         return response()->json([
+            'privacy_notice' => $notice,
             'user' => [
                 'id' => (int) $user->id,
                 'name' => trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')),

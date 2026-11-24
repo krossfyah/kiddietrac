@@ -233,6 +233,7 @@ final class MarketingSiteController extends Controller
                     'button' => ['label' => 'Open the pipeline', 'url' => 'https://app.kiddietrac.com/dashboard.html#sales'],
                 ]),
                 function ($m) use ($email, $name) {
+                    \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                     $m->to('sales@kiddietrac.com')
                       ->subject('New website enquiry: ' . ($name ?: $email))
                       ->replyTo($email, $name ?: $email);
@@ -245,12 +246,18 @@ final class MarketingSiteController extends Controller
         // branded confirmation email with unsubscribe + privacy + terms links.
         $this->removeSuppression($email);
         try {
-            Mail::to($email)->send(new \App\Mail\SubscriberWelcome(
-                $name ?: 'there',
-                $this->subUnsubscribeUrl($email),
-                'https://www.kiddietrac.com/privacy',
-                'https://www.kiddietrac.com/terms'
-            ));
+            /* A NEW LEAD GETS THE WELCOME (2026-10-22): the film, the features, the brochure
+               and a time to talk (App\Support\LeadWelcome, once per address). Someone it
+               has already welcomed gets the short confirmation as before. */
+            if (! \App\Support\LeadWelcome::send($email, $name, $source, $agency, true, (string) $request->ip())) {
+                Mail::to($email)->send(new \App\Mail\SubscriberWelcome(
+                    $name ?: 'there',
+                    $this->subUnsubscribeUrl($email),
+                    'https://www.kiddietrac.com/privacy',
+                    'https://www.kiddietrac.com/terms',
+                    $source
+                ));
+            }
         } catch (\Throwable $e) {
             // never fail the subscribe because email delivery hiccuped
         }
@@ -357,6 +364,7 @@ final class MarketingSiteController extends Controller
         $sent = false;
         try {
             Mail::html($html, function ($m) use ($email, $name, $program) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $m->to('sales@kiddietrac.com')->subject('New referral: ' . $program . ' (from ' . $name . ')')->replyTo($email, $name);
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
             });
@@ -432,6 +440,9 @@ final class MarketingSiteController extends Controller
             \Illuminate\Support\Facades\Log::warning('Contact form lead failed', ['email' => $email, 'error' => $e->getMessage()]);
         }
 
+        // The lead welcome + the subscriber list (2026-10-22). Not if they unsubscribed before.
+        \App\Support\LeadWelcome::send($email, $name, 'contact', $agency, false, (string) $request->ip());
+
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $rows = ['Name' => $name, 'Email' => $email, 'Phone' => $data['phone'] ?? '', 'Agency' => $agency, 'Interested in' => $interest,
             'Centres' => $centres, 'Licensed capacity' => $capacity, 'Top priorities' => implode(', ', $priorities)];
@@ -448,6 +459,7 @@ final class MarketingSiteController extends Controller
         $sent = false;
         try {
             Mail::html($html, function ($m) use ($email, $name, $interest) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $m->to('sales@kiddietrac.com')->subject('Website contact: ' . $name . ($interest ? ' — ' . $interest : ''))->replyTo($email, $name);
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
             });
@@ -709,7 +721,8 @@ final class MarketingSiteController extends Controller
             // A receipt for what they just did. Guarded: a failed confirmation must never
             // undo the unsubscribe, which is the part that actually matters.
             try {
-                Mail::to($email)->send(new \App\Mail\SubscriberUnsubscribed($email, '', 'self'));
+                Mail::to($email)->send((new \App\Mail\SubscriberUnsubscribed($email, '', 'self'))
+                    ->withSymfonyMessage(fn ($sm) => \App\Support\MailScope::platform($sm)));
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::warning('Unsubscribe confirmation failed', ['email' => $email, 'error' => $e->getMessage()]);
             }
@@ -821,7 +834,7 @@ final class MarketingSiteController extends Controller
         if (strlen($path) > 60) {
             $path = substr($path, 0, 60);
         }
-        $day = now()->toDateString();
+        $day = \App\Support\AgencyTime::today();
 
         try {
             $a = [];
@@ -867,7 +880,7 @@ final class MarketingSiteController extends Controller
 
         $series = [];
         for ($i = 13; $i >= 0; $i--) {
-            $d = now()->subDays($i)->toDateString();
+            $d = \App\Support\AgencyTime::todayDate()->subDays($i)->toDateString();
             $series[] = ['date' => $d, 'views' => (int) ($days[$d]['views'] ?? 0)];
         }
 
@@ -885,15 +898,19 @@ final class MarketingSiteController extends Controller
 
         $totalLeads = 0;
         $sources = [];
+        $leadDays = [];
         try {
             if (Storage::disk('local')->exists('marketing-leads.jsonl')) {
                 $lines = array_filter(preg_split('/\r?\n/', trim((string) Storage::disk('local')->get('marketing-leads.jsonl'))));
                 foreach ($lines as $ln) {
                     $r = json_decode($ln, true);
                     if (is_array($r)) {
+                        // Throttle probes and other test addresses are not leads.
+                        if (preg_match('/@example\.(invalid|com|org)$/i', (string) ($r['email'] ?? ''))) continue;
                         $totalLeads++;
                         $s = $r['source'] ?? 'unknown';
                         $sources[$s] = ($sources[$s] ?? 0) + 1;
+                        if (! empty($r['at'])) $leadDays[] = $r['at'];
                     }
                 }
             }
@@ -908,7 +925,53 @@ final class MarketingSiteController extends Controller
         }
 
         $views14 = array_sum(array_column($series, 'views'));
+
+        // For the Overview charts: 30 days of visits and leads (the site's own day), and 8 weeks
+        // of subscribers, website chats and meeting requests.
+        $tz = \App\Support\AgencyTime::tz(null) ?: 'America/Toronto';
+        $leadByDay = [];
+        foreach ($leadDays as $at) {
+            try { $d = \Carbon\Carbon::parse($at)->tz($tz)->toDateString(); $leadByDay[$d] = ($leadByDay[$d] ?? 0) + 1; } catch (\Throwable $e) {}
+        }
+        $series30 = [];
+        for ($i = 29; $i >= 0; $i--) {
+            $d = \App\Support\AgencyTime::todayDate()->subDays($i)->toDateString();
+            $series30[] = ['date' => $d, 'views' => (int) ($days[$d]['views'] ?? 0), 'leads' => (int) ($leadByDay[$d] ?? 0)];
+        }
+        $weeks = [];
+        $wk0 = \Carbon\Carbon::now($tz)->startOfWeek(\Carbon\Carbon::MONDAY)->subWeeks(7);
+        $count = function (string $table, string $col, $a, $b, ?callable $more = null) {
+            try {
+                if (! \Illuminate\Support\Facades\Schema::hasTable($table)) return 0;
+                $q = \Illuminate\Support\Facades\DB::table($table)->where($col, '>=', $a->copy()->utc())->where($col, '<', $b->copy()->utc());
+                if ($more) $more($q);
+                return (int) $q->count();
+            } catch (\Throwable $e) { return 0; }
+        };
+        for ($i = 0; $i < 8; $i++) {
+            $a0 = $wk0->copy()->addWeeks($i); $b0 = $a0->copy()->addWeek();
+            $weeks[] = [
+                'week' => $a0->toDateString(),
+                'subscribers' => $count('site_subscribers', 'created_at', $a0, $b0, fn ($q) => $q->where('email', 'not like', '%@example.%')),
+                'chats' => $count('web_chats', 'created_at', $a0, $b0),
+                'meetings' => $count('marketing_bookings', 'created_at', $a0, $b0, fn ($q) => $q->where('name', 'not like', 'Claude Test%')),
+            ];
+        }
+        $subs = ['active' => 0, 'unsubscribed' => 0];
+        try {
+            $subs['active'] = (int) \Illuminate\Support\Facades\DB::table('site_subscribers')->whereNull('unsubscribed_at')->count();
+            $subs['unsubscribed'] = (int) \Illuminate\Support\Facades\DB::table('site_subscribers')->whereNotNull('unsubscribed_at')->count();
+        } catch (\Throwable $e) {}
+        $meetings = [];
+        try {
+            foreach (\Illuminate\Support\Facades\DB::table('marketing_bookings')->where('name', 'not like', 'Claude Test%')->groupBy('status')->selectRaw('status, count(*) n')->get() as $r) $meetings[$r->status] = (int) $r->n;
+        } catch (\Throwable $e) {}
+
         return response()->json([
+            'series_30d'   => $series30,
+            'weeks'        => $weeks,
+            'subscribers'  => $subs,
+            'meetings'     => $meetings,
             'total_views'  => (int) ($a['total'] ?? 0),
             'views_14d'    => $views14,
             'series_14d'   => $series,
@@ -1006,12 +1069,30 @@ final class MarketingSiteController extends Controller
 
         // One email per conversation. Reopening the widget, or a keepalive send that
         // arrives twice on a flaky connection, must not mail sales the same chat again.
-        $lock = 'mkt-chat-sent:'.$session;
-        if (\Illuminate\Support\Facades\Cache::has($lock)) {
+        // KEPT ON THE CHAT, NOT IN THE CACHE (2026-11-01): the 24-hour cache key expired while the
+        // browser still held the session, and leaving a page two days later mailed the same chat
+        // again. A stored chat is mailed only when it has messages not mailed yet; the claim is one
+        // conditional UPDATE, so two sends racing cannot both win. The cache key stays for a chat the
+        // server never stored (its own copy is all there is).
+        $dup = function () {
             return response()->json(['ok' => true, 'duplicate' => true])
                 ->header('Access-Control-Allow-Origin', '*');
+        };
+        $chatRow = \Illuminate\Support\Facades\DB::table('web_chats')->where('session', $session)->first(['id']);
+        if ($chatRow) {
+            $upto = (int) \Illuminate\Support\Facades\DB::table('web_chat_messages')->where('web_chat_id', $chatRow->id)->max('id');
+            $won = \Illuminate\Support\Facades\DB::table('web_chats')->where('id', $chatRow->id)
+                ->where(function ($q) use ($upto) { $q->whereNull('emailed_upto_id')->orWhere('emailed_upto_id', '<', $upto); })
+                ->update(['emailed_upto_id' => $upto]);
+            if (! $won) {
+                return $dup();
+            }
+        } else {
+            $lock = 'mkt-chat-sent:'.$session;
+            if (! \Illuminate\Support\Facades\Cache::add($lock, 1, 86400 * 30)) {
+                return $dup();
+            }
         }
-        \Illuminate\Support\Facades\Cache::put($lock, 1, 86400);
 
         $name   = trim((string) ($data['name'] ?? ''));
         $email  = strtolower(trim((string) ($data['email'] ?? '')));
@@ -1090,6 +1171,7 @@ final class MarketingSiteController extends Controller
 
         try {
             \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($subject, $email, $name, $to) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $m->to($to)->subject($subject);
                 // So a reply goes straight back to them rather than to nobody.
                 if ($email && filter_var($email, FILTER_VALIDATE_EMAIL)) {

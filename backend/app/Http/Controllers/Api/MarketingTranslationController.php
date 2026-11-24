@@ -320,7 +320,7 @@ class MarketingTranslationController extends Controller
         }
         Cache::forget('mkt-i18n-last-error');
         Cache::forget('mkt-i18n-probe');
-        $text = (string) ($res->json('content.0.text') ?? '');
+        $text = (string) (\App\Support\AiConfig::text($res->json()) ?? '');
         $a = strpos($text, '{');
         $b = strrpos($text, '}');
         $json = ($a !== false && $b !== false) ? json_decode(substr($text, $a, $b - $a + 1), true) : null;

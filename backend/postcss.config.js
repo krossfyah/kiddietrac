@@ -1,6 +1,1 @@
-export default {
-    plugins: {
-        tailwindcss: {},
-        autoprefixer: {},
-    },
-};
+../../../private_html/kt-extras/backend/postcss.config.js

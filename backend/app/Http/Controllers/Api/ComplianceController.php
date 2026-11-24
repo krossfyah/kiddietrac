@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Dompdf\Dompdf;
+use App\Support\KtDompdf as Dompdf;   // translating Dompdf (2026-10-22)
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -30,6 +30,9 @@ final class ComplianceController extends Controller
         $rows = DB::table('families as f')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('c.agency_id', $agencyId)
+            // The caller's centres, as the monthly report beside it (2026-11-05 leak sweep): a
+            // director was listed every centre's CWELCC families.
+            ->whereIn('c.id', \App\Support\Visibility::centreIds((int) $agencyId, $request->user()) ?: [0])
             ->join('cwelcc_enrolments as e', function ($j) { $j->on('e.family_id', '=', 'f.id')->whereNull('e.enrolled_to'); })
             ->whereNull('f.deleted_at')
             ->select('f.id', 'f.family_name', 'e.enrolled_from as cwelcc_enrolled_at', 'e.subsidy_rate as cwelcc_subsidy_rate', 'c.name as centre_name', 'f.centre_id')
@@ -50,6 +53,13 @@ final class ComplianceController extends Controller
         $famAgency = DB::table('families as f')->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('f.id', $familyId)->value('c.agency_id');
         abort_unless($famAgency && (int) $famAgency === (int) $agencyId, 403, 'That family is not in your agency.');
+        /* ...and at a centre you run (2026-11-05 leak sweep): any director of the agency could
+           enrol or end another centre's family in CWELCC, which changes that centre's subsidy
+           claim. An admin of this agency, or a director of the family's centre. */
+        $famCentre = DB::table('families')->where('id', $familyId)->value('centre_id');
+        abort_unless(array_intersect(\App\Support\AgencyRole::names($request), ['platform_admin', 'agency_admin', 'centre_director'])
+            && \App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, (int) $agencyId), $famCentre),
+            403, 'That family is not at a centre you manage.');
 
         /* Through CwelccHistory (2026-09-29): this overwrote the family's flag, date and
            rate in place, which erased the family from past reports on un-enrolment and
@@ -103,23 +113,32 @@ final class ComplianceController extends Controller
             ->get(['e.id as period_id', 'e.family_id', 'e.enrolled_from', 'e.enrolled_to', 'e.subsidy_rate',
                 'f.family_name', 'f.deleted_at as family_archived', 'c.id as centre_id', 'c.name as centre_name']);
 
-        $report = $periods->map(function ($p) use ($start, $end, $month) {
+        /* ONTARIO IS NOT A PERCENTAGE ANY MORE (2026-11-13, OCCMS sweep). Since January 1, 2025 an Ontario CWELCC
+           family pays the BASE FEE (App\Support\CwelccFees) and the centre is funded by its cost-based allocation, so
+           "gross x rate%" claimed a reduction that no longer exists. For an Ontario agency the report is the split the
+           Standardized Financial Report asks for: base fee revenue billed, the part the fee subsidy (CMSM) paid, and
+           the part parents paid. The rate model stays for the other provinces. */
+        $onBase = \App\Support\CwelccFees::applies((int) $agencyId);
+
+        $report = $periods->map(function ($p) use ($start, $end, $month, $onBase) {
             $from = max($start->toDateString(), $p->enrolled_from);
             $to = min($end->toDateString(), $p->enrolled_to ?: $end->toDateString());
-            $invoiced = (float) DB::table('invoices')
+            $invQ = DB::table('invoices')
                 ->where('family_id', $p->family_id)
                 ->whereBetween('issued_at', [$from . ' 00:00:00', $to . ' 23:59:59'])
                 // A voided invoice was never owed and a draft was never sent -- neither is
                 // a fee the family was charged, so neither belongs in a subsidy claim.
-                ->whereNotIn('status', ['void', 'draft'])
-                ->sum('total');
+                ->whereNotIn('status', ['void', 'draft']);
+            $invoiced = (float) (clone $invQ)->sum('total');
+            $feeSubsidy = $onBase ? (float) (clone $invQ)->sum('subsidy_amount') : 0.0;
             // Children of the family during the month, archived ones included.
             $kids = DB::table('children')->where('family_id', $p->family_id)
                 ->where(function ($w) use ($start) { $w->whereNull('deleted_at')->orWhere('deleted_at', '>=', $start); })
                 ->where(function ($w) use ($start) { $w->whereNull('withdrawn_at')->orWhere('withdrawn_at', '>=', $start); })
                 ->orderBy('first_name')->get(['first_name', 'last_name']);
-            $rate = (float) ($p->subsidy_rate ?? 50);
-            $subsidy = round($invoiced * ($rate / 100), 2);
+            $rate = $onBase ? null : (float) ($p->subsidy_rate ?? 50);
+            $subsidy = $onBase ? round($feeSubsidy, 2) : round($invoiced * ($rate / 100), 2);
+            $gross = $onBase ? round($invoiced + $feeSubsidy, 2) : $invoiced;
 
             return [
                 'family_id' => $p->family_id,
@@ -130,10 +149,10 @@ final class ComplianceController extends Controller
                 'centre_name' => $p->centre_name,
                 'period_from' => $p->enrolled_from,
                 'period_to' => $p->enrolled_to,
-                'gross_fee' => $invoiced,
+                'gross_fee' => $gross,
                 'subsidy_rate' => $rate,
                 'subsidy_amount' => $subsidy,
-                'parent_portion' => round($invoiced - $subsidy, 2),
+                'parent_portion' => round($gross - $subsidy, 2),
                 'month' => $month,
             ];
         });
@@ -145,7 +164,7 @@ final class ComplianceController extends Controller
             'child_count' => $report->sum('child_count'),
             'family_count' => $report->pluck('family_id')->unique()->count(),
         ];
-        return response()->json(['data' => $report, 'totals' => $totals, 'month' => $month]);
+        return response()->json(['data' => $report, 'totals' => $totals, 'month' => $month, 'model' => $onBase ? 'on_base_fee' : 'rate']);
     }
 
     public function cwelccMonthlyPdf(Request $request): Response
@@ -160,6 +179,7 @@ final class ComplianceController extends Controller
             'month' => $month,
             'rows' => $body['data'],
             'totals' => $body['totals'],
+            'model' => $body['model'] ?? 'rate',
         ])->render();
         $dompdf = new Dompdf();
         $dompdf->loadHtml($html, 'UTF-8');
@@ -181,11 +201,20 @@ final class ComplianceController extends Controller
         return response()->streamDownload(function () use ($body, $fref) {
             $h = fopen('php://output', 'w');
             fwrite($h, "\xEF\xBB\xBF");
-            fputcsv($h, ['Children', 'Family', 'Family ID', 'Centre', 'Gross fee', 'Subsidy rate %', 'Subsidy $', 'Parent portion $']);
-            foreach ($body['data'] as $r) {
-                fputcsv($h, [$r['child_name'], $r['family_name'], $fref[(int) ($r['family_id'] ?? 0)] ?? '', $r['centre_name'], $r['gross_fee'], $r['subsidy_rate'], $r['subsidy_amount'], $r['parent_portion']]);
+            if (($body['model'] ?? 'rate') === 'on_base_fee') {
+                // Ontario since 2025: base fee revenue, split between the fee subsidy and parents (no rate).
+                fputcsv($h, ['Children', 'Family', 'Family ID', 'Centre', 'Base fee revenue $', 'Fee subsidy paid $', 'Parents paid $']);
+                foreach ($body['data'] as $r) {
+                    fputcsv($h, [$r['child_name'], $r['family_name'], $fref[(int) ($r['family_id'] ?? 0)] ?? '', $r['centre_name'], $r['gross_fee'], $r['subsidy_amount'], $r['parent_portion']]);
+                }
+                fputcsv($h, ['TOTAL', '', '', '', $body['totals']['gross'], $body['totals']['subsidy'], $body['totals']['parent']]);
+            } else {
+                fputcsv($h, ['Children', 'Family', 'Family ID', 'Centre', 'Gross fee', 'Subsidy rate %', 'Subsidy $', 'Parent portion $']);
+                foreach ($body['data'] as $r) {
+                    fputcsv($h, [$r['child_name'], $r['family_name'], $fref[(int) ($r['family_id'] ?? 0)] ?? '', $r['centre_name'], $r['gross_fee'], $r['subsidy_rate'], $r['subsidy_amount'], $r['parent_portion']]);
+                }
+                fputcsv($h, ['TOTAL', '', '', '', $body['totals']['gross'], '', $body['totals']['subsidy'], $body['totals']['parent']]);
             }
-            fputcsv($h, ['TOTAL', '', '', '', $body['totals']['gross'], '', $body['totals']['subsidy'], $body['totals']['parent']]);
             fclose($h);
         }, "CWELCC-{$month}.csv", ['Content-Type' => 'text/csv; charset=UTF-8']);
     }

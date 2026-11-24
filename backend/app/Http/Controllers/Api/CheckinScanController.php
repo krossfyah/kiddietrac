@@ -44,14 +44,9 @@ final class CheckinScanController extends Controller
     public function centreCode(Request $request, int $centreId): JsonResponse
     {
         $uid = $request->user()->id;
-        $ok = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
-            ->where(function ($q) use ($centreId) {
-                $q->where('centre_id', $centreId)->orWhereIn('role', ['agency_admin', 'platform_admin']);
-            })->exists();
-        if (!$ok) abort(403);
-
         $centre = DB::table('centres')->where('id', $centreId)->first();
         if (!$centre) abort(404);
+        if (!$this->mayShowCode((int) $uid, $centre)) abort(403);
 
         $ymd = now()->format('Ymd');
         // Mint a fresh short code each time the QR is opened (unique → traceable).
@@ -63,15 +58,68 @@ final class CheckinScanController extends Controller
             'centre_id'  => $centreId,
             'created_by' => $uid,
             'used_count' => 0,
-            'expires_at' => now()->endOfDay(),
+            'expires_at' => \App\Support\AgencyTime::boundaryUtc(null, 'day', 1)->subSecond(),
             'created_at' => now(),
         ]);
         return response()->json([
             'code' => 'KTCHK.' . $centreId . '.' . $ymd . '.' . $this->sig($centreId, $ymd),
             'short_code' => $short,
             'centre_name' => $centre->name,
-            'valid_for' => now()->toDateString(),
-        ]);
+            'valid_for' => \App\Support\AgencyTime::today(),
+        ] + $this->posterBrand($centre));
+    }
+
+    /**
+     * GET /api/v1/checkin/poster-info/{centreId}
+     * Who a printed One-Tap poster belongs to: the agency's name and logo, the centre's
+     * name. The kiosk poster on the centre screen has its QR already; this is only the
+     * heading. Same people as centreCode.
+     */
+    public function posterInfo(Request $request, int $centreId): JsonResponse
+    {
+        $centre = DB::table('centres')->where('id', $centreId)->first();
+        if (!$centre) abort(404);
+        if (!$this->mayShowCode((int) $request->user()->id, $centre)) abort(403);
+
+        return response()->json(['centre_name' => $centre->name] + $this->posterBrand($centre));
+    }
+
+    /* WHO MAY SEE A CENTRE'S CODE (2026-10-21). Staff of that centre; an agency admin or
+       director of ITS agency; a platform admin. It was "staff of the centre, or an agency
+       admin anywhere", so an admin of one agency could fetch another agency's daily
+       check-in code by changing the number in the URL. */
+    private function mayShowCode(int $uid, object $centre): bool
+    {
+        return DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
+            ->where(function ($q) use ($centre) {
+                $q->where('centre_id', $centre->id)
+                    ->orWhere(function ($q2) use ($centre) {
+                        $q2->whereIn('role', ['agency_admin', 'centre_director'])
+                            ->whereNull('centre_id')->where('agency_id', $centre->agency_id);
+                    })
+                    ->orWhere('role', 'platform_admin');
+            })->exists();
+    }
+
+    /* The printed poster names the AGENCY, not only the centre (Anthony, 2026-10-21: "the
+       QR printable should have the ilearn agency name as well"), with its logo when it has
+       one. "Powered by KiddieTrac" follows the white-label licence like every other
+       printout. */
+    private function posterBrand(object $centre): array
+    {
+        $a = DB::table('agencies')->where('id', $centre->agency_id)
+            ->first(['name', 'logo_url', 'brand_logo_url', 'brand_primary_color', 'powered_by_visible']);
+        $logo = $a ? ($a->brand_logo_url ?: $a->logo_url) : null;
+        if ($logo && str_starts_with($logo, '/')) {
+            $logo = rtrim((string) config('app.url'), '/') . $logo;
+        }
+
+        return [
+            'agency_name' => $a->name ?? null,
+            'agency_logo' => $logo ?: null,
+            'brand_color' => $a->brand_primary_color ?? null,
+            'powered_by' => $a ? (int) ($a->powered_by_visible ?? 1) !== 0 : true,
+        ];
     }
 
     /**
@@ -203,7 +251,7 @@ final class CheckinScanController extends Controller
                 'name' => $c->preferred_name ?: $c->first_name,
                 'event' => $newType,
                 'label' => $newType === 'check_in' ? 'checked in' : 'checked out',
-                'time' => now()->format('g:i A'),
+                'time' => \App\Support\AgencyTime::now()->format('g:i A'),
             ];
         }
 

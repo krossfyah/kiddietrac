@@ -613,7 +613,7 @@
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div class="er-wrap">'
       + '<div class="kt-page-hero"><h2>🎛️ Room Controls</h2>'
-      + '<p>Who works in which room, headcount reminders, sleep checks, daily records reminders and auto sign-off.</p></div>'
+      + '<p>Who works in which room, headcount reminders, sleep checks, daily records reminders, auto sign-off and walk detection.</p></div>'
       + '<div id="rc-tabs"></div></div>';
     /* A painter that returns quietly (the API said this is not theirs to change) leaves
        its pane empty; say so rather than show nothing. */
@@ -634,6 +634,8 @@
       // Daily records reminders and auto sign-off (2026-10-15).
       { key: 'records', label: '📝 Daily records', paint: function (pane) { return guarded(KT.RecordReminders && KT.RecordReminders.paintSettings)(pane); } },
       { key: 'signoff', label: '⏱️ Auto sign-off', paint: function (pane) { return guarded(KT.ClockSettings && KT.ClockSettings.paintSignoff)(pane); } },
+      // Walk detection, incl. the per-agency background switch (2026-10-21).
+      { key: 'walks', label: '🚶 Walks', paint: function (pane) { return guarded(KT.WalkSettings && KT.WalkSettings.paintSettings)(pane); } },
     ]);
   }
 

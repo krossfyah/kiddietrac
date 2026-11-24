@@ -80,7 +80,7 @@ final class FeatureFlagController extends Controller
             'hashes' => ['awards']],
         'parent_feedback'   => ['label' => 'Parent feedback & NPS',        'plan_min' => 'starter',    'group' => 'Family engagement',
             'hashes' => ['parent-feedback', 'nps']],
-        'sms'               => ['label' => 'SMS & voice announcements',    'plan_min' => 'growth',     'group' => 'Family engagement',
+        'sms'               => ['label' => 'SMS & voice announcements',    'plan_min' => 'addon',      'group' => 'Family engagement',
             'hashes' => ['sms', 'sms-settings']],
 
         // ── Staff ─────────────────────────────────────────────────────────────────
@@ -89,9 +89,9 @@ final class FeatureFlagController extends Controller
         'timesheets'        => ['label' => 'Time clock & timesheets',      'plan_min' => 'starter',    'group' => 'Staff',
             'hashes' => ['timesheets', 'time-clock', 'time-off']],
         'payroll'           => ['label' => 'Payroll documents & payslips', 'plan_min' => 'growth',     'group' => 'Staff',
-            'hashes' => ['payroll']],
+            'hashes' => ['payroll', 'payroll-settings', 'my-pay']],
         'certifications'    => ['label' => 'Certifications & background checks', 'plan_min' => 'starter', 'group' => 'Staff',
-            'hashes' => ['certifications', 'background-checks']],
+            'hashes' => ['certifications', 'background-checks', 'my-certificates']],
         'tasks'             => ['label' => 'Task assignment',              'plan_min' => 'free',       'group' => 'Staff',
             'hashes' => ['tasks', 'my-tasks']],
         'home_visits'       => ['label' => 'Home visits & inspection forms', 'plan_min' => 'starter',  'group' => 'Staff',
@@ -100,15 +100,15 @@ final class FeatureFlagController extends Controller
         // ── Billing & payments ────────────────────────────────────────────────────
         'billing'           => ['label' => 'Invoicing & billing',          'plan_min' => 'starter',    'group' => 'Billing & payments',
             'hashes' => ['billing', 'bulk-invoices', 'billing-schedule', 'billing-settings',
-                'payment-plans', 'tuition-increases', 'refunds', 'account-ledgers']],
+                'payment-plans', 'tuition-increases', 'refunds', 'account-ledgers', 'tuition-plans', 'vacation-holds']],
         'autopay'           => ['label' => 'Card & bank autopay',          'plan_min' => 'growth',     'group' => 'Billing & payments',
-            'hashes' => ['payment-providers']],
+            'hashes' => ['payment-providers', 'payment-run']],
         'expenses'          => ['label' => 'Expenses, suppliers & POs',    'plan_min' => 'growth',     'group' => 'Billing & payments',
             'hashes' => ['expenses']],
         'accounting_sync'   => ['label' => 'Accounting: QuickBooks, Xero & Sage', 'plan_min' => 'growth',   'group' => 'Billing & payments',
             'hashes' => ['external-billing', 'quickbooks', 'xero', 'sage']],
-        'white_label'       => ['label' => 'White-label branding & site',  'plan_min' => 'growth',     'group' => 'Billing & payments',
-            'hashes' => ['admin-branding', 'marketing-site']],
+        'white_label'       => ['label' => 'White-label branding & site',  'plan_min' => 'addon',      'group' => 'Billing & payments',
+            'hashes' => ['admin-branding']],
 
         // ── Compliance & reporting ────────────────────────────────────────────────
         'forms'             => ['label' => 'Forms, e-signatures & documents', 'plan_min' => 'starter', 'group' => 'Compliance & reporting',
@@ -117,7 +117,7 @@ final class FeatureFlagController extends Controller
         'compliance'        => ['label' => 'Compliance dashboard',         'plan_min' => 'starter',    'group' => 'Compliance & reporting',
             'hashes' => ['compliance']],
         'cwelcc_reporting'  => ['label' => 'CWELCC & CACFP reporting',     'plan_min' => 'starter',    'group' => 'Compliance & reporting',
-            'hashes' => ['cwelcc', 'cacfp']],
+            'hashes' => ['cwelcc', 'cacfp', 'subsidy-roa', 'workforce-funding']],
         'reports'           => ['label' => 'Reports & scheduled exports',  'plan_min' => 'starter',    'group' => 'Compliance & reporting',
             'hashes' => ['reports']],
         'audit_log'         => ['label' => 'Audit log',                    'plan_min' => 'starter',    'group' => 'Compliance & reporting',
@@ -126,8 +126,8 @@ final class FeatureFlagController extends Controller
             'hashes' => ['data-retention']],
 
         // ── Growth ────────────────────────────────────────────────────────────────
-        'waitlist'          => ['label' => 'Waitlist & enrolment pipeline', 'plan_min' => 'starter',   'group' => 'Growth',
-            'hashes' => ['synced-waitlist', 'reenrollment', 'renewals']],
+        'waitlist'          => ['label' => 'Waitlist',                     'plan_min' => 'starter',    'group' => 'Growth',
+            'hashes' => ['synced-waitlist']],
         'tours'             => ['label' => 'Tours & enquiries',            'plan_min' => 'starter',    'group' => 'Growth',
             'hashes' => ['tours']],
         'marketing'         => ['label' => 'Marketing & drip campaigns',   'plan_min' => 'growth',     'group' => 'Growth',
@@ -137,13 +137,15 @@ final class FeatureFlagController extends Controller
            screens and `sales-invoices` belongs to the platform's own billing. Testing on
            Test Agency is what caught it — the flag was off and the menu still had six
            sales items in it. */
-        'sales_crm'         => ['label' => 'Sales CRM',                    'plan_min' => 'growth',     'group' => 'Growth',
-            'hashes' => ['sales', 'sales-leads', 'sales-lead', 'sales-new', 'sales-followups',
-                'sales-plans', 'sales-demo', 'sales-chat', 'sales-invoices']],
-        'analytics'         => ['label' => 'Analytics & forecasting',      'plan_min' => 'growth',     'group' => 'Growth',
+        'sales_crm'         => ['label' => 'Enquiries & enrolment pipeline', 'plan_min' => 'growth',   'group' => 'Growth',
+            'hashes' => ['reenrollment', 'renewals']],
+        'analytics'         => ['label' => 'Analytics & forecasting',      'plan_min' => 'enterprise', 'group' => 'Growth',
             'hashes' => ['forecast', 'engagement', 'anomalies', 'retention']],
-        'ai_tools'          => ['label' => 'AI tools & report cards',      'plan_min' => 'growth',     'group' => 'Growth',
-            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status']],
+        /* THE AI BUNDLE (2026-10-28, KT-ADD-0006, $25/month): no plan includes it - Anthony: "bundle required on every
+           plan". Everything AI hangs off this key: the routes below in EnforcePlanFeatures, and App\Support\AiBundle
+           for the AI inside shared endpoints and nightly jobs (parent end-of-day note, day story, photo tagging). */
+        'ai_tools'          => ['label' => 'AI Bundle — summaries, writing help & report cards', 'plan_min' => 'addon', 'group' => 'Growth',
+            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status', 'lesson-plans-ai', 'photo-tagging']],
 
         // ── Platform ──────────────────────────────────────────────────────────────
         'multi_centre'      => ['label' => 'Multiple centres per agency',  'plan_min' => 'starter',    'group' => 'Platform',
@@ -196,6 +198,13 @@ final class FeatureFlagController extends Controller
             }
         }
 
+        /* LICENSED AGENCIES FOLLOW THEIR LICENCE (2026-10-24, App\Support\Licences): the plan level
+           (each feature's plan_min) plus add-ons, explicit On/Off still winning. An agency with
+           no licence keeps the old rule exactly: on unless switched off. */
+        if ($agencyId && \App\Support\Licences::managed($agencyId)) {
+            return \App\Support\Licences::effectiveFlags($agencyId, self::FEATURES, $stored);
+        }
+
         $out = [];
         foreach (self::FEATURES as $key => $meta) {
             $out[$key] = array_key_exists($key, $stored) ? (bool) $stored[$key] : true;
@@ -212,11 +221,14 @@ final class FeatureFlagController extends Controller
      *
      * @return list<string>
      */
-    public static function hiddenHashesFor(?int $agencyId): array
+    /** Features that are KiddieTrac's own tools, never an agency's: a superadmin always has them (2026-10-25). */
+    public const PLATFORM_WIDE = ['mrr_dashboard'];
+
+    public static function hiddenHashesFor(?int $agencyId, bool $platformAdmin = false): array
     {
         $hidden = [];
         foreach (self::effectiveFor($agencyId) as $key => $on) {
-            if ($on) {
+            if ($on || ($platformAdmin && in_array($key, self::PLATFORM_WIDE, true))) {
                 continue;
             }
             foreach (self::FEATURES[$key]['hashes'] ?? [] as $h) {
@@ -260,6 +272,8 @@ final class FeatureFlagController extends Controller
             'billing_status'    => $agency->billing_status ?? 'trial',
             'billing_starts_at' => $agency->billing_starts_at ?? null,
             'flags'         => $effective,   // effective {feature: bool}
+            'region'        => \App\Support\PlatformRegion::forAgency((int) $agency->id),
+            'included'      => \App\Support\PlatformRegion::included($effective),
             'feature_flags' => $rawFlags,    // raw {feature: bool} (only explicit ones)
             'catalog'       => self::FEATURES,
             'branding'      => [
@@ -423,7 +437,7 @@ final class FeatureFlagController extends Controller
                     $update['cancelled_at'] = now();
                 }
                 if ($data['billing_status'] === 'active' && empty($agency->billing_starts_at)) {
-                    $update['billing_starts_at'] = now()->toDateString();
+                    $update['billing_starts_at'] = \App\Support\AgencyTime::today();
                 }
             }
         } else {
@@ -484,11 +498,17 @@ final class FeatureFlagController extends Controller
         // Audit trail (if audit_logs table exists)
         try {
             \App\Support\Audit::write([
-                'user_id'    => $user->id,
-                'centre_id'  => null,
-                'event'      => 'agency_settings_updated',
-                'data'       => json_encode(['agency_id' => $id, 'changes' => array_keys($update), 'by_role' => $isPlatform ? 'platform_admin' : 'agency_admin']),
-                'created_at' => now(),
+                'user_id'     => $user->id,
+                'agency_id'   => (int) $id,
+                'action'      => 'agency.settings_updated',
+                'entity_type' => 'agency',
+                'entity_id'   => (int) $id,
+                'payload'     => json_encode([
+                    'changes' => array_keys($update),
+                    'by_role' => $isPlatform ? 'platform_admin' : 'agency_admin',
+                    'summary' => 'Changed agency settings: ' . implode(', ', array_map(fn ($k) => str_replace('_', ' ', $k), array_keys($update))),
+                ]),
+                'created_at'  => now(),
             ]);
         } catch (\Throwable $e) { /* audit is best-effort */ }
 

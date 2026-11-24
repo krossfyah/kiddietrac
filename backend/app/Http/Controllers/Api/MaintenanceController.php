@@ -155,7 +155,7 @@ class MaintenanceController extends Controller
         $start = $fmt($w->starts_at ?? null);
         $end = $fmt($w->ends_at ?? null);
         $when = $start ? ('<p><strong>When:</strong> ' . e($start) . ($end ? ' &ndash; ' . e($end) : '') . '</p>') : '';
-        $msg = ! empty($w->message) ? '<p style="background:#EEF1F8;border-left:3px solid #3BBBBE;padding:14px 16px;border-radius:6px;">' . nl2br(e($w->message)) . '</p>' : '';
+        $msg = ! empty($w->message) ? '<p style="background:#EEF1F8;--kt-edge:#3BBBBE;padding:14px 16px;border-radius:6px;">' . nl2br(e($w->message)) . '</p>' : '';
 
         // Render through the shared branded layout (official logo + privacy/terms
         // footer). Sends from the configured noreply address.

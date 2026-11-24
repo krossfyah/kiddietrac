@@ -394,3 +394,127 @@ everything.
 - Opt a wrapper out: `data-kt-keep-gutter`. Opt a deliberately wide block out: `data-kt-allow-overflow`
   (or put it in an `overflow-x:auto` scroller, as wide tables already are).
 - Debug: `KT.phoneGutter.report()`; switch off with `window.__ktNoPhoneGutter = true`.
+
+## Dates and "today" are the AGENCY's (2026-10-21)
+
+The server clock is UTC and must stay UTC (stored instants and kt-tz.js assume it); MariaDB's
+`NOW()`/`CURDATE()` run on the host's MST. So from 8pm Toronto, anything that asks the server
+or the browser for "today" in UTC gets TOMORROW (the Upcoming birthdays bug).
+
+**Server (PHP).** Every API request carries its agency's timezone (middleware
+`ResolveAgencyTimezone`, using AuditScope's rules). Never `now()->toDateString()`, `today()`,
+`Carbon::today()`, `date('Y-m-d')`, `now()->startOfDay()` or SQL `NOW()/CURDATE()` for a day.
+Use `App\Support\AgencyTime`:
+- `today()`: the agency's date `'Y-m-d'` (compare with DATE columns; default form values).
+- `todayDate()`: that date as a Carbon at 00:00 UTC, for date arithmetic
+  (`->addDays()`, `->startOfMonth()`, `->diffInDays($dueDate)`).
+- `boundaryUtc($agency, 'day'|'week'|'month', $offsetDays)`: the agency's midnight / week / month
+  start as a UTC instant, for comparing with stored instants (`occurred_at`, `created_at`).
+- `dayRange()` / `scopeDay()` / `spanRange()`: the half-open UTC bounds of an agency day/range.
+- `now()->format('g:i A')`, shown to people, is `AgencyTime::now()->format(...)`.
+With no agency id they use the request's agency; console jobs pass the agency they loop over.
+`php artisan kt:tz-check` fails on any new UTC "today". Add `// tz-ok: why` only where UTC is
+the point (a stored instant, a dedupe key).
+
+**Browser (JS).** `new Date().toISOString().slice(0, 10)` is the UTC date: use
+`KT.agencyToday()`. Step dates in whole UTC days from a `'YYYY-MM-DDT00:00:00Z'` anchor, and show
+date-only values with `KT.dayLabel()`.
+
+## Subtabs re-render the tab body, never the screen (2026-10-21)
+
+A screen's banner (`.kt-hero`, a screen's own `.kt-page-hero`, `[data-kt-hero]`) and its tab
+strip are drawn ONCE per screen visit. A subtab click renders into the tab's own body element
+(`pane.innerHTML = …` / `Dom.clear(pane)`), never `main.innerHTML = …`, and never re-runs the
+whole screen's render unless that render draws the banner again. The shell only guarantees a
+banner for ~9s after a navigation; in-place re-renders after that are on the screen.
+- Safety net, not a licence: `kt-banner-normalize.js` `keepHero()` puts the same page-level banner
+  back (same render generation + address only, rate-capped, before paint) if an in-place
+  re-render leaves the page with none, and steps aside if the screen draws its own again. Opt
+  out with `data-kt-hero-off` anywhere in the screen.
+- Hash subtabs (`#screen/tab`) go through `renderScreen`; putting back a missing banner there is
+  rate-capped (3 in 2s), not charged to the per-screen normalising budget.
+- Test a tabbed screen AFTER the 9s window: open it, wait 10s, then click every tab and check the
+  banner is still first under the top bar, once.
+
+## Every popup can be closed with ✕ or Escape (2026-10-21)
+
+Anthony: "all popup windows should have an X to close where appropriate". `kt-modal-guard.js`
+does this for every dialog without the screen opting in — do not hand-roll a second ✕.
+- It adds a ✕ (top-right, sticky so it stays visible while the card scrolls) to any full-screen
+  overlay whose card has no ✕/×, `aria-label="Close"` or `.modal-close` of its own. A bottom
+  "Cancel" does not count as a ✕; the guard's ✕ presses that Cancel/Close, so your clean-up runs.
+- Escape closes the dialog on top; a click on the backdrop closes it only when it has no fields.
+- Popups inside `#appMain` are found too (inline `position:fixed`), not only ones on `<body>`.
+- **Mandatory steps must opt out** with `data-kt-no-close` (or `data-kt-keep-open`) on the overlay:
+  gates, required wizards, anything the user must answer. Already excluded by id: `#kt-mfa-gate`,
+  `#kt-agree`, `#kt-bio-lock`, `#kt-session-warning`, `#kt-onboarding-overlay`,
+  `#kt-onboarding-catchup`, `#kt-urgent`, `#kt-upd`, `#kt-splash`. `KT.confirm`/`KT.prompt`
+  (marked by `[data-action="cancel"]`) get Escape but no ✕.
+- `data-no-modal-guard` keeps your own layout (no size cap, no z-index lift) and only gets a ✕
+  when its sole way out is a plain Cancel/Close button.
+
+## One banner per screen: the shell decides (2026-10-21)
+
+Security alerts showed two hero banners after a background refresh. A screen gets exactly one banner:
+- its own `.kt-hero`;
+- or a `.kt-page-hero` that LEADS the page (first content slots, top few levels; a `.kt-page-hero` deeper in is a section header);
+- or, if it has neither, the shell's automatic `.kt-hero-auto`.
+
+`ownBanner()` in app-v2-shell.js is the only definition. Both the insert check and `normaliseBanners()` use it. Never write a second "does this screen have a banner" test: two tests that disagree make the shell add and remove its banner on every tick, burn the per-screen budget, and leave two banners once it runs out.
+
+`enforceOneBanner()` runs on every pass outside the budget and removes only banners the shell made. A screen that redraws itself after the shell's watch ends can call `KT.Shell.enforceOneBanner()`.
+
+Opting out of the automatic banner is `data-kt-no-autohero`, never a decoy `.kt-hero`.
+
+## A section's content box is `.kt-section` (2026-10-21)
+
+The Reseller section was narrower than everything else: a private `max-width:1500px;margin:0 auto`
+column, and banners wider than the content under them. Every section screen puts its content in
+ONE wrapper, `<div class="kt-section">` (kt-consistency-polish.css: 24px padding, max-width
+1800px, left-aligned: 44px from the edge of `#appMain` on desktop, the shell's 10px on phones via
+kt-phone-gutter.js). Its own banner goes inside it as the first child.
+- Never give a screen its own page `max-width`, centring or page padding. Cards and grids inside
+  the section are yours.
+- A screen that relies on the shell's automatic banner needs nothing else: `alignAutoHero()` lines
+  the banner and its action bar up with your content box.
+
+## Phone traps found on Educator points (2026-11-02)
+
+- **A coloured card must not start from `background:#fff`.** kt-mobile-tint.css matches an inline
+  `background:#fff;` on a phone and repaints it with a pale tint (`!important`), even when a later
+  `background:linear-gradient(...)` in the same style overrides it on desktop. White text on that card
+  then disappears (My points' navy total card). Give a dark/gradient card its own style string.
+- **A sentence of fields is not a filter bar.** kt-phone-gutter.js marks any flex row with 2+ selects/
+  text boxes as `data-kt-filterbar` and stretches each box to the full width on a phone ("day [1] at
+  [9:00]", "$ [0] per [100] points" became full-width boxes with orphaned words). Opt out with
+  `data-kt-nofb` on the row (kt-field-fit's packBar has its own `data-kt-nopack`).
+- **No `grid-column` on an element kt-row-actions turns into a card ⋮.** It positions the action bar
+  `absolute` in the row's right gutter, but an absolute child of a grid WITH a grid-column is placed
+  inside that grid area instead, so the ⋮ covered the row's last column (Agency overview points totals).
+- **A radio/checkbox beside long text in a flex label needs `flex:0 0 auto` and a size**, or flexbox
+  shrinks it (8-13px wide) and each option's text starts at a different x.
+
+## Spell check is decided in one place: kt-spellcheck.js (2026-11-02)
+
+- **Never write `spellcheck`, `autocorrect` or `autocapitalize` on a field by hand.** kt-spellcheck.js
+  watches document.body (popups and lazily loaded screens included) and sets them by field type:
+  textareas, contenteditable and short free-text boxes ON; names, usernames, emails, phones, numbers,
+  dates, codes/IDs, URLs, addresses, search/filter boxes OFF. A `spellcheck` attribute written in the
+  markup is respected, so a hand-written `spellcheck="false"` silently turns the speller off.
+- **Opt a field (or a whole container) out with `data-kt-nospell`**; force it on with
+  `data-kt-spellcheck="on"`.
+- On a phone `spellcheck=false` also removes the keyboard's suggestion strip and autocorrect, so an
+  OFF decision on a prose box costs more than the red underline.
+
+## A new record type needs a search source (2026-11-02)
+
+- **A new record type needs a search source.** The global search (⌘K palette, sidebar widget, phone
+  launcher -> `GET /admin/search`) finds only what `App\Support\SearchRegistry::SOURCES` lists. Adding a
+  type is one registry entry (label, icon, tables, scope, link) plus one `SearchController::src<Key>()`
+  method that applies the active-agency + CentreScope rule. The three boxes draw groups from the
+  response's `groups`, so nothing is added on the front end.
+- If a type should NOT be searchable, give it a reason in `NOT_SEARCHABLE` (or `KNOWN_GAPS` if it should
+  be, later). `php artisan kt:search-coverage` runs nightly and fails, emailing the platform admins, when
+  a main record type or a NEW table has neither.
+- A result opens its screen through the HASH (so kt-screen-loader runs), never by calling a lazy
+  screen's function directly. Show the record's number / RefCode, never a raw id.

@@ -69,7 +69,119 @@
           + '</div>'
           + '<div style="margin-top:14px;display:flex;gap:14px;flex-wrap:wrap">'
           + '<a href="https://www.kiddietrac.com" target="_blank" rel="noopener" style="font-size:13px;color:' + TEAL + ';font-weight:700;text-decoration:none">Open marketing site ↗</a>'
-          + '<a href="https://www.kiddietrac.com/sitemap.xml" target="_blank" rel="noopener" style="font-size:13px;color:' + TEAL + ';font-weight:700;text-decoration:none">View sitemap ↗</a></div>');
+          + '<a href="https://www.kiddietrac.com/sitemap.xml" target="_blank" rel="noopener" style="font-size:13px;color:' + TEAL + ';font-weight:700;text-decoration:none">View sitemap ↗</a></div>')
+      + overviewCharts(a);
+  }
+
+  /* OVERVIEW CHARTS (2026-10-23, Anthony: "website section add some graphs and or charts
+     under overview"). Plain SVG, no library: visits and leads over 30 days, where visitors
+     are, the most-read pages, where leads come from, and 8 weeks of subscribers, website
+     chats and meeting requests. From /platform/marketing-site/analytics. */
+  var PALETTE = ['#2563EB', '#16A34A', '#F59E0B', '#DB2777', '#7C3AED', '#0891B2', '#94A3B8'];
+  function chartCard(title, sub, inner) {
+    return '<div style="background:#fff;border:1px solid #E5E7EB;border-radius:14px;padding:16px 18px;min-width:0">'
+      + '<div style="font-size:14.5px;font-weight:800;color:#0a1e2c">' + esc(title) + '</div>'
+      + (sub ? '<div style="font-size:12px;color:#64748B;margin:2px 0 8px">' + esc(sub) + '</div>' : '<div style="height:8px"></div>') + inner + '</div>';
+  }
+  function legend(items) {
+    return '<div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:#475569;margin-top:6px">' + items.map(function (x) {
+      return '<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:' + x[1] + '"></span>' + esc(x[0]) + '</span>';
+    }).join('') + '</div>';
+  }
+  function niceMax(v) { return Math.max(2, Math.ceil(v / 2) * 2); }
+  function shortDate(iso) { var d = new Date(iso + 'T12:00:00'); return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+
+  // Visits as a filled line, leads as bars, on two scales.
+  function visitsChart(series) {
+    if (!series || !series.length) return '<div style="color:#64748B;font-size:13px">No data yet.</div>';
+    var W = 640, H = 200, L = 30, R = 30, T = 14, B = 28, n = series.length;
+    var vmax = niceMax(Math.max.apply(null, series.map(function (x) { return x.views; }))), lmax = niceMax(Math.max.apply(null, series.map(function (x) { return x.leads || 0; })));
+    var x = function (i) { return L + (W - L - R) * (n === 1 ? 0.5 : i / (n - 1)); };
+    var yv = function (v) { return T + (H - T - B) * (1 - v / vmax); }, yl = function (v) { return T + (H - T - B) * (1 - v / lmax); };
+    var g = '';
+    for (var k = 0; k <= 2; k++) { var gy = T + (H - T - B) * k / 2; g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + gy + '" y2="' + gy + '" stroke="#EEF2F6"/><text x="4" y="' + (gy + 4) + '" font-size="10" fill="#2563EB">' + Math.round(vmax * (2 - k) / 2) + '</text><text x="' + (W - 4) + '" y="' + (gy + 4) + '" font-size="10" fill="#16A34A" text-anchor="end">' + Math.round(lmax * (2 - k) / 2) + '</text>'; }
+    var bw = Math.max(3, (W - L - R) / n * 0.5);
+    series.forEach(function (p, i) { if (p.leads) g += '<rect x="' + (x(i) - bw / 2) + '" y="' + yl(p.leads) + '" width="' + bw + '" height="' + (H - B - yl(p.leads)) + '" rx="2" fill="#16A34A" opacity=".85"><title>' + esc(p.date + ': ' + p.leads + ' lead(s)') + '</title></rect>'; });
+    var pts = series.map(function (p, i) { return x(i) + ',' + yv(p.views); }).join(' ');
+    g += '<polygon points="' + x(0) + ',' + (H - B) + ' ' + pts + ' ' + x(n - 1) + ',' + (H - B) + '" fill="#2563EB" opacity=".12"/>';
+    g += '<polyline points="' + pts + '" fill="none" stroke="#2563EB" stroke-width="2.2" stroke-linejoin="round"/>';
+    series.forEach(function (p, i) { g += '<circle cx="' + x(i) + '" cy="' + yv(p.views) + '" r="2.6" fill="#2563EB"><title>' + esc(p.date + ': ' + p.views + ' views') + '</title></circle>'; if (i % 5 === 0 || i === n - 1) g += '<text x="' + x(i) + '" y="' + (H - 8) + '" font-size="10" fill="#64748B" text-anchor="middle">' + esc(shortDate(p.date)) + '</text>'; });
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block" role="img" aria-label="Visits and leads, last 30 days">' + g + '</svg>'
+      + legend([['Page views', '#2563EB'], ['Leads', '#16A34A']]);
+  }
+
+  // A donut with its legend: [[label, value], ...]
+  function donut(items, centreLabel) {
+    items = (items || []).filter(function (x) { return x[1] > 0; });
+    var total = items.reduce(function (t, x) { return t + x[1]; }, 0);
+    if (!total) return '<div style="color:#64748B;font-size:13px">No data yet.</div>';
+    if (items.length > 6) { var rest = items.slice(5).reduce(function (t, x) { return t + x[1]; }, 0); items = items.slice(0, 5).concat([['Other', rest]]); }
+    var R = 52, r = 32, cx = 64, cy = 64, a0 = -Math.PI / 2, g = '';
+    items.forEach(function (it, i) {
+      var frac = it[1] / total, a1 = a0 + frac * Math.PI * 2, col = PALETTE[i % PALETTE.length];
+      if (frac >= 0.9999) { g += '<circle cx="' + cx + '" cy="' + cy + '" r="' + ((R + r) / 2) + '" fill="none" stroke="' + col + '" stroke-width="' + (R - r) + '"><title>' + esc(it[0] + ': ' + it[1]) + '</title></circle>'; }
+      else {
+        var big = frac > 0.5 ? 1 : 0, p = function (ang, rad) { return (cx + rad * Math.cos(ang)).toFixed(2) + ' ' + (cy + rad * Math.sin(ang)).toFixed(2); };
+        g += '<path d="M ' + p(a0, R) + ' A ' + R + ' ' + R + ' 0 ' + big + ' 1 ' + p(a1, R) + ' L ' + p(a1, r) + ' A ' + r + ' ' + r + ' 0 ' + big + ' 0 ' + p(a0, r) + ' Z" fill="' + col + '"><title>' + esc(it[0] + ': ' + it[1]) + '</title></path>';
+      }
+      a0 = a1;
+    });
+    g += '<text x="' + cx + '" y="' + (cy + 2) + '" text-anchor="middle" font-size="18" font-weight="800" fill="#0a1e2c">' + total + '</text><text x="' + cx + '" y="' + (cy + 16) + '" text-anchor="middle" font-size="9.5" fill="#64748B">' + esc(centreLabel || '') + '</text>';
+    return '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><svg viewBox="0 0 128 128" style="width:128px;height:128px;flex:0 0 auto">' + g + '</svg>'
+      + '<div style="flex:1;min-width:140px;font-size:12.5px;color:#334155;line-height:1.9">' + items.map(function (it, i) {
+        return '<div style="display:flex;gap:8px;align-items:center"><span style="width:10px;height:10px;border-radius:3px;background:' + PALETTE[i % PALETTE.length] + ';flex:0 0 auto"></span><span style="flex:1;min-width:0;overflow-wrap:anywhere">' + esc(it[0]) + '</span><b>' + it[1] + '</b><span style="color:#94A3B8;width:38px;text-align:right">' + Math.round(it[1] * 100 / total) + '%</span></div>';
+      }).join('') + '</div></div>';
+  }
+
+  // Horizontal bars: [[label, value], ...]
+  function hbars(items, color) {
+    if (!items || !items.length) return '<div style="color:#64748B;font-size:13px">No data yet.</div>';
+    var max = Math.max.apply(null, items.map(function (x) { return x[1]; })) || 1;
+    return items.map(function (x) {
+      return '<div style="display:flex;align-items:center;gap:10px;margin:5px 0;font-size:12.5px"><span style="flex:0 0 38%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155" title="' + esc(x[0]) + '">' + esc(x[0]) + '</span>'
+        + '<span style="flex:1;background:#F1F5F9;border-radius:6px;height:12px;overflow:hidden"><span style="display:block;height:100%;width:' + Math.max(2, Math.round(x[1] * 100 / max)) + '%;background:' + (color || '#2563EB') + ';border-radius:6px"></span></span>'
+        + '<b style="width:34px;text-align:right">' + x[1] + '</b></div>';
+    }).join('');
+  }
+
+  // Grouped weekly bars: [{week, subscribers, chats, meetings}]
+  function weeksChart(weeks) {
+    if (!weeks || !weeks.length) return '<div style="color:#64748B;font-size:13px">No data yet.</div>';
+    var keys = [['subscribers', 'New subscribers', '#2563EB'], ['chats', 'Website chats', '#F59E0B'], ['meetings', 'Meeting requests', '#16A34A']];
+    var W = 640, H = 190, L = 26, T = 14, B = 26, n = weeks.length, max = 1;
+    weeks.forEach(function (w) { keys.forEach(function (k) { max = Math.max(max, w[k[0]] || 0); }); });
+    max = niceMax(max);
+    var gw = (W - L - 10) / n, bw = Math.max(4, (gw - 10) / keys.length), g = '';
+    for (var k = 0; k <= 2; k++) { var gy = T + (H - T - B) * k / 2; g += '<line x1="' + L + '" x2="' + (W - 10) + '" y1="' + gy + '" y2="' + gy + '" stroke="#EEF2F6"/><text x="4" y="' + (gy + 4) + '" font-size="10" fill="#94A3B8">' + Math.round(max * (2 - k) / 2) + '</text>'; }
+    weeks.forEach(function (w, i) {
+      keys.forEach(function (kk, j) {
+        var v = w[kk[0]] || 0, h = (H - T - B) * v / max, xx = L + i * gw + 5 + j * bw;
+        g += '<rect x="' + xx + '" y="' + (H - B - h) + '" width="' + (bw - 2) + '" height="' + h + '" rx="2" fill="' + kk[2] + '"><title>' + esc(kk[1] + ': ' + v) + '</title></rect>';
+        if (v) g += '<text x="' + (xx + (bw - 2) / 2) + '" y="' + (H - B - h - 3) + '" font-size="10" fill="#475569" text-anchor="middle">' + v + '</text>';
+      });
+      g += '<text x="' + (L + i * gw + gw / 2) + '" y="' + (H - 8) + '" font-size="10" fill="#64748B" text-anchor="middle">' + esc(shortDate(w.week)) + '</text>';
+    });
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block" role="img" aria-label="Last 8 weeks">' + g + '</svg>' + legend(keys.map(function (k) { return [k[1], k[2]]; }));
+  }
+
+  var COUNTRY = { CA: 'Canada', US: 'United States', GB: 'United Kingdom', IE: 'Ireland', IN: 'India', AU: 'Australia', PH: 'Philippines', Other: 'Other', Unknown: 'Unknown' };
+  function overviewCharts(a) {
+    if (!a) return '';
+    var s30 = a.series_30d || [];
+    var v30 = s30.reduce(function (t, x) { return t + x.views; }, 0), l30 = s30.reduce(function (t, x) { return t + (x.leads || 0); }, 0);
+    var subs = a.subscribers || {}, meet = a.meetings || {};
+    var meetItems = [['Confirmed', meet.booked || 0], ['Waiting for a decision', meet.requested || 0], ['Declined', meet.declined || 0], ['Cancelled', meet.cancelled || 0]];
+    return '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:14px;margin-bottom:18px">'
+        + chartCard('Visits and leads — last 30 days', v30 + ' page views · ' + l30 + ' lead' + (l30 === 1 ? '' : 's'), visitsChart(s30))
+        + chartCard('Activity — last 8 weeks', 'New subscribers, website chats and meeting requests each week', weeksChart(a.weeks))
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px;margin-bottom:18px">'
+        + chartCard('Where visitors are', 'By visitor timezone', donut((a.top_countries || []).map(function (x) { return [COUNTRY[x.country] || x.country, x.views]; }), 'views'))
+        + chartCard('Where leads come from', 'All time', donut(Object.keys(a.lead_sources || {}).map(function (k) { return [k.replace(/-/g, ' '), a.lead_sources[k]]; }).sort(function (p, q) { return q[1] - p[1]; }), 'leads'))
+        + chartCard('Subscribers', (subs.active || 0) + ' subscribed', donut([['Subscribed', subs.active || 0], ['Unsubscribed', subs.unsubscribed || 0]], 'people'))
+        + chartCard('Meeting requests', 'From the website booking page', donut(meetItems, 'meetings'))
+      + '</div>'
+      + chartCard('Most-read pages', 'All time', hbars((a.top_paths || []).slice(0, 8).map(function (p) { return [p.path, p.views]; })));
   }
 
   function leadRowHtml(l) {
@@ -149,7 +261,7 @@
       + field('Badge text', 'ms_tag', c.announce_tag, 'NEW · 2026', '')
       + field('Message', 'ms_text', c.announce_text, 'What’s new…', '')
       + field('Button text', 'ms_cta', c.announce_cta_text, 'Start your free trial →', '')
-      + field('Button links to page', 'ms_page', c.announce_cta_page || 'contact', 'contact', 'e.g. contact, pricing, solutions, whitelabel, checklist')
+      + field('Button links to page', 'ms_page', c.announce_cta_page || 'contact', 'contact', 'e.g. contact, pricing, solutions, whitelabel — or get-app (each phone gets its own store), app-store, google-play')
       + saveBar('annMsg', 'annSave'));
   }
 
@@ -243,7 +355,6 @@
 
   var TABS = [
     { id: 'overview', label: 'Overview' }, { id: 'subscribers', label: 'Subscribers' },
-    { id: 'unsubscribed', label: 'Unsubscribed' },
     { id: 'chat', label: 'Chat' }, { id: 'content', label: 'Content' }, { id: 'seo', label: 'SEO' },
     { id: 'announce', label: 'Announcement' }, { id: 'analytics', label: 'Analytics' },
     { id: 'translations', label: 'Translations' }
@@ -254,8 +365,10 @@
       return '<button class="wsTab" data-tab="' + t.id + '" style="background:none;border:none;border-bottom:3px solid ' + (i === 0 ? TEAL : 'transparent') + ';color:' + (i === 0 ? TEAL : '#6b7280') + ';font-weight:700;font-size:14px;padding:10px 14px;cursor:pointer;white-space:nowrap">' + t.label + '</button>';
     }).join('');
     var panels = '<div class="wsPanel" data-panel="overview">' + tabOverview(c, a) + '</div>'
-      + '<div class="wsPanel" data-panel="subscribers" style="display:none"><div id="ws-subs">Loading…</div></div>'
-      + '<div class="wsPanel" data-panel="unsubscribed" style="display:none"><div id="ws-unsub">Loading…</div></div>'
+      // Subscribers: the numbers first, then Subscribed | Unsubscribed as sub-tabs (2026-10-23).
+      + '<div class="wsPanel" data-panel="subscribers" style="display:none"><div id="ws-substats"></div>'
+      +   '<div id="ws-subtabs" role="tablist" style="display:inline-flex;gap:4px;margin:0 0 12px"><button type="button" role="tab" aria-selected="true" data-sub-view="active">Subscribed</button><button type="button" role="tab" aria-selected="false" data-sub-view="unsubscribed">Unsubscribed</button></div>'
+      +   '<div id="ws-subs">Loading…</div><div id="ws-unsub" style="display:none">Loading…</div></div>'
       + '<div class="wsPanel" data-panel="chat" style="display:none">' + tabChats(chats, false) + '</div>'
       + '<div class="wsPanel" data-panel="content" style="display:none">' + tabContent(c) + '</div>'
       + '<div class="wsPanel" data-panel="seo" style="display:none">' + tabSeo(c) + '</div>'
@@ -263,7 +376,8 @@
       + '<div class="wsPanel" data-panel="analytics" style="display:none">' + tabAnalytics(c, a) + '</div>'
       + '<div class="wsPanel" data-panel="translations" style="display:none"><div id="ws-tr">Loading…</div></div>';
     return '<div style="max-width:900px;margin:0 auto;padding:24px">'
-      + '<p style="color:#6b7280;margin:-4px 0 18px;font-size:14px">Manage <b>www.kiddietrac.com</b> — subscribers, content, SEO, the announcement bar and analytics. Changes go live within about a minute.</p>'
+      // The banner above says what this is (2026-10-23); only the timing note stays.
+      + '<p style="color:#6b7280;margin:-4px 0 14px;font-size:12.5px">Changes go live on the site within about a minute.</p>'
       + '<div style="display:flex;gap:4px;border-bottom:1px solid #E5E7EB;margin-bottom:20px;overflow-x:auto">' + tabBtns + '</div>' + panels + '</div>';
   }
 
@@ -281,7 +395,8 @@
         'X-Active-Agency-Id': sessionStorage.getItem('kt_active_agency_id') || '',
       },
     }, opts || {})).then(function (r) {
-      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      // The server's own words ("The email field must be a valid email address."), never "HTTP 422".
+      if (!r.ok) { return r.json().catch(function () { return {}; }).then(function (j) { throw new Error((j && j.message) || 'That did not work. Please try again.'); }); }
       return r.json();
     });
   }
@@ -338,7 +453,31 @@
       + '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>';
   }
 
+  function subStats(container, act, unsub) {
+    var host = container.querySelector('#ws-substats');
+    if (!host) return;
+    var now = Date.now(), DAY = 864e5;
+    var when = function (r) { var t = Date.parse(String(r.subscribed_at || r.created_at || '').replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(r.subscribed_at || r.created_at || '')) ? '' : 'Z')); return isNaN(t) ? 0 : t; };
+    var new7 = act.filter(function (r) { return now - when(r) < 7 * DAY; }).length;
+    var new30 = act.filter(function (r) { return now - when(r) < 30 * DAY; }).length;
+    var welcomed = act.filter(function (r) { return r.lead_welcome_sent_at; }).length;
+    var out30 = unsub.filter(function (r) { var t = Date.parse(String(r.unsubscribed_at || '').replace(' ', 'T') + 'Z'); return !isNaN(t) && now - t < 30 * DAY; }).length;
+    var src = {}; act.forEach(function (r) { var k = (r.source || 'unknown').replace(/-/g, ' '); src[k] = (src[k] || 0) + 1; });
+    var topSrc = Object.keys(src).sort(function (p, q) { return src[q] - src[p]; })[0];
+    var total = act.length + unsub.length;
+    host.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'
+      + stat('Subscribed', act.length, total ? Math.round(act.length * 100 / total) + '% of everyone who signed up' : '', '#16a34a')
+      + stat('New this week', new7, new30 + ' in the last 30 days', TEAL)
+      + stat('Unsubscribed', unsub.length, out30 + ' in the last 30 days', unsub.length ? '#B45309' : '#16a34a')
+      + stat('Welcome email sent', act.length ? Math.round(welcomed * 100 / act.length) + '%' : '—', welcomed + ' of ' + act.length + ' subscribed', TEAL)
+      + stat('Top source', topSrc ? topSrc : '—', topSrc ? src[topSrc] + ' subscriber' + (src[topSrc] === 1 ? '' : 's') : '', '#0a1e2c')
+      + '</div>';
+    var tabs = container.querySelectorAll('#ws-subtabs [data-sub-view]');
+    tabs.forEach(function (b) { b.textContent = (b.getAttribute('data-sub-view') === 'active' ? 'Subscribed ' : 'Unsubscribed ') + (b.getAttribute('data-sub-view') === 'active' ? act.length : unsub.length); });
+  }
+
   function loadSubs(container) {
+    var got = {};
     ['active', 'unsubscribed'].forEach(function (mode) {
       var host = container.querySelector(mode === 'active' ? '#ws-subs' : '#ws-unsub');
       if (!host) { return; }
@@ -350,10 +489,14 @@
               + '<div style="font-size:13px;color:#6b7280;">People who signed up on the public site. '
               + 'Unsubscribing keeps the record and stamps the time — it never deletes the person.</div>'
               + '<button id="ws-sub-add" class="kt-btn kt-btn-ghost" style="white-space:nowrap;">+ Add subscriber</button></div>'
-            : '<div style="font-size:13px;color:#6b7280;margin:0 0 10px;">Everyone who has opted out, and when. '
-              + 'They stay suppressed from marketing email until re-subscribed.</div>';
+            : '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 10px;">'
+              + '<div style="font-size:13px;color:#6b7280;">Everyone who has opted out, and when. '
+              + 'They stay suppressed from marketing email until re-subscribed.</div>'
+              + '<button id="ws-unsub-add" class="kt-btn kt-btn-ghost" style="white-space:nowrap;">+ Add to unsubscribed</button></div>';
           host.innerHTML = head + subsTable(rows, mode);
           wireSubActions(container, host);
+          got[mode] = rows;
+          if (got.active && got.unsubscribed) subStats(container, got.active, got.unsubscribed);
         })
         .catch(function (e) {
           host.innerHTML = '<div style="color:#b91c1c;padding:14px;">Could not load subscribers: ' + esc(e.message || 'error') + '</div>';
@@ -398,10 +541,47 @@
         }
       });
     }
+
+    /* ADD SOMEONE TO THE UNSUBSCRIBED LIST BY HAND (2026-11-09) — asked by phone or email, or never to be mailed.
+       A current subscriber is unsubscribed in place; a new address goes straight onto this list. */
+    var addUn = host.querySelector('#ws-unsub-add');
+    if (addUn) {
+      addUn.addEventListener('click', async function () {
+        var v = await KT.prompt({ title: 'Add to unsubscribed', description: 'This address will never get marketing email until it is re-subscribed.', okLabel: 'Add to unsubscribed',
+          fields: [
+            { key: 'email', label: 'Email', type: 'email', placeholder: 'name@example.com' },
+            { key: 'name', label: 'Name (optional)', placeholder: 'Their name' },
+            { key: 'note', label: 'Reason (optional)', placeholder: 'e.g. Asked by phone' },
+            { key: 'notify', label: 'Email them a confirmation?', type: 'select', value: '0', options: [{ value: '0', label: 'No' }, { value: '1', label: 'Yes, confirm they are unsubscribed' }] },
+          ] });
+        if (!v) { return; }
+        var email = String(v.email || '').trim();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+          if (window.KT && KT.Dom && KT.Dom.toast) { KT.Dom.toast('Enter a full email address.', 'error'); }
+          return;
+        }
+        try {
+          var r = await subsApi('/platform/site-subscribers/suppress', { method: 'POST',
+            body: JSON.stringify({ email: email, name: String(v.name || '').trim() || null, note: String(v.note || '').trim() || null, notify: v.notify === '1' }) });
+          if (window.KT && KT.Dom && KT.Dom.toast) { KT.Dom.toast(r && r.already ? email + ' was already unsubscribed.' : email + ' is now unsubscribed.', 'success'); }
+          loadSubs(container);
+        } catch (e) {
+          if (window.KT && KT.Dom && KT.Dom.toast) { KT.Dom.toast(e.message || 'Could not add', 'error'); }
+        }
+      });
+    }
   }
 
   function wire(container, leads) {
     loadSubs(container);
+    container.querySelectorAll('#ws-subtabs [data-sub-view]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var v = b.getAttribute('data-sub-view');
+        container.querySelectorAll('#ws-subtabs [data-sub-view]').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+        container.querySelector('#ws-subs').style.display = v === 'active' ? '' : 'none';
+        container.querySelector('#ws-unsub').style.display = v === 'active' ? 'none' : '';
+      });
+    });
     container.querySelectorAll('.wsTab').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var id = btn.getAttribute('data-tab');

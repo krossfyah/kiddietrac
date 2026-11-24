@@ -43,6 +43,27 @@
       + '<button id="kt-imp-exit" style="flex:0 0 auto;background:#fff;color:#7c2d12;border:0;border-radius:999px;padding:5px 13px;font-weight:800;font-size:12px;cursor:pointer;">Exit</button>';
     document.body.appendChild(bar);
     bar.querySelector('#kt-imp-exit').onclick = stop;
+    placeBanner();
+  }
+
+  /* AT THE VERY TOP OF THE HEADER (2026-11-04, Anthony: "for impersonation add the viewing as, agency selector at the
+     very top and above the kiddietrac top bar" - impersonating an educator, a parent, etc). Those people get the
+     one-bar header (#appSidebar as a wrapping row): the pill goes in as its first line, in the flow, instead of
+     floating over the bar's middle. kt-parent-chrome.js adds the line break after it. Admin / director layouts keep the
+     floating pill. The role class lands after this script, so it is retried for a few seconds. */
+  var HEADER_ROLES = /\brole-(guardian|educator|home-visitor|sales-rep)\b/;
+  function placeBanner(tries) {
+    var bar = document.getElementById('kt-imp-bar'), sb = document.getElementById('appSidebar');
+    if (!bar) return;
+    if (sb && HEADER_ROLES.test(document.body.className)) {
+      if (bar.parentNode !== sb) sb.insertBefore(bar, sb.firstChild);
+      bar.style.position = 'static'; bar.style.transform = 'none'; bar.style.left = 'auto'; bar.style.top = 'auto';
+      bar.style.order = '-5'; bar.style.margin = '0 8px 6px 0'; bar.style.boxShadow = 'none'; bar.style.alignSelf = 'center';
+      bar.style.flex = '0 1 auto';
+      return;
+    }
+    tries = (tries || 0) + 1;
+    if (tries < 20) setTimeout(function () { placeBanner(tries); }, 500);
   }
 
   // ── launcher (platform admin, not impersonating) ────────────────────
@@ -100,8 +121,8 @@
   function openPicker() {
     if (document.getElementById('kt-imp-modal')) return;
     var ov = document.createElement('div'); ov.id = 'kt-imp-modal';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483550;background:rgba(8,17,33,.55);display:flex;align-items:flex-start;justify-content:center;padding:5vh 12px;font-family:system-ui,-apple-system,sans-serif;';
-    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.6);">'
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483550;background:rgba(8,17,33,.55);display:flex;align-items:flex-start;justify-content:center;padding:max(5vh, calc(var(--kt-safe-top, env(safe-area-inset-top, 0px)) + 12px)) 12px max(5vh, calc(var(--kt-safe-bottom, env(safe-area-inset-bottom, 0px)) + 12px));box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;max-height:min(88vh,100%);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.6);">'
       + '<div style="padding:16px 18px 10px;flex:0 0 auto;">'
       + '<div style="display:flex;justify-content:space-between;align-items:center;"><div style="font-weight:800;font-size:16px;color:#0f172a;">👁 View as…</div><button id="kt-imp-x" style="background:none;border:0;font-size:22px;color:#64748B;cursor:pointer;line-height:1;">×</button></div>'
       + '<input id="kt-imp-q" placeholder="Search by name or email…" autocomplete="off" style="width:100%;margin-top:10px;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px;box-sizing:border-box;">'

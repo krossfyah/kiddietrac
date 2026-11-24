@@ -40,7 +40,7 @@ class DocumentTemplateController extends Controller
 
     private function assertAdmin(Request $request): void
     {
-        $ok = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
+        $ok = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $request->user()->id)->where('active', 1)
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])->exists();
         abort_unless($ok, 403, 'Administrator access required.');
     }
@@ -281,7 +281,7 @@ class DocumentTemplateController extends Controller
         $base = [
             'agency_name' => $agency ?: 'Your Agency',
             'agency_logo' => '',
-            'generated_at' => now()->format('M j, Y g:i A'),
+            'generated_at' => \App\Support\AgencyTime::now()->format('M j, Y g:i A'),
         ];
 
         if ($kind === 'invoice') {

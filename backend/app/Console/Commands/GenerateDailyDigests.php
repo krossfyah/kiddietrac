@@ -21,16 +21,18 @@ class GenerateDailyDigests extends Command
 {
     protected $signature = 'kiddietrac:generate-digests
                             {--centre= : Generate for one centre only}
-                            {--date= : Override the date (YYYY-MM-DD)}';
+                            {--date= : Override the date (YYYY-MM-DD)}
+                            {--no-notify : Build the digests only; do not push parents (they get the daily summary)}';
 
     protected $description = 'Generate AI daily digests for all enrolled children';
 
     public function handle(AiDigestService $service): int
     {
-        $date = $this->option('date') ?: today()->toDateString();
+        $date = $this->option('date') ?: \App\Support\AgencyTime::today();
         $centreId = $this->option('centre');
 
-        $centres = Centre::where('status', 'active')
+        // Onboarding centres run real days too (the status page lists them); only active-only left them out (2026-10-30).
+        $centres = Centre::whereIn('status', ['active', 'onboarding'])
             ->when($centreId, fn($q) => $q->where('id', $centreId))
             ->get();
 
@@ -39,6 +41,9 @@ class GenerateDailyDigests extends Command
 
         foreach ($centres as $centre) {
             $this->info("Processing {$centre->name}...");
+            /* Name the agency for the AI gate and the meter (2026-11-24): with no agency named, a console AI call
+               passed AiConfig::offFor, so test agencies' digests used AI despite being switched off. */
+            \App\Support\UsageMeter::forAgency((int) $centre->agency_id ?: null);
             $stats = $service->generateForCentre($centre->id, $date);
             $this->info("  Generated: {$stats['generated']}, Skipped: {$stats['skipped']}, Failed: {$stats['failed']}");
 
@@ -47,7 +52,8 @@ class GenerateDailyDigests extends Command
             $totals['failed'] += $stats['failed'];
         }
 
-        $elapsed = now()->diffInSeconds($started);
+        \App\Support\UsageMeter::forAgency(null);   // never leak the last centre's agency into the next command
+        $elapsed = (int) round($started->diffInSeconds(now(), true));
         $this->line('');
         $this->info("──────────────────────────────────────");
         $this->info("Digest generation complete in {$elapsed}s");
@@ -56,8 +62,11 @@ class GenerateDailyDigests extends Command
             [[$totals['generated'], $totals['skipped'], $totals['failed']]]
         );
 
-        // Trigger push notifications to parents
-        \App\Jobs\NotifyParentsOfDigests::dispatch($date);
+        // Trigger push notifications to parents - not when scheduled: parents already get the daily summary after
+        // check-out, and Anthony chose "build digests, no parent push" (2026-10-30).
+        if (! $this->option('no-notify')) {
+            \App\Jobs\NotifyParentsOfDigests::dispatch($date);
+        }
 
         return $totals['failed'] > 0 ? 1 : 0;
     }

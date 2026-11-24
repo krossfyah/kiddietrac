@@ -58,7 +58,7 @@ class TestDailyDigest extends Command
 
         // ─── Step 2: Pick the child ────────────────────────────────
         $this->info('Step 2/6: Find a test child');
-        $date = $this->option('date') ?: today()->toDateString();
+        $date = $this->option('date') ?: \App\Support\AgencyTime::today();
         $childId = $this->option('child');
 
         if ($childId) {

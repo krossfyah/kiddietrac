@@ -252,7 +252,7 @@
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>🎯 ${esc(fw.short)} gap detection</h2>
-        <p>Children with few observations in an area of ${esc(fw.name)}. Most gaps first — those need attention. (Fewer than 2 observations is a gap; 5 or more is strong.)</p>
+        <p>Children with few observations in an area of ${esc(fw.name)}. Most gaps first — those need attention. (Fewer than 2 observations is a gap; 5 or more is strong.) 📋 counts the planned activities tagged with that area in the child's room.</p>
       </div>
       <div class="kt-card">
         <table>
@@ -262,7 +262,11 @@
               const d = (r.domains || []).find(x => (x.key || x.domain) === key);
               if (!d) return '';
               const colour = d.status === 'gap' ? '#EF4444' : d.status === 'moderate' ? '#F59E0B' : '#10B981';
-              return `<span class="kt-pill" style="background:${colour}22;color:${colour};">${d.count}</span>`;
+              /* Planned activities tagged with this area in the child's room (2026-11-03, curriculum library):
+                 published weeks, then drafts. The colour stays about what was OBSERVED. */
+              const pl = (d.planned || 0), pd = (d.planned_draft || 0);
+              const plan = (pl || pd) ? `<div style="font-size:11px;color:#475569;margin-top:3px;white-space:nowrap;" title="Planned activities in this area for the child's room (last 8 weeks and next 4)">📋 ${pl} planned${pd ? ` · ${pd} draft` : ''}</div>` : '';
+              return `<span class="kt-pill" style="background:${colour}22;color:${colour};" title="Observations">${d.count}</span>${plan}`;
             };
             return `<tr>
               <td><strong>${esc(r.first_name)} ${esc(r.last_name)}</strong></td>
@@ -349,17 +353,28 @@
   }
 
   // ============================ Curriculum library ============================
+  /* #curriculum (2026-11-03): the Ontario curriculum library (screen-curriculum-library.js). The
+     one-activity templates below are its "Activity ideas" tab. */
   async function renderCurriculum(main) {
+    if (window.KT && KT.CurriculumLibrary && KT.CurriculumLibrary.render) { return KT.CurriculumLibrary.render(main); }
+    return renderCurriculumIdeas(main);
+  }
+  async function renderCurriculumIdeas(main) {
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div style="padding:24px;">Loading library…</div>';
     const r = await Api.get('/curriculum').catch(() => ({ data: [] }));
     const rows = r.data || [];
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+    const inTab = !!(main.closest && main.closest('.kcl'));   // the Curriculum library's "Activity ideas" tab (2026-11-03)
+    main.innerHTML = (inTab ? `<div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 14px;">
+        <p style="margin:0;color:#64748B;font-size:13px;">Single activities shared across your agency. Use one to add it to a weekly lesson plan.</p>
+        <button class="kt-btn kt-btn-ghost" id="cl-new" data-kt-inpage>+ New template</button>
+      </div>` : `<div style="padding:24px;max-width:1800px;margin:0 auto;">
       <div class="kt-page-hero">
         <h2>📚 Curriculum library</h2>
         <p>Shared lesson plans across your agency. Click "Use" to copy a template into your centre.</p>
         <div class="kt-hero-actions"><button class="kt-btn kt-btn-ghost" id="cl-new">+ New template</button></div>
-      </div>
+      </div>`) + `
       <div data-kt-list="1" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;">
         ${rows.map(t => `<div class="kt-card">
           <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;">
@@ -367,7 +382,7 @@
               <h3 style="margin:0;color:#0F172A;font-size:16px;font-weight:700;">${esc(t.title)}</h3>
               <div style="color:#475569;font-size:12px;margin-top:4px;">${esc(t.author_name || '')}</div>
             </div>
-            ${t.is_featured ? '<span class="kt-pill kt-pill-warning">⭐ Featured</span>' : ''}
+            ${t.is_featured ? '<span class="kt-pill kt-pill-warning" style="white-space:nowrap;flex-shrink:0;">⭐ Featured</span>' : ''}
           </div>
           <div style="margin:14px 0;font-size:13px;color:#475569;line-height:1.5;">${esc((t.description || '').substring(0, 180))}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">
@@ -382,7 +397,7 @@
         </div>`).join('') || '<div class="kt-card" style="grid-column:1/-1;text-align:center;color:#64748B;padding:60px;">No curriculum templates yet.</div>'}
       </div>
     </div>`;
-    document.getElementById('cl-new').onclick = () => openCurriculumModal();
+    document.getElementById('cl-new').onclick = () => openCurriculumModal(main);
     // "Use template" now actually adds the template's activities to a real weekly
     // lesson plan (pick room/centre + week + day), so it shows up under Lesson
     // plans — instead of only bumping a counter.
@@ -492,7 +507,7 @@
       }
     };
   }
-  function openCurriculumModal() {
+  function openCurriculumModal(host) {
     const m = document.createElement('div');
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
     m.innerHTML = `<div style="background:#fff;padding:28px;border-radius:14px;max-width:560px;width:92%;max-height:88vh;overflow:auto;">
@@ -538,7 +553,7 @@
         visibility: m.querySelector('#cu-vis').value,
       });
       m.remove();
-      renderCurriculum(document.querySelector('main'));
+      renderCurriculumIdeas(host && host.isConnected ? host : document.querySelector('main'));
     };
   }
 
@@ -673,6 +688,6 @@
   window.KT = KT;
   window.KT.V22p57 = {
     renderPickupAuth, renderCheckin, renderTrends, renderHdlhGaps,
-    renderDrip, renderCurriculum, renderAch, renderReferrals,
+    renderDrip, renderCurriculum, renderCurriculumIdeas, renderAch, renderReferrals,
   };
 })(window);

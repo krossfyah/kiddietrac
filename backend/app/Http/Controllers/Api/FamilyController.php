@@ -173,6 +173,20 @@ final class FamilyController extends Controller
 
         $this->authorizeFamily($request->user(), $family);
 
+        /* Only the director of the family's centre, or an admin of its agency (2026-11-05 leak sweep):
+           authorizeFamily says yes to the family's own parent and to any staff role at the centre, so a parent who
+           directs another centre, or a director elsewhere who teaches here, could add guardians to this family. */
+        $famAgency = (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id');
+        $callerRoles = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+            ->get(['role', 'agency_id', 'centre_id']);
+        $runsCentre = $famAgency > 0 && ($callerRoles->contains(fn ($r) => $r->role === 'platform_admin')
+            ? (int) $this->resolveAgencyId($request) === $famAgency
+            : $callerRoles->contains(fn ($r) => ($r->role === 'agency_admin' && (int) $r->agency_id === $famAgency)
+                || ($r->role === 'centre_director' && (int) $r->centre_id === (int) $family->centre_id)));
+        if (! $runsCentre) {
+            return response()->json(['message' => 'Only the director of this family\'s centre or an agency admin can add a guardian.'], 403);
+        }
+
         $data = $request->validate([
             'email' => ['required', 'email', 'max:180'],
             'first_name' => ['required', 'string', 'max:80'],
@@ -191,6 +205,11 @@ final class FamilyController extends Controller
 
         if ($existingUser) {
             $userId = (int) $existingUser->id;
+            /* Never yourself (2026-11-05 leak sweep): inviting your own email made you a guardian of the family,
+               with its children, invoices and messages. */
+            if ($userId === (int) $request->user()->id) {
+                return response()->json(['message' => 'You cannot add yourself as a guardian of a family.'], 422);
+            }
         } else {
             $isNewUser = true;
             $tempPassword = Str::random(12);
@@ -350,14 +369,11 @@ final class FamilyController extends Controller
         $centres = empty($centreIds) ? collect() : DB::table('centres')->whereIn('id', $centreIds)->get()->keyBy('id');
         $agencyIds = $centres->pluck('agency_id')->filter()->unique()->values()->all();
         $agencies = empty($agencyIds) ? collect() : DB::table('agencies')->whereIn('id', $agencyIds)->get()->keyBy('id');
-        $educatorsByRoom = empty($roomIds) ? collect() : DB::table('educator_rooms as er')
-            ->join('users as u', 'u.id', '=', 'er.user_id')
-            ->whereIn('er.room_id', $roomIds)
-            ->whereNull('u.deleted_at')
-            ->orderBy('u.first_name')
-            ->select('er.room_id', 'u.first_name', 'u.last_name', 'u.preferred_name', 'u.photo_url')
-            ->get()
-            ->groupBy('room_id');
+        /* The home's own team only (App\Support\CentreTeam::forRooms, 2026-10-21): reading
+           educator_rooms directly showed families the agency's office account and both
+           home-visitor accounts as "your educators" in every iLearn home. */
+        $educatorsByRoom = collect(\App\Support\CentreTeam::forRooms($roomIds))
+            ->map(fn ($members) => collect(array_values($members))->map(fn ($m) => (object) $m));
 
         return $children->map(function ($c) use ($enrollments, $checkEvents, $centres, $agencies, $educatorsByRoom) {
             $enrollment = $enrollments[$c->id] ?? null;

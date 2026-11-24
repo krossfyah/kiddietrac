@@ -48,6 +48,21 @@ final class AttendancePatternController extends Controller
         foreach (self::DAYS as $d) {
             $data[$d] = $this->normaliseRotation($request->input($d));
         }
+        /* The room must be at this child's own centre (2026-11-05 leak sweep): room_id was
+           written unchecked, so a parent or staff member could file the child's expected days
+           into another centre's (or agency's) room and its ratio and roster counts. */
+        if (! empty($data['room_id'])) {
+            $childCentre = (int) DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+                ->where('c.id', $childId)->value('f.centre_id');
+            $roomCentre = (int) DB::table('rooms')->where('id', $data['room_id'])->value('centre_id');
+            if ($roomCentre <= 0 || $roomCentre !== $childCentre) {
+                return response()->json(['message' => 'That room is not at this child\'s centre.'], 422);
+            }
+        }
+        // The week as it stood, for the schedule-change notice (a no-op if the provider save already took it).
+        \App\Support\ScheduleChangeNotice::remember($childId, (int) ($request->user()->id ?? 0));
+        $prior = DB::table('attendance_patterns')->where('child_id', $childId)
+            ->whereNull('effective_until')->orderByDesc('effective_from')->first();
         // Close the prior open pattern
         DB::table('attendance_patterns')->where('child_id', $childId)
             ->whereNull('effective_until')
@@ -64,6 +79,40 @@ final class AttendancePatternController extends Controller
         if (Schema::hasColumn('attendance_patterns', 'updated_by_id')) $row['updated_by_id'] = $request->user()->id ?? null;
         if (Schema::hasColumn('attendance_patterns', 'created_at')) $row['created_at'] = now();
         $id = DB::table('attendance_patterns')->insertGetId($row);
+
+        /* A NAMED AUDIT ENTRY (2026-10-20). This change used to exist only as the raw request
+           line "post:api/v1/attendance/pattern/48", filed under entity "childId" - so it did
+           not show in a child's history and read as noise in the log. Safia changed Myrah's
+           days that way and it looked like it had never happened. */
+        try {
+            $label = function ($v) {
+                foreach (self::ROTATION_LABELS as $r) {
+                    if (($r['key'] ?? null) === $v) { return $r['short'] ?? $v; }
+                }
+                return $v ?: 'off';
+            };
+            $was = []; $now = []; $changes = [];
+            foreach (self::DAYS as $d) {
+                $b = $prior ? $this->normaliseRotation($prior->{$d} ?? null) : null;
+                $a = $data[$d] ?? null;
+                if ($b !== $a) { $changes[] = ucfirst(substr($d, 0, 3)) . ' ' . $label($b) . ' -> ' . $label($a); }
+                $was[$d] = $b; $now[$d] = $a;
+            }
+            $agencyId = (int) DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+                ->join('centres as ce', 'ce.id', '=', 'f.centre_id')->where('c.id', $childId)->value('ce.agency_id');
+            \App\Support\Audit::write([
+                'user_id' => $request->user()->id ?? null, 'agency_id' => $agencyId ?: null,
+                'action' => 'child.attendance_pattern_updated', 'entity_type' => 'child', 'entity_id' => $childId,
+                'payload' => json_encode([
+                    'summary' => 'Attendance days ' . ($changes ? 'changed: ' . implode('; ', $changes) : 'saved (no change)')
+                        . ' (from ' . $data['effective_from'] . ')',
+                    'before' => $was, 'after' => $now, 'effective_from' => $data['effective_from'], 'pattern_id' => $id,
+                ]),
+                'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Attendance pattern audit failed: ' . $e->getMessage());
+        }
 
         /* A PARENT CHANGING THE DAYS IS NEWS TO THE OFFICE. These days drive ratios,
            staffing and the check-in reminders, so a quiet change is the kind that bites
@@ -205,8 +254,11 @@ final class AttendancePatternController extends Controller
         // header let an agency_admin of A forge X-Active-Agency-Id=B and read
         // agency B's full child roster + attendance patterns.
         $agencyId = (int) $this->resolveAgencyId($request);
+        /* Scoped to the person (2026-11-09): every educator was shown the whole agency's children here - an iLearn
+           provider with 2 children in her home saw all 30. null = an admin, who sees the agency. */
+        $scope = \App\Support\Visibility::planningChildIds($agencyId, $request->user());
 
-        return $this->overviewResponse($this->rowsFor($agencyId, null));
+        return $this->overviewResponse($this->rowsFor($agencyId, $scope === null ? null : ($scope ?: [0])));
     }
 
     /**

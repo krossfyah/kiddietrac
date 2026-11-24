@@ -60,39 +60,120 @@
     });
   };
 
+  /* PRINT A ONE-TAP POSTER — ONLY THE POSTER (2026-10-21).
+
+     Anthony: "when educator uses QR and wants to print from desktop or phone, it doesnt
+     just only print the QR it prints the entire page". This used to lay an overlay over
+     the portal and call window.print(), trusting a print stylesheet to hide the rest. The
+     portal's own print rules won, a phone browser printed the page behind, and the app's
+     web view ignores window.print() entirely.
+
+     The poster is now its own page, /print/one-tap-poster.html, carrying what it shows in
+     the URL fragment (never sent to a server). It is printed the way each device can:
+       - desktop browser: loaded into a hidden frame and that FRAME is printed, so the
+         print is the poster and nothing else, with no tab opened;
+       - phone browser: opened in a new tab, which prints itself (and has a Print button);
+       - the Android/iOS app: handed to the device's browser, where Print works.
+     It names the AGENCY as well as the centre ("the QR printable should have the ilearn
+     agency name as well"), with its logo; that comes from /checkin/poster-info.
+
+     cfg: { data, kind:'app'|'kiosk', centreId, centreName, shortCode, validFor,
+            agencyName, agencyLogo, brandColor, poweredBy }
+     The old { url, title } names still work. Resolves when the print was handed over. */
+  function isNative() {
+    try { var C = window.Capacitor; return !!(C && (C.isNativePlatform ? C.isNativePlatform() : C.isNative)); }
+    catch (e) { return false; }
+  }
+  function touchPhone() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches)
+        && Math.min(window.screen.width || 9999, window.screen.height || 9999) < 820;
+    } catch (e) { return false; }
+  }
+  function appOrigin() {
+    var o = window.location.origin || '';
+    return /^https:\/\//i.test(o) && !/localhost|capacitor:/i.test(o) ? o : 'https://app.kiddietrac.com';
+  }
+  function apiBase() { return (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
+  function authHeaders() {
+    var h = { Accept: 'application/json' };
+    try {
+      var t = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+      if (t) h.Authorization = 'Bearer ' + t;
+      var aid = sessionStorage.getItem('kt_active_agency_id'); if (aid) h['X-Active-Agency-Id'] = aid;
+    } catch (e) {}
+    return h;
+  }
+  function brandFor(cfg) {
+    if (cfg.agencyName || !cfg.centreId) return Promise.resolve(cfg);
+    return fetch(apiBase() + '/checkin/poster-info/' + encodeURIComponent(cfg.centreId), { headers: authHeaders() })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d) {
+          cfg.agencyName = d.agency_name; cfg.agencyLogo = d.agency_logo; cfg.brandColor = d.brand_color;
+          cfg.poweredBy = d.powered_by; cfg.centreName = cfg.centreName || d.centre_name;
+        }
+        return cfg;
+      })
+      .catch(function () { return cfg; });
+  }
+  function posterUrl(cfg, auto) {
+    var payload = {
+      d: cfg.data || cfg.url || '', k: cfg.kind === 'kiosk' ? 'kiosk' : 'app',
+      t: cfg.centreName || cfg.title || '', a: cfg.agencyName || '', l: cfg.agencyLogo || '',
+      c: cfg.brandColor || '', s: cfg.shortCode || '', v: cfg.validFor || '',
+      p: cfg.poweredBy === false ? 0 : 1,
+    };
+    var b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return appOrigin() + '/print/one-tap-poster.html#' + b64 + (auto ? '&auto=1' : '');
+  }
+  function printInFrame(url) {
+    return new Promise(function (resolve) {
+      var prev = document.getElementById('kt-qrposter-frame'); if (prev) prev.remove();
+      var f = document.createElement('iframe');
+      f.id = 'kt-qrposter-frame';
+      f.setAttribute('aria-hidden', 'true');
+      f.style.cssText = 'position:fixed;left:-10000px;top:0;width:900px;height:1200px;border:0;visibility:hidden;';
+      var fired = false;
+      var go = function () {
+        if (fired) return; fired = true;
+        window.removeEventListener('message', onMsg);
+        try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { window.open(url, '_blank'); }
+        // The print window held the page while it was open: not a freeze (tickets #160, #161).
+        try { (window.__ktNoteBlockingDialog || function () {})(); } catch (e) {}
+        // Leave the frame until the dialog has had it; a removed frame prints blank.
+        setTimeout(function () { try { f.remove(); } catch (e) {} }, 60000);
+        resolve();
+      };
+      var onMsg = function (ev) { if (ev.source === f.contentWindow && ev.data && ev.data.ktPoster === 'ready') go(); };
+      window.addEventListener('message', onMsg);
+      f.src = url;
+      document.body.appendChild(f);
+      setTimeout(go, 6000);   // never strand the button if the ready message is lost
+    });
+  }
+
   KT.printQRPoster = function (cfg) {
     cfg = cfg || {};
-    return ensureLib().then(function () {
-      var dataUrl = build(cfg.url || '').createDataURL(10, 4);
-      // In-app overlay, NOT window.open — the APK WebView returns a stub window
-      // that opened nothing yet trapped the user with no way back. This overlay
-      // always has an X to close, centers the QR, and prints via the WebView's
-      // own print (an injected @media print stylesheet isolates the poster).
-      var prev = document.getElementById('kt-qrposter'); if (prev) prev.remove();
-      var ov = document.createElement('div');
-      ov.id = 'kt-qrposter';
-      ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:#fff;overflow-y:auto;color:#111827;';
-      ov.innerHTML =
-        '<div style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:56px 28px 40px;box-sizing:border-box;">'
-        + '<h1 style="font-size:30px;margin:0 0 6px;color:#1F6080;">' + esc(cfg.title || '') + '</h1>'
-        + (cfg.subtitle ? '<h2 style="font-size:17px;font-weight:500;color:#374151;margin:0 0 26px;">' + esc(cfg.subtitle) + '</h2>' : '')
-        + '<img src="' + dataUrl + '" alt="Check-in QR code" style="width:min(78vw,340px);height:min(78vw,340px);image-rendering:pixelated;border:1px solid #E5E7EB;border-radius:14px;padding:12px;box-sizing:border-box;">'
-        + (cfg.steps ? '<div style="margin:26px auto 0;max-width:430px;text-align:left;font-size:15px;color:#374151;line-height:1.7;">' + cfg.steps + '</div>' : '')
-        + (cfg.url ? '<div style="margin-top:20px;font-size:12px;color:#64748B;word-break:break-all;font-family:ui-monospace,monospace;">' + esc(cfg.url) + '</div>' : '')
-        + (cfg.footer ? '<div style="margin-top:12px;font-size:12px;color:#64748B;">' + esc(cfg.footer) + '</div>' : '')
-        + '</div>'
-        + '<div class="kt-qrposter-ctl" style="position:fixed;top:calc(var(--kt-safe-top, env(safe-area-inset-top,0px)) + 12px);right:14px;display:flex;gap:10px;">'
-        +   '<button id="kt-qrposter-print" style="background:#1F6080;color:#fff;border:0;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;">🖨️ Print</button>'
-        +   '<button id="kt-qrposter-x" aria-label="Close" style="background:#fff;color:#111827;border:1px solid #E5E7EB;width:44px;height:44px;border-radius:50%;font-size:22px;line-height:1;cursor:pointer;">✕</button>'
-        + '</div>';
-      document.body.appendChild(ov);
-      var st = document.createElement('style'); st.id = 'kt-qrposter-print-css';
-      st.textContent = '@media print{body>*{display:none!important;}#kt-qrposter{display:block!important;position:static!important;background:#fff!important;}#kt-qrposter .kt-qrposter-ctl{display:none!important;}}';
-      document.head.appendChild(st);
-      var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); if (st.parentNode) st.parentNode.removeChild(st); };
-      ov.querySelector('#kt-qrposter-x').addEventListener('click', close);
-      ov.querySelector('#kt-qrposter-print').addEventListener('click', function () { try { window.print(); } catch (e) {} });
-      if (window.KT && KT.pushOverlay) KT.pushOverlay(ov, close);
+    if (!(cfg.data || cfg.url)) return Promise.reject(new Error('Nothing to print yet.'));
+    // A phone or the app must open the page from the tap itself, before any await,
+    // or the browser treats it as a popup. Open first, point it at the poster after.
+    var native = isNative(), phone = !native && touchPhone();
+    var tab = phone ? window.open('about:blank', '_blank') : null;
+    return brandFor(cfg).then(function (c) {
+      if (native) {
+        var url = posterUrl(c, true);
+        var B = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Browser;
+        if (B && B.open) { B.open({ url: url }); } else { window.location.href = url; }
+        return;
+      }
+      if (phone) {
+        var u2 = posterUrl(c, true);
+        if (tab && !tab.closed) { tab.location.href = u2; } else { window.location.href = u2; }
+        return;
+      }
+      return printInFrame(posterUrl(c, false));
     });
   };
 })(window);

@@ -152,6 +152,11 @@
           status.textContent = 'Select at least one child.';
           return;
         }
+        // Not One-Tap: the centred yellow warning every manual check-in asks with (2026-11-06).
+        if (window.KT && KT.warnManualCheck) {
+          const n = selectedIds.length;
+          if (!(await KT.warnManualCheck({ name: n === 1 ? '1 child' : n + ' children', going: 'in' }))) return;
+        }
 
         submitBtn.disabled = true;
         submitBtn.textContent = 'Checking in…';

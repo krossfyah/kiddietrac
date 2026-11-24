@@ -31,7 +31,28 @@
     if (k === 'm' || k === 'male') return 'Male';
     if (k === 'f' || k === 'female') return 'Female';
     if (k === 'x' || k === 'other' || k === 'nonbinary' || k === 'non_binary') return 'Other';
-    return g.charAt(0).toUpperCase() + g.slice(1);
+    // Stored values are words joined by "_" (prefer_not_to_say): "Prefer not to say", not "Prefer_not_to_say".
+    var w = String(g).replace(/_/g, ' ');
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  /* Allergies, health alerts and dietary needs are stored as lists ([{allergen, severity}], or plain strings) -
+     shown as words, never as the raw ["Dairy"] (2026-11-04, the educator's child record). */
+  function healthText(raw, key) {
+    if (raw == null || raw === '') return '';
+    var arr = raw;
+    if (typeof raw === 'string') {
+      var t = raw.trim();
+      if (!t) return '';
+      if (t.charAt(0) !== '[' && t.charAt(0) !== '{') return t;
+      try { arr = JSON.parse(t); } catch (e) { return t; }
+    }
+    if (!Array.isArray(arr)) arr = [arr];
+    return arr.map(function (x) {
+      if (x == null) return '';
+      if (typeof x !== 'object') return String(x).trim();
+      var n = String(x[key] || x.name || x.label || x.allergen || x.restriction || '').trim();
+      return n ? n + (x.severity ? ' (' + String(x.severity).replace(/_/g, ' ') + ')' : '') : '';
+    }).filter(Boolean).join(', ');
   }
 
   function esc(s) {
@@ -89,7 +110,8 @@
     var byDay = {}, total = 0, open = null;
     punches.forEach(function (p) {
       if (!p.punched_out_at) { open = p; return; }
-      var day = String(p.punched_in_at).slice(0, 10);
+      // The AGENCY's day, not the UTC date: an evening shift is that day, not tomorrow (2026-11-05).
+      var day = agencyKeyOf(p.punched_in_at) || String(p.punched_in_at).slice(0, 10);
       var hrs = hoursBetween(p.punched_in_at, p.punched_out_at);
       if (!byDay[day]) byDay[day] = { day: day, hours: 0, rows: [] };
       byDay[day].hours += hrs;
@@ -100,7 +122,7 @@
 
     // "This period" = the current calendar month, which is how the director's
     // payroll export is bucketed too.
-    var monthKey = new Date().toISOString().slice(0, 7);
+    var monthKey = (agencyKeyOf(new Date().toISOString()) || new Date().toISOString()).slice(0, 7);
     var monthHours = days.filter(function (d) { return d.slice(0, 7) === monthKey; })
       .reduce(function (a, d) { return a + byDay[d].hours; }, 0);
 
@@ -117,7 +139,7 @@
       + '</div>';
 
     if (open) {
-      html += '<div style="' + CARD + 'border-left:5px solid #16A34A;">'
+      html += '<div style="' + CARD + '--kt-edge:#16A34A;">'
         + '<div style="font-weight:800;color:#16A34A;font-size:14px;">⏱ Clocked in now</div>'
         + '<div style="font-size:12.5px;color:#64748B;margin-top:3px;">Since ' + fmtTime(open.punched_in_at) + ' · ' + fmtDay(open.punched_in_at) + '</div>'
         + '<a href="#time-clock" style="display:inline-block;margin-top:10px;background:' + TEAL + ';color:#fff;border-radius:9px;padding:8px 14px;font-size:13px;font-weight:800;text-decoration:none;">Go to the time clock</a>'
@@ -133,7 +155,7 @@
         var e = byDay[d];
         html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #F1F5F9;">'
           + '<div><div style="font-weight:700;font-size:13.5px;color:#0F172A;">' + esc(fmtDay(d)) + '</div>'
-          + '<div style="font-size:11.5px;color:#64748B;">' + e.rows.map(function (r) { return fmtTime(r.punched_in_at) + '–' + fmtTime(r.punched_out_at); }).join(', ') + '</div></div>'
+          + '<div style="font-size:11.5px;color:#64748B;">' + e.rows.slice().reverse().map(function (r) { return fmtTime(r.punched_in_at) + '–' + fmtTime(r.punched_out_at) + (r.out_reason === 'lunch' ? ' (lunch)' : (r.out_reason === 'break' ? ' (break)' : '')); }).join(', ') + '</div></div>'
           + '<div style="font-weight:800;font-size:14px;color:' + TEAL + ';">' + fmtHours(e.hours) + '</div>'
           + '</div>';
       });
@@ -149,63 +171,179 @@
   }
 
   // ── My calendar ─────────────────────────────────────────────────────
+  /* REDESIGN (2026-10-28, Anthony: "for educators and my calendar make this look better - full sweep"). It was a
+     list of upcoming shifts under a generic banner, and an educator could not see that the centre was closed next
+     Friday, or their own approved day off, on it. Now a real calendar from GET /provider/calendar/me: their shifts
+     (room colours), their time off, closures and birthdays for their centres - a month grid with the selected
+     day's detail beside it (below it on a phone), a "next shift" card and the month's figures. */
+  var CAL = { cursor: null, sel: null, data: null };
+  function calKey(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function agencyKeyOf(iso) {
+    // The agency's calendar day a UTC timestamp falls on (a 7 pm shift is that day, not tomorrow in UTC).
+    var d = ktParse(iso); if (isNaN(d)) { return ''; }
+    try { return new Intl.DateTimeFormat('en-CA', { timeZone: ktTz(), year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); } catch (e) { return String(iso).slice(0, 10); }
+  }
+  function ensureCalCss() {
+    if (document.getElementById('kt-mycal-css')) { return; }
+    var s = document.createElement('style'); s.id = 'kt-mycal-css';
+    s.textContent =
+      '.mc-top{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:12px;margin-bottom:14px;}' +
+      '.mc-next{position:relative;overflow:hidden;border-radius:18px;padding:16px 18px;color:#fff;background:linear-gradient(135deg,#0E7490 0%,#159FB4 45%,#6366F1 120%);box-shadow:0 16px 32px -18px rgba(14,116,144,.8);}' +
+      '.mc-next:after{content:"📅";position:absolute;right:14px;bottom:4px;font-size:58px;opacity:.18;}' +
+      '.mc-next .l{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;opacity:.85;}' +
+      '.mc-next .d{font-size:22px;font-weight:900;margin-top:4px;line-height:1.15;}.mc-next .t{font-size:13.5px;opacity:.95;margin-top:3px;}' +
+      '.mc-stat{background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:13px 15px;min-width:0;}' +
+      '.mc-stat .l{font-size:10.5px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+      '.mc-stat .v{font-size:24px;font-weight:900;color:#0F172A;margin-top:6px;}.mc-stat .s{font-size:11.5px;color:#64748B;margin-top:2px;}' +
+      '.mc-wrap{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start;}' +
+      '.mc-cal{background:#fff;border:1px solid #E2E8F0;border-radius:18px;padding:14px;min-width:0;}' +
+      '.mc-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;}' +
+      '.mc-bar h2{margin:0 auto 0 4px;font-size:18px;color:#0F172A;}' +
+      '.mc-btn{height:32px;min-width:32px;padding:0 10px;border-radius:9px;border:1px solid #CBD5E1;background:#fff;color:#1F2937;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}' +
+      '.mc-btn.pri{background:' + TEAL + ';border-color:' + TEAL + ';color:#fff;}' +
+      '.mc-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;}' +
+      '.mc-dow{font-size:10.5px;font-weight:800;color:#94A3B8;text-align:center;text-transform:uppercase;letter-spacing:.5px;padding:2px 0 4px;}' +
+      '.mc-day{min-height:92px;border:1px solid #EEF2F7;border-radius:10px;padding:5px;cursor:pointer;background:#fff;display:flex;flex-direction:column;gap:3px;min-width:0;text-align:left;font-family:inherit;}' +
+      '.mc-day:hover{border-color:#B6E3EA;}.mc-day.out{background:#F8FAFC;opacity:.6;}.mc-day.closed{background:#FEF2F2;border-color:#FECACA;}' +
+      '.mc-day.sel{box-shadow:0 0 0 2px ' + TEAL + ';border-color:' + TEAL + ';}' +
+      '.mc-num{font-size:12px;font-weight:800;color:#334155;display:flex;align-items:center;justify-content:space-between;}' +
+      '.mc-day.today .mc-num b{background:' + TEAL + ';color:#fff;border-radius:999px;min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;}' +
+      '.mc-chip{font-size:10.5px;font-weight:700;border-radius:6px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35;}' +
+      '.mc-dots{display:none;gap:3px;flex-wrap:wrap;margin-top:auto;}.mc-dots i{width:6px;height:6px;border-radius:50%;display:inline-block;}' +
+      '.mc-side{background:#fff;border:1px solid #E2E8F0;border-radius:18px;padding:14px 16px;min-width:0;}' +
+      '.mc-side h3{margin:0 0 2px;font-size:15px;color:#0F172A;}.mc-item{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid #F1F5F9;}' +
+      '.mc-item:first-of-type{border-top:0;}.mc-ic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex:0 0 auto;}' +
+      '.mc-legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:#64748B;margin-top:10px;}.mc-legend span{display:inline-flex;align-items:center;gap:5px;}' +
+      '.mc-legend i{width:9px;height:9px;border-radius:3px;display:inline-block;}' +
+      '@media(max-width:1000px){.mc-top{grid-template-columns:1fr 1fr;}.mc-wrap{grid-template-columns:1fr;}}' +
+      '@media(max-width:600px){.mc-day{min-height:52px;padding:4px;}.mc-chip{display:none;}.mc-dots{display:flex;}.mc-cal{padding:10px;}' +
+        '.mc-stat .v{font-size:20px;}.mc-next .d{font-size:19px;}.mc-bar h2{font-size:16px;}}';
+    document.head.appendChild(s);
+  }
+
   async function renderMySchedule(main) {
-    main.innerHTML = hero('My calendar', 'Your upcoming shifts')
+    ensureCalCss();
+    if (!CAL.cursor) { var t0 = (window.KT && KT.agencyToday) ? KT.agencyToday() : calKey(new Date()); CAL.cursor = new Date(+t0.slice(0, 4), +t0.slice(5, 7) - 1, 1); CAL.sel = t0; }
+    main.innerHTML = hero('My calendar', 'Your shifts, days off, closures and birthdays')
       + '<div id="es-body"><div style="padding:24px;text-align:center;color:#64748B;">Loading…</div></div>';
     var body = main.querySelector('#es-body');
+    var today = (window.KT && KT.agencyToday) ? KT.agencyToday() : calKey(new Date());
+    var y = CAL.cursor.getFullYear(), m = CAL.cursor.getMonth();
+    var first = new Date(y, m, 1), gridStart = new Date(y, m, 1 - first.getDay());
+    var gridEnd = new Date(gridStart); gridEnd.setDate(gridStart.getDate() + 41);
+    // Fetch from today when that is earlier, so "next shift" and this week's hours are always right.
+    var from = calKey(gridStart) < today ? calKey(gridStart) : today;
+    var to = calKey(gridEnd);
+    var next30 = new Date(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10) + 45);
+    if (calKey(next30) > to) { to = calKey(next30); }
 
-    var data = null;
-    try { data = await Api.get('/provider/shifts/me'); } catch (e) {
-      /* Say WHY and offer a way out. A bare sentence made a transient 500 look
-         identical to "you have no shifts", with reloading the page as the only
-         escape. */
-      body.innerHTML = '<div style="' + CARD + 'text-align:center;color:#B91C1C;">'
-        + 'Could not load your schedule.<div style="font-size:12px;color:#64748B;margin-top:6px;">'
-        + ((e && e.message) ? String(e.message).replace(/[<>]/g, '') : 'The server did not respond.')
-        + '</div><button type="button" class="kt-retry" style="margin-top:12px;background:#1F6080;color:#fff;'
-        + 'border:0;border-radius:8px;padding:8px 16px;font-weight:700;cursor:pointer;">Try again</button></div>';
-      var rb = body.querySelector('.kt-retry');
-      if (rb) { rb.onclick = function () { renderMySchedule(main); }; }   // was render(container): neither exists here (ticket 109)
-      return;
-    }
-    var shifts = (data && data.shifts) || [];
-    if (!shifts.length) {
-      body.innerHTML = '<div style="' + CARD + 'text-align:center;color:#64748B;padding:28px 16px;">'
-        + '<div style="font-size:38px;">📅</div>'
-        + '<div style="font-weight:800;color:#0F172A;margin-top:8px;">No shifts scheduled</div>'
-        + '<div style="font-size:13px;margin-top:4px;">When your director schedules you, your shifts show up here.</div>'
-        + '<a href="#time-off" style="display:inline-block;margin-top:14px;color:' + TEAL + ';font-weight:800;font-size:13px;text-decoration:none;">Request time off →</a>'
-        + '</div>';
+    var data;
+    try { data = await Api.get('/provider/calendar/me?from=' + from + '&to=' + to); }
+    catch (e) {
+      body.innerHTML = '<div style="' + CARD + 'text-align:center;color:#B91C1C;">Could not load your calendar.<div style="font-size:12px;color:#64748B;margin-top:6px;">'
+        + esc((e && e.message) || 'The server did not respond.') + '</div><button type="button" class="kt-retry mc-btn pri" style="margin-top:12px;">Try again</button></div>';
+      var rb = body.querySelector('.kt-retry'); if (rb) { rb.onclick = function () { renderMySchedule(main); }; }
       return;
     }
 
-    // Group by day so a day with two shifts reads as one block.
+    // Index everything by agency day.
     var byDay = {};
-    shifts.forEach(function (s) { (byDay[s.date] = byDay[s.date] || []).push(s); });
+    function slot(k) { return byDay[k] = byDay[k] || { shifts: [], events: [] }; }
+    (data.shifts || []).forEach(function (s) { var k = agencyKeyOf(s.starts_at); if (k) { slot(k).shifts.push(s); } });
+    (data.events || []).forEach(function (ev) { slot(ev.date).events.push(ev); });
 
-    var today = new Date().toISOString().slice(0, 10);
-    var html = '<div style="' + CARD + 'text-align:center;margin-bottom:14px;">'
-      + '<div style="font-size:11px;font-weight:800;color:#64748B;letter-spacing:.6px;">SCHEDULED</div>'
-      + '<div style="font-size:26px;font-weight:800;color:' + TEAL + ';margin-top:2px;">' + fmtHours(data.scheduled_hours || 0) + '</div>'
-      + '<div style="font-size:11.5px;color:#64748B;">' + shifts.length + ' shift' + (shifts.length === 1 ? '' : 's') + ' · to ' + esc(data.to || '') + '</div></div>';
-
-    Object.keys(byDay).sort().forEach(function (day) {
-      var isToday = day === today;
-      html += '<div style="' + CARD + (isToday ? 'border-left:5px solid ' + TEAL + ';' : '') + '">'
-        + '<div style="font-weight:800;font-size:14px;color:#0F172A;margin-bottom:8px;">'
-        + esc(fmtDay(day)) + (isToday ? ' <span style="color:' + TEAL + ';font-size:12px;">· Today</span>' : '') + '</div>';
-      byDay[day].forEach(function (s) {
-        var colour = s.room_colour || TEAL;
-        html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;">'
-          + '<span style="width:9px;height:9px;border-radius:50%;background:' + esc(colour) + ';flex:0 0 auto;"></span>'
-          + '<div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:#0F172A;">' + fmtTime(s.starts_at) + ' – ' + fmtTime(s.ends_at) + '</div>'
-          + '<div style="font-size:11.5px;color:#64748B;">' + esc(s.room_name || 'Centre') + (s.role ? ' · ' + esc(s.role) : '') + '</div></div>'
-          + (s.hours ? '<div style="font-weight:800;font-size:13px;color:#64748B;">' + fmtHours(s.hours) + '</div>' : '')
-          + '</div>';
+    // ── figures ──
+    var wk = new Date(+today.slice(0, 4), +today.slice(5, 7) - 1, +today.slice(8, 10)); wk.setDate(wk.getDate() - wk.getDay());
+    var wkStart = calKey(wk), wkEnd = calKey(new Date(wk.getFullYear(), wk.getMonth(), wk.getDate() + 6));
+    var monthKey = y + '-' + String(m + 1).padStart(2, '0');
+    var weekHours = 0, monthShifts = 0, monthOff = 0, monthClosed = 0, next = null;
+    Object.keys(byDay).sort().forEach(function (k) {
+      var d = byDay[k];
+      d.shifts.forEach(function (s) {
+        if (k >= wkStart && k <= wkEnd) { weekHours += hoursBetween(s.starts_at, s.ends_at); }
+        if (k.slice(0, 7) === monthKey) { monthShifts++; }
+        var endAt = ktParse(s.ends_at || s.starts_at);
+        if (!next && !isNaN(endAt) && endAt > new Date()) { next = { k: k, s: s }; }
       });
-      html += '</div>';
+      if (k.slice(0, 7) === monthKey) {
+        if (d.events.some(function (e) { return e.kind === 'timeoff' && e.tone !== 'pending'; })) { monthOff++; }
+        if (d.events.some(function (e) { return e.kind === 'closure'; })) { monthClosed++; }
+      }
     });
+
+    var html = '<div class="mc-top" data-kt-nosechead="1">'
+      + '<div class="mc-next"><div class="l">' + (next ? (next.k === today ? 'Your shift today' : 'Your next shift') : 'Next shift') + '</div>'
+      + (next ? '<div class="d">' + esc(fmtDay(next.s.starts_at)) + '</div><div class="t">' + esc(fmtTime(next.s.starts_at)) + ' – ' + esc(fmtTime(next.s.ends_at))
+          + (next.s.room_name ? ' · ' + esc(next.s.room_name) : '') + '</div>'
+        : '<div class="d">Nothing scheduled</div><div class="t">Your director has not scheduled you in the next few weeks.</div>')
+      + '</div>'
+      + '<div class="mc-stat"><div class="l">This week</div><div class="v">' + fmtHours(weekHours) + '</div><div class="s">scheduled</div></div>'
+      + '<div class="mc-stat"><div class="l">' + esc(CAL.cursor.toLocaleDateString(undefined, { month: 'long' })) + ' shifts</div><div class="v">' + monthShifts + '</div><div class="s">in this month</div></div>'
+      + '<div class="mc-stat"><div class="l">Days off · closures</div><div class="v">' + monthOff + ' · ' + monthClosed + '</div><div class="s">this month</div></div>'
+      + '</div>';
+
+    html += '<div class="mc-wrap"><div class="mc-cal" data-kt-nosechead="1"><div class="mc-bar">'
+      + '<h2>' + esc(CAL.cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })) + '</h2>'
+      + '<button type="button" class="mc-btn" data-mc="prev" aria-label="Previous month">‹</button>'
+      + '<button type="button" class="mc-btn" data-mc="today">Today</button>'
+      + '<button type="button" class="mc-btn" data-mc="next" aria-label="Next month">›</button>'
+      + '<a class="mc-btn pri" href="#time-off" style="display:inline-flex;align-items:center;text-decoration:none;">🌴 Request time off</a></div>'
+      + '<div class="mc-grid">' + ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(function (n) { return '<div class="mc-dow">' + n + '</div>'; }).join('');
+    for (var i = 0; i < 42; i++) {
+      var dd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i), k = calKey(dd), d = byDay[k] || { shifts: [], events: [] };
+      var closed = d.events.some(function (e) { return e.kind === 'closure'; });
+      var cls = 'mc-day' + (dd.getMonth() !== m ? ' out' : '') + (k === today ? ' today' : '') + (k === CAL.sel ? ' sel' : '') + (closed ? ' closed' : '');
+      var chips = '', dots = '';
+      d.events.filter(function (e) { return e.kind === 'closure'; }).slice(0, 1).forEach(function () { chips += '<div class="mc-chip" style="background:#FEE2E2;color:#B91C1C;">🚫 Closed</div>'; dots += '<i style="background:#EF4444"></i>'; });
+      d.shifts.slice(0, 2).forEach(function (s) {
+        var c = s.room_colour || TEAL;
+        chips += '<div class="mc-chip" style="background:' + esc(c) + '22;color:#0F172A;--kt-edge:' + esc(c) + ';">' + esc(fmtTime(s.starts_at)) + (s.room_name ? ' ' + esc(s.room_name) : '') + '</div>';
+        dots += '<i style="background:' + esc(c) + '"></i>';
+      });
+      d.events.filter(function (e) { return e.kind === 'timeoff'; }).slice(0, 1).forEach(function (e) { chips += '<div class="mc-chip" style="background:#ECFDF5;color:#047857;">🌴 ' + esc(e.title) + '</div>'; dots += '<i style="background:#10B981"></i>'; });
+      var bd = d.events.filter(function (e) { return e.kind === 'birthday'; });
+      if (bd.length) { chips += '<div class="mc-chip" style="background:#FDF2F8;color:#BE185D;">🎂 ' + (bd.length > 1 ? bd.length + ' birthdays' : esc(String(bd[0].title).split(' ')[0])) + '</div>'; dots += '<i style="background:#EC4899"></i>'; }
+      var more = d.shifts.length - 2; if (more > 0) { chips += '<div style="font-size:10px;color:#64748B;font-weight:700;">+' + more + ' more</div>'; }
+      html += '<button type="button" class="' + cls + '" data-day="' + k + '"><div class="mc-num"><b>' + dd.getDate() + '</b></div>' + chips + '<div class="mc-dots">' + dots + '</div></button>';
+    }
+    html += '</div><div class="mc-legend"><span><i style="background:' + TEAL + '"></i>Shift</span><span><i style="background:#10B981"></i>Time off</span>'
+      + '<span><i style="background:#EF4444"></i>Closed</span><span><i style="background:#EC4899"></i>Birthday</span></div></div>'
+      + '<div class="mc-side" data-kt-nosechead="1" id="mc-side"></div></div>';
     body.innerHTML = html;
+
+    function paintSide(k) {
+      var d = byDay[k] || { shifts: [], events: [] }, side = body.querySelector('#mc-side');
+      var dt = new Date(+k.slice(0, 4), +k.slice(5, 7) - 1, +k.slice(8, 10));
+      var out = '<h3>' + esc(dt.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })) + '</h3>'
+        + '<div style="font-size:12px;color:#64748B;margin-bottom:8px;">' + (k === today ? 'Today' : (k < today ? 'Past day' : 'Coming up')) + '</div>';
+      var n = 0;
+      d.events.filter(function (e) { return e.kind === 'closure'; }).forEach(function (e) { n++; out += '<div class="mc-item"><div class="mc-ic" style="background:#FEE2E2;">🚫</div><div><b style="color:#B91C1C;">' + esc(e.title) + '</b><div style="font-size:12px;color:#64748B;">' + esc(e.detail || '') + (e.date_label ? ' · ' + esc(e.date_label) : '') + '</div></div></div>'; });
+      d.shifts.forEach(function (s) {
+        n++;
+        var hrs = hoursBetween(s.starts_at, s.ends_at);
+        out += '<div class="mc-item"><div class="mc-ic" style="background:' + esc(s.room_colour || TEAL) + '22;">🧑‍🏫</div><div><b>' + esc(fmtTime(s.starts_at)) + ' – ' + esc(fmtTime(s.ends_at)) + '</b>'
+          + '<div style="font-size:12px;color:#64748B;">' + esc([s.room_name, s.centre_name].filter(Boolean).join(' · ') || 'Centre') + (s.role ? ' · ' + esc(s.role) : '') + (hrs ? ' · ' + fmtHours(hrs) : '') + '</div></div></div>';
+      });
+      d.events.filter(function (e) { return e.kind === 'timeoff'; }).forEach(function (e) { n++; out += '<div class="mc-item"><div class="mc-ic" style="background:#ECFDF5;">🌴</div><div><b>' + esc(e.title) + '</b>' + (e.detail ? '<div style="font-size:12px;color:#64748B;">' + esc(e.detail) + '</div>' : '') + '</div></div>'; });
+      d.events.filter(function (e) { return e.kind === 'birthday'; }).forEach(function (e) { n++; out += '<div class="mc-item"><div class="mc-ic" style="background:#FDF2F8;">🎂</div><div><b>' + esc(e.title) + '</b><div style="font-size:12px;color:#64748B;">' + esc(e.detail || 'Birthday') + '</div></div></div>'; });
+      if (!n) { out += '<div style="padding:18px 0;text-align:center;color:#94A3B8;font-size:13px;">Nothing on this day.</div>'; }
+      side.innerHTML = out;
+    }
+    var selKey = (CAL.sel && CAL.sel.slice(0, 7) === monthKey) ? CAL.sel : (today.slice(0, 7) === monthKey ? today : monthKey + '-01');
+    paintSide(selKey);
+
+    Array.prototype.forEach.call(body.querySelectorAll('[data-day]'), function (b) {
+      b.addEventListener('click', function () {
+        CAL.sel = b.getAttribute('data-day');
+        Array.prototype.forEach.call(body.querySelectorAll('.mc-day.sel'), function (x) { x.classList.remove('sel'); });
+        b.classList.add('sel');
+        paintSide(CAL.sel);
+        if (window.matchMedia('(max-width:1000px)').matches) { var sd = body.querySelector('#mc-side'); if (sd) { sd.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } }
+      });
+    });
+    body.querySelector('[data-mc="prev"]').addEventListener('click', function () { CAL.cursor = new Date(y, m - 1, 1); renderMySchedule(main); });
+    body.querySelector('[data-mc="next"]').addEventListener('click', function () { CAL.cursor = new Date(y, m + 1, 1); renderMySchedule(main); });
+    body.querySelector('[data-mc="today"]').addEventListener('click', function () { CAL.cursor = new Date(+today.slice(0, 4), +today.slice(5, 7) - 1, 1); CAL.sel = today; renderMySchedule(main); });
   }
 
   // ── Child records ───────────────────────────────────────────────────
@@ -289,6 +427,14 @@
     return h + ':' + m[2] + ' ' + ap;
   }
 
+  (function rememberFrom() {
+    window.addEventListener('hashchange', function (e) {
+      try {
+        var to = '#' + (String(e.newURL).split('#')[1] || ''), was = '#' + (String(e.oldURL).split('#')[1] || '');
+        if (/^#child-record/.test(to) && !/^#child-record/.test(was)) sessionStorage.setItem('kt_child_record_from', was);
+      } catch (er) {}
+    });
+  })();
   async function renderChildRecordScreen(main) {
     var childId = null;
     try { childId = new URLSearchParams((location.hash.split('?')[1] || '')).get('id'); } catch (e) {}
@@ -310,9 +456,14 @@
       + '<span style="font-weight:800;font-size:18px;color:#0F172A;">Child record</span></div>'
       + '<div id="cr-body"><div style="text-align:center;color:#64748B;padding:30px;">Loading…</div></div>';
     main.appendChild(ov);
+    /* BACK GOES BACK (2026-10-23, Anthony: "clicking back arrow where it shows child record does
+       nothing"). history.back() did nothing when the record was the first screen in the tab or
+       was opened from a notification. It now goes to the screen it was opened from, else the list. */
     ov.querySelector('[data-back]').addEventListener('click', function (e) {
       e.preventDefault();
-      if (window.history.length > 1) window.history.back(); else location.hash = '#children';
+      var from = '';
+      try { from = sessionStorage.getItem('kt_child_record_from') || ''; } catch (er) {}
+      location.hash = (from && !/^#child-record/.test(from)) ? from : '#children';
     });
 
     var d;
@@ -325,9 +476,10 @@
     var name = ((c.first_name || '') + ' ' + (c.last_name || '')).trim();
     var html = '';
 
-    html += '<div style="' + CARD + 'display:flex;align-items:center;gap:13px;">'
-      + KT.avatar(name, { size: 56, photoUrl: c.photo_url ? absUrl(c.photo_url) : '' })
-      + '<div><div style="font-weight:800;font-size:17px;color:#0F172A;">' + esc(name) + '</div>'
+    // Wraps (2026-10-23): on a narrow phone the Emergency card button squeezed the name out of sight.
+    html += '<div style="' + CARD + 'display:flex;flex-wrap:wrap;align-items:center;gap:10px 13px;">'
+      + '<span style="flex:0 0 auto;">' + KT.avatar(name, { size: 56, photoUrl: c.photo_url ? absUrl(c.photo_url) : '' }) + '</span>'
+      + '<div style="flex:1 1 150px;min-width:0;"><div style="font-weight:800;font-size:17px;color:#0F172A;overflow-wrap:anywhere;">' + esc(name || 'Child') + '</div>'
       + '<div style="font-size:12.5px;color:#64748B;">'
       + esc([c.age_human, genderLabel(c.gender), c.room_name, c.pronouns].filter(Boolean).join(' · ') || '—')
       + '</div>'
@@ -337,19 +489,19 @@
       /* EMERGENCY CARD (2026-10-09, Anthony: "educators should be able to see the emergency
          card for their children"). The same printable card directors open, for a child
          in this educator's own rooms; every view is audited. */
-      + '<button type="button" data-ecard style="margin-left:auto;background:#B91C1C;color:#fff;border:0;border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">🆘 Emergency card</button>'
+      + '<button type="button" data-ecard style="flex:0 0 auto;margin-left:auto;background:#B91C1C;color:#fff;border:0;border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">🆘 Emergency card</button>'
       + '</div>';
 
     // Safety first — this is the reason an educator opens a record mid-room.
     var alerts = [
-      { label: 'Allergies', value: c.allergies, colour: '#B91C1C', icon: '⚠️' },
-      { label: 'Health alerts', value: c.health_alerts, colour: '#B45309', icon: '🩺' },
+      { label: 'Allergies', value: healthText(c.allergies, 'allergen'), colour: '#B91C1C', icon: '⚠️' },
+      { label: 'Health alerts', value: healthText(c.health_alerts, 'label'), colour: '#B45309', icon: '🩺' },
       { label: 'Medical notes', value: c.medical_notes, colour: '#0F172A', icon: '📋' },
-      { label: 'Dietary', value: c.dietary_restrictions || c.dietary_notes, colour: '#0F172A', icon: '🍎' },
+      { label: 'Dietary', value: healthText(c.dietary_restrictions, 'restriction') || c.dietary_notes, colour: '#0F172A', icon: '🍎' },
     ].filter(function (a) { return a.value; });
 
     if (alerts.length) {
-      html += '<div style="' + CARD + 'border-left:5px solid #B91C1C;">';
+      html += '<div style="' + CARD + '--kt-edge:#B91C1C;">';
       alerts.forEach(function (a, i) {
         html += '<div style="' + (i ? 'border-top:1px solid #F1F5F9;padding-top:9px;margin-top:9px;' : '') + '">'
           + '<div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:' + a.colour + ';">' + a.icon + ' ' + a.label.toUpperCase() + '</div>'
@@ -421,7 +573,7 @@
     var hist = d.history || [];
     var ICONS = {
       check_in: '✅', check_out: '👋', diaper: '🧷', bathroom: '🚽', nap: '😴', outdoor: '🌳',
-      meal: '🍽️', snack: '🍎', bottle: '🍼', sunscreen: '☀️', mood: '🙂',
+      meal: '🍽️', snack: '🍎', bottle: '🍼', sunscreen: '☀️', mood: '🙂', medicine: '💊', clothing: '👕',
     };
     var LABELS = { check_in: 'Signed in', check_out: 'Signed out' };
     var fmtHist = function (at) {

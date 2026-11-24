@@ -38,6 +38,12 @@ class AiLessonPlanController extends Controller
         if (! in_array((int) $data['centre_id'], $this->callerCentreIds($request), true)) {
             return response()->json(['error' => 'That centre is not in your agency.'], 403);
         }
+        /* The room must be at that centre (2026-11-05 leak sweep): room_id was taken unchecked, so a plan
+           could be saved against (or generated for) another centre's or agency's room. */
+        if (! empty($data['room_id'])
+            && (int) DB::table('rooms')->where('id', $data['room_id'])->value('centre_id') !== (int) $data['centre_id']) {
+            return response()->json(['error' => 'That room is not at the centre you picked.'], 422);
+        }
 
         $result = $this->ai->generate($data);
 
@@ -75,6 +81,12 @@ class AiLessonPlanController extends Controller
 
         if (! in_array((int) $data['centre_id'], $this->callerCentreIds($request), true)) {
             return response()->json(['error' => 'That centre is not in your agency.'], 403);
+        }
+        /* The room must be at that centre (2026-11-05 leak sweep): room_id was taken unchecked, so a plan
+           could be saved against (or generated for) another centre's or agency's room. */
+        if (! empty($data['room_id'])
+            && (int) DB::table('rooms')->where('id', $data['room_id'])->value('centre_id') !== (int) $data['centre_id']) {
+            return response()->json(['error' => 'That room is not at the centre you picked.'], 422);
         }
 
         $row = [
@@ -117,7 +129,7 @@ class AiLessonPlanController extends Controller
             return ($aid && DB::table('agencies')->where('id', $aid)->whereNull('deleted_at')->exists())
                 ? DB::table('centres')->where('agency_id', $aid)->pluck('id')->all() : [];
         }
-        $centreIds = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
+        $centreIds = DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)->where('user_id', $uid)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->all();
         $agencyIds = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)->where('role', 'agency_admin')->whereNotNull('agency_id')->pluck('agency_id')->all();
         if ($agencyIds) {
             $centreIds = array_merge($centreIds, DB::table('centres')->whereIn('agency_id', $agencyIds)->pluck('id')->all());

@@ -101,7 +101,7 @@ final class InvoicePreviewController extends Controller
 
         $sampleInvoice = (object) [
             'number'        => 'PREVIEW-' . date('Ymd'),
-            'issued_at'     => date('Y-m-d'),
+            'issued_at'     => \App\Support\AgencyTime::today(),
             'due_at'        => date('Y-m-d', strtotime('+14 days')),
             'bill_to_name'  => 'Sarah Thompson',
             'bill_to_email' => 'sarah.thompson@example.com',

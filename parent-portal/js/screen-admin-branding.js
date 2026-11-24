@@ -52,7 +52,7 @@
     if (!agencyId) {
       container.innerHTML = `
         <div style="padding:48px;max-width:600px;margin:0 auto;text-align:center;">
-          <div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:20px;border-radius:8px;text-align:left;">
+          <div style="background:#FEF3C7;--kt-edge:#F59E0B;padding:20px;border-radius:8px;text-align:left;">
             <strong style="color:#92400E;">No agency on your account</strong>
             <div style="margin-top:6px;font-size:13px;color:#78350F;">Branding is configured per-agency. Sign in as an agency admin.</div>
           </div>
@@ -109,7 +109,7 @@
             </div>` : `
             <div style="padding:12px;background:${isWL ? '#ECFDF5' : '#F9FAFB'};border-radius:8px;margin-bottom:16px;font-size:13px;color:#374151;">
               ${isWL
-                ? '<strong>White-label licence: on.</strong> Your logo replaces KiddieTrac throughout.'
+                ? '<strong>White-label licence: on.</strong> Your logo replaces KiddieTrac throughout, and marketing campaigns can be sent from your own mailbox (Marketing \u203A Send from).'
                 : '<strong>White-label licence: off.</strong> Your logo appears on invoices and emails; the portal and app keep the KiddieTrac brand. Ask KiddieTrac about the white-label licence to show your own brand throughout.'}
             </div>`}
 
@@ -158,6 +158,8 @@
             </div>
             <div style="font-size:11.5px;color:#64748B;line-height:1.55;">Also: emails, invoices, forms, and the sign-in page of your own branded app. Your own app icon and name in the app stores come with a white-label app build — ask KiddieTrac.</div>
           </div>
+          <!-- Page banner gradient (2026-10-21): only where this agency may show its own look. -->
+          <div id="kt-hero-card" style="${card}grid-column:1/-1;" hidden></div>
         </div>
 
         <!-- ── Invoices ── -->
@@ -308,6 +310,33 @@
       } catch (e) {}
     }
     container.querySelectorAll('.kt-br-tab').forEach(b => b.addEventListener('click', () => showTab(b.getAttribute('data-tab'))));
+
+    // PAGE BANNER (2026-10-21, kt-hero-brand.js). Shown only when this agency may brand
+    // itself (its reseller allows it, or it holds the white-label licence).
+    (async function () {
+      const host = container.querySelector('#kt-hero-card');
+      if (!host || !window.KT || !KT.heroEditor) return;
+      let b;
+      // With the token: agency_may_override is only told to a member of the agency (2026-11-05).
+      try { b = await (await fetch(apiBase() + '/branding?agency_id=' + agencyId, { headers: { Authorization: 'Bearer ' + token() } })).json(); } catch (e) { return; }
+      if (!b || !b.agency_may_override || !b.theme || !host.isConnected) return;
+      const h = b.theme.hero || {};
+      host.hidden = false;
+      KT.heroEditor(host, {
+        value: h.custom ? { hero_from: h.from, hero_via: h.via || '', hero_to: h.to, hero_angle: String(h.angle) } : {},
+        defaults: function () { return { from: b.theme.primary_color, to: b.theme.accent_color }; },
+        onSave: async function (v) {
+          const body = {};
+          ['hero_from', 'hero_via', 'hero_to', 'hero_angle'].forEach(function (k) { body[k] = v[k] === '' ? null : (k === 'hero_angle' ? +v[k] : v[k]); });
+          await fetch(apiBase() + '/admin/branding', {
+            method: 'PUT',
+            headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Active-Agency-Id': String(agencyId) },
+            body: JSON.stringify(body),
+          }).then(async function (r) { if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.message || ('API ' + r.status)); } });
+          try { localStorage.removeItem('kt_branding'); localStorage.removeItem('kt_brand_a' + agencyId); } catch (e) {}
+        },
+      });
+    })();
 
     /* The preview follows the logo field and the licence switch as they change, so
        nobody has to save to find out what families will see. */

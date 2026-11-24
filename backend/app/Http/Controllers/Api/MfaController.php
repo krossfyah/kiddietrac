@@ -86,7 +86,32 @@ final class MfaController extends Controller
             'has_recovery_codes' => DB::table('users')->where('id', $u->id)
                 ->whereNotNull('two_factor_recovery_codes')
                 ->exists(),
-        ]);
+            'demo_exempt' => self::demoExempt((int) $u->id),
+        /* The server's own answer (App\Support\StrongSignIn, 2026-11-10): the screen gate and the banner follow these
+           rather than guessing from cached roles. strong = an authenticator app OR a passkey. */
+        ] + \App\Support\StrongSignIn::state($u));
+    }
+
+    /**
+     * DEMO AGENCIES ARE NOT GATED (2026-10-28, Anthony chose "Exempt the demo agency" for Brightwood): the forced
+     * two-factor screen (kt-mfa-gate.js) stands down for someone whose EVERY agency is a demo that opted out
+     * (agencies.settings.demo = true AND settings.mfa_exempt = true; only kt:seed-brightwood-demo sets both). One real agency among them and the gate applies as always. Nothing else
+     * changes: a demo account that turns 2FA on is still asked for its code at sign-in.
+     */
+    public static function demoExempt(int $userId): bool
+    {
+        $rows = DB::table('role_assignments as ra')->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
+            ->where('ra.user_id', $userId)->where('ra.active', true)
+            ->get(['ra.role', 'ra.agency_id', 'c.agency_id as centre_agency_id']);
+        if ($rows->isEmpty() || $rows->contains(fn ($r) => $r->role === 'platform_admin')) return false;
+        $ids = $rows->map(fn ($r) => (int) ($r->agency_id ?: $r->centre_agency_id))->unique()->values();
+        if ($ids->contains(0)) return false;
+        foreach (DB::table('agencies')->whereIn('id', $ids->all())->pluck('settings', 'id') as $raw) {
+            $s = json_decode((string) $raw, true) ?: [];
+            if (($s['demo'] ?? false) !== true || ($s['mfa_exempt'] ?? false) !== true) return false;
+        }
+
+        return $ids->count() === DB::table('agencies')->whereIn('id', $ids->all())->count();
     }
 
     public function setup(Request $request): JsonResponse

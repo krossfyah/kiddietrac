@@ -1,0 +1,9 @@
+# App links (2026-11-05): both files must be served as JSON, never cached for long, never redirected.
+<Files "assetlinks.json">
+  ForceType application/json
+  Header set Cache-Control "public, max-age=3600"
+</Files>
+<Files "apple-app-site-association">
+  ForceType application/json
+  Header set Cache-Control "public, max-age=3600"
+</Files>

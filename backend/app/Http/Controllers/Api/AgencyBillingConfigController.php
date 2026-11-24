@@ -103,6 +103,26 @@ final class AgencyBillingConfigController extends Controller
                2-3%, an Interac e-Transfer is usually a flat cost well under 1%. */
             'eft_surcharge_percent'     => $bs['eft_surcharge_percent'] ?? 0,
             'accepted_payment_methods'  => $bs['accepted_payment_methods'] ?? ['stripe_card', 'interac', 'cash', 'cheque'],
+            /* Parent billing (2026-10-28) - see App\Support\ParentBilling. The address families send Interac
+               e-Transfers to (no address = no Interac button), and how many days before its due date an unpaid
+               invoice appears to the family. */
+            'interac_email'             => $bs['interac_email'] ?? '',
+            // Families may ask for an e-Transfer REQUEST instead of sending one (2026-10-30). On unless switched off.
+            'interac_requests'          => ($bs['interac_requests'] ?? true) !== false,
+            /* INTERAC E-TRANSFER TAB (2026-11-11, Anthony: "in payment providers add a new subtab to enable interac
+               etransfer and ability to prompt parents ... instructions on how to do so for the agency"). Edited in
+               Payment providers -> Interac e-Transfer; read by ParentBilling::payInfo for every parent screen and invoice. */
+            'interac_recipient_name'    => $bs['interac_recipient_name'] ?? '',
+            'interac_autodeposit'       => array_key_exists('interac_autodeposit', $bs) ? $bs['interac_autodeposit'] : null,
+            'interac_question'          => $bs['interac_question'] ?? '',
+            'interac_answer'            => $bs['interac_answer'] ?? '',
+            'interac_instructions'      => $bs['interac_instructions'] ?? '',
+            'agency_display_name'       => (string) (DB::table('agencies')->where('id', $agencyId)->value('legal_name') ?: DB::table('agencies')->where('id', $agencyId)->value('name')),
+            // Card / debit payment shown on invoices and invoice emails (2026-10-31). Off unless switched on.
+            'invoice_show_card'         => ($bs['invoice_show_card'] ?? false) === true,
+            // Each new invoice is also an announcement in the paying guardian's News (2026-10-31). On unless switched off.
+            'announce_invoices'         => ($bs['announce_invoices'] ?? true) !== false,
+            'due_window_days'           => $bs['due_window_days'] ?? \App\Support\ParentBilling::DEFAULT_WINDOW_DAYS,
         ]]);
     }
 
@@ -124,6 +144,16 @@ final class AgencyBillingConfigController extends Controller
             'eft_surcharge_percent'      => 'nullable|numeric|min:0|max:10',
             'accepted_payment_methods'   => 'nullable|array',
             'accepted_payment_methods.*' => 'in:stripe_card,stripe_ach,interac,cash,cheque,manual',
+            'interac_email'              => 'nullable|email|max:190',
+            'interac_requests'           => 'nullable|boolean',
+            'interac_recipient_name'     => 'nullable|string|max:120',
+            'interac_autodeposit'        => 'nullable|boolean',
+            'interac_question'           => 'nullable|string|max:120',
+            'interac_answer'             => 'nullable|string|max:60',
+            'interac_instructions'       => 'nullable|string|max:1000',
+            'invoice_show_card'          => 'nullable|boolean',
+            'announce_invoices'          => 'nullable|boolean',
+            'due_window_days'            => 'nullable|integer|min:0|max:120',
         ]);
 
         $cols = [];
@@ -134,8 +164,22 @@ final class AgencyBillingConfigController extends Controller
         $settings = [];
         if ($row && $row->settings) { $x = json_decode($row->settings, true); if (is_array($x)) $settings = $x; }
         $bs = $settings['billing_setup'] ?? [];
-        foreach (['default_billing_frequency', 'deposit_amount', 'registration_fee', 'invoice_issue_lead_days', 'autopay_default', 'autopay_required', 'card_surcharge_percent', 'eft_surcharge_percent', 'accepted_payment_methods'] as $k) {
-            if (array_key_exists($k, $d)) $bs[$k] = $d[$k];
+        foreach (['default_billing_frequency', 'deposit_amount', 'registration_fee', 'invoice_issue_lead_days', 'autopay_default', 'autopay_required', 'card_surcharge_percent', 'eft_surcharge_percent', 'accepted_payment_methods', 'interac_email', 'interac_requests', 'invoice_show_card', 'announce_invoices', 'due_window_days'] as $k) {
+            if (array_key_exists($k, $d)) $bs[$k] = in_array($k, ['invoice_show_card', 'announce_invoices'], true) ? (bool) $d[$k] : $d[$k];
+        }
+        // The Interac e-Transfer tab (2026-11-11). Plain text only: it is shown to families as written.
+        foreach (['interac_recipient_name', 'interac_question', 'interac_answer', 'interac_instructions'] as $k) {
+            if (array_key_exists($k, $d)) $bs[$k] = trim(strip_tags((string) ($d[$k] ?? '')));
+        }
+        if (array_key_exists('interac_autodeposit', $d)) $bs['interac_autodeposit'] = $d['interac_autodeposit'] === null ? null : (bool) $d['interac_autodeposit'];
+        if (array_key_exists('interac_email', $d) && in_array('interac', (array) ($bs['accepted_payment_methods'] ?? []), true)) {
+            // Switched on from the tab: never an e-Transfer button with no address, or a security question with no answer.
+            if (trim((string) ($bs['interac_email'] ?? '')) === '') {
+                return response()->json(['message' => 'Add the email address families send e-Transfers to.', 'errors' => ['interac_email' => ['Required to accept Interac e-Transfer.']]], 422);
+            }
+            if (($bs['interac_autodeposit'] ?? null) === false && (($bs['interac_question'] ?? '') === '' || ($bs['interac_answer'] ?? '') === '')) {
+                return response()->json(['message' => 'Without Autodeposit, families need the security question and its answer.', 'errors' => ['interac_question' => ['Add the question and the answer, or choose Autodeposit.']]], 422);
+            }
         }
         $settings['billing_setup'] = $bs;
         $cols['settings'] = json_encode($settings);

@@ -29,7 +29,7 @@ final class DailyDigestCommand extends Command
     public function handle(): int
     {
         $dry = (bool) $this->option('dry-run');
-        $today = Carbon::now()->startOfDay();
+        $today = \App\Support\AgencyTime::boundaryUtc();   // re-resolved per agency inside the loop
         $tomorrow = (clone $today)->addDay();
 
         $agencies = DB::table('agencies')
@@ -39,6 +39,9 @@ final class DailyDigestCommand extends Command
         $this->info("Running daily digest for {$agencies->count()} agencies (dry=" . ($dry ? 'yes' : 'no') . ')');
 
         foreach ($agencies as $a) {
+            // Each agency's OWN day, as UTC instants: its midnight and the next one.
+            $today = \App\Support\AgencyTime::boundaryUtc((int) $a->id);
+            $tomorrow = $today->copy()->addDay();
             $stats = $this->statsForAgency($a, $today, $tomorrow);
             $recipients = $this->recipientsForAgency($a);
             if (empty($recipients)) continue;

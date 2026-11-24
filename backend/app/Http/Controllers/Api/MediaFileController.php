@@ -26,7 +26,8 @@ class MediaFileController extends Controller
             abort(404);
         }
 
-        return $this->serve($rel);
+        // The signed display name, when the link carries one (Files repository).
+        return $this->serve($rel, ProtectedMedia::safeName($request->query('n')));
     }
 
     /**
@@ -44,7 +45,7 @@ class MediaFileController extends Controller
         return $this->serve($rel);
     }
 
-    private function serve(string $rel): Response
+    private function serve(string $rel, ?string $name = null): Response
     {
 
         $disk = Storage::disk('public');
@@ -91,16 +92,27 @@ class MediaFileController extends Controller
         /* Belt and braces on traversal. The signature covers the path, and decode()
            already refused '..', but this is the line where a string becomes a file
            read — so it is checked here too, against the resolved real path. */
-        $root = realpath($disk->path(''));
+        /* Two homes (2026-11-10, PIPEDA review): the protected folders now live in ProtectedMedia::HOME, outside
+           the web root, and public/storage/<folder> is a link to there - nginx served them straight off disk
+           otherwise, .htaccess and all bypassed. A link resolves to that home, which is just as much ours. */
         $real = realpath($abs);
-        if ($root === false || $real === false || ! str_starts_with($real, $root)) {
+        $inside = false;
+        foreach ([realpath($disk->path('')), realpath(ProtectedMedia::home())] as $root) {
+            if ($root !== false && $real !== false && str_starts_with($real, $root . DIRECTORY_SEPARATOR)) $inside = true;
+        }
+        if (! $inside) {
             abort(404);
         }
 
         /* inline: these are opened in a tab or rendered in an <img>, not downloaded.
            The filename is the stored one, which is already sanitised on upload. */
         $res = new BinaryFileResponse($real);
-        $res->setContentDisposition('inline', basename($real));
+        /* The file's real name when the link was signed with one, so "save" from the viewer
+           keeps it; otherwise the stored name. The ASCII fallback is for old browsers only. */
+        $shown = $name ?: basename($real);
+        $ascii = (string) preg_replace('/[^\x20-\x7E]+/', '-', $shown);
+        $ascii = str_replace(['%', '"', '\\', '/'], '-', $ascii) ?: basename($real);
+        $res->setContentDisposition('inline', $shown, $ascii);
 
         /* Private, and no shared cache. A signed URL is a capability — a proxy or a
            CDN holding a copy would outlive both the signature and any revocation. */

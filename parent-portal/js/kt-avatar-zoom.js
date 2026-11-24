@@ -140,10 +140,28 @@
     } catch (e) { return false; }
   }
 
+  /* A TOUCH SCREEN IS TAPPED (2026-11-03, Anthony's iPhone recording: the photo viewer said "Click anywhere or
+     press Esc to close" on a phone, which has neither a mouse nor an Esc key). The same test the zoom cursor
+     below uses: no hover means fingers. The packaged app is always touch. */
+  function isTouch() {
+    try { if (w.Capacitor && typeof w.Capacitor.isNativePlatform === 'function' && w.Capacitor.isNativePlatform()) return true; } catch (e) {}
+    try { return !!(w.matchMedia && w.matchMedia('(hover: none)').matches); } catch (e) { return false; }
+  }
+
   function open(src, name, role, userId) {
+    var touch = isTouch();
     var ov = d.createElement('div');
     ov.className = 'kt-av-zoom';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483200;background:rgba(8,20,35,.82);display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out;opacity:0;transition:opacity .18s ease;';
+    /* "ANYWHERE" HAS TO BE TRUE (2026-11-03). kt-modal-safety.js stops a tap on a popup's dark ground from closing
+       it when the popup has a close button - right for a form, where a stray tap would lose what was typed. This
+       viewer has a ✕, so a tap on the ground around the photo did nothing while the hint said it would close
+       (only a tap ON the photo closed it). A photo holds nothing to lose: it opts in to closing on the ground. */
+    ov.setAttribute('data-kt-tap-outside', '1');
+    /* THE VIEWER COVERS THE BOTTOM BAR (2026-11-03). It always sat above the bar (z 2147483200 against 9500), but
+       its ground was 82% opaque, so on a phone the white bar and its icons showed through along the bottom
+       and read as still being live. A phone gets a near-solid ground, as a photo viewer has; a desktop keeps
+       the page faintly visible behind it. */
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483200;background:rgba(8,20,35,' + (touch ? '.97' : '.82') + ');display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out;opacity:0;transition:opacity .18s ease;';
     var fig = d.createElement('figure');
     fig.style.cssText = 'margin:0;display:flex;flex-direction:column;align-items:center;gap:12px;max-width:92vw;max-height:92vh;cursor:default;';
     var big = d.createElement('img');
@@ -179,7 +197,7 @@
     }
 
     var hint = d.createElement('div');
-    hint.textContent = 'Click anywhere or press Esc to close';
+    hint.textContent = touch ? 'Tap anywhere to close' : 'Click anywhere or press Esc to close';
     hint.style.cssText = 'color:rgba(255,255,255,.6);font-size:12px;';
     fig.appendChild(hint);
     var x = d.createElement('button');
@@ -233,13 +251,25 @@
 
   // Show a zoom cursor over photo avatars (best-effort; the click delegate is
   // the source of truth and does not depend on this).
+  /* PERF (2026-10-28, Anthony's video of slow screen changes on a phone): this pass measured 2.1 s of a
+     4x-throttled Agency overview. It re-measured EVERY avatar on every DOM change (img.kt-avatar and
+     span.kt-avatar carried no :not([data-kt-zc])), and set a cursor between measurements, so each avatar paid a
+     full style recalculation. A zoom cursor means nothing without a mouse, so touch screens skip it; elsewhere
+     it is new elements only, all read first, then all written. */
+  var NO_HOVER = false;
+  try { NO_HOVER = !!(w.matchMedia && w.matchMedia('(hover: none)').matches); } catch (e) {}
   function markCursor() {
+    if (NO_HOVER) return;
     try {
-      d.querySelectorAll('img.kt-avatar,span.kt-avatar,img[src]:not([data-kt-zc])').forEach(function (el) {
+      var els = d.querySelectorAll('img.kt-avatar:not([data-kt-zc]),span.kt-avatar:not([data-kt-zc]),img[src]:not([data-kt-zc])');
+      var hits = [];
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i];
         var src = el.tagName === 'IMG' ? (el.currentSrc || el.getAttribute('src')) : bgPhoto(el);
-        if (isRealPhotoUrl(src) && looksAvatar(el)) el.style.cursor = 'zoom-in';
-        el.setAttribute('data-kt-zc', '1');
-      });
+        if (isRealPhotoUrl(src) && looksAvatar(el)) hits.push(el);
+      }
+      for (var j = 0; j < els.length; j++) { els[j].setAttribute('data-kt-zc', '1'); }
+      for (var k = 0; k < hits.length; k++) { hits[k].style.cursor = 'zoom-in'; }
     } catch (e) {}
   }
   if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', markCursor); else markCursor();

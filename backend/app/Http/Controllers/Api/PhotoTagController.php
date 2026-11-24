@@ -44,8 +44,17 @@ final class PhotoTagController extends Controller
         $u = $request->user();
         abort_unless($this->isPlatformAdminUser($u) || $this->authorizeCentreAccess($u, (int) $photo->centre_id), 403);
 
-        $key = env('ANTHROPIC_API_KEY');
+        // Photo AI tagging is part of the AI Bundle (2026-10-28).
+        if (!\App\Support\AiBundle::forCentre((int) $photo->centre_id)) {
+            return response()->json(['message' => 'AI photo tagging is part of the AI Bundle. Ask your KiddieTrac contact to add it to your licence.'], 403);
+        }
+        $key = config('services.anthropic.key');
         if (!$key) return response()->json(['error' => 'AI not configured'], 503);
+        /* PHOTO CONSENT (2026-11-06, App\Support\MediaConsent): a hidden photo, or one of a child whose family said
+           "do not photograph", is never sent to the AI; and those children's names are never in the list it gets. */
+        if (! empty($photo->hidden_at) || \App\Support\MediaConsent::untaggable(\App\Support\MediaConsent::tagged($photo))) {
+            return response()->json(['message' => 'This photo cannot be tagged: a child on it has no photo consent.'], 422);
+        }
 
         // Candidate children at the centre with photos on file (for matching)
         $candidates = DB::table('children as c')
@@ -55,6 +64,8 @@ final class PhotoTagController extends Controller
             ->whereNull('c.deleted_at')
             ->select('c.id', 'c.first_name', 'c.last_name', 'c.photo_url')
             ->get();
+        $lv = \App\Support\MediaConsent::forChildren($candidates->pluck('id')->all());
+        $candidates = $candidates->reject(fn ($c) => ($lv[(int) $c->id]['level'] ?? 'family') === \App\Support\MediaConsent::NONE)->values();
 
         $childList = $candidates->map(fn ($c) => "{$c->id}: {$c->first_name} {$c->last_name}")->implode("\n");
         $prompt = "You are helping staff at a childcare centre tag a photo with which children appear in it. "
@@ -90,7 +101,7 @@ final class PhotoTagController extends Controller
                 'anthropic-version' => '2023-06-01',
                 'content-type' => 'application/json',
             ])->timeout(60)->post('https://api.anthropic.com/v1/messages', [
-                'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+                'model' => config('services.anthropic.model'),
                 'max_tokens' => 600,
                 'messages' => [[
                     'role' => 'user',
@@ -115,7 +126,7 @@ final class PhotoTagController extends Controller
                 ]);
                 return response()->json(['error' => 'AI failed', 'status' => $res->status()], 502);
             }
-            $raw = $res->json('content.0.text') ?? '';
+            $raw = \App\Support\AiConfig::text($res->json()) ?? '';
             $jsonStart = strpos($raw, '{');
             $jsonEnd = strrpos($raw, '}');
             $payload = $jsonStart !== false
@@ -154,6 +165,21 @@ final class PhotoTagController extends Controller
             'confirmed' => 'required|boolean',
         ]);
         abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403); // v22p94
+        /* The photo must be at a centre you work at, and the child in the same agency (2026-11-05 leak sweep):
+           photo_id was never checked, so staff could tag their own child onto another centre's or another
+           agency's photo (or remove tags from it), which then shows that photo in the wrong family's feed. */
+        $photo = DB::table('photos')->where('id', (int) $data['photo_id'])->first();
+        abort_unless($photo, 404);
+        $agencyId = (int) $this->resolveAgencyId($request);
+        $photoAgency = (int) DB::table('centres')->where('id', (int) $photo->centre_id)->value('agency_id');
+        $childAgency = (int) DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('ch.id', (int) $data['child_id'])->value('c.agency_id');
+        abort_unless($agencyId && $photoAgency === $agencyId && $childAgency === $agencyId
+            && \App\Support\CentreScope::canWrite(\App\Support\CentreScope::ids($request, $agencyId), (int) $photo->centre_id), 403);
+        if ($data['confirmed'] && ($why = \App\Support\MediaConsent::untaggable([(int) $data['child_id']]))) {
+            return response()->json(['message' => $why, 'reason' => 'no_photo_consent'], 422);
+        }
         if ($data['confirmed']) {
             DB::table('photo_tags')->updateOrInsert(
                 ['photo_id' => $data['photo_id'], 'child_id' => $data['child_id']],

@@ -82,7 +82,7 @@ This matrix maps each KiddieTrac control to the criteria it supports. It also re
 | AC-05 | CC6.1, CC6.6 | Login and reset throttles (10/min per email and IP, 40/min per IP, forgot 3/min, reset 10/min) | Implemented | Route middleware list | AH |
 | AC-06 | CC6.1 | MFA (TOTP, encrypted secret) enforced on the server for all admin roles, including platform_admin | Partial (enforced in the browser only; platform_admin exempt; 3/116 users enrolled) | Middleware code; MFA enrolment report (RM-01) | AH |
 | AC-07 | CC6.1 | Passkeys (WebAuthn) available on the web | Implemented (not available in the Android app) | Settings → Security; passkey count (2 users) | AH |
-| AC-08 | CC6.1 | MFA on infrastructure and vendor consoles (GitHub, cPanel, registrar, payments, email, SMS, Firebase) | Gap (not verified) | Screenshots of MFA settings per console (RM-01) | AH |
+| AC-08 | CC6.1 | MFA on infrastructure and vendor consoles (GitHub, Cloudways console, registrar, payments, email, SMS, Firebase) | Gap (not verified) | Screenshots of MFA settings per console (RM-01) | AH |
 | AC-09 | CC6.2 | Temporary passwords force a change at first login (`must_change_password` plus middleware) | Implemented | Middleware code; user flag sample | AH |
 | AC-10 | CC6.2 | User provisioning through the invite flow by agency admins | Implemented | Invite records; `audit_logs` user-create events | Agency admins / AH |
 | AC-11 | CC6.2, CC6.3 | Tokens of deactivated users revoked every 15 minutes; offboarding and departure jobs run daily | Implemented | Crontab/schedule list; job logs | AH |
@@ -90,13 +90,13 @@ This matrix maps each KiddieTrac control to the criteria it supports. It also re
 | AC-13 | CC6.2, CC6.3 | Quarterly access review with sign-off (privileged roles, dormant accounts, infrastructure accounts) | Gap (feature in progress; no review recorded; 2 admins never logged in) | Compliance evidence screen → Access review CSV with sign-off (RM-08) | AH |
 | AC-14 | CC6.3 | Role changes recorded with who, when, and before/after values | Partial (only `created_at`; partly audited) | `audit_logs` role-change events (RM-09) | AH |
 | AC-15 | CC6.2 | Register of infrastructure and vendor-console access | Gap | Access register (RM-19) | AH |
-| AC-16 | CC6.4 | Physical security of data centre | Implemented (carved out to GoDaddy) | GoDaddy assurance documentation (RM-16) | GoDaddy |
+| AC-16 | CC6.4 | Physical security of data centre | Implemented (carved out to DigitalOcean, via Cloudways) | DigitalOcean / Cloudways assurance documentation (RM-16) | DigitalOcean |
 | AC-17 | CC6.5 | Data disposed of when no longer needed (purge job, backup rotation) | Partial (purge enabled for 0 agencies) | Retention settings per agency; purge `audit_logs` counts (RM-12) | AH |
 | AC-18 | CC6.6 | Abusive source IPs can be denied at the web server | Implemented | Web server deny rules; 2026-09-20 incident record | AH |
-| AC-19 | CC6.7 | TLS on all endpoints; HSTS and security headers (X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, CORP, CSP) | Implemented | Response header capture; SSL test output | AH |
+| AC-19 | CC6.7 | TLS on all endpoints; HSTS and security headers (frame-ancestors / X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, CORP, CSP); the portal may be framed only by kiddietrac.com (website demo, 2026-10-31) | Implemented | Response header capture; SSL test output | AH |
 | AC-20 | CC6.7 | TLS certificates auto-renew daily (acme.sh), with an expiry email when fewer than 21 days remain | Implemented | acme.sh cron; `cert-check.log` | AH |
 | AC-21 | CC6.1, C1.1 | Secrets (MFA, SMS, email, payment, accounting credentials, payout details) encrypted at the application level; credentials write-only in the UI | Implemented | Model casts/code; database sample showing ciphertext | AH |
-| AC-22 | CC6.1, C1.1 | Personal information encrypted at rest (host volume and/or field level) | Gap (host encryption unconfirmed; no field encryption) | GoDaddy written confirmation; decision record (RM-14, RM-23) | AH |
+| AC-22 | CC6.1, C1.1 | Personal information encrypted at rest (host volume and/or field level) | Partial (field-level encryption in place; host volume encryption unconfirmed) | Cloudways/DigitalOcean written confirmation (RM-14); field-encryption record | AH |
 | AC-23 | CC6.8 | Protection against unauthorised software: production deployed only from reviewed git commits; drift detection | Gap (138 uncommitted production changes) | Clean `git status` on production; drift-check alerts (RM-04) | AH |
 
 ## CC7: System operations
@@ -167,7 +167,7 @@ This matrix maps each KiddieTrac control to the criteria it supports. It also re
 
 ## Notes for the auditor
 
-- **Carved-out sub-service organisation:** GoDaddy (hosting and physical security). Its controls are expected to be covered by its own assurance reports.
+- **Carved-out sub-service organisations:** Cloudways (managed hosting platform) and DigitalOcean (infrastructure and physical security, Toronto). Their controls are expected to be covered by their own assurance reports.
 - **Complementary user entity controls (agencies):**
   - manage their own users and roles, and deactivate leavers promptly;
   - enrol their administrators in MFA;

@@ -95,6 +95,7 @@ class WebsiteSupportController extends Controller
         try {
             $html = \App\Services\EmailTemplate::wrap(null, $inner, ['force_brand' => 'kt', 'title' => 'Website support request #' . $id]);
             Mail::html($html, function ($m) use ($id, $data, $email, $attach) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $m->to(self::INBOX)->replyTo($email, $data['name'])
                   ->subject('[Support #' . $id . ' · ' . ucfirst($data['priority']) . '] ' . $data['subject']);
                 if ($attach && is_file($attach['path'])) $m->attach($attach['path'], ['as' => $attach['name'], 'mime' => $attach['mime']]);
@@ -112,6 +113,7 @@ class WebsiteSupportController extends Controller
                 . '<p style="margin:14px 0 0;font-size:14px;color:#64748B;line-height:1.6">To add anything, just reply to this email. If it’s urgent, call 1-855-400-9996.</p>';
             $html = \App\Services\EmailTemplate::wrap(null, $body, ['force_brand' => 'kt', 'title' => 'We’ve got your request', 'preheader' => 'Support request #' . $id]);
             Mail::html($html, function ($m) use ($id, $data, $email) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
                 $m->to($email, $data['name'])->replyTo(self::INBOX, 'KiddieTrac Support')->subject('KiddieTrac support request #' . $id . ' received');
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
             });
@@ -139,10 +141,14 @@ class WebsiteSupportController extends Controller
         if ($sid === '' || $url === '') return $xml();
         $from = (string) ($request->input('From') ?: $request->input('from') ?: '');
         $duration = (int) ($request->input('RecordingDuration') ?: $request->input('recording_duration') ?: 0);
+        // A department's mailbox from the call menu (2026-10-22, App\Support\PhoneMenu): ?dept=<key>.
+        $deptKey = (string) $request->query('dept', '');
+        $dept = $deptKey !== '' ? \App\Support\PhoneMenu::find(\App\Support\PhoneMenu::config(), $deptKey) : null;
 
         // First callback wins; the action and the status callback both carry the recording.
         try {
-            $id = DB::table('voicemails')->insertGetId(['recording_sid' => substr($sid, 0, 100), 'call_sid' => substr((string) $request->input('CallSid', ''), 0, 100) ?: null,
+            $id = DB::table('voicemails')->insertGetId(['department' => $dept ? $dept['name'] : null,
+                'recording_sid' => substr($sid, 0, 100), 'call_sid' => substr((string) $request->input('CallSid', ''), 0, 100) ?: null,
                 'from_number' => substr($from, 0, 40) ?: null, 'to_number' => substr((string) $request->input('To', ''), 0, 40) ?: null,
                 'duration' => $duration, 'recording_url' => substr($url, 0, 1000), 'created_at' => now(), 'updated_at' => now()]);
         } catch (\Illuminate\Database\QueryException $ex) {
@@ -150,6 +156,8 @@ class WebsiteSupportController extends Controller
             if ($row && ! $row->from_number && $from) DB::table('voicemails')->where('id', $row->id)->update(['from_number' => substr($from, 0, 40)]);
             return $xml();
         }
+
+        \App\Support\InboundCalls::note((string) $request->input('CallSid', ''), $from, $dept ? $dept['name'] : null, 'voicemail', (int) $id);
 
         $file = null;
         try {
@@ -170,7 +178,8 @@ class WebsiteSupportController extends Controller
 
         $when = now('America/Toronto')->format('l, F j \a\t g:i A') . ' ET';
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-        $inner = '<p style="font-size:15px;color:#334155;margin:0 0 10px">New voicemail on <strong>1-855-400-9996</strong>.</p>'
+        $inner = '<p style="font-size:15px;color:#334155;margin:0 0 10px">New voicemail on <strong>1-855-400-9996</strong>'
+            . ($dept ? ' for <strong>' . $e($dept['name']) . '</strong>' : '') . '.</p>'
             . '<table style="border-collapse:collapse;margin-bottom:12px">'
             . '<tr><td style="padding:4px 14px 4px 0;color:#64748b">Caller</td><td style="font-weight:700">' . $e($from ?: 'Unknown / hidden') . '</td></tr>'
             . '<tr><td style="padding:4px 14px 4px 0;color:#64748b">When</td><td>' . $e($when) . '</td></tr>'
@@ -179,8 +188,11 @@ class WebsiteSupportController extends Controller
                 : '<p style="font-size:14px;color:#B45309">The recording could not be downloaded; <a href="' . $e($url) . '">this link</a> may still work for a few minutes, or find it in Telnyx → Call recordings.</p>');
         try {
             $html = \App\Services\EmailTemplate::wrap(null, $inner, ['force_brand' => 'kt', 'title' => 'New voicemail']);
-            Mail::html($html, function ($m) use ($from, $file, $id) {
-                $m->to(self::INBOX)->subject('Voicemail from ' . ($from ?: 'an unknown caller') . ' (1-855-400-9996)');
+            // The general mailbox goes to sales@ as well as info@ (2026-10-23, Anthony).
+            $to = ($dept && $dept['emails']) ? $dept['emails'] : [self::INBOX, 'sales@kiddietrac.com'];
+            Mail::html($html, function ($m) use ($from, $file, $id, $to, $dept) {
+                \App\Support\MailScope::platform($m);   // platform mail: filed under Platform in the email log
+                $m->to($to)->subject(($dept ? $dept['name'] . ' voicemail' : 'Voicemail') . ' from ' . ($from ?: 'an unknown caller') . ' (1-855-400-9996)');
                 if ($file && is_file($file['path'])) $m->attach($file['path'], ['as' => 'voicemail-' . $id . '.' . $file['ext'], 'mime' => $file['ext'] === 'wav' ? 'audio/wav' : 'audio/mpeg']);
                 $m->getHeaders()->addTextHeader('X-KT-Bypass-Suppression', '1');
             });
@@ -188,6 +200,39 @@ class WebsiteSupportController extends Controller
         } catch (\Throwable $ex) {
             DB::table('voicemails')->where('id', $id)->update(['email_status' => 'failed']);
             Log::error('Voicemail email failed', ['voicemail' => $id, 'error' => $ex->getMessage()]);
+        }
+
+        /* The department's people: a bell + push, and a text where they asked for one and
+           have agreed to texts (the normal SMS gates apply). */
+        /* Everyone who should hear about it, each the way they chose (App\Support\CallAlerts,
+           2026-10-23: app / email / text per person; a general-mailbox voicemail reaches every
+           department's alert people). The old per-department block below no longer runs. */
+        try {
+            \App\Support\CallAlerts::send('voicemail', $from ?: null, $dept ? $dept['name'] : null, ['duration' => $duration, 'voicemail_id' => (int) $id]);
+        } catch (\Throwable $ex) {
+            Log::warning('Voicemail alerts failed', ['voicemail' => $id, 'error' => $ex->getMessage()]);
+        }
+        // And a text to the caller: we have it, and who will be in touch (App\Support\VoicemailReply).
+        $replied = \App\Support\VoicemailReply::send($from ?: null, $dept ? $dept['name'] : null, (int) $id);
+        Log::info('Voicemail reply text', ['voicemail' => $id, 'result' => $replied]);
+        if (false && $dept && $dept['alert_user_ids']) {
+            $title = '📞 New ' . $dept['name'] . ' voicemail';
+            $body = 'From ' . ($from ?: 'an unknown caller') . ($duration ? ', ' . $duration . ' seconds' : '') . '. Open Phone & voicemail to listen.';
+            foreach ($dept['alert_user_ids'] as $uid) {
+                try {
+                    \App\Support\Notify::write(['user_id' => $uid, 'type' => 'voicemail', 'title' => $title, 'body' => $body,
+                        'data' => json_encode(['link' => '#phone-voicemail', 'voicemail_id' => $id]), 'created_at' => now()]);
+                    app(\App\Services\FcmService::class)->sendToUser((int) $uid, $title, $body, '#phone-voicemail');
+                    if ($dept['text_alert']) {
+                        $ph = (string) DB::table('users')->where('id', $uid)->value('phone');
+                        if ($ph !== '') {
+                            app(SmsController::class)->sendOne(2, (int) $uid, $ph, 'KiddieTrac: new ' . $dept['name'] . ' voicemail from ' . ($from ?: 'an unknown caller') . '. Listen in Phone & voicemail.', 'voicemail_alert');
+                        }
+                    }
+                } catch (\Throwable $ex) {
+                    Log::warning('Voicemail alert failed', ['voicemail' => $id, 'user' => $uid, 'error' => $ex->getMessage()]);
+                }
+            }
         }
 
         return $xml();
