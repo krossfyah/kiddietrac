@@ -1106,6 +1106,10 @@ post admin/staff-breaks | Changed whether lunch and breaks are paid
 post marketing-site/chat/ai | Website chat: AI reply requested
 post marketing-site/careers/apply | Job application submitted on the website
 patch platform/careers/{id} | Changed a job application status
+post platform/careers/{id}/preview | Previewed an email to a job applicant
+post platform/careers/{id}/meeting | Booked an interview with a job applicant (invitation emailed)
+post platform/careers/{id}/keep | Kept a job application on file for 24 months (applicant emailed)
+post platform/careers/{id}/decline | Declined a job application (applicant emailed)
 post sales/web-chats/{id}/nudge | Nudged a website chat visitor
 post sales/prospects | Added a cold-reach prospect
 post sales/prospects/import | Imported a cold-reach list

@@ -561,6 +561,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Read a resume / cover letter in the portal: a PDF or picture as itself, a Word file as a page (2026-11-04).
             Route::get('/careers/{id}/view/{kind}', [\App\Http\Controllers\Api\CareersController::class, 'view'])->whereNumber('id')->where('kind', 'resume|cover');
             Route::patch('/careers/{id}', [\App\Http\Controllers\Api\CareersController::class, 'update'])->whereNumber('id');
+            // Outcomes (2026-11-24): book a meeting / keep on file 24 months / decline politely - each emails the applicant.
+            Route::post('/careers/{id}/preview', [\App\Http\Controllers\Api\CareersController::class, 'preview'])->whereNumber('id')->middleware('throttle:120,1,careers-prev');
+            Route::post('/careers/{id}/meeting', [\App\Http\Controllers\Api\CareersController::class, 'meeting'])->whereNumber('id')->middleware('throttle:20,1,careers-out');
+            Route::post('/careers/{id}/keep', [\App\Http\Controllers\Api\CareersController::class, 'keep'])->whereNumber('id')->middleware('throttle:20,1,careers-out');
+            Route::post('/careers/{id}/decline', [\App\Http\Controllers\Api\CareersController::class, 'decline'])->whereNumber('id')->middleware('throttle:20,1,careers-out');
             // The Cloudways server through Cloudways' API v2 (read-only access token).
             Route::get   ('/server-health/cloudways', [\App\Http\Controllers\Api\ServerHealthController::class, 'cloudways']);
             Route::put   ('/server-health/cloudways', [\App\Http\Controllers\Api\ServerHealthController::class, 'saveCloudways'])->middleware('throttle:10,1,r-grp-873');

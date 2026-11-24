@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Storage;
 class CareersController extends Controller
 {
     private const FILE_RULE = ['file', 'mimes:pdf,doc,docx,rtf,txt', 'max:8192'];
-    public const STATUSES = ['new', 'reviewing', 'interview', 'offer', 'hired', 'declined', 'withdrawn'];
+    public const STATUSES = ['new', 'reviewing', 'interview', 'offer', 'hired', 'on_file', 'declined', 'withdrawn'];   // on_file 2026-11-24
 
     private function cors(JsonResponse $r): JsonResponse
     {
@@ -124,19 +124,7 @@ class CareersController extends Controller
     private function confirmApplicant(object $a): void
     {
         try {
-            $html = \App\Support\SalesMail::render([
-                'preheader' => 'We received your application for ' . $a->role,
-                'eyebrow' => 'Application received', 'icon' => '✅',
-                'title' => 'Thanks, ' . $a->first_name . '!',
-                'subtitle' => $a->role,
-                'intro' => 'We have your application for ' . $a->role . ' at KiddieTrac. Our team reviews every application and '
-                    . 'will be in touch within 5 business days. If you have anything to add, just reply to this email.',
-            ]);
-            Mail::html($html, function ($m) use ($a) {
-                \App\Support\MailScope::platform($m);
-                $m->to($a->email, $a->first_name)->subject('We received your application — ' . $a->role)
-                  ->replyTo('info@kiddietrac.com', 'KiddieTrac');
-            });
+            \App\Support\CareersMail::send('received', $a);
         } catch (\Throwable $e) {
             report($e);
         }
@@ -150,7 +138,9 @@ class CareersController extends Controller
         return response()->json(['applications' => $rows->map(function ($r) {
             return ['id' => $r->id, 'role' => $r->role, 'name' => trim($r->first_name . ' ' . $r->last_name), 'email' => $r->email,
                 'phone' => $r->phone, 'linkedin' => $r->linkedin, 'cover_text' => $r->cover_text, 'status' => $r->status,
-                'has_resume' => (bool) $r->resume_path, 'has_cover' => (bool) $r->cover_path, 'created_at' => $r->created_at];
+                'has_resume' => (bool) $r->resume_path, 'has_cover' => (bool) $r->cover_path, 'created_at' => $r->created_at,
+                'keep_until' => $r->keep_until ?? null, 'meeting_id' => $r->meeting_id ?? null,
+                'last_email_kind' => $r->last_email_kind ?? null, 'last_emailed_at' => $r->last_emailed_at ?? null];
         })->all(), 'statuses' => self::STATUSES]);
     }
 
@@ -189,9 +179,144 @@ class CareersController extends Controller
         $data = $request->validate(['status' => 'required|in:' . implode(',', self::STATUSES)]);
         $old = DB::table('career_applications')->where('id', $id)->value('status');
         abort_if($old === null, 404, 'Application not found.');
-        DB::table('career_applications')->where('id', $id)->update(['status' => $data['status'], 'updated_at' => now()]);
+        $keep = $data['status'] === 'on_file'
+            ? ['keep_until' => DB::table('career_applications')->where('id', $id)->value('keep_until') ?: now(\App\Support\BookingMail::TZ)->addMonths(\App\Support\CareersMail::KEEP_MONTHS)->toDateString()]
+            : ['keep_until' => null];
+        DB::table('career_applications')->where('id', $id)->update(array_merge(['status' => $data['status'], 'updated_at' => now()], $keep));
         if ($old !== $data['status']) $this->logStatus($id, $old, $data['status'], optional($request->user())->id);
         return response()->json(['ok' => true]);
+    }
+
+    // ── Outcomes (2026-11-24): book a meeting / keep on file / decline politely ─────────────
+    // Anthony: "for resumes submitted wire up a book a meeting, add to our database for future considerations
+    // and or politely decline". Each sends ONE letter (App\Support\CareersMail) to the applicant's own address,
+    // signed "The KiddieTrac Team", replies to info@. Preview first: POST .../preview returns the letter unsent.
+
+    private function application(int $id): object
+    {
+        $a = DB::table('career_applications')->where('id', $id)->first();
+        abort_if(! $a, 404, 'Application not found.');
+        return $a;
+    }
+
+    /** The meeting fields from the request: date (Y-m-d) + time (H:i) in Toronto time, minutes. */
+    private function slot(Request $request): array
+    {
+        $d = $request->validate([
+            'date' => 'required|date_format:Y-m-d',
+            'time' => 'required|date_format:H:i',
+            'minutes' => 'nullable|integer|min:15|max:180',
+            'video' => 'nullable|in:teams,none',
+            'location' => 'nullable|string|max:200',
+        ]);
+        $tz = \App\Support\BookingMail::TZ;
+        $start = \Illuminate\Support\Carbon::createFromFormat('Y-m-d H:i', $d['date'] . ' ' . $d['time'], $tz);
+        abort_if($start->isPast(), 422, 'Pick a time in the future.');
+        $mins = (int) ($d['minutes'] ?? 30);
+        return ['start' => $start, 'end' => $start->copy()->addMinutes($mins), 'minutes' => $mins, 'tz' => $tz,
+            'video' => $d['video'] ?? 'teams', 'location' => trim((string) ($d['location'] ?? ''))];
+    }
+
+    private function meetingOpts(object $m, int $minutes, ?object $att): array
+    {
+        return ['when' => \App\Support\Meetings::whenText($m),
+            'how' => $m->video === 'teams' ? 'Microsoft Teams video call (link below)' : ($m->join_url ? 'Video call (link below)' : ($m->location ? 'In person' : 'We will call you')),
+            'where' => $m->location ?: '', 'minutes' => $minutes, 'join_url' => $m->join_url, 'video' => $m->video,
+            'rsvp' => $att ? [\App\Support\Meetings::rsvpUrl($att, 'accepted'), \App\Support\Meetings::rsvpUrl($att, 'tentative'), \App\Support\Meetings::rsvpUrl($att, 'declined')] : null];
+    }
+
+    /** The letter as it will be sent, without sending it. kind: interview | on_file | decline. */
+    public function preview(Request $request, int $id): JsonResponse
+    {
+        $a = $this->application($id);
+        $kind = (string) $request->validate(['kind' => 'required|in:interview,on_file,decline'])['kind'];
+        $note = mb_substr(trim((string) $request->input('note', '')), 0, 2000);
+        $o = ['note' => $note];
+        if ($kind === 'interview') {
+            $s = $this->slot($request);
+            $m = (object) ['id' => 0, 'scope' => 'platform', 'agency_id' => null, 'timezone' => $s['tz'], 'all_day' => 0,
+                'starts_at' => $s['start']->copy()->utc()->format('Y-m-d H:i:s'), 'ends_at' => $s['end']->copy()->utc()->format('Y-m-d H:i:s'),
+                'video' => $s['video'], 'join_url' => $s['video'] === 'teams' ? 'https://teams.microsoft.com/' : null, 'location' => $s['location']];
+            $o['meeting'] = $this->meetingOpts($m, $s['minutes'], null);
+            $o['meeting']['rsvp'] = ['#', '#', '#'];
+        }
+        if ($kind === 'on_file') $o['keep_until'] = now(\App\Support\BookingMail::TZ)->addMonths(\App\Support\CareersMail::KEEP_MONTHS)->toDateString();
+        $mail = \App\Support\CareersMail::build($kind, $a, $o);
+        return response()->json(['subject' => $mail['subject'], 'html' => $mail['html'], 'to' => $a->email]);
+    }
+
+    /** We pick the time: a platform meeting on the team calendar (Teams), the applicant invited as a guest. */
+    public function meeting(Request $request, int $id): JsonResponse
+    {
+        $a = $this->application($id);
+        abort_unless(filter_var($a->email, FILTER_VALIDATE_EMAIL), 422, 'This application has no valid email address.');
+        $s = $this->slot($request);
+        $note = mb_substr(trim((string) $request->input('note', '')), 0, 2000);
+        $user = $request->user();
+        $name = trim($a->first_name . ' ' . $a->last_name);
+
+        $mid = DB::table('meetings')->insertGetId([
+            'scope' => 'platform', 'agency_id' => null, 'centre_id' => null,
+            'title' => 'Interview: ' . $a->role . ' with KiddieTrac (' . $name . ')',
+            'description' => 'A conversation about the ' . $a->role . ' role at KiddieTrac. Application #' . $a->id . '.',
+            'location' => $s['location'] !== '' ? $s['location'] : null,
+            'starts_at' => $s['start']->copy()->utc(), 'ends_at' => $s['end']->copy()->utc(), 'all_day' => 0, 'timezone' => $s['tz'],
+            'video' => $s['video'] === 'teams' ? 'teams' : 'none', 'organizer_id' => $user->id, 'status' => 'scheduled', 'sequence' => 0,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $m = DB::table('meetings')->where('id', $mid)->first();
+        $teamsNote = null;
+        if ($m->video === 'teams') {
+            $t = \App\Support\Meetings::teamsCreate($m);
+            if (! empty($t['url'])) {
+                DB::table('meetings')->where('id', $mid)->update(['join_url' => $t['url'], 'graph_event_id' => $t['event_id'] ?? null]);
+            } else {
+                DB::table('meetings')->where('id', $mid)->update(['video' => 'none']);
+                $teamsNote = 'The Teams link could not be made, so the invitation went without one. Add a link from Meetings if you need it.';
+            }
+            $m = DB::table('meetings')->where('id', $mid)->first();
+        }
+        $attId = DB::table('meeting_attendees')->insertGetId([
+            'meeting_id' => $mid, 'user_id' => null, 'email' => $a->email, 'name' => $name, 'kind' => 'guest', 'optional' => 0,
+            'response' => 'pending', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $att = DB::table('meeting_attendees')->where('id', $attId)->first();
+        $org = DB::table('users')->where('id', $user->id)->first(['id', 'first_name', 'last_name', 'email']);
+        $ics = \App\Support\Meetings::ics($m, 'REQUEST', [$att], $org);
+
+        $ok = \App\Support\CareersMail::send('interview', $a, ['note' => $note, 'meeting' => $this->meetingOpts($m, $s['minutes'], $att)], null, $ics);
+        if ($ok) DB::table('meeting_attendees')->where('id', $attId)->update(['invited_at' => now()]);
+        $this->outcome($a, 'interview', 'interview', $user->id, ['meeting_id' => $mid]);
+        return response()->json(['ok' => true, 'sent' => $ok, 'meeting_id' => $mid, 'when' => \App\Support\Meetings::whenText($m), 'join_url' => $m->join_url, 'note' => $teamsNote]);
+    }
+
+    /** Keep on file for future roles, KEEP_MONTHS months (kt:careers-retention removes it after). */
+    public function keep(Request $request, int $id): JsonResponse
+    {
+        $a = $this->application($id);
+        abort_unless(filter_var($a->email, FILTER_VALIDATE_EMAIL), 422, 'This application has no valid email address.');
+        $until = now(\App\Support\BookingMail::TZ)->addMonths(\App\Support\CareersMail::KEEP_MONTHS)->toDateString();
+        $ok = \App\Support\CareersMail::send('on_file', $a, ['note' => mb_substr(trim((string) $request->input('note', '')), 0, 2000), 'keep_until' => $until]);
+        $this->outcome($a, 'on_file', 'on_file', $request->user()->id, ['keep_until' => $until]);
+        return response()->json(['ok' => true, 'sent' => $ok, 'keep_until' => $until]);
+    }
+
+    /** A kind no. */
+    public function decline(Request $request, int $id): JsonResponse
+    {
+        $a = $this->application($id);
+        abort_unless(filter_var($a->email, FILTER_VALIDATE_EMAIL), 422, 'This application has no valid email address.');
+        $ok = \App\Support\CareersMail::send('decline', $a, ['note' => mb_substr(trim((string) $request->input('note', '')), 0, 2000)]);
+        $this->outcome($a, 'declined', 'decline', $request->user()->id, ['keep_until' => null]);
+        return response()->json(['ok' => true, 'sent' => $ok]);
+    }
+
+    private function outcome(object $a, string $status, string $emailKind, ?int $userId, array $extra = []): void
+    {
+        DB::table('career_applications')->where('id', $a->id)->update(array_merge([
+            'status' => $status, 'last_email_kind' => $emailKind, 'last_emailed_at' => now(), 'updated_at' => now(),
+        ], $extra));
+        if ($a->status !== $status) $this->logStatus((int) $a->id, $a->status, $status, $userId);
     }
 
     /** One row per status change, so time-to-review / time-to-hire can be measured (2026-11-02). */
@@ -390,12 +515,12 @@ class CareersController extends Controller
         $toDecision = [];
         $unmeasured = 0;
         foreach ($rows as $r) {
-            $max = $stageIdx[$r->status] ?? ($r->status === 'declined' ? 1 : 0);
+            $max = $stageIdx[$r->status] ?? (in_array($r->status, ['declined', 'on_file'], true) ? 1 : 0);
             $created = \Illuminate\Support\Carbon::parse($r->created_at, 'UTC');
             $responded = null;
             foreach ($events[$r->id] ?? [] as $e) {
                 if (isset($stageIdx[$e->to_status])) $max = max($max, $stageIdx[$e->to_status]);
-                if ($e->to_status === 'declined') $max = max($max, 1);
+                if (in_array($e->to_status, ['declined', 'on_file'], true)) $max = max($max, 1);
                 if ($responded === null && $e->from_status === 'new' && $e->to_status !== 'new') {
                     $responded = \Illuminate\Support\Carbon::parse($e->created_at, 'UTC');
                     $firstResponse[] = max(0, $created->diffInMinutes($responded)) / 60;

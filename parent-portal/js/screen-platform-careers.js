@@ -20,7 +20,7 @@
   function ssGet(k, d) { try { return sessionStorage.getItem(k) || d; } catch (e) { return d; } }
   function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
   function toast(m, t) { if (KT.Dom && KT.Dom.toast) KT.Dom.toast(m, t); }
-  var LABEL = { new: 'New', reviewing: 'Reviewing', interview: 'Interview', offer: 'Offer', hired: 'Hired', declined: 'Declined', withdrawn: 'Withdrawn' };
+  var LABEL = { new: 'New', reviewing: 'Reviewing', interview: 'Interview', offer: 'Offer', hired: 'Hired', on_file: 'Kept on file', declined: 'Declined', withdrawn: 'Withdrawn' };
   var STAGE_LABEL = { new: 'Applied', reviewing: 'Reviewed', interview: 'Interviewed', offer: 'Offered', hired: 'Hired' };
 
   /* ── Styles: colour tokens on .kt-cs. The portal's dark theme (html.kt-dark / data-theme=dark) swaps them;
@@ -192,6 +192,88 @@
       .then(function () { btn.disabled = false; });
   }
 
+  /* ── Outcomes (2026-11-24, Anthony: "wire up a book a meeting, add to our database for future considerations and or
+        politely decline"). One dialog per outcome: the details, an optional personal note, and the exact email as it
+        will arrive (POST .../preview). Send goes to the applicant's own address only. ── */
+  var ACT = {
+    interview: { title: '📅 Book a meeting', send: 'Send invitation', busy: 'Booking…', url: 'meeting',
+      done: function (r) { return 'Invitation sent' + (r.when ? ' for ' + r.when : '') + '. It is on the team calendar in Meetings.'; } },
+    on_file: { title: '🗂️ Keep on file for future roles', send: 'Keep on file & send', busy: 'Sending…', url: 'keep',
+      done: function (r) { return 'Kept on file until ' + day(r.keep_until) + '. Thank-you email sent.'; } },
+    decline: { title: '💌 Decline politely', send: 'Send', busy: 'Sending…', url: 'decline',
+      done: function () { return 'Thank-you email sent.'; } }
+  };
+  function lastLine(a) {
+    var bits = [];
+    if (a.status === 'on_file' && a.keep_until) bits.push('On file until ' + esc(day(a.keep_until)));
+    if (a.last_email_kind && a.last_emailed_at) bits.push({ interview: '📅 Invitation', on_file: '🗂️ On-file email', decline: '💌 Decline email' }[a.last_email_kind] + ' sent ' + esc(when(a.last_emailed_at)));
+    return bits.length ? '<div style="font-size:11.5px;color:#64748B;margin-top:4px;line-height:1.4">' + bits.join('<br>') + '</div>' : '';
+  }
+  function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function outcome(a, kind, root) {
+    var cfg = ACT[kind];
+    var tomorrow = new Date(Date.now() + 86400000);
+    var f = 'height:30px;padding:4px 8px;border:1px solid #CBD5E1;border-radius:7px;font:inherit;font-size:13px';
+    var body = '<div class="pc-out" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;width:min(900px,86vw)">'
+      + '<div style="display:flex;flex-direction:column;gap:10px;font-size:13px">'
+      + '<div style="color:#334155">To <strong>' + esc(a.name) + '</strong> &lt;' + esc(a.email) + '&gt;<div style="color:#64748B;font-size:12px">' + esc(a.role) + '</div></div>'
+      + (kind === 'interview'
+        ? '<label>Date<br><input type="date" class="po-date" min="' + ymd(new Date()) + '" value="' + ymd(tomorrow) + '" style="' + f + '"></label>'
+          + '<label>Time (Toronto)<br><input type="time" class="po-time" value="10:00" step="900" style="' + f + '"></label>'
+          + '<label>Length<br><select class="po-min" style="' + f + '"><option value="20">20 minutes</option><option value="30" selected>30 minutes</option><option value="45">45 minutes</option><option value="60">1 hour</option></select></label>'
+          + '<label>How<br><select class="po-video" style="' + f + '"><option value="teams" selected>Microsoft Teams video call</option><option value="none">Phone call / in person</option></select></label>'
+          + '<label class="po-locw" style="display:none">Where (optional)<br><input type="text" class="po-loc" maxlength="200" placeholder="e.g. We will call you at the number you gave" style="' + f + ';width:100%"></label>'
+        : '')
+      + (kind === 'on_file' ? '<div style="background:#ECFEFF;border:1px solid #A5F3FC;border-radius:8px;padding:8px 10px;color:#155E75">Their resume is kept for <strong>24 months</strong>, then removed automatically. The email tells them the date and that they can ask for removal any time.</div>' : '')
+      + '<label>A personal note (optional)<br><textarea class="po-note" maxlength="2000" placeholder="A line in your own words, shown in its own box in the email." style="width:100%;min-height:96px;padding:6px 8px;border:1px solid #CBD5E1;border-radius:7px;font:inherit;font-size:13px"></textarea></label>'
+      + '<div style="font-size:12px;color:#64748B">Signed “The KiddieTrac Team”. Replies go to info@kiddietrac.com.</div>'
+      + '</div>'
+      + '<div style="display:flex;flex-direction:column;min-height:420px"><div style="font-size:12px;color:#64748B;margin-bottom:4px">Email preview · <span class="po-subj" style="color:#0F172A;font-weight:600"></span></div>'
+      + '<iframe class="po-frame" title="Email preview" sandbox="" style="flex:1;width:100%;min-height:420px;border:1px solid #E2E8F0;border-radius:10px;background:#EEF3F6"></iframe></div>'
+      + '</div>';
+    var host;
+    function fields() {
+      var q = function (c) { var el = host && host.querySelector(c); return el ? el.value : ''; };
+      var o = { kind: kind, note: q('.po-note') };
+      if (kind === 'interview') { o.date = q('.po-date'); o.time = q('.po-time'); o.minutes = +q('.po-min') || 30; o.video = q('.po-video') || 'teams'; o.location = q('.po-loc'); }
+      return o;
+    }
+    var t = null;
+    function preview() {
+      clearTimeout(t);
+      t = setTimeout(function () {
+        KT.Api.post('/platform/careers/' + a.id + '/preview', fields()).then(function (r) {
+          if (!host) return;
+          host.querySelector('.po-frame').srcdoc = r.html;
+          host.querySelector('.po-subj').textContent = r.subject;
+        }).catch(function (e) { if (host) host.querySelector('.po-subj').textContent = (e && e.message) || 'Could not draw the preview.'; });
+      }, 350);
+    }
+    Shell.Modal.open({
+      title: cfg.title + ' · ' + a.name, body: body, large: true,
+      actions: [
+        { label: 'Cancel' },
+        { label: cfg.send, primary: true, busyLabel: cfg.busy, handler: function () {
+          var o = fields();
+          if (kind === 'interview' && (!o.date || !o.time)) { toast('Pick a date and a time.', 'error'); return false; }
+          return KT.Api.post('/platform/careers/' + a.id + '/' + cfg.url, o).then(function (r) {
+            toast(r.sent === false ? 'Saved, but the email could not be sent. Check the address.' : cfg.done(r), r.sent === false ? 'error' : undefined);
+            if (r.note) toast(r.note, 'error');
+            renderList(root);
+          });
+        } }
+      ]
+    });
+    host = document.querySelector('.pc-out');
+    if (!host) return;
+    host.addEventListener('input', preview);
+    host.addEventListener('change', function (e) {
+      if (e.target.classList.contains('po-video')) host.querySelector('.po-locw').style.display = e.target.value === 'none' ? '' : 'none';
+      preview();
+    });
+    preview();
+  }
+
   async function renderList(root) {
     root.innerHTML = '<div style="padding:20px;color:#64748B">Loading…</div>';
     var d;
@@ -206,12 +288,16 @@
           + '<td style="font-weight:700">' + esc(a.role) + '</td>'
           + '<td>' + esc(a.name) + (a.linkedin ? '<div><a href="' + esc(a.linkedin) + '" target="_blank" rel="noopener" style="font-size:12px">LinkedIn / portfolio ↗</a></div>' : '') + '</td>'
           + '<td><a href="mailto:' + esc(a.email) + '">' + esc(a.email) + '</a>' + (a.phone ? '<div style="font-size:12px;color:#64748B">' + esc(a.phone) + '</div>' : '') + '</td>'
-          + '<td><select class="pc-status" aria-label="Status">' + statuses.map(function (s) { return '<option value="' + s + '"' + (s === a.status ? ' selected' : '') + '>' + esc(LABEL[s] || s) + '</option>'; }).join('') + '</select></td>'
+          + '<td><select class="pc-status" aria-label="Status">' + statuses.map(function (s) { return '<option value="' + s + '"' + (s === a.status ? ' selected' : '') + '>' + esc(LABEL[s] || s) + '</option>'; }).join('') + '</select>' + lastLine(a) + '</td>'
           + '<td style="white-space:nowrap">'
           // Plain buttons in the last cell: kt-row-actions folds them into the row's ⋮ menu.
           + (a.has_resume ? '<button type="button" class="pc-view" data-kind="resume">👁️ View resume</button> <button type="button" class="pc-dl" data-kind="resume">⬇️ Download resume</button> ' : '')
           + (a.has_cover ? '<button type="button" class="pc-view" data-kind="cover">👁️ View cover letter</button> <button type="button" class="pc-dl" data-kind="cover">⬇️ Download cover letter</button> ' : '')
-          + (a.cover_text ? '<button type="button" class="pc-note">💬 Note</button>' : '')
+          + (a.cover_text ? '<button type="button" class="pc-note">💬 Note</button> ' : '')
+          // Outcomes (2026-11-24): each opens a dialog with the email preview; nothing is sent until Send.
+          + '<button type="button" class="pc-act" data-act="interview">📅 Book a meeting</button> '
+          + '<button type="button" class="pc-act" data-act="on_file">🗂️ Keep on file</button> '
+          + '<button type="button" class="pc-act" data-act="decline">💌 Decline politely</button>'
           + '</td></tr>';
       }).join('') + '</tbody></table></div>';
     root.querySelectorAll('tr[data-id]').forEach(function (tr) {
@@ -222,6 +308,7 @@
       if (nb) nb.addEventListener('click', function () {
         Shell.Modal.open({ title: 'Note from ' + a.name, body: '<div style="white-space:pre-wrap;max-width:560px;font-size:14px;line-height:1.55">' + esc(a.cover_text) + '</div>', actions: [{ label: 'Close' }] });
       });
+      tr.querySelectorAll('.pc-act').forEach(function (b) { b.addEventListener('click', function () { outcome(a, b.getAttribute('data-act'), root); }); });
       tr.querySelector('.pc-status').addEventListener('change', function () {
         var sel = this;
         KT.Api.patch('/platform/careers/' + id, { status: sel.value })
@@ -295,7 +382,7 @@
     var pipeline = '<div class="kt-cs-panel"><h3>Pipeline</h3><p class="cap">How far applications from the ' + esc(periodName) + ' got. Declined ones count as reviewed; a stage is counted once it was reached, even if the applicant later withdrew.</p>' +
       (applied ? fun : '<div class="kt-cs-empty">No applications in this period.</div>') + '</div>';
 
-    var SC = { new: '#64748B', reviewing: '#2F7FC1', interview: '#7C3AED', offer: '#D97706', hired: '#15803D', declined: '#BE123C', withdrawn: '#94A3B8' };
+    var SC = { new: '#64748B', reviewing: '#2F7FC1', interview: '#7C3AED', offer: '#D97706', hired: '#15803D', on_file: '#0E7490', declined: '#BE123C', withdrawn: '#94A3B8' };
     var bs = d.by_status || {};
     var statusNow = '<div class="kt-cs-panel"><h3>Where they stand now</h3><p class="cap">Current status of applications from the ' + esc(periodName) + '.</p>' +
       rows(Object.keys(LABEL).filter(function (s) { return bs[s] || ['new', 'reviewing', 'interview', 'hired'].indexOf(s) > -1; })

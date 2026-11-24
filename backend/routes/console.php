@@ -583,6 +583,8 @@ Schedule::command('kt:intake-reminders')->dailyAt('09:00')->timezone('America/To
 // Every section banner shimmers: gradient range, animation not switched off, white-label size kept (2026-11-24).
 Schedule::command('kt:banner-shimmer-check --quiet-ok')->dailyAt('05:52')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
 Schedule::command('kt:text-check')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
+// Job applications kept on file: removed when their 24 months are up, as the applicant was told (2026-11-24).
+Schedule::command('kt:careers-retention')->dailyAt('03:40')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
 /* Xero: agencies that turned on automatic sync in Settings → Xero (off by default). */
 Schedule::command('xero:sync')->cron('9,39 * * * *')->withoutOverlapping(25)->runInBackground()->onOneServer();
 /* QuickBooks: the same, for agencies with automatic sync on in Settings → QuickBooks. */
