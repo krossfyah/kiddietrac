@@ -283,6 +283,10 @@
         '#kt-mobilenav button.scan .ic{width:50px;height:50px;margin-top:-22px;border-radius:50%;background:#0E7C90;color:#fff;display:flex;align-items:center;justify-content:center;font-size:23px;box-shadow:0 6px 16px -4px rgba(14,124,144,.7);border:3px solid #fff;}',
         '#kt-mobilenav button.scan.on .ic{transform:none;}',
         '#kt-mobilenav button.scan.on::before{display:none;}',
+        /* ACTIVE RAISED BUTTON (2026-11-24): .scan is always bold + coloured, so "on" showed nothing. While its screen
+           or its popover is up it gets the tab indicator under its label and a white inner ring on the circle. */
+        '#kt-mobilenav#kt-mobilenav button.scan.on::before{display:block;top:auto;bottom:2px;}',
+        '#kt-mobilenav button.scan.on .ic{outline:2px solid rgba(255,255,255,.92);outline-offset:-8px;}',
         // Keep the parent profile name clear of the floating settings gear.
         '#navUser{padding-right:56px !important;box-sizing:border-box !important;}',
         // The `font` shorthand needs a real family — `font:800 10px/16px inherit` is
@@ -795,7 +799,10 @@
           } catch (e) { return false; }
         })();
         if (_super) {
-          nav.appendChild(btn('📞', 'Phone', function () { if (window.KT && KT.dialer && KT.dialer.open) KT.dialer.open(); else go('#phone'); }, 'kt-b-phone', 'phone'));
+          var phoneBtn = btn('📞', 'Phone', function () { if (window.KT && KT.dialer && KT.dialer.open) KT.dialer.open(); else go('#phone'); }, 'kt-b-phone', 'phone');
+          // The dial pad (kt-dialer: html.kt-dpop-full) and its Texts sheet (html.kt-txfull-open) are panels, not a hash.
+          phoneBtn.__ktOpen = function () { var c = document.documentElement.classList; return c.contains('kt-dpop-full') || c.contains('kt-txfull-open'); };
+          nav.appendChild(phoneBtn);
           setTimeout(function () { try { if (window.KT && KT.dialer && KT.dialer.paint) KT.dialer.paint(); } catch (e) {} }, 0);
         } else {
           nav.appendChild(btn('🗓️', 'Daily', function () { go('#provider-day'); }, null, 'provider-day'));
@@ -824,6 +831,7 @@
       if (_adminRole) {
         var qaBtn = btn('\u26A1', 'Add', function () { openAdminQuickAdd(qaBtn); }, null, '__qadd');
         qaBtn.classList.add('scan');   // the raised centre treatment the parent bar uses
+        qaBtn.__ktOpen = function () { return !!(document.getElementById('kt-qa-pop') || document.getElementById('kt-qa-sheet')); };
         nav.appendChild(qaBtn);
       }
 
@@ -833,6 +841,7 @@
         // was too easy to miss for something parents queue up to scan.
         var qrBtn = btn(ONETAP_MARK, 'One-Tap', function () { oneTapMenu(qrBtn); }, null, 'eduqr');
         qrBtn.classList.add('scan');
+        qrBtn.__ktOpen = function () { return !!(document.getElementById('kt-otm') || document.getElementById('kt-qr-overlay')); };
         nav.appendChild(qrBtn);
       }
       // An auditor has no Message Centre (no auditor:chat screen); Audit logs is their next stop.
@@ -888,6 +897,7 @@
         }, null, '__menu');
         menuBtn.setAttribute('aria-expanded', 'false');
         menuBtn.setAttribute('aria-haspopup', 'menu');
+        menuBtn.__ktOpen = function () { return document.body.classList.contains('kt-mnav-open'); };
         nav.appendChild(menuBtn);
       }
     }
@@ -929,14 +939,37 @@
     placeGear();
 
     // Highlight the active section.
+    /* ONE ACTIVE-STATE RULE (2026-11-24, Anthony: "under super admin in mobile the phone icon when you click it doesn't
+       highlight like it does with the other icons on the bottom bar - full sweep"). Phone opens the dial pad, a PANEL -
+       the hash never changes - so a hash-only match could never light it (Home stayed lit under the pad). The same
+       was true of ⚡ Add, the educator's One-Tap and ☰ Menu (popovers/drawer). Now:
+         • a button that opens a panel says so (b.__ktOpen); while its panel is up it alone is lit;
+         • otherwise the button whose hash is the current screen, read the way the shell's navKey reads it
+           (no ?query, &…, or /sub-screen), so #chat?id=4 or #settings/about still light their tab.
+       Re-run on hashchange and whenever a panel opens or closes (html/body class or a body child changing). */
     var updateActive = function () {
-      var h = (location.hash || '#dashboard').replace('#', '').split('?')[0];
+      var bs = [].slice.call(nav.querySelectorAll('button'));
+      var panel = null;
+      bs.forEach(function (b) { try { if (!panel && b.__ktOpen && b.__ktOpen()) panel = b; } catch (e) {} });
+      var h = (location.hash || '#dashboard').replace('#', '').split('?')[0].split('&')[0].split('/')[0];
       // For parents the launcher (#home) is the base; Today/dashboard are drilled in from it.
       if (nav.querySelector('button[data-hash="home"]') && (h === 'today' || h === 'dashboard')) h = 'home';
-      [].forEach.call(nav.querySelectorAll('button'), function (b) { b.classList.toggle('on', b.getAttribute('data-hash') === h); });
+      bs.forEach(function (b) {
+        var on = panel ? b === panel : b.getAttribute('data-hash') === h;
+        if (b.classList.contains('on') !== on) b.classList.toggle('on', on);
+        if (b.__ktOpen) b.setAttribute('aria-expanded', b === panel ? 'true' : 'false');
+        if (on && !b.__ktOpen) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      });
     };
     updateActive();
     window.addEventListener('hashchange', updateActive);
+    var _uaQ = false;
+    var _uaSoon = function () { if (_uaQ) return; _uaQ = true; requestAnimationFrame(function () { _uaQ = false; if (nav.isConnected) updateActive(); else { try { _uaObs.disconnect(); } catch (e) {} } }); };
+    try {
+      var _uaObs = new MutationObserver(_uaSoon);
+      _uaObs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+      _uaObs.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true });
+    } catch (e) {}
     // close the sidebar overlay whenever a nav link is tapped inside it
     var sb = document.getElementById('appSidebar');
     if (sb && !sb.__ktMnavBound) { sb.__ktMnavBound = true; sb.addEventListener('click', function (e) { if (e.target.closest('a,.nav-link')) closeMenu(); }); }
