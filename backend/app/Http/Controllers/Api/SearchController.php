@@ -125,6 +125,8 @@ final class SearchController extends Controller
             'agencyId' => $agencyId,
             'centreIds' => $centreIds,
             'wholeAgency' => $wholeAgency,
+            // Families on the agency waitlist after their provider closed: agency admins still find them (2026-11-24).
+            'held' => $wholeAgency ? (\App\Support\AgencyWaitlist::familyIds($agencyId) ?: []) : [],
             'refs' => RefCode::searchIds($q, $agencyId) ?? [],
             'exact' => RefCode::lookup($q, $agencyId),
             'billing' => (bool) array_intersect($here, SearchRegistry::BILLING_ROLES),
@@ -205,7 +207,7 @@ final class SearchController extends Controller
 
     private function srcFamilies(object $ctx, array $meta): array
     {
-        if (! $ctx->centreIds) return [];
+        if (! $ctx->centreIds && ! $ctx->held) return [];
         $famIds = array_map('intval', $ctx->refs['F'] ?? []);
         $exactId = ($ctx->exact && ($ctx->exact['type'] ?? '') === 'F') ? (int) $ctx->exact['id'] : 0;
         if (! $ctx->nameSearch && ! $famIds) return [];
@@ -213,7 +215,7 @@ final class SearchController extends Controller
         $refSql = $famIds ? 'CASE WHEN id = ' . $exactId . ' THEN 0 WHEN id IN (' . implode(',', $famIds) . ') THEN 1 ELSE ' . $rk . ' END' : $rk;
 
         $families = DB::table('families')
-            ->whereIn('centre_id', $ctx->centreIds)
+            ->where(fn ($w) => $w->whereIn('centre_id', $ctx->centreIds ?: [0])->orWhereIn('id', $ctx->held ?: [0]))
             ->where(function ($w) use ($ctx, $famIds) {
                 if ($ctx->nameSearch) $w->where(fn ($x) => $x->whereNull('deleted_at')->where('family_name', 'LIKE', $ctx->term));
                 if ($famIds) $w->orWhereIn('id', $famIds);
@@ -230,7 +232,7 @@ final class SearchController extends Controller
         return $families->map(fn ($f) => [
             'id' => $f->id,
             'label' => $f->family_name . ($f->deleted_at ? ' (archived)' : ''),
-            'sublabel' => $this->sub($codes[$f->id] ?? null, 'Family'),
+            'sublabel' => $this->sub($codes[$f->id] ?? null, in_array((int) $f->id, $ctx->held, true) ? 'Family · ⏳ Waitlisted' : 'Family'),
             'ref_code' => $codes[$f->id] ?? null,
             // Directors have no Families screen: their family hit opens the first child's record.
             'hash' => $ctx->wholeAgency ? '#admin-families?family=' . $f->id . ($f->deleted_at ? '&archived=1' : '')
@@ -241,7 +243,7 @@ final class SearchController extends Controller
 
     private function srcChildren(object $ctx, array $meta): array
     {
-        if (! $ctx->centreIds) return [];
+        if (! $ctx->centreIds && ! $ctx->held) return [];
         $kidIds = array_map('intval', $ctx->refs['C'] ?? []);
         $exactId = ($ctx->exact && ($ctx->exact['type'] ?? '') === 'C') ? (int) $ctx->exact['id'] : 0;
         if (! $ctx->nameSearch && ! $kidIds) return [];
@@ -253,7 +255,7 @@ final class SearchController extends Controller
         // An archived child is still found by its ID — the ID is printed on documents kept for years.
         $children = DB::table('children')
             ->join('families', 'families.id', '=', 'children.family_id')
-            ->whereIn('families.centre_id', $ctx->centreIds)
+            ->where(fn ($w) => $w->whereIn('families.centre_id', $ctx->centreIds ?: [0])->orWhereIn('families.id', $ctx->held ?: [0]))
             ->where(function ($w) use ($ctx, $kidIds, $full, $pref) {
                 if ($ctx->nameSearch) {
                     $w->where(fn ($x) => $x->whereNull('children.deleted_at')->where(fn ($y) => $y
@@ -305,8 +307,8 @@ final class SearchController extends Controller
     private function srcParents(object $ctx, array $meta): array
     {
         // Guardians of a family at the caller's centres.
-        $ids = ! $ctx->centreIds ? [] : DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
-            ->whereIn('f.centre_id', $ctx->centreIds)->pluck('g.user_id')->map(fn ($x) => (int) $x)->unique()->all();
+        $ids = (! $ctx->centreIds && ! $ctx->held) ? [] : DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+            ->where(fn ($w) => $w->whereIn('f.centre_id', $ctx->centreIds ?: [0])->orWhereIn('f.id', $ctx->held ?: [0]))->pluck('g.user_id')->map(fn ($x) => (int) $x)->unique()->all();
         $people = $this->people($ctx, $ids, $ctx->refs['P'] ?? [], 'P', $meta['limit']);
         $codes = RefCode::users($people->pluck('id')->all(), $ctx->agencyId, 'P');
         return $people->map(fn ($u) => [

@@ -295,6 +295,12 @@ final class ChildController extends Controller
 
         // v22p88: centre + agency + full enrollment history for the detail tabs.
         $centre = $family ? DB::table('centres')->where('id', $family->centre_id)->first(['id', 'name', 'city', 'agency_id']) : null;
+        // Held on the agency waitlist (provider closed): no provider now; the old one is history (2026-11-24).
+        if ($centre && \App\Support\AgencyWaitlist::holdsChild((int) $childId)) {
+            $centre->previous_name = $centre->name;
+            $centre->name = \App\Support\AgencyWaitlist::NO_PROVIDER;
+            $centre->waitlisted = true;
+        }
         $agency = $centre ? DB::table('agencies')->where('id', $centre->agency_id)->first(['id', 'name']) : null;
         $enrollmentHistory = DB::table('enrollments')
             ->leftJoin('rooms', 'rooms.id', '=', 'enrollments.room_id')

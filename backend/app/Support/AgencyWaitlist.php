@@ -30,6 +30,9 @@ use Illuminate\Support\Str;
  */
 final class AgencyWaitlist
 {
+    /** What a waitlisted family's / child's provider reads as everywhere (2026-11-24). */
+    public const NO_PROVIDER = 'Waitlisted · unassigned';
+
     /** Linked rows still waiting for a home. Readers (integrity check, still-open list) use the same set. */
     public const OPEN_STATUSES = ['Waiting', 'Contacted', 'Approved'];
 

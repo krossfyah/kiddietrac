@@ -1870,7 +1870,7 @@ final class AdminController extends Controller
             ->pluck('user_id')->unique()->values()->all();
         $guardianIds = DB::table('guardians as g')
             ->join('families as f', 'f.id', '=', 'g.family_id')
-            ->whereIn('f.centre_id', $centreIds ?: [0])
+            ->where(fn ($w) => $w->whereIn('f.centre_id', $centreIds ?: [0])->orWhereIn('f.id', $this->heldFamilyIds($agencyId)))   // or held on the agency waitlist (provider closed, 2026-11-24)
             ->pluck('g.user_id')->all();
         $scoped = array_values(array_unique(array_merge($scoped, $guardianIds)));
         $base->whereIn('t.tokenable_id', $scoped ?: [0]);
@@ -3645,7 +3645,9 @@ final class AdminController extends Controller
                 'id' => $f->id,
                 'family_name' => $f->family_name,
                 'centre_id' => $f->centre_id,
-                'centre_name' => $f->centre_name,
+                // A family held on the agency waitlist has no provider: their old (closed) one is history (2026-11-24).
+                'centre_name' => in_array((int) $f->id, $heldFamilies, true) ? \App\Support\AgencyWaitlist::NO_PROVIDER : $f->centre_name,
+                'previous_centre_name' => in_array((int) $f->id, $heldFamilies, true) ? $f->centre_name : null,
                 'primary_phone' => $f->primary_phone,
                 'onboarding' => [
                     'guardians' => count($gs),
@@ -3800,7 +3802,15 @@ final class AdminController extends Controller
         $agencyId = $this->getAgencyId($request);
         if (! $agencyId) return null;
         $centreIds = $this->getCentreIds($agencyId);
-        return DB::table('families')->where('id', $familyId)->whereIn('centre_id', $centreIds ?: [0])->whereNull('deleted_at')->first();
+        return DB::table('families')->where('id', $familyId)
+            ->where(fn ($w) => $w->whereIn('centre_id', $centreIds ?: [0])->orWhereIn('id', $this->heldFamilyIds($agencyId)))   // or held on the agency waitlist (provider closed, 2026-11-24)
+            ->whereNull('deleted_at')->first();
+    }
+
+    /** Families held on THIS agency's waitlist after their provider closed (never [] => whereIn fails closed with [0]). */
+    private function heldFamilyIds($agencyId): array
+    {
+        return $agencyId ? (\App\Support\AgencyWaitlist::familyIds((int) $agencyId) ?: [0]) : [0];
     }
 
     /** Edit a guardian's user (name/phone) + guardian row (relationship/pickup). */
@@ -3810,7 +3820,7 @@ final class AdminController extends Controller
         if (! $agencyId) return response()->json(['message' => 'No agency access'], 403);
         $centreIds = $this->getCentreIds($agencyId);
         $g = DB::table('guardians as gu')->join('families as f', 'f.id', '=', 'gu.family_id')
-            ->where('gu.id', $guardian)->whereIn('f.centre_id', $centreIds ?: [0])->whereNull('f.deleted_at')
+            ->where('gu.id', $guardian)->where(fn ($w) => $w->whereIn('f.centre_id', $centreIds ?: [0])->orWhereIn('f.id', $this->heldFamilyIds($agencyId)))->whereNull('f.deleted_at')   // or held on the agency waitlist (provider closed, 2026-11-24)
             ->select('gu.id', 'gu.user_id')->first();
         if (! $g) return response()->json(['message' => 'Guardian not in your agency'], 403);
 
@@ -4580,7 +4590,7 @@ final class AdminController extends Controller
         $centreIds = $this->getCentreIds($agencyId);
 
         $family = DB::table('families')
-            ->whereIn('centre_id', $centreIds ?: [0])
+            ->where(fn ($w) => $w->whereIn('centre_id', $centreIds ?: [0])->orWhereIn('id', $this->heldFamilyIds($agencyId)))   // or held on the agency waitlist (provider closed, 2026-11-24)
             ->where('id', $familyId)
             ->whereNull('deleted_at')
             ->first();
@@ -7774,7 +7784,7 @@ final class AdminController extends Controller
             $gids = DB::table('guardians')->whereNotNull('user_id')->pluck('user_id');
         } else {
             $gids = DB::table('guardians')->join('families', 'families.id', '=', 'guardians.family_id')
-                ->whereIn('families.centre_id', $centreIds ?: [0])->pluck('guardians.user_id');
+                ->where(fn ($w) => $w->whereIn('families.centre_id', $centreIds ?: [0])->orWhereIn('families.id', $this->heldFamilyIds($agencyId)))->pluck('guardians.user_id');   // or held on the agency waitlist (provider closed, 2026-11-24)
         }
         $ids = $userIds->merge($gids)->unique()->values();
         if ($ids->isEmpty()) return response()->json(['groups' => [], 'count' => 0]);
@@ -7840,7 +7850,7 @@ final class AdminController extends Controller
                 })->pluck('user_id')
                 ->merge(
                     DB::table('guardians')->join('families', 'families.id', '=', 'guardians.family_id')
-                        ->whereIn('families.centre_id', $centreIds ?: [0])
+                        ->where(fn ($w) => $w->whereIn('families.centre_id', $centreIds ?: [0])->orWhereIn('families.id', $this->heldFamilyIds($agencyId)))   // or held on the agency waitlist (provider closed, 2026-11-24)
                         ->whereNotNull('guardians.user_id')
                         ->pluck('guardians.user_id')
                 )->unique()->values();
@@ -7861,7 +7871,7 @@ final class AdminController extends Controller
             }
         } elseif ($type === 'child' && mb_strlen($name) >= 3) {
             foreach (DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
-                ->whereIn('f.centre_id', $centreIds ?: [0])->whereNull('c.deleted_at')
+                ->where(fn ($w) => $w->whereIn('f.centre_id', $centreIds ?: [0])->orWhereIn('f.id', $this->heldFamilyIds($agencyId)))->whereNull('c.deleted_at')   // or held on the agency waitlist (provider closed, 2026-11-24)
                 ->whereRaw("LOWER(CONCAT(c.first_name,' ',COALESCE(c.last_name,''))) LIKE ?", ['%' . mb_strtolower($name) . '%'])
                 ->limit(6)->get(['c.id', 'c.first_name', 'c.last_name', 'f.family_name']) as $c) {
                 $matches[] = ['id' => (int) $c->id, 'label' => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')) ?: 'Child', 'detail' => 'Family: ' . ($c->family_name ?: '—')];
