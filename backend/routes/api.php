@@ -1511,6 +1511,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Temporary pickup passes at sign-out (2026-11-24, App\Support\TempPickups).
             Route::get ('/temp-pickups',                 [\App\Http\Controllers\Api\TempPickupController::class, 'staffIndex']);
             Route::get ('/temp-pickups/child/{child}',   [\App\Http\Controllers\Api\TempPickupController::class, 'staffForChild'])->whereNumber('child');
+            Route::get ('/temp-pickups/child/{child}/all', [\App\Http\Controllers\Api\TempPickupController::class, 'staffChildAll'])->whereNumber('child');
             Route::post('/temp-pickups/verify',          [\App\Http\Controllers\Api\TempPickupController::class, 'staffVerify'])->middleware('throttle:30,1,r-tp-verify');
             Route::post('/temp-pickups/alert',           [\App\Http\Controllers\Api\TempPickupController::class, 'staffAlert'])->middleware('throttle:10,1,r-tp-alert');
             Route::post('/temp-pickups/{id}/cancel',     [\App\Http\Controllers\Api\TempPickupController::class, 'staffCancel'])->whereNumber('id');

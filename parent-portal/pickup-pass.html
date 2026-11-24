@@ -85,7 +85,7 @@
       h += '<p class="sub" style="margin-top:12px;">At the centre, show this code and your photo ID to a staff member. They sign the child out with you.</p>';
     }
     app.innerHTML = h;
-    if (p.code && window.KT && KT.qrImg) KT.qrImg(p.code, { size: 168 }).then(function (img) { var q = document.getElementById('qr'); if (q) q.appendChild(img); }).catch(function () {});
+    if (p.code && window.KT && KT.qrImg) KT.qrImg('KTPASS.' + p.code, { size: 168 }).then(function (img) { var q = document.getElementById('qr'); if (q) q.appendChild(img); }).catch(function () {});
     var go = document.getElementById('go');
     if (!go) return;
     var err = document.getElementById('err');

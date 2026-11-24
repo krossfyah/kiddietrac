@@ -631,9 +631,10 @@
         + (p.phone ? '<a href="tel:' + esc(p.phone) + '" style="color:' + TEAL + ';font-weight:800;font-size:12.5px;text-decoration:none;">Call</a>' : '')
         + '</div>';
     });
-    html += '</div>';
+    html += '<div id="cr-tpick"></div></div>';
 
     ov.querySelector('#cr-body').innerHTML = html;
+    if (KT.tempPickupList) KT.tempPickupList(ov.querySelector('#cr-tpick'), childId, { cancel: false });
     var notesBox = ov.querySelector('#cr-notes');
     if (notesBox && KT.renderChildNotes) KT.renderChildNotes(notesBox, childId);
     renderHistory();

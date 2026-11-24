@@ -208,6 +208,7 @@ class TempPickupController extends Controller
         DB::table('temp_pickups')->where('id', $p->id)->update(['status' => 'cancelled', 'cancelled_by_id' => $request->user()->id, 'cancelled_at' => now(), 'updated_at' => now()]);
         TempPickups::audit((int) $p->agency_id, (int) $request->user()->id, 'temp_pickup.cancelled', TempPickups::childIds($p)[0] ?? null,
             'Cancelled ' . $p->full_name . '\'s temporary pickup (' . TempPickups::window($p) . ') as ' . $who);
+        try { TempPickups::tellCancelled($p, (int) $request->user()->id, $who); } catch (\Throwable $e) {}
 
         return response()->json(['ok' => true]);
     }
@@ -267,6 +268,21 @@ class TempPickupController extends Controller
         $this->staffChild($request, $child);
 
         return response()->json(['passes' => array_map(fn ($p) => $this->present($p), TempPickups::todayFor($child))]);
+    }
+
+    /** GET /provider/temp-pickups/child/{child}/all - the child record's list: recent passes in every state (same guard as Cancel). */
+    public function staffChildAll(Request $request, int $child): JsonResponse
+    {
+        $agencyId = $this->staffChild($request, $child);
+        $since = Carbon::parse(AgencyTime::today($agencyId))->subDays(60)->toDateString();
+        $rows = DB::table('temp_pickups')->where('agency_id', $agencyId)->whereRaw('JSON_CONTAINS(child_ids, ?)', [(string) $child])
+            ->where(fn ($q) => $q->where('ends_on', '>=', $since)->orWhere('status', 'active'))->orderByDesc('starts_on')->orderByDesc('id')->limit(20)->get();
+
+        return response()->json(['passes' => $rows->map(function ($p) use ($child) {
+            $x = $this->present($p);
+            $x['children'] = array_values(array_filter($x['children'], fn ($c) => $c['id'] === $child));
+            return $x;
+        })->values()]);
     }
 
     /** POST /provider/temp-pickups/verify {child_id, code, pass_id?} */

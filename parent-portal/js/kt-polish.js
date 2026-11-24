@@ -311,6 +311,7 @@
           + '<div style="font-size:12px;color:#475569;margin:2px 0 6px;">Added by ' + e(p.added_by || 'a parent') + ' · ' + e(p.window) + '. Check their photo ID matches.</div>'
           + '<div style="display:flex;gap:6px;flex-wrap:wrap;"><input data-tp-code inputmode="numeric" maxlength="6" placeholder="6-digit code" aria-label="Pickup code" style="width:120px;height:30px;padding:0 8px;border:1px solid #CBD5E1;border-radius:8px;font-size:15px;letter-spacing:2px;">'
           + '<button type="button" data-tp-check style="height:30px;padding:0 10px;border-radius:8px;border:0;background:#1F6080;color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;">Check code</button>'
+          + '<button type="button" data-tp-scan style="height:30px;padding:0 10px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:800;font-size:12.5px;cursor:pointer;">📷 Scan pass</button>'
           + '<button type="button" data-tp-alert style="height:30px;padding:0 10px;border-radius:8px;border:1px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;font-weight:800;font-size:12.5px;cursor:pointer;">🚨 Not the right person</button></div>'
           + '<div data-tp-msg role="status" style="font-size:12.5px;font-weight:800;margin-top:6px;"></div></div>';
         fetch(base + '/provider/temp-pickups/' + p.id + '/photo', { headers: hdr() }).then(function (x) { return x.ok ? x.blob() : null; })
@@ -325,6 +326,17 @@
             say('✓ ' + (x.message || 'Code matches.') + ' Tap Check out.', true);
           }, function (x) { b.disabled = false; say('🚨 ' + ((x && x.message) || 'That code does not match. Don\'t release ' + name + '.'), false); });
         };
+        /* Scan the QR on their pass (2026-11-24): the scanned code goes through Check code, so the same refusals,
+           3-miss lock and high alert apply. Typing stays as the fallback. */
+        c.querySelector('[data-tp-scan]').onclick = function () {
+          if (!KT.scanQR) { say('Scanning isn\'t available here. Type the code.', false); return; }
+          KT.scanQR({ prompt: 'Point the camera at the QR code on their pickup pass.', accept: function (v) { return /^(KTPASS\.)?\d{6}$/.test(String(v).trim()); } })
+            .then(function (v) {
+              if (!v) return;
+              c.querySelector('[data-tp-code]').value = String(v).trim().replace(/\D/g, '').slice(-6);
+              c.querySelector('[data-tp-check]').click();
+            }, function (e) { say((e && e.message) || 'Could not scan. Type the code.', false); });
+        };
         c.querySelector('[data-tp-alert]').onclick = function () {
           var b = this; b.disabled = true;
           A.post('/provider/temp-pickups/alert', { child_id: childId, pass_id: p.id }).then(function () {
@@ -335,6 +347,53 @@
       });
       return wrap;
     });
+  };
+
+  /* The child record's temporary pickup people (2026-11-24): name, photo, relationship, one pickup or dates, state.
+     GET /provider/temp-pickups/child/{id}/all (the same Visibility guard as Cancel). opts.cancel adds Cancel. */
+  KT.tempPickupList = function (host, childId, opts) {
+    opts = opts || {};
+    var A = (window.KT && KT.Api) || window.Api;
+    if (!host || !A) return;
+    var base = (KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    var hdr = function () { var h = { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || '') }; var a = sessionStorage.getItem('kt_active_agency_id'); if (a) h['X-Active-Agency-Id'] = a; return h; };
+    var e = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var ST = { active: ['Active', '#047857', '#ECFDF5'], upcoming: ['Starts later', '#1E40AF', '#EFF6FF'], used: ['Used', '#475569', '#F1F5F9'], expired: ['Expired', '#475569', '#F1F5F9'], cancelled: ['Cancelled', '#475569', '#F1F5F9'], locked: ['Locked (wrong code)', '#B91C1C', '#FEF2F2'] };
+    A.get('/provider/temp-pickups/child/' + childId + '/all').then(function (r) {
+      var list = (r && r.passes) || [];
+      if (!host.isConnected) return;
+      if (!list.length) { host.innerHTML = ''; return; }
+      host.innerHTML = '<div style="font-size:11.5px;font-weight:800;color:#6B7280;text-transform:uppercase;letter-spacing:.3px;margin:14px 0 6px;">🎫 Temporary pickup people</div>' + list.map(function (p) {
+        var st = ST[p.state] || ST.expired;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #EEF2F5;font-size:13px;">'
+          + '<img data-tpl-img="' + p.id + '" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;background:#E2E8F0;flex:0 0 auto;">'
+          + '<div style="min-width:0;flex:1;"><div style="font-weight:700;color:#0F172A;">' + e(p.full_name) + (p.relationship ? ' · ' + e(p.relationship) : '') + '</div>'
+          + '<div style="color:#64748B;font-size:12px;">' + e(p.window) + ' · ' + (p.one_time ? 'one time' : 'date range') + ' · added by ' + e(p.added_by || 'a parent') + (p.last_used ? ' · used ' + e(p.last_used) : '') + '</div></div>'
+          + '<span style="font-size:11.5px;font-weight:700;color:' + st[1] + ';background:' + st[2] + ';border-radius:999px;padding:3px 10px;white-space:nowrap;">' + st[0] + '</span>'
+          + (opts.cancel && (p.state === 'active' || p.state === 'upcoming') ? '<button type="button" data-tpl-cancel="' + p.id + '" style="height:28px;padding:0 10px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#B91C1C;font-weight:800;font-size:12px;cursor:pointer;">Cancel</button>' : '')
+          + '</div>';
+      }).join('');
+      host.querySelectorAll('[data-tpl-img]').forEach(function (img) {
+        var p = list.filter(function (x) { return String(x.id) === img.getAttribute('data-tpl-img'); })[0];
+        if (!p || !p.has_photo) return;
+        fetch(base + '/provider/temp-pickups/' + p.id + '/photo', { headers: hdr() }).then(function (x) { return x.ok ? x.blob() : null; })
+          .then(function (b) { if (b) img.src = URL.createObjectURL(b); }).catch(function () {});
+      });
+      host.querySelectorAll('[data-tpl-cancel]').forEach(function (b) {
+        b.onclick = function () {
+          var p = list.filter(function (x) { return String(x.id) === b.getAttribute('data-tpl-cancel'); })[0];
+          var go = function () {
+            b.disabled = true;
+            A.post('/provider/temp-pickups/' + p.id + '/cancel', {}).then(function () {
+              if (KT.Dom && KT.Dom.toast) KT.Dom.toast(p.full_name + ' can no longer pick up. The room and family have been told.', 'success');
+              KT.tempPickupList(host, childId, opts);
+            }, function (x) { b.disabled = false; if (KT.Dom && KT.Dom.toast) KT.Dom.toast((x && x.message) || 'Could not cancel', 'error'); });
+          };
+          if (KT.confirm) KT.confirm({ title: 'Cancel ' + p.full_name + '\u2019s pickup?', description: 'Their code stops working at once, and if they try it everyone is alerted.', okLabel: 'Cancel pickup', cancelLabel: 'Keep it' }).then(function (y) { if (y) go(); });
+          else go();
+        };
+      });
+    }).catch(function () {});
   };
 
   KT.warnManualCheck = function (d) {

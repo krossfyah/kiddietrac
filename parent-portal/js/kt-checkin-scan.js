@@ -146,6 +146,70 @@
     } catch (e) { return null; }
   }
 
+  /* KT.scanQR({prompt, accept}) -> Promise<string|null> (2026-11-24, temporary pickup passes at staff sign-out).
+     The SAME decoding order as the One-Tap scanner above: the native @capacitor/barcode-scanner plugin (the only
+     thing that scans in the iOS app's WKWebView), then BarcodeDetector over getUserMedia (Android app + Chrome).
+     Resolves the first value `accept` likes, null if the person cancels; rejects with a friendly message when there
+     is no camera, permission is refused, or the device can't scan (callers keep typing as the fallback). */
+  KT.scanQR = function (opts) {
+    opts = opts || {};
+    var accept = opts.accept || function () { return true; };
+    var prompt = opts.prompt || 'Point the camera at the QR code.';
+    var np = nativeScanner();
+    if (np) {
+      return np.scanBarcode({ hint: 0, cameraDirection: 1, scanInstructions: prompt }).then(function (res) {
+        var v = (res && res.ScanResult) || '';
+        if (!v) return null;
+        if (!accept(v)) throw new Error('That QR code isn’t the right kind. Type the code instead.');
+        return v;
+      }, function (err) {
+        if (/cancel/i.test(String((err && (err.message || err.errorMessage)) || ''))) return null;
+        throw new Error('Could not open the camera. Check camera access for this app in your phone settings, or type the code.');
+      });
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('No camera on this device. Type the code instead.'));
+    if (!('BarcodeDetector' in window)) return Promise.reject(new Error('This device can’t scan QR codes here. Type the code instead.'));
+    var det;
+    try { det = new window.BarcodeDetector({ formats: ['qr_code'] }); } catch (e) { return Promise.reject(new Error('This device can’t scan QR codes here. Type the code instead.')); }
+    return new Promise(function (resolve, reject) {
+      var s = null, done = false, raf = null;
+      var ov = el('div', 'position:fixed;inset:0;z-index:2147483600;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;');
+      var video = el('video', 'width:100%;max-width:520px;max-height:70vh;object-fit:cover;');
+      video.setAttribute('playsinline', ''); video.muted = true;
+      var msg = el('div', 'color:#fff;font-size:15px;font-weight:700;text-align:center;padding:14px 20px;', prompt);
+      var cancel = el('button', 'margin-top:6px;height:40px;padding:0 22px;border-radius:12px;border:1.5px solid rgba(255,255,255,.6);background:transparent;color:#fff;font-size:15px;font-weight:800;cursor:pointer;', 'Cancel');
+      ov.appendChild(video); ov.appendChild(msg); ov.appendChild(cancel);
+      document.body.appendChild(ov);
+      var finish = function (v, err) {
+        if (done) return; done = true;
+        if (raf) cancelAnimationFrame(raf);
+        try { if (s) s.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        if (ov.parentNode) ov.parentNode.removeChild(ov);
+        if (err) reject(err); else resolve(v);
+      };
+      cancel.addEventListener('click', function () { finish(null); });
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }).then(function (st) {
+        s = st; video.srcObject = st;
+        if (done) { finish(null); return; }
+        video.play().catch(function () {});
+        var tick = function () {
+          if (done) return;
+          det.detect(video).then(function (codes) {
+            var hit = (codes || []).map(function (c) { return c.rawValue || ''; }).filter(Boolean)[0];
+            if (hit && accept(hit)) { if (navigator.vibrate) { try { navigator.vibrate(40); } catch (e) {} } finish(hit); return; }
+            if (hit) msg.textContent = 'That QR code isn’t the right kind. ' + prompt;
+            raf = requestAnimationFrame(tick);
+          }).catch(function () { raf = requestAnimationFrame(tick); });
+        };
+        tick();
+      }, function (err) {
+        finish(null, new Error(err && err.name === 'NotAllowedError'
+          ? 'Camera access was refused. Allow the camera for KiddieTrac in your settings, or type the code.'
+          : 'Could not open the camera. Type the code instead.'));
+      });
+    });
+  };
+
   // hint 0 = QR_CODE, cameraDirection 1 = BACK. Raw numbers because the portal is
   // served remotely and can't import the plugin's TS enums.
   function nativeScan(plugin, video, status, foot) {

@@ -357,6 +357,8 @@ final class EmergencyCardController extends Controller
             'guardians' => $guardians,
             'medications' => $medications,
             'emergency_contacts' => $emergencyContacts,
+            // Today's ACTIVE temporary pickup people (2026-11-24, App\Support\TempPickups): same child, same card guard.
+            'temp_pickups' => Schema::hasTable('temp_pickups') ? \App\Support\TempPickups::todayFor((int) $child->id) : [],
             'educators' => $educators,
             'week_summary' => $weekSummary,
         ];
@@ -664,6 +666,22 @@ HTML;
             $ecHtml .= '</tbody></table></div>';
         }
 
+        // ── Temporary pickup people today (2026-11-24) ─────────────────────
+        $tpHtml = '';
+        if (! empty($c['temp_pickups'])) {
+            $tpHtml = '<div class="section"><h3>🎫 Temporary pickup today</h3>'
+                .'<div class="sub" style="margin-bottom:6px">Added by the family. Check their photo ID and their 6-digit pickup code before the child leaves.</div><div class="people">';
+            foreach ($c['temp_pickups'] as $t) {
+                $img = \App\Support\TempPickups::photoDataUri($t);
+                $tpHtml .= '<div class="person">'
+                    .($img ? '<img src="'.$img.'" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover;flex:0 0 auto">' : $this->avatarHtml(null, (string) $t->full_name, 48, null, false))
+                    .'<div class="person-t"><div class="person-n">'.$this->esc($t->full_name).'</div>'
+                    .'<div class="person-s">'.$this->esc($t->relationship ?: 'temporary pickup').' · <strong>'.$this->esc(\App\Support\TempPickups::window($t)).'</strong></div>'
+                    .'</div></div>';
+            }
+            $tpHtml .= '</div></div>';
+        }
+
         // ── Medications ────────────────────────────────────────────────────
         $medsHtml = '';
         if (count($c['medications']) > 0) {
@@ -738,6 +756,7 @@ HTML;
   </div>
 
   {$ecHtml}
+  {$tpHtml}
   {$medsHtml}
 
   <div class="section">

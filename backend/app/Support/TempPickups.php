@@ -156,10 +156,9 @@ final class TempPickups
         if ($kw === 'inbound_stop') return 'opted out';
         $parent = (string) (strtok(trim((string) DB::table('users')->where('id', $p->created_by_user_id)->value('first_name')), ' ') ?: 'A parent');
         $kids = implode(' and ', self::childNames(self::childIds($p)));
-        $agency = trim((string) DB::table('agencies')->where('id', $agencyId)->value('name'));
-        $body = 'KiddieTrac: ' . $parent . ' added you to pick up ' . $kids . ($agency !== '' ? ' (' . $agency . ')' : '') . ' — ' . self::window($p) . '. '
-            . 'Your pickup code is ' . $code . '. ' . ($p->mode === 'signin' ? 'Open your pass to sign out with One-Tap, or show it to staff: ' : 'Show this code or your pass to staff at pickup: ')
-            . self::PASS_URL . '#t=' . $token . ' Bring photo ID.';
+        $body = 'KiddieTrac: ' . $parent . ' added you to pick up ' . $kids . ', ' . self::window($p) . '. Code ' . $code . '. '
+            . ($p->mode === 'signin' ? 'Sign out with One-Tap or show staff: ' : 'Show staff at pickup: ')
+            . self::PASS_URL . '#t=' . $token . ' Bring photo ID.' . self::signOff($p);
         $body = Brand::rename($body, $agencyId);
         $r = SmsGateway::deliver(self::LINE_AGENCY, $to, $body);
         DB::table('sms_messages')->insert(['agency_id' => self::LINE_AGENCY, 'direction' => 'out', 'to_user_id' => null, 'to_phone' => $to,
@@ -298,8 +297,52 @@ final class TempPickups
         if ($rows) Notify::write($rows);
         try {
             $ph = DB::table('users')->where('id', $p->created_by_user_id)->value('phone');
-            if ($ph && ! Suppression::isAgency((int) $p->agency_id)) self::textTo($ph, 'KiddieTrac: ' . $body, (int) $p->agency_id, 'temp_pickup_used');
+            if ($ph && ! Suppression::isAgency((int) $p->agency_id)) self::textTo($ph, 'KiddieTrac: ' . $body . self::signOff($p), (int) $p->agency_id, 'temp_pickup_used');
         } catch (\Throwable $e) {
+        }
+    }
+
+    /**
+     * Every temporary-pickup text ends with who it is from: " – Sunny Meadows (iLearn Childcare)" (Anthony, 2026-11-24:
+     * "Centre + agency"). A plain hyphen, not a dash: an en dash makes the whole text Unicode, 70 characters a part instead of 160. One name when they are the same; Brand::rename still runs over the whole text afterwards.
+     */
+    public static function signOff(object $p): string
+    {
+        $centre = trim((string) DB::table('centres')->where('id', (int) ($p->centre_id ?? 0))->value('name'));
+        $agency = trim((string) DB::table('agencies')->where('id', (int) $p->agency_id)->value('name'));
+        if ($centre === '' && $agency === '') return '';
+        if ($centre === '' || strcasecmp($centre, $agency) === 0) return ' - ' . ($centre ?: $agency);
+
+        return ' - ' . $centre . ($agency !== '' ? ' (' . $agency . ')' : '');
+    }
+
+    /** A pass was cancelled: the room and director hear it (bell), and the family too when staff cancelled it. */
+    public static function tellCancelled(object $p, int $byUserId, string $who): int
+    {
+        if (TestAgency::blocks((int) $p->agency_id)) return 0;
+        $kids = implode(' and ', self::childNames(self::childIds($p)));
+        $by = (string) (strtok(trim((string) DB::table('users')->where('id', $byUserId)->value('first_name')), ' ') ?: '');
+        $title = '🎫 Temporary pickup cancelled';
+        $body = $p->full_name . ' can no longer pick up ' . $kids . ' (' . self::window($p) . ')' . ($by ? ', cancelled by ' . $by : '') . '. Their code no longer works.';
+        $staff = self::staffFor($p);
+        $users = $who === 'staff' ? array_values(array_unique(array_merge($staff, self::guardianIds((int) $p->family_id)))) : $staff;
+        $users = array_values(array_diff($users, [$byUserId]));
+        $rows = array_map(fn ($uid) => ['user_id' => $uid, 'agency_id' => (int) $p->agency_id, 'type' => 'checkin', 'title' => $title, 'body' => $body,
+            'data' => json_encode(['link' => in_array($uid, $staff, true) ? '#safe-arrival' : '#family-contacts', 'temp_pickup' => (int) $p->id]), 'created_at' => now()], $users);
+        if ($rows) Notify::write($rows);
+
+        return count($rows);
+    }
+
+    /** The holder's photo as a data: URI, for the printed emergency card (the file is never web-reachable). */
+    public static function photoDataUri(object $p): ?string
+    {
+        try {
+            if (! $p->photo_path || ! \Illuminate\Support\Facades\Storage::disk('local')->exists($p->photo_path)) return null;
+
+            return 'data:image/jpeg;base64,' . base64_encode(\Illuminate\Support\Facades\Storage::disk('local')->get($p->photo_path));
+        } catch (\Throwable $e) {
+            return null;
         }
     }
 
@@ -356,7 +399,7 @@ final class TempPickups
         }
         if (! Suppression::isAgency($agencyId)) {
             foreach (DB::table('users')->whereIn('id', $guardians ?: [0])->whereNotNull('phone')->pluck('phone') as $ph) {
-                try { self::textTo((string) $ph, 'KiddieTrac PICKUP ALERT: ' . $famBody, $agencyId, 'temp_pickup_alert'); } catch (\Throwable $e) {}
+                try { self::textTo((string) $ph, 'KiddieTrac PICKUP ALERT: ' . $famBody . self::signOff($pp), $agencyId, 'temp_pickup_alert'); } catch (\Throwable $e) {}
             }
         }
 

@@ -1222,6 +1222,10 @@
           er.appendChild(_loginCell(btns));
           sec.appendChild(er);
         });
+        /* Temporary pickup people (2026-11-24, App\Support\TempPickups), with Cancel (same path as Safe Arrival). */
+        var tpHost = Dom.el('div', {});
+        sec.appendChild(tpHost);
+        if (KT.tempPickupList) KT.tempPickupList(tpHost, child.id, { cancel: true });
         wrap.appendChild(sec);
       })();
 
