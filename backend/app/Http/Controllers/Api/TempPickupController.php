@@ -296,6 +296,34 @@ class TempPickupController extends Controller
             'pass' => $r['ok'] && $r['pass'] ? $this->present($r['pass']) : null], $r['ok'] ? 200 : 422);
     }
 
+    /** POST /provider/temp-pickups/lookup {code} - One-Tap "Scan a pickup pass": which pass, which children, no child picked first. */
+    public function staffLookup(Request $request): JsonResponse
+    {
+        $d = $request->validate(['code' => ['required', 'string', 'max:40']]);
+        $agencyId = $this->staffAgency($request);
+        $scope = Visibility::liveChildIds($agencyId, $request->user());
+        $r = TempPickups::lookup((int) $request->user()->id, $agencyId, $scope, (string) $d['code']);
+        if (! $r['ok']) {
+            return response()->json(['ok' => false, 'kind' => $r['kind'], 'message' => $r['message'], 'alerted' => $r['alerted'] ?? 0], $r['kind'] === 'paused' ? 429 : 422);
+        }
+        $p = $r['pass'];
+        $tz = AgencyTime::tz($agencyId);
+        $names = TempPickups::childNames($r['children']);
+        $kids = [];
+        foreach ($r['children'] as $cid) {
+            [$from, $to] = AgencyTime::dayRangeForCentre((int) $p->centre_id);
+            $last = DB::table('check_events')->where('child_id', $cid)->where('occurred_at', '>=', $from)->where('occurred_at', '<', $to)->where('occurred_at', '<=', now())
+                ->orderByDesc('occurred_at')->orderByDesc('id')->first(['event_type', 'room_id', 'occurred_at']);
+            $kids[] = ['id' => $cid, 'name' => $names[$cid] ?? 'Child', 'room_id' => $last ? (int) $last->room_id : null,
+                'at_centre' => $last && $last->event_type === 'check_in',
+                'out_at' => $last && $last->event_type === 'check_out' ? Carbon::parse($last->occurred_at)->timezone($tz)->format('g:i A') : null];
+        }
+        $x = $this->present($p);
+        $x['children'] = $kids;
+
+        return response()->json(['ok' => true, 'pass' => $x]);
+    }
+
     /** POST /provider/temp-pickups/alert {child_id, pass_id?} - "This isn't the right person". */
     public function staffAlert(Request $request): JsonResponse
     {

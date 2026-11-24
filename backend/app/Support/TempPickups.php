@@ -266,6 +266,55 @@ final class TempPickups
         return ['ok' => false, 'pass' => null, 'alerted' => $n, 'message' => 'Don\'t release ' . $first . '. That code doesn\'t match. Everyone has been alerted.'];
     }
 
+    /**
+     * One-Tap "Scan a pickup pass" (2026-11-24): a code with NO child picked yet. Matched against the passes of the
+     * children this staff member looks after ($scope = Visibility::liveChildIds), since code_hash is per pass id.
+     * ok => the pass and the children it can still take today. A pass that isn't valid now => refused + the high
+     * alert for its children. No match => a friendly refusal, audited (no child to alert); 5 misses in 10 minutes
+     * pause lookups for this staff member (the route is throttled too).
+     */
+    public static function lookup(int $staffId, int $agencyId, array $scope, string $code): array
+    {
+        $code = preg_replace('/\D/', '', $code);
+        if (! preg_match('/^\d{6}$/', $code)) return ['ok' => false, 'kind' => 'format', 'message' => 'A pickup code is 6 digits.'];
+        $missKey = 'kt-tp-lookmiss:' . $staffId;
+        if ((int) Cache::get($missKey, 0) >= 5) {
+            return ['ok' => false, 'kind' => 'paused', 'message' => 'Too many codes that didn\'t match. Wait 10 minutes, or check the pass with the director.'];
+        }
+        $scope = array_map('intval', $scope);
+        $hit = null;
+        if ($scope) {
+            $rows = DB::table('temp_pickups')->where('agency_id', $agencyId)->where('created_at', '>=', now()->subDays(120))->orderByDesc('id')->get();
+            foreach ($rows as $p) {
+                if (! array_intersect(self::childIds($p), $scope)) continue;
+                if (hash_equals((string) $p->code_hash, self::codeHash((int) $p->id, $code))) { $hit = $p; break; }
+            }
+        }
+        if (! $hit) {
+            Cache::put($missKey, (int) Cache::get($missKey, 0) + 1, now()->addMinutes(10));
+            self::audit($agencyId, $staffId, 'temp_pickup.lookup_miss', null, 'A pickup code scanned or typed at One-Tap matched no pass for this staff member\'s children');
+
+            return ['ok' => false, 'kind' => 'none', 'message' => 'Not a valid pass for your centre. Don\'t release a child: check with the family or the director.'];
+        }
+        $kids = array_values(array_intersect(self::childIds($hit), $scope));
+        $usable = array_values(array_filter($kids, fn ($c) => self::usable($hit, $c)[0]));
+        $names = implode(' and ', self::childNames($kids));
+        if (! $usable) {
+            $st = self::state($hit);
+            $what = ['expired' => 'has expired', 'upcoming' => 'isn\'t valid until ' . Carbon::parse($hit->starts_on)->format('D, M j'),
+                'cancelled' => 'was cancelled', 'locked' => 'was locked after wrong codes'][$st] ?? 'was already used';
+            $n = 0;
+            foreach ($kids as $cid) $n += self::alert($cid, $staffId, $hit->full_name . '\'s pickup pass ' . $what . ' (scanned at One-Tap)', $hit);
+
+            return ['ok' => false, 'kind' => 'invalid', 'pass' => $hit, 'alerted' => $n,
+                'message' => 'Don\'t release ' . $names . '. That pass ' . $what . '. Everyone has been alerted.'];
+        }
+        Cache::forget($missKey);
+        self::audit($agencyId, $staffId, 'temp_pickup.looked_up', $usable[0], 'Pickup code at One-Tap matched ' . $hit->full_name . '\'s pass for ' . $names);
+
+        return ['ok' => true, 'pass' => $hit, 'children' => $usable];
+    }
+
     /** The check-out that follows a verify() by the same staff member within 3 minutes. */
     public static function takeVerified(int $childId, int $staffId): ?object
     {

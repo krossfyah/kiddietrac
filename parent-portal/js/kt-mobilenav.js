@@ -537,6 +537,35 @@
     document.body.appendChild(ov);
   }
 
+  /* ONE-TAP = TWO CHOICES (2026-11-24, Anthony: "the one tap on the educator view should have the QR or the Camera as
+     an option"). A small standard popup: show the centre's One-Tap code (the code parents scan, unchanged) or scan a
+     temporary pickup person's pass with the camera (KT.pickupPassScan in kt-polish.js). Remembers nothing. */
+  function oneTapMenu() {
+    var Sh = window.KT && KT.Shell;
+    if (!(Sh && Sh.Modal && Sh.Modal.open) || !(window.KT && KT.pickupPassScan)) { showCheckinQr(); return; }
+    if (document.getElementById('kt-onetap-menu')) return;
+    var body = document.createElement('div');
+    body.id = 'kt-onetap-menu';
+    body.style.cssText = 'display:grid;gap:10px;';
+    var big = function (icon, title, sub) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.style.cssText = 'display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 16px;border-radius:14px;border:1px solid #CBD5E1;background:#fff;color:#0F172A;cursor:pointer;font-family:inherit;';
+      b.innerHTML = '<span style="font-size:30px;line-height:1;">' + icon + '</span><span><span style="display:block;font-weight:800;font-size:15.5px;">' + title + '</span>'
+        + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:2px;">' + sub + '</span></span>';
+      return b;
+    };
+    var qr = big('📲', 'Show the centre’s code', 'Parents scan it to check in or out.');
+    var cam = big('📷', 'Scan a pickup pass', 'A temporary pickup person’s pass, with the camera.');
+    body.appendChild(qr); body.appendChild(cam);
+    var h = Sh.Modal.open({ title: '📷 One-Tap', body: body, actions: [{ label: 'Close' }] });
+    var close = function () { try { h.close(); } catch (e) {} };
+    if (window.KT && KT.pushOverlay && h && h.backdrop) KT.pushOverlay(h.backdrop, close);
+    qr.addEventListener('click', function () { close(); setTimeout(showCheckinQr, 60); });
+    cam.addEventListener('click', function () { close(); setTimeout(function () { KT.pickupPassScan(); }, 60); });
+  }
+  window.KT.oneTapMenu = function () { oneTapMenu(); };
+
   function showCheckinQr() {
     // Guard: a stale/second overlay stacking made the button feel unresponsive
     // ("kept clicking"). If one's already up, don't build another.
@@ -754,7 +783,7 @@
         // The educator's check-in QR, as a raised centre button — the same
         // affordance parents get for scanning. A 🔳 glyph floating in the corner
         // was too easy to miss for something parents queue up to scan.
-        var qrBtn = btn('📷', 'One-Tap', function () { showCheckinQr(); }, null, 'eduqr');
+        var qrBtn = btn('📷', 'One-Tap', function () { oneTapMenu(); }, null, 'eduqr');
         qrBtn.classList.add('scan');
         nav.appendChild(qrBtn);
       }

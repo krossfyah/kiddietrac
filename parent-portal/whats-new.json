@@ -4,6 +4,20 @@
         {
             "type": "improved",
             "date": "2026-11-24",
+            "icon": "📷",
+            "title": "One-Tap: show the centre code or scan a pickup pass",
+            "body": "The 📷 One-Tap button now gives two choices: show the centre’s code for parents (as before), or scan a temporary pickup person’s pass with the camera. A valid pass shows their photo and each child they can take, with a Check out button. A cancelled, used or expired pass alerts everyone. No camera? Type the 6-digit code instead.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
             "icon": "🎫",
             "title": "Scan a pickup pass, and see temporary pickups on the child",
             "body": "At sign-out, tap 📷 Scan pass to read the QR on a temporary pickup person’s pass (typing the code still works). The child’s record now lists their temporary pickup people with photo, dates and status, and directors and admins can cancel one there. Today’s active ones print on the emergency card.",

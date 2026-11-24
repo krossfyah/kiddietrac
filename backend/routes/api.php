@@ -1514,6 +1514,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get ('/temp-pickups/child/{child}/all', [\App\Http\Controllers\Api\TempPickupController::class, 'staffChildAll'])->whereNumber('child');
             Route::post('/temp-pickups/verify',          [\App\Http\Controllers\Api\TempPickupController::class, 'staffVerify'])->middleware('throttle:30,1,r-tp-verify');
             Route::post('/temp-pickups/alert',           [\App\Http\Controllers\Api\TempPickupController::class, 'staffAlert'])->middleware('throttle:10,1,r-tp-alert');
+            Route::post('/temp-pickups/lookup',          [\App\Http\Controllers\Api\TempPickupController::class, 'staffLookup'])->middleware('throttle:15,1,r-tp-lookup');
             Route::post('/temp-pickups/{id}/cancel',     [\App\Http\Controllers\Api\TempPickupController::class, 'staffCancel'])->whereNumber('id');
             Route::get ('/temp-pickups/{id}/photo',      [\App\Http\Controllers\Api\TempPickupController::class, 'staffPhoto'])->whereNumber('id');
             Route::post('/check-in-batch', [CheckEventController::class, 'checkInBatch']);

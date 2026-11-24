@@ -354,8 +354,10 @@
          the raised button in the bottom bar; wider screens have no bottom bar, so the QR
          parents scan at drop-off could not be reached. Same overlay (kt-mobilenav). */
       if (role === 'educator') {
-        wrap.appendChild(iconBtn('📷', 'One-Tap code', function () {
-          if (window.KT && window.KT.showCheckinQr) window.KT.showCheckinQr();
+        wrap.appendChild(iconBtn('📷', 'One-Tap', function () {
+          // The same two choices as the phone bar (2026-11-24): the centre's code, or scan a pickup pass.
+          if (window.KT && window.KT.oneTapMenu) window.KT.oneTapMenu();
+          else if (window.KT && window.KT.showCheckinQr) window.KT.showCheckinQr();
         }));
       }
       if (role === 'sales_rep') {

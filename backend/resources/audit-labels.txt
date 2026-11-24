@@ -1230,3 +1230,4 @@ post provider/temp-pickups/alert | Raised a pickup alert (not the right person)
 post provider/temp-pickups/{id}/cancel | Cancelled a temporary pickup person
 post pickup-pass/view | A pickup person opened their pass
 post pickup-pass/sign-out | A temporary pickup person signed a child out
+post provider/temp-pickups/lookup | Looked up a temporary pickup pass at One-Tap

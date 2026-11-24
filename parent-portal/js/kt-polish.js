@@ -396,6 +396,110 @@
     }).catch(function () {});
   };
 
+  /* ONE-TAP "Scan a pickup pass" (2026-11-24, Anthony: "the one tap on the educator view should have the QR or the
+     Camera as an option"). No child is picked first: POST /provider/temp-pickups/lookup {code} finds the pass among
+     the children this staff member looks after. Each child still to go gets "Check out {child}", which runs the SAME
+     path as the sign-out section: verify (code checked, 3-minute ticket) then POST /provider/check-out (pickup
+     recorded, one-time pass closed, parent told). No camera => a friendly line and a type-the-code box. */
+  KT.pickupPassScan = function () {
+    var A = (window.KT && KT.Api) || window.Api;
+    if (!A) return;
+    var accept = function (v) { return /^(KTPASS\.)?\d{6}$/.test(String(v).trim()); };
+    var digits = function (v) { return String(v || '').replace(/\D/g, '').slice(-6); };
+    var e = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var base = (KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    var hdr = function () { var h = { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || '') }; var a = sessionStorage.getItem('kt_active_agency_id'); if (a) h['X-Active-Agency-Id'] = a; return h; };
+    var body = null;
+    var open = function () {
+      if (body && body.isConnected) return body;
+      body = document.createElement('div');
+      body.id = 'kt-tp-scan';
+      body.style.cssText = 'color:#0F172A;font-size:14px;';
+      body.innerHTML = '<div data-msg role="status" style="font-weight:800;font-size:13.5px;min-height:18px;margin-bottom:8px;"></div>'
+        + '<div data-res></div>'
+        + '<div data-type style="display:none;margin-top:10px;"><label style="display:block;font-size:12.5px;font-weight:800;color:#334155;margin-bottom:4px;">Type the 6-digit code from their pass</label>'
+        + '<div style="display:flex;gap:8px;"><input data-code inputmode="numeric" maxlength="6" autocomplete="off" aria-label="Pickup code" style="flex:1;min-width:0;height:34px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:17px;letter-spacing:3px;">'
+        + '<button type="button" data-find style="height:34px;padding:0 14px;border-radius:8px;border:0;background:#1F6080;color:#fff;font-weight:800;cursor:pointer;">Find pass</button></div>'
+        + '<button type="button" data-rescan style="margin-top:8px;height:30px;padding:0 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#1F6080;font-weight:800;font-size:12.5px;cursor:pointer;">📷 Scan again</button></div>';
+      var Sh = KT.Shell || window.Shell;
+      if (Sh && Sh.Modal && Sh.Modal.open) {
+        var h = Sh.Modal.open({ title: '🎫 Pickup pass', body: body, actions: [{ label: 'Close' }] });
+        if (KT.pushOverlay && h && h.backdrop) KT.pushOverlay(h.backdrop, function () { try { h.close(); } catch (x) {} });
+      } else { document.body.appendChild(body); }
+      body.querySelector('[data-find]').onclick = function () {
+        var c = digits(body.querySelector('[data-code]').value);
+        if (c.length !== 6) { say('Enter the 6 digits from their pass.', false); return; }
+        find(c);
+      };
+      body.querySelector('[data-code]').addEventListener('keydown', function (ev) { if (ev.key === 'Enter') body.querySelector('[data-find]').click(); });
+      body.querySelector('[data-rescan]').onclick = function () { scan(); };
+      return body;
+    };
+    var say = function (t, ok) { var m = open().querySelector('[data-msg]'); m.textContent = t; m.style.color = ok === true ? '#047857' : ok === false ? '#B91C1C' : '#334155'; };
+    var typeBox = function (on) { open().querySelector('[data-type]').style.display = on ? '' : 'none'; if (on) setTimeout(function () { try { body.querySelector('[data-code]').focus(); } catch (x) {} }, 40); };
+    var find = function (code) {
+      open().querySelector('[data-res]').innerHTML = '';
+      say('Checking the pass…');
+      A.post('/provider/temp-pickups/lookup', { code: code }).then(function (r) { show(r.pass, code); }, function (x) {
+        var msg = (x && x.message) || 'Could not check that pass. Try again.';
+        var data = (x && (x.data || x.body)) || {};
+        say((data.kind === 'invalid' || /alerted/i.test(msg) ? '🚨 ' : '') + msg, false);
+        typeBox(true);
+      });
+    };
+    var show = function (p, code) {
+      typeBox(false);
+      say('✓ Valid pass. Check their photo ID matches.', true);
+      var res = open().querySelector('[data-res]');
+      res.innerHTML = '<div style="display:flex;gap:12px;align-items:flex-start;border:1px solid #E2E8F0;border-radius:12px;padding:12px;">'
+        + '<img data-photo alt="Photo of ' + e(p.full_name) + '" style="width:88px;height:88px;border-radius:12px;object-fit:cover;background:#E2E8F0;flex:0 0 auto;">'
+        + '<div style="min-width:0;flex:1;"><div style="font-weight:800;font-size:16px;">' + e(p.full_name) + '</div>'
+        + '<div style="font-size:12.5px;color:#475569;margin-top:2px;">' + e(p.relationship || 'Temporary pickup') + ' · ' + e(p.window) + '</div>'
+        + '<div style="font-size:12px;color:#64748B;margin-top:2px;">Added by ' + e(p.added_by || 'a parent') + (p.mode === 'signin' ? ' · may also sign out with One-Tap' : '') + '</div></div></div>'
+        + '<div data-kids style="margin-top:10px;display:grid;gap:8px;"></div>';
+      if (p.has_photo) fetch(base + '/provider/temp-pickups/' + p.id + '/photo', { headers: hdr() }).then(function (x) { return x.ok ? x.blob() : null; })
+        .then(function (b) { if (b) res.querySelector('[data-photo]').src = URL.createObjectURL(b); }).catch(function () {});
+      var kids = res.querySelector('[data-kids]');
+      (p.children || []).forEach(function (k) {
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;justify-content:space-between;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px;';
+        row.innerHTML = '<div style="font-weight:800;">' + e(k.name) + '<div data-st style="font-weight:600;font-size:12px;color:#64748B;">'
+          + (k.at_centre ? 'At Centre' : k.out_at ? 'Signed out at ' + e(k.out_at) : 'Not at Centre') + '</div></div>';
+        if (k.at_centre && k.room_id) {
+          var b = document.createElement('button');
+          b.type = 'button'; b.textContent = 'Check out ' + k.name;
+          b.style.cssText = 'height:34px;padding:0 14px;border-radius:9px;border:0;background:#1F6080;color:#fff;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;';
+          b.onclick = function () {
+            b.disabled = true; b.textContent = 'Checking out…';
+            A.post('/provider/temp-pickups/verify', { child_id: k.id, code: code, pass_id: p.id })
+              .then(function () { return A.post('/provider/check-out', { child_id: k.id, room_id: k.room_id }); })
+              .then(function () {
+                b.remove();
+                row.querySelector('[data-st]').textContent = '✓ Signed out with ' + p.full_name;
+                row.querySelector('[data-st]').style.color = '#047857';
+                say('✓ ' + k.name + ' is signed out. The family has been told.', true);
+                try { window.dispatchEvent(new CustomEvent('kt:check-event', { detail: { child_id: k.id, type: 'check_out' } })); } catch (x) {}
+              }, function (x) {
+                b.disabled = false; b.textContent = 'Check out ' + k.name;
+                say('🚨 ' + ((x && x.message) || 'Could not check out. Don\'t release ' + k.name + ' yet.'), false);
+              });
+          };
+          row.appendChild(b);
+        }
+        kids.appendChild(row);
+      });
+      if (!(p.children || []).some(function (k) { return k.at_centre; })) say('Valid pass, but no child on it is at the centre right now.', null);
+    };
+    var scan = function () {
+      if (!KT.scanQR) { say('Scanning isn\'t available here.', false); typeBox(true); return; }
+      KT.scanQR({ prompt: 'Point the camera at the QR code on their pickup pass.', accept: accept }).then(function (v) {
+        if (!v) { if (body && body.isConnected) typeBox(true); return; }
+        find(digits(v));
+      }, function (err) { say((err && err.message) || 'Could not open the camera.', false); typeBox(true); });
+    };
+    scan();
+  };
+
   KT.warnManualCheck = function (d) {
     d = d || {};
     var name = String(d.name || 'this child'), going = d.going === 'out' ? 'out' : 'in';
