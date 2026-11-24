@@ -263,6 +263,17 @@
         '#kt-mobilenav button{position:relative;flex:1;background:transparent;border:none;display:flex;flex-direction:column;',
         'align-items:center;gap:2px;padding:8px 2px 6px;cursor:pointer;color:#64748B;font-weight:600;font-size:10.5px;line-height:1.2;min-height:52px;}',
         '#kt-mobilenav button .ic{font-size:21px;line-height:1;transition:transform .12s ease;}',
+        '#kt-mobilenav{--duo-ink:#1E3A5F;--duo-fill:rgba(42,143,157,.16);}',
+        '#kt-mobilenav button.on{--duo-ink:#0E7C90;--duo-fill:rgba(14,124,144,.34);}',
+        '#kt-mobilenav button.scan .ic{--duo-ink:#fff;--duo-fill:rgba(255,255,255,.28);}',
+        '#kt-mobilenav .kt-duo{display:block;width:24px;height:24px;overflow:visible;}',
+        '#kt-mobilenav button.scan .kt-duo{width:26px;height:26px;}',
+        '#kt-mobilenav .kt-duo .f *{fill:var(--duo-fill);stroke:none;}',
+        '#kt-mobilenav .kt-duo .l *{fill:none;stroke:var(--duo-ink);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}',
+        '#kt-mobilenav .kt-duo .l [stroke-width]{stroke-width:2.6;}',
+        '#kt-mobilenav .kt-mnav-g{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;}',
+        'html.kt-dark #kt-mobilenav,html[data-theme="dark"] #kt-mobilenav{--duo-ink:#CBD5E1;--duo-fill:rgba(45,212,191,.18);}',
+        'html.kt-dark #kt-mobilenav button.on,html[data-theme="dark"] #kt-mobilenav button.on{--duo-ink:#5EEAD4;--duo-fill:rgba(45,212,191,.36);}',
         '#kt-mobilenav button:active{color:#1F6080;}',
         '#kt-mobilenav button.on{color:#0E7C90;font-weight:800;}',
         '#kt-mobilenav button.on .ic{transform:translateY(-2px) scale(1.06);}',
@@ -699,6 +710,44 @@
       .catch(function () { var s = ov.querySelector('#kt-qr-sub'); if (s) s.textContent = 'Could not load the One-Tap code.'; var h = ov.querySelector('#kt-qr-holder'); if (h) h.textContent = '—'; });
   }
 
+  /* DUOTONE BAR ICONS (2026-11-24, Anthony: "on the bottom bar for mobile use higher quality images for the quick
+     access buttons", duotone chosen). Each bar emoji is drawn as a 24px outline (1.8 stroke, round ends, the
+     kt-line-icons grid) over a soft teal fill; the active tab turns the stroke teal and the fill stronger (CSS tokens
+     --duo-ink / --duo-fill on the button). The emoji stays in the button, hidden (.kt-mnav-g), for anything that reads
+     it. Anything not in this map (the official One-Tap mark) is drawn as given. */
+  var DUO = {
+    '🏠': ['<path d="M5.5 10.2 12 4.6l6.5 5.6V20h-13z"/>', '<path d="M3.5 11.5 12 4.3l8.5 7.2"/><path d="M5.5 10v10h13V10"/><path d="M10 20v-5.5h4V20"/>'],
+    '📝': ['<rect x="4.5" y="3.5" width="12" height="17" rx="2"/>', '<rect x="4.5" y="3.5" width="12" height="17" rx="2"/><path d="M8 8h5M8 11.5h5M8 15h2.5"/><path d="M19.6 9.4 14 15l-.7 2.7 2.7-.7 5.6-5.6a1.5 1.5 0 0 0-2-2z"/>'],
+    '✍️': ['<rect x="4.5" y="3.5" width="12" height="17" rx="2"/>', '<rect x="4.5" y="3.5" width="12" height="17" rx="2"/><path d="M8 8h5M8 11.5h3"/><path d="M7.5 17c1.2-1.4 2-1.4 2.6 0s1.4 1.4 2.6-.4"/><path d="M19.6 9.4 14 15l-.7 2.7 2.7-.7 5.6-5.6a1.5 1.5 0 0 0-2-2z"/>'],
+    '💬': ['<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V16A2.5 2.5 0 0 1 4 13.5z"/>', '<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V16A2.5 2.5 0 0 1 4 13.5z"/><path d="M8.5 10h.01M12 10h.01M15.5 10h.01" stroke-width="2.6"/>'],
+    '🗨️': ['<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V16A2.5 2.5 0 0 1 4 13.5z"/>', '<path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 3.5V16A2.5 2.5 0 0 1 4 13.5z"/><path d="M8 8.5h8M8 11.5h5"/>'],
+    '🔔': ['<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/>', '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/>'],
+    '⚡': ['<path d="M13 2.5 5 13.5h6l-1 8 8-11h-6z"/>', '<path d="M13 2.5 5 13.5h6l-1 8 8-11h-6z"/>'],
+    '📋': ['<rect x="5" y="4.5" width="14" height="16" rx="2"/>', '<rect x="5" y="4.5" width="14" height="16" rx="2"/><path d="M9 4.5v-.7a1.3 1.3 0 0 1 1.3-1.3h3.4A1.3 1.3 0 0 1 15 3.8v.7"/><path d="M8.5 10h7M8.5 13.5h7M8.5 17h4"/>'],
+    '✅': ['<path d="M12 3 19 6v5.5c0 4.5-3 7.8-7 9.5-4-1.7-7-5-7-9.5V6z"/>', '<path d="M12 3 19 6v5.5c0 4.5-3 7.8-7 9.5-4-1.7-7-5-7-9.5V6z"/><path d="m8.8 12 2.3 2.3 4.2-4.6"/>'],
+    '📜': ['<path d="M6 3.5h9l4 4v13H6z"/>', '<path d="M6 3.5h9l4 4v13H6z"/><path d="M15 3.5v4h4"/><path d="M9 11h7M9 14.5h7M9 18h4"/>'],
+    '📄': ['<path d="M6 3.5h9l4 4v13H6z"/>', '<path d="M6 3.5h9l4 4v13H6z"/><path d="M15 3.5v4h4"/><path d="M9 12h6M9 15.5h6"/>'],
+    '🖼️': ['<rect x="3.5" y="5" width="17" height="14" rx="2.5"/>', '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.7"/><path d="m4 17.5 5-5 4 4 2.5-2.5 5 4.5"/>'],
+    '📷': ['<path d="M3.5 8.5a2 2 0 0 1 2-2h2.2l1.6-2h5.4l1.6 2h2.2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>', '<path d="M3.5 8.5a2 2 0 0 1 2-2h2.2l1.6-2h5.4l1.6 2h2.2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/>'],
+    '💳': ['<rect x="3" y="5.5" width="18" height="13" rx="2.5"/>', '<rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M3 10h18M7 15h3"/>'],
+    '📊': ['<rect x="4" y="4" width="16" height="16" rx="2.5"/>', '<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 16.5v-4M12 16.5V8M16 16.5v-6"/>'],
+    '🎯': ['<circle cx="12" cy="12" r="8.5"/>', '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/>'],
+    '🏪': ['<path d="M5 11h14v9H5z"/>', '<path d="M3.5 10 5 4.5h14l1.5 5.5"/><path d="M3.5 10a2.8 2.8 0 0 0 5.6 0 2.8 2.8 0 0 0 5.6 0 2.8 2.8 0 0 0 5.8 0"/><path d="M5 12.5V20h14v-7.5"/><path d="M10 20v-4.5h4V20"/>'],
+    '➕': ['<circle cx="12" cy="12" r="8.5"/>', '<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/>'],
+    '🎧': ['<rect x="3.5" y="12" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="12" width="4" height="6.5" rx="1.5"/>', '<rect x="3.5" y="12" width="4" height="6.5" rx="1.5"/><rect x="16.5" y="12" width="4" height="6.5" rx="1.5"/><path d="M4 13v-1a8 8 0 0 1 16 0v1"/><path d="M18.5 18.5v.5a2.5 2.5 0 0 1-2.5 2.5h-3"/>'],
+    '⚙️': ['<circle cx="12" cy="12" r="6.2"/>', '<circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>'],
+    '📞': ['<path d="M6.6 3.5h2.6l1.4 4-1.9 1.3a10.5 10.5 0 0 0 6.5 6.5l1.3-1.9 4 1.4v2.6a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2z"/>', '<path d="M6.6 3.5h2.6l1.4 4-1.9 1.3a10.5 10.5 0 0 0 6.5 6.5l1.3-1.9 4 1.4v2.6a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2z"/>'],
+    '🗓️': ['<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/>', '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M8 13.5h.01M12 13.5h.01M16 13.5h.01M8 17h.01M12 17h.01" stroke-width="2.6"/>'],
+    '⏳': ['<path d="M7.5 4h9c0 4-4.5 5.5-4.5 8s4.5 4 4.5 8h-9c0-4 4.5-5.5 4.5-8S7.5 8 7.5 4z"/>', '<path d="M7.5 4h9c0 4-4.5 5.5-4.5 8s4.5 4 4.5 8h-9c0-4 4.5-5.5 4.5-8S7.5 8 7.5 4z"/><path d="M6 3.5h12M6 20.5h12"/>'],
+    '☰': ['', '<path d="M4 7h16M4 12h16M4 17h16"/>']
+  };
+  function duoIcon(icon) {
+    var d = DUO[icon];
+    if (!d) return icon;
+    return '<span class="kt-mnav-g">' + icon + '</span><svg class="kt-duo" viewBox="0 0 24 24" aria-hidden="true" focusable="false">'
+      + (d[0] ? '<g class="f">' + d[0] + '</g>' : '') + '<g class="l">' + d[1] + '</g></svg>';
+  }
+
   function ensure() {
     if (!tok() || document.getElementById('kt-mobilenav')) return;
     injectStyle();
@@ -707,7 +756,7 @@
     var nav = document.createElement('div'); nav.id = 'kt-mobilenav';
     var btn = function (icon, label, fn, badgeId, hash) {
       var b = document.createElement('button'); b.type = 'button'; if (hash) b.setAttribute('data-hash', hash);
-      b.innerHTML = '<span class="ic" style="position:relative;">' + icon + (badgeId ? '<span class="badge" id="' + badgeId + '" hidden></span>' : '') + '</span>' + label;
+      b.innerHTML = '<span class="ic" style="position:relative;">' + duoIcon(icon) + (badgeId ? '<span class="badge" id="' + badgeId + '" hidden></span>' : '') + '</span>' + label;
       b.addEventListener('click', fn); return b;
     };
     var parent = isParentView();
