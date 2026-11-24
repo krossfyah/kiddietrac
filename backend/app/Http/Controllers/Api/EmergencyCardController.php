@@ -211,6 +211,12 @@ final class EmergencyCardController extends Controller
     private function renderChild(object $child, object $family): SymfonyResponse
     {
         $centre = DB::table('centres')->where('id', $family->centre_id)->first();
+        /* WAITLISTED: THE CLOSED PROVIDER IS NOT WHERE THE CHILD IS (2026-11-24, Anthony: Liam's card still said
+           Bruni Meeser after the provider closed). Its name, address, phone and educators would send someone to a
+           home that no longer cares for children. The card says so and points to the guardians and the agency. */
+        if ($centre && ! \App\Support\Live::centreOpen((int) $centre->id)) {
+            $centre = $this->noProvider($centre);
+        }
         $card = $this->buildCardData($child, $family, $centre);
         $html = $this->buildPage([$card], $centre);
 
@@ -299,14 +305,34 @@ final class EmergencyCardController extends Controller
         /* Who is caring for this child, and who has them TODAY. With a week that can be
            split between providers, "their educator" is a question with a different answer
            depending on the day — and an emergency is always on a particular day. */
-        $todayRoomId = \App\Support\CareSchedule::roomToday((int) $child->id)
-            ?: ($room->id ?? null);
+        $waitlisted = (bool) ($centre->waitlisted ?? false);
+        $bookedToday = $waitlisted ? null : \App\Support\CareSchedule::roomToday((int) $child->id, \App\Support\AgencyTime::tz((int) ($centre->agency_id ?? 0)));
+        $todayRoomId = $waitlisted ? null : ($bookedToday ?: ($room->id ?? null));
+        /* No care booked today (a part-time child on a day off) still has a provider: name them rather than
+           "No educator is assigned" (2026-11-24: 3 of agency 2's 28 enrolled children on a Tuesday). */
+        /* A part-time child whose week has days booked, but not today: their regular provider, said plainly. */
+        $notToday = ! $waitlisted && ! $bookedToday && $todayRoomId
+            && array_filter(\App\Support\CareSchedule::week((int) $child->id));
+        if (! $todayRoomId && ! $waitlisted) {
+            $today = now(\App\Support\AgencyTime::tz((int) ($centre->agency_id ?? 0)))->toDateString();
+            $todayRoomId = DB::table('enrollments as e')->join('rooms as r', 'r.id', '=', 'e.room_id')
+                ->where('e.child_id', $child->id)->where('e.start_date', '<=', $today)
+                ->where(fn ($w) => $w->whereNull('e.end_date')->orWhere('e.end_date', '>=', $today))
+                ->whereIn('r.centre_id', \App\Support\Live::centreIds((int) ($centre->agency_id ?? 0)) ?: [0])
+                ->orderBy('e.start_date')->value('e.room_id');
+            $notToday = (bool) $todayRoomId;
+        }
+        $notToday = (bool) $notToday;
         $todayRoom = $todayRoomId ? DB::table('rooms')->where('id', $todayRoomId)->first() : $room;
-        $todayCentre = $todayRoom
+        $todayCentre = $todayRoom && ! $waitlisted
             ? DB::table('centres')->where('id', $todayRoom->centre_id)->first()
             : $centre;
+        if ($waitlisted) $todayRoom = null;
+        $agencyId = (int) (($todayCentre->agency_id ?? null) ?: ($centre->agency_id ?? 0));
+        $agency = $agencyId ? DB::table('agencies')->where('id', $agencyId)
+            ->first(['id', 'name', 'contact_phone', 'contact_email', 'address_line1', 'address_line2', 'city', 'province', 'postal_code', 'website', 'logo_url', 'brand_logo_url']) : null;
 
-        $educators = $this->providerFor($todayRoomId, $todayCentre);
+        $educators = $waitlisted ? collect() : $this->providerFor($todayRoomId, $todayCentre);
 
         $weekSummary = \App\Support\CareSchedule::summary((int) $child->id);
 
@@ -322,6 +348,9 @@ final class EmergencyCardController extends Controller
             'child' => $child,
             'family' => $family,
             'centre' => $todayCentre ?: $centre,
+            'agency' => $agency,
+            'waitlisted' => $waitlisted,
+            'not_today' => $notToday,
             'room' => $todayRoom ?: $room,
             'age' => $age,
             'health_flags' => $healthFlags,
@@ -533,9 +562,11 @@ HTML;
             trim(($child->preferred_name ?: $child->first_name).' '.($child->last_name ?? '')), 96,
             $child->sex ?? $child->gender ?? null, true);
 
-        $agencyLogo = ($centre && $centre->logo_url)
-            ? '<img src="'.$this->esc($centre->logo_url).'" alt="">' : '';
+        $agency = $c['agency'] ?? null;
+        $logoUrl = ($agency->brand_logo_url ?? null) ?: ($agency->logo_url ?? null) ?: ($centre->logo_url ?? null);
+        $agencyLogo = $logoUrl ? '<img src="'.$this->esc($this->absUrl($logoUrl)).'" alt="">' : '';
         $centreName = $centre ? $this->esc($centre->name) : '';
+        $agencyName = $agency ? $this->esc($agency->name) : '';
 
         // ── What could harm this child ─────────────────────────────────────
         $alerts = [];
@@ -574,15 +605,22 @@ HTML;
         $alertsHtml .= '</div>';
 
         // ── Who has this child ─────────────────────────────────────────────
-        $eduHtml = '<div class="section"><h3>👩‍🏫 Their provider today</h3>';
-        if (count($c['educators'])) {
+        $eduHtml = '<div class="section"><h3>👩‍🏫 '.(! empty($c['not_today']) ? 'Their provider' : 'Their provider today').'</h3>';
+        if (! empty($c['not_today'])) {
+            $eduHtml .= '<div class="sub" style="margin-bottom:6px">No care is booked for today. Their regular provider is below.</div>';
+        }
+        if (! empty($c['waitlisted'])) {
+            $eduHtml .= '<div class="none-recorded">Not placed with a provider yet: this child is on the agency waitlist. '
+                .'In an emergency, call the guardians and the agency below.</div>';
+        } elseif (count($c['educators'])) {
             $eduHtml .= '<div class="people">';
             foreach ($c['educators'] as $e) {
                 $en = trim(($e->first_name ?? '').' '.($e->last_name ?? ''));
                 $eduHtml .= '<div class="person">'
                     .$this->avatarHtml($e->photo_url ?? null, $en, 48, $e->sex ?? null, false)
                     .'<div class="person-t"><div class="person-n">'.$this->esc($en).'</div>'
-                    .'<div class="person-s">'.($e->phone ? $this->esc($e->phone) : 'No phone on file').'</div>'
+                    .'<div class="person-s"><strong>'.($e->phone ? $this->esc($this->phone($e->phone)) : 'No phone on file').'</strong></div>'
+                    .(! empty($e->email) ? '<div class="person-s">'.$this->esc($e->email).'</div>' : '')
                     .'</div></div>';
             }
             $eduHtml .= '</div>';
@@ -655,7 +693,23 @@ HTML;
             .'<div class="where-b"><div class="where-n">'.($centreName ?: '—').'</div>'
             .($centreAddr ? '<div>'.$centreAddr.'</div>' : '')
             .($centrePhone ? '<div><strong>'.$centrePhone.'</strong></div>' : '')
-            .'<div class="sub">Room: '.$roomName.'</div></div></div>';
+            .(! empty($c['waitlisted'])
+                ? '<div class="sub">Not attending any provider right now.</div>'
+                : '<div class="sub">Room: '.$roomName.'</div>')
+            .'</div></div>';
+
+        // ── The agency (2026-11-24, Anthony: "emergency card should also have the agency info") ──
+        if ($agency) {
+            $aAddr = trim(implode(', ', array_filter([trim(($agency->address_line1 ?? '').' '.($agency->address_line2 ?? '')),
+                $agency->city ?? '', trim(($agency->province ?? '').' '.($agency->postal_code ?? ''))])));
+            $whereHtml .= '<div class="section where"><h3>🏢 Agency</h3><div class="where-b">'
+                .'<div class="where-n">'.$this->esc($agency->name).'</div>'
+                .(! empty($agency->contact_phone) ? '<div><strong>'.$this->esc($this->phone($agency->contact_phone)).'</strong></div>' : '')
+                .(! empty($agency->contact_email) ? '<div>'.$this->esc($agency->contact_email).'</div>' : '')
+                .($aAddr !== '' ? '<div>'.$this->esc($aAddr).'</div>' : '')
+                .(! empty($agency->website) ? '<div class="sub">'.$this->esc($agency->website).'</div>' : '')
+                .'</div></div>';
+        }
 
         $expected = trim(($child->expected_dropoff_time ?? '').' – '.($child->expected_pickup_time ?? ''), ' –');
 
@@ -671,6 +725,7 @@ HTML;
     </div>
     <div class="agency-logo">
       {$agencyLogo}
+      <div style="font-weight:700">{$agencyName}</div>
       <div>{$centreName}</div>
     </div>
   </div>
@@ -699,6 +754,29 @@ HTML;
   </div>
 </div>
 HTML;
+    }
+
+    /** The stand-in for a closed provider: the child is on the agency waitlist. */
+    private function noProvider(object $closed): object
+    {
+        return (object) ['id' => $closed->id, 'agency_id' => $closed->agency_id, 'name' => \App\Support\AgencyWaitlist::NO_PROVIDER,
+            'previous_name' => $closed->name, 'waitlisted' => true, 'logo_url' => null, 'phone' => null, 'email' => null,
+            'address_line1' => null, 'city' => null, 'province' => null, 'postal_code' => null];
+    }
+
+    /** 4165702747 -> (416) 570-2747; anything else as typed. */
+    private function phone(?string $p): string
+    {
+        $d = preg_replace('/\D+/', '', (string) $p);
+        if (strlen($d) === 11 && $d[0] === '1') $d = substr($d, 1);
+        return strlen($d) === 10 ? '('.substr($d, 0, 3).') '.substr($d, 3, 3).'-'.substr($d, 6) : trim((string) $p);
+    }
+
+    /** Uploaded files live on the API host; a printed card needs the full address (signed when protected). */
+    private function absUrl(string $u): string
+    {
+        $u = (string) \App\Support\ProtectedMedia::sign($u);
+        return str_starts_with($u, '/') ? 'https://api.kiddietrac.com'.$u : $u;
     }
 
     /** A photo when there is one, a face when there is not. Never an empty box. */

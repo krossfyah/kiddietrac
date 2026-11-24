@@ -114,7 +114,11 @@ final class ChildController extends Controller
                 ->where('fe.room_id', $roomId));
         }
 
-        if ($statusParam !== '' && $statusParam !== 'all') {
+        if ($statusParam === 'enrolled' && $heldFamilies) {
+            /* Waitlisted after their provider closed: still the agency's children, listed with the enrolled ones
+               (their own status badge says Waitlist) - 2026-11-24, Anthony could not find Liam under Children. */
+            $q->where(fn ($w) => $w->where('children.enrollment_status', 'enrolled')->orWhereIn('families.id', $heldFamilies));
+        } elseif ($statusParam !== '' && $statusParam !== 'all') {
             $q->where('children.enrollment_status', $statusParam);
         } elseif ($statusParam === '') {
             $q->where(fn ($w) => \App\Support\Live::children($w, 'children'));
