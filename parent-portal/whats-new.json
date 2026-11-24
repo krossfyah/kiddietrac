@@ -5,6 +5,23 @@
             "type": "improved",
             "date": "2026-11-24",
             "icon": "✨",
+            "title": "Play Spark in the end-of-day emails",
+            "body": "Families see the Play Spark activity their child did, what it helps them learn, and an idea to try at home. Educators see the activities they ran and how many draft observations are waiting for review. The day view now names each Play Spark activity.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
+            "icon": "✨",
             "title": "Crisper icons on the phone bar",
             "body": "The buttons on the bottom bar of the phone now have crisp new icons, with the screen you are on highlighted.",
             "roles": [
@@ -18,7 +35,6 @@
                 "reseller_admin"
             ]
         },
-        
         {
             "type": "improved",
             "date": "2026-11-24",

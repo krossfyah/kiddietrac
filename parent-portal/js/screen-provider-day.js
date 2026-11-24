@@ -872,7 +872,9 @@
       ? '<div id="pd-feed">' + tl.map(function (e) {
         return '<div class="pd-feed-row" data-child="' + esc(e.child || '') + '" style="display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #F1F5F9;align-items:flex-start;">'
           + '<div style="font-size:12px;font-weight:700;color:#64748B;min-width:70px;text-align:right;font-variant-numeric:tabular-nums;">' + esc(e.time || '') + '</div>'
-          + '<div style="font-size:16px;width:22px;text-align:center;">' + (e.icon || '•') + '</div>'
+          + '<div style="font-size:16px;width:22px;text-align:center;">' + (e.brand === 'play-spark'
+            ? '<img src="/img/play-spark.svg?v=2" width="18" height="18" alt="Play Spark" style="display:block;margin:1px auto 0;">'
+            : (e.icon || '•')) + '</div>'
           + '<div style="flex:1;min-width:0;"><b style="font-size:13px;">' + esc(e.child || '') + '</b> <span style="font-size:13px;color:#334155;">— ' + esc(e.title || '') + (e.detail ? ' <span style="color:#64748B;">· ' + esc(e.detail) + '</span>' : '') + '</span></div></div>';
       }).join('') + '</div>'
       : '<div style="color:#94A3B8;padding:18px;text-align:center;">Nothing logged on ' + esc(d.date) + '.</div>');

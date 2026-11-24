@@ -151,6 +151,31 @@ final class PlaySpark
         ][$d] ?? ucfirst(str_replace('_', ' ', $d));
     }
 
+    /* ONE READER FOR AN ACTIVITY EVENT (2026-11-24, Anthony: Play Spark in the end-of-day emails and the provider day).
+       A Play Spark run is a daily_events 'activity' whose payload is {play_spark_id, title, home_idea, domains}; every
+       other activity carries 'name'. The four places that list activities read only 'name', so a Play Spark showed as a
+       bare "Activity". They all call these now. */
+    public static function isRun(array $p): bool
+    {
+        return ! empty($p['play_spark_id']);
+    }
+
+    public static function activityTitle(array $p): string
+    {
+        $name = trim((string) ($p['name'] ?? ''));
+        if ($name !== '') return $name;
+        $title = trim((string) ($p['title'] ?? ''));
+        if ($title !== '') return (self::isRun($p) ? 'Play Spark: ' : '') . $title;
+        return 'Activity';
+    }
+
+    /** The learning areas in plain words: "Physical, Language & literacy". */
+    public static function domainsText(array $p): string
+    {
+        $d = is_array($p['domains'] ?? null) ? $p['domains'] : [];
+        return implode(', ', array_map(fn ($x) => self::domainLabel((string) $x), array_slice(array_filter($d, 'is_string'), 0, 3)));
+    }
+
     /** The agency framework's name for a KiddieTrac domain (HDLH "engagement" for cognitive, etc.). */
     public static function areaLabel(array $fw, string $domain): ?string
     {

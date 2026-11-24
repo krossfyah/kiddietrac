@@ -495,6 +495,32 @@ class EducatorDailySummaryCommand extends Command
      * Led BY them, not merely at their centre: a summary that says "where you took
      * them" should not list somebody else's outing.
      */
+    /** This educator's Play Spark runs for the agency-day, and their Play Spark drafts not yet reviewed or shared. */
+    private function playSparkLed(int $uid, Carbon $date, string $tz): array
+    {
+        try {
+            if (! Schema::hasTable('play_spark_runs')) return ['runs' => [], 'drafts' => 0];
+            $start = Carbon::parse($date->toDateString() . ' 00:00:00', $tz)->utc();
+            $end   = Carbon::parse($date->toDateString() . ' 23:59:59', $tz)->utc();
+            $out = [];
+            foreach (DB::table('play_spark_runs as r')->join('play_spark_ideas as i', 'i.id', '=', 'r.idea_id')
+                ->where('r.user_id', $uid)->whereBetween('r.done_at', [$start, $end])->orderBy('r.done_at')
+                ->get(['i.title', 'r.child_ids', 'r.done_at']) as $r) {
+                $ids = array_values(array_filter(array_map('intval', json_decode((string) $r->child_ids, true) ?: [])));
+                $names = $ids ? DB::table('children')->whereIn('id', $ids)->whereNull('deleted_at')->orderBy('first_name')
+                    ->get(['first_name', 'preferred_name'])
+                    ->map(fn ($c) => trim((string) (($c->preferred_name ?? '') ?: $c->first_name)))->filter()->values()->all() : [];
+                $out[] = ['title' => (string) $r->title, 'when' => Carbon::parse($r->done_at, 'UTC')->setTimezone($tz)->format('g:i A'), 'children' => $names];
+            }
+            $drafts = $out ? (int) DB::table('observations')->where('recorded_by_id', $uid)->where('shared_with_family', 0)
+                ->whereNull('educator_reviewed_at')->where('title', 'like', 'Play Spark:%')->count() : 0;
+
+            return ['runs' => $out, 'drafts' => $drafts];
+        } catch (\Throwable $e) {
+            return ['runs' => [], 'drafts' => 0];   // the summary still goes without it
+        }
+    }
+
     private function walksLed(int $educatorId, Carbon $date, string $tz): array
     {
         try {
@@ -921,6 +947,32 @@ class EducatorDailySummaryCommand extends Command
                 }
 
                 $body .= '</td></tr></table>';
+            }
+        }
+
+        // ── Play Spark today (2026-11-24) ──────────────────────────────────
+        // What they ran (children by FIRST name only) and the Play Spark draft observations still waiting for them.
+        $ps = $this->playSparkLed((int) $ed->id, $date, $tz);
+        if ($ps['runs']) {
+            $mark = '<img src="https://app.kiddietrac.com/img/play-spark-email.png" width="20" height="20" alt=""'
+                . ' style="display:inline-block;vertical-align:-5px;border:0;border-radius:5px;">';
+            $body .= $this->sectionHead($mark, 'Play Spark today');
+            foreach ($ps['runs'] as $r) {
+                $kids = $r['children'];
+                $who = $kids ? implode(', ', array_slice($kids, 0, 6)) . (count($kids) > 6 ? ' +' . (count($kids) - 6) : '') : '';
+                $body .= '<table class="kt-panel" cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" '
+                    . 'style="border-collapse:separate;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:14px;margin-bottom:10px;">'
+                    . '<tr><td style="padding:12px 15px;">'
+                    . '<div style="font-size:15px;font-weight:800;color:#1B2350;">' . htmlspecialchars($r['title']) . '</div>'
+                    . '<div style="font-size:13px;color:#5B21B6;margin-top:3px;">' . htmlspecialchars(trim($r['when'] . ($who !== '' ? ' · with ' . $who : ''), ' ·')) . '</div>'
+                    . '</td></tr></table>';
+            }
+            if ($ps['drafts'] > 0) {
+                $url = rtrim((string) (env('PORTAL_URL') ?: 'https://app.kiddietrac.com'), '/') . '/dashboard.html#observations';
+                $body .= '<div style="margin:4px 0 6px;">'
+                    . '<a href="' . htmlspecialchars($url) . '" style="display:inline-block;background:#1B2350;color:#FFFFFF;text-decoration:none;'
+                    . 'font-size:13.5px;font-weight:800;padding:9px 14px;border-radius:9px;">'
+                    . $ps['drafts'] . ' draft observation' . ($ps['drafts'] === 1 ? '' : 's') . ' waiting for your review &rarr;</a></div>';
             }
         }
 

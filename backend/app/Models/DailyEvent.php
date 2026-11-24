@@ -96,8 +96,9 @@ class DailyEvent extends Model
                 'icon' => 'droplet', 'color' => '#3DB6A0',
             ],
             'activity' => [
-                'title' => $p['name'] ?? 'Activity',
-                'detail' => ($p['domain'] ?? '') . ($p['duration_min'] ?? false ? " · {$p['duration_min']} min" : ''),
+                'title' => \App\Support\PlaySpark::activityTitle($p),
+                'detail' => \App\Support\PlaySpark::isRun($p) ? \App\Support\PlaySpark::domainsText($p)
+                    : ($p['domain'] ?? '') . ($p['duration_min'] ?? false ? " · {$p['duration_min']} min" : ''),
                 'icon' => 'sparkles', 'color' => '#1F6080',
             ],
             'mood' => [

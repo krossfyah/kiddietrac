@@ -506,7 +506,7 @@ final class RoomController extends Controller
             'nap_end' => 'Woke from nap',
             'diaper' => 'Diaper ('.($payload['type'] ?? 'changed').')',
             'bathroom' => 'Bathroom',
-            'activity' => $payload['name'] ?? 'Activity',
+            'activity' => \App\Support\PlaySpark::activityTitle($payload),
             'mood' => 'Mood: '.($payload['score'] ?? 'noted'),
             default => str_replace('_', ' ', ucfirst($event->event_type)),
         };

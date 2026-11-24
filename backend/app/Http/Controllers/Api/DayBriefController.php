@@ -425,7 +425,7 @@ final class DayBriefController extends Controller
                         'meal', 'snack' => ucfirst($p['meal'] ?? $e->event_type),
                         'nap_start' => 'Started nap', 'nap_end' => 'Woke from nap',
                         'diaper' => 'Diaper (' . ($p['type'] ?? 'changed') . ')',
-                        'activity' => $p['name'] ?? 'Activity',
+                        'activity' => \App\Support\PlaySpark::activityTitle($p),
                         'mood' => 'Mood: ' . ($p['score'] ?? '—'),
                         default => str_replace('_', ' ', ucfirst((string) $e->event_type)),
                     };
@@ -436,7 +436,10 @@ final class DayBriefController extends Controller
                     'title' => $title,
                     'child' => $nameById[$e->child_id] ?? 'Child',
                     // The caption is the description the educator typed when capturing.
-                    'detail' => $isMedia ? (string) ($p['note'] ?? $e->notes ?? '') : ($e->notes ?? ''),
+                    'detail' => $isMedia ? (string) ($p['note'] ?? $e->notes ?? '')
+                        : (\App\Support\PlaySpark::isRun($p) ? \App\Support\PlaySpark::domainsText($p) : ($e->notes ?? '')),
+                    // The front end draws the Play Spark mark instead of the icon for these.
+                    'brand' => \App\Support\PlaySpark::isRun($p) ? 'play-spark' : null,
                     'media_type' => $isMedia ? ($isVideoEvent ? 'video' : 'photo') : null,
                     'photo_id' => $isMedia ? ($p['photo_id'] ?? null) : null,
                 ];

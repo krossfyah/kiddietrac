@@ -759,8 +759,9 @@ final class DailyEventController extends Controller
             'nap_end' => ['title' => 'Woke from nap', 'detail' => ''],
             'diaper' => ['title' => 'Diaper change', 'detail' => $payload['type'] ?? 'changed'],
             'activity' => [
-                'title' => $payload['name'] ?? 'Activity',
-                'detail' => ($payload['domain'] ?? '').(!empty($payload['duration_min']) ? ' · '.$payload['duration_min'].' min' : ''),
+                'title' => \App\Support\PlaySpark::activityTitle($payload),
+                'detail' => \App\Support\PlaySpark::isRun($payload) ? \App\Support\PlaySpark::domainsText($payload)
+                    : ($payload['domain'] ?? '').(!empty($payload['duration_min']) ? ' · '.$payload['duration_min'].' min' : ''),
             ],
             'mood' => ['title' => 'Mood: '.($payload['score'] ?? '—'), 'detail' => ''],
             // A media note carries kind=media from PhotoFeedController — give it a

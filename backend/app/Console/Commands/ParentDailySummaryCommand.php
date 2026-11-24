@@ -458,6 +458,33 @@ class ParentDailySummaryCommand extends Command
             })
             ->values();
 
+        /* TODAY'S PLAY (2026-11-24, Anthony: Play Spark in the end-of-day email). This child's own Play Spark activities:
+           the name, the learning areas in plain words and the "Try it at home" idea. Only the daily_events row, which is
+           already the family's record of the day - never the draft observations, which stay private until an educator
+           shares them. Shown whatever the agency's plan is now: it is what happened that day. */
+        $plays = collect();
+        try {
+            $plays = DB::table('daily_events')
+                ->where('child_id', $child->id)->where('event_type', 'activity')->whereNull('deleted_at')
+                ->whereBetween('occurred_at', [$start, $end])
+                ->where('payload', 'like', '%"play_spark_id"%')
+                ->orderBy('occurred_at')
+                ->get(['payload', 'occurred_at'])
+                ->map(function ($r) {
+                    $p = json_decode((string) $r->payload, true) ?: [];
+                    return [
+                        'title' => trim((string) ($p['title'] ?? '')),
+                        'areas' => \App\Support\PlaySpark::domainsText($p),
+                        'home' => trim((string) ($p['home_idea'] ?? '')),
+                    ];
+                })
+                ->filter(fn ($p) => $p['title'] !== '')
+                ->unique('title')
+                ->values();
+        } catch (\Throwable $e) {
+            $plays = collect();   // never cost a family their summary
+        }
+
         /* WHAT WAS ON THE MENU TODAY, with the food photos (2026-11-02, Anthony: the menu photos "also needs to show in
            the parent summary email as well"). Only a PUBLISHED week - a draft is staff-only - for this child's own
            centre, and only the agency-local day this email is about. */
@@ -485,6 +512,7 @@ class ParentDailySummaryCommand extends Command
             'menu' => $menu,
             'menu_notes' => $menuNotes,
             'walks' => $walks,
+            'plays' => $plays,
             'check_in' => $checkIn,
             'check_out' => $checkOut,
             'visits' => $visits,
@@ -510,7 +538,7 @@ class ParentDailySummaryCommand extends Command
 
                The digest is a RENDERING of the facts below, not a fact of its own.
                Judge the day by the facts. (Anthony, 2026-09-07) */
-            'has_anything' => (bool) ($checkIn || $logs->count() || $photos->count() || $messages->count() || $awards->count() || $latePickup),
+            'has_anything' => (bool) ($checkIn || $plays->count() || $logs->count() || $photos->count() || $messages->count() || $awards->count() || $latePickup),
         ];
     }
 
@@ -955,6 +983,23 @@ class ParentDailySummaryCommand extends Command
                 }
 
                 $body .= '</div>';
+            }
+        }
+
+        // Today's play · Play Spark (2026-11-24). The mark is a PNG: SVG does not render in several mail clients.
+        if (! empty($day['plays']) && count($day['plays'])) {
+            $mark = '<img src="https://app.kiddietrac.com/img/play-spark-email.png" width="20" height="20" alt=""'
+                . ' style="display:inline-block;vertical-align:-5px;border:0;border-radius:5px;margin-right:6px;">';
+            $body .= $this->section($mark . 'Today\'s play · Play Spark');
+            foreach ($day['plays'] as $pl) {
+                $body .= '<div class="kt-panel" style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:12px;padding:13px 15px;margin-bottom:10px;">'
+                    . '<div class="kt-h" style="font-size:15px;font-weight:800;color:#1B2350;">' . e($pl['title']) . '</div>'
+                    . ($pl['areas'] !== '' ? '<div style="font-size:13px;color:#5B21B6;margin-top:3px;">Learning: ' . e($pl['areas']) . '</div>' : '')
+                    . ($pl['home'] !== ''
+                        ? '<div class="kt-panel" style="margin-top:9px;background:#FFFFFF;border:1px solid #EDE9FE;border-radius:9px;padding:8px 10px;'
+                            . 'font-size:13.5px;line-height:1.5;color:#334155;"><b class="kt-h" style="color:#0F172A;">🏠 Try it at home:</b> ' . e($pl['home']) . '</div>'
+                        : '')
+                    . '</div>';
             }
         }
 
