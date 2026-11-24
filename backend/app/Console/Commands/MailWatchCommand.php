@@ -81,6 +81,16 @@ class MailWatchCommand extends Command
             }
         }
         if (! $this->option('account') && (int) now()->format('i') % 5 === 0) $this->countImap($dry);
+        // A lead made (or re-addressed) after the mail came in: its earlier mail, once (2026-11-24, WeeWatch Barrie).
+        if (! $this->option('account')) {
+            try {
+                foreach (\App\Support\LeadHistory::catchUpRecent($dry) as [$lid, $n, $errs]) {
+                    $this->line('lead ' . $lid . ' caught up: ' . $n . ($dry ? ' would be filed' : ' filed') . ($errs ? ' (' . implode('; ', $errs) . ')' : ''));
+                }
+            } catch (\Throwable $e) {
+                $this->warn('lead catch-up: ' . $e->getMessage());
+            }
+        }
         if (! $dry && random_int(1, 240) === 1) {
             DB::table('email_mail_alerts')->where('created_at', '<', now()->subDays(14))->delete();
         }
@@ -165,6 +175,20 @@ class MailWatchCommand extends Command
                 if ($from === '' || isset($own[$from])) continue;
                 $lid = \App\Support\LeadHistory::fileEmail($a, $m, $dry);
                 if ($lid) $this->line('  lead ' . $lid . ($dry ? ': would file' : ': filed') . ' an email received ' . ($m['receivedDateTime'] ?? ''));
+            }
+            // And what we sent them (2026-11-24): replies out of sales@ were never on the lead's history.
+            try {
+                $sent = MicrosoftMailbox::call($a, 'GET', '/mailFolders/sentitems/messages', [
+                    '$filter' => 'sentDateTime ge ' . $since->copy()->utc()->format('Y-m-d\TH:i:s\Z'),
+                    '$orderby' => 'sentDateTime desc',
+                    '$top' => 30,
+                    '$select' => 'id,internetMessageId,from,toRecipients,ccRecipients,subject,sentDateTime,bodyPreview,hasAttachments,isDraft',
+                ])->json('value') ?? [];
+                foreach ($sent as $m) {
+                    foreach (\App\Support\LeadHistory::fileSent($a, $m, $dry) as $lid) $this->line('  lead ' . $lid . ($dry ? ': would file' : ': filed') . ' an email sent ' . ($m['sentDateTime'] ?? ''));
+                }
+            } catch (\Throwable $e) {
+                $this->warn('  sent items ' . $a->id . ': ' . $e->getMessage());
             }
         }
 
