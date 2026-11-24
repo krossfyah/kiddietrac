@@ -148,8 +148,14 @@ final class SafeArrivalAllClear
             $eyebrow = $kind === 'departure' ? 'SAFE DEPARTURE' : 'SAFE ARRIVAL';
             foreach ($p['to'] as $uid) {
                 [$emailed, $texted] = self::channelsOf($uid, $byUser[$uid] ?? []);
+                // Their own Safe Arrival channels (2026-11-24): follow-ups obey them like the alert did.
+                $emailed = $emailed && SafeArrival::staffWants((int) $uid, 'email');
+                $texted = $texted && SafeArrival::staffWants((int) $uid, 'sms');
                 $res = [];
                 try {
+                    if (! SafeArrival::staffWants((int) $uid, 'push')) {
+                        throw new \RuntimeException('__sa_push_off');
+                    }
                     Notify::write([
                         'user_id' => $uid, 'type' => 'safe_arrival', 'title' => $title, 'body' => $body,
                         'data' => json_encode(['link' => '#safe-arrival', 'child_id' => (int) $check->child_id, 'sa_kind' => $kind,
@@ -162,7 +168,7 @@ final class SafeArrivalAllClear
                     $res = app(\App\Services\FcmService::class)->sendToUser($uid, $title, $body, '#safe-arrival', false, false, true,
                         ['kt_category' => self::CATEGORY]);
                 } catch (\Throwable $e) {
-                    Log::warning('Safe Arrival all-clear push failed', ['child' => $check->child_id, 'user' => $uid, 'error' => $e->getMessage()]);
+                    if ($e->getMessage() !== '__sa_push_off') Log::warning('Safe Arrival all-clear push failed', ['child' => $check->child_id, 'user' => $uid, 'error' => $e->getMessage()]);
                 }
                 if ((int) ($res['sent'] ?? 0) > 0) {
                     $out['sent']++;

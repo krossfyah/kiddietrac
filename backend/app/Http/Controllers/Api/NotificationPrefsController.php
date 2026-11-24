@@ -43,6 +43,14 @@ class NotificationPrefsController extends Controller
             'hint' => 'When a new photo or video of my child is shared.',
             'channels' => ['push'],
         ],
+        // Directors and admins choose how Safe Arrival reaches them (2026-11-24). Calls default off.
+        \App\Support\SafeArrival::PREF_KEY => [
+            'label' => 'Safe Arrival alerts',
+            'hint' => 'When a child has not arrived or been picked up as expected, the parents\' answers, and the all-clear. Room educators are always told.',
+            'channels' => ['push', 'email', 'sms', 'voice'],
+            'for' => 'staff',
+            'roles' => ['agency_admin', 'centre_director'],
+        ],
     ];
 
     public function index(Request $request): JsonResponse
@@ -54,8 +62,12 @@ class NotificationPrefsController extends Controller
         $sides = NotifyAudience::sides($request);
         $out = [];
         foreach (self::EVENTS as $key => $meta) {
-            $meta['for'] = NotifyAudience::PREF_EVENTS[$key] ?? 'all';
-            if (! NotifyAudience::shows($meta['for'], $sides)) {
+            $meta['for'] = $meta['for'] ?? (NotifyAudience::PREF_EVENTS[$key] ?? 'all');
+            if (! NotifyAudience::shows($meta['for'], $sides, $meta['roles'] ?? null)) {
+                continue;
+            }
+            if ($key === \App\Support\SafeArrival::PREF_KEY) {
+                $out[] = array_merge(['key' => $key], $meta, \App\Support\SafeArrival::staffPrefs((int) $user->id));
                 continue;
             }
             if ($key === CheckEventNotifier::EVENT_KEY) {
@@ -77,10 +89,27 @@ class NotificationPrefsController extends Controller
             'email' => 'required|boolean',
             'push' => 'required|boolean',
             'sms' => 'required|boolean',
+            'voice' => 'sometimes|boolean',
         ]);
 
-        abort_unless(NotifyAudience::shows(NotifyAudience::PREF_EVENTS[$data['key']] ?? 'all', NotifyAudience::sides($request)),
+        $meta = self::EVENTS[$data['key']];
+        abort_unless(NotifyAudience::shows($meta['for'] ?? (NotifyAudience::PREF_EVENTS[$data['key']] ?? 'all'), NotifyAudience::sides($request), $meta['roles'] ?? null),
             422, 'That kind of notification is not sent to you.');
+
+        if ($data['key'] === \App\Support\SafeArrival::PREF_KEY) {
+            DB::table('notification_prefs')->updateOrInsert(
+                ['user_id' => $request->user()->id, 'event_key' => $data['key']],
+                ['email' => (bool) $data['email'], 'push' => (bool) $data['push'], 'sms' => (bool) $data['sms'],
+                 'voice' => (bool) ($data['voice'] ?? false), 'updated_at' => now()]
+            );
+            \App\Support\SafeArrival::forgetPrefs((int) $request->user()->id);
+            \App\Support\Audit::write(['user_id' => $request->user()->id, 'action' => 'notification_prefs.safe_arrival',
+                'entity_type' => 'user', 'entity_id' => $request->user()->id,
+                'payload' => json_encode(['summary' => 'Safe Arrival alerts: app ' . ($data['push'] ? 'on' : 'off') . ', email ' . ($data['email'] ? 'on' : 'off')
+                    . ', texts ' . ($data['sms'] ? 'on' : 'off') . ', calls ' . (! empty($data['voice']) ? 'on' : 'off')]), 'created_at' => now()]);
+
+            return response()->json(['ok' => true]);
+        }
 
         if ($data['key'] !== CheckEventNotifier::EVENT_KEY) {   // in-app/phone-only categories
             $data['email'] = false;

@@ -1219,12 +1219,13 @@
             row.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-bottom:9px;' }, [p.hint]));
 
             var chans = el('div', { style: 'display:flex;gap:7px;flex-wrap:wrap;' });
-            var state = { email: !!p.email, push: !!p.push, sms: !!p.sms };
+            var state = { email: !!p.email, push: !!p.push, sms: !!p.sms, voice: !!p.voice };
             // paintChan is per-channel and scoped to the forEach below; the stop-all
             // link needs the SMS one, so it is captured on the way past.
             var smsPaint = null;
             /* Some categories are in-app/phone only (instant moments, 2026-10-31): p.channels lists them. */
-            [['email', '✉️ Email'], ['push', p.channels ? '🔔 In-app & phone' : '🔔 In-app'], ['sms', '💬 Text']].filter(function (c) {
+            [['email', '✉️ Email'], ['push', p.channels ? '🔔 In-app & phone' : '🔔 In-app'], ['sms', '💬 Text'], ['voice', '📞 Calls']].filter(function (c) {
+              if (c[0] === 'voice') return !!(p.channels && p.channels.indexOf('voice') >= 0);   // Safe Arrival only (2026-11-24)
               return !p.channels || p.channels.indexOf(c[0]) >= 0;
             }).forEach(function (c) {
               var key = c[0];
@@ -1237,7 +1238,7 @@
               };
               var savePrefs = function (revertKey) {
                 Api.put('/me/notification-prefs', {
-                  key: p.key, email: state.email, push: state.push, sms: state.sms,
+                  key: p.key, email: state.email, push: state.push, sms: state.sms, voice: state.voice,
                 }).then(function () {
                   if (p.key === 'check_in_out' && revertKey === 'sms') {
                     try { window.dispatchEvent(new CustomEvent('kt-checkin-sms', { detail: { on: state.sms, from: 'notify' } })); } catch (e) {}

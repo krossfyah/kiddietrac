@@ -148,6 +148,65 @@ class SafeArrival
        notifications" - he holds an agency-admin role at iLearn as well, so every alert there texted his own phone.
        A platform admin still gets the bell and the phone push (and the email fallback); only the text is not sent.
        Used by both senders: the alert (alertStaff) and the arrived / all-clear follow-up (SafeArrivalAllClear). */
+    /* A DIRECTOR'S / ADMIN'S OWN SAFE ARRIVAL CHANNELS (2026-11-24, Anthony: "add for admin/directors ability to turn
+       off safe arrival notifications in their user profile (calls, texts, emails and app notifications) turn off
+       calls as a default"). Settings -> Notifications, stored in notification_prefs (event_key safe_arrival).
+       Defaults: app, email and texts on; calls OFF. Only people holding an active agency_admin / centre_director
+       role choose: a room educator is always told (somebody in the room must hear about a missing child).
+       Safe Arrival never phones staff today - the calls switch governs any staff call added later (staffWants). */
+    public const PREF_KEY = 'safe_arrival';
+    public const PREF_DEFAULTS = ['push' => true, 'email' => true, 'sms' => true, 'voice' => false];
+
+    /** @var array<int,array> */
+    private static array $prefMemo = [];
+
+    public static function managesSafeArrival(int $userId): bool
+    {
+        return DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)
+            ->whereIn('role', ['agency_admin', 'centre_director'])->exists();
+    }
+
+    /** @return array{push:bool,email:bool,sms:bool,voice:bool} */
+    public static function staffPrefs(int $userId): array
+    {
+        if (isset(self::$prefMemo[$userId])) {
+            return self::$prefMemo[$userId];
+        }
+        $out = self::PREF_DEFAULTS;
+        try {
+            $r = DB::table('notification_prefs')->where('user_id', $userId)->where('event_key', self::PREF_KEY)->first();
+            if ($r) {
+                foreach (['push', 'email', 'sms', 'voice'] as $k) {
+                    if ($r->{$k} !== null) {
+                        $out[$k] = (bool) $r->{$k};
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return self::$prefMemo[$userId] = $out;
+    }
+
+    /** May Safe Arrival reach this person by this channel (push | email | sms | voice)? */
+    public static function staffWants(int $userId, string $channel): bool
+    {
+        try {
+            if (! self::managesSafeArrival($userId)) {
+                return true;   // educators: always (the room must hear)
+            }
+        } catch (\Throwable $e) {
+            return true;
+        }
+
+        return (bool) (self::staffPrefs($userId)[$channel] ?? true);
+    }
+
+    public static function forgetPrefs(int $userId): void
+    {
+        unset(self::$prefMemo[$userId]);
+    }
+
     public static function textsStaff(int $userId): bool
     {
         return ! DB::table('role_assignments')->where('user_id', $userId)->where('role', 'platform_admin')
@@ -268,7 +327,11 @@ class SafeArrival
         foreach ($ids as $uid) {
             $res = [];
             $nid = null;
+            $wantPush = self::staffWants((int) $uid, 'push');   // their own Safe Arrival channels (2026-11-24)
             try {
+                if (! $wantPush) {
+                    throw new \RuntimeException('__sa_push_off');
+                }
                 $before = (int) DB::table('notifications')->where('user_id', $uid)->max('id');
                 Notify::write([
                     'user_id' => $uid, 'type' => 'safe_arrival', 'title' => $title, 'body' => $body,
@@ -278,7 +341,9 @@ class SafeArrival
                 $nid = $after > $before ? $after : null;
                 $res = app(\App\Services\FcmService::class)->sendToUser($uid, $title, $body, $link);
             } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('Safe Arrival staff alert failed', ['child' => $childId, 'user' => $uid, 'error' => $e->getMessage()]);
+                if ($e->getMessage() !== '__sa_push_off') {
+                    \Illuminate\Support\Facades\Log::warning('Safe Arrival staff alert failed', ['child' => $childId, 'user' => $uid, 'error' => $e->getMessage()]);
+                }
             }
             $reached = (int) ($res['sent'] ?? 0) > 0;
             $emailed = false;
@@ -287,10 +352,10 @@ class SafeArrival
                 : DB::table('users')->where('id', $uid)->first(['first_name', 'last_name', 'email', 'phone']);
             if ($u) {
                 $who = trim($u->first_name . ' ' . $u->last_name);
-                if (! $reached) {
+                if (! $reached && $wantPush) {   // switched off on purpose is not "could not reach"
                     $unreached[] = $who;
                 }
-                if ($sms && $u->phone && self::textsStaff((int) $uid)) {
+                if ($sms && $u->phone && self::textsStaff((int) $uid) && self::staffWants((int) $uid, 'sms')) {
                     try {
                         $texted = (bool) app(\App\Http\Controllers\Api\SmsController::class)
                             ->sendOne($agencyId, (int) $uid, (string) $u->phone, $title . ' - ' . $body, 'safe_arrival_staff');
@@ -298,7 +363,7 @@ class SafeArrival
                         \Illuminate\Support\Facades\Log::warning('Safe Arrival staff text failed', ['child' => $childId, 'user' => $uid, 'error' => $e->getMessage()]);
                     }
                 }
-                if ($u->email && ($emailMode === 'always' || ($emailMode === 'fallback' && ! $reached))) {
+                if ($u->email && self::staffWants((int) $uid, 'email') && ($emailMode === 'always' || ($emailMode === 'fallback' && ! $reached))) {
                     try {
                         self::staffEmail($agencyId, (string) $u->email, $who, $title, $body);
                         $emailed = true;
@@ -611,12 +676,17 @@ class SafeArrival
         }
         $rows = [];
         foreach ($ids as $uid) {
+            if (! self::staffWants((int) $uid, 'push')) {
+                continue;   // app notifications switched off for Safe Arrival (2026-11-24)
+            }
             $rows[] = ['user_id' => $uid, 'type' => 'running_late', 'title' => $title, 'body' => $body,
                 'data' => json_encode(['link' => '#safe-arrival', 'child_id' => $childId]), 'created_at' => now()];
         }
-        Notify::write($rows);
+        if ($rows) {
+            Notify::write($rows);
+        }
 
-        return count($ids);
+        return count($rows);
     }
 
     /**

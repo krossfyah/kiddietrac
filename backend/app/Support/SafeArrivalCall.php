@@ -333,13 +333,17 @@ final class SafeArrivalCall
                 };
             foreach ($ids as $uid) {
                 $res = [];
+                $wantPush = \App\Support\SafeArrival::staffWants((int) $uid, 'push');   // their own channels (2026-11-24)
                 try {
+                    if (! $wantPush) {
+                        throw new \RuntimeException('__sa_push_off');
+                    }
                     Notify::write(['user_id' => $uid, 'type' => 'safe_arrival', 'title' => $title, 'body' => $body,
                         'data' => json_encode(['link' => '#safe-arrival', 'child_id' => (int) $check->child_id, 'sa_kind' => 'arrival']), 'created_at' => now()]);
                     $res = app(FcmService::class)->sendToUser($uid, $title, $body, '#safe-arrival');
                 } catch (\Throwable $e) {
                 }
-                if (! $urgent || (int) ($res['sent'] ?? 0) > 0) continue;
+                if (! $urgent || (int) ($res['sent'] ?? 0) > 0 || ! \App\Support\SafeArrival::staffWants((int) $uid, 'email')) continue;
                 // An urgent one that reached no phone goes by email too.
                 $u = DB::table('users')->where('id', $uid)->first(['first_name', 'last_name', 'email']);
                 if (! $u || ! $u->email) continue;
