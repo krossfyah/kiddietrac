@@ -4,6 +4,16 @@
         {
             "type": "improved",
             "date": "2026-11-24",
+            "icon": "🧹",
+            "title": "Admin controls tidy themselves away",
+            "body": "Opened admin controls (View as and the agency switcher) fold away again after 15 seconds untouched. They stay open while you are using them or the person picker is open.",
+            "roles": [
+                "platform_admin"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
             "icon": "📷",
             "title": "One-Tap: show the centre code or scan a pickup pass",
             "body": "The 📷 One-Tap button now gives two choices: show the centre’s code for parents (as before), or scan a temporary pickup person’s pass with the camera. A valid pass shows their photo and each child they can take, with a Check out button. A cancelled, used or expired pass alerts everyone. No camera? Type the 6-digit code instead.",

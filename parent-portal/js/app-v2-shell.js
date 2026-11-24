@@ -2394,7 +2394,7 @@
         link.setAttribute('data-kt-iconized', '1'); link.setAttribute('aria-expanded', 'false');
         link.title = 'Show View as and the agency switcher';
         link.innerHTML = '▸ Show admin controls' + (viewingAs ? '<span class="kt-ac-va">Viewing as ' + _escAC(roleName()) + '</span>' : '');
-        link.addEventListener('click', function () { collapsed = false; save(); paint(); });
+        link.addEventListener('click', function () { collapsed = false; save(); paint(); acShown(); });
         box.appendChild(link);
       } else {
         var hide = document.createElement('button');
@@ -2405,10 +2405,44 @@
       }
     }
     function save() { try { localStorage.setItem(ADMINCTL_KEY, collapsed ? '1' : '0'); } catch (e) {} }
+    /* AUTO-COLLAPSE (2026-11-24, Anthony: "show admin controls should auto collapse after x seconds - wire this up
+       for super admin"; he chose 15 seconds). Opened, the controls fold away again after 15 seconds untouched. A
+       pointer, key or focus inside them (View as, the agency switcher and its menu) restarts the count, and it waits
+       while one of them has focus, the pointer is over them, or a popup opened SINCE they were shown (the person
+       picker) is still up. A popup that was already open (the notifications gate, What's New) does not hold them
+       open - the first build waited on any open dialog and never folded behind the notifications gate. */
+    var AC_IDLE_MS = 15000;
+    var acZone = '#kt-adminctl,#kt-view-as,#kt-agency-switcher,.kt-tb-selectors,#kt-imp-fab';
+    var inZone = function (n) { return !!(n && n.closest && n.closest(acZone)); };
+    var openDialogs = function () {
+      return [].slice.call(document.querySelectorAll('.modal-backdrop, .kt-modal-backdrop, [role="dialog"][aria-modal="true"]'))
+        .filter(function (e) { return e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none'; });
+    };
+    var acShown = function () { window.__ktAcPre = openDialogs(); acArm(); };
+    function acArm() {
+      if (window.__ktAcTimer) { clearTimeout(window.__ktAcTimer); window.__ktAcTimer = null; }
+      if (collapsed) return;
+      window.__ktAcTimer = setTimeout(function () {
+        window.__ktAcTimer = null;
+        if (collapsed || !box.isConnected) return;
+        var busy = inZone(document.activeElement) || window.__ktAcHover
+          || openDialogs().some(function (e) { return (window.__ktAcPre || []).indexOf(e) < 0; });
+        if (busy) { acArm(); return; }
+        collapsed = true; save(); paint();
+      }, AC_IDLE_MS);
+    }
+    window.__ktAcArm = acArm;
+    if (!window.__ktAcBound) {
+      window.__ktAcBound = true;
+      var poke = function (e) { if (inZone(e.target) && window.__ktAcArm) window.__ktAcArm(); };
+      ['pointerdown', 'keydown', 'focusin', 'input', 'change'].forEach(function (ev) { document.addEventListener(ev, poke, true); });
+      document.addEventListener('pointerover', function (e) { var h = inZone(e.target); if (h !== window.__ktAcHover) { window.__ktAcHover = h; if (h && window.__ktAcArm) window.__ktAcArm(); } }, true);
+    }
     // Slot 5: above the agency switcher (10) and View as (20).
     if (window.KT && KT.sidebarFoot && KT.sidebarFoot(5, box)) { /* placed */ }
     else { var sb = document.getElementById('appSidebar'); if (sb) sb.appendChild(box); else return; }
     paint();
+    acShown();   // left open on another visit: it folds away after 15 seconds here too
     /* The agency switcher arrives after its own fetch; keep the chip's summary current. */
     var foot = box.parentNode;
     if (foot && window.MutationObserver && !foot.__ktAcObs) {
