@@ -25,11 +25,14 @@ final class SubscriberCampaign
     private const SITE = 'https://www.kiddietrac.com';
 
     /** The templates a Sales campaign can use: key => label (2026-10-27). */
-    public const TEMPLATES = ['onetap' => 'One-Tap', 'halloween' => 'Halloween'];
+    public const TEMPLATES = ['onetap' => 'One-Tap', 'halloween' => 'Halloween', 'playspark' => 'Play Spark'];
+
+    /** The inbox preview line for a template that sets one (2026-11-24). */
+    public const PREHEADER = ['playspark' => 'Rainy day, restless kids, nothing planned? One tap gives you an idea for every age in the room.'];
 
     public static function subject(string $key): string
     {
-        return ['onetap' => 'Meet One-Tap: check-in and pick-up in one tap', 'halloween' => 'Happy Halloween from KiddieTrac 🎃'][$key] ?? '';
+        return ['onetap' => 'Meet One-Tap: check-in and pick-up in one tap', 'halloween' => 'Happy Halloween from KiddieTrac 🎃', 'playspark' => 'One tap. A play idea for every age in the room.'][$key] ?? '';
     }
 
     /* DESIGN v5 (2026-10-27): white header + teal bar, the product hero, a compact film row, icon steps. v2 (2026-10-27, Anthony: "too bold - make it professional and more pleasing"). A white page, a slim
@@ -38,6 +41,7 @@ final class SubscriberCampaign
     public static function render(string $key, string $email, string $name = '', ?string $unsubUrl = null): string
     {
         if ($key === 'halloween') return self::renderHalloween($email, $name, $unsubUrl);
+        if ($key === 'playspark') return self::renderPlaySpark($email, $name, $unsubUrl);
         $first = trim((string) strtok(trim($name), ' '));
         $unsub = $unsubUrl ?: LeadWelcome::unsubscribeUrl($email);
         $S = self::SITE;
@@ -157,6 +161,118 @@ final class SubscriberCampaign
             . '<td style="padding-left:14px;font:400 14px/1.4 ' . $font . ';color:' . $body . ';">or call <a href="tel:18554009996" style="color:' . $teal . ';text-decoration:none;font-weight:600;">1-855-400-9996</a></td></tr></table>'
             . '</td></tr></table>'
             . '<div class="hd" style="font:600 14.5px/1.5 ' . $font . ';color:' . $navy . ';margin:22px 0 0;">The KiddieTrac team</div></td></tr>'
+            // footer
+            . '<tr><td class="pad foot" bgcolor="#F8FAFC" style="background:#F8FAFC;border-top:1px solid ' . $line . ';padding:18px 40px 22px;font:400 12px/1.7 ' . $font . ';color:' . $muted . ';">'
+            . 'You&rsquo;re receiving this because you use KiddieTrac or subscribed to KiddieTrac updates. '
+            . '<a href="' . $e($unsub) . '" style="color:' . $muted . ';text-decoration:underline;">Unsubscribe</a> &middot; <a href="' . $S . '/privacy" style="color:' . $muted . ';text-decoration:underline;">Privacy</a><br>'
+            . 'KiddieTrac &middot; 246372 Hockley Road, Mono, ON L9W 6K4, Canada'
+            . '<div style="margin:10px 0 0;">' . SocialLinks::block(SocialLinks::row($muted, 'font-family:Arial,Helvetica,sans-serif;', 'Follow us', $muted, 'left')) . '</div></td></tr>'
+            . '</table></td></tr></table></body></html>';
+    }
+
+    /* PLAY SPARK (2026-11-24, Anthony: "create new platform campaign to all subscribers on play spark - set this up
+       for me and I will send this on my own"). Built like One-Tap's: white sheet, wordmark header, the product hero
+       linked to the film. Play Spark's own palette: midnight ink #0B1026 / #1B2350 and spark gold #FFC531 (#9A5B00 for
+       gold text on white). Plain, direct copy (no AI tone). Dark mode: prefers-color-scheme + [data-ogsc]/[data-ogsb]. */
+    private static function renderPlaySpark(string $email, string $name = '', ?string $unsubUrl = null): string
+    {
+        $first = trim((string) strtok(trim($name), ' '));
+        $unsub = $unsubUrl ?: LeadWelcome::unsubscribeUrl($email);
+        $S = self::SITE;
+        $film = $S . '/watch/play-spark/';
+        $demo = $S . '/?book=1';
+        $font = '-apple-system,Segoe UI,Helvetica,Arial,sans-serif';
+        $ink = '#0B1026'; $gold = '#FFC531'; $goldT = '#9A5B00'; $body = '#4B5563'; $muted = '#8A94A3'; $line = '#E6EAF0';
+        $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+        $p = fn ($h, $x = '') => '<p style="margin:0 0 14px;font:400 15px/1.7 ' . $font . ';color:' . $body . ';' . $x . '">' . $h . '</p>';
+        $label = fn ($t) => '<div class="gold" style="font:600 11px/1 ' . $font . ';letter-spacing:1.4px;text-transform:uppercase;color:' . $goldT . ';margin:0 0 10px;">' . $t . '</div>';
+        $h2 = fn ($t) => '<div class="hd" style="font:600 20px/1.35 ' . $font . ';color:' . $ink . ';margin:0 0 10px;">' . $t . '</div>';
+        $btn = fn ($l, $u) => '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="btn" bgcolor="' . $gold . '" style="border-radius:8px;background:' . $gold . ';">'
+            . '<a href="' . $e($u) . '" style="display:inline-block;white-space:nowrap;padding:12px 20px;font:700 14px/1 ' . $font . ';color:' . $ink . ' !important;text-decoration:none;border-radius:8px;">' . $l . '</a></td></tr></table>';
+        $btn2 = fn ($l, $u) => '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="btn2" bgcolor="' . $ink . '" style="border-radius:8px;background:' . $ink . ';">'
+            . '<a href="' . $e($u) . '" style="display:inline-block;white-space:nowrap;padding:12px 20px;font:700 14px/1 ' . $font . ';color:#FFFFFF !important;text-decoration:none;border-radius:8px;">' . $l . '</a></td></tr></table>';
+        $hr = '<tr><td class="pad" style="padding:0 40px;"><div class="hr" style="height:1px;line-height:1px;background:' . $line . ';">&nbsp;</div></td></tr>';
+
+        $points = [
+            ['Ideas for the kids in the room', 'It uses the ages of the children signed in right now, so every idea comes with a version for each age group.'],
+            ['Works with what you have', 'Snap a photo of the shelf and the idea uses those materials. Or type what you have.'],
+            ['Logged when you&rsquo;re done', 'Tap &ldquo;We did it&rdquo; and it goes on each child&rsquo;s day, with a draft observation ready for you to finish.'],
+            ['Families can try it at home', 'Parents see what their child did and get a simple version to try at home.'],
+        ];
+        $rows = '';
+        foreach (array_chunk($points, 2) as $row) {
+            $rows .= '<tr>';
+            foreach ($row as $i => $w) {
+                $rows .= '<td class="col" width="50%" valign="top" style="padding:' . ($i ? '0 0 18px 12px' : '0 12px 18px 0') . ';">'
+                    . '<div class="bar" style="width:24px;height:3px;background:' . $gold . ';margin:0 0 10px;font-size:0;line-height:0;">&nbsp;</div>'
+                    . '<div class="hd" style="font:600 15px/1.4 ' . $font . ';color:' . $ink . ';margin:0 0 4px;">' . $w[0] . '</div>'
+                    . '<div style="font:400 14px/1.6 ' . $font . ';color:' . $body . ';">' . $w[1] . '</div></td>';
+            }
+            $rows .= '</tr>';
+        }
+
+        $dark = '.body-bg{background:#0E1525 !important}.sheet{background:#141D2F !important}.card{border-color:#2A3650 !important}'
+            . '.sheet div,.sheet p,.sheet td{color:#C9D3E0 !important}.sheet .hd{color:#F1F5F9 !important}.sheet .gold{color:#FFC531 !important}'
+            . '.sheet td.top{background:#141D2F !important}.hr{background:#2A3650 !important}.logo-l{display:none !important}.logo-d{display:block !important;max-height:none !important}'
+            . '.sheet td.foot{background:#0F1828 !important;border-color:#2A3650 !important;color:#8A97AB !important}.sheet td.foot a{color:#9FB0C6 !important}'
+            . '.sheet td.pill{background:#2A2410 !important;color:#FFC531 !important}.sheet td.chat{background:#18213A !important;border-color:#2A3650 !important}'
+            . '.sheet td.btn{background:#FFC531 !important}.sheet td.btn2{background:#2A3A66 !important}';
+        $ogsc = preg_replace('/(^|\}|,)\s*\./','$1[data-ogsc] .', $dark);
+        $ogsb = '[data-ogsb] .body-bg{background:#0E1525 !important}[data-ogsb] .sheet{background:#141D2F !important}[data-ogsb] .sheet td.top{background:#141D2F !important}'
+            . '[data-ogsb] .sheet td.foot{background:#0F1828 !important}[data-ogsb] .sheet td.chat{background:#18213A !important}[data-ogsb] .sheet td.pill{background:#2A2410 !important}'
+            . '[data-ogsb] .sheet td.btn{background:#FFC531 !important}[data-ogsb] .sheet td.btn2{background:#2A3A66 !important}';
+
+        return '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            . '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>' . $e(self::subject('playspark')) . '</title>'
+            . '<style>@media (max-width:620px){.wrap{width:100% !important}.pad{padding-left:22px !important;padding-right:22px !important}.col{display:block !important;width:100% !important;padding:0 0 16px !important}.ctas td.cta{display:block !important;padding:0 0 10px !important}}'
+            . '@media (prefers-color-scheme:dark){' . $dark . '}' . $ogsc . $ogsb . '</style></head>'
+            . '<body class="body-bg" style="margin:0;padding:0;background:#F3F5F8;">'
+            . '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' . $e(self::PREHEADER['playspark']) . '&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>'
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="body-bg" bgcolor="#F3F5F8" style="background:#F3F5F8;"><tr><td align="center" style="padding:28px 12px;">'
+            . '<table role="presentation" class="wrap sheet" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFFFFF" style="width:600px;max-width:600px;background:#ffffff;border:1px solid ' . $line . ';border-radius:12px;overflow:hidden;">'
+            // header: the four toy colours as a slim bar (solid cells, no gradient-only background), wordmark, "Product update"
+            . '<tr><td style="padding:0;font-size:0;line-height:0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+            . '<td width="25%" bgcolor="#FF5A4E" style="height:4px;background:#FF5A4E;">&nbsp;</td><td width="25%" bgcolor="#FFC531" style="height:4px;background:#FFC531;">&nbsp;</td>'
+            . '<td width="25%" bgcolor="#3D8BFF" style="height:4px;background:#3D8BFF;">&nbsp;</td><td width="25%" bgcolor="#2FCB8E" style="height:4px;background:#2FCB8E;">&nbsp;</td></tr></table></td></tr>'
+            . '<tr><td class="pad top" bgcolor="#FFFFFF" style="background:#ffffff;padding:20px 40px 18px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>'
+            . '<td><a href="' . $S . '/"><img class="logo-l" src="' . $S . '/email-icons/brand/kiddietrac-wordmark-dark.png" width="116" alt="KiddieTrac" style="display:block;border:0;width:116px;height:auto;">'
+            . '<!--[if !mso]><!--><img class="logo-d" src="' . $S . '/email-icons/brand/kiddietrac-wordmark.png" width="132" alt="KiddieTrac" style="display:none;max-height:0;overflow:hidden;border:0;width:132px;height:auto;"><!--<![endif]--></a></td>'
+            . '<td align="right" class="gold" style="font:600 12px/1 ' . $font . ';color:' . $goldT . ';">Product update</td></tr></table></td></tr>'
+            // hero: the film poster with a play button, on midnight, linked to the film
+            . '<tr><td bgcolor="#0B1026" style="padding:0;line-height:0;font-size:0;background:#0B1026;"><a href="' . $film . '"><img src="' . $S . '/email-icons/playspark/hero-play.jpg" width="600" alt="Play Spark: an idea for every age in the room. Watch the 2-minute film" style="display:block;width:100%;max-width:600px;height:auto;border:0;"></a></td></tr>'
+            // intro
+            . '<tr><td class="pad" style="padding:30px 40px 8px;">'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px;"><tr><td class="pill" bgcolor="#FFF4D6" style="background:#FFF4D6;border-radius:999px;padding:6px 12px;font:600 11.5px/1 ' . $font . ';letter-spacing:.6px;color:' . $goldT . ';text-transform:uppercase;">New in KiddieTrac</td></tr></table>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;"><tr><td valign="middle"><img src="' . $S . '/email-icons/playspark/mark.png" width="40" height="40" alt="" style="display:block;border:0;border-radius:10px;"></td>'
+            . '<td valign="middle" class="hd" style="padding-left:12px;font:600 14px/1.3 ' . $font . ';color:' . $ink . ';">Play Spark<br><span style="font-weight:400;color:' . $muted . ';">On-the-spot play ideas</span></td></tr></table>'
+            . '<div class="hd" style="font:600 26px/1.3 ' . $font . ';color:' . $ink . ';letter-spacing:-.3px;margin:0 0 14px;">A play idea for the kids in your room, in one tap</div>'
+            . $p(($first ? $e($first) . ', you' : 'You') . ' know the moment. It&rsquo;s raining, six kids are restless, and nothing&rsquo;s planned for the next twenty minutes.')
+            . $p('Open Play Spark and tap once. You get an activity for the children signed in right now, with a version for each age. Snap a photo of what&rsquo;s on the shelf and it works with what you have.')
+            . $p('When you&rsquo;re done, tap &ldquo;We did it&rdquo;. It goes on each child&rsquo;s day, and parents get an easy idea to try at home.')
+            . '<table role="presentation" class="ctas" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 8px;"><tr><td class="cta" style="padding:0 12px 0 0;">' . $btn('Watch the 2-minute film', $film) . '</td>'
+            . '<td class="cta">' . $btn2('Book a demo', $demo) . '</td></tr></table>'
+            . '</td></tr>'
+            . '<tr><td style="height:22px;line-height:22px;font-size:0;">&nbsp;</td></tr>'
+            . $hr
+            // how it helps
+            . '<tr><td class="pad" style="padding:30px 40px 12px;">' . $label('How it works') . $h2('Less planning on the fly, more time with the kids')
+            . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">' . $rows . '</table></td></tr>'
+            . $hr
+            // lesson plans
+            . '<tr><td class="pad" style="padding:30px 40px 12px;">' . $label('Also new') . $h2('Your lesson plans live here now')
+            . $p('Weekly lesson plans moved into Play Spark. Plan the week, keep a library of activities that worked, and publish the week to families from the same screen. A good idea from today can go straight onto next week&rsquo;s plan.')
+            . $p('Every idea is checked for safety before you see it, with extra care for children under three and a note when food is involved. Only the children&rsquo;s ages and counts are used, never their names.')
+            . $p('The idea tools are part of the AI Bundle add-on. Lesson plans work on every plan.', 'font-size:14px;color:' . $muted . ';')
+            . '</td></tr>'
+            // app badge + chat
+            . '<tr><td class="pad" style="padding:6px 40px 18px;">' . PlayBadge::card('font-family:' . $font . ';') . '</td></tr>'
+            . '<tr><td class="pad" style="padding:8px 40px 34px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="card chat" bgcolor="#F6F7FB" style="background:#F6F7FB;border:1px solid ' . $line . ';border-radius:12px;padding:22px 24px;">'
+            . '<div class="hd" style="font:600 18px/1.35 ' . $font . ';color:' . $ink . ';margin:0 0 6px;">Want to see it in your room?</div>'
+            . '<div style="font:400 14.5px/1.6 ' . $font . ';color:' . $body . ';margin:0 0 14px;">We&rsquo;ll show you Play Spark and lesson plans with your own rooms and ages. It takes about 20 minutes.</div>'
+            . '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td>' . $btn2('Book a demo', $demo) . '</td>'
+            . '<td style="padding-left:14px;font:400 14px/1.4 ' . $font . ';color:' . $body . ';">or call <a href="tel:18554009996" class="gold" style="color:' . $goldT . ';text-decoration:none;font-weight:600;">1-855-400-9996</a></td></tr></table>'
+            . '</td></tr></table>'
+            . '<div class="hd" style="font:600 14.5px/1.5 ' . $font . ';color:' . $ink . ';margin:22px 0 0;">The KiddieTrac team</div></td></tr>'
             // footer
             . '<tr><td class="pad foot" bgcolor="#F8FAFC" style="background:#F8FAFC;border-top:1px solid ' . $line . ';padding:18px 40px 22px;font:400 12px/1.7 ' . $font . ';color:' . $muted . ';">'
             . 'You&rsquo;re receiving this because you use KiddieTrac or subscribed to KiddieTrac updates. '
