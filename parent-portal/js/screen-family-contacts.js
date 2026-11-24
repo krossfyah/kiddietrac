@@ -222,6 +222,128 @@
       });
       list.appendChild(card);
     });
+    renderTemp(wrap);
+  }
+
+  /* TEMPORARY PICKUP PEOPLE (2026-11-24, App\Support\TempPickups). A parent adds someone for one pickup or up to 30
+     days: either a PASS (texted code + pass link, staff check it at sign-out) or a PICKUP SIGN-IN (the same link also
+     lets them sign the child out with One-Tap). Active at once, the centre is told; a photo is required so staff
+     know who to expect. API: GET/POST /parent/temp-pickups, POST …/{id}/cancel|resend, GET …/{id}/photo. */
+  var TP_STATE = { active: ['Active', '#047857', '#ECFDF5'], upcoming: ['Starts soon', '#1E40AF', '#EFF6FF'], used: ['Used', '#475569', '#F1F5F9'],
+    expired: ['Ended', '#475569', '#F1F5F9'], cancelled: ['Cancelled', '#475569', '#F1F5F9'], locked: ['Locked (wrong code)', '#B91C1C', '#FEF2F2'] };
+  function authHdr() {
+    var h = { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || ''), Accept: 'image/*' };
+    var a = sessionStorage.getItem('kt_active_agency_id'); if (a) h['X-Active-Agency-Id'] = a;
+    return h;
+  }
+  function apiBase() { return (KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
+  function photoInto(img, path) {
+    fetch(apiBase() + path, { headers: authHdr() }).then(function (r) { return r.ok ? r.blob() : null; })
+      .then(function (b) { if (b) img.src = URL.createObjectURL(b); }).catch(function () {});
+  }
+  async function renderTemp(wrap) {
+    var D = dom();
+    var card = D.el('div', { style: 'background:var(--kt-surface,#fff);border:1px solid var(--kt-border,#E5E7EB);border-radius:14px;padding:14px 16px 10px;margin-bottom:14px;' });
+    wrap.appendChild(card);
+    var d;
+    try { d = await api().get('/parent/temp-pickups'); } catch (e) { card.remove(); return; }
+    if (!d || !(d.families || []).length) { card.remove(); return; }
+    var hd = D.el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:8px;' }, [heading(D, '🎫 Temporary pickup people')]);
+    hd.appendChild(btn(D, '＋ Add someone', true, function () { addTemp(d); }));
+    card.appendChild(hd);
+    card.appendChild(D.el('div', { style: 'font-size:12.5px;color:var(--kt-text-muted,#64748B);line-height:1.5;margin:0 0 8px;' },
+      'Someone collecting your child once, or for a few days (up to ' + d.max_days + '). They get a text with a pickup code, staff see their photo and check the code, and you’re told the moment they sign your child out. A wrong or old code alerts everyone straight away.'));
+    var passes = d.passes || [];
+    if (!passes.length) card.appendChild(D.el('div', { style: 'font-size:13px;color:var(--kt-text-muted);padding:4px 0 8px;' }, 'No one yet.'));
+    passes.forEach(function (p) {
+      var st = TP_STATE[p.state] || TP_STATE.expired;
+      var r = D.el('div', { style: 'display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--kt-border,#F1F5F9);flex-wrap:wrap;' });
+      var img = D.el('img', { alt: '', style: 'width:44px;height:44px;border-radius:50%;object-fit:cover;background:#E2E8F0;flex:0 0 auto;' });
+      if (p.has_photo) photoInto(img, '/parent/temp-pickups/' + p.id + '/photo');
+      r.appendChild(img);
+      var mid = D.el('div', { style: 'flex:1 1 220px;min-width:0;' });
+      mid.appendChild(D.el('div', { style: 'font-weight:800;font-size:14px;' }, p.full_name + (p.relationship ? ' · ' + p.relationship : '')));
+      mid.appendChild(D.el('div', { style: 'font-size:12.5px;color:var(--kt-text-muted,#64748B);margin-top:2px;' },
+        p.children.map(function (c) { return c.name + (c.picked_up ? ' ✓' : ''); }).join(', ') + ' · ' + p.window + ' · ' + (p.mode === 'signin' ? 'pickup sign-in (One-Tap)' : 'pass shown to staff')
+        + (p.code && (p.state === 'active' || p.state === 'upcoming') ? ' · code ' + p.code : '') + (p.last_used ? ' · last used ' + p.last_used : '')));
+      r.appendChild(mid);
+      var right = D.el('div', { style: 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;' }, [pill(D, st[0], st[1], st[2])]);
+      if (p.state === 'active' || p.state === 'upcoming') {
+        right.appendChild(btn(D, 'Text again', false, function (b) {
+          b.disabled = true;
+          api().post('/parent/temp-pickups/' + p.id + '/resend', {}).then(function (x) {
+            toast(x.texted === 'sent' ? 'A new code was texted to ' + p.full_name + '. The old one no longer works.' : 'New code made (' + x.texted + ').', 'success'); rerender();
+          }, function (x) { b.disabled = false; toast((x && x.message) || 'Could not send', 'error'); });
+        }));
+        right.appendChild(btn(D, 'Cancel', false, function (b) {
+          var go = function () { b.disabled = true; api().post('/parent/temp-pickups/' + p.id + '/cancel', {}).then(function () { toast(p.full_name + ' can no longer pick up', 'success'); rerender(); }, function (x) { b.disabled = false; toast((x && x.message) || 'Could not cancel', 'error'); }); };
+          if (KT.confirm) KT.confirm({ title: 'Cancel ' + p.full_name + '’s pickup?', description: 'Their code stops working at once. If they try to use it, everyone is alerted.', okLabel: 'Cancel pickup', cancelLabel: 'Keep it' }).then(function (y) { if (y) go(); });
+          else go();
+        }));
+      }
+      r.appendChild(right);
+      card.appendChild(r);
+    });
+  }
+  function addTemp(d) {
+    var FLD = 'width:100%;box-sizing:border-box;height:34px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px;background:#fff;color:#0F172A;';
+    var LBL = 'display:block;font-size:12px;font-weight:700;color:#334155;margin:10px 0 4px;';
+    var fam = d.families[0];
+    var kids = [];
+    d.families.forEach(function (f) { f.children.forEach(function (c) { kids.push({ id: c.id, name: c.name, fam: f.family_id }); }); });
+    var e = function (v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (ch) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]; }); };
+    var ov = document.createElement('div');
+    ov.className = 'kt-modal kt-fc-modal';
+    ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML = '<div style="background:#fff;border-radius:14px;width:100%;max-width:500px;max-height:90vh;overflow:auto;padding:20px 20px 16px;box-sizing:border-box;">'
+      + '<h3 style="margin:0 0 4px;font-size:18px;color:#0F172A;">🎫 Add a temporary pickup person</h3>'
+      + '<div style="font-size:12.5px;color:#64748B;line-height:1.45;">Active as soon as you add them. The centre is told, and you’ll get a message when they pick up.</div>'
+      + '<label style="' + LBL + '">Who are they picking up? *</label><div data-kids style="display:flex;gap:14px;flex-wrap:wrap;">'
+      +   kids.map(function (k) { return '<label style="display:flex;gap:6px;align-items:center;font-size:14px;cursor:pointer;"><input type="checkbox" data-kid="' + k.id + '" data-fam="' + k.fam + '"' + (kids.length === 1 ? ' checked' : '') + '> ' + e(k.name) + '</label>'; }).join('') + '</div>'
+      + '<label style="' + LBL + '">Their full name *</label><input data-f="full_name" maxlength="120" style="' + FLD + '" placeholder="As on their photo ID">'
+      + '<label style="' + LBL + '">Who are they to your child?</label><input data-f="relationship" maxlength="60" style="' + FLD + '" placeholder="e.g. Neighbour, Aunt, Family friend">'
+      + '<label style="' + LBL + '">Their mobile number *</label><input data-f="phone" type="tel" maxlength="40" style="' + FLD + '" placeholder="We text them the pickup code">'
+      + '<label style="' + LBL + '">A photo of them *</label><input data-f="photo" type="file" accept="image/*" style="font-size:13px;">'
+      + '<div style="font-size:12px;color:#64748B;margin-top:3px;">A clear photo of their face. Staff see it at pickup, and they should bring photo ID.</div>'
+      + '<label style="' + LBL + '">How will they sign out?</label><select data-f="mode" style="' + FLD + '">'
+      +   '<option value="pass">Show the code to staff (a pass)</option><option value="signin">Sign out themselves with One-Tap (a pickup sign-in)</option></select>'
+      + '<label style="' + LBL + '">When?</label><select data-f="one_time" style="' + FLD + '"><option value="1">One pickup</option><option value="0">Every day in a date range</option></select>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"><div><label style="' + LBL + '" data-l-start>Day *</label><input data-f="starts_on" type="date" min="' + e(d.today) + '" value="' + e(d.today) + '" style="' + FLD + '"></div>'
+      +   '<div data-endwrap style="display:none;"><label style="' + LBL + '">Last day *</label><input data-f="ends_on" type="date" min="' + e(d.today) + '" value="' + e(d.today) + '" style="' + FLD + '"></div></div>'
+      + '<label style="' + LBL + '">Note for the centre</label><input data-f="note" maxlength="300" style="' + FLD + '" placeholder="Optional">'
+      + '<div data-err role="alert" style="color:#B91C1C;font-size:13px;font-weight:700;min-height:18px;margin-top:8px;"></div>'
+      + '<div style="display:flex;justify-content:flex-end;gap:8px;">'
+      +   '<button type="button" data-cancel style="height:32px;padding:0 14px;border-radius:8px;border:0;background:#F1F5F9;color:#334155;font-weight:700;cursor:pointer;">Cancel</button>'
+      +   '<button type="button" data-save style="height:32px;padding:0 16px;border-radius:8px;border:0;background:var(--kt-primary,#1F6080);color:#fff;font-weight:800;cursor:pointer;">Add and text them</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    var q = function (k) { return ov.querySelector('[data-f="' + k + '"]'); };
+    var close = function () { if (ov.parentNode) ov.parentNode.removeChild(ov); };
+    ov.querySelector('[data-cancel]').onclick = close;
+    q('one_time').onchange = function () {
+      var range = q('one_time').value === '0';
+      ov.querySelector('[data-endwrap]').style.display = range ? '' : 'none';
+      ov.querySelector('[data-l-start]').textContent = range ? 'First day *' : 'Day *';
+    };
+    ov.querySelector('[data-save]').onclick = function () {
+      var b = this, err = ov.querySelector('[data-err]');
+      var picked = Array.prototype.slice.call(ov.querySelectorAll('[data-kid]:checked'));
+      if (!picked.length) { err.textContent = 'Tick at least one child.'; return; }
+      if (q('full_name').value.trim().length < 3) { err.textContent = 'Enter their full name.'; return; }
+      if (!q('phone').value.trim()) { err.textContent = 'Enter their mobile number.'; return; }
+      if (!q('photo').files[0]) { err.textContent = 'Add a photo of them, so staff know who to expect.'; return; }
+      var fd = new FormData();
+      picked.forEach(function (x) { fd.append('child_ids[]', x.getAttribute('data-kid')); });
+      ['full_name', 'relationship', 'phone', 'mode', 'one_time', 'starts_on', 'ends_on', 'note'].forEach(function (k) { fd.append(k, q(k).value.trim()); });
+      fd.append('photo', q('photo').files[0]);
+      b.disabled = true; b.textContent = 'Adding…';
+      api().postForm('/parent/temp-pickups', fd).then(function (r) {
+        close();
+        toast(r.texted === 'sent' ? q('full_name').value.trim() + ' was texted their pickup code. The centre knows.' : 'Added. Their code is ' + ((r.pass && r.pass.code) || '') + ' (text: ' + r.texted + ').', 'success');
+        rerender();
+      }, function (x) { b.disabled = false; b.textContent = 'Add and text them'; err.textContent = (x && x.message) || 'Could not add them.'; });
+    };
   }
 
   KT.FamilyContacts = { render: render };

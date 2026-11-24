@@ -292,7 +292,7 @@
       + kpi('NOT DUE YET', (c.waiting || 0) + (c.running_late || 0), '#F8FAFC', '#475569')
       + kpi('NEEDS ATTENTION', (c.overdue || 0) + (c.escalated || 0), (c.overdue || c.escalated) ? '#FEF2F2' : '#F8FAFC', (c.overdue || c.escalated) ? '#991B1B' : '#475569')
       + '</div>'
-      + '<div id="sa-phone"></div>'
+      + '<div id="sa-phone"></div><div id="sa-tpick"></div>'
       + '<h3 style="margin:8px 0 10px;font-size:15px;color:#0F172A;">Needs attention</h3>'
       + (urgent.length ? urgent.map(function (r) {
           var red = r.state === 'escalated' || r.state === 'dropped_off';
@@ -349,6 +349,7 @@
     if (sel) sel.onchange = function () { centreFilter = sel.value; render(main); };
     root.querySelector('#sa-refresh').onclick = function () { render(main); };
     phoneMessages(root, main);
+    tempPickups(root, main);
     var st = root.querySelector('#sa-settings');
     if (st) st.onclick = function () { settingsDialog(main, s); };
     root.querySelectorAll('[data-sd-act]').forEach(function (b) {
@@ -706,6 +707,37 @@
     var save = !had && h && h.backdrop && h.backdrop.querySelector('.modal-footer .btn-primary');
     if (save) save.setAttribute('data-kt-always-save', '1');
     setTimeout(function () { var i = body.querySelector('#sa-late-time'); if (i && !(window.matchMedia && matchMedia('(pointer: coarse)').matches)) i.focus(); }, 30);
+  }
+
+  /* TEMPORARY PICKUPS (2026-11-24, App\Support\TempPickups): who may collect which child with a pass, with photo. */
+  async function tempPickups(root, main) {
+    var box = root.querySelector('#sa-tpick'); if (!box) return;
+    var d; try { d = await call('GET', '/provider/temp-pickups'); } catch (e) { return; }
+    if (!box.isConnected) return;
+    var list = (d.passes || []).filter(function (p) { return p.state === 'active' || p.state === 'upcoming' || p.state === 'locked'; });
+    if (!list.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<h3 style="margin:8px 0 10px;font-size:15px;color:#0F172A;">🎫 Temporary pickups</h3>' + list.map(function (p) {
+      return '<div style="border:1px solid ' + (p.state === 'locked' ? '#FCA5A5' : '#E2E8F0') + ';background:#fff;border-radius:12px;padding:10px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'
+        + '<img data-tp-img="' + p.id + '" alt="" style="width:48px;height:48px;border-radius:10px;object-fit:cover;background:#E2E8F0;">'
+        + '<div style="flex:1;min-width:200px;"><div style="font-weight:800;font-size:14px;color:#0F172A;">' + esc(p.full_name) + (p.relationship ? ' · ' + esc(p.relationship) : '') + ' → ' + esc(p.children.map(function (c) { return c.name; }).join(', ')) + '</div>'
+        + '<div style="font-size:12.5px;color:#475569;margin-top:2px;">' + esc(p.window) + ' · ' + (p.mode === 'signin' ? 'signs out with One-Tap' : 'shows a code at sign-out') + ' · added by ' + esc(p.added_by || 'a parent')
+        + (p.state === 'locked' ? ' · <b style="color:#B91C1C;">locked after a wrong code</b>' : p.state === 'upcoming' ? ' · starts later' : '') + '</div></div>'
+        + (p.state !== 'locked' ? '<button type="button" data-tp-cancel="' + p.id + '" data-kt-iconized="1" style="height:32px;padding:0 12px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#B91C1C;font-weight:800;font-size:12.5px;cursor:pointer;">Cancel</button>' : '')
+        + '</div>';
+    }).join('');
+    box.querySelectorAll('[data-tp-img]').forEach(function (img) {
+      fetch(API() + '/provider/temp-pickups/' + img.getAttribute('data-tp-img') + '/photo', { headers: hdrs(false) })
+        .then(function (r) { return r.ok ? r.blob() : null; }).then(function (b) { if (b) img.src = URL.createObjectURL(b); }).catch(function () {});
+    });
+    box.querySelectorAll('[data-tp-cancel]').forEach(function (b) {
+      b.onclick = async function () {
+        var p = list.filter(function (x) { return String(x.id) === b.getAttribute('data-tp-cancel'); })[0];
+        var ok = KT.confirm ? await KT.confirm({ title: 'Cancel ' + p.full_name + '’s pickup?', description: 'Their code stops working at once, and if they try it everyone is alerted.', okLabel: 'Cancel pickup', cancelLabel: 'Keep it' }) : true;
+        if (!ok) return;
+        try { await call('POST', '/provider/temp-pickups/' + p.id + '/cancel', {}); if (window.ktToast) window.ktToast('🎫', p.full_name + ' can no longer pick up.'); render(main); }
+        catch (e) { if (window.ktToast) window.ktToast('⚠️', e.message); }
+      };
+    });
   }
 
   /* PHONE MESSAGES (2026-11-24, App\Support\ParentLine). A parent called the KiddieTrac line but couldn't confirm the

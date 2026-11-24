@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Pickup pass</title>
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <!-- No icon: a white-label agency must not show KiddieTrac's. -->
+  <link rel="icon" id="fav" href="data:,">
+  <link rel="stylesheet" href="/css/kt-fonts.css?v=20261014net">
+  <meta name="theme-color" content="#0A1C3A">
+  <!-- A temporary pickup person's pass (2026-11-24). #t=<token> (a hash, so it never reaches a server log).
+       Backend: TempPickupController holderView / holderSignOut + App\Support\TempPickups.
+       No account: no photos, reports or messages, only this pass. -->
+  <style>
+    :root { --brand: #1F6080; --ink: #0F172A; --muted: #64748B; --line: #E2E8F0; --bg: #F4F8FB; --card: #fff; }
+    @media (prefers-color-scheme: dark) { :root { --ink: #E2E8F0; --muted: #94A3B8; --line: #334155; --bg: #0B1220; --card: #111A2E; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    .wrap { max-width: 480px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px 48px; }
+    .head { text-align: center; font-weight: 800; font-size: 16px; margin: 4px 0 14px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: 0 18px 40px -28px rgba(15, 23, 42, .35); }
+    .eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #2A8F9D; }
+    h1 { font-size: 22px; line-height: 1.25; margin: 6px 0; }
+    .sub { font-size: 14.5px; line-height: 1.55; margin: 0 0 12px; color: var(--muted); }
+    .code { text-align: center; margin: 14px 0; }
+    .code b { display: block; font-size: 40px; letter-spacing: 8px; font-variant-numeric: tabular-nums; }
+    .code img { width: 168px; height: 168px; background: #fff; padding: 8px; border-radius: 12px; margin-top: 8px; }
+    .facts { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+    .facts div { display: flex; justify-content: space-between; gap: 12px; }
+    .facts span { color: var(--muted); }
+    .state { display: inline-block; border-radius: 999px; padding: 4px 12px; font-weight: 800; font-size: 13px; }
+    .ok { background: #ECFDF5; color: #047857; } .no { background: #FEF2F2; color: #B91C1C; } .soon { background: #EFF6FF; color: #1E40AF; }
+    label { display: block; font-size: 14px; font-weight: 800; margin: 16px 0 6px; }
+    input { width: 100%; font-size: 20px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; font-family: inherit; color: var(--ink); background: transparent; }
+    .btn { display: block; width: 100%; margin-top: 12px; border: 0; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 800; color: #fff; background: var(--brand); cursor: pointer; font-family: inherit; }
+    .btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+    .btn:disabled { opacity: .6; }
+    .err { color: #DC2626; font-weight: 700; font-size: 13.5px; min-height: 18px; margin-top: 10px; }
+    video { width: 100%; border-radius: 12px; margin-top: 10px; display: none; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="head" id="head"></div>
+  <div class="card" id="app">Loading…</div>
+  <div class="foot">Bring photo ID. Staff check your face and code before a child leaves with you.</div>
+</main>
+<script src="/js/kt-qr.js?v=20261124tp"></script>
+<script>
+(function () {
+  'use strict';
+  var API = 'https://api.kiddietrac.com/api/v1/pickup-pass/';
+  var token = String((location.hash.match(/t=([A-Za-z0-9]+)/) || [])[1] || '');
+  var app = document.getElementById('app');
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+  function post(path, body) {
+    return fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.message || 'Something went wrong. Please speak to a staff member.'); return j; }); });
+  }
+  if (!token) { app.innerHTML = '<h1>Link not complete</h1><p class="sub">Open the whole link from your text message.</p>'; return; }
+
+  post('view', { token: token }).then(function (d) {
+    var p = d.pass, c = d.centre || {};
+    document.getElementById('head').textContent = d.agency || '';
+    var st = { active: ['Valid now', 'ok'], upcoming: ['Not valid yet', 'soon'], used: ['Already used', 'no'], expired: ['Ended', 'no'], cancelled: ['Cancelled by the parent', 'no'], locked: ['Locked. Speak to staff', 'no'] }[p.state] || ['Not valid', 'no'];
+    var live = p.state === 'active';
+    var h = '<div class="eyebrow">Pickup pass</div><h1>' + esc(p.full_name) + '</h1>'
+      + '<p class="sub">' + esc(p.added_by || 'A parent') + ' has asked you to pick up <b>' + esc(p.children.map(function (k) { return k.name; }).join(' and ')) + '</b>.</p>'
+      + '<span class="state ' + st[1] + '">' + esc(st[0]) + '</span>';
+    if (p.code && (live || p.state === 'upcoming')) {
+      h += '<div class="code"><span class="sub">Show staff this code</span><b>' + esc(p.code) + '</b><div id="qr"></div></div>';
+    }
+    h += '<div class="facts" style="margin-top:12px;"><div><span>When</span><b>' + esc(p.window) + '</b></div>'
+      + (c.name ? '<div><span>Where</span><b style="text-align:right;">' + esc(c.name) + (c.address ? '<br><span style="font-weight:500;">' + esc(c.address) + '</span>' : '') + '</b></div>' : '')
+      + (c.phone ? '<div><span>Centre phone</span><b><a href="tel:' + esc(c.phone) + '" style="color:inherit;">' + esc(c.phone) + '</a></b></div>' : '') + '</div>';
+    if (live && p.mode === 'signin') {
+      h += '<label for="cc">Sign out at the door</label><p class="sub" style="margin:0 0 8px;">Scan the One-Tap QR code at the centre, or type the 6-letter code under it.</p>'
+        + '<input id="cc" maxlength="6" autocomplete="off" placeholder="ABC123"><video id="cam" playsinline muted></video>'
+        + '<button class="btn" id="go">Sign out</button>' + ('BarcodeDetector' in window ? '<button class="btn ghost" id="scan">📷 Scan the door QR</button>' : '')
+        + '<div class="err" id="err" role="alert"></div>';
+    } else if (live) {
+      h += '<p class="sub" style="margin-top:12px;">At the centre, show this code and your photo ID to a staff member. They sign the child out with you.</p>';
+    }
+    app.innerHTML = h;
+    if (p.code && window.KT && KT.qrImg) KT.qrImg(p.code, { size: 168 }).then(function (img) { var q = document.getElementById('qr'); if (q) q.appendChild(img); }).catch(function () {});
+    var go = document.getElementById('go');
+    if (!go) return;
+    var err = document.getElementById('err');
+    var send = function (code) {
+      go.disabled = true; go.textContent = 'Signing out…'; err.textContent = '';
+      post('sign-out', { token: token, centre_code: code }).then(function (r) {
+        app.innerHTML = '<div style="text-align:center;"><div style="font-size:52px;">✅</div><h1>' + esc(r.message) + '</h1><p class="sub">Signed out at ' + esc(r.time) + '. The family has been told.</p></div>';
+      }, function (e) { go.disabled = false; go.textContent = 'Sign out'; err.textContent = e.message; });
+    };
+    go.onclick = function () { var v = document.getElementById('cc').value.trim(); if (!v) { err.textContent = 'Type the code at the door, or scan it.'; return; } send(v); };
+    var scan = document.getElementById('scan');
+    if (scan) scan.onclick = function () {
+      var v = document.getElementById('cam'), det = new window.BarcodeDetector({ formats: ['qr_code'] });
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function (s) {
+        v.srcObject = s; v.style.display = 'block'; v.play();
+        var tick = function () {
+          det.detect(v).then(function (codes) {
+            var raw = codes[0] && codes[0].rawValue;
+            var m = raw && String(raw).match(/KTCHK\.\d+\.\d{8}\.[a-f0-9]{16}/);
+            if (m) { s.getTracks().forEach(function (t) { t.stop(); }); v.style.display = 'none'; send(m[0]); }
+            else requestAnimationFrame(tick);
+          }).catch(function () { requestAnimationFrame(tick); });
+        };
+        tick();
+      }, function () { err.textContent = 'The camera is blocked. Type the 6-letter code instead.'; });
+    };
+  }, function (e) { app.innerHTML = '<h1>Pass not found</h1><p class="sub">' + esc(e.message) + '</p>'; });
+})();
+</script>
+</body>
+</html>

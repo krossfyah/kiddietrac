@@ -341,6 +341,9 @@ Route::match(['get', 'post'], '/voice/dialer/hook/{id}/{token?}/{step?}', [\App\
 Route::match(['get', 'post'], '/voice/ivr/{token}/dialed',    [\App\Http\Controllers\Api\PhoneMenuController::class, 'dialed'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
 // A held caller put through to the app that answered the ringing push (2026-10-23).
 Route::match(['get', 'post'], '/voice/ivr/{token}/connect',   [\App\Http\Controllers\Api\PhoneMenuController::class, 'connect'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
+// A temporary pickup person's own pass (2026-11-24, App\Support\TempPickups): the link is the pass, no account.
+Route::post('/pickup-pass/view', [\App\Http\Controllers\Api\TempPickupController::class, 'holderView'])->middleware('throttle:30,1,r-tpass');
+Route::post('/pickup-pass/sign-out', [\App\Http\Controllers\Api\TempPickupController::class, 'holderSignOut'])->middleware('throttle:10,1,r-tpass-out');
 // Parents call in to report absent / late (2026-11-24, App\Support\ParentLine): every call starts here.
 Route::match(['get', 'post'], '/voice/ivr/{token}/start', [\App\Http\Controllers\Api\ParentLineController::class, 'start'])->where('token', '[A-Za-z0-9]{24,64}')->middleware('throttle:120,1,ivr');
 Route::match(['get', 'post'], '/voice/ivr/{token}/parent/{step}', [\App\Http\Controllers\Api\ParentLineController::class, 'step'])->where(['token' => '[A-Za-z0-9]{24,64}', 'step' => '[a-z]{2,12}'])->middleware('throttle:240,1,ivr');
@@ -1038,6 +1041,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/me/sms-consent',  [\App\Http\Controllers\Api\SmsConsentController::class, 'show']);
         Route::post('/me/sms-consent', [\App\Http\Controllers\Api\SmsConsentController::class, 'store']);
         // 'My child isn't coming in today' — reported by a parent, tells the centre.
+        // Temporary pickup people (2026-11-24, App\Support\TempPickups).
+        Route::get ('/parent/temp-pickups',              [\App\Http\Controllers\Api\TempPickupController::class, 'parentIndex']);
+        Route::post('/parent/temp-pickups',              [\App\Http\Controllers\Api\TempPickupController::class, 'parentStore'])->middleware('throttle:20,1,r-tp-add');
+        Route::post('/parent/temp-pickups/{id}/cancel',  [\App\Http\Controllers\Api\TempPickupController::class, 'parentCancel'])->whereNumber('id');
+        Route::post('/parent/temp-pickups/{id}/resend',  [\App\Http\Controllers\Api\TempPickupController::class, 'parentResend'])->whereNumber('id')->middleware('throttle:6,1,r-tp-resend');
+        Route::get ('/parent/temp-pickups/{id}/photo',   [\App\Http\Controllers\Api\TempPickupController::class, 'parentPhoto'])->whereNumber('id');
         // Call in instead: the KiddieTrac number and my phone PIN (2026-11-24, App\Support\ParentLine).
         Route::get   ('/parent/phone-line',     [\App\Http\Controllers\Api\ParentLineController::class, 'mineParent']);
         Route::put   ('/parent/phone-line/pin', [\App\Http\Controllers\Api\ParentLineController::class, 'setPin'])->middleware('throttle:10,1,r-ppin');
@@ -1499,6 +1508,13 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
             Route::post('/check-in', [CheckEventController::class, 'checkIn']);
             Route::post('/check-out', [CheckEventController::class, 'checkOut']);
+            // Temporary pickup passes at sign-out (2026-11-24, App\Support\TempPickups).
+            Route::get ('/temp-pickups',                 [\App\Http\Controllers\Api\TempPickupController::class, 'staffIndex']);
+            Route::get ('/temp-pickups/child/{child}',   [\App\Http\Controllers\Api\TempPickupController::class, 'staffForChild'])->whereNumber('child');
+            Route::post('/temp-pickups/verify',          [\App\Http\Controllers\Api\TempPickupController::class, 'staffVerify'])->middleware('throttle:30,1,r-tp-verify');
+            Route::post('/temp-pickups/alert',           [\App\Http\Controllers\Api\TempPickupController::class, 'staffAlert'])->middleware('throttle:10,1,r-tp-alert');
+            Route::post('/temp-pickups/{id}/cancel',     [\App\Http\Controllers\Api\TempPickupController::class, 'staffCancel'])->whereNumber('id');
+            Route::get ('/temp-pickups/{id}/photo',      [\App\Http\Controllers\Api\TempPickupController::class, 'staffPhoto'])->whereNumber('id');
             Route::post('/check-in-batch', [CheckEventController::class, 'checkInBatch']);
 
             Route::post('/events', [DailyEventController::class, 'store']);

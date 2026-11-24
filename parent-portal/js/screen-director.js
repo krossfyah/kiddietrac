@@ -721,7 +721,7 @@
     var name = child.display_name || 'this child';
 
     /* Not One-Tap: the centred yellow warning every manual check-in/out asks with (2026-11-06). */
-    var ok = (KT.warnManualCheck) ? await KT.warnManualCheck({ name: name, going: goingIn ? 'in' : 'out' }) : await KT.confirm({
+    var ok = (KT.warnManualCheck) ? await KT.warnManualCheck({ name: name, going: goingIn ? 'in' : 'out', child_id: child.id }) : await KT.confirm({
       title: (goingIn ? 'Sign in ' : 'Sign out ') + name + '?',
       description: goingIn
         ? (name + ' will be marked present in ' + (room.room_name || 'this room')

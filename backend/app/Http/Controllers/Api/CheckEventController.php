@@ -124,6 +124,9 @@ final class CheckEventController extends Controller
         }
 
         $notes = trim(($data['pickup_person'] ?? '').' '.($data['notes'] ?? '')) ?: null;
+        // A temporary pickup pass this staff member checked a moment ago (App\Support\TempPickups, 2026-11-24).
+        $tempPass = \App\Support\TempPickups::takeVerified((int) $data['child_id'], (int) $request->user()->id);
+        if ($tempPass) $notes = trim('Temporary pickup: ' . $tempPass->full_name . ' (code checked). ' . ($notes ?? ''));
 
         $eventId = DB::table('check_events')->insertGetId([
             'child_id' => $data['child_id'],
@@ -136,6 +139,10 @@ final class CheckEventController extends Controller
             'notes' => $notes,
             'created_at' => now(),
         ]);
+
+        if ($tempPass) {
+            try { \App\Support\TempPickups::recordUse($tempPass, (int) $data['child_id'], (int) $eventId, (int) $request->user()->id, 'staff_code'); } catch (\Throwable $e) {}
+        }
 
         // Tell the parents — who signed the child out, and when. Wrapped so a
         // failed notification can never undo a check-out that already happened.

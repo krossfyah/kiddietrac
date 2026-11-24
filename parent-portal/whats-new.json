@@ -4,6 +4,138 @@
         {
             "type": "new",
             "date": "2026-11-24",
+            "icon": "🎫",
+            "title": "Temporary pickup passes at sign-out",
+            "body": "When a parent adds a temporary pickup person, the room and director are told. At sign-out you see their photo: type the 6-digit code from their pass and tap Check code, then Check out. A wrong, old or cancelled code, or Not the right person, sends a high alert to the family, room, director and admins. Safe Arrival lists them, with Cancel.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "🎫",
+            "title": "Temporary pickup people",
+            "body": "Someone else collecting your child once, or for up to 30 days? Add them in Family & pick-ups with their photo and mobile number. They get a text with a pickup code, staff check the code and their photo at sign-out, and you get a message the moment they pick up. A wrong or cancelled code alerts everyone straight away.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "📞",
+            "title": "Parents can report absences and late arrivals by phone",
+            "body": "Parents can now call the KiddieTrac line to report an absence or a late drop-off or pickup. It’s recorded just as if they’d used the app, after they prove who they are with a texted code or their phone PIN. If they can’t, they leave a message, and directors and admins approve or decline it under Safe Arrival → Phone messages from parents.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "📞",
+            "title": "Call in to report an absence or running late",
+            "body": "Call 1-855-400-9996 from your phone to report your child absent (today or tomorrow) or a late drop-off or pickup. To keep your child safe, we text a code to your phone during the call. Calling from a landline? Set a phone PIN in Running late → Call in instead.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "💛",
+            "title": "Safe Arrival tells the family when a child is marked absent",
+            "body": "If a child still isn’t signed in after every Safe Arrival check, the child is marked absent and the family gets a kind email (“We missed Ava today”) with what was tried and how to reach you. The educators and the people alerted get a copy. If the child is signed in later, the absence is removed. Change when this happens (after the last alert, at closing time, or never) in Safe Arrival settings.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "📧",
+            "title": "View the full email from a lead’s history",
+            "body": "Email entries on a lead show a short preview. Click 📧 View full email to read the whole message, with its formatting, and download its attachments, without leaving the lead. Opening it never marks the email read in the mailbox.",
+            "roles": [
+                "platform_admin",
+                "sales_rep"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
+            "icon": "📤",
+            "title": "Lead history now shows the emails you send",
+            "body": "Emails sent to a lead from the Sales mailboxes (sales@ and info@) now appear on the lead’s activity as 📤 Email to …, next to the ✉️ emails they send you. A lead created after you’ve already been emailing them picks up the last 90 days of that conversation within a few minutes.",
+            "roles": [
+                "platform_admin",
+                "sales_rep"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
+            "icon": "🆘",
+            "title": "Emergency cards show the agency and educators",
+            "body": "Every emergency card now carries your agency’s name, logo, phone, email and address, and each educator’s phone and email. A part-time child on a day off still shows their regular provider. A child waitlisted after their provider closed no longer shows the old home; the card points to the guardians and the agency instead, and they now appear in the Children list.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "💼",
+            "title": "Careers: book interviews, keep on file, or decline kindly",
+            "body": "Each job application now has three actions: 📅 Book a meeting (you pick the time; they get a warm invitation with a Teams link and Accept / Maybe / Decline), 🗂️ Keep on file (kept 24 months, then removed automatically), and 💌 Decline politely. Add a personal note and see the exact email before it is sent.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
+            "icon": "🔎",
+            "title": "Search finds waitlisted families",
+            "body": "Global search now finds families, children and parents waiting for a new provider after theirs closed, tagged ⏳ Waitlisted. Their provider shows as \"Waitlisted · unassigned\" instead of the closed one, and you can edit their details and emergency contacts as usual.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
+            "icon": "⏳",
+            "title": "Waitlisted families are easy to find",
+            "body": "Families waiting for a new provider after theirs closed now show in the main Families list with a ⏳ Waitlisted tag. On the Children screen, the Waitlist filter and the search box find their children too.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
             "icon": "🧩",
             "title": "Play at home",
             "body": "See the Play Spark activities your child did at the centre this month, with an easy way to try each one at home.",

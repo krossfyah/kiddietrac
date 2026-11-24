@@ -1532,7 +1532,7 @@
      (KT.warnManualCheck, kt-polish.js) asks first (2026-11-06). The old wording stays as the fallback. */
   function askManualCheck(child, going, run) {
     if (window.KT && typeof KT.warnManualCheck === 'function') {
-      KT.warnManualCheck({ name: child.display_name, going: going }).then(function (ok) { if (ok) run(); });
+      KT.warnManualCheck({ name: child.display_name, going: going, child_id: child.id }).then(function (ok) { if (ok) run(); });
       return;
     }
     Modal.confirm({

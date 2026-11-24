@@ -1163,7 +1163,7 @@
     name = String(name).trim().split(/\s{2,}/)[0] || 'this child';
 
     /* Not One-Tap: the centred yellow warning every manual check-in/out asks with (2026-11-06). */
-    (KT.warnManualCheck ? KT.warnManualCheck({ name: name, going: going }) : KT.confirm({
+    (KT.warnManualCheck ? KT.warnManualCheck({ name: name, going: going, child_id: Number(childId) }) : KT.confirm({
       title: (going === 'in' ? 'Sign in ' : 'Sign out ') + name + '?',
       description: going === 'in'
         ? (name + ' will be marked present as of now, and their family is notified.')

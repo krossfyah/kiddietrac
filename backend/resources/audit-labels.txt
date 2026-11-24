@@ -1222,3 +1222,11 @@ post safe-arrival/phone-messages/{id}/approve | Approved a parent's phone messag
 post safe-arrival/phone-messages/{id}/decline | Declined a parent's phone message
 post voice/ivr/{token}/start | A call to the KiddieTrac line began
 post voice/ivr/{token}/parent/{step} | A parent used the phone line
+post parent/temp-pickups | Added a temporary pickup person
+post parent/temp-pickups/{id}/cancel | Cancelled a temporary pickup person
+post parent/temp-pickups/{id}/resend | Sent a temporary pickup person a new code
+post provider/temp-pickups/verify | Checked a temporary pickup code at sign-out
+post provider/temp-pickups/alert | Raised a pickup alert (not the right person)
+post provider/temp-pickups/{id}/cancel | Cancelled a temporary pickup person
+post pickup-pass/view | A pickup person opened their pass
+post pickup-pass/sign-out | A temporary pickup person signed a child out

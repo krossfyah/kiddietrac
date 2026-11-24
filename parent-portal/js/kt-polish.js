@@ -290,6 +290,53 @@
      One-Tap asks through here: the Today roster and the child's quick actions (educator), the director's rooms, and the
      Daily Overview. Centred, yellow, ⚠, short. Resolves true / false.
      d: { name, going: 'in' | 'out' } */
+  KT.tempPickupPanel = function (childId, name) {
+    var A = (window.KT && KT.Api) || window.Api;
+    var base = (KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+    var hdr = function () { var h = { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || '') }; var a = sessionStorage.getItem('kt_active_agency_id'); if (a) h['X-Active-Agency-Id'] = a; return h; };
+    if (!A) return Promise.resolve(null);
+    var t = new Promise(function (res) { setTimeout(function () { res(null); }, 4000); });
+    return Promise.race([A.get('/provider/temp-pickups/child/' + childId).catch(function () { return null; }), t]).then(function (r) {
+      var list = (r && r.passes) || [];
+      if (!list.length) return null;
+      var wrap = document.createElement('div');
+      wrap.style.cssText = 'margin-top:10px;border-top:1px solid rgba(146,64,14,.25);padding-top:10px;';
+      wrap.innerHTML = '<p class="kt-cf-warn-big" style="margin:0 0 6px;">🎫 Temporary pickup today</p>';
+      list.forEach(function (p) {
+        var e = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+        var c = document.createElement('div');
+        c.style.cssText = 'display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid #FDE68A;border-radius:10px;padding:10px;margin-bottom:8px;color:#0F172A;';
+        c.innerHTML = '<img alt="Photo of ' + e(p.full_name) + '" style="width:72px;height:72px;border-radius:10px;object-fit:cover;background:#E2E8F0;flex:0 0 auto;">'
+          + '<div style="flex:1;min-width:0;"><div style="font-weight:800;font-size:14px;">' + e(p.full_name) + (p.relationship ? ' · ' + e(p.relationship) : '') + '</div>'
+          + '<div style="font-size:12px;color:#475569;margin:2px 0 6px;">Added by ' + e(p.added_by || 'a parent') + ' · ' + e(p.window) + '. Check their photo ID matches.</div>'
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap;"><input data-tp-code inputmode="numeric" maxlength="6" placeholder="6-digit code" aria-label="Pickup code" style="width:120px;height:30px;padding:0 8px;border:1px solid #CBD5E1;border-radius:8px;font-size:15px;letter-spacing:2px;">'
+          + '<button type="button" data-tp-check style="height:30px;padding:0 10px;border-radius:8px;border:0;background:#1F6080;color:#fff;font-weight:800;font-size:12.5px;cursor:pointer;">Check code</button>'
+          + '<button type="button" data-tp-alert style="height:30px;padding:0 10px;border-radius:8px;border:1px solid #FCA5A5;background:#FEF2F2;color:#B91C1C;font-weight:800;font-size:12.5px;cursor:pointer;">🚨 Not the right person</button></div>'
+          + '<div data-tp-msg role="status" style="font-size:12.5px;font-weight:800;margin-top:6px;"></div></div>';
+        fetch(base + '/provider/temp-pickups/' + p.id + '/photo', { headers: hdr() }).then(function (x) { return x.ok ? x.blob() : null; })
+          .then(function (b) { if (b) c.querySelector('img').src = URL.createObjectURL(b); }).catch(function () {});
+        var msg = c.querySelector('[data-tp-msg]');
+        var say = function (t, ok) { msg.textContent = t; msg.style.color = ok ? '#047857' : '#B91C1C'; };
+        c.querySelector('[data-tp-check]').onclick = function () {
+          var b = this, code = c.querySelector('[data-tp-code]').value.replace(/\D/g, '');
+          if (code.length !== 6) { say('Enter the 6-digit code from their text or pass.', false); return; }
+          b.disabled = true;
+          A.post('/provider/temp-pickups/verify', { child_id: childId, code: code, pass_id: p.id }).then(function (x) {
+            say('✓ ' + (x.message || 'Code matches.') + ' Tap Check out.', true);
+          }, function (x) { b.disabled = false; say('🚨 ' + ((x && x.message) || 'That code does not match. Don\'t release ' + name + '.'), false); });
+        };
+        c.querySelector('[data-tp-alert]').onclick = function () {
+          var b = this; b.disabled = true;
+          A.post('/provider/temp-pickups/alert', { child_id: childId, pass_id: p.id }).then(function () {
+            say('🚨 Everyone has been alerted. Don\'t release ' + name + '. Keep them with you.', false);
+          }, function (x) { b.disabled = false; say((x && x.message) || 'Could not send the alert. Call the director now.', false); });
+        };
+        wrap.appendChild(c);
+      });
+      return wrap;
+    });
+  };
+
   KT.warnManualCheck = function (d) {
     d = d || {};
     var name = String(d.name || 'this child'), going = d.going === 'out' ? 'out' : 'in';
@@ -307,6 +354,18 @@
     note.textContent = going === 'in' ? name + ' will be marked at the centre and the family notified.' : name + ' will be marked as picked up and the family notified.';
     col.appendChild(big); col.appendChild(sub); col.appendChild(note);
     box.appendChild(ico); box.appendChild(col);
+    /* TEMPORARY PICKUP (2026-11-24, App\Support\TempPickups): someone with a pass for this child today shows here,
+       with their photo. Staff type their code; a match lets the check-out record it (the server keeps a 3-minute
+       ticket), a miss or an old pass raises the high alert. "Not the right person" raises it too. */
+    if (going === 'out' && d.child_id && !d.__tp) {
+      return KT.tempPickupPanel(d.child_id, name).then(function (panel) {
+        if (panel) { col.appendChild(panel); }
+        return KT.confirm({
+          title: 'Check out ' + name + '?', keepHeaderTitle: true, extra: box, tone: 'warning', alarm: true,
+          okLabel: 'Check out', cancelLabel: 'Cancel',
+        });
+      });
+    }
     return KT.confirm({
       title: (going === 'in' ? 'Check in ' : 'Check out ') + name + '?',
       keepHeaderTitle: true, extra: box, tone: 'warning', alarm: true,
