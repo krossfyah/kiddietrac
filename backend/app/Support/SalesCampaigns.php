@@ -648,7 +648,7 @@ final class SalesCampaigns
         try {
             $res = MicrosoftMailbox::call($a, 'GET', '/mailFolders/inbox/messages', [
                 '$filter' => 'receivedDateTime ge ' . Carbon::parse($since)->utc()->format('Y-m-d\TH:i:s\Z'),
-                '$select' => 'from,subject,receivedDateTime,bodyPreview', '$orderby' => 'receivedDateTime desc', '$top' => 100,
+                '$select' => 'from,subject,receivedDateTime,bodyPreview,internetMessageId', '$orderby' => 'receivedDateTime desc', '$top' => 100,
             ]);
             $msgs = is_array($res) ? ($res['value'] ?? []) : (method_exists($res, 'json') ? ($res->json('value') ?: []) : []);
             foreach ($msgs as $msg) {
@@ -665,7 +665,11 @@ final class SalesCampaigns
                     ->first(fn ($x) => mb_strtolower(trim(preg_replace('/\s+/u', ' ', (string) $x->campaign_subject))) === $subj);
                 if (! $r) continue;
                 unset($r->campaign_subject);
+                $before = (int) ($r->followup_activity_id ?? 0);
                 self::respond($r, 'replied', null, trim((string) ($msg['subject'] ?? '')) . "\n" . trim((string) ($msg['bodyPreview'] ?? '')));
+                // The entry holds the reply's preview; remember the email so View full email can open it (2026-11-24).
+                $after = (int) DB::table('sales_campaign_recipients')->where('id', $r->id)->value('followup_activity_id');
+                if ($after && $after !== $before) \App\Support\LeadHistory::linkActivity('campaign_reply', $a, $msg, $after);
                 $n++;
             }
         } catch (\Throwable $e) {

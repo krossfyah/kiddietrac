@@ -713,6 +713,64 @@
     attachAddressAutocomplete(f.address, { city: f.city, province: f.province, postal_code: f.postal_code, country: f.country });
   }
 
+  /* ── VIEW FULL EMAIL (2026-11-24, Anthony: "some of the logged history are truncated, can you add a button to view
+        the entire message"). An email entry keeps Outlook's short preview; this opens the whole message from the Sales
+        mailbox (read only, never marked read), in a sandboxed frame: its styles cannot leak in and its scripts cannot
+        run. Attachments download as they do in Sales → Email. ── */
+  function openFullEmail(a) {
+    var M = window.KT && KT.Shell && KT.Shell.Modal;
+    var box = el('div', { style: 'display:flex;flex-direction:column;gap:10px;width:min(920px,88vw)' }, [
+      el('div', { style: 'padding:24px;color:#64748B;font-size:13px' }, ['Opening the email…'])]);
+    M.open({ title: '📧 Full email', large: true, body: box, actions: [{ label: 'Close' }] });
+    function people(list) { return (list || []).map(function (p) { return p.name ? p.name + ' <' + p.email + '>' : p.email; }).join(', '); }
+    function row(label, val) {
+      return val ? el('div', { style: 'display:grid;grid-template-columns:64px 1fr;gap:8px;font-size:13px;line-height:1.45' }, [
+        el('span', { style: 'color:#64748B;font-weight:700' }, [label]), el('span', { style: 'color:#0D1B2A;overflow-wrap:anywhere' }, [val])]) : '';
+    }
+    (async function () {
+      var where, msg, path;
+      try {
+        where = await Api.get('/sales/activities/' + a.id + '/email');
+        path = '/sales/email/messages/m?account_id=' + where.account_id + '&mid=' + encodeURIComponent(where.uid);
+        msg = await Api.get(path + '&peek=1');
+      } catch (e) {
+        clear(box);
+        box.appendChild(el('div', { style: 'padding:18px;color:#B91C1C;font-size:13.5px' }, [(e && e.message) || 'Could not open this email.']));
+        return;
+      }
+      clear(box);
+      box.appendChild(el('div', { style: 'display:flex;flex-direction:column;gap:3px;padding:2px 2px 8px;border-bottom:1px solid #E2E8F0' }, [
+        el('div', { style: 'font-size:15px;font-weight:800;color:#0D1B2A;margin-bottom:4px' }, [msg.subject || '(no subject)']),
+        row('From', msg.from ? people([msg.from]) : ''), row('To', people(msg.to)), row('Cc', people(msg.cc)),
+        row('Date', msg.date || (a.created_at ? fmtStamp(a.created_at) : '')),
+      ]));
+      var f = document.createElement('iframe');
+      f.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+      f.setAttribute('referrerpolicy', 'no-referrer');
+      f.setAttribute('title', 'Email');
+      f.style.cssText = 'width:100%;height:62vh;border:1px solid #E2E8F0;border-radius:10px;background:#fff';
+      f.srcdoc = '<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>html,body{margin:0;background:#fff}body{padding:14px 16px;font:14px/1.55 "Segoe UI",Calibri,Arial,sans-serif;color:#1F2937;overflow-wrap:anywhere}img{max-width:100%;height:auto}table{max-width:100%}pre{white-space:pre-wrap}blockquote{margin:0 0 0 6px;padding-left:10px;border-left:3px solid #D5DCE4}</style></head><body>' + (msg.html || '') + '</body></html>';
+      box.appendChild(f);
+      if ((msg.attachments || []).length) {
+        box.appendChild(el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' },
+          [el('span', { style: 'font-size:12px;color:#64748B;font-weight:700' }, ['📎 Attachments'])].concat(msg.attachments.map(function (t) {
+            return chip('⬇ ' + t.name + (t.size ? ' · ' + fmtBytes(t.size) : ''), function () {
+              var token = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+              var agency = ''; try { agency = sessionStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+              var base = (window.KT && KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+              var h = { 'Authorization': 'Bearer ' + token }; if (agency) h['X-Active-Agency-Id'] = agency;
+              fetch(base + '/sales/email/messages/m/attachment?account_id=' + where.account_id + '&mid=' + encodeURIComponent(where.uid) + '&section=' + encodeURIComponent(t.section), { headers: h })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+                .then(function (blob) {
+                  var u = URL.createObjectURL(blob), x = document.createElement('a'); x.href = u; x.download = t.name || 'attachment';
+                  document.body.appendChild(x); x.click(); setTimeout(function () { URL.revokeObjectURL(u); x.remove(); }, 1500);
+                }).catch(function () { toast('⚠️', 'Could not download', t.name || '', '#DC2626'); });
+            });
+          }))));
+      }
+    })();
+  }
+
   // Render an activity's body — multi-line "Field: old → new" change logs (type 'edit'
   // or quote edits) become a small list with bold field names; everything else is plain.
   function activityBodyNode(a) {
@@ -1194,6 +1252,7 @@
           isFu && a.due_date ? el('span', { style: 'margin-left:6px;font-weight:700;color:' + (a.done ? '#15803D' : '#C2410C') }, [a.done ? '✓ done' : ('due ' + fmtDate(a.due_date))]) : '',
           isFu && !a.done ? chip('✓ Mark done', async function () { try { await Api.patch('/sales/activities/' + a.id, { done: true }); toast('✅', 'Done'); renderDetail(container, ctx); } catch (er) {} }) : '',
           a.edited_at ? el('span', { style: 'margin-left:6px;color:#94A3B8;font-style:italic', title: 'Edited ' + fmtStamp(a.edited_at) }, ['· edited ' + fmtStamp(a.edited_at)]) : '',
+          a.full_email ? chip('📧 View full email', function () { openFullEmail(a); }) : '',
           editLink,
         ]),
         bodyHost,

@@ -363,6 +363,16 @@ class SalesController extends Controller
      * POST /sales/activities/{activity}/notify — the team email for an entry whose files
      * (a Teams transcript) arrived after it was saved. Sent once.
      */
+    /** GET /sales/activities/{activity}/email - where the email behind a lead-history entry is now, to open it whole. */
+    public function activityEmail(int $activity)
+    {
+        $a = SalesActivity::findOrFail($activity);
+        $where = \App\Support\LeadHistory::emailFor((int) $a->id);
+        if (! $where) return response()->json(['message' => 'This entry did not come from an email.'], 404);
+        if (! empty($where['missing'])) return response()->json(['message' => 'This email is no longer in the Sales mailbox. It may have been deleted.'], 404);
+        return response()->json($where);
+    }
+
     public function notifyNow(Request $r, int $activity)
     {
         $a = SalesActivity::findOrFail($activity);
@@ -2231,8 +2241,11 @@ TXT;
             'value_quote_number' => $l->value_quote_id ? optional($l->quotes->firstWhere('id', $l->value_quote_id))->number : null,
             'activities'  => (function () use ($l) {
                 $files = \App\Http\Controllers\Api\SalesActivityFileController::forActivities($l->activities->pluck('id')->all());
+                // Entries that came from an email the Sales mailbox still holds: "View full email" (2026-11-24).
+                $mail = DB::table('sales_lead_filed')->whereIn('activity_id', $l->activities->pluck('id')->all() ?: [0])->whereNotNull('message_id')->pluck('activity_id')->flip();
                 return $l->activities->map(fn ($a) => [
                 'files' => $files[$a->id] ?? [],
+                'full_email' => isset($mail[$a->id]),
                 'id' => $a->id, 'type' => $a->type, 'body' => $a->body,
                 'due_date' => optional($a->due_date)->toDateString(),
                 'done' => (bool) $a->done, 'user_name' => $a->user ? trim($a->user->first_name . ' ' . $a->user->last_name) : null,

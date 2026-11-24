@@ -761,6 +761,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Teams transcripts / recordings on an activity: chunked raw-body upload, remove (2026-10-09).
             Route::post('/activities/{activity}/upload', [\App\Http\Controllers\Api\SalesActivityFileController::class, 'upload'])->where('activity','[0-9]+');
             Route::post('/activities/{activity}/notify', [\App\Http\Controllers\Api\SalesController::class, 'notifyNow'])->where('activity','[0-9]+');
+            Route::get('/activities/{activity}/email', [\App\Http\Controllers\Api\SalesController::class, 'activityEmail'])->where('activity','[0-9]+')->middleware('throttle:60,1,sales-act-email');
             Route::delete('/activity-files/{file}', [\App\Http\Controllers\Api\SalesActivityFileController::class, 'destroy'])->where('file','[0-9]+');
             Route::post('/leads/{lead}/quotes', [\App\Http\Controllers\Api\SalesController::class, 'quoteStore'])->where('lead','[0-9]+');
             Route::get('/quotes/{quote}', [\App\Http\Controllers\Api\SalesController::class, 'quoteShow'])->where('quote','[0-9]+');

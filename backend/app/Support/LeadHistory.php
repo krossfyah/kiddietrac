@@ -76,15 +76,15 @@ class LeadHistory
             . 'Subject: ' . mb_substr($subject, 0, 250)
             . ($preview !== '' ? "\n\n" . mb_substr($preview, 0, 600) : '');
 
-        return self::write('email', $key, $lead, $body, $at, 'email');
+        return self::write('email', $key, $lead, $body, $at, 'email', null, self::mailMeta($acct, $m));
     }
 
     /** One claimed entry: the sales_lead_filed row and the activity together, or neither. */
-    private static function write(string $source, string $ref, object $lead, string $body, Carbon $at, string $type, ?int $uid = null): ?int
+    private static function write(string $source, string $ref, object $lead, string $body, Carbon $at, string $type, ?int $uid = null, array $meta = []): ?int
     {
         try {
-            return DB::transaction(function () use ($source, $ref, $lead, $body, $at, $type, $uid) {
-                if (! DB::table('sales_lead_filed')->insertOrIgnore(['source' => $source, 'ref' => $ref, 'lead_id' => $lead->id, 'created_at' => now()])) return null;
+            return DB::transaction(function () use ($source, $ref, $lead, $body, $at, $type, $uid, $meta) {
+                if (! DB::table('sales_lead_filed')->insertOrIgnore(['source' => $source, 'ref' => $ref, 'lead_id' => $lead->id, 'created_at' => now()] + $meta)) return null;
                 $id = DB::table('sales_activities')->insertGetId(['lead_id' => $lead->id, 'user_id' => $uid, 'type' => $type, 'body' => $body,
                     'done' => 1, 'created_at' => $at, 'updated_at' => $at]);
                 DB::table('sales_lead_filed')->where('source', $source)->where('ref', $ref)->update(['activity_id' => $id]);
@@ -218,7 +218,7 @@ class LeadHistory
                 . 'Subject: ' . mb_substr($subject, 0, 250)
                 . ($preview !== '' ? "\n\n" . mb_substr($preview, 0, 600) : '');
             $uid = (int) ($acct->user_id ?? 0) ?: null;
-            if (self::write('email_out', $key, $lead, $body, $at, 'email', $uid)) $done[] = (int) $lead->id;
+            if (self::write('email_out', $key, $lead, $body, $at, 'email', $uid, self::mailMeta($acct, $m))) $done[] = (int) $lead->id;
         }
 
         return $done;
@@ -285,6 +285,125 @@ class LeadHistory
         }
 
         return $done;
+    }
+
+
+    /* ── VIEW FULL EMAIL (2026-11-24, Anthony: "some of the logged history are truncated, can you add a button to view
+          the entire message"). An email entry holds Outlook's preview only; the ledger row remembers the mailbox and the
+          internetMessageId so the whole message can be opened from the Sales mailbox. ── */
+
+    private static function mailMeta(object $acct, array $m): array
+    {
+        $mid = trim((string) ($m['internetMessageId'] ?? ''));
+
+        return $mid !== '' ? ['account_id' => (int) $acct->id, 'message_id' => mb_substr($mid, 0, 512)] : [];
+    }
+
+    /** Record that an activity another path wrote (a campaign reply) came from this email. */
+    public static function linkActivity(string $source, object $acct, array $m, int $activityId): void
+    {
+        $meta = self::mailMeta($acct, $m);
+        if (! $meta) return;
+        $leadId = DB::table('sales_activities')->where('id', $activityId)->value('lead_id');
+        if (! $leadId) return;
+        try {
+            DB::table('sales_lead_filed')->insertOrIgnore(['source' => $source, 'ref' => hash('sha256', $source . '|' . self::emailKey($m) . '|' . $activityId),
+                'lead_id' => $leadId, 'activity_id' => $activityId, 'created_at' => now()] + $meta);
+        } catch (Throwable $e) {
+            Log::warning('LeadHistory: could not link', ['activity' => $activityId, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Where an activity's email is now: ['account_id', 'uid'] (Graph's id, for /sales/email/messages), ['missing' => true]
+     * when the email has left every Sales mailbox, or null when the entry is not an email.
+     */
+    public static function emailFor(int $activityId): ?array
+    {
+        $f = DB::table('sales_lead_filed')->where('activity_id', $activityId)->whereNotNull('message_id')->orderBy('id')->first();
+        if (! $f) return null;
+        $accts = self::salesAccounts()->sortBy(fn ($a) => (int) $a->id === (int) $f->account_id ? 0 : 1)->values();
+        foreach ($accts as $a) {
+            try {
+                $rows = MicrosoftMailbox::call($a, 'GET', '/messages', [
+                    '$filter' => "internetMessageId eq '" . str_replace("'", "''", (string) $f->message_id) . "'",
+                    '$select' => 'id', '$top' => 1,
+                ])->json('value') ?? [];
+            } catch (Throwable $e) {
+                continue;
+            }
+            if (! empty($rows[0]['id'])) return ['account_id' => (int) $a->id, 'uid' => (string) $rows[0]['id']];
+        }
+
+        return ['missing' => true];
+    }
+
+    /**
+     * Backfill: find the email behind every email entry filed before the ledger kept it, and behind campaign replies.
+     * Returns [linked, still unlinked].
+     */
+    public static function linkMessages(bool $dry = false, int $days = 400): array
+    {
+        $linked = 0;
+        $since = now()->subDays($days)->utc()->format('Y-m-d\TH:i:s\Z');
+        $want = DB::table('sales_lead_filed')->whereIn('source', ['email', 'email_out'])->whereNull('message_id')->get(['id', 'source', 'ref', 'lead_id']);
+        $byLead = $want->groupBy('lead_id');
+        $accts = self::salesAccounts();
+        foreach ($byLead as $leadId => $rows) {
+            $lead = DB::table('sales_leads')->where('id', $leadId)->first(['id', 'email', 'owner_email']);
+            if (! $lead) continue;
+            $refs = $rows->keyBy('ref');
+            foreach ([$lead->email, $lead->owner_email] as $addr) {
+                $addr = mb_strtolower(trim((string) $addr));
+                if ($addr === '' || ! str_contains($addr, '@')) continue;
+                foreach ($accts as $a) {
+                    try {
+                        $msgs = array_merge(
+                            MicrosoftMailbox::call($a, 'GET', '/messages', ['$filter' => "from/emailAddress/address eq '" . str_replace("'", "''", $addr) . "' and receivedDateTime ge " . $since,
+                                '$top' => 200, '$select' => 'id,internetMessageId'])->json('value') ?? [],
+                            MicrosoftMailbox::call($a, 'GET', '/mailFolders/sentitems/messages', ['$search' => '"to:' . $addr . '"', '$top' => 200,
+                                '$select' => 'id,internetMessageId'])->json('value') ?? []);
+                    } catch (Throwable $e) {
+                        continue;
+                    }
+                    foreach ($msgs as $m) {
+                        $k = self::emailKey($m);
+                        foreach ([$k, hash('sha256', 'out|' . $k . '|' . $lead->id)] as $ref) {
+                            $row = $refs[$ref] ?? null;
+                            if (! $row || isset($row->done)) continue;
+                            $row->done = true; $linked++;
+                            if (! $dry) DB::table('sales_lead_filed')->where('id', $row->id)->update(self::mailMeta($a, $m));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Campaign replies: "📣 … replied to the email (campaign …)", built from the reply's preview.
+        $acct = SalesMailbox::account();
+        $replies = DB::table('sales_campaign_recipients')->where('response', 'replied')->whereNotNull('followup_activity_id')->get(['email', 'followup_activity_id']);
+        foreach ($replies as $r) {
+            if (DB::table('sales_lead_filed')->where('activity_id', $r->followup_activity_id)->whereNotNull('message_id')->exists()) continue;
+            $body = (string) DB::table('sales_activities')->where('id', $r->followup_activity_id)->value('body');
+            $parts = explode("\n\n", $body, 2);
+            $subject = trim(strtok((string) ($parts[1] ?? ''), "\n"));
+            if (! $acct || $subject === '') continue;
+            try {
+                $msgs = MicrosoftMailbox::call($acct, 'GET', '/messages', ['$filter' => "from/emailAddress/address eq '" . str_replace("'", "''", mb_strtolower(trim((string) $r->email))) . "' and receivedDateTime ge " . $since,
+                    '$top' => 100, '$select' => 'id,internetMessageId,subject'])->json('value') ?? [];
+            } catch (Throwable $e) {
+                continue;
+            }
+            foreach ($msgs as $m) {
+                if (trim((string) ($m['subject'] ?? '')) !== $subject) continue;
+                $linked++;
+                if (! $dry) self::linkActivity('campaign_reply', $acct, $m, (int) $r->followup_activity_id);
+                break;
+            }
+        }
+        $left = DB::table('sales_lead_filed')->whereIn('source', ['email', 'email_out'])->whereNull('message_id')->count();
+
+        return [$linked, $left];
     }
 
     private static function salesAccounts()
