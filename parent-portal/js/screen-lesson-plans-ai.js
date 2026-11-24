@@ -1,5 +1,7 @@
 /* ============================================================
    KIDDIETRAC v21 - AI Lesson Plan Generator (director)
+   2026-11-24: lives in Play Spark now, as the "Plan the week" tab (KT.LessonPlansAi.list with {inTab:true}).
+   #lesson-plans-ai redirects there; #lesson-plan-new stays the generator page and comes back to the tab.
    ============================================================ */
 (function (window) {
   'use strict';
@@ -34,10 +36,20 @@
   /* ============================================================
      LESSON PLANS LIST
      ============================================================ */
+  var PLAN_TAB = '#play-spark?tab=plan';
   async function renderLessonPlansAi(main, ctx) {
     Dom.clear(main);
     const wrap = document.createElement('div');
     main.appendChild(wrap);
+    if (ctx && ctx.inTab) {
+      // Inside Play Spark: its own hero is above, so only the action row here.
+      wrap.insertAdjacentHTML('beforeend',
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 12px;">' +
+          '<p style="margin:0;color:var(--kt-text-muted);font-size:13px;">HDLH-aware weekly plans, drafted in seconds. Edit one, then publish it to families.</p>' +
+          '<button class="btn btn-primary" id="kt-new-plan" data-kt-inpage>+ Generate plan</button>' +
+        '</div>' +
+        '<div id="kt-list"><div class="loading-state"><div class="spinner"></div></div></div>');
+    } else
     wrap.insertAdjacentHTML('beforeend',
       '<div class="page-header-v17">' +
         '<div>' +
@@ -129,7 +141,7 @@
       '<div class="page-header-v17">' +
         '<div>' +
           '<div class="crumbs">' +
-            '<a href="#lesson-plans-ai" style="color:var(--kt-text-muted);">AI Lesson Plans</a>' +
+            '<a href="#play-spark?tab=plan" style="color:var(--kt-text-muted);">Play Spark · Plan the week</a>' +
             '<span class="sep">&gt;</span>' +
             '<span style="color:var(--kt-text-muted);">Generate</span>' +
           '</div>' +
@@ -186,7 +198,7 @@
     );
 
     wrap.querySelector('#kt-cancel').addEventListener('click', function () {
-      window.location.hash = '#lesson-plans-ai';
+      window.location.hash = PLAN_TAB;
     });
 
     wrap.querySelector('#kt-generate').addEventListener('click', async function () {
@@ -323,12 +335,12 @@
 
     step2.querySelector('#kt-save-draft').addEventListener('click', async function () {
       const status = step2.querySelector('#kt-save-status');
-      try { await save(false); Dom.toast('Saved as draft', 'success'); setTimeout(function () { window.location.hash = '#lesson-plans-ai'; }, 500); }
+      try { await save(false); Dom.toast('Saved as draft', 'success'); setTimeout(function () { window.location.hash = PLAN_TAB; }, 500); }
       catch (e) { status.innerHTML = '<span style="color:#DC2626;">' + esc(e.message || 'Could not save') + '</span>'; }
     });
     step2.querySelector('#kt-save-publish').addEventListener('click', async function () {
       const status = step2.querySelector('#kt-save-status');
-      try { await save(true); Dom.toast('Saved and published', 'success'); setTimeout(function () { window.location.hash = '#lesson-plans-ai'; }, 500); }
+      try { await save(true); Dom.toast('Saved and published', 'success'); setTimeout(function () { window.location.hash = PLAN_TAB; }, 500); }
       catch (e) { status.innerHTML = '<span style="color:#DC2626;">' + esc(e.message || 'Could not save') + '</span>'; }
     });
   }
@@ -339,9 +351,14 @@
   window.KT = window.KT || {};
   window.KT.renderLessonPlansAi  = renderLessonPlansAi;
   window.KT.renderLessonPlanNew  = renderLessonPlanNew;
+  window.KT.LessonPlansAi = { list: renderLessonPlansAi, create: renderLessonPlanNew };
   if (Shell && Shell.registerScreen) {
     ['centre_director', 'agency_admin'].forEach(function (r) {
-      Shell.registerScreen(r + ':lesson-plans-ai',  renderLessonPlansAi);
+      // The old address opens Play Spark's "Plan the week" tab (2026-11-24, lesson plans merged into Play Spark).
+      Shell.registerScreen(r + ':lesson-plans-ai', function (main) {
+        main.innerHTML = '<div class="loading-state"><div class="spinner"></div></div>';
+        location.replace(location.pathname + location.search + PLAN_TAB);
+      });
       Shell.registerScreen(r + ':lesson-plan-new',  renderLessonPlanNew);
     });
   }

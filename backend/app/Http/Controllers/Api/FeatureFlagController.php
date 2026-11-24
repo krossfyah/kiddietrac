@@ -45,7 +45,7 @@ final class FeatureFlagController extends Controller
     public const FEATURES = [
         // ── Daily care ────────────────────────────────────────────────────────────
         'lesson_plans'      => ['label' => 'Lesson plans & curriculum',    'plan_min' => 'starter',    'group' => 'Daily care',
-            'hashes' => ['lesson-plans', 'curriculum', 'hdlh-gaps']],
+            'hashes' => ['lesson-plans', 'curriculum', 'hdlh-gaps', 'play-spark']],   // + Play Spark: the weekly plan lives in it (2026-11-24)
         'observations'      => ['label' => 'Observations & portfolios',    'plan_min' => 'starter',    'group' => 'Daily care',
             'hashes' => ['observations', 'photos', 'videos', 'photo-tagging']],
         'daily_log'         => ['label' => 'Daily log & care records',     'plan_min' => 'free',       'group' => 'Daily care',
@@ -145,7 +145,7 @@ final class FeatureFlagController extends Controller
            plan". Everything AI hangs off this key: the routes below in EnforcePlanFeatures, and App\Support\AiBundle
            for the AI inside shared endpoints and nightly jobs (parent end-of-day note, day story, photo tagging). */
         'ai_tools'          => ['label' => 'AI Bundle — summaries, writing help & report cards', 'plan_min' => 'addon', 'group' => 'Growth',
-            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status', 'lesson-plans-ai', 'photo-tagging', 'play-spark']],   // + Play Spark (2026-11-24)
+            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status', 'lesson-plans-ai', 'photo-tagging']],   // Play Spark's AI tabs: hidden in the screen, refused by the API (2026-11-24)
 
         // ── Platform ──────────────────────────────────────────────────────────────
         'multi_centre'      => ['label' => 'Multiple centres per agency',  'plan_min' => 'starter',    'group' => 'Platform',
@@ -234,6 +234,13 @@ final class FeatureFlagController extends Controller
             foreach (self::FEATURES[$key]['hashes'] ?? [] as $h) {
                 $hidden[] = $h;
             }
+        }
+
+        /* Play Spark is the weekly plan AND the AI play ideas (2026-11-24). With lesson plans off but the AI Bundle
+           on it still has its AI tabs, so it stays. */
+        $eff = self::effectiveFor($agencyId);
+        if (empty($eff['lesson_plans']) && ! empty($eff['ai_tools'])) {
+            $hidden = array_values(array_diff($hidden, ['play-spark']));
         }
 
         return array_values(array_unique($hidden));

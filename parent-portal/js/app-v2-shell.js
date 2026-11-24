@@ -219,8 +219,18 @@
   function hiddenHashes() {
     try {
       var u = Auth.user();
-      return (u && Array.isArray(u.hidden_screens)) ? u.hidden_screens : [];
+      return aiOnlyHidden(u, (u && Array.isArray(u.hidden_screens)) ? u.hidden_screens : []);
     } catch (e) { return []; }
+  }
+  /* PLAY SPARK FOR EVERY PLAN (2026-11-24, lesson plans merged into it). For staff it holds the weekly plan, so
+     the server lists it under lesson_plans. A parent's "Play at home" and a home visitor's Play Spark are AI only,
+     so without the AI Bundle (ai_bundle, the server's AiBundle::on) the item goes for those two roles. */
+  function aiOnlyHidden(u, list) {
+    if (!u || u.ai_bundle !== false) return list;
+    var r = '';
+    try { r = Roles.primaryRoleOf(u); } catch (e) {}
+    if ((r === 'guardian' || r === 'home_visitor') && list.indexOf('play-spark') === -1) return list.concat(['play-spark']);
+    return list;
   }
 
   function pruneHiddenLinks(root) {
@@ -241,7 +251,7 @@
   window.KT.pruneHiddenLinks = pruneHiddenLinks;
 
   function hideSwitchedOff(sections, user) {
-    var hidden = (user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [];
+    var hidden = aiOnlyHidden(user, (user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : []);
     if (!hidden.length) { return sections; }
     var off = {};
     hidden.forEach(function (h) { off[String(h)] = true; });
@@ -300,7 +310,7 @@
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
-          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // on-the-spot play ideas, AI Bundle (2026-11-24)
+          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
           { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
@@ -326,7 +336,6 @@
           { hash: 'forecast',            label: 'Enrolment forecast', icon: '📈' },
         ]},
         { label: 'Programs', items: [
-          { hash: 'lesson-plans',      label: 'Lesson plans',    icon: '📚' },   // moved from the main list (2026-10-24)
           { hash: 'menu',                label: 'Weekly menu',     icon: '🍽' },
           { hash: 'field-trips',         label: 'Field trips',     icon: '🚐' },
           { hash: 'allergy-alerts',      label: 'Allergy alerts',  icon: '🥜' },
@@ -518,7 +527,7 @@
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
-          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // on-the-spot play ideas, AI Bundle (2026-11-24)
+          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
           { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
@@ -558,7 +567,6 @@
           { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
         ]},
         { label: 'Programs', items: [
-          { hash: 'lesson-plans',      label: 'Lesson plans',    icon: '📚' },   // moved from the main list (2026-10-24)
           { hash: 'curriculum',        label: 'Curriculum library', icon: '🌱' },   // Ontario units (2026-11-03)
           { hash: 'menu',              label: 'Weekly menu',     icon: '🍽' },
           { hash: 'field-trips',       label: 'Field trips',     icon: '🚐' },
@@ -630,8 +638,7 @@
           { hash: 'care-log',      label: 'Daily log',     icon: '📝' },
           { hash: 'observations',  label: 'Observations',  icon: '👀' },
           { hash: 'photo-permissions', label: 'Photo permissions', icon: '🤳' },   // who may be photographed (2026-11-06)
-          { hash: 'lesson-plans',  label: 'Lesson plans',  icon: '📚' },
-          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // on-the-spot play ideas, AI Bundle (2026-11-24)
+          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)
           { hash: 'curriculum',    label: 'Curriculum library', icon: '🌱' },   // Ontario units (2026-11-03)
           { hash: 'chat',          label: 'Message Centre',      icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
@@ -680,7 +687,7 @@
         { label: 'Menu', items: [
           { hash: 'home',           label: 'Home',             icon: '🏠' },
           { hash: 'new-home-visit', label: 'New visit report', icon: '📝' },
-          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // on-the-spot play ideas, AI Bundle (2026-11-24)
+          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)
           { hash: 'home-visits',    label: 'My reports',       icon: '📋' },
           { hash: 'my-tasks',       label: 'My tasks',         icon: '✅' },
           /* Forms sent from the Forms Manager land here — the same fill-and-sign the
@@ -1329,6 +1336,7 @@
     'announcements': 'Broadcast news to a centre, a room, or the whole agency.',
     'awards': 'Celebrate a child’s effort — daily, weekly or monthly. Parents see it too, and you can print a certificate.',
     'lesson-plans': 'Weekly plans for each room.',
+    'play-spark': 'Play ideas and weekly lesson plans for every room.',
     'observations': 'Learning stories and developmental observations for each child.',
     'curriculum': 'Ontario units built on How Does Learning Happen?, ready to plan with.',
     'hdlh-gaps': 'Where your programme is light against your learning framework.',

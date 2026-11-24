@@ -198,8 +198,13 @@
       + tabs.map(function (t) { return '<button type="button" data-kt-inpage role="tab" data-tab="' + t[0] + '" aria-selected="' + (st.tab === t[0]) + '">' + esc(t[1]) + '</button>'; }).join('')
       + '</div><div id="kcl-pane"></div></div>';
     main.querySelectorAll('[data-tab]').forEach(function (b) {
-      b.onclick = function () { st.tab = b.getAttribute('data-tab'); drawList(main); };
+      b.onclick = function () {
+        // Activity ideas live in Play Spark's Library now (2026-11-24, lesson plans merged into Play Spark).
+        if (b.getAttribute('data-tab') === 'ideas') { location.hash = '#play-spark?tab=library&lib=ideas'; return; }
+        st.tab = b.getAttribute('data-tab'); drawList(main);
+      };
     });
+    if (st.tab === 'ideas') st.tab = 'library';
     var pane = main.querySelector('#kcl-pane');
     if (st.tab === 'ideas') {
       if (KT.V22p57 && KT.V22p57.renderCurriculumIdeas) { KT.V22p57.renderCurriculumIdeas(pane); }
@@ -444,7 +449,7 @@
       { label: 'Stay here' },
       { label: 'Open lesson plans', primary: true, handler: function () {
         try { if (KT.LessonPlans && KT.LessonPlans.focus && first) KT.LessonPlans.focus({ scope: isC ? 'centre' : 'room', centreId: isC ? tid : undefined, roomId: isC ? undefined : tid, week: first.week_starting }); } catch (e) {}
-        setTimeout(function () { location.hash = '#lesson-plans'; }, 20);
+        setTimeout(function () { location.hash = '#play-spark?tab=week'; }, 20);
         return true;
       } },
     ] });

@@ -1,9 +1,19 @@
 /* ============================================================
    PLAY SPARK (2026-11-24) - on-the-spot play ideas.
-   Staff: #play-spark (New idea / Library / Monthly report). Parents: #play-spark (Play at home).
-   AI Bundle only: the server refuses without it (code ai_bundle) and the screen hides via hidden_screens.
+   Staff: #play-spark. Parents: #play-spark (Play at home).
    Backend: PlaySparkController + App\Support\PlaySpark. Nothing here sends anything to families except
    "We did it", which logs an Activity to the daily record (the family feed shows it as usual).
+
+   LESSON PLANS MERGED IN (2026-11-24, Anthony: "lesson plan and play spark should be merged together - it's the
+   same"). One screen, tabs (deep link #play-spark?tab=now|week|plan|library|report, &lib= for the library):
+     ✨ Right now       today's spark                                   AI Bundle
+     📅 This week       the weekly lesson plan (KT.LessonPlans, what families see)   lesson plans on; staff
+     🗓️ Plan the week   AI-drafted weeks (KT.LessonPlansAi)              AI Bundle; directors + admins
+     📚 Library         sparks (AI) + 💡 Activity ideas templates (KT.V22p57)        directors + admins for ideas
+     📊 Monthly report  Play Spark activities by room                   AI Bundle
+   Called Play Spark for everyone. Without the AI Bundle the AI tabs are simply not there (no upsell) - the
+   server still refuses every AI endpoint (PlaySparkController::gate, AiLessonPlanController). The old
+   #lesson-plans (staff) and #lesson-plans-ai redirect here; parents keep their own #lesson-plans view.
    ============================================================ */
 (function (window) {
   'use strict';
@@ -88,25 +98,86 @@
   }
 
   /* ── staff ──────────────────────────────────────────────────────────── */
-  var S = { tab: 'new', ctx: null, rooms: [], children: [], roomId: 0, sel: {}, bands: {}, setting: 'either', minutes: 20,
-    involvement: 'guided', theme: '', idea: null, ack: false, busy: false, libScope: 'mine', month: '' };
+  var S = { tab: '', ctx: null, rooms: [], children: [], roomId: 0, sel: {}, bands: {}, setting: 'either', minutes: 20,
+    involvement: 'guided', theme: '', idea: null, ack: false, busy: false, libScope: '', month: '' };
+
+  var WEEK_ROLES = ['agency_admin', 'centre_director', 'educator', 'platform_admin'];   // who plans the week today (legacy allStaff + superadmin)
+  var MANAGE_ROLES = ['agency_admin', 'centre_director', 'platform_admin'];          // AI week drafts + activity-idea templates
+  function me() { try { return (KT.Auth && KT.Auth.user && KT.Auth.user()) || {}; } catch (e) { return {}; } }
+  function myRole() {
+    var u = me();
+    try { if (Shell && Shell.Roles && Shell.Roles.primaryRoleOf) return Shell.Roles.primaryRoleOf(u) || ''; } catch (e) {}
+    return u.primary_role || ((u.roles || [])[0]) || '';
+  }
+  /* The same answer the server gives (AuthController ai_bundle = AiBundle::on), so a tab is shown exactly when its
+     endpoints answer. hidden_screens carries the lesson_plans switch. */
+  function aiOn() { return me().ai_bundle === true; }
+  function lpOn() { var h = me().hidden_screens; return !(Array.isArray(h) && h.indexOf('lesson-plans') !== -1); }
+  function tabsFor() {
+    var r = myRole(), ai = aiOn(), lp = lpOn(), canWeek = lp && WEEK_ROLES.indexOf(r) !== -1, manage = MANAGE_ROLES.indexOf(r) !== -1, t = [];
+    if (ai) t.push(['now', '✨ Right now']);
+    if (canWeek) t.push(['week', '📅 This week']);
+    if (ai && manage) t.push(['plan', '🗓️ Plan the week']);
+    if (ai || (lp && manage)) t.push(['library', '📚 Library']);
+    if (ai) t.push(['report', '📊 Monthly report']);
+    return t;
+  }
+  function libScopes() {
+    var s = [];
+    if (aiOn()) s.push(['mine', 'My ideas'], ['favourites', '★ Favourites'], ['shared', '📚 Agency library']);
+    if (lpOn() && MANAGE_ROLES.indexOf(myRole()) !== -1) s.push(['ideas', '💡 Activity ideas']);
+    return s;
+  }
+  function hashQuery() {
+    var q = {}, s = String(location.hash || '').split('?')[1] || '';
+    s.split('&').forEach(function (p) { var kv = p.split('='); if (kv[0]) q[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || ''); });
+    return q;
+  }
+  /* Keep the address on the tab you are on (a refresh or a shared link lands there), without a hashchange. */
+  function setHash() {
+    var h = '#play-spark?tab=' + S.tab + (S.tab === 'library' && S.libScope ? '&lib=' + S.libScope : '');
+    try { if (location.hash !== h) history.replaceState(history.state, '', location.pathname + location.search + h); } catch (e) {}
+  }
+  function needsHere(main, what) {
+    var el = main.querySelector('[data-ps-body]');
+    if (el) el.innerHTML = '<div class="ps-card ps-empty">' + esc(what) + ' could not open. Refresh the page and try again.</div>';
+  }
 
   async function renderStaff(main) {
     addCss();
     Dom.clear(main);
+    var tabs = tabsFor(), has = function (k) { return tabs.some(function (t) { return t[0] === k; }); };
+    var q = hashQuery();
+    if (q.tab === 'new') q.tab = 'now';
+    if (q.tab && has(q.tab)) S.tab = q.tab;
+    if (q.lib) S.libScope = q.lib;
+    if (!has(S.tab)) S.tab = tabs.length ? tabs[0][0] : '';
+    var ai = aiOn();
     var w = document.createElement('div'); w.className = 'ps-wrap'; w.setAttribute('data-kt-noband', '1'); w.setAttribute('data-kt-nosechead', '1'); main.appendChild(w);   // own chips, not tab bands
-    w.innerHTML = hero({ title: 'On-the-spot play ideas', sub: 'One tap. A fresh idea for every age in the room.' }) +
-      '<div class="ps-tabs" role="tablist">' +
-      [['new', '✨ New idea'], ['library', '📚 Library'], ['report', '📊 Monthly report']].map(function (t) {
-        return '<button type="button" class="ps-tab' + (S.tab === t[0] ? ' on' : '') + '" data-ps-tab="' + t[0] + '">' + t[1] + '</button>';
-      }).join('') + '</div><div data-ps-body></div>';
+    w.innerHTML = hero(ai
+        ? { title: 'Play ideas and weekly plans', sub: 'One tap. A fresh idea for every age in the room, and the week families see.' }
+        : { title: 'Weekly plans and activity ideas', sub: 'Plan the week for every room, and share it with families.' }) +
+      (tabs.length > 1 ? '<div class="ps-tabs" role="tablist">' + tabs.map(function (t) {
+        return '<button type="button" role="tab" aria-selected="' + (S.tab === t[0]) + '" class="ps-tab' + (S.tab === t[0] ? ' on' : '') + '" data-ps-tab="' + t[0] + '">' + t[1] + '</button>';
+      }).join('') + '</div>' : '') + '<div data-ps-body></div>';
     w.querySelectorAll('[data-ps-tab]').forEach(function (b) {
-      b.addEventListener('click', function () { S.tab = b.getAttribute('data-ps-tab'); renderStaff(main); });
+      b.addEventListener('click', function () { S.tab = b.getAttribute('data-ps-tab'); setHash(); renderStaff(main); });
     });
     var body = w.querySelector('[data-ps-body]');
+    if (!S.tab) { body.innerHTML = '<div class="ps-card ps-empty">Nothing here is switched on for your agency.</div>'; return; }
+    setHash();
+    if (S.tab === 'week') {
+      if (!(KT.LessonPlans && KT.LessonPlans.render)) return needsHere(w, 'The weekly plan');
+      return KT.LessonPlans.render(body);
+    }
+    if (S.tab === 'plan') {
+      if (!(KT.LessonPlansAi && KT.LessonPlansAi.list)) return needsHere(w, 'Plan the week');
+      return KT.LessonPlansAi.list(body, { inTab: true });
+    }
+    if (S.tab === 'library' && !ai) return renderLibrary(body, main);   // activity ideas only - no Play Spark context to load
     body.innerHTML = '<div class="ps-load"><div class="spinner"></div></div>';
     try {
-      if (!S.ctx || S.tab === 'new') await loadCtx(S.roomId);
+      if (!S.ctx || S.tab === 'now') await loadCtx(S.roomId);
     } catch (e) { return bundleOff(w, e); }
     if (S.tab === 'library') return renderLibrary(body, main);
     if (S.tab === 'report') return renderReport(body, main);
@@ -154,6 +225,7 @@
       '<button type="button" class="ps-btn" data-ps-scan data-kttip="Snap the materials - no people in the photo. The photo is not kept.">📷 Scan</button>' +
       '<input type="file" accept="image/*" capture="environment" data-ps-file hidden></div>' +
       '<div class="ps-lab">Theme (optional)</div><input class="ps-in" data-ps-theme style="width:100%" maxlength="120" placeholder="' + esc(c.theme || 'e.g. dinosaurs, the water cycle, counting') + '" value="' + esc(S.theme) + '">' +
+      '<div data-ps-today></div>' +
       '<button type="button" class="ps-go" data-ps-go>✨ Spark an idea</button>' +
       '</div><div data-ps-out>' + (S.idea ? '' : '<div class="ps-card ps-empty"><img src="' + MARK + '" alt="" style="width:56px;height:56px;border-radius:24%;opacity:.9"><div style="margin-top:10px">Pick the ages and what you have, then tap <b>Spark an idea</b>.</div></div>') + '</div></div>';
 
@@ -198,7 +270,90 @@
       }).catch(function (e) { toast(errMsg(e), 'error'); });
     }
     S._saveMats = saveMats;
+    todaysPlan(form);
     if (S.idea) showIdea(body.querySelector('[data-ps-out]'), S.idea, main);
+  }
+
+  /* ── Lesson plan ⇄ spark (the merge) ───────────────────────────────── */
+  var DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+  var DAY_LABEL = { monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday' };
+  function todayIso() { return (KT.agencyToday ? KT.agencyToday() : new Date().toISOString()).slice(0, 10); }
+  function mondayOf(iso) {
+    var p = String(iso).split('-'), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    var back = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - back);
+    return d.toISOString().slice(0, 10);
+  }
+  function todayKey() {
+    var p = todayIso().split('-'), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    return ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][d.getUTCDay()];
+  }
+  function canWeek() { return lpOn() && WEEK_ROLES.indexOf(myRole()) !== -1; }
+
+  /* Spark it: today's planned activities for this room as chips; one tap makes it the theme of the spark. */
+  function todaysPlan(form) {
+    var box = form.querySelector('[data-ps-today]');
+    if (!box || !canWeek() || !S.roomId || DAYS.indexOf(todayKey()) === -1) return;
+    Api.get('/provider/lesson-plans?room_id=' + S.roomId + '&week_starting=' + mondayOf(todayIso())).then(function (r) {
+      var acts = (((r && r.plan) || {}).days || {})[todayKey()] || [];
+      acts = acts.filter(function (a) { return a && String(a.title || '').trim(); }).slice(0, 8);
+      if (!acts.length || !box.isConnected) return;
+      box.innerHTML = '<div class="ps-lab">On today\'s plan · tap to spark it</div><div class="ps-chips">' + acts.map(function (a, i) {
+        return '<button type="button" class="ps-chip" data-ps-plan="' + i + '">📅 ' + esc(a.title) + '</button>';
+      }).join('') + '</div>';
+      box.querySelectorAll('[data-ps-plan]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var t = String(acts[+b.getAttribute('data-ps-plan')].title || '').slice(0, 120);
+          var inp = form.querySelector('[data-ps-theme]'); if (inp) inp.value = t;
+          S.theme = t;
+          box.querySelectorAll('[data-ps-plan]').forEach(function (x) { x.classList.toggle('on', x === b); });
+        });
+      });
+    }).catch(function () { /* no plan for this week: nothing to offer */ });
+  }
+
+  /* Add to this week: the idea goes onto a day of this room's weekly plan. An existing plan keeps its status (a
+     published week stays published, a draft stays a draft); a new one is saved as a DRAFT, so nothing reaches
+     families until someone publishes it in This week. Saving a plan sends no notification. */
+  function addToWeek(row) {
+    var I = row.idea || {};
+    var today = todayKey(), week = mondayOf(todayIso());
+    var bodyEl = document.createElement('div'); bodyEl.setAttribute('data-kt-noband', '1'); bodyEl.setAttribute('data-kt-nosechead', '1');
+    bodyEl.innerHTML = '<div class="ps-ctx" style="margin-bottom:8px">Adds <b>' + esc(row.title) + '</b> to the weekly plan for <b>' +
+      esc(((S.ctx && S.ctx.room) || {}).name || 'this room') + '</b>, week of ' + esc(week) + '.</div>' +
+      '<div class="ps-lab">Day</div><div class="ps-chips">' + DAYS.map(function (d) {
+        return '<button type="button" class="ps-chip' + (d === (DAYS.indexOf(today) !== -1 ? today : 'monday') ? ' on' : '') + '" data-day="' + d + '">' + DAY_LABEL[d] + '</button>';
+      }).join('') + '</div>' +
+      '<div class="ps-lab">Week</div><div class="ps-chips"><button type="button" class="ps-chip on" data-wk="0">This week</button><button type="button" class="ps-chip" data-wk="7">Next week</button></div>';
+    var day = DAYS.indexOf(today) !== -1 ? today : 'monday', plus = 0;
+    bodyEl.querySelectorAll('[data-day]').forEach(function (b) {
+      b.addEventListener('click', function () { day = b.getAttribute('data-day'); bodyEl.querySelectorAll('[data-day]').forEach(function (x) { x.classList.toggle('on', x === b); }); });
+    });
+    bodyEl.querySelectorAll('[data-wk]').forEach(function (b) {
+      b.addEventListener('click', function () { plus = +b.getAttribute('data-wk'); bodyEl.querySelectorAll('[data-wk]').forEach(function (x) { x.classList.toggle('on', x === b); }); });
+    });
+    Shell.Modal.open({
+      title: '📅 Add to the weekly plan', body: bodyEl,
+      actions: [
+        { label: 'Cancel' },
+        { label: 'Add', primary: true, busyLabel: 'Adding…', onClick: function () {
+          var p = week.split('-'), d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + plus)), wk = d.toISOString().slice(0, 10);
+          return Api.get('/provider/lesson-plans?room_id=' + S.roomId + '&week_starting=' + wk).then(function (plan) {
+            var days = (plan && plan.plan && plan.plan.days) ? plan.plan.days : {};
+            DAYS.forEach(function (k) { if (!Array.isArray(days[k])) days[k] = []; });
+            var mats = (I.materials || []).slice(0, 12);
+            days[day].push({ time: '', title: String(row.title || I.title || '').slice(0, 200), domain: '',
+              notes: ((I.summary || '') + (mats.length ? ' Materials: ' + mats.join(', ') + '.' : '') + ' (Play Spark)').trim().slice(0, 1000) });
+            var own = plan && plan.updated_at && !plan.inherited_from_centre;
+            var status = own ? (plan.status || 'published') : 'draft';
+            return Api.put('/provider/lesson-plans', { room_id: S.roomId, week_starting: wk, theme: (own && plan.theme) || (plan && plan.theme) || '', status: status, plan: { days: days } })
+              .then(function () {
+                if (KT.LessonPlans && KT.LessonPlans.focus) KT.LessonPlans.focus({ scope: 'room', roomId: S.roomId, week: wk });
+                toast('Added to ' + DAY_LABEL[day] + (status === 'draft' ? ' · saved as a draft' : ''));
+              });
+          }).catch(function (e) { toast(errMsg(e), 'error'); return false; });
+        } }
+      ]
+    });
   }
 
   function seg(label, field, opts) {
@@ -315,9 +470,12 @@
       '<button type="button" class="ps-btn pri" data-ps-did' + (S.ack ? '' : ' disabled') + ' data-kttip="Logs it to the daily record for the children who joined in and drafts an observation for each">✅ We did it</button>' +
       '<button type="button" class="ps-btn" data-ps-fav>' + (row.favourite ? '★ Saved' : '☆ Save') + '</button>' +
       (row.mine ? '<button type="button" class="ps-btn" data-ps-share>' + (row.shared ? '📚 In the library' : '📚 Share to library') + '</button>' : '') +
+      (canWeek() && S.roomId ? '<button type="button" class="ps-btn" data-ps-week data-kttip="Put this idea on a day of the room\'s weekly lesson plan">📅 Add to this week</button>' : '') +
       '<button type="button" class="ps-btn" data-ps-print>🖨️ Print</button>' +
-      (S.tab === 'new' ? '<button type="button" class="ps-btn" data-ps-again>🔄 Another idea</button>' : '') +
+      (S.tab === 'now' ? '<button type="button" class="ps-btn" data-ps-again>🔄 Another idea</button>' : '') +
       '</div></div>';
+    var wk = out.querySelector('[data-ps-week]');
+    if (wk) wk.addEventListener('click', function () { addToWeek(row); });
     var did = out.querySelector('[data-ps-did]');
     var ack = out.querySelector('[data-ps-ack]');
     if (ack) ack.addEventListener('change', function () { S.ack = ack.checked; did.disabled = !ack.checked; });
@@ -387,17 +545,27 @@
   }
 
   async function renderLibrary(body, main) {
-    body.innerHTML = '<div class="ps-chips" style="margin-bottom:12px">' + [['mine', 'My ideas'], ['favourites', '★ Favourites'], ['shared', '📚 Agency library']].map(function (t) {
+    var scopes = libScopes();
+    if (!scopes.some(function (t) { return t[0] === S.libScope; })) S.libScope = scopes.length ? scopes[0][0] : '';
+    setHash();
+    body.innerHTML = (scopes.length > 1 ? '<div class="ps-chips" style="margin-bottom:12px">' + scopes.map(function (t) {
       return '<button type="button" class="ps-chip' + (S.libScope === t[0] ? ' on' : '') + '" data-scope="' + t[0] + '">' + t[1] + '</button>';
-    }).join('') + '</div><div data-list><div class="ps-load"><div class="spinner"></div></div></div>';
+    }).join('') + '</div>' : '') + '<div data-list><div class="ps-load"><div class="spinner"></div></div></div>';
     body.querySelectorAll('[data-scope]').forEach(function (b) {
       b.addEventListener('click', function () { S.libScope = b.getAttribute('data-scope'); renderLibrary(body, main); });
     });
     var el = body.querySelector('[data-list]');
+    /* 💡 Activity ideas: the agency's one-activity templates (were the Curriculum library's "Activity ideas" tab). */
+    if (S.libScope === 'ideas') {
+      if (KT.V22p57 && KT.V22p57.renderCurriculumIdeas) { el.innerHTML = ''; return KT.V22p57.renderCurriculumIdeas(el); }
+      el.innerHTML = '<div class="ps-card ps-empty">Activity ideas could not open. Refresh the page and try again.</div>';
+      return;
+    }
+    if (!S.libScope) { el.innerHTML = '<div class="ps-card ps-empty">Nothing in the library yet.</div>'; return; }
     try {
       var r = await Api.get('/provider/play-spark/ideas?scope=' + S.libScope);
       var rows = r.ideas || [];
-      if (!rows.length) { el.innerHTML = '<div class="ps-card ps-empty">' + (S.libScope === 'shared' ? 'Nobody has shared an idea yet. Share a good one from its page.' : 'No ideas here yet. Spark one from New idea.') + '</div>'; return; }
+      if (!rows.length) { el.innerHTML = '<div class="ps-card ps-empty">' + (S.libScope === 'shared' ? 'Nobody has shared an idea yet. Share a good one from its page.' : 'No ideas here yet. Spark one from Right now.') + '</div>'; return; }
       el.innerHTML = '<div class="ps-list">' + rows.map(function (x, i) {
         var I = x.idea || {};
         return '<div class="ps-card ps-li" data-i="' + i + '"><div style="font-weight:800">' + esc(x.title) + (x.favourite ? ' ★' : '') + '</div>' +
@@ -483,6 +651,10 @@
   }
 
   KT.renderPlaySpark = renderStaff;
+  /* Open Play Spark on a tab from anywhere (the old #lesson-plans / #lesson-plans-ai redirect through this). */
+  KT.openPlaySpark = function (tab, lib) {
+    location.hash = '#play-spark?tab=' + encodeURIComponent(tab || 'week') + (lib ? '&lib=' + encodeURIComponent(lib) : '');
+  };
   if (Shell && Shell.registerScreen) {
     ['educator', 'home_visitor', 'centre_director', 'agency_admin', 'platform_admin'].forEach(function (r) {
       Shell.registerScreen(r + ':play-spark', function (main) { return renderStaff(main); });

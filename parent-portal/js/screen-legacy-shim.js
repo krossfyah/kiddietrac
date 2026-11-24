@@ -67,7 +67,15 @@
 
   // Staff (educator + director + admin)
   reg(allStaff,  'announcements',  'KT.Announcements');
-  reg(allStaff,  'lesson-plans',   'KT.LessonPlans');
+  /* Lesson plans live in Play Spark now (2026-11-24): staff's old address opens its "This week" tab. Whatever
+     a caller pointed the planner at first (KT.LessonPlans.focus: "Use template", a curriculum unit) still holds,
+     since the planner keeps that state. Parents keep guardian:lesson-plans below. */
+  allStaff.concat(['platform_admin']).forEach(function (r) {
+    Shell.registerScreen(r + ':lesson-plans', function (main) {
+      main.innerHTML = '<div class="loading-state"><div class="spinner"></div></div>';
+      location.replace(location.pathname + location.search + '#play-spark?tab=week');
+    });
+  });
 
   // v22p34: marketing campaigns — directors + agency admins
   reg(directors, 'marketing-campaigns', 'KT.Marketing');

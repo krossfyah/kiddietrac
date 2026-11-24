@@ -364,7 +364,7 @@
     main.innerHTML = '<div style="padding:24px;">Loading library…</div>';
     const r = await Api.get('/curriculum').catch(() => ({ data: [] }));
     const rows = r.data || [];
-    const inTab = !!(main.closest && main.closest('.kcl'));   // the Curriculum library's "Activity ideas" tab (2026-11-03)
+    const inTab = !!(main.closest && main.closest('.kcl, [data-ps-body]'));   // a tab: the Curriculum library's (2026-11-03) or Play Spark's Library (2026-11-24)
     main.innerHTML = (inTab ? `<div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 14px;">
         <p style="margin:0;color:#64748B;font-size:13px;">Single activities shared across your agency. Use one to add it to a weekly lesson plan.</p>
@@ -500,8 +500,8 @@
             });
           }
         } catch (e) {}
-        msg.style.color = '#16A34A'; msg.textContent = '✓ Added to ' + day.charAt(0).toUpperCase() + day.slice(1) + ' — opening lesson plans…';
-        setTimeout(function () { m.remove(); location.hash = '#lesson-plans'; }, 750);
+        msg.style.color = '#16A34A'; msg.textContent = '✓ Added to ' + day.charAt(0).toUpperCase() + day.slice(1) + ' — opening this week in Play Spark…';
+        setTimeout(function () { m.remove(); location.hash = '#play-spark?tab=week'; }, 750);
       } catch (e) {
         btn.disabled = false; msg.style.color = '#DC2626'; msg.textContent = 'Could not add: ' + (e.message || 'error');
       }

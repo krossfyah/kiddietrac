@@ -8,6 +8,13 @@
   function apiBase() { return (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'; }
   function getUser() { try { return JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}'); } catch (e) { return {}; } }
   function getRole() { const u = getUser(); return u.primary_role || (u.roles && u.roles[0]) || 'guest'; }
+  /* ✨ Draft with AI (2026-11-24, merged into Play Spark): only with the AI Bundle (the same ai_bundle the server's
+     AiBundle::on gives) and only for directors and admins - /director/lesson-plans-ai/* answers nobody else. It
+     showed for everyone before and an educator, or an agency without the bundle, got an error. */
+  function aiDraftOk() {
+    const u = getUser(), roles = u.roles || [];
+    return u.ai_bundle === true && (roles.indexOf('agency_admin') !== -1 || roles.indexOf('centre_director') !== -1);
+  }
 
   async function api(method, path, body) {
     const opts = { method, headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json' } };
@@ -531,7 +538,7 @@
             <div class="lp-actions">
               ${lpReadOnly ? `
                 <div class="lp-tools">
-                <button id="kt-ai" type="button" data-kt-iconized="1" class="lp-btn lp-btn-ghost" title="Draft this week with AI">✨ Draft with AI</button>
+                ${aiDraftOk() ? '<button id="kt-ai" type="button" data-kt-iconized="1" class="lp-btn lp-btn-ghost" title="Draft this week with AI">✨ Draft with AI</button>' : ''}
                 <button id="kt-lp-templates" type="button" class="lp-btn lp-btn-ghost" data-kt-iconized="1" title="Start this week from a template">📋 Templates</button>
                 ${picsWanted ? `<button id="kt-lp-pics" type="button" class="lp-btn lp-btn-ghost" data-kt-iconized="1" title="Find pictures for the activities that have none">🖼 Find pictures</button>` : ''}
                 </div>
@@ -546,7 +553,7 @@
                 </div>
                 <select id="kt-lp-status" hidden><option value="draft" ${lpStatus === 'draft' ? 'selected' : ''}>Draft</option><option value="published" ${lpStatus === 'published' ? 'selected' : ''}>Published</option></select>
                 <div class="lp-tools">
-                <button id="kt-ai" type="button" data-kt-iconized="1" class="lp-btn lp-btn-ghost lp-btn-sm" title="Draft this week with AI">✨ AI</button>
+                ${aiDraftOk() ? '<button id="kt-ai" type="button" data-kt-iconized="1" class="lp-btn lp-btn-ghost lp-btn-sm" title="Draft this week with AI">✨ AI</button>' : ''}
                 <button id="kt-lp-templates" type="button" class="lp-btn lp-btn-ghost lp-btn-sm" data-kt-iconized="1">📋 Templates</button>
                 <button id="kt-lp-savetpl" type="button" class="lp-btn lp-btn-ghost lp-btn-sm" data-kt-iconized="1" title="Save this week as a template your agency can reuse">Save template</button>
                 </div>
@@ -648,7 +655,7 @@
     if (lpStatusEl) {
       lpStatusEl.addEventListener('change', function () { lpStatus = lpStatusEl.value; });
     }
-    $('#kt-ai', container).addEventListener('click', () => openAiDialog(container));
+    const _ktAi = $('#kt-ai', container); if (_ktAi) _ktAi.addEventListener('click', () => openAiDialog(container));
     const picsBtn = $('#kt-lp-pics', container);
     if (picsBtn) picsBtn.addEventListener('click', () => { picsBtn.disabled = true; fillPictures(container, true); });
     const coverBtn = $('#kt-lp-cover', container);

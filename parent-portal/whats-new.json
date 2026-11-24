@@ -4,6 +4,20 @@
         {
             "type": "improved",
             "date": "2026-11-24",
+            "icon": "🧩",
+            "title": "Lesson plans are now part of Play Spark",
+            "body": "Play Spark is now the one place for play: This week (the weekly lesson plan families see), plus the Library of activity ideas. With the AI Bundle you also get Right now (a fresh idea for the room), Plan the week (AI-drafted weeks) and the monthly play report. Add a spark to the week with one tap, or tap one of today's planned activities to spark it.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-24",
             "icon": "⚡",
             "title": "Quick menus all look the same",
             "body": "Every short menu of choices (the phone bar Add and One-Tap buttons, Quick add, the chat + button, your name menu and the calendar Add button) now opens the same light see-through menu right by the button you tapped. Tap outside or press Esc to close it.",
