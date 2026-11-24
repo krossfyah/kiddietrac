@@ -875,7 +875,7 @@
       + '<circle cx="78" cy="22" r="7" fill="#fbbf24" stroke="#fff" stroke-width="2.5"/></svg>',
     /* WALK WATCH (2026-10-26): the walks & outings brand, the same mark as the website and the film. */
     /* PLAY SPARK (2026-11-24): the on-the-spot play ideas brand, the same mark as the white paper and website. */
-    'play-spark': '<img src="/img/play-spark.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
+    'play-spark': '<img src="/img/play-spark.svg?v=2" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
     'trip-gps': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
     'walk': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
     'walks': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',

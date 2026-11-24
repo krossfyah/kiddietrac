@@ -9,7 +9,7 @@
   'use strict';
   var KT = window.KT || {};
   var Api = KT.Api, Dom = KT.Dom, Shell = KT.Shell;
-  var MARK = '/img/play-spark.svg';
+  var MARK = '/img/play-spark.svg?v=2';
 
   function esc(s) {
     return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
