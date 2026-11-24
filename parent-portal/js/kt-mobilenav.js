@@ -540,31 +540,83 @@
   /* ONE-TAP = TWO CHOICES (2026-11-24, Anthony: "the one tap on the educator view should have the QR or the Camera as
      an option"). A small standard popup: show the centre's One-Tap code (the code parents scan, unchanged) or scan a
      temporary pickup person's pass with the camera (KT.pickupPassScan in kt-polish.js). Remembers nothing. */
-  function oneTapMenu() {
-    var Sh = window.KT && KT.Shell;
-    if (!(Sh && Sh.Modal && Sh.Modal.open) || !(window.KT && KT.pickupPassScan)) { showCheckinQr(); return; }
-    if (document.getElementById('kt-onetap-menu')) return;
-    var body = document.createElement('div');
-    body.id = 'kt-onetap-menu';
-    body.style.cssText = 'display:grid;gap:10px;';
-    var big = function (icon, title, sub) {
+  /* ONE-TAP = TWO CHOICES, AS A QUICK GLASS POPOVER (2026-11-24, Anthony: "the pop up should be a transparent quick
+     popup for the quick tap"). His explicit exception to the one-popup-header rule, for THIS chooser only: no header,
+     no footer, no ✕. The page stays visible behind a light frosted dim; two big glass buttons. On a phone it pops up
+     just above the raised One-Tap button; on desktop it drops down from the One-Tap icon. Tap outside, Esc or Android
+     back closes it; a choice closes it and runs at once. Remembers nothing. The code popup and the pass popup it opens
+     stay standard. */
+  function oneTapMenu(anchor) {
+    if (!(window.KT && KT.pickupPassScan)) { showCheckinQr(); return; }
+    if (document.getElementById('kt-otm')) { closeOneTapMenu(); return; }
+    if (!document.getElementById('kt-otm-css')) {
+      var st = document.createElement('style');
+      st.id = 'kt-otm-css';
+      st.textContent = ''
+        + '#kt-otm-dim{position:fixed;inset:0;z-index:2147483000;background:rgba(8,28,65,.16);-webkit-backdrop-filter:blur(1px);backdrop-filter:blur(1px);opacity:0;transition:opacity .12s ease;}'
+        + '#kt-otm{position:fixed;z-index:2147483001;display:grid;gap:10px;width:268px;max-width:calc(100vw - 24px);opacity:0;transform:scale(.94);transition:opacity .12s ease,transform .12s ease;}'
+        + '#kt-otm.on,#kt-otm-dim.on{opacity:1;}#kt-otm.on{transform:scale(1);}'
+        + '#kt-otm button{display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:10px 16px;border-radius:18px;cursor:pointer;text-align:left;font:inherit;'
+        +   'color:#0B1B33;background:rgba(255,255,255,.62);border:1px solid rgba(255,255,255,.75);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);'
+        +   'box-shadow:0 10px 30px -12px rgba(8,28,65,.45);transition:transform .08s ease,background .12s ease;}'
+        + '#kt-otm button:hover{background:rgba(255,255,255,.78);}#kt-otm button:active{transform:scale(.97);}'
+        + '#kt-otm button:focus-visible{outline:3px solid #2A8F9D;outline-offset:2px;}'
+        + '#kt-otm .i{font-size:26px;line-height:1;flex:0 0 auto;}#kt-otm .t{font-weight:800;font-size:15px;line-height:1.2;}#kt-otm .s{display:block;font-weight:600;font-size:12px;opacity:.72;margin-top:2px;}'
+        + '@media (prefers-color-scheme: dark){#kt-otm-dim{background:rgba(0,0,0,.24);}'
+        +   '#kt-otm button{color:#F1F5F9;background:rgba(13,27,51,.58);border-color:rgba(255,255,255,.16);}#kt-otm button:hover{background:rgba(13,27,51,.74);}}'
+        + '@media (prefers-reduced-motion: reduce){#kt-otm,#kt-otm-dim{transition:none;}}';
+      document.head.appendChild(st);
+    }
+    var dim = document.createElement('div');
+    dim.id = 'kt-otm-dim';
+    var pop = document.createElement('div');
+    pop.id = 'kt-otm';
+    pop.setAttribute('role', 'menu');
+    pop.setAttribute('aria-label', 'One-Tap');
+    var mk = function (icon, title, sub, aria) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.style.cssText = 'display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 16px;border-radius:14px;border:1px solid #CBD5E1;background:#fff;color:#0F172A;cursor:pointer;font-family:inherit;';
-      b.innerHTML = '<span style="font-size:30px;line-height:1;">' + icon + '</span><span><span style="display:block;font-weight:800;font-size:15.5px;">' + title + '</span>'
-        + '<span style="display:block;font-size:12.5px;color:#64748B;margin-top:2px;">' + sub + '</span></span>';
+      b.setAttribute('role', 'menuitem');
+      b.setAttribute('aria-label', aria);
+      b.innerHTML = '<span class="i" aria-hidden="true">' + icon + '</span><span class="t">' + title + '<span class="s">' + sub + '</span></span>';
       return b;
     };
-    var qr = big('📲', 'Show the centre’s code', 'Parents scan it to check in or out.');
-    var cam = big('📷', 'Scan a pickup pass', 'A temporary pickup person’s pass, with the camera.');
-    body.appendChild(qr); body.appendChild(cam);
-    var h = Sh.Modal.open({ title: '📷 One-Tap', body: body, actions: [{ label: 'Close' }] });
-    var close = function () { try { h.close(); } catch (e) {} };
-    if (window.KT && KT.pushOverlay && h && h.backdrop) KT.pushOverlay(h.backdrop, close);
-    qr.addEventListener('click', function () { close(); setTimeout(showCheckinQr, 60); });
-    cam.addEventListener('click', function () { close(); setTimeout(function () { KT.pickupPassScan(); }, 60); });
+    var qr = mk('📲', 'Show the centre’s code', 'Parents scan it', 'Show the centre’s One-Tap code');
+    var cam = mk('📷', 'Scan a pickup pass', 'With the camera', 'Scan a temporary pickup person’s pass with the camera');
+    pop.appendChild(qr); pop.appendChild(cam);
+    document.body.appendChild(dim); document.body.appendChild(pop);
+    // Place it by the button that opened it: above it near the bottom of the screen (the phone bar), below it at the top.
+    var r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+    var W = window.innerWidth, H = window.innerHeight, pw = Math.min(268, W - 24);
+    if (r && r.width) {
+      var left = Math.max(12, Math.min(W - pw - 12, r.left + r.width / 2 - pw / 2));
+      pop.style.left = left + 'px';
+      if (r.top > H / 2) { pop.style.bottom = (H - r.top + 10) + 'px'; pop.style.transformOrigin = (r.left + r.width / 2 - left) + 'px 100%'; }
+      else { pop.style.top = (r.bottom + 8) + 'px'; pop.style.transformOrigin = (r.left + r.width / 2 - left) + 'px 0'; }
+    } else {
+      pop.style.left = Math.max(12, (W - pw) / 2) + 'px';
+      pop.style.bottom = 'calc(env(safe-area-inset-bottom,0px) + 96px)';
+    }
+    var onKey = function (e) { if (e.key === 'Escape') { e.preventDefault(); closeOneTapMenu(); } };
+    closeOneTapMenu = function () {
+      document.removeEventListener('keydown', onKey, true);
+      if (dim.parentNode) dim.parentNode.removeChild(dim);
+      if (pop.parentNode) pop.parentNode.removeChild(pop);
+      closeOneTapMenu = function () {};
+      try { if (anchor && anchor.focus) anchor.focus({ preventScroll: true }); } catch (e) {}
+    };
+    document.addEventListener('keydown', onKey, true);
+    dim.addEventListener('click', function () { closeOneTapMenu(); });
+    if (window.KT && KT.pushOverlay) KT.pushOverlay(pop, function () { closeOneTapMenu(); });   // Android back
+    qr.addEventListener('click', function () { closeOneTapMenu(); showCheckinQr(); });
+    cam.addEventListener('click', function () { closeOneTapMenu(); KT.pickupPassScan(); });
+    requestAnimationFrame(function () { dim.classList.add('on'); pop.classList.add('on'); try { qr.focus({ preventScroll: true }); } catch (e) {} });
   }
-  window.KT.oneTapMenu = function () { oneTapMenu(); };
+  var closeOneTapMenu = function () {};
+  /* The OFFICIAL One-Tap mark (fingertip + teal arcs, white-paper onetap_mark()), drawn as-is: Anthony 2026-11-24, "the one
+     tap icon instead of using a camera use a better icon". The parent's #scan camera stays 📷 (a different action). */
+  var ONETAP_MARK = '<svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" style="display:block;"><defs><linearGradient id="ktOtmBar" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#12307A"/><stop offset="1" stop-color="#0A1E55"/></linearGradient></defs><rect width="64" height="64" rx="17" fill="url(#ktOtmBar)"/><path d="M19.55 31.01 A13 13 0 0 1 32.99 44.45" fill="none" stroke="#1DB9C3" stroke-width="4.6" stroke-linecap="round" opacity="1"/><path d="M19.27 23.01 A21 21 0 0 1 40.99 44.73" fill="none" stroke="#1DB9C3" stroke-width="4.6" stroke-linecap="round" opacity="0.8"/><path d="M18.99 15.02 A29 29 0 0 1 48.98 45.01" fill="none" stroke="#1DB9C3" stroke-width="4.6" stroke-linecap="round" opacity="0.6"/><circle cx="20" cy="44" r="7.2" fill="#fff"/><circle cx="20" cy="44" r="2.6" fill="#1DB9C3"/></svg>';
+  window.KT.oneTapMenu = function (anchor) { oneTapMenu(anchor); };
 
   function showCheckinQr() {
     // Guard: a stale/second overlay stacking made the button feel unresponsive
@@ -783,7 +835,7 @@
         // The educator's check-in QR, as a raised centre button — the same
         // affordance parents get for scanning. A 🔳 glyph floating in the corner
         // was too easy to miss for something parents queue up to scan.
-        var qrBtn = btn('📷', 'One-Tap', function () { oneTapMenu(); }, null, 'eduqr');
+        var qrBtn = btn(ONETAP_MARK, 'One-Tap', function () { oneTapMenu(qrBtn); }, null, 'eduqr');
         qrBtn.classList.add('scan');
         nav.appendChild(qrBtn);
       }
