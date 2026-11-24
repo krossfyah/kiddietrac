@@ -20,7 +20,7 @@
     { id: 'bulk-invoices',   label: 'Invoice run',       icon: '💸', hash: 'bulk-invoices' },
     { id: 'tours',           label: 'Book a tour',       icon: '🚪', hash: 'tours' },
     { id: 'field-trips',     label: 'Plan field trip',   icon: '🚐', hash: 'field-trips' },
-    { id: 'lesson-plans',    label: 'Lesson plan',       icon: '📚', hash: 'lesson-plans' },
+    { id: 'lesson-plans',    label: 'Lesson plan',       icon: '🧩', hash: 'play-spark?tab=week' },   // in Play Spark (2026-11-24)
     { id: 'tickets',         label: 'Raise ticket',      icon: '🎫', hash: 'tickets' },
     { id: 'staff-calendar',  label: 'Calendar',          icon: '📅', hash: 'staff-calendar' },
     { id: 'photos',          label: 'Upload photo',      icon: '📷', hash: 'photos' },
@@ -73,7 +73,26 @@
 
   function toggleMenu() { menuOpen ? closeMenu() : openMenu(); }
 
+  var qpHandle = null;
   function openMenu() {
+    /* QUICK POPOVER (2026-11-24): this short menu of actions is KT.quickPop (kt-quickpop.js), the one quick-choice look. */
+    if (window.KT && KT.quickPop) {
+      var pins0 = getPins(), by0 = {};
+      CATALOG.forEach(function (c) { by0[c.id] = c; });
+      var tb = null;
+      try { if (window.matchMedia && window.matchMedia('(min-width:769px)').matches) tb = document.querySelector('#kt-topbar [data-kttip="Quick add"], #kt-topbar [title="Quick add"]'); } catch (e) {}
+      var fab0 = document.getElementById('kt-quickadd-fab');
+      var its = pins0.map(function (id) { var c = by0[id]; return c ? { icon: c.icon, label: c.label, run: function () { go(c.hash); } } : null; }).filter(Boolean);
+      its.push({ icon: '⚙️', label: 'Customise shortcuts', sub: its.length ? '' : 'No shortcuts yet', run: function () { openCustomizer(); } });
+      menuOpen = true;
+      if (fab0) fab0.classList.add('is-open');
+      // Anchor to the button actually on screen: the top-bar ⚡, else the ＋ (hidden in some desktop chromes), else the button just used.
+      var vis = function (el) { if (!el) return null; var q = el.getBoundingClientRect(); return (q.width || q.height) ? el : null; };
+      var ae = document.activeElement && document.activeElement.tagName === 'BUTTON' ? document.activeElement : null;
+      qpHandle = KT.quickPop({ anchor: vis(tb) || vis(fab0) || vis(ae), id: 'kt-quickadd-pop', label: 'Quick add', items: its,
+        onClose: function () { menuOpen = false; qpHandle = null; if (fab0) fab0.classList.remove('is-open'); } });
+      return;
+    }
     var menu = document.getElementById('kt-quickadd-menu');
     if (!menu) return;
     menu.innerHTML = '';
@@ -142,6 +161,7 @@
   }
 
   function closeMenu() {
+    if (qpHandle) { var h0 = qpHandle; qpHandle = null; h0.close(); }
     var menu = document.getElementById('kt-quickadd-menu');
     if (menu) menu.style.display = 'none';
     menuOpen = false;

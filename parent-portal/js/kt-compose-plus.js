@@ -117,6 +117,16 @@
        hides them on the bar below 480px), so the box keeps room for a sentence. */
     if (narrow()) Array.prototype.forEach.call(row.querySelectorAll(':scope > .kt-call-btn, :scope > .kt-nudge-btn'), function (b) { if (usable(b) && list.indexOf(b) < 0) list.push(b); });
     if (!list.length) return;
+    /* QUICK POPOVER (2026-11-24): this short menu of actions is KT.quickPop (kt-quickpop.js), the one quick-choice look. */
+    if (window.KT && KT.quickPop) {
+      btn.setAttribute('aria-expanded', 'true');
+      btn.classList.add('kt-plus-open');
+      KT.quickPop({ anchor: btn, label: 'Shortcuts', items: list.map(function (t) {
+        var full = label(t);
+        return { icon: icon(t), label: shortLabel(full), aria: full, disabled: t.disabled, run: function () { t.click(); } };   // same tap: a file picker may still open
+      }), onClose: function () { btn.setAttribute('aria-expanded', 'false'); btn.classList.remove('kt-plus-open'); } });
+      return;
+    }
     var menu = document.createElement('div');
     menu.className = 'kt-plus-menu';
     menu.setAttribute('role', 'menu');

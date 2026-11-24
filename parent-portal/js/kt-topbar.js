@@ -480,6 +480,15 @@
   function outsideProfileMenu(e) { if (profileMenu && !profileMenu.contains(e.target)) closeProfileMenu(); }
   function openProfileMenu(anchor) {
     if (profileMenu) { closeProfileMenu(); return; }
+    /* QUICK POPOVER (2026-11-24): this short menu of actions is KT.quickPop (kt-quickpop.js), the one quick-choice look. */
+    if (window.KT && KT.quickPop) {
+      KT.quickPop({ anchor: anchor, id: 'kt-profile-pop', label: 'My account', items: [
+        { icon: '👤', label: 'My profile', run: function () { openProfile(); } },
+        { icon: '⚙️', label: 'My settings', run: function () { location.hash = '#settings'; } },
+        { icon: '🔊', label: 'Notification sounds', run: function () { location.hash = '#settings?tab=notifications&sub=sounds'; } },
+      ] });
+      return;
+    }
     var r = anchor.getBoundingClientRect();
     profileMenu = document.createElement('div');
     profileMenu.id = 'kt-profile-menu';

@@ -981,6 +981,21 @@
   function openAddMenu(anchor, calRoot) {
     var existing = document.getElementById('kt-cal-addmenu');
     if (existing) { existing.remove(); return; }        // second click closes it
+    /* QUICK POPOVER (2026-11-24): this short menu of actions is KT.quickPop (kt-quickpop.js), the one quick-choice look. */
+    if (window.KT && KT.quickPop) {
+      var when0 = addMenuDate();
+      KT.quickPop({ anchor: anchor, id: 'kt-cal-addpop', label: 'Add to the calendar', items: ADD_ITEMS.map(function (it) {
+        var dest = it.nav ? hasScreen(it.nav) : null;
+        if (it.nav && !dest) { return null; }
+        return { icon: it.icon, label: it.label, sub: it.sub, run: function () {
+          if (it.shift) { openShiftModal(null, calRoot); return; }
+          if (it.meeting) { if (KT.Meeting) KT.Meeting.compose({ scope: 'agency', date: when0, onSaved: function () { reload(calRoot); } }); return; }
+          if (it.holiday) { openHolidayModal(when0, calRoot); return; }
+          window.location.hash = '#' + dest + (it.noDialog ? '' : '?add=1&date=' + when0);
+        } };
+      }) });
+      return;
+    }
 
     var menu = Dom.el('div', {
       id: 'kt-cal-addmenu',
