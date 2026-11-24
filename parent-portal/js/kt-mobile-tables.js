@@ -79,7 +79,20 @@
       '  #appMain table:not(.kt-nomc) td.kt-mcard-title::before{display:none;}',
       '  #appMain table:not(.kt-nomc) td.kt-mcard-empty{display:none;}',
       // Value side of each row.
-      '  #appMain table:not(.kt-nomc) td > *{min-width:0;}',
+      /* CONTENT SHRINKS TO ITS CARD (2026-11-24, Anthony: "my settings under mobile view the document subtab shows
+         the forms not in full view - full sweep"). This reset had no !important, so a screen's inline min-width
+         (My settings > Documents gives its counter-signed cell min-width:170px) beat it: in a 140px half-card the
+         pill ran past the card edge and the table's own scroll box cut it off ("Not counter-signed y"). Controls
+         keep their tap sizes. */
+      '  #appMain table:not(.kt-nomc) td > :not(button):not(input):not(select):not(textarea),#appMain table:not(.kt-nomc) td > .kt-mcv > :not(button):not(input):not(select):not(textarea){min-width:0 !important;max-width:100%;box-sizing:border-box;}',
+      /* A table that became cards has nothing to scroll sideways, so the scroll box a screen (or kt-table-filter's
+         .kt-tbl-scroll) wrapped it in must not clip: anything still too wide shows instead of being cut silently.
+         BOTH axes: with overflow-y anything but visible, a browser turns overflow-x:visible back into auto. */
+      '  #appMain .kt-tbl-scroll:has(> table.kt-mcards:not(.kt-nomc)),#appMain div:has(> table.kt-mcards:not(.kt-nomc)),#appMain div:has(> .kt-tbl-scroll > table.kt-mcards:not(.kt-nomc)){overflow:visible !important;}',
+      // Nothing inside a card cell is wider than the cell (a fixed-width block, an image, a long nowrap line).
+      '  #appMain table.kt-mcards:not(.kt-nomc) td *{max-width:100%;}',
+      // A header row a screen built from <th> cells without a <thead> (labelsOf) is the labels, not a card.
+      '  #appMain table:not(.kt-nomc) tr.kt-mc-headrow,#appMain table.kt-mcards:not(.kt-nomc) tr.kt-mc-headrow{display:none !important;}',
       '  #appMain table:not(.kt-nomc) td{color:#334155;}',
       /* CONDENSED CARDS (2026-10-15, Anthony: "the boxes are so big can you condense with
          repositioning the data"). One field per full-width line made a family 327px tall,
@@ -125,6 +138,20 @@
 
   function labelsOf(table) {
     var head = table.querySelector('thead tr');
+    /* NO <thead> (2026-11-24 sweep). Several screens build their table with DOM calls and append the header row of
+       <th> cells (and the rows) straight to the <table> - no <thead>, and no <tbody> either (only the HTML parser
+       adds one). So there was "no header": the table was marked kt-nomc and left as a 640px desktop table squeezed
+       into a phone, columns cut off (Inspection forms is one). A first row made
+       only of <th> cells IS the header: it gives the labels and is hidden on a phone (.kt-mc-headrow). Not for a
+       table with merged cells (the inspection checklist's rowspans): labels go by column position, so they would
+       land on the wrong cells - those stay as built. */
+    if (!head && !table.querySelector('td[rowspan],td[colspan],th[rowspan],th[colspan]')) {
+      var first = table.rows && table.rows[0];
+      if (first && first.cells.length > 1 && [].every.call(first.cells, function (c) { return c.tagName === 'TH'; })) {
+        head = first;
+        first.classList.add('kt-mc-headrow');
+      }
+    }
     if (!head) return null;
     return [].map.call(head.children, function (th) {
       // Strip the sort arrows headers carry ("Date ▾", "Sent to ⇅") — they're
@@ -173,8 +200,15 @@
     var labels = labelsOf(table);
     if (!labels || !labels.length) return;
     table.classList.add('kt-mcards');
-    [].forEach.call(table.querySelectorAll('tbody tr'), function (tr) {
+    /* The table's own body rows wherever they sit: in a <tbody>, or straight under a <table> built with DOM calls
+       (no <tbody> then - only the HTML parser adds one). Not header/footer rows, not a nested table's rows. */
+    var bodyRows = [].filter.call(table.rows, function (r) {
+      var sec = r.parentNode && r.parentNode.tagName;
+      return sec !== 'THEAD' && sec !== 'TFOOT';
+    });
+    bodyRows.forEach(function (tr) {
       if (tr.__ktCards) return;                        // already done
+      if (tr.classList.contains('kt-mc-headrow')) return;   // the labels row (labelsOf), not a card
       /* Rows the pager or search is hiding wait until they are shown (2026-10-28): restacking all
          441 rows of a 25-row page cost ~0.3 s on a phone. apply() runs on every change, so a row is
          done in the same frame it appears. */
@@ -213,11 +247,13 @@
       cells.forEach(function (td) {
         if (/\bkt-mcard-(title|empty)\b/.test(td.className)) return;
         var bare = td.cloneNode(true);
-        [].forEach.call(bare.querySelectorAll('button,[role="button"],input,select,label'), function (n) { n.remove(); });
+        /* Icon-only action links (.kt-act-icon: the row's i / pencil, 2026-11-24 sweep, Inspection forms) are controls like
+           buttons - counted as text, their cell stayed in the card body instead of going to the corner. */
+        [].forEach.call(bare.querySelectorAll('button,[role="button"],input,select,label,a.kt-act-icon'), function (n) { n.remove(); });
         if ((bare.textContent || '').trim() === '') {
           var box = td.querySelector('input[type="checkbox"]');
           if (box && !selectDone && !td.querySelector('button,[role="button"],select')) { td.classList.add('kt-mcard-select'); selectDone = true; }
-          else if (td.querySelector('button,[role="button"]')) { lastActions = td; }
+          else if (td.querySelector('button,[role="button"],a.kt-act-icon')) { lastActions = td; }
           return;
         }
         var t = (td.textContent || '').replace(/\s+/g, ' ').trim();
@@ -226,7 +262,9 @@
            data"). "🐞 Technical / app issue" is 24 characters - short enough to stay in a
            half-width cell, too long for a pill there, so it broke over two lines. A cell
            whose value is a pill longer than a half column holds takes the whole row. */
-        else if (t.length > 16 && td.querySelector('.kt-pill,.badge,[class*="pill"],[class*="chip"],[class*="badge"],[class*="tag"]')) td.classList.add('kt-mcard-block');
+        /* ...and a pill drawn with inline styles (no pill class: a rounded inline-block, e.g. My settings > Documents'
+           "Not counter-signed yet") counts too (2026-11-24 mobile sweep). */
+        else if (t.length > 16 && td.querySelector('.kt-pill,.badge,[class*="pill"],[class*="chip"],[class*="badge"],[class*="tag"],[style*="border-radius:999px"],[style*="border-radius: 999px"],[style*="border-radius:20px"],[style*="border-radius:99px"]')) td.classList.add('kt-mcard-block');
       });
       if (lastActions) lastActions.classList.add('kt-mcard-actions');
     });

@@ -199,7 +199,11 @@
   async function render(main) {
     Dom = (window.KT && window.KT.Dom) || Dom || window.Dom;   // read at call time, like api()
     Dom.clear(main);
-    var wrap = Dom.el('div', { style: 'padding:20px 16px 90px;max-width:820px;margin:0 auto;' });
+    /* INSIDE MY SETTINGS (2026-11-24 mobile sweep): the Documents tab draws this into its settings card, which
+       already has the padding. The screen's own page padding and 820px column inside it framed the list twice
+       and cost a phone ~40px of width. The full-page #my-documents keeps them. */
+    var inPane = !!(main.closest && main.closest('.kt-st-pane'));
+    var wrap = Dom.el('div', { style: inPane ? 'padding:0;' : 'padding:20px 16px 90px;max-width:820px;margin:0 auto;' });
     main.appendChild(wrap);
 
     wrap.appendChild(Dom.el('h1', {
