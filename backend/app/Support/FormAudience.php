@@ -192,6 +192,62 @@ final class FormAudience
     }
 
     /** The audience list off a form row, whatever shape it was stored in. */
+    /**
+     * IS THIS SIGN-OFF FAMILY PAPERWORK, OR STAFF PAPERWORK? (2026-11-24)
+     *
+     * A person can be staff AND a parent in the same agency (an educator whose own
+     * children attend). Everything downstream of a signature used to answer "which
+     * family is this?" with "whichever family the signer is a guardian of" - so an
+     * educator's Daily Sleep Charts and Supervision Checks were filed onto her own
+     * family's record and the office email said "Family: <her family>" on every one.
+     * The signer being a guardian is a fact about the PERSON; whether the paper is
+     * family paperwork is a fact about the FORM.
+     *
+     * Decided by the form's audience, server-side:
+     *   - family roles only (guardian)          -> family paperwork
+     *   - staff roles only                      -> staff paperwork, never a family's
+     *   - both, or none (named people only)     -> family paperwork only when the signer
+     *     holds no live staff role in that agency. A dual-role signer of an ambiguous
+     *     form is treated as staff: failing closed means her work never lands on her
+     *     family's record, where her co-parent and her children's centre can read it.
+     *
+     * @param  object  $form  needs ->audiences
+     */
+    public static function isFamilyPaperwork(object $form, int $userId, int $agencyId): bool
+    {
+        $aud = self::audiencesOf($form);
+        $fam = (bool) array_intersect($aud, ['guardian', 'parent', 'parents', 'family']);
+        $staff = (bool) array_intersect($aud, \App\Support\Visibility::STAFF_ROLES);
+        if ($fam && ! $staff) {
+            return true;
+        }
+        if ($staff && ! $fam) {
+            return false;
+        }
+        return ! self::isStaffIn($userId, $agencyId);
+    }
+
+    /** Does this person hold a live staff role in this agency (agency-wide or at one of its centres)? */
+    public static function isStaffIn(int $userId, int $agencyId): bool
+    {
+        if ($userId <= 0 || $agencyId <= 0) {
+            return false;
+        }
+        /* Memoised for 30 seconds, not for the life of the process: a queue worker runs for
+           hours, and a role granted or removed must be seen on the next job. */
+        static $memo = [];
+        $k = $userId . ':' . $agencyId;
+        if (! isset($memo[$k]) || $memo[$k][1] < time() - 30) {
+            $memo[$k] = [DB::table('role_assignments as ra')
+                ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
+                ->where('ra.user_id', $userId)->where('ra.active', 1)
+                ->whereIn('ra.role', \App\Support\Visibility::STAFF_ROLES)
+                ->where(fn ($q) => $q->where('ra.agency_id', $agencyId)->orWhere('c.agency_id', $agencyId))
+                ->exists(), time()];
+        }
+        return $memo[$k][0];
+    }
+
     public static function audiencesOf(object $form): array
     {
         $raw = $form->audiences ?? null;

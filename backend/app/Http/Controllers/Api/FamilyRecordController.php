@@ -85,7 +85,32 @@ class FamilyRecordController extends Controller
             ->orderByDesc('created_at')
             ->limit(500)
             ->get(['id', 'scope_type', 'scope_id', 'category', 'title', 'file_url',
-                   'file_type', 'file_size', 'signed_at', 'expires_at', 'created_at']);
+                   'file_type', 'file_size', 'signed_at', 'expires_at', 'created_at', 'source_type', 'source_id']);
+
+        /* A GUARDIAN'S SIGNED FORM IS ONLY THE FAMILY'S WHEN IT IS FAMILY PAPERWORK (2026-11-24).
+           The guardian link says who the person is, not what the paper is: an educator who is
+           also a parent here had ~120 of her own Daily Sleep Charts and Supervision Checks
+           listed on her family's record. Keep a user-scoped signed form only when its sign-off
+           is on a family-paperwork form (FormAudience::isFamilyPaperwork); anything else on a
+           guardian's own record - including office shares - stays on that person's record. */
+        $userDocs = $rows->where('scope_type', 'user');
+        if ($userDocs->isNotEmpty()) {
+            $srcIds = $userDocs->where('source_type', \App\Support\SignedFormFiler::SOURCE)
+                ->pluck('source_id')->map(fn ($v) => (int) $v)->all();
+            $forms = $srcIds ? DB::table('managed_form_signoffs as s')
+                ->join('managed_forms as f', 'f.id', '=', 's.managed_form_id')
+                ->whereIn('s.id', $srcIds)->get(['s.id', 's.user_id', 'f.audiences', 'f.agency_id'])->keyBy('id') : collect();
+            $rows = $rows->filter(function ($d) use ($forms) {
+                if ($d->scope_type !== 'user') {
+                    return true;
+                }
+                if ($d->source_type !== \App\Support\SignedFormFiler::SOURCE) {
+                    return false;
+                }
+                $f = $forms[(int) $d->source_id] ?? null;
+                return $f && \App\Support\FormAudience::isFamilyPaperwork($f, (int) $f->user_id, (int) $f->agency_id);
+            })->values();
+        }
 
         return response()->json([
             'documents' => $rows->map(function ($d) use ($childName, $guardianName) {

@@ -133,7 +133,7 @@ final class CountersignReminders
             ->where('s.signed_at', '<=', $cut)
             ->whereNull('u.deleted_at')
             ->orderBy('s.signed_at')
-            ->get(['s.id', 's.user_id', 's.signed_at', 's.signer_name', 'f.id as form_id', 'f.title', 'f.centre_id as form_centre_id', 'u.first_name', 'u.last_name']);
+            ->get(['s.id', 's.user_id', 's.signed_at', 's.signer_name', 'f.id as form_id', 'f.title', 'f.centre_id as form_centre_id', 'f.audiences', 'u.first_name', 'u.last_name']);
 
         $out = collect();
         foreach ($rows as $r) {
@@ -144,7 +144,11 @@ final class CountersignReminders
             $isStaff = DB::table('role_assignments')->where('user_id', $r->user_id)->where('active', true)
                 ->whereIn('role', ['educator', 'home_visitor', 'centre_director', 'agency_admin'])->exists();
             if (! $fam && ! $isStaff) continue;   // left: nobody to chase
-            $r->centre_ids = array_values(array_unique(array_map('intval', array_merge($fam, $staff))));
+            /* Family paperwork goes to the family's centre, staff paperwork to the signer's own
+               centres (2026-11-24): a dual-role educator's Daily Sleep Chart was being chased by
+               the director of her children's centre as well. */
+            $r->centre_ids = array_values(array_unique(array_map('intval',
+                \App\Support\FormAudience::isFamilyPaperwork($r, (int) $r->user_id, (int) $agencyId) ? $fam : $staff)));
             $r->person = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? '')) ?: ($r->signer_name ?: 'Someone');
             $out->push($r);
         }

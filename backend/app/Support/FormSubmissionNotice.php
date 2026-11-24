@@ -48,7 +48,7 @@ final class FormSubmissionNotice
                 ->whereNotNull('s.signed_at')
                 ->first([
                     's.id', 's.user_id', 's.signed_at', 's.signer_name', 's.filled_file_url',
-                    'f.id as form_id', 'f.title', 'f.description', 'f.agency_id',
+                    'f.id as form_id', 'f.title', 'f.description', 'f.agency_id', 'f.audiences',
                     // The one field that says who is told about this form. See officeEmails().
                     'f.notify_email',
                 ]);
@@ -75,10 +75,17 @@ final class FormSubmissionNotice
                A signer is often a guardian, and then the family is the thing the office
                files this under. An educator signing a policy has no family, and the line
                is simply left out rather than printed empty. */
-            $family = DB::table('guardians as g')
-                ->join('families as f', 'f.id', '=', 'g.family_id')
-                ->where('g.user_id', $s->user_id)->whereNull('f.deleted_at')
-                ->first(['f.id', 'f.family_name', 'f.centre_id']);
+            /* ...and only when the FORM is family paperwork (FormAudience::isFamilyPaperwork).
+               An educator who is also a parent here signing her Daily Sleep Chart is not
+               filing it for her family - the email said "Family: <hers>" on every one. */
+            $family = \App\Support\FormAudience::isFamilyPaperwork($s, (int) $s->user_id, $agencyId)
+                ? DB::table('guardians as g')
+                    ->join('families as f', 'f.id', '=', 'g.family_id')
+                    ->join('centres as c', 'c.id', '=', 'f.centre_id')
+                    ->where('g.user_id', $s->user_id)->whereNull('f.deleted_at')
+                    ->where('c.agency_id', $agencyId)
+                    ->first(['f.id', 'f.family_name', 'f.centre_id'])
+                : null;
             $familyName = $family ? trim((string) $family->family_name) : null;
 
             /* EVERY form this person has been given, and where each stands.
