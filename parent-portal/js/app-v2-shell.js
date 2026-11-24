@@ -300,6 +300,7 @@
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
+          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // on-the-spot play ideas, AI Bundle (2026-11-24)
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
           { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
@@ -517,6 +518,7 @@
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
+          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // on-the-spot play ideas, AI Bundle (2026-11-24)
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
           { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
@@ -629,6 +631,7 @@
           { hash: 'observations',  label: 'Observations',  icon: '👀' },
           { hash: 'photo-permissions', label: 'Photo permissions', icon: '🤳' },   // who may be photographed (2026-11-06)
           { hash: 'lesson-plans',  label: 'Lesson plans',  icon: '📚' },
+          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // on-the-spot play ideas, AI Bundle (2026-11-24)
           { hash: 'curriculum',    label: 'Curriculum library', icon: '🌱' },   // Ontario units (2026-11-03)
           { hash: 'chat',          label: 'Message Centre',      icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
@@ -677,6 +680,7 @@
         { label: 'Menu', items: [
           { hash: 'home',           label: 'Home',             icon: '🏠' },
           { hash: 'new-home-visit', label: 'New visit report', icon: '📝' },
+          { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // on-the-spot play ideas, AI Bundle (2026-11-24)
           { hash: 'home-visits',    label: 'My reports',       icon: '📋' },
           { hash: 'my-tasks',       label: 'My tasks',         icon: '✅' },
           /* Forms sent from the Forms Manager land here — the same fill-and-sign the
@@ -788,6 +792,7 @@
         { hash: 'home',               label: 'Home',       icon: '🏠' },
         { hash: 'today',              label: 'Today',      icon: '🌈' },
         { hash: 'photos',             label: 'Photos & video', icon: '📸', badgeKey: 'photos_new' },
+        { hash: 'play-spark', label: 'Play at home', icon: '🧩' },   // Play Spark for families, AI Bundle (2026-11-24)
         { hash: 'messages',           label: 'Message Centre',   icon: '💬', badgeKey: 'chat_unread' },
         { hash: 'files',          label: 'Files',          icon: '📎' },
         { hash: 'my-tasks',           label: 'My tasks',   icon: '📋' },
@@ -869,6 +874,8 @@
       + '<circle cx="58" cy="31" r="8.5" fill="#fff"/><path d="M30 54l15 15 27-27" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>'
       + '<circle cx="78" cy="22" r="7" fill="#fbbf24" stroke="#fff" stroke-width="2.5"/></svg>',
     /* WALK WATCH (2026-10-26): the walks & outings brand, the same mark as the website and the film. */
+    /* PLAY SPARK (2026-11-24): the on-the-spot play ideas brand, the same mark as the white paper and website. */
+    'play-spark': '<img src="/img/play-spark.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
     'trip-gps': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
     'walk': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
     'walks': '<img src="/img/walk-watch.svg" alt="" width="18" height="18" style="display:block;margin:0 auto;border-radius:5px;">',
@@ -1274,7 +1281,7 @@
     /* Names the title-case fallback gets wrong ("Prospect Ndas"), for every role. */
     /* Website (2026-10-23): it moved into the Platform section, which this list does not read,
        so its banner fell back to "Marketing Site" with the default ✨ (Anthony: "not unique"). */
-    var EXTRA_NAMES = { 'prospect-ndas': 'Prospect NDAs', 'marketing-site': 'Website', 'walk': 'Walk Watch', 'walks': 'Walk Watch',
+    var EXTRA_NAMES = { 'prospect-ndas': 'Prospect NDAs', 'marketing-site': 'Website', 'walk': 'Walk Watch', 'walks': 'Walk Watch', 'play-spark': 'Play Spark',
       'ai-usage': 'AI usage', 'usage-spend': 'Usage & spend', 'ask': 'Ask KiddieTrac' };   // were "Ai Usage" / "Usage Spend" (2026-10-28)
     var override = (EXTRA_LABELS[role] || {})[base] || EXTRA_NAMES[base];
     // 🗂️, not 📄: "My documents" already has 📄 in the same sidebar (2026-10-28 sweep).

@@ -1326,6 +1326,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         });
 
         Route::prefix('parent')->middleware('role:guardian')->group(function () {
+            Route::get('/play-spark', [\App\Http\Controllers\Api\PlaySparkController::class, 'parent']);   // Play Spark at home (2026-11-24, AI Bundle)
             Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
             // Report an issue to the centre (2026-10-13).
             Route::get('/issues/options', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentOptions']);
@@ -1448,6 +1449,17 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
            home visitor reads exactly the rooms somebody put her in. */
         Route::prefix('provider')->middleware(KT_PROVIDER_ROLES)->group(function () {
             Route::get('/bootstrap', [RoomController::class, 'bootstrap']);
+            // Play Spark - on-the-spot play ideas (2026-11-24). AI Bundle only (EnforcePlanFeatures ai_tools).
+            Route::get('/play-spark/context',             [\App\Http\Controllers\Api\PlaySparkController::class, 'context']);
+            Route::post('/play-spark/generate',           [\App\Http\Controllers\Api\PlaySparkController::class, 'generate']);
+            Route::post('/play-spark/scan',               [\App\Http\Controllers\Api\PlaySparkController::class, 'scan']);
+            Route::post('/play-spark/{id}/done',          [\App\Http\Controllers\Api\PlaySparkController::class, 'done'])->whereNumber('id');
+            Route::get('/play-spark/ideas',               [\App\Http\Controllers\Api\PlaySparkController::class, 'ideas']);
+            Route::patch('/play-spark/ideas/{id}',        [\App\Http\Controllers\Api\PlaySparkController::class, 'update'])->whereNumber('id');
+            Route::delete('/play-spark/ideas/{id}',       [\App\Http\Controllers\Api\PlaySparkController::class, 'destroy'])->whereNumber('id');
+            Route::post('/play-spark/materials',          [\App\Http\Controllers\Api\PlaySparkController::class, 'addMaterials']);
+            Route::delete('/play-spark/materials/{id}',   [\App\Http\Controllers\Api\PlaySparkController::class, 'removeMaterial'])->whereNumber('id');
+            Route::get('/play-spark/report',              [\App\Http\Controllers\Api\PlaySparkController::class, 'report']);
             Route::get('/day-brief', [DayBriefController::class, 'brief']);
             Route::get('/day-activity', [DayBriefController::class, 'dayActivity']);
 

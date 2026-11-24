@@ -1205,3 +1205,10 @@ post me/devices/sign-out | Signed one of their own devices out remotely
 post admin/users/{user}/devices/sign-out | Signed a person out of a device remotely
 post diag/search-words | Report the words on a screen for the global search
 get search-keys | Load the global search words
+post provider/play-spark/generate | Asked Play Spark for a play idea
+post provider/play-spark/scan | Read the play materials in a photo (Play Spark, photo not kept)
+post provider/play-spark/{id}/done | Logged a Play Spark activity for children (daily log, draft observations)
+patch provider/play-spark/ideas/{id} | Changed a Play Spark idea (favourite, rating or library)
+delete provider/play-spark/ideas/{id} | Removed a Play Spark idea
+post provider/play-spark/materials | Added play materials to a room (Play Spark)
+delete provider/play-spark/materials/{id} | Removed a play material from a room (Play Spark)

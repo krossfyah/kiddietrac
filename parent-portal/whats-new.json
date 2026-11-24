@@ -2,6 +2,42 @@
     "updated": "2026-11-24",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "🧩",
+            "title": "Play at home",
+            "body": "See the Play Spark activities your child did at the centre this month, with an easy way to try each one at home.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "🧩",
+            "title": "Play Spark: a play idea, right now",
+            "body": "Tap Play Spark for an activity made for the children in your room right now, with a level for every age, the materials you have and a safety check. Tap We did it to log it to the daily record and draft observations. Part of the AI Bundle.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-24",
+            "icon": "🛡️",
+            "title": "Choose your Safe Arrival alerts",
+            "body": "Directors and admins can now choose how Safe Arrival reaches them: app, email, texts or calls. Go to Settings, then Notifications. Calls start off. Room educators are always told.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-24",
             "icon": "⏳",

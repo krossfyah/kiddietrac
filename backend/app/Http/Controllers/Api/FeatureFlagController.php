@@ -145,7 +145,7 @@ final class FeatureFlagController extends Controller
            plan". Everything AI hangs off this key: the routes below in EnforcePlanFeatures, and App\Support\AiBundle
            for the AI inside shared endpoints and nightly jobs (parent end-of-day note, day story, photo tagging). */
         'ai_tools'          => ['label' => 'AI Bundle — summaries, writing help & report cards', 'plan_min' => 'addon', 'group' => 'Growth',
-            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status', 'lesson-plans-ai', 'photo-tagging']],
+            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status', 'lesson-plans-ai', 'photo-tagging', 'play-spark']],   // + Play Spark (2026-11-24)
 
         // ── Platform ──────────────────────────────────────────────────────────────
         'multi_centre'      => ['label' => 'Multiple centres per agency',  'plan_min' => 'starter',    'group' => 'Platform',
