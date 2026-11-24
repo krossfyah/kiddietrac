@@ -2167,7 +2167,7 @@ class IntegrationController extends Controller
             return;
         }
         $hasRole = DB::table('role_assignments')->where('user_id', $u->id)
-            ->where('agency_id', $agencyId)->whereIn('role', ['agency_admin', 'centre_director'])
+            ->where('agency_id', $agencyId)->whereIn('role', ['agency_admin', 'centre_director', 'integration'])
             ->where('active', true)->exists();
         abort_unless($hasRole, 403, 'Token is not an agency_admin for this agency.');
     }

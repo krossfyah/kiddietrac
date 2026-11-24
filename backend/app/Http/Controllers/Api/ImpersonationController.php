@@ -41,7 +41,8 @@ class ImpersonationController extends Controller
 
         $q = DB::table('users')
             ->join('role_assignments as ra', function ($j) {
-                $j->on('ra.user_id', '=', 'users.id')->where('ra.active', true);
+                // An integration token is a service, not a person to view as (2026-11-24).
+                $j->on('ra.user_id', '=', 'users.id')->where('ra.active', true)->where('ra.role', '<>', 'integration');
             })
             ->leftJoin('agencies as a', 'a.id', '=', 'ra.agency_id')
             ->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')

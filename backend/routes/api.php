@@ -3726,7 +3726,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // caller's own external_id, scoped to the token's agency. Lets any external
     // agency platform feed centres/families/children into KiddieTrac under its
     // own agency. First consumer: iLearn. See docs/INTEGRATION_API.md.
-    Route::middleware('role:agency_admin,platform_admin')->prefix('integration')->group(function () {
+    // 'integration' (2026-11-24): the silent service role an integration token holds - it can call this API and nothing else,
+    // and no staff list, notification or email audience includes it (people roles never name it).
+    Route::middleware('role:agency_admin,platform_admin,integration')->prefix('integration')->group(function () {
         Route::get ('/ping',     [\App\Http\Controllers\Api\IntegrationController::class, 'ping']);
         Route::post('/centres',  [\App\Http\Controllers\Api\IntegrationController::class, 'upsertCentre']);
         Route::post('/families', [\App\Http\Controllers\Api\IntegrationController::class, 'upsertFamily']);

@@ -148,7 +148,7 @@ final class SmsConsentInviteController extends Controller
 
         $rows = DB::table('users as u')
             ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-            ->where('ra.agency_id', $agencyId)->where('ra.active', true)
+            ->where('ra.agency_id', $agencyId)->where('ra.active', true)->where('ra.role', '<>', 'integration')   // a service account is not a person to text
             ->groupBy('u.id', 'u.first_name', 'u.last_name', 'u.email', 'u.phone', 'u.sms_opt_in',
                 'u.sms_opt_in_at', 'u.sms_consent_source', 'u.sms_opt_out_at')
             ->selectRaw("u.id, TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) name,
