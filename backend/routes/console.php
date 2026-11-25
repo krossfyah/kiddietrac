@@ -436,7 +436,9 @@ Schedule::command('immunization:reminders')->hourlyAt(11)->withoutOverlapping();
 
    100, not 128: the check is made BETWEEN jobs, so the headroom has to cover the
    largest single job, and a send peaks at ~32 MB from a ~28 MB floor. */
-Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=55 --memory=100 --tries=3 --sleep=2 --backoff=30")
+/* "pictures" LAST (2026-11-24): Play Spark end-result drawings take ~30 s each (App\Jobs\DrawPlaySparkPicture), so they
+   run only when no email or other job is waiting. */
+Schedule::command("queue:work --queue=mail,default,pictures --stop-when-empty --max-time=55 --memory=100 --tries=3 --sleep=2 --backoff=30")
     ->everyMinute()->withoutOverlapping(5)->runInBackground();
 
 

@@ -440,6 +440,8 @@ final class DayBriefController extends Controller
                         : (\App\Support\PlaySpark::isRun($p) ? \App\Support\PlaySpark::domainsText($p) : ($e->notes ?? '')),
                     // The front end draws the Play Spark mark instead of the icon for these.
                     'brand' => \App\Support\PlaySpark::isRun($p) ? 'play-spark' : null,
+                    // Its end-result picture opens from the row (2026-11-24, App\Support\PlaySparkPicture).
+                    'play_spark_id' => \App\Support\PlaySpark::isRun($p) ? (int) $p['play_spark_id'] : null,
                     'media_type' => $isMedia ? ($isVideoEvent ? 'video' : 'photo') : null,
                     'photo_id' => $isMedia ? ($p['photo_id'] ?? null) : null,
                 ];

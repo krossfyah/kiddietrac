@@ -91,6 +91,8 @@ final class LessonPlanController extends Controller
         // Pictures (2026-11-02): credit lines for looked-up pictures, the theme's cover, and the agency's settings.
         $data['days'] = LessonImages::decorate($data['days']);
         $agencyId = $this->scopeAgency($roomId, ($centreId && !$roomId) ? $centreId : null);
+        // Play Spark end-result pictures (2026-11-24): each activity's status, for the "🎨 End result" chip.
+        $data['days'] = \App\Support\PlaySparkPicture::decorateDays($agencyId, $data['days']);
 
         return response()->json([
             'scope' => ($centreId && !$roomId) ? 'centre' : 'room',
@@ -203,6 +205,11 @@ final class LessonPlanController extends Controller
                     if (! empty($act['unit_activity']) && is_string($act['unit_activity'])) {
                         $row['unit_activity'] = mb_substr(preg_replace('/[^a-z0-9_-]/', '', strtolower($act['unit_activity'])), 0, 20);
                     }
+                    // Added from a Play Spark idea (2026-11-24): the activity shows that idea's end-result picture. This agency's only.
+                    if (! empty($act['play_spark_id']) && $agencyId
+                        && DB::table('play_spark_ideas')->where('id', (int) $act['play_spark_id'])->where('agency_id', $agencyId)->exists()) {
+                        $row['play_spark_id'] = (int) $act['play_spark_id'];
+                    }
                     $pic = $agencyId ? LessonImages::clean($act, $agencyId, $keep) : null;
                     if ($pic === null) $pic = $oldPic($day, $row['title']);
                     if ($pic && (! empty($pic['image_url']) || ($pic['image_source'] ?? null) === 'none')) {
@@ -277,6 +284,27 @@ final class LessonPlanController extends Controller
             ]),
             'created_at' => now(),
         ]);
+
+        /* PLAY SPARK END-RESULT PICTURES (2026-11-24, Anthony: a picture of every generated activity "to show the educator
+           on what the end result will be with the steps"). With the AI Bundle, each activity's drawing is queued now, keyed
+           by its words, so it is ready when someone opens it; an unchanged activity is never drawn twice. Queued only
+           (App\Jobs\DrawPlaySparkPicture): the save itself does no AI work. */
+        if ($agencyId && \App\Support\AiBundle::on($agencyId)) {
+            try {
+                $n = 0;
+                foreach ($cleanDays as $acts) {
+                    foreach ($acts as $act) {
+                        if (! empty($act['play_spark_id']) || mb_strlen(trim($act['title'])) < 3 || ++$n > 40) {
+                            continue;
+                        }
+                        \App\Support\PlaySparkPicture::queue($agencyId, 'lesson', \App\Support\PlaySparkPicture::lessonKey($act['title'], $act['notes']),
+                            ['title' => $act['title'], 'notes' => $act['notes'], 'theme' => (string) ($data['theme'] ?? '')]);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::info('Play Spark lesson pictures not queued', ['plan' => $planId, 'error' => $e->getMessage()]);
+            }
+        }
 
         // How many activities still want a picture, so the planner knows whether to ask for them (no network here).
         $auto = $agencyId ? LessonImages::autoOn($agencyId) : false;
@@ -367,6 +395,10 @@ final class LessonPlanController extends Controller
 
         $pd = json_decode($plan->plan_data, true) ?: [];
         $pd['days'] = LessonImages::decorate(is_array($pd['days'] ?? null) ? $pd['days'] : array_fill_keys(self::DAYS, []));
+        // Play Spark end-result pictures (2026-11-24): families see the ones already drawn.
+        $pd['days'] = \App\Support\PlaySparkPicture::decorateDays(
+            (int) DB::table('rooms as r')->join('centres as c', 'c.id', '=', 'r.centre_id')->where('r.id', $enrollment->room_id)->value('c.agency_id') ?: null,
+            $pd['days']);
         /* Families get the unit's name and its "try at home" ideas, never the staff-only observation
            prompts; and no internal unit ids on the activities. */
         if (! empty($pd['unit']) && is_array($pd['unit'])) {

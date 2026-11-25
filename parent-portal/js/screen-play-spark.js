@@ -341,7 +341,7 @@
             var days = (plan && plan.plan && plan.plan.days) ? plan.plan.days : {};
             DAYS.forEach(function (k) { if (!Array.isArray(days[k])) days[k] = []; });
             var mats = (I.materials || []).slice(0, 12);
-            days[day].push({ time: '', title: String(row.title || I.title || '').slice(0, 200), domain: '',
+            days[day].push({ time: '', title: String(row.title || I.title || '').slice(0, 200), domain: '', play_spark_id: row.id,
               notes: ((I.summary || '') + (mats.length ? ' Materials: ' + mats.join(', ') + '.' : '') + ' (Play Spark)').trim().slice(0, 1000) });
             var own = plan && plan.updated_at && !plan.inherited_from_centre;
             var status = own ? (plan.status || 'published') : 'draft';
@@ -444,6 +444,13 @@
     return arr && arr.length ? '<' + tag + '>' + arr.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</' + tag + '>' : '';
   }
 
+  /* THE END-RESULT PICTURE (2026-11-24): KT.PlaySparkPic (kt-play-spark-pic.js, loaded with this screen). */
+  function Pic() { return KT.PlaySparkPic || null; }
+  function ideaPic(el, row, opts) {
+    if (!el || !Pic() || !row || !row.id || row.picture === 'off' || row.picture === 'failed') return;
+    Pic().idea(el, row.id, row.title, opts);
+  }
+
   function ideaHtml(row, printable) {
     var I = row.idea || {};
     var caution = row.safety_level === 'caution';
@@ -452,6 +459,8 @@
       ({ indoor: '🏠 Indoor', outdoor: '🌳 Outdoor', either: '🏠🌳 Indoor or outdoor' }[I.setting] || '') + '</span>' +
       (I.areas || []).map(function (a) { return '<span class="ps-pill area">' + esc(a) + '</span>'; }).join('') +
       (I.framework ? '<span class="ps-pill">' + esc(I.framework) + '</span>' : '') + '</div>' +
+      (printable ? ((Pic() && Pic().cached('i' + row.id)) ? '<div class="ps-pic"><img alt="" style="display:block;width:100%;max-width:720px;height:auto;border:1px solid #d7dde8;border-radius:12px" src="' + Pic().src(Pic().cached('i' + row.id)) + '"></div>' : '')
+        : '<div class="ps-pic" data-ps-pic></div>') +
       '<div class="ps-safe' + (caution ? ' caution' : '') + '"><h4>' + (caution ? '⚠️ Safety check - read before you start' : '🛡️ Safety check') + '</h4>' +
       list(I.safety, 'ul') + (printable ? '' : '<label><input type="checkbox" data-ps-ack' + (S.ack ? ' checked' : '') + '> I have read the safety check</label>') + '</div>' +
       (I.materials && I.materials.length ? '<div class="ps-sec"><h4>You need</h4><div class="ps-chips">' + I.materials.map(function (m) { return '<span class="ps-pill">' + esc(m) + '</span>'; }).join('') + '</div></div>' : '') +
@@ -474,6 +483,7 @@
       '<button type="button" class="ps-btn" data-ps-print>🖨️ Print</button>' +
       (S.tab === 'now' ? '<button type="button" class="ps-btn" data-ps-again>🔄 Another idea</button>' : '') +
       '</div></div>';
+    ideaPic(out.querySelector('[data-ps-pic]'), row);
     var wk = out.querySelector('[data-ps-week]');
     if (wk) wk.addEventListener('click', function () { addToWeek(row); });
     var did = out.querySelector('[data-ps-did]');
@@ -502,6 +512,16 @@
   }
 
   function printIdea(row) {
+    // The picture prints too: fetch it first if this screen has not shown it yet (ready only; no waiting at the printer).
+    if (row.id && Pic() && !Pic().cached('i' + row.id) && row.picture !== 'off') {
+      Api.get('/provider/play-spark/ideas/' + row.id + '/picture').then(function (r) {
+        if (r && r.status === 'ready' && r.svg) Pic().remember('i' + row.id, r.svg);
+      }).catch(function () {}).then(function () { printIdeaNow(row); });
+      return;
+    }
+    printIdeaNow(row);
+  }
+  function printIdeaNow(row) {
     var html = '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(row.title) + '</title><style>' + CSS +
       'body{font-family:Inter,system-ui,sans-serif;color:#0f172a;margin:24px;--kt-border:#d7dde8;--kt-bg:#f6f8fb;--kt-surface:#fff;--kt-text-faint:#64748b;--kt-text-muted:#475569;}' +
       '.ps-hero{border-bottom:3px solid #3D8BFF;border-image:linear-gradient(90deg,#FF5A4E,#E8A400 35%,#3D8BFF 68%,#22B37C) 1;padding-bottom:8px;}</style></head><body>' +
@@ -568,11 +588,16 @@
       if (!rows.length) { el.innerHTML = '<div class="ps-card ps-empty">' + (S.libScope === 'shared' ? 'Nobody has shared an idea yet. Share a good one from its page.' : 'No ideas here yet. Spark one from Right now.') + '</div>'; return; }
       el.innerHTML = '<div class="ps-list">' + rows.map(function (x, i) {
         var I = x.idea || {};
-        return '<div class="ps-card ps-li" data-i="' + i + '"><div style="font-weight:800">' + esc(x.title) + (x.favourite ? ' ★' : '') + '</div>' +
+        return '<div class="ps-card ps-li" data-i="' + i + '"><div class="ps-thumb-wrap" data-ps-thumb="' + i + '"></div><div style="font-weight:800">' + esc(x.title) + (x.favourite ? ' ★' : '') + '</div>' +
           '<div class="ps-ctx" style="margin:4px 0">' + esc((I.summary || '').slice(0, 140)) + '</div>' +
           '<div class="ps-meta" style="margin:0">' + (I.tiers || []).map(function (t) { return '<span class="ps-pill">' + esc(BAND_SHORT[t.band] || t.band) + '</span>'; }).join('') +
           (x.times_done ? '<span class="ps-pill area">Done ' + x.times_done + '×</span>' : '') + (x.mine ? '' : '<span class="ps-pill">by ' + esc(x.by || '') + '</span>') + '</div></div>';
       }).join('') + '</div><div data-open style="margin-top:14px"></div>';
+      // Thumbnails: ready ones now; ones being drawn (new, or older ideas being filled in) appear when done.
+      el.querySelectorAll('[data-ps-thumb]').forEach(function (t) {
+        var row = rows[+t.getAttribute('data-ps-thumb')];
+        if (row && (row.picture === 'ready' || row.picture === 'drawing')) ideaPic(t, row, { thumb: true });
+      });
       el.querySelectorAll('[data-i]').forEach(function (c) {
         c.addEventListener('click', function () {
           var row = rows[+c.getAttribute('data-i')]; S.ack = false;
@@ -641,9 +666,15 @@
         var a = r.activities || [];
         el.innerHTML = a.length ? '<div class="ps-list">' + a.map(function (x) {
           return '<div class="ps-card"><div class="ps-ctx">' + esc(x.date) + '</div><div style="font-weight:800;margin:2px 0 6px">' + esc(x.title) + '</div>' +
+            (x.play_spark_id ? '<div class="ps-pic" data-ps-ppic="' + x.play_spark_id + '" data-t="' + esc(x.title) + '"></div>' : '') +
             (x.areas.length ? '<div class="ps-meta" style="margin:0 0 6px">' + x.areas.map(function (s) { return '<span class="ps-pill area">' + esc(s) + '</span>'; }).join('') + '</div>' : '') +
             (x.home_idea ? '<div class="ps-home" style="margin-top:4px">🏡 <b>Try at home:</b> ' + esc(x.home_idea) + '</div>' : '') + '</div>';
         }).join('') + '</div>' : '<div class="ps-card ps-empty">No Play Spark activities this month yet.</div>';
+        // The end-result picture of each one (families only see a picture that is already drawn).
+        if (Pic()) el.querySelectorAll('[data-ps-ppic]').forEach(function (p) {
+          var id = p.getAttribute('data-ps-ppic');
+          Pic().mount(p, function () { return Api.get('/parent/play-spark/picture/' + id); }, { key: 'i' + id, title: p.getAttribute('data-t') });
+        });
       } catch (e) { el.innerHTML = '<div class="ps-card ps-empty">' + esc(errMsg(e)) + '</div>'; }
     };
     w.querySelector('[data-month]').addEventListener('change', go);

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Support\AiBundle;
 use App\Support\LearningFrameworks;
 use App\Support\PlaySpark;
+use App\Support\PlaySparkPicture;
 use App\Support\Visibility;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -137,8 +138,97 @@ class PlaySparkController extends Controller
             'title' => mb_substr($idea['title'], 0, 160), 'idea' => json_encode($idea), 'inputs' => json_encode($in),
             'safety_level' => $idea['safety_level'], 'created_at' => now(), 'updated_at' => now(),
         ]);
+        // The end-result picture is drawn in the queue: the idea is on screen now, the picture follows (PlaySparkPicture).
+        PlaySparkPicture::queue($a, 'idea', (string) $id, $idea);
 
         return response()->json(['idea' => $this->row(DB::table('play_spark_ideas')->find($id), $request)]);
+    }
+
+    /* ── the end-result picture (2026-11-24, App\Support\PlaySparkPicture) ─────────────────────────────── */
+
+    /** GET provider/play-spark/ideas/{id}/picture -> {status: ready|drawing|failed|off|none, svg?} */
+    public function picture(Request $request, int $id): JsonResponse
+    {
+        $a = $this->agency($request);
+        $idea = $this->find($request, $a, $id, true);
+        $body = json_decode((string) $idea->idea, true) ?: [];
+
+        return response()->json(PlaySparkPicture::status($a, 'idea', (string) $idea->id, $body + ['title' => $idea->title]));
+    }
+
+    /**
+     * POST provider/play-spark/lesson-picture {title, notes?, theme?, play_spark_id?} - the picture for a weekly
+     * lesson-plan activity. Keyed by its words (PlaySparkPicture::lessonKey), so the same activity in any room or week
+     * shares one picture; an activity added from a Play Spark idea uses that idea's picture.
+     */
+    public function lessonPicture(Request $request): JsonResponse
+    {
+        $a = $this->agency($request);
+        $d = $request->validate(['title' => 'required|string|max:200', 'notes' => 'nullable|string|max:1500',
+            'theme' => 'nullable|string|max:160', 'play_spark_id' => 'nullable|integer']);
+        if (! empty($d['play_spark_id'])) {
+            $idea = DB::table('play_spark_ideas')->where('id', (int) $d['play_spark_id'])->where('agency_id', $a)->whereNull('deleted_at')->first();
+            if ($idea) {
+                return response()->json(PlaySparkPicture::status($a, 'idea', (string) $idea->id, (json_decode((string) $idea->idea, true) ?: []) + ['title' => $idea->title]));
+            }
+        }
+        $key = PlaySparkPicture::lessonKey($d['title'], (string) ($d['notes'] ?? ''));
+        // Drawing costs: a new one only within a fair hourly allowance per person (a saved plan queues its own on save).
+        $limiter = 'ps-pic:' . $request->user()->id;
+        $may = ! \Illuminate\Support\Facades\RateLimiter::tooManyAttempts($limiter, 80);
+        $before = PlaySparkPicture::find($a, 'lesson', $key);
+        $out = PlaySparkPicture::status($a, 'lesson', $key, ['title' => $d['title'], 'notes' => $d['notes'] ?? '', 'theme' => $d['theme'] ?? ''], true, $may);
+        if ($may && ! $before && ($out['status'] ?? '') === 'drawing') {
+            \Illuminate\Support\Facades\RateLimiter::hit($limiter, 3600);
+        }
+
+        return response()->json($out);
+    }
+
+    /** GET parent/play-spark/picture/{id} - a family sees the picture of an idea their own child did (never queues one). */
+    public function parentPicture(Request $request, int $id): JsonResponse
+    {
+        $a = $this->agency($request);
+        $kids = $this->myChildren($request, $a);
+        $did = $kids && DB::table('daily_events')->whereIn('child_id', $kids)->where('event_type', 'activity')
+            ->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(payload, '$.play_spark_id')) = ?", [(string) $id])->exists();
+        abort_unless($did, 404, 'That picture is not available.');
+        abort_unless(DB::table('play_spark_ideas')->where('id', $id)->where('agency_id', $a)->exists(), 404, 'That picture is not available.');
+
+        return response()->json(PlaySparkPicture::status($a, 'idea', (string) $id, [], true, false));
+    }
+
+    /** POST parent/play-spark/lesson-picture {title, notes?, play_spark_id?} - the picture of an activity on my child's plan (never queues one). */
+    public function parentLessonPicture(Request $request): JsonResponse
+    {
+        $a = $this->agency($request);
+        $d = $request->validate(['title' => 'required|string|max:200', 'notes' => 'nullable|string|max:1500', 'play_spark_id' => 'nullable|integer']);
+        abort_unless($this->myChildren($request, $a), 404, 'That picture is not available.');
+        if (! empty($d['play_spark_id']) && DB::table('play_spark_ideas')->where('id', (int) $d['play_spark_id'])->where('agency_id', $a)->exists()) {
+            return response()->json(PlaySparkPicture::status($a, 'idea', (string) (int) $d['play_spark_id'], [], true, false));
+        }
+
+        return response()->json(PlaySparkPicture::status($a, 'lesson', PlaySparkPicture::lessonKey($d['title'], (string) ($d['notes'] ?? '')), [], true, false));
+    }
+
+    /** GET play-spark/picture/{id} (signed link, no sign-in) - the PNG copy for email. Holds no personal data. */
+    public function pngFile(int $id)
+    {
+        $row = DB::table('play_spark_pictures')->where('id', $id)->where('status', 'ready')->first(['png_path']);
+        $disk = \Illuminate\Support\Facades\Storage::disk('local');
+        abort_unless($row && $row->png_path && $disk->exists($row->png_path), 404);
+
+        return response($disk->get($row->png_path), 200, [
+            'Content-Type' => 'image/png', 'Cache-Control' => 'public, max-age=2592000, immutable', 'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    private function myChildren(Request $request, int $a): array
+    {
+        return DB::table('children as c')->join('guardians as g', 'g.family_id', '=', 'c.family_id')
+            ->join('families as f', 'f.id', '=', 'c.family_id')->join('centres as ce', 'ce.id', '=', 'f.centre_id')
+            ->where('g.user_id', $request->user()->id)->where('ce.agency_id', $a)->whereNull('c.deleted_at')
+            ->distinct()->pluck('c.id')->map(fn ($v) => (int) $v)->all();
     }
 
     /** POST provider/play-spark/scan  {image: data URL}  - the materials in a photo; never stored. */
@@ -267,6 +357,18 @@ class PlaySparkController extends Controller
             $q->where('user_id', $uid);
         }
         $rows = $q->orderByDesc('id')->limit(100)->get();
+        // Each idea's picture status in one read; ideas made before pictures get theirs drawn, a few per visit.
+        $pics = DB::table('play_spark_pictures')->where('agency_id', $a)->where('kind', 'idea')
+            ->whereIn('ref', $rows->pluck('id')->map(fn ($v) => (string) $v)->all() ?: ['0'])->pluck('status', 'ref')->all();
+        $fill = 0;
+        foreach ($rows as $r) {
+            if (! isset($pics[(string) $r->id]) && $fill < 4) {
+                PlaySparkPicture::queue($a, 'idea', (string) $r->id, (json_decode((string) $r->idea, true) ?: []) + ['title' => $r->title]);
+                $pics[(string) $r->id] = 'drawing';
+                $fill++;
+            }
+        }
+        $this->picStatus = $pics;
 
         return response()->json(['ideas' => $rows->map(fn ($r) => $this->row($r, $request))->values()]);
     }
@@ -408,7 +510,7 @@ class PlaySparkController extends Controller
         $out = [];
         foreach ($rows as $r) {
             $p = json_decode((string) $r->payload, true) ?: [];
-            $out[] = ['child_id' => (int) $r->child_id, 'date' => Carbon::parse($r->occurred_at)->tz($tz)->toDateString(),
+            $out[] = ['child_id' => (int) $r->child_id, 'play_spark_id' => (int) ($p['play_spark_id'] ?? 0), 'date' => Carbon::parse($r->occurred_at)->tz($tz)->toDateString(),
                 'title' => $p['title'] ?? 'Play', 'home_idea' => $p['home_idea'] ?? '',
                 'areas' => array_map(fn ($d) => PlaySpark::domainLabel($d), $p['domains'] ?? [])];
         }
@@ -444,15 +546,22 @@ class PlaySparkController extends Controller
             ->exists();
     }
 
+    /** ref => picture status, filled by ideas() for the whole list; other callers read the one row. */
+    private ?array $picStatus = null;
+
     private function row(object $r, Request $request): array
     {
         $who = DB::table('users')->where('id', $r->user_id)->value('first_name');
+        $pic = $this->picStatus !== null ? ($this->picStatus[(string) $r->id] ?? 'none')
+            : (DB::table('play_spark_pictures')->where('agency_id', $r->agency_id)->where('kind', 'idea')->where('ref', (string) $r->id)->value('status') ?? 'none');
 
         return ['id' => (int) $r->id, 'title' => $r->title, 'idea' => json_decode((string) $r->idea, true),
             'room_id' => $r->room_id ? (int) $r->room_id : null, 'safety_level' => $r->safety_level,
             'favourite' => (bool) $r->favourite, 'rating' => $r->rating ? (int) $r->rating : null, 'shared' => (bool) $r->shared,
             'times_done' => (int) $r->times_done, 'created_at' => $r->created_at, 'by' => $who,
-            'mine' => (int) $r->user_id === (int) $request->user()->id];
+            'mine' => (int) $r->user_id === (int) $request->user()->id,
+            // ready | drawing | failed | off | none - the screen fetches the SVG itself (GET ideas/{id}/picture)
+            'picture' => $pic];
     }
 
     /* Copied from DailyEventController (2026-11-05 leak sweep): staff, not only a parent; and the room is the child's. */

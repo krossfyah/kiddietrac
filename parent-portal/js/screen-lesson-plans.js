@@ -29,6 +29,40 @@
   function $(s, r) { return (r || document).querySelector(s); }
   function $$(s, r) { return (r || document).querySelectorAll(s); }
 
+  /* PLAY SPARK END-RESULT PICTURE (2026-11-24): every activity on a saved plan gets a Claude-drawn picture of the finished
+     set-up and its steps (queued by the server when the plan is saved, AI Bundle only; KT.PlaySparkPic in
+     kt-play-spark-pic.js). The plan carries each activity's status (ps_picture); the drawing itself is fetched only
+     when someone taps "🎨 End result". */
+  function psChip(a, day, idx, who) {
+    const st = a && a.ps_picture;
+    if (!window.KT || !KT.PlaySparkPic || !(a.title || '').trim()) return '';
+    if (st === 'ready') return `<button type="button" class="lp-ps-chip" data-lp-ps="${who}|${day}|${idx}" title="What it looks like set up, and the steps">🎨 End result</button>`;
+    if (st === 'drawing' && who === 'staff') return '<span class="lp-ps-chip lp-ps-wait" title="Play Spark is drawing the end result">🎨 Drawing…</span>';
+    return '';
+  }
+  function psOpen(a, parent) {
+    const body = { title: (a.title || '').trim(), notes: (a.notes || '').trim() };
+    if (a.play_spark_id) body.play_spark_id = a.play_spark_id;
+    if (!parent) body.theme = currentTheme || '';
+    const key = a.play_spark_id ? 'i' + a.play_spark_id : 'l' + body.title + '|' + body.notes;
+    const cached = KT.PlaySparkPic.cached(key);
+    if (cached) { KT.PlaySparkPic.open(cached, body.title); return; }
+    api('POST', parent ? '/parent/play-spark/lesson-picture' : '/provider/play-spark/lesson-picture', body).then(r => {
+      if (r && r.status === 'ready' && r.svg) { KT.PlaySparkPic.remember(key, r.svg); KT.PlaySparkPic.open(r.svg, body.title); }
+      else if (window.KT && KT.toast) KT.toast('🎨', 'Play Spark', 'The picture is still being drawn. Try again in a minute.');
+    }).catch(e => { if (window.KT && KT.toast) KT.toast('🎨', 'Play Spark', e.message || 'The picture could not open.'); });
+  }
+  function wirePsChips(root, daysOf, parent) {
+    (root || document).querySelectorAll('[data-lp-ps]').forEach(b => {
+      b.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const p = b.getAttribute('data-lp-ps').split('|'), a = ((daysOf(p[0]) || {})[p[1]] || [])[+p[2]];
+        if (a) psOpen(a, parent);
+      });
+      b.addEventListener('keydown', e => e.stopPropagation());   // the card behind it opens the editor on Enter
+    });
+  }
+
   // ── pictures ──────────────────────────────────────────────────────────────
   function scopeParams() { return activeScope === 'centre' ? { centre_id: activeCentreId } : { room_id: activeRoomId }; }
   function picUrl(a) { return (a && (a.thumb_url || a.image_url || a.image)) || ''; }
@@ -907,6 +941,7 @@
     grid.querySelectorAll('.kt-add-activity').forEach(b => b.addEventListener('click', () => {
       openActivityDialog(b.dataset.day, -1);
     }));
+    wirePsChips(grid, () => currentPlan.days, false);
     grid.querySelectorAll('.kt-activity-tap').forEach(card => {
       const open = () => openActivityDialog(card.dataset.day, parseInt(card.dataset.idx, 10));
       card.addEventListener('click', open);
@@ -967,6 +1002,7 @@
         ${domain ? `<span class="lp-dom lp-dom-sm" style="--c:${domain.c}">${esc(domain.l)}</span>` : ''}
         ${(a.foundations || []).length ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0 0;">${fndChips(a)}</div>` : ''}
         ${notes ? `<div class="lp-notes">${esc(notes)}</div>` : ''}
+        ${psChip(a, day, idx, 'staff')}
       </div>
     `;
   }
@@ -1150,14 +1186,24 @@
     container.innerHTML = '<div style="padding:24px;max-width:1800px;"><h2 style="font-size:24px;margin:0 0 16px;">📚 This Week\'s Activities</h2><div id="kt-kids-plans"></div></div>';
     const mount = $('#kt-kids-plans', container);
 
+    const PARENT_PLANS = {};
     for (const child of kids) {
       try {
         const plan = await api('GET', '/parent/lesson-plan/' + child.id);
+        PARENT_PLANS[child.id] = (plan.plan && plan.plan.days) || {};
         mount.insertAdjacentHTML('beforeend', parentPlanCard(child, plan));
       } catch (e) {
         mount.insertAdjacentHTML('beforeend', `<div style="background:white;border-radius:12px;padding:18px;margin-bottom:12px;color:#6B7280;">${esc(child.first_name)}: ${esc(e.message)}</div>`);
       }
     }
+    // "🎨 End result" on the activities Play Spark has drawn (families only see ones already drawn).
+    mount.querySelectorAll('[data-lp-ps]').forEach(b => {
+      b.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const p = b.getAttribute('data-lp-ps').split('|'), a = ((PARENT_PLANS[p[0].slice(1)] || {})[p[1]] || [])[+p[2]];
+        if (a) psOpen(a, true);
+      });
+    });
   }
 
   function parentPlanCard(child, plan) {
@@ -1174,7 +1220,7 @@
         ${empty
           ? '<div style="color:#64748B;font-style:italic;">No plan posted yet for this week.</div>'
           : `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;">
-              ${DAYS.map(d => parentDayCard(d, days[d] || [])).join('')}
+              ${DAYS.map(d => parentDayCard(d, days[d] || [], child.id)).join('')}
             </div>`
         }
         ${(!empty && plan.plan && plan.plan.unit && (plan.plan.unit.family || []).length) ? `<div style="margin-top:12px;background:#F0FDFA;border:1px solid #99F6E4;border-radius:10px;padding:10px 12px;font-size:13px;color:#134E4A;">
@@ -1186,13 +1232,13 @@
     `;
   }
 
-  function parentDayCard(day, activities) {
+  function parentDayCard(day, activities, childId) {
     return `
       <div style="background:#F9FAFB;border-radius:8px;padding:10px;">
         <div style="font-weight:700;font-size:12px;color:#6B7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">${DAY_LABELS[day]}</div>
         ${activities.length === 0
           ? '<div style="font-size:12px;color:#D1D5DB;">—</div>'
-          : activities.map(a => {
+          : activities.map((a, ai) => {
               const dom = DOMAINS.find(d => d.v === a.domain);
               const bg = dom ? dom.c + '40' : '#FFF';
               return `<div style="background:${bg};border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:12px;">
@@ -1200,6 +1246,7 @@
                 ${picUrl(a) && a.image_credit_required && a.image_credit ? `<div class="lp-credit">Picture: ${esc(a.image_credit)}</div>` : ''}
                 ${a.time ? `<span style="color:#6B7280;white-space:nowrap;">${esc(fmtTime(a.time))}</span> ` : ''}
                 <strong>${esc(a.title||'')}</strong>
+                ${psChip(a, day, ai, 'p' + childId)}
               </div>`;
             }).join('')
         }
@@ -1270,6 +1317,8 @@
       + '.lp-dcount{margin-left:auto;font-size:11px;font-weight:800;color:#94A3B8}'
       + '.lp-empty{font-size:12.5px;color:#94A3B8;text-align:center;padding:14px 6px;border:1px dashed #E2E8F0;border-radius:9px}'
       + '.lp-act{background:color-mix(in srgb,var(--ac) 16%,#fff);--kt-edge:var(--ac);border-radius:9px;padding:8px 10px;display:flex;flex-direction:column;gap:5px}'
+      + '.lp-ps-chip{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;margin-top:2px;border-radius:12px;border:1px solid rgba(15,23,42,.14);background:rgba(255,255,255,.75);color:#1B2350;font:inherit;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap}'
+      + '.lp-ps-chip:hover{border-color:#FFC531;background:#fff}.lp-ps-wait{cursor:default;opacity:.7;font-weight:700}'
       + '.lp-act.kt-activity-tap{cursor:pointer}.lp-act.kt-activity-tap:hover{box-shadow:0 2px 8px rgba(15,23,42,.08)}'
       + '.lp-act-top{display:flex;align-items:flex-start;gap:7px}'
       + '.lp-time{flex:0 0 auto;font-size:11px;font-weight:800;color:#1F6080;background:#fff;border:1px solid #CFE3EB;border-radius:6px;padding:1px 6px;font-variant-numeric:tabular-nums;white-space:nowrap}'

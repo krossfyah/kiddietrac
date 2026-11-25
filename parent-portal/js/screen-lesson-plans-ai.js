@@ -282,12 +282,13 @@
               '<div style="font-size:16px; font-weight:600; margin-top:4px;">' + esc(d.headline || '') + '</div>' +
               (activities.length > 0 ?
                 '<div style="margin-top:10px; display:grid; gap:8px;">' +
-                  activities.map(function (a) {
+                  activities.map(function (a, ai) {
                     return '<div style="background:' + foundationColor(a.hdlh_foundation) + '; padding:10px; border-radius:8px;">' +
                       '<div style="font-weight:600; font-size:13px;">' + esc(a.title) + (a.duration_min ? ' &middot; ' + a.duration_min + ' min' : '') + '</div>' +
                       '<div style="font-size:13px; line-height:1.5; margin-top:4px;">' + esc(a.description) + '</div>' +
                       ((Array.isArray(a.materials) && a.materials.length > 0) ?
                         '<div style="font-size:11px; color:var(--kt-text-muted); margin-top:4px;">Materials: ' + esc(a.materials.join(', ')) + '</div>' : '') +
+                      '<div data-lpai-ps="' + days.indexOf(d) + '|' + ai + '" style="margin-top:6px"></div>' +
                     '</div>';
                   }).join('') +
                 '</div>' : '') +
@@ -309,6 +310,21 @@
         '</div>' +
         '<div id="kt-save-status" style="margin-top:12px; font-size:13px;"></div>' +
       '</div>';
+
+    /* PLAY SPARK END-RESULT PICTURES (2026-11-24): each drafted activity gets its drawing (finished set-up + steps),
+       started now and keyed by the same words the weekly plan will hold (aiPlanToDays in screen-lesson-plans.js:
+       description + " Materials: ..."), so placing the week in the planner reuses them. */
+    if (window.KT && KT.PlaySparkPic) {
+      step2.querySelectorAll('[data-lpai-ps]').forEach(function (el) {
+        var p = el.getAttribute('data-lpai-ps').split('|'), a = ((days[+p[0]] || {}).activities || [])[+p[1]];
+        if (!a || !String(a.title || '').trim()) return;
+        var notes = String(a.description || '');
+        if (Array.isArray(a.materials) && a.materials.length) notes += (notes ? ' ' : '') + 'Materials: ' + a.materials.join(', ') + '.';
+        var body = { title: String(a.title).trim(), notes: notes.trim(), theme: plan.theme || params.theme || '' };
+        KT.PlaySparkPic.mount(el, function () { return Api.post('/provider/play-spark/lesson-picture', body); },
+          { key: 'l' + body.title + '|' + body.notes, title: body.title, link: true });
+      });
+    }
 
     step2.querySelector('#kt-redo').addEventListener('click', function () {
       step1.style.opacity = '1';

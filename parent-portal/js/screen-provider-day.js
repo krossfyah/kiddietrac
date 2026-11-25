@@ -875,9 +875,30 @@
           + '<div style="font-size:16px;width:22px;text-align:center;">' + (e.brand === 'play-spark'
             ? '<img src="/img/play-spark.svg?v=2" width="18" height="18" alt="Play Spark" style="display:block;margin:1px auto 0;">'
             : (e.icon || '•')) + '</div>'
-          + '<div style="flex:1;min-width:0;"><b style="font-size:13px;">' + esc(e.child || '') + '</b> <span style="font-size:13px;color:#334155;">— ' + esc(e.title || '') + (e.detail ? ' <span style="color:#64748B;">· ' + esc(e.detail) + '</span>' : '') + '</span></div></div>';
+          + '<div style="flex:1;min-width:0;"><b style="font-size:13px;">' + esc(e.child || '') + '</b> <span style="font-size:13px;color:#334155;">— ' + esc(e.title || '') + (e.detail ? ' <span style="color:#64748B;">· ' + esc(e.detail) + '</span>' : '') + '</span>'
+          // Play Spark: the end-result picture of the activity (2026-11-24, KT.PlaySparkPic)
+          + (e.play_spark_id && window.KT && KT.PlaySparkPic ? ' <button type="button" class="ps-pic-link" data-pd-ps="' + e.play_spark_id + '" data-t="' + esc(String(e.title || '').replace(/^Play Spark: /, '')) + '">🎨 End result</button>' : '')
+          + '</div></div>';
       }).join('') + '</div>'
       : '<div style="color:#94A3B8;padding:18px;text-align:center;">Nothing logged on ' + esc(d.date) + '.</div>');
+
+    // 🎨 End result on a Play Spark row: fetch the drawing and show it big (one listener for the whole screen).
+    if (window.KT && KT.PlaySparkPic && !window.__ktPdPsBound) {
+      window.__ktPdPsBound = true;
+      KT.PlaySparkPic.addCss();
+      document.addEventListener('click', function (ev) {
+        var b = ev.target && ev.target.closest && ev.target.closest('[data-pd-ps]');
+        if (!b) return;
+        ev.preventDefault();
+        var id = b.getAttribute('data-pd-ps'), t = b.getAttribute('data-t') || 'Play Spark';
+        var c = KT.PlaySparkPic.cached('i' + id);
+        if (c) { KT.PlaySparkPic.open(c, t); return; }
+        KT.Api.get('/provider/play-spark/ideas/' + id + '/picture').then(function (r) {
+          if (r && r.status === 'ready' && r.svg) { KT.PlaySparkPic.remember('i' + id, r.svg); KT.PlaySparkPic.open(r.svg, t); }
+          else if (KT.toast) KT.toast('🎨', 'Play Spark', r && r.status === 'drawing' ? 'The picture is still being drawn. Try again in a minute.' : 'There is no picture for this one.');
+        }).catch(function (er) { if (KT.toast) KT.toast('🎨', 'Play Spark', (er && er.message) || 'The picture could not open.'); });
+      });
+    }
 
     // Performance analytics + moment-breakdown pie
     var an = d.analytics || {};

@@ -400,6 +400,8 @@ Route::post('/voice/telnyx/webhook/{agency}', [\App\Http\Controllers\Api\VoiceCo
     ->where('agency', '[0-9]+')->middleware('throttle:1200,1,r-grp-698');
 // Signed (session-less) e-document view — a mobile WebView can open this URL directly.
 Route::get('/edoc/{id}/view', [\App\Http\Controllers\Api\EDocumentController::class, 'signedStream'])->name('edoc.signed')->middleware('signed');
+// Play Spark end-result picture as PNG for email (2026-11-24): signed, no sign-in, no personal data in it.
+Route::get('/play-spark/picture/{id}', [\App\Http\Controllers\Api\PlaySparkController::class, 'pngFile'])->name('play-spark.picture.png')->middleware('signed')->whereNumber('id');
 Route::get('/report-card/{id}/view', [\App\Http\Controllers\Api\ParentReportCardController::class, 'signedPdf'])->name('rc.signed')->middleware('signed');
 
 /* The emergency card, openable in the device's own browser so it can be printed —
@@ -1349,6 +1351,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
 
         Route::prefix('parent')->middleware('role:guardian')->group(function () {
             Route::get('/play-spark', [\App\Http\Controllers\Api\PlaySparkController::class, 'parent']);   // Play Spark at home (2026-11-24, AI Bundle)
+            Route::get('/play-spark/picture/{id}', [\App\Http\Controllers\Api\PlaySparkController::class, 'parentPicture'])->whereNumber('id');   // end-result picture (2026-11-24)
+            Route::post('/play-spark/lesson-picture', [\App\Http\Controllers\Api\PlaySparkController::class, 'parentLessonPicture']);
             Route::get('/dashboard', [FamilyController::class, 'parentDashboard']);
             // Report an issue to the centre (2026-10-13).
             Route::get('/issues/options', [\App\Http\Controllers\Api\ParentIssueController::class, 'parentOptions']);
@@ -1482,6 +1486,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/play-spark/materials',          [\App\Http\Controllers\Api\PlaySparkController::class, 'addMaterials']);
             Route::delete('/play-spark/materials/{id}',   [\App\Http\Controllers\Api\PlaySparkController::class, 'removeMaterial'])->whereNumber('id');
             Route::get('/play-spark/report',              [\App\Http\Controllers\Api\PlaySparkController::class, 'report']);
+            // The end-result picture (2026-11-24, App\Support\PlaySparkPicture): an idea's, or a weekly lesson-plan activity's.
+            Route::get('/play-spark/ideas/{id}/picture',  [\App\Http\Controllers\Api\PlaySparkController::class, 'picture'])->whereNumber('id');
+            Route::post('/play-spark/lesson-picture',     [\App\Http\Controllers\Api\PlaySparkController::class, 'lessonPicture']);
             Route::get('/day-brief', [DayBriefController::class, 'brief']);
             Route::get('/day-activity', [DayBriefController::class, 'dayActivity']);
 

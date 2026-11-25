@@ -476,6 +476,8 @@ class ParentDailySummaryCommand extends Command
                         'title' => trim((string) ($p['title'] ?? '')),
                         'areas' => \App\Support\PlaySpark::domainsText($p),
                         'home' => trim((string) ($p['home_idea'] ?? '')),
+                        // The end-result picture as a PNG (mail clients drop SVG); none yet = the block as before.
+                        'pic' => ! empty($p['play_spark_id']) ? \App\Support\PlaySparkPicture::pngUrlForIdea((int) $p['play_spark_id']) : null,
                     ];
                 })
                 ->filter(fn ($p) => $p['title'] !== '')
@@ -995,6 +997,8 @@ class ParentDailySummaryCommand extends Command
                 $body .= '<div class="kt-panel" style="background:#F5F3FF;border:1px solid #DDD6FE;border-radius:12px;padding:13px 15px;margin-bottom:10px;">'
                     . '<div class="kt-h" style="font-size:15px;font-weight:800;color:#1B2350;">' . e($pl['title']) . '</div>'
                     . ($pl['areas'] !== '' ? '<div style="font-size:13px;color:#5B21B6;margin-top:3px;">Learning: ' . e($pl['areas']) . '</div>' : '')
+                    . (! empty($pl['pic']) ? '<img src="' . e($pl['pic']) . '" width="520" alt="The end result and the steps, drawn by Play Spark"'
+                        . ' style="display:block;width:100%;max-width:520px;height:auto;border:1px solid #DDD6FE;border-radius:10px;margin-top:9px;background:#FFFFFF;">' : '')
                     . ($pl['home'] !== ''
                         ? '<div class="kt-panel" style="margin-top:9px;background:#FFFFFF;border:1px solid #EDE9FE;border-radius:9px;padding:8px 10px;'
                             . 'font-size:13.5px;line-height:1.5;color:#334155;"><b class="kt-h" style="color:#0F172A;">🏠 Try it at home:</b> ' . e($pl['home']) . '</div>'

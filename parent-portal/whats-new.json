@@ -1,6 +1,30 @@
 {
-    "updated": "2026-11-24",
+    "updated": "2026-11-25",
     "entries": [
+        {
+            "type": "new",
+            "date": "2026-11-25",
+            "icon": "🎨",
+            "title": "See the play, step by step",
+            "body": "Play Spark activities in your end-of-day email and in Play at home now show a picture of the finished activity and its steps, so you can set up your own at home. It is a drawing, never a photo of your child.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-25",
+            "icon": "🎨",
+            "title": "Play Spark draws the end result",
+            "body": "Every Play Spark idea now comes with a picture: the finished set-up on top and numbered steps underneath, so you can see what it looks like before you start. Tap it to make it bigger. It is saved with the idea, prints with it, and activities on your weekly plan get one too once the plan is saved (tap 🎨 End result). AI Bundle.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
         {
             "type": "improved",
             "date": "2026-11-24",

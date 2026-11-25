@@ -505,12 +505,13 @@ class EducatorDailySummaryCommand extends Command
             $out = [];
             foreach (DB::table('play_spark_runs as r')->join('play_spark_ideas as i', 'i.id', '=', 'r.idea_id')
                 ->where('r.user_id', $uid)->whereBetween('r.done_at', [$start, $end])->orderBy('r.done_at')
-                ->get(['i.title', 'r.child_ids', 'r.done_at']) as $r) {
+                ->get(['i.id', 'i.title', 'r.child_ids', 'r.done_at']) as $r) {
                 $ids = array_values(array_filter(array_map('intval', json_decode((string) $r->child_ids, true) ?: [])));
                 $names = $ids ? DB::table('children')->whereIn('id', $ids)->whereNull('deleted_at')->orderBy('first_name')
                     ->get(['first_name', 'preferred_name'])
                     ->map(fn ($c) => trim((string) (($c->preferred_name ?? '') ?: $c->first_name)))->filter()->values()->all() : [];
-                $out[] = ['title' => (string) $r->title, 'when' => Carbon::parse($r->done_at, 'UTC')->setTimezone($tz)->format('g:i A'), 'children' => $names];
+                $out[] = ['title' => (string) $r->title, 'when' => Carbon::parse($r->done_at, 'UTC')->setTimezone($tz)->format('g:i A'), 'children' => $names,
+                    'pic' => \App\Support\PlaySparkPicture::pngUrlForIdea((int) $r->id)];   // the end-result picture, PNG for mail
             }
             $drafts = $out ? (int) DB::table('observations')->where('recorded_by_id', $uid)->where('shared_with_family', 0)
                 ->whereNull('educator_reviewed_at')->where('title', 'like', 'Play Spark:%')->count() : 0;
@@ -965,6 +966,8 @@ class EducatorDailySummaryCommand extends Command
                     . '<tr><td style="padding:12px 15px;">'
                     . '<div style="font-size:15px;font-weight:800;color:#1B2350;">' . htmlspecialchars($r['title']) . '</div>'
                     . '<div style="font-size:13px;color:#5B21B6;margin-top:3px;">' . htmlspecialchars(trim($r['when'] . ($who !== '' ? ' · with ' . $who : ''), ' ·')) . '</div>'
+                    . (! empty($r['pic']) ? '<img src="' . htmlspecialchars($r['pic']) . '" width="520" alt="The end result and the steps, drawn by Play Spark"'
+                        . ' style="display:block;width:100%;max-width:520px;height:auto;border:1px solid #DDD6FE;border-radius:10px;margin-top:9px;background:#FFFFFF;">' : '')
                     . '</td></tr></table>';
             }
             if ($ps['drafts'] > 0) {
