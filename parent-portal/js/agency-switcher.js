@@ -207,7 +207,7 @@
         '<span class="nav-icon">📄</span><span class="nav-label">Proposals</span></a>' +
       // Every won lead, its services and AR (2026-11-10).
       '<a href="#sales-customers" class="nav-link" data-hash="sales-customers">' +
-        '<span class="nav-icon">🏆</span><span class="nav-label">Customers</span></a>' +
+        '<span class="nav-icon">🥇</span><span class="nav-label">Customers</span></a>' +
       '<a href="#sales-expenses" class="nav-link" data-hash="sales-expenses">' +
         '<span class="nav-icon">🪙</span><span class="nav-label">Expenses</span></a>' +
       '<a href="#sales-campaigns" class="nav-link" data-hash="sales-campaigns">' +

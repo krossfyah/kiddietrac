@@ -42,7 +42,7 @@
     // A hero with its own inline background is deliberate artwork — never paint over it.
     var own = hero.getAttribute('style') || '';
     if (/background/i.test(own)) return;
-    if (hero.querySelector('.kt-hero-svg')) return;
+    if (realDrawing(hero)) return;
     var key = heroTitle(hero);
     if (!key) return;
     hero.style.background = 'var(--kt-hero-grad-' + GRADS[hashIndex(key, GRADS.length)] + ')';
@@ -125,6 +125,17 @@
     }
   }
 
+  // A drawing that IS the banner's art (the Phone handset) - not KT.Illustrations' generic clouds.
+  function realDrawing(hero) {
+    var d = hero.querySelectorAll('.kt-hero-svg');
+    for (var i = 0; i < d.length; i++) {
+      var decor = (window.KT && KT.heroDecor) ? KT.heroDecor(d[i])
+        : !(d[i].hasAttribute('data-kt-art-keep') || (d[i].closest && d[i].closest('.kt-phone-hero, [data-kt-brand]')));
+      if (!decor) return true;
+    }
+    return false;
+  }
+
   function pickEmoji(hero) {
     /* The screen's OWN icon first (2026-10-28 sweep, Anthony: "hero banners in educator view - make sure they are all
        unique"): the sidebar icon for this role, or the shell's table for screens reached from home tiles. Reading the
@@ -178,7 +189,9 @@
       if (mine) existing.textContent = mine;
       return;
     }
-    if (hero.querySelector('.kt-hero-svg')) return;
+    /* A generic decorative drawing (clouds and stars) is not this banner's art (2026-11-25): it gets the same
+       floating screen icon as every other banner. kt-banner-normalize hides the drawing (KT.heroDecor). */
+    if (realDrawing(hero)) return;
     var e = doc.createElement('div');
     e.className = 'kt-hero-emoji';
     e.setAttribute('aria-hidden', 'true');

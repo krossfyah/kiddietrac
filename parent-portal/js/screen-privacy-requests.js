@@ -249,7 +249,7 @@
 
   async function render(main) {
     main.setAttribute('data-kt-pretty', '1');
-    var head = '<div class="kt-page-hero"><h2>📬 Privacy requests</h2><p>Requests to see, correct or delete personal information, or to withdraw consent. '
+    var head = '<div class="kt-page-hero"><h2>📥 Privacy requests</h2><p>Requests to see, correct or delete personal information, or to withdraw consent. '
       + 'PIPEDA gives 30 days to answer; a missed deadline counts as a refusal.</p></div>';
     if (!main.querySelector('[data-pr-root]')) main.innerHTML = '<div class="kt-section" data-pr-root>' + head + '<p style="color:#64748B;font-size:13px;">Loading…</p></div>';
     var data;

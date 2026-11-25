@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-25",
+            "icon": "🎈",
+            "title": "Every banner has its moving picture",
+            "body": "Families, Children, Users, Centres and the agency overview now show the same floating, gently moving icon on their banner as every other screen. Privacy requests (📥) and Customers (🥇) also got their own icons, so no two screens in the menu share one.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-25",
             "icon": "💬",
             "title": "No more \"Saved\" when you close a chat",
             "body": "Taking a conversation off your chat list, restoring it, website-chat actions and marking an announcement read no longer flash \"Saving… Saved\". The Saved message now only appears when you actually change a setting or save something.",

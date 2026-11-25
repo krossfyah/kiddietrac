@@ -22,6 +22,12 @@ use Illuminate\Console\Command;
  *   3. no stylesheet sets `animation: none` on a banner class outside @media (prefers-reduced-motion);
  *   4. each banner class (.kt-hero, .kt-page-hero, .page-header-v17, .kt-banner-fx) still has a
  *      kt-hero-breathe rule.
+ *   5. EVERY BANNER HAS ITS FLOATING ART (2026-11-25, Anthony: "some hero banners such as the families section
+ *      lack the animated hero animation image compared to the rest"). Families, Children, Users, Centres and
+ *      the agency overview drew a generic clouds drawing or carried a logo in the title row, and both art paths
+ *      stood down for them. Guarded: kt-hero-emoji.js must not skip a banner just because it holds a
+ *      .kt-hero-svg (only a real drawing, realDrawing()), and kt-banner-normalize.js must treat the generic
+ *      drawing as decoration (isDecor) and count only FLOATING pictures as the banner's art.
  * Runtime confirmation (every screen, every role): tools/banner-sweep.mjs (headless Chrome, own profile).
  * Nightly; exit 1 + email to the platform admins when anything is found.
  */
@@ -53,6 +59,13 @@ class KtBannerShimmerCheck extends Command
                     }
                 }
                 continue;
+            }
+            // 5: the floating art paths (see the class comment).
+            if ($name === 'kt-hero-emoji.js' && preg_match('/querySelector\(\s*[\x27"]\.kt-hero-svg[\x27"]\s*\)\s*\)\s*return/', $src)) {
+                $found['Banners left without floating art'][] = $name . ': skips every banner holding a .kt-hero-svg drawing (use realDrawing())';
+            }
+            if ($name === 'kt-banner-normalize.js' && (strpos($src, 'function isDecor') === false || strpos($src, 'illus = illus.filter(floats)') === false)) {
+                $found['Banners left without floating art'][] = $name . ': generic drawings / in-flow logos count as the banner art again (isDecor + floats filter missing)';
             }
             // White-label banners: branding-loader must keep the shimmer's 200% size (it set `auto` until 2026-11-24).
             if ($name === 'branding-loader.js' && preg_match('/HERO_SEL\s*\+\s*.\{[^\n]*?background-size:\s*auto/', $src)) {

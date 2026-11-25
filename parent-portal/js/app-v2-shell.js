@@ -406,7 +406,7 @@
           { hash: 'household',        label: 'Household residents', icon: '🛋️' },
           { hash: 'audit-logs',       label: 'Audit log',        icon: '📜' },
           { hash: 'privacy-breaches', label: 'Privacy breaches', icon: '🔓' },   // PIPEDA breach register (2026-11-06)
-          { hash: 'privacy-requests', label: 'Privacy requests', icon: '📬' },   // PIPEDA s. 8 access / correction requests (2026-11-10)
+          { hash: 'privacy-requests', label: 'Privacy requests', icon: '📥' },   // PIPEDA s. 8 access / correction requests (2026-11-10)
           { hash: 'photo-permissions', label: 'Photo permissions', icon: '🤳' },  // per-child photo consent (2026-11-06)
           { hash: 'closures',         label: 'Closures',         icon: '🚫' },
           { hash: 'room-ratios',      label: 'Room ratios',      icon: '⚖️' },
@@ -726,7 +726,7 @@
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'sales-leads',     label: 'Leads',           icon: '🎯' },
           { hash: 'sales-quotes',    label: 'Proposals',       icon: '📄' },
-          { hash: 'sales-customers', label: 'Customers',       icon: '🏆' },   // every won lead, its services (2026-11-10)   // every proposal, stats + charts (2026-10-24)
+          { hash: 'sales-customers', label: 'Customers',       icon: '🥇' },   // every won lead, its services (2026-11-10)   // every proposal, stats + charts (2026-10-24)
           { hash: 'sales-expenses',  label: 'Expenses',        icon: '🪙' },   // their own expenses, for approval (2026-10-24)
           { hash: 'sales-campaigns', label: 'Campaigns',       icon: '📣' },   // intro emails to prospects, tracked (2026-10-26)
           { hash: 'sales-email',     label: 'Sales email',     icon: '📮' },   // the shared sales@ mailbox (2026-10-26)

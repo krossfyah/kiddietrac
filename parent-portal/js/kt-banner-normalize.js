@@ -268,8 +268,9 @@
     //    the banner — known classes, real illustrations, and stray custom
     //    absolutely-positioned emoji — then keep one (preferring an illustration)
     //    and hide the rest. This fixes banners that showed DOUBLE floating art.
+    retireDecor(banner);
     var illus = [].slice.call(banner.querySelectorAll('.kt-hero-svg, img:not(.kt-hero-brandmark), svg'))
-      .filter(function (el) { return !(el.closest && el.closest('[data-kt-brandart]')); });
+      .filter(function (el) { return !(el.closest && el.closest('[data-kt-brandart]')) && !isDecor(el); });
     var emojiArt = [].slice.call(banner.querySelectorAll('.kt-hero-emoji, .kt-banner-art'));
     var nodes = banner.querySelectorAll('div, span');
     for (var i = 0; i < nodes.length && i < 60; i++) {
@@ -283,9 +284,21 @@
         }
       } catch (ex) {}
     }
+    /* Only FLOATING pictures are banner art (2026-11-25). The agency overview's logo sits in the title row, in the
+       flow of the text; counting it as "the illustration" hid that banner's floating 🏠, so it was the one banner
+       on the screen list with no moving art. An in-flow logo still keeps the title free of a second icon (below). */
+    var floats = function (el) {
+      for (var n = el; n && n !== banner; n = n.parentElement) {
+        var p = getComputedStyle(n).position;
+        if (p === 'absolute' || p === 'fixed') return true;
+      }
+      return false;
+    };
+    var inFlow = illus.filter(function (el) { return !floats(el); });
+    illus = illus.filter(floats);
     var art = illus.concat(emojiArt);
-    // A real illustration/logo (an <img>/<svg>, e.g. the agency-overview banner) carries
-    // its own identity — those keep their logo and are exempt from the emoji treatment.
+    // A real floating illustration (an <img>/<svg>: the Phone handset, brand art) carries
+    // its own identity — those keep it and are exempt from the emoji treatment.
     var hasIllustration = illus.length > 0;
     var iconEmoji = null;
     if (art.length > 0) {
@@ -321,7 +334,7 @@
     //    icon; others (Support tickets, Reports...) had both — this makes them all alike.
     //    Added as a separate text node so it survives translation and never clobbers the
     //    title's own child nodes (breadcrumbs, <strong>, etc.).
-    if (iconEmoji && !hasIllustration) {
+    if (iconEmoji && !hasIllustration && !inFlow.length) {
       var titleEl = banner.querySelector('h1, h2');
       // A title that hard-codes a DIFFERENT emoji takes the screen's own, so the title icon and the art agree.
       if (titleEl && iconEmoji && startsWithEmoji((titleEl.textContent || '').replace(/^\s+/, ''))) {
@@ -338,6 +351,35 @@
       }
     }
   }
+
+  /* DECORATIVE DRAWINGS ARE NOT THE BANNER'S ART (2026-11-25, Anthony: "some hero banners such as the families
+     section lack the animated hero animation image compared to the rest - full sweep").
+     Agency overview, the director's dashboard and screen-admin's tabHero banners (Centres, Users, Families) plus
+     Children drew KT.Illustrations' generic clouds-and-stars (.kt-hero-svg). On a desktop that drawing is squeezed
+     to 62px at .48 opacity (kt-consistency-polish 9b) - a faint smudge - and its presence made BOTH art paths stand
+     down: kt-hero-emoji.js skipped any banner with a drawing, and normalize() kept the drawing as "the
+     illustration". So those banners were the only ones without the big floating screen icon. The phone-only
+     fix below (10-28) papered over it on phones alone.
+     A generic drawing now counts as decoration: it is hidden and the banner gets the same floating screen-icon art
+     as every other banner, at every width. A drawing that IS the banner's identity is still kept: the Phone
+     screen's handset (.kt-phone-hero), brand art, and anything marked data-kt-art-keep. */
+  function isDecor(el) {
+    // The drawing's holder, or anything inside it (its <svg>): the inner svg must not count as an illustration.
+    var d = el && el.closest ? el.closest('.kt-hero-svg') : null;
+    if (!d) return false;
+    if (d.hasAttribute('data-kt-art-keep')) return false;
+    return !d.closest('.kt-phone-hero, [data-kt-brand]');
+  }
+  function retireDecor(banner) {
+    [].forEach.call(banner.querySelectorAll('.kt-hero-svg'), function (el) {
+      if (isDecor(el) && !el.hasAttribute('data-kt-decor')) {
+        el.setAttribute('data-kt-decor', '1');
+        el.style.setProperty('display', 'none', 'important');
+      }
+    });
+  }
+  w.KT = w.KT || {};
+  w.KT.heroDecor = isDecor;   // kt-hero-emoji.js asks the same question
 
   /* PHONE ART FOR DRAWING-ONLY BANNERS (2026-10-28, Anthony: "check all hero banners in mobile view as some do
      not have the animating image floating - full sweep"). Swept all 156 screens at 392px: six banners (Agency
@@ -361,14 +403,19 @@
       if (b.hasAttribute('data-kt-art-checked')) continue;
       if (!b.querySelector('.kt-hero-svg')) continue;
       b.setAttribute('data-kt-art-checked', '1');
+      retireDecor(b);
       if (b.querySelector('.kt-hero-emoji, .kt-banner-art, [data-kt-brandart]')) continue;
+      // A drawing that is the banner's own art (the handset) still shows on a desktop: phones only, as before.
+      var keepsDrawing = !!b.querySelector('.kt-hero-svg:not([data-kt-decor])');
       var t = b.querySelector('h1, h2');
       var nav = document.querySelector('#appSidebar .active, #appSidebar [aria-current="page"], .nav-item.active');
-      var emoji = firstEmoji(t && t.textContent) || firstEmoji(nav && nav.textContent) || '🏢';
+      var own = '';
+      try { own = (w.KT && KT.Shell && KT.Shell.screenIcon) ? KT.Shell.screenIcon() : ''; } catch (e) { own = ''; }
+      var emoji = own || firstEmoji(t && t.textContent) || firstEmoji(nav && nav.textContent) || '🏢';
       var el = document.createElement('div');
       el.className = 'kt-banner-art';
       el.setAttribute('aria-hidden', 'true');
-      el.setAttribute('data-kt-art-phone', '1');
+      if (keepsDrawing) el.setAttribute('data-kt-art-phone', '1');
       el.textContent = emoji;
       if (getComputedStyle(b).position === 'static') b.style.position = 'relative';
       b.appendChild(el);
