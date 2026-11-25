@@ -48,8 +48,7 @@ class NotificationPrefsController extends Controller
             'label' => 'Safe Arrival alerts',
             'hint' => 'When a child has not arrived or been picked up as expected, the parents\' answers, and the all-clear. Room educators are always told.',
             'channels' => ['push', 'email', 'sms', 'voice'],
-            'for' => 'staff',
-            'roles' => ['agency_admin', 'centre_director'],
+            'roles' => ['agency_admin', 'centre_director'],   // audience: NotifyAudience::PREF_EVENTS
         ],
     ];
 

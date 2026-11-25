@@ -57,7 +57,7 @@ class KtLeakSweep extends Command
         Also the platform's own alerts (this sweep and kt:integrity-check), which name the
         closed records BY DESIGN — counting them made every sweep re-find the previous
         day's alert and raise a CRITICAL forever (2026-10-13). */
-    public const LEGIT_MAIL = '/^\[KiddieTrac\] (Leak sweep|Data check)|leaving|de-?enrol|depart|off-?board|statement|receipt|invoice|refund|credit note|final|closed account|access (has been )?(paused|closed)|your records|withdraw|provider closed/i';
+    public const LEGIT_MAIL = '/^\[KiddieTrac\] (Leak sweep|Data check)|leaving|de-?enrol|depart|off-?board|statement|receipt|invoice|refund|credit note|final|closed account|access (has been )?(paused|closed)|your records|withdraw|provider closed|needs? a new home/i';
 
     private const PATHS = '#(roster|attendance|children|child|centres|centre|provider|staff|educator|famil|dashboard|today|ratio|check|report|summary|digest|people|users|directory|enrol|room|immuni|allerg|medic|birthday|safe|absence|closure|calendar|home|overview|stats|count|zone|late|pickup|option)#i';
     private const SKIP = '#(export|download|pdf|csv|xlsx|file|photo|avatar|image|logo|qr|ical|\.ics|stream|poll|callback|webhook|unsubscribe|oauth|google|track|pixel|preview|print|zip|backup|signed|token|logout|impersonat)#i';
@@ -243,7 +243,10 @@ class KtLeakSweep extends Command
        have LEFT under "deactivations" so iLearn can close them; a home provider is named like
        her closed centre, so the departure notice read as a leak. The current part is still checked. */
     // recent_events / activity: a feed of what already happened (the platform overview's audit feed names a centre the day it closes). 2026-11-12
-    public const HISTORICAL_KEYS = '/^(archived(_[a-z_]+)?|departures?|departed(_[a-z_]+)?|deactivations?|history|leaving(_[a-z_]+)?|recent_events|activity(_feed)?)$/i';
+    /* + previous_centre_name / previous_name (2026-11-25, support ticket #266): a family held on the agency waitlist after
+       its provider closed (AgencyWaitlist, #251) shows "Waitlisted · unassigned" as its provider and the closed one
+       ONLY under these keys, which by name are the past. */
+    public const HISTORICAL_KEYS = '/^(archived(_[a-z_]+)?|departures?|departed(_[a-z_]+)?|deactivations?|history|leaving(_[a-z_]+)?|recent_events|activity(_feed)?|previous_centre_name|previous_name)$/i';
 
     public static function withoutHistoricalFields(string $body): string
     {
@@ -271,6 +274,9 @@ class KtLeakSweep extends Command
             if (! is_array($v)) return $v;
             foreach ($v as $k => $x) {
                 if (is_string($k) && preg_match(self::HISTORICAL_KEYS, $k)) { unset($v[$k]); continue; }
+                /* An agency waitlist entry made BY a closure (#266) says which provider closed in its notes: that is why the
+                   family is waiting. Only those notes are skipped; the rest of the entry is still checked. */
+                if (is_array($x) && ($x['source'] ?? null) === \App\Support\AgencyWaitlist::SOURCE_CLOSURE) { unset($x['notes']); }
                 if (is_int($k) && $past($x)) { unset($v[$k]); continue; }
                 $v[$k] = $strip($x);
             }

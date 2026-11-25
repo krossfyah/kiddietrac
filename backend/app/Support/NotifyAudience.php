@@ -113,6 +113,7 @@ final class NotifyAudience
     /** "Notify me about…" events (NotificationPrefsController::EVENTS) => audience. */
     public const PREF_EVENTS = [
         'check_in_out' => 'family', 'daily_moments' => 'family', 'learning_observations' => 'family', 'photos_videos' => 'family',
+        'safe_arrival' => 'staff',   // directors and admins choose their Safe Arrival channels (2026-11-24; mapped here 2026-11-25, ticket #268)
     ];
 
     public static function ofType(?string $type): string

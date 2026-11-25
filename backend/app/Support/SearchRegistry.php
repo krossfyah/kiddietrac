@@ -190,6 +190,9 @@ final class SearchRegistry
         'sign_in_lock_exceptions' => 'one person let in past a centre sign-in lock, shown on that lock and on their page; never surfaced in a global box',
         'sign_in_locks' => 'a pause on sign-in for a person, a centre or an agency, worked on Locked sign-ins by agency admins only; never surfaced in a global box',
         'privacy_requests' => 'a person\'s request to see, correct or delete their information (PIPEDA s. 8), worked on Privacy requests by agency admins only; never surfaced in a global box',
+        // 2026-11-25 (ticket #267)
+        'temp_pickups' => 'a temporary pickup person (name, phone, photo, pass code) for one family, shown on that child\'s record and emergency card and checked at sign-out; never surfaced in a global box',
+        'phone_reports' => 'a parent\'s phone message about an absence or late arrival (recording and transcript), approved in Safe Arrival by directors and admins only; never surfaced in a global box',
     ];
 
     /** Primary types that SHOULD become searchable. Reported every night so they are not forgotten. */
@@ -211,6 +214,7 @@ final class SearchRegistry
         'background_checks' => 'Background checks: by staff',
         'observations' => 'Observations: by child',
         'lesson_plans' => 'Lesson plans: by title',
+        'play_spark_ideas' => 'Play Spark ideas: by title (2026-11-25, ticket #267; the Library tab filters its own list)',
         'medications' => 'Medications: by child / medication',
         'field_trips' => 'Field trips: by name / date',
         'report_cards' => 'Report cards: by child',
@@ -260,6 +264,11 @@ final class SearchRegistry
         'announcement_user_state' => 'each person read / archived / deleted state for News items; the announcement itself is the record',
         'email_person_links' => 'which mailbox email is linked to which person (PersonMail; subject and preview sealed); shown on the person or family record Emails tab, never in a global box',
         'safe_arrival_late' => 'Safe Arrival running-late notices (SafeArrival::logLate); shown on the room and the child that day, not a record people look up',
+        // 2026-11-25 (ticket #267)
+        'temp_pickup_uses' => 'each time a temporary pickup pass was used at sign-out (TempPickups); shown on that pass, never a record people look up',
+        'play_spark_materials' => 'the materials a room has on hand, offered as choices on Play Spark; a list, not a record',
+        'play_spark_runs' => 'Play Spark "We did it" ledger: which children did an idea and the day entries it wrote; the entries show on each child\'s day',
+        'play_spark_pictures' => 'Play Spark end-result drawings (PlaySparkPicture), shown with their idea or lesson activity; never a record people look up',
     ];
 
     public const BASELINE_FILE = 'resources/kt/search-table-baseline.txt';
