@@ -151,6 +151,7 @@
     if (q.tab === 'new') q.tab = 'now';
     if (q.tab && has(q.tab)) S.tab = q.tab;
     if (q.lib) S.libScope = q.lib;
+    if (q.idea && /^\d+$/.test(q.idea)) S.openIdeaId = +q.idea;   // a link from the top search (2026-11-25)
     if (!has(S.tab)) S.tab = tabs.length ? tabs[0][0] : '';
     var ai = aiOn();
     var w = document.createElement('div'); w.className = 'ps-wrap'; w.setAttribute('data-kt-noband', '1'); w.setAttribute('data-kt-nosechead', '1'); main.appendChild(w);   // own chips, not tab bands
@@ -605,6 +606,16 @@
           o.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
       });
+      /* Opened from the top search: show that idea under the list (from the list, or fetched if it is older). */
+      if (S.openIdeaId) {
+        var want = S.openIdeaId; S.openIdeaId = null;
+        var hit = rows.filter(function (x) { return x.id === want; })[0];
+        var o2 = el.querySelector('[data-open]');
+        var put = function (row) { S.ack = false; showIdea(o2, row, main); o2.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+        if (hit) put(hit);
+        else Api.get('/provider/play-spark/ideas/' + want).then(function (x) { if (x && x.idea) put(x.idea); })
+          .catch(function (e) { toast(errMsg(e), 'error'); });
+      }
     } catch (e) { el.innerHTML = '<div class="ps-card ps-empty">' + esc(errMsg(e)) + '</div>'; }
   }
 

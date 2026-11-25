@@ -1481,6 +1481,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/play-spark/scan',               [\App\Http\Controllers\Api\PlaySparkController::class, 'scan']);
             Route::post('/play-spark/{id}/done',          [\App\Http\Controllers\Api\PlaySparkController::class, 'done'])->whereNumber('id');
             Route::get('/play-spark/ideas',               [\App\Http\Controllers\Api\PlaySparkController::class, 'ideas']);
+            Route::get('/play-spark/ideas/{id}',          [\App\Http\Controllers\Api\PlaySparkController::class, 'show'])->whereNumber('id');   // one idea, for a search link (2026-11-25)
             Route::patch('/play-spark/ideas/{id}',        [\App\Http\Controllers\Api\PlaySparkController::class, 'update'])->whereNumber('id');
             Route::delete('/play-spark/ideas/{id}',       [\App\Http\Controllers\Api\PlaySparkController::class, 'destroy'])->whereNumber('id');
             Route::post('/play-spark/materials',          [\App\Http\Controllers\Api\PlaySparkController::class, 'addMaterials']);

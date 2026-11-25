@@ -2,6 +2,18 @@
     "updated": "2026-11-25",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-25",
+            "icon": "✨",
+            "title": "Find Play Spark ideas in search",
+            "body": "Type part of an idea's name in the top search box to find it: your own Play Spark ideas and the ones shared to your agency library, for the centres you look after. Tap one to open it in Play Spark.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-25",
             "icon": "🎨",

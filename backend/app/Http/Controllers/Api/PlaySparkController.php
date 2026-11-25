@@ -373,6 +373,29 @@ class PlaySparkController extends Controller
         return response()->json(['ideas' => $rows->map(fn ($r) => $this->row($r, $request))->values()]);
     }
 
+    /** GET provider/play-spark/ideas/{id} (2026-11-25): one idea, for a link from the top search. The same rule as the
+        Library: your own idea, or one shared to the agency library from a centre you see (Visibility::centreIds; an
+        agency-wide idea only for agency admins). Fails closed. */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $a = $this->agency($request);
+        if ($r = $this->gate($a)) {
+            return $r;
+        }
+        $idea = DB::table('play_spark_ideas')->where('id', $id)->where('agency_id', $a)->whereNull('deleted_at')->first();
+        abort_unless($idea, 404, 'That idea is no longer there.');
+        if ((int) $idea->user_id !== (int) $request->user()->id) {
+            $centres = array_map('intval', Visibility::centreIds($a, $request->user()) ?: []);
+            $ok = (int) $idea->shared === 1 && ($idea->centre_id
+                ? in_array((int) $idea->centre_id, $centres, true)
+                : DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
+                    ->where(fn ($q) => $q->where(fn ($q2) => $q2->where('agency_id', $a)->where('role', 'agency_admin'))->orWhere('role', 'platform_admin'))->exists());
+            abort_unless($ok, 404, 'That idea is no longer there.');
+        }
+
+        return response()->json(['idea' => $this->row($idea, $request)]);
+    }
+
     /** PATCH provider/play-spark/ideas/{id}  {favourite?, rating?, shared?} */
     public function update(Request $request, int $id): JsonResponse
     {

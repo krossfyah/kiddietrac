@@ -571,6 +571,10 @@ Schedule::command('kt:photo-consent-check')->dailyAt('05:50')->timezone('America
 Schedule::command('kt:signature-pad-check --quiet-ok')->dailyAt('05:55')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
 // Every notification kind says who it is for; no staff-only alert reaches a parent (2026-11-06, NotifyAudience).
 Schedule::command('kt:notify-audience-check --quiet-ok')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+// ONE-OFF (2026-11-25, Anthony): resolve tickets #266-#268 only if their checks passed this morning (KtCloseCheckTickets).
+// Runs on 2026-11-26 only; delete this line and the command after that day.
+Schedule::command('kt:close-check-tickets')->dailyAt('06:15')->timezone('America/Toronto')
+    ->when(fn () => now('America/Toronto')->toDateString() === '2026-11-26')->withoutOverlapping(30)->onOneServer();
 // Every staff child list holds the children that person looks after; enrolment counts agree (2026-11-09).
 Schedule::command('kt:child-scope-check --quiet-ok')->dailyAt('05:55')->timezone('America/Toronto')->withoutOverlapping(20)->onOneServer();
 // Each role sees only its own screens: admin routes guarded, deny list, one tile badge (2026-11-06 role sweep).

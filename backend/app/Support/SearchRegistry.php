@@ -77,6 +77,13 @@ final class SearchRegistry
             'scope' => 'active non-guardian role at the agency (admins) or the caller\'s centres',
             'link' => '#admin-users?user={id}',
         ],
+        'play_spark_ideas' => [
+            'label' => 'Play Spark ideas', 'icon' => '✨', 'limit' => 5, 'tables' => ['play_spark_ideas'],
+            'billing' => false, 'feature' => null,   // the AI Bundle is checked in srcPlaySparkIdeas (AiBundle::on), fail closed
+            'matches' => 'idea title',
+            'scope' => 'active agency, AI Bundle on; the caller\'s own ideas, plus ideas shared to the agency library from a centre the caller sees (CentreScope via Visibility::centreIds; agency-wide ideas for agency admins only). Search is admins and directors only; never parents',
+            'link' => '#play-spark?tab=library&lib=mine|shared&idea={id}',
+        ],
         'parents' => [
             'label' => 'Parents', 'icon' => '👨‍👩‍👧', 'limit' => 6, 'tables' => ['users', 'guardians'],
             'billing' => false, 'feature' => null,
@@ -214,7 +221,6 @@ final class SearchRegistry
         'background_checks' => 'Background checks: by staff',
         'observations' => 'Observations: by child',
         'lesson_plans' => 'Lesson plans: by title',
-        'play_spark_ideas' => 'Play Spark ideas: by title (2026-11-25, ticket #267; the Library tab filters its own list)',
         'medications' => 'Medications: by child / medication',
         'field_trips' => 'Field trips: by name / date',
         'report_cards' => 'Report cards: by child',

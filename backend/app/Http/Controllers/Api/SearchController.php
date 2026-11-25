@@ -125,6 +125,7 @@ final class SearchController extends Controller
             'agencyId' => $agencyId,
             'centreIds' => $centreIds,
             'wholeAgency' => $wholeAgency,
+            'userId' => (int) $user->id,
             // Families on the agency waitlist after their provider closed: agency admins still find them (2026-11-24).
             'held' => $wholeAgency ? (\App\Support\AgencyWaitlist::familyIds($agencyId) ?: []) : [],
             'refs' => RefCode::searchIds($q, $agencyId) ?? [],
@@ -203,6 +204,39 @@ final class SearchController extends Controller
             ->limit($meta['limit'])->get()
             ->map(fn ($r) => ['id' => $r->id, 'label' => $r->name, 'sublabel' => 'Room', 'hash' => '#admin-centres', 'rank' => (int) $r->rk])
             ->all();
+    }
+
+    /* Play Spark ideas by title (2026-11-25). Exactly what the caller's Play Spark Library shows them (their own ideas
+       and the agency library), narrowed to the centres they see: a director never finds an idea shared from another
+       centre, and an idea with no centre is agency-wide, for agency admins only. No AI Bundle = no group. Fails closed. */
+    private function srcPlaySparkIdeas(object $ctx, array $meta): array
+    {
+        if (! $ctx->nameSearch || ! $ctx->userId || ! \App\Support\AiBundle::on($ctx->agencyId)) return [];
+        $centres = $ctx->centreIds;
+        [$rk, $b] = $this->rankExpr(['i.title'], $ctx->q);
+        return DB::table('play_spark_ideas as i')
+            ->leftJoin('users as u', 'u.id', '=', 'i.user_id')
+            ->where('i.agency_id', $ctx->agencyId)->whereNull('i.deleted_at')
+            ->where('i.title', 'LIKE', $ctx->term)
+            ->where(function ($w) use ($ctx, $centres) {
+                $w->where('i.user_id', $ctx->userId)
+                  ->orWhere(function ($s) use ($ctx, $centres) {
+                      $s->where('i.shared', 1)->where(function ($c) use ($ctx, $centres) {
+                          $c->whereIn('i.centre_id', $centres ?: [0]);
+                          if ($ctx->wholeAgency) $c->orWhereNull('i.centre_id');
+                      });
+                  });
+            })
+            ->selectRaw('i.id, i.title, i.user_id, i.shared, u.first_name, ' . $rk . ' as rk', $b)
+            ->orderBy('rk')->orderByDesc('i.id')
+            ->limit($meta['limit'])->get()
+            ->map(function ($r) use ($ctx) {
+                $mine = (int) $r->user_id === $ctx->userId;
+                return ['id' => (int) $r->id, 'label' => $r->title,
+                    'sublabel' => 'Play Spark · ' . ($mine ? 'my idea' : 'agency library' . ($r->first_name ? ', by ' . $r->first_name : '')),
+                    'hash' => '#play-spark?tab=library&lib=' . ($mine ? 'mine' : 'shared') . '&idea=' . (int) $r->id,
+                    'rank' => (int) $r->rk];
+            })->all();
     }
 
     private function srcFamilies(object $ctx, array $meta): array
