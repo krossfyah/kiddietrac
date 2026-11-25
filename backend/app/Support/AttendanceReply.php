@@ -189,16 +189,14 @@ final class AttendanceReply
         ];
     }
 
-    private const TAG = ' (from the email link)';
-
     private static function plainNote(string $n): string
     {
         $n = trim($n);
-        if ($n === 'Reported from the email link.') {
+        if (preg_match('/^Reported from the (email link|text reply)\.$/', $n)) {
             return '';
         }
 
-        return str_ends_with($n, self::TAG) ? substr($n, 0, -strlen(self::TAG)) : $n;
+        return preg_replace('/ \(from the (email link|text reply)\)$/', '', $n);
     }
 
     /** Everything the public page may show: the child's first name, the centre, today, what is on file. */
@@ -256,7 +254,7 @@ final class AttendanceReply
         if ($state !== 'ok') {
             return [false, self::stateMessage($state)];
         }
-        $lock = Cache::lock('attendance-reply:' . $link->id, 15);
+        $lock = Cache::lock('attendance-reply:child:' . $link->child_id, 15);
         if (! $lock->get()) {
             return [false, 'Still saving your last answer. Please try again in a moment.'];
         }
@@ -267,8 +265,41 @@ final class AttendanceReply
         }
     }
 
+    /**
+     * The same answer from somewhere other than an email link (2026-11-25: a reply to the Safe Arrival / check-in
+     * reminder TEXT, App\Support\SmsAttendance). $via names it in the note and the audit ("text reply").
+     *
+     * @return array{0:bool,1:string}
+     */
+    public static function answer(int $agencyId, int $childId, int $guardianId, string $action, ?string $reason, ?string $note, ?string $by, string $via): array
+    {
+        $ctx = (object) ['id' => null, 'agency_id' => $agencyId, 'child_id' => $childId, 'guardian_user_id' => $guardianId,
+            'for_date' => AgencyTime::today($agencyId), 'via' => $via];
+        if (! self::kid($ctx)) {
+            return [false, self::stateMessage('gone')];
+        }
+        $lock = Cache::lock('attendance-reply:child:' . $childId, 15);
+        if (! $lock->get()) {
+            return [false, 'Still saving your last answer. Please try again in a moment.'];
+        }
+        try {
+            return self::applyLocked($ctx, $action, $reason, $note, $by);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /** Signed in today? The time (g:i A), or null. */
+    public static function arrivedToday(int $agencyId, int $childId): ?string
+    {
+        return self::arrivedAt((object) ['agency_id' => $agencyId, 'child_id' => $childId, 'for_date' => AgencyTime::today($agencyId)],
+            AgencyTime::tz($agencyId) ?: 'America/Toronto');
+    }
+
     private static function applyLocked(object $link, string $action, ?string $reason, ?string $note, ?string $by): array
     {
+        $via = (string) ($link->via ?? 'email link');
+        $tag = ' (from the ' . $via . ')';
         $agencyId = (int) $link->agency_id;
         $childId = (int) $link->child_id;
         $uid = (int) $link->guardian_user_id;
@@ -288,7 +319,7 @@ final class AttendanceReply
         if ($action === 'absent') {
             $reason = in_array($reason, self::REASONS, true) ? $reason : 'other';
             $req = Request::create('/api/v1/parent/absences', 'POST', ['child_id' => $childId, 'reason' => $reason,
-                'note' => $note !== '' ? $note . self::TAG : 'Reported from the email link.', 'date' => $date]);
+                'note' => $note !== '' ? $note . $tag : 'Reported from the ' . $via . '.', 'date' => $date]);
             $req->setUserResolver(fn () => $user);
             $req->headers->set('X-Active-Agency-Id', (string) $agencyId);
             $res = app(AbsenceController::class)->store($req);
@@ -304,7 +335,7 @@ final class AttendanceReply
             }
             self::touch($link, 'absent');
             self::audit($agencyId, $uid, 'attendance_reply.absent', $childId,
-                "{$first} reported absent today ({$date}) from the email link" . ' - ' . ucfirst($reason) . ($note !== '' ? ': ' . $note : ''));
+                "{$first} reported absent today ({$date}) from the {$via}" . ' - ' . ucfirst($reason) . ($note !== '' ? ': ' . $note : ''));
 
             return [true, 'Thank you. ' . $first . ' is marked absent today, and the centre has been told.'];
         }
@@ -331,7 +362,7 @@ final class AttendanceReply
                 if ($reopened) {
                     DB::table('safe_arrival_checks')->where('id', $reopened->id)->update([
                         'status' => 'escalated', 'resolution' => null, 'resolved_at' => null, 'updated_at' => now(),
-                        'note' => trim(($reopened->note ? $reopened->note . ' ' : '') . 'Reopened: a parent said running late (email link).'),
+                        'note' => trim(($reopened->note ? $reopened->note . ' ' : '') . 'Reopened: a parent said running late (' . $via . ').'),
                     ]);
                 }
             }
@@ -357,7 +388,7 @@ final class AttendanceReply
         $byLabel = Carbon::parse($date . ' ' . $by, $tz)->format('g:i A');
         self::touch($link, 'late');
         self::audit($agencyId, $uid, 'attendance_reply.late', $childId,
-            "{$first}: running late, here by {$byLabel} (from the email link)" . ($abs ? '; the absence on file was taken back' . ($reopened ? ' and Safe Arrival reopened' : '') : '')
+            "{$first}: running late, here by {$byLabel} (from the {$via})" . ($abs ? '; the absence on file was taken back' . ($reopened ? ' and Safe Arrival reopened' : '') : '')
             . ($note !== '' ? ' - ' . $note : ''));
 
         return [true, 'Thank you. The centre knows ' . $first . ' will be there by ' . $byLabel . '.'];
@@ -365,6 +396,9 @@ final class AttendanceReply
 
     private static function touch(object $link, string $action): void
     {
+        if (empty($link->id)) {
+            return;
+        }
         DB::table('attendance_reply_links')->where('id', $link->id)
             ->update(['last_action' => $action, 'last_action_at' => now(), 'uses' => DB::raw('uses + 1')]);
     }

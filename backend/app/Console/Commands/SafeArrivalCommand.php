@@ -409,6 +409,13 @@ class SafeArrivalCommand extends Command
             . "If they're not coming in today, please tell us in the app (Not attending today). "
             . "If they're on the way, no need to reply.";
 
+        /* The TEXT ends with "Reply 1 if running late, 2 if absent today." (2026-11-25, App\Support\SmsAttendance), in
+           plain GSM-7 words; the push and email keep $body. */
+        $smsBody = function (int $uid, string $phone) use ($agencyId, $row, $name, $at, $body) {
+            $line = \App\Support\SmsAttendance::promptLine($agencyId, $uid, $phone, (int) $row['child_id'], (string) $name, 'safe_arrival_ask');
+
+            return $line === '' ? $body : "{$name} was expected at {$row['centre_name']} around {$at} and hasn't been signed in yet. " . $line;
+        };
         $guardians = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
             ->where('g.family_id', $row['family_id'])->whereNull('u.deleted_at')
             ->get(['u.id', 'u.email', 'u.phone', 'u.first_name', 'u.last_name']);
@@ -432,7 +439,7 @@ class SafeArrivalCommand extends Command
                     // 'checkin_reminder' is the kind of text this is: the agency's and the
                     // person's own switches for it apply inside sendOne.
                     app(\App\Http\Controllers\Api\SmsController::class)
-                        ->sendOne($agencyId, (int) $g->id, (string) $g->phone, $body, 'checkin_reminder');
+                        ->sendOne($agencyId, (int) $g->id, (string) $g->phone, $smsBody((int) $g->id, (string) $g->phone), 'checkin_reminder');
                 }
                 $n++;
             } catch (\Throwable $e) {

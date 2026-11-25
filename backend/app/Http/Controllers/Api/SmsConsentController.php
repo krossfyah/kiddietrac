@@ -370,6 +370,28 @@ final class SmsConsentController extends Controller
             $matched = 'help';
         }
 
+        /* "REPLY 1 RUNNING LATE, 2 ABSENT TODAY" (2026-11-25, App\Support\SmsAttendance). Only an answer to today's
+           prompt from the exact number it was texted to; anything else carries on below into chat as before. */
+        if ($matched === null) {
+            $att = null;
+            try {
+                $att = \App\Support\SmsAttendance::handle($from, $rawText, $agencyId, $onThisPhone);
+            } catch (\Throwable $e) {
+                Log::warning('SMS attendance reply failed; filed as a message', ['from' => $from, 'error' => $e->getMessage()]);
+            }
+            if ($att) {
+                \App\Support\SmsInbound::record((int) $att['agency_id'], $from, $rawText, (int) $att['user_id'], 'attendance', null, $carrier, true);
+                try {
+                    app(\App\Http\Controllers\Api\SmsController::class)
+                        ->sendOne((int) $att['agency_id'], (int) $att['user_id'], $from, (string) $att['reply'], 'checkin_reminder');
+                } catch (\Throwable $e) {
+                    Log::warning('SMS attendance confirmation not sent', ['from' => $from, 'error' => $e->getMessage()]);
+                }
+
+                return null;
+            }
+        }
+
         \App\Support\SmsInbound::record(
             (int) ($agencyId ?: \App\Support\SmsInbound::agencyOfUser($user->id ?? null)),
             $from,

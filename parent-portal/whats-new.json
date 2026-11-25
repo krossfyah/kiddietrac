@@ -4,6 +4,30 @@
         {
             "type": "new",
             "date": "2026-11-25",
+            "icon": "💬",
+            "title": "Parents can answer arrival texts with 1 or 2",
+            "body": "Safe Arrival and morning check-in reminder texts now end with \"Reply 1 if running late, 2 if absent today.\" A reply is recorded exactly like the parent doing it in the app (running late with a time they send back, or absent), the room and directors are told, and the parent gets a confirmation. Anything else they text still reaches you in chat as before.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-25",
+            "icon": "💬",
+            "title": "Reply 1 or 2 to the arrival text",
+            "body": "The text asking whether your child has arrived now ends with \"Reply 1 if running late, 2 if absent today.\" Reply 1 and the centre knows your child is on the way (we then ask what time), or 2 and your child is marked absent. You get a text back confirming it.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-25",
             "icon": "📧",
             "title": "Parents can answer missed-child emails in one tap",
             "body": "Families can now mark a child absent (with a reason and note) or running late (with a time) straight from the Safe Arrival and check-in reminder emails. It is recorded exactly as if they did it in the app: the room and directors are told, Safe Arrival stops chasing, and a running-late answer after a Safe Arrival no-show reopens the check so the child is still looked for. Every answer is in the audit log.",

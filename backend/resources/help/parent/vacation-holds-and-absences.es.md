@@ -46,6 +46,8 @@ Es posible que su centro ofrezca solo algunas de estas opciones y redacte la lla
 
 **Botones en el correo.** Los correos "¿Ya llegó su hijo?" y "Hoy echamos de menos a su hijo" tienen dos botones: **Marcar ausente** (o **Añadir un motivo**) y **Llega tarde** (o **Al final llega tarde**). Cada uno abre una pequeña página solo para su hijo, donde elige un motivo o la hora de llegada y añade una nota si quiere. Se avisa al centro de inmediato, igual que en la aplicación. Los botones solo funcionan el día del correo, y puede abrirlos de nuevo ese día para cambiar su respuesta. Si su hijo ya registró su entrada, no cambia nada.
 
+**Responder al mensaje de texto.** El mensaje que pregunta si su hijo ya llegó termina con "Reply 1 if running late, 2 if absent today." Responda **1** y el centro sabrá que su hijo va en camino; luego le preguntamos la hora de llegada, responda con una hora como **9:30**. Responda **2** y su hijo queda marcado como ausente. Si se pregunta por varios hijos, cada opción va numerada (por ejemplo 1 Ava late, 2 Ava absent). Recibirá un mensaje de confirmación. Cualquier otra respuesta llega al centro como un mensaje normal.
+
 > **Consejo:** Avisar al centro de una ausencia con anticipación evita que reciba estos mensajes o llamadas ese día.
 
 ## ¿Una ausencia cambia mi factura?

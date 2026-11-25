@@ -53,7 +53,8 @@ final class SmsInbound
         ?int $userId,
         ?string $keyword = null,
         ?string $providerRef = null,
-        string $provider = 'telnyx'
+        string $provider = 'telnyx',
+        bool $quiet = false
     ): ?int {
         try {
             $id = (int) DB::table('sms_messages')->insertGetId([
@@ -80,6 +81,13 @@ final class SmsInbound
                Centre of whoever sent the text it answers (an announcement's author, a staff reply). */
             $attr = SmsReplies::file($id) ?: [];
             $ownerId = (int) ($attr['owner_user_id'] ?? 0);
+
+            /* A REPLY-BY-NUMBER ANSWER (2026-11-25, SmsAttendance): "1" / "2" / a time answering the Safe Arrival or
+               check-in reminder text. It was recorded as the parent's absence or late notice, which already told the
+               centre - so it is filed (and audited) here, and never dropped into chat as a bare "2". */
+            if ($quiet) {
+                return $id;
+            }
 
             /* INTO THE CHAT THREAD FIRST (2026-09-24).
 

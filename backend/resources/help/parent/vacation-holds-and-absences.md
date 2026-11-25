@@ -46,6 +46,8 @@ Your centre may offer only some of these choices, and may word the call differen
 
 **Buttons in the email.** The "Has your child arrived?" email and the "We missed your child today" email have two buttons: **Mark absent** (or **Add a reason or note**) and **Running late** (or **Running late after all**). Each opens a small page just for your child, where you pick a reason or the time you'll arrive, and add a note if you like. The centre is told straight away, the same as doing it in the app. The buttons work on the day of the email only, and you can open them again that day to change your answer. If your child has already been signed in, nothing changes.
 
+**Reply to the text.** The text asking whether your child has arrived ends with "Reply 1 if running late, 2 if absent today." Reply **1** and the centre is told your child is on the way; we then ask what time they'll arrive, so reply with a time like **9:30**. Reply **2** and your child is marked absent. If several children were asked about, the text numbers each choice (for example 1 Ava late, 2 Ava absent). You get a text back confirming it. Any other reply reaches the centre as a normal message.
+
 > **Tip:** Telling the centre about an absence in advance means you won't get these messages or calls that day.
 
 ## Does an absence change my bill?

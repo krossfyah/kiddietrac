@@ -171,7 +171,7 @@ class CheckinReminderCommand extends Command
                 if ($prefs['sms'] && $g->phone) {
                     try {
                         app(\App\Http\Controllers\Api\SmsController::class)
-                            ->sendOne((int) $child->agency_id, (int) $g->id, (string) $g->phone, $body, 'checkin_reminder');
+                            ->sendOne((int) $child->agency_id, (int) $g->id, (string) $g->phone, $this->smsBody($window, $body, $child, $name, (int) $g->id, (string) $g->phone), 'checkin_reminder');
                     } catch (\Throwable $e) {}
                 }
 
@@ -183,6 +183,18 @@ class CheckinReminderCommand extends Command
 
         $this->info("Done. {$sent} reminder(s) sent.");
         return self::SUCCESS;
+    }
+
+    /* The morning TEXT (2026-11-25, App\Support\SmsAttendance): plain words (GSM-7, one segment for most names) and
+       "Reply 1 if running late, 2 if absent today." The push and email keep $body. */
+    private function smsBody(string $window, string $body, object $child, string $name, int $guardianId, string $phone): string
+    {
+        if ($window !== 'morning') {
+            return $body;
+        }
+        $line = \App\Support\SmsAttendance::promptLine((int) $child->agency_id, $guardianId, $phone, (int) $child->id, $name, 'checkin_reminder');
+
+        return $line === '' ? $body : "{$name} hasn't been signed in at {$child->centre_name} today. " . $line;
     }
 
     private function email(int $agencyId, string $to, string $toName, string $title, string $body, string $window, array $data = [],

@@ -46,6 +46,8 @@ Votre centre peut n’offrir que certains de ces choix, et formuler l’appel au
 
 **Boutons dans le courriel.** Les courriels « Votre enfant est-il arrivé? » et « Votre enfant nous a manqué aujourd’hui » contiennent deux boutons : **Marquer absent** (ou **Ajouter une raison**) et **En retard** (ou **Finalement en retard**). Chacun ouvre une petite page réservée à votre enfant, où vous choisissez une raison ou l’heure d’arrivée et ajoutez une note si vous le souhaitez. Le centre est avisé immédiatement, comme dans l’application. Les boutons ne fonctionnent que le jour du courriel, et vous pouvez les rouvrir ce jour-là pour modifier votre réponse. Si votre enfant est déjà arrivé, rien ne change.
 
+**Répondre au texto.** Le texto qui demande si votre enfant est arrivé se termine par « Reply 1 if running late, 2 if absent today. » Répondez **1** et le centre sait que votre enfant est en route; nous vous demandons ensuite l’heure d’arrivée, répondez par une heure comme **9:30**. Répondez **2** et votre enfant est marqué absent. Si la question porte sur plusieurs enfants, chaque choix est numéroté (par exemple 1 Ava late, 2 Ava absent). Un texto vous confirme la réponse. Toute autre réponse parvient au centre comme un message ordinaire.
+
 > **Astuce :** Informer le centre d’une absence à l’avance vous évite de recevoir ces messages ou appels ce jour-là.
 
 ## Une absence change-t-elle ma facture?
