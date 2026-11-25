@@ -16,8 +16,19 @@
      agency, a director's centres): /meetings, /director/calendar/overlays, /tasks/mine, /tasks, /tasks/assignees,
      /agency/dashboard or /director/dashboard, /safe-arrival/today. Nothing is fetched while folded; a section loads
      when it is opened, and the open section refreshes at most every 2 minutes, nudged by the badges poll.
-   • Super admin with no agency picked (platform view): Meetings (the KiddieTrac team calendar) and Tasks only.
-   • State per person in localStorage kt_rp_<user id>: { open, section, month }.
+   • Super admin with no agency picked (platform view) and sales reps: Calendar, Meetings (the KiddieTrac team
+     calendar) and Tasks - no "Today at the centre".
+   • Follow-up (2026-11-25, Anthony):
+     - Private to-dos: "Me" is the first and default assignee in quick add (POST /tasks private=1). Only the
+       creator ever sees one (TaskController + every task reader), it never notifies.
+     - Admins' ratio alerts come from the room ratio engine across every centre they can see
+       (/operations/ratio-status, the Room ratios screen's own feed), grouped by centre.
+     - Sales calendar (/sales/calendar: website bookings, lead follow-ups, sales events) shows for sales reps and
+       super admins in their own (platform) role, in pink, never for agency admins or directors.
+     - "Days ahead": a Coming up list under the calendar and the Meetings range follow one per-person setting
+       (Today / 3 days / 1 week / 2 weeks / 1 month, default 1 week), saved server-side in ui-prefs my_day and
+       set from the panel's gear or My settings.
+   • State per person in localStorage kt_rp_<user id>: { open, section, days }.
    • Times and "today" are the agency's (KT.agencyToday / KT.fmtTime). Text is translated by kt-i18n's sweep.
    ═══════════════════════════════════════════════════════════════════ */
 (function (w, d) {
@@ -39,8 +50,14 @@
     refresh: '<path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1L20.5 8.5"/><path d="M20.5 3.5v5h-5"/>',
     prev: '<path d="m15 6-6 6 6 6"/>',
     next: '<path d="m9 6 6 6-6 6"/>',
-    video: '<rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/>'
+    video: '<rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/>',
+    clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    lock: '<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
   };
+  // "Days ahead" (2026-11-25): how far the Coming up list and the Meetings section look.
+  var RANGES = [[1, 'Today'], [3, '3 days'], [7, '1 week'], [14, '2 weeks'], [30, '1 month']];
+  function rangeLabel(n) { for (var i = 0; i < RANGES.length; i++) if (RANGES[i][0] === n) return RANGES[i][1]; return '1 week'; }
   function svg(name, size) {
     return '<svg viewBox="0 0 24 24" width="' + (size || 20) + '" height="' + (size || 20) + '" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + ICON[name] + '</svg>';
   }
@@ -63,24 +80,55 @@
     if (b.classList.contains('role-centre-director')) return 'director';
     if (b.classList.contains('role-agency-admin')) return 'admin';
     if (b.classList.contains('role-platform-admin')) return 'platform';
+    if (b.classList.contains('role-sales-rep')) return 'sales';
     return '';
   }
+  function hasRole(r) { var u = me(); return Array.isArray(u.roles) && u.roles.indexOf(r) !== -1; }
+  /* Sales calendar: sales reps and super admins as themselves. A super admin runs through the agency admin shell
+     (body role-agency-admin) - "View as" (sessionStorage kt_view_as) is what makes them an agency admin or director,
+     and then it never shows: sales data stays with the platform team. */
+  function viewingAs() { try { return sessionStorage.getItem('kt_view_as') || ''; } catch (e) { return ''; } }
+  function salesOn() {
+    var r = roleNow();
+    if (r === 'sales') return hasRole('sales_rep') || (isPlatformTeam() && viewingAs() === 'sales_rep');
+    return isPlatformTeam() && !viewingAs() && (r === 'admin' || r === 'platform');
+  }
+  // Can assign to other people (educators, home visitors, parents): admins and directors in an agency.
+  function canAssign() { var r = roleNow(); return !!agency() && (r === 'admin' || r === 'director' || r === 'platform'); }
   function phoneChrome() {
     var mn = d.getElementById('kt-mobilenav');
     return !!(mn && getComputedStyle(mn).display !== 'none');
   }
   function eligible() { return !!roleNow() && w.innerWidth >= MIN_W && !phoneChrome() && !!uid(); }
-  function platformView() { return !agency(); }   // super admin, no agency picked
-  function sections() { return platformView() ? ['meetings', 'tasks'] : SECTIONS; }
+  // Platform view: a super admin with no agency picked, or a sales rep (the KiddieTrac team calendar, no centre).
+  function platformView() { return !agency() || roleNow() === 'sales'; }
+  function sections() { return platformView() ? ['calendar', 'meetings', 'tasks'] : SECTIONS; }
   function meetingScope() { return platformView() ? 'platform' : 'agency'; }
 
   /* ── remembered state, per person ─────────────────────────────────── */
-  var S = { open: true, section: 'calendar', month: '', sel: '' };
+  var S = { open: true, section: 'calendar', month: '', sel: '', days: 7 };
   function key() { return 'kt_rp_' + uid(); }
+  function okDays(n) { n = +n; return RANGES.some(function (r) { return r[0] === n; }) ? n : 0; }
   function load() {
-    try { var j = JSON.parse(localStorage.getItem(key()) || 'null'); if (j && typeof j === 'object') { S.open = j.open !== false; if (SECTIONS.indexOf(j.section) !== -1) S.section = j.section; } } catch (e) {}
+    try { var j = JSON.parse(localStorage.getItem(key()) || 'null'); if (j && typeof j === 'object') { S.open = j.open !== false; if (SECTIONS.indexOf(j.section) !== -1) S.section = j.section; if (okDays(j.days)) S.days = okDays(j.days); } } catch (e) {}
   }
-  function save() { try { localStorage.setItem(key(), JSON.stringify({ open: S.open, section: S.section })); } catch (e) {} }
+  function save() { try { localStorage.setItem(key(), JSON.stringify({ open: S.open, section: S.section, days: S.days })); } catch (e) {} }
+  // The days-ahead choice follows the person to every device: ui-prefs my_day (server), read once at start.
+  function loadServerPrefs() {
+    try {
+      api().get('/auth/me/ui-prefs').then(function (j) {
+        var n = okDays(j && j.prefs && j.prefs.my_day && j.prefs.my_day.days);
+        if (n && n !== S.days) { S.days = n; save(); if (S.section === 'calendar' || S.section === 'meetings') renderSection(); }
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  function setDays(n) {
+    n = okDays(n); if (!n) return Promise.resolve(false);
+    S.days = n; save();
+    if (isOpen() && (S.section === 'calendar' || S.section === 'meetings')) renderSection();
+    try { w.dispatchEvent(new CustomEvent('kt:my-day-range', { detail: { days: n } })); } catch (e) {}
+    return api().put('/auth/me/ui-prefs', { my_day: { days: n } }).then(function () { return true; });
+  }
 
   /* ── dates (agency's) ─────────────────────────────────────────────── */
   function today() { try { if (KT.agencyToday) return KT.agencyToday(); } catch (e) {} var t = new Date(); return t.getFullYear() + '-' + pad(t.getMonth() + 1) + '-' + pad(t.getDate()); }
@@ -88,7 +136,9 @@
   function ymdParts(s) { var p = String(s).slice(0, 10).split('-'); return [+p[0], +p[1], +p[2]]; }
   function utcDate(s) { var p = ymdParts(s); return new Date(Date.UTC(p[0], p[1] - 1, p[2], 12)); }
   function addDays(s, n) { var x = utcDate(s); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
-  function fmtD(s, opts) { try { return new Intl.DateTimeFormat(undefined, Object.assign({ timeZone: 'UTC' }, opts)).format(utcDate(s)); } catch (e) { return s; } }
+  // Dates and times speak the person's portal language (kt_locale), not just the browser's.
+  function lang() { var l = ''; try { l = localStorage.getItem('kt_locale') || ''; } catch (e) {} l = l || (d.documentElement.lang || ''); return /^[a-z]{2}(-[A-Za-z]{2})?$/.test(l) ? (l === 'en' ? 'en-CA' : l) : undefined; }
+  function fmtD(s, opts) { try { return new Intl.DateTimeFormat(lang(), Object.assign({ timeZone: 'UTC' }, opts)).format(utcDate(s)); } catch (e) { return s; } }
   function dayTitle(s) { var t = today(); if (s === t) return T('Today'); if (s === addDays(t, 1)) return T('Tomorrow'); return fmtD(s, { weekday: 'short', month: 'short', day: 'numeric' }); }
   function hm12(hm) { var p = String(hm || '').split(':'); var h = +p[0], m = p[1] || '00'; if (isNaN(h)) return ''; return ((h % 12) || 12) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM'); }
   function mTime(m) {
@@ -107,9 +157,49 @@
   function getMeetings(from, to) {
     var c = cache(), k = meetingScope() + ':' + from + ':' + to;
     if (c.meetings[k] && fresh('m:' + k, 120000)) return Promise.resolve(c.meetings[k]);
-    return api().get('/meetings?scope=' + meetingScope() + '&from=' + from + '&to=' + to).then(function (j) {
-      c.meetings[k] = (j && j.meetings) || []; c.at['m:' + k] = Date.now(); return c.meetings[k];
+    var one = function (sc) { return api().get('/meetings?scope=' + sc + '&from=' + from + '&to=' + to).then(function (j) { return (j && j.meetings) || []; }); };
+    // A super admin working in an agency also sees the KiddieTrac team's (sales) meetings.
+    var both = meetingScope() === 'agency' && salesOn() ? [one('agency'), one('platform').catch(function () { return []; })] : [one(meetingScope())];
+    return Promise.all(both).then(function (r) {
+      var seen = {}, list = [];
+      r.forEach(function (ms) { ms.forEach(function (m) { if (!seen[m.id]) { seen[m.id] = 1; list.push(m); } }); });
+      c.meetings[k] = list; c.at['m:' + k] = Date.now(); return list;
     });
+  }
+  /* Sales calendar (sales reps, super admins): website bookings, lead follow-ups and sales events, as panel items
+     { kind:'sales', date, start, label, sub, go }. Their times are the sales calendar's own zone (Eastern). */
+  function tzParts(iso, tz) {
+    try {
+      var p = {}; new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+        .formatToParts(new Date(iso)).forEach(function (x) { p[x.type] = x.value; });
+      return { date: p.year + '-' + p.month + '-' + p.day, hm: p.hour + ':' + p.minute };
+    } catch (e) { return { date: String(iso).slice(0, 10), hm: String(iso).slice(11, 16) }; }
+  }
+  function getSales(from, to) {
+    var c = cache(), k = from + ':' + to;
+    if (!salesOn()) return Promise.resolve([]);
+    if (c.sales && c.sales[k] && fresh('s:' + k, 120000)) return Promise.resolve(c.sales[k]);
+    return api().get('/sales/calendar?from=' + from + '&to=' + to).then(function (j) {
+      var tz = (j && j.tz) || 'America/Toronto', out = [];
+      ((j && j.bookings) || []).forEach(function (b) {
+        if (b.status === 'declined' || b.status === 'cancelled') return;
+        var s = tzParts(b.start, tz);
+        out.push({ kind: 'sales', id: 'b' + b.id, date: s.date, startIso: b.start, endIso: b.end, tz: tz, all: false, label: (b.title || T('Website booking')),
+          sub: b.status === 'requested' ? T('Needs a decision') : (b.teams_url ? T('Microsoft Teams meeting') : T('Website booking')), tent: b.status === 'requested', go: 'sales-bookings?id=' + b.id, join: b.teams_url || '' });
+      });
+      ((j && j.activities) || []).forEach(function (a) {
+        if (!a.date) return;
+        out.push({ kind: 'sales', id: 'a' + a.id, date: String(a.date).slice(0, 10), all: true, label: (a.title || ''),
+          sub: T(a.type === 'meeting' ? 'Lead meeting' : 'Lead follow-up'), go: a.lead_id ? 'sales-lead?id=' + a.lead_id : 'sales-calendar' });
+      });
+      ((j && j.events) || []).forEach(function (e) {
+        if (e.kind === 'where' || !e.start) return;   // whereabouts are not events
+        var s = tzParts(e.start, tz);
+        out.push({ kind: 'sales', id: 'e' + e.id, date: s.date, startIso: e.start, endIso: e.end, tz: tz, all: !!e.all_day, label: e.title || T('Sales calendar'),
+          sub: T('Sales calendar'), go: 'sales-calendar' });
+      });
+      c.sales = c.sales || {}; c.sales[k] = out; c.at['s:' + k] = Date.now(); return out;
+    }).catch(function () { return []; });
   }
   function getOverlays(from, to) {
     var c = cache(), k = from + ':' + to;
@@ -123,11 +213,12 @@
     var c = cache();
     if (!force && c.tasks && fresh('t', 120000)) return Promise.resolve(c.tasks);
     var mine = api().get('/tasks/mine').then(function (j) { return (j && j.tasks) || []; }).catch(function () { return []; });
-    var all = platformView() ? Promise.resolve([]) : api().get('/tasks').then(function (j) { return (j && j.tasks) || []; }).catch(function () { return []; });
+    var all = !canAssign() ? Promise.resolve([]) : api().get('/tasks').then(function (j) { return (j && j.tasks) || []; }).catch(function () { return []; });
     return Promise.all([mine, all]).then(function (r) {
       var id = +uid();
       var open = function (t) { return t.status === 'open' || t.status === 'in_progress'; };
-      c.tasks = { mine: r[0].filter(open), byMe: r[1].filter(function (t) { return open(t) && +t.assigned_by === id; }) };
+      // Private to-dos are mine (assigned to me); "Assigned by me" is the tasks I gave other people.
+      c.tasks = { mine: r[0].filter(open), byMe: r[1].filter(function (t) { return open(t) && +t.assigned_by === id && !t.is_private; }) };
       c.at.t = Date.now(); return c.tasks;
     });
   }
@@ -142,8 +233,10 @@
     var dir = roleNow() === 'director';
     var dash = api().get(dir ? '/director/dashboard' : '/agency/dashboard').catch(function () { return null; });
     var sa = api().get('/safe-arrival/today').catch(function () { return null; });
-    return Promise.all([dash, sa]).then(function (r) {
-      var t = { dir: dir, dash: r[0], sa: r[1], at: new Date() };
+    // Admins: every room's live ratio across the centres they can see - the Room ratios screen's own feed.
+    var rr = dir ? Promise.resolve(null) : api().get('/operations/ratio-status').catch(function () { return null; });
+    return Promise.all([dash, sa, rr]).then(function (r) {
+      var t = { dir: dir, dash: r[0], sa: r[1], rooms: r[2], at: new Date() };
       c.today = t; c.at.d = Date.now(); return t;
     });
   }
@@ -169,13 +262,25 @@
       ['.kt-rp-cal-d', 'color:#CBD5E1;'],
       ['.kt-rp-cal-d:hover', 'background:#1B2A44;'],
       ['.kt-rp-cal-d.out', 'color:#475569;'],
-      ['.kt-rp-cal-d.sel', 'background:#0F766E;color:#fff;'],
+      ['.kt-rp-cal-d.today', 'background:rgba(45,212,191,.16);color:#5EEAD4;'],
+      ['.kt-rp-cal-d.sel', 'box-shadow:inset 0 0 0 1.5px #2DD4BF;'],
+      ['.kt-rp-ahead-h span,.kt-rp-dh', 'color:#CBD5E1;'],
+      ['.kt-rp-dh b,.kt-rp-ec b,.kt-rp-t1', 'color:#F1F5F9;'],
+      ['.kt-rp-day', 'border-color:#1E2B44;'],
+      ['.kt-rp-ev:hover,.kt-rp-addt:hover', 'background:#1B2A44;'],
+      ['.kt-rp-ec span,.kt-rp-t2,.kt-rp-none,.kt-rp-addt,.kt-rp-ic', 'color:#94A3B8;'],
+      ['.kt-rp-ev.next', 'background:rgba(45,212,191,.14);'],
+      ['.kt-rp-ev.next .kt-rp-ec b,.kt-rp-addt:hover', 'color:#5EEAD4;'],
+      ['.kt-rp-next', 'background:#14B8A6;color:#042F2E;'],
+      ['.kt-rp-ic.join', 'background:#16324A;color:#5EEAD4;'],
       ['.kt-rp-in,.kt-rp-sel', 'background:#0E1A2E;border-color:#2A3B5A;color:#E2E8F0;'],
       ['.kt-rp-stat', 'background:#162238;border-color:#22324F;'],
       ['.kt-rp-stat b', 'color:#F1F5F9;'],
       ['.kt-rp-btn.ghost', 'background:#162238;border-color:#2A3B5A;color:#E2E8F0;'],
       ['.kt-rp-link', 'color:#5EEAD4;'],
-      ['.kt-rp-due', 'background:#1E2B44;color:#CBD5E1;']
+      ['.kt-rp-due', 'background:#1E2B44;color:#CBD5E1;'],
+      ['.kt-rp-ctr', 'color:#94A3B8;'],
+      ['.kt-rp-pv', 'background:#2E1F5E;color:#C4B5FD;']
     ];
     var themed = DK.map(function (x) { return x[0].split(',').map(function (s) { return 'html.kt-dark ' + s + ',html[data-theme="dark"] ' + s; }).join(',') + '{' + x[1] + '}'; }).join('');
     st.textContent = ''
@@ -207,7 +312,9 @@
       + '.kt-rp-item b{display:block;font-size:13px;font-weight:700;color:#0F172A;line-height:1.3;overflow-wrap:anywhere;}'
       + '.kt-rp-sub{display:block;font-size:11.5px;color:#64748B;margin-top:2px;line-height:1.35;}'
       + '.kt-rp-bar{width:3px;align-self:stretch;border-radius:2px;background:#2A8F9D;flex:0 0 auto;}'
-      + '.kt-rp-bar.ev{background:#F59E0B;}.kt-rp-bar.tk{background:#6366F1;}.kt-rp-bar.pf{background:#7C3AED;}'
+      + '.kt-rp-bar.ev{background:#F59E0B;}.kt-rp-bar.tk{background:#6366F1;}.kt-rp-bar.pf{background:#7C3AED;}.kt-rp-bar.sl{background:#DB2777;}'
+      + '.kt-rp-ctr{font-size:11.5px;font-weight:700;color:#64748B;margin:6px 2px 4px;}'
+      + '.kt-rp-pv{display:inline-block;font-size:10px;font-weight:800;padding:0 5px;border-radius:5px;background:#EDE9FE;color:#5B21B6;margin-left:4px;vertical-align:1px;}'
       + '.kt-rp-muted{color:#64748B;font-size:12.5px;padding:6px 2px;}'
       + '.kt-rp-err{color:#B91C1C;font-size:12.5px;padding:6px 2px;}'
       + '.kt-rp-btn{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 11px;border-radius:8px;border:1px solid #0F766E;background:#0F766E;color:#fff;font:700 12.5px/1 inherit;cursor:pointer;white-space:nowrap;}'
@@ -224,12 +331,36 @@
       + '.kt-rp-cal-w{font-size:10.5px;font-weight:700;color:#64748B;text-align:center;padding:2px 0;text-transform:uppercase;}'
       + '.kt-rp-cal-d{position:relative;height:32px;border:0;border-radius:8px;background:transparent;color:#1E293B;font:600 12.5px/1 inherit;cursor:pointer;padding:0;}'
       + '.kt-rp-cal-d:hover{background:#F1F5F9;}.kt-rp-cal-d.out{color:#CBD5E1;}'
-      + '.kt-rp-cal-d.today{box-shadow:inset 0 0 0 1.5px #0F766E;font-weight:800;}'
-      + '.kt-rp-cal-d.sel{background:#0F766E;color:#fff;}'
+      // Today = a teal tint (like Outlook); a picked day = a ring. Event dots stay on both.
+      + '.kt-rp-cal-d.today{background:rgba(15,118,110,.14);color:#0F766E;font-weight:800;}'
+      + '.kt-rp-cal-d.sel{box-shadow:inset 0 0 0 1.5px #0F766E;}.kt-rp-cal-d.today.sel{box-shadow:none !important;}'
+      // the Outlook-style agenda
+      + '.kt-rp-ahead-h{justify-content:space-between;margin:12px 2px 0;}.kt-rp-ahead-h span{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#334155;}'
+      + '.kt-rp-day{padding-bottom:4px;border-bottom:1px solid #EEF2F6;margin-bottom:2px;}.kt-rp-day:last-of-type{border-bottom:0;}'
+      + '.kt-rp-dh{display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:600;color:#475569;margin:10px 2px 5px;}'
+      + '.kt-rp-dh b{font-weight:800;color:#0F172A;}.kt-rp-dh i{font-style:normal;color:#94A3B8;font-size:9px;}'
+      + '.kt-rp-none{font-size:12.5px;color:#64748B;padding:0 2px 2px 10px;}'
+      + '.kt-rp-cne{padding:0 2px 2px 10px;font-weight:600;}'
+      + '.kt-rp-ev{display:flex;align-items:stretch;gap:9px;padding:6px 6px 6px 4px;border-radius:8px;cursor:pointer;min-width:0;margin-bottom:2px;}'
+      + '.kt-rp-ev:hover{background:#F1F5F9;}'
+      + '.kt-rp-vb{width:4px;flex:0 0 4px;border-radius:2px;box-sizing:border-box;background:#0F9488;border:1.5px solid #0F9488;}'
+      + '.kt-rp-vb.sl{background:#DB2777;border-color:#DB2777;}.kt-rp-vb.ev{background:#F59E0B;border-color:#F59E0B;}.kt-rp-vb.tk{background:#7C3AED;border-color:#7C3AED;}'
+      + '.kt-rp-vb.tent{background:transparent;}'
+      + '.kt-rp-tc{flex:0 0 60px;display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;}'
+      + '.kt-rp-t1{font-size:11.5px;font-weight:700;color:#1E293B;white-space:nowrap;}.kt-rp-t2{font-size:10.5px;color:#64748B;white-space:nowrap;}'
+      + '.kt-rp-ec{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1px;}'
+      + '.kt-rp-ec b{font-size:12.5px;font-weight:700;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      + '.kt-rp-ec span{font-size:11.5px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+      + '.kt-rp-ic{flex:0 0 auto;align-self:center;color:#64748B;display:inline-flex;align-items:center;justify-content:center;}'
+      + '.kt-rp-ic.join{width:26px;height:26px;border-radius:7px;color:#0F766E;background:#E0F2F1;}.kt-rp-ic.join:hover{filter:brightness(.95);}'
+      + '.kt-rp-ev.next{background:rgba(15,118,110,.10);}.kt-rp-ev.next .kt-rp-ec b{color:#0F766E;}'
+      + '.kt-rp-next{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 9px;border-radius:999px;background:#0F766E;color:#fff;font-size:11px;font-weight:700;margin:2px 0 4px 2px;}'
+      + '.kt-rp-addt{display:flex;align-items:center;gap:9px;width:100%;border:0;background:none;color:#64748B;font:500 12.5px inherit;padding:6px 4px;cursor:pointer;text-align:left;border-radius:8px;}'
+      + '.kt-rp-addt:hover{color:#0F766E;background:#F1F5F9;}'
+      + '.kt-rp-qt{display:flex;gap:6px;padding:4px 0;}'
       + '.kt-rp-cal-d i{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);display:flex;gap:2px;}'
       + '.kt-rp-cal-d i s{width:4px;height:4px;border-radius:50%;background:#2A8F9D;display:block;}'
-      + '.kt-rp-cal-d i s.ev{background:#F59E0B;}.kt-rp-cal-d i s.tk{background:#6366F1;}'
-      + '.kt-rp-cal-d.sel i s{background:#fff;}'
+      + '.kt-rp-cal-d i s.ev{background:#F59E0B;}.kt-rp-cal-d i s.tk{background:#6366F1;}.kt-rp-cal-d i s.sl{background:#DB2777;}'
       // tasks
       + '.kt-rp-in,.kt-rp-sel{height:30px;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:8px;padding:0 9px;font:500 12.5px inherit;color:#0F172A;background:#fff;min-width:0;}'
       + '.kt-rp-in{width:100%;}.kt-rp-in:focus,.kt-rp-sel:focus{outline:2px solid #2A8F9D;outline-offset:0;border-color:#2A8F9D;}'
@@ -267,6 +398,7 @@
     body = d.createElement('aside'); body.id = 'kt-rp-body'; body.setAttribute('aria-label', 'My day');
     body.innerHTML = '<div class="kt-rp-h"><b id="kt-rp-title"></b>'
       + '<button type="button" class="kt-rp-ib" data-rp="new" data-kttip="' + esc(T('New')) + '" aria-label="New">' + svg('plus', 18) + '</button>'
+      + '<button type="button" class="kt-rp-ib" data-rp="range" data-kttip="' + esc(T('Days ahead')) + '" aria-label="Days ahead">' + svg('gear', 17) + '</button>'
       + '<button type="button" class="kt-rp-ib" data-rp="refresh" data-kttip="' + esc(T('Refresh')) + '" aria-label="Refresh">' + svg('refresh', 17) + '</button>'
       + '<button type="button" class="kt-rp-ib" data-rp="fold" data-kttip="' + esc(T('Collapse')) + '" aria-label="Collapse">' + svg('fold', 18) + '</button></div>'
       + '<div class="kt-rp-scroll" id="kt-rp-scroll"></div>';
@@ -302,6 +434,13 @@
     if (a === 'fold') setOpen(false);
     else if (a === 'refresh') { cacheFor = null; renderSection(true); }
     else if (a === 'new') newMenu(b);
+    else if (a === 'range') rangeMenu(b);
+  }
+  function rangeMenu(anchor) {
+    var items = RANGES.map(function (r) {
+      return { icon: r[0] === S.days ? '✓' : '·', label: r[1], run: function () { setDays(r[0]).then(function () { if (KT.savedToast) KT.savedToast(); }).catch(function () { toast('Could not save that setting.', 'error'); }); } };
+    });
+    if (KT.quickPop) KT.quickPop({ anchor: anchor, items: items, label: 'Days ahead' });
   }
   function onOutside(e) {
     if (!root || !isOpen() || pushMode()) return;
@@ -335,7 +474,6 @@
     cl.add('kt-rp-on'); cl.toggle('kt-rp-open', open); cl.toggle('kt-rp-push', push);
     drawRail();
     if (titleEl) titleEl.textContent = LABEL[S.section];
-    var nb = body && body.querySelector('[data-rp="new"]'); if (nb) nb.style.display = platformView() && !isPlatformTeam() ? 'none' : '';
     if (changed || lastOn !== true || lastPush !== push) { lastOn = true; lastPush = push; relayout(); }
     if (open && !fromUser && !scroller.firstChild) renderSection();
   }
@@ -366,15 +504,18 @@
   function calendarHtml(force) {
     if (!S.month) S.month = today().slice(0, 7);
     if (!S.sel) S.sel = today();
-    var r = monthRange(S.month);
+    var r = monthRange(S.month), t0 = today(), aheadTo = addDays(t0, S.days - 1);
+    // One fetch covers the month on show and the Coming up days (which may run into next month).
+    var from = r[0] < t0 ? r[0] : t0, to = r[1] > aheadTo ? r[1] : aheadTo;
     if (force) { cache(); C.at = {}; }
-    return Promise.all([getMeetings(r[0], r[1]), getOverlays(r[0], r[1]), getTasks(force).catch(function () { return { mine: [], byMe: [] }; })]).then(function (x) {
-      var ms = x[0], ev = x[1], tk = x[2];
+    return Promise.all([getMeetings(from, to), getOverlays(from, to), getTasks(force).catch(function () { return { mine: [], byMe: [] }; }), getSales(from, to)]).then(function (x) {
+      var ms = x[0], ev = x[1], tk = x[2], sl = x[3];
       var by = {};
-      var put = function (day, kind, item) { (by[day] = by[day] || { m: [], e: [], t: [] })[kind].push(item); };
+      var put = function (day, kind, item) { (by[day] = by[day] || { m: [], e: [], t: [], s: [] })[kind].push(item); };
       ms.forEach(function (m) { var dd = m.date; var end = m.end_date || m.date; var g = 0; while (dd <= end && g++ < 40) { put(dd, 'm', m); dd = addDays(dd, 1); } });
       ev.forEach(function (e) { if (e.date) put(e.date, 'e', e); });
       tk.mine.concat(tk.byMe).forEach(function (t) { if (t.due_date) put(String(t.due_date).slice(0, 10), 't', t); });
+      sl.forEach(function (s) { put(s.date, 's', s); });
       C.calBy = by;
       var p = S.month.split('-'), y = +p[0], mo = +p[1];
       var first = new Date(Date.UTC(y, mo - 1, 1)), start = addDays(r[0], -first.getUTCDay());
@@ -390,54 +531,135 @@
         var day = addDays(start, k);
         if (k >= 35 && day.slice(0, 7) !== S.month) break;
         var b = by[day], dots = '';
-        if (b) { if (b.m.length) dots += '<s></s>'; if (b.e.length) dots += '<s class="ev"></s>'; if (b.t.length) dots += '<s class="tk"></s>'; }
+        if (b) { if (b.m.length) dots += '<s></s>'; if (b.s.length) dots += '<s class="sl"></s>'; if (b.e.length) dots += '<s class="ev"></s>'; if (b.t.length) dots += '<s class="tk"></s>'; }
         h += '<button type="button" class="kt-rp-cal-d' + (day.slice(0, 7) !== S.month ? ' out' : '') + (day === t ? ' today' : '') + (day === S.sel ? ' sel' : '') + '" data-day="' + day + '" aria-label="' + esc(fmtD(day, { weekday: 'long', month: 'long', day: 'numeric' })) + '">' + (+day.slice(8)) + (dots ? '<i>' + dots + '</i>' : '') + '</button>';
       }
-      h += '</div></div><div class="kt-rp-sec" id="kt-rp-agenda">' + agendaHtml(S.sel) + '</div>';
+      h += '</div></div><div class="kt-rp-sec" id="kt-rp-agenda">' + agendaHtml(S.sel) + '</div>'
+        + '<div class="kt-rp-sec" id="kt-rp-ahead">' + aheadHtml() + '</div>';
       return h;
     });
   }
-  function agendaHtml(day) {
-    var b = (C.calBy || {})[day] || { m: [], e: [], t: [] };
-    var h = '<h4>' + esc(dayTitle(day)) + '</h4>';
-    if (!b.m.length && !b.e.length && !b.t.length) h += '<div class="kt-rp-muted">Nothing scheduled.</div>';
-    b.m.slice().sort(function (a, c) { return String(a.start).localeCompare(String(c.start)); }).forEach(function (m) { h += meetingItem(m, true); });
-    b.e.forEach(function (e) {
-      h += '<button type="button" class="kt-rp-item" data-go="staff-calendar"><span class="kt-rp-bar ev"></span><span><b data-no-i18n>' + esc((e.icon ? e.icon + ' ' : '') + (e.title || '')) + '</b>'
-        + (e.detail ? '<span class="kt-rp-sub">' + esc(e.detail) + '</span>' : '') + '</span></button>';
-    });
-    b.t.forEach(function (t) { h += '<button type="button" class="kt-rp-item" data-go="tasks"><span class="kt-rp-bar tk"></span><span><b data-no-i18n>' + esc(t.title) + '</b><span class="kt-rp-sub">' + esc(T('Task due')) + (t.centre_name ? ' · ' + esc(t.centre_name) : '') + '</span></span></button>'; });
-    h += '<div class="kt-rp-row" style="margin-top:4px">' + (canMeet() ? '<button type="button" class="kt-rp-btn sm" data-new-meeting="' + day + '">' + svg('plus', 13) + ' New meeting</button>' : '')
-      + '<button type="button" class="kt-rp-link" data-go="staff-calendar">Open calendar</button></div>';
-    return h;
+  /* ── THE AGENDA, LIKE OUTLOOK (2026-11-25, Anthony's screenshot) ─────────────────────────────────────
+     "Today • Wed, Nov 25" day headers; a time column (start time, the length under it, or All day); a bar coloured
+     by kind (meeting teal, sales pink, centre dates amber, tasks purple) - filled when it's on, an outline when it
+     still needs a reply or a decision; the title on one line and one line under it. Today's finished events drop
+     off ("No more events scheduled today"), and the next one gets an "Up next" pill and a teal tint. */
+  var SALES_TZ = 'America/Toronto';
+  function clock(iso, tz) {
+    try { if (!platformView() && KT.fmtTime) { var x = KT.fmtTime(iso); if (x) return x; } } catch (e) {}
+    try { return new Intl.DateTimeFormat(lang(), { hour: 'numeric', minute: '2-digit', timeZone: tz || SALES_TZ }).format(new Date(iso)); } catch (e) { return ''; }
   }
-  function canMeet() { return platformView() ? isPlatformTeam() : true; }
-
-  // Meetings: the next 45 days, by day.
-  function meetingItem(m, inDay) {
-    var sub = [mTime(m)];
-    if (m.location) sub.push(m.location);
-    var resp = m.my_response === 'pending' && !m.is_organizer ? ' · <em style="font-style:normal;color:#B45309;font-weight:700">' + esc(T('Reply needed')) + '</em>' : '';
-    return '<div class="kt-rp-item" role="button" tabindex="0" data-meeting="' + m.id + '"><span class="kt-rp-bar' + (m.scope === 'platform' ? ' pf' : '') + '"></span><span style="flex:1;min-width:0"><b data-no-i18n>' + esc(m.title) + '</b>'
-      + '<span class="kt-rp-sub">' + esc(sub.join(' · ')) + resp + '</span></span>'
-      + (m.join_url && /^https?:\/\//i.test(m.join_url) ? '<a class="kt-rp-btn sm" href="' + esc(m.join_url) + '" target="_blank" rel="noopener" data-join="1">' + svg('video', 13) + ' Join</a>' : '')
+  function dur(min) {
+    if (!(min > 0)) return '';
+    var L = lang();
+    try {
+      var nf = function (n, unit, disp) { return new Intl.NumberFormat(L, { style: 'unit', unit: unit, unitDisplay: disp }).format(n); };
+      var en = !L || /^en/.test(L);   // Outlook's own "45 min" (Intl says "45 mins" in English)
+      if (min < 60) return en ? min + ' min' : nf(min, 'minute', 'short');
+      var h = Math.floor(min / 60), m = min % 60;
+      return m ? nf(h, 'hour', 'narrow') + ' ' + (en ? m + ' min' : nf(m, 'minute', 'short')) : nf(h, 'hour', 'long');
+    } catch (e) { return min + ' min'; }
+  }
+  function dayHead(day) {
+    var t = today(), pre = day === t ? T('Today') : (day === addDays(t, 1) ? T('Tomorrow') : '');
+    return '<div class="kt-rp-dh">' + (pre ? '<b>' + esc(pre) + '</b><i>•</i>' : '') + '<span>' + esc(fmtD(day, { weekday: 'short', month: 'short', day: 'numeric' })) + '</span></div>';
+  }
+  // One day's items, all-day first, then by start. map = { day: { m, e, t, s } }.
+  function itemsFor(day, map) {
+    var b = (map || {})[day] || {}, out = [];
+    (b.m || []).forEach(function (m) {
+      var s = Date.parse(m.start), e = Date.parse(m.end), all = !!m.all_day || (m.date !== day);
+      var sales = salesOn() && !!(m.lead_id || m.booking_id);
+      var sub = m.video === 'teams' ? T('Microsoft Teams meeting') : (m.location || (m.join_url ? T('Video meeting') : ''));
+      if (!m.is_organizer && m.organizer && m.organizer.name) sub = sub ? sub + ' · ' + m.organizer.name : m.organizer.name;
+      out.push({ k: sales ? 'sl' : 'mt', all: all, s: s, e: e, time: all ? '' : clock(m.start, m.timezone), dur: all ? '' : dur(Math.round((e - s) / 60000)),
+        title: m.title, sub: sub, tent: !m.is_organizer && (m.my_response === 'pending' || m.my_response === 'tentative'),
+        tip: m.my_response === 'pending' && !m.is_organizer ? T('Reply needed') : '', attr: 'data-meeting="' + m.id + '"', join: m.join_url });
+    });
+    (b.s || []).forEach(function (x) {
+      var s = x.startIso ? Date.parse(x.startIso) : NaN, e = x.endIso ? Date.parse(x.endIso) : s;
+      out.push({ k: 'sl', all: !!x.all || isNaN(s), s: s, e: e, time: x.all || isNaN(s) ? '' : clock(x.startIso, x.tz), dur: x.all || isNaN(s) ? '' : dur(Math.round((e - s) / 60000)),
+        title: x.label, sub: T('Sales') + (x.sub ? ' · ' + x.sub : ''), tent: !!x.tent, attr: 'data-go="' + esc(x.go) + '"', join: x.join });
+    });
+    (b.e || []).forEach(function (x) {
+      out.push({ k: 'ev', all: true, title: (x.icon ? x.icon + ' ' : '') + (x.title || ''), sub: x.detail || '', attr: 'data-go="staff-calendar"' });
+    });
+    (b.t || []).forEach(function (x) {
+      out.push({ k: 'tk', all: true, allLabel: T('Due'), title: x.title, sub: T('Task') + (x.centre_name ? ' · ' + x.centre_name : ''), priv: !!x.is_private,
+        attr: tasksHash() ? 'data-go="' + tasksHash() + '"' : 'data-rp-sec-go="tasks"' });
+    });
+    return out.sort(function (a, c) { if (a.all !== c.all) return a.all ? -1 : 1; return (a.s || 0) - (c.s || 0); });
+  }
+  function evRow(it, next) {
+    var tc = it.all ? '<span class="kt-rp-t1">' + esc(it.allLabel || T('All day')) + '</span>'
+      : '<span class="kt-rp-t1">' + esc(it.time) + '</span>' + (it.dur ? '<span class="kt-rp-t2">' + esc(it.dur) + '</span>' : '');
+    return (next ? '<span class="kt-rp-next">' + svg('clock', 12) + esc(T('Up next')) + '</span>' : '')
+      + '<div class="kt-rp-ev' + (next ? ' next' : '') + '" role="button" tabindex="0" ' + it.attr + '>'
+      + '<span class="kt-rp-vb ' + it.k + (it.tent ? ' tent' : '') + '"' + (it.tip ? ' data-kttip="' + esc(it.tip) + '"' : '') + '></span>'
+      + '<span class="kt-rp-tc">' + tc + '</span>'
+      + '<span class="kt-rp-ec"><b data-no-i18n data-kttip="' + esc(it.title) + '">' + esc(it.title) + '</b>' + (it.sub ? '<span data-no-i18n>' + esc(it.sub) + '</span>' : '') + '</span>'
+      + (it.priv ? '<span class="kt-rp-ic" data-kttip="' + esc(T('Private')) + '">' + svg('lock', 13) + '</span>' : '')
+      + (it.join && /^https?:\/\//i.test(it.join) ? '<a class="kt-rp-ic join" href="' + esc(it.join) + '" target="_blank" rel="noopener" data-join="1" data-kttip="' + esc(T('Join')) + '" aria-label="Join">' + svg('video', 14) + '</a>' : '')
       + '</div>';
   }
+  /* Days in order. Today: finished timed events drop off; nothing left = "No more events scheduled today".
+     opts: { map, keepEmpty (show a day even with nothing), addToday (the "+ Add a task due today" row) }. */
+  function daysHtml(days, opts) {
+    var now = Date.now(), t = today(), nextDone = false, h = '', shown = 0, count = 0;
+    days.forEach(function (day) {
+      var its = itemsFor(day, opts.map);
+      if (day === t) its = its.filter(function (it) { return it.all || !(it.e <= now); });
+      if (day !== t && !its.length && !opts.keepEmpty) return;
+      shown++;
+      h += '<div class="kt-rp-day">' + dayHead(day);
+      if (!its.length) {
+        if (day === t) h += '<div class="kt-rp-none">' + esc(T('No more events scheduled today')) + '</div>'
+          + (canMeet() ? '<button type="button" class="kt-rp-link kt-rp-cne" data-new-meeting="' + t + '">' + esc(T('Create new event')) + '</button>' : '');
+        else h += '<div class="kt-rp-none">' + esc(T('Nothing scheduled.')) + '</div>';
+      }
+      count += its.length;
+      its.forEach(function (it) { var nx = !nextDone && !it.all && it.e > now; if (nx) nextDone = true; h += evRow(it, nx); });
+      if (day === t && opts.addToday) h += '<button type="button" class="kt-rp-addt" data-rp-addtoday="1">' + svg('plus', 15) + '<span>' + esc(T('Add a task due today')) + '</span></button>';
+      h += '</div>';
+    });
+    return { html: h, days: shown, items: count };
+  }
+  // A picked day other than today shows on its own; the Coming up list always starts today.
+  function agendaHtml(day) {
+    if (day === today()) return '';
+    return daysHtml([day], { map: C.calBy, keepEmpty: true }).html
+      + (canMeet() ? '<div class="kt-rp-row" style="margin:2px 0 4px"><button type="button" class="kt-rp-btn sm" data-new-meeting="' + day + '">' + svg('plus', 13) + ' New meeting</button></div>' : '');
+  }
+  function rangeDays(n) { var t = today(), a = []; for (var i = 0; i < n; i++) a.push(addDays(t, i)); return a; }
+  // Coming up: today, then each day through the person's "days ahead" that has something on it.
+  function aheadHtml() {
+    var n = S.days, h = '<div class="kt-rp-row kt-rp-ahead-h"><span>' + esc(T('Coming up')) + ' · ' + esc(T(rangeLabel(n))) + '</span><button type="button" class="kt-rp-link" data-rp-range="1">' + esc(T('Change')) + '</button></div>';
+    var r = daysHtml(rangeDays(n), { map: C.calBy, addToday: true });
+    h += r.html;
+    if (r.days < 2 && n > 1) h += '<div class="kt-rp-none" style="margin-top:8px">' + esc(T('Nothing else coming up.')) + '</div>';
+    h += '<div class="kt-rp-row" style="margin-top:8px"><button type="button" class="kt-rp-link" data-go="' + calHash() + '">Open calendar</button></div>';
+    return h;
+  }
+  function calHash() { return platformView() ? 'sales-calendar' : 'staff-calendar'; }
+  function canMeet() { return platformView() ? (isPlatformTeam() || hasRole('sales_rep')) : true; }
+  // The Tasks screen exists for admins, directors and super admins; a sales rep's to-dos live in the panel only.
+  function tasksHash() { return roleNow() === 'sales' ? '' : 'tasks'; }
+
+  // Meetings: the next "days ahead", by day (plus sales bookings and follow-ups for the sales team).
   function meetingsHtml(force) {
-    var t = today(), to = addDays(t, 45);
+    var t = today(), to = addDays(t, S.days - 1);
     if (force) { cache(); C.at = {}; }
-    return getMeetings(t, to).then(function (ms) {
-      var now = Date.now();
-      ms = ms.filter(function (m) { return !m.end || new Date(m.end).getTime() > now; }).sort(function (a, b) { return String(a.start).localeCompare(String(b.start)); });
-      var h = '<div class="kt-rp-sec">' + (canMeet() ? '<div class="kt-rp-row" style="margin-bottom:8px"><button type="button" class="kt-rp-btn sm" data-new-meeting="' + t + '">' + svg('plus', 13) + ' New meeting</button></div>' : '');
-      if (!ms.length) h += '<div class="kt-rp-muted">No meetings in the next 45 days.</div>';
-      var cur = '';
-      ms.slice(0, 25).forEach(function (m) {
-        var dd = m.date < t ? t : m.date;
-        if (dd !== cur) { cur = dd; h += '<h4>' + esc(dayTitle(dd)) + '</h4>'; }
-        h += meetingItem(m);
-      });
-      h += '<div class="kt-rp-row"><button type="button" class="kt-rp-link" data-go="' + (platformView() ? 'sales-calendar' : 'staff-calendar') + '">Open calendar</button></div></div>';
+    return Promise.all([getMeetings(t, to), getSales(t, to)]).then(function (x) {
+      var map = {};
+      var put = function (day, k, it) { (map[day] = map[day] || { m: [], s: [] })[k].push(it); };
+      x[0].forEach(function (m) { var dd = m.date < t ? t : m.date, end = m.end_date || m.date, g = 0; while (dd <= end && dd <= to && g++ < 40) { put(dd, 'm', m); dd = addDays(dd, 1); } });
+      x[1].forEach(function (s) { put(s.date, 's', s); });
+      var h = '<div class="kt-rp-sec"><div class="kt-rp-row" style="margin-bottom:4px;justify-content:space-between">' + (canMeet() ? '<button type="button" class="kt-rp-btn sm" data-new-meeting="' + t + '">' + svg('plus', 13) + ' New meeting</button>' : '<span></span>')
+        + '<button type="button" class="kt-rp-link" data-rp-range="1">' + esc(T(rangeLabel(S.days))) + '</button></div>';
+      var r = daysHtml(rangeDays(S.days), { map: map });
+      h += r.html;
+      if (!r.items) h += '<div class="kt-rp-none" style="margin-top:8px">' + esc(T('No meetings coming up.')) + '</div>';
+      h += '<div class="kt-rp-row" style="margin-top:8px"><button type="button" class="kt-rp-link" data-go="' + calHash() + '">Open calendar</button></div></div>';
       return h;
     });
   }
@@ -452,26 +674,31 @@
   }
   function taskItem(t, who) {
     return '<div class="kt-rp-item" data-task="' + t.id + '"><button type="button" class="kt-rp-chk" role="checkbox" aria-checked="false" data-done="' + t.id + '" aria-label="Mark done: ' + esc(t.title) + '" data-kttip="' + esc(T('Mark done')) + '"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>'
-      + '<span style="flex:1;min-width:0" role="button" tabindex="0" data-go="tasks"><b data-no-i18n>' + esc(t.title) + '</b>'
-      + '<span class="kt-rp-sub">' + esc(who === 'mine' ? (t.assigned_by_name ? T('From') + ' ' + t.assigned_by_name : '') : (t.assigned_to_name ? T('For') + ' ' + t.assigned_to_name : '')) + (t.centre_name ? ' · ' + esc(t.centre_name) : '') + '</span>'
+      + '<span style="flex:1;min-width:0"' + (tasksHash() ? ' role="button" tabindex="0" data-go="' + tasksHash() + '"' : '') + '><b data-no-i18n>' + esc(t.title) + '</b>'
+      + (t.is_private ? '<span class="kt-rp-sub">' + esc(T('Private - only you can see it')) + '</span>'
+        : '<span class="kt-rp-sub">' + esc(who === 'mine' ? (t.assigned_by_name ? T('From') + ' ' + t.assigned_by_name : '') : (t.assigned_to_name ? T('For') + ' ' + t.assigned_to_name : '')) + (t.centre_name ? ' · ' + esc(t.centre_name) : '') + '</span>')
       + dueChip(t) + '</span></div>';
   }
   function tasksHtml(force) {
     return getTasks(force).then(function (tk) {
       var h = '<div class="kt-rp-sec">';
-      if (!platformView()) {
-        h += '<form class="kt-rp-add" id="kt-rp-add" autocomplete="off"><input class="kt-rp-in" name="title" maxlength="200" placeholder="Add a task…" aria-label="Add a task">'
-          + '<div class="kt-rp-add-more"><select class="kt-rp-sel" name="to" aria-label="Assign to"><option value="">Assign to…</option></select>'
-          + '<input class="kt-rp-in" type="date" name="due" aria-label="Due date"></div>'
-          + '<div class="kt-rp-add-go"><button type="button" class="kt-rp-btn ghost sm" data-add="cancel">Cancel</button><button type="submit" class="kt-rp-btn sm">Assign task</button></div></form>';
-      }
-      if (tk.mine.length) { h += '<h4>Assigned to me</h4>'; tk.mine.forEach(function (t) { h += taskItem(t, 'mine'); }); }
-      if (!platformView()) {
+      // "Me" first and chosen: a private to-do. Admins and directors can pick someone else instead.
+      h += '<form class="kt-rp-add" id="kt-rp-add" autocomplete="off"><input class="kt-rp-in" name="title" maxlength="200" placeholder="Add a task…" aria-label="Add a task">'
+        + '<div class="kt-rp-add-more"><select class="kt-rp-sel" name="to" aria-label="Assign to"><option value="me" selected>' + esc(T('Me (private)')) + '</option></select>'
+        + '<input class="kt-rp-in" type="date" name="due" aria-label="Due date"></div>'
+        + '<div class="kt-rp-add-go"><button type="button" class="kt-rp-btn ghost sm" data-add="cancel">Cancel</button><button type="submit" class="kt-rp-btn sm">Add task</button></div></form>';
+      var priv = tk.mine.filter(function (t) { return t.is_private; }), given = tk.mine.filter(function (t) { return !t.is_private; });
+      h += '<h4>My to-dos</h4>';
+      if (!priv.length) h += '<div class="kt-rp-muted">' + esc(T('Nothing on your list.')) + '</div>';
+      priv.forEach(function (t) { h += taskItem(t, 'mine'); });
+      if (given.length) { h += '<h4>Assigned to me</h4>'; given.forEach(function (t) { h += taskItem(t, 'mine'); }); }
+      if (canAssign()) {
         h += '<h4>Assigned by me</h4>';
         if (!tk.byMe.length) h += '<div class="kt-rp-muted">No open tasks you assigned.</div>';
         tk.byMe.slice(0, 40).forEach(function (t) { h += taskItem(t, 'byme'); });
-      } else if (!tk.mine.length) h += '<div class="kt-rp-muted">No open tasks.</div>';
-      h += '<div class="kt-rp-row"><button type="button" class="kt-rp-link" data-go="tasks">All tasks</button></div></div>';
+      }
+      if (tasksHash()) h += '<div class="kt-rp-row"><button type="button" class="kt-rp-link" data-go="tasks">All tasks</button></div>';
+      h += '</div>';
       return h;
     });
   }
@@ -484,19 +711,23 @@
       var ratio = [], check = [];
       // A director's rooms carry the ratio engine's state: breach / over_group are ratio alerts (as the agency count's
       // "rooms over ratio"); attention is "check staffing" (one adult where two are needed, no RECE in the group).
-      if (t.dir) (dash.rooms || []).forEach(function (r) {
-        var n = T('Children') + ' ' + (r.children_present || 0) + ' · ' + T('Staff') + ' ' + (r.educators_present || 0);
-        if (r.status === 'breach' || r.status === 'over_group') ratio.push({ name: r.room_name, sub: T(r.status === 'over_group' ? 'Over group size' : 'Over ratio') + ' · ' + n + (r.ratio_target ? ' · ' + r.ratio_target : '') });
-        else if (r.status === 'attention') check.push({ name: r.room_name, sub: (r.warnings && r.warnings[0]) || n });
+      // Admins: the same engine, room by room, across every centre they can see (grouped by centre below).
+      var rooms = t.dir ? (dash.rooms || []) : ((t.rooms && t.rooms.data) || []).map(function (r) {
+        return { room_name: r.room_name, centre: r.centre_name, status: r.status, children_present: r.children_present, educators_present: r.staff_present, ratio_target: r.standard && r.standard.ratio, warnings: r.warnings };
       });
-      else (dash.centres || []).forEach(function (c) { if (c.rooms_in_breach > 0) ratio.push({ name: c.name, sub: T('Children here with no staff on the floor') }); });
+      rooms.forEach(function (r) {
+        var n = T('Children') + ' ' + (r.children_present || 0) + ' · ' + T('Staff') + ' ' + (r.educators_present || 0);
+        if (r.status === 'breach' || r.status === 'over_group') ratio.push({ name: r.room_name, centre: r.centre, sub: T(r.status === 'over_group' ? 'Over group size' : 'Over ratio') + ' · ' + n + (r.ratio_target ? ' · ' + r.ratio_target : '') });
+        else if (r.status === 'attention') check.push({ name: r.room_name, centre: r.centre, sub: (r.warnings && r.warnings[0]) || n });
+      });
+      var ratioKnown = t.dir ? !!t.dash : !!t.rooms;
       var sa = t.sa, saOn = !!(sa && sa.settings && sa.settings.enabled), over = sa && sa.counts ? (sa.counts.overdue || 0) : 0;
       var late = sa && sa.rows ? sa.rows.filter(function (r) { return r.state === 'overdue'; }) : [];
       var h = '<div class="kt-rp-sec"><div class="kt-rp-stats">'
         + stat(present == null ? '–' : present, 'At Centre', 'headcounts', '', enrolled)
         + stat(staff == null ? '–' : staff, 'Staff on floor', 'dashboard', '')
         + stat(!sa ? '–' : (saOn ? over : 'Off'), saOn ? 'Not arrived' : 'Safe Arrival', 'safe-arrival', saOn ? (over ? 'warn' : 'ok') : '')
-        + stat(t.dash ? ratio.length : '–', 'Ratio alerts', t.dir ? 'dashboard' : 'dashboard', t.dash ? (ratio.length ? 'bad' : 'ok') : '')
+        + stat(ratioKnown ? ratio.length : '–', 'Ratio alerts', 'room-ratios', ratioKnown ? (ratio.length ? 'bad' : 'ok') : '')
         + '</div>';
       if (saOn && late.length) {
         h += '<h4>Not arrived</h4>';
@@ -509,7 +740,12 @@
       var list = function (title, rows, colour) {
         if (!rows.length) return;
         h += '<h4>' + esc(title) + '</h4>';
-        rows.slice(0, 6).forEach(function (r) { h += '<button type="button" class="kt-rp-item" data-go="dashboard"><span class="kt-rp-bar" style="background:' + colour + '"></span><span><b data-no-i18n>' + esc(r.name) + '</b><span class="kt-rp-sub">' + esc(r.sub) + '</span></span></button>'; });
+        var lastC = null;
+        rows.slice(0, 12).forEach(function (r) {
+          if (r.centre && r.centre !== lastC) { lastC = r.centre; h += '<div class="kt-rp-ctr" data-no-i18n>' + esc(r.centre) + '</div>'; }
+          h += '<button type="button" class="kt-rp-item" data-go="room-ratios"><span class="kt-rp-bar" style="background:' + colour + '"></span><span><b data-no-i18n>' + esc(r.name) + '</b><span class="kt-rp-sub">' + esc(r.sub) + '</span></span></button>';
+        });
+        if (rows.length > 12) h += '<button type="button" class="kt-rp-link" data-go="room-ratios">+ ' + (rows.length - 12) + ' ' + esc(T('more')) + '</button>';
       };
       list('Ratio alerts', ratio, '#DC2626');
       list('Check staffing', check, '#F59E0B');
@@ -529,6 +765,9 @@
     var t = e.target;
     if (t.closest('[data-join]')) { e.stopPropagation(); return; }
     var nm = t.closest('[data-new-meeting]'); if (nm) { newMeeting(nm.getAttribute('data-new-meeting')); return; }
+    var rg = t.closest('[data-rp-range]'); if (rg) { rangeMenu(rg); return; }
+    var at = t.closest('[data-rp-addtoday]'); if (at) { addToday(at); return; }
+    var sg = t.closest('[data-rp-sec-go]'); if (sg) { S.section = sg.getAttribute('data-rp-sec-go'); save(); apply(true); renderSection(); return; }
     var cal = t.closest('[data-cal]');
     if (cal) {
       var a = cal.getAttribute('data-cal'), p = S.month.split('-'), y = +p[0], m = +p[1];
@@ -567,11 +806,31 @@
       try { w.dispatchEvent(new CustomEvent('kt:tasks-changed')); } catch (e2) {}
     }).catch(function (err) { c.setAttribute('aria-checked', 'false'); c.disabled = false; if (row) row.style.opacity = ''; toast(said(err, 'Could not update the task.'), 'error'); });
   }
+  // "+ Add a task due today" under Today: a private to-do of mine, due today. Enter adds it; Escape or leaving it empty closes it.
+  function addToday(btn) {
+    var f = d.createElement('form'); f.className = 'kt-rp-qt'; f.setAttribute('autocomplete', 'off');
+    f.innerHTML = '<input class="kt-rp-in" name="title" maxlength="200" placeholder="' + esc(T('Add a task due today')) + '" aria-label="' + esc(T('Add a task due today')) + '">'
+      + '<button type="submit" class="kt-rp-btn sm">' + esc(T('Add')) + '</button>';
+    btn.replaceWith(f);
+    var inp = f.querySelector('input'); inp.focus();
+    var close = function () { if (f.isConnected) renderSection(); };
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Escape') { e.stopPropagation(); close(); } });
+    inp.addEventListener('blur', function () { setTimeout(function () { if (f.isConnected && !inp.value.trim() && d.activeElement !== f.querySelector('button')) close(); }, 150); });
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var tt = inp.value.trim(); if (!tt) { inp.focus(); return; }
+      var b = f.querySelector('button'); b.disabled = true;
+      api().post('/tasks', { private: 1, title: tt, due_date: today(), priority: 'normal' }).then(function () {
+        toast('Task added');
+        try { w.dispatchEvent(new CustomEvent('kt:tasks-changed')); } catch (e2) {}
+      }).catch(function (err) { b.disabled = false; toast(said(err, 'Could not add the task.'), 'error'); });
+    });
+  }
   function wireAdd() {
     var f = scroller.querySelector('#kt-rp-add'); if (!f) return;
     var title = f.querySelector('[name=title]'), sel = f.querySelector('[name=to]'), filled = false;
     var fill = function () {
-      if (filled) return; filled = true;
+      if (filled || !canAssign()) return; filled = true;
       getAssignees().then(function (list) {
         var groups = {};
         list.forEach(function (a) { (groups[a.role_label] = groups[a.role_label] || []).push(a); });
@@ -580,20 +839,23 @@
           groups[g].forEach(function (a) { var o = d.createElement('option'); o.value = a.id; o.textContent = a.name + (a.centre_name ? ' · ' + a.centre_name : ''); og.appendChild(o); });
           sel.appendChild(og);
         });
-        if (!list.length) { var o = d.createElement('option'); o.disabled = true; o.textContent = 'Nobody to assign to'; sel.appendChild(o); }
       }).catch(function () { filled = false; });
     };
+    var btnLbl = function () { var b = f.querySelector('[type=submit]'); if (b) b.textContent = T(sel.value === 'me' ? 'Add task' : 'Assign task'); };
+    sel.addEventListener('change', btnLbl);
     title.addEventListener('focus', function () { f.classList.add('open'); fill(); });
     title.addEventListener('input', function () { f.classList.add('open'); fill(); });
     sel.addEventListener('focus', fill); sel.addEventListener('pointerdown', fill);
     f.addEventListener('submit', function (e) {
       e.preventDefault();
-      var tt = (title.value || '').trim(), to = parseInt(sel.value, 10), due = f.querySelector('[name=due]').value || null;
+      var tt = (title.value || '').trim(), mine = sel.value === 'me', to = parseInt(sel.value, 10), due = f.querySelector('[name=due]').value || null;
       if (!tt) { title.focus(); return; }
-      if (!to) { toast('Pick who the task is for', 'error'); sel.focus(); return; }
+      if (!mine && !to) { toast('Pick who the task is for', 'error'); sel.focus(); return; }
       var btn = f.querySelector('[type=submit]'); btn.disabled = true;
-      api().post('/tasks', { assigned_to: to, title: tt, due_date: due, priority: 'normal', notify_channels: ['app'] }).then(function () {
-        toast('Task assigned');
+      // Me = a private to-do: nobody else sees it and nothing is sent.
+      var bodyJ = mine ? { private: 1, title: tt, due_date: due, priority: 'normal' } : { assigned_to: to, title: tt, due_date: due, priority: 'normal', notify_channels: ['app'] };
+      api().post('/tasks', bodyJ).then(function () {
+        toast(mine ? 'Task added' : 'Task assigned');
         try { w.dispatchEvent(new CustomEvent('kt:tasks-changed')); } catch (e2) {}
         renderSection(true);
       }).catch(function (err) { btn.disabled = false; toast(said(err, 'Could not assign the task.'), 'error'); });
@@ -606,7 +868,7 @@
   function newMenu(anchor) {
     var items = [];
     if (canMeet()) items.push({ icon: '📅', label: 'New meeting', run: function () { newMeeting(S.section === 'calendar' ? S.sel : today()); } });
-    if (!platformView()) items.push({ icon: '☑️', label: 'New task', run: function () { S.section = 'tasks'; save(); apply(true); renderSection(); setTimeout(function () { var i = scroller.querySelector('#kt-rp-add [name=title]'); if (i) i.focus(); }, 400); } });
+    items.push({ icon: '☑️', label: 'New task', run: function () { S.section = 'tasks'; save(); apply(true); renderSection(); setTimeout(function () { var i = scroller.querySelector('#kt-rp-add [name=title]'); if (i) i.focus(); }, 400); } });
     if (!items.length) return;
     if (KT.quickPop) KT.quickPop({ anchor: anchor, items: items, label: 'New' }); else items[0].run();
   }
@@ -631,8 +893,14 @@
     booted = true;
     load();
     apply();
+    if (eligible()) loadServerPrefs();
     var rz = null;
     w.addEventListener('resize', function (e) { if (e && e.isTrusted === false) return; clearTimeout(rz); rz = setTimeout(function () { apply(); }, 150); });
+    // A task ticked or added on the Tasks screen (or here): the panel's list is stale.
+    w.addEventListener('kt:tasks-changed', function () {
+      if (C.at) C.at.t = 0;
+      if (isOpen() && (S.section === 'tasks' || S.section === 'calendar')) setTimeout(function () { renderSection(true); }, 50);
+    });
     w.addEventListener('kt:agency-changed', function () { cacheFor = null; if (scroller) scroller.innerHTML = ''; apply(); });
     // Role (View as) and phone chrome come and go as body classes: re-check on a change.
     var last = d.body.className;
@@ -660,5 +928,9 @@
   function start() { if (started) return; started = true; boot(); }
   w.addEventListener('kt:screen-settled', function () { setTimeout(start, 300); }, { once: true });
   setTimeout(start, 6000);
-  KT.rightPanel = { open: function (s) { if (s && SECTIONS.indexOf(s) !== -1) S.section = s; setOpen(true); }, close: function () { setOpen(false); }, refresh: function () { cacheFor = null; renderSection(true); } };
+  KT.rightPanel = { open: function (s) { if (s && SECTIONS.indexOf(s) !== -1) S.section = s; setOpen(true); }, close: function () { setOpen(false); }, refresh: function () { cacheFor = null; renderSection(true); },
+    // My settings > My day panel uses these (the same per-person "days ahead" as the panel's gear).
+    ranges: RANGES, getDays: function () { if (!booted) load(); return S.days; }, setDays: setDays, loadDays: function () {
+      return api().get('/auth/me/ui-prefs').then(function (j) { var n = okDays(j && j.prefs && j.prefs.my_day && j.prefs.my_day.days); if (n) { S.days = n; save(); } return S.days; }).catch(function () { return S.days; });
+    } };
 })(window, document);

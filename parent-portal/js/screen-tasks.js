@@ -180,13 +180,15 @@
           + (t.description ? '<div style="color:#64748B;font-size:12.5px;margin-top:3px;max-width:360px;white-space:pre-wrap;">' + esc(t.description) + '</div>' : '')
           + reminderLine(t)
         + '</td>'
-        + '<td style="padding:11px 10px;vertical-align:top;color:#334155;font-size:13px;">' + esc(t.assigned_to_name || '—') + (t.centre_name ? '<div style="color:#64748B;font-size:11.5px;">' + esc(t.centre_name) + '</div>' : '') + '</td>'
+        // Private to-dos (2026-11-25, My day panel "Me"): only their owner ever gets them in this list.
+        + '<td style="padding:11px 10px;vertical-align:top;color:#334155;font-size:13px;">' + (t.is_private ? 'Me' + '<span style="display:inline-block;font-size:10.5px;font-weight:800;padding:1px 7px;border-radius:6px;background:#EDE9FE;color:#5B21B6;margin-left:4px;" data-kttip="Only you can see this to-do">Private</span>' : esc(t.assigned_to_name || '—')) + (t.centre_name ? '<div style="color:#64748B;font-size:11.5px;">' + esc(t.centre_name) + '</div>' : '') + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;">' + chip(PRIO, t.priority) + '</td>'
         // Date created (2026-11-04, Anthony: "tasks section in the table add a date created column"), in the agency's time zone.
         + '<td style="padding:11px 10px;vertical-align:top;font-size:12.5px;color:#475569;white-space:nowrap;"' + (t.created_local ? ' data-kttip="' + esc(fmtDate(t.created_local) + ' · ' + String(t.created_local).slice(11, 16)) + '"' : '') + '>' + (t.created_local ? esc(fmtDate(t.created_local)) : '—') + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;font-size:12.5px;' + (od ? 'color:#B91C1C;font-weight:800;' : 'color:#475569;') + '">' + (t.due_date ? esc(fmtDate(t.due_date)) + (od ? ' ⚠' : '') : '—') + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;">' + chip(STATUS, t.status) + '</td>'
         + '<td style="padding:11px 10px;vertical-align:top;white-space:nowrap;text-align:right;">'
+          + (t.is_private && t.status !== 'done' ? '<button type="button" data-act="done" class="kt-act-icon kt-act-edit kt-icon-tip" data-kttip="Mark done" aria-label="Mark done">✅</button>' : '')
           + '<button type="button" data-act="view" class="kt-act-icon kt-act-info kt-icon-tip" data-kttip="View" aria-label="View">👁️</button>'
           + '<button type="button" data-act="edit" class="kt-act-icon kt-act-edit kt-icon-tip" data-kttip="Edit" aria-label="Edit">✏️</button>'
           + '<button type="button" data-act="del" class="kt-act-icon kt-act-danger kt-icon-tip" data-kttip="Delete" aria-label="Delete">🗑️</button>'
@@ -213,6 +215,12 @@
         del.disabled = true;
         Api.delete('/tasks/' + id).then(function () { toast('Task deleted'); loadManage(main); })
           .catch(function (e) { toast(e && e.message || 'Could not delete', false); del.disabled = false; });
+      });
+      var done = tr.querySelector('button[data-act="done"]');
+      if (done) done.addEventListener('click', function () {
+        done.disabled = true;
+        Api.patch('/tasks/' + id + '/status', { status: 'done' }).then(function () { toast('Task done'); try { window.dispatchEvent(new CustomEvent('kt:tasks-changed')); } catch (e2) {} loadManage(main); })
+          .catch(function (e) { toast(e && e.message || 'Could not update the task.', false); done.disabled = false; });
       });
       var view = tr.querySelector('button[data-act="view"]');
       if (view) view.addEventListener('click', function () { openTaskEditor(main, t, true); });
@@ -329,8 +337,9 @@
         + field('Priority', '<select id="te-prio" ' + dis + ' style="' + inp() + '">' + optList(['low', 'normal', 'high'], t.priority) + '</select>')
         + field('Due date', '<input id="te-due" type="date" value="' + esc(String(t.due_date || '').slice(0, 10)) + '" ' + dis + ' style="' + inp() + '">')
         + field('Status', '<select id="te-status" ' + dis + ' style="' + inp() + '">' + optList(['open', 'in_progress', 'done'], t.status) + '</select>')
-        + (t.assigned_to_name ? field('Assigned to', '<input type="text" value="' + esc(t.assigned_to_name) + '" disabled style="' + inp() + '">') : '')
-        + reminderBlock('te', t, dis)
+        + (t.is_private ? '<div style="font-size:12.5px;color:#5B21B6;background:#F5F3FF;border-radius:10px;padding:8px 10px;margin:4px 0 10px;">🔒 Private to-do: only you can see it, and it never sends anything.</div>'
+          : (t.assigned_to_name ? field('Assigned to', '<input type="text" value="' + esc(t.assigned_to_name) + '" disabled style="' + inp() + '">') : '')
+            + reminderBlock('te', t, dis))
       + '</div>',
       readOnly ? '<button type="button" data-x style="' + BTN_GHOST + '">Close</button>'
         : '<button type="button" data-x style="' + BTN_GHOST + '">Cancel</button><button type="button" id="te-save" style="' + BTN_MAIN + '">Save changes</button>');
@@ -346,9 +355,11 @@
         due_date: ov.querySelector('#te-due').value || null,
       };
       if (!payload.title) { toast('Title is required', false); return; }
-      var rem = readReminder(ov, 'te', payload.due_date);
-      if (rem.error) { toast(rem.error, false); return; }
-      payload.remind_at_local = rem.remind_at_local; payload.remind_channels = rem.remind_channels;
+      if (!t.is_private) {   // a private to-do has no reminder block
+        var rem = readReminder(ov, 'te', payload.due_date);
+        if (rem.error) { toast(rem.error, false); return; }
+        payload.remind_at_local = rem.remind_at_local; payload.remind_channels = rem.remind_channels;
+      }
       save.disabled = true;
       Api.patch('/tasks/' + t.id, payload).then(function () { toast('Task updated'); close(); loadManage(main); })
         .catch(function (e) { toast(e && e.message || 'Could not save', false); save.disabled = false; });

@@ -1028,6 +1028,32 @@
     lc.appendChild(langSel); lc.appendChild(langStatus);
     paneProfile.appendChild(lc);
 
+    // ── MY DAY PANEL (2026-11-25) ── how far ahead the desktop right panel's Coming up list and Meetings look.
+    // The same per-person setting as the panel's gear (ui-prefs my_day, via KT.rightPanel), so it follows them.
+    if (['agency_admin', 'centre_director', 'platform_admin', 'sales_rep'].indexOf(activeRole) !== -1) {
+      try {
+        var mdc = el('div', { style: CARD });
+        mdc.appendChild(el('div', { style: SECT }, ['My day panel']));
+        mdc.appendChild(el('div', { style: 'font-size:13px;color:#64748b;margin:-2px 0 12px;' },
+          ['How far ahead the Coming up list and Meetings look in the right panel on a computer.']));
+        var mdRanges = (KT.rightPanel && KT.rightPanel.ranges) || [[1, 'Today'], [3, '3 days'], [7, '1 week'], [14, '2 weeks'], [30, '1 month']];
+        var mdSel = el('select', { 'aria-label': 'Days ahead', style: 'width:100%;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:15px;background:#fff;color:#0f172a;cursor:pointer;' });
+        mdRanges.forEach(function (r) { var o = el('option', { value: String(r[0]) }, [r[1]]); if (r[0] === 7) o.selected = true; mdSel.appendChild(o); });
+        var mdStatus = el('div', { style: 'font-size:13px;min-height:16px;margin-top:8px;' });
+        var mdLoad = KT.rightPanel && KT.rightPanel.loadDays ? KT.rightPanel.loadDays()
+          : Api.get('/auth/me/ui-prefs').then(function (j) { return (j && j.prefs && j.prefs.my_day && j.prefs.my_day.days) || 7; });
+        Promise.resolve(mdLoad).then(function (n) { if (n) mdSel.value = String(n); }).catch(function () {});
+        mdSel.addEventListener('change', function () {
+          var n = parseInt(mdSel.value, 10);
+          var p = KT.rightPanel && KT.rightPanel.setDays ? KT.rightPanel.setDays(n) : Api.put('/auth/me/ui-prefs', { my_day: { days: n } });
+          Promise.resolve(p).then(function () { mdStatus.style.color = '#16A34A'; mdStatus.textContent = '✓ Saved'; })
+            .catch(function () { mdStatus.style.color = '#B91C1C'; mdStatus.textContent = 'Could not save that setting.'; });
+        });
+        mdc.appendChild(mdSel); mdc.appendChild(mdStatus);
+        paneProfile.appendChild(mdc);
+      } catch (e) {}
+    }
+
     // ── FAMILY DIRECTORY (guardian only) — moved here from the Directory screen so
     //    all of the user's preferences live in one place. ──
     //    Not for a parent the agency has not linked to a family yet: there is no family

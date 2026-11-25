@@ -638,7 +638,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/admin/ref-prefix', [\App\Http\Controllers\Api\RefController::class, 'prefix']);
         Route::put('/admin/ref-prefix', [\App\Http\Controllers\Api\RefController::class, 'setPrefix'])->middleware('throttle:10,1,r-admin-ref-prefix');
         // Tasks — admins/directors assign to educators; educators mark progress/done.
-        Route::middleware('role:educator,home_visitor,guardian,centre_director,agency_admin,platform_admin')->prefix('tasks')->group(function () {
+        Route::middleware('role:educator,home_visitor,guardian,centre_director,agency_admin,platform_admin,sales_rep')->prefix('tasks')->group(function () {
             Route::get('/mine', [\App\Http\Controllers\Api\TaskController::class, 'mine']);
             Route::patch('/{task}/status', [\App\Http\Controllers\Api\TaskController::class, 'updateStatus'])->where('task','[0-9]+');
             Route::get('/assignees', [\App\Http\Controllers\Api\TaskController::class, 'assignees']);

@@ -28,6 +28,45 @@ class TaskController extends Controller
             ->where('active', true)->whereNotNull('agency_id')->value('agency_id')) ?: null;
     }
 
+    /* PRIVATE TO-DOS (2026-11-25, Anthony): an admin / director / super admin's own task ("Me" in the My day panel).
+       assigned_to = assigned_by = them, is_private = 1. Only they ever see it - every list, count, digest, reminder and
+       offboarding plan leaves it out, and only they may change it. It lives in the agency they were working in, or
+       none (agency_id NULL) for a super admin with no agency picked. */
+    private function headerAgency(Request $request): ?int
+    {
+        $active = (int) $request->header('X-Active-Agency-Id');
+        if ($active && DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)
+                ->where(function ($q) use ($active) { $q->where('role', 'platform_admin')->orWhere('agency_id', $active); })->exists()) {
+            return $active;
+        }
+        return null;
+    }
+
+    /** Can this person keep private to-dos? Admins, directors (active agency) and the platform team (super admins and
+        sales reps - a sales rep's tasks are only ever their own). */
+    private function mayKeepPrivate(Request $request): bool
+    {
+        return $this->isReviewer($request) || DB::table('role_assignments')->where('user_id', $request->user()->id)
+            ->where('active', true)->whereIn('role', ['platform_admin', 'sales_rep'])->exists();
+    }
+
+    /** My private to-dos in this context: the agency I am working in (plus ones made with no agency), or, with no
+        agency picked, only the no-agency ones. */
+    private function privateScope($q, Request $request, string $p = 'tasks.'): void
+    {
+        $aid = $this->headerAgency($request);
+        $q->where($p . 'is_private', 1)->where($p . 'assigned_by', (int) $request->user()->id)
+          ->where(fn ($w) => $aid ? $w->where($p . 'agency_id', $aid)->orWhereNull($p . 'agency_id') : $w->whereNull($p . 'agency_id'));
+    }
+
+    /** A private task: only its owner. Anyone else is told it does not exist. */
+    private function assertOwnerIfPrivate(Request $request, $row): bool
+    {
+        if (empty($row->is_private)) return false;
+        abort_unless((int) $row->assigned_by === (int) $request->user()->id, 404, 'Task not found.');
+        return true;
+    }
+
     private function hasRole(Request $request, array $roles): bool
     {
         // Roles in the active agency only (2026-11-05): a role held in another agency gave reviewer powers here.
@@ -89,6 +128,7 @@ class TaskController extends Controller
             ->leftJoin('centres as c', 'c.id', '=', 'tasks.centre_id')
             ->whereNull('tasks.deleted_at')
             ->where('tasks.assigned_to', $uid)
+            ->where(fn ($w) => $w->where('tasks.is_private', 0)->orWhere(fn ($p) => $this->privateScope($p, $request)))
             ->orderByRaw("FIELD(tasks.status,'open','in_progress','done')")
             ->orderByRaw('tasks.due_date IS NULL, tasks.due_date ASC')
             ->orderByDesc('tasks.created_at')
@@ -111,6 +151,7 @@ class TaskController extends Controller
         abort_unless($row, 404, 'Task not found.');
 
         $uid = (int) $request->user()->id;
+        $this->assertOwnerIfPrivate($request, $row);
         abort_unless((int) $row->assigned_to === $uid || $this->isReviewer($request), 403, 'This task is not assigned to you.');
         /* Not your task: it must be in your agency/centres (2026-11-05 leak sweep): any reviewer
            could change the status of any task id, including another agency's or centre's. */
@@ -172,13 +213,16 @@ class TaskController extends Controller
     /** GET /tasks — every task in scope (agency, or the director's centres). */
     public function index(Request $request): JsonResponse
     {
-        abort_unless($this->isReviewer($request), 403);
+        abort_unless($this->isReviewer($request) || $this->mayKeepPrivate($request), 403);
+        $agencyOk = $this->isReviewer($request);
         $agencyId = $this->agencyId($request);
         $isPlatform = $this->hasRole($request, ['platform_admin']);
         $allMode = $isPlatform && strtolower(trim((string) $request->header('X-Active-Agency-Id'))) === 'all';
         $centreIds = $this->directorCentreIds($request, $agencyId);
 
-        if (! $allMode) {
+        if (! $allMode && ! $this->headerAgency($request) && ! $agencyOk) {
+            $agencyId = null;   // platform team with no agency picked: only their own private to-dos
+        } elseif (! $allMode) {
             abort_unless($agencyId, 422, 'No agency for this account.');
         }
 
@@ -187,8 +231,14 @@ class TaskController extends Controller
             ->leftJoin('users as ab', 'ab.id', '=', 'tasks.assigned_by')
             ->leftJoin('centres as c', 'c.id', '=', 'tasks.centre_id')
             ->whereNull('tasks.deleted_at')
-            ->when(! $allMode && $agencyId, fn ($q) => $q->where('tasks.agency_id', $agencyId))
-            ->when(is_array($centreIds), fn ($q) => $q->whereIn('tasks.centre_id', $centreIds ?: [-1]))
+            ->where(function ($w) use ($request, $allMode, $agencyId, $centreIds, $agencyOk) {
+                $w->where(function ($s) use ($allMode, $agencyId, $centreIds, $agencyOk) {
+                    if (! $agencyOk || (! $allMode && ! $agencyId)) { $s->whereRaw('1 = 0'); return; }
+                    $s->where('tasks.is_private', 0)
+                      ->when(! $allMode && $agencyId, fn ($q) => $q->where('tasks.agency_id', $agencyId))
+                      ->when(is_array($centreIds), fn ($q) => $q->whereIn('tasks.centre_id', $centreIds ?: [-1]));
+                })->orWhere(fn ($p) => $this->privateScope($p, $request));
+            })
             ->orderByRaw("FIELD(tasks.status,'open','in_progress','done')")
             ->orderByRaw('tasks.due_date IS NULL, tasks.due_date ASC')
             ->orderByDesc('tasks.created_at')
@@ -219,6 +269,9 @@ class TaskController extends Controller
     /** POST /tasks — create/assign a task to an educator. */
     public function store(Request $request): JsonResponse
     {
+        if ($request->boolean('private')) {
+            return $this->storePrivate($request);
+        }
         abort_unless($this->isReviewer($request), 403);
         $agencyId = $this->agencyId($request);
         abort_unless($agencyId, 422, 'Pick an agency before assigning tasks.');
@@ -275,13 +328,44 @@ class TaskController extends Controller
         return response()->json(['ok' => true, 'id' => $id, 'notified' => $notified], 201);
     }
 
+    /** POST /tasks with private=1: a to-do for me. Never notifies, never reminds, never assigned to anyone else. */
+    private function storePrivate(Request $request): JsonResponse
+    {
+        abort_unless($this->mayKeepPrivate($request), 403);
+        $data = $request->validate([
+            'title'       => 'required|string|max:200',
+            'description' => 'nullable|string|max:4000',
+            'priority'    => 'nullable|in:low,normal,high',
+            'due_date'    => 'nullable|date',
+        ]);
+        $uid = (int) $request->user()->id;
+        $id = DB::table('tasks')->insertGetId([
+            'agency_id'   => $this->headerAgency($request),
+            'centre_id'   => null,
+            'assigned_to' => $uid,
+            'assigned_by' => $uid,
+            'is_private'  => 1,
+            'title'       => $data['title'],
+            'description' => $data['description'] ?? null,
+            'priority'    => $data['priority'] ?? 'normal',
+            'due_date'    => $data['due_date'] ?? null,
+            'status'      => 'open',
+            'created_at'  => now(),
+            'updated_at'  => now(),
+        ]);
+        return response()->json(['ok' => true, 'id' => $id, 'private' => true, 'notified' => null], 201);
+    }
+
     /** PATCH /tasks/{id} — reviewer edits a task. */
     public function update(Request $request, int $id): JsonResponse
     {
-        abort_unless($this->isReviewer($request), 403);
         $row = DB::table('tasks')->whereNull('deleted_at')->where('id', $id)->first();
         abort_unless($row, 404, 'Task not found.');
-        $this->assertSameScope($request, $row);
+        $private = $this->assertOwnerIfPrivate($request, $row);
+        if (! $private) {
+            abort_unless($this->isReviewer($request), 403);
+            $this->assertSameScope($request, $row);
+        }
 
         $data = $request->validate([
             'title'       => 'sometimes|string|max:200',
@@ -295,6 +379,9 @@ class TaskController extends Controller
             'remind_channels.*' => 'string|in:app,email,sms,voice',
         ]);
 
+        if ($private) {   // a private to-do stays mine and silent
+            unset($data['assigned_to'], $data['remind_at_local'], $data['remind_channels']);
+        }
         $update = [];
         // A reminder changed: a new moment (or new channels) is sent again; cleared = none.
         if (array_key_exists('remind_at_local', $data) || array_key_exists('remind_channels', $data)) {
@@ -333,10 +420,12 @@ class TaskController extends Controller
     /** DELETE /tasks/{id} — reviewer soft-deletes a task. */
     public function destroy(Request $request, int $id): JsonResponse
     {
-        abort_unless($this->isReviewer($request), 403);
         $row = DB::table('tasks')->whereNull('deleted_at')->where('id', $id)->first();
         abort_unless($row, 404, 'Task not found.');
-        $this->assertSameScope($request, $row);
+        if (! $this->assertOwnerIfPrivate($request, $row)) {
+            abort_unless($this->isReviewer($request), 403);
+            $this->assertSameScope($request, $row);
+        }
         DB::table('tasks')->where('id', $id)->update(['deleted_at' => now(), 'updated_at' => now()]);
         return response()->json(['ok' => true]);
     }
@@ -363,7 +452,8 @@ class TaskController extends Controller
             'completed_at'    => $r->completed_at,
             'centre_id'       => $r->centre_id ? (int) $r->centre_id : null,
             'centre_name'     => $r->centre_name ?? null,
-            'assigned_by'     => isset($r->assigned_by) ? (int) $r->assigned_by : null,   // My day panel: "Assigned by me" (2026-11-25)
+            'assigned_by'     => isset($r->assigned_by) ? (int) $r->assigned_by : null,
+            'is_private'      => ! empty($r->is_private),   // My day panel: "Assigned by me" (2026-11-25)
             'assigned_by_name'=> $this->name((object) ['first_name' => $r->ab_first ?? null, 'last_name' => $r->ab_last ?? null, 'email' => $r->ab_email ?? null]),
             'created_at'      => $r->created_at,
             // Stored in UTC; the table's "Created" date is the agency's (AgencyTime).

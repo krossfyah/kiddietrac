@@ -117,6 +117,7 @@ final class AdminDigest
                 ? $x->where('t.agency_id', $c['agency'])->orWhereIn('t.centre_id', $c['centres'])
                 : $x->whereIn('t.centre_id', $c['centres']));
         if (Schema::hasColumn('tasks', 'status')) { $q->where('t.status', '!=', 'done'); }
+        if (Schema::hasColumn('tasks', 'is_private')) { $q->where('t.is_private', 0); }   // someone's own to-do is theirs alone
 
         $rows = $q->orderBy('t.due_date')->limit(8)
             ->get(['t.title', 't.due_date', 'u.first_name', 'u.last_name']);

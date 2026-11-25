@@ -63,6 +63,7 @@ final class TaskReminders
         return DB::table('tasks')
             ->whereNull('deleted_at')->whereNull('reminded_at')
             ->whereNotNull('remind_at')->where('remind_at', '<=', now('UTC'))
+            ->where('is_private', 0)   // a private to-do never notifies (2026-11-25)
             ->where('status', '!=', 'done')
             ->orderBy('remind_at')->limit(200)->get();
     }

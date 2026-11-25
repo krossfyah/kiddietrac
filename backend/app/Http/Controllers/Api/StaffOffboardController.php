@@ -575,7 +575,8 @@ final class StaffOffboardController extends Controller
                which does not exist — the try/catch swallowed it and every plan reported
                ZERO open tasks. A silent empty list is worse than an error here: it says
                "nothing outstanding" about somebody who is leaving. */
-            $q = DB::table('tasks')->where('assigned_to', $userId);
+            // Their private to-dos are theirs alone: never listed to whoever runs the offboarding (2026-11-25).
+            $q = DB::table('tasks')->where('assigned_to', $userId)->whereNull('deleted_at')->where('is_private', 0);
             if (Schema::hasColumn('tasks', 'status')) {
                 $q->whereNotIn('status', ['done', 'complete', 'completed', 'cancelled']);
             }
