@@ -363,6 +363,7 @@ class TaskController extends Controller
             'completed_at'    => $r->completed_at,
             'centre_id'       => $r->centre_id ? (int) $r->centre_id : null,
             'centre_name'     => $r->centre_name ?? null,
+            'assigned_by'     => isset($r->assigned_by) ? (int) $r->assigned_by : null,   // My day panel: "Assigned by me" (2026-11-25)
             'assigned_by_name'=> $this->name((object) ['first_name' => $r->ab_first ?? null, 'last_name' => $r->ab_last ?? null, 'email' => $r->ab_email ?? null]),
             'created_at'      => $r->created_at,
             // Stored in UTC; the table's "Created" date is the agency's (AgencyTime).

@@ -8,6 +8,34 @@
  * words only). New UI text goes HERE now.
  */
 window.KT_I18N_BASE && window.KT_I18N_BASE({
+    // 2026-11-25 My day - the right panel (kt-right-panel.js)
+    'My day': { fr: 'Ma journée', es: 'Mi día', hi: 'मेरा दिन' },
+    'Meetings': { fr: 'Réunions', es: 'Reuniones', hi: 'बैठकें' },
+    'Today at the centre': { fr: 'Aujourd’hui au centre', es: 'Hoy en el centro', hi: 'आज केंद्र में' },
+    'Collapse': { fr: 'Réduire', es: 'Contraer', hi: 'छोटा करें' },
+    'Open calendar': { fr: 'Ouvrir le calendrier', es: 'Abrir el calendario', hi: 'कैलेंडर खोलें' },
+    'Task due': { fr: 'Tâche à échéance', es: 'Tarea con vencimiento', hi: 'कार्य की नियत तिथि' },
+    'Reply needed': { fr: 'Réponse attendue', es: 'Respuesta pendiente', hi: 'जवाब चाहिए' },
+    'No meetings in the next 45 days.': { fr: 'Aucune réunion dans les 45 prochains jours.', es: 'No hay reuniones en los próximos 45 días.', hi: 'अगले 45 दिनों में कोई बैठक नहीं।' },
+    'Add a task…': { fr: 'Ajouter une tâche…', es: 'Añadir una tarea…', hi: 'कार्य जोड़ें…' },
+    'Add a task': { fr: 'Ajouter une tâche', es: 'Añadir una tarea', hi: 'कार्य जोड़ें' },
+    'Assign to…': { fr: 'Attribuer à…', es: 'Asignar a…', hi: 'इन्हें सौंपें…' },
+    'Assigned to me': { fr: 'Attribuées à moi', es: 'Asignadas a mí', hi: 'मुझे सौंपे गए' },
+    'Assigned by me': { fr: 'Attribuées par moi', es: 'Asignadas por mí', hi: 'मेरे द्वारा सौंपे गए' },
+    'No open tasks you assigned.': { fr: 'Aucune tâche ouverte attribuée par vous.', es: 'No hay tareas abiertas asignadas por usted.', hi: 'आपके सौंपे गए कोई खुले कार्य नहीं।' },
+    'No open tasks.': { fr: 'Aucune tâche ouverte.', es: 'No hay tareas abiertas.', hi: 'कोई खुला कार्य नहीं।' },
+    'All tasks': { fr: 'Toutes les tâches', es: 'Todas las tareas', hi: 'सभी कार्य' },
+    'New task': { fr: 'Nouvelle tâche', es: 'Nueva tarea', hi: 'नया कार्य' },
+    'Task done': { fr: 'Tâche terminée', es: 'Tarea completada', hi: 'कार्य पूरा हुआ' },
+    'Task assigned': { fr: 'Tâche attribuée', es: 'Tarea asignada', hi: 'कार्य सौंपा गया' },
+    'Could not load this right now.': { fr: 'Chargement impossible pour le moment.', es: 'No se pudo cargar en este momento.', hi: 'अभी इसे लोड नहीं किया जा सका।' },
+    'Could not update the task.': { fr: 'Impossible de mettre à jour la tâche.', es: 'No se pudo actualizar la tarea.', hi: 'कार्य अपडेट नहीं हो सका।' },
+    'Could not assign the task.': { fr: 'Impossible d’attribuer la tâche.', es: 'No se pudo asignar la tarea.', hi: 'कार्य सौंपा नहीं जा सका।' },
+    'Nobody to assign to': { fr: 'Personne à qui attribuer', es: 'No hay nadie a quien asignar', hi: 'सौंपने के लिए कोई नहीं' },
+    'Over ratio': { fr: 'Ratio dépassé', es: 'Proporción superada', hi: 'अनुपात से अधिक' },
+    'Over group size': { fr: 'Taille de groupe dépassée', es: 'Tamaño de grupo superado', hi: 'समूह आकार से अधिक' },
+    'more': { fr: 'de plus', es: 'más', hi: 'और' },
+    'Children here with no staff on the floor': { fr: 'Enfants présents sans personnel sur place', es: 'Niños presentes sin personal en sala', hi: 'बच्चे मौजूद हैं पर कोई स्टाफ़ नहीं' },
     // 2026-10-30 portal sweep (French crawl of every screen)
     // 2026-11-03 educator figures say what they count
     'At the centre': { fr: 'Au centre', es: 'En el centro', hi: 'केंद्र में' },

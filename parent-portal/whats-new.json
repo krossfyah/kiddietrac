@@ -4,6 +4,18 @@
         {
             "type": "new",
             "date": "2026-11-25",
+            "icon": "📅",
+            "title": "My day: a right panel like Outlook",
+            "body": "On a computer there is now a thin bar on the right of every screen with Calendar, Meetings, Tasks and Today at the centre. Click an icon to open it: a month calendar with the day's agenda, your next meetings with Join, your open tasks (tick one done or assign a new one), and children at centre, staff on floor, Safe Arrival not arrived and ratio alerts. Click the arrow to fold it away - it remembers how you like it.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-25",
             "icon": "💬",
             "title": "Parents can answer arrival texts with 1 or 2",
             "body": "Safe Arrival and morning check-in reminder texts now end with \"Reply 1 if running late, 2 if absent today.\" A reply is recorded exactly like the parent doing it in the app (running late with a time they send back, or absent), the room and directors are told, and the parent gets a confirmation. Anything else they text still reaches you in chat as before.",
