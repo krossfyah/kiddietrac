@@ -159,6 +159,8 @@ final class SearchRegistry
 
     /** Deliberately NOT in the global search, with the reason. */
     public const NOT_SEARCHABLE = [
+        'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',
+        'calendar_links' => 'encrypted Outlook/Google calendar permissions per person or agency (Settings > Calendar); secrets, never searched or shown as a record',
         'invoice_lines' => 'part of an invoice; the invoice is searchable and shows its lines',
         'payment_refunds' => 'shown on the payment it reverses (status Refunded) and on the invoice sheet',
         'payment_plans' => 'a plan; each instalment is issued as an invoice, which is searchable',
@@ -275,6 +277,8 @@ final class SearchRegistry
         'play_spark_materials' => 'the materials a room has on hand, offered as choices on Play Spark; a list, not a record',
         'play_spark_runs' => 'Play Spark "We did it" ledger: which children did an idea and the day entries it wrote; the entries show on each child\'s day',
         'play_spark_pictures' => 'Play Spark end-result drawings (PlaySparkPicture), shown with their idea or lesson activity; never a record people look up',
+        'calendar_event_links' => 'which Outlook/Google event a KiddieTrac meeting was written to, so it can be updated or cancelled; the meeting is the record',
+        'sms_attendance_prompts' => 'today\'s "Reply 1 / 2" arrival texts awaiting an answer (AttendanceReply); expire at the agency\'s midnight, never a record people look up',
     ];
 
     public const BASELINE_FILE = 'resources/kt/search-table-baseline.txt';
