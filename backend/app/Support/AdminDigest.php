@@ -355,16 +355,23 @@ final class AdminDigest
             $f = strtolower((string) ($p->frequency ?: 'monthly'));
             $byFreq[$f] = ($byFreq[$f] ?? 0) + 1;
         }
-        // Families with no invoice raised in the window are the actionable half.
-        $unbilled = 0;
+        /* Families with an enrolled child and NOTHING billed for this month or later, in KiddieTrac OR the partner's
+           billing (iLearn, external_invoices) - App\Support\BilledFamilies (2026-11-25). This counted only
+           KiddieTrac invoices CREATED inside the digest window (today, for the daily digest), so every iLearn
+           family read "no invoice raised" every morning, and the advice was a bulk run that would bill them twice. */
+        $unbilled = [];
+        $partner = null;
         if (Schema::hasTable('invoices')) {
-            $billed = DB::table('invoices')->whereIn('centre_id', $c['centres'])
-                ->whereDate('created_at', '>=', $c['from'])->distinct()->pluck('family_id')->all();
-            $unbilled = DB::table('families')->whereIn('centre_id', $c['centres'])
-                ->whereNull('deleted_at')->whereNull('suspended_at')
-                ->when($billed, fn ($q) => $q->whereNotIn('id', $billed))->count();
+            $tz = \App\Support\AgencyTime::tz((int) $c['agency']) ?: 'America/Toronto';
+            $since = \Illuminate\Support\Carbon::parse($c['to'], $tz)->startOfMonth()->toDateString();
+            $r = \App\Support\BilledFamilies::unbilledSince($c['centres'], $since);
+            $unbilled = $r['families'];
+            $partner = $r['partner_agency'];
         }
-        return ['plans' => $byFreq, 'unbilled_families' => $unbilled];
+        return ['plans' => $byFreq, 'unbilled_families' => count($unbilled),
+            'unbilled_names' => array_slice(array_values(array_map('strval', $unbilled)), 0, 8),
+            'partner_billing' => $partner,   // the partner's name ("iLearn") when the agency is billed there too, else null
+            'month' => \Illuminate\Support\Carbon::parse($c['to'])->format('F')];
     }
 
     /** Families on file that nobody has invited yet — the welcome-package reminder. */

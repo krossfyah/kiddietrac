@@ -2309,19 +2309,28 @@ final class InvoiceController extends Controller
 
         $generated = 0;
         $skipped = 0;
+        $skippedPartner = 0;
         // Invoices to email once every transaction has committed — see below.
         $emailQueue = [];
 
-        foreach ($enrollments as $familyId => $childEnrollments) {
-            // Skip if invoice already exists for this family for this month
-            $exists = DB::table('invoices')
-                ->where('family_id', $familyId)
-                ->whereMonth('issued_at', $month)
-                ->whereYear('issued_at', $year)
-                ->exists();
+        /* ALREADY BILLED FOR THIS MONTH (2026-11-25, App\Support\BilledFamilies): by an invoice raised here (issued
+           in the month OR covering it - a schedule raises December's in November) or by the partner's billing
+           (iLearn, external_invoices) due in the month. Issued-in-month only let a run bill iLearn's families, and a
+           schedule's family, a second time. Voided invoices raised here still block, as before. */
+        $mStart = $issueDate->copy()->startOfMonth()->toDateString();
+        $mEnd = $issueDate->copy()->endOfMonth()->toDateString();
+        $already = \App\Support\BilledFamilies::forMonth(array_keys($enrollments->all()), $mStart, $mEnd, true);
+        $alreadyNative = array_flip($already['native']);
+        $alreadyPartner = array_flip($already['partner']);
 
-            if ($exists) {
+        foreach ($enrollments as $familyId => $childEnrollments) {
+            if (isset($alreadyNative[(int) $familyId])) {
                 $skipped++;
+                continue;
+            }
+            if (isset($alreadyPartner[(int) $familyId])) {
+                $skipped++;
+                $skippedPartner++;
                 continue;
             }
 
@@ -2524,6 +2533,7 @@ final class InvoiceController extends Controller
             'emailed' => $emailed,
             'generated' => $generated,
             'skipped' => $skipped,
+            'skipped_partner' => $skippedPartner,
             'message' => "Generated {$generated} invoices for ".$issueDate->format('F Y'),
         ]);
     }

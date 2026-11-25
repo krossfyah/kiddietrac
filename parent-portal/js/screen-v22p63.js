@@ -1853,8 +1853,8 @@
           + (drafts.length ? ''
             : '<p style="margin:10px 0 0;font-size:12.5px;color:#64748B;">Nothing here is still unissued, '
               + 'so nothing will be withdrawn.</p>')
-        : '<p style="margin:0;font-size:13px;color:#64748B;">This schedule raised no invoices, so there is '
-          + 'nothing to withdraw.</p>')
+        : '<p style="margin:0;font-size:13px;color:#64748B;">No invoices were raised in KiddieTrac for this schedule, so there is '
+          + 'nothing to withdraw here. Invoices from a connected billing system are managed there.</p>')
       + '<div id="ps-cmsg" style="margin-top:10px;font-size:13px;color:#B91C1C;"></div>';
 
     KT.Shell.Modal.open({

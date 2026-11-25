@@ -924,15 +924,18 @@
     function doGenerate() {
       var p = period(monthSel, yearSel);
       KT.confirm('Generate invoices for ' + p.label + ' ' + p.year + ' at ' + centre.name + '?\n\n' +
-        'This creates one invoice per enrolled family. Existing invoices for this period are NOT overwritten.').then(function (ok) {
+        'This creates one invoice per enrolled family. Families already invoiced for this month, here or in a connected billing system, are skipped.').then(function (ok) {
         if (!ok) return;
         status.innerHTML = '<span style="color:#64748B;">Generating…</span>';
         Api.post('/admin/invoices/generate-batch', { centre_id: centre.id, month: p.month, year: p.year })
           .then(function (r) {
-            var created = (r.created != null) ? r.created : (r.count != null ? r.count : '?');
+            /* The server answers `generated` (+ `skipped`, `skipped_partner` = billed by a connected partner system already); this read
+               created/count only and showed "? created" (2026-11-25). */
+            var created = (r.generated != null) ? r.generated : (r.created != null ? r.created : (r.count != null ? r.count : '?'));
+            var skipNote = r.skipped ? ' · ' + r.skipped + ' already billed' + (r.skipped_partner ? ' (' + r.skipped_partner + ' in a connected billing system)' : '') : '';
             var total = (r.total_amount != null) ? r.total_amount : (r.total != null ? r.total : null);
             status.innerHTML = '<span style="color:#16A34A;font-weight:700;">✓ ' + created + ' created' + (total != null ? ' · $' + Number(total).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '') + '</span>';
-            toast('🧾', 'Invoices generated', created + ' invoice' + (created === 1 ? '' : 's') + ' created for ' + centre.name + '.', '#16A34A');
+            toast('🧾', 'Invoices generated', created + ' invoice' + (created === 1 ? '' : 's') + ' created for ' + centre.name + skipNote + '.', '#16A34A');
           })
           .catch(function (e) {
             status.innerHTML = '<span style="color:#DC2626;">Failed</span>';

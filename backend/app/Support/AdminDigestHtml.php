@@ -103,9 +103,18 @@ final class AdminDigestHtml
                 $body .= self::barChart('Fee plans by billing cycle', $labels, '#16A34A');
             }
             if (! empty($inv['unbilled_families'])) {
+                // Counts KiddieTrac AND partner (iLearn) invoices - AdminDigest::invoicing / BilledFamilies (2026-11-25).
+                $n = (int) $inv['unbilled_families'];
+                $month = (string) ($inv['month'] ?? 'this month');
+                $names = array_map(fn ($x) => htmlspecialchars((string) $x, ENT_QUOTES), (array) ($inv['unbilled_names'] ?? []));
                 $body .= '<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:9px;padding:11px 13px;font-size:13.5px;color:#92400E;margin-top:8px;">'
-                    . '<strong>' . (int) $inv['unbilled_families'] . ' famil' . ($inv['unbilled_families'] === 1 ? 'y has' : 'ies have')
-                    . ' had no invoice raised this period.</strong> Worth a bulk run before the cycle closes.</div>';
+                    . '<strong>' . $n . ' enrolled famil' . ($n === 1 ? 'y has' : 'ies have') . ' no invoice for ' . htmlspecialchars($month) . ' yet'
+                    . (! empty($inv['partner_billing']) ? ' in KiddieTrac or ' . htmlspecialchars((string) $inv['partner_billing']) : '') . '.</strong>'
+                    . ($names ? ' ' . implode(', ', $names) . ($n > count($names) ? ' and ' . ($n - count($names)) . ' more' : '') . '.' : '')
+                    . (! empty($inv['partner_billing'])
+                        ? ' Raise theirs wherever that family is billed.'
+                        : ' Worth a bulk run before the cycle closes.')
+                    . '</div>';
             }
             if ($body !== '') {
                 $html .= self::wrap('💸 Billing', $body);
@@ -172,8 +181,11 @@ final class AdminDigestHtml
         }
         if (! empty($s['invoicing']['unbilled_families'])) {
             $n = (int) $s['invoicing']['unbilled_families'];
-            $steps[] = 'Run the bulk invoices before the cycle closes: ' . $n . ' famil' . ($n === 1 ? 'y has' : 'ies have')
-                . ' had nothing raised this period.';
+            $steps[] = ! empty($s['invoicing']['partner_billing'])
+                ? 'Invoice the ' . $n . ' enrolled famil' . ($n === 1 ? 'y' : 'ies') . ' with nothing billed for '
+                    . ($s['invoicing']['month'] ?? 'this month') . ' in KiddieTrac or ' . $s['invoicing']['partner_billing'] . '.'
+                : 'Run the bulk invoices before the cycle closes: ' . $n . ' enrolled famil' . ($n === 1 ? 'y has' : 'ies have')
+                    . ' nothing billed for ' . ($s['invoicing']['month'] ?? 'this month') . '.';
         }
         if (! empty($s['welcome']['count'])) {
             $n = (int) $s['welcome']['count'];

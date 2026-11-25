@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-25",
+            "icon": "🧾",
+            "title": "iLearn invoices now count as billed",
+            "body": "The admin digest now counts invoices raised in iLearn as well as KiddieTrac, so it no longer says families have no invoice when iLearn has billed them. It names the families with nothing billed for the month in either system. The bulk invoice run also skips families already invoiced for that month, including in iLearn, so nobody is billed twice.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-25",
             "icon": "✨",
             "title": "Find Play Spark ideas in search",
             "body": "Type part of an idea's name in the top search box to find it: your own Play Spark ideas and the ones shared to your agency library, for the centres you look after. Tap one to open it in Play Spark.",
