@@ -73,19 +73,25 @@ class MicrosoftMailbox
         return (string) config('services.microsoft.redirect');
     }
 
-    /** The Microsoft sign-in page for this account. */
-    public static function authorizeUrl(object $a, int $userId, string $returnTo = 'email'): string
+    /**
+     * The Microsoft sign-in page for this account. $cal (2026-11-25, ExternalCalendar): "Connect calendar" - the same
+     * sign-in asking for the calendar too; ['scope' => personal|agency, 'agency_id' => ?int] comes back to finish().
+     * A mailbox whose calendar is already connected keeps asking for it on a plain Reconnect, so reconnecting mail
+     * never quietly drops the calendar.
+     */
+    public static function authorizeUrl(object $a, int $userId, string $returnTo = 'email', ?array $cal = null): string
     {
         $state = 'mbx.' . bin2hex(random_bytes(20));
         // Where the person lands afterwards: Email, or Sales -> Email for the shared sales mailbox (2026-10-26).
-        $returnTo = in_array($returnTo, ['email', 'sales-email'], true) ? $returnTo : 'email';
-        Cache::put('kt_mbx_state:' . hash('sha256', $state), ['account_id' => (int) $a->id, 'user_id' => $userId, 'return_to' => $returnTo], self::STATE_TTL);
+        $returnTo = in_array($returnTo, ['email', 'sales-email', 'calendar'], true) ? $returnTo : 'email';
+        $withCal = $cal !== null || \App\Support\ExternalCalendar::granted($a);
+        Cache::put('kt_mbx_state:' . hash('sha256', $state), ['account_id' => (int) $a->id, 'user_id' => $userId, 'return_to' => $returnTo, 'cal' => $cal, 'with_cal' => $withCal], self::STATE_TTL);
         return 'https://login.microsoftonline.com/' . rawurlencode(self::tenant()) . '/oauth2/v2.0/authorize?' . http_build_query([
             'client_id' => config('services.microsoft.client_id'),
             'response_type' => 'code',
             'redirect_uri' => self::redirectUri(),
             'response_mode' => 'query',
-            'scope' => self::SCOPES . ' ' . self::SETTINGS_SCOPE . ' ' . self::SEND_SCOPE,
+            'scope' => self::SCOPES . ' ' . self::SETTINGS_SCOPE . ' ' . self::SEND_SCOPE . ($withCal ? ' ' . \App\Support\ExternalCalendar::MS_SCOPE : ''),
             'state' => $state,
             'prompt' => 'select_account',
         ], '', '&', PHP_QUERY_RFC3986);
@@ -112,10 +118,14 @@ class MicrosoftMailbox
             return self::back(null, 'Microsoft did not send back a sign-in code. Please try again.', $to);
         }
         try {
-            $tok = self::tokenRequest(['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => self::redirectUri(), 'scope' => self::SCOPES . ' ' . self::SETTINGS_SCOPE . ' ' . self::SEND_SCOPE]);
+            $tok = self::tokenRequest(['grant_type' => 'authorization_code', 'code' => $code, 'redirect_uri' => self::redirectUri(),
+                'scope' => self::SCOPES . ' ' . self::SETTINGS_SCOPE . ' ' . self::SEND_SCOPE . (! empty($st['with_cal']) ? ' ' . \App\Support\ExternalCalendar::MS_SCOPE : '')]);
             $me = self::send($tok['access_token'], 'GET', self::GRAPH . '/me', ['$select' => 'mail,userPrincipalName'])->json();
         } catch (\Throwable $e) {
             return self::back(null, $e->getMessage(), $to);
+        }
+        if (! empty($st['cal']) && stripos((string) ($tok['scope'] ?? ''), 'Calendars.ReadWrite') === false) {
+            return self::back(null, 'Microsoft signed you in, but did not allow KiddieTrac to use the calendar. Nothing was changed. Try again and allow the calendar, or ask your Microsoft 365 administrator.', $to);
         }
         $identity = strtolower(trim((string) (($me['mail'] ?? '') ?: ($me['userPrincipalName'] ?? ''))));
         $nonce = bin2hex(random_bytes(20));
@@ -128,11 +138,15 @@ class MicrosoftMailbox
 
     private static function back(?string $nonce, ?string $err, string $to = 'email')
     {
+        // A calendar connect returns to Settings > Calendar with its own key, so the Email screen does not take it.
+        if ($to === 'calendar') {
+            return redirect()->away(self::FRONTEND . '/dashboard.html?' . ($nonce ? 'kcal=' . $nonce : 'kcal_error=' . rawurlencode((string) $err)) . '#settings/calendar');
+        }
         $q = $nonce ? 'mbx=' . $nonce : 'mbx_error=' . rawurlencode((string) $err);
         return redirect()->away(self::FRONTEND . '/dashboard.html?' . $q . '#' . (in_array($to, ['email', 'sales-email'], true) ? $to : 'email'));
     }
 
-    /** Called by the app, signed in. Returns [ok, message, account_id]. */
+    /** Called by the app, signed in. Returns [ok, message, account_id, calendar request (or null)]. */
     public static function finish(int $userId, string $nonce): array
     {
         $p = Cache::pull('kt_mbx_done:' . hash('sha256', $nonce));
@@ -169,7 +183,7 @@ class MicrosoftMailbox
 
         DB::table('email_accounts')->where('id', $a->id)->update([
             'auth_type' => 'microsoft',
-            'oauth_token' => Crypt::encryptString(json_encode(['refresh_token' => $tok['refresh_token']] + self::flags((string) ($tok['scope'] ?? ''), true, true))),
+            'oauth_token' => Crypt::encryptString(json_encode(['refresh_token' => $tok['refresh_token']] + self::flags((string) ($tok['scope'] ?? ''), true, true, true))),
             'oauth_identity' => $identity,
             'oauth_connected_at' => now(),
             'secret' => null,
@@ -178,7 +192,7 @@ class MicrosoftMailbox
             'updated_at' => now(),
         ] + self::cols(['auth_failed_at' => null, 'token_refreshed_at' => now()]));
         self::cacheAccess((int) $a->id, $tok);
-        return [true, 'Connected', (int) $a->id];
+        return [true, 'Connected', (int) $a->id, $p['cal'] ?? null];
     }
 
     /** The mailbox's Graph path: the person's own, or a shared one they can open. */
@@ -206,10 +220,10 @@ class MicrosoftMailbox
            Read the refresh token from the ROW, not from the copy this request loaded: another request (or the
            watcher) may have rotated it a moment ago. Microsoft keeps an older refresh token valid after rotation,
            so a race costs nothing - but saving a stale one over a fresh one would, a day later. */
-        $rt = null; $ms = false; $snd = false;
+        $rt = null; $ms = false; $snd = false; $cal = false;
         $stored = DB::table('email_accounts')->where('id', $a->id)->value('oauth_token') ?: $a->oauth_token;
-        try { $j = json_decode(Crypt::decryptString((string) $stored), true) ?: []; $rt = $j['refresh_token'] ?? null; $ms = ! empty($j['ms']); $snd = ! empty($j['snd']); } catch (\Throwable $e) {}
-        $was = ['ms' => $ms, 'snd' => $snd];
+        try { $j = json_decode(Crypt::decryptString((string) $stored), true) ?: []; $rt = $j['refresh_token'] ?? null; $ms = ! empty($j['ms']); $snd = ! empty($j['snd']); $cal = ! empty($j['cal']); } catch (\Throwable $e) {}
+        $was = ['ms' => $ms, 'snd' => $snd, 'cal' => $cal];
         if (! $rt) {
             self::authFailed($a, 'Microsoft sign-in is missing. Reconnect this mailbox (Sign in with Microsoft).');
             throw new \RuntimeException('This mailbox needs to be signed in with Microsoft again (Manage accounts, Sign in with Microsoft).');
@@ -217,14 +231,14 @@ class MicrosoftMailbox
         try {
             try {
                 $tok = self::tokenRequest(['grant_type' => 'refresh_token', 'refresh_token' => $rt]
-                    + ($ms || $snd ? ['scope' => self::SCOPES . ($ms ? ' ' . self::SETTINGS_SCOPE : '') . ($snd ? ' ' . self::SEND_SCOPE : '')] : []));
+                    + ($ms || $snd || $cal ? ['scope' => self::SCOPES . ($ms ? ' ' . self::SETTINGS_SCOPE : '') . ($snd ? ' ' . self::SEND_SCOPE : '') . ($cal ? ' ' . \App\Support\ExternalCalendar::MS_SCOPE : '')] : []));
             } catch (\RuntimeException $e) {
                 // An extra permission was withdrawn on its own: keep the mailbox; what is still granted is read back
                 // from the answer (no scope asked = everything the sign-in still has).
-                if (! ($ms || $snd) || $e->getCode() !== 401) throw $e;
+                if (! ($ms || $snd || $cal) || $e->getCode() !== 401) throw $e;
                 $tok = self::tokenRequest(['grant_type' => 'refresh_token', 'refresh_token' => $rt]);
-                $f = self::flags((string) ($tok['scope'] ?? ''), true, true);
-                $ms = ! empty($f['ms']); $snd = ! empty($f['snd']);
+                $f = self::flags((string) ($tok['scope'] ?? ''), true, true, true);
+                $ms = ! empty($f['ms']); $snd = ! empty($f['snd']); $cal = ! empty($f['cal']);
             }
         } catch (\RuntimeException $e) {
             // 401 = invalid_grant: revoked, password changed, MFA now required, or 90 days unused. Network trouble is not.
@@ -237,8 +251,8 @@ class MicrosoftMailbox
         // Microsoft hands out a NEW refresh token on (almost) every use; the newest is always the one kept.
         $upd = self::cols(['token_refreshed_at' => now()]);
         $newRt = ! empty($tok['refresh_token']) ? (string) $tok['refresh_token'] : $rt;
-        if ($newRt !== $rt || $was !== ['ms' => $ms, 'snd' => $snd]) {
-            $upd['oauth_token'] = Crypt::encryptString(json_encode(['refresh_token' => $newRt] + ($ms ? ['ms' => 1] : []) + ($snd ? ['snd' => 1] : [])));
+        if ($newRt !== $rt || $was !== ['ms' => $ms, 'snd' => $snd, 'cal' => $cal]) {
+            $upd['oauth_token'] = Crypt::encryptString(json_encode(['refresh_token' => $newRt] + ($ms ? ['ms' => 1] : []) + ($snd ? ['snd' => 1] : []) + ($cal ? ['cal' => 1] : [])));
         }
         if ($upd) {
             try { DB::table('email_accounts')->where('id', $a->id)->update($upd); } catch (\Throwable $e) {}
@@ -247,12 +261,13 @@ class MicrosoftMailbox
         return (string) $tok['access_token'];
     }
 
-    /** The extra permissions a token's granted scope string carries, as stored in oauth_token ('ms', 'snd'). */
-    private static function flags(string $scope, bool $settings, bool $send): array
+    /** The extra permissions a token's granted scope string carries, as stored in oauth_token ('ms', 'snd', 'cal'). */
+    private static function flags(string $scope, bool $settings, bool $send, bool $calendar = false): array
     {
         $out = [];
         if ($settings && stripos($scope, self::SETTINGS_SCOPE) !== false) $out['ms'] = 1;
         if ($send && preg_match('/(^|[\s\/])Mail\.Send(\s|$)/i', $scope)) $out['snd'] = 1;
+        if ($calendar && preg_match('/(^|[\s\/])Calendars\.ReadWrite(\s|$)/i', $scope)) $out['cal'] = 1;
         return $out;
     }
 

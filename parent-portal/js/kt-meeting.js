@@ -103,7 +103,7 @@
     var dur = el('div', { class: 'ktm-dur' });
     var videoMode = mt ? mt.video : (scope === 'platform' ? 'teams' : 'none');
     var seg = el('div', { class: 'ktm-seg', role: 'group', 'aria-label': 'Online meeting' });
-    var link = el('input', { type: 'url', placeholder: scope === 'platform' ? 'https://teams.microsoft.com/…  or a Zoom / Meet link' : 'Paste your Teams, Zoom or Google Meet link (https://…)', value: mt && mt.video === 'link' ? (mt.join_url || '') : '' });
+    var link = el('input', { type: 'url', placeholder: scope === 'platform' ? 'https://teams.microsoft.com/…  or a Zoom / Meet link' : 'Paste your Teams, Zoom or Google Meet link (https://…)', value: mt && (mt.video === 'link' || (scope !== 'platform' && mt.join_url)) ? (mt.join_url || '') : '' });
     var linkWrap = el('div', {}, [link]);
     var teamsNote = el('div', { class: 'ktm-note' });
     var loc = el('input', { type: 'text', maxlength: '255', placeholder: 'Room, address or "Phone call" (optional)', value: mt ? (mt.location || '') : '' });
@@ -195,14 +195,29 @@
     allDay.addEventListener('change', paintAllDay);
 
     var MODES = scope === 'platform' ? [['teams', '🟣 Teams meeting'], ['link', '🔗 Other link'], ['none', 'In person / phone']] : [['link', '🔗 Teams / Zoom / Meet link'], ['none', 'In person / phone']];
-    if (scope !== 'platform' && videoMode === 'teams') videoMode = 'link';
+    var savedVideo = videoMode;
+    if (scope !== 'platform' && (videoMode === 'teams' || videoMode === 'meet')) videoMode = 'link';
     MODES.forEach(function (m) { seg.appendChild(el('button', { type: 'button', 'data-v': m[0], onclick: function () { videoMode = m[0]; paintVideo(); } }, [m[1]])); });
     function paintVideo() {
       [].forEach.call(seg.children, function (b) { b.classList.toggle('on', b.getAttribute('data-v') === videoMode); });
       linkWrap.style.display = videoMode === 'link' ? '' : 'none';
-      teamsNote.textContent = videoMode === 'teams' ? (isEdit && mt.video === 'teams' && mt.join_url ? 'The Teams link stays the same.' : 'A Microsoft Teams link is created when you send, and goes in every invitation.') : '';
+      var same = isEdit && mt.video === videoMode && mt.join_url;
+      teamsNote.textContent = videoMode === 'teams' ? (same ? 'The Teams link stays the same.' : (scope === 'platform' ? 'A Microsoft Teams link is created when you send, and goes in every invitation.' : 'A Microsoft Teams link is made on your Outlook calendar when you save, and Outlook sends the invitations.'))
+        : videoMode === 'meet' ? (same ? 'The Google Meet link stays the same.' : 'A Google Meet link is made on your Google calendar when you save, and Google sends the invitations.') : '';
     }
     paintVideo();
+    /* An agency meeting can have a Teams / Meet link made for it when the organiser connected their own Outlook or
+       Google calendar (Settings > Calendar, 2026-11-25, App\Support\ExternalCalendar). */
+    if (scope !== 'platform' && KT.Api && KT.Api.get) {
+      KT.Api.get('/me/calendar-connections').then(function (j) {
+        var p = j && j.personal;
+        if (!p || p.status !== 'connected') return;
+        var m = p.provider === 'google' ? ['meet', '🟢 Google Meet'] : ['teams', '🟣 Teams meeting'];
+        seg.insertBefore(el('button', { type: 'button', 'data-v': m[0], onclick: function () { videoMode = m[0]; paintVideo(); } }, [m[1]]), seg.firstChild);
+        if (savedVideo === m[0]) videoMode = m[0];
+        paintVideo();
+      }).catch(function () {});
+    }
 
     var body = el('div', { class: 'ktm', 'data-kt-nogrid': '1', 'data-kt-nopack': '1', 'data-kt-nofit': '1' }, [
       title,

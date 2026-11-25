@@ -28,6 +28,11 @@
      - "Days ahead": a Coming up list under the calendar and the Meetings range follow one per-person setting
        (Today / 3 days / 1 week / 2 weeks / 1 month, default 1 week), saved server-side in ui-prefs my_day and
        set from the panel's gear or My settings.
+   • Outlook / Google (2026-11-25, Anthony: "make it so the calendar is connected to the email ... (optional)"): once
+     someone connects their own calendar or the agency's in Settings > Calendar (App\Support\ExternalCalendar), its
+     events join the calendar dots, the agenda, Coming up and Meetings (blue bar; the agency's private events read
+     "Busy"). One GET /me/calendar-connections/events per open section, cached 5 minutes here and on the server; when
+     nothing is connected the panel stops asking for the session and offers "Connect Outlook or Google calendar".
    • State per person in localStorage kt_rp_<user id>: { open, section, days }.
    • Times and "today" are the agency's (KT.agencyToday / KT.fmtTime). Text is translated by kt-i18n's sweep.
    ═══════════════════════════════════════════════════════════════════ */
@@ -53,6 +58,7 @@
     video: '<rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/>',
     clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
     lock: '<rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+    repeat: '<path d="M17 2.5 20.5 6 17 9.5"/><path d="M3.5 11V9.5A3.5 3.5 0 0 1 7 6h13.5"/><path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 13v1.5A3.5 3.5 0 0 1 17 18H3.5"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'
   };
   // "Days ahead" (2026-11-25): how far the Coming up list and the Meetings section look.
@@ -209,6 +215,32 @@
       c.overlays[k] = (j && j.events) || []; c.at['o:' + k] = Date.now(); return c.overlays[k];
     }).catch(function () { return []; });
   }
+  /* Outlook / Google events (ExternalCalendar). xcalNone: nothing connected - not asked again this session/agency. */
+  function getExternal(from, to) {
+    var c = cache();
+    if (c.xcalNone) return Promise.resolve([]);
+    var k = 'x:' + from + ':' + to;
+    if (c[k] && fresh(k, 300000)) return Promise.resolve(c[k]);
+    return api().get('/me/calendar-connections/events?from=' + from + '&to=' + to).then(function (j) {
+      var cals = (j && j.calendars) || [], tz = (j && j.timezone) || undefined, out = [];
+      if (!cals.length) { c.xcalNone = true; return []; }
+      c.xcalBad = cals.filter(function (x) { return !x.ok; }).map(function (x) { return x.address; });
+      ((j && j.events) || []).forEach(function (e) {
+        var date = e.all_day ? String(e.start).slice(0, 10) : (tzParts(e.start, tz).date || String(e.start).slice(0, 10));
+        var last = e.all_day ? addDays(String(e.end).slice(0, 10), -1) : date;
+        out.push({ kind: 'x', id: e.id, date: date, last: last < date ? date : last, startIso: e.all_day ? null : e.start, endIso: e.all_day ? null : e.end, tz: tz, all: !!e.all_day,
+          label: e.title, sub: e.location || (e.organizer || (e.source === 'agency' ? T('Agency calendar') : (e.provider === 'google' ? 'Google' : 'Outlook'))),
+          tent: !!e.tentative, priv: !!e.private && e.title !== 'Busy', rec: !!e.recurring, join: e.join_url, web: e.web_link });
+      });
+      c[k] = out; c.at[k] = Date.now(); return out;
+    }).catch(function () { return []; });
+  }
+  function xcalFooter() {
+    var c = cache();
+    if (c.xcalNone) return '<div class="kt-rp-row" style="margin-top:6px"><button type="button" class="kt-rp-link" data-go="settings/calendar">' + esc(T('Connect Outlook or Google calendar')) + '</button></div>';
+    if (c.xcalBad && c.xcalBad.length) return '<div class="kt-rp-row" style="margin-top:6px"><button type="button" class="kt-rp-link" data-go="settings/calendar">' + esc(T('Calendar needs reconnecting')) + '</button></div>';
+    return '';
+  }
   function getTasks(force) {
     var c = cache();
     if (!force && c.tasks && fresh('t', 120000)) return Promise.resolve(c.tasks);
@@ -345,6 +377,7 @@
       + '.kt-rp-ev:hover{background:#F1F5F9;}'
       + '.kt-rp-vb{width:4px;flex:0 0 4px;border-radius:2px;box-sizing:border-box;background:#0F9488;border:1.5px solid #0F9488;}'
       + '.kt-rp-vb.sl{background:#DB2777;border-color:#DB2777;}.kt-rp-vb.ev{background:#F59E0B;border-color:#F59E0B;}.kt-rp-vb.tk{background:#7C3AED;border-color:#7C3AED;}'
+      + '.kt-rp-vb.xc{background:#2563EB;border-color:#2563EB;}'
       + '.kt-rp-vb.tent{background:transparent;}'
       + '.kt-rp-tc{flex:0 0 60px;display:flex;flex-direction:column;justify-content:center;gap:1px;min-width:0;}'
       + '.kt-rp-t1{font-size:11.5px;font-weight:700;color:#1E293B;white-space:nowrap;}.kt-rp-t2{font-size:10.5px;color:#64748B;white-space:nowrap;}'
@@ -360,7 +393,7 @@
       + '.kt-rp-qt{display:flex;gap:6px;padding:4px 0;}'
       + '.kt-rp-cal-d i{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);display:flex;gap:2px;}'
       + '.kt-rp-cal-d i s{width:4px;height:4px;border-radius:50%;background:#2A8F9D;display:block;}'
-      + '.kt-rp-cal-d i s.ev{background:#F59E0B;}.kt-rp-cal-d i s.tk{background:#6366F1;}.kt-rp-cal-d i s.sl{background:#DB2777;}'
+      + '.kt-rp-cal-d i s.ev{background:#F59E0B;}.kt-rp-cal-d i s.tk{background:#6366F1;}.kt-rp-cal-d i s.sl{background:#DB2777;}.kt-rp-cal-d i s.xc{background:#2563EB;}'
       // tasks
       + '.kt-rp-in,.kt-rp-sel{height:30px;box-sizing:border-box;border:1px solid #CBD5E1;border-radius:8px;padding:0 9px;font:500 12.5px inherit;color:#0F172A;background:#fff;min-width:0;}'
       + '.kt-rp-in{width:100%;}.kt-rp-in:focus,.kt-rp-sel:focus{outline:2px solid #2A8F9D;outline-offset:0;border-color:#2A8F9D;}'
@@ -508,10 +541,11 @@
     // One fetch covers the month on show and the Coming up days (which may run into next month).
     var from = r[0] < t0 ? r[0] : t0, to = r[1] > aheadTo ? r[1] : aheadTo;
     if (force) { cache(); C.at = {}; }
-    return Promise.all([getMeetings(from, to), getOverlays(from, to), getTasks(force).catch(function () { return { mine: [], byMe: [] }; }), getSales(from, to)]).then(function (x) {
-      var ms = x[0], ev = x[1], tk = x[2], sl = x[3];
+    return Promise.all([getMeetings(from, to), getOverlays(from, to), getTasks(force).catch(function () { return { mine: [], byMe: [] }; }), getSales(from, to), getExternal(from, to)]).then(function (x) {
+      var ms = x[0], ev = x[1], tk = x[2], sl = x[3], xs = x[4];
       var by = {};
-      var put = function (day, kind, item) { (by[day] = by[day] || { m: [], e: [], t: [], s: [] })[kind].push(item); };
+      var put = function (day, kind, item) { (by[day] = by[day] || { m: [], e: [], t: [], s: [], x: [] })[kind].push(item); };
+      xs.forEach(function (e) { var dd = e.date, g = 0; while (dd <= e.last && g++ < 40) { put(dd, 'x', e); dd = addDays(dd, 1); } });
       ms.forEach(function (m) { var dd = m.date; var end = m.end_date || m.date; var g = 0; while (dd <= end && g++ < 40) { put(dd, 'm', m); dd = addDays(dd, 1); } });
       ev.forEach(function (e) { if (e.date) put(e.date, 'e', e); });
       tk.mine.concat(tk.byMe).forEach(function (t) { if (t.due_date) put(String(t.due_date).slice(0, 10), 't', t); });
@@ -531,11 +565,11 @@
         var day = addDays(start, k);
         if (k >= 35 && day.slice(0, 7) !== S.month) break;
         var b = by[day], dots = '';
-        if (b) { if (b.m.length) dots += '<s></s>'; if (b.s.length) dots += '<s class="sl"></s>'; if (b.e.length) dots += '<s class="ev"></s>'; if (b.t.length) dots += '<s class="tk"></s>'; }
+        if (b) { if (b.m.length) dots += '<s></s>'; if (b.x.length) dots += '<s class="xc"></s>'; if (b.s.length) dots += '<s class="sl"></s>'; if (b.e.length) dots += '<s class="ev"></s>'; if (b.t.length) dots += '<s class="tk"></s>'; }
         h += '<button type="button" class="kt-rp-cal-d' + (day.slice(0, 7) !== S.month ? ' out' : '') + (day === t ? ' today' : '') + (day === S.sel ? ' sel' : '') + '" data-day="' + day + '" aria-label="' + esc(fmtD(day, { weekday: 'long', month: 'long', day: 'numeric' })) + '">' + (+day.slice(8)) + (dots ? '<i>' + dots + '</i>' : '') + '</button>';
       }
       h += '</div></div><div class="kt-rp-sec" id="kt-rp-agenda">' + agendaHtml(S.sel) + '</div>'
-        + '<div class="kt-rp-sec" id="kt-rp-ahead">' + aheadHtml() + '</div>';
+        + '<div class="kt-rp-sec" id="kt-rp-ahead">' + aheadHtml() + xcalFooter() + '</div>';
       return h;
     });
   }
@@ -581,6 +615,12 @@
       out.push({ k: 'sl', all: !!x.all || isNaN(s), s: s, e: e, time: x.all || isNaN(s) ? '' : clock(x.startIso, x.tz), dur: x.all || isNaN(s) ? '' : dur(Math.round((e - s) / 60000)),
         title: x.label, sub: T('Sales') + (x.sub ? ' · ' + x.sub : ''), tent: !!x.tent, attr: 'data-go="' + esc(x.go) + '"', join: x.join });
     });
+    (b.x || []).forEach(function (x) {
+      var s = x.startIso ? Date.parse(x.startIso) : NaN, e = x.endIso ? Date.parse(x.endIso) : s, all = !!x.all || isNaN(s) || x.date !== day;
+      out.push({ k: 'xc', all: all, s: s, e: e, time: all ? '' : clock(x.startIso, x.tz), dur: all ? '' : dur(Math.round((e - s) / 60000)),
+        title: x.label, sub: x.sub, tent: !!x.tent, priv: !!x.priv, rec: !!x.rec, join: x.join,
+        attr: x.web && /^https:\/\//i.test(x.web) ? 'data-xlink="' + esc(x.web) + '"' : '' });
+    });
     (b.e || []).forEach(function (x) {
       out.push({ k: 'ev', all: true, title: (x.icon ? x.icon + ' ' : '') + (x.title || ''), sub: x.detail || '', attr: 'data-go="staff-calendar"' });
     });
@@ -599,6 +639,7 @@
       + '<span class="kt-rp-tc">' + tc + '</span>'
       + '<span class="kt-rp-ec"><b data-no-i18n data-kttip="' + esc(it.title) + '">' + esc(it.title) + '</b>' + (it.sub ? '<span data-no-i18n>' + esc(it.sub) + '</span>' : '') + '</span>'
       + (it.priv ? '<span class="kt-rp-ic" data-kttip="' + esc(T('Private')) + '">' + svg('lock', 13) + '</span>' : '')
+      + (it.rec ? '<span class="kt-rp-ic" data-kttip="' + esc(T('Repeats')) + '">' + svg('repeat', 13) + '</span>' : '')
       + (it.join && /^https?:\/\//i.test(it.join) ? '<a class="kt-rp-ic join" href="' + esc(it.join) + '" target="_blank" rel="noopener" data-join="1" data-kttip="' + esc(T('Join')) + '" aria-label="Join">' + svg('video', 14) + '</a>' : '')
       + '</div>';
   }
@@ -649,9 +690,10 @@
   function meetingsHtml(force) {
     var t = today(), to = addDays(t, S.days - 1);
     if (force) { cache(); C.at = {}; }
-    return Promise.all([getMeetings(t, to), getSales(t, to)]).then(function (x) {
+    return Promise.all([getMeetings(t, to), getSales(t, to), getExternal(t, to)]).then(function (x) {
       var map = {};
-      var put = function (day, k, it) { (map[day] = map[day] || { m: [], s: [] })[k].push(it); };
+      var put = function (day, k, it) { (map[day] = map[day] || { m: [], s: [], x: [] })[k].push(it); };
+      x[2].forEach(function (e) { var dd = e.date < t ? t : e.date, g = 0; while (dd <= e.last && dd <= to && g++ < 40) { put(dd, 'x', e); dd = addDays(dd, 1); } });
       x[0].forEach(function (m) { var dd = m.date < t ? t : m.date, end = m.end_date || m.date, g = 0; while (dd <= end && dd <= to && g++ < 40) { put(dd, 'm', m); dd = addDays(dd, 1); } });
       x[1].forEach(function (s) { put(s.date, 's', s); });
       var h = '<div class="kt-rp-sec"><div class="kt-rp-row" style="margin-bottom:4px;justify-content:space-between">' + (canMeet() ? '<button type="button" class="kt-rp-btn sm" data-new-meeting="' + t + '">' + svg('plus', 13) + ' New meeting</button>' : '<span></span>')
@@ -659,7 +701,7 @@
       var r = daysHtml(rangeDays(S.days), { map: map });
       h += r.html;
       if (!r.items) h += '<div class="kt-rp-none" style="margin-top:8px">' + esc(T('No meetings coming up.')) + '</div>';
-      h += '<div class="kt-rp-row" style="margin-top:8px"><button type="button" class="kt-rp-link" data-go="' + calHash() + '">Open calendar</button></div></div>';
+      h += '<div class="kt-rp-row" style="margin-top:8px"><button type="button" class="kt-rp-link" data-go="' + calHash() + '">Open calendar</button></div>' + xcalFooter() + '</div>';
       return h;
     });
   }
@@ -785,6 +827,8 @@
       return;
     }
     var ck = t.closest('.kt-rp-chk'); if (ck) { tickDone(ck); return; }
+    var xl = t.closest('[data-xlink]');
+    if (xl) { var wn = null; try { wn = w.open(xl.getAttribute('data-xlink'), '_blank'); if (wn) wn.opener = null; } catch (er) {} return; }
     var mt = t.closest('[data-meeting]');
     if (mt) { if (KT.Meeting && KT.Meeting.view) KT.Meeting.view(+mt.getAttribute('data-meeting'), { onChange: function () { cacheFor = null; renderSection(true); } }); return; }
     var g = t.closest('[data-go]'); if (g) { go(g.getAttribute('data-go')); return; }

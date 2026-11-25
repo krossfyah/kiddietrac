@@ -127,7 +127,7 @@ class MeetingController extends Controller
             'start_time' => ['nullable', 'date_format:H:i'],
             'end_time' => ['nullable', 'date_format:H:i'],
             'all_day' => ['nullable', 'boolean'],
-            'video' => ['nullable', 'in:teams,link,none'],
+            'video' => ['nullable', 'in:teams,meet,link,none'],
             'join_url' => ['nullable', 'string', 'max:1000'],
             'centre_id' => ['nullable', 'integer'],
             'booking_id' => ['nullable', 'integer'],
@@ -156,7 +156,21 @@ class MeetingController extends Controller
         if ($video === 'link') {
             if (! preg_match('~^https://[^\s]+$~i', $url)) return [null, null, 'Paste the full meeting link, starting with https://.'];
         }
-        if ($video === 'teams' && $scope !== 'platform') return [null, null, 'Paste your Teams link: agency calendars add the link themselves.'];
+        /* An agency meeting gets a Teams / Meet link from the organiser's own connected calendar (2026-11-25,
+           ExternalCalendar): Teams on a Microsoft one, Meet on a Google one. Without one, they paste a link. */
+        if ($video === 'teams' || $video === 'meet') {
+            if ($scope === 'platform') {
+                if ($video === 'meet') return [null, null, 'KiddieTrac team meetings use Teams.'];
+            } else {
+                $mine = \App\Support\ExternalCalendar::personal((int) $r->user()->id);
+                $need = $video === 'teams' ? 'microsoft' : 'google';
+                if (! $mine || $mine->provider !== $need || ! \App\Support\ExternalCalendar::account($mine)) {
+                    return [null, null, $video === 'teams'
+                        ? 'Connect your Microsoft 365 calendar (Settings, Calendar) for a Teams link, or paste your Teams link.'
+                        : 'Connect your Google calendar (Settings, Calendar) for a Meet link, or paste your Meet link.'];
+                }
+            }
+        }
         $centreId = $d['centre_id'] ?? null;
         if ($scope === 'agency') {
             $cs = CentreScope::ids($r, $aid);
@@ -214,12 +228,12 @@ class MeetingController extends Controller
            fails (Teams, an email) goes on the organiser's bell. "queued" is who will be emailed - not "sent". */
         $send = $r->boolean('send', true);
         $queued = $send ? count(array_filter($people, fn ($p) => filter_var($p['email'] ?? '', FILTER_VALIDATE_EMAIL))) : 0;
-        SendMeetingMail::dispatch('create', $id, $send, $m->video === 'teams' ? 'create' : null)->onQueue('mail');
+        SendMeetingMail::dispatch('create', $id, $send, $m->video === 'teams' && $scope === 'platform' ? 'create' : null)->onQueue('mail');
         $this->tellPeople($m, 'invite');
         Audit::write(['user_id' => $uid, 'agency_id' => $aid, 'action' => 'meeting.created', 'entity_type' => 'meeting', 'entity_id' => $id,
             'payload' => json_encode(['summary' => 'Scheduled "' . $m->title . '" for ' . Meetings::whenText($m) . ' with ' . count($people) . ' attendee' . (count($people) === 1 ? '' : 's') . ($queued ? '; invitation going to ' . $queued : '')]),
             'created_at' => now()]);
-        return response()->json(['meeting' => Meetings::shape($m, $uid), 'queued' => $queued, 'teams_pending' => $m->video === 'teams'], 201);
+        return response()->json(['meeting' => Meetings::shape($m, $uid), 'queued' => $queued, 'teams_pending' => in_array($m->video, ['teams', 'meet'], true)], 201);
     }
 
     /** PUT /meetings/{id} — change it; attendees hear about it (new ones get an invitation, removed ones a cancellation). */
@@ -231,7 +245,8 @@ class MeetingController extends Controller
         if ($m->status !== 'scheduled') return response()->json(['message' => 'This meeting was cancelled.'], 422);
         [$row, $people, $err] = $this->read($r, $m->scope, $m->agency_id ? (int) $m->agency_id : null);
         if ($err) return response()->json(['message' => $err], 422);
-        if ($m->video === 'teams' && $row['video'] === 'teams') unset($row['join_url']);   // keep the Teams link
+        if (in_array($m->video, ['teams', 'meet'], true) && $row['video'] === $m->video) unset($row['join_url']);   // keep the Teams / Meet link
+        elseif (in_array($row['video'], ['teams', 'meet'], true)) $row['join_url'] = null;   // switched to Teams / Meet: a new link is made
 
         $before = Meetings::attendees($id);
         $byEmail = []; foreach ($before as $b) $byEmail[$b->email] = $b;
@@ -250,7 +265,7 @@ class MeetingController extends Controller
         $removed = array_values(array_filter($before, fn ($b) => ! in_array((int) $b->id, $keep, true)));
         $m2 = DB::table('meetings')->where('id', $id)->first();
 
-        $teams = ($m2->video === 'teams' && $m->video !== 'teams' && $m2->scope === 'platform') ? 'create' : ($m2->video === 'teams' ? 'move' : null);
+        $teams = ($m2->video === 'teams' && $m->video !== 'teams' && $m2->scope === 'platform') ? 'create' : ($m2->video === 'teams' && $m2->scope === 'platform' ? 'move' : null);
 
         // Teams and the emails from the queue (see store). People taken off go now; their cancellation is
         // sent from the rows as they were.

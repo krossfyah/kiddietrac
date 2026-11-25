@@ -25,6 +25,11 @@ use Illuminate\Support\Facades\Log;
  *
  * The meeting is read again here, so the email carries what it says NOW. One try: a retried job would send
  * the same invitation twice. Whatever did not work - Teams, or an email - goes on the organiser's bell.
+ *
+ * CONNECTED CALENDARS (2026-11-25, App\Support\ExternalCalendar::push): the meeting goes on the organiser's own
+ * Outlook / Google calendar (and the agency's) first. For an agency meeting Microsoft / Google invite the attendees
+ * from the organiser's mailbox, so the people push() names are not emailed by KiddieTrac as well. If the calendar
+ * write fails, push() names nobody and KiddieTrac's own invitation goes out as before.
  */
 class SendMeetingMail implements ShouldQueue
 {
@@ -50,28 +55,44 @@ class SendMeetingMail implements ShouldQueue
         try {
             if ($this->kind === 'cancel') {
                 Meetings::teamsCancel($m);
+                $byCal = \App\Support\ExternalCalendar::push($m, 'cancel', $this->send);
                 if ($this->send) {
                     $told = DB::table('meeting_attendees')->where('meeting_id', $m->id)->whereNotNull('invited_at')->pluck('id')->map(fn ($x) => (int) $x)->all();
+                    $told = array_values(array_diff($told, $byCal));
                     if ($told) $this->tally(Meetings::send($m, 'cancel', $told), $problems);
                 }
             } else {
                 // A meeting cancelled before this ran: nothing to make, and nobody to invite to it.
                 if ($m->status !== 'scheduled') return;
-                if ($this->teams === 'create' && ! $m->graph_event_id) {
+                if ($m->scope === 'platform' && $this->teams === 'create' && ! $m->graph_event_id) {
                     $m = $this->teamsCreate($m, $problems);
-                } elseif ($this->teams === 'move') {
+                } elseif ($m->scope === 'platform' && $this->teams === 'move') {
                     Meetings::teamsMove($m);
                 }
+                // The organiser's connected calendar (and the agency's): Teams / Meet for an agency meeting is made there.
+                $byCal = \App\Support\ExternalCalendar::push($m, $this->kind === 'create' ? 'create' : 'update', $this->send);
+                $m = DB::table('meetings')->where('id', $m->id)->first();
+                if ($m->scope === 'agency' && in_array($m->video, ['teams', 'meet'], true) && ! $m->join_url) {
+                    $problems[] = ($m->video === 'teams' ? 'Teams' : 'Google Meet') . ' could not make a link for it (add one with Edit)';
+                }
+                if ($byCal) {
+                    DB::table('meeting_attendees')->whereIn('id', $byCal)->update(['invited_at' => now(), 'updated_at' => now()]);
+                }
+                $all = DB::table('meeting_attendees')->where('meeting_id', $m->id)->pluck('id')->map(fn ($x) => (int) $x)->all();
                 if ($this->send && $this->kind === 'create') {
-                    $this->tally(Meetings::send($m, 'invite'), $problems);
+                    $rest = array_values(array_diff($all, $byCal));
+                    if ($rest) $this->tally(Meetings::send($m, 'invite', $byCal ? $rest : null), $problems);
                 } elseif ($this->send) {
-                    if ($this->removed) {
+                    // The calendar told the people taken off as well when it handled the meeting's invitations.
+                    if ($this->removed && ! $byCal) {
                         $gone = array_map(fn ($a) => (object) $a, $this->removed);
                         $tmp = clone $m; $tmp->cancel_reason = 'You are no longer on the invitation list.';
                         $this->tally(Meetings::send($tmp, 'cancel', array_map(fn ($a) => (int) $a->id, $gone), null, $gone), $problems);
                     }
-                    if ($this->keep) $this->tally(Meetings::send($m, 'update', $this->keep), $problems);
-                    if ($this->added) $this->tally(Meetings::send($m, 'invite', $this->added), $problems);
+                    $keep = array_values(array_diff($this->keep, $byCal));
+                    $added = array_values(array_diff($this->added, $byCal));
+                    if ($keep) $this->tally(Meetings::send($m, 'update', $keep), $problems);
+                    if ($added) $this->tally(Meetings::send($m, 'invite', $added), $problems);
                 }
             }
         } catch (\Throwable $e) {

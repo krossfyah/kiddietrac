@@ -64,6 +64,7 @@ class MinuteBatchCommand extends Command
             'kiddietrac:educator-summary --due' => 30,
             'kiddietrac:parent-summary --due' => 30,
             'kt:encrypt-sensitive' => 10,
+            'kt:calendar-responses' => 10,   // answers from connected Outlook / Google calendars (2026-11-25)
         ],
         'fifteen' => [   // everyFifteenMinutes
             'kiddietrac:revoke-off-tokens' => 10,

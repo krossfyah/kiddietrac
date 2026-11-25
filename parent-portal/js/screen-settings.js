@@ -733,7 +733,8 @@
     /* CALENDAR SYNC (2026-11-03, cal1103): "Add to my calendar" - a private subscription link for
        Apple / Google / Outlook. Parents with a family, and paid staff. js/kt-cal-sync.js loads when
        the tab first opens, so nobody who never opens it makes a link. */
-    var calOn = isGuardian ? !cachedUser().family_pending : isPaidStaff;
+    // + the KiddieTrac team (2026-11-25): their Calendar tab holds the Outlook / Google connection (kt-cal-sync.js).
+    var calOn = isGuardian ? !cachedUser().family_pending : (isPaidStaff || activeRole === 'platform_admin' || activeRole === 'sales_rep');
     var paneCal = el('div', { class: 'kt-st-pane kt-st-full', style: 'display:none;' });
     /* PHOTOS (2026-11-06): each child's photo permission (kt-photo-consent.js, App\Support\MediaConsent). A parent with a
        family only; drawn when the tab first opens. #settings/photos opens it (the photo prompt and #photo-permissions point here). */
@@ -763,7 +764,7 @@
         if (_calDone) return; _calDone = true;
         var go = function () { KT.calSync.render(paneCal, { role: activeRole, mkSwitch: mkSwitch, CARD: CARD, SECT: SECT }); };
         if (KT.calSync) { go(); return; }
-        var s = document.createElement('script'); s.src = '/js/kt-cal-sync.js?v=20261103cal1'; s.onload = go;
+        var s = document.createElement('script'); s.src = '/js/kt-cal-sync.js?v=20261125xcal1'; s.onload = go;
         s.onerror = function () { _calDone = false; paneCal.textContent = 'Could not load. Please try again.'; };
         document.head.appendChild(s);
       });

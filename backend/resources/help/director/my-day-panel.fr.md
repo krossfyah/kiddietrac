@@ -50,3 +50,13 @@ Les enfants **Au centre** (sur les inscrits), le **Personnel sur le plancher**, 
 Les alertes de ratio et **Vérifier le personnel** viennent de la même vérification en direct que l'écran Ratios des salles, salle par salle, regroupées par centre. Cliquez sur une alerte pour ouvrir Ratios des salles. La section se met à jour toute seule toutes les deux ou trois minutes quand elle est ouverte; le bouton **↻** la met à jour tout de suite.
 
 Tout ce qui est dans le panneau suit ce que vous pouvez déjà voir - votre agence et, pour une direction, vos centres.
+
+## Calendrier Outlook ou Google (facultatif)
+
+Si vous utilisez une boîte Microsoft 365 (Outlook) ou Gmail dans **Courriel**, vous pouvez connecter son calendrier. Rien ne change tant que vous ne le faites pas.
+
+- Allez dans **Mes paramètres → Calendrier → Calendrier Outlook ou Google** et choisissez **Connecter le calendrier**. Microsoft ou Google vous demande d'autoriser KiddieTrac à voir et modifier le calendrier; choisissez **Accepter**. Si vous n'avez pas encore ajouté de boîte, ajoutez-la d'abord dans **Courriel → Gérer les comptes**.
+- **Mon calendrier** est le vôtre. Ses événements apparaissent dans ce panneau avec une barre bleue, et vous seul les voyez. Les réunions que vous organisez dans KiddieTrac y sont ajoutées : pour une réunion de l'agence, Outlook ou Google envoie les invitations depuis votre propre boîte et KiddieTrac récupère les réponses. Avec votre calendrier connecté, le formulaire de réunion propose aussi **Réunion Teams** (Outlook) ou **Google Meet** (Google) pour créer le lien vidéo.
+- **Calendrier de l'agence** (connecté par un administrateur d'agence, par exemple une boîte partagée du bureau) : les administrateurs et les directions voient ses événements dans le panneau, et les événements privés affichent seulement **Occupé**. Les réunions de l'agence y sont copiées.
+- Cliquez sur un événement Outlook ou Google dans le panneau pour l'ouvrir là-bas. **Déconnecter** arrête la lecture et l'ajout; les réunions déjà ajoutées y restent.
+- Si le panneau affiche **Le calendrier doit être reconnecté**, ouvrez **Mes paramètres → Calendrier** et choisissez **Reconnecter**.

@@ -86,6 +86,112 @@
     ]
   };
 
+  /* ── OUTLOOK / GOOGLE CALENDAR (2026-11-25, Anthony: "make it so the calendar is connected to the email that will be
+     setup via the mail client ... (optional)"). Opt-in: nothing changes until "Connect calendar". Uses a mailbox the
+     person already signed in to in Email (Microsoft 365 or Google) and asks Microsoft / Google for the calendar too.
+     Their own calendar: its events show in the My day panel, and meetings they organise go on it (Microsoft / Google
+     send the invitations). The agency's calendar (an agency admin connects it): its events show for the agency's
+     admins and directors - private ones as "Busy" - and the agency's meetings are copied onto it.
+     Server: /me/calendar-connections (CalendarConnectController, App\Support\ExternalCalendar). The sign-in comes
+     back to #settings/calendar with ?kcal= (or ?kcal_error=), finished here. ── */
+  function takeReturn() {
+    var q; try { q = new URLSearchParams(window.location.search); } catch (e) { return null; }
+    var n = q.get('kcal'), err = q.get('kcal_error');
+    if (!n && !err) return null;
+    q.delete('kcal'); q.delete('kcal_error');
+    var rest = q.toString();
+    try { history.replaceState(history.state, '', window.location.pathname + (rest ? '?' + rest : '') + window.location.hash); } catch (e) {}
+    return { nonce: n, error: err };
+  }
+  function renderExternal(host, o) {
+    var CARD = o.CARD || 'background:#fff;border-radius:16px;padding:16px;margin-bottom:14px;';
+    var SECT = o.SECT || 'font-size:16px;font-weight:800;color:#0f172a;margin:0 0 10px;';
+    var card = el('div', { style: CARD, 'data-kt-nofit': '1', class: 'kt-xcal' });
+    card.appendChild(el('div', { style: SECT, text: 'Outlook or Google calendar' }));
+    var body = el('div', {}, [el('div', { style: 'color:#64748B;font-size:13px;padding:6px 0;', text: 'Loading…' })]);
+    card.appendChild(body);
+    var back = takeReturn();
+    var first = back && back.nonce
+      ? Api.post('/me/calendar-connections/finish', { nonce: back.nonce }).then(function (r) {
+          toast('📅', 'Calendar connected', r && r.scope === 'agency' ? 'The agency calendar now shows in My day.' : 'Your calendar now shows in My day, and your meetings go on it.', '#16A34A');
+        }, function (e) { toast('⚠️', 'Calendar not connected', said(e, 'Please try again.'), '#B91C1C'); })
+      : Promise.resolve(back && back.error ? toast('⚠️', 'Calendar not connected', back.error, '#B91C1C') : null);
+    return first.then(function () { return Api.get('/me/calendar-connections'); }).then(function (d) {
+      if (!d || !d.available) return;   // not a role that has it: no card at all
+      host.appendChild(card);
+      paintX(body, d);
+    }).catch(function () {});
+  }
+  function paintX(body, d) {
+    body.innerHTML = '';
+    body.appendChild(el('div', { style: 'font-size:13.5px;color:#475569;line-height:1.5;margin:0 0 12px;', text:
+      'Optional. Connect the calendar of a mailbox you use in Email: its events show in your My day panel, and meetings you organise in KiddieTrac go on it, with the invitations sent from your own mailbox. Nothing changes until you connect it.' }));
+    var accts = (d.accounts || []).filter(function (a) { return a.signed_in; });
+    function row(title, sub, link, scope) {
+      var r = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;flex-wrap:wrap;' });
+      var left = el('div', { style: 'min-width:0;flex:1 1 220px;' }, [el('div', { style: 'font-weight:700;font-size:14px;color:#0f172a;', text: title }), el('div', { style: 'font-size:12.5px;color:#64748B;line-height:1.45;', text: sub })]);
+      r.appendChild(left);
+      var right = el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;' });
+      if (link) {
+        var st = link.status === 'connected' ? ['#DCFCE7', '#166534', '● Connected'] : (link.status === 'reconnect' ? ['#FFEDD5', '#9A3412', '● Needs sign-in'] : ['#FEE2E2', '#B91C1C', '● Problem']);
+        left.appendChild(el('div', { style: 'font-size:12.5px;color:#334155;margin-top:3px;' }, [
+          el('span', { style: 'background:' + st[0] + ';color:' + st[1] + ';border-radius:20px;padding:1px 8px;font-size:11px;font-weight:800;margin-right:6px;', text: st[2] }),
+          (link.provider === 'google' ? 'Google · ' : 'Microsoft · ') + (link.address || '')]));
+        if (link.detail) left.appendChild(el('div', { style: 'font-size:12px;color:#B91C1C;margin-top:3px;', text: link.detail }));
+        if (link.status !== 'connected') right.appendChild(connectBtn(scope, 'Reconnect', link.account_id));
+        var off = el('button', { type: 'button', style: BTN_RED, 'data-kt-iconized': '1' }, ['Disconnect']);
+        off.addEventListener('click', function () {
+          var ask = KT.confirm ? KT.confirm({ title: 'Disconnect this calendar?', description: 'KiddieTrac stops reading it and stops adding meetings to it. Meetings already added stay on it. To withdraw the permission completely, remove KiddieTrac in your Microsoft or Google account settings.', okLabel: 'Disconnect', tone: 'danger' })
+            : Promise.resolve(window.confirm('Disconnect this calendar?'));
+          Promise.resolve(ask).then(function (ok) {
+            if (!ok) return;
+            off.disabled = true;
+            Api.del ? Api.del('/me/calendar-connections/' + link.id).then(reload, fail) : Api.delete('/me/calendar-connections/' + link.id).then(reload, fail);
+            function fail(e) { off.disabled = false; toast('⚠️', 'Could not disconnect', said(e, 'Please try again.'), '#B91C1C'); }
+          });
+        });
+        right.appendChild(off);
+      } else {
+        right.appendChild(connectBtn(scope, 'Connect calendar'));
+      }
+      r.appendChild(right);
+      return r;
+    }
+    function connectBtn(scope, label, preferId) {
+      var b = el('button', { type: 'button', style: BTN_MAIN, 'data-kt-iconized': '1', 'data-xcal-connect': scope }, [label]);
+      b.addEventListener('click', function () {
+        if (!accts.length) {
+          toast('✉️', 'Connect a mailbox first', 'Add your Microsoft 365 or Gmail mailbox in Email (Manage accounts), then come back here.', '#1F6080');
+          return;
+        }
+        var go = function (id) {
+          b.disabled = true; b.textContent = 'Opening…';
+          Api.post('/me/calendar-connections/connect', { account_id: id, scope: scope }).then(function (r) {
+            if (r && r.url) { window.location.href = r.url; return; }
+            throw new Error('Could not start the sign-in.');
+          }).catch(function (e) { b.disabled = false; b.textContent = label; toast('⚠️', 'Could not start', said(e, 'Please try again.'), '#B91C1C'); });
+        };
+        var pref = preferId && accts.filter(function (a) { return a.id === preferId; })[0];
+        if (pref || accts.length === 1) { go((pref || accts[0]).id); return; }
+        if (KT.quickPop) {
+          KT.quickPop({ anchor: b, label: 'Which mailbox?', items: accts.map(function (a) { return { icon: a.provider === 'google' ? '🟢' : '🟦', label: a.address, sub: a.provider === 'google' ? 'Google' : 'Microsoft 365', run: function () { go(a.id); } }; }) });
+        } else { go(accts[0].id); }
+      });
+      return b;
+    }
+    body.appendChild(row('My calendar', 'Only you see its events. Meetings you organise go on it.', d.personal, 'personal'));
+    if (d.agency || d.can_set_agency) {
+      body.appendChild(row('Agency calendar' + (d.agency_name ? ' · ' + d.agency_name : ''),
+        'The agency’s own calendar (for example a shared office mailbox). Admins and directors see its events; private ones show as “Busy”. The agency’s meetings are copied onto it.',
+        d.agency, 'agency'));
+      if (!d.can_set_agency && !d.agency) body.lastChild.style.display = 'none';
+      if (!d.can_set_agency && d.agency) { [].forEach.call(body.lastChild.querySelectorAll('button'), function (x) { x.style.display = 'none'; }); }
+    }
+    if (!accts.length) body.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:8px;line-height:1.5;', text: 'You have no Microsoft 365 or Gmail mailbox signed in to Email yet. Add one in Email (Manage accounts) to connect its calendar.' }));
+    body.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-top:10px;line-height:1.5;', text: 'Microsoft or Google asks you to allow KiddieTrac to see and change the calendar. KiddieTrac reads events for the days the panel shows and keeps them for a few minutes; it never shares them with anyone else.' }));
+    function reload() { Api.get('/me/calendar-connections').then(function (nd) { paintX(body, nd); }).catch(function () {}); }
+  }
+
   function render(host, o) {
     o = o || {};
     var kind = o.role === 'guardian' ? 'parent' : 'staff';
@@ -97,6 +203,7 @@
     var body = el('div', {}, [el('div', { style: 'color:#64748B;font-size:13px;padding:6px 0;', text: 'Loading…' })]);
     card.appendChild(body);
     host.appendChild(card);
+    if (kind === 'staff') renderExternal(host, o);   // Outlook / Google (2026-11-25): only for roles the server says
 
     function load() {
       return Api.get('/me/calendar-feed?as=' + kind).then(paint).catch(function (e) {

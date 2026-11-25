@@ -50,3 +50,13 @@ Children **At Centre** (of those enrolled), **Staff on floor**, Safe Arrival chi
 Ratio alerts and **Check staffing** come from the same live ratio check as the Room ratios screen, room by room, grouped by centre. Click one to open Room ratios. The section refreshes on its own every couple of minutes while it's open; the **↻** button refreshes it now.
 
 Everything in the panel follows what you can already see - your agency, and for a director, your centres.
+
+## Outlook or Google calendar (optional)
+
+If you use a Microsoft 365 (Outlook) or Gmail mailbox in **Email**, you can connect its calendar. Nothing changes until you do.
+
+- Go to **My settings → Calendar → Outlook or Google calendar** and choose **Connect calendar**. Microsoft or Google asks you to allow KiddieTrac to see and change the calendar; choose **Accept**. If you haven't added a mailbox yet, add it in **Email → Manage accounts** first.
+- **My calendar** is your own. Its events show in this panel with a blue bar, and only you see them. Meetings you organise in KiddieTrac go on it: for an agency meeting, Outlook or Google sends the invitations from your own mailbox and KiddieTrac reads everyone's answers back. With your calendar connected, the meeting form also offers **Teams meeting** (Outlook) or **Google Meet** (Google) to make the video link for you.
+- **Agency calendar** (agency admins connect it - for example a shared office mailbox): admins and directors see its events in the panel, and private ones just say **Busy**. The agency's meetings are copied onto it.
+- Click an Outlook or Google event in the panel to open it there. **Disconnect** stops KiddieTrac reading and adding to the calendar; meetings already added stay on it.
+- If the panel shows **Calendar needs reconnecting**, open **My settings → Calendar** and choose **Reconnect**.

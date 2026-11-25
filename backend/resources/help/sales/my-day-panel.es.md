@@ -50,3 +50,13 @@ Niños **En el centro** (de los inscritos), **Personal en piso**, niños de Lleg
 Las alertas de proporción y **Revisar personal** vienen de la misma verificación en vivo que la pantalla Proporciones de salas, sala por sala, agrupadas por centro. Haz clic en una para abrir Proporciones de salas. La sección se actualiza sola cada par de minutos mientras está abierta; el botón **↻** la actualiza ahora.
 
 Todo lo del panel sigue lo que ya puedes ver - tu agencia y, para una dirección, tus centros.
+
+## Calendario de Outlook o Google (opcional)
+
+Si usa un buzón de Microsoft 365 (Outlook) o Gmail en **Correo**, puede conectar su calendario. Nada cambia hasta que lo haga.
+
+- Vaya a **Mi configuración → Calendario → Calendario de Outlook o Google** y elija **Conectar calendario**. Microsoft o Google le pide permitir que KiddieTrac vea y cambie el calendario; elija **Aceptar**. Si aún no agregó un buzón, agréguelo primero en **Correo → Administrar cuentas**.
+- **Mi calendario** es el suyo. Sus eventos aparecen en este panel con una barra azul y solo usted los ve. Las reuniones que organiza en KiddieTrac se agregan a él: en una reunión de la agencia, Outlook o Google envía las invitaciones desde su propio buzón y KiddieTrac lee las respuestas. Con su calendario conectado, el formulario de reunión también ofrece **Reunión de Teams** (Outlook) o **Google Meet** (Google) para crear el enlace de video.
+- **Calendario de la agencia** (lo conecta un administrador de la agencia, por ejemplo un buzón compartido de la oficina): los administradores y directores ven sus eventos en el panel, y los privados solo dicen **Ocupado**. Las reuniones de la agencia se copian en él.
+- Haga clic en un evento de Outlook o Google en el panel para abrirlo allí. **Desconectar** deja de leer y agregar al calendario; las reuniones ya agregadas se quedan.
+- Si el panel muestra **El calendario necesita reconectarse**, abra **Mi configuración → Calendario** y elija **Reconectar**.

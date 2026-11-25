@@ -1181,6 +1181,9 @@ post educator-points/auto/drafts/{id}/skip | Skipped an automatic thank-you awar
 post educator-points/auto/send-all | Sent all pending automatic thank-you awards
 patch me/calendar-feed | Changed what their calendar link shows
 post me/calendar-feed/reset | Reset their calendar link
+post me/calendar-connections/connect | Started connecting an Outlook / Google calendar
+post me/calendar-connections/finish | Connected an Outlook / Google calendar
+delete me/calendar-connections/{id} | Disconnected an Outlook / Google calendar
 post curriculum/units/{id}/use | Made draft lesson plans from a curriculum unit
 post curriculum/units/{id}/copy | Copied a curriculum unit
 put curriculum/units/{id} | Edited a curriculum unit

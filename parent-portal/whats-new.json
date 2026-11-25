@@ -5,6 +5,19 @@
             "type": "new",
             "date": "2026-11-25",
             "icon": "📅",
+            "title": "Connect Outlook or Google calendar",
+            "body": "Optional: in My settings, Calendar, connect the calendar of a Microsoft 365 or Gmail mailbox you use in Email. Its events show in your My day panel, and meetings you organise go on it with a Teams or Meet link, invitations sent from your own mailbox.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "sales_rep"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-25",
+            "icon": "📅",
             "title": "My day: a right panel like Outlook",
             "body": "On a computer there is now a thin bar on the right of every screen with Calendar, Meetings, Tasks and Today at the centre, like Outlook. The calendar lists what is coming up the way Outlook does: Today and Tomorrow headings, start times with how long each lasts, the next event tinted with Up next, and finished ones dropping off. Choose how far ahead it looks (today, 3 days, 1 week, 2 weeks or 1 month) with the gear or in My settings. Add private to-dos for yourself: Me is picked first in Add a task, and only you can ever see them. Ratio alerts check every room in every centre you look after, grouped by centre. Super admins and the sales team also see sales bookings and follow-ups in pink. Click the arrow to fold it away; it remembers your choice.",
             "roles": [

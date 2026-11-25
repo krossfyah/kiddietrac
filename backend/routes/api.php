@@ -1000,6 +1000,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/me/calendar-feed', [\App\Http\Controllers\Api\CalendarFeedController::class, 'show']);
         Route::patch('/me/calendar-feed', [\App\Http\Controllers\Api\CalendarFeedController::class, 'update']);
         Route::post('/me/calendar-feed/reset', [\App\Http\Controllers\Api\CalendarFeedController::class, 'reset'])->middleware('throttle:10,1,calreset');
+        // Outlook / Google calendar through the mail client (2026-11-25, App\Support\ExternalCalendar): opt-in, own + agency.
+        Route::get('/me/calendar-connections', [\App\Http\Controllers\Api\CalendarConnectController::class, 'index']);
+        Route::get('/me/calendar-connections/events', [\App\Http\Controllers\Api\CalendarConnectController::class, 'events'])->middleware('throttle:60,1,xcal-events');
+        Route::post('/me/calendar-connections/connect', [\App\Http\Controllers\Api\CalendarConnectController::class, 'connect'])->middleware('throttle:20,1,xcal-connect');
+        Route::post('/me/calendar-connections/finish', [\App\Http\Controllers\Api\CalendarConnectController::class, 'finish'])->middleware('throttle:20,1,xcal-connect');
+        Route::delete('/me/calendar-connections/{id}', [\App\Http\Controllers\Api\CalendarConnectController::class, 'destroy'])->whereNumber('id')->middleware('throttle:20,1,xcal-connect');
         Route::put('/me/voice-opt-out', [\App\Http\Controllers\Api\ContactPrefsController::class, 'voiceOptOut']);
         // Consent to be texted at all — a separate question from which events you want,
         // and the one a carrier wants evidence of. See kiddietrac.com/privacy#sms.
