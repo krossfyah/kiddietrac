@@ -252,7 +252,7 @@
         if (_ktScreenReq) { try { window.__ktScreenInflight = Math.max(0, (window.__ktScreenInflight || 1) - 1); } catch (e) {} }
       }
     },
-    async _request(path, { method = 'GET', body = null, query = null, _retried = false } = {}) {
+    async _request(path, { method = 'GET', body = null, query = null, quiet = false, _retried = false } = {}) {
       const opts_retried = _retried;
       let url = API_BASE + path;
       if (query) {
@@ -292,6 +292,9 @@
           method,
           headers,
           body: body ? (isForm ? body : JSON.stringify(body)) : null,
+          // Housekeeping the person did not ask to save (archive a chat, mark read): kt-progress shows no
+          // "Saving... Saved" for it. fetch() ignores the extra key.
+          ktQuiet: quiet || undefined,
         });
       } catch (e) {
         /* "NETWORK ERROR — CHECK YOUR CONNECTION" WAS USUALLY A LIE (2026-09-18).
@@ -334,7 +337,7 @@
         if (_idempotent && !offline && !opts_retried) {
           await new Promise(r => setTimeout(r, 900));
           try {
-            return await this._request(path, { method, body, query, _retried: true });
+            return await this._request(path, { method, body, query, quiet, _retried: true });
           } catch (again) {
             Api._reportFailure(path, method, 0, Date.now() - _started, 'fetch_rejected');
             throw again;
@@ -563,13 +566,16 @@
       }
       return p;
     },
-    post(path, body) { return this.request(path, { method: 'POST', body }); },
+    /* QUIET WRITES (2026-11-25, Anthony: "when closing a chat message why does the save toast show up"). The last
+       argument { quiet: true } marks a write that tidies rather than saves - archiving a conversation, marking
+       something read, a chat action whose result is already on screen - so kt-progress.js shows no "Saved" for it. */
+    post(path, body, o) { return this.request(path, { method: 'POST', body, quiet: !!(o && o.quiet) }); },
     /** Multipart upload. Same as post() — request() detects FormData — but named
      *  so call sites reading as an upload are obvious. */
     postForm(path, formData) { return this.request(path, { method: 'POST', body: formData }); },
-    patch(path, body) { return this.request(path, { method: 'PATCH', body }); },
-    put(path, body) { return this.request(path, { method: 'PUT', body }); },
-    delete(path) { return this.request(path, { method: 'DELETE' }); },
+    patch(path, body, o) { return this.request(path, { method: 'PATCH', body, quiet: !!(o && o.quiet) }); },
+    put(path, body, o) { return this.request(path, { method: 'PUT', body, quiet: !!(o && o.quiet) }); },
+    delete(path, o) { return this.request(path, { method: 'DELETE', quiet: !!(o && o.quiet) }); },
   };
 
   class ApiError extends Error {

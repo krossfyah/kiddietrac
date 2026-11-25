@@ -104,7 +104,7 @@
         { label: 'Later', handler: function () { a.__done = true; later[a.key] = 1; saveLater(); a.__next = true; next(); } },
         { label: "✓ I've read this", primary: true, busyLabel: 'Saving…', handler: function () {
           var path = (a.audience === 'parent' ? '/parent' : '/provider') + '/announcements/state';
-          return KT.Api.post(path, { keys: [a.key], action: 'read' }).then(function () {
+          return KT.Api.post(path, { keys: [a.key], action: 'read' }, { quiet: true }).then(function () {
             a.__done = true; a.__next = true; next();
             try { KT.badges && KT.badges.refresh && KT.badges.refresh(); } catch (e) {}
             try { window.dispatchEvent(new CustomEvent('kt:announcement-read', { detail: { key: a.key } })); } catch (e) {}

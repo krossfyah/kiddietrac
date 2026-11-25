@@ -75,7 +75,7 @@
   function archiveRow(a, id, host) {
     id = parseInt(id, 10); if (!id || !KT.Api) return;
     a.style.opacity = '.4';
-    KT.Api.post('/chat-archive', { kind: 'web', id: id, archived: true }).then(function () {
+    KT.Api.post('/chat-archive', { kind: 'web', id: id, archived: true }, { quiet: true }).then(function () {
       archived.push(String(id));
       a.style.opacity = '';
       a.innerHTML = '<span style="flex:1;font-size:12.5px;color:#64748B;">Removed</span>'
@@ -84,7 +84,7 @@
       var u = a.querySelector('.kt-wc-undo');
       u.addEventListener('click', function (e) {
         e.preventDefault(); e.stopPropagation(); clearTimeout(gone); u.disabled = true; u.textContent = 'Restoring…';
-        KT.Api.post('/chat-archive', { kind: 'web', id: id, archived: false }).then(function () {
+        KT.Api.post('/chat-archive', { kind: 'web', id: id, archived: false }, { quiet: true }).then(function () {
           archived = archived.filter(function (x) { return x !== String(id); }); render(host);
         }).catch(function () { u.disabled = false; u.textContent = 'Undo'; });
       });
@@ -226,7 +226,8 @@
       b.addEventListener('click', function (e) { e.stopPropagation(); fn(b); });
       return b;
     }
-    function post(path, body) { return KT.Api.post('/sales/web-chats/' + id + path, body || {}); }
+    // Chat actions (join, close, hand back, reply, nudge, lead): the chat shows the result - no "Saved" (kt-progress).
+    function post(path, body) { return KT.Api.post('/sales/web-chats/' + id + path, body || {}, { quiet: true }); }
     function changed() { try { opts.onChange && opts.onChange(st.chat); } catch (e) {} if (KT.webChats && KT.webChats.load) KT.webChats.load(true); }
     function paintHead() {
       var c = st.chat; if (!c) return;

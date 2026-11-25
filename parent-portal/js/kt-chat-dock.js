@@ -875,7 +875,7 @@
       undo.disabled = true;
       undo.textContent = 'Restoring\u2026';
       fetch(dockApiBase() + '/chat-archive', {
-        method: 'POST', headers: dockHeaders(),
+        method: 'POST', headers: dockHeaders(), ktQuiet: true,
         body: JSON.stringify({ kind: kind, id: refId, archived: false }),
       }).then(function (r) {
         if (r && r.ok) {
@@ -987,7 +987,7 @@
             var tok = null;
             try { tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token'); } catch (e2) {}
             fetch(((w.KT && w.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1') + '/chat-archive', {
-              method: 'POST',
+              method: 'POST', ktQuiet: true,   // closing a chat is not a save (kt-progress)
               headers: { 'Content-Type': 'application/json', Accept: 'application/json',
                          Authorization: 'Bearer ' + tok,
                          'X-Active-Agency-Id': (function () {

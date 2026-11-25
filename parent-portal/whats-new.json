@@ -2,6 +2,23 @@
     "updated": "2026-11-25",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-25",
+            "icon": "💬",
+            "title": "No more \"Saved\" when you close a chat",
+            "body": "Taking a conversation off your chat list, restoring it, website-chat actions and marking an announcement read no longer flash \"Saving… Saved\". The Saved message now only appears when you actually change a setting or save something.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-25",
             "icon": "📅",

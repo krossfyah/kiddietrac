@@ -620,7 +620,7 @@
       setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
     }
     function archiveChat(s, on) {
-      Api.post('/platform/marketing-site/chats/archive', { session: s.session, archived: on }).then(function () {
+      Api.post('/platform/marketing-site/chats/archive', { session: s.session, archived: on }, { quiet: true }).then(function () {
         s.archived = on; paintChats();
         chatSay(on ? 'Conversation archived.' : 'Conversation moved back to Active.', true);
       }).catch(function (e) { chatSay((e && e.message) || 'Could not update the conversation.'); });

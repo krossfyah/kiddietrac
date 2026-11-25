@@ -16,7 +16,15 @@
      · Not for chat sends (the bubble appears at once, chat-optimistic), file uploads (kt-upload-progress.js has
        its own popup with a percentage) or a card already showing KT.busy (check-in, clock-in).
      · Deleting… / Deleted and Sending… / Sent where that is what the write does.
-     · A call site can opt out with init.ktQuiet = true.
+     · A call site can opt out with init.ktQuiet = true (KT.Api: the last argument { quiet: true }).
+
+   NOT FOR TIDYING UP (2026-11-25, Anthony: "when closing a chat message why does the save toast show up - full
+   sweep"). The x that takes a conversation off the chat list archives it (POST /chat-archive): a write a click
+   started, so the prompt said "Saving... Saved" - for closing a chat. Writes that tidy rather than save are quiet now:
+   archiving or restoring a conversation, the website-chat actions (join, close, hand back, reply, nudge), marking an
+   announcement read. Marked at the call site ({ quiet: true } / ktQuiet), with chat-archive and announcement state
+   in QUIET for the screens that call fetch themselves. And when the screen shows its own toast for the write
+   ("Archived", "Nudged", "Lead created"), the prompt leaves without a verdict instead of adding "Saved" on top.
 
    SAVED TOAST FOR CHANGES WITH NO SAVE BUTTON (2026-11-13, Anthony: "when changing notification sound types we need
    a saved pop up shown so we know the change is made - full sweep for other types of changes where there is no
@@ -101,8 +109,8 @@
   }
 
   /* ── the saving prompt ─────────────────────────────────────────────── */
-  var GESTURE_MS = 4000, MIN_SPIN = 450, OK_MS = 1100, BAD_MS = 2200;
-  var QUIET = /unread-count|\/e\/o\/|typing|presence|heartbeat|\/diag\/|\/push\/|\/badges|\/pulse|marketing-site|\/notifications\/|mark-read|\/(seen|read|ping|draft|react|ack)(\?|$)|\/me\/(markers|device-permissions|privacy-notice)|\/auth\/(login|logout|passkey|mfa|reset|forgot|refresh|me\/ui-prefs|me\/auto-signoff)|\/parent\/messages(\?|$)|\/(chats|team-threads|threads|rooms)\/\d+\/(send|messages)(\?|$)|\/client-error/;
+  var GESTURE_MS = 4000, MIN_SPIN = 450, OK_MS = 1100, BAD_MS = 2200, OWN_MS = 250;
+  var QUIET = /unread-count|\/e\/o\/|typing|presence|heartbeat|\/diag\/|\/push\/|\/badges|\/pulse|marketing-site|\/notifications\/|mark-read|\/(seen|read|ping|draft|react|ack)(\?|$)|\/me\/(markers|device-permissions|privacy-notice)|\/auth\/(login|logout|passkey|mfa|reset|forgot|refresh|me\/ui-prefs|me\/auto-signoff)|\/parent\/messages(\?|$)|\/(chats|team-threads|threads|rooms)\/\d+\/(send|messages)(\?|$)|\/client-error|\/chat-archive|\/chats\/archive|\/announcements\/state(\?|$)/;
   /* READS SENT AS A WRITE (2026-11-12). Previews, checks, searches and "viewed" pings go out as POST because they carry
      a body, but nothing is saved: opening a sub-tab that shows an email or reminder preview (or a family's billing
      split) said "Saving... Saved". */
@@ -204,9 +212,11 @@
     if (outcome === 'bad') svBad = true;
     if (outcome === 'quiet' && !svJobs && !svBad) { svHide(0); return; }
     if (svJobs) return;
-    var wait = Math.max(0, MIN_SPIN - (Date.now() - svStarted));
+    var wait = Math.max(OWN_MS, MIN_SPIN - (Date.now() - svStarted));
     svTimer = setTimeout(function () {
       if (svJobs) return;
+      // The screen answered for this write itself (a toast since it started): no "Saved" on top of it.
+      if (toastAt >= svStarted) { svHide(0); return; }
       sv.classList.add(svBad ? 'kt-sv-bad' : 'kt-sv-ok');
       svText.textContent = WORDS[svWord][svBad ? 2 : 1];
       svHide(svBad ? BAD_MS : OK_MS);
@@ -235,14 +245,18 @@
   /* ── the Saved toast ── */
   var toastAt = 0, confirmAt = 0;
   // Note every toast the screen shows, so a save it already confirmed (or explained) is not confirmed again.
-  function watchToasts() {
-    var K = window.KT;
-    if (!K || typeof K.toast !== 'function' || K.toast.__ktSavedWatch) return;
-    var t = K.toast;
+  function watchOne(host) {
+    if (!host || typeof host.toast !== 'function' || host.toast.__ktSavedWatch) return;
+    var t = host.toast;
     var w = function () { toastAt = Date.now(); return t.apply(this, arguments); };
     w.__ktSavedWatch = true;
     for (var k in t) { try { if (!(k in w)) w[k] = t[k]; } catch (e) {} }
-    K.toast = w;
+    host.toast = w;
+  }
+  function watchToasts() {
+    var K = window.KT;
+    watchOne(K);
+    watchOne(window.Dom || (K && K.Dom));
   }
   function savedToast(body, bad) {
     var K = window.KT;
@@ -273,7 +287,7 @@
     var kind = null;
     try { kind = svWanted(method, url, init); } catch (e) {}
     var auto = kind === 'save' && Date.now() - lastAuto <= GESTURE_MS, since = Date.now();
-    if (auto) { try { watchToasts(); } catch (e) {} }
+    if (kind) { try { watchToasts(); } catch (e) {} }
     start();
     if (kind) { try { svBegin(kind); } catch (e) { kind = null; } }
     var p;
