@@ -164,7 +164,8 @@ class CheckinReminderCommand extends Command
 
                 if ($prefs['email'] && $g->email) {
                     $this->email((int) $child->agency_id, (string) $g->email,
-                        trim(($g->first_name ?? '') . ' ' . ($g->last_name ?? '')), $title, $body, $window, $mailData);
+                        trim(($g->first_name ?? '') . ' ' . ($g->last_name ?? '')), $title, $body, $window, $mailData,
+                        (int) $child->id, (int) $g->id);
                 }
 
                 if ($prefs['sms'] && $g->phone) {
@@ -184,8 +185,15 @@ class CheckinReminderCommand extends Command
         return self::SUCCESS;
     }
 
-    private function email(int $agencyId, string $to, string $toName, string $title, string $body, string $window, array $data = []): void
+    private function email(int $agencyId, string $to, string $toName, string $title, string $body, string $window, array $data = [],
+        ?int $childId = null, ?int $guardianId = null): void
     {
+        /* "Mark absent / Running late" buttons (2026-11-25, App\Support\AttendanceReply): the morning email only, one link per
+           child and parent, good for today. */
+        $buttons = ($window === 'morning' && $childId && $guardianId)
+            ? \App\Support\AttendanceReply::buttonsHtml(\App\Support\AttendanceReply::issue($agencyId, $childId, $guardianId,
+                \App\Support\AgencyTime::today($agencyId), 'checkin_reminder'), (string) ($data['child_name'] ?? 'your child'))
+            : '';
         /* The agency's own wording for the EMAIL (2026-10-06). $body is also the push and
            the text, which keep the standard words; only the email copy changes here, and a
            section nobody edited returns exactly what was built before. */
@@ -198,13 +206,14 @@ class CheckinReminderCommand extends Command
 
         $html = EmailTemplate::wrap($agencyId,
             '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">'
-            . $say($window === 'morning' ? 'message_morning' : 'message_evening', e($body)) . '</p>' . $extra,
+            . $say($window === 'morning' ? 'message_morning' : 'message_evening', e($body)) . '</p>' . $buttons . $extra,
             [
                 'eyebrow' => 'REMINDER',
                 'title' => $title,
                 'subtitle' => 'Attendance',
                 'preheader' => $body,
             ]);
+        $html = \App\Support\AttendanceReply::withDarkCss($html);
 
         dispatch(function () use ($agencyId, $to, $toName, $html, $title) {
             AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title) {

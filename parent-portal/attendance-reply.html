@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Attendance</title>
+  <meta name="robots" content="noindex">
+  <!-- No icon until the brand is known: a white-label agency must not show KiddieTrac's. -->
+  <link rel="icon" id="fav" href="data:,">
+  <link rel="stylesheet" href="/css/kt-fonts.css?v=20261014net">
+  <meta name="theme-color" content="#0A1C3A">
+  <!-- "Mark absent / Running late" from the missed-child emails (2026-11-25). ?t=<token>[&a=absent|late].
+       Backend: AttendanceReplyController + App\Support\AttendanceReply. Opening the page changes nothing;
+       only the popup's Send does. -->
+  <style>
+    :root { --brand: #1F6080; --ink: #0F172A; --ink2: #334155; --muted: #64748B; --line: #E2E8F0; --bg: #F4F8FB; --card: #FFFFFF; --soft: #F8FAFC;
+            --warn: #B45309; --ok: #047857; --field: #FFFFFF; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #F1F5F9; --ink2: #CBD5E1; --muted: #94A3B8; --line: #334155; --bg: #0B1220; --card: #111A2E; --soft: #1E293B; --warn: #F59E0B; --ok: #34D399; --field: #0F172A; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    .wrap { max-width: 520px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px 48px; }
+    .head { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 6px 0 18px; min-height: 40px; }
+    .head img { max-height: 40px; max-width: 200px; }
+    .head b { font-size: 17px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 22px 20px; box-shadow: 0 18px 40px -28px rgba(15, 23, 42, .35); }
+    .eyebrow { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+    h1 { font-size: 22px; line-height: 1.25; margin: 6px 0 6px; }
+    .sub { font-size: 14.5px; color: var(--ink2); line-height: 1.55; margin: 0 0 14px; }
+    .facts { display: grid; gap: 8px; background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; }
+    .facts div { display: flex; justify-content: space-between; gap: 12px; }
+    .facts span { color: var(--muted); white-space: nowrap; }
+    .facts b { text-align: right; }
+    .st-absent { color: var(--warn); }
+    .st-ok { color: var(--ok); }
+    .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+    .btn { display: block; width: 100%; border: 0; border-radius: 12px; padding: 14px 10px; font-size: 15.5px; font-weight: 800; color: #fff; background: var(--brand); cursor: pointer; font-family: inherit; }
+    .btn.abs { background: #B45309; }
+    .btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+    .btn:disabled { opacity: .6; cursor: default; }
+    .err { color: #DC2626; font-weight: 700; font-size: 13.5px; min-height: 18px; margin-top: 10px; }
+    .done { text-align: center; padding: 6px 0 2px; }
+    .done .big { font-size: 48px; line-height: 1; margin-bottom: 8px; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 16px; }
+    /* The popup: a glass backdrop, the one popup header (navy-to-teal band + teal line), the ✕ inside it. */
+    .ov { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px;
+          background: rgba(15, 23, 42, .38); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+    .pop { width: 100%; max-width: 440px; max-height: calc(100vh - 32px); display: flex; flex-direction: column; overflow: hidden;
+           background: var(--card); border-radius: 18px; box-shadow: 0 30px 70px -20px rgba(2, 6, 23, .55); }
+    .pop-h { position: relative; padding: 15px 52px 15px 18px; color: #fff; font-weight: 800; font-size: 16.5px;
+             background: linear-gradient(135deg, #1B3A63 0%, #265B7A 50%, #2F8C86 100%); box-shadow: inset 0 -3px 0 #7FD3CC; flex: 0 0 auto; }
+    .pop-x { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); width: 32px; height: 32px; border: 0; border-radius: 8px;
+             background: rgba(255, 255, 255, .14); color: #fff; font-size: 16px; cursor: pointer; }
+    .pop-b { padding: 16px 18px 18px; overflow-y: auto; }
+    label { display: block; font-size: 14px; font-weight: 800; margin: 14px 0 6px; }
+    label:first-child { margin-top: 0; }
+    .opt { font-weight: 500; color: var(--muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { border: 1.5px solid var(--line); background: var(--field); color: var(--ink); border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .chip[aria-pressed="true"] { border-color: var(--brand); background: var(--brand); color: #fff; }
+    input[type=time] { width: 100%; font-size: 22px; font-weight: 700; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: 12px; font-family: inherit; color: var(--ink); background: var(--field); color-scheme: light dark; }
+    textarea { width: 100%; min-height: 76px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; font-size: 15px; font-family: inherit; resize: vertical; color: var(--ink); background: var(--field); }
+    input:focus, textarea:focus, .chip:focus-visible, .btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+    .help { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+    @media (min-width: 700px) { .wrap { padding-top: 48px; } .card { padding: 28px 30px; } h1 { font-size: 25px; } }
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="head" id="head"></div>
+  <div class="card" id="app">Loading…</div>
+  <div class="foot" id="foot"></div>
+</main>
+<div id="ovl"></div>
+<script>
+(function () {
+  'use strict';
+  var API = 'https://api.kiddietrac.com/api/v1/public/attendance-reply/';
+  var qs = new URLSearchParams(location.search);
+  var token = String(qs.get('t') || '').replace(/[^A-Za-z0-9]/g, '');
+  var want = qs.get('a');
+  var app = document.getElementById('app');
+  var D = null;
+
+  /* FR / ES / HI. The language is the recipient's own (sent by the server), else this browser's KiddieTrac choice, else the browser's. */
+  var TR = {
+    fr: {
+      "Loading…": "Chargement…", "Attendance": "Présences", "This link can’t be used": "Ce lien ne peut pas être utilisé",
+      "This link is not complete. Please open it again from your email.": "Ce lien est incomplet. Ouvrez-le de nouveau à partir de votre courriel.",
+      "We could not reach the server. Please check your connection and try again.": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
+      "We could not reach the server. Please try again.": "Impossible de joindre le serveur. Veuillez réessayer.",
+      "Is {1} coming in today?": "{1} vient-il aujourd’hui?", "We missed {1} today": "{1} nous a manqué aujourd’hui",
+      "{1} hasn’t been signed in yet. Let the team know what’s happening.": "{1} n’a pas encore été inscrit à l’arrivée. Dites à l’équipe ce qui se passe.",
+      "{1} wasn’t signed in, so Safe Arrival marked {1} absent. Tell us why, or let us know {1} is on the way.": "{1} n’a pas été inscrit à l’arrivée; Arrivée sécuritaire l’a donc marqué absent. Dites-nous pourquoi, ou indiquez-nous que {1} est en route.",
+      "Date": "Date", "Centre": "Centre", "Expected": "Attendu", "On file now": "Au dossier",
+      "Not signed in yet": "Pas encore arrivé", "Marked absent by Safe Arrival": "Marqué absent par Arrivée sécuritaire",
+      "Absent": "Absent", "Running late, here by {1}": "En retard, arrivée vers {1}", "Signed in at {1}": "Arrivé à {1}",
+      "Mark absent": "Marquer absent", "Running late": "En retard", "Add a reason": "Ajouter une raison", "Running late after all": "Finalement en retard",
+      "Mark {1} absent today": "Marquer {1} absent aujourd’hui", "{1} is running late": "{1} est en retard",
+      "Reason": "Raison", "Sick": "Malade", "Appointment": "Rendez-vous", "Holiday": "Vacances", "Family": "Famille", "Other": "Autre",
+      "Note": "Note", "(optional)": "(facultatif)", "Arriving by": "Arrivée vers",
+      "e.g. Fever since last night": "p. ex. Fièvre depuis hier soir", "e.g. Doctor’s appointment first": "p. ex. Rendez-vous chez le médecin d’abord",
+      "Today, centre time.": "Aujourd’hui, heure du centre.", "Send to the centre": "Envoyer au centre", "Cancel": "Annuler", "Close": "Fermer",
+      "Please choose a time.": "Veuillez choisir une heure.", "Choose a time later than now.": "Choisissez une heure plus tardive que maintenant.",
+      "Saving…": "Enregistrement…", "That could not be saved.": "Impossible d’enregistrer.", "Thank you!": "Merci!",
+      "You can close this page.": "Vous pouvez fermer cette page.", "Change my answer": "Modifier ma réponse",
+      "The centre is told straight away.": "Le centre est avisé immédiatement.",
+      "{1} is already signed in today, so there is nothing to change.": "{1} est déjà arrivé aujourd’hui; il n’y a rien à changer.",
+      "Thank you. {1} is marked absent today, and the centre has been told.": "Merci. {1} est marqué absent aujourd’hui et le centre en a été avisé.",
+      "Thank you. The centre knows {1} will be there by {2}.": "Merci. Le centre sait que {1} arrivera vers {2}.",
+      "{1} was signed in at {2} today, so nothing was changed.": "{1} est arrivé à {2} aujourd’hui; rien n’a été changé.",
+      "Still saving your last answer. Please try again in a moment.": "Votre dernière réponse s’enregistre encore. Réessayez dans un instant.",
+      "Sorry, that could not be recorded. Please contact the centre.": "Désolé, impossible d’enregistrer. Communiquez avec le centre.",
+      "{1} isn't expected at the centre today, so there is no arrival time to change. You can still mark {1} absent.": "{1} n’est pas attendu au centre aujourd’hui; il n’y a donc pas d’heure d’arrivée à changer. Vous pouvez quand même marquer {1} absent.",
+      "Please choose the time {1} will arrive.": "Veuillez choisir l’heure d’arrivée de {1}.",
+      "This link was for an earlier day. Open KiddieTrac to tell the centre about today.": "Ce lien concernait une journée précédente. Ouvrez KiddieTrac pour aviser le centre pour aujourd’hui.",
+      "This link is no longer available. Please contact the centre.": "Ce lien n’est plus disponible. Communiquez avec le centre.",
+      "This link is not valid. Please use the buttons in your most recent email, or open KiddieTrac.": "Ce lien n’est pas valide. Utilisez les boutons de votre courriel le plus récent ou ouvrez KiddieTrac."
+    },
+    es: {
+      "Loading…": "Cargando…", "Attendance": "Asistencia", "This link can’t be used": "Este enlace no se puede usar",
+      "This link is not complete. Please open it again from your email.": "Este enlace está incompleto. Ábralo de nuevo desde su correo.",
+      "We could not reach the server. Please check your connection and try again.": "No pudimos contactar con el servidor. Compruebe su conexión e inténtelo de nuevo.",
+      "We could not reach the server. Please try again.": "No pudimos contactar con el servidor. Inténtelo de nuevo.",
+      "Is {1} coming in today?": "¿Viene {1} hoy?", "We missed {1} today": "Hoy echamos de menos a {1}",
+      "{1} hasn’t been signed in yet. Let the team know what’s happening.": "{1} todavía no ha registrado su entrada. Cuéntele al equipo qué pasa.",
+      "{1} wasn’t signed in, so Safe Arrival marked {1} absent. Tell us why, or let us know {1} is on the way.": "{1} no registró su entrada, así que Llegada Segura marcó a {1} como ausente. Díganos por qué, o avísenos de que {1} va en camino.",
+      "Date": "Fecha", "Centre": "Centro", "Expected": "Esperado", "On file now": "Registrado",
+      "Not signed in yet": "Aún sin entrada", "Marked absent by Safe Arrival": "Marcado ausente por Llegada Segura",
+      "Absent": "Ausente", "Running late, here by {1}": "Llega tarde, hacia las {1}", "Signed in at {1}": "Entrada a las {1}",
+      "Mark absent": "Marcar ausente", "Running late": "Llega tarde", "Add a reason": "Añadir un motivo", "Running late after all": "Al final llega tarde",
+      "Mark {1} absent today": "Marcar a {1} ausente hoy", "{1} is running late": "{1} llega tarde",
+      "Reason": "Motivo", "Sick": "Enfermo", "Appointment": "Cita", "Holiday": "Vacaciones", "Family": "Familia", "Other": "Otro",
+      "Note": "Nota", "(optional)": "(opcional)", "Arriving by": "Llega hacia las",
+      "e.g. Fever since last night": "p. ej. Fiebre desde anoche", "e.g. Doctor’s appointment first": "p. ej. Primero tiene cita con el médico",
+      "Today, centre time.": "Hoy, hora del centro.", "Send to the centre": "Enviar al centro", "Cancel": "Cancelar", "Close": "Cerrar",
+      "Please choose a time.": "Elija una hora.", "Choose a time later than now.": "Elija una hora posterior a la actual.",
+      "Saving…": "Guardando…", "That could not be saved.": "No se pudo guardar.", "Thank you!": "¡Gracias!",
+      "You can close this page.": "Puede cerrar esta página.", "Change my answer": "Cambiar mi respuesta",
+      "The centre is told straight away.": "Se avisa al centro de inmediato.",
+      "{1} is already signed in today, so there is nothing to change.": "{1} ya registró su entrada hoy, así que no hay nada que cambiar.",
+      "Thank you. {1} is marked absent today, and the centre has been told.": "Gracias. {1} está marcado como ausente hoy y se ha avisado al centro.",
+      "Thank you. The centre knows {1} will be there by {2}.": "Gracias. El centro sabe que {1} llegará hacia las {2}.",
+      "{1} was signed in at {2} today, so nothing was changed.": "{1} registró su entrada a las {2} hoy, así que no se cambió nada.",
+      "Still saving your last answer. Please try again in a moment.": "Aún se está guardando su última respuesta. Inténtelo de nuevo en un momento.",
+      "Sorry, that could not be recorded. Please contact the centre.": "Lo sentimos, no se pudo registrar. Contacte con el centro.",
+      "{1} isn't expected at the centre today, so there is no arrival time to change. You can still mark {1} absent.": "Hoy no se espera a {1} en el centro, así que no hay hora de llegada que cambiar. Aun así, puede marcar a {1} como ausente.",
+      "Please choose the time {1} will arrive.": "Elija la hora a la que llegará {1}.",
+      "This link was for an earlier day. Open KiddieTrac to tell the centre about today.": "Este enlace era para un día anterior. Abra KiddieTrac para avisar al centro sobre hoy.",
+      "This link is no longer available. Please contact the centre.": "Este enlace ya no está disponible. Contacte con el centro.",
+      "This link is not valid. Please use the buttons in your most recent email, or open KiddieTrac.": "Este enlace no es válido. Use los botones de su correo más reciente o abra KiddieTrac."
+    },
+    hi: {
+      "Loading…": "लोड हो रहा है…", "Attendance": "उपस्थिति", "This link can’t be used": "इस लिंक का उपयोग नहीं हो सकता",
+      "This link is not complete. Please open it again from your email.": "यह लिंक अधूरा है। कृपया इसे अपने ईमेल से फिर खोलें।",
+      "We could not reach the server. Please check your connection and try again.": "सर्वर से संपर्क नहीं हो सका। कृपया अपना कनेक्शन जाँचें और फिर कोशिश करें।",
+      "We could not reach the server. Please try again.": "सर्वर से संपर्क नहीं हो सका। कृपया फिर कोशिश करें।",
+      "Is {1} coming in today?": "क्या {1} आज आ रहा है?", "We missed {1} today": "आज हमें {1} की कमी खली",
+      "{1} hasn’t been signed in yet. Let the team know what’s happening.": "{1} का अभी तक साइन इन नहीं हुआ है। टीम को बताएँ कि क्या हो रहा है।",
+      "{1} wasn’t signed in, so Safe Arrival marked {1} absent. Tell us why, or let us know {1} is on the way.": "{1} का साइन इन नहीं हुआ, इसलिए सेफ़ अराइवल ने {1} को अनुपस्थित दर्ज किया। हमें कारण बताएँ, या बताएँ कि {1} रास्ते में है।",
+      "Date": "तारीख़", "Centre": "केंद्र", "Expected": "अपेक्षित समय", "On file now": "अभी दर्ज",
+      "Not signed in yet": "अभी साइन इन नहीं हुआ", "Marked absent by Safe Arrival": "सेफ़ अराइवल द्वारा अनुपस्थित दर्ज",
+      "Absent": "अनुपस्थित", "Running late, here by {1}": "देर से, {1} तक पहुँचेगा", "Signed in at {1}": "{1} पर साइन इन",
+      "Mark absent": "अनुपस्थित दर्ज करें", "Running late": "देर हो रही है", "Add a reason": "कारण जोड़ें", "Running late after all": "आख़िरकार देर से आ रहा है",
+      "Mark {1} absent today": "आज {1} को अनुपस्थित दर्ज करें", "{1} is running late": "{1} को देर हो रही है",
+      "Reason": "कारण", "Sick": "बीमार", "Appointment": "अपॉइंटमेंट", "Holiday": "छुट्टी", "Family": "परिवार", "Other": "अन्य",
+      "Note": "नोट", "(optional)": "(वैकल्पिक)", "Arriving by": "पहुँचने का समय",
+      "e.g. Fever since last night": "जैसे: कल रात से बुख़ार", "e.g. Doctor’s appointment first": "जैसे: पहले डॉक्टर के पास जाना है",
+      "Today, centre time.": "आज, केंद्र का समय।", "Send to the centre": "केंद्र को भेजें", "Cancel": "रद्द करें", "Close": "बंद करें",
+      "Please choose a time.": "कृपया एक समय चुनें।", "Choose a time later than now.": "अभी के बाद का समय चुनें।",
+      "Saving…": "सहेजा जा रहा है…", "That could not be saved.": "यह सहेजा नहीं जा सका।", "Thank you!": "धन्यवाद!",
+      "You can close this page.": "आप यह पृष्ठ बंद कर सकते हैं।", "Change my answer": "मेरा जवाब बदलें",
+      "The centre is told straight away.": "केंद्र को तुरंत बताया जाता है।",
+      "{1} is already signed in today, so there is nothing to change.": "{1} का आज साइन इन हो चुका है, इसलिए बदलने को कुछ नहीं है।",
+      "Thank you. {1} is marked absent today, and the centre has been told.": "धन्यवाद। {1} आज अनुपस्थित दर्ज है, और केंद्र को बता दिया गया है।",
+      "Thank you. The centre knows {1} will be there by {2}.": "धन्यवाद। केंद्र को पता है कि {1} {2} तक पहुँचेगा।",
+      "{1} was signed in at {2} today, so nothing was changed.": "{1} का आज {2} पर साइन इन हुआ, इसलिए कुछ नहीं बदला गया।",
+      "Still saving your last answer. Please try again in a moment.": "आपका पिछला जवाब अभी सहेजा जा रहा है। कृपया थोड़ी देर में फिर कोशिश करें।",
+      "Sorry, that could not be recorded. Please contact the centre.": "माफ़ करें, यह दर्ज नहीं हो सका। कृपया केंद्र से संपर्क करें।",
+      "{1} isn't expected at the centre today, so there is no arrival time to change. You can still mark {1} absent.": "{1} आज केंद्र में अपेक्षित नहीं है, इसलिए बदलने को कोई आगमन समय नहीं है। फिर भी आप {1} को अनुपस्थित दर्ज कर सकते हैं।",
+      "Please choose the time {1} will arrive.": "कृपया चुनें कि {1} कब पहुँचेगा।",
+      "This link was for an earlier day. Open KiddieTrac to tell the centre about today.": "यह लिंक पिछले दिन का था। आज के बारे में केंद्र को बताने के लिए KiddieTrac खोलें।",
+      "This link is no longer available. Please contact the centre.": "यह लिंक अब उपलब्ध नहीं है। कृपया केंद्र से संपर्क करें।",
+      "This link is not valid. Please use the buttons in your most recent email, or open KiddieTrac.": "यह लिंक मान्य नहीं है। अपने सबसे हाल के ईमेल के बटन का उपयोग करें, या KiddieTrac खोलें।"
+    }
+  };
+  var LOC = (function () {
+    try { var l = localStorage.getItem('kt_locale'); if (TR[l]) { return l; } } catch (e) {}
+    var n = String(navigator.language || '').slice(0, 2).toLowerCase();
+    return TR[n] ? n : 'en';
+  })();
+  var BCP = { en: 'en-CA', fr: 'fr-CA', es: 'es-ES', hi: 'hi-IN' };
+  function tr(s) {
+    var a = arguments, o = (TR[LOC] && TR[LOC][s]) || s;
+    return o.replace(/\{(\d)\}/g, function (_, i) { return a[+i] == null ? '' : a[+i]; });
+  }
+  // A message from the server: exact, or one of its templates with names/times in it.
+  function trMsg(m) {
+    m = String(m || '');
+    if (LOC === 'en' || !TR[LOC]) { return m; }
+    if (TR[LOC][m]) { return TR[LOC][m]; }
+    for (var k in TR[LOC]) {
+      if (k.indexOf('{1}') === -1) { continue; }
+      var order = [];
+      var rx = new RegExp('^' + k.split(/(\{\d\})/).map(function (x) {
+        var ph = /^\{(\d)\}$/.exec(x);
+        if (ph) { if (order.indexOf(ph[1]) > -1) { return '(?:.+?)'; } order.push(ph[1]); return '(.+?)'; }
+        return x.replace(/[.*+?^$()|[\]\\{}]/g, '\\$&');
+      }).join('') + '$');
+      var hit = rx.exec(m);
+      if (hit) {
+        var vals = {}; order.forEach(function (n, i) { vals[n] = hit[i + 1]; });
+        return TR[LOC][k].replace(/\{(\d)\}/g, function (_, n) { return vals[n] || ''; });
+      }
+    }
+    return m;
+  }
+  function setLang() {
+    document.documentElement.lang = BCP[LOC] || 'en-CA';
+    if (app.textContent === 'Loading…') { app.textContent = tr('Loading…'); }
+  }
+  setLang();
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fmt12(hhmm) {
+    var p = String(hhmm || '').split(':'); var h = +p[0]; var m = p[1] || '00';
+    return (((h + 11) % 12) + 1) + ':' + m + ' ' + (h < 12 ? 'AM' : 'PM');
+  }
+  function dateLabel() {
+    if (LOC === 'en' || !D.date) { return D.date_label; }
+    try { return new Date(D.date + 'T12:00:00').toLocaleDateString(BCP[LOC], { weekday: 'long', month: 'long', day: 'numeric' }); } catch (e) { return D.date_label; }
+  }
+  function brand(b) {
+    b = b || { name: 'KiddieTrac' };
+    var hex = String(b.primary || '').replace('#', '');
+    if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+      var ch = [0, 2, 4].map(function (i) { var v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      // Only a colour dark enough to carry white button text replaces the default.
+      if (0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2] < 0.3) { document.documentElement.style.setProperty('--brand', '#' + hex); }
+    }
+    var head = document.getElementById('head');
+    head.innerHTML = b.logo ? '<img alt="' + esc(b.name) + '">' : '<b>' + esc(b.name) + '</b>';
+    if (b.logo) { head.firstChild.src = b.logo; head.firstChild.onerror = function () { head.innerHTML = '<b>' + esc(b.name) + '</b>'; }; }
+    // Favicon: the brand's own; KiddieTrac's only when this is not a white-label agency.
+    var f = document.getElementById('fav');
+    if (f) { f.href = b.favicon || (b.white_label ? 'data:,' : '/favicon.svg?v=20260901b'); }
+    document.getElementById('foot').textContent = b.name;
+    document.title = tr('Attendance') + ' · ' + b.name;
+  }
+  function fail(msg) {
+    app.innerHTML = '<div class="done"><div class="big">🔗</div><h1>' + esc(tr('This link can’t be used')) + '</h1><p class="sub">' + esc(trMsg(msg)) + '</p></div>';
+  }
+  function load(then) {
+    if (token.length < 30) { brand(null); return fail(tr('This link is not complete. Please open it again from your email.')); }
+    fetch(API + token, { headers: { Accept: 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && TR[d.locale]) { LOC = d.locale; } else if (d && d.locale === 'en') { LOC = 'en'; }
+        setLang();
+        brand(d.brand);
+        if (d.state !== 'ok') { return fail(d.message); }
+        D = d; paint(); if (then) { then(); }
+      })
+      .catch(function () { brand(null); fail(tr('We could not reach the server. Please check your connection and try again.')); });
+  }
+  function statusLine() {
+    var c = D.current || {};
+    if (c.arrived) { return '<b class="st-ok">' + esc(tr('Signed in at {1}', c.arrived)) + '</b>'; }
+    if (c.absent) {
+      if (c.absent.auto) { return '<b class="st-absent">' + esc(tr('Marked absent by Safe Arrival')) + '</b>'; }
+      return '<b class="st-absent">' + esc(tr('Absent')) + (c.absent.reason ? ' · ' + esc(tr(c.absent.reason.charAt(0).toUpperCase() + c.absent.reason.slice(1))) : '') + '</b>';
+    }
+    if (c.late) { return '<b>' + esc(tr('Running late, here by {1}', c.late.by_label)) + '</b>'; }
+    return '<b>' + esc(tr('Not signed in yet')) + '</b>';
+  }
+  function paint() {
+    var c = D.current || {};
+    var noShow = c.absent && c.absent.auto;
+    app.innerHTML = '<div class="eyebrow">' + esc(tr('Attendance')) + '</div>'
+      + '<h1>' + esc(noShow ? tr('We missed {1} today', D.child) : tr('Is {1} coming in today?', D.child)) + '</h1>'
+      + '<p class="sub">' + esc(noShow ? tr('{1} wasn’t signed in, so Safe Arrival marked {1} absent. Tell us why, or let us know {1} is on the way.', D.child)
+          : tr('{1} hasn’t been signed in yet. Let the team know what’s happening.', D.child)) + '</p>'
+      + '<div class="facts">'
+      + '<div><span>' + esc(tr('Date')) + '</span><b>' + esc(dateLabel()) + '</b></div>'
+      + (D.centre ? '<div><span>' + esc(tr('Centre')) + '</span><b>' + esc(D.centre) + '</b></div>' : '')
+      + (D.expected ? '<div><span>' + esc(tr('Expected')) + '</span><b>' + esc(D.expected) + '</b></div>' : '')
+      + '<div><span>' + esc(tr('On file now')) + '</span>' + statusLine() + '</div>'
+      + '</div>'
+      + (c.arrived
+        ? '<p class="sub" style="margin:14px 0 0">' + esc(tr('{1} is already signed in today, so there is nothing to change.', D.child)) + '</p>'
+        : '<div class="acts"' + (D.can_late ? '' : ' style="grid-template-columns:1fr"') + '>'
+          + '<button class="btn abs" type="button" id="bA">' + esc(noShow ? tr('Add a reason') : tr('Mark absent')) + '</button>'
+          + (D.can_late ? '<button class="btn" type="button" id="bL">' + esc(noShow ? tr('Running late after all') : tr('Running late')) + '</button>' : '')
+          + '</div><div class="help" style="text-align:center;margin-top:10px">' + esc(tr('The centre is told straight away.')) + '</div>');
+    var bA = document.getElementById('bA'), bL = document.getElementById('bL');
+    if (bA) { bA.onclick = function () { openPop('absent'); }; }
+    if (bL) { bL.onclick = function () { openPop('late'); }; }
+  }
+  var ovl = document.getElementById('ovl');
+  var lastFocus = null;
+  function closePop() {
+    ovl.innerHTML = ''; document.removeEventListener('keydown', onKey);
+    if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+  }
+  function onKey(e) { if (e.key === 'Escape') { closePop(); } }
+  function openPop(kind) {
+    var c = D.current || {};
+    if (c.arrived) { return; }
+    lastFocus = document.activeElement;
+    var abs = kind === 'absent';
+    var cur = abs ? (c.absent && !c.absent.auto ? c.absent : null) : c.late;
+    var title = abs ? tr('Mark {1} absent today', D.child) : tr('{1} is running late', D.child);
+    var body = '';
+    if (abs) {
+      var sel = (cur && cur.reason) || '';
+      body += '<label id="lr">' + esc(tr('Reason')) + '</label><div class="chips" role="group" aria-labelledby="lr">'
+        + D.reasons.map(function (r) {
+          var lbl = r.charAt(0).toUpperCase() + r.slice(1);
+          return '<button type="button" class="chip" data-r="' + r + '" aria-pressed="' + (r === sel) + '">' + esc(tr(lbl)) + '</button>';
+        }).join('') + '</div>';
+    } else {
+      body += '<label for="tm">' + esc(tr('Arriving by')) + '</label>'
+        + '<input type="time" id="tm" step="60" min="' + esc(D.now) + '" max="23:59" value="' + esc(cur ? cur.by : '') + '">'
+        + '<div class="help">' + esc(tr('Today, centre time.')) + '</div>';
+    }
+    body += '<label for="nt">' + esc(tr('Note')) + ' <span class="opt">' + esc(tr('(optional)')) + '</span></label>'
+      + '<textarea id="nt" maxlength="280" placeholder="' + esc(abs ? tr('e.g. Fever since last night') : tr('e.g. Doctor’s appointment first')) + '">' + esc(cur && cur.note ? cur.note : '') + '</textarea>'
+      + '<div class="hp"><label>Website <input id="hp" tabindex="-1" autocomplete="off"></label></div>'
+      + '<div class="err" id="err" role="alert"></div>'
+      + '<div class="row2"><button class="btn ghost" type="button" id="pc">' + esc(tr('Cancel')) + '</button>'
+      + '<button class="btn' + (abs ? ' abs' : '') + '" type="button" id="go">' + esc(tr('Send to the centre')) + '</button></div>';
+    ovl.innerHTML = '<div class="ov" id="ov"><div class="pop" role="dialog" aria-modal="true" aria-labelledby="pt">'
+      + '<div class="pop-h" id="pt">' + esc(title) + '<button class="pop-x" type="button" id="px" aria-label="' + esc(tr('Close')) + '">✕</button></div>'
+      + '<div class="pop-b">' + body + '</div></div></div>';
+    document.getElementById('ov').addEventListener('click', function (e) { if (e.target.id === 'ov') { closePop(); } });
+    document.getElementById('px').onclick = closePop;
+    document.getElementById('pc').onclick = closePop;
+    document.addEventListener('keydown', onKey);
+    [].forEach.call(ovl.querySelectorAll('.chip'), function (b) {
+      b.onclick = function () { [].forEach.call(ovl.querySelectorAll('.chip'), function (x) { x.setAttribute('aria-pressed', String(x === b)); }); };
+    });
+    var first = abs ? ovl.querySelector('.chip') : document.getElementById('tm');
+    if (first) { first.focus(); }
+    document.getElementById('go').onclick = function () {
+      var err = document.getElementById('err'), b = this;
+      var payload = { action: kind, note: document.getElementById('nt').value || null, website: document.getElementById('hp').value || null };
+      if (abs) {
+        var on = ovl.querySelector('.chip[aria-pressed="true"]');
+        payload.reason = on ? on.getAttribute('data-r') : 'other';
+      } else {
+        var t = document.getElementById('tm').value;
+        if (!t) { err.textContent = tr('Please choose a time.'); return; }
+        if (t <= D.now) { err.textContent = tr('Choose a time later than now.'); return; }
+        payload.by = t;
+      }
+      b.disabled = true; b.textContent = tr('Saving…');
+      fetch(API + token, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(payload) })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (res.j && res.j.current) { D.current = res.j.current; }
+          if (!res.ok) {
+            b.disabled = false; b.textContent = tr('Send to the centre');
+            err.textContent = trMsg((res.j && res.j.message) || tr('That could not be saved.'));
+            return;
+          }
+          closePop();
+          app.innerHTML = '<div class="done"><div class="big">✅</div><h1>' + esc(tr('Thank you!')) + '</h1><p class="sub">' + esc(trMsg(res.j.message)) + '</p>'
+            + '<p class="sub" style="color:var(--muted);font-size:13px">' + esc(tr('You can close this page.')) + '</p>'
+            + '<button class="btn ghost" type="button" id="again" style="margin-top:6px">' + esc(tr('Change my answer')) + '</button></div>';
+          document.getElementById('again').onclick = function () { load(); };
+        })
+        .catch(function () { b.disabled = false; b.textContent = tr('Send to the centre'); err.textContent = tr('We could not reach the server. Please try again.'); });
+    };
+  }
+  // ?a=absent|late from the email button: open that popup straight away (opening it still changes nothing).
+  load(function () { if ((want === 'absent' || want === 'late') && !(D.current || {}).arrived && (want === 'absent' || D.can_late)) { openPop(want); } });
+})();
+</script>
+</body>
+</html>

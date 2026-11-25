@@ -44,6 +44,8 @@ Si personne ne répond, votre centre peut vous **téléphoner**. L’appel autom
 
 Votre centre peut n’offrir que certains de ces choix, et formuler l’appel autrement. Les tuteurs sont généralement appelés un à la fois, le tuteur principal en premier. Si vous avez désactivé les appels téléphoniques dans vos paramètres, vous ne serez pas appelé.
 
+**Boutons dans le courriel.** Les courriels « Votre enfant est-il arrivé? » et « Votre enfant nous a manqué aujourd’hui » contiennent deux boutons : **Marquer absent** (ou **Ajouter une raison**) et **En retard** (ou **Finalement en retard**). Chacun ouvre une petite page réservée à votre enfant, où vous choisissez une raison ou l’heure d’arrivée et ajoutez une note si vous le souhaitez. Le centre est avisé immédiatement, comme dans l’application. Les boutons ne fonctionnent que le jour du courriel, et vous pouvez les rouvrir ce jour-là pour modifier votre réponse. Si votre enfant est déjà arrivé, rien ne change.
+
 > **Astuce :** Informer le centre d’une absence à l’avance vous évite de recevoir ces messages ou appels ce jour-là.
 
 ## Une absence change-t-elle ma facture?

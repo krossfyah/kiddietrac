@@ -425,7 +425,8 @@ class SafeArrivalCommand extends Command
                     app(FcmService::class)->sendToUser((int) $g->id, $title, $body, '#today');
                 }
                 if ($prefs['email'] && $g->email) {
-                    $this->email($agencyId, (string) $g->email, trim($g->first_name . ' ' . $g->last_name), $title, $body);
+                    $this->email($agencyId, (string) $g->email, trim($g->first_name . ' ' . $g->last_name), $title, $body, true,
+                        (int) $row['child_id'], (int) $g->id, (string) $name);
                 }
                 if ($prefs['sms'] && $g->phone) {
                     // 'checkin_reminder' is the kind of text this is: the agency's and the
@@ -608,14 +609,22 @@ class SafeArrivalCommand extends Command
         return $n;
     }
 
-    private function email(int $agencyId, string $to, string $toName, string $title, string $body, bool $arrival = true): void
+    private function email(int $agencyId, string $to, string $toName, string $title, string $body, bool $arrival = true,
+        ?int $childId = null, ?int $guardianId = null, string $child = ''): void
     {
         $toName = (string) (strtok(trim($toName), ' ') ?: '');   // first name only in email (standing rule)
+        // "Mark absent / Running late" buttons (2026-11-25, App\Support\AttendanceReply): one link per child and parent, today only.
+        $buttons = ($arrival && $childId && $guardianId)
+            ? \App\Support\AttendanceReply::buttonsHtml(\App\Support\AttendanceReply::issue($agencyId, $childId, $guardianId,
+                \App\Support\AgencyTime::today($agencyId), 'safe_arrival_ask'), $child !== '' ? $child : 'your child')
+            : '';
         $html = EmailTemplate::wrap($agencyId,
             '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">' . e($body) . '</p>'
-            . ($arrival ? '<p style="margin:14px 0 0;font-size:13.5px;color:#475569;line-height:1.6;">Open KiddieTrac and tap '
+            . $buttons
+            . ($arrival ? '<p style="margin:14px 0 0;font-size:13.5px;color:#475569;line-height:1.6;">' . ($buttons ? 'You can also open KiddieTrac and tap ' : 'Open KiddieTrac and tap ')
             . '<strong>“Not attending today”</strong> to let the team know. That also stops these messages.</p>' : ''),
             ['eyebrow_icon' => \App\Support\SafeArrival::EMAIL_ICON, 'eyebrow' => 'SAFE ARRIVAL', 'title' => $title, 'subtitle' => 'Attendance', 'preheader' => $body]);
+        $html = \App\Support\AttendanceReply::withDarkCss($html);
         dispatch(function () use ($agencyId, $to, $toName, $html, $title) {
             AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($to, $toName, $title) {
                 $m->to($to, $toName ?: null)->from('noreply@kiddietrac.com', 'KiddieTrac')->subject($title);

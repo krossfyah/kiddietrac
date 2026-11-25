@@ -1026,6 +1026,7 @@ post reseller/brand/upload | Uploaded a reseller logo
 put platform/resellers/{id}/app | Changed a reseller's app build settings
 post platform/resellers/{id}/app/kit | Downloaded a reseller's app build kit
 post public/time-fix/{token} | Entered the real time from an automatic sign-out email
+post public/attendance-reply/{token} | Marked a child absent or running late from a missed-child email
 post voice/dialer/call | Placed a phone call from the portal
 post voice/dialer/calls/{id}/hangup | Hung up a portal phone call
 put voice/dialer/settings | Changed who can call from the portal

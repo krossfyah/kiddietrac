@@ -2,6 +2,30 @@
     "updated": "2026-11-25",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-25",
+            "icon": "📧",
+            "title": "Parents can answer missed-child emails in one tap",
+            "body": "Families can now mark a child absent (with a reason and note) or running late (with a time) straight from the Safe Arrival and check-in reminder emails. It is recorded exactly as if they did it in the app: the room and directors are told, Safe Arrival stops chasing, and a running-late answer after a Safe Arrival no-show reopens the check so the child is still looked for. Every answer is in the audit log.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-25",
+            "icon": "📧",
+            "title": "Mark absent or running late from the email",
+            "body": "The \"Has your child arrived?\" and \"We missed your child today\" emails now have two buttons: Mark absent and Running late. Pick a reason or the time you will arrive, add a note if you like, and the centre is told straight away, just like in the app. The buttons work that day only.",
+            "roles": [
+                "guardian"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-25",
             "icon": "🧾",

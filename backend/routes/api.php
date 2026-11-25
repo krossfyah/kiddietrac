@@ -482,6 +482,10 @@ Route::get ('/public/proposal/{token}/pdf',     [\App\Http\Controllers\Api\Propo
    the token is the credential (App\Support\AutoTimeFix). */
 Route::get ('/public/time-fix/{token}',  [\App\Http\Controllers\Api\AutoTimeFixController::class, 'show'])->where('token', '[A-Za-z0-9]{30,64}')->middleware('throttle:60,1,timefixget');
 Route::post('/public/time-fix/{token}',  [\App\Http\Controllers\Api\AutoTimeFixController::class, 'submit'])->where('token', '[A-Za-z0-9]{30,64}')->middleware('throttle:10,10,timefixpost');
+/* "Mark absent / Running late" from the missed-child emails (2026-11-25). Public: the token is the credential
+   (App\Support\AttendanceReply). GET only reads (email scanners prefetch links); only the page's POST acts. */
+Route::get ('/public/attendance-reply/{token}',  [\App\Http\Controllers\Api\AttendanceReplyController::class, 'show'])->where('token', '[A-Za-z0-9]{30,64}')->middleware('throttle:60,1,attrget');
+Route::post('/public/attendance-reply/{token}',  [\App\Http\Controllers\Api\AttendanceReplyController::class, 'submit'])->where('token', '[A-Za-z0-9]{30,64}')->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:10,10,attrpost']);
 Route::get ('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'publicEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpget');
 Route::post('/public/rsvp/event/{token}',  [\App\Http\Controllers\Api\RsvpController::class, 'submitEvent'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:10,10,rsvpsub');
 Route::get ('/public/rsvp/invite/{token}', [\App\Http\Controllers\Api\RsvpController::class, 'publicInvite'])->where('token', '[A-Za-z0-9]{20,48}')->middleware('throttle:60,1,rsvpgeti');

@@ -44,6 +44,8 @@ If nobody answers, your centre may **phone** you. The automated call names your 
 
 Your centre may offer only some of these choices, and may word the call differently. Guardians are usually called one at a time, primary first. If you've turned off phone calls in your settings, you won't be called.
 
+**Buttons in the email.** The "Has your child arrived?" email and the "We missed your child today" email have two buttons: **Mark absent** (or **Add a reason or note**) and **Running late** (or **Running late after all**). Each opens a small page just for your child, where you pick a reason or the time you'll arrive, and add a note if you like. The centre is told straight away, the same as doing it in the app. The buttons work on the day of the email only, and you can open them again that day to change your answer. If your child has already been signed in, nothing changes.
+
 > **Tip:** Telling the centre about an absence in advance means you won't get these messages or calls that day.
 
 ## Does an absence change my bill?

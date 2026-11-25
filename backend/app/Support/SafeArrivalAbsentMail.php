@@ -57,6 +57,8 @@ class SafeArrivalAbsentMail
             . '<div class="kt-sa-box" style="margin:0 0 18px;padding:12px 16px;border:1px solid #E2E8F0;border-radius:12px;background:#F8FAFC;">'
             . '<div class="kt-sa-eyebrow" style="font-size:11px;font-weight:800;letter-spacing:.08em;color:#64748B;margin-bottom:6px;">WHAT HAPPENED TODAY</div>'
             . '<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">' . $steps . '</table></div>'
+            // "Add a reason / Running late after all" (2026-11-25, AttendanceReply): this parent's own link, today only.
+            . (string) ($d['actions'] ?? '')
             . '<p style="margin:0 0 14px;font-size:15px;line-height:1.65;"><strong>Did ' . $e($child) . ' attend after all, or is something we should know?</strong> '
             . self::contact($phone, trim((string) ($d['email'] ?? ''))) . ', and we\'ll update today\'s record.</p>'
             . '<p style="margin:0 0 14px;font-size:14px;line-height:1.65;color:#475569;">Next time, you can tap <strong>“Not attending today”</strong> in the KiddieTrac app '
@@ -75,6 +77,7 @@ class SafeArrivalAbsentMail
         $style = '<style>@media (prefers-color-scheme:dark){' . $dark . '}'
             . preg_replace('/(^|\})\s*\./', '$1[data-ogsc] .', $dark) . '</style>';
         $html = stripos($html, '</head>') !== false ? str_ireplace('</head>', $style . '</head>', $html) : $style . $html;
+        $html = AttendanceReply::withDarkCss($html);
 
         return ['subject' => $title, 'html' => $html];
     }
@@ -115,7 +118,11 @@ class SafeArrivalAbsentMail
             ->where('g.family_id', $child->family_id)->whereNull('u.deleted_at')->whereNotNull('u.email')->where('u.email', '<>', '')
             ->get(['u.id', 'u.email', 'u.first_name']);
         $to = [];
-        foreach ($guardians as $g) $to[mb_strtolower(trim((string) $g->email))] = (string) $g->first_name;
+        $toId = [];
+        foreach ($guardians as $g) {
+            $to[mb_strtolower(trim((string) $g->email))] = (string) $g->first_name;
+            $toId[mb_strtolower(trim((string) $g->email))] ??= (int) $g->id;
+        }
         $names = array_values(array_filter(array_map(fn ($n) => (string) (strtok(trim($n), ' ') ?: ''), $to)));
         $staff = SafeArrival::recipients($agencyId, (int) $c->centre_id, $c->room_id ? (int) $c->room_id : null, $cfg, true, true);
         $bcc = [];
@@ -138,8 +145,21 @@ class SafeArrivalAbsentMail
         $sent = false;
         if ($to && ! $quiet && ! TestAgency::blocks($agencyId)) {
             try {
-                self::send($agencyId, $to, array_values($bcc), $agency->contact_email ?? null, $d);
-                $sent = true;
+                /* One letter per parent (2026-11-25): each carries that parent's own "Add a reason / Running late after
+                   all" link, so an answer is recorded as theirs. The staff copy (BCC) rides on the first letter only. */
+                $today = (string) $c->check_date === AgencyTime::today($agencyId);
+                $staffCopy = array_values($bcc);
+                foreach ($to as $addr => $gname) {
+                    $dd = $d;
+                    $dd['guardian'] = (string) (strtok(trim($gname), ' ') ?: '');
+                    if ($today && ! empty($toId[$addr])) {
+                        $dd['actions'] = AttendanceReply::buttonsHtml(
+                            AttendanceReply::issue($agencyId, (int) $c->child_id, $toId[$addr], (string) $c->check_date, 'safe_arrival_no_show'), $first, true);
+                    }
+                    self::send($agencyId, [$addr => $gname], $staffCopy, $agency->contact_email ?? null, $dd);
+                    $staffCopy = [];
+                    $sent = true;
+                }
             } catch (\Throwable $e) {
                 Log::warning('Safe Arrival absent email failed', ['check' => $c->id, 'error' => $e->getMessage()]);
             }
