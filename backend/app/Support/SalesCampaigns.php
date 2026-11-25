@@ -361,6 +361,7 @@ final class SalesCampaigns
     {
         try {
             return DB::table('email_accounts')->whereNull('agency_id')->whereNull('deleted_at')->where('provider', 'microsoft')
+                ->whereRaw("COALESCE(shared_scope, '') <> 'calendar'")   // a calendar-only sign-in is not a mailbox
                 ->where('status', 'connected')->whereNotNull('email_address')->orderBy('id')->get(['id', 'email_address', 'display_name'])
                 ->map(fn ($a) => ['id' => (int) $a->id, 'email' => mb_strtolower(trim((string) $a->email_address)),
                     'name' => trim((string) $a->display_name) !== '' ? trim((string) $a->display_name) : 'KiddieTrac'])->values()->all();

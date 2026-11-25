@@ -124,7 +124,8 @@ class GraphTransport extends AbstractTransport
         }
         try {
             return \Illuminate\Support\Facades\DB::table('email_accounts')->whereNull('agency_id')->whereNull('deleted_at')
-                ->where('provider', 'microsoft')->whereRaw('LOWER(email_address) = ?', [$address])->exists();
+                ->where('provider', 'microsoft')->whereRaw("COALESCE(shared_scope, '') <> 'calendar'")
+                ->whereRaw('LOWER(email_address) = ?', [$address])->exists();
         } catch (\Throwable $e) {
             return false;
         }

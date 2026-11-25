@@ -19,6 +19,18 @@
             ]
         },
         {
+            "type": "improved",
+            "date": "2026-11-25",
+            "icon": "📅",
+            "title": "Your calendar: directors and sales",
+            "body": "Centre directors can now add their own mailbox in Email, and connect its calendar in My settings, Calendar. The sales team connects an Outlook or Google calendar directly - calendar only, never email.",
+            "roles": [
+                "centre_director",
+                "platform_admin",
+                "sales_rep"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-25",
             "icon": "📅",

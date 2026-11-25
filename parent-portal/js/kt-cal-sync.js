@@ -124,8 +124,10 @@
   }
   function paintX(body, d) {
     body.innerHTML = '';
-    body.appendChild(el('div', { style: 'font-size:13.5px;color:#475569;line-height:1.5;margin:0 0 12px;', text:
-      'Optional. Connect the calendar of a mailbox you use in Email: its events show in your My day panel, and meetings you organise in KiddieTrac go on it, with the invitations sent from your own mailbox. Nothing changes until you connect it.' }));
+    var co = !!d.calendar_only;   // no Email client (the sales team): a calendar-only sign-in, no mail (2026-11-25)
+    body.appendChild(el('div', { style: 'font-size:13.5px;color:#475569;line-height:1.5;margin:0 0 12px;', text: co
+      ? 'Optional. Connect your Outlook or Google calendar: its events show in your My day panel, and meetings you organise in KiddieTrac go on it. KiddieTrac gets your calendar only, never your email. Nothing changes until you connect it.'
+      : 'Optional. Connect the calendar of a mailbox you use in Email: its events show in your My day panel, and meetings you organise in KiddieTrac go on it, with the invitations sent from your own mailbox. Nothing changes until you connect it.' }));
     var accts = (d.accounts || []).filter(function (a) { return a.signed_in; });
     function row(title, sub, link, scope) {
       var r = el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #F1F5F9;flex-wrap:wrap;' });
@@ -138,7 +140,7 @@
           el('span', { style: 'background:' + st[0] + ';color:' + st[1] + ';border-radius:20px;padding:1px 8px;font-size:11px;font-weight:800;margin-right:6px;', text: st[2] }),
           (link.provider === 'google' ? 'Google · ' : 'Microsoft · ') + (link.address || '')]));
         if (link.detail) left.appendChild(el('div', { style: 'font-size:12px;color:#B91C1C;margin-top:3px;', text: link.detail }));
-        if (link.status !== 'connected') right.appendChild(connectBtn(scope, 'Reconnect', link.account_id));
+        if (link.status !== 'connected') right.appendChild(connectBtn(scope, 'Reconnect', link.account_id, link.provider));
         var off = el('button', { type: 'button', style: BTN_RED, 'data-kt-iconized': '1' }, ['Disconnect']);
         off.addEventListener('click', function () {
           var ask = KT.confirm ? KT.confirm({ title: 'Disconnect this calendar?', description: 'KiddieTrac stops reading it and stops adding meetings to it. Meetings already added stay on it. To withdraw the permission completely, remove KiddieTrac in your Microsoft or Google account settings.', okLabel: 'Disconnect', tone: 'danger' })
@@ -157,9 +159,24 @@
       r.appendChild(right);
       return r;
     }
-    function connectBtn(scope, label, preferId) {
+    function connectBtn(scope, label, preferId, preferProvider) {
       var b = el('button', { type: 'button', style: BTN_MAIN, 'data-kt-iconized': '1', 'data-xcal-connect': scope }, [label]);
       b.addEventListener('click', function () {
+        if (co && scope === 'personal') {
+          var start = function (prov) {
+            b.disabled = true; b.textContent = 'Opening…';
+            Api.post('/me/calendar-connections/connect', { provider: prov, scope: 'personal' }).then(function (r) {
+              if (r && r.url) { window.location.href = r.url; return; }
+              throw new Error('Could not start the sign-in.');
+            }).catch(function (e) { b.disabled = false; b.textContent = label; toast('⚠️', 'Could not start', said(e, 'Please try again.'), '#B91C1C'); });
+          };
+          if (preferProvider) { start(preferProvider); return; }
+          var opts = [['microsoft', '🟦', 'Outlook / Microsoft 365'], ['google', '🟢', 'Google Calendar']].filter(function (x) { return !d.configured || d.configured[x[0]] !== false; });
+          if (KT.quickPop && opts.length > 1) {
+            KT.quickPop({ anchor: b, label: 'Which calendar?', items: opts.map(function (x) { return { icon: x[1], label: x[2], sub: 'Calendar only', run: function () { start(x[0]); } }; }) });
+          } else if (opts.length) { start(opts[0][0]); }
+          return;
+        }
         if (!accts.length) {
           toast('✉️', 'Connect a mailbox first', 'Add your Microsoft 365 or Gmail mailbox in Email (Manage accounts), then come back here.', '#1F6080');
           return;
@@ -187,8 +204,8 @@
       if (!d.can_set_agency && !d.agency) body.lastChild.style.display = 'none';
       if (!d.can_set_agency && d.agency) { [].forEach.call(body.lastChild.querySelectorAll('button'), function (x) { x.style.display = 'none'; }); }
     }
-    if (!accts.length) body.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:8px;line-height:1.5;', text: 'You have no Microsoft 365 or Gmail mailbox signed in to Email yet. Add one in Email (Manage accounts) to connect its calendar.' }));
-    body.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-top:10px;line-height:1.5;', text: 'Microsoft or Google asks you to allow KiddieTrac to see and change the calendar. KiddieTrac reads events for the days the panel shows and keeps them for a few minutes; it never shares them with anyone else.' }));
+    if (!co && !accts.length) body.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:8px;line-height:1.5;', text: 'You have no Microsoft 365 or Gmail mailbox signed in to Email yet. Add one in Email (Manage accounts) to connect its calendar.' }));
+    body.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-top:10px;line-height:1.5;', text: 'Microsoft or Google asks you to allow KiddieTrac to see and change the calendar. KiddieTrac reads events for the days the panel shows and keeps them for a few minutes (never more than an hour); it never shares them with anyone else.' }));
     function reload() { Api.get('/me/calendar-connections').then(function (nd) { paintX(body, nd); }).catch(function () {}); }
   }
 

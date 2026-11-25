@@ -155,7 +155,23 @@ final class PersonMail
     /** An agency's own mailbox (not Sales, not a mailbox with no agency) whose agency has linking on. */
     public static function linkable(object $acct): bool
     {
-        return ! empty($acct->agency_id) && empty($acct->shared_scope) && self::settings((int) $acct->agency_id)['enabled'];
+        return ! empty($acct->agency_id) && empty($acct->shared_scope) && self::settings((int) $acct->agency_id)['enabled']
+            && self::adminOwned($acct);
+    }
+
+    /* AN AGENCY MAILBOX IS AN ADMIN'S (2026-11-25, Anthony: directors "can add their OWN mailbox in Email (personal
+       only - never the agency's mailboxes)"). A mailbox is the agency's - filed on people, matched by address - only
+       when its owner is that agency's admin (or a platform admin). A centre director's mailbox stays theirs alone. */
+    private static array $adminOwned = [];
+
+    private static function adminOwned(object $acct): bool
+    {
+        $uid = (int) ($acct->user_id ?? DB::table('email_accounts')->where('id', (int) ($acct->id ?? 0))->value('user_id'));
+        $aid = (int) $acct->agency_id;
+        if (! $uid) return false;
+        return self::$adminOwned[$uid . ':' . $aid] ??= DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+            ->where(fn ($q) => $q->where('role', 'platform_admin')->orWhere(fn ($w) => $w->where('role', 'agency_admin')->where('agency_id', $aid)))
+            ->exists();
     }
 
     public static function norm(?string $addr): string

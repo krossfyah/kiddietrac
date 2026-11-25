@@ -74,6 +74,7 @@ class MailWatchCommand extends Command
         }
 
         foreach ($accounts as $a) {
+            if (($a->shared_scope ?? null) === 'calendar') continue;   // a calendar-only sign-in has no mail (kept alive above)
             try {
                 $this->watch($a, $own, $dry);
             } catch (\Throwable $e) {

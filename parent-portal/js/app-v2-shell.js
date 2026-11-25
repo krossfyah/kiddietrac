@@ -525,6 +525,8 @@
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
+          // 2026-11-25: their OWN mailbox (Anthony) - never the agency's; linking emails to people stays with admins.
+          { hash: 'email',          label: 'Email Client',     icon: '✉️' },
           { hash: 'announcements',  label: 'Announcements',    icon: '📢', badgeKey: 'announcement_unread' },
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
           { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)

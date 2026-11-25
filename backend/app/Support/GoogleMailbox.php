@@ -57,18 +57,21 @@ class GoogleMailbox
         $state = 'gmbx.' . bin2hex(random_bytes(20));
         $returnTo = in_array($returnTo, ['email', 'sales-email', 'calendar'], true) ? $returnTo : 'email';
         $withCal = $cal !== null || ExternalCalendar::granted($a);
-        Cache::put('kt_gmbx_state:' . hash('sha256', $state), ['account_id' => (int) $a->id, 'user_id' => $userId, 'return_to' => $returnTo, 'cal' => $cal, 'with_cal' => $withCal], self::STATE_TTL);
-        return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query([
+        // Calendar only (shared_scope 'calendar', 2026-11-25): no Gmail permission is asked for at all.
+        $co = ($a->shared_scope ?? null) === 'calendar';
+        Cache::put('kt_gmbx_state:' . hash('sha256', $state), ['account_id' => (int) $a->id, 'user_id' => $userId, 'return_to' => $returnTo, 'cal' => $cal, 'with_cal' => $withCal, 'co' => $co], self::STATE_TTL);
+        $q = [
             'client_id' => RsvpGmail::clientId(),
             'redirect_uri' => RsvpGmail::redirectUri(),
             'response_type' => 'code',
-            'scope' => self::SCOPES . ($withCal ? ' ' . ExternalCalendar::GOOGLE_SCOPE : ''),
+            'scope' => $co ? 'openid email ' . ExternalCalendar::GOOGLE_SCOPE : self::SCOPES . ($withCal ? ' ' . ExternalCalendar::GOOGLE_SCOPE : ''),
             'access_type' => 'offline',
             'prompt' => 'consent select_account',
             'include_granted_scopes' => 'false',
-            'login_hint' => (string) $a->email_address,
             'state' => $state,
-        ], '', '&', PHP_QUERY_RFC3986);
+        ];
+        if (trim((string) $a->email_address) !== '') $q['login_hint'] = (string) $a->email_address;
+        return 'https://accounts.google.com/o/oauth2/v2/auth?' . http_build_query($q, '', '&', PHP_QUERY_RFC3986);
     }
 
     /** Google's redirect back. Parks the result for finish(); never saves it. */
@@ -93,7 +96,7 @@ class GoogleMailbox
         } catch (\Throwable $e) {
             return self::back(null, $e->getMessage(), $to);
         }
-        if (! str_contains((string) ($tok['scope'] ?? ''), 'gmail.modify')) {
+        if (empty($st['co']) && ! str_contains((string) ($tok['scope'] ?? ''), 'gmail.modify')) {
             return self::back(null, 'Google signed you in, but the box allowing KiddieTrac to read your mail was not ticked. Please sign in again and allow it.', $to);
         }
         if (! empty($st['cal']) && ! str_contains((string) ($tok['scope'] ?? ''), 'calendar.events')) {
@@ -140,6 +143,25 @@ class GoogleMailbox
         $tok = json_decode(Crypt::decryptString($p['tok']), true) ?: [];
         $identity = (string) $p['identity'];
         $mailbox = strtolower(trim((string) $a->email_address));
+        if (($a->shared_scope ?? null) === 'calendar') {
+            // Calendar only: the calendar must open; the address is whoever signed in.
+            try {
+                self::send((string) ($tok['access_token'] ?? ''), 'GET', 'https://www.googleapis.com/calendar/v3/calendars/primary/events', ['maxResults' => 1]);
+            } catch (\Throwable $e) {
+                return [false, 'Google signed you in but would not open the calendar: ' . $e->getMessage(), (int) $a->id];
+            }
+            if (empty($tok['refresh_token']) || $identity === '') {
+                return [false, 'Google did not allow KiddieTrac to stay connected to this calendar. Please try again.', (int) $a->id];
+            }
+            DB::table('email_accounts')->where('id', $a->id)->update([
+                'provider' => 'google', 'auth_type' => 'google', 'email_address' => $identity, 'display_name' => 'Calendar',
+                'oauth_token' => Crypt::encryptString(json_encode(['refresh_token' => $tok['refresh_token'], 'cal' => 1, 'co' => 1])),
+                'oauth_identity' => $identity, 'oauth_connected_at' => now(), 'secret' => null,
+                'status' => 'connected', 'status_detail' => 'Calendar only, signed in with Google as ' . $identity, 'updated_at' => now(),
+            ] + self::cols(['auth_failed_at' => null, 'token_refreshed_at' => now()]));
+            self::cacheAccess((int) $a->id, $tok);
+            return [true, 'Connected', (int) $a->id, $p['cal'] ?? null];
+        }
         // A Google sign-in opens only its own mailbox (Gmail has no "Full Access" to someone else's).
         if ($identity !== '' && $identity !== $mailbox) {
             return [false, 'You signed in to Google as ' . $identity . ', not ' . $mailbox . '. Sign in as ' . $mailbox . ' (Google lets you pick the account).', (int) $a->id];

@@ -764,7 +764,7 @@
         if (_calDone) return; _calDone = true;
         var go = function () { KT.calSync.render(paneCal, { role: activeRole, mkSwitch: mkSwitch, CARD: CARD, SECT: SECT }); };
         if (KT.calSync) { go(); return; }
-        var s = document.createElement('script'); s.src = '/js/kt-cal-sync.js?v=20261125xcal1'; s.onload = go;
+        var s = document.createElement('script'); s.src = '/js/kt-cal-sync.js?v=20261125xcal2'; s.onload = go;
         s.onerror = function () { _calDone = false; paneCal.textContent = 'Could not load. Please try again.'; };
         document.head.appendChild(s);
       });

@@ -2784,6 +2784,33 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/admin/fee-plans/{id}/generate-invoices', [\App\Http\Controllers\Api\FeePlanController::class, 'generateInvoices']);
     });
 
+    /* THE EMAIL CLIENT, OWN MAILBOXES (2026-11-25, Anthony: directors "can add their OWN mailbox in Email (personal
+       only)"). Every route here works on the caller's own mailboxes (SalesMailbox::owner: user_id = me, no shared
+       scope); a director's mailbox is never the agency's (PersonMail::adminOwned), and linking emails to people,
+       Email settings and the agency's mail log stay with agency admins (the admin group below). */
+    Route::middleware('role:agency_admin,centre_director,platform_admin')->group(function () {
+        Route::get('/email/accounts', [\App\Http\Controllers\Api\EmailAccountController::class, 'index']);
+        Route::post('/email/accounts', [\App\Http\Controllers\Api\EmailAccountController::class, 'store']);
+        Route::patch('/email/accounts/{id}', [\App\Http\Controllers\Api\EmailAccountController::class, 'update']);
+        Route::delete('/email/accounts/{id}', [\App\Http\Controllers\Api\EmailAccountController::class, 'destroy']);
+        Route::post('/email/accounts/{id}/test', [\App\Http\Controllers\Api\EmailAccountController::class, 'test']);
+        Route::get('/email/accounts/{id}/auto-replies', [\App\Http\Controllers\Api\EmailAccountController::class, 'autoReplies'])->middleware('throttle:60,1,r-email-auto-replies');
+        Route::put('/email/accounts/{id}/auto-replies', [\App\Http\Controllers\Api\EmailAccountController::class, 'saveAutoReplies'])->middleware('throttle:20,1,r-email-auto-replies-save');
+        Route::put('/email/accounts/{id}/alerts', [\App\Http\Controllers\Api\EmailAccountController::class, 'saveAlerts'])->middleware('throttle:60,1,r-email-alerts');
+        Route::post('/email/accounts/{id}/microsoft', [\App\Http\Controllers\Api\EmailAccountController::class, 'microsoftStart'])->middleware('throttle:20,1,r-email-accounts-x-microsoft-2876');
+        Route::post('/email/microsoft/finish', [\App\Http\Controllers\Api\EmailAccountController::class, 'microsoftFinish'])->middleware('throttle:20,1,r-email-microsoft-finish-2877');
+        // Sign in with Google + "which provider is this address?" (2026-11-04).
+        Route::post('/email/accounts/{id}/google', [\App\Http\Controllers\Api\EmailAccountController::class, 'googleStart'])->middleware('throttle:20,1,r-email-accounts-x-google-2');
+        Route::post('/email/discover', [\App\Http\Controllers\Api\EmailAccountController::class, 'discover'])->middleware('throttle:30,1,r-email-discover-2');
+        Route::get('/email/folders', [\App\Http\Controllers\Api\EmailMailController::class, 'folders']);
+        Route::get('/email/messages', [\App\Http\Controllers\Api\EmailMailController::class, 'messages']);
+        Route::get('/email/messages/{uid}', [\App\Http\Controllers\Api\EmailMailController::class, 'message']);
+        Route::get('/email/messages/{uid}/attachment', [\App\Http\Controllers\Api\EmailMailController::class, 'attachment']);
+        Route::post('/email/messages/{uid}/action', [\App\Http\Controllers\Api\EmailMailController::class, 'action']);
+        Route::post('/email/messages/bulk', [\App\Http\Controllers\Api\EmailMailController::class, 'bulk'])->middleware('throttle:60,1,r-email-bulk');
+        Route::post('/email/send', [\App\Http\Controllers\Api\EmailMailController::class, 'send'])->middleware('throttle:30,1,r-email-send-own');   // own mailboxes send (2026-11-09)
+    });
+
     Route::middleware('role:agency_admin,platform_admin')->group(function () {
         Route::get  ('/admin/billing-config', [\App\Http\Controllers\Api\AgencyBillingConfigController::class, 'show']);
         // v22p87: combined guided billing setup (defaults + payment methods + autopay)
@@ -2810,26 +2837,6 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'show']);
         Route::patch('/admin/email-settings', [\App\Http\Controllers\Api\EmailSettingsController::class, 'update']);
         Route::post('/admin/email-settings/test', [\App\Http\Controllers\Api\EmailSettingsController::class, 'sendTest']);
-        Route::get('/email/accounts', [\App\Http\Controllers\Api\EmailAccountController::class, 'index']);
-        Route::post('/email/accounts', [\App\Http\Controllers\Api\EmailAccountController::class, 'store']);
-        Route::patch('/email/accounts/{id}', [\App\Http\Controllers\Api\EmailAccountController::class, 'update']);
-        Route::delete('/email/accounts/{id}', [\App\Http\Controllers\Api\EmailAccountController::class, 'destroy']);
-        Route::post('/email/accounts/{id}/test', [\App\Http\Controllers\Api\EmailAccountController::class, 'test']);
-        Route::get('/email/accounts/{id}/auto-replies', [\App\Http\Controllers\Api\EmailAccountController::class, 'autoReplies'])->middleware('throttle:60,1,r-email-auto-replies');
-        Route::put('/email/accounts/{id}/auto-replies', [\App\Http\Controllers\Api\EmailAccountController::class, 'saveAutoReplies'])->middleware('throttle:20,1,r-email-auto-replies-save');
-        Route::put('/email/accounts/{id}/alerts', [\App\Http\Controllers\Api\EmailAccountController::class, 'saveAlerts'])->middleware('throttle:60,1,r-email-alerts');
-        Route::post('/email/accounts/{id}/microsoft', [\App\Http\Controllers\Api\EmailAccountController::class, 'microsoftStart'])->middleware('throttle:20,1,r-email-accounts-x-microsoft-2876');
-        Route::post('/email/microsoft/finish', [\App\Http\Controllers\Api\EmailAccountController::class, 'microsoftFinish'])->middleware('throttle:20,1,r-email-microsoft-finish-2877');
-        // Sign in with Google + "which provider is this address?" (2026-11-04).
-        Route::post('/email/accounts/{id}/google', [\App\Http\Controllers\Api\EmailAccountController::class, 'googleStart'])->middleware('throttle:20,1,r-email-accounts-x-google-2');
-        Route::post('/email/discover', [\App\Http\Controllers\Api\EmailAccountController::class, 'discover'])->middleware('throttle:30,1,r-email-discover-2');
-        Route::get('/email/folders', [\App\Http\Controllers\Api\EmailMailController::class, 'folders']);
-        Route::get('/email/messages', [\App\Http\Controllers\Api\EmailMailController::class, 'messages']);
-        Route::get('/email/messages/{uid}', [\App\Http\Controllers\Api\EmailMailController::class, 'message']);
-        Route::get('/email/messages/{uid}/attachment', [\App\Http\Controllers\Api\EmailMailController::class, 'attachment']);
-        Route::post('/email/messages/{uid}/action', [\App\Http\Controllers\Api\EmailMailController::class, 'action']);
-        Route::post('/email/messages/bulk', [\App\Http\Controllers\Api\EmailMailController::class, 'bulk'])->middleware('throttle:60,1,r-email-bulk');
-        Route::post('/email/send', [\App\Http\Controllers\Api\EmailMailController::class, 'send'])->middleware('throttle:30,1,r-email-send-own');   // own mailboxes send (2026-11-09)
         // Emails on a person's record (2026-11-07, App\Support\PersonMail).
         Route::get('/email/messages/{uid}/links', [\App\Http\Controllers\Api\EmailLinkController::class, 'show'])->middleware('throttle:60,1,r-email-links');
         Route::post('/email/messages/{uid}/links', [\App\Http\Controllers\Api\EmailLinkController::class, 'store'])->middleware('throttle:60,1,r-email-links-save');

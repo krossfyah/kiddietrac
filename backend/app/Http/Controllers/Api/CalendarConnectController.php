@@ -26,6 +26,10 @@ use Illuminate\Support\Facades\DB;
  * Personal: admins, directors, the KiddieTrac team (platform admin, sales). The agency's calendar: set by an agency
  * admin (or a platform admin in that agency); read by its admins and directors. Everything is the ACTIVE agency's;
  * no agency, no agency calendar.
+ *
+ * CALENDAR ONLY (2026-11-25): someone with no Email client (the sales team) connects with {provider} instead of an
+ * account_id - a Microsoft / Google sign-in that grants the calendar and none of the mail, held on an email_accounts
+ * row with shared_scope 'calendar' (never shown as a mailbox). Disconnecting removes that row and its sign-in.
  */
 class CalendarConnectController extends Controller
 {
@@ -34,6 +38,8 @@ class CalendarConnectController extends Controller
     private const PERSONAL_ROLES = ['agency_admin', 'centre_director', 'platform_admin', 'sales_rep'];
     private const AGENCY_READ = ['agency_admin', 'centre_director', 'platform_admin'];
     private const AGENCY_SET = ['agency_admin', 'platform_admin'];
+    /** Who has the Email client (their own mailboxes); everyone else in PERSONAL_ROLES connects calendar-only. */
+    private const EMAIL_ROLES = ['agency_admin', 'centre_director', 'platform_admin'];
 
     private function roles(Request $r): array
     {
@@ -77,15 +83,19 @@ class CalendarConnectController extends Controller
             'agency' => $readAgency ? ExternalCalendar::present(ExternalCalendar::agency($aid)) : null,
             'agency_name' => $readAgency ? DB::table('agencies')->where('id', $aid)->value('name') : null,
             'can_set_agency' => $aid && $this->may($r, self::AGENCY_SET),
-            'accounts' => $this->accounts($uid),
+            'calendar_only' => ! $this->may($r, self::EMAIL_ROLES),
+            'accounts' => $this->may($r, self::EMAIL_ROLES) ? $this->accounts($uid) : [],
         ]);
     }
 
     public function connect(Request $r): JsonResponse
     {
-        $d = $r->validate(['account_id' => ['required', 'integer'], 'scope' => ['required', 'in:personal,agency']]);
+        $d = $r->validate(['account_id' => ['required_without:provider', 'nullable', 'integer'], 'provider' => ['required_without:account_id', 'nullable', 'in:microsoft,google'],
+            'scope' => ['required', 'in:personal,agency']]);
         if (! $this->may($r, self::PERSONAL_ROLES)) return response()->json(['message' => 'Calendar connections are for admins, directors and the KiddieTrac team.'], 403);
         $uid = (int) $r->user()->id;
+        if (empty($d['account_id'])) return $this->connectCalendarOnly($r, $uid, (string) $d['provider'], $d['scope']);
+        if (! $this->may($r, self::EMAIL_ROLES)) return response()->json(['message' => 'Connect your calendar with Microsoft or Google instead.'], 403);
         $aid = null;
         if ($d['scope'] === 'agency') {
             $aid = $this->agencyId($r);
@@ -103,6 +113,23 @@ class CalendarConnectController extends Controller
             return response()->json(['url' => GoogleMailbox::authorizeUrl($a, $uid, 'calendar', $cal)]);
         }
         return response()->json(['message' => 'Only Microsoft 365 / Outlook and Google mailboxes have a calendar KiddieTrac can connect.'], 422);
+    }
+
+    /** A calendar-only sign-in (no mail): the sales team, and anyone else without the Email client. Personal only. */
+    private function connectCalendarOnly(Request $r, int $uid, string $provider, string $scope): JsonResponse
+    {
+        if ($scope !== 'personal') return response()->json(['message' => 'Only an agency admin can connect the agency calendar, from a mailbox in Email.'], 403);
+        if ($provider === 'microsoft' && ! MicrosoftMailbox::configured()) return response()->json(['message' => 'Microsoft sign-in is not set up on this server. Please contact KiddieTrac support.'], 422);
+        if ($provider === 'google' && ! GoogleMailbox::configured()) return response()->json(['message' => 'Google sign-in is not set up on this server. Please contact KiddieTrac support.'], 422);
+        $a = DB::table('email_accounts')->where('user_id', $uid)->where('shared_scope', 'calendar')->where('provider', $provider)->whereNull('deleted_at')->orderByDesc('id')->first();
+        if (! $a) {
+            $id = DB::table('email_accounts')->insertGetId(['user_id' => $uid, 'agency_id' => null, 'shared_scope' => 'calendar', 'display_name' => 'Calendar',
+                'email_address' => '', 'provider' => $provider, 'auth_type' => $provider, 'is_default' => 0, 'status' => 'pending',
+                'signature_enabled' => 0, 'ooo_enabled' => 0, 'created_at' => now(), 'updated_at' => now()]);
+            $a = DB::table('email_accounts')->find($id);
+        }
+        $cal = ['scope' => 'personal', 'agency_id' => null];
+        return response()->json(['url' => $provider === 'google' ? GoogleMailbox::authorizeUrl($a, $uid, 'calendar', $cal) : MicrosoftMailbox::authorizeUrl($a, $uid, 'calendar', $cal)]);
     }
 
     public function finish(Request $r): JsonResponse
@@ -128,6 +155,10 @@ class CalendarConnectController extends Controller
             'status' => 'connected', 'status_detail' => null, 'updated_at' => now()];
         $old = $scope === 'agency' ? ExternalCalendar::agency($aid) : ExternalCalendar::personal($uid);
         if ($old) {
+            if ((int) $old->email_account_id !== (int) $a->id) {
+                DB::table('email_accounts')->where('id', $old->email_account_id)->where('shared_scope', 'calendar')->whereNull('deleted_at')
+                    ->update(['deleted_at' => now(), 'oauth_token' => null, 'status' => 'removed', 'updated_at' => now()]);
+            }
             DB::table('calendar_links')->where('id', $old->id)->update($row);
             $id = (int) $old->id;
             ExternalCalendar::forget($id);
@@ -149,6 +180,13 @@ class CalendarConnectController extends Controller
         if (! $mine && ! $agencyOk) return response()->json(['message' => 'That calendar is not available.'], 404);
         DB::table('calendar_links')->where('id', $id)->update(['deleted_at' => now(), 'updated_at' => now()]);
         ExternalCalendar::forget($id);
+        // A calendar-only sign-in exists for this link alone: it goes too (token and all), unless another link uses it.
+        $acct = DB::table('email_accounts')->where('id', $link->email_account_id)->where('shared_scope', 'calendar')->whereNull('deleted_at')->first();
+        if ($acct && ! DB::table('calendar_links')->where('email_account_id', $acct->id)->whereNull('deleted_at')->exists()) {
+            DB::table('email_accounts')->where('id', $acct->id)->update(['deleted_at' => now(), 'oauth_token' => null, 'status' => 'removed', 'updated_at' => now()]);
+            \Illuminate\Support\Facades\Cache::forget('kt_mbx_at:' . $acct->id);
+            \Illuminate\Support\Facades\Cache::forget('kt_gmbx_at:' . $acct->id);
+        }
         // The meetings already written stay on that calendar; KiddieTrac just stops moving them.
         Audit::write(['user_id' => $uid, 'agency_id' => $link->agency_id ?: $this->agencyId($r), 'action' => 'calendar.disconnected', 'entity_type' => 'calendar_link', 'entity_id' => $id,
             'payload' => json_encode(['summary' => 'Disconnected ' . ($link->scope === 'agency' ? 'the agency calendar' : 'their own calendar') . ' (' . $link->address . ')']),
