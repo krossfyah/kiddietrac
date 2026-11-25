@@ -103,6 +103,8 @@ class CheckEventNotifier
                 ->first();
 
             if (! $child) return;
+            // Runs in the queue worker (no session): a test agency's check-in tells nobody (2026-11-25).
+            if (\App\Support\TestAgency::skips((int) $child->agency_id, 'check-in event (family)', ['child' => $childId])) return;
 
             $tz = $child->tz ?: 'America/Toronto';
             $when = Carbon::parse($occurredAt ?: now())->timezone($tz);
@@ -209,6 +211,7 @@ class CheckEventNotifier
             $child = DB::table('children')->where('id', $childId)
                 ->first(['first_name', 'preferred_name', 'last_name', 'primary_room_id', 'family_id']);
             if (! $child) return;
+            if (\App\Support\TestAgency::skips(\App\Support\TestAgency::agencyOfChild($childId), 'check-in event (staff)', ['child' => $childId])) return;   // test agency (2026-11-25)
 
             $roomId = $roomId ?: (int) ($child->primary_room_id ?? 0);
             if (! $centreId) {

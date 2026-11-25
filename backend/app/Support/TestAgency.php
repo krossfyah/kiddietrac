@@ -37,10 +37,20 @@ final class TestAgency
     /** @var array<int,bool> */
     private static array $users = [];
 
-    /** @param string[] $to every recipient is a preview inbox */
-    public static function previewOnly(array $to): bool
+    /**
+     * @param string[] $to every recipient is a preview inbox
+     *
+     * AND the message says it is a preview (2026-11-25): a "[TEST] …" subject or an X-KT-Preview header. Anthony is
+     * also a guardian at Test Agency #6, so his Gmail is a real recipient of #6's automatic mail; "the only recipient
+     * is his Gmail" let #6's "🕘 Has Liam arrived?" reminders through every weekday morning. Previews mark
+     * themselves (every test send in the codebase prefixes "[TEST] "); a real notification never does.
+     */
+    public static function previewOnly(array $to, string $subject = '', bool $marked = false): bool
     {
         if (! $to) {
+            return false;
+        }
+        if (! $marked && ! str_starts_with(ltrim($subject), '[TEST]')) {
             return false;
         }
         foreach ($to as $e) {
@@ -165,6 +175,51 @@ final class TestAgency
         } catch (\Throwable $e) {
             return false;
         }
+    }
+
+    /**
+     * THE QUESTION A JOB ASKS PER SEND (2026-11-25, Anthony: "i am still receiving test agency safe arrival
+     * notifications - i thought we turned this off?"). A console or queued job has no session, and someone in a test
+     * AND a real agency (Anthony: guardian at #6, admin at #2) is not a test-only person, so the push services let #6's
+     * "Has Liam arrived?" through to his phone. A sender that knows the agency it is sending for asks this; true = a
+     * test agency: send nothing (noted in the log). Mail and texts also judge the agency themselves (X-KT-Agency-Id in
+     * SuppressAgencyMail, SmsGateway); push has no agency, so the push senders MUST ask.
+     */
+    public static function skips(?int $agencyId, string $what, array $ctx = []): bool
+    {
+        if (! self::isAgency($agencyId)) {
+            return false;
+        }
+        self::note($what, ['agency' => $agencyId] + $ctx);
+
+        return true;
+    }
+
+    /** @var array<int,?int> */
+    private static array $centreAgency = [];
+
+    public static function agencyOfCentre(?int $centreId): ?int
+    {
+        if (! $centreId) {
+            return null;
+        }
+        if (! array_key_exists($centreId, self::$centreAgency)) {
+            $a = DB::table('centres')->where('id', $centreId)->value('agency_id');
+            self::$centreAgency[$centreId] = $a ? (int) $a : null;
+        }
+
+        return self::$centreAgency[$centreId];
+    }
+
+    public static function agencyOfChild(?int $childId): ?int
+    {
+        if (! $childId) {
+            return null;
+        }
+        $c = DB::table('children as ch')->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->where('ch.id', $childId)->value('f.centre_id');
+
+        return self::agencyOfCentre($c ? (int) $c : null);
     }
 
     /** The one question every sender asks: is this send for a test agency (by agency, session or person)? */

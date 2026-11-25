@@ -90,6 +90,7 @@ final class AutoSignOffNotices
     /** A staff punch closed automatically. */
     public static function staffClosed(int $agencyId, int $punchId, int $userId, int $centreId, Carbon $in, Carbon $out): void
     {
+        if (\App\Support\TestAgency::skips($agencyId, 'auto sign-off (staff)', ['user' => $userId])) return;   // test agency (2026-11-25)
         try {
             $u = DB::table('users')->where('id', $userId)->first(['id', 'email', 'first_name', 'last_name']);
             if (! $u) return;
@@ -151,6 +152,7 @@ final class AutoSignOffNotices
      */
     public static function childrenClosed(int $agencyId, int $centreId, array $kids): void
     {
+        if (\App\Support\TestAgency::skips($agencyId, 'auto sign-off (children)')) return;   // test agency (2026-11-25)
         if (! $kids || ! in_array($centreId, Live::centreIds($agencyId), true)) return;
         try {
             $c = DB::table('centres')->where('id', $centreId)->first(['name', 'phone', 'email']);

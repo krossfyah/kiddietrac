@@ -106,7 +106,7 @@ class EmptyRoomClockOutCommand extends Command
                 . '. If your day is done, clock out now so your hours are right.';
             $this->line(($dry ? '[dry] ' : '') . "remind user {$p->user_id} ({$p->first_name}), punch {$p->id}: room empty since {$left}");
             if (! $dry) {
-                Notify::write(['user_id' => (int) $p->user_id, 'type' => 'clock_reminder', 'title' => $title, 'body' => $body,
+                Notify::write(['agency_id' => $agencyId, 'user_id' => (int) $p->user_id, 'type' => 'clock_reminder', 'title' => $title, 'body' => $body,
                     'data' => json_encode(['link' => '#time-clock']), 'created_at' => now()]);
             }
             $sent++;

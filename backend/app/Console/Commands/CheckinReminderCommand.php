@@ -68,6 +68,7 @@ class CheckinReminderCommand extends Command
         $closedCentres = [];
 
         foreach ($children as $child) {
+            if (\App\Support\TestAgency::skips((int) $child->agency_id, 'check-in reminder', ['child' => (int) $child->id])) continue;   // test agency: nothing to anyone (2026-11-25)
             $centreKey = (int) ($child->centre_id ?? 0);
             if ($centreKey) {
                 if (! array_key_exists($centreKey, $closedCentres)) {

@@ -178,6 +178,7 @@ final class RatioAlerts
 
     private static function tell(array $userIds, string $title, string $body, bool $push, ?int $agencyId = null): void
     {
+        if (\App\Support\TestAgency::skips($agencyId, 'ratio alert')) return;   // test agency (2026-11-25)
         foreach ($userIds as $uid) {
             try {
                 Notify::write(['agency_id' => $agencyId, 'user_id' => $uid, 'type' => 'ratio_breach', 'title' => $title, 'body' => $body,

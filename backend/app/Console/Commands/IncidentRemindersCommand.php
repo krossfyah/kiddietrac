@@ -77,6 +77,7 @@ class IncidentRemindersCommand extends Command
 
         foreach ($byCentre as $centreId => $items) {
             $agencyId = (int) $items->first()->agency_id;
+            if (\App\Support\TestAgency::skips($agencyId, 'incident reminder')) continue;   // test agency (2026-11-25)
             $centreName = (string) $items->first()->centre_name;
             $tz = AgencyTime::tz($agencyId) ?: 'America/Toronto';
 

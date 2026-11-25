@@ -471,6 +471,7 @@ final class ClockReminderCommand extends Command
 
     private function sendReminder(int $userId, int $centreId, string $to, ?string $firstName, string $subject, string $lead, ?string $shiftWindow = null): void
     {
+        if (\App\Support\TestAgency::skips(\App\Support\TestAgency::agencyOfCentre($centreId), 'clock reminder', ['user' => $userId])) return;   // test agency (2026-11-25)
         if ($this->dryRun) {
             $this->line("  [dry-run] would remind {$to} (user {$userId}) — {$subject}");
             return;
@@ -653,6 +654,7 @@ final class ClockReminderCommand extends Command
 
     private function sendChildrenReminder(int $userId, int $centreId, string $to, ?string $firstName, string $subject, string $lead, array $names): void
     {
+        if (\App\Support\TestAgency::skips(\App\Support\TestAgency::agencyOfCentre($centreId), 'clock children reminder', ['user' => $userId])) return;   // test agency (2026-11-25)
         if ($this->dryRun) {
             $this->line("  [dry-run] would warn user {$userId} <{$to}> — {$subject}: " . implode(', ', $names));
             return;

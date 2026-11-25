@@ -266,8 +266,9 @@ class SuppressAgencyMail
             if ($taHit && \App\Support\TicketAlerts::allowsAddresses($taTo)) {
                 $taHit = false;
             }
-            // And Anthony's own preview inbox, when it is the ONLY recipient (Anthony, 2026-11-24: "Allow your Gmail only").
-            if ($taHit && \App\Support\TestAgency::previewOnly($taTo)) {
+            // And Anthony's own preview inbox, when it is the ONLY recipient (Anthony, 2026-11-24: "Allow your Gmail only")
+            // AND the message is a preview ("[TEST] …" or X-KT-Preview): a real #6 notification to his Gmail is not (2026-11-25).
+            if ($taHit && \App\Support\TestAgency::previewOnly($taTo, (string) $event->message->getSubject(), (bool) ($taH && $taH->has('X-KT-Preview')))) {
                 $taHit = false;
             }
             if ($taHit) {

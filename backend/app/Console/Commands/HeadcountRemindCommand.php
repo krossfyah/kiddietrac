@@ -34,6 +34,7 @@ final class HeadcountRemindCommand extends Command
         foreach ($q->get(['id', 'settings']) as $a) {
             $s = $a->settings ? (json_decode((string) $a->settings, true) ?: []) : [];
             if (empty($s['headcount_reminders']['enabled'])) continue;
+            if (\App\Support\TestAgency::skips((int) $a->id, 'headcount reminder')) continue;   // test agency (2026-11-25)
             $every = max(10, min(240, (int) ($s['headcount_reminders']['minutes'] ?? 30)));
             // Switched off for chosen centres and people (Room Controls -> Headcounts, 2026-10-23).
             $offCentres = array_map('intval', (array) ($s['headcount_reminders']['off_centres'] ?? []));

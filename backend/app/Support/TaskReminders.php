@@ -77,6 +77,7 @@ final class TaskReminders
         $isNew = $kind === 'assigned';
         $channels = self::channels($channels ?? ($isNew ? [] : $t->remind_channels));
         $out = [];
+        if (\App\Support\TestAgency::skips($agencyId, 'task reminder', ['task' => (int) $t->id])) { foreach ($channels as $c) $out[$c] = 'held: test agency'; return $out; }   // (2026-11-25)
         // The portal's own list of accounts that cannot sign in (Audience::OFF_STATUSES). Recorded as handled,
         // so a reminder for somebody who has left is not retried every five minutes.
         if (! $u || $u->deleted_at || in_array((string) ($u->status ?? ''), Audience::OFF_STATUSES, true)) {

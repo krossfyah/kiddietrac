@@ -133,6 +133,7 @@ final class SafeArrivalAllClear
     public static function send(int $agencyId, string $kind, object $check, string $title, string $body, ?int $actorId = null): array
     {
         $out = ['alerted' => false, 'read' => 0, 'to' => [], 'sent' => 0];
+        if (\App\Support\TestAgency::skips($agencyId, 'safe arrival all clear')) return $out;   // test agency (2026-11-25)
         try {
             $p = self::plan($kind, $check, $actorId);
             $out['alerted'] = $p['alerted'];

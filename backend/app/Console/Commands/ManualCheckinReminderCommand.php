@@ -48,6 +48,7 @@ class ManualCheckinReminderCommand extends Command
 
         $agencies = DB::table('agencies')->get(['id', 'name', 'settings']);
         foreach ($agencies as $ag) {
+            if (\App\Support\TestAgency::skips((int) $ag->id, 'manual check-in reminder')) continue;   // test agency (2026-11-25)
             $s = json_decode($ag->settings ?? '{}', true) ?: [];
             $enabled = array_key_exists('manual_checkin_reminders_enabled', $s) ? (bool) $s['manual_checkin_reminders_enabled'] : true; // default ON
             if (! $enabled) {

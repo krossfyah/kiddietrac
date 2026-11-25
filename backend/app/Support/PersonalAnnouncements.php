@@ -211,6 +211,7 @@ final class PersonalAnnouncements
         } catch (Throwable $e) {
             Log::warning('personal announcement bell failed', ['announcement' => $id, 'error' => $e->getMessage()]);
         }
+        if (\App\Support\TestAgency::skips((int) ($o['agency_id'] ?? 0), 'personal announcement push', ['user' => $o['user_id']])) return;   // test agency (2026-11-25)
         try {
             app(\App\Services\FcmService::class)->sendToUser($o['user_id'], $o['notif_title'], $o['notif_body'], $o['link'],
                 false, false, true, ['kt_category' => $o['category']]);

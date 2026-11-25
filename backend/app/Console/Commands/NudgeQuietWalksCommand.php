@@ -29,9 +29,10 @@ class NudgeQuietWalksCommand extends Command
         $dry = (bool) $this->option('dry-run');
         $cut = now()->subMinutes(self::QUIET_MIN);
         $walks = DB::table('field_trips')->where('status', 'active')->whereNotNull('staff_lead_id')
-            ->where('created_at', '<=', $cut)->get(['id', 'staff_lead_id', 'destination', 'title', 'created_at']);
+            ->where('created_at', '<=', $cut)->get(['id', 'agency_id', 'staff_lead_id', 'destination', 'title', 'created_at']);
         $n = 0;
         foreach ($walks as $w) {
+            if (\App\Support\TestAgency::skips((int) $w->agency_id, 'quiet walk nudge')) continue;   // test agency (2026-11-25)
             $last = DB::table('field_trip_pings')->where('field_trip_id', $w->id)->max('recorded_at');
             if ($last && Carbon::parse((string) $last)->gt($cut)) {
                 continue;   // still reporting

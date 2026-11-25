@@ -301,7 +301,8 @@ final class ThankYouAuto
             'data' => json_encode(['link' => '#my-points', 'award_id' => $rid])]);
         $push = 'not sent';
         try {
-            $r = app(\App\Services\FcmService::class)->sendToUser($uid, '🏅 Thank you!', $body, '#my-points');
+            $r = \App\Support\TestAgency::skips($agencyId, 'thank-you push', ['user' => $uid]) ? ['suppressed' => true]   // test agency (2026-11-25)
+                : app(\App\Services\FcmService::class)->sendToUser($uid, '🏅 Thank you!', $body, '#my-points');
             $push = ! empty($r['suppressed']) ? 'suppressed' : ((($r['sent'] ?? 0) > 0) ? 'sent' : 'no device');
         } catch (\Throwable $e) {
             report($e);
@@ -321,6 +322,7 @@ final class ThankYouAuto
     /** Bell + email to the agency admins: N drafts are waiting. */
     private static function tellManagers(int $agencyId, string $month, int $count, array $people): void
     {
+        if (\App\Support\TestAgency::skips($agencyId, 'thank-you managers')) return;   // test agency (2026-11-25)
         $label = self::monthLabel($month);
         $title = '🏅 ' . $count . ' thank-you award' . ($count === 1 ? ' is' : 's are') . ' ready to review';
         $body = 'For ' . $label . ': ' . implode(', ', array_slice(array_map(fn ($p) => $p['first'], $people), 0, 6)) . ($count > 6 ? ' and ' . ($count - 6) . ' more' : '') . '. Review, edit and send them in Settings → Educator awards.';

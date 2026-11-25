@@ -41,6 +41,7 @@ final class SleepChecksAlertCommand extends Command
 
         foreach (SleepChecks::openNaps(null, $now) as $n) {
             if (! $n['enabled'] || ! $n['overdue']) continue;
+            if (\App\Support\TestAgency::skips((int) ($n['agency_id'] ?? 0), 'sleep check alert')) continue;   // test agency (2026-11-25)
             $due = $n['due'];
             $late = (int) floor($due->diffInSeconds($now, true) / 60);
             $dueS = $due->format('Y-m-d H:i:s');

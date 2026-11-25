@@ -44,6 +44,7 @@ class ImmunizationRemindersCommand extends Command
 
         $sent = 0;
         foreach ($agencies as $agency) {
+            if (\App\Support\TestAgency::skips((int) $agency->id, 'immunization reminder')) continue;   // test agency (2026-11-25)
             $cfg = Cfg::read((int) $agency->id);
             $this->parentSent = [];
 

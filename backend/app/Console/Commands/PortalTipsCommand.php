@@ -92,6 +92,25 @@ final class PortalTipsCommand extends Command
         }
         $target = $target->map(fn ($i) => (int) $i)->unique()->values();
 
+        /* Only people who are a guardian / staff at a REAL agency (2026-11-25). A tip is nobody's agency's, so the
+           push services cannot tell; Anthony is a guardian only at Test Agency #6 and got the parents' tip. */
+        $test = \App\Support\TestAgency::ids();
+        if ($test && $target->isNotEmpty()) {
+            $real = $guardianPath
+                ? DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')->join('centres as c', 'c.id', '=', 'f.centre_id')
+                    ->whereIn('g.user_id', $target)->whereNotIn('c.agency_id', $test)->pluck('g.user_id')
+                : DB::table('role_assignments as ra')->leftJoin('centres as c', 'c.id', '=', 'ra.centre_id')
+                    ->whereIn('ra.user_id', $target)->whereIn('ra.role', $roles)->where('ra.active', true)
+                    ->whereRaw('COALESCE(ra.agency_id, c.agency_id) IS NOT NULL')
+                    ->whereNotIn(DB::raw('COALESCE(ra.agency_id, c.agency_id)'), $test)->pluck('ra.user_id');
+            $real = $real->map(fn ($i) => (int) $i)->unique();
+            $held = $target->diff($real);
+            if ($held->isNotEmpty()) {
+                \App\Support\TestAgency::note('portal tip', ['users' => $held->values()->all()]);
+            }
+            $target = $target->intersect($real)->values();
+        }
+
         $svc = app(FcmService::class);
         $n = 0;
         foreach ($target as $uid) {

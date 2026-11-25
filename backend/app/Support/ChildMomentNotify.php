@@ -99,6 +99,7 @@ final class ChildMomentNotify
             ->where('c.id', $childId)->whereNull('c.deleted_at')
             ->first(['c.id', 'c.first_name', 'c.family_id', 'c.enrollment_status', 'ce.agency_id']);
         if (! $child || ! $child->family_id || ($child->enrollment_status && $child->enrollment_status !== 'enrolled')) return;
+        if (\App\Support\TestAgency::skips((int) $child->agency_id, 'child moment', ['child' => $childId])) return;   // test agency (2026-11-25)
 
         $settings = self::settings((int) $child->agency_id);
         if (! $settings['enabled']) return;

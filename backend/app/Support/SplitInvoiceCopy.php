@@ -272,6 +272,7 @@ final class SplitInvoiceCopy
     {
         $inv = DB::table('invoices')->where('id', $invoiceId)->first();
         if (! $inv) return 0;
+        if (\App\Support\TestAgency::skips(\App\Support\TestAgency::agencyOfCentre((int) ($inv->centre_id ?? 0)), 'split invoice copy')) return 0;   // test agency (2026-11-25)
         $n = 0;
         foreach (self::copies($inv) as $c) {
             if (! $c['user_id']) continue;

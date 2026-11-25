@@ -313,6 +313,7 @@ final class SafeArrivalCall
     {
         try {
             $agencyId = (int) $check->agency_id;
+            if (\App\Support\TestAgency::skips($agencyId, 'safe arrival call (staff)')) return;   // test agency (2026-11-25)
             // The room's educators and the directors/admins the agency chose in Safe Arrival settings (2026-10-30;
             // this used to tell every director and every admin whatever the switches said).
             $ids = \App\Support\SafeArrival::recipients($agencyId, (int) $check->centre_id, $check->room_id ? (int) $check->room_id : null,
