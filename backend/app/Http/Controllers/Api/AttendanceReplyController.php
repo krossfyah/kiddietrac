@@ -42,8 +42,15 @@ final class AttendanceReplyController extends Controller
         [$ok, $message] = AttendanceReply::apply($token, $data['action'], $data['reason'] ?? null, $data['note'] ?? null, $data['by'] ?? null);
         [$link, $state] = AttendanceReply::find($token);
         if (! $ok) {
-            AttendanceReply::audit($link->agency_id ?? null, $link->guardian_user_id ?? null, 'attendance_reply.refused', $link->child_id ?? null,
-                'Email link answer not recorded (' . $data['action'] . '): ' . $message . ' [' . $request->ip() . ']');
+            // A refused answer is worth a line too (an old or forwarded link). Recorded answers are audited in
+            // AttendanceReply::apply (attendance_reply.absent / .late).
+            try {
+                \App\Support\Audit::write(['user_id' => $link->guardian_user_id ?? null, 'agency_id' => $link->agency_id ?? null,
+                    'action' => 'attendance_reply.refused', 'entity_type' => 'child', 'entity_id' => $link->child_id ?? null,
+                    'payload' => json_encode(['summary' => 'Email link answer not recorded (' . $data['action'] . '): ' . $message,
+                        'ip' => $request->ip()], JSON_UNESCAPED_UNICODE), 'created_at' => now()]);
+            } catch (\Throwable $e) {
+            }
 
             return response()->json(['message' => $message, 'current' => ($link && $state === 'ok') ? AttendanceReply::current($link) : null], 422);
         }
