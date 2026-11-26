@@ -300,6 +300,7 @@ route meetings/rsvp
 route my-compliance
 route my-policies
 route notifications
+route notifications/alerts
 route notifications/delete
 route notifications/mark-read
 route notifications/seen

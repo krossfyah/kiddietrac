@@ -2395,6 +2395,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     
     // NOTIFICATIONS — unread badge support
     Route::get('/notifications/unread-count', [NotificationUnreadController::class, 'unreadCount']);
+    // The admin bell lists the person's own safety alerts above the agency feed (BellAlertsController, 2026-11-26).
+    Route::get('/notifications/alerts',       [\App\Http\Controllers\Api\BellAlertsController::class, 'index'])->middleware('throttle:60,1,bellalerts');
     Route::post('/notifications/mark-read',   [NotificationUnreadController::class, 'markRead']);
     // Every badge in one answer; opening the inbox marks it seen; iPhone icon sync (App\Support\Badges, 2026-10-30).
     Route::get('/announcements/popup',        [\App\Http\Controllers\Api\AnnouncementController::class, 'popup'])->middleware('throttle:30,1,annpopup');

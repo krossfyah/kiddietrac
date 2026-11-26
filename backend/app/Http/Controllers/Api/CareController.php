@@ -1005,6 +1005,7 @@ final class CareController extends Controller
             foreach ($recipients as $rid) {
                 if ((int) $rid === $actorId) continue;   // don't notify the actor
                 \App\Support\Notify::write([
+                    'agency_id'  => $agencyId ? (int) $agencyId : null,   // the row named no centre, so it had no agency (2026-11-26)
                     'user_id'    => $rid,
                     'type'       => 'clock',
                     'title'      => $title,

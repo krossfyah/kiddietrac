@@ -114,6 +114,10 @@ final class NotifyAudience
     public const PREF_EVENTS = [
         'check_in_out' => 'family', 'daily_moments' => 'family', 'learning_observations' => 'family', 'photos_videos' => 'family',
         'safe_arrival' => 'staff',   // directors and admins choose their Safe Arrival channels (2026-11-24; mapped here 2026-11-25, ticket #268)
+        // What admins and directors choose to hear about (StaffNotifyPrefs::TOPICS, 2026-11-26).
+        'staff_clock' => 'staff', 'staff_absences' => 'staff', 'staff_countersign' => 'staff', 'staff_compliance' => 'staff',
+        'staff_payments' => 'staff', 'staff_billing_copies' => 'staff', 'staff_pickup' => 'staff', 'staff_closures' => 'staff',
+        'staff_schedule' => 'staff', 'staff_tips' => 'staff', 'staff_cold_reach' => 'staff', 'staff_tickets' => 'staff',
     ];
 
     public static function ofType(?string $type): string

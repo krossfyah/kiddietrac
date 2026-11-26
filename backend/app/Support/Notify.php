@@ -237,6 +237,10 @@ final class Notify
             // Every row names its agency (same keys on every row: one bulk insert).
             $dd = $r['data'] ?? null;
             $r['agency_id'] = self::agencyFor($r, is_array($dd) ? $dd : (is_string($dd) && $dd !== '' ? (json_decode($dd, true) ?: []) : []));
+            // The person switched this kind of notice off in "Notify me about" (StaffNotifyPrefs, 2026-11-26): no bell row, no push.
+            if (StaffNotifyPrefs::holdsBack($r, is_array($dd) ? $dd : (is_string($dd) && $dd !== '' ? (json_decode($dd, true) ?: []) : []))) {
+                continue;
+            }
             if (TicketAlerts::allowsUser((int) $r['user_id'])) {
                 $r['__platform'] = true;   // a platform ticket alert: its push goes out even from a test agency
             }

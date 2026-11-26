@@ -48,9 +48,19 @@ class NotificationPrefsController extends Controller
             'label' => 'Safe Arrival alerts',
             'hint' => 'When a child has not arrived or been picked up as expected, the parents\' answers, and the all-clear. Room educators are always told.',
             'channels' => ['push', 'email', 'sms', 'voice'],
-            'roles' => ['agency_admin', 'centre_director'],   // audience: NotifyAudience::PREF_EVENTS
+            'roles' => ['agency_admin', 'centre_director', 'platform_admin'],   // audience: NotifyAudience::PREF_EVENTS
         ],
     ];
+
+    /** EVENTS plus the staff topics an admin or director can switch off (StaffNotifyPrefs, 2026-11-26). */
+    public static function events(): array
+    {
+        $all = self::EVENTS;
+        foreach (\App\Support\StaffNotifyPrefs::TOPICS as $key => $t) {
+            $all[$key] = ['label' => $t[0], 'hint' => $t[1], 'channels' => $t[3], 'roles' => $t[4], 'for' => 'staff'];
+        }
+        return $all;
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -60,13 +70,18 @@ class NotificationPrefsController extends Controller
         // These are all about a parent's own children (NotifyAudience::PREF_EVENTS): staff-only accounts get none.
         $sides = NotifyAudience::sides($request);
         $out = [];
-        foreach (self::EVENTS as $key => $meta) {
+        foreach (self::events() as $key => $meta) {
             $meta['for'] = $meta['for'] ?? (NotifyAudience::PREF_EVENTS[$key] ?? 'all');
             if (! NotifyAudience::shows($meta['for'], $sides, $meta['roles'] ?? null)) {
                 continue;
             }
             if ($key === \App\Support\SafeArrival::PREF_KEY) {
                 $out[] = array_merge(['key' => $key], $meta, \App\Support\SafeArrival::staffPrefs((int) $user->id));
+                continue;
+            }
+            if (isset(\App\Support\StaffNotifyPrefs::TOPICS[$key])) {
+                $p = \App\Support\StaffNotifyPrefs::prefs((int) $user->id, $key);
+                $out[] = array_merge(['key' => $key], $meta, ['push' => $p['push'], 'email' => $p['email'], 'sms' => false]);
                 continue;
             }
             if ($key === CheckEventNotifier::EVENT_KEY) {
@@ -84,14 +99,14 @@ class NotificationPrefsController extends Controller
     public function update(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'key' => 'required|string|in:' . implode(',', array_keys(self::EVENTS)),
+            'key' => 'required|string|in:' . implode(',', array_keys(self::events())),
             'email' => 'required|boolean',
             'push' => 'required|boolean',
             'sms' => 'required|boolean',
             'voice' => 'sometimes|boolean',
         ]);
 
-        $meta = self::EVENTS[$data['key']];
+        $meta = self::events()[$data['key']];
         abort_unless(NotifyAudience::shows($meta['for'] ?? (NotifyAudience::PREF_EVENTS[$data['key']] ?? 'all'), NotifyAudience::sides($request), $meta['roles'] ?? null),
             422, 'That kind of notification is not sent to you.');
 
@@ -106,6 +121,23 @@ class NotificationPrefsController extends Controller
                 'entity_type' => 'user', 'entity_id' => $request->user()->id,
                 'payload' => json_encode(['summary' => 'Safe Arrival alerts: app ' . ($data['push'] ? 'on' : 'off') . ', email ' . ($data['email'] ? 'on' : 'off')
                     . ', texts ' . ($data['sms'] ? 'on' : 'off') . ', calls ' . (! empty($data['voice']) ? 'on' : 'off')]), 'created_at' => now()]);
+
+            return response()->json(['ok' => true]);
+        }
+
+        if (isset(\App\Support\StaffNotifyPrefs::TOPICS[$data['key']])) {
+            $ch = \App\Support\StaffNotifyPrefs::TOPICS[$data['key']][3];
+            $push = in_array('push', $ch, true) ? (bool) $data['push'] : true;
+            $email = in_array('email', $ch, true) ? (bool) $data['email'] : true;
+            DB::table('notification_prefs')->updateOrInsert(
+                ['user_id' => $request->user()->id, 'event_key' => $data['key']],
+                ['email' => $email, 'push' => $push, 'sms' => false, 'updated_at' => now()]
+            );
+            \App\Support\StaffNotifyPrefs::forget((int) $request->user()->id);
+            \App\Support\Audit::write(['user_id' => $request->user()->id, 'action' => 'notification_prefs.staff_topic',
+                'entity_type' => 'user', 'entity_id' => $request->user()->id,
+                'payload' => json_encode(['summary' => \App\Support\StaffNotifyPrefs::TOPICS[$data['key']][0] . ': app ' . ($push ? 'on' : 'off') . ', email ' . ($email ? 'on' : 'off'),
+                    'key' => $data['key']]), 'created_at' => now()]);
 
             return response()->json(['ok' => true]);
         }

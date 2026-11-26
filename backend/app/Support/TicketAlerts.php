@@ -122,7 +122,10 @@ final class TicketAlerts
     {
         return (int) self::run(function () use ($subject, $html, $replyTo) {
             $n = 0;
-            foreach (self::addresses() as $to) {
+            // The support inbox always gets it; a platform admin who switched ticket emails off does not (StaffNotifyPrefs, 2026-11-26).
+            $hq = strtolower(trim((string) env('SUPPORT_INBOX', 'info@kiddietrac.com')));
+            $to_list = array_values(array_unique(array_merge([$hq], StaffNotifyPrefs::filterEmails(array_values(array_diff(self::addresses(), [$hq])), 'staff_tickets'))));
+            foreach ($to_list as $to) {
                 try {
                     \Illuminate\Support\Facades\Mail::html($html, function ($m) use ($to, $subject, $replyTo) {
                         MailScope::platform($m);   // KiddieTrac's own alert: Platform in the email log

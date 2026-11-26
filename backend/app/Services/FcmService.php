@@ -297,6 +297,10 @@ class FcmService
      */
     public function sendToUser(int $userId, string $title, string $body, string $link = '', bool $urgent = false, bool $forceUrgent = false, bool $webFallback = true, array $extra = []): array
     {
+        // The bell row for this was just held back because the person switched that kind of notice off (StaffNotifyPrefs).
+        if (\App\Support\StaffNotifyPrefs::justMuted($userId, $title)) {
+            return ['sent' => 0, 'failed' => 0, 'suppressed' => true];
+        }
         self::$pushedAt[$userId] = time();
         // Working in a test agency: no push to anyone (2026-11-24, App\Support\TestAgency).
         if (\App\Support\TestAgency::isSession() && ! \App\Support\TicketAlerts::allowsUser($userId)) {   // ticket alerts to platform admins excepted

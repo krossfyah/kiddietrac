@@ -185,6 +185,7 @@ final class PaymentAlerts
             $g = array_values(array_filter($got, $mine)); $fl = array_values(array_filter($fails, $mine)); $b = array_values(array_filter($backs, $mine));
             if (! $g && ! $fl && ! $b) continue;
             if ($s['email'] === '' || ! filter_var($s['email'], FILTER_VALIDATE_EMAIL)) continue;
+            if (! self::$redirect && StaffNotifyPrefs::off((int) $s['user_id'], 'staff_payments', 'email', $agencyId)) continue;   // switched off (2026-11-26)
             $total = array_sum(array_column($g, 'amount'));
             $day = Carbon::parse($date)->format('l, M j');
             $subject = (self::$redirect ? '[TEST] ' : '') . 'Payments for ' . $day . ': $' . number_format($total, 2) . ' received'

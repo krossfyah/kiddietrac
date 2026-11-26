@@ -204,7 +204,8 @@ final class CertExpiryAlerts
                     'title' => '🎓 ' . $n . ' staff certificate' . ($n === 1 ? '' : 's') . ' need' . ($n === 1 ? 's' : '') . ' attention',
                     'body' => implode(' · ', array_map(fn ($i) => $i['name'] . ': ' . $i['label'] . ' ' . $i['phrase'], array_slice($g['items'], 0, 3))) . ($n > 3 ? ' · and ' . ($n - 3) . ' more' : ''),
                     'data' => json_encode(['hash' => 'certifications']), 'created_at' => now()]);
-                if ($s['email'] && filter_var((string) $g['m']->email, FILTER_VALIDATE_EMAIL)) $mail += self::mailManager($aid, (string) $a->name, $g['m'], $g['items']);
+                if ($s['email'] && filter_var((string) $g['m']->email, FILTER_VALIDATE_EMAIL)
+                    && \App\Support\StaffNotifyPrefs::wants((int) $mid, 'staff_compliance', 'email', (int) $aid)) $mail += self::mailManager($aid, (string) $a->name, $g['m'], $g['items']);
             }
             if (! $dry && Schema::hasTable('cert_alert_log')) {
                 foreach ($items as $it) {

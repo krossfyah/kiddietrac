@@ -359,6 +359,8 @@ class AbsenceController extends Controller
                 })
                 ->whereNull('u.deleted_at')
                 ->pluck('u.email')->unique()->values()->all();
+            // Directors and admins who switched absence emails off (StaffNotifyPrefs, 2026-11-26).
+            $emails = \App\Support\StaffNotifyPrefs::filterEmails($emails, 'staff_absences', (int) ($child->agency_id ?? 0) ?: null);
 
             if ($emails) {
                 $html = EmailTemplate::wrap((int) $child->agency_id,

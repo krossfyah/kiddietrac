@@ -358,6 +358,55 @@
     if (e.target.closest && e.target.closest('[data-kttip="Notifications"]')) return;
     closeNotif();
   }
+  /* YOUR SAFETY ALERTS IN THE BELL (2026-11-26, Anthony: "the safe arrival alerts should show up in the bell as well").
+     The admin bell lists the agency activity feed and only summed the person's own alerts in one "N alerts for you"
+     row, so a Safe Arrival alert never appeared by name. /notifications/alerts returns their own safety alerts for the
+     agency on screen (last 48 h); they head the list, unread ones tinted, each opening its screen and marked read. */
+  var __bellAlerts = null;
+  function loadAlerts(cb) {
+    var t = store('kt_token'); if (!t) { cb(null); return; }
+    var h = { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' };
+    try { var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa; } catch (e) {}
+    fetch(API + '/notifications/alerts', { headers: h })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { cb(d && d.alerts ? d.alerts : null); })
+      .catch(function () { cb(null); });
+  }
+  function markAlertRead(id) {
+    var t = store('kt_token'); if (!t) return;
+    try { fetch(API + '/notifications/' + id + '/read', { method: 'PATCH', headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' }, ktQuiet: true }); } catch (e) {}
+  }
+  function prependAlerts(list) {
+    if (!list) return;
+    var old = document.getElementById('kt-notif-alerts'); if (old && old.parentNode) old.parentNode.removeChild(old);
+    var a = __bellAlerts;
+    if (!a || !a.length) return;
+    var box = document.createElement('div');
+    box.id = 'kt-notif-alerts';
+    box.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#B45309;">Alerts for you</div>';
+    a.forEach(function (x) {
+      var m = /^(\p{Extended_Pictographic}\uFE0F?)\s*/u.exec(x.title || '');
+      var icon = m ? m[1] : '\uD83D\uDEE1\uFE0F';
+      var title = m ? (x.title || '').slice(m[0].length) : (x.title || '');
+      var row = document.createElement('div');
+      var unread = !x.read;
+      var bg = unread ? '#FFF7ED' : '';
+      row.style.cssText = 'display:flex;gap:11px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid #F8FAFC;cursor:pointer;' + (bg ? 'background:' + bg + ';' : '');
+      row.onmouseover = function () { row.style.background = '#F1F5F9'; };
+      row.onmouseout = function () { row.style.background = bg; };
+      row.innerHTML = '<span style="font-size:17px;line-height:1.25;flex-shrink:0;">' + esc(icon) + '</span>'
+        + '<div style="min-width:0;flex:1;"><div style="font-size:13px;color:#1E293B;line-height:1.4;' + (unread ? 'font-weight:700;' : '') + '">' + esc(title) + '</div>'
+        + (x.body ? '<div style="font-size:12px;color:#64748B;line-height:1.35;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + esc(x.body) + '</div>' : '')
+        + '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">' + esc(relTime(x.when)) + '</div></div>';
+      row.onclick = function () { if (unread) { x.read = true; markAlertRead(x.id); } closeNotif(); go(x.link || '#notifications'); };
+      box.appendChild(row);
+    });
+    var sep = document.createElement('div');
+    sep.style.cssText = 'padding:10px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8;';
+    sep.textContent = 'Agency activity';
+    box.appendChild(sep);
+    list.insertBefore(box, list.firstChild);
+  }
   function toggleNotif() {
     if (notifPanel) { closeNotif(); return; }
     var openOwn = __ownUnread;   // what was waiting for them before this opening (seen() zeroes it next)
@@ -414,7 +463,7 @@
         list.parentNode.insertBefore(own, list);
       }
 
-      if (!events.length) { list.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;font-size:13px;">Nothing new yet.</div>'; return; }
+      if (!events.length) { list.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;font-size:13px;">Nothing new yet.</div>'; prependAlerts(list); return; }
       list.innerHTML = '';
       events.forEach(function (e) {
         var isNew = e.when && (!seen || e.when > seen);
@@ -439,9 +488,15 @@
         list.appendChild(row);
       });
       // (seen + badge were already set above, before the rows were built)
+      prependAlerts(list);
     };
     var memo = feedMemo();
     if (memo) { drawFeed(memo); drewFromMemory = true; }
+    loadAlerts(function (a) {
+      if (a) __bellAlerts = a;
+      var l = document.getElementById('kt-notif-list');
+      if (l && l.isConnected && !/Loading/.test(l.textContent || '')) prependAlerts(l);
+    });
     loadFeed(function (d) {
       if (!d && drewFromMemory) return;   // a failed refresh keeps the rows already on screen
       var l = document.getElementById('kt-notif-list'), top = l ? l.scrollTop : 0;

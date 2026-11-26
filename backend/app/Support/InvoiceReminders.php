@@ -125,7 +125,7 @@ final class InvoiceReminders
         if (empty($cfg['cc_enabled'])) return [];   // the agency's staff-copies switch (2026-11-26)
         $emails = [];
         foreach (self::staffChoices($agencyId, $centreId, $cfg) as $s) {
-            if ($s['default']) $emails[] = $s['email'];
+            if ($s['default'] && StaffNotifyPrefs::wants((int) $s['user_id'], 'staff_billing_copies', 'email', $agencyId)) $emails[] = $s['email'];
         }
         if (! empty($cfg['cc_admin'])) {
             $a = DB::table('agencies')->where('id', $agencyId)->first(['contact_email', 'brand_support_email']);

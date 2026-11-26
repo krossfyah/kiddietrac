@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-26",
+            "icon": "🔔",
+            "title": "Choose which notices reach you",
+            "body": "Admins and directors can now switch each kind of notice on or off for themselves in Settings → Notifications → Notify me about: team clock-ins, absences, forms to countersign, staff certificates, payments, copies of parent billing reminders, pick-up list changes, closures, schedule changes and tips. Safety alerts always reach you. Your own Safe Arrival and other safety alerts now also show by name at the top of the 🔔 bell.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
             "icon": "🏫",
             "title": "Centres included in the Reseller bundle, and bigger SMS blocks",
             "body": "The Reseller bundle includes 5 centres, and each Reseller extra centre adds one more. Your open centres always stay open and closed centres don't count. When you reach the limit, opening another centre shows an Upgrade popup. Each SMS Incremental block now raises both your monthly text and call allowance.",

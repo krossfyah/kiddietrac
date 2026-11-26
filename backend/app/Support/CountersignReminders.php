@@ -249,7 +249,8 @@ final class CountersignReminders
             $res['reviewers']++;
             [$subject, $html] = self::digest($agencyId, $list);
             $inbox = mb_strtolower(trim((string) $p->email));
-            if (! empty($s['email']) && filter_var((string) $p->email, FILTER_VALIDATE_EMAIL) && ! isset($mailed[$inbox])) {
+            if (! empty($s['email']) && filter_var((string) $p->email, FILTER_VALIDATE_EMAIL) && ! isset($mailed[$inbox])
+                && \App\Support\StaffNotifyPrefs::wants((int) $uid, 'staff_countersign', 'email', $agencyId)) {
                 $mailed[$inbox] = true;
                 try {
                     $name = trim(($p->first_name ?? '') . ' ' . ($p->last_name ?? ''));
