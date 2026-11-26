@@ -5,7 +5,7 @@
    • Two kinds, chosen per note: "Just me" (private: only the person who wrote it, ever - super admins included) and
      "Agency" (every staff member who can see it may read and edit it; agency-wide or one centre). Server rules:
      App\Support\QuickNotes. Parents never have a notepad.
-   • Where it shows: the 📓 top-bar button (admins, directors, super admins) opens a drawer (a bottom sheet on a
+   • Where it shows: the 📃 top-bar button (admins, directors, super admins) opens a drawer (a bottom sheet on a
      phone); the Notes screen (#notes) in every staff role's menu (educators and home visitors: their top nav); the
      "Quick notes" dashboard widget; a Notes card on child, family and staff records; reminders in the right panel.
    • Quick add: type and press Enter (Shift+Enter = new line). Pin, colour, search, edit, history, delete per note.
@@ -64,16 +64,23 @@
       + '.qn-add textarea.qn-in:focus{outline:none;}'
       + '.qn-add-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;}'
       + '.qn-hint{font-size:11px;color:var(--qn-sub);margin-left:auto;}'
+      + '.qn-save{display:none;margin-left:auto;}'
+      + '@media (hover:none) and (pointer:coarse){.qn-hint{display:none;}.qn-save{display:inline-block;}}'
       + '.qn-b{height:28px;padding:0 11px;border-radius:8px;border:1px solid var(--qn-inb);background:var(--qn-card);color:var(--qn-ink);font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;}'
       + '.qn-b.p{background:#0F766E;border-color:#0F766E;color:#fff;}'
       + '.qn-seg{display:inline-flex;border:1px solid var(--qn-inb);border-radius:8px;overflow:hidden;}'
       + '.qn-seg button{height:26px;padding:0 9px;border:0;background:var(--qn-card);color:var(--qn-sub);font-weight:700;font-size:12px;cursor:pointer;}'
       + '.qn-seg button.on{background:#0F766E;color:#fff;}'
-      + '.qn-dots{display:inline-flex;gap:4px;align-items:center;}'
-      + '.qn-dot{width:16px;height:16px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-sizing:border-box;}'
+      + '.qn-dots{display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;}'
+      + '.qn-dot{flex:0 0 auto;width:16px;height:16px;min-height:0;min-width:0;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-sizing:border-box;}'
       + '.qn-dot.on{border-color:var(--qn-ink);}'
       + '.qn-dot.none{background:var(--qn-card);border:1px dashed var(--qn-inb);}'
       + '.qn-dot.none.on{border:2px solid var(--qn-ink);}'
+      + 'body .qn-dots>.qn-dot[class]{border:2px solid transparent !important;}'
+      + 'body .qn-dots>.qn-dot.on[class]{border-color:var(--qn-ink) !important;}'
+      + 'body .qn-dots>.qn-dot.none[class]{border:1.5px dashed var(--qn-inb) !important;}'
+      + 'body .qn-dots>.qn-dot.none.on[class]{border:2px solid var(--qn-ink) !important;}'
+      + '#appMain .qn-seg>button[data-qn-vis],.kt-modal .qn-seg>button[data-qn-vis],body .qn-seg>button[data-qn-vis]{padding:0 9px !important;}'
       + '.qn-list{display:flex;flex-direction:column;gap:8px;}'
       + '.qn-grid .qn-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));align-items:start;}'
       + '.qn-card{position:relative;border:1px solid var(--qn-line);border-left:4px solid var(--qn-line);border-radius:10px;padding:8px 10px 6px;background:var(--qn-card);}'
@@ -86,8 +93,14 @@
       + 'button.qn-chip{cursor:pointer;}'
       + '.qn-chip.due{background:#FEE2E2;color:#B91C1C;}'
       + '.qn-chip.soon{background:#FEF3C7;color:#92400E;}'
-      + '.qn-acts{display:flex;gap:2px;margin-left:auto;}'
-      + '.qn-ib{width:26px;height:26px;border-radius:7px;border:0;background:transparent;cursor:pointer;font-size:13px;line-height:26px;padding:0;color:var(--qn-sub);}'
+      + '.qn-acts{display:flex;gap:2px;margin-left:auto;align-items:center;}'
+      /* min-height:0 with an id-level selector: the phone stylesheet gives every #appMain button a 42px floor
+         (meant for form buttons), which made these 26x42 while the delete icon kept 26 - a ragged row. */
+      + '.qn-ib,#appMain .qn-root .qn-acts .qn-ib,.kt-modal .qn-root .qn-acts .qn-ib{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;min-height:0;min-width:0;border-radius:7px;border:0;background:transparent;cursor:pointer;font-size:14px;line-height:1;padding:0;margin:0;color:var(--qn-sub);vertical-align:middle;}'
+      + '@media (hover:none) and (pointer:coarse){.qn-ib,#appMain .qn-root .qn-acts .qn-ib{width:34px;height:34px;font-size:16px;}.qn-acts{gap:4px;}'
+      + '.qn-dots{gap:10px;}.qn-dot{width:24px;height:24px;}'
+      + '.qn-seg button{height:34px;font-size:13px;}'
+      + '#appMain .qn-seg>button[data-qn-vis],.kt-modal .qn-seg>button[data-qn-vis],body .qn-seg>button[data-qn-vis]{padding:0 14px !important;}}'
       + '.qn-ib:hover{background:var(--qn-chip);}'
       + '.qn-empty{color:var(--qn-sub);text-align:center;padding:18px 8px;font-size:13px;}'
       + '.qn-sub{font-size:12px;color:var(--qn-sub);}'
@@ -113,7 +126,11 @@
       + '.qn-drawer .qn-head:before{content:"";position:absolute;top:5px;left:50%;width:36px;height:4px;margin-left:-18px;border-radius:4px;background:rgba(255,255,255,.45);}}'
       /* the screen */
       + '.qn-wrap{padding:20px 24px;margin:0 auto;}'
-      + '@media (max-width:700px){.qn-wrap{padding:12px;}}'
+      + '@media (max-width:700px){.qn-wrap{padding:12px;}'
+      /* phone composer: who-sees-it on its own row (both halves equal), then the colours and Save */
+      + '.qn-add-row{row-gap:10px;}.qn-add-row .qn-seg{display:flex;flex:1 1 100%;}.qn-add-row .qn-seg button{flex:1 1 0;}'
+      + '.qn-add-row select.qn-in{flex:1 1 100%;max-width:none!important;height:34px!important;}'
+      + '.qn-panel{padding:10px;}}'
       + '.qn-panel{background:var(--qn-card);border:1px solid var(--qn-line);border-radius:12px;padding:12px 14px;margin-top:14px;}'
       /* record card */
       + '.qn-rec{border:1px solid var(--qn-line);border-radius:12px;padding:10px 12px;margin-top:12px;background:var(--qn-card);}'
@@ -202,13 +219,14 @@
       var h = '<form class="qn-add" autocomplete="off">'
         + '<textarea class="qn-in" name="body" rows="2" maxlength="5000" placeholder="' + esc(opts.link ? T('Add a note about this record…') : T('Write a quick note…')) + '" aria-label="' + esc(T('New note')) + '"></textarea>'
         + '<div class="qn-add-row">';
-      if (share) h += '<span class="qn-seg" role="group" aria-label="' + esc(T('Who sees it')) + '"><button type="button" data-qn-vis="private" class="' + (vis === 'private' ? 'on' : '') + '" data-kttip="' + esc(T('Only you can see this note')) + '">🔒 ' + esc(T('Just me')) + '</button><button type="button" data-qn-vis="agency" class="' + (vis === 'agency' ? 'on' : '') + '" data-kttip="' + esc(T('Staff can see and edit it')) + '">👥 ' + esc(T('Agency')) + '</button></span>';
+      if (share) h += '<span class="qn-seg" role="group" aria-label="' + esc(T('Who sees it')) + '"><button type="button" data-qn-vis="private" aria-pressed="' + (vis === 'private' ? 'true' : 'false') + '" class="' + (vis === 'private' ? 'on' : '') + '" data-kttip="' + esc(T('Only you can see this note')) + '">🔒 ' + esc(T('Just me')) + '</button><button type="button" data-qn-vis="agency" aria-pressed="' + (vis === 'agency' ? 'true' : 'false') + '" class="' + (vis === 'agency' ? 'on' : '') + '" data-kttip="' + esc(T('Staff can see and edit it')) + '">👥 ' + esc(T('Agency')) + '</button></span>';
       if (share && vis === 'agency' && !opts.link && centres.length > 1) {
         h += '<select class="qn-in" name="centre" aria-label="' + esc(T('Centre')) + '" style="height:28px;max-width:170px"><option value="">' + esc(T('Agency-wide')) + '</option>'
           + centres.map(function (c) { return '<option value="' + c.id + '"' + (String(st.centre) === String(c.id) ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>';
       }
       h += dotsHtml(st.colour)
-        + '<span class="qn-hint">' + esc(T('Enter saves · Shift+Enter new line')) + '</span></div></form>';
+        + '<span class="qn-hint">' + esc(T('Enter saves · Shift+Enter new line')) + '</span>'
+        + '<button type="button" class="qn-b p qn-save" data-qn-save>' + esc(T('Save')) + '</button></div></form>';
       return h;
     }
     function draw() {
@@ -253,16 +271,18 @@
       if (opts.link) { o.linked_type = opts.link.type; o.linked_id = opts.link.id; }
       ta.disabled = true;
       save(null, o).then(function () {
-        toast('📓', T('Note saved'), vis === 'agency' ? T('Shared with staff') : T('Only you can see it'), '#0F766E');
+        toast('📃', T('Note saved'), vis === 'agency' ? T('Shared with staff') : T('Only you can see it'), '#0F766E');
         if (!opts.link && !opts.compact && st.tab !== (vis === 'agency' ? 'agency' : 'mine')) st.tab = vis === 'agency' ? 'agency' : 'mine';
         st.vis = null; load().then(function () { var t2 = root.querySelector('.qn-add textarea'); if (t2) t2.focus(); });
       }, function (e) { ta.disabled = false; toast('⚠️', T('Could not save the note'), errMsg(e), '#DC2626'); });
     }
 
     root.addEventListener('keydown', function (e) {
-      if (e.target.matches('.qn-add textarea') && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(e.target.form); }
+      // Touch screens: Enter is a new line (there is no Shift on a phone keyboard); the Save button saves.
+      if (e.target.matches('.qn-add textarea') && e.key === 'Enter' && !e.shiftKey && !e.isComposing && !touchOnly()) { e.preventDefault(); submit(e.target.form); }
     });
     root.addEventListener('submit', function (e) { e.preventDefault(); submit(e.target); });
+    root.addEventListener('click', function (e) { var sb = e.target.closest && e.target.closest('[data-qn-save]'); if (sb && root.contains(sb)) { e.preventDefault(); submit(sb.form || sb.closest('form')); } });
     root.addEventListener('input', function (e) {
       if (e.target.name !== 'q') return;
       clearTimeout(timer); var v = e.target.value;
@@ -296,10 +316,11 @@
     draw(); load();
     return { reload: load, root: root };
   }
+  function touchOnly() { try { return matchMedia('(hover: none) and (pointer: coarse)').matches; } catch (e) { return false; } }
   function dotsHtml(sel) {
     return '<span class="qn-dots" role="group" aria-label="' + esc(T('Colour')) + '">'
-      + '<button type="button" class="qn-dot none' + (!sel ? ' on' : '') + '" data-qn-colour="" data-kttip="' + esc(T('No colour')) + '" aria-label="' + esc(T('No colour')) + '"></button>'
-      + Object.keys(COLOURS).map(function (k) { return '<button type="button" class="qn-dot' + (sel === k ? ' on' : '') + '" data-qn-colour="' + k + '" style="background:' + COLOURS[k].bar + '" data-kttip="' + esc(T(COLOURS[k].l)) + '" aria-label="' + esc(T(COLOURS[k].l)) + '"></button>'; }).join('')
+      + '<button type="button" class="qn-dot none' + (!sel ? ' on' : '') + '" aria-pressed="' + (!sel ? 'true' : 'false') + '" data-qn-colour="" data-kttip="' + esc(T('No colour')) + '" aria-label="' + esc(T('No colour')) + '"></button>'
+      + Object.keys(COLOURS).map(function (k) { return '<button type="button" class="qn-dot' + (sel === k ? ' on' : '') + '" aria-pressed="' + (sel === k ? 'true' : 'false') + '" data-qn-colour="' + k + '" style="background:' + COLOURS[k].bar + '" data-kttip="' + esc(T(COLOURS[k].l)) + '" aria-label="' + esc(T(COLOURS[k].l)) + '"></button>'; }).join('')
       + '</span>';
   }
 
@@ -392,7 +413,7 @@
       if (vis === 'agency') { var cs = body.querySelector('#qn-e-centre'); o.centre_id = cs && cs.value ? +cs.value : null; }
       if (linkHost) { o.linked_type = link ? link.type : null; o.linked_id = link ? link.id : null; }
       if (n.id && n.visibility === 'agency') delete o.visibility;
-      return save(n.id, o).then(function () { toast('📓', T('Note saved'), '', '#0F766E'); done && done(); },
+      return save(n.id, o).then(function () { toast('📃', T('Note saved'), '', '#0F766E'); done && done(); },
         function (e) { msg.style.color = '#B91C1C'; msg.textContent = errMsg(e); return false; });
     } });
     KT.Shell.Modal.open({ title: n.id ? T('Edit note') : T('New note'), body: body, actions: actions });
@@ -426,7 +447,7 @@
     if (drawer) return;
     var dim = document.createElement('div'); dim.className = 'qn-dim';
     var el = document.createElement('aside'); el.className = 'qn-drawer qn-root'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', T('Quick notes'));
-    el.innerHTML = '<div class="qn-head"><h2>📓 ' + esc(T('Quick notes')) + '</h2><div class="qn-hs">' + esc(T('Just for you, or shared with your staff')) + '</div>'
+    el.innerHTML = '<div class="qn-head"><h2>📃 ' + esc(T('Quick notes')) + '</h2><div class="qn-hs">' + esc(T('Just for you, or shared with your staff')) + '</div>'
       + '<button type="button" class="qn-x" aria-label="' + esc(T('Close')) + '" data-kttip="' + esc(T('Close')) + '">✕</button></div>'
       + '<div class="qn-scroll"></div>'
       + '<div class="qn-foot"><button type="button" class="qn-b" data-qn-screen>' + esc(T('Open Notes')) + ' →</button></div>';
@@ -464,7 +485,7 @@
   function render(main) {
     css();
     main.innerHTML = '<div class="qn-wrap qn-root"><div class="kt-hero" style="background:linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%);">'
-      + '<div class="kt-hero-greet">📓 ' + esc(T('NOTEPAD')) + '</div><h1>' + esc(T('Notes')) + '</h1>'
+      + '<div class="kt-hero-greet">📃 ' + esc(T('NOTEPAD')) + '</div><h1>' + esc(T('Notes')) + '</h1>'
       + '<div class="kt-hero-sub">' + esc(T('Quick notes just for you, or shared with your staff. Pin, colour, link to a child, family or staff member, and set a reminder.')) + '</div></div>'
       + '<div class="qn-panel"></div></div>';
     mountList(main.querySelector('.qn-panel'), { tab: 'mine', grid: true });
@@ -482,7 +503,7 @@
   function recordCard(type, id) {
     css();
     var wrap = document.createElement('div'); wrap.className = 'qn-rec qn-root';
-    wrap.innerHTML = '<div class="qn-rec-h">📓 ' + esc(T('Quick notes')) + '</div><div></div>';
+    wrap.innerHTML = '<div class="qn-rec-h">📃 ' + esc(T('Quick notes')) + '</div><div></div>';
     if (!id) return wrap;
     mountList(wrap.lastChild, { link: { type: type, id: +id }, clamp: true });
     return wrap;

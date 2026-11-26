@@ -444,7 +444,7 @@
         ]},
         { label: 'Staff', items: [
           { hash: 'tasks',              label: 'Tasks',              icon: '☑️' },
-          { hash: 'notes', label: 'Notes', icon: '📓' },   // Quick notes (2026-11-26, kt-quick-notes.js)
+          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks',  label: 'Background checks',  icon: '🪪' },
           { hash: 'substitutes',        label: 'Substitutes',        icon: '🙋' },
@@ -664,7 +664,7 @@
         ]},
         { label: 'Staff', items: [
           { hash: 'tasks',             label: 'Tasks',              icon: '☑️' },
-          { hash: 'notes', label: 'Notes', icon: '📓' },   // Quick notes (2026-11-26, kt-quick-notes.js)
+          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
           { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
           { hash: 'background-checks', label: 'Background checks',  icon: '🪪' },
@@ -780,7 +780,7 @@
           { hash: 'household',     label: 'Household residents', icon: '🛋️' },
         ]},
         { label: 'Account', items: [
-          { hash: 'notes', label: 'Notes', icon: '📓' },   // Quick notes (2026-11-26, kt-quick-notes.js)
+          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'settings', label: 'My settings', icon: '⚙️' },
           { hash: 'help',          label: 'Help',          icon: '📖' },
@@ -815,7 +815,7 @@
           { hash: 'hazards',        label: 'Report a hazard', icon: '🚧' },   // 2026-10-15
         ]},
         { label: 'Account', items: [
-          { hash: 'notes', label: 'Notes', icon: '📓' },   // Quick notes (2026-11-26, kt-quick-notes.js)
+          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'settings',      label: 'Settings',      icon: '⚙️' },
           { hash: 'help',          label: 'Help',          icon: '📖' },
@@ -842,7 +842,7 @@
           { hash: 'sales-demo',      label: 'Launch demo',     icon: '🚀' },
         ]},
         { label: 'Account', items: [
-          { hash: 'notes', label: 'Notes', icon: '📓' },   // Quick notes (2026-11-26, kt-quick-notes.js)
+          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'help',          label: 'Help',          icon: '❓' },
           { hash: 'settings',      label: 'Settings',      icon: '⚙️' },

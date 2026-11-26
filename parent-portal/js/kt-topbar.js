@@ -845,7 +845,7 @@
     calcBtn.id = 'kt-tb-calc'; calcBtn.setAttribute('aria-pressed', 'false');
     right.appendChild(calcBtn);
     // Quick notes (2026-11-26): the notepad drawer - private notes and the agency's shared ones (kt-quick-notes.js).
-    var notesBtn = iconBtn('📓', 'Quick notes', function () { if (window.KT && window.KT.quickNotes) window.KT.quickNotes.toggle(); else location.hash = '#notes'; });
+    var notesBtn = iconBtn('📃', 'Quick notes', function () { if (window.KT && window.KT.quickNotes) window.KT.quickNotes.toggle(); else location.hash = '#notes'; });
     notesBtn.id = 'kt-tb-notes'; notesBtn.setAttribute('aria-pressed', 'false');
     right.appendChild(notesBtn);
     /* ONE AI BUTTON (Anthony, 2026-11-03: "should be combined into one on the top bar"). It was 🤖 (the help
