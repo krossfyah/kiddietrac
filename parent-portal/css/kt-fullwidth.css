@@ -92,6 +92,15 @@
   max-width: 480px !important;
 }
 #appMain textarea { max-width: 720px !important; }
+/* ...and that includes a popup drawn INSIDE #appMain (2026-11-26). "Controls inside modals are untouched" only held
+   for #modalRoot: My agency > Manage mounts its overlay in the screen, so its 100%-wide fields stopped at 480px in a
+   592px column - five right edges. kt-modal-guard marks every popup it dresses data-kt-dlg; their fields take the
+   column, like every other popup's. Date/time caps below still apply (more specific). */
+#appMain [data-kt-dlg] select,
+#appMain [data-kt-dlg] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="time"]):not([type="date"]):not([type="datetime-local"]):not([type="month"]):not([type="week"]) {
+  max-width: 100% !important;
+}
+#appMain [data-kt-dlg] textarea { max-width: 100% !important; }
 
 /* A date or time field has a known intrinsic size, so the 480px cap above is far too
    generous for it — the lesson planner's time inputs rendered 266px wide, filling the

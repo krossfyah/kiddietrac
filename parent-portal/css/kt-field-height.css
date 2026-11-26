@@ -8,7 +8,9 @@
    32px on a computer (the compact size Anthony asked for), 38px on a phone (finger-sized).
    Big-on-purpose fields opt out with data-kt-tall (PIN / code boxes, the dialer, kiosk).
    Loaded last so no screen's own padding can make one field taller than its neighbours. */
-:is(#appMain, .kt-modal, [role="dialog"], .kt-sheet, .kt-drawer)
+/* [data-kt-dlg] (2026-11-26): every popup kt-modal-guard dresses, so a hand-built <div> overlay (Edit agency) gets
+   the same 32/38px fields as Shell.Modal - it had 28px inputs beside 29px selects. */
+:is(#appMain, .kt-modal, [role="dialog"], [data-kt-dlg], .kt-sheet, .kt-drawer)
   :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
       select:not([multiple]):not([size])):not([data-kt-tall]):not([data-kt-tall] *):not(.kt-pin *):not(.kt-otp *):not(.kt-tx-rp *):not(#kt-dialer *):not([maxlength="1"]) {
   height: 32px !important;
@@ -20,7 +22,7 @@
   line-height: normal;
 }
 @media (max-width: 768px) {
-  :is(#appMain, .kt-modal, [role="dialog"], .kt-sheet, .kt-drawer)
+  :is(#appMain, .kt-modal, [role="dialog"], [data-kt-dlg], .kt-sheet, .kt-drawer)
     :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
         select:not([multiple]):not([size])):not([data-kt-tall]):not([data-kt-tall] *):not(.kt-pin *):not(.kt-otp *):not(.kt-tx-rp *):not(#kt-dialer *):not([maxlength="1"]) {
     height: 38px !important;
@@ -68,4 +70,20 @@
   :is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]):not([type="hidden"]):not([type="search"]):not(.kt-table-filter-input):not([data-kt-has-clear]),
       textarea) {
   padding-right: 10px !important;
+}
+
+/* ── A FIELD'S LABEL SITS ABOVE IT, IN EVERY POPUP (2026-11-26) ──
+   Anthony: "edit the agency the pop up prompts are not all fully aligned correctly - full sweep". Hand-built popups
+   write <div><label>Start date</label><input type=date></div> with the label left inline. Wherever the field is
+   narrower than the row (dates, times, capped fields) it rode up BESIDE its label, so in one popup some fields started
+   at the left edge and others 60-120px in (New time-off request, New field trip, My agency > Manage). A label that is
+   its block's first child, directly followed by the block's only field, is a block above it. A label that sets its own
+   display inline (flex rows, deliberate side-by-side) keeps it. The same for a block label that WRAPS its field
+   (<label style="display:block">Start date <input type=date></label>): the field goes on its own line under the words. */
+[data-kt-dlg] label:first-child:has(+ :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea):last-child) {
+  display: block;
+  margin-bottom: 4px;
+}
+[data-kt-dlg] label:is([style*="display:block"], [style*="display: block"]) > :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea) {
+  display: block;
 }

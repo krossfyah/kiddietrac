@@ -163,23 +163,23 @@
           <form id="kt-agency-form" onsubmit="return false;" style="padding:0 24px 24px;display:grid;gap:14px;">
             <section style="border:1px solid #E5E7EB;border-radius:10px;padding:16px;">
               <h3 style="font-size:14px;text-transform:uppercase;letter-spacing:1px;color:#6B7280;margin:0 0 10px;">Agency</h3>
-              <label style="font-size:13px;font-weight:600;">Name *</label>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Name *</label>
               <input name="agency_name" required style="${inputStyle()}">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                 <div>
-                  <label style="font-size:13px;font-weight:600;">Subdomain</label>
+                  <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Subdomain</label>
                   <input name="subdomain" placeholder="acme" style="${inputStyle()}">
                   <div style="font-size:11px;color:#64748B;">acme.kiddietrac.com</div>
                 </div>
                 <div>
-                  <label style="font-size:13px;font-weight:600;">Custom domain</label>
+                  <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Custom domain</label>
                   <input name="custom_domain" placeholder="childcare.acme.com" style="${inputStyle()}">
                   <div style="font-size:11px;color:#64748B;">requires DNS setup</div>
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                 <div>
-                  <label style="font-size:13px;font-weight:600;">Plan *</label>
+                  <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan *</label>
                   <select name="plan" required style="${inputStyle()}">
                     <option value="starter">Starter — $49/mo (≤12 kids)</option>
                     <option value="centre" selected>Centre — $149/mo (≤80 kids)</option>
@@ -187,21 +187,21 @@
                   </select>
                 </div>
                 <div>
-                  <label style="font-size:13px;font-weight:600;">Trial (days)</label>
+                  <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Trial (days)</label>
                   <input name="trial_days" type="number" min="1" max="90" value="14" style="${inputStyle()}">
                 </div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                 <div>
-                  <label style="font-size:13px;font-weight:600;">Primary color</label>
+                  <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Primary color</label>
                   <input name="primary_color" type="color" value="#1F6080" style="${inputStyle()};height:42px;">
                 </div>
                 <div>
-                  <label style="font-size:13px;font-weight:600;">Accent color</label>
+                  <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Accent color</label>
                   <input name="accent_color" type="color" value="#8EC73C" style="${inputStyle()};height:42px;">
                 </div>
               </div>
-              <label style="font-size:13px;font-weight:600;">Timezone *</label>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Timezone *</label>
               <select name="timezone" required style="${inputStyle()}">${tzOptions('America/Toronto')}</select>
               <div style="font-size:12px;color:#6B7280;margin-top:4px;">
                 Every time in the platform — sign-in/out, logs, reports and the daily summary emails — is shown
@@ -210,22 +210,22 @@
             </section>
             <section style="border:1px solid #E5E7EB;border-radius:10px;padding:16px;">
               <h3 style="font-size:14px;text-transform:uppercase;letter-spacing:1px;color:#6B7280;margin:0 0 10px;">First centre</h3>
-              <label style="font-size:13px;font-weight:600;">Centre name *</label>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Centre name *</label>
               <input name="centre_name" required style="${inputStyle()}">
               <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;">
-                <div><label style="font-size:13px;font-weight:600;">City *</label><input name="centre_city" required style="${inputStyle()}"></div>
-                <div><label style="font-size:13px;font-weight:600;">Licensed capacity *</label><input name="centre_capacity" type="number" min="1" max="500" value="64" required style="${inputStyle()}"></div>
+                <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">City *</label><input name="centre_city" required style="${inputStyle()}"></div>
+                <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Licensed capacity *</label><input name="centre_capacity" type="number" min="1" max="500" value="64" required style="${inputStyle()}"></div>
               </div>
             </section>
             <section style="border:1px solid #E5E7EB;border-radius:10px;padding:16px;">
               <h3 style="font-size:14px;text-transform:uppercase;letter-spacing:1px;color:#6B7280;margin:0 0 10px;">Admin user (will be emailed an invite)</h3>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div><label style="font-size:13px;font-weight:600;">First name *</label><input name="admin_first_name" required style="${inputStyle()}"></div>
-                <div><label style="font-size:13px;font-weight:600;">Last name *</label><input name="admin_last_name" required style="${inputStyle()}"></div>
+                <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">First name *</label><input name="admin_first_name" required style="${inputStyle()}"></div>
+                <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Last name *</label><input name="admin_last_name" required style="${inputStyle()}"></div>
               </div>
-              <label style="font-size:13px;font-weight:600;">Email *</label>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Email *</label>
               <input name="admin_email" type="email" required style="${inputStyle()}">
-              <label style="font-size:13px;font-weight:600;">Phone</label>
+              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Phone</label>
               <input name="admin_phone" type="tel" style="${inputStyle()}">
             </section>
             <div id="kt-agency-status" style="min-height:20px;font-size:14px;"></div>
@@ -320,39 +320,39 @@
             </div>
 
             <div data-agpane="details">
-              <div><label style="font-size:13px;font-weight:600;">Name</label><input name="name" value="${esc(a.name)}" style="${inputStyle()}"></div>
-              <div><label style="font-size:13px;font-weight:600;">Legal name <span style="font-weight:400;color:#94A3B8;">(if different from the trading name)</span></label><input name="legal_name" value="${esc(a.legal_name || '')}" style="${inputStyle()}"></div>
-              <div><label style="font-size:13px;font-weight:600;">Subdomain</label><input name="subdomain" value="${esc(a.subdomain || '')}" style="${inputStyle()}"></div>
-              <div><label style="font-size:13px;font-weight:600;">Custom domain</label><input name="custom_domain" value="${esc(a.custom_domain || '')}" style="${inputStyle()}"></div>
-              <div><label style="font-size:13px;font-weight:600;">Website</label><input name="website" value="${esc(a.website || '')}" placeholder="https://" style="${inputStyle()}"></div>
-              <div><label style="font-size:13px;font-weight:600;">Timezone</label><select name="timezone" style="${inputStyle()}">${tzOptions(a.timezone || 'America/Toronto')}</select>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Name</label><input name="name" value="${esc(a.name)}" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Legal name <span style="font-weight:400;color:#94A3B8;">(if different from the trading name)</span></label><input name="legal_name" value="${esc(a.legal_name || '')}" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Subdomain</label><input name="subdomain" value="${esc(a.subdomain || '')}" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Custom domain</label><input name="custom_domain" value="${esc(a.custom_domain || '')}" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Website</label><input name="website" value="${esc(a.website || '')}" placeholder="https://" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Timezone</label><select name="timezone" style="${inputStyle()}">${tzOptions(a.timezone || 'America/Toronto')}</select>
                 <div style="font-size:12px;color:#6B7280;margin:-4px 0 8px;">Every time this agency records or displays \u2014 sign-ins, rotas, reports \u2014 is in this zone.</div>
               </div>
             </div>
 
             <div data-agpane="address" hidden>
-              <div><label style="font-size:13px;font-weight:600;">Address line 1</label><input name="address_line1" value="${esc(a.address_line1 || '')}" style="${inputStyle()}"></div>
-              <div><label style="font-size:13px;font-weight:600;">Address line 2</label><input name="address_line2" value="${esc(a.address_line2 || '')}" placeholder="Unit, suite, floor" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Address line 1</label><input name="address_line1" value="${esc(a.address_line1 || '')}" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Address line 2</label><input name="address_line2" value="${esc(a.address_line2 || '')}" placeholder="Unit, suite, floor" style="${inputStyle()}"></div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div><label style="font-size:13px;font-weight:600;">City</label><input name="city" value="${esc(a.city || '')}" style="${inputStyle()}"></div>
-                <div><label style="font-size:13px;font-weight:600;">Province / State</label><input name="province" value="${esc(a.province || '')}" style="${inputStyle()}"></div>
+                <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">City</label><input name="city" value="${esc(a.city || '')}" style="${inputStyle()}"></div>
+                <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Province / State</label><input name="province" value="${esc(a.province || '')}" style="${inputStyle()}"></div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div><label style="font-size:13px;font-weight:600;">Postal / ZIP code</label><input name="postal_code" value="${esc(a.postal_code || '')}" style="${inputStyle()}"></div>
-                <div><label style="font-size:13px;font-weight:600;">Country</label><input name="country" value="${esc(a.country || '')}" style="${inputStyle()}"></div>
+                <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Postal / ZIP code</label><input name="postal_code" value="${esc(a.postal_code || '')}" style="${inputStyle()}"></div>
+                <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Country</label><input name="country" value="${esc(a.country || '')}" style="${inputStyle()}"></div>
               </div>
               <div style="font-size:12px;color:#6B7280;">Printed on invoices and receipts, and used for the statutory holiday calendar.</div>
             </div>
 
             <div data-agpane="email" hidden>
-              <div><label style="font-size:13px;font-weight:600;">Contact email</label><input name="contact_email" type="email" value="${esc(a.contact_email || '')}" style="${inputStyle()}">
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Contact email</label><input name="contact_email" type="email" value="${esc(a.contact_email || '')}" style="${inputStyle()}">
                 <div style="font-size:12px;color:#6B7280;margin:-4px 0 8px;">Where we write to the agency itself \u2014 not what families see.</div>
               </div>
-              <div><label style="font-size:13px;font-weight:600;">Contact phone</label><input name="contact_phone" value="${esc(a.contact_phone || '')}" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Contact phone</label><input name="contact_phone" value="${esc(a.contact_phone || '')}" style="${inputStyle()}"></div>
               <div style="border-top:1px solid #F1F5F9;margin:6px 0 10px;"></div>
               <div style="font-size:12.5px;font-weight:700;color:#0F172A;margin-bottom:6px;">How their mail appears to families</div>
-              <div><label style="font-size:13px;font-weight:600;">From name</label><input name="email_from_name" value="${esc(a.email_from_name || '')}" placeholder="${esc(a.name)}" style="${inputStyle()}"></div>
-              <div><label style="font-size:13px;font-weight:600;">From address</label><input name="email_from_address" type="email" value="${esc(a.email_from_address || '')}" placeholder="noreply@youragency.com" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">From name</label><input name="email_from_name" value="${esc(a.email_from_name || '')}" placeholder="${esc(a.name)}" style="${inputStyle()}"></div>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">From address</label><input name="email_from_address" type="email" value="${esc(a.email_from_address || '')}" placeholder="noreply@youragency.com" style="${inputStyle()}"></div>
               <div style="font-size:12px;color:#6B7280;line-height:1.5;">
                 Mail servers, suppression, closure notices and the template library live on the full
                 <a href="#email-settings" style="color:#1F6080;font-weight:600;">Email settings</a> screen \u2014 kept there rather than copied here, so there is one place that decides how mail goes out.
@@ -401,14 +401,14 @@
                   </span>
                 </label>
               </div>
-              <div><label style="font-size:13px;font-weight:600;">Plan</label>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan</label>
                 <select name="plan" style="${inputStyle()}">
                   <option value="starter" ${a.plan==='starter'?'selected':''}>Starter</option>
                   <option value="centre"  ${a.plan==='centre' ?'selected':''}>Centre</option>
                   <option value="agency"  ${a.plan==='agency' ?'selected':''}>Agency</option>
                 </select>
               </div>
-              <div><label style="font-size:13px;font-weight:600;">Billing status</label>
+              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Billing status</label>
                 <select name="billing_status" style="${inputStyle()}">
                   ${['trial','active','past_due','suspended'].map(st=>`<option value="${st}" ${a.billing_status===st?'selected':''}>${st}</option>`).join('')}
                 </select>
@@ -488,6 +488,9 @@
     });
   }
 
+  /* Labels sit ABOVE their fields (2026-11-26, Anthony: "when I go to my agency and edit the agency the pop up
+     prompts are not all fully aligned"). They were inline, so wherever a field was narrower than the row it
+     rode up beside its label - Name, Subdomain, Website and Timezone each started at a different x. */
   function inputStyle() {
     return 'width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;font-family:inherit;margin-bottom:8px;';
   }

@@ -57,6 +57,8 @@
     // Country address labels (base is CA: Province / Postal code).
     if (STATE !== 'Province' && /province/i.test(out)) {
       out = out.replace(/\bProvince\b/g, STATE).replace(/\bprovince\b/g, STATE.toLowerCase());
+      // A label that already names both ("Province / State", Edit agency) read "State / State" for a US agency.
+      out = out.split(STATE + ' / ' + STATE).join(STATE);
     }
     if (ZIP !== 'Postal code' && /postal/i.test(out)) {
       out = out.replace(/\bPostal code\b/g, ZIP).replace(/\bPostal Code\b/g, ZIP).replace(/\bpostal code\b/g, ZIP.toLowerCase());

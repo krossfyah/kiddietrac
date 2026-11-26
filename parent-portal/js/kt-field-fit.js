@@ -73,7 +73,7 @@
 
   /* POPUPS (2026-10-27): inside a dialog or a fixed overlay, a field in a multi-column row keeps the
      width of its column, and form rows are never packed like filter bars. */
-  var POPUP = '[role="dialog"],[role="alertdialog"],.modal,.kt-modal,.kt-sheet,.kt-drawer,.kt-cf';
+  var POPUP = '[role="dialog"],[role="alertdialog"],[data-kt-dlg],.modal,.kt-modal,.kt-sheet,.kt-drawer,.kt-cf';
   function inPopup(el) {
     if (!el || !el.closest) { return false; }
     if (el.closest(POPUP)) { return true; }
@@ -95,6 +95,40 @@
     return false;
   }
   function popupColumn(el) { try { return inPopup(el) && multiColumn(el); } catch (e) { return false; } }
+  /* A NARROW POPUP'S COLUMN IS ALREADY THE FIELD WIDTH (2026-11-26, Anthony: "when I go to my agency and edit the
+     agency the pop up prompts are not all fully aligned correctly - full sweep"). Capping each stacked field to what
+     it holds left Edit agency with a 380px name, a 240px phone, a full subdomain and two selects sized to their
+     options - five right edges in one 500px column. In a popup whose form column is no wider than the width at
+     which tighten() would lay fields two across (600px), every field keeps the column, so the edges line up as they
+     do in the multi-column rows above. The same in a WIDER popup that has any two-across row (New medication, Add
+     background check): those rows already set the right edge, so a capped field beside them is the odd one out.
+     Only a wide popup of nothing but stacked fields is still capped (the 2026-10-20 "Canada" rule). */
+  var POPUP_COL = 600;
+  function popupRoot(el) {
+    var r = el.closest(POPUP);
+    if (r) { return r; }
+    for (var n = el.parentElement; n && n !== document.body; n = n.parentElement) { if (getComputedStyle(n).position === 'fixed') { return n; } }
+    return null;
+  }
+  function popupHasColumns(el) {
+    var root = popupRoot(el);
+    if (!root) { return false; }
+    var now = Date.now();
+    if (root.__ktColsAt && now - root.__ktColsAt < 1500) { return root.__ktCols; }
+    var found = false, ctls = root.querySelectorAll(CONTROL);
+    for (var i = 0; i < ctls.length && !found; i++) {
+      var c = ctls[i];
+      if (c.type === 'checkbox' || c.type === 'radio' || c.type === 'hidden' || c.offsetParent === null) { continue; }
+      if (multiColumn(c)) { found = true; }
+    }
+    root.__ktCols = found; root.__ktColsAt = now;
+    return found;
+  }
+  function narrowPopupField(el, w) {
+    // Dates and times keep their cap: a 500px "2026-11-26" is a slab, not an aligned field (kt-fullwidth does the same).
+    if (/^(date|time|datetime-local|month|week)$/.test((el.getAttribute('type') || '').toLowerCase())) { return false; }
+    try { return inPopup(el) && (w <= POPUP_COL || popupHasColumns(el)); } catch (e) { return false; }
+  }
 
   function fitSelect(sel) {
     if (!sel.__ktFitCapped && popupColumn(sel)) { sel.__ktFitSig = (sel.options ? sel.options.length : 0) + ':' + (((sel.options || [])[(sel.options || []).length - 1] || {}).text || '').length; return; }
@@ -113,6 +147,7 @@
     var pad = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0);
     var need = Math.ceil(Math.max(MIN_SELECT, widest + pad + ARROW));
     var now = sel.getBoundingClientRect().width;
+    if (!sel.__ktFitCapped && narrowPopupField(sel, now)) { return; }
     if (sel.__ktFitCapped) {
       sel.style.setProperty('max-width', need + 'px', 'important');            // options changed: follow them
       return;
@@ -128,7 +163,9 @@
     var cap = capFor(inp);
     inp.__ktFitDone = true;
     if (!cap || popupColumn(inp)) { return; }
-    if (inp.getBoundingClientRect().width > cap + 24) { inp.style.setProperty('max-width', cap + 'px', 'important'); }
+    var w = inp.getBoundingClientRect().width;
+    if (narrowPopupField(inp, w)) { return; }
+    if (w > cap + 24) { inp.style.setProperty('max-width', cap + 'px', 'important'); }
   }
 
   /* PULL STACKED FIELDS TOGETHER (2026-10-20). A form that lists label + field blocks one per

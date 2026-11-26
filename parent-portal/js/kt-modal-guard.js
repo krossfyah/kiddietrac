@@ -903,6 +903,13 @@
       return;
     }
     if (!optedOut(el)) { contain(el); settle(el); }
+    /* ONE FORM LAYOUT IN EVERY POPUP (2026-11-26, Anthony: "edit the agency the pop up prompts are not all fully
+       aligned"). The shared field rules (kt-field-height 32/38px, kt-popup-rows, kt-field-fit) find popups by
+       role=dialog / .modal / .kt-scrim - a hand-built <div> overlay matched none of them, so its inputs were 28px,
+       its selects 29px and its phone address row ragged. Every popup this guard dresses carries data-kt-dlg, and
+       those rules name it. Own-layout popups (data-no-modal-guard: PDF field overlays), full-screen sheets and the gates
+       (sign-in locks, MFA, password change: big-on-purpose fields) do not. */
+    if (!optedOut(el) && !isGate(el) && !el.hasAttribute('data-kt-no-close') && !el.hasAttribute('data-kt-dlg')) el.setAttribute('data-kt-dlg', '1');
     try { phoneSafe(el); } catch (e) {}
     ensureHead(el);
     ensureClose(el);
