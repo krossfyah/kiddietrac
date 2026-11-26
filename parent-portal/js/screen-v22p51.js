@@ -17,10 +17,12 @@
     // No status filter. Asking only for pending meant a request disappeared from this
     // screen the instant it was decided, so nobody could see what had been agreed to —
     // or who agreed to it.
-    const [mine, all] = await Promise.all([
+    const [mine, all, hrMe] = await Promise.all([
       Api.get('/time-off/mine').catch(() => ({ data: [] })),
       isStaffOrAdmin() ? Api.get('/admin/time-off').catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+      hrOn() ? Api.get('/hr/me').catch(() => null) : Promise.resolve(null),
     ]);
+    HR_ME = hrMe;
     /* REPLACED WHILE LOADING (2026-11-08, ticket #240: Safia tapped Deny on the phone app and got "Cannot set
        properties of null"). The shell gives each render a fresh #appMain; if the screen was redrawn while this one
        was still fetching (the reload after Deny, a live refresh), this render's node is no longer on the page and
@@ -40,6 +42,7 @@
       <div style="padding:24px;max-width:1800px;margin:0 auto;">
         <h2 style="margin:0 0 16px;color:#1F6080;">Time off</h2>
         <button id="tor-new" class="btn btn-primary" style="margin-top:6px;${isMobile() ? 'width:100%;' : ''}">🌴 Request time off</button>
+        ${hrStrip()}
         <h3 style="margin-top:32px;font-size:16px;color:#374151;">Your requests</h3>
         <div id="tor-mine"></div>
         ${isStaffOrAdmin() ? '<h3 style="margin-top:32px;font-size:16px;color:#374151;">Team requests</h3>'
@@ -54,6 +57,29 @@
     main.querySelector('#tor-new').onclick = () => openTorModal();
   }
   function isMobile() { return window.innerWidth <= 700 || document.documentElement.classList.contains('kt-native'); }
+  /* KIDDIETRAC HR (2026-11-27): leave balances on this screen when the HR add-on is on. The balance is the
+     server's (the leave ledger); this only shows it. Old requests keep their own type and are never changed. */
+  var HR_ME = null;
+  function hrOn() {
+    try { var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {}; return (u.hidden_screens || []).indexOf('hr') < 0; } catch (e) { return false; }
+  }
+  function hrAmt(v, unit) { v = Math.round((+v || 0) * 100) / 100; return v + ' ' + (unit === 'hours' ? (v === 1 ? 'hour' : 'hours') : (v === 1 ? 'day' : 'days')); }
+  function hrStrip() {
+    var b = (HR_ME && HR_ME.balances || []).filter(function (x) { return x.tracked; });
+    if (!b.length) return '';
+    return '<div id="tor-balances" style="display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 0;">' + b.map(function (x) {
+      return '<div style="background:#fff;border:1px solid #E2E8F0;border-left:4px solid ' + escapeHtml(x.colour || '#64748B') + ';border-radius:10px;padding:7px 12px;min-width:120px;">'
+        + '<div style="font-size:11.5px;font-weight:800;color:#475569;" data-no-i18n>' + escapeHtml(x.name) + '</div>'
+        + '<div style="font-size:16px;font-weight:800;color:' + (x.balance < 0 ? '#B91C1C' : '#0F172A') + ';">' + escapeHtml(hrAmt(x.balance, x.unit)) + '</div>'
+        + (x.pending ? '<div style="font-size:11.5px;color:#64748B;">' + escapeHtml(hrAmt(x.pending, x.unit)) + ' pending</div>' : '') + '</div>';
+    }).join('') + '</div>';
+  }
+  function hrLine(r) {
+    if (r.leave_balance == null) return '';
+    var u = r.leave_unit, st = (r.status || 'pending').toLowerCase();
+    return (r.leave_amount != null ? hrAmt(r.leave_amount, u) + ' · ' : '')
+      + (st === 'pending' ? 'balance ' + hrAmt(r.leave_balance, u) + ', ' + hrAmt(r.leave_balance_after, u) + ' after this' : 'balance now ' + hrAmt(r.leave_balance, u));
+  }
   var TOR_META = {
     vacation:    { icon: '🌴', label: 'Vacation' },
     sick:        { icon: '🤒', label: 'Sick leave' },
@@ -216,12 +242,13 @@
     var head = el('div', { style: 'display:flex;align-items:center;gap:11px;' });
     head.appendChild(el('span', { style: 'flex:0 0 auto;width:40px;height:40px;border-radius:50%;background:#F1F5F9;display:flex;align-items:center;justify-content:center;font-size:20px;' }, meta.icon));
     var mid = el('div', { style: 'flex:1;min-width:0;' });
-    mid.appendChild(el('div', { style: 'font-weight:800;font-size:15px;color:#0F172A;' }, meta.label));
+    mid.appendChild(el('div', { style: 'font-weight:800;font-size:15px;color:#0F172A;' }, r.leave_type_name || meta.label));
     if (isApprover) mid.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' }, r.user_name || 'Team member'));
     head.appendChild(mid);
     head.appendChild(el('span', { style: 'flex:0 0 auto;font-size:11.5px;font-weight:800;text-transform:capitalize;padding:4px 11px;border-radius:20px;background:' + sc.bg + ';color:' + sc.fg + ';' }, status));
     card.appendChild(head);
     card.appendChild(el('div', { style: 'font-size:13.5px;font-weight:600;color:#334155;margin-top:11px;padding-top:11px;border-top:1px solid #F1F5F9;' }, '📅 ' + torWhen(r)));
+    if (hrLine(r)) card.appendChild(el('div', { style: 'font-size:12.5px;font-weight:700;color:' + ((r.leave_balance_after < 0) ? '#B91C1C' : '#0E7490') + ';margin-top:6px;' }, hrLine(r)));
     if (r.reason) card.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:6px;line-height:1.45;' }, r.reason));
     // Mobile renders cards, not the table, so the decision has to be added here too.
     var decidedLine = decidedText(r);
@@ -276,7 +303,7 @@
       const status = (r.status || 'pending').toLowerCase();
       const color = status === 'approved' ? '#047857' : status === 'denied' ? '#B91C1C' : '#D97706';
       tr.innerHTML = `<td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.user_name || 'You')}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-transform:capitalize;">${escapeHtml(r.request_type)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${r.leave_type_name ? '<span data-no-i18n>' + escapeHtml(r.leave_type_name) + '</span>' : '<span style="text-transform:capitalize;">' + escapeHtml(r.request_type) + '</span>'}${hrLine(r) ? '<div style="font-size:11.5px;font-weight:700;color:' + ((r.leave_balance_after < 0) ? '#B91C1C' : '#0E7490') + ';">' + escapeHtml(hrLine(r)) + '</div>' : ''}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(torWhen(r))}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:12.5px;color:#475569;">${decidedCell(r)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span>${r.closed_for_dates && status === 'approved' ? '<div style="font-size:11.5px;color:#92400E;font-weight:700;">🔒 Centre closed</div>' : ''}</td>
@@ -375,6 +402,39 @@
         <button id="tor-submit" class="kt-btn kt-btn-primary" type="button">Submit</button>
       </div></div>`;
     document.body.appendChild(m);
+    var hrTypes = (HR_ME && HR_ME.types) || [];
+    var hrBal = {};
+    ((HR_ME && HR_ME.balances) || []).forEach(function (x) { hrBal[x.leave_type_id] = x; });
+    if (hrTypes.length) {
+      m.querySelector('#tor-type').innerHTML = hrTypes.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name) + '</option>'; }).join('');
+      var bl = document.createElement('div');
+      bl.id = 'tor-bal';
+      bl.style.cssText = 'font-size:12.5px;font-weight:700;color:#0E7490;margin-top:6px;min-height:16px;';
+      m.querySelector('#tor-type').closest('label').after(bl);
+    }
+    function weekdays(a, b) {
+      if (!a || !b || b < a) return 0;
+      var d = new Date(a + 'T12:00:00'), e = new Date(b + 'T12:00:00'), n = 0, all = 0;
+      for (; d <= e && all < 400; d.setDate(d.getDate() + 1), all++) { var w = d.getDay(); if (w !== 0 && w !== 6) n++; }
+      return n || all;
+    }
+    function syncBal() {
+      var bl = m.querySelector('#tor-bal'); if (!bl) return;
+      var t = hrTypes.filter(function (x) { return String(x.id) === m.querySelector('#tor-type').value; })[0], b = t && hrBal[t.id];
+      if (!t || !b || !b.tracked) { bl.textContent = t && !t.needs_approval ? 'Approved as soon as you send it.' : ''; bl.style.color = '#0E7490'; return; }
+      var s = m.querySelector('#tor-start').value, e = allDayEl.checked ? m.querySelector('#tor-end').value : s, n = 0;
+      if (s && e) {
+        if (allDayEl.checked) n = weekdays(s, e);
+        else { var a = (m.querySelector('#tor-tstart').value || '').split(':'), z = (m.querySelector('#tor-tend').value || '').split(':'); var hrs = Math.max(0, ((+z[0] * 60 + +z[1]) - (+a[0] * 60 + +a[1])) / 60); n = t.unit === 'hours' ? hrs : Math.round(hrs / ((HR_ME && HR_ME.hours_per_day) || 8) * 100) / 100; }
+        if (allDayEl.checked && t.unit === 'hours') n = n * ((HR_ME && HR_ME.hours_per_day) || 8);
+      }
+      var left = Math.round((b.balance - b.pending) * 100) / 100, after = Math.round((left - n) * 100) / 100;
+      bl.textContent = t.name + ': ' + hrAmt(left, t.unit) + ' available' + (n ? ', ' + hrAmt(after, t.unit) + ' after this request' : '') + (after < 0 && n ? (HR_ME.allow_negative ? ' (below zero)' : ' — not enough left') : '');
+      bl.style.color = after < 0 && n ? '#B91C1C' : '#0E7490';
+    }
+    m.addEventListener('change', syncBal);
+    m.addEventListener('input', syncBal);
+    setTimeout(syncBal, 0);
 
     var allDayEl = m.querySelector('#tor-allday');
     var timesEl = m.querySelector('#tor-times');
@@ -407,12 +467,13 @@
     m.querySelector('#tor-submit').onclick = async () => {
       var allDay = allDayEl.checked;
       const payload = {
-        request_type: m.querySelector('#tor-type').value,
         start_at: startEl.value,
         end_at: allDay ? endEl.value : startEl.value,
         reason: m.querySelector('#tor-reason').value,
         all_day: allDay,
       };
+      if (hrTypes.length) payload.leave_type_id = +m.querySelector('#tor-type').value;
+      else payload.request_type = m.querySelector('#tor-type').value;
       if (!allDay) {
         payload.start_time = m.querySelector('#tor-tstart').value;
         payload.end_time = m.querySelector('#tor-tend').value;
@@ -423,9 +484,11 @@
       if (payload.end_at < payload.start_at) { errEl.textContent = 'The end date can\'t be before the start date.'; return; }
       errEl.textContent = '';
       // Said in the form, never a silent Submit (and never filed as a crash).
-      try { await Api.post('/time-off', payload); }
+      var sent;
+      try { sent = await Api.post('/time-off', payload); }
       catch (e) { errEl.textContent = (e && e.data && e.data.message) || (e && e.message) || 'Could not send the request. Please try again.'; return; }
       m.remove();
+      try { if (sent && sent.warning && KT.toast) KT.toast('⚠️', 'Sent, below zero', sent.warning, '#D97706'); else if (sent && sent.status === 'approved' && KT.toast) KT.toast('✅', 'Approved', 'This leave type does not need approval.', '#16A34A'); } catch (e) {}
       torReload();
     };
   }

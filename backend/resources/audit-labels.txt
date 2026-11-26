@@ -1261,3 +1261,17 @@ patch quick-notes/{id} | Updated a quick note
 delete quick-notes/{id} | Deleted a quick note
 post quick-notes/{id}/pictures | Added a picture to a quick note
 delete quick-notes/pictures/{pid} | Removed a picture from a quick note
+put hr/settings | Changed the HR leave settings
+post hr/leave-types | Added a leave type
+post hr/leave-types/example | Loaded the example leave types
+patch hr/leave-types/{id} | Changed a leave type
+post hr/leave-types/{id}/archive | Archived a leave type
+post hr/leave-types/{id}/restore | Restored a leave type
+put hr/leave-types/{id}/rules | Changed the entitlement rules of a leave type
+post hr/leave-types/{id}/count-approved | Counted this leave year's approved time off against balances
+post hr/accrue | Ran leave grants and accruals
+put hr/people/{id} | Updated an employee file
+put hr/people/{id}/sin | Saved a staff member's SIN
+delete hr/people/{id}/sin | Removed a staff member's SIN
+post hr/people/{id}/sin/reveal | Revealed a staff member's SIN
+post hr/adjustments | Adjusted a leave balance

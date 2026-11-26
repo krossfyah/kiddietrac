@@ -2616,6 +2616,36 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/time-off/{id}/close',           [\App\Http\Controllers\Api\TimeOffController::class, 'closeForRequest'])->whereNumber('id');
     });
 
+    // ---- KiddieTrac HR add-on (2026-11-27, feature `hr`: EnforcePlanFeatures::MAP owns hr/ and exports/hr-absence) ----
+    // Scoped inside HrController: admins = the agency, directors = their own centres' staff, everyone = their own balances.
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/hr/me',     [\App\Http\Controllers\Api\HrController::class, 'me']);
+        Route::get ('/hr/ledger', [\App\Http\Controllers\Api\HrController::class, 'ledger']);
+    });
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get   ('/hr/setup',                          [\App\Http\Controllers\Api\HrController::class, 'setup']);
+        Route::put   ('/hr/settings',                       [\App\Http\Controllers\Api\HrController::class, 'saveSettings']);
+        Route::post  ('/hr/leave-types',                    [\App\Http\Controllers\Api\HrController::class, 'createType']);
+        Route::post  ('/hr/leave-types/example',            [\App\Http\Controllers\Api\HrController::class, 'loadExample']);
+        Route::patch ('/hr/leave-types/{id}',               [\App\Http\Controllers\Api\HrController::class, 'updateType'])->whereNumber('id');
+        Route::post  ('/hr/leave-types/{id}/archive',       [\App\Http\Controllers\Api\HrController::class, 'archiveType'])->whereNumber('id');
+        Route::post  ('/hr/leave-types/{id}/restore',       [\App\Http\Controllers\Api\HrController::class, 'archiveType'])->whereNumber('id');
+        Route::put   ('/hr/leave-types/{id}/rules',         [\App\Http\Controllers\Api\HrController::class, 'saveRules'])->whereNumber('id');
+        Route::post  ('/hr/leave-types/{id}/count-approved', [\App\Http\Controllers\Api\HrController::class, 'countApproved'])->whereNumber('id');
+        Route::post  ('/hr/accrue',                         [\App\Http\Controllers\Api\HrController::class, 'accrue'])->middleware('throttle:6,1,hraccrue');
+        Route::get   ('/hr/people',                         [\App\Http\Controllers\Api\HrController::class, 'peopleList']);
+        Route::get   ('/hr/people/{id}',                    [\App\Http\Controllers\Api\HrController::class, 'profile'])->whereNumber('id');
+        Route::put   ('/hr/people/{id}',                    [\App\Http\Controllers\Api\HrController::class, 'saveFile'])->whereNumber('id');
+        Route::put   ('/hr/people/{id}/sin',                [\App\Http\Controllers\Api\HrController::class, 'saveSin'])->whereNumber('id');
+        Route::delete('/hr/people/{id}/sin',                [\App\Http\Controllers\Api\HrController::class, 'clearSin'])->whereNumber('id');
+        Route::post  ('/hr/people/{id}/sin/reveal',         [\App\Http\Controllers\Api\HrController::class, 'revealSin'])->whereNumber('id')->middleware('throttle:20,1,hrsin');
+        Route::get   ('/hr/balances',                       [\App\Http\Controllers\Api\HrController::class, 'balances']);
+        Route::post  ('/hr/adjustments',                    [\App\Http\Controllers\Api\HrController::class, 'adjust']);
+        Route::get   ('/hr/absence',                        [\App\Http\Controllers\Api\HrController::class, 'absence']);
+        Route::get   ('/hr/off-now',                        [\App\Http\Controllers\Api\HrController::class, 'offNow']);
+        Route::get   ('/exports/hr-absence',                [\App\Http\Controllers\Api\HrController::class, 'exportAbsence']);
+    });
+
     // ---- Staff pay / payslips (educators = hourly, home visitors = per visit) ----
     Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get('/me/payslips',              [\App\Http\Controllers\Api\PayController::class, 'myPayslips']);

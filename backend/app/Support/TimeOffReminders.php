@@ -207,9 +207,12 @@ final class TimeOffReminders
                         . '<a href="' . $e($mk('denied')) . '" style="display:inline-block;padding:6px 12px;border-radius:8px;background:#fff;color:#B91C1C;border:1px solid #FCA5A5;text-decoration:none;font-size:13px;font-weight:700">Decline</a>';
                 } catch (\Throwable $ex) { $links = ''; }
             }
+            /* KiddieTrac HR (2026-11-27): the agency's own leave type, and the balance the decision is made against. */
+            [$typeName, $balLine] = \App\Support\HrLeave::emailLine($r);
             $rows .= '<tr><td style="padding:12px 0;border-top:1px solid #E2E8F0">'
-                . '<div style="font-size:15px;font-weight:700;color:#0F172A">' . $e($r->staff_name) . ' · ' . $e(ucfirst((string) $r->request_type)) . '</div>'
+                . '<div style="font-size:15px;font-weight:700;color:#0F172A">' . $e($r->staff_name) . ' · ' . $e($typeName ?: ucfirst((string) $r->request_type)) . '</div>'
                 . '<div style="font-size:14px;color:#334155;margin-top:2px">' . $e($when) . ' · ' . $e($days) . '</div>'
+                . ($balLine ? '<div style="font-size:13px;color:#0E7490;margin-top:2px">' . $e($balLine) . '</div>' : '')
                 . '<div style="font-size:12.5px;color:#64748B;margin-top:2px">Asked ' . $e($created->format('M j, g:i A')) . ' · waiting ' . $e($waiting) . '</div>'
                 . (! empty($r->reason) ? '<div style="font-size:13px;color:#475569;margin-top:4px">“' . $e(mb_substr((string) $r->reason, 0, 240)) . '”</div>' : '')
                 . ($links ? '<div style="margin-top:8px">' . $links . '</div>' : '')

@@ -133,6 +133,11 @@ final class WebDemoShowcase
             // Only what this wrote last time: timeline rows first (they point at photos), then newest tables first.
             $order = array_reverse($old, true);
             if (isset($order['daily_events'])) $order = ['daily_events' => $order['daily_events']] + $order;
+            // HR rows hanging off this builder's own leave types (the nightly accrual can add to them) go with the types.
+            if (! empty($old['hr_leave_types'])) {
+                DB::table('hr_leave_ledger')->whereIn('leave_type_id', $old['hr_leave_types'])->delete();
+                DB::table('hr_leave_rules')->whereIn('leave_type_id', $old['hr_leave_types'])->delete();
+            }
             foreach ($order as $table => $ids) {
                 if (preg_match('/^[a-z_]+$/', $table) && $ids) DB::table($table)->whereIn('id', $ids)->delete();
             }
@@ -595,9 +600,114 @@ final class WebDemoShowcase
                 $bell($olivia, 'task_assigned', '📋 Your to-do is due tomorrow', 'Approve the December menu', ['link' => '#my-tasks'], $this->at(-1, 8, 30), false);
             }
 
+            if ($set === 'white_label') $this->hrStory($agencyId, $maya, $elena, $olivia, $now);
+
             PlatformSettings::set($this->key, json_encode($this->made));
         });
 
         return array_map('count', $this->made);
+    }
+
+    /**
+     * KIDDIETRAC HR DEMO (2026-11-27, Starlight only): leave types and rules, every staff member's employee file, this
+     * leave year's grants, past and upcoming approved leave (Sofia off today, Marcus later this week), two requests
+     * waiting, a manual adjustment with its reason, and Lucas's three single sick days so the absence report flags
+     * repeated short absences. All rows go in the ledger of this builder, so a rerun replaces them.
+     */
+    private function hrStory(int $agencyId, int $maya, int $elena, int $olivia, string $now): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_leave_ledger')) return;
+        HrLeave::saveSettings($agencyId, ['leave_year' => 'fixed', 'leave_year_start' => '01-01', 'allow_negative' => false, 'hours_per_day' => 8,
+            'short_absence' => ['max_days' => 2, 'count' => 3, 'months' => 6]]);
+        $types = [];
+        foreach (HrLeave::EXAMPLE_SET as $i => $e) {
+            $rules = $e['rules'];
+            unset($e['rules']);
+            $id = $this->add('hr_leave_types', $e + ['periods_per_year' => null, 'hours_per_unit' => null, 'carry_cap' => null,
+                'carry_expiry_months' => null, 'agency_id' => $agencyId, 'is_example' => 0, 'sort' => $i + 1,
+                'created_by_id' => $olivia ?: null, 'created_at' => $now, 'updated_at' => $now]);
+            if ($e['name'] === 'Vacation') $rules[] = ['employment_type' => 'part_time', 'min_years' => 0, 'amount' => 5];
+            foreach ($rules as $r) $this->add('hr_leave_rules', $r + ['agency_id' => $agencyId, 'leave_type_id' => $id, 'created_at' => $now, 'updated_at' => $now]);
+            $types[$e['maps_request_type']] = (object) ($e + ['id' => $id]);
+        }
+        $staff = HrLeave::staffIds($agencyId);
+        $centreOf = DB::table('role_assignments')->whereIn('user_id', $staff ?: [0])->where('active', 1)->whereNotNull('centre_id')->pluck('centre_id', 'user_id');
+        $users = DB::table('users')->whereIn('id', $staff ?: [0])->get(['id', 'first_name', 'hire_date'])->keyBy('id');
+        $byName = $users->mapWithKeys(fn ($u) => [$u->first_name => (int) $u->id]);
+        $titles = ['Harper' => ['Executive Director', 'full_time'], 'Olivia' => ['Operations Manager', 'full_time'], 'Elena' => ['Center Director', 'full_time'],
+            'Maya' => ['Lead Teacher', 'full_time'], 'Ethan' => ['Lead Teacher', 'full_time'], 'Grace' => ['Lead Teacher', 'full_time'], 'Noah' => ['Teacher', 'full_time'],
+            'Marcus' => ['Teacher', 'full_time'], 'Sofia' => ['Assistant Teacher', 'part_time'], 'Lucas' => ['Assistant Teacher', 'part_time'],
+            'Ava' => ['Teacher Aide', 'casual'], 'Nina' => ['Assistant Teacher', 'student']];
+        $etype = [];
+        foreach ($users as $u) {
+            [$title, $et] = $titles[$u->first_name] ?? ['Teacher', 'full_time'];
+            $etype[$u->id] = $et;
+            if (DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('user_id', $u->id)->exists()) continue;
+            $mine = (int) ($centreOf[$u->id] ?? 0);
+            $mgr = in_array($u->first_name, ['Harper', 'Olivia'], true) ? null
+                : (($mine && $mine === (int) ($centreOf[$elena] ?? -1) && (int) $u->id !== $elena) ? $elena : ($olivia ?: null));
+            $this->add('hr_employee_files', ['agency_id' => $agencyId, 'user_id' => $u->id, 'job_title' => $title, 'employment_type' => $et, 'status' => 'active',
+                'manager_user_id' => $mgr, 'primary_centre_id' => $centreOf[$u->id] ?? null, 'updated_by_id' => $olivia ?: null, 'created_at' => $now, 'updated_at' => $now]);
+        }
+        // This leave year's grants, keyed like the nightly job's, so hr:leave-accrue finds them and adds nothing.
+        $today = $this->today->toDateString();
+        $s = HrLeave::settings($agencyId);
+        foreach ($users as $u) {
+            $hire = $u->hire_date ? substr((string) $u->hire_date, 0, 10) : null;
+            $ys = HrLeave::yearStart($agencyId, (int) $u->id, $today, $s, $hire);
+            foreach ($types as $t) {
+                if ($t->accrual !== 'lump') continue;
+                $amt = HrLeave::entitlement($t, $etype[$u->id] ?? null, HrLeave::serviceYears($hire, $ys));
+                if (! $amt) continue;
+                $this->add('hr_leave_ledger', ['agency_id' => $agencyId, 'user_id' => $u->id, 'leave_type_id' => $t->id, 'entry_date' => max($ys, $hire ?: $ys),
+                    'amount' => $amt, 'kind' => 'grant', 'source_key' => 'grant:' . $ys, 'reason' => 'Leave year from ' . Carbon::parse($ys)->format('M j, Y'), 'created_at' => $now]);
+            }
+        }
+        // A weekday at or after $from days from today.
+        $wd = function (int $from) {
+            for ($d = $from; $d < $from + 7; $d++) if (! $this->today->copy()->addDays($d)->isWeekend()) return $d;
+            return $from;
+        };
+        $req = function (string $who, string $type, int $d1, int $d2, string $status, string $reason, ?string $note = null) use ($agencyId, $byName, $centreOf, $types, $elena, $now) {
+            $uid = $byName[$who] ?? null;
+            if (! $uid || ! isset($types[$type])) return;
+            $t = $types[$type];
+            $start = $this->today->copy()->addDays($d1)->toDateString();
+            $end = $this->today->copy()->addDays($d2)->toDateString();
+            $amt = (float) HrLeave::weekdays($start, $end);
+            $decided = $status === 'pending' ? null : $this->at(min(-1, $d1 - 7), 9, 30);
+            $asked = $this->at(min(-2, $d1 - 9), 8, 10);
+            $rid = $this->add('time_off_requests', ['agency_id' => $agencyId, 'user_id' => $uid, 'centre_id' => $centreOf[$uid] ?? null, 'request_type' => $type,
+                'leave_type_id' => $t->id, 'leave_amount' => $amt, 'start_at' => $start, 'end_at' => $end, 'all_day' => 1, 'reason' => $reason, 'status' => $status,
+                'decided_by_id' => $status === 'pending' ? null : ($t->needs_approval ? $elena : $uid), 'decided_at' => $decided, 'decision_notes' => $note,
+                'created_at' => $asked, 'updated_at' => $decided ?: $asked]);
+            if ($status === 'approved') {
+                $this->add('hr_leave_ledger', ['agency_id' => $agencyId, 'user_id' => $uid, 'leave_type_id' => $t->id, 'entry_date' => substr((string) $decided, 0, 10),
+                    'amount' => -$amt, 'kind' => 'taken', 'time_off_request_id' => $rid, 'reason' => 'Time off approved', 'created_by_id' => $elena, 'created_at' => $now]);
+            }
+        };
+        $past = $this->pastWeekdays(25);   // oldest first
+        $ago = fn (int $k) => (int) $past[max(0, count($past) - 1 - $k)];   // $ago(0) = the last weekday before today
+        $req('Sofia', 'vacation', 0, 2, 'approved', 'Visiting family in Phoenix', 'Have a lovely trip!');
+        $req('Marcus', 'personal', $wd(3), $wd(3), 'approved', 'Moving apartments');
+        $req('Noah', 'vacation', $wd(21), $wd(21) + 4, 'pending', 'Winter break with my kids');
+        $req('Ethan', 'vacation', $ago(6), $ago(6) + 2, 'approved', 'Long weekend away', 'Grace will cover Rainbows.');
+        $req('Grace', 'sick', $ago(9), $ago(9), 'approved', 'Migraine');
+        $req('Lucas', 'sick', $ago(2), $ago(2), 'approved', 'Cold');
+        $req('Lucas', 'sick', $ago(11), $ago(11), 'approved', 'Stomach bug');
+        $req('Lucas', 'sick', $ago(20), $ago(20), 'approved', 'Fever');
+        $req('Ava', 'personal', $wd(10), $wd(10), 'pending', 'Dentist appointment');
+        // Maya's personal day (the request written above) counts against her Personal days.
+        $mayaOff = DB::table('time_off_requests')->whereIn('id', $this->made['time_off_requests'] ?? [0])->where('user_id', $maya)
+            ->whereNull('leave_type_id')->where('status', 'approved')->first();
+        if ($mayaOff && isset($types['personal'])) {
+            $this->add('hr_leave_ledger', ['agency_id' => $agencyId, 'user_id' => $maya, 'leave_type_id' => $types['personal']->id, 'entry_date' => substr((string) $mayaOff->decided_at, 0, 10),
+                'amount' => -1, 'kind' => 'taken', 'time_off_request_id' => $mayaOff->id, 'reason' => 'Time off approved', 'created_by_id' => $elena, 'created_at' => $now]);
+        }
+        if (isset($byName['Ethan'], $types['vacation'])) {
+            $this->add('hr_leave_ledger', ['agency_id' => $agencyId, 'user_id' => $byName['Ethan'], 'leave_type_id' => $types['vacation']->id,
+                'entry_date' => $this->today->copy()->addDays($ago(15))->toDateString(), 'amount' => 2, 'kind' => 'adjustment',
+                'reason' => 'Two days for covering the summer camp weekend, agreed with Olivia', 'created_by_id' => $olivia ?: $elena, 'created_at' => $now]);
+        }
     }
 }

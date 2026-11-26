@@ -283,8 +283,12 @@
     var sa = api().get('/safe-arrival/today').catch(function () { return null; });
     // Admins: every room's live ratio across the centres they can see - the Room ratios screen's own feed.
     var rr = dir ? Promise.resolve(null) : api().get('/operations/ratio-status').catch(function () { return null; });
-    return Promise.all([dash, sa, rr]).then(function (r) {
-      var t = { dir: dir, dash: r[0], sa: r[1], rooms: r[2], at: new Date() };
+    // KiddieTrac HR (2026-11-27): who is off today and this week. Only when the HR add-on is on (the server
+    // still refuses without it, and a refusal just leaves the block out).
+    var hrOn = (me().hidden_screens || []).indexOf('hr') < 0;
+    var off = hrOn ? api().get('/hr/off-now').catch(function () { return null; }) : Promise.resolve(null);
+    return Promise.all([dash, sa, rr, off]).then(function (r) {
+      var t = { dir: dir, dash: r[0], sa: r[1], rooms: r[2], off: r[3], at: new Date() };
       c.today = t; c.at.d = Date.now(); return t;
     });
   }
@@ -820,6 +824,21 @@
       };
       list('Ratio alerts', ratio, '#DC2626');
       list('Check staffing', check, '#F59E0B');
+      var off = t.off, offItem = function (r) {
+        return '<button type="button" class="kt-rp-item" data-go="time-off"><span class="kt-rp-bar" style="background:' + esc(r.colour || '#64748B') + '"></span><span><b data-no-i18n>' + esc(shortName(r.name)) + '</b><span class="kt-rp-sub">'
+          + esc([T(r.type || 'Time off'), r.when].filter(Boolean).join(' · ')) + (r.centre ? ' · <span data-no-i18n>' + esc(r.centre) + '</span>' : '') + '</span></span></button>';
+      };
+      if (off && (off.today || off.week)) {
+        h += '<h4>' + esc(T("Who's off today")) + '</h4>';
+        if (off.today.length) off.today.slice(0, 8).forEach(function (r) { h += offItem(r); });
+        else h += '<div class="kt-rp-muted">' + esc(T('Nobody is off today.')) + '</div>';
+        if (off.today.length > 8) h += '<button type="button" class="kt-rp-link" data-go="hr">+ ' + (off.today.length - 8) + ' ' + esc(T('more')) + '</button>';
+        if (off.week.length) {
+          h += '<h4>' + esc(T('Off later this week')) + '</h4>';
+          off.week.slice(0, 8).forEach(function (r) { h += offItem(r); });
+          if (off.week.length > 8) h += '<button type="button" class="kt-rp-link" data-go="hr">+ ' + (off.week.length - 8) + ' ' + esc(T('more')) + '</button>';
+        }
+      }
       var at = t.at; h += '<div class="kt-rp-muted" style="margin-top:6px">' + esc(T('Updated')) + ' ' + esc(KT.fmtTime ? KT.fmtTime(at.toISOString()) : at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) + '</div></div>';
       return h;
     });

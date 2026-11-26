@@ -45,6 +45,7 @@ final class EnforcePlanFeatures
             'safe-arrival/test-call', 'safe-arrival/phone-messages', 'parent/phone-line'], []],   // + voice announcements: the feature is "SMS & voice announcements" (2026-11-26)
         'staff_scheduling' => [['director/schedule', 'operations/substitutes', 'operations/sub-requests', 'operations/room-rotations', 'provider/educator-rooms'], []],
         'timesheets'       => [['director/timesheets', 'time-off', 'admin/time-off', 'admin/timeoff-reminders'], []],
+        'hr'               => [['hr/', 'exports/hr-absence'], []],   // KiddieTrac HR add-on: leave balances, employee files, absence report (2026-11-27)
         'payroll'          => [['admin/payroll', 'admin/payroll-settings', 'exports/payroll', 'provider/payroll-documents', 'payroll-documents/', 'me/payslips', 'agency/payslip-settings', 'me/payroll-documents', 'auth/me/payroll-documents'], []],
         'certifications'   => [['director/certifications', 'admin/background-checks', 'staff-certifications', 'admin/staff-compliance', 'admin/cert-alerts', 'exports/background-checks'], []],
         'home_visits'      => [['home-visits', 'inspection-forms', 'operations/inspection'], []],

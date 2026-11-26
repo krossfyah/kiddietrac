@@ -57,6 +57,7 @@ final class AddonCoverageCommand extends Command
         'schedule:autofill' => ['staff_scheduling', 'app/Console/Commands/ScheduleAutofillCommand.php'],
         'occms:roa-remind' => ['cwelcc_reporting', 'app/Console/Commands/OccmsRoaRemindCommand.php'],
         'portfolio:year-end' => ['observations', 'app/Console/Commands/YearEndPortfolioCommand.php'],
+        'hr:leave-accrue' => ['hr', 'app/Console/Commands/HrLeaveAccrueCommand.php'],
         'timeoff:remind-approvers' => ['timesheets', 'app/Console/Commands/TimeOffRemindApprovers.php'],
         'forms:remind-countersign' => ['forms', 'app/Console/Commands/CountersignRemindCommand.php'],
         'kt:payslip-notices' => ['payroll', 'app/Support/PayslipNotices.php'],

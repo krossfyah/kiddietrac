@@ -25,16 +25,85 @@ final class TimeOffController extends Controller
             ->where('user_id', $request->user()->id)
             ->orderByDesc('start_at')
             ->get();
+        $this->withLeave($rows, true);
         return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * KIDDIETRAC HR (2026-11-27): the leave type and the balance on every request, for agencies with the HR add-on.
+     * Without it nothing is added and the screen is exactly as before. $staffView hides the balance of a type the
+     * agency does not show to staff (the request itself still shows).
+     */
+    private function withLeave($rows, bool $staffView = false): void
+    {
+        $on = [];
+        foreach ($rows as $r) {
+            $aid = (int) $r->agency_id;
+            if (! isset($on[$aid])) {
+                $on[$aid] = \App\Support\HrLeave::on($aid);
+            }
+            if (! $on[$aid]) {
+                continue;
+            }
+            $t = \App\Support\HrLeave::typeForRequest($r);
+            if (! $t) {
+                continue;
+            }
+            $amount = \App\Support\HrLeave::amountFor($r, $t);
+            $r->leave_type_name = $t->name;
+            $r->leave_colour = $t->colour;
+            $r->leave_unit = $t->unit;
+            $r->leave_amount = $amount;
+            if ($staffView && ! $t->visible_to_staff) {
+                continue;
+            }
+            $bal = \App\Support\HrLeave::balance((int) $r->user_id, (int) $t->id);
+            $r->leave_balance = $bal;
+            // What is left once this request counts: pending = not deducted yet; approved = already deducted.
+            $r->leave_balance_after = $r->status === 'pending' ? round($bal - $amount, 2) : $bal;
+        }
+    }
+
+    /** Would approving this take the balance below zero where the agency does not allow it? The refusal, or null. */
+    private function negativeRefusal(object $row): ?string
+    {
+        $aid = (int) $row->agency_id;
+        if (! \App\Support\HrLeave::on($aid) || ($t = \App\Support\HrLeave::typeForRequest($row)) === null) {
+            return null;
+        }
+        if ($t->accrual === 'none' && ! DB::table('hr_leave_ledger')->where('user_id', $row->user_id)->where('leave_type_id', $t->id)->exists()) {
+            return null;   // an untracked type (e.g. unpaid leave) has no balance to go below
+        }
+        $after = \App\Support\HrLeave::balance((int) $row->user_id, (int) $t->id) - \App\Support\HrLeave::amountFor($row, $t);
+        if ($after >= -0.005 || \App\Support\HrLeave::settings($aid)['allow_negative']) {
+            return null;
+        }
+
+        return 'This would take the ' . $t->name . ' balance below zero (' . rtrim(rtrim(number_format($after, 2), '0'), '.') . ' ' . $t->unit
+            . '). Your agency does not allow negative balances: adjust the balance first, or decline.';
     }
 
     public function listAgency(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
         $status = $request->query('status');
+        /* A DIRECTOR SEES THEIR OWN CENTRES' REQUESTS (2026-11-27, with HR balances on every row). The list was bounded
+           by the agency only, so a director saw (and now would have seen the balances of) another centre's staff.
+           Same rule as who may decide one (assertDecider): the request's centre, or a centre the requester works at. */
+        $scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
         $q = DB::table('time_off_requests as tor')
             ->join('users as u', 'u.id', '=', 'tor.user_id')
             ->where('tor.agency_id', $agencyId)
+            ->when($scope !== null, function ($w) use ($scope) {
+                $w->where(function ($s) use ($scope) {
+                    $s->whereIn('tor.centre_id', $scope ?: [0])
+                      ->orWhere(fn ($n) => $n->whereNull('tor.centre_id')->whereExists(fn ($e) => $e->from('role_assignments as sra')
+                          ->whereColumn('sra.user_id', 'tor.user_id')->where('sra.active', 1)
+                          ->whereIn('sra.role', \App\Support\Visibility::STAFF_ROLES)->whereIn('sra.centre_id', $scope ?: [0])->select(DB::raw(1))))
+                      ->orWhere(fn ($n) => $n->whereNull('tor.centre_id')->whereExists(fn ($e) => $e->from('educator_rooms as er')->join('rooms as rm', 'rm.id', '=', 'er.room_id')
+                          ->whereColumn('er.user_id', 'tor.user_id')->whereIn('rm.centre_id', $scope ?: [0])->select(DB::raw(1))));
+                });
+            })
             ->orderByDesc('tor.start_at')
             ->select(
                 'tor.*', DB::raw("CONCAT(u.first_name, ' ', u.last_name) as user_name"), 'u.email as user_email',
@@ -55,6 +124,7 @@ final class TimeOffController extends Controller
             $r->close_centre_name = $cid ? DB::table('centres')->where('id', $cid)->value('name') : null;
             $r->closed_for_dates = $cid ? $this->closureFor($cid, $r) !== null : false;
         }
+        $this->withLeave($rows);
         return response()->json(['data' => $rows]);
     }
 
@@ -185,7 +255,9 @@ final class TimeOffController extends Controller
     public function create(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'request_type'  => 'required|string|in:vacation,sick,personal,bereavement,jury,other',
+            // KiddieTrac HR (2026-11-27): an agency's own leave type, or the six original types as before.
+            'leave_type_id' => 'nullable|integer',
+            'request_type'  => 'required_without:leave_type_id|nullable|string|in:vacation,sick,personal,bereavement,jury,other',
             'start_at'      => 'required|date',
             'end_at'        => 'required|date|after_or_equal:start_at',
             'reason'        => 'nullable|string|max:2000',
@@ -228,11 +300,43 @@ final class TimeOffController extends Controller
             return response()->json(['message' => 'Choose a centre you work at.'], 422);
         }
 
+        /* KIDDIETRAC HR (2026-11-27): the request names one of the agency's leave types. The original request_type is
+           still written (the type's mapping, else "other") so closures, emails and the calendar read it as before. */
+        $leaveType = null;
+        $leaveAmount = null;
+        $warning = null;
+        if (! empty($data['leave_type_id'])) {
+            abort_unless(\App\Support\HrLeave::on((int) $agencyId), 422, 'Choose a type of time off.');
+            $leaveType = DB::table('hr_leave_types')->where('id', (int) $data['leave_type_id'])->where('agency_id', $agencyId)
+                ->whereNull('archived_at')->first();
+            if (! $leaveType || (! $leaveType->visible_to_staff && ! array_intersect(\App\Support\AgencyRole::names($request), ['agency_admin', 'centre_director', 'platform_admin']))) {
+                return response()->json(['message' => 'Choose a type of time off.'], 422);
+            }
+            $data['request_type'] = $leaveType->maps_request_type ?: 'other';
+            $probe = (object) ['agency_id' => $agencyId, 'user_id' => $user->id, 'leave_type_id' => $leaveType->id, 'leave_amount' => null,
+                'request_type' => $data['request_type'], 'start_at' => $data['start_at'], 'end_at' => $data['end_at'], 'all_day' => $allDay,
+                'start_time' => $allDay ? null : $data['start_time'], 'end_time' => $allDay ? null : $data['end_time'], 'status' => 'pending'];
+            $leaveAmount = \App\Support\HrLeave::amountFor($probe, $leaveType);
+            $tracked = $leaveType->accrual !== 'none' || DB::table('hr_leave_ledger')->where('user_id', $user->id)->where('leave_type_id', $leaveType->id)->exists();
+            if ($tracked) {
+                $after = \App\Support\HrLeave::balance((int) $user->id, (int) $leaveType->id)
+                    - \App\Support\HrLeave::pending((int) $agencyId, (int) $user->id, $leaveType) - $leaveAmount;
+                if ($after < -0.005) {
+                    $fmt = rtrim(rtrim(number_format($after, 2), '0'), '.') . ' ' . $leaveType->unit;
+                    if (! \App\Support\HrLeave::settings((int) $agencyId)['allow_negative']) {
+                        return response()->json(['message' => 'You do not have enough ' . $leaveType->name . ' left for this request (it would leave ' . $fmt . ').'], 422);
+                    }
+                    $warning = 'This takes your ' . $leaveType->name . ' balance below zero (' . $fmt . ').';
+                }
+            }
+        }
+
         $id = DB::table('time_off_requests')->insertGetId([
             'agency_id'    => $agencyId,
             'user_id'      => $user->id,
             'centre_id'    => $data['centre_id'] ?? null,
             'request_type' => $data['request_type'],
+        ] + ($leaveType ? ['leave_type_id' => (int) $leaveType->id, 'leave_amount' => $leaveAmount] : []) + [
             'start_at'     => $data['start_at'],
             'end_at'       => $data['end_at'],
             'reason'       => $data['reason'] ?? null,
@@ -243,6 +347,25 @@ final class TimeOffController extends Controller
             'created_at'   => now(),
             'updated_at'   => now(),
         ]);
+
+        /* A LEAVE TYPE THAT NEEDS NO APPROVAL (KiddieTrac HR) is approved as it is filed, through the same applyDecision
+           as a director's approval (balance, closure rule, the rota and admin notices), recorded as decided by the
+           person themselves. The approvers get a bell, not a request to act on. */
+        if ($leaveType && ! $leaveType->needs_approval) {
+            $row = DB::table('time_off_requests')->where('id', $id)->first();
+            $this->applyDecision($row, 'approved', null, $user, 'auto', null);
+            $who = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: 'A team member';
+            $req = (object) ['id' => $id, 'user_id' => (int) $user->id, 'centre_id' => $data['centre_id'] ?? null,
+                'centre_ids' => ! empty($data['centre_id']) ? [(int) $data['centre_id']] : DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
+                    ->where('user_id', $user->id)->where('agency_id', $agencyId)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all()];
+            foreach (\App\Support\TimeOffReminders::approvers($agencyId, ['recipients' => 'both'], collect([$req])) as $o) {
+                \App\Support\Notify::write(['user_id' => (int) $o['user']->user_id, 'type' => 'time_off',
+                    'title' => $who . ' is off: ' . $leaveType->name, 'body' => self::whenPhrase($row) . ' · no approval needed',
+                    'data' => json_encode(['link' => '#time-off']), 'created_at' => now()]);
+            }
+
+            return response()->json(['id' => $id, 'status' => 'approved', 'warning' => $warning], 201);
+        }
 
         // Centre directors and agency admins are the people who can act on this, so
         // they get both a bell and an email. A bell alone waits for them to open the
@@ -287,7 +410,7 @@ final class TimeOffController extends Controller
                 $data['reason'] ?? null, (int) $id);
         }
 
-        return response()->json(['id' => $id, 'status' => 'pending'], 201);
+        return response()->json(['id' => $id, 'status' => 'pending', 'warning' => $warning], 201);
     }
 
     /**
@@ -430,6 +553,9 @@ final class TimeOffController extends Controller
         $centre = $mode === 'centre' ? $this->checkedCentre($row, $data['close_centre_id'] ?? null) : null;
         abort_if($mode === 'centre' && ! $centre, 422, 'Choose the centre to close.');
         $this->assertDecider($request, $row, $centre ?: ($mode === 'auto' ? $this->centreFor($row) : null));
+        if ($data['status'] === 'approved' && $row->status !== 'approved' && ($no = $this->negativeRefusal($row))) {
+            return response()->json(['message' => $no], 422);
+        }
 
         $result = $this->applyDecision($row, $data['status'], $data['decision_notes'] ?? null, $request->user(), $mode, $centre);
 
@@ -453,6 +579,8 @@ final class TimeOffController extends Controller
             'decision_notes'=> $notes,
             'updated_at'    => now(),
         ]);
+        // KiddieTrac HR: approving deducts from the balance; a decision that undoes an approval gives it back.
+        \App\Support\HrLeave::syncRequest(DB::table('time_off_requests')->where('id', $row->id)->first(), (int) $actor->id);
 
         $data = ['status' => $status, 'decision_notes' => $notes];
         $when = self::whenPhrase($row);
@@ -468,7 +596,9 @@ final class TimeOffController extends Controller
 
         // Emailed as well as belled. Somebody who asked for leave is waiting on this to
         // book something, and "check the app occasionally" is not an answer.
-        $this->mailDecision($row, (string) $status, $when, $notes, $actor);
+        if ((int) $actor->id !== (int) $row->user_id) {   // a type with no approval step: they know already
+            $this->mailDecision($row, (string) $status, $when, $notes, $actor);
+        }
 
         // A home provider IS the centre, so approving their leave closes it — and the
         // parents need telling on the usual reminder schedule.
@@ -515,6 +645,7 @@ final class TimeOffController extends Controller
             . '<tr><td style="padding:6px 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;'
             . 'font-size:15px;color:#0F172A;"><strong>' . $e(ucfirst($type)) . '</strong><br>' . $e($when) . '</div></td></tr>'
             . $reasonRow
+            . $this->balanceRow($requestId)
             . $this->quickButtons($requestId, (int) $approver->id)
             . '<tr><td style="padding:16px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
             . 'Or handle it under <strong>Time off</strong> in KiddieTrac.</td></tr></table>';
@@ -538,6 +669,16 @@ final class TimeOffController extends Controller
                 'approver' => $approver->id, 'error' => $ex->getMessage(),
             ]);
         }
+    }
+
+    /** KiddieTrac HR: the balance line under a request in the approver's email (empty without the add-on). */
+    private function balanceRow(?int $requestId): string
+    {
+        $r = $requestId ? DB::table('time_off_requests')->where('id', $requestId)->first() : null;
+        [, $line] = $r ? \App\Support\HrLeave::emailLine($r) : [null, null];
+
+        return $line ? '<tr><td style="padding:10px 0 0;font-size:14px;line-height:1.6;color:#0E7490;"><strong>Balance:</strong> '
+            . htmlspecialchars($line, ENT_QUOTES, 'UTF-8') . '</td></tr>' : '';
     }
 
     /** Tell the requester what was decided, and by whom. */
@@ -633,6 +774,9 @@ final class TimeOffController extends Controller
 
         $status = $request->input('decision') === 'denied' ? 'denied' : 'approved';
         $notes = trim((string) $request->input('decision_notes', '')) ?: null;
+        if ($status === 'approved' && ($no = $this->negativeRefusal($row))) {
+            return response($this->actShell('Not approved yet.', e($no)), 422)->header('Content-Type', 'text/html');
+        }
         // The page shows the closure box only when there is one centre to close.
         $mode = $request->has('close_shown') ? ($request->input('close') === '1' ? 'centre' : 'none') : 'auto';
 
@@ -1078,6 +1222,8 @@ final class TimeOffController extends Controller
         DB::table('time_off_requests')->where('id', $id)->update([
             'status' => 'cancelled', 'updated_at' => now(),
         ]);
+        // KiddieTrac HR: withdrawn leave goes back on the balance.
+        \App\Support\HrLeave::syncRequest(DB::table('time_off_requests')->where('id', $id)->first(), (int) $request->user()->id);
 
         // Put the calendar back. Only a closure this system created for exactly these
         // dates is removed — anything typed in by hand is somebody's deliberate entry

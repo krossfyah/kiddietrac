@@ -446,6 +446,7 @@
           { hash: 'tasks',              label: 'Tasks',              icon: '☑️' },
           { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
+          { hash: 'hr',                 label: 'HR',                 icon: '🧑‍💼' },
           { hash: 'background-checks',  label: 'Background checks',  icon: '🪪' },
           { hash: 'substitutes',        label: 'Substitutes',        icon: '🙋' },
           // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
@@ -667,6 +668,7 @@
           { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
           { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
+          { hash: 'hr',                label: 'HR',                 icon: '🧑‍💼' },
           { hash: 'background-checks', label: 'Background checks',  icon: '🪪' },
           { hash: 'substitutes',       label: 'Substitutes',        icon: '🙋' },
           // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
@@ -1466,6 +1468,7 @@
     'timesheets': 'Hours worked, ready for payroll.',
     'time-clock': 'Clock in and out.',
     'time-off': 'Leave requests awaiting a decision.',
+    'hr': 'Employee files, leave balances and the absence report.',
     'substitutes': 'Cover for absent staff.',
     'payroll': 'Pay runs and hours.',
     'workforce-funding': 'Ontario WEG and workforce compensation: wage components, the 32-day check and the year-end report.',

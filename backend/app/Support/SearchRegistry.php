@@ -159,6 +159,11 @@ final class SearchRegistry
 
     /** Deliberately NOT in the global search, with the reason. */
     public const NOT_SEARCHABLE = [
+        // KiddieTrac HR (2026-11-27)
+        'hr_leave_types' => 'an agency\'s own leave types (HR > Leave types); configuration, found on that screen',
+        'hr_leave_ledger' => 'leave balance history; shown on the person\'s HR profile and time-off requests: search the staff member',
+        'hr_employee_files' => 'employee file fields; search the staff member, whose HR profile shows them',
+        'hr_staff_sin' => 'encrypted SIN / SSN (HR); never searched, listed or exported, and every reveal is audited',
         'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',
         'calendar_links' => 'encrypted Outlook/Google calendar permissions per person or agency (Settings > Calendar); secrets, never searched or shown as a record',
@@ -244,6 +249,7 @@ final class SearchRegistry
      * NOT_SEARCHABLE, KNOWN_GAPS or here, or the check fails. Add a reason each.
      */
     public const PLUMBING = [
+        'hr_leave_rules' => 'entitlement rules of a leave type (KiddieTrac HR), edited and shown with that type',
         'sign_in_lock_people' => 'who a sign-in lock held when it was made, for its unlock report (App\\Support\\SignInLocks)',
         // 'example_log' => 'telemetry',
         // 2026-11-10 (ticket #244)
