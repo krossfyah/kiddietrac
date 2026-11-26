@@ -120,6 +120,7 @@ final class NotifyAudience
         'staff_clock' => 'staff', 'staff_absences' => 'staff', 'staff_countersign' => 'staff', 'staff_compliance' => 'staff',
         'staff_payments' => 'staff', 'staff_billing_copies' => 'staff', 'staff_pickup' => 'staff', 'staff_closures' => 'staff',
         'staff_schedule' => 'staff', 'staff_tips' => 'staff', 'staff_cold_reach' => 'staff', 'staff_tickets' => 'staff',
+        'staff_submissions' => 'staff',   // StaffSubmissionsFeed: what the team submitted, in the admin bell (2026-11-26)
     ];
 
     public static function ofType(?string $type): string

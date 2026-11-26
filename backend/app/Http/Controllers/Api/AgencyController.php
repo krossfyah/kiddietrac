@@ -800,12 +800,25 @@ final class AgencyController extends Controller
         if (! $unscoped) $hvQ->whereIn("agency_id", $agencyIds ?: [0]);
         foreach ($hvQ->get() as $r) $push("home_visit", "\u{1F3E1}", "Home-visit report — " . ($r->family_name ?: $r->child_name ?: "family"), $r->created_at, "#home-visits");
 
-        // Incidents (scoped via room → centre).
-        $incQ = DB::table("incidents as inc")->leftJoin("rooms as rm", "rm.id", "=", "inc.room_id")->leftJoin("centres as c", "c.id", "=", "rm.centre_id")
-            ->orderByDesc("inc.created_at")->limit(12)
-            ->select("inc.incident_type", "inc.created_at");
-        if (! $unscoped) $incQ->whereIn("c.agency_id", $agencyIds ?: [0]);
-        foreach ($incQ->get() as $r) $push("incident", "\u{1FA79}", "Incident logged (" . str_replace("_", " ", (string) $r->incident_type) . ")", $r->created_at, "#incidents");
+        /* Incidents: who logged it, for which child, at which centre, and the link opens that incident (2026-11-26, staff
+           submissions sweep). A director sees their own centres only (CentreScope), open centres and children still
+           with us (Live). StaffSubmissionsFeed::incidents is the reader. */
+        try {
+            foreach (\App\Support\StaffSubmissionsFeed::incidents($request, $uid, $unscoped, $agencyIds) as $ev) $events->push($ev);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        /* WHAT THE TEAM SUBMITTED (2026-11-26, Anthony: "notifications bell should also show if educators submitted forms,
+           fire drills etc etc.."). Drills, hazards, medication doses, field trips, report cards sent for approval, shared
+           notes, forms signed, policies acknowledged, certificates uploaded and HR tasks/courses/self reviews, each as one
+           item in this list, by time. Feed only (no Notify row, no phone push). Scope, Live and the "Staff submissions"
+           switch are in StaffSubmissionsFeed::events. */
+        try {
+            foreach (\App\Support\StaffSubmissionsFeed::events($request, $uid, $unscoped, $agencyIds) as $ev) $events->push($ev);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         // New staff / role assignments.
         $stQ = DB::table("role_assignments as ra")->join("users as u", "u.id", "=", "ra.user_id")

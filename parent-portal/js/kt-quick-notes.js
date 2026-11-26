@@ -735,7 +735,11 @@
       + '<div class="kt-hero-sub">' + esc(T('Quick notes just for you, or shared with your staff. Pin, colour, link to a child, family or staff member, and set a reminder.')) + '</div></div>'
       + '<div class="qn-panel"></div></div>';
     mountList(main.querySelector('.qn-panel'), { tab: 'mine', grid: true });
+    /* #notes?id=N opens that note (2026-11-26: the admin bell's "Maya shared a note" item links here). Once per link. */
+    var lm = /[?&]id=(\d+)/.exec(location.hash || '');
+    if (lm && location.hash !== linkHandled) { linkHandled = location.hash; open(+lm[1]); }
   }
+  var linkHandled = '';
 
   /* ── dashboard widget ───────────────────────────────────────────────────────── */
   function widget() {

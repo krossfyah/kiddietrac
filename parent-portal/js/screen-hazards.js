@@ -86,9 +86,14 @@
     return o;
   }
 
+  /* #hazards?id=N opens that hazard (2026-11-26: the admin bell's "Maya reported a hazard" item links here). Once per
+     link, and from the "All hazards" list so a resolved one is found too. */
+  var linkHandled = '';
   async function render(main) {
     css();
     main.setAttribute('data-kt-pretty', '1');
+    var lm = /[?&]id=(\d+)/.exec(location.hash || ''), linkId = lm && location.hash !== linkHandled ? lm[1] : null;
+    if (linkId) { linkHandled = location.hash; state.status = 'all'; }
     main.innerHTML = '<div class="hz-wrap" style="color:#64748B;">Loading hazards…</div>';
     var q = ['status=' + state.status]; if (state.centre) q.push('centre_id=' + state.centre);
     var d;
@@ -164,6 +169,7 @@
     main.querySelectorAll('[data-tab]').forEach(function (b) { b.addEventListener('click', function () { state.status = b.getAttribute('data-tab'); render(main); }); });
     var fc = main.querySelector('#hz-fc'); if (fc) fc.addEventListener('change', function () { state.centre = fc.value; render(main); });
     main.querySelector('#hz-new').addEventListener('click', function () { openForm(main, d, null); });
+    if (linkId && byId[linkId]) openForm(main, d, byId[linkId]);
     main.querySelectorAll('[data-act]').forEach(function (b) {
       b.addEventListener('click', function () {
         var x = byId[b.getAttribute('data-id')]; if (!x) return;

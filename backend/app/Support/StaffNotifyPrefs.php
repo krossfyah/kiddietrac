@@ -60,6 +60,9 @@ final class StaffNotifyPrefs
             ['cold_reach'], ['push'], ['sales_rep', 'platform_admin']],
         'staff_hr' => ['Team HR reminders', 'Your team\'s overdue onboarding tasks and courses, reviews to write or sign, and new job applicants (KiddieTrac HR). Your own HR reminders always reach you.',
             ['hr'], ['push'], self::MGMT],
+        // Feed only (StaffSubmissionsFeed, 2026-11-26): no bell type of its own; the switch hides these items from the bell.
+        'staff_submissions' => ['Staff submissions', 'In the bell: drills, hazards, medication doses, field trips, report cards sent for approval, shared notes, signed forms, policies acknowledged, certificates uploaded and HR tasks your team completes.',
+            [], ['push'], self::MGMT],
         'staff_tickets' => ['Support tickets', 'New tickets, replies and overdue tickets. The support inbox always gets the email.',
             ['support_ticket'], ['push', 'email'], ['platform_admin']],
     ];
