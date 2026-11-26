@@ -1,0 +1,247 @@
+{
+    "title": "Paper Towel Roll Letter Hunt",
+    "safety_level": "ok",
+    "inputs": {
+        "bands": {
+            "infant": 1,
+            "toddler": 1
+        },
+        "setting": "either",
+        "minutes": 20,
+        "involvement": "guided",
+        "materials": [
+            "papertowel",
+            "yellow construction paper",
+            "pink pipe cleaners",
+            "neon yellow pipe cleaners",
+            "paper towel roll",
+            "paint sticks",
+            "chunky crayons",
+            "foam alphabet letters",
+            "plastic bag",
+            "black marker"
+        ],
+        "theme": null,
+        "gaps": [
+            "Language & literacy",
+            "Outdoor & nature"
+        ],
+        "framework": "How Does Learning Happen?"
+    },
+    "idea": {
+        "title": "Paper Towel Roll Letter Hunt",
+        "summary": "Children roll, look through and talk about the paper towel tube while the educator names letters and sounds. Toddlers can post the foam letters through a tube made into a simple chute, and the infant explores the cardboard tube textures with close adult support.",
+        "setting": "either",
+        "minutes": 20,
+        "materials": [
+            "paper towel roll",
+            "foam alphabet letters",
+            "yellow construction paper",
+            "chunky crayons",
+            "black marker",
+            "paint sticks",
+            "pink pipe cleaners",
+            "neon yellow pipe cleaners",
+            "papertowel"
+        ],
+        "setup": [
+            "Check the paper towel roll for sharp edges and tape any rough spots smooth. Keep the foam letters in a shallow tray or basket near the group.",
+            "Lay a sheet of yellow construction paper on the floor or table as a rug for the group to sit around.",
+            "Using the black marker, write the first letter of each child's name on a separate paint stick, but use only letters the group already knows, and keep the paint sticks out of mouths.",
+            "Put the pipe cleaners and crayons in a small bin where everyone can reach them.",
+            "Sit on the floor with the group and keep the infant on a soft cushion in front of you."
+        ],
+        "tiers": [
+            {
+                "band": "infant",
+                "band_label": "Infants (under 18 months)",
+                "label": "Tube Explorers",
+                "steps": [
+                    "Hold the paper towel roll near the infant so they can touch it, mouth it safely and feel the cardboard texture.",
+                    "Roll the tube gently across the infant's hands and say the sound of a letter they can see, like 'mmm' for M.",
+                    "Hold one large foam letter up to the infant's face, say its name, and let them reach for it.",
+                    "Watch the infant look through the tube at your face, then say 'hello' through the tube."
+                ],
+                "stretch": "Let the infant hold the tube with both hands while you guide their wrists to move it up and down."
+            },
+            {
+                "band": "toddler",
+                "band_label": "Toddlers (18 months to 3)",
+                "label": "Letter Chute",
+                "steps": [
+                    "Show the toddler how to stand the paper towel roll upright on the paper.",
+                    "Ask each toddler to find a foam letter, name it, and drop it through the tube, then say the letter sound out loud.",
+                    "Help toddlers gather pipe cleaners and bend them into simple shapes, then slide the shape through the tube and say what it looks like.",
+                    "Let toddlers scribble a line with a chunky crayon on yellow paper while you sing the alphabet song together."
+                ],
+                "stretch": "Ask toddlers to find a letter that starts like their own first name and drop it down the chute."
+            },
+            {
+                "band": "preschool",
+                "band_label": "Preschool (3 to 5)",
+                "label": "Letter Chute",
+                "steps": [
+                    "Show the children how to stand the paper towel roll upright and drop a foam letter through it.",
+                    "Ask children to name the letter before it goes through, then say a word that starts with its sound.",
+                    "Invite them to bend pipe cleaners into a letter shape, then pass it through the tube and guess the letter together.",
+                    "Let them write or draw one thing they found on the yellow paper."
+                ],
+                "stretch": "Ask children to hide a letter inside the tube and have a friend guess which one it is by its sound."
+            },
+            {
+                "band": "school_age",
+                "band_label": "School-age (6+)",
+                "label": "Letter Chute",
+                "steps": [
+                    "Set up the tube and ask school-age children to take turns dropping letters through and reading the word they make with a partner.",
+                    "Have children write a short word on a paint stick with the black marker, then trade it with a friend to read aloud.",
+                    "Invite them to shape pipe cleaners into a letter and explain which sound it makes."
+                ],
+                "stretch": "Challenge children to write three words that start with the same letter and sort them on the yellow paper."
+            }
+        ],
+        "safety": [
+            "Keep all foam letters and pipe cleaners away from infants and toddlers when no adult is close, since small pieces can come loose.",
+            "Remove any loose tape or torn paper edges from the paper towel roll before each use.",
+            "Keep the plastic bag out of reach, and never use it in this activity.",
+            "Always keep the infant within arm's reach of an adult during the activity.",
+            "An educator supervises the whole time.",
+            "Check the space and every material before you start."
+        ],
+        "domains": [
+            "language_literacy",
+            "cognitive",
+            "outdoor"
+        ],
+        "watch_for": [
+            "Notice which letters each child recognizes and which sounds they try out loud.",
+            "Note how toddlers use the tube, whether they drop, look through it or try to fit things inside.",
+            "Record how the infant responds to textures and voices."
+        ],
+        "talk": [
+            "What sound does this letter make, and what other word starts with it?",
+            "Where else in the room could we find a tube like this?",
+            "What do you think is inside the tube when you look through it?"
+        ],
+        "home_idea": "Roll up a paper towel tube and hunt for letters or objects that start with the same sound as the child's name, then talk about them together.",
+        "safety_level": "ok",
+        "areas": [
+            "Expression",
+            "Engagement"
+        ],
+        "domain_labels": [
+            "Language & literacy",
+            "Thinking & problem-solving",
+            "Outdoor & nature"
+        ],
+        "framework": "HDLH"
+    },
+    "picture_source": {
+        "title": "Paper Towel Roll Letter Hunt",
+        "summary": "Children roll, look through and talk about the paper towel tube while the educator names letters and sounds. Toddlers can post the foam letters through a tube made into a simple chute, and the infant explores the cardboard tube textures with close adult support.",
+        "setting": "either",
+        "minutes": 20,
+        "materials": [
+            "paper towel roll",
+            "foam alphabet letters",
+            "yellow construction paper",
+            "chunky crayons",
+            "black marker",
+            "paint sticks",
+            "pink pipe cleaners",
+            "neon yellow pipe cleaners",
+            "papertowel"
+        ],
+        "setup": [
+            "Check the paper towel roll for sharp edges and tape any rough spots smooth. Keep the foam letters in a shallow tray or basket near the group.",
+            "Lay a sheet of yellow construction paper on the floor or table as a rug for the group to sit around.",
+            "Using the black marker, write the first letter of each child's name on a separate paint stick, but use only letters the group already knows, and keep the paint sticks out of mouths.",
+            "Put the pipe cleaners and crayons in a small bin where everyone can reach them.",
+            "Sit on the floor with the group and keep the infant on a soft cushion in front of you."
+        ],
+        "tiers": [
+            {
+                "band": "infant",
+                "band_label": "Infants (under 18 months)",
+                "label": "Tube Explorers",
+                "steps": [
+                    "Hold the paper towel roll near the infant so they can touch it, mouth it safely and feel the cardboard texture.",
+                    "Roll the tube gently across the infant's hands and say the sound of a letter they can see, like 'mmm' for M.",
+                    "Hold one large foam letter up to the infant's face, say its name, and let them reach for it.",
+                    "Watch the infant look through the tube at your face, then say 'hello' through the tube."
+                ],
+                "stretch": "Let the infant hold the tube with both hands while you guide their wrists to move it up and down."
+            },
+            {
+                "band": "toddler",
+                "band_label": "Toddlers (18 months to 3)",
+                "label": "Letter Chute",
+                "steps": [
+                    "Show the toddler how to stand the paper towel roll upright on the paper.",
+                    "Ask each toddler to find a foam letter, name it, and drop it through the tube, then say the letter sound out loud.",
+                    "Help toddlers gather pipe cleaners and bend them into simple shapes, then slide the shape through the tube and say what it looks like.",
+                    "Let toddlers scribble a line with a chunky crayon on yellow paper while you sing the alphabet song together."
+                ],
+                "stretch": "Ask toddlers to find a letter that starts like their own first name and drop it down the chute."
+            },
+            {
+                "band": "preschool",
+                "band_label": "Preschool (3 to 5)",
+                "label": "Letter Chute",
+                "steps": [
+                    "Show the children how to stand the paper towel roll upright and drop a foam letter through it.",
+                    "Ask children to name the letter before it goes through, then say a word that starts with its sound.",
+                    "Invite them to bend pipe cleaners into a letter shape, then pass it through the tube and guess the letter together.",
+                    "Let them write or draw one thing they found on the yellow paper."
+                ],
+                "stretch": "Ask children to hide a letter inside the tube and have a friend guess which one it is by its sound."
+            },
+            {
+                "band": "school_age",
+                "band_label": "School-age (6+)",
+                "label": "Letter Chute",
+                "steps": [
+                    "Set up the tube and ask school-age children to take turns dropping letters through and reading the word they make with a partner.",
+                    "Have children write a short word on a paint stick with the black marker, then trade it with a friend to read aloud.",
+                    "Invite them to shape pipe cleaners into a letter and explain which sound it makes."
+                ],
+                "stretch": "Challenge children to write three words that start with the same letter and sort them on the yellow paper."
+            }
+        ],
+        "safety": [
+            "Keep all foam letters and pipe cleaners away from infants and toddlers when no adult is close, since small pieces can come loose.",
+            "Remove any loose tape or torn paper edges from the paper towel roll before each use.",
+            "Keep the plastic bag out of reach, and never use it in this activity.",
+            "Always keep the infant within arm's reach of an adult during the activity.",
+            "An educator supervises the whole time.",
+            "Check the space and every material before you start."
+        ],
+        "domains": [
+            "language_literacy",
+            "cognitive",
+            "outdoor"
+        ],
+        "watch_for": [
+            "Notice which letters each child recognizes and which sounds they try out loud.",
+            "Note how toddlers use the tube, whether they drop, look through it or try to fit things inside.",
+            "Record how the infant responds to textures and voices."
+        ],
+        "talk": [
+            "What sound does this letter make, and what other word starts with it?",
+            "Where else in the room could we find a tube like this?",
+            "What do you think is inside the tube when you look through it?"
+        ],
+        "home_idea": "Roll up a paper towel tube and hunt for letters or objects that start with the same sound as the child's name, then talk about them together.",
+        "safety_level": "ok",
+        "areas": [
+            "Expression",
+            "Engagement"
+        ],
+        "domain_labels": [
+            "Language & literacy",
+            "Thinking & problem-solving",
+            "Outdoor & nature"
+        ],
+        "framework": "HDLH"
+    }
+}

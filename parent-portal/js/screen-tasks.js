@@ -23,10 +23,17 @@
     try { if (KT.toast) return KT.toast(msg, ok === false ? 'error' : 'success'); } catch (e) {}
     try { if (KT.Toasts && KT.Toasts.show) return KT.Toasts.show(msg); } catch (e) {}
   }
+  /* A bare "YYYY-MM-DD" (due_date) is a calendar day. new Date("2026-11-27") reads it as UTC midnight, which is the
+     evening before anywhere in the Americas: every due date showed a day early and a task due today was "overdue"
+     (2026-11-26). Build it as a local date; date-times keep the old parse. */
+  function dayOf(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d).slice(0, 10) === String(d) ? String(d) : '');
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date((d + '').replace(' ', 'T'));
+  }
   function fmtDate(d) {
     if (!d) return '';
     try {
-      var dt = new Date((d + '').replace(' ', 'T'));
+      var dt = dayOf(d);
       if (isNaN(dt)) return d;
       return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     } catch (e) { return d; }
@@ -48,7 +55,7 @@
   }
   function overdue(t) {
     if (!t.due_date || t.status === 'done') return false;
-    try { return new Date((t.due_date + '').replace(' ', 'T')) < new Date(new Date().toDateString()); }
+    try { return dayOf(String(t.due_date).slice(0, 10)) < new Date(new Date().toDateString()); }
     catch (e) { return false; }
   }
 

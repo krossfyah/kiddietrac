@@ -26,19 +26,33 @@ use Illuminate\Support\Facades\DB;
  *
  * SILENT: every row is inserted directly - no mailer, listener, push or bell runs. RE-RUNNABLE: the ids it wrote are
  * kept in PlatformSettings webdemo.showcase and removed before it writes again - nothing else is ever deleted.
- *   php artisan kt:web-demo-showcase [--dry-run]
+ *   php artisan kt:web-demo-showcase [--set=kiddietrac|white_label|all] [--dry-run]
+ *
+ * BOTH WEBSITE DEMOS (2026-11-26, Anthony: "under the demo agency - starlight academy make sure there is demo data for
+ * playspark and any other sections that may be missing ... linked to show a demo"). The same story is written for each
+ * login set in PublicDemo::sets(): 'kiddietrac' = Brightwood (agency 25, ledger webdemo.showcase) and 'white_label' =
+ * Starlight Kids Academy (agency 26, ledger webdemo.showcase.white_label). Both agencies are test agencies: nothing
+ * here can send. Added the same day, for both:
+ *  - Play Spark: two of Maya's ideas with their end-result drawings (fixed assets in resources/demo/play-spark, no
+ *    personal data, never an AI call), one shared to the agency library and a favourite; one "We did it" run that put
+ *    the activity on the children's day and left draft observations, exactly as PlaySparkController::done does;
+ *  - quick notes (Maya's private one, Elena's shared centre note with a reminder, a note linked to Evelyn, Olivia's
+ *    private one) and tasks (Elena -> Maya, Olivia's private to-do);
+ *  - bell rows so each login has something in the notifications list: Megan's arrivals, moments, observation, photo;
+ *    Maya's new task; Elena's time-off request; Olivia's task - inserted directly, so nothing rings or is sent.
  */
 final class WebDemoShowcase
 {
     private const KEY = 'webdemo.showcase';
 
     private array $made = [];
+    private string $key = self::KEY;
     private Carbon $today;
     private string $tz = 'America/Los_Angeles';
 
-    public static function run(bool $dry = false): array
+    public static function run(bool $dry = false, string $set = 'kiddietrac'): array
     {
-        return (new self())->build($dry);
+        return (new self())->build($dry, $set);
     }
 
     private function add(string $table, array $row): int
@@ -70,10 +84,13 @@ final class WebDemoShowcase
         return $from;
     }
 
-    public function build(bool $dry): array
+    public function build(bool $dry, string $set = 'kiddietrac'): array
     {
-        $U = PublicDemo::USERS;
-        [$megan, $maya, $elena] = [(int) $U['parent'], (int) $U['educator'], (int) $U['director']];
+        $U = PublicDemo::sets()[$set] ?? null;
+        abort_unless(is_array($U), 500, 'Unknown website demo set: ' . $set);
+        [$megan, $maya, $elena] = [(int) $U['parent']['id'], (int) $U['educator']['id'], (int) $U['director']['id']];
+        $olivia = isset($U['admin']['id']) ? (int) $U['admin']['id'] : 0;
+        $this->key = $set === 'kiddietrac' ? self::KEY : self::KEY . '.' . $set;
         $fam = (int) DB::table('guardians')->where('user_id', $megan)->value('family_id');
         $family = DB::table('families')->where('id', $fam)->first();
         $agencyId = (int) DB::table('role_assignments')->where('user_id', $elena)->where('role', 'centre_director')->value('agency_id');
@@ -87,12 +104,23 @@ final class WebDemoShowcase
         $this->tz = AgencyTime::tzForCentre($centreId) ?: $this->tz;
         $this->today = Carbon::now($this->tz)->startOfDay();
 
-        $old = json_decode((string) PlatformSettings::get(self::KEY, '{}'), true) ?: [];
+        $old = json_decode((string) PlatformSettings::get($this->key, '{}'), true) ?: [];
         if ($dry) {
-            return ['would_remove' => array_map('count', $old), 'family' => $fam, 'children' => [$james->id, $evelyn->id], 'room' => $roomId, 'centre' => $centreId];
+            return ['set' => $set, 'agency' => $agencyId, 'would_remove' => array_map('count', $old), 'family' => $fam, 'children' => [$james->id, $evelyn->id], 'room' => $roomId, 'centre' => $centreId];
         }
 
-        DB::transaction(function () use ($old, $megan, $maya, $elena, $fam, $agencyId, $centreId, $james, $evelyn, $roomId) {
+        $area = $set === 'white_label' ? '619' : '562';   // San Diego / Long Beach
+        [$tripName, $tripWhere] = $set === 'white_label'
+            ? ['Birch Aquarium at Scripps', '2300 Expedition Way, La Jolla, CA 92037']
+            : ['Aquarium of the Pacific', '100 Aquarium Way, Long Beach, CA 90802'];
+
+        DB::transaction(function () use ($old, $megan, $maya, $elena, $olivia, $fam, $agencyId, $centreId, $james, $evelyn, $roomId, $area, $tripName, $tripWhere) {
+            // The drawings' PNG copies (email) written last time go with their rows.
+            if (! empty($old['play_spark_pictures'])) {
+                foreach (DB::table('play_spark_pictures')->whereIn('id', $old['play_spark_pictures'])->pluck('png_path') as $png) {
+                    if ($png && str_starts_with((string) $png, 'play-spark-pictures/' . $agencyId . '/')) @unlink(storage_path('app/private/' . $png));
+                }
+            }
             // Only what this wrote last time: timeline rows first (they point at photos), then newest tables first.
             $order = array_reverse($old, true);
             if (isset($order['daily_events'])) $order = ['daily_events' => $order['daily_events']] + $order;
@@ -101,6 +129,9 @@ final class WebDemoShowcase
             }
             $now = now()->format('Y-m-d H:i:s');
             $days = $this->pastWeekdays(10);
+            // The newest day of the story is the last weekday BEFORE today: a row stamped later today (offset 0) showed
+            // "6 hours from now" in the parent's chat and a future learning story until the day caught up (2026-11-26).
+            $recent = (int) $days[count($days) - 1];
 
             // ── The twins' last two weeks in Sprouts ──
             $moods = ['happy', 'calm', 'happy', 'tired'];
@@ -144,13 +175,13 @@ final class WebDemoShowcase
                 [$this->at(-4, 12, 51), $megan, 'That\'s such a relief, thank you!'],
                 [$this->at(-2, 16, 4), $megan, 'Is there anything we need to pack for the aquarium trip?'],
                 [$this->at(-2, 16, 27), $maya, 'Just a labeled water bottle and a sun hat - we\'ll bring snacks. Both permission forms came through, thank you for signing!'],
-                [$this->at(0, 10, 12), $maya, 'James used two words together all morning today - "more blocks!" 🧱 We\'re so proud of him.'],
+                [$this->at($recent, 10, 12), $maya, 'James used two words together all morning today - "more blocks!" 🧱 We\'re so proud of him.'],
             ]);
             $chat($evelyn, [
                 [$this->at(-1, 7, 58), $megan, 'Hi Maya, Evelyn\'s allergy medicine is in her backpack - 2.5 mL with lunch, please.'],
                 [$this->at(-1, 11, 34), $maya, 'Got it! Given at 11:30 and logged in her medication record ✅'],
                 [$this->at(-1, 13, 5), $elena, 'Hi Megan, I\'ve added Evelyn\'s medication form to her file. Thanks for completing it so quickly.'],
-                [$this->at(0, 15, 40), $maya, 'Evelyn painted her very first rainbow today 🌈 The photo is in the gallery!'],
+                [$this->at($recent, 15, 40), $maya, 'Evelyn painted her very first rainbow today 🌈 The photo is in the gallery!'],
             ]);
 
             // ── Maya's Sprouts shifts, two weeks back and two ahead; her personal day ──
@@ -200,8 +231,8 @@ final class WebDemoShowcase
 
             // ── Field trip: permission forms for the whole room ──
             $trip = $this->nextWeekday(6, 4);   // a Thursday about a week out
-            $ftid = $this->add('field_trips', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'title' => 'Aquarium of the Pacific',
-                'destination' => '100 Aquarium Way, Long Beach, CA 90802', 'trip_date' => $this->today->copy()->addDays($trip)->toDateString(),
+            $ftid = $this->add('field_trips', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'title' => $tripName,
+                'destination' => $tripWhere, 'trip_date' => $this->today->copy()->addDays($trip)->toDateString(),
                 'depart_time' => '09:30:00', 'return_time' => '12:30:00', 'description' => 'Sprouts visit the touch pools and the shark lagoon. Please pack a labeled water bottle and a sun hat.',
                 'transport_method' => 'bus', 'distance_km' => 6.5, 'staff_lead_id' => $maya, 'cost_per_child' => 12.00,
                 'permission_deadline' => $this->today->copy()->addDays($trip - 2)->toDateString(), 'status' => 'planned', 'created_by_id' => $elena,
@@ -234,7 +265,7 @@ final class WebDemoShowcase
             // ── Grandma Rosa can pick up ──
             foreach ([$james, $evelyn] as $c) {
                 $this->add('pickup_authorizations', ['child_id' => $c->id, 'family_id' => $fam, 'full_name' => 'Rosa Gonzalez', 'relationship' => 'Grandmother',
-                    'phone' => '562-555-0140', 'notes' => 'Picks up on Wednesdays.', 'active' => 1, 'created_by_user_id' => $megan,
+                    'phone' => $area . '-555-0140', 'notes' => 'Picks up on Wednesdays.', 'active' => 1, 'created_by_user_id' => $megan,
                     'created_at' => $this->at(-20, 19, 0), 'updated_at' => $this->at(-20, 19, 0)]);
             }
 
@@ -335,6 +366,7 @@ final class WebDemoShowcase
                 [$evelyn, 'social_emotional', 'Took turns at the easel', 'Evelyn waited for a friend to finish, then said "my turn?" and handed the brush back when she was done. Big growth in sharing this month!', 'Evelyn is learning to take turns - she shared the easel beautifully today.', -5],
                 [$evelyn, 'language_literacy', 'Named all the animals in "Brown Bear, Brown Bear"', 'Evelyn turned the pages herself and named every animal before we read it: bear, bird, duck, horse, frog, cat and dog.', 'Evelyn can name every animal in "Brown Bear, Brown Bear" - try reading it together at home.', -7],
             ] as [$c, $domain, $title, $body, $family, $d]) {
+                $d = $d ?: $recent;
                 $this->add('observations', ['child_id' => $c->id, 'framework' => 'HDLH', 'domain' => $domain, 'title' => $title, 'body' => $body,
                     'observed_at' => $this->at($d, 10, 20), 'recorded_by_id' => $maya, 'shared_with_family' => 1, 'family_summary' => $family,
                     'ai_generated' => 0, 'educator_reviewed_at' => $this->at($d, 15, 45), 'created_at' => $this->at($d, 15, 45)]);
@@ -363,7 +395,102 @@ final class WebDemoShowcase
                     'created_at' => $this->at(-4, 14, 0), 'updated_at' => $this->at(-1, 16, 0)]);
             }
 
-            PlatformSettings::set(self::KEY, json_encode($this->made));
+            // ── Play Spark: two of Maya's ideas with their end-result drawings; one "We did it" ──
+            $psDir = resource_path('demo/play-spark');
+            $ps = [];
+            foreach ([['chalk-color-walk', 1, 1, -6], ['tube-letter-hunt', 0, 0, -2]] as [$slug, $shared, $fav, $made]) {
+                $j = json_decode((string) @file_get_contents($psDir . '/' . $slug . '.json'), true);
+                if (! is_array($j) || empty($j['idea'])) continue;
+                $when = $this->at($made, 10, 5);
+                $iid = $this->add('play_spark_ideas', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'room_id' => $roomId, 'user_id' => $maya,
+                    'title' => $j['title'], 'idea' => json_encode($j['idea'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'inputs' => json_encode($j['inputs'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'safety_level' => $j['safety_level'] ?? 'ok',
+                    'favourite' => $fav, 'rating' => $fav ? 5 : null, 'shared' => $shared, 'times_done' => 0, 'last_done_at' => null,
+                    'created_at' => $when, 'updated_at' => $when]);
+                $png = null;
+                if (is_file($psDir . '/' . $slug . '.png')) {
+                    $rel = 'play-spark-pictures/' . $agencyId . '/idea-' . $iid . '.png';
+                    $abs = storage_path('app/private/' . $rel);
+                    if (! is_dir(dirname($abs))) @mkdir(dirname($abs), 0775, true);
+                    if (@copy($psDir . '/' . $slug . '.png', $abs)) $png = $rel;
+                }
+                $this->add('play_spark_pictures', ['agency_id' => $agencyId, 'kind' => 'idea', 'ref' => (string) $iid, 'status' => 'ready',
+                    'source' => json_encode($j['picture_source'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'svg' => (string) @file_get_contents($psDir . '/' . $slug . '.svg'), 'png_path' => $png, 'tries' => 1, 'error' => null,
+                    'created_at' => $when, 'updated_at' => $when]);
+                $ps[] = ['id' => $iid, 'j' => $j];
+            }
+            if ($ps) {
+                // "We did it" on the last weekday, as PlaySparkController::done writes it: the day log, draft observations, the run.
+                $run = $ps[0];
+                $dd = end($days);
+                $doneAt = $this->at($dd, 10, 40);
+                $runKids = array_values(array_unique(array_merge([(int) $james->id, (int) $evelyn->id], array_slice($friends, 0, 2))));
+                $body = $run['j']['idea'];
+                try { $fwKey = (string) (LearningFrameworks::forAgency($agencyId)['key'] ?? 'HDLH'); } catch (\Throwable $e) { $fwKey = 'HDLH'; }
+                $evs = [];
+                $obsIds = [];
+                $note = 'Everyone found the red circle first!';
+                foreach ($runKids as $cid) {
+                    $evs[] = $this->add('daily_events', ['child_id' => $cid, 'room_id' => $roomId, 'event_type' => 'activity', 'occurred_at' => $doneAt,
+                        'payload' => json_encode(['play_spark_id' => $run['id'], 'title' => $body['title'], 'home_idea' => $body['home_idea'] ?? null, 'domains' => $body['domains'] ?? []], JSON_UNESCAPED_UNICODE),
+                        'notes' => '✨ ' . $body['title'] . ' - ' . $note, 'recorded_by_id' => $maya, 'created_at' => $doneAt, 'updated_at' => $doneAt]);
+                    $obsIds[] = $this->add('observations', ['child_id' => $cid, 'framework' => $fwKey, 'domain' => $body['domains'][0] ?? 'physical',
+                        'title' => 'Play Spark: ' . $body['title'], 'body' => 'Took part in "' . $body['title'] . '". ' . $note
+                            . (! empty($body['watch_for']) ? "\nLook for: " . implode(' ', $body['watch_for']) : ''),
+                        'raw_text' => $note, 'observed_at' => $doneAt, 'recorded_by_id' => $maya, 'media_ids' => '[]', 'hdlh_milestones' => '[]',
+                        'shared_with_family' => 0, 'ai_generated' => 0, 'created_at' => $doneAt]);
+                }
+                $this->add('play_spark_runs', ['idea_id' => $run['id'], 'agency_id' => $agencyId, 'centre_id' => $centreId, 'room_id' => $roomId, 'user_id' => $maya,
+                    'child_ids' => json_encode($runKids), 'event_ids' => json_encode($evs), 'observation_ids' => json_encode($obsIds), 'note' => $note,
+                    'done_at' => $doneAt, 'created_at' => $doneAt]);
+                DB::table('play_spark_ideas')->where('id', $run['id'])->update(['times_done' => 1, 'last_done_at' => $doneAt]);
+            }
+
+            // ── Quick notes and tasks ──
+            $soon = $this->nextWeekday(2, 5);   // a Friday in the next week or so
+            foreach ([
+                [$maya, 'private', null, null, null, 'Aquarium trip', 'Pack spare sun hats and the first-aid bag. Ask Megan if she can chaperone.', 'yellow', 1, null, -1],
+                [$elena, 'agency', $centreId, null, null, 'Fire drill', 'Fire drill at 10:00. Sprouts and Seedlings go out the garden door; take the attendance tablets.', 'red', 1, $this->today->copy()->addDays($soon)->toDateString(), -2],
+                [$maya, 'agency', $centreId, 'child', (int) $evelyn->id, 'Evelyn: allergy medicine', 'Cetirizine 2.5 mL with lunch. Bottle is in her backpack; Mom refills on Mondays.', 'blue', 0, null, -3],
+                [$olivia, 'private', null, null, null, 'December', 'Check the December tuition run and the holiday closure notice before the 1st.', 'purple', 0, $this->today->copy()->addDays(3)->toDateString(), -1],
+            ] as [$owner, $vis, $cen, $lt, $lid, $title, $text, $colour, $pin, $remind, $d]) {
+                if (! $owner) continue;
+                $this->add('quick_notes', ['agency_id' => $agencyId, 'centre_id' => $cen, 'owner_user_id' => $owner, 'visibility' => $vis, 'title' => $title,
+                    'body' => $text, 'colour' => $colour, 'pinned' => $pin, 'linked_type' => $lt, 'linked_id' => $lid, 'remind_on' => $remind,
+                    'updated_by' => $owner, 'created_at' => $this->at($d, 16, 10), 'updated_at' => $this->at($d, 16, 10)]);
+            }
+            $taskTitle = 'Add this week\'s photos to the Sprouts portfolios';
+            $this->add('tasks', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'assigned_to' => $maya, 'assigned_by' => $elena, 'is_private' => 0,
+                'title' => $taskTitle, 'description' => 'Three photos per child, before the parent-teacher conferences.', 'priority' => 'normal',
+                'due_date' => $this->today->copy()->addDays(3)->toDateString(), 'status' => 'open', 'created_at' => $this->at(-1, 9, 15), 'updated_at' => $this->at(-1, 9, 15)]);
+            if ($olivia) {
+                $this->add('tasks', ['agency_id' => $agencyId, 'centre_id' => null, 'assigned_to' => $olivia, 'assigned_by' => $olivia, 'is_private' => 1,
+                    'title' => 'Approve the December menu', 'description' => null, 'priority' => 'normal',
+                    'due_date' => $this->today->copy()->addDays(1)->toDateString(), 'status' => 'open', 'created_at' => $this->at(-1, 8, 30), 'updated_at' => $this->at(-1, 8, 30)]);
+            }
+
+            // ── Something in each login's bell (inserted directly: nothing rings, nothing is sent) ──
+            $last = end($days);
+            $bell = function (int $uid, string $type, string $title, string $body, array $data, string $when, bool $read) use ($agencyId) {
+                $this->add('notifications', ['user_id' => $uid, 'agency_id' => $agencyId, 'type' => $type, 'title' => $title, 'body' => $body,
+                    'data' => json_encode($data + ['severity' => 'info'], JSON_UNESCAPED_UNICODE), 'read_at' => $read ? $when : null, 'created_at' => $when]);
+            };
+            $bell($megan, 'checkin', '👋 James arrived', 'Signed in to Sprouts', ['link' => '#today', 'child_id' => (int) $james->id], $this->at($last, 8, 6), true);
+            $bell($megan, 'checkin', '👋 Evelyn arrived', 'Signed in to Sprouts', ['link' => '#today', 'child_id' => (int) $evelyn->id], $this->at($last, 8, 7), true);
+            $bell($megan, 'moment', '🍽️ Meal — James', 'Lunch: chicken, rice and veggies, finished most', ['link' => '#today', 'child_id' => (int) $james->id, 'count' => 1, 'kind' => 'moments'], $this->at($last, 12, 2), true);
+            if ($ps) {
+                $bell($megan, 'moment', '✨ ' . $ps[0]['j']['title'] . ' — Evelyn', 'Everyone found the red circle first!', ['link' => '#today', 'child_id' => (int) $evelyn->id, 'count' => 1, 'kind' => 'moments'], $this->at($last, 10, 41), false);
+            }
+            $bell($megan, 'observation', '🌱 New learning observation — James', 'Asked for "more blocks" at the building table', ['link' => '#today', 'child_id' => (int) $james->id, 'count' => 1, 'kind' => 'observations'], $this->at(-1, 15, 46), false);
+            $bell($megan, 'photo', 'New photo shared', 'Maya shared a photo of James and Evelyn', ['link' => '#photos'], $this->at($last, 15, 12), false);
+            $bell($maya, 'task_assigned', '📋 New task from Elena', $taskTitle . ' · due ' . $this->today->copy()->addDays(3)->format('M j'), ['link' => '#my-tasks'], $this->at(-1, 9, 15), false);
+            $bell($elena, 'time_off', 'New time-off request from Maya', 'personal · Family wedding', ['link' => '#time-off'], $this->at(-3, 8, 45), true);
+            if ($olivia) {
+                $bell($olivia, 'task_assigned', '📋 Your to-do is due tomorrow', 'Approve the December menu', ['link' => '#my-tasks'], $this->at(-1, 8, 30), false);
+            }
+
+            PlatformSettings::set($this->key, json_encode($this->made));
         });
 
         return array_map('count', $this->made);

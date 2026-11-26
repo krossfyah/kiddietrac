@@ -1,0 +1,151 @@
+{
+    "title": "Chalk Color Walk Outside",
+    "safety_level": "ok",
+    "inputs": {
+        "bands": {
+            "toddler": 1
+        },
+        "setting": "outdoor",
+        "minutes": 20,
+        "involvement": "guided",
+        "materials": [],
+        "theme": "Colors and Shapes: finding color and shape all around us",
+        "gaps": [
+            "Physical",
+            "Creative arts"
+        ],
+        "framework": "How Does Learning Happen?"
+    },
+    "idea": {
+        "title": "Chalk Color Walk Outside",
+        "summary": "Toddlers walk and crouch along a short outdoor path, matching big color and shape shapes drawn in chalk or taped to the ground. The educator stays close and names what the children find.",
+        "setting": "outdoor",
+        "minutes": 20,
+        "materials": [
+            "sidewalk chalk (large pieces)",
+            "painter's tape or masking tape",
+            "large sheets of colored paper",
+            "scissors (adult use only)",
+            "a cushion or soft mat",
+            "a scarf or two"
+        ],
+        "setup": [
+            "Check the outdoor area is clear of sticks, rocks, and anything small enough to go in a mouth.",
+            "Using chalk, draw large simple shapes (circle, square, triangle) in red, blue, and yellow along a short path. Keep them big and well apart.",
+            "Cut a few large colored paper shapes to match, and tape a few of them to the fence or a low post at toddler eye level.",
+            "Put the soft mat near the start for children who want to sit and rest."
+        ],
+        "tiers": [
+            {
+                "band": "toddler",
+                "band_label": "Toddlers (18 months to 3)",
+                "label": "Walk, point, and name",
+                "steps": [
+                    "Invite children to walk slowly along the path with you, holding hands if they wish.",
+                    "At each chalk shape, stop, point, and say the color and the shape out loud, like 'Red circle! Round like a ball.'",
+                    "Let children point, stomp, or crouch to touch a shape, copying your words as they can.",
+                    "Give a scarf to any child who wants to wave it over a shape they find.",
+                    "Finish at the mat with a stretch, reaching up high and down low, while you sing a short color song."
+                ],
+                "stretch": "Ask a child to walk to a red shape you name, or to hop over the blue one."
+            }
+        ],
+        "safety": [
+            "Keep the adult within arm's reach of every toddler at all times, especially near the fence and any steps.",
+            "Use only chalk and tape meant for children; check for wet paint or loose tape ends before the walk.",
+            "Check the ground for broken glass, sharp edges, and loose items before each use.",
+            "An educator supervises the whole time.",
+            "Check the space and every material before you start."
+        ],
+        "domains": [
+            "physical",
+            "creative_arts"
+        ],
+        "watch_for": [
+            "Notice which toddlers move with confidence and which prefer to stay close to you, and record their balance and steadiness.",
+            "Note whether a child repeats a color or shape word after you, and which words they say on their own."
+        ],
+        "talk": [
+            "What color is this one? Can you show me?",
+            "Is this shape round like a ball, or does it have corners?",
+            "Where else do you see a circle outside today?"
+        ],
+        "home_idea": "Draw a few big circles and squares on the sidewalk or on paper with chalk, then walk or hop between them while naming each color together.",
+        "safety_level": "ok",
+        "areas": [
+            "Well-being",
+            "Expression"
+        ],
+        "domain_labels": [
+            "Physical",
+            "Creative arts"
+        ],
+        "framework": "HDLH"
+    },
+    "picture_source": {
+        "title": "Chalk Color Walk Outside",
+        "summary": "Toddlers walk and crouch along a short outdoor path, matching big color and shape shapes drawn in chalk or taped to the ground. The educator stays close and names what the children find.",
+        "setting": "outdoor",
+        "minutes": 20,
+        "materials": [
+            "sidewalk chalk (large pieces)",
+            "painter's tape or masking tape",
+            "large sheets of colored paper",
+            "scissors (adult use only)",
+            "a cushion or soft mat",
+            "a scarf or two"
+        ],
+        "setup": [
+            "Check the outdoor area is clear of sticks, rocks, and anything small enough to go in a mouth.",
+            "Using chalk, draw large simple shapes (circle, square, triangle) in red, blue, and yellow along a short path. Keep them big and well apart.",
+            "Cut a few large colored paper shapes to match, and tape a few of them to the fence or a low post at toddler eye level.",
+            "Put the soft mat near the start for children who want to sit and rest."
+        ],
+        "tiers": [
+            {
+                "band": "toddler",
+                "band_label": "Toddlers (18 months to 3)",
+                "label": "Walk, point, and name",
+                "steps": [
+                    "Invite children to walk slowly along the path with you, holding hands if they wish.",
+                    "At each chalk shape, stop, point, and say the color and the shape out loud, like 'Red circle! Round like a ball.'",
+                    "Let children point, stomp, or crouch to touch a shape, copying your words as they can.",
+                    "Give a scarf to any child who wants to wave it over a shape they find.",
+                    "Finish at the mat with a stretch, reaching up high and down low, while you sing a short color song."
+                ],
+                "stretch": "Ask a child to walk to a red shape you name, or to hop over the blue one."
+            }
+        ],
+        "safety": [
+            "Keep the adult within arm's reach of every toddler at all times, especially near the fence and any steps.",
+            "Use only chalk and tape meant for children; check for wet paint or loose tape ends before the walk.",
+            "Check the ground for broken glass, sharp edges, and loose items before each use.",
+            "An educator supervises the whole time.",
+            "Check the space and every material before you start."
+        ],
+        "domains": [
+            "physical",
+            "creative_arts"
+        ],
+        "watch_for": [
+            "Notice which toddlers move with confidence and which prefer to stay close to you, and record their balance and steadiness.",
+            "Note whether a child repeats a color or shape word after you, and which words they say on their own."
+        ],
+        "talk": [
+            "What color is this one? Can you show me?",
+            "Is this shape round like a ball, or does it have corners?",
+            "Where else do you see a circle outside today?"
+        ],
+        "home_idea": "Draw a few big circles and squares on the sidewalk or on paper with chalk, then walk or hop between them while naming each color together.",
+        "safety_level": "ok",
+        "areas": [
+            "Well-being",
+            "Expression"
+        ],
+        "domain_labels": [
+            "Physical",
+            "Creative arts"
+        ],
+        "framework": "HDLH"
+    }
+}
