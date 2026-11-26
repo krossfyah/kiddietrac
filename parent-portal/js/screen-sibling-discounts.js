@@ -27,7 +27,8 @@
   function row(rank, percent, onDel) {
     var r = Dom.el('div', {
       class: 'tier-row',
-      style: 'display:grid;grid-template-columns:auto 1fr auto 1fr auto;gap:10px;align-items:center;padding:10px 14px;background:white;border-radius:10px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);',
+      /* Wraps on a phone (2026-11-26 popup sweep): the five-column grid ran 40px past a 390px screen and cut Remove off. */
+      style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;background:white;border-radius:10px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,.04);',
     });
     r.appendChild(Dom.el('span', { style: 'font-size:12px;color:#6B7280;font-weight:600;' }, 'Child rank'));
     var rankInput = Dom.el('input', {

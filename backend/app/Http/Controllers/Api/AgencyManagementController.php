@@ -67,6 +67,11 @@ final class AgencyManagementController extends Controller
                 'billing_status' => $a->billing_status,
                 'trial_ends_at' => $a->trial_ends_at,
                 'plan' => $settings['plan'] ?? 'centre',
+                /* The card's plan (2026-11-26, Anthony): the licence, the same source as Platform > Edit agency > Plan -
+                   not settings.plan, which nothing bills or licenses from. Never licensed: its plan_code, "(no licence yet)". */
+                'plan_label' => \App\Support\Licences::managed((int) $a->id)
+                    ? \App\Support\Licences::planLabel((int) $a->id)
+                    : (($l = \App\Support\Licences::planLabel((int) $a->id)) ? $l . ' (no licence yet)' : 'No plan yet'),
                 'centre_count' => $centreCount,
                 'user_count' => $userCount,
                 'contact_email' => $a->contact_email,

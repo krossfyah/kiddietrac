@@ -140,7 +140,7 @@
           </div>
           <div style="font-size:14px;color:#6B7280;display:flex;flex-wrap:wrap;gap:12px;">
             ${(!a.custom_domain && !a.subdomain && window.KT && KT.brand) ? '' : `<span>🌐 <a href="${esc(url)}" target="_blank" style="color:#1F6080;">${esc(url.replace(/^https?:\/\//, ''))}</a></span>`}
-            <span>📦 Plan: ${esc(a.plan)}</span>
+            <span>📦 ${esc(a.plan_label || 'No plan yet')}</span>
             <span>🏫 ${a.centre_count} centres</span>
             <span>👥 ${a.user_count} users</span>
             ${trialEnds ? `<span>⏱ Trial ends ${esc(trialEnds)}</span>` : ''}
