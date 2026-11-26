@@ -125,6 +125,12 @@ final class SearchController extends Controller
             'agencyId' => $agencyId,
             'centreIds' => $centreIds,
             'wholeAgency' => $wholeAgency,
+            // Centres this person DIRECTS here (Play Spark Team ideas, 2026-11-26): director roles' centres within the
+            // centres they see; a director role with no centre = the centres they see. [] = not a director.
+            'directorCentres' => in_array('centre_director', $here, true) ? (function () use ($roleRows, $centreIds) {
+                $d = $roleRows->where('role', 'centre_director')->pluck('centre_id')->filter()->map(fn ($v) => (int) $v)->all();
+                return $d ? array_values(array_intersect($centreIds, $d)) : $centreIds;
+            })() : [],
             'userId' => (int) $user->id,
             // Families on the agency waitlist after their provider closed: agency admins still find them (2026-11-24).
             'held' => $wholeAgency ? (\App\Support\AgencyWaitlist::familyIds($agencyId) ?: []) : [],
@@ -226,15 +232,23 @@ final class SearchController extends Controller
                           if ($ctx->wholeAgency) $c->orWhereNull('i.centre_id');
                       });
                   });
+                // Team ideas (2026-11-26): an agency admin finds every idea in the agency, a director those made at
+                // the centres they direct - exactly the Library's Team ideas tab.
+                if ($ctx->wholeAgency) {
+                    $w->orWhereRaw('1 = 1');
+                } elseif ($ctx->directorCentres) {
+                    $w->orWhereIn('i.centre_id', $ctx->directorCentres);
+                }
             })
             ->selectRaw('i.id, i.title, i.user_id, i.shared, u.first_name, ' . $rk . ' as rk', $b)
             ->orderBy('rk')->orderByDesc('i.id')
             ->limit($meta['limit'])->get()
             ->map(function ($r) use ($ctx) {
                 $mine = (int) $r->user_id === $ctx->userId;
+                $lib = $mine ? 'mine' : ((int) $r->shared === 1 ? 'shared' : 'team');
                 return ['id' => (int) $r->id, 'label' => $r->title,
-                    'sublabel' => 'Play Spark · ' . ($mine ? 'my idea' : 'agency library' . ($r->first_name ? ', by ' . $r->first_name : '')),
-                    'hash' => '#play-spark?tab=library&lib=' . ($mine ? 'mine' : 'shared') . '&idea=' . (int) $r->id,
+                    'sublabel' => 'Play Spark · ' . ($mine ? 'my idea' : ($lib === 'shared' ? 'agency library' : 'team idea') . ($r->first_name ? ', by ' . $r->first_name : '')),
+                    'hash' => '#play-spark?tab=library&lib=' . $lib . '&idea=' . (int) $r->id,
                     'rank' => (int) $r->rk];
             })->all();
     }

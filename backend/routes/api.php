@@ -1508,6 +1508,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::get('/play-spark/ideas/{id}',          [\App\Http\Controllers\Api\PlaySparkController::class, 'show'])->whereNumber('id');   // one idea, for a search link (2026-11-25)
             Route::patch('/play-spark/ideas/{id}',        [\App\Http\Controllers\Api\PlaySparkController::class, 'update'])->whereNumber('id');
             Route::delete('/play-spark/ideas/{id}',       [\App\Http\Controllers\Api\PlaySparkController::class, 'destroy'])->whereNumber('id');
+            Route::post('/play-spark/ideas/{id}/copy',    [\App\Http\Controllers\Api\PlaySparkController::class, 'copy'])->whereNumber('id');   // Team ideas: save a copy (2026-11-26)
             Route::post('/play-spark/materials',          [\App\Http\Controllers\Api\PlaySparkController::class, 'addMaterials']);
             Route::delete('/play-spark/materials/{id}',   [\App\Http\Controllers\Api\PlaySparkController::class, 'removeMaterial'])->whereNumber('id');
             Route::get('/play-spark/report',              [\App\Http\Controllers\Api\PlaySparkController::class, 'report']);

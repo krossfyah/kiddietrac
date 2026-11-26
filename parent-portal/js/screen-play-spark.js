@@ -125,6 +125,9 @@
   function libScopes() {
     var s = [];
     if (aiOn()) s.push(['mine', 'My ideas'], ['favourites', '★ Favourites'], ['shared', '📚 Agency library']);
+    /* 👥 Team ideas (2026-11-26, Anthony): every idea made at the centres you run, read-only (admins the agency,
+       directors their centres; the server decides - PlaySparkController::team). */
+    if (aiOn() && MANAGE_ROLES.indexOf(myRole()) !== -1) s.push(['team', '👥 Team ideas']);
     if (lpOn() && MANAGE_ROLES.indexOf(myRole()) !== -1) s.push(['ideas', '💡 Activity ideas']);
     return s;
   }
@@ -452,7 +455,7 @@
     Pic().idea(el, row.id, row.title, opts);
   }
 
-  function ideaHtml(row, printable) {
+  function ideaHtml(row, printable, ro) {
     var I = row.idea || {};
     var caution = row.safety_level === 'caution';
     return '<div class="ps-idea"><h2>' + esc(I.title) + '</h2><div style="font-size:14px">' + esc(I.summary) + '</div>' +
@@ -463,7 +466,7 @@
       (printable ? ((Pic() && Pic().cached('i' + row.id)) ? '<div class="ps-pic"><img alt="" style="display:block;width:100%;max-width:720px;height:auto;border:1px solid #d7dde8;border-radius:12px" src="' + Pic().src(Pic().cached('i' + row.id)) + '"></div>' : '')
         : '<div class="ps-pic" data-ps-pic></div>') +
       '<div class="ps-safe' + (caution ? ' caution' : '') + '"><h4>' + (caution ? '⚠️ Safety check - read before you start' : '🛡️ Safety check') + '</h4>' +
-      list(I.safety, 'ul') + (printable ? '' : '<label><input type="checkbox" data-ps-ack' + (S.ack ? ' checked' : '') + '> I have read the safety check</label>') + '</div>' +
+      list(I.safety, 'ul') + (printable || ro ? '' : '<label><input type="checkbox" data-ps-ack' + (S.ack ? ' checked' : '') + '> I have read the safety check</label>') + '</div>' +
       (I.materials && I.materials.length ? '<div class="ps-sec"><h4>You need</h4><div class="ps-chips">' + I.materials.map(function (m) { return '<span class="ps-pill">' + esc(m) + '</span>'; }).join('') + '</div></div>' : '') +
       (I.setup && I.setup.length ? '<div class="ps-sec"><h4>Set up</h4>' + list(I.setup, 'ol') + '</div>' : '') +
       '<div class="ps-sec"><h4>Every age joins in</h4><div class="ps-tiers">' + (I.tiers || []).map(function (t) {
@@ -476,6 +479,7 @@
   }
 
   function showIdea(out, row, main) {
+    if (S.libScope === 'team' && S.tab === 'library' && !row.mine) return showTeamIdea(out, row);
     out.innerHTML = '<div class="ps-card">' + ideaHtml(row) + '<div class="ps-acts">' +
       '<button type="button" class="ps-btn pri" data-ps-did' + (S.ack ? '' : ' disabled') + ' data-kttip="Logs it to the daily record for the children who joined in and drafts an observation for each">✅ We did it</button>' +
       '<button type="button" class="ps-btn" data-ps-fav>' + (row.favourite ? '★ Saved' : '☆ Save') + '</button>' +
@@ -509,6 +513,24 @@
     var again = out.querySelector('[data-ps-again]');
     if (again) again.addEventListener('click', function () {
       var go = document.querySelector('[data-ps-go]'); if (go) go.click();
+    });
+  }
+
+  /* A team member's idea (Team ideas): read-only. Print, or save a copy to your own ideas - nothing else changes it. */
+  function showTeamIdea(out, row) {
+    out.innerHTML = '<div class="ps-card"><div class="ps-ctx" style="margin-bottom:8px">👥 ' + esc('Read only') + ' · ' +
+      esc('Made by') + ' ' + esc(row.by || '') + (row.room ? ' · ' + esc(row.room) : '') + ' · ' + esc(String(row.created_at || '').slice(0, 10)) +
+      (row.times_done ? ' · ' + esc('Done') + ' ' + row.times_done + '×' : '') + '</div>' + ideaHtml(row, false, true) + '<div class="ps-acts">' +
+      '<button type="button" class="ps-btn pri" data-ps-copy data-kttip="Adds a copy to My ideas so you can save, share or log it">📋 Save a copy to my ideas</button>' +
+      '<button type="button" class="ps-btn" data-ps-print>🖨️ Print</button></div></div>';
+    ideaPic(out.querySelector('[data-ps-pic]'), row);
+    out.querySelector('[data-ps-print]').addEventListener('click', function () { printIdea(row); });
+    var cp = out.querySelector('[data-ps-copy]');
+    cp.addEventListener('click', function () {
+      cp.disabled = true;
+      Api.post('/provider/play-spark/ideas/' + row.id + '/copy', {}).then(function () {
+        cp.textContent = '✅ Saved to My ideas'; toast('Saved a copy to your ideas');
+      }).catch(function (e) { cp.disabled = false; toast(errMsg(e), 'error'); });
     });
   }
 
@@ -586,13 +608,15 @@
     try {
       var r = await Api.get('/provider/play-spark/ideas?scope=' + S.libScope);
       var rows = r.ideas || [];
-      if (!rows.length) { el.innerHTML = '<div class="ps-card ps-empty">' + (S.libScope === 'shared' ? 'Nobody has shared an idea yet. Share a good one from its page.' : 'No ideas here yet. Spark one from Right now.') + '</div>'; return; }
+      if (!rows.length) { el.innerHTML = '<div class="ps-card ps-empty">' + (S.libScope === 'shared' ? 'Nobody has shared an idea yet. Share a good one from its page.' : S.libScope === 'team' ? 'Nobody at your centres has made an idea yet.' : 'No ideas here yet. Spark one from Right now.') + '</div>'; return; }
       el.innerHTML = '<div class="ps-list">' + rows.map(function (x, i) {
         var I = x.idea || {};
         return '<div class="ps-card ps-li" data-i="' + i + '"><div class="ps-thumb-wrap" data-ps-thumb="' + i + '"></div><div style="font-weight:800">' + esc(x.title) + (x.favourite ? ' ★' : '') + '</div>' +
           '<div class="ps-ctx" style="margin:4px 0">' + esc((I.summary || '').slice(0, 140)) + '</div>' +
           '<div class="ps-meta" style="margin:0">' + (I.tiers || []).map(function (t) { return '<span class="ps-pill">' + esc(BAND_SHORT[t.band] || t.band) + '</span>'; }).join('') +
-          (x.times_done ? '<span class="ps-pill area">Done ' + x.times_done + '×</span>' : '') + (x.mine ? '' : '<span class="ps-pill">by ' + esc(x.by || '') + '</span>') + '</div></div>';
+          (x.times_done ? '<span class="ps-pill area">Done ' + x.times_done + '×</span>' : '') + (x.mine ? '' : '<span class="ps-pill">by ' + esc(x.by || '') + '</span>') +
+          (S.libScope === 'team' ? (x.room ? '<span class="ps-pill">' + esc(x.room) + '</span>' : '') + '<span class="ps-pill">' + esc(String(x.created_at || '').slice(0, 10)) + '</span>' +
+            (x.shared ? '<span class="ps-pill">📚</span>' : '') : '') + '</div></div>';
       }).join('') + '</div><div data-open style="margin-top:14px"></div>';
       // Thumbnails: ready ones now; ones being drawn (new, or older ideas being filled in) appear when done.
       el.querySelectorAll('[data-ps-thumb]').forEach(function (t) {

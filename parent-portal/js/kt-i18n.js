@@ -60,7 +60,7 @@
      while that language is on, so an English session downloads nothing extra. A pack fills gaps only: an
      entry written in DICT above always wins. New UI text can still go straight into DICT. */
   var PACK_V = '20261126brc';
-  var BASE_V = '20261126rem';   // + reminder toasts (2026-11-26)
+  var BASE_V = '20261126team';   // + Play Spark Team ideas (2026-11-26)
   var packAsked = {};
   var baseState = 0, afterBase = [];   // 0 not asked, 1 on its way, 2 in
   window.KT_I18N_BASE = function (map) {

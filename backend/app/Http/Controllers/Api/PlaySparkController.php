@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Concerns\ResolvesCentreContext;
 use App\Http\Controllers\Controller;
+use App\Support\AgencyRole;
 use App\Support\AiBundle;
 use App\Support\LearningFrameworks;
 use App\Support\PlaySpark;
@@ -349,7 +350,15 @@ class PlaySparkController extends Controller
         $scope = (string) $request->query('scope', 'mine');
         $q = DB::table('play_spark_ideas')->where('agency_id', $a)->whereNull('deleted_at');
         $uid = (int) $request->user()->id;
-        if ($scope === 'shared') {
+        if ($scope === 'team') {
+            // TEAM IDEAS (2026-11-26, Anthony): every idea made at the centres this person runs - agency admins (and a
+            // super admin in the agency) the whole agency, directors their own centres. Read-only. Fails closed.
+            $t = $this->team($request, $a);
+            abort_unless($t, 403, 'Team ideas are for directors and agency admins.');
+            if (! $t['wide']) {
+                $q->whereIn('centre_id', $t['centres'] ?: [0]);
+            }
+        } elseif ($scope === 'shared') {
             $q->where('shared', 1);
         } elseif ($scope === 'favourites') {
             $q->where('user_id', $uid)->where('favourite', 1);
@@ -369,6 +378,8 @@ class PlaySparkController extends Controller
             }
         }
         $this->picStatus = $pics;
+        $this->roomNames = DB::table('rooms')->whereIn('id', $rows->pluck('room_id')->filter()->unique()->values()->all() ?: [0])
+            ->pluck('name', 'id')->all();
 
         return response()->json(['ideas' => $rows->map(fn ($r) => $this->row($r, $request))->values()]);
     }
@@ -390,7 +401,7 @@ class PlaySparkController extends Controller
                 ? in_array((int) $idea->centre_id, $centres, true)
                 : DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
                     ->where(fn ($q) => $q->where(fn ($q2) => $q2->where('agency_id', $a)->where('role', 'agency_admin'))->orWhere('role', 'platform_admin'))->exists());
-            abort_unless($ok, 404, 'That idea is no longer there.');
+            abort_unless($ok || $this->teamSees($this->team($request, $a), $idea), 404, 'That idea is no longer there.');
         }
 
         return response()->json(['idea' => $this->row($idea, $request)]);
@@ -413,7 +424,7 @@ class PlaySparkController extends Controller
                     $set[$k] = $d[$k];
                 }
             }
-        } elseif ($request->has('shared') && ! $d['shared'] && $this->managesAgency($request, $a)) {
+        } elseif ($request->has('shared') && ! $d['shared'] && $this->teamSees($this->team($request, $a), $idea)) {
             $set['shared'] = 0;   // a director or admin may take an idea out of the library
         }
         abort_if(! $set, 403, 'Only the person who made this idea can change it.');
@@ -421,6 +432,38 @@ class PlaySparkController extends Controller
         DB::table('play_spark_ideas')->where('id', $idea->id)->update($set);
 
         return response()->json(['idea' => $this->row(DB::table('play_spark_ideas')->find($idea->id), $request)]);
+    }
+
+    /** POST provider/play-spark/ideas/{id}/copy (2026-11-26, Team ideas): save a copy of an idea you can see to your own
+        ideas - the one change a director or admin may make to someone else's idea. The copy is yours (favourite, share,
+        We did it); the original is untouched. Its end-result picture is reused, not drawn again. */
+    public function copy(Request $request, int $id): JsonResponse
+    {
+        $a = $this->agency($request);
+        if ($r = $this->gate($a)) {
+            return $r;
+        }
+        $idea = $this->find($request, $a, $id, true);
+        $uid = (int) $request->user()->id;
+        abort_if((int) $idea->user_id === $uid, 422, 'This idea is already one of yours.');
+        $now = now();
+        $newId = DB::table('play_spark_ideas')->insertGetId([
+            'agency_id' => $a, 'centre_id' => $idea->centre_id, 'room_id' => $idea->room_id, 'user_id' => $uid,
+            'title' => $idea->title, 'idea' => $idea->idea, 'inputs' => $idea->inputs, 'safety_level' => $idea->safety_level,
+            'favourite' => 0, 'rating' => null, 'shared' => 0, 'times_done' => 0, 'last_done_at' => null,
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $pic = DB::table('play_spark_pictures')->where('agency_id', $a)->where('kind', 'idea')->where('ref', (string) $idea->id)->first();
+        if ($pic && $pic->status === 'ready') {
+            DB::table('play_spark_pictures')->insertOrIgnore([
+                'agency_id' => $a, 'kind' => 'idea', 'ref' => (string) $newId, 'status' => 'ready', 'source' => $pic->source,
+                'svg' => $pic->svg, 'png_path' => $pic->png_path, 'tries' => 0, 'error' => null, 'created_at' => $now, 'updated_at' => $now,
+            ]);
+        } else {
+            PlaySparkPicture::queue($a, 'idea', (string) $newId, (json_decode((string) $idea->idea, true) ?: []) + ['title' => $idea->title]);
+        }
+
+        return response()->json(['idea' => $this->row(DB::table('play_spark_ideas')->find($newId), $request)]);
     }
 
     /** DELETE provider/play-spark/ideas/{id} */
@@ -552,25 +595,58 @@ class PlaySparkController extends Controller
         return [$start->copy()->utc(), $start->copy()->endOfMonth()->utc(), $start->format('F Y')];
     }
 
-    private function find(Request $request, int $a, int $id, bool $mineOrShared): object
+    /* Your own idea, one shared to the agency library, or ($team) one made at a centre you run (Team ideas). The old
+       rule let ANY director of the agency read every idea through this door - directors are now held to their own
+       centres (2026-11-26). We did it passes $team = false: a team idea is read-only until you save a copy. */
+    private function find(Request $request, int $a, int $id, bool $team): object
     {
         $idea = DB::table('play_spark_ideas')->where('id', $id)->where('agency_id', $a)->whereNull('deleted_at')->first();
         abort_unless($idea, 404, 'That idea is no longer there.');
         $uid = (int) $request->user()->id;
-        abort_unless((int) $idea->user_id === $uid || (int) $idea->shared === 1 || $this->managesAgency($request, $a), 403);
+        abort_unless((int) $idea->user_id === $uid || (int) $idea->shared === 1
+            || ($team && $this->teamSees($this->team($request, $a), $idea)), 403);
 
         return $idea;
     }
 
-    private function managesAgency(Request $request, int $a): bool
+    /**
+     * TEAM IDEAS scope (2026-11-26): null = not a manager here. Roles counted in the ACTIVE agency only (AgencyRole).
+     * Agency admin / super admin: the whole agency. Centre director: the centres they direct (their director roles'
+     * centres, within the centres they can see; a director role with no centre falls back to Visibility::centreIds).
+     *
+     * @return array{wide: bool, centres: int[]}|null
+     */
+    private function team(Request $request, int $a): ?array
     {
-        return DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
-            ->where(fn ($q) => $q->where(fn ($q2) => $q2->where('agency_id', $a)->whereIn('role', ['agency_admin', 'centre_director']))->orWhere('role', 'platform_admin'))
-            ->exists();
+        $roles = AgencyRole::names($request);
+        if (array_intersect($roles, ['platform_admin', 'agency_admin'])) {
+            return ['wide' => true, 'centres' => []];
+        }
+        if (! in_array('centre_director', $roles, true)) {
+            return null;
+        }
+        $vis = array_map('intval', Visibility::centreIds($a, $request->user()) ?: []);
+        $dir = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', 1)
+            ->where('role', 'centre_director')->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->all();
+        $c = $dir ? array_values(array_intersect($vis, $dir)) : $vis;
+
+        return $c ? ['wide' => false, 'centres' => $c] : null;
+    }
+
+    private function teamSees(?array $t, object $idea): bool
+    {
+        if (! $t) {
+            return false;
+        }
+
+        return $t['wide'] || ($idea->centre_id && in_array((int) $idea->centre_id, $t['centres'], true));
     }
 
     /** ref => picture status, filled by ideas() for the whole list; other callers read the one row. */
     private ?array $picStatus = null;
+
+    /** room id => name, filled by ideas() for the whole list. */
+    private ?array $roomNames = null;
 
     private function row(object $r, Request $request): array
     {
@@ -581,7 +657,8 @@ class PlaySparkController extends Controller
         return ['id' => (int) $r->id, 'title' => $r->title, 'idea' => json_decode((string) $r->idea, true),
             'room_id' => $r->room_id ? (int) $r->room_id : null, 'safety_level' => $r->safety_level,
             'favourite' => (bool) $r->favourite, 'rating' => $r->rating ? (int) $r->rating : null, 'shared' => (bool) $r->shared,
-            'times_done' => (int) $r->times_done, 'created_at' => $r->created_at, 'by' => $who,
+            'times_done' => (int) $r->times_done, 'last_done_at' => $r->last_done_at, 'created_at' => $r->created_at, 'by' => $who,
+            'room' => $r->room_id ? ($this->roomNames !== null ? ($this->roomNames[$r->room_id] ?? null) : DB::table('rooms')->where('id', $r->room_id)->value('name')) : null,
             'mine' => (int) $r->user_id === (int) $request->user()->id,
             // ready | drawing | failed | off | none - the screen fetches the SVG itself (GET ideas/{id}/picture)
             'picture' => $pic];

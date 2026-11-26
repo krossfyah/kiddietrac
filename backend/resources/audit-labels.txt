@@ -1221,6 +1221,7 @@ post provider/play-spark/scan | Read the play materials in a photo (Play Spark, 
 post provider/play-spark/{id}/done | Logged a Play Spark activity for children (daily log, draft observations)
 patch provider/play-spark/ideas/{id} | Changed a Play Spark idea (favourite, rating or library)
 delete provider/play-spark/ideas/{id} | Removed a Play Spark idea
+post provider/play-spark/ideas/{id}/copy | Saved a copy of a team member's Play Spark idea
 post provider/play-spark/materials | Added play materials to a room (Play Spark)
 delete provider/play-spark/materials/{id} | Removed a play material from a room (Play Spark)
 post provider/play-spark/lesson-picture | Opened the end-result picture of a lesson-plan activity (Play Spark)
