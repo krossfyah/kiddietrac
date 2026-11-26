@@ -22,7 +22,7 @@ The same settings also appear under **Settings → Email settings → Billing**,
 - **Overdue payment reminders**: tick **Send overdue-payment reminders**, then list the **Days after due date**. The default is `1,7,14`.
 - **Daily send time**: the hour reminders go out, **in your agency's time zone**. The default is 09:00.
 - **✉️ Send by email**: reminders are sent by email.
-- **Also copy the agency billing contact**: the office receives a **blind copy** of each reminder. Families never see the office's address on it.
+- **Who gets a copy**: turn on **Send staff a copy of each reminder**, then choose who: **Agency admins**, the **Directors of the invoice's centre** (only for families at their own centres), **the agency billing contact address**, and any staff you tick (for example a bookkeeper). Each copy is a **blind copy** (BCC) of the family's email, so families never see the office's addresses. With the switch off, no staff copy is sent. **Also copy invoices emailed on their own date (instalments)** adds a copy of each new invoice email too. A staff member who is also a guardian in that family gets only their own family email, not a copy as well.
 - **Custom note added to each reminder (optional)**: added to every reminder you send.
 
 Click **Save reminders**.

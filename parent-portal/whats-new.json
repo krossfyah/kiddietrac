@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-26",
+            "icon": "📧",
+            "title": "Staff copies of billing reminders: one on/off switch",
+            "body": "Settings → Billing → Reminders → Who gets a copy now has one switch, Send staff a copy of each reminder. Turn it on and choose agency admins, the invoice centre’s directors, your billing contact address and any staff you pick. Copies are hidden (BCC) from families. You can also copy each new invoice emailed on its own date. Off by default for new agencies.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
             "icon": "🧩",
             "title": "Add-ons take effect straight away",
             "body": "When your plan or an add-on changes, the menu and tiles follow it the next time the app opens - no need to sign out and back in. Screens that are not part of your plan (for example Trends on plans below Agency) are no longer shown only to say they are unavailable.",

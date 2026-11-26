@@ -59,7 +59,7 @@
      language, js/kt-i18n-pack-<lang>.js = KT_I18N_PACK('<lang>', { English: translation, ... }), fetched only
      while that language is on, so an English session downloads nothing extra. A pack fills gaps only: an
      entry written in DICT above always wins. New UI text can still go straight into DICT. */
-  var PACK_V = '20261113imz';
+  var PACK_V = '20261126brc';
   var BASE_V = '20261125xcal2';   // + My day panel words (2026-11-25)
   var packAsked = {};
   var baseState = 0, afterBase = [];   // 0 not asked, 1 on its way, 2 in

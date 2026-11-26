@@ -406,6 +406,11 @@
       wrap.appendChild(c2);
 
       var c3 = card('Who gets a copy', 'Copies are hidden from the family (BCC), so they never see the office’s addresses.');
+      /* STAFF COPIES ON/OFF (2026-11-26, Anthony): one switch for all of it; the choices below only apply while it is on. */
+      c3.appendChild(toggleRow('cc_enabled', 'Send staff a copy of each reminder', !!r.cc_enabled));
+      var ccBody = Dom.el('div', { style: 'padding-left:4px;border-left:3px solid #E2E8F0;padding-left:12px;margin-left:6px;' });
+      c3.appendChild(ccBody);
+      var c3a = c3; c3 = ccBody;
       c3.appendChild(toggleRow('cc_admins', 'Agency admins', r.cc_admins !== false));
       c3.appendChild(toggleRow('cc_directors', 'Directors of the invoice’s centre', r.cc_directors !== false));
       c3.appendChild(toggleRow('cc_admin', 'The agency billing contact address', r.cc_admin));
@@ -424,6 +429,14 @@
         });
         c3.appendChild(grid);
       }
+      c3.appendChild(toggleRow('cc_issued', 'Also copy invoices emailed on their own date (instalments)', !!r.cc_issued));
+      c3 = c3a;
+      function ccShow() {
+        var on = ins.cc_enabled.checked;
+        ccBody.style.opacity = on ? '' : '.45';
+        ccBody.querySelectorAll('input').forEach(function (x) { x.disabled = !on; });
+      }
+      ins.cc_enabled.addEventListener('change', ccShow); ccShow();
       wrap.appendChild(c3);
 
       var c4 = card('Delivery', '');
@@ -450,6 +463,8 @@
           overdue_every: Math.max(1, parseInt(ins.overdue_every.value, 10) || 3),
           overdue_days_after: ins.overdue_days_after.value,
           overdue_max: Math.max(0, parseInt(ins.overdue_max.value, 10) || 0),
+          cc_enabled: ins.cc_enabled.checked,
+          cc_issued: ins.cc_issued.checked,
           cc_admins: ins.cc_admins.checked,
           cc_directors: ins.cc_directors.checked,
           cc_admin: ins.cc_admin.checked,

@@ -38,6 +38,12 @@ final class InvoiceReminders
         'overdue_max'         => 0,         // stop after N overdue reminders; 0 = until paid
         'send_time'           => '09:00',   // agency-local
         'channel_email'       => true,
+        /* STAFF COPIES ON/OFF (2026-11-26, Anthony: "wire up a setting to allow invoice parent billing reminders to
+           include directors/admins and staff (can turn this on or off)"). The master switch: off = no staff copy on any
+           automatic reminder, whatever is ticked below. Off for an agency that never set it (never default a recipient);
+           iLearn's stored settings were given cc_enabled = true the same day so its copies carried on unchanged. */
+        'cc_enabled'          => false,
+        'cc_issued'           => false,     // also copy the invoice email sent on its own date (instalments)
         'cc_admins'           => true,      // blind copy to the agency admins
         'cc_directors'        => true,      // blind copy to the invoice's centre directors
         'cc_staff'            => [],        // + chosen staff (user ids in this agency)
@@ -114,8 +120,9 @@ final class InvoiceReminders
     }
 
     /** The addresses the schedule copies (blind) on an automatic reminder. */
-    public static function scheduledCopies(int $agencyId, ?int $centreId, array $cfg): array
+    public static function scheduledCopies(int $agencyId, ?int $centreId, array $cfg, ?int $familyId = null): array
     {
+        if (empty($cfg['cc_enabled'])) return [];   // the agency's staff-copies switch (2026-11-26)
         $emails = [];
         foreach (self::staffChoices($agencyId, $centreId, $cfg) as $s) {
             if ($s['default']) $emails[] = $s['email'];
@@ -124,6 +131,15 @@ final class InvoiceReminders
             $a = DB::table('agencies')->where('id', $agencyId)->first(['contact_email', 'brand_support_email']);
             $x = trim((string) ($a->contact_email ?? $a->brand_support_email ?? ''));
             if ($x !== '' && filter_var($x, FILTER_VALIDATE_EMAIL)) $emails[] = mb_strtolower($x);
+        }
+        /* A staff member who is also a guardian in THIS family gets the family's own reminder, never a staff copy of it
+           as well (memory: staff who are parents). */
+        if ($familyId && $emails) {
+            $own = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')->where('g.family_id', $familyId)
+                ->whereNotNull('u.email')->pluck('u.email')->map(fn ($e) => mb_strtolower(trim((string) $e)))->all();
+            $pe = DB::table('families')->where('id', $familyId)->value('primary_email');
+            if ($pe) $own[] = mb_strtolower(trim((string) $pe));
+            $emails = array_values(array_diff($emails, $own));
         }
         return array_values(array_unique($emails));
     }
@@ -381,10 +397,10 @@ final class InvoiceReminders
         $pdfs = [];   // one PDF per invoice (per guardian copy) per run
         // First: invoices whose own date has come and that nobody has been sent yet (logged, so no reminder goes the same day).
         if ($cfg['invoice_enabled']) {
-            $lines = self::issuedPass($agencyId, $nowLocal, $dry, $agency, $interac, $link, $am);
+            $lines = self::issuedPass($agencyId, $nowLocal, $dry, $agency, $interac, $link, $am, $cfg);
         }
         foreach (self::invoices($agencyId, $from, $to) as $inv) {
-            $copies = self::scheduledCopies($agencyId, $inv->centre_id ? (int) $inv->centre_id : null, $cfg);
+            $copies = self::scheduledCopies($agencyId, $inv->centre_id ? (int) $inv->centre_id : null, $cfg, $inv->family_id ? (int) $inv->family_id : null);
             /* PAID IN THE PARTNER, NOT YET LINKED (2026-11-03). The family has a payment in the partner system,
                received since this invoice was issued, that is on none of our invoices (PartnerPaymentHold). It may be
                this invoice's money - Kicks-Ward got "Overdue" four days running for one that was. Hold the reminder
@@ -467,7 +483,7 @@ final class InvoiceReminders
        PDF, on the earlier of the first day of its period and 7 days before it is due, to each billing guardian who has
        not had it: an issue, resend or batch email naming the invoice, or any reminder for it, counts as having had it.
        Only invoices not yet due - one already late has been reminded about instead. Logged as reason 'issued'. */
-    private static function issuedPass(int $agencyId, Carbon $nowLocal, bool $dry, ?object $agency, ?string $interac, string $link, $am): array
+    private static function issuedPass(int $agencyId, Carbon $nowLocal, bool $dry, ?object $agency, ?string $interac, string $link, $am, array $cfg = []): array
     {
         $today = $nowLocal->toDateString();
         $week = $nowLocal->copy()->addDays(7)->toDateString();
@@ -484,6 +500,9 @@ final class InvoiceReminders
             if ($base === '') continue;
             if (PartnerPaymentHold::heldBy($agencyId, $inv)) continue;   // may already be paid in the partner; the reminder loop tells staff
             $pdfs = [];
+            // Staff copies of the invoice email itself, when the agency turned that on (2026-11-26): once per invoice.
+            $issuedCopies = ! empty($cfg['cc_issued'])
+                ? self::scheduledCopies($agencyId, $inv->centre_id ? (int) $inv->centre_id : null, $cfg, $inv->family_id ? (int) $inv->family_id : null) : [];
             foreach (self::guardians($inv, 'native') as $g) {
                 if ($g['balance'] <= 0.004) continue;
                 if (self::bounced($g['email'])) continue;
@@ -498,7 +517,8 @@ final class InvoiceReminders
                     ->whereNotIn('status', ['suppressed', 'failed'])->exists();
                 if ($had) continue;
                 $daysToDue = (int) Carbon::parse($today)->diffInDays(Carbon::parse(substr((string) $inv->due_at, 0, 10)), false);
-                $line = "issued d{$daysToDue} native#{$inv->id} {$number} → {$g['email']}";
+                $copies = $issuedCopies; $issuedCopies = [];
+                $line = "issued d{$daysToDue} native#{$inv->id} {$number} → {$g['email']}" . ($copies ? ' (bcc ' . count($copies) . ')' : '');
                 if ($dry) { $lines[] = '[dry] ' . $line; continue; }
                 $pk = $copyOf ?: 0;
                 if (! array_key_exists($pk, $pdfs)) $pdfs[$pk] = PaidMail::invoicePdf($inv, 'native', $copyOf);
@@ -514,12 +534,13 @@ final class InvoiceReminders
                     'guardian_id' => $g['guardian_id'] ?? null,
                 ]);
                 try {
-                    $am->html($html, function ($m) use ($g, $subject, $number, $pdf) {
+                    $am->html($html, function ($m) use ($g, $subject, $number, $pdf, $copies) {
                         MailScope::billing($m);
                         $m->to($g['email'], $g['name'] ?: null)->subject($subject);
+                        foreach ($copies as $c) { if ($c !== $g['email']) $m->bcc($c); }
                         if ($pdf) $m->attachData($pdf, 'Invoice ' . PaidMail::fileSafe($number) . '.pdf', ['mime' => 'application/pdf']);
                     });
-                    self::log($agencyId, 'native', (int) $inv->id, $g['email'], $g['guardian_id'], 'issued', $daysToDue, $today, [], null);
+                    self::log($agencyId, 'native', (int) $inv->id, $g['email'], $g['guardian_id'], 'issued', $daysToDue, $today, $copies, null);
                     $lines[] = $line . ($pdf ? ' +pdf' : '');
                 } catch (Throwable $e) {
                     Log::warning('invoice issued email failed: ' . $e->getMessage(), ['invoice' => $inv->id]);
@@ -558,7 +579,7 @@ final class InvoiceReminders
         $rows = [];
         foreach (self::invoices($agencyId, $now->copy()->subDays(366)->toDateString(), $now->copy()->addDays($ahead)->toDateString()) as $inv) {
             $fam = DB::table('families')->where('id', $inv->family_id)->value('family_name');
-            $copies = self::scheduledCopies($agencyId, $inv->centre_id ? (int) $inv->centre_id : null, $cfg);
+            $copies = self::scheduledCopies($agencyId, $inv->centre_id ? (int) $inv->centre_id : null, $cfg, $inv->family_id ? (int) $inv->family_id : null);
             $dueDate = substr((string) $inv->due_at, 0, 10);
             $gs = self::guardians($inv, $inv->kind);
             $held = $inv->kind === 'native' ? PartnerPaymentHold::heldBy($agencyId, $inv) : [];

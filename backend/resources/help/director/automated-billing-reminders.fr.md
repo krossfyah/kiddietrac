@@ -22,7 +22,7 @@ Les **directeurs de centre** ne voient que les rappels, pas le reste des paramè
 - **Rappels de paiement en souffrance** : cochez **Envoyer des rappels de paiement en souffrance**, puis indiquez les **Jours après l’échéance**. La valeur par défaut est `1,7,14`.
 - **Heure d’envoi quotidienne** : l’heure à laquelle les rappels partent, **dans le fuseau horaire de votre agence**. La valeur par défaut est 09:00.
 - **✉️ Envoyer par courriel** : les rappels sont envoyés par courriel.
-- **Mettre aussi en copie le contact de facturation de l’agence** : le bureau reçoit une **copie conforme invisible** de chaque rappel. Les familles ne voient jamais l’adresse du bureau.
+- **Qui reçoit une copie** : activez **Envoyer une copie de chaque rappel au personnel**, puis choisissez : les **administrateurs de l’agence**, les **directeurs du centre de la facture** (seulement pour les familles de leurs propres centres), **l’adresse du contact de facturation de l’agence**, et le personnel que vous cochez (par exemple un teneur de livres). Chaque copie est une **copie conforme invisible** (Cci) du courriel de la famille : les familles ne voient jamais les adresses du bureau. Interrupteur désactivé, aucune copie n’est envoyée au personnel. **Copier aussi les factures envoyées à leur propre date (versements)** ajoute aussi une copie de chaque nouvelle facture. Un membre du personnel qui est aussi tuteur dans cette famille reçoit seulement le courriel de sa famille, sans copie en plus.
 - **Note personnalisée ajoutée à chaque rappel (facultatif)** : ajoutée à chaque rappel que vous envoyez.
 
 Cliquez sur **Enregistrer les rappels**.

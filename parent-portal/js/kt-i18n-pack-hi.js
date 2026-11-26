@@ -10490,6 +10490,8 @@ KT_I18N_PACK('hi', {
 "Who can see it":"इसे कौन देख सकता है",
 "Who did you speak to":"आपने किससे बात की",
 "Who gets a copy":"किसे प्रति मिलती है",
+"Send staff a copy of each reminder":"हर अनुस्मारक की एक प्रति कर्मचारियों को भेजें",
+"Also copy invoices emailed on their own date (instalments)":"अपनी तारीख़ पर ईमेल किए गए चालानों (किस्तों) की भी प्रति भेजें",
 "Who gets a reply":"किसे उत्तर मिलता है",
 "Who gets head count reminders":"गिनती रिमाइंडर किसे मिलते हैं",
 "Who gets it":"किसे मिलता है",

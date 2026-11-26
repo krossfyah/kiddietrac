@@ -10434,6 +10434,8 @@ KT_I18N_PACK('fr', {
 "Who can see it":"Qui peut le voir",
 "Who did you speak to":"À qui avez-vous parlé",
 "Who gets a copy":"Qui reçoit une copie",
+"Send staff a copy of each reminder":"Envoyer une copie de chaque rappel au personnel",
+"Also copy invoices emailed on their own date (instalments)":"Copier aussi les factures envoyées à leur propre date (versements)",
 "Who gets a reply":"Qui reçoit une réponse",
 "Who gets head count reminders":"Qui reçoit les rappels de comptage",
 "Who gets it":"Qui le reçoit",

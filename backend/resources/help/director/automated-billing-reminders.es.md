@@ -22,7 +22,7 @@ Los **directores de centro** ven solo los recordatorios, no el resto de los ajus
 - **Recordatorios de pago vencido**: marque **Enviar recordatorios de pagos vencidos** y luego indique los **Días después de la fecha de vencimiento**. El valor predeterminado es `1,7,14`.
 - **Hora de envío diaria**: la hora a la que salen los recordatorios, **en la zona horaria de su agencia**. El valor predeterminado es 09:00.
 - **✉️ Enviar por correo**: los recordatorios se envían por correo electrónico.
-- **Copiar también al contacto de facturación de la agencia**: la oficina recibe una **copia oculta** de cada recordatorio. Las familias nunca ven la dirección de la oficina.
+- **Quién recibe una copia**: active **Enviar al personal una copia de cada recordatorio** y elija quién: los **administradores de la agencia**, los **directores del centro de la factura** (solo para las familias de sus propios centros), **la dirección del contacto de facturación de la agencia** y el personal que marque (por ejemplo, un contable). Cada copia es una **copia oculta** (CCO) del correo de la familia, así que las familias nunca ven las direcciones de la oficina. Con el interruptor apagado no se envía ninguna copia al personal. **Copiar también las facturas enviadas en su propia fecha (cuotas)** añade una copia de cada factura nueva. Un miembro del personal que también es tutor en esa familia recibe solo el correo de su familia, sin una copia adicional.
 - **Nota personalizada añadida a cada recordatorio (opcional)**: se añade a todos los recordatorios que envíe.
 
 Haga clic en **Guardar recordatorios**.

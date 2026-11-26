@@ -134,6 +134,8 @@ final class BillingRemindersController extends Controller
             'overdue_mode'        => ['nullable', 'in:daily,every,weekly,days'],
             'overdue_every'       => ['nullable', 'integer', 'min:1', 'max:60'],
             'overdue_max'         => ['nullable', 'integer', 'min:0', 'max:365'],
+            'cc_enabled'          => ['nullable', 'boolean'],
+            'cc_issued'           => ['nullable', 'boolean'],
             'cc_admins'           => ['nullable', 'boolean'],
             'cc_directors'        => ['nullable', 'boolean'],
             'cc_staff'            => ['nullable', 'array', 'max:50'],
