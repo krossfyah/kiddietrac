@@ -744,6 +744,7 @@ job kt:personal-announcements
 job kt:photo-consent-check
 job kt:proposal-followups
 job kt:reset-web-demo
+job kt:web-demo-showcase
 job kt:sales-meetings
 job kt:screen-guard-check
 job kt:search-coverage

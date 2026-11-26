@@ -1133,20 +1133,50 @@ final class CareController extends Controller
         return response()->json(['id' => $id, 'message' => 'Tour requested. We will be in touch shortly.'], 201);
     }
 
+    /**
+     * WHO SEES WHICH TOURS (2026-11-26, Anthony: "directors see and manage tour bookings for their OWN centres only").
+     * [agency, scope]: agency/platform admins get null = the whole ACTIVE agency, exactly as before; a centre director
+     * gets the centres CentreScope gives them. A booking with no centre is agency business: CentreScope::canRead() does
+     * not share it, so it stays with the admins and never reaches a director of any centre. Anyone else: null agency.
+     * listTours() and updateTour() both ask this one question, so the list and the write cannot disagree. Fails closed.
+     *
+     * @return array{0:int,1:?array}|null
+     */
+    private function tourScope(Request $request): ?array
+    {
+        $agencyId = (int) $this->resolveAgencyId($request);
+        if ($agencyId <= 0) {
+            return null;
+        }
+        $roles = \App\Support\AgencyRole::names($request);
+        if (array_intersect($roles, ['agency_admin', 'platform_admin'])) {
+            return [$agencyId, null];
+        }
+        if (! in_array('centre_director', $roles, true)) {
+            return null;
+        }
+        return [$agencyId, \App\Support\CentreScope::ids($request, $agencyId) ?? []];
+    }
+
+    /** The bookings this caller may touch, in the active agency (CentreScope for directors; no-centre rows admin-only). */
+    private function toursQuery(int $agencyId, ?array $scope, string $alias = 'tb')
+    {
+        $q = DB::table('tour_bookings as ' . $alias)->where($alias . '.agency_id', $agencyId);
+        if ($scope !== null) {
+            $q->whereIn($alias . '.centre_id', $scope ?: [0]);   // NULL centre_id never matches: admins only
+        }
+        return $q;
+    }
+
     public function listTours(Request $request): JsonResponse
     {
-        $userId = $request->user()->id;
-        $isAdmin = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $userId)
-            ->whereIn('role', ['agency_admin', 'platform_admin'])->where('active', true)->exists();
-        if (!$isAdmin) {
+        $s = $this->tourScope($request);
+        if (! $s) {
             return response()->json(['tours' => []]);
         }
-        $agencyId = (int) $request->header('X-Active-Agency-Id') ?:
-            (int) DB::table('role_assignments')->where('user_id', $userId)
-                ->where('role', 'agency_admin')->where('active', true)->value('agency_id');
-        $rows = DB::table('tour_bookings as tb')
+        [$agencyId, $scope] = $s;
+        $rows = $this->toursQuery($agencyId, $scope)
             ->leftJoin('centres as c', 'c.id', '=', 'tb.centre_id')
-            ->where('tb.agency_id', $agencyId)
             ->orderByDesc('tb.tour_at')
             ->limit(200)
             ->get(['tb.*', 'c.name as centre_name']);
@@ -1160,34 +1190,19 @@ final class CareController extends Controller
             'tour_at' => ['sometimes', 'date'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ]);
-        // Who may touch a tour at all. listTours() already answers this the same
-        // way; the write was simply never asked. Without it, ANY authenticated user —
-        // a parent included — could change any booking by guessing an id.
-        $userId = $request->user()->id;
-        $isAdmin = \App\Support\AgencyRole::constrain(DB::table('role_assignments'))->where('user_id', $userId)
-            ->whereIn('role', ['agency_admin', 'platform_admin'])->where('active', true)->exists();
-        abort_unless($isAdmin, 403, 'Not authorized to change tour bookings.');
+        // Who may touch a tour, and WHICH tours: the same tourScope() as listTours() (admins the active agency, a
+        // director their own centres, nobody else). Without it ANY signed-in user - a parent included - could change
+        // a booking by guessing an id. The agency comes from resolveAgencyId (header only for an agency they belong to).
+        $s = $this->tourScope($request);
+        abort_unless($s, 403, 'Not authorized to change tour bookings.');
+        [$agencyId, $scope] = $s;
 
-        // And WHICH tours. The header is user-controlled, so it is only honoured for an
-        // agency they actually hold a role in — otherwise fall back to their own.
-        $headerAgency = (int) $request->header('X-Active-Agency-Id');
-        $belongs = $headerAgency && DB::table('role_assignments')->where('user_id', $userId)
-            ->where('active', true)
-            ->where(function ($q) use ($headerAgency) {
-                $q->where('agency_id', $headerAgency)->orWhere('role', 'platform_admin');
-            })->exists();
-        $agencyId = $belongs ? $headerAgency : (int) DB::table('role_assignments')
-            ->where('user_id', $userId)->where('role', 'agency_admin')
-            ->where('active', true)->value('agency_id');
-        abort_unless($agencyId, 403, 'No agency for this account.');
-
+        // Scoped by agency AND the caller's centres as well as id: a booking in another tenant, at another director's
+        // centre or with no centre (for a director) simply is not found, rather than being found and refused. Found
+        // first, then written: update() counts CHANGED rows, so saving the same status used to answer 404.
+        abort_unless($this->toursQuery($agencyId, $scope)->where('tb.id', $id)->exists(), 404, 'Tour booking not found.');
         $data['updated_at'] = now();
-
-        // Scoped by agency as well as id: a booking in another tenant simply is not
-        // found, rather than being found and refused.
-        $changed = DB::table('tour_bookings')
-            ->where('id', $id)->where('agency_id', $agencyId)->update($data);
-        abort_unless($changed, 404, 'Tour booking not found.');
+        $this->toursQuery($agencyId, $scope)->where('tb.id', $id)->update($data);
 
         return response()->json(['message' => 'Tour updated']);
     }

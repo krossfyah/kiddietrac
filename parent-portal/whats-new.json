@@ -2,6 +2,16 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "🚪",
+            "title": "Tours for your centre",
+            "body": "Centre directors now see and manage the tour bookings for their own centre under Tours: confirm, mark completed or no-show, or cancel. Tours at other centres stay with them and your agency admins.",
+            "roles": [
+                "centre_director"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-26",
             "icon": "🤖",

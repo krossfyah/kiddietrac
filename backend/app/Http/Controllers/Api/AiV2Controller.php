@@ -235,18 +235,24 @@ final class AiV2Controller extends Controller
     public function enrollmentForecast(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
+        // A CENTRE DIRECTOR'S FORECAST IS THEIR CENTRES (2026-11-26, tours for directors): enrolment and the tour pipeline
+        // both counted the whole agency for them. CentreScope: null = admin (agency-wide, as before); a director's
+        // centres otherwise - and a tour with no centre is not theirs. Fails closed.
+        $scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
         $months = 6;
         $now = Carbon::now();
         $currentEnrolled = DB::table('children as ch')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
             ->join('centres as c', 'c.id', '=', 'f.centre_id')
             ->where('c.agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->whereIn('c.id', $scope ?: [0]))
             ->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
             ->count();
 
         $tourPipeline = DB::table('tour_bookings')
             ->where('agency_id', $agencyId)
+            ->when($scope !== null, fn ($q) => $q->whereIn('centre_id', $scope ?: [0]))
             ->whereIn('status', ['requested', 'scheduled', 'completed'])
             ->where('tour_at', '>=', $now->copy()->subDays(60))
             ->count();
@@ -268,7 +274,8 @@ final class AiV2Controller extends Controller
                 'monthly_adds' => $monthlyAdds,
                 'monthly_churn' => $churn,
             ];
-            DB::table('enrollment_forecasts')->updateOrInsert(
+            // The stored forecast is the AGENCY's (centre_id NULL): a director's centre-only numbers never overwrite it.
+            if ($scope === null) DB::table('enrollment_forecasts')->updateOrInsert(
                 ['agency_id' => $agencyId, 'centre_id' => null, 'forecast_for_month' => $month->format('Y-m')],
                 [
                     'projected_enrolment' => $running,
