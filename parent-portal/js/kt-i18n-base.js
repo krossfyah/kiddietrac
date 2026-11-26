@@ -81,6 +81,12 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     'How it is going': { fr: 'Comment ça se passe', es: 'Cómo va', hi: 'कैसा चल रहा है' },
     'Board report': { fr: 'Déclaration à la commission', es: 'Informe a la junta', hi: 'बोर्ड रिपोर्ट' },
     'Report to the compensation board': { fr: 'Déclaration à la commission des accidents du travail', es: 'Informe a la junta de compensación', hi: 'मुआवज़ा बोर्ड को रिपोर्ट' },
+    // HR item 8 follow-up (2026-11-26): the 3-business-day countdown for every agency; neutral wording outside Ontario.
+    'WSIB Form 7 due': { fr: 'Formulaire 7 de la WSIB dû le', es: 'Formulario 7 de la WSIB vence el', hi: 'WSIB फ़ॉर्म 7 की आख़िरी तारीख़' },
+    'Injury report to your workers’ compensation board due': { fr: 'Déclaration de blessure à votre commission des accidents du travail due le', es: 'Informe de lesión a su junta de compensación laboral vence el', hi: 'कर्मचारी मुआवज़ा बोर्ड को चोट रिपोर्ट की आख़िरी तारीख़' },
+    'Injury report to your workers’ compensation board': { fr: 'Déclaration de blessure à votre commission des accidents du travail', es: 'Informe de lesión a su junta de compensación laboral', hi: 'कर्मचारी मुआवज़ा बोर्ड को चोट रिपोर्ट' },
+    'Injury report': { fr: 'Déclaration de blessure', es: 'Informe de lesión', hi: 'चोट रिपोर्ट' },
+    'Due within 3 business days of learning of it.': { fr: 'Dû dans les 3 jours ouvrables après en avoir été informé.', es: 'Vence dentro de los 3 días hábiles después de enterarse.', hi: 'पता चलने के 3 कार्य दिवसों के अंदर देय।' },
     'Filed on': { fr: 'Déposé le', es: 'Presentado el', hi: 'दाखिल करने की तारीख़' },
     'Reference / claim number': { fr: 'Référence / numéro de réclamation', es: 'Referencia / número de reclamo', hi: 'रेफ़रेंस / दावा नंबर' },
     'To file': { fr: 'À déposer', es: 'Por presentar', hi: 'दाखिल करना है' },

@@ -27,11 +27,11 @@ Nobody else sees these records.
 
 The health details are kept encrypted: what happened, the body part, the injury, first aid, doctor or hospital, modified duties and check-in notes. They never show in the list and are never exported. To read them, open a record and choose **Show health details**. Each time they are shown is recorded in the audit log.
 
-## WSIB Form 7 (Ontario)
+## The injury report countdown
 
-An injury that needed health care beyond first aid, or time off work, must be reported to WSIB on Form 7 within **3 business days** of you learning of it. The list counts the business days left. It skips weekends and the stat holidays in your closures.
+An injury that needed health care beyond first aid, or time off work, must be reported to your workers' compensation board within **3 business days** of you learning of it. In Ontario that is **WSIB Form 7**; elsewhere the record calls it the **injury report to your workers' compensation board**. The list counts the business days left in your agency's own time zone. It skips weekends and the days in your closures, such as stat holidays.
 
-File the form on the WSIB site, then open the record, choose **Form 7**, and enter the date and the reference number. Outside Ontario the record keeps a **Board report** date and reference, with no countdown.
+File the report on the board's site (in Ontario, the WSIB site), then open the record, choose **Form 7** (or **Injury report**), and enter the date and the reference number.
 
 ## Return to work
 

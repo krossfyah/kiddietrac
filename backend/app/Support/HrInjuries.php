@@ -22,11 +22,12 @@ use Illuminate\Support\Facades\DB;
  *   - an agency admin (or platform admin working in the agency): all of the agency's.
  * Nobody else: not a file manager, not other staff.
  *
- * FORM 7 (Ontario, WSIB): due within 3 business days of the employer learning of an injury that needed health care
- * beyond first aid or cost time off. Business days = Monday to Friday, less the stat holidays the agency recorded as
- * closures (closure_type stat_holiday / holiday) at that centre, or at any of the agency's centres when the record
- * has none. Counted in the agency's own calendar (learned_on is an agency date). Other provinces / states: the record
- * keeps "report filed on / reference" without the Ontario countdown.
+ * THE BOARD REPORT COUNTDOWN (every agency, Anthony 2026-11-26): due within 3 business days of the employer learning of
+ * an injury that needed health care beyond first aid or cost time off. Ontario calls it WSIB Form 7; elsewhere the UI
+ * says "injury report to your workers' compensation board". Business days = Monday to Friday, less the days the agency
+ * recorded as closures (closure_type stat_holiday / holiday / emergency / other, the same set HrLeave::closedDays uses)
+ * at that centre, or at any of the agency's centres when the record has none. Counted in the agency's own calendar
+ * (learned_on is an agency date; "today" is AgencyTime::today).
  */
 final class HrInjuries
 {
@@ -35,6 +36,8 @@ final class HrInjuries
     public const SEALED = ['what_happened', 'body_part', 'injury_nature', 'first_aid', 'medical_care', 'medical_notes', 'rtw_duties'];
     public const LIST_COLS = ['id', 'agency_id', 'centre_id', 'user_id', 'reported_by_id', 'kind', 'occurred_at', 'learned_on', 'location',
         'witnesses', 'lost_time', 'form7_needed', 'form7_filed_on', 'form7_reference', 'rtw_start', 'rtw_end', 'status', 'created_at', 'updated_at'];
+    /** Closure types that make a day a non-business day for the countdown (staff_leave / pd_day do not). */
+    public const CLOSED_TYPES = ['stat_holiday', 'holiday', 'emergency', 'other'];
     public const WSIB_URL = 'https://www.wsib.ca/en/businesses/claims/report-injury-or-illness';
 
     /** WSIB applies (Ontario agencies). */
@@ -44,12 +47,12 @@ final class HrInjuries
         return $a && strtoupper((string) $a->province) === 'ON';
     }
 
-    /** Stat holidays the agency recorded as closures (that centre, or any of its centres), as [Y-m-d => true]. */
+    /** Closures (stat holidays and other closed days) the agency recorded as closures (that centre, or any of its centres), as [Y-m-d => true]. */
     public static function holidays(int $agencyId, ?int $centreId, string $from, string $to): array
     {
         $centres = $centreId ? [$centreId] : Live::centreIds($agencyId);
         $out = [];
-        foreach (DB::table('centre_closures')->whereIn('centre_id', $centres ?: [0])->whereIn('closure_type', ['stat_holiday', 'holiday'])
+        foreach (DB::table('centre_closures')->whereIn('centre_id', $centres ?: [0])->whereIn('closure_type', self::CLOSED_TYPES)
             ->whereDate('closure_date', '<=', $to)
             ->where(fn ($w) => $w->whereDate('closure_date', '>=', $from)->orWhereDate('end_date', '>=', $from))
             ->get(['closure_date', 'end_date']) as $c) {
@@ -101,7 +104,7 @@ final class HrInjuries
             'lost_time' => (bool) $r->lost_time, 'form7_needed' => (bool) $r->form7_needed, 'form7_filed_on' => $r->form7_filed_on ? substr((string) $r->form7_filed_on, 0, 10) : null,
             'form7_reference' => $r->form7_reference, 'rtw_start' => $r->rtw_start ? substr((string) $r->rtw_start, 0, 10) : null,
             'rtw_end' => $r->rtw_end ? substr((string) $r->rtw_end, 0, 10) : null, 'status' => $r->status, 'ontario' => $ontario];
-        if ($ontario && $r->kind === 'injury' && $r->form7_needed && ! $r->form7_filed_on) {
+        if ($r->kind === 'injury' && $r->form7_needed && ! $r->form7_filed_on) {
             $due = self::form7Due((int) $r->agency_id, $r->centre_id ? (int) $r->centre_id : null, $out['learned_on']);
             $out['form7_due'] = $due;
             $out['form7_days_left'] = self::businessDaysLeft((int) $r->agency_id, $r->centre_id ? (int) $r->centre_id : null, $due);

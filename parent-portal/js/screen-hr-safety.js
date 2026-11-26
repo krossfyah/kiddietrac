@@ -50,8 +50,10 @@
 
   function kindPill(k) { return k === 'near_miss' ? pill('#FEF3C7', '#92400E', 'Near miss') : pill('#FEE2E2', '#991B1B', 'Injury'); }
   function statusPill(s) { return s === 'closed' ? pill('#F1F5F9', '#475569', 'Closed') : pill('#E0F2FE', '#075985', 'Open'); }
-  /* The report to the compensation board: WSIB Form 7 in Ontario (3 business days), "report" elsewhere. */
-  function boardName(r) { return r.ontario ? 'Form 7' : 'Board report'; }
+  /* The report to the compensation board, due within 3 business days everywhere (Anthony 2026-11-26):
+     WSIB Form 7 in Ontario, neutral wording elsewhere. */
+  function boardName(r) { return r.ontario ? 'Form 7' : 'Injury report'; }
+  function dueLine(r, d) { return '<span>' + (r.ontario ? 'WSIB Form 7 due' : 'Injury report to your workers’ compensation board due') + '</span> <span data-no-i18n>' + esc(day(d)) + '</span>'; }
   function form7Pill(r) {
     if (r.kind !== 'injury') return '<span class="hr-sub">Not needed</span>';
     if (r.form7_filed_on) return pill('#DCFCE7', '#166534', 'Filed ' + day(r.form7_filed_on));
@@ -59,7 +61,7 @@
     if (r.form7_due) {
       var n = r.form7_days_left;
       var t = n < 0 ? 'Overdue ' + (-n) + ' business day' + (n === -1 ? '' : 's') : n === 0 ? 'Due today' : n + ' business day' + (n === 1 ? '' : 's') + ' left';
-      return pill(n <= 0 ? '#FEE2E2' : n === 1 ? '#FEF3C7' : '#E0F2FE', n <= 0 ? '#991B1B' : n === 1 ? '#92400E' : '#075985', t) + '<div class="hr-sub">Due ' + esc(day(r.form7_due)) + '</div>';
+      return pill(n <= 0 ? '#FEE2E2' : n === 1 ? '#FEF3C7' : '#E0F2FE', n <= 0 ? '#991B1B' : n === 1 ? '#92400E' : '#075985', t) + '<div class="hr-sub">' + dueLine(r, r.form7_due) + '</div>';
     }
     return pill('#FEF3C7', '#92400E', 'To file');
   }
@@ -78,10 +80,11 @@
     var d = S.data, rows = d.injuries || [];
     var due = rows.filter(function (r) { return r.form7_due && r.form7_days_left <= 1; }).length;
     var h = '<div class="hr-note">Workplace injuries and near misses for your team, separate from child incidents. Health details stay hidden in this list; open a record and choose Show health details (each view is recorded).'
-      + (d.ontario ? ' In Ontario, WSIB Form 7 is due within 3 business days of learning of an injury that needed health care or cost time off: <a href="' + esc(d.wsib_url) + '" target="_blank" rel="noopener">WSIB: report an injury</a>.' : '') + '</div>'
+      + (d.ontario ? ' In Ontario, WSIB Form 7 is due within 3 business days of learning of an injury that needed health care or cost time off: <a href="' + esc(d.wsib_url) + '" target="_blank" rel="noopener">WSIB: report an injury</a>.'
+        : ' An injury that needed health care or cost time off is reported to your workers’ compensation board; the countdown gives 3 business days from the day you learned of it.') + '</div>'
       + '<div class="hr-bar"><button type="button" class="hr-b p" data-ij="new">Report an injury or near miss</button>'
-      + (due ? pill('#FEE2E2', '#991B1B', due + ' ' + (d.ontario ? 'Form 7' : 'report') + (due === 1 ? '' : 's') + ' due soon') : '') + '</div>'
-      + '<div class="kt-card">' + (rows.length ? '<table data-hrs="injuries"><thead><tr><th>Person</th><th>Type</th><th>When</th><th>Centre</th><th>' + (d.ontario ? 'WSIB Form 7' : 'Board report') + '</th><th>Return to work</th><th>Status</th><th></th></tr></thead><tbody>'
+      + (due ? pill('#FEE2E2', '#991B1B', due + ' ' + (d.ontario ? 'Form 7' : 'injury report') + (due === 1 ? '' : 's') + ' due soon') : '') + '</div>'
+      + '<div class="kt-card">' + (rows.length ? '<table data-hrs="injuries"><thead><tr><th>Person</th><th>Type</th><th>When</th><th>Centre</th><th>' + (d.ontario ? 'WSIB Form 7' : 'Injury report') + '</th><th>Return to work</th><th>Status</th><th></th></tr></thead><tbody>'
         + rows.map(function (r) {
           return '<tr><td><b data-no-i18n>' + esc(r.person) + '</b>' + (r.reported_by && r.reported_by !== r.person ? '<div class="hr-sub">Reported by <span data-no-i18n>' + esc(r.reported_by) + '</span></div>' : '') + '</td>'
             + '<td>' + kindPill(r.kind) + '</td><td style="white-space:nowrap;">' + esc(when(r.occurred_at)) + '</td><td data-no-i18n>' + esc(r.centre || '') + '</td>'
@@ -144,9 +147,9 @@
       + kv('Status', statusPill(r.status)) + '</div>'
       + '<div style="margin:12px 0 4px;font-weight:800;font-size:13px;">Health details</div><div data-health class="hr-sub" style="padding:8px 10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;">🔒 Hidden. <button type="button" class="hr-b" data-reveal style="margin-left:6px;">Show health details</button><div class="hr-sub" style="margin-top:4px;">Each time they are shown is recorded.</div></div>';
     if (r.kind === 'injury') {
-      h += '<div style="margin:14px 0 4px;font-weight:800;font-size:13px;">' + (r.ontario ? 'WSIB Form 7' : 'Report to the compensation board') + '</div><div>' + kv('Needed', r.form7_needed ? 'Yes' : 'No') + kv('Status', form7Pill(r))
+      h += '<div style="margin:14px 0 4px;font-weight:800;font-size:13px;">' + (r.ontario ? 'WSIB Form 7' : 'Injury report to your workers’ compensation board') + '</div><div>' + kv('Needed', r.form7_needed ? 'Yes' : 'No') + kv('Status', form7Pill(r))
         + kv('Filed on', esc(day(r.form7_filed_on))) + kv('Reference', esc(r.form7_reference || '')) + '</div>'
-        + (r.ontario ? '<div class="hr-sub" style="margin-top:4px;">Due within 3 business days of learning of it. <a href="' + esc(p.wsib_url) + '" target="_blank" rel="noopener">WSIB: report an injury</a></div>' : '');
+        + '<div class="hr-sub" style="margin-top:4px;">Due within 3 business days of learning of it.' + (r.ontario ? ' <a href="' + esc(p.wsib_url) + '" target="_blank" rel="noopener">WSIB: report an injury</a>' : '') + '</div>';
     }
     h += '<div style="margin:14px 0 4px;font-weight:800;font-size:13px;">Return to work</div><div>' + kv('Modified duties', rtwText(r)) + '</div>'
       + '<div style="margin:14px 0 4px;font-weight:800;font-size:13px;">Check-ins</div>' + ((p.checkins || []).length ? '<div>' + p.checkins.map(function (c) { return kv(day(c.on_date), esc(c.by || '')); }).join('') + '</div>' : '<div class="hr-sub">None yet.</div>');
@@ -156,7 +159,7 @@
       acts = [{ label: 'Close' },
         { label: 'Check-in', handler: function () { closeModal(); setTimeout(function () { openCheckin(r, done); }, 60); return false; } },
         { label: 'Return to work', handler: function () { closeModal(); setTimeout(function () { openRtw(r, done); }, 60); return false; } }];
-      if (r.kind === 'injury') acts.push({ label: r.ontario ? 'Form 7' : 'Board report', handler: function () { closeModal(); setTimeout(function () { openForm7(r, done); }, 60); return false; } });
+      if (r.kind === 'injury') acts.push({ label: boardName(r), handler: function () { closeModal(); setTimeout(function () { openForm7(r, done); }, 60); return false; } });
       acts.push({ label: r.status === 'closed' ? 'Reopen' : 'Close record', primary: true, handler: function () { return setStatus(r, r.status === 'closed' ? 'open' : 'closed', done); } });
     }
     modal({ title: (r.kind === 'near_miss' ? 'Near miss: ' : 'Injury: ') + r.person, body: box, actions: acts });
@@ -190,7 +193,7 @@
       + '<div style="grid-column:1/-1;">' + check('form7_needed', r.form7_needed, 'A report is needed (health care beyond first aid, or time off work)') + '</div></div>'
       + (r.ontario ? '<div class="hr-sub" style="margin-top:8px;">File it on the WSIB site, then record the date and the reference here.</div>' : '')
       + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
-    modal({ title: r.ontario ? 'WSIB Form 7' : 'Report to the compensation board', body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
+    modal({ title: r.ontario ? 'WSIB Form 7' : 'Injury report to your workers’ compensation board', body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
       return Api.put('/hr/injuries/' + r.id + '/form7', { form7_filed_on: val(box, 'form7_filed_on'), form7_reference: val(box, 'form7_reference'), form7_needed: !!val(box, 'form7_needed') })
         .then(function () { saved(); done(); }, function (e) { msg(box, errMsg(e)); return false; });
     } }] });

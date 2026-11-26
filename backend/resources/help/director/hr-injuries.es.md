@@ -27,11 +27,11 @@ Nadie más ve estos registros.
 
 Los datos de salud se guardan cifrados: qué pasó, la parte del cuerpo, la lesión, los primeros auxilios, el médico u hospital, las tareas modificadas y las notas de seguimiento. Nunca aparecen en la lista ni se exportan. Para leerlos, abra un registro y elija **Mostrar los datos de salud**. Cada vez que se muestran queda anotado en el registro de auditoría.
 
-## Formulario 7 de la WSIB (Ontario)
+## La cuenta regresiva del informe
 
-Una lesión que necesitó atención médica más allá de los primeros auxilios, o días sin trabajar, debe informarse a la WSIB con el formulario 7 dentro de los **3 días hábiles** después de que usted se enteró. La lista cuenta los días hábiles que quedan. Omite los fines de semana y los feriados de sus cierres.
+Una lesión que necesitó atención médica más allá de los primeros auxilios, o días sin trabajar, debe informarse a su junta de compensación laboral dentro de los **3 días hábiles** después de que usted se enteró. En Ontario es el **formulario 7 de la WSIB**; en otros lugares, el registro lo llama **informe de lesión a su junta de compensación laboral**. La lista cuenta los días hábiles que quedan en la zona horaria de su agencia. Omite los fines de semana y los días de sus cierres, como los feriados.
 
-Presente el formulario en el sitio de la WSIB, luego abra el registro, elija **Formulario 7** e ingrese la fecha y el número de referencia. Fuera de Ontario, el registro guarda la fecha y la referencia del **informe a la junta**, sin cuenta regresiva.
+Presente el informe en el sitio de la junta (en Ontario, el sitio de la WSIB), luego abra el registro, elija **Formulario 7** (o **Informe de lesión**) e ingrese la fecha y el número de referencia.
 
 ## Regreso al trabajo
 
