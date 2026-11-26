@@ -96,6 +96,7 @@ final class NotifyAudience
         'chat' => 'all', 'nudge' => 'all', 'call' => 'all', 'announcement' => 'all', 'email' => 'staff',
         'checkin' => 'all', 'safety' => 'all', 'photos' => 'family', 'billing' => 'all', 'forms' => 'all',
         'staff' => 'staff', 'headcount' => 'staff', 'general' => 'all', 'emergency' => 'all',
+        'reminder' => 'all',   // reminder toasts: staff, and parents for meetings they were invited to (2026-11-26)
     ];
 
     /** Optional text kinds (ContactCategories::SMS) => audience. Who each is sent to: the senders' recipients. */

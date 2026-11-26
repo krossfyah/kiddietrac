@@ -283,6 +283,7 @@ post auth/me/avatar | Changed their profile photo
 patch auth/me/onboarding | Progressed their onboarding
 patch auth/me/provider-bio | Edited their provider bio
 put auth/me/ui-prefs | Changed their screen preferences
+post me/reminders/state | Dismissed or snoozed a reminder
 post auth/mfa/confirm | Turned on two-step sign-in
 post auth/mfa/disable | Turned off two-step sign-in
 post auth/mfa/setup | Started setting up two-step sign-in

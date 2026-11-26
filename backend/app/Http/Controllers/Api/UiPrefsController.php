@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Schema;
 final class UiPrefsController extends Controller
 {
     /** Keys this endpoint will store. An unknown key is ignored rather than persisted. */
-    private const ALLOWED = ['chat_dock', 'quick_access', 'my_day'];   // my_day: the right panel's "days ahead" (2026-11-25)   // quick_access: the launcher's own tiles, per role (2026-10-16)
+    private const ALLOWED = ['chat_dock', 'quick_access', 'my_day', 'reminders'];   // reminders: the reminder toasts' lead time {lead: 0|5|10|15|30|60|'off'} (2026-11-26)   // my_day: the right panel's "days ahead" (2026-11-25)   // quick_access: the launcher's own tiles, per role (2026-10-16)
 
     /** Guards against a client pushing something large into a shared table. */
     private const MAX_BYTES = 4000;

@@ -911,6 +911,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post('/auth/me/auto-signoff-notice/ack', [\App\Http\Controllers\Api\AutoSignOffNoticeController::class, 'ack']);
     Route::get('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'show']);
     Route::put('/auth/me/ui-prefs', [\App\Http\Controllers\Api\UiPrefsController::class, 'update']);
+    // Reminder toasts, Outlook-style: the caller's own upcoming meetings, events and tasks (App\Support\Reminders, 2026-11-26).
+    Route::get('/me/reminders', [\App\Http\Controllers\Api\ReminderController::class, 'index'])->middleware('throttle:30,1,reminders');
+    Route::post('/me/reminders/state', [\App\Http\Controllers\Api\ReminderController::class, 'state'])->middleware('throttle:60,1,reminderstate');
         Route::patch('/auth/me/provider-bio', [AuthController::class, 'updateProviderBio']);
 
         // v22p3.2: self-service avatar upload (any authenticated user)

@@ -489,6 +489,8 @@
     var items = RANGES.map(function (r) {
       return { icon: r[0] === S.days ? '✓' : '·', label: r[1], run: function () { setDays(r[0]).then(function () { if (KT.savedToast) KT.savedToast(); }).catch(function () { toast('Could not save that setting.', 'error'); }); } };
     });
+    // Reminder toasts' lead time (kt-reminders.js, 2026-11-26): one more row that opens its own choices.
+    if (KT.reminders && KT.reminders.leadMenu) items.push({ icon: '⏰', label: T('Reminders'), sub: KT.reminders.leadLabel(KT.reminders.getLead()), run: function () { setTimeout(function () { KT.reminders.leadMenu(anchor); }, 0); } });
     if (KT.quickPop) KT.quickPop({ anchor: anchor, items: items, label: 'Days ahead' });
   }
   function onOutside(e) {

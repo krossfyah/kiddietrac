@@ -288,6 +288,7 @@ route me/notify-requirement
 route me/payout-method
 route me/photo-consent
 route me/privacy-notice
+route me/reminders
 route me/saved-signatures
 route me/sms-consent
 route me/voice-opt-out

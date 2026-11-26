@@ -1065,6 +1065,29 @@
       } catch (e) {}
     }
 
+    // ── REMINDERS (2026-11-26, kt-reminders.js) ── Outlook-style reminder toasts for meetings, calendar events and
+    // tasks while KiddieTrac is open. Per person (ui-prefs reminders), the same choice as the My day panel's gear.
+    if (KT.reminders) {
+      try {
+        var rmc = el('div', { style: CARD });
+        rmc.appendChild(el('div', { style: SECT }, ['Reminders']));
+        rmc.appendChild(el('div', { style: 'font-size:13px;color:#64748b;margin:-2px 0 12px;' },
+          [/\brole-guardian\b/.test(document.body.className || '') && ['educator', 'home_visitor', 'centre_director', 'agency_admin', 'platform_admin', 'sales_rep'].indexOf(activeRole) === -1
+            ? 'A reminder appears in KiddieTrac before a meeting you were invited to. It stays until you dismiss or snooze it.'
+            : 'A reminder appears in KiddieTrac before your meetings, calendar events and tasks. It stays until you dismiss or snooze it.']));
+        var rmSel = el('select', { 'aria-label': 'Remind me', style: 'width:100%;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:10px;font-size:15px;background:#fff;color:#0f172a;cursor:pointer;' });
+        KT.reminders.leads.forEach(function (r) { var o = el('option', { value: String(r[0]) }, [r[1]]); if (r[0] === 15) o.selected = true; rmSel.appendChild(o); });
+        var rmStatus = el('div', { style: 'font-size:13px;min-height:16px;margin-top:8px;' });
+        Promise.resolve(KT.reminders.loadLead()).then(function (v) { rmSel.value = String(v); }).catch(function () {});
+        rmSel.addEventListener('change', function () {
+          Promise.resolve(KT.reminders.setLead(rmSel.value)).then(function () { rmStatus.style.color = '#16A34A'; rmStatus.textContent = '✓ Saved'; })
+            .catch(function () { rmStatus.style.color = '#B91C1C'; rmStatus.textContent = 'Could not save that setting.'; });
+        });
+        rmc.appendChild(rmSel); rmc.appendChild(rmStatus);
+        paneProfile.appendChild(rmc);
+      } catch (e) {}
+    }
+
     // ── FAMILY DIRECTORY (guardian only) — moved here from the Directory screen so
     //    all of the user's preferences live in one place. ──
     //    Not for a parent the agency has not linked to a family yet: there is no family

@@ -134,6 +134,7 @@ final class NotificationSounds
         'forms'        => ['Forms & documents', 'Forms to sign, signatures and documents.', 'kt_tone_triple', 'short'],
         'staff'        => ['Staff reminders', 'Clock in/out, time off and rewards.', 'kt_tone_pager', 'double'],
         'headcount'    => ['Headcount reminders', 'Time to count the children in your room.', 'kt_bell_school', 'heartbeat'],
+        'reminder'     => ['⏰ Meeting & task reminders', 'A meeting, calendar event or task is about to start (while KiddieTrac is open).', 'kt_bell_desk', 'double'],
         'general'      => ['Everything else', 'Any other KiddieTrac notification.', 'kt_notify', 'double'],
         'emergency'    => ['🚨 Emergency messages', 'Always rings repeatedly until answered (up to 2 minutes). You can choose the tone.', 'kt_tone_siren', 'insistent'],
     ];

@@ -8,6 +8,29 @@
  * words only). New UI text goes HERE now.
  */
 window.KT_I18N_BASE && window.KT_I18N_BASE({
+    // Reminder toasts (kt-reminders.js, 2026-11-26)
+    "1 reminder": { fr: "1 rappel", es: "1 recordatorio", hi: "1 रिमाइंडर" },
+    "reminders": { fr: "rappels", es: "recordatorios", hi: "रिमाइंडर" },
+    "Show reminders": { fr: "Afficher les rappels", es: "Mostrar recordatorios", hi: "रिमाइंडर दिखाएँ" },
+    "Dismiss all": { fr: "Tout ignorer", es: "Descartar todo", hi: "सभी हटाएँ" },
+    "Snooze": { fr: "Répéter", es: "Posponer", hi: "स्नूज़" },
+    "Minimize": { fr: "Réduire", es: "Minimizar", hi: "छोटा करें" },
+    "Due today": { fr: "À faire aujourd'hui", es: "Vence hoy", hi: "आज तक" },
+    "5 minutes": { fr: "5 minutes", es: "5 minutos", hi: "5 मिनट" },
+    "10 minutes": { fr: "10 minutes", es: "10 minutos", hi: "10 मिनट" },
+    "15 minutes": { fr: "15 minutes", es: "15 minutos", hi: "15 मिनट" },
+    "Until it starts": { fr: "Jusqu'au début", es: "Hasta que empiece", hi: "शुरू होने तक" },
+    "At start time": { fr: "À l'heure de début", es: "A la hora de inicio", hi: "शुरू होने के समय" },
+    "5 minutes before": { fr: "5 minutes avant", es: "5 minutos antes", hi: "5 मिनट पहले" },
+    "10 minutes before": { fr: "10 minutes avant", es: "10 minutos antes", hi: "10 मिनट पहले" },
+    "15 minutes before": { fr: "15 minutes avant", es: "15 minutos antes", hi: "15 मिनट पहले" },
+    "30 minutes before": { fr: "30 minutes avant", es: "30 minutos antes", hi: "30 मिनट पहले" },
+    "1 hour before": { fr: "1 heure avant", es: "1 hora antes", hi: "1 घंटा पहले" },
+    "Remind me": { fr: "Me rappeler", es: "Recordarme", hi: "मुझे याद दिलाएँ" },
+    "A reminder appears in KiddieTrac before your meetings, calendar events and tasks. It stays until you dismiss or snooze it.": { fr: "Un rappel s'affiche dans KiddieTrac avant vos réunions, événements d'agenda et tâches. Il reste affiché jusqu'à ce que vous l'ignoriez ou le répétiez.", es: "Aparece un recordatorio en KiddieTrac antes de sus reuniones, eventos del calendario y tareas. Se queda hasta que lo descarte o lo posponga.", hi: "आपकी मीटिंग, कैलेंडर इवेंट और कामों से पहले KiddieTrac में एक रिमाइंडर दिखता है। यह तब तक रहता है जब तक आप इसे हटा या स्नूज़ न करें।" },
+    "A reminder appears in KiddieTrac before a meeting you were invited to. It stays until you dismiss or snooze it.": { fr: "Un rappel s'affiche dans KiddieTrac avant une réunion à laquelle vous êtes invité. Il reste affiché jusqu'à ce que vous l'ignoriez ou le répétiez.", es: "Aparece un recordatorio en KiddieTrac antes de una reunión a la que le invitaron. Se queda hasta que lo descarte o lo posponga.", hi: "जिस मीटिंग में आपको बुलाया गया है, उससे पहले KiddieTrac में एक रिमाइंडर दिखता है। यह तब तक रहता है जब तक आप इसे हटा या स्नूज़ न करें।" },
+    "Meeting & task reminders": { fr: "Rappels de réunions et de tâches", es: "Recordatorios de reuniones y tareas", hi: "मीटिंग और काम के रिमाइंडर" },
+    "A meeting, calendar event or task is about to start (while KiddieTrac is open).": { fr: "Une réunion, un événement d'agenda ou une tâche va commencer (pendant que KiddieTrac est ouvert).", es: "Una reunión, un evento del calendario o una tarea está por empezar (mientras KiddieTrac está abierto).", hi: "कोई मीटिंग, कैलेंडर इवेंट या काम शुरू होने वाला है (जब KiddieTrac खुला हो)।" },
     /* Quick notes (2026-11-26, kt-quick-notes.js) */
     "Quick notes": { fr: "Notes rapides", es: "Notas rápidas", hi: "त्वरित नोट्स" },
     "Just for you, or shared with your staff": { fr: "Pour vous seul, ou partagées avec votre personnel", es: "Solo para usted o compartidas con su personal", hi: "सिर्फ़ आपके लिए, या आपके स्टाफ़ के साथ साझा" },
