@@ -759,7 +759,7 @@
   }
   async function rcSubmit(id, save) {
     try { if (save) await save(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); return; }
-    const sig = await KT.signaturePad({ title: 'Educator signature', subtitle: 'Sign to submit this report card to your director/admin for review & approval.', okLabel: 'Sign & submit' });
+    const sig = await KT.signaturePad({ title: 'Educator signature', subtitle: 'Sign to submit this report card for review. An agency admin approves it before it reaches the family.', okLabel: 'Sign & submit' });
     if (!sig) return;
     try { await Api.post('/report-cards/' + id + '/submit', { educator_signature: sig }); rcToast('Submitted for approval — your director/admin was notified. ✓', 'success'); rcAfter(id); return true; }
     catch (e) { rcToast(rcSaid(e, 'Could not submit.'), 'error'); return false; }
@@ -860,13 +860,64 @@
     try { m.h.close(); } catch (e) {}
     rcCardHash(0);
   }
+  /* VIEW = THE PDF (2026-11-26, Anthony: "when you hit view on the report card it should pop up with the pdf view").
+     The same /pdf bytes Download gives (so the preview is what parents get; a draft carries its DRAFT watermark),
+     drawn by the portal's viewer (KT.renderDocumentInto: a frame on desktop, pdf.js pages on phones and in the app)
+     inside the house popup. The footer holds only what this person may do - the server's `can` decides. */
+  function rcViewPdf(c, editableNow) {
+    const can = c.can || {}, st = c.status || 'draft', replaced = !!c.replaced;
+    const body = document.createElement('div');
+    body.id = 'rc-out'; body.setAttribute('data-card', c.id); body.setAttribute('data-child', c.child || '');
+    const meta = [c.made_by ? 'Made by ' + c.made_by : '', c.centre || '', c.room || '', c.ref ? 'Ref ' + c.ref : ''].filter(Boolean).map(esc).join(' · ');
+    body.innerHTML =
+      `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">${rcPill(st, replaced)}${c.archived ? rcArchPill(c.archived) : ''}<span style="font-size:12.5px;color:#64748B;">${meta}</span></div>` +
+      (c.review_note && (st === 'draft' || st === 'reviewed') ? `<div style="margin:8px 0 0;border:1px solid #FECACA;background:#FEF2F2;color:#991B1B;border-radius:10px;padding:8px 12px;font-size:13px;"><b>Sent back:</b> ${esc(c.review_note)}</div>` : '') +
+      (st === 'submitted' && !can.approver ? '<div style="margin-top:8px;font-size:13px;color:#92400E;">Waiting for an agency admin to approve it.</div>' : '') +
+      (replaced ? '<div style="margin-top:8px;font-size:13px;color:#475569;">A newer version replaced this one. It is kept here, with its PDF, for the record.</div>' : '') +
+      '<div class="rc-pdf-host" style="margin-top:10px;display:flex;flex-direction:column;height:calc(100vh - 290px);min-height:420px;background:#E2E8F0;border-radius:10px;padding:0;"></div>' +
+      '<details id="rc-o-hist" style="margin-top:12px;"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1F6080;">History &amp; versions</summary><div data-rc-hist style="margin-top:8px;font-size:13px;color:#475569;">Loading…</div></details>';
+    const A = [];
+    const stay = (fn) => async () => { await fn(); return false; };
+    const done = (fn) => async () => ((await fn()) ? undefined : false);
+    const live = !replaced;
+    if (editableNow) A.push({ label: st === 'submitted' ? (can.approver ? '✍️ Review & approve' : '✍️ Review') : '✏️ Edit', primary: !can.approver, handler: stay(() => rcOpen(c.id, { edit: true })) });
+    if (can.revise) A.push({ label: '✏️ Edit (new version)', busyLabel: 'Starting…', handler: stay(() => rcRevise(c.id)) });
+    if (live && st !== 'sent' && can.approver) A.push({ label: '✅ Sign & approve', primary: true, handler: stay(() => { rcCloseCard(c.id); return rcQuickApprove([Object.assign({}, c, { can_approve: true })]); }) });
+    if (live && st === 'submitted' && (can.approver || can.review)) A.push({ label: '↩ Send back', busyLabel: 'Sending back…', handler: done(() => rcSendBack(c.id)) });
+    if (can.email) A.push({ label: '✉️ Email to family', handler: stay(() => { rcCloseCard(c.id); return rcEmail(c); }) });
+    A.push({ label: '⬇️ Download PDF', busyLabel: 'Downloading…', handler: stay(() => rcDownload(c)) });
+    A.push({ label: '🖨️ Print', busyLabel: 'Opening…', handler: stay(() => rcPrint(c)) });
+    if (can.delete) A.push({ label: '🗑️ Delete draft', busyLabel: 'Deleting…', handler: done(() => rcDelete(c)) });
+    rcCloseCard();
+    let blobUrl = null;
+    const h = KT.Shell.Modal.open({
+      title: '📑 ' + (c.child || 'Report card') + ' — ' + (c.term || '') + (+c.version > 1 ? ' · v' + (+c.version) : ''),
+      body: body, actions: A, large: true,
+      onClose: () => { if (blobUrl) { try { URL.revokeObjectURL(blobUrl); } catch (e) {} } if (RC_MODAL && RC_MODAL.h === h) { RC_MODAL = null; rcCardHash(0); } },
+    });
+    RC_MODAL = { id: c.id, h: h };
+    rcCardHash(c.id, false);
+    try { h.backdrop.querySelector('.modal').setAttribute('data-rc-card', c.id); h.backdrop.querySelector('.modal').setAttribute('data-rc-view', 'pdf'); } catch (e) {}
+    document.getElementById('rc-o-hist').addEventListener('toggle', function () { if (this.open) rcHistory(c.id); });
+    const host = body.querySelector('.rc-pdf-host');
+    host.innerHTML = '<div style="color:#64748B;font-size:13px;text-align:center;padding:24px;">Opening the report card…</div>';
+    KT.fetchFileBlob(rcPdfUrl(c.id)).then(b => {
+      if (!document.body.contains(host)) return;
+      blobUrl = URL.createObjectURL(new Blob([b], { type: 'application/pdf' }));
+      return KT.renderDocumentInto(host, blobUrl + '#view=FitH', { title: rcName(c) }).then(() => {
+        // pdf.js pages (phones, the app) flow in the popup's one scroll region; a desktop frame keeps its height.
+        if (!host.querySelector('iframe')) { host.style.height = 'auto'; host.style.minHeight = '0'; host.style.padding = '8px'; }
+      });
+    }).catch(e => { host.innerHTML = `<div style="max-width:420px;margin:40px auto;background:#fff;border-radius:12px;padding:20px;text-align:center;font-size:13.5px;color:#334155;">${esc(rcSaid(e, 'The report card could not be shown here. Use Download PDF.'))}</div>`; });
+  }
   async function rcOpen(id, opts) {
     opts = opts || {};
     let r; try { r = await Api.get('/report-cards/' + id); } catch (e) { rcToast(rcSaid(e, 'Could not load the card.'), 'error'); return; }
     const c = (r && r.data) || {}; const can = c.can || {};
     const st = c.status || 'draft', replaced = !!c.replaced;
-    const editableNow = !replaced && (st === 'draft' || st === 'reviewed' || (st === 'submitted' && can.approver));
+    const editableNow = !replaced && (st === 'draft' || st === 'reviewed' || (st === 'submitted' && (can.approver || can.review)));
     const editable = editableNow && !!opts.edit;
+    if (!editable) return rcViewPdf(c, editableNow);   // View = the PDF the family gets (2026-11-26)
     const out = document.createElement('div');
     out.id = 'rc-out'; out.setAttribute('data-card', c.id); out.setAttribute('data-child', c.child || '');
     const meta = [c.made_by ? 'Made by ' + c.made_by : '', c.centre || '', c.room || '', c.ref ? 'Ref ' + c.ref : ''].filter(Boolean).map(esc).join(' · ');
@@ -892,10 +943,10 @@
     if (editable) {
       A.push({ label: '💾 Save', busyLabel: 'Saving…', handler: stay(async () => { try { await save(); rcToast('Saved.', 'success'); rcReloadList(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); } }) });
       if (st === 'submitted') A.push({ label: '↩ Send back', busyLabel: 'Sending back…', handler: done(() => rcSendBack(c.id)) });
-      if (st === 'submitted' || can.approver) A.push({ label: '✍️ Sign, approve & send', primary: true, busyLabel: 'Approving…', handler: done(() => rcApprove(c.id, save)) });
-      else A.push({ label: '✍️ Sign & submit', primary: true, busyLabel: 'Submitting…', handler: done(() => rcSubmit(c.id, save)) });
+      if (can.approver) A.push({ label: '✍️ Sign, approve & send', primary: true, busyLabel: 'Approving…', handler: done(() => rcApprove(c.id, save)) });
+      else if (st !== 'submitted') A.push({ label: '✍️ Sign & submit', primary: true, busyLabel: 'Submitting…', handler: done(() => rcSubmit(c.id, save)) });
     } else if (editableNow) {
-      A.push({ label: st === 'submitted' ? '✍️ Review & approve' : '✏️ Edit', primary: true, handler: stay(() => rcOpen(c.id, { edit: true })) });
+      A.push({ label: st === 'submitted' ? (can.approver ? '✍️ Review & approve' : '✍️ Review') : '✏️ Edit', primary: true, handler: stay(() => rcOpen(c.id, { edit: true })) });
     }
     if (can.revise) A.push({ label: '✏️ Edit (new version)', primary: !editableNow, busyLabel: 'Starting…', handler: stay(() => rcRevise(c.id)) });
     if (can.email) A.push({ label: '✉️ Email to family', handler: stay(() => { rcCloseCard(c.id); return rcEmail(c); }) });
@@ -944,7 +995,8 @@
     const st = r.status || 'draft', g = rcGroup(st), live = !r.replaced;
     const list = [['view', '👁️ View']];
     if (live && g === 'draft') list.push(['edit', '✏️ Edit']);
-    if (live && st === 'submitted' && RC.approver) list.push(['edit', '✍️ Review & approve'], ['back', '↩ Send back']);
+    if (live && st === 'submitted' && (r.can_approve || r.can_review)) list.push(['edit', r.can_approve ? '✍️ Review & approve' : '✍️ Review'], ['back', '↩ Send back']);
+    if (live && st !== 'sent' && r.can_approve) list.push(['approve', '✅ Sign & approve']);
     if (live && st === 'sent' && (RC.approver || r.mine)) list.push(['revise', '✏️ Edit (new version)']);
     list.push(['pdf', '⬇️ Download PDF'], ['print', '🖨️ Print']);
     if (live && st === 'sent' && RC.approver) list.push(['email', '✉️ Email to family']);
@@ -960,6 +1012,96 @@
     if (k === 'print') return rcPrint(r);
     if (k === 'email') return rcEmail(r);
     if (k === 'delete') return rcDelete(r);
+    if (k === 'approve') return rcQuickApprove([r]);
+  }
+
+  /* SIGN & APPROVE - one card from its ⋮, or several from the bulk bar (2026-11-26, Anthony: "add in kebab option
+     to sign/approve and allow ability to select multiple at once to sign and approve or delete"). One house popup:
+     what will be approved, the signature pad (with "Use my saved signature" when one is saved), an optional note.
+     Several cards ask once more before going. The server checks every card on its own and says which it skipped. */
+  const rcCanApprove = (c) => !!c.can_approve && !c.replaced && (c.status || 'draft') !== 'sent';
+  function rcQuickApprove(cards) {
+    const ok = cards.filter(rcCanApprove), many = cards.length > 1;
+    if (!ok.length) { rcToast('You can\'t approve any of the selected report cards.', 'error'); return; }
+    const others = cards.length - ok.length;
+    const body = document.createElement('div');
+    const line = (c) => `<li><b>${esc(c.child)}</b> — ${esc(c.term)}${rcVer(c.version)} <span style="color:#64748B;">· ${esc((RC_ST[c.status || 'draft'] || RC_ST.draft)[0])}${c.made_by ? ' · ' + esc(c.made_by) : ''}</span></li>`;
+    body.innerHTML = (many
+        ? `<p style="margin:0 0 8px;font-size:14px;"><b>${ok.length}</b> report card${ok.length === 1 ? '' : 's'} will be approved and sent to ${ok.length === 1 ? 'the family' : 'their families'}.</p>`
+          + (others ? `<p style="margin:0 0 8px;font-size:13px;color:#92400E;">${others} of the ${cards.length} selected can't be approved by you (already approved, or not yours to approve). They will be skipped.</p>` : '')
+        : '<p style="margin:0 0 8px;font-size:14px;">This report card will be approved and sent to the family.</p>')
+      + `<ul style="margin:0 0 12px;padding-left:20px;font-size:13.5px;line-height:1.6;">${ok.slice(0, 8).map(line).join('')}${ok.length > 8 ? `<li style="color:#64748B;">and ${ok.length - 8} more</li>` : ''}</ul>`
+      + '<div style="font-size:13px;font-weight:700;color:#334155;margin:0 0 6px;">Your signature</div><div class="rc-qa-pad"></div>'
+      + '<label for="rc-qa-note" style="display:block;font-size:13px;font-weight:700;color:#334155;margin:12px 0 6px;">Note <span style="font-weight:400;color:#64748B;">(optional, kept in the card\'s history)</span></label>'
+      + '<textarea id="rc-qa-note" maxlength="1000" rows="2" style="width:100%;min-height:64px;padding:9px;border:1px solid #CBD5E1;border-radius:8px;font-family:inherit;font-size:14px;"></textarea>';
+    const pad = KT.signaturePadInline(body.querySelector('.rc-qa-pad'), { hint: 'Sign here to approve', context: many ? 'report_cards:bulk' : 'report_card:' + ok[0].id });
+    const go = async () => {
+      if (pad.isEmpty()) { rcToast('Sign first - your signature approves ' + (ok.length === 1 ? 'the card.' : 'the cards.'), 'error'); return false; }
+      if (many) {
+        const yes = await KT.confirm({ title: `Approve ${ok.length} report card${ok.length === 1 ? '' : 's'}?`,
+          description: `${ok.length === 1 ? 'It' : 'They'} will be signed with your signature and sent to ${ok.length === 1 ? 'the family' : 'the families'}. A sent card can only be changed by making a new version.`,
+          okLabel: `Approve ${ok.length}` });
+        if (!yes) return false;
+      }
+      const sig = pad.toDataURL(), note = (body.querySelector('#rc-qa-note').value || '').trim();
+      if (!many) {
+        try { await Api.post('/report-cards/' + ok[0].id + '/approve', { admin_signature: sig, note: note || undefined }); }
+        catch (e) { rcToast(rcSaid(e, 'Could not approve.'), 'error'); return false; }
+        rcToast('Approved & sent to the family. ✓', 'success'); rcReloadList(); return true;
+      }
+      let r; try { r = await Api.post('/report-cards/bulk-approve', { ids: cards.map(c => c.id), admin_signature: sig, note: note || undefined }); }
+      catch (e) { rcToast(rcSaid(e, 'Could not approve the report cards.'), 'error'); return false; }
+      rcReloadList(); setTimeout(() => rcBulkSummary('approved', r), 0); return true;
+    };
+    KT.Shell.Modal.open({
+      title: many ? `✅ Sign & approve ${ok.length} report card${ok.length === 1 ? '' : 's'}` : `✅ Sign & approve — ${ok[0].child}`,
+      body,
+      actions: [{ label: 'Cancel' }, { label: many ? `✅ Approve ${ok.length}` : '✅ Approve & send', primary: true, busyLabel: 'Approving…', handler: async () => ((await go()) ? undefined : false) }],
+    });
+  }
+
+  async function rcBulkDelete(cards) {
+    const ok = cards.filter(c => !c.replaced && rcGroup(c.status) === 'draft');
+    if (!ok.length) { rcToast('Only drafts can be deleted, and none are selected.', 'error'); return; }
+    const others = cards.length - ok.length;
+    const yes = await KT.confirm({ title: `Delete ${ok.length} draft${ok.length === 1 ? '' : 's'}?`,
+      description: `${ok.length} report card draft${ok.length === 1 ? '' : 's'} will be deleted. This cannot be undone.` + (others ? ` ${others} selected card${others === 1 ? ' is' : 's are'} not a draft and will be skipped.` : ''),
+      okLabel: `Delete ${ok.length}`, tone: 'danger' });
+    if (!yes) return;
+    let r; try { r = await Api.post('/report-cards/bulk-delete', { ids: cards.map(c => c.id) }); }
+    catch (e) { rcToast(rcSaid(e, 'Could not delete the drafts.'), 'error'); return; }
+    rcReloadList(); rcBulkSummary('deleted', r);
+  }
+
+  /* What happened, card by card: never a silent partial success. */
+  function rcBulkSummary(verb, r) {
+    const done = (r && r[verb]) || [], skipped = (r && r.skipped) || [];
+    const body = document.createElement('div');
+    const li = (x, why) => `<li><b>${esc(x.name || ('Report card #' + x.id))}</b>${why ? ` <span style="color:#92400E;">— ${esc(why)}</span>` : ''}</li>`;
+    body.innerHTML = `<p style="margin:0 0 10px;font-size:15px;font-weight:800;color:#0F172A;">${done.length} ${verb}${skipped.length ? `, ${skipped.length} skipped` : ''}</p>`
+      + (done.length ? `<ul style="margin:0 0 12px;padding-left:20px;font-size:13.5px;line-height:1.6;">${done.map(x => li(x)).join('')}</ul>` : '')
+      + (skipped.length ? `<div style="font-size:13px;font-weight:700;color:#92400E;margin:0 0 4px;">Skipped</div><ul style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.6;">${skipped.map(x => li(x, x.reason)).join('')}</ul>` : '');
+    KT.Shell.Modal.open({ title: verb === 'approved' ? '✅ Report cards approved' : '🗑️ Drafts deleted', body, actions: [{ label: 'Done', primary: true }] });
+    if (skipped.length) rcToast(`${done.length} ${verb}, ${skipped.length} skipped.`, done.length ? 'success' : 'error');
+    else rcToast(`${done.length} ${verb}. ✓`, 'success');
+  }
+
+  /* The bulk bar on the list (the portal's one: kt-polish-v2's tick boxes + .kt-bulk-bar). Its buttons follow the
+     selection - Sign & approve when one of them is yours to approve, Delete drafts for an admin when one is a draft. */
+  function rcWireBulk(table, rows) {
+    if (!table) return;
+    const byId = {}; rows.forEach(r => { byId[r.id] = r; });
+    const picked = (trs, all) => all ? rows : trs.map(tr => byId[+tr.getAttribute('data-id')]).filter(Boolean);
+    const sel = () => { const trs = Array.from(table.querySelectorAll('.kt-row-check:checked')).map(cb => cb.closest('tr')); return picked(trs, !!table.ktBulkAllMatching); };
+    table.ktBulkMatching = () => rows.length;
+    Object.defineProperty(table, 'ktBulkActions', { configurable: true, get() {
+      const cs = sel(), acts = [];
+      const nA = cs.filter(rcCanApprove).length, nD = RC.admin ? cs.filter(c => !c.replaced && rcGroup(c.status) === 'draft').length : 0;
+      if (nA) acts.push({ label: `✅ Sign & approve (${nA})`, run: (trs, o) => rcQuickApprove(picked(trs, o && o.allMatching)) });
+      if (nD) acts.push({ label: `🗑️ Delete drafts (${nD})`, danger: true, run: (trs, o) => rcBulkDelete(picked(trs, o && o.allMatching)) });
+      return acts;
+    } });
+    if (table.ktBulkRefresh) table.ktBulkRefresh();
   }
   function rcPaintAll() {
     const host = document.getElementById('rc-all'); if (!host) return;
@@ -1009,6 +1151,7 @@
       tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === tr) rcOpen(r.id, {}); });
     });
     if (window.KT && KT.enhanceTables) { try { KT.enhanceTables(); } catch (e) {} }
+    rcWireBulk(host.querySelector('table.rc-table'), rows);
   }
   async function rcLoadArchived() {
     let r; try { r = await Api.get('/report-cards/archived'); } catch (e) { rcToast(rcSaid(e, 'Could not load archived report cards.'), 'error'); RC.archived = []; return; }
@@ -1048,23 +1191,28 @@
     const host = document.getElementById('rc-pending'); if (!host) return;
     if (!RC.approver) { host.innerHTML = ''; return; }
     let r; try { r = await Api.get('/report-cards/pending'); } catch (e) { return; }
-    const pend = (r && r.data) || [];
+    const pend = (r && r.data) || []; RC.pendAdmin = !!(r && r.admin);
     if (!pend.length) { host.innerHTML = ''; return; }
     host.innerHTML = '<div class="kt-card" style="--kt-edge:#F59E0B;margin-bottom:16px;">' +
-      `<h3 style="margin:0 0 4px;">✍️ Awaiting your approval <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${pend.length}</span></h3>` +
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:0 0 4px;"><h3 style="margin:0;">✍️ ${RC.pendAdmin ? 'Awaiting your approval' : 'Awaiting approval'} <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${pend.length}</span></h3>`
+      + (!RC.pendAdmin ? '<span style="font-size:12.5px;color:#64748B;">Review and send back here. An agency admin signs &amp; approves.</span>' : '')
+      + (RC.pendAdmin && pend.length > 1 ? `<button type="button" class="kt-btn kt-btn-primary rc-approve-all" data-kt-iconized="1">✅ Sign &amp; approve all ${pend.length}</button>` : '') + '</div>' +
       '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Educators submitted these report cards for your review, signature and approval.</p>' +
       pend.map(p => `<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:12px 14px;margin-bottom:8px;">
         <div><b>${esc(p.child)}</b> — ${esc(p.term)}<div style="font-size:12px;color:#92400E;">Submitted by ${esc(p.submitted_by || 'an educator')}</div></div>
-        <div style="display:flex;gap:6px;align-items:center;"><button type="button" class="kt-btn kt-btn-primary rc-review" data-kt-iconized="1" data-id="${p.id}">Review &amp; sign</button>
+        <div style="display:flex;gap:6px;align-items:center;"><button type="button" class="kt-btn kt-btn-primary rc-review" data-kt-iconized="1" data-id="${p.id}">${p.can_approve ? 'Review &amp; sign' : 'Review'}</button>
         <button type="button" class="kt-ka-kebab rc-pmenu" data-id="${p.id}" aria-label="More actions" data-kttip="More actions">⋮</button></div></div>`).join('') + '</div>';
     const byId = {}; pend.forEach(p => { byId[p.id] = p; });
     host.querySelectorAll('.rc-review').forEach(b => { b.onclick = () => rcOpen(+b.getAttribute('data-id'), { edit: true }); });
+    const all = host.querySelector('.rc-approve-all');
+    if (all) all.onclick = () => rcQuickApprove(pend.map(p => Object.assign({ status: 'submitted' }, p)));
     host.querySelectorAll('.rc-pmenu').forEach(b => {
       b.onclick = () => {
         const p = byId[+b.getAttribute('data-id')], c = { id: p.id, child: p.child, term: p.term };
         const mk = (label, fn) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = label; x.addEventListener('click', fn); return x; };
         KT.openActionMenu(b, [
-          mk('👁️ View', () => rcOpen(p.id, {})), mk('✍️ Review & approve', () => rcOpen(p.id, { edit: true })),
+          mk('👁️ View', () => rcOpen(p.id, {})), mk(p.can_approve ? '✍️ Review & approve' : '✍️ Review', () => rcOpen(p.id, { edit: true })),
+          ...(p.can_approve ? [mk('✅ Sign & approve', () => rcQuickApprove([Object.assign({ status: 'submitted' }, p)]))] : []),
           mk('↩ Send back', () => rcSendBack(p.id)), mk('⬇️ Download PDF', () => rcDownload(c)), mk('🖨️ Print', () => rcPrint(c)),
         ]);
       };
@@ -1075,10 +1223,11 @@
   async function rcPaintSettings() {
     const host = document.getElementById('rc-settings'); if (!host || !RC.admin) { if (host) host.innerHTML = ''; return; }
     let s; try { s = await Api.get('/admin/report-card-settings'); } catch (e) { host.innerHTML = ''; return; }
+    if (!host.isConnected) return;   // the screen repainted while this was loading; the new paint fills its own host
     host.innerHTML = '<div class="kt-card" style="margin-top:16px;"><h3 style="margin:0 0 8px;">⚙️ Report card settings</h3>' +
       `<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;"><input type="checkbox" id="rc-set-rece" ${s && s.show_registry ? 'checked' : ''} style="width:17px;height:17px;margin-top:2px;accent-color:#2F8C86;">` +
       '<span><b>Show the educator\'s RECE registration number</b><br><span style="color:#64748B;font-size:12.5px;">Printed under "Prepared by" on report card PDFs when the educator has one on file.</span></span></label></div>';
-    const cb = document.getElementById('rc-set-rece');
+    const cb = host.querySelector('#rc-set-rece'); if (!cb) return;
     cb.onchange = async () => {
       try { await Api.post('/admin/report-card-settings', { show_registry: cb.checked }); rcToast('Saved.', 'success'); }
       catch (e) { cb.checked = !cb.checked; rcToast(rcSaid(e, 'Could not save.'), 'error'); }

@@ -146,6 +146,7 @@
       <td style="width:45%; border-top:0;" rowspan="2">
         <span class="lbl">{{ $L['agency'] }}:</span><span class="val">{{ $providerName }}</span>
         <span class="lbl" style="margin-top:5px;">{{ $L['address'] }}:</span><span class="val-sm">{{ $agencyAddress ?: $dash }}</span>
+        @if ($agencyPhone)<span class="lbl" style="margin-top:5px;">{{ $L['telephone'] }}:</span><span class="val-sm">{{ $agencyPhone }}</span>@endif
       </td>
       <td colspan="2" style="width:55%; border-top:0; height:52px;">
         <span class="lbl">{{ $L['centre'] }}:</span><span class="val">{{ $centreName ?: $providerName }}</span>
@@ -154,7 +155,7 @@
       </td>
     </tr>
     <tr>
-      <td style="width:30%;"><span class="lbl">{{ $L['director_lbl'] }}:</span><span class="val">{{ $director ?: $dash }}</span></td>
+      <td style="width:30%;"><span class="lbl">{{ $L['director_lbl'] }}:</span>@if($directors)<span class="val-sm" style="font-weight:bold;">{{ $directors }}</span>@endif @if($admins)<span class="val-sm" style="font-weight:bold;">{{ $admins }}</span>@endif @if(! $directors && ! $admins)<span class="val">{{ $dash }}</span>@endif</td>
       <td style="width:25%;"><span class="lbl">{{ $L['telephone'] }}:</span><span class="val">{{ $phone ?: $dash }}</span></td>
     </tr>
   </table>

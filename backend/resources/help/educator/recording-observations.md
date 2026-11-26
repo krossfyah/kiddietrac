@@ -100,6 +100,6 @@ At year-end, you can export all of a child's observations as a developmental sum
 
 ## Finding your report cards
 
-On the **Report cards** screen, **All report cards** lists the cards for the children in your rooms and the cards you wrote yourself. Use **Draft**, **Awaiting approval** and **Sent** to filter them, or search for a child. Tap a draft to finish it and **Sign & submit for approval**, or use **⋮** on its row to view, edit, download or print it. Once your director or admin approves it, it is marked **Sent**. To change a sent card you wrote, use **Edit (new version)**: your director or admin approves the new version before the family sees it.
+On the **Report cards** screen, **All report cards** lists the cards for the children in your rooms and the cards you wrote yourself. Use **Draft**, **Awaiting approval** and **Sent** to filter them, or search for a child. Tap a draft to finish it and **Sign & submit for approval**, or use **⋮** on its row to view, edit, download or print it. Once your director or admin approves it, it is marked **Sent**. To change a sent card you wrote, use **Edit (new version)**: your director or admin approves the new version before the family sees it. When you sign and submit a card, an **agency admin** reviews it and signs to approve it before it reaches the family.
 
 To write a new one, open the **✨ Generate with AI** tab. When a parent asks for a report card, **Write it** takes you there with the child and term filled in.

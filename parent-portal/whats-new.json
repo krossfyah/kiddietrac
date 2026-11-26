@@ -2,6 +2,18 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "✅",
+            "title": "Sign & approve several report cards",
+            "body": "Report cards are now approved by agency admins. Admins can sign and approve a card from its ⋮ menu, or tick several and approve them in one go, and delete several drafts at once. Directors still review, edit and send back. You get a list of what was done and anything skipped.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-26",
             "icon": "📑",

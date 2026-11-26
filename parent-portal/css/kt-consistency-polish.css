@@ -577,7 +577,7 @@ input.kt-switchified.kt-switchified {
    in JS, or selected/hover rows) still win — inline beats this rule — so nothing
    gets double-styled; this only fills in tables that had no striping. */
 #appMain table > tbody > tr:nth-child(even) { background-color: #F1F5F9; }
-#appMain table > tbody > tr:nth-child(even):hover { background-color: #E5EDF4; }
+#appMain table > tbody > tr:nth-child(even):hover { background-color: #E5EDF4 !important; } /* keeps its shade over the !important tint below */
 
 /* ── Table legibility (2026-08-14) ────────────────────────────────────────────
    Striping alone was not enough to read a wide table across: every row looked the
@@ -601,8 +601,10 @@ input.kt-switchified.kt-switchified {
 }
 /* A quiet line between rows so the eye can track across a wide one. */
 #appMain table > tbody > tr > td { border-bottom: 1px solid #EDF2F7; }
-/* Every row answers the cursor, not only the tinted ones. */
-#appMain table > tbody > tr:hover { background-color: #E8F0F7; }
+/* Every row answers the cursor, not only the tinted ones. !important since 2026-11-26: kt-polish-v22.css has
+   `table tbody tr:hover { background:#F9FAFB !important }`, which outranked this rule on every screen that is not
+   [data-kt-pretty] (Users, Account ledgers...), so those rows hovered near-white instead of the house tint. */
+#appMain table > tbody > tr:hover { background-color: #E8F0F7 !important; }
 /* PRETTY SCREENS GET THE SAME TINT (2026-11-26, Anthony: "the highlight of the records in the table are
    highlighted in black - full sweep"). kt-design-v22p64/66 give [data-kt-pretty] rows an !important hover of
    rgba(74,144,184,.04) or a white gradient, so those screens never showed the house tint above, and a screen's own

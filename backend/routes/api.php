@@ -3599,7 +3599,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/report-cards/pending',         [\App\Http\Controllers\Api\ReportCardController::class, 'pending']);
         Route::get ('/report-cards/all',             [\App\Http\Controllers\Api\ReportCardController::class, 'index']);   // every card the caller may see (2026-11-26)
-        Route::get ('/report-cards/archived',        [\App\Http\Controllers\Api\ReportCardController::class, 'archived']);   // admins: withdrawn children / closed centres (2026-11-26)
+        Route::get ('/report-cards/archived',        [\App\Http\Controllers\Api\ReportCardController::class, 'archived']);
+        // Several at once (2026-11-26): each card re-checked on its own, skipped with a reason when it fails.
+        Route::post('/report-cards/bulk-approve',    [\App\Http\Controllers\Api\ReportCardController::class, 'bulkApprove'])->middleware('throttle:10,1,r-rc-bulk');
+        Route::post('/report-cards/bulk-delete',     [\App\Http\Controllers\Api\ReportCardController::class, 'bulkDelete'])->middleware('throttle:10,1,r-rc-bulk');   // admins: withdrawn children / closed centres (2026-11-26)
         // Row actions (2026-11-26): view, history, edit as a new version, delete a draft, email the family.
         Route::get ('/report-cards/{id}',               [\App\Http\Controllers\Api\ReportCardController::class, 'show'])->whereNumber('id');
         Route::get ('/report-cards/{id}/history',       [\App\Http\Controllers\Api\ReportCardController::class, 'history'])->whereNumber('id');

@@ -143,6 +143,7 @@
       <div style="display:flex;align-items:center;gap:12px;">
         <span style="font-size:18px;">☑</span>
         <span class="kt-bulk-count" style="font-weight:700;">0 selected</span>
+        <button type="button" class="kt-bulk-more" style="display:none;background:none;border:0;color:#fff;text-decoration:underline;cursor:pointer;font-size:13px;font-weight:600;padding:0;"></button>
       </div>
       <div style="display:flex;gap:8px;align-items:center;" class="kt-bulk-btns">
         <span class="kt-bulk-custom" style="display:flex;gap:8px;"></span>
@@ -187,28 +188,40 @@
           if (!rows.length) { return; }
           const was = b.textContent;
           b.disabled = true; b.textContent = 'Working…';
-          try { await a.run(rows); } catch (e) { /* the action reports its own failure */ }
+          try { await a.run(rows, { allMatching: !!table.ktBulkAllMatching }); } catch (e) { /* the action reports its own failure */ }
           b.disabled = false; b.textContent = was;
         };
         host.appendChild(b);
       });
     }
 
+    /* SELECT ALL N MATCHING (2026-11-26). A screen whose list is longer than the rows drawn (a cap, a pager) sets
+       `table.ktBulkMatching = () => n`. Ticking the header box then offers "Select all n matching"; its actions get
+       run(rows, {allMatching:true}) and act on the whole filtered list. Unticking any row drops back to the rows. */
     function updateActionBar() {
       const checked = Array.from(tbody.querySelectorAll('.kt-row-check:checked'));
       const n = checked.length;
+      const total = Array.from(tbody.querySelectorAll('.kt-row-check')).filter(cb => cb.closest('tr').style.display !== 'none').length;
+      const matching = typeof table.ktBulkMatching === 'function' ? (+table.ktBulkMatching() || 0) : 0;
+      if (!n || n < total || matching <= n) table.ktBulkAllMatching = false;
+      const all = !!table.ktBulkAllMatching;
       syncCustomActions();
-      bar.querySelector('.kt-bulk-count').textContent = n + ' selected';
+      bar.querySelector('.kt-bulk-count').textContent = (all ? matching : n) + ' selected';
+      const more = bar.querySelector('.kt-bulk-more');
+      if (more) { const show = n > 0 && n === total && matching > n; more.style.display = show ? '' : 'none';
+        more.textContent = all ? 'Select only the ' + n + ' shown' : 'Select all ' + matching + ' matching'; }
       bar.style.display = n > 0 ? 'flex' : 'none';
       // Header checkbox indeterminate
-      const total = Array.from(tbody.querySelectorAll('.kt-row-check')).filter(cb => cb.closest('tr').style.display !== 'none').length;
       headerCheckbox.checked = n === total && n > 0;
       headerCheckbox.indeterminate = n > 0 && n < total;
     }
     bar.querySelector('.kt-bulk-clear').onclick = () => {
       Array.from(tbody.querySelectorAll('.kt-row-check')).forEach(cb => cb.checked = false);
+      table.ktBulkAllMatching = false;
       updateActionBar();
     };
+    bar.querySelector('.kt-bulk-more').onclick = () => { table.ktBulkAllMatching = !table.ktBulkAllMatching; bar.querySelector('.kt-bulk-custom').dataset.sig = ''; updateActionBar(); };
+    table.ktBulkRefresh = () => { bar.querySelector('.kt-bulk-custom').dataset.sig = ''; updateActionBar(); };
     bar.querySelector('.kt-bulk-csv').onclick = () => {
       // Reuse the kt-polish CSV export but with only checked rows
       const csv = [];

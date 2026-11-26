@@ -5,7 +5,7 @@ order: 76
 ---
 # Report cards
 
-AI-generated narrative reports per child, organised by HDLH domain. Director reviews + edits + sends.
+AI-generated narrative reports per child, organised by HDLH domain. Directors review, edit and send back; **report cards are now approved by agency admins**.
 
 ## Generating
 
@@ -30,9 +30,11 @@ Each domain text is editable. Tweak as needed — the AI gets you 90% of the way
 Under the approvals on the **Report cards** screen, **All report cards** lists every card you can see, newest first: the child, the term, who made it, its status, the centre and when it was last changed.
 
 - Agency admins see every card in the agency. Directors see the cards for their own centres.
+- **Who approves:** the educator or provider signs and submits (*Prepared by*). An **agency admin** signs and approves (*Approved by*), which sends the card to the family. Directors review, edit and send back cards for their centres, but don't approve them. Cards a director approved before this change keep that approval.
 - Tap **Draft**, **Awaiting approval** or **Sent** to show just those. Each chip shows how many there are.
 - Search for a child, or narrow the list by term, by who made it, or by centre.
-- Tap a card to open it in a popup, or use **⋮** on its row: **View**, **Edit**, **Download PDF**, **Print**, **Email to family**, **Review & approve**, **Send back** and **Delete draft**. You only see the ones you can use.
+- Tap a card to open it in a popup, or use **⋮** on its row: **View**, **Edit**, **Download PDF**, **Print**, **Email to family**, **Review & approve**, **Sign & approve**, **Send back** and **Delete draft**. You only see the ones you can use.
+- **Several at once:** tick the boxes at the start of the rows (the box in the header ticks every row shown, then offers **Select all … matching**). For agency admins, the bar above the list shows **Sign & approve** and **Delete drafts**. You sign once and confirm. Each card is still checked on its own: a card that is already approved, or at a centre you don't direct, is skipped, and the list at the end says which ones and why. Deleting drafts cannot be undone.
 - **Editing a sent card** makes a new version (v2, v3…). The new version is approved again before it reaches the family. The earlier one stays, marked **Replaced**, and both PDFs are kept under **History & versions**.
 - **Email to family** lists the child's guardians who have an email address. Nobody is ticked for you. Add a note if you like, preview the email, then send. Each person gets a secure link to the PDF that works for 14 days. Who sent it, to whom and when is kept in the card's history.
 - **Delete draft** is for agency admins, and only for drafts that were never sent.
@@ -41,14 +43,14 @@ Cards for withdrawn children and closed centres are not listed there. Agency adm
 
 ## The PDF
 
-The PDF is laid out as a progress report. Your agency's logo and name sit at the top, with the term and date. A ruled grid shows the child, the card's reference, days absent, days late and late pick-ups for the term (from attendance; blank when the term has no dates), the room and educator, your agency and centre addresses, the director and the phone number. Each learning area of your framework has its own grey panel, followed by **Strengths / Next Steps for Growth** and the signatures of the educator and the approver. A reference number and page number are on every page. Drafts are stamped *DRAFT – not approved*. Print uses the same layout.
+The PDF is laid out as a progress report. Your agency's logo and name sit at the top, with the term and date. A ruled grid shows the child, the card's reference, days absent, days late and late pick-ups for the term (from attendance; blank when the term has no dates), the room and educator, your agency and centre addresses, the centre's directors and the agency's admins (**Director / Administrator**), and both phone numbers. Each learning area of your framework has its own grey panel, followed by **Strengths / Next Steps for Growth** and the signatures of the educator and the approver. A reference number and page number are on every page. Drafts are stamped *DRAFT – not approved*. Print uses the same layout.
 
 Agency admins can choose whether the educator's RECE registration number is printed: **Report card settings** at the bottom of the Report cards tab. It is on unless you turn it off.
 
 ## Statuses
 
 - **Draft** — generated, not yet sent
-- **Reviewed** — director has edited + signed off
+- **Reviewed** — a director or admin has edited it
 - **Sent** — emailed to the family + guardians notified
 
 ## PDF export

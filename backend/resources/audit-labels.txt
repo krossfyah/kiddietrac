@@ -889,6 +889,8 @@ post refunds/invoice | Refunded an invoice
 post report-cards/generate | Generated report cards
 get report-cards/all | Viewed all report cards
 get report-cards/archived | Viewed archived report cards
+post report-cards/bulk-approve | Signed & approved several report cards
+post report-cards/bulk-delete | Deleted several report card drafts
 get report-cards/{id} | Opened a report card
 get report-cards/{id}/history | Viewed a report card's history
 post report-cards/{id}/revise | Started a new version of a report card
