@@ -982,7 +982,7 @@
     const eHtml = evs.length ? '<div style="font-weight:700;margin:10px 0 4px;">History</div>' + evs.map(e => {
       const d = e.detail || {};
       const to = Array.isArray(d.to) ? d.to.map(t => esc(t.name || t.email) + (t.email ? ' (' + esc(t.email) + ')' : '')).join(', ') : '';
-      return `<div style="padding:3px 0;"><b>${esc(RC_EV[e.action] || e.action)}</b>${to ? ' to ' + to : ''}${d.note ? ': “' + esc(d.note) + '”' : ''} · ${who(e)} · <span style="color:#64748B;">${esc(rcDay(e.at))}</span></div>`;
+      return `<div style="padding:3px 0;"><b>${esc(RC_EV[e.action] || e.action)}</b>${to ? ' to ' + to : ''}${e.action === 'emailed' ? (d.attachment ? ' · 📎 PDF attached' : (d.link ? ' · secure link' : '')) : ''}${d.note ? ': “' + esc(d.note) + '”' : ''} · ${who(e)} · <span style="color:#64748B;">${esc(rcDay(e.at))}</span></div>`;
     }).join('') : '<div style="color:#64748B;">No history recorded yet. Actions from 2026-11-26 on are listed here.</div>';
     box.innerHTML = vHtml + eHtml;
     const byId = {}; vs.forEach(v => { byId[v.id] = v; });

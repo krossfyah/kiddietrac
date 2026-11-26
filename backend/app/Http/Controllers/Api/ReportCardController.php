@@ -522,12 +522,20 @@ final class ReportCardController extends Controller
         if (! empty($data['to'])) {
             $g = $this->guardiansFor($child)->firstWhere('id', (int) $data['to'][0]);
         }
-        $mail = \App\Support\ReportCardMail::build($this->mailFields($row, $child, $agencyId,
-            $g ? (string) ($g->preferred_name ?: $g->first_name) : '', $request, (string) ($data['message'] ?? ''), '#preview'));
-        return response()->json($mail);
+        $f = $this->mailFields($row, $child, $agencyId,
+            $g ? (string) ($g->preferred_name ?: $g->first_name) : '', $request, (string) ($data['message'] ?? ''), '#preview');
+        $f['attachment'] = $this->cardFileName($row, $child);   // the preview shows the attached form, as sent
+        return response()->json(\App\Support\ReportCardMail::build($f));
     }
 
-    /** Email the card to the guardians ticked in the popup: each gets their own 14-day secure link. */
+    /** The attachment's name: "Liam S - Spring 2026 Report Card.pdf". */
+    private function cardFileName(object $row, object $child): string
+    {
+        return \App\Support\ReportCardMail::filename((string) (($child->preferred_name ?? '') ?: $child->first_name), (string) $child->last_name, (string) $row->term);
+    }
+
+    /** Email the card to the guardians ticked in the popup, the PDF attached (the same file as Download); a secure 14-day
+     *  link per guardian only when the PDF is too big to attach (ReportCardMail::MAX_ATTACH). */
     public function email(Request $request, int $id): JsonResponse
     {
         [$row, $child, $agencyId] = $this->emailable($request, $id);
@@ -551,16 +559,23 @@ final class ReportCardController extends Controller
 
         $sent = 0;
         $failed = [];
+        $pdf = (string) $this->pdfResponse($row)->getContent();   // the Download file: current approved version
+        $fname = $this->cardFileName($row, $child);
+        $attach = $pdf !== '' && strlen($pdf) <= \App\Support\ReportCardMail::MAX_ATTACH;
         foreach ($to as $g) {
-            $url = \Illuminate\Support\Facades\URL::temporarySignedRoute('rc.signed', now()->addDays(14), ['id' => $id, 'u' => (int) $g->id]);
-            $mail = \App\Support\ReportCardMail::build($this->mailFields($row, $child, $agencyId,
-                (string) ($g->preferred_name ?: $g->first_name), $request, (string) ($data['message'] ?? ''), $url));
+            $url = $attach ? '' : \Illuminate\Support\Facades\URL::temporarySignedRoute('rc.signed', now()->addDays(14), ['id' => $id, 'u' => (int) $g->id]);
+            $f = $this->mailFields($row, $child, $agencyId, (string) ($g->preferred_name ?: $g->first_name), $request, (string) ($data['message'] ?? ''), $url);
+            $f['attachment'] = $attach ? $fname : null;
+            $mail = \App\Support\ReportCardMail::build($f);
             $email = mb_strtolower(trim((string) $g->email));
             try {
-                \Illuminate\Support\Facades\Mail::html($mail['html'], function ($m) use ($email, $mail, $agencyId) {
+                \Illuminate\Support\Facades\Mail::html($mail['html'], function ($m) use ($email, $mail, $agencyId, $attach, $pdf, $fname) {
                     \App\Support\MailScope::agency($m, $agencyId);
                     $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
                     $m->to($email)->subject($mail['subject']);
+                    if ($attach) {
+                        $m->attachData($pdf, $fname, ['mime' => 'application/pdf']);
+                    }
                 });
                 $sent++;
             } catch (\Throwable $e) {
@@ -568,13 +583,15 @@ final class ReportCardController extends Controller
                 \Illuminate\Support\Facades\Log::warning('report card email failed', ['card' => $id, 'error' => $e->getMessage()]);
             }
         }
-        $this->logEvent($id, $uid, 'emailed', ['to' => $list, 'sent' => $sent, 'failed' => $failed, 'message' => $hasMsg]);
+        $how = $attach ? ['attachment' => $fname, 'bytes' => strlen($pdf)] : ['attachment' => null, 'link' => 'secure 14-day link (PDF too big to attach)'];
+        $this->logEvent($id, $uid, 'emailed', ['to' => $list, 'sent' => $sent, 'failed' => $failed, 'message' => $hasMsg] + $how);
         try {
             \App\Support\Audit::write(['user_id' => $uid, 'agency_id' => $agencyId, 'action' => 'report_card.emailed',
                 'entity_type' => 'report_card', 'entity_id' => $id, 'payload' => json_encode([
-                    'summary' => 'Emailed the ' . $row->term . ' report card to ' . implode(', ', array_column($list, 'email')),
+                    'summary' => 'Emailed the ' . $row->term . ' report card to ' . implode(', ', array_column($list, 'email'))
+                        . ($attach ? ' (PDF attached: ' . $fname . ')' : ' (secure link; PDF too big to attach)'),
                     'to' => $list, 'sent' => $sent,
-                ], JSON_UNESCAPED_UNICODE), 'created_at' => now()]);
+                ] + $how, JSON_UNESCAPED_UNICODE), 'created_at' => now()]);
         } catch (\Throwable $e) {
         }
         return response()->json(['sent' => $sent, 'failed' => $failed]);

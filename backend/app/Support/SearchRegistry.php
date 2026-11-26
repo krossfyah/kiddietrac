@@ -159,6 +159,7 @@ final class SearchRegistry
 
     /** Deliberately NOT in the global search, with the reason. */
     public const NOT_SEARCHABLE = [
+        'report_card_events' => 'a report card\'s history (drafted, submitted, approved, emailed...); shown under History & versions on the card, which is searchable',
         // KiddieTrac HR (2026-11-27)
         'hr_leave_types' => 'an agency\'s own leave types (HR > Leave types); configuration, found on that screen',
         'hr_leave_ledger' => 'leave balance history; shown on the person\'s HR profile and time-off requests: search the staff member',
