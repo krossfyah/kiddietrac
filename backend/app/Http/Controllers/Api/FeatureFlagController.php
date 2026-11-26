@@ -80,8 +80,8 @@ final class FeatureFlagController extends Controller
             'hashes' => ['awards']],
         'parent_feedback'   => ['label' => 'Parent feedback & NPS',        'plan_min' => 'starter',    'group' => 'Family engagement',
             'hashes' => ['parent-feedback', 'nps']],
-        'sms'               => ['label' => 'SMS & voice announcements',    'plan_min' => 'addon',      'group' => 'Family engagement',
-            'hashes' => ['sms', 'sms-settings']],
+        'sms'               => ['label' => 'SMS & voice, Safe Arrival & phone line',    'plan_min' => 'addon',      'group' => 'Family engagement',
+            'hashes' => ['sms', 'sms-settings', 'safe-arrival']],   // + Safe Arrival (2026-11-26)
 
         // ── Staff ─────────────────────────────────────────────────────────────────
         'staff_scheduling'  => ['label' => 'Staff scheduling',             'plan_min' => 'starter',    'group' => 'Staff',
@@ -104,7 +104,7 @@ final class FeatureFlagController extends Controller
                 'payment-plans', 'tuition-increases', 'refunds', 'account-ledgers', 'tuition-plans', 'vacation-holds',
                 'billing-setup', 'sibling-discounts', 'etransfer-requests']],
         'autopay'           => ['label' => 'Card & bank autopay',          'plan_min' => 'growth',     'group' => 'Billing & payments',
-            'hashes' => ['payment-providers', 'payment-run']],
+            'hashes' => ['payment-providers', 'payment-run', 'autopay', 'autopay-card', 'ach-pay']],   // + the parent autopay screens (2026-11-26)
         'expenses'          => ['label' => 'Expenses, suppliers & POs',    'plan_min' => 'growth',     'group' => 'Billing & payments',
             'hashes' => ['expenses']],
         'accounting_sync'   => ['label' => 'Accounting: QuickBooks, Xero & Sage', 'plan_min' => 'growth',   'group' => 'Billing & payments',
@@ -226,7 +226,7 @@ final class FeatureFlagController extends Controller
     /** Features that are KiddieTrac's own tools, never an agency's: a superadmin always has them (2026-10-25). */
     public const PLATFORM_WIDE = ['mrr_dashboard'];
 
-    public static function hiddenHashesFor(?int $agencyId, bool $platformAdmin = false): array
+    public static function hiddenHashesFor(?int $agencyId, bool $platformAdmin = false, ?array $roles = null): array
     {
         $hidden = [];
         foreach (self::effectiveFor($agencyId) as $key => $on) {
@@ -243,6 +243,14 @@ final class FeatureFlagController extends Controller
         $eff = self::effectiveFor($agencyId);
         if (empty($eff['lesson_plans']) && ! empty($eff['ai_tools'])) {
             $hidden = array_values(array_diff($hidden, ['play-spark']));
+        }
+
+        /* A PARENT'S AND A HOME VISITOR'S PLAY SPARK IS AI ONLY (2026-11-26, moved here from app-v2-shell.js
+           aiOnlyHidden so the server's list is the one answer). For staff it also holds the weekly plan, so it
+           stays for them; for someone who is only a parent and/or home visitor it goes without the AI Bundle. */
+        if ($roles && ! array_diff($roles, ['guardian', 'home_visitor']) && ! in_array('play-spark', $hidden, true)
+            && ! rescue(fn () => \App\Support\AiBundle::on($agencyId), true, false)) {
+            $hidden[] = 'play-spark';
         }
 
         return array_values(array_unique($hidden));

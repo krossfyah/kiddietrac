@@ -75,8 +75,25 @@ final class MessagingOverage
 
     public static function thresholdsFor(array $s, int $agencyId): array
     {
-        return ['texts' => $s['agencies'][$agencyId]['texts'] ?? $s['default']['texts'],
-            'calls' => $s['agencies'][$agencyId]['calls'] ?? $s['default']['calls']];
+        $texts = $s['agencies'][$agencyId]['texts'] ?? $s['default']['texts'];
+
+        /* A PREPAID SMS INCREMENTAL RAISES THE ALLOWANCE (2026-11-26, Anthony: give 'SMS Incremental' "a real monthly SMS
+           quota increase"). Each live SMS Incremental line on the agency's licence adds its qty in blocks, each the size
+           of the agency's text allowance, to the texts allowed each month - so a block bought ahead is not charged again
+           as overage. Nothing here stops a text: the allowance only decides what is billed. */
+        $texts += self::prepaidBlocks($agencyId) * $texts;
+
+        return ['texts' => $texts, 'calls' => $s['agencies'][$agencyId]['calls'] ?? $s['default']['calls']];
+    }
+
+    /** Blocks of texts bought ahead: the qty on the agency's live SMS Incremental licence lines. */
+    public static function prepaidBlocks(int $agencyId): int
+    {
+        $pid = DB::table('sales_products')->where('name', self::PRODUCT_NAME)->where('kind', 'addon')->value('id');
+        if (! $pid) return 0;
+
+        return (int) floor((float) DB::table('agency_licences')->where('agency_id', $agencyId)->where('product_id', $pid)
+            ->whereIn('status', Licences::LIVE)->sum('qty'));
     }
 
     /** The SMS Incremental add-on in the catalogue, created (KT-ADD part number, $15 per block) the first time. */

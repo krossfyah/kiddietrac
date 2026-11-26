@@ -219,21 +219,108 @@
   function hiddenHashes() {
     try {
       var u = Auth.user();
-      return aiOnlyHidden(u, (u && Array.isArray(u.hidden_screens)) ? u.hidden_screens : []);
+      return notLocked((u && Array.isArray(u.hidden_screens)) ? u.hidden_screens : [], u);
     } catch (e) { return []; }
   }
-  /* PLAY SPARK FOR EVERY PLAN (2026-11-24, lesson plans merged into it). For staff it holds the weekly plan, so
-     the server lists it under lesson_plans. A parent's "Play at home" and a home visitor's Play Spark are AI only,
-     so without the AI Bundle (ai_bundle, the server's AiBundle::on) the item goes for those two roles. */
-  function aiOnlyHidden(u, list) {
-    if (!u || u.ai_bundle !== false) return list;
-    var r = '';
-    try { r = Roles.primaryRoleOf(u); } catch (e) {}
-    if ((r === 'guardian' || r === 'home_visitor') && list.indexOf('play-spark') === -1) return list.concat(['play-spark']);
-    return list;
+  /* PLAY SPARK FOR EVERY PLAN (2026-11-24): a parent's and a home visitor's Play Spark is AI only. That rule moved
+     to the server (FeatureFlagController::hiddenHashesFor, 2026-11-26), so hidden_screens is the one answer. */
+
+  /* LOCKED FEATURES: AN AGENCY ADMIN SEES THEM AS AN UPGRADE (2026-11-26, Anthony: "show to AGENCY ADMINS only as
+     upsell - greyed menu items/tiles with an Upgrade badge opening a clean info popup"). The server sends
+     locked_screens (App\Support\PlanUpsell) only to an agency admin of a licensed agency: hash -> {feature, label,
+     blurb, via}. Those hashes stay in hidden_screens - search, the route guard and the API still treat them as off -
+     but the menu and the tiles keep them, greyed with a badge, and a tap explains instead of navigating. Staff and
+     parents get no locked_screens, so for them nothing changes: the item is simply not there. */
+  function lockedMap(u) {
+    try {
+      u = u || Auth.user();
+      var m = u && u.locked_screens;
+      return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {};
+    } catch (e) { return {}; }
   }
+  function notLocked(list, u) {
+    var L = lockedMap(u);
+    return (list || []).filter(function (h) { return !L[h]; });
+  }
+  (function upsellStyle() {
+    try {
+      if (document.getElementById('kt-upsell-css')) return;
+      var st = document.createElement('style'); st.id = 'kt-upsell-css';
+      st.textContent = '.kt-locked{opacity:.55;filter:grayscale(.6);cursor:pointer}'
+        + '.kt-locked:hover{opacity:.8}'
+        + '.kt-upgrade-badge{display:inline-flex;align-items:center;margin-left:auto;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.02em;line-height:16px;color:#fff;background:linear-gradient(135deg,#1E3A8A,#0D9488);opacity:1;filter:none;white-space:nowrap;flex:0 0 auto}'
+        + '.kt-tile .kt-upgrade-badge{position:absolute;top:8px;right:8px;margin:0}'
+        + '.kt-upsell p{margin:0 0 10px;font-size:14px;line-height:1.5;color:var(--kt-ink,#334155)}'
+        + '.kt-upsell .kt-upsell-via{display:inline-block;margin:2px 0 12px;padding:4px 10px;border-radius:8px;font-size:12.5px;font-weight:700;background:rgba(13,148,136,.12);color:#0F766E}'
+        + '.kt-upsell .kt-upsell-note{font-size:12px;color:#64748B;margin:0}';
+      (document.head || document.documentElement).appendChild(st);
+    } catch (e) {}
+  })();
+  function markLocked(root) {
+    var L = lockedMap();
+    var keys = Object.keys(L);
+    if (!keys.length || !root) { return; }
+    keys.forEach(function (h) {
+      var nodes;
+      try { nodes = root.querySelectorAll('[href="#' + h + '"],[data-hash="' + h + '"]'); } catch (e) { return; }
+      [].forEach.call(nodes, function (el) {
+        if (el.getAttribute('data-kt-locked')) { return; }
+        el.setAttribute('data-kt-locked', h);
+        el.setAttribute('aria-disabled', 'true');
+        el.classList.add('kt-locked');
+        el.setAttribute('data-kttip', 'Not in your plan yet - tap to see how to add it');
+        var b = document.createElement('span');
+        b.className = 'kt-upgrade-badge';
+        b.textContent = 'Upgrade';
+        el.appendChild(b);
+      });
+    });
+  }
+  window.KT.markLocked = markLocked;
+  function upsellBody(info) {
+    var wrap = Dom.el('div', { class: 'kt-upsell' });
+    wrap.appendChild(Dom.el('p', {}, info.blurb || info.label));
+    wrap.appendChild(Dom.el('div', { class: 'kt-upsell-via' }, 'Comes with ' + (info.via || 'an upgrade')));
+    wrap.appendChild(Dom.el('p', { class: 'kt-upsell-note' },
+      'Only agency admins see this. Your team and families will see it once it is part of your plan.'));
+    return wrap;
+  }
+  async function askForUpgrade(info, hash) {
+    await window.KT.Api.post('/tickets', {
+      request_type: 'addon',
+      impact: 'question',
+      subject: 'Add to our plan: ' + info.label,
+      body: 'We would like to add ' + info.label + ' (' + (info.via || 'upgrade') + ') to our plan.',
+      context: { screen: '#' + hash, feature: info.feature },
+    });
+    if (Dom.toast) Dom.toast('Sent - we will be in touch about ' + info.label + '.', 'success');
+  }
+  function openUpsell(hash) {
+    var info = lockedMap()[hash];
+    if (!info) { return; }
+    Modal.open({
+      title: '🔒 ' + info.label,
+      body: upsellBody(info),
+      actions: [
+        { label: 'Not now' },
+        { label: 'See my plan', handler: function () { location.hash = '#licence'; } },
+        { label: 'Ask about adding it', primary: true, busyLabel: 'Sending…', handler: function () { return askForUpgrade(info, hash); } },
+      ],
+    });
+  }
+  window.KT.openUpsell = openUpsell;
+  // A tap on a locked item explains instead of opening a screen the plan does not include.
+  document.addEventListener('click', function (ev) {
+    var a = ev.target && ev.target.closest ? ev.target.closest('[data-kt-locked]') : null;
+    if (!a) { return; }
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (ev.stopImmediatePropagation) { ev.stopImmediatePropagation(); }
+    openUpsell(a.getAttribute('data-kt-locked'));
+  }, true);
 
   function pruneHiddenLinks(root) {
+    try { markLocked(root); } catch (e) {}
     var hidden = hiddenHashes();
     if (!hidden.length || !root) { return; }
     hidden.forEach(function (h) {
@@ -251,7 +338,7 @@
   window.KT.pruneHiddenLinks = pruneHiddenLinks;
 
   function hideSwitchedOff(sections, user) {
-    var hidden = aiOnlyHidden(user, (user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : []);
+    var hidden = notLocked((user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [], user);
     if (!hidden.length) { return sections; }
     var off = {};
     hidden.forEach(function (h) { off[String(h)] = true; });
@@ -1021,7 +1108,7 @@
        one-shot prune here would run before it exists. Watch instead — for an agency with
        nothing switched off this never attaches at all. */
     try {
-      if (hiddenHashes().length && !window.__ktNavPruneObs) {
+      if ((hiddenHashes().length || Object.keys(lockedMap(user)).length) && !window.__ktNavPruneObs) {
         var _nl = Dom.$('#navLinks');
         if (_nl && window.MutationObserver) {
           window.__ktNavPruneObs = new MutationObserver(function () { pruneHiddenLinks(_nl); });
@@ -3521,6 +3608,20 @@
        (CheckFeatureFlag); this is the part that explains itself. (2026-09-17) */
     try {
       var _hidden = (user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [];
+      if (_hidden.indexOf(hash) !== -1 && lockedMap(user)[hash]) {
+        ensureTopbar(hash);
+        var _li = lockedMap(user)[hash];
+        var _up = emptyState('🔒', _li.label, '');
+        var _ub = upsellBody(_li); _ub.style.maxWidth = '520px'; _ub.style.margin = '0 auto';
+        _up.appendChild(_ub);
+        _up.appendChild(Dom.el('div', { style: 'display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap' },
+          Dom.el('a', { class: 'btn btn-secondary', href: '#licence' }, 'See my plan'),
+          Dom.el('button', { class: 'btn btn-primary', type: 'button', onClick: function () { openUpsell(hash); } }, 'Ask about adding it')));
+        main.appendChild(_up);
+        _ktReveal(true);
+        __ktDropSnapshot();
+        return;
+      }
       if (_hidden.indexOf(hash) !== -1) {
         ensureTopbar(hash);
         main.appendChild(emptyState(

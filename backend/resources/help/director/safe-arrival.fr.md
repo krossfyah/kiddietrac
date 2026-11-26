@@ -12,6 +12,8 @@ d’absence, KiddieTrac interroge les parents. S’ils ne répondent pas, il peu
 puis il alerte les éducateurs de la salle et le directeur — et le tableau **Safe Arrival**
 indique qui doit encore être appelé.
 
+> Safe Arrival est inclus dans le module **SMS et voix**. Sans ce module, les administrateurs de l'agence le voient grisé avec un badge **Upgrade**.
+
 [[open: #safe-arrival | Ouvrir Safe Arrival]]
 
 ## Comment ça fonctionne

@@ -345,7 +345,6 @@ route parent/menu
 route parent/messages
 route parent/notifications
 route parent/onboarding
-route parent/phone-line
 route parent/pickup-login-requests
 route parent/pickup-plan
 route parent/running-late
@@ -467,12 +466,6 @@ route reseller/statement
 route reseller/tickets
 route rsvp/google
 route safe-arrival
-route safe-arrival/departure
-route safe-arrival/history
-route safe-arrival/phone-messages
-route safe-arrival/settings
-route safe-arrival/test-call
-route safe-arrival/today
 route sales/activities
 route sales/activity-files
 route sales/announcements
@@ -543,7 +536,6 @@ route voice/voicemail
 route widgets/me
 route zumrails/webhook
 
-screen ach-pay
 screen admin
 screen admin-
 screen admin-billing
@@ -558,8 +550,6 @@ screen agency-billing
 screen ai-usage
 screen ask
 screen auto-signoff
-screen autopay
-screen autopay-card
 screen backups
 screen birthday-settings
 screen calendar
@@ -647,7 +637,6 @@ screen reseller-support
 screen resellers
 screen rsvp
 screen running-late
-screen safe-arrival
 screen sales
 screen sales-bookings
 screen sales-calendar
@@ -725,8 +714,6 @@ job kiddietrac:portal-tips
 job kiddietrac:ref-codes
 job kiddietrac:revoke-off-tokens
 job kiddietrac:roster-alerts
-job kiddietrac:safe-arrival
-job kiddietrac:safe-arrival-next
 job kiddietrac:sales-campaigns
 job kiddietrac:sales-followups
 job kiddietrac:task-reminders
@@ -790,3 +777,4 @@ job tokens:prune
 job training:remind
 job walks:close-forgotten
 job walks:nudge-quiet
+job kt:addon-coverage

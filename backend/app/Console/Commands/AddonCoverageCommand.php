@@ -60,6 +60,8 @@ final class AddonCoverageCommand extends Command
         'timeoff:remind-approvers' => ['timesheets', 'app/Console/Commands/TimeOffRemindApprovers.php'],
         'forms:remind-countersign' => ['forms', 'app/Console/Commands/CountersignRemindCommand.php'],
         'kt:payslip-notices' => ['payroll', 'app/Support/PayslipNotices.php'],
+        'kiddietrac:safe-arrival' => ['sms', 'app/Console/Commands/SafeArrivalCommand.php'],
+        'kiddietrac:safe-arrival-next' => ['sms', 'app/Console/Commands/SafeArrivalNextCallCommand.php'],
         'kiddietrac:report-card-reminders' => ['ai_tools', 'app/Console/Commands/ReportCardRemindersCommand.php'],
         // AI inside shared jobs: the job runs for everyone, its AI part asks AiBundle.
         'kiddietrac:parent-summary' => ['ai_tools', 'app/Console/Commands/ParentDailySummaryCommand.php'],
@@ -153,9 +155,9 @@ final class AddonCoverageCommand extends Command
         // 6. LICENCE ------------------------------------------------------------------------------------------
         foreach (DB::table('agencies')->whereNull('deleted_at')->get(['id', 'name', 'settings']) as $a) {
             if (\App\Support\Licences::managed((int) $a->id)) continue;
-            $demo = ! empty((json_decode((string) $a->settings, true) ?: [])['demo']);
-            $msg = "agency {$a->id} ({$a->name}) has no licence, so every feature and add-on is on";
-            if ($demo) $this->warn[] = $msg . ' (demo agency)'; else $this->fail[] = $msg;
+            /* Test agencies are full showcases on purpose (2026-11-26, Anthony): exempt. */
+            if (\App\Support\TestAgency::isAgency((int) $a->id) || ! empty((json_decode((string) $a->settings, true) ?: [])['demo'])) continue;
+            $this->fail[] = "agency {$a->id} ({$a->name}) has no licence, so every feature and add-on is on";
         }
 
         if ($this->option('write-baseline')) {

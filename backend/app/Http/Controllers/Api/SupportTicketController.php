@@ -362,6 +362,8 @@ final class SupportTicketController extends Controller
         'idea'        => ['label' => 'Suggest an improvement',    'category' => 'feature',     'hq' => true],
         // Agency plan only, 3 courtesy requests a year, reviewed by HQ (2026-10-24, App\Support\Licences::enhancements).
         'enhancement' => ['label' => 'Request an enhancement',    'category' => 'feature',     'hq' => true],
+        // A plan or add-on the agency would like (the Upgrade popup, App\Support\PlanUpsell, 2026-11-26) - KiddieTrac sells it.
+        'addon'       => ['label' => 'Add a feature to our plan', 'category' => 'account',     'hq' => true],
         'account'     => ['label' => 'Account & sign-in',         'category' => 'account',     'hq' => false],
         'billing'     => ['label' => 'Billing & payments',        'category' => 'billing',     'hq' => false],
         'enrollment'  => ['label' => 'Enrollment & families',     'category' => 'enrollment',  'hq' => false],

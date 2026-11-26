@@ -37,7 +37,12 @@ final class EnforcePlanFeatures
         'wellness'         => [['wellness/'], []],
         'awards'           => [['provider/awards', 'parent/awards'], []],
         'parent_feedback'  => [['engagement/nps', 'feedback/day', 'feedback/mine-educator'], []],
-        'sms'              => [['admin/sms', 'admin/sms-settings', 'sms-replies', 'admin/voice'], []],   // + voice announcements: the feature is "SMS & voice announcements" (2026-11-26)
+        'sms'              => [['admin/sms', 'admin/sms-settings', 'sms-replies', 'admin/voice',
+            /* Safe Arrival and the parent phone line need the SMS & voice add-on (2026-11-26, Anthony: "safe arrival needs
+               SMS plan, parent phone line needs SMS/voice plan"). Not /safe-arrival/{child}/late: Running late is a
+               standard feature, and /resolve only closes a check that already exists. */
+            'safe-arrival/today', 'safe-arrival/history', 'safe-arrival/departure', 'safe-arrival/settings',
+            'safe-arrival/test-call', 'safe-arrival/phone-messages', 'parent/phone-line'], []],   // + voice announcements: the feature is "SMS & voice announcements" (2026-11-26)
         'staff_scheduling' => [['director/schedule', 'operations/substitutes', 'operations/sub-requests', 'operations/room-rotations', 'provider/educator-rooms'], []],
         'timesheets'       => [['director/timesheets', 'time-off', 'admin/time-off', 'admin/timeoff-reminders'], []],
         'payroll'          => [['admin/payroll', 'admin/payroll-settings', 'exports/payroll', 'provider/payroll-documents', 'payroll-documents/', 'me/payslips', 'agency/payslip-settings', 'me/payroll-documents', 'auth/me/payroll-documents'], []],
@@ -45,7 +50,9 @@ final class EnforcePlanFeatures
         'home_visits'      => [['home-visits', 'inspection-forms', 'operations/inspection'], []],
         'billing'          => [['billing/schedule', 'billing/etransfer-requests', 'billing/etransfer-reports', 'admin/billing-settings', 'payment-plans', 'billing/tuition-increases', 'billing/vacation-holds', 'refunds', 'admin/account-ledgers', 'admin/fee-plans',
             'admin/invoices', 'director/invoices', 'admin/billing-reminders', 'admin/billing-setup', 'admin/sibling-discounts'], []],   // + the staff side of raising invoices (parents viewing and paying stay open) (2026-11-26)
-        'autopay'          => [['admin/payment-providers', 'admin/payment-runs'], []],
+        'autopay'          => [['admin/payment-providers', 'admin/payment-runs',
+            // + a parent SETTING UP autopay (2026-11-26); its status and turning it off stay open
+            'parent/billing/setup-intent', 'parent/billing/confirm-autopay', 'parent/billing/ach-setup-intent', 'parent/billing/ach-save'], []],
         'expenses'         => [['admin/expenses', 'admin/expense-invoices', 'admin/suppliers', 'admin/purchase-orders'], []],
         'accounting_sync'  => [['qbo/', 'xero/', 'sage/', 'sage50/', 'admin/qbo-config', 'admin/xero-config', 'admin/sage-config', 'agency/external-invoices', 'provider/payee-invoices'], []],   // + the staff side of synced and payee invoices: global search already filed both under this feature (2026-11-26)
         'white_label'      => [['admin/branding'], ['POST', 'PUT', 'PATCH', 'DELETE']],   // reading the brand is for everyone

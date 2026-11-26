@@ -175,7 +175,7 @@
           plan ? el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: B, onclick: function () { termDialog(plan, liveN, main); } }, ['Term & renewal']) : null,
           el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: B, onclick: function () { flt.addFor = aid; addDialog(d, main, aid, !!plan); } }, [plan ? '＋ Add add-on' : '＋ Add plan']),
           plan ? el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: B, onclick: async function () {
-            if (!(await KT.confirm({ title: 'Cancel ' + (ls[0].agency_name || 'this agency') + '\'s licence?', description: 'The plan and every add-on are cancelled and their features switch off straight away. They stay listed as cancelled.', okLabel: 'Cancel licence', tone: 'danger' }))) return;
+            if (!(await KT.confirm({ title: 'Cancel ' + (ls[0].agency_name || 'this agency') + '\'s licence?', description: 'The plan and every add-on are cancelled and their features switch off straight away - except invoicing and autopay, which run to the end of the period already paid. They stay listed as cancelled.', okLabel: 'Cancel licence', tone: 'danger' }))) return;
             try { var res = await KT.Api.patch('/platform/licences/' + plan.id, { status: 'cancelled' }); toast('Licence cancelled'); await offerReissue(res, 'the cancelled licence'); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not cancel', 'error'); }
           } }, ['Cancel licence']) : null,
         ])])]));

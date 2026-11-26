@@ -29,6 +29,7 @@ final class SafeArrivalNextCallCommand extends Command
             ->whereNull('resolved_at')->whereNull('parent_response')
             ->get();
         foreach ($checks as $c) {
+            if (\App\Support\Features::skips((int) $c->agency_id, 'sms', 'Safe Arrival calls')) continue;   // SMS & voice add-on (2026-11-26)
             /* ONLY A CHAIN STILL IN PROGRESS. The next guardian is rung shortly after the last
                unanswered call - never hours later, when "not signed in yet" is no longer news
                (the first deploy found seven of the morning's checks that would have been

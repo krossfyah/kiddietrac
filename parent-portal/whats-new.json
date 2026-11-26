@@ -2,6 +2,18 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "🔓",
+            "title": "Locked features show as Upgrade, and plan changes are clearer",
+            "body": "Agency admins now see features that are not in your plan greyed out with an Upgrade badge. Tap one to see what it does and which plan or add-on includes it, and ask us to add it. Staff and families still only see what your plan includes. Safe Arrival and the parent phone line are part of the SMS & voice add-on. If your plan gets smaller, invoicing and autopay keep running until the end of the period already paid.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-26",
             "icon": "📧",

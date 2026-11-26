@@ -12,6 +12,8 @@ una ausencia, KiddieTrac consulta a los padres. Si no responden, puede **llamarl
 y luego alerta a los educadores de la sala y al director, y el tablero **Safe Arrival**
 muestra a quién falta llamar.
 
+> Safe Arrival viene con el complemento **SMS y voz**. Sin él, los administradores de la agencia lo ven en gris con la insignia **Upgrade**.
+
 [[open: #safe-arrival | Abrir Safe Arrival]]
 
 ## Cómo funciona

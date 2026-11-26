@@ -947,7 +947,8 @@
         if (Array.isArray(fresh.hidden_screens) && meAg !== 'all') {
           var featSig = function (u) {
             return JSON.stringify([(Array.isArray(u.hidden_screens) ? u.hidden_screens.slice().sort() : null),
-              !!u.ai_bundle, !!u.licence_lapsed, u.licence_label || null]);
+              !!u.ai_bundle, !!u.licence_lapsed, u.licence_label || null,
+              Object.keys((u.locked_screens && typeof u.locked_screens === 'object') ? u.locked_screens : {}).sort()]);
           };
           if (featSig(fresh) !== featSig(cur)) {
             var hadPlan = Array.isArray(cur.hidden_screens);
@@ -955,13 +956,14 @@
             cur.ai_bundle = !!fresh.ai_bundle;
             cur.licence_lapsed = !!fresh.licence_lapsed;
             cur.licence_label = fresh.licence_label || null;
+            cur.locked_screens = fresh.locked_screens || {};
             var savedPlan = false;
             try { sessionStorage.setItem('kt_user', JSON.stringify(cur)); savedPlan = true; } catch (e) {}
             try {
               var lu = JSON.parse(localStorage.getItem('kt_user') || 'null');
               if (lu && lu.id === cur.id) {
                 lu.hidden_screens = cur.hidden_screens; lu.ai_bundle = cur.ai_bundle;
-                lu.licence_lapsed = cur.licence_lapsed; lu.licence_label = cur.licence_label;
+                lu.licence_lapsed = cur.licence_lapsed; lu.licence_label = cur.licence_label; lu.locked_screens = cur.locked_screens;
                 localStorage.setItem('kt_user', JSON.stringify(lu));
               }
             } catch (e) {}

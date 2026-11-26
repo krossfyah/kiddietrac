@@ -44,6 +44,7 @@ class SafeArrivalCommand extends Command
 
         foreach ($agencies as $agencyId) {
             $agencyId = (int) $agencyId;
+            if (\App\Support\Features::skips($agencyId, 'sms', 'Safe Arrival')) continue;   // needs the SMS & voice add-on (2026-11-26)
             /* TEST AGENCIES: DEMO MODE ONLY (2026-11-24, App\Support\TestAgency). Always a dry run: worked out and
                printed, never called, texted, pushed, emailed or written. */
             $dry = $dryOpt || \App\Support\TestAgency::isAgency($agencyId);

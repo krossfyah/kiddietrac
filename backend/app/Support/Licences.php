@@ -182,9 +182,38 @@ class Licences
         foreach ($features as $key => $meta) {
             if (array_key_exists($key, $stored)) { $out[$key] = (bool) $stored[$key]; continue; }
             $min = self::ORDER[$meta['plan_min'] ?? 'free'] ?? 0;
-            $out[$key] = $level >= $min || isset($addons[$key]);
+            $on = $level >= $min || isset($addons[$key]);
+            if (! $on && in_array($key, self::PAID_THROUGH, true)) {
+                $on = self::paidThrough($agencyId, $key, (string) ($meta['plan_min'] ?? 'free')) !== null;
+            }
+            $out[$key] = $on;
         }
         return $out;
+    }
+
+    /* BILLING RUNS TO THE END OF THE PERIOD ALREADY PAID (2026-11-26, Anthony: "billing jobs run to the end of the
+       period already paid, then stop (not that night)"). When a plan is replaced by a smaller one, or the licence is
+       cancelled, invoicing and autopay stay on - screens, API and the nightly jobs alike, one answer - until the
+       licence that brought them reaches its end date. Every other feature still stops straight away. An explicit
+       Off from a platform admin is a decision, not a downgrade, so it still wins at once (effectiveFlags above). */
+    public const PAID_THROUGH = ['billing', 'autopay'];
+
+    /** The last day (Y-m-d) a no-longer-live licence still pays for this feature, or null when none does today. */
+    public static function paidThrough(int $agencyId, string $key, string $planMin): ?string
+    {
+        $need = self::ORDER[$planMin] ?? 0;
+        $best = null;
+        foreach (DB::table('agency_licences')->where('agency_id', $agencyId)->whereNotIn('status', self::LIVE)
+            ->whereNotNull('expires_at')->get(['kind', 'plan_code', 'feature_keys', 'expires_at']) as $l) {
+            $gave = $l->kind === 'plan'
+                ? (self::ORDER[(string) $l->plan_code] ?? -1) >= $need
+                : in_array($key, (array) (json_decode((string) $l->feature_keys, true) ?: []), true);
+            $end = substr((string) $l->expires_at, 0, 10);
+            if ($gave && ($best === null || $end > $best)) $best = $end;
+        }
+        if ($best === null) return null;
+
+        return \App\Support\AgencyTime::todayDate($agencyId)->toDateString() <= $best ? $best : null;
     }
 
     /**

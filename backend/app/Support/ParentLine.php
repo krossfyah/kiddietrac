@@ -92,6 +92,9 @@ final class ParentLine
             ->get(['c.id', 'c.first_name', 'c.preferred_name', 'ce.id as centre_id', 'ce.agency_id', 'g.user_id']);
         $out = [];
         foreach ($rows as $r) {
+            /* The line is part of the SMS & voice add-on (2026-11-26): a child at an agency without it is not offered,
+               so the caller hears the same "no children found" as an unknown number. */
+            if (! \App\Support\Features::on((int) $r->agency_id, 'sms')) continue;
             $out[(int) $r->id] ??= ['child_id' => (int) $r->id, 'first_name' => trim((string) ($r->preferred_name ?: $r->first_name)),
                 'centre_id' => (int) $r->centre_id, 'agency_id' => (int) $r->agency_id, 'guardian_user_id' => (int) $r->user_id];
         }

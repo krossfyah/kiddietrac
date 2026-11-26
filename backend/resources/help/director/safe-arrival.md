@@ -12,6 +12,8 @@ absence, KiddieTrac asks the parents. If they don't answer, it can **phone them*
 then it alerts the room's educators and the director — and the **Safe Arrival** board
 shows who still needs a call.
 
+> Safe Arrival comes with the **SMS & voice** add-on. Without it, agency admins see it greyed out with an **Upgrade** badge.
+
 [[open: #safe-arrival | Open Safe Arrival]]
 
 ## How it works

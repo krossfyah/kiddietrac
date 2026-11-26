@@ -1690,8 +1690,11 @@ final class AuthController extends Controller
             'ai_bundle' => rescue(fn () => \App\Support\AiBundle::on($featureAgencyId ? (int) $featureAgencyId : null), false, false),
             'hidden_screens' => \App\Http\Controllers\Api\FeatureFlagController::hiddenHashesFor(
                 $featureAgencyId ? (int) $featureAgencyId : null,
-                in_array('platform_admin', $roles ?? [], true)
+                in_array('platform_admin', $roles ?? [], true),
+                $roles ?? []
             ),
+            // An agency admin's features the plan leaves out, drawn greyed with "Upgrade" (App\Support\PlanUpsell, 2026-11-26).
+            'locked_screens' => (object) rescue(fn () => \App\Support\PlanUpsell::lockedFor($featureAgencyId ? (int) $featureAgencyId : null, $roles ?? []), [], false),
             // Shown once when the app opens: the centre is closed today, or will be
             // shortly. Omitted entirely when there is nothing to say, so the client can
             // test for the key rather than unpacking an empty object.
