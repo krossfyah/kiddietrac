@@ -424,6 +424,9 @@ final class FeatureFlagController extends Controller
             'powered_by_visible'  => ['nullable', 'integer', 'in:0,1'],
         ]);
 
+        // A licence-managed agency's billing status comes from its licence (Licences::derivedStatus), never a form.
+        if (\App\Support\Licences::managed((int) $id)) unset($data['billing_status']);
+
         $update = [];
 
         // ─── Platform-admin-only writes ────────────────────────────

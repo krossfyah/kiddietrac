@@ -351,6 +351,9 @@ final class AgencyManagementController extends Controller
             unset($data['billing_status'], $data['trial_ends_at'], $data['plan']);
         }
 
+        // A licence-managed agency's billing status comes from its licence (Licences::derivedStatus), never a form.
+        if (\App\Support\Licences::managed((int) $id)) unset($data['billing_status']);
+
         $columns = [
             'name', 'subdomain', 'custom_domain', 'contact_email', 'contact_phone',
             'timezone', 'locale', 'legal_name', 'website',

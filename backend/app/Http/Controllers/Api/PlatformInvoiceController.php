@@ -227,6 +227,8 @@ class PlatformInvoiceController extends Controller
         if (! DB::table('agencies')->where('id', $agencyId)->exists()) {
             return response()->json(['message' => 'Agency not found.'], 404);
         }
+        // A licence-managed agency's billing status comes from its licence (Licences::derivedStatus), never a form.
+        if (\App\Support\Licences::managed((int) $agencyId)) unset($data['billing_status']);
         if (! empty($data['billing_starts_at']) && ! empty($data['billing_ends_at']) && $data['billing_ends_at'] < $data['billing_starts_at']) {
             return response()->json(['message' => 'The issuing end date is before the start date.'], 422);
         }

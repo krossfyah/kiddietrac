@@ -169,10 +169,9 @@
             </select>
           </div>
           <div style="flex:0 1 220px;min-width:0;">
-            <label style="font-size:12px;font-weight:700;color:#6B7280;">Billing status</label>
-            <select id="kt-status" style="width:100%;padding:10px 12px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;margin-top:6px;">
-              ${['trial','active','past_due','cancelled'].map(s => `<option value="${s}" ${s == data.billing_status ? 'selected' : ''}>${s}</option>`).join('')}
-            </select>
+            <!-- Read-only (2026-11-26): the billing status follows the licence (Licences::derivedStatus). -->
+            <div style="font-size:12px;font-weight:700;color:#6B7280;">Billing status</div>
+            <div style="margin-top:6px;padding:9px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;background:#F8FAFC;">${esc(data.billing_status || '\u2014')} <span style="font-size:11.5px;color:#94A3B8;">\u00b7 set by the licence</span></div>
           </div>
         </div>
       </div>
@@ -231,7 +230,6 @@
       });
       const payload = {
         plan_code: $('#kt-plan',   container).value,
-        billing_status: $('#kt-status', container).value,
         feature_flags: newFlags,
       };
       const msg = $('#kt-save-msg', container);

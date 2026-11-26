@@ -1300,8 +1300,12 @@ final class PlatformController extends Controller
     {
         $exists = DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->exists();
         if (! $exists) return response()->json(['message' => 'Not found'], 404);
+        // Suspended BY HAND: the licence sync leaves it suspended until Resume (Licences::derivedStatus).
+        $s = json_decode((string) DB::table('agencies')->where('id', $agencyId)->value('settings'), true) ?: [];
+        $s[\App\Support\Licences::MANUAL_SUSPEND] = true;
         DB::table('agencies')->where('id', $agencyId)->update([
             'billing_status' => 'suspended',
+            'settings' => json_encode($s),
             'updated_at' => now(),
         ]);
         return response()->json(['message' => 'Agency suspended']);
@@ -1314,10 +1318,15 @@ final class PlatformController extends Controller
     {
         $exists = DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->exists();
         if (! $exists) return response()->json(['message' => 'Not found'], 404);
+        // Resume clears the hand suspension; a licence-managed agency then takes its status from the licence.
+        $s = json_decode((string) DB::table('agencies')->where('id', $agencyId)->value('settings'), true) ?: [];
+        unset($s[\App\Support\Licences::MANUAL_SUSPEND]);
         DB::table('agencies')->where('id', $agencyId)->update([
-            'billing_status' => 'active',
+            'billing_status' => \App\Support\Licences::derivedStatus($agencyId) ?? 'active',
+            'settings' => json_encode((object) $s),
             'updated_at' => now(),
         ]);
+        \App\Support\Licences::sync($agencyId);
         return response()->json(['message' => 'Agency resumed']);
     }
 }

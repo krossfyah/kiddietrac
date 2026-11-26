@@ -412,10 +412,14 @@
                 </div>
                 <button type="button" id="kt-ag-licence" style="background:white;color:#1F6080;border:1px solid #1F6080;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;">${data.is_platform_admin ? 'Manage in Licences →' : 'View my licence →'}</button>
               </div>
-              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Billing status</label>
-                <select name="billing_status" style="${inputStyle()}">
-                  ${['trial','active','past_due','suspended'].map(st=>`<option value="${st}" ${a.billing_status===st?'selected':''}>${st}</option>`).join('')}
-                </select>
+              <!-- Billing status is read-only (2026-11-26, Anthony): it follows the licence (Licences::derivedStatus);
+                   only Suspend / Resume changes it by hand, and a hand Suspend holds until Resume. Not a form field. -->
+              <div><div style="font-size:13px;font-weight:600;margin-bottom:4px;">Billing status</div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;background:${a.billing_status==='suspended'?'#FEE2E2':a.billing_status==='active'?'#DCFCE7':'#E0F2FE'};color:${a.billing_status==='suspended'?'#B91C1C':a.billing_status==='active'?'#15803D':'#0369A1'};">${esc(a.billing_status || '\u2014')}</span>
+                  ${data.is_platform_admin ? `<button type="button" id="kt-ag-suspend" style="background:white;color:${a.billing_status==='suspended'?'#15803D':'#B45309'};border:1px solid currentColor;border-radius:8px;padding:5px 12px;font-size:12.5px;font-weight:700;cursor:pointer;">${a.billing_status==='suspended'?'Resume':'Suspend'}</button>` : ''}
+                </div>
+                <div style="font-size:11.5px;color:#94A3B8;margin-top:4px;">Set by the licence.</div>
               </div>
             </div>
             <div id="kt-edit-status" style="min-height:20px;font-size:14px;"></div>
@@ -451,6 +455,13 @@
       });
     });
     $('#kt-cancel', mount).addEventListener('click', close);
+    const susBtn = $('#kt-ag-suspend', mount);
+    if (susBtn) susBtn.addEventListener('click', async () => {
+      const op = a.billing_status === 'suspended' ? 'resume' : 'suspend';
+      if (op === 'suspend' && !await KT.confirm('Suspend ' + a.name + '? Users will lose dashboard access immediately. It stays suspended until you press Resume.')) return;
+      try { await api('POST', '/platform/agencies/' + a.id + '/' + op, {}); close(); render(container); }
+      catch (e) { alert((op === 'suspend' ? 'Suspend' : 'Resume') + ' failed: ' + e.message); }
+    });
     const licBtn = $('#kt-ag-licence', mount);
     if (licBtn) licBtn.addEventListener('click', () => {
       if (data.is_platform_admin) { try { sessionStorage.setItem('kt_lic_agency', String(a.id)); } catch (e) {} }

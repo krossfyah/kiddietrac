@@ -245,12 +245,46 @@ class Licences
                 'plan_amount_cents' => (int) round($monthly * $per),
                 'updated_at' => now(),
             ];
+            // The billing status follows the licence too (derivedStatus, 2026-11-26).
+            $st = self::derivedStatus($agencyId, $a);
+            if ($st !== null && $st !== (string) $a->billing_status) $upd['billing_status'] = $st;
             // On recurring billing the next invoice date follows the next licence renewal.
             if ($a->next_invoice_at && $nextDue) $upd['next_invoice_at'] = $nextDue;
             DB::table('agencies')->where('id', $agencyId)->update($upd);
         } catch (Throwable $e) {
             Log::warning('Licence sync failed', ['agency' => $agencyId, 'error' => $e->getMessage()]);
         }
+    }
+
+    /* BILLING STATUS FOLLOWS THE LICENCE (2026-11-26, Anthony). For a licence-managed agency agencies.billing_status
+       is worked out here and written by sync(), never typed in (Edit agency, Features and Billing plans show it
+       read-only and their endpoints drop it):
+         live plan, paid or complimentary  -> active
+         trial plan                        -> trial
+         plan in grace                     -> active (renewal invoices keep being raised, billingOn needs 'active')
+         no live plan (lapsed / cancelled) -> suspended
+       A SUSPEND PRESSED BY HAND WINS: Platform > Suspend sets settings.billing_suspended_manually and it stays
+       suspended through every sync until Resume clears the flag and hands the status back to the licence.
+       null = not licence-managed (or deleted): the stored value is left alone. */
+    public const MANUAL_SUSPEND = 'billing_suspended_manually';
+
+    public static function manuallySuspended(object $a): bool
+    {
+        $s = json_decode((string) ($a->settings ?? ''), true);
+        return is_array($s) && ! empty($s[self::MANUAL_SUSPEND]);
+    }
+
+    public static function derivedStatus(int $agencyId, ?object $a = null): ?string
+    {
+        if (! self::managed($agencyId)) return null;
+        $a = $a ?: DB::table('agencies')->where('id', $agencyId)->first();
+        if (! $a || ! empty($a->deleted_at)) return null;
+        if (self::manuallySuspended($a)) return 'suspended';
+        $p = DB::table('agency_licences')->where('agency_id', $agencyId)->where('kind', 'plan')->whereIn('status', self::LIVE)
+            ->orderByRaw("FIELD(status,'active','grace')")->first();
+        if (! $p) return 'suspended';
+        if ((string) ($p->source ?? '') === 'trial') return 'trial';
+        return 'active';
     }
 
     public static function billingOn(object $a): bool
