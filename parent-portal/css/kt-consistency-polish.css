@@ -604,7 +604,7 @@ input.kt-switchified.kt-switchified {
 /* Every row answers the cursor, not only the tinted ones. !important since 2026-11-26: kt-polish-v22.css has
    `table tbody tr:hover { background:#F9FAFB !important }`, which outranked this rule on every screen that is not
    [data-kt-pretty] (Users, Account ledgers...), so those rows hovered near-white instead of the house tint. */
-#appMain table > tbody > tr:hover { background-color: #E8F0F7 !important; }
+#appMain table > tbody > tr:hover { background-color: var(--kt-row-hover, #E8F0F7) !important; }
 /* PRETTY SCREENS GET THE SAME TINT (2026-11-26, Anthony: "the highlight of the records in the table are
    highlighted in black - full sweep"). kt-design-v22p64/66 give [data-kt-pretty] rows an !important hover of
    rgba(74,144,184,.04) or a white gradient, so those screens never showed the house tint above, and a screen's own
@@ -612,7 +612,7 @@ input.kt-switchified.kt-switchified {
    background, so ranking this one above them takes nothing away from a status-coloured row. */
 #appMain[data-kt-pretty] table > tbody > tr:hover,
 #appMain [data-kt-pretty] table > tbody > tr:hover,
-[data-kt-pretty] #appMain table > tbody > tr:hover { background: #E8F0F7 !important; }
+[data-kt-pretty] #appMain table > tbody > tr:hover { background: var(--kt-row-hover, #E8F0F7) !important; }
 /* A defined edge, so a table reads as one object rather than loose text. */
 #appMain table {
   border: 1px solid #E7EBF0;

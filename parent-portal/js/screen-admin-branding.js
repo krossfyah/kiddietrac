@@ -160,6 +160,8 @@
           </div>
           <!-- Page banner gradient (2026-10-21): only where this agency may show its own look. -->
           <div id="kt-hero-card" style="${card}grid-column:1/-1;" hidden></div>
+          <!-- Soft tint (2026-11-26): the light wash behind the sidebar, tabs and highlighted rows. Same rule as the banner. -->
+          <div id="kt-tint-card" style="${card}grid-column:1/-1;" hidden></div>
         </div>
 
         <!-- ── Invoices ── -->
@@ -335,6 +337,42 @@
           }).then(async function (r) { if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.message || ('API ' + r.status)); } });
           try { localStorage.removeItem('kt_branding'); localStorage.removeItem('kt_brand_a' + agencyId); } catch (e) {}
         },
+      });
+
+      /* SOFT TINT (2026-11-26, Anthony: "the default light blue colour used throughout including sidebar for white
+         label should be changeable"). Empty = automatic: a light shade of the brand colour (KT.brandTint). */
+      const tc = container.querySelector('#kt-tint-card');
+      if (!tc) return;
+      const auto = (window.KT && KT.brandTint) ? (KT.brandTint(Object.assign({}, b.theme, { soft_tint: null })) || {}).auto : '';
+      const cur = /^#[0-9a-f]{6}$/i.test(b.theme.soft_tint || '') ? b.theme.soft_tint : '';
+      tc.hidden = false;
+      tc.innerHTML = '<h3 style="margin:0 0 4px;font-size:15px;">Soft tint</h3>'
+        + '<div style="font-size:12px;color:#475569;margin-bottom:12px;">The very light colour behind the sidebar, tabs and highlighted rows. Leave it on automatic for a soft shade of your brand colour.</div>'
+        + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+        + '<input type="color" id="kt-tint-picker" value="' + esc(cur || auto || '#F1F8FA') + '" aria-label="Soft tint" style="width:50px;height:32px;padding:0;border:1px solid #D1D5DB;border-radius:6px;cursor:pointer;background:#fff;">'
+        + '<input type="text" id="kt-tint" value="' + esc(cur) + '" placeholder="Automatic (' + esc(auto || '') + ')" style="width:180px;height:32px;padding:0 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px;font-family:monospace;">'
+        + '<span id="kt-tint-swatch" style="width:120px;height:32px;border-radius:8px;border:1px solid #E2E8F0;background:' + esc(cur || auto || '#F1F8FA') + ';"></span>'
+        + '<button type="button" id="kt-tint-auto" data-kt-iconized="1" style="height:32px;padding:0 12px;background:#fff;color:#334155;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">Use automatic</button>'
+        + '<button type="button" id="kt-tint-save" data-kt-iconized="1" style="height:32px;padding:0 14px;background:#081C41;color:#fff;border:0;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">Save tint</button>'
+        + '<span id="kt-tint-msg" role="status" style="font-size:12px;color:#475569;"></span></div>';
+      const tp = tc.querySelector('#kt-tint-picker'), tt = tc.querySelector('#kt-tint'), sw = tc.querySelector('#kt-tint-swatch'), tm = tc.querySelector('#kt-tint-msg');
+      const paint = function () { sw.style.background = /^#[0-9a-f]{6}$/i.test(tt.value.trim()) ? tt.value.trim() : (auto || '#F1F8FA'); };
+      tp.addEventListener('input', function () { tt.value = tp.value.toUpperCase(); paint(); });
+      tt.addEventListener('input', function () { if (/^#[0-9a-f]{6}$/i.test(tt.value.trim())) tp.value = tt.value.trim(); paint(); });
+      tc.querySelector('#kt-tint-auto').addEventListener('click', function () { tt.value = ''; if (auto) tp.value = auto; paint(); });
+      tc.querySelector('#kt-tint-save').addEventListener('click', async function () {
+        const v = tt.value.trim();
+        if (v && !/^#[0-9a-f]{6}$/i.test(v)) { tm.textContent = 'Use a colour like #F4F1FD, or leave it empty for automatic.'; tm.style.color = '#B91C1C'; return; }
+        tm.textContent = 'Saving…'; tm.style.color = '#475569';
+        try {
+          const r = await fetch(apiBase() + '/admin/branding', { method: 'PUT',
+            headers: { 'Authorization': 'Bearer ' + token(), 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-Active-Agency-Id': String(agencyId) },
+            body: JSON.stringify({ soft_tint: v || null }) });
+          if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.message || ('API ' + r.status)); }
+          try { localStorage.removeItem('kt_branding'); localStorage.removeItem('kt_brand_a' + agencyId); } catch (e) {}
+          tm.textContent = '✓ Saved'; tm.style.color = '#15803D';
+          reloadChrome();
+        } catch (e) { tm.textContent = '✗ ' + e.message; tm.style.color = '#B91C1C'; }
       });
     })();
 

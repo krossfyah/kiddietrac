@@ -278,6 +278,7 @@ final class BrandingController extends Controller
             'hero_via' => ['sometimes', 'nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'hero_to' => ['sometimes', 'nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'hero_angle' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:360'],
+            'soft_tint' => ['sometimes', 'nullable', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ]);
         // The banner gradient is part of the agency's own look: only where it may show one.
         if ($hero && ! \App\Support\Brand::agencyMayOverride((int) $agencyId)) {
@@ -301,7 +302,7 @@ final class BrandingController extends Controller
         $data += $hero;
         $settings['branding'] = array_merge($settings['branding'] ?? [], $data);
         // A cleared banner colour goes back to the default rather than staying as null.
-        foreach (['hero_from', 'hero_via', 'hero_to', 'hero_angle'] as $k) {
+        foreach (['hero_from', 'hero_via', 'hero_to', 'hero_angle', 'soft_tint'] as $k) {
             if (array_key_exists($k, $settings['branding']) && ($settings['branding'][$k] === null || $settings['branding'][$k] === '')) {
                 unset($settings['branding'][$k]);
             }

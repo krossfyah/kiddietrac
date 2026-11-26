@@ -63,26 +63,65 @@
   function rgb2hex(c) { return '#' + c.map(function (v) { v = Math.max(0, Math.min(255, Math.round(v))); return (v < 16 ? '0' : '') + v.toString(16); }).join(''); }
   function mix(h, toward, amt) { var a = hex2rgb(h), b = hex2rgb(toward); if (!a || !b) return h; return rgb2hex(a.map(function (v, i) { return v + (b[i] - v) * amt; })); }
 
+  function lumOf(h) { var c = hex2rgb(h); if (!c) return 1; c = c.map(function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+  function crWhite(h) { return 1.05 / (lumOf(h) + 0.05); }
+  /* Darken toward black until white text reads (4.5:1), or lighten-dark text the same way. */
+  function forWhiteText(h) { var x = h, k = 0; while (crWhite(x) < 4.5 && k++ < 20) x = mix(x, '#000000', 0.06); return x; }
+  function readOn(h, bg) { var x = h, k = 0; const cr = function () { var a = lumOf(x), b = lumOf(bg); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); }; while (cr() < 7 && k++ < 20) x = mix(x, '#000000', 0.08); return x; }
+  /* THE BRAND'S SECOND BUTTON COLOUR (2026-11-26, Anthony: "the dark orange buttons in starlight academy don't look
+     good"). KiddieTrac's action colour is a teal family (#13B7CC and its darker steps, the teal->blue button
+     gradient, the popup header's teal end); the map below sent all of it to the ACCENT and darkened steps of it, so a
+     warm accent such as Starlight's amber came out as muddy dark orange on buttons, the Add button and every popup
+     header. The teal family now maps to the primary's own lighter partner - the banner gradient's end (hero.to) when
+     white text reads on it, else a lighter primary - darkened until white reads 4.5:1. The accent keeps the small
+     highlights (KiddieTrac's green: the nav's active line, badges). */
+  function brandPartner(t) {
+    var P = t.primary_color, h = t.hero || {}, to = /^#[0-9a-f]{6}$/i.test(h.to || '') ? h.to : (/^#[0-9a-f]{6}$/i.test(t.hero_to || '') ? t.hero_to : null);
+    if (to && to.toLowerCase() !== String(t.accent_color || '').toLowerCase() && crWhite(to) >= 3) return forWhiteText(to);
+    return forWhiteText(mix(P, '#ffffff', 0.28));
+  }
+  /* THE SOFT TINT (2026-11-26, Anthony: "the default light blue colour used throughout including sidebar for white
+     label should be changeable and for starlight should mimic its branding - very soft purple tint"). The brand's
+     Soft tint setting, else 7% of its lighter brand colour on white; every step (sidebar, active item, row hover,
+     tab band and its active tab) is that tint pulled toward the brand colour by a little more. KiddieTrac's own
+     light blue is the CSS fallback of each var (kt-sidebar-brand.css, kt-tab-band.js, kt-consistency-polish.css). */
+  function brandTint(t) {
+    if (!t || !/^#[0-9a-f]{6}$/i.test(t.primary_color || '')) return null;
+    var B = brandPartner(t), T = /^#[0-9a-f]{6}$/i.test(t.soft_tint || '') ? t.soft_tint : mix(B, '#ffffff', 0.93);
+    var strong = mix(T, B, 0.08), tabTo = mix(T, B, 0.13);
+    return { base: B, auto: mix(B, '#ffffff', 0.93), tint: T, tint2: mix(T, B, 0.03), border: mix(T, B, 0.12), hover: mix(T, B, 0.05),
+      strong: strong, ink: readOn(t.primary_color, strong), edge: mix(T, B, 0.18), sep: mix(T, B, 0.14), row: mix(T, B, 0.05),
+      band: mix(T, B, 0.03), tabFrom: mix(T, B, 0.06), tabTo: tabTo, tabInk: readOn(t.primary_color, tabTo), tabEdge: mix(T, B, 0.35) };
+  }
+  const TINT_VARS = { '--kt-tint': 'tint', '--kt-tint-2': 'tint2', '--kt-tint-border': 'border', '--kt-tint-hover': 'hover', '--kt-tint-strong': 'strong',
+    '--kt-tint-ink': 'ink', '--kt-tint-edge': 'edge', '--kt-tint-sep': 'sep', '--kt-row-hover': 'row', '--kt-tab-band': 'band',
+    '--kt-tab-from': 'tabFrom', '--kt-tab-to': 'tabTo', '--kt-tab-ink': 'tabInk', '--kt-tab-edge': 'tabEdge' };
+  function applyTint(t) {
+    const root = document.documentElement, v = t ? brandTint(t) : null;
+    Object.keys(TINT_VARS).forEach(function (k) { if (v) root.style.setProperty(k, v[TINT_VARS[k]]); else root.style.removeProperty(k); });
+  }
+
   function buildColorMap(t) {
     var P = t.primary_color, A = t.accent_color;
     if (!/^#[0-9a-f]{6}$/i.test(P || '') || !/^#[0-9a-f]{6}$/i.test(A || '')) return null;
     if (P.toLowerCase() === '#1f6080' && A.toLowerCase() === '#13b7cc') return null;   // KiddieTrac's own
+    var B2 = brandPartner(t);
     return {
       '#1f6080': P, '#2d7ba8': mix(P, '#ffffff', 0.18), '#154057': mix(P, '#000000', 0.3),
       '#0c4a6e': mix(P, '#000000', 0.45), '#12315c': mix(P, '#000000', 0.5), '#081c41': mix(P, '#000000', 0.62),
-      '#13b7cc': A, '#159fb4': A, '#0e7490': mix(A, '#000000', 0.25), '#0891b2': mix(A, '#000000', 0.12),
-      '#e0f2fe': mix(P, '#ffffff', 0.88), '#ecfeff': mix(A, '#ffffff', 0.9), '#cffafe': mix(A, '#ffffff', 0.8),
+      '#13b7cc': B2, '#159fb4': B2, '#0e7490': mix(B2, '#000000', 0.22), '#0891b2': mix(B2, '#000000', 0.1),
+      '#e0f2fe': mix(P, '#ffffff', 0.88), '#ecfeff': mix(B2, '#ffffff', 0.92), '#cffafe': mix(B2, '#ffffff', 0.82),
       '#edf6fb': mix(P, '#ffffff', 0.93), '#e7f3fb': t.splash_bg || mix(P, '#ffffff', 0.9),
       // The rest of KiddieTrac's palette: the hero gradient's mid-blue and green, and the
       // teal/blue pairs used by toasts and What's new.
-      '#2c8aac': mix(P, A, 0.5), '#8ec73c': A, '#6cb241': A, '#4b9670': mix(P, A, 0.5), '#29799e': P,
-      '#0e7c90': mix(A, '#000000', 0.25), '#1f6fb2': mix(P, '#ffffff', 0.1), '#2563a8': P,
+      '#2c8aac': mix(P, B2, 0.5), '#8ec73c': A, '#6cb241': A, '#4b9670': mix(P, B2, 0.5), '#29799e': P,
+      '#0e7c90': mix(B2, '#000000', 0.22), '#1f6fb2': mix(P, '#ffffff', 0.1), '#2563a8': P,
       /* POPUP HEADERS WEAR THE BRAND (2026-11-06, Anthony: "match the new message to the white label colour scheme -
          full sweep"). The one popup header (navy #1B3A63 -> #265B7A -> teal #2F8C86, teal line #7FD3CC) is written
          into ~24 files and Shell.Modal's CSS; none of it was in this map, so a white-label agency got KiddieTrac's
          colours on every popup. Mapped here, every copy follows: dark primary -> primary -> darkened accent (kept dark
          enough for the white title), and a light accent line. */
-      '#1b3a63': mix(P, '#000000', 0.35), '#265b7a': P, '#2f8c86': mix(A, '#000000', 0.3), '#7fd3cc': mix(A, '#ffffff', 0.45),
+      '#1b3a63': mix(P, '#000000', 0.35), '#265b7a': P, '#2f8c86': B2, '#7fd3cc': mix(A, '#ffffff', 0.45),
     };
   }
   /* rgb() AS WELL AS #hex (2026-11-06). The browser keeps a colour set from script (el.style.x = '#159FB4', or
@@ -577,6 +616,7 @@
       root.style.setProperty('--kt-brand-primary', THEME.primary_color);
       root.style.setProperty('--kt-brand-accent', THEME.accent_color);
       root.style.setProperty('--kt-blue-50', mix(THEME.primary_color, '#ffffff', 0.9));
+      applyTint(THEME);
       applyHero(THEME.hero || null);
       BRAND_KEYS = null;
       contrastSettle();
@@ -588,10 +628,12 @@
       if (document.body) { sweep(document.body); startObserver(); }
       document.querySelectorAll('.kt-powered-by, [data-powered-by]').forEach(function (el) { el.style.display = 'none'; });
     } else {
+      applyTint(null);
       applyHero(null);
       applyLogos(document);
     }
     window.KT.brand = THEME;
+    window.KT.brandTint = brandTint;
     try { window.dispatchEvent(new CustomEvent('kt:brand', { detail: THEME })); } catch (e) {}
     // A reseller's own sign-in page (index.html, ?tenant=) wears its scheme; the plain one stays navy.
     try {

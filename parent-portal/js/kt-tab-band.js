@@ -35,15 +35,15 @@
     var st = document.createElement('style');
     st.id = 'kt-tab-band-css';
     st.textContent = ''
-      + '.kt-tabband{background:#EEF3F8 !important;border:1px solid #E2E8F0 !important;border-radius:14px !important;padding:5px !important;gap:4px !important;box-shadow:none !important;}'
+      + '.kt-tabband{background:var(--kt-tab-band,#EEF3F8) !important;border:1px solid #E2E8F0 !important;border-radius:14px !important;padding:5px !important;gap:4px !important;box-shadow:none !important;}'
       + '.kt-tabband>.kt-tabbtn{border:1px solid transparent !important;border-radius:10px !important;background:transparent !important;color:#475569 !important;'
       + 'box-shadow:none !important;margin:0 !important;text-decoration:none !important;transition:background .15s,color .15s,box-shadow .15s;}'
       + '.kt-tabband>.kt-tabbtn:not(.kt-tab-on):hover{background:#FFFFFF !important;color:#1B3A63 !important;}'
       /* LIGHT, so it reads (2026-10-20: "band highlighting should be a lighter gradient as its
          hard to read"): pale blue gradient, navy text, a thin blue edge. */
-      + '.kt-tabband>.kt-tabbtn.kt-tab-on{background:linear-gradient(135deg,#E3EFFA 0%,#CFE2F5 100%) !important;color:#12305A !important;font-weight:800 !important;'
-      + 'border-color:#9EC2E3 !important;box-shadow:0 2px 6px -3px rgba(27,58,99,.35) !important;}'
-      + '.kt-tabband>.kt-tabbtn.kt-tab-on .kt-tab-ink{color:#12305A !important;}'
+      + '.kt-tabband>.kt-tabbtn.kt-tab-on{background:linear-gradient(135deg,var(--kt-tab-from,#E3EFFA) 0%,var(--kt-tab-to,#CFE2F5) 100%) !important;color:var(--kt-tab-ink,#12305A) !important;font-weight:800 !important;'
+      + 'border-color:var(--kt-tab-edge,#9EC2E3) !important;box-shadow:0 2px 6px -3px rgba(27,58,99,.35) !important;}'
+      + '.kt-tabband>.kt-tabbtn.kt-tab-on .kt-tab-ink{color:var(--kt-tab-ink,#12305A) !important;}'
       + '.kt-tabband>.kt-tabbtn:focus-visible{outline:2px solid #4A7FA6 !important;outline-offset:2px;}'
       /* COLOURS FADE, SIZES NEVER ANIMATE (2026-11-12, phone sweep). Tabs that are .kt-btn buttons carry the design
          pass's "transition: all" ([data-kt-pretty] .kt-btn), so when the band's sizes arrived each tab shrank from a

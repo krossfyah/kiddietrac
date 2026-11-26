@@ -41,7 +41,10 @@ final class Brand
     public const FIELDS = ['app_name', 'logo_square_url', 'logo_wordmark_url', 'splash_logo_url', 'favicon_url',
         'primary_color', 'accent_color', 'splash_bg', 'support_email',
         // The banner gradient (2026-10-21): start, optional middle, end, angle in degrees.
-        'hero_from', 'hero_via', 'hero_to', 'hero_angle'];
+        'hero_from', 'hero_via', 'hero_to', 'hero_angle',
+        // The soft tint (2026-11-26): the light wash behind the sidebar, tabs and highlighted rows. Empty = derived
+        // from the brand colour in branding-loader.js (KT.brandTint).
+        'soft_tint'];
 
     private static array $memo = [];
 
@@ -95,7 +98,7 @@ final class Brand
                 $b['splash_logo_url'] = $ab['splash_logo_url'] ?? $logo;
                 if (empty($ab['logo_square_url']) && $b['source'] !== 'reseller') { $b['logo_square_url'] = $logo; }
             }
-            foreach (['logo_square_url', 'favicon_url', 'accent_color', 'splash_bg', 'hero_from', 'hero_via', 'hero_to', 'hero_angle'] as $k) {
+            foreach (['logo_square_url', 'favicon_url', 'accent_color', 'splash_bg', 'hero_from', 'hero_via', 'hero_to', 'hero_angle', 'soft_tint'] as $k) {
                 if (! empty($ab[$k])) { $b[$k] = $ab[$k]; }
             }
             if (! empty($agency->brand_primary_color)) { $b['primary_color'] = $agency->brand_primary_color; }
