@@ -28,12 +28,13 @@ class NotificationSoundsController extends Controller
            a parent no longer sees staff reminders, headcounts or the staff mailbox. */
         $sides = NotifyAudience::sides($request);
         $cat = NotificationSounds::catalogue();
-        $cat['categories'] = array_values(array_filter(array_map(function ($c) {
+        $cat['categories'] = array_values(array_filter(array_map(function ($c) use ($sides) {
             $c['for'] = NotifyAudience::SOUND_CATEGORIES[$c['key']] ?? 'all';
             $c['roles'] = NotifyAudience::SOUND_ROLES[$c['key']] ?? null;   // staff roles it is for (null = all of them)
+            $c['as'] = NotifyAudience::tag($c['for'], $sides, $c['roles']);   // staff | parent | both | null (2026-11-26)
 
             return $c;
-        }, $cat['categories'] ?? []), fn ($c) => NotifyAudience::shows($c['for'], $sides, $c['roles'])));
+        }, $cat['categories'] ?? []), fn ($c) => $c['as'] !== null));
 
         return response()->json($cat + [
             'sides' => $sides,

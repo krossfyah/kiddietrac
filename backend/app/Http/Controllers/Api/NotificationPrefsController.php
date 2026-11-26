@@ -72,7 +72,8 @@ class NotificationPrefsController extends Controller
         $out = [];
         foreach (self::events() as $key => $meta) {
             $meta['for'] = $meta['for'] ?? (NotifyAudience::PREF_EVENTS[$key] ?? 'all');
-            if (! NotifyAudience::shows($meta['for'], $sides, $meta['roles'] ?? null)) {
+            $meta['as'] = NotifyAudience::tag($meta['for'], $sides, $meta['roles'] ?? null);   // staff | parent | both
+            if ($meta['as'] === null) {
                 continue;
             }
             if ($key === \App\Support\SafeArrival::PREF_KEY) {

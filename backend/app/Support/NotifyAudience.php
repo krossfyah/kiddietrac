@@ -132,15 +132,45 @@ final class NotifyAudience
     public static function sides(Request $request): array
     {
         $names = AgencyRole::names($request);
+        /* EXACTLY WHAT THEY RECEIVE HERE (2026-11-26, Anthony: "as admin I can turn on and off parent notifications -
+           this needs to reflect the exact roles"). A platform admin used to get BOTH sides and every staff role, so a
+           super admin working as iLearn's admin was offered parent switches. Now:
+             - previewing a role ("View as", X-View-As-Role, platform admins only): exactly that role's lists;
+             - otherwise: their real roles in the ACTIVE agency, and the family side only if they are a parent IN IT
+               (a guardian record at another agency does not count). */
+        $agency = AgencyRole::activeAgency($request);
         if (in_array('platform_admin', $names, true)) {
-            return ['staff' => true, 'family' => true, 'roles' => ['platform_admin']];   // previews any role; the screen narrows to the one viewed
+            $view = strtolower(trim((string) $request->header('X-View-As-Role')));
+            if ($view !== '' && $view !== 'platform_admin') {
+                $isStaff = in_array($view, self::STAFF_ROLES, true);
+                return ['staff' => $isStaff, 'family' => $view === 'guardian', 'roles' => $isStaff ? [$view] : [], 'preview' => $view];
+            }
+            /* AgencyRole never narrows a platform admin, so their roles here are every agency's (Anthony: parent at
+               the Test Agency, admin at iLearn). Narrow to the agency on screen for these lists. */
+            $header = (int) $request->header('X-Active-Agency-Id');
+            if ($agency === null && $header > 0) {
+                $agency = $header;
+                $centres = AgencyRole::centreIds($header);
+                $names = ['platform_admin'];
+                foreach (UserRoles::all($request) as $r) {
+                    if ((int) $r->agency_id === $header || ($r->centre_id && in_array((int) $r->centre_id, $centres, true))) {
+                        $names[] = (string) $r->role;
+                    }
+                }
+                $names = array_values(array_unique($names));
+            }
         }
         $staffRoles = array_values(array_intersect($names, self::STAFF_ROLES));
         $staff = (bool) $staffRoles;
         $family = in_array('guardian', $names, true);
         if (! $family) {
             try {
-                $family = DB::table('guardians')->where('user_id', (int) $request->user()->id)->exists();
+                $g = DB::table('guardians as g')->where('g.user_id', (int) $request->user()->id);
+                if ($agency !== null) {
+                    $g->join('families as f', 'f.id', '=', 'g.family_id')->join('centres as c', 'c.id', '=', 'f.centre_id')
+                        ->where('c.agency_id', $agency);
+                }
+                $family = $g->exists();
             } catch (\Throwable $e) {
             }
         }
@@ -154,13 +184,23 @@ final class NotifyAudience
     /** Does an item with this audience (and, on the staff side, these roles) belong on this person's lists? */
     public static function shows(string $audience, array $sides, ?array $roles = null): bool
     {
-        $myRoles = (array) ($sides['roles'] ?? []);
-        $staffOk = ! empty($sides['staff'])
-            && ($roles === null || in_array('platform_admin', $myRoles, true) || array_intersect($myRoles, $roles));
-        if ($audience === 'staff') return $staffOk;
-        if ($audience === 'family') return ! empty($sides['family']);
+        return self::tag($audience, $sides, $roles) !== null;
+    }
 
-        return $staffOk || ! empty($sides['family']);
+    /**
+     * THE ONE RULE for every per-person list and its save guard (2026-11-26): which hat an item reaches this person
+     * in - 'staff', 'parent', 'both' - or null when it never reaches them. A staff item with `roles` needs one of
+     * those roles (platform_admin no longer passes every list: an item for it says so in its roles).
+     */
+    public static function tag(string $audience, array $sides, ?array $roles = null): ?string
+    {
+        $myRoles = (array) ($sides['roles'] ?? []);
+        $staff = $audience !== 'family' && ! empty($sides['staff']) && ($roles === null || array_intersect($myRoles, $roles));
+        $family = $audience !== 'staff' && ! empty($sides['family']);
+        if ($staff && $family) return 'both';
+        if ($staff) return 'staff';
+
+        return $family ? 'parent' : null;
     }
 
     /**

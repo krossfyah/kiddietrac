@@ -48,7 +48,7 @@ class ContactPrefsController extends Controller
             if (! in_array($k, $smsOn, true) || ! NotifyAudience::shows($for, $sides)) {
                 continue;
             }
-            $sms[] = ['key' => $k, 'label' => $label, 'hint' => $hint, 'for' => $for, 'on' => ContactCategories::userWants($uid, 'sms', $k)];
+            $sms[] = ['key' => $k, 'label' => $label, 'hint' => $hint, 'for' => $for, 'as' => NotifyAudience::tag($for, $sides), 'on' => ContactCategories::userWants($uid, 'sms', $k)];
         }
         $voice = [];
         foreach (ContactCategories::voice() as $k => $label) {
@@ -58,6 +58,7 @@ class ContactPrefsController extends Controller
                 continue;
             }
             $voice[] = ['key' => $k, 'label' => $label, 'urgent' => BroadcastAudience::isEmergency($k), 'for' => $for, 'roles' => $roles,
+                'as' => NotifyAudience::tag($for, $sides, $roles),
                 'on' => ContactCategories::userWants($uid, 'voice', $k)];
         }
 

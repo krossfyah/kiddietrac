@@ -469,6 +469,7 @@
      family or all. Here the list narrows to the ROLE being viewed: a parent never sees staff kinds; staff see
      family kinds only when they are a parent too (marked "as a parent"), never while previewing a role. */
   var _ktRole = '';
+  var _ktBoth = false;   // set from the server's sides: staff AND parent in this agency
   function ktSettingsRole() {
     if (_ktRole) return _ktRole;
     try { if (typeof window.__ktActiveRole === 'function') return window.__ktActiveRole() || ''; } catch (e) {}
@@ -479,6 +480,11 @@
      carry `roles` (NotifyAudience::SOUND_ROLES / VOICE_ROLES): the staff roles it is for. Viewed as any other staff
      role it is hidden - unless the person is a parent too and it is a parent item as well ("all"), not while previewing. */
   function ktForRole(item, sides) {
+    /* SERVER-TAGGED (2026-11-26, NotifyAudience::tag): the server already sent only what this person receives in this
+       agency (or, previewing, in the role viewed), each with the hat it comes in. Working as a parent hides the
+       staff-only ones; otherwise every item listed is theirs. */
+    if (sides) _ktBoth = !!(sides.staff && sides.family);
+    if (item && item.as) return ktSettingsRole() === 'guardian' ? item.as !== 'staff' : true;
     var aud = (item && item.for) || 'all';
     var role = ktSettingsRole();
     var guardian = role === 'guardian';
@@ -491,6 +497,10 @@
   }
   function ktAudLabel(item) {
     var role = ktSettingsRole();
+    if (item && item.as) {   // staff + parent in this agency: say which hat (a "both" item needs no tag)
+      if (role === 'guardian' || !_ktBoth) return item.label;
+      return item.label + (item.as === 'parent' ? ' \u00b7 as a parent' : item.as === 'staff' ? ' \u00b7 as staff' : '');
+    }
     var notMine = item.for === 'family' || (item.for === 'all' && item.roles && item.roles.length && item.roles.indexOf(role) === -1);
     return item.label + (notMine && role !== 'guardian' ? ' \u00b7 as a parent' : '');
   }
@@ -1317,7 +1327,7 @@
             }, ['Stop all text messages']);
             stopLink.dataset.ktIconized = '1';
             var paintStop = function () {
-              stopWrap.style.display = smsConsent.opted_in ? 'block' : 'none';
+              stopWrap.style.display = (smsConsent.opted_in && smsPaint) ? 'block' : 'none';   // only on a row that has a Text pill (2026-11-26)
             };
             stopLink.addEventListener('click', function () {
               Api.post('/me/sms-consent', { agree: false }).then(function () {
@@ -1539,7 +1549,7 @@
         };
       };
       KT.settingsTabs(_nHost, 'settings-notifications', [
-        typeof _notifAbout !== 'undefined' && _notifAbout && (isGuardian || (!ktPreviewing() && (u.roles || []).indexOf('guardian') !== -1)) ? { key: 'about', label: '🔔 Notify me about', paint: _card(_notifAbout) } : null,
+        typeof _notifAbout !== 'undefined' && _notifAbout ? { key: 'about', label: '🔔 Notify me about', paint: _card(_notifAbout) } : null,
         _notifTexts ? { key: 'texts', label: '📱 Texts & calls', paint: _card(_notifTexts) } : null,
         typeof _notifPush !== 'undefined' && _notifPush ? { key: 'push', label: '📲 Push & alerts', paint: _card(_notifPush) } : null,
         _notifSounds ? { key: 'sounds', label: '🔊 Sounds & vibration', paint: _card(_notifSounds) } : null,
