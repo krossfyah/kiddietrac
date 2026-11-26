@@ -69,7 +69,7 @@ final class EnforcePlanFeatures
         'analytics'        => [['analytics/trends', 'ai/enrollment-forecast', 'ai/attendance-anomalies', 'engagement/scores'], []],
         // + observation write-up help and AI drafting (2026-10-28, the AI Bundle).
         // Not 'ai/' as a whole: ai/enrollment-forecast and ai/attendance-anomalies are Analytics, and not AI.
-        'ai_tools'         => [['ai/churn-risk', 'ai/doc-extract', 'ai/doc-extractions', 'ai/weekly-recap', 'ai/tag-observation', 'ai/translate-message', 'ai/assist', 'report-cards', 'parent/report-cards', 'director/digest-status', 'director/lesson-plans-ai', 'provider/observations/structure', 'provider/play-spark', 'parent/play-spark'], []],   // + Play Spark (2026-11-24)
+        'ai_tools'         => [['ai/churn-risk', 'ai/doc-extract', 'ai/doc-extractions', 'ai/weekly-recap', 'ai/tag-observation', 'ai/translate-message', 'ai/assist', 'report-cards', 'admin/report-card-settings', 'parent/report-cards', 'director/digest-status', 'director/lesson-plans-ai', 'provider/observations/structure', 'provider/play-spark', 'parent/play-spark'], []],   // + Play Spark (2026-11-24)
         'mrr_dashboard'    => [['admin/mrr'], []],
     ];
 
