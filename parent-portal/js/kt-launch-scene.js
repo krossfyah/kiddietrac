@@ -465,6 +465,8 @@
           if (bt) {
             fadeEl.style.setProperty('--ktls-accent', safeColour(bt.accent_color) || safeColour(bt.primary_color) || '#13B7CC');
             if (/^#[0-9a-f]{6}$/i.test(bt.accent_color || '')) fadeEl.style.setProperty('--ktpf-spin', bt.accent_color);
+            /* On a light splash the spinner wears the primary, as the dashboard splash does (2026-11-26). */
+            if (/^#[0-9a-f]{6}$/i.test(bt.primary_color || '') && /^#[0-9a-f]{6}$/i.test(bt.splash_bg || '') && parseInt(bt.splash_bg.slice(1, 3), 16) + parseInt(bt.splash_bg.slice(3, 5), 16) + parseInt(bt.splash_bg.slice(5, 7), 16) > 600) fadeEl.style.setProperty('--ktpf-spin', bt.primary_color);
           }
           fadeEl.innerHTML = signFrame(bt);
           fadeEl.classList.add('ktls-static');

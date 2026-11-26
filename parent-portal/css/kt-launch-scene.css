@@ -196,3 +196,6 @@ html.ktls-boot #kt-launch{z-index:2147483647}   /* above the greeting toast and 
 /* The sign-out spinner, carried onto the sign-in page (kt-signout-fade.js, arrive()). */
 @keyframes ktso-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.ktso-spin{animation-duration:1.6s!important}}
+
+/* White-label frames, clean (2026-11-26): no KiddieTrac rays or swoosh around a partner's logo plate (kt-boot-intro.css). */
+.ktls-wl-spk,.ktls-wl-sw{display:none!important}

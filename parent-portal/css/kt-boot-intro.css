@@ -107,3 +107,10 @@ html.kti #kt-splash .kti-spk b:nth-child(3){--tx:26px;--ty:-18px;animation-delay
 @keyframes kti-spk{0%{transform:translate(0,0) scale(.2);opacity:0}35%{opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(1);opacity:0}}
 html.kti-carry #kt-splash .kti-spk{display:none}
 @media (prefers-reduced-motion:reduce){html.kti #kt-splash .kti-spk{display:none}}
+
+/* ── WHITE-LABEL SPLASH, CLEAN (2026-11-26, Anthony: "the logging in screen shows the logo with some orange sprinkle
+   and underline that doesn't look good"). The rays over the plate and the swoosh under it were KiddieTrac's own
+   wordmark moves (rays over the "d", the swoosh) redrawn in the partner's accent. A partner's logo has neither: the
+   plate rises on its own, and the spinner wears the primary on a light splash (--kti-spin, set by the boot script). */
+html.kt-wl #kt-splash .kti-wl-spk,html.kt-wl #kt-splash .kti-wl-swoosh{display:none!important}
+html.kt-wl #kt-splash .kt-spinner{border-color:var(--kti-spin-track,rgba(255,255,255,.20))!important;border-top-color:var(--kti-spin,var(--kt-wl-spin,#13B7CC))!important}

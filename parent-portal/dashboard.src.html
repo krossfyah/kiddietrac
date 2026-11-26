@@ -212,7 +212,7 @@
      window.KT_PUBLIC_DEMO; a small badge says it is a demo that resets nightly. */
   try{(function(){var u=JSON.parse(sessionStorage.getItem('kt_user')||localStorage.getItem('kt_user')||'{}')||{};var e=String(u.email||(u.user&&u.user.email)||'');if(u.is_public_demo===true||(u.user&&u.user.is_public_demo===true)||/\.invalid$|@brightwood\.kiddietrac\.com$|@starlightkids\.example$/i.test(e)){window.KT_PUBLIC_DEMO=true;document.documentElement.classList.add('kt-public-demo');document.addEventListener('DOMContentLoaded',function(){var b=document.createElement('div');b.id='kt-demo-badge';b.setAttribute('aria-hidden','true');b.textContent='Demo · resets nightly';b.style.cssText='position:fixed;left:10px;bottom:calc(84px + var(--kt-safe-bottom, env(safe-area-inset-bottom,0px)));z-index:99990;pointer-events:none;background:rgba(10,30,44,.82);color:#fff;font:700 11px/1 system-ui,-apple-system,sans-serif;letter-spacing:.3px;padding:6px 10px;border-radius:999px;box-shadow:0 4px 12px rgba(0,0,0,.25)';document.body.appendChild(b);});}})();}catch(e){}</script>
   <script>try{(function(){var u=JSON.parse(sessionStorage.getItem('kt_user')||localStorage.getItem('kt_user')||'{}')||{};var a=sessionStorage.getItem('kt_active_agency_id')||localStorage.getItem('kt_active_agency_id')||'';if(u.id&&localStorage.getItem('kt_can_dial:'+u.id+':'+a)==='1')document.documentElement.classList.add('kt-can-dial');})();}catch(e){}</script>
-  <link rel="stylesheet" href="/css/kt-launch-scene.css?v=20261103ios">
+  <link rel="stylesheet" href="/css/kt-launch-scene.css?v=20261127spl">
   <script>/* SPACE OUT THE READS (2026-10-01). A fresh page - every reload, every agency switch - fired its whole boot at once: 14-15 API requests open together, 39 in the first three seconds for an admin. The hosting account caps how many PHP requests run at the same moment, and past it the server answers 508 with no CORS header, which the browser reports as "the request never completed" (Anthony, 4s after switching agency). FIRST script on the page and at the fetch() level, because half the boot requests are plain fetch() calls and some start before app.js loads. SLOW CONNECTION (2026-10-29, kt-net-quality.js sets window.__ktSlowNet): badge counts and polls go two at a time at most, so the screen being opened gets the bandwidth. Per page: at most 6 API reads on the wire, the rest wait their turn; badge counts and polls go last and not in the first 2.5s; writes never wait; a read that never answers hands its slot back after 15s. */
   (function(){try{if(window.__ktReadLimiter||typeof window.fetch!=='function')return;window.__ktReadLimiter=true;var SLOTS=6,QUIET=2500,MAXMS=15000,API=/^https:\/\/api\.kiddietrac\.com\//,LOW=/unread-count|\/count(\?|$)|\/pulse(\?|$)|\/me\/markers(\?|$)/,L={open:0,hi:[],lo:[],timer:null};
   function pump(){while(L.open<SLOTS){var n=L.hi.shift();if(!n){var w=QUIET-((window.performance&&performance.now())||QUIET);if(w>0&&L.lo.length){if(!L.timer)L.timer=setTimeout(function(){L.timer=null;pump();},w+10);break;}if(window.__ktSlowNet&&L.open>=2&&L.lo.length){if(!L.timer)L.timer=setTimeout(function(){L.timer=null;pump();},400);break;}n=L.lo.shift();}if(!n)break;n();}}
@@ -419,7 +419,7 @@ document.documentElement.appendChild(d);}}catch(e){}})();</script>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Kiddietrac">
   <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/css/kt-boot-intro.css?v=20261101fi">
+  <link rel="stylesheet" href="/css/kt-boot-intro.css?v=20261127spl">
 <link rel="stylesheet" href="/css/kt-design-v22p55.css?v=20261030a">
   <link rel="stylesheet" href="/css/kt-design-v22p64.css?v=20261030u">
   <link rel="stylesheet" href="/css/kt-design-v22p65.css?v=20261102dw">
@@ -488,7 +488,7 @@ document.documentElement.appendChild(d);}}catch(e){}})();</script>
 })();
 </script>
 <!-- The blocks scene on a first boot (see the head) - before the splash, so it is the first frame. -->
-<script src="/js/kt-launch-scene.js?v=20261105tix"></script>
+<script src="/js/kt-launch-scene.js?v=20261127spl"></script>
 <!-- v17.2-shell -->
 <!-- ── Launch splash: the real KiddieTrac logo on a soft light ground (flows into the light login) ── -->
 <style>
@@ -641,6 +641,8 @@ if(fr||bio)n.textContent='Signing you in…';})();}catch(e){}</script>
   document.documentElement.classList.add('kt-wl');
   if(/^#[0-9a-f]{6}$/i.test(t.accent_color||'')){document.documentElement.style.setProperty('--kt-wl-spin',t.accent_color);}
   var sp=document.getElementById('kt-splash');if(sp&&t.splash_bg){sp.style.background=t.splash_bg;}
+  /* A light splash: the spinner in the primary on a faint track, not the accent (kt-boot-intro.css, 2026-11-26). */
+  if(sp&&/^#[0-9a-f]{6}$/i.test(t.primary_color||'')&&/^#[0-9a-f]{6}$/i.test(t.splash_bg||'')&&parseInt(t.splash_bg.slice(1,3),16)+parseInt(t.splash_bg.slice(3,5),16)+parseInt(t.splash_bg.slice(5,7),16)>600){sp.style.setProperty('--kti-spin',t.primary_color);sp.style.setProperty('--kti-spin-track','rgba(15,23,42,.08)');}
   var i=document.querySelector('#kt-splash .ktl-anim>img');if(!i)return;
   var abs=function(x){return !x?'':(/^(https?:|data:)/i.test(x)?x:'https://api.kiddietrac.com'+(x.charAt(0)==='/'?'':'/')+x);};
   var src=abs(t.splash_logo_url);
