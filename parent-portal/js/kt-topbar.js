@@ -309,7 +309,8 @@
       }
 
       // Alert rows (e.alert) are the person's own Notify rows, already in __ownUnread: counted once, there.
-      var unread = d.events.filter(function (e) { return !e.alert && e.when && e.when > seen; }).length;
+      // Staff submissions too (2026-11-26): /badges counts them for every device (StaffSubmissionsFeed::unseenCount).
+      var unread = d.events.filter(function (e) { return !e.alert && e.type !== 'submission' && e.when && e.when > seen; }).length;
       setNotifBadge(unread + __ownUnread);
     });
     });

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -244,6 +245,102 @@ final class StaffSubmissionsFeed
             }
         });
 
+        return $out;
+    }
+
+    /* THE PHONE INBOX TOO (2026-11-26, Anthony: staff submissions in the phone Inbox as well, a list only, no push).
+       On a phone the bell is the Inbox (#notifications), which lists Notify rows. READ-TIME MERGE, NOT NOTIFY ROWS:
+       Notify::write queues a phone push for every row it writes (memory kiddietrac-bell-rings-phone), so writing these
+       as notifications would ring every admin's phone for every drill and signed checklist. Instead:
+         - GET /notifications?with_submissions=1 (only the Inbox screen asks) merges forViewer() into the list by time;
+         - GET /badges adds unseenCount() to `notifications`, so the phone Inbox and the desktop bell count each item
+           ONCE (the desktop feed no longer counts type "submission" itself);
+         - POST /notifications/seen (opening the Inbox, or the bell, on any device) moves ONE server marker
+           (user_ui_markers 'kt_subs_seen' = the newest submission time seen), so seen on one device is seen on all.
+       The marker is a submission's own timestamp, never "now", so a row stamped in another zone cannot slip under it.
+       Same scope, Live filter, topic switch and links as the desktop bell: the rows come from events(). */
+    private const SEEN_KEY = 'kt_subs_seen';
+
+    /** The submissions this person's bell shows, worked out from the request the way activityFeed does. */
+    public static function forViewer(Request $request): array
+    {
+        $u = $request->user();
+        if (! $u || $request->header('X-View-As-Role')) return [];   // previewing another role: exactly that role's list
+        $uid = (int) $u->id;
+        $hdr = strtolower(trim((string) $request->header('X-Active-Agency-Id')));
+        return Cache::remember('kt_subs_v1_' . $uid . '_' . $hdr, 45, function () use ($request, $uid, $hdr) {
+            $isPlatform = DB::table('role_assignments')->where('user_id', $uid)->where('role', 'platform_admin')->where('active', 1)->exists();
+            if ($isPlatform) {
+                // A platform admin inside one agency; their "All agencies" view (no agency) lists none in the Inbox.
+                $aid = (int) $hdr;
+                if ($aid <= 0 || ! DB::table('agencies')->where('id', $aid)->exists()) return [];
+                return self::events($request, $uid, false, [$aid]);
+            }
+            $agencyIds = DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
+                ->whereIn('role', ['agency_admin', 'centre_director'])->whereNotNull('agency_id')->pluck('agency_id')->unique()->values()->all();
+            if (! $agencyIds) {
+                $agencyIds = DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')
+                    ->where('ra.user_id', $uid)->where('ra.active', 1)->whereIn('ra.role', ['agency_admin', 'centre_director'])
+                    ->pluck('c.agency_id')->unique()->values()->all();
+            }
+            return $agencyIds ? self::events($request, $uid, false, array_map('intval', $agencyIds)) : [];
+        });
+    }
+
+    /** The newest submission time this person has seen (null = never looked). */
+    public static function seenAt(int $userId): ?string
+    {
+        $v = DB::table('user_ui_markers')->where('user_id', $userId)->where('marker_key', self::SEEN_KEY)->value('marker_value');
+        return $v === null || $v === '' ? null : (string) $v;
+    }
+
+    private static function setSeen(int $userId, string $when): void
+    {
+        DB::table('user_ui_markers')->updateOrInsert(['user_id' => $userId, 'marker_key' => self::SEEN_KEY], ['marker_value' => $when, 'updated_at' => now()]);
+    }
+
+    private static function newest(array $events): ?string
+    {
+        $max = null;
+        foreach ($events as $e) if (! empty($e['when']) && ($max === null || (string) $e['when'] > $max)) $max = (string) $e['when'];
+        return $max;
+    }
+
+    /** New since the person last opened the Inbox or the bell. First time: today's list is the starting point, not "new". */
+    public static function unseenCount(Request $request): int
+    {
+        $events = self::forViewer($request);
+        if (! $events) return 0;
+        $uid = (int) $request->user()->id;
+        $seen = self::seenAt($uid);
+        if ($seen === null) { if ($n = self::newest($events)) self::setSeen($uid, $n); return 0; }
+        return count(array_filter($events, fn ($e) => (string) $e['when'] > $seen));
+    }
+
+    /** Opening the Inbox or the bell: everything listed now counts as seen, on every device. Only ever moves forward. */
+    public static function markSeen(Request $request): void
+    {
+        $newest = self::newest(self::forViewer($request));
+        if ($newest === null) return;
+        $uid = (int) $request->user()->id;
+        $seen = self::seenAt($uid);
+        if ($seen === null || $newest > $seen) self::setSeen($uid, $newest);
+    }
+
+    /** The Inbox rows: one per submission, shaped like a notification and marked `virtual` (no read/delete, no id). */
+    public static function inboxRows(Request $request): array
+    {
+        $seen = self::seenAt((int) $request->user()->id);
+        $out = [];
+        foreach (self::forViewer($request) as $e) {
+            $w = (string) $e['when'];
+            $out[] = (object) [
+                'id' => 'sub-' . substr(md5($e['kind'] . '|' . $e['link'] . '|' . $w . '|' . $e['text']), 0, 16),
+                'virtual' => true, 'type' => 'staff_submission', 'title' => (string) $e['text'], 'body' => null,
+                'data' => json_encode(['link' => $e['link'], 'icon' => $e['icon'], 'kind' => $e['kind']]),
+                'read_at' => ($seen !== null && $w <= $seen) ? $w : null, 'created_at' => $w,
+            ];
+        }
         return $out;
     }
 

@@ -110,7 +110,7 @@
     form: '📝', system: '🔧',
     headcount_due: '🧮', records_reminder: '📋', safe_arrival: '🚸', supplies: '🧺',
     proposal_opened: '📖', task: '✅', tasks: '✅', clock: '⏱️', late_pickup: '⏰', absence: '🏠',
-    observation: '🔭', lesson_plan: '📚', drill: '🚒', medication_due: '💊', birthday: '🎂',
+    observation: '🔭', lesson_plan: '📚', drill: '🚒', medication_due: '💊', birthday: '🎂', staff_submission: '📥',
     sales: '💼', lead: '🎯', booking: '📅', voicemail: '📼', missed_call: '📞', line_text: '💬',
   };
   /* WHAT KIND, IN WORDS (2026-10-23, Anthony: "look at inbox ... you will see some issues"). The
@@ -122,6 +122,7 @@
     system: 'System', headcount_due: 'Headcount', records_reminder: 'Daily records', safe_arrival: 'Safe Arrival',
     supplies: 'Supplies', proposal_opened: 'Proposal', task: 'Task', tasks: 'Task', late_pickup: 'Late pick-up',
     absence: 'Absence', sms_reply: 'Text reply', sms: 'Text', clock_reminder: 'Clock reminder', observation: 'Observation', lesson_plan: 'Lesson plan', drill: 'Drill', birthday: 'Birthday',
+    staff_submission: 'Team submission',
   };
   function typeLabel(t) {
     if (!t) return 'Notice';
@@ -265,7 +266,7 @@
       if (filter.value === 'read') rows = rows.filter(function (r) { return r.read_at; });
       return rows;
     }
-    function selectedIds() { return Object.keys(selected).filter(function (k) { return selected[k]; }).map(Number); }
+    function selectedIds() { return Object.keys(selected).filter(function (k) { return selected[k] && /^\d+$/.test(k); }).map(Number); }
     function paintSelBar() {
       var n = selectedIds().length;
       selBar.style.display = selecting ? 'flex' : 'none';
@@ -286,7 +287,7 @@
       var rows = visibleRows();
       var allOn = selectedIds().length === rows.length;
       selected = {};
-      if (!allOn) rows.forEach(function (r) { selected[r.id] = true; });
+      if (!allOn) rows.forEach(function (r) { if (!r.virtual) selected[r.id] = true; });
       paintSelBar(); paint();
     });
     selDel.addEventListener('click', function () {
@@ -387,8 +388,16 @@
       }
     }
 
+    /* TEAM SUBMISSIONS (2026-11-26): an admin's or director's Inbox also lists what the team submitted (drills,
+       hazards, signed forms...), merged by the server at read time (GET /notifications?with_submissions=1,
+       App\Support\StaffSubmissionsFeed). They are not notifications: `virtual`, no id to mark or delete, never
+       selected - a tap just opens the record. Their "new" count is the badge's; opening this screen clears it. */
+    function rowIcon(n) {
+      if (n.virtual) { try { var dv = typeof n.data === 'string' ? JSON.parse(n.data) : (n.data || {}); if (dv && dv.icon) return dv.icon; } catch (e) {} }
+      return typeIcon(n.type);
+    }
     function renderRow(n) {
-      var icon = typeIcon(n.type);
+      var icon = rowIcon(n);
       var row = Dom.el('div', { class: 'kt-ntf-row', style: 'display:flex;align-items:flex-start;gap:14px;padding:14px 18px;border-bottom:1px solid #F3F4F6;cursor:pointer;background:' + (n.read_at ? 'white' : '#EFF6FF') + ';position:relative;' });
       row.addEventListener('mouseenter', function () { row.style.background = '#FAFBFC'; });
       row.addEventListener('mouseleave', function () { row.style.background = n.read_at ? 'white' : '#EFF6FF'; });
@@ -397,7 +406,7 @@
         row.appendChild(Dom.el('div', { style: 'width:8px;height:8px;border-radius:50%;background:#3B82F6;position:absolute;left:6px;top:22px;' }));
       }
 
-      if (selecting) {
+      if (selecting && !n.virtual) {
         var box = Dom.el('input', { type: 'checkbox', style: 'width:20px;height:20px;flex-shrink:0;margin-top:10px;accent-color:#159FB4;' });
         box.checked = !!selected[n.id];
         box.addEventListener('click', function (e) {
@@ -481,15 +490,16 @@
       });
       acts.appendChild(del);
 
-      row.appendChild(acts);
+      if (!n.virtual) row.appendChild(acts);
 
       row.addEventListener('click', function () {
         if (selecting) {
+          if (n.virtual) return;
           selected[n.id] = !selected[n.id];
           paintSelBar(); paint();
           return;
         }
-        if (!n.read_at) {
+        if (!n.read_at && !n.virtual) {
           // Optimistic update
           n.read_at = new Date().toISOString();
           rememberPending(n.id, n.read_at);
@@ -542,7 +552,7 @@
        single statement. Re-reading afterwards means the list shows what the server
        actually holds rather than what we hoped it did. */
     markAll.addEventListener('click', async function () {
-      var unread = cache.filter(function (r) { return !r.read_at; });
+      var unread = cache.filter(function (r) { return !r.read_at && !r.virtual; });
       if (!unread.length) return;
       if (!await KT.confirm('Mark all ' + unread.length + ' as read?')) return;
       markAll.disabled = true; markAll.textContent = 'Marking…';
@@ -565,7 +575,7 @@
 
       try {
         await Api.post('/notifications/mark-read', {});
-        var fresh = await Api.get('/notifications');
+        var fresh = await Api.get('/notifications?with_submissions=1');
         cache = applyPending((fresh && fresh.notifications) ? fresh.notifications : (Array.isArray(fresh) ? fresh : cache));
         paint();
         // Released on the same delay a single mark uses, for the same reason.
@@ -587,7 +597,7 @@
     // (NotificationController::mine is gated for guardian only). Future
     // ships should extend this to staff via a new endpoint.
     if (memo) { cache = applyPending(memo.rows); paint(); }
-    Api.get('/notifications').then(function (data) {
+    Api.get('/notifications?with_submissions=1').then(function (data) {
       var fresh = applyPending((data && data.notifications) ? data.notifications : (Array.isArray(data) ? data : []));
       var sig = JSON.stringify(fresh);
       var same = !!memo && sig === JSON.stringify(cache);

@@ -86,6 +86,13 @@ final class Badges
             // The newest notification the person has (2026-10-30): the page fetches the full list only when this moves.
             $out['newest_id'] = (int) DB::table('notifications')->where('user_id', $uid)->max('id');
         } catch (\Throwable $e) { Log::warning('badges: notifications', ['e' => $e->getMessage()]); }
+        /* STAFF SUBMISSIONS (2026-11-26, App\Support\StaffSubmissionsFeed): an admin's or director's new team submissions,
+           listed in the Inbox at read time (never Notify rows, so never a push). Counted HERE once for every device - the
+           phone Inbox and the desktop bell both read `notifications` - and cleared by POST /notifications/seen. */
+        try {
+            $out['submissions'] = \App\Support\StaffSubmissionsFeed::unseenCount($r);
+            $out['notifications'] += $out['submissions'];
+        } catch (\Throwable $e) { Log::warning('badges: submissions', ['e' => $e->getMessage()]); }
         /* THE PLAN IN VIEW (2026-11-26, App\Support\PlanStamp): every open tab asks here every 10 s, so a licence or
            feature change reaches it on the next poll - kt-badges.js compares this with kt_user.plan_v. */
         try { $out['plan_v'] = \App\Support\PlanStamp::forUser($uid); }

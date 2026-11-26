@@ -37,9 +37,26 @@ final class NotificationController extends Controller
                 'id', 'type', 'title', 'body', 'data', 'read_at', 'created_at',
             ]);
 
+        $unread = $rows->whereNull('read_at')->count();
+
+        /* STAFF SUBMISSIONS IN THE PHONE INBOX (2026-11-26): only when the Inbox screen asks (with_submissions=1), so
+           every other reader of this list (sounds, toasts, badges) is unchanged. Merged by time, read-time only - see
+           App\Support\StaffSubmissionsFeed. Empty for anyone who is not an admin or director. unread_count stays the
+           notifications' own. */
+        if ($request->boolean('with_submissions')) {
+            try {
+                $extra = \App\Support\StaffSubmissionsFeed::inboxRows($request);
+                if ($extra) {
+                    $rows = $rows->concat($extra)->sortByDesc(fn ($r) => (string) $r->created_at)->take(200)->values();
+                }
+            } catch (\Throwable $e) {
+                report($e);   // the person's own notifications still answer
+            }
+        }
+
         return response()->json([
             'notifications' => $rows,
-            'unread_count' => $rows->whereNull('read_at')->count(),
+            'unread_count' => $unread,
         ]);
     }
 

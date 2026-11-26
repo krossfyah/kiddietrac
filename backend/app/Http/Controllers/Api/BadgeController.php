@@ -21,6 +21,8 @@ final class BadgeController extends Controller
     {
         $uid = (int) $r->user()->id;
         Badges::markSeen($uid);
+        // Staff submissions in the Inbox / bell (StaffSubmissionsFeed): seen here is seen on every device.
+        try { \App\Support\StaffSubmissionsFeed::markSeen($r); } catch (\Throwable $e) { report($e); }
         $b = Badges::forRequest($r);
         $b['ios'] = Badges::syncIos($uid, $b['total']);
         return response()->json($b)->header('Cache-Control', 'no-store');
