@@ -1048,6 +1048,8 @@ post platform/invoices/payments/{payment}/refund | Refunded a payment on a Kiddi
 post platform/billing-extras | Added an extra line item for an agency's invoices
 patch platform/billing-extras/{extra} | Changed an extra line item
 delete platform/billing-extras/{extra} | Removed an extra line item
+post platform/referral-credits | Added a referral credit for a customer's invoice
+post platform/referral-credits/{id}/cancel | Cancelled a referral credit
 post admin/kt-invoices/{id}/report-payment | Reported a payment on a KiddieTrac invoice
 post admin/kt-invoices/prepay-year | Asked for a 12-month prepayment invoice
 put meetings/{id} | Changed a meeting (attendees were told)

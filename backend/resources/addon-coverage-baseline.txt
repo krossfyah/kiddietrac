@@ -395,6 +395,7 @@ route platform/marketing-site
 route platform/messaging-overage
 route platform/overview
 route platform/phone
+route platform/referral-credits
 route platform/reports
 route platform/resellers
 route platform/sales-report

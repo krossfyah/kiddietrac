@@ -737,6 +737,13 @@
       }
     }
 
+    /* ── referrals (2026-11-26): who referred them, and the referral credits they were given ── */
+    if (KT.ReferralCredits && x.referrals && (r.can_see_ar || x.referrals.referred_by || (x.referrals.given || []).length)) {
+      body.appendChild(sec('Referrals'));
+      body.appendChild(card([KT.ReferralCredits.customerBlock(x.referrals, { canEdit: !!r.can_see_ar && !!x.agency_id, agency_id: x.agency_id,
+        onChange: function () { M.close && M.close(); openCustomer(id, screen); } })]));
+    }
+
     body.appendChild(sec('Status, owner and notes'));
     var selStyle = 'height:34px;padding:0 10px;border:1px solid #D9E1EA;border-radius:9px;font-size:13.5px;max-width:100%';
     statusSel = el('select', { 'aria-label': 'Customer status', style: selStyle },

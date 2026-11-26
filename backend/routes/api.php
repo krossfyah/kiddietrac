@@ -2514,6 +2514,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post  ('/platform/billing-extras', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveExtra'])->middleware('role:platform_admin');
     Route::patch ('/platform/billing-extras/{extra}', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveExtra'])->whereNumber('extra')->middleware('role:platform_admin');
     Route::delete('/platform/billing-extras/{extra}', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'deleteExtra'])->whereNumber('extra')->middleware('role:platform_admin');
+    // Referral credits (2026-11-26, App\Support\ReferralCredits): one-time credit off a customer's chosen month's invoice.
+    Route::get   ('/platform/referral-credits', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'referralCredits'])->middleware('role:platform_admin');
+    Route::post  ('/platform/referral-credits', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveReferralCredit'])->middleware('role:platform_admin');
+    Route::post  ('/platform/referral-credits/{id}/cancel', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'cancelReferralCredit'])->whereNumber('id')->middleware('role:platform_admin');
     Route::put   ('/platform/billing-emails', [\App\Http\Controllers\Api\PlatformInvoiceController::class, 'saveBillingEmails'])->middleware('role:platform_admin');
     // An agency's own KiddieTrac invoices: admins only, the active agency.
     Route::get   ('/admin/kt-invoices', [\App\Http\Controllers\Api\AgencyBillingController::class, 'index'])->middleware('role:agency_admin,platform_admin');

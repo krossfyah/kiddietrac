@@ -202,6 +202,8 @@ final class SearchRegistry
         'privacy_requests' => 'a person\'s request to see, correct or delete their information (PIPEDA s. 8), worked on Privacy requests by agency admins only; never surfaced in a global box',
         // 2026-11-25 (ticket #267)
         'temp_pickups' => 'a temporary pickup person (name, phone, photo, pass code) for one family, shown on that child\'s record and emergency card and checked at sign-out; never surfaced in a global box',
+        // 2026-11-26: referral credits (ReferralCredits)
+        'referral_credits' => 'a one-time credit off an invoice of a KiddieTrac customer for referring a lead, listed on Platform invoices > Referral credits and on the Sales customer record (platform admins only); search the customer',
         'phone_reports' => 'a parent\'s phone message about an absence or late arrival (recording and transcript), approved in Safe Arrival by directors and admins only; never surfaced in a global box',
     ];
 

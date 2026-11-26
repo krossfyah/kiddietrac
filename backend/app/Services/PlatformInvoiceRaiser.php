@@ -201,6 +201,9 @@ final class PlatformInvoiceRaiser
                     /* EXTRA LINE ITEMS (2026-10-25): whatever Sales -> Invoices -> Extra line items holds
                        for this agency - on every invoice, or just this one - in the same transaction. */
                     \App\Support\PlatformAccounts::applyExtras((int) $invId, (int) $p['agency_id']);
+                    /* REFERRAL CREDITS (2026-11-26): a pending credit for this agency whose month has come comes off
+                       here, before tax, in the same transaction (App\Support\ReferralCredits). */
+                    \App\Support\ReferralCredits::applyToInvoice((int) $invId, $userId);
                 });
                 if (! empty($p['lines'])) \App\Support\Licences::sync((int) $p['agency_id']);
 

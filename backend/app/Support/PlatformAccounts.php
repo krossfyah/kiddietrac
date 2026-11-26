@@ -773,6 +773,8 @@ final class PlatformAccounts
     public static function lineTaxable(object $ln, object $inv): bool
     {
         if ((int) $ln->tax_cents > 0) return true;
+        // A referral credit comes off before tax: ticked "Taxed" when it took tax off (2026-11-26, ReferralCredits).
+        if ($ln->kind === 'referral') return (int) $ln->tax_cents < 0;
         if (in_array($ln->kind, ['comp', 'late', 'nsf', 'credit', 'surcharge'], true) || (int) $ln->amount_cents <= 0) return false;
         return (int) $inv->tax_rate_bps > 0 && in_array($ln->kind, [null, '', 'licence', 'manual', 'extra'], true);
     }
@@ -793,17 +795,22 @@ final class PlatformAccounts
         $before = PlatformBilling::money((int) $inv->amount_cents, $inv->currency);
         // Never below what has been paid: refund the difference first (2026-10-25).
         $newSub = 0; $newTax = 0;
-        foreach ($d['lines'] as $ln) { $amt = (int) round((float) ($ln['qty'] ?? 1) * (int) round(((float) $ln['unit']) * 100)); $newSub += $amt; if (! empty($ln['taxable']) && $amt > 0) $newTax += PlatformBilling::taxCents($amt, $bps); }
+        /* A taxed line below zero (a referral credit, which comes off before tax) takes its tax off too (2026-11-26).
+           Only referral lines are ever ticked Taxed below zero (lineTaxable), so other credits are unchanged. */
+        $lineTax = fn (array $ln, int $amt) => empty($ln['taxable']) ? 0 : ($amt > 0 ? PlatformBilling::taxCents($amt, $bps)
+            : ($amt < 0 && isset($ln['id']) && isset($existing[(int) $ln['id']]) && $existing[(int) $ln['id']]->kind === 'referral' ? -PlatformBilling::taxCents(-$amt, $bps) : 0));
+        foreach ($d['lines'] as $ln) { $amt = (int) round((float) ($ln['qty'] ?? 1) * (int) round(((float) $ln['unit']) * 100)); $newSub += $amt; $newTax += $lineTax($ln, $amt); }
+        abort_if($newSub + $newTax < 0, 422, 'A credit cannot take the invoice below zero.');
         abort_if($newSub + $newTax < (int) $inv->amount_paid_cents, 422, 'The new total (' . PlatformBilling::money($newSub + $newTax, $inv->currency) . ') is less than the '
             . PlatformBilling::money((int) $inv->amount_paid_cents, $inv->currency) . ' already paid. Refund the difference first, then edit.');
-        DB::transaction(function () use ($inv, $invoiceId, $d, $bps, $existing, $byUserId, $before) {
+        DB::transaction(function () use ($inv, $invoiceId, $d, $bps, $existing, $byUserId, $before, $lineTax) {
             $keep = [];
             $sub = 0; $tax = 0;
             foreach ($d['lines'] as $ln) {
                 $qty = (float) ($ln['qty'] ?? 1);
                 $unit = (int) round(((float) $ln['unit']) * 100);
                 $amt = (int) round($qty * $unit);
-                $lt = ! empty($ln['taxable']) && $amt > 0 ? PlatformBilling::taxCents($amt, $bps) : 0;
+                $lt = $lineTax($ln, $amt);
                 $row = ['description' => mb_substr((string) $ln['description'], 0, 255), 'qty' => $qty, 'unit_cents' => $unit, 'amount_cents' => $amt, 'tax_cents' => $lt,
                     'part_number' => $ln['part_number'] ?? null];
                 $id = (int) ($ln['id'] ?? 0);

@@ -175,6 +175,9 @@
         + '<label><span style="' + L + '">Due date</span><input data-f="due" type="date" value="' + esc(x.due_at || '') + '" style="width:100%;' + F + '"></label>'
         + ((x.extras || []).length ? '<div style="grid-column:1/-1;font-size:12.5px;color:#7C3AED;background:#F5F3FF;border-radius:8px;padding:6px 10px;">Plus extra line items: '
             + x.extras.map(function (e) { return esc(e.description) + ' ' + money(Math.round((Number(e.qty) || 1) * e.unit_cents), cur) + (e.taxable ? ' + tax' : '') + (e.recurring ? '' : ' (this invoice only)'); }).join(' · ') + '</div>' : '')
+        /* Referral credits that come off when raised (2026-11-26, KT.ReferralCredits), before tax. */
+        + ((x.referral_credits || []).length ? '<div style="grid-column:1/-1;font-size:12.5px;color:#047857;background:#ECFDF5;border-radius:8px;padding:6px 10px;">🤝 Comes off when raised (before tax): '
+            + x.referral_credits.map(function (r) { return esc(r.description) + ' ' + money(r.amount_cents, cur); }).join(' · ') + '</div>' : '')
         + '<label style="grid-column:1/-1;"><span style="' + L + '">Note on the invoice (optional)</span><input data-f="notes" maxlength="1000" placeholder="e.g. Includes 2 extra centres from 15 Sep" style="width:100%;' + F + '"></label>'
         + '</div>'
         + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px;">'
@@ -445,7 +448,7 @@
   var activeTab = 'open';
   /* SUB-TABS (2026-10-25): one row instead of six buttons that each opened a panel above the table. */
   var SECTION = 'invoices';
-  var SECTIONS = [['invoices', '🧾 Invoices'], ['payments', '💳 Payments'], ['extras', '➕ Extra line items'], ['plans', '🏷️ Billing plans'], ['fees', '⚙️ Settings'], ['ap', '📤 Expenses (AP)']];
+  var SECTIONS = [['invoices', '🧾 Invoices'], ['payments', '💳 Payments'], ['extras', '➕ Extra line items'], ['referrals', '🤝 Referral credits'], ['plans', '🏷️ Billing plans'], ['fees', '⚙️ Settings'], ['ap', '📤 Expenses (AP)']];
   var PENDING_N = 0;
   function sectionBar() {
     return '<div id="kt-arap-tabs" role="tablist" aria-label="Accounting sections" style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 16px;">' + SECTIONS.map(function (x) {
@@ -467,6 +470,10 @@
     var host = main.querySelector('#kt-sec-host');
     if (SECTION === 'payments') return paymentsSection(host, main);
     if (SECTION === 'extras') return extrasPanel(host);
+    if (SECTION === 'referrals') {   // 2026-11-26: one-time referral credits off a chosen month's invoice
+      if (KT.ReferralCredits) return KT.ReferralCredits.panel(host);
+      host.innerHTML = '<div style="color:#B91C1C;">Referral credits did not load. Refresh the page.</div>'; return;
+    }
     if (SECTION === 'plans') return planEditor(host);
     if (SECTION === 'fees') {
       host.innerHTML = '<div id="kt-recur"></div><div id="kt-bm"></div>';
@@ -1268,7 +1275,7 @@
   function manageInvoice(id, main) {
     var ov = overlay('Lines & payments', '');
     var body = ov.querySelector('[data-body]');
-    var KIND = { late: 'Late fee', nsf: 'NSF fee', surcharge: 'Surcharge', extra: 'Extra', manual: 'Added', credit: 'Credit' };
+    var KIND = { late: 'Late fee', nsf: 'NSF fee', surcharge: 'Surcharge', extra: 'Extra', manual: 'Added', credit: 'Credit', referral: 'Referral credit' };
     function load() {
       api('/platform/invoices/' + id + '/detail').then(function (d) {
         var inv = d.invoice || {}, cur = inv.currency || 'CAD', open = inv.status !== 'paid' && inv.status !== 'void';

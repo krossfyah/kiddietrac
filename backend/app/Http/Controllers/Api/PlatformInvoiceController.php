@@ -307,6 +307,9 @@ class PlatformInvoiceController extends Controller
                 'due_at' => \App\Support\PlatformBilling::dueDate(\App\Support\AgencyTime::today()),
                 // Extra line items waiting for this agency's next invoice (added on top when raised).
                 'extras' => \App\Support\PlatformAccounts::pendingExtras((int) $p['agency_id']),
+                // Referral credits that come off this invoice when raised (2026-11-26), on the subtotal with the extras.
+                'referral_credits' => \App\Support\ReferralCredits::preview((int) $p['agency_id'], (string) $p['period_start'],
+                    (int) $p['subtotal_cents'] + (int) array_sum(array_map(fn ($x) => (int) round((float) $x->qty * (int) $x->unit_cents), \App\Support\PlatformAccounts::pendingExtras((int) $p['agency_id'])))),
             ];
 
             return response()->json([
@@ -920,6 +923,38 @@ class PlatformInvoiceController extends Controller
         \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => $x->agency_id, 'action' => 'platform_invoice.extra_saved', 'entity_type' => 'platform_invoice_extra', 'entity_id' => $id,
             'payload' => json_encode(['summary' => ($extra ? 'Changed' : 'Added') . ' extra line item "' . $x->description . '" (' . \App\Support\PlatformBilling::money((int) round((float) $x->qty * (int) $x->unit_cents), 'CAD') . ($x->recurring ? ', every invoice' : ', next invoice only') . ($x->active ? '' : ', paused') . ')']), 'created_at' => now()]);
         return response()->json(['extra' => $x], $extra ? 200 : 201);
+    }
+
+    /* ── referral credits (2026-11-26, App\Support\ReferralCredits) ─────────────────────────── */
+
+    /** GET /platform/referral-credits: every credit, plus the customers and leads to pick from. */
+    public function referralCredits(): JsonResponse
+    {
+        $rows = \Illuminate\Support\Facades\Schema::hasTable('referral_credits')
+            ? DB::table('referral_credits')->orderByRaw("FIELD(status,'pending','partially_applied','applied','cancelled')")->orderByDesc('id')->get()->map(fn ($c) => \App\Support\ReferralCredits::row($c))->all() : [];
+        $nums = \App\Support\SalesCustomers::numbersForAgencies(DB::table('agencies')->whereNull('deleted_at')->pluck('id')->all());
+        $agencies = DB::table('agencies')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name', 'plan_currency'])
+            ->map(fn ($a) => ['id' => (int) $a->id, 'name' => $a->name, 'customer_number' => $nums[(int) $a->id] ?? null, 'currency' => $a->plan_currency ?: 'CAD'])->all();
+        $taken = \Illuminate\Support\Facades\Schema::hasTable('referral_credits') ? DB::table('referral_credits')->where('status', '!=', 'cancelled')->pluck('referred_lead_id')->map(fn ($v) => (int) $v)->all() : [];
+        $leads = DB::table('sales_leads')->whereNull('deleted_at')->orderByDesc('updated_at')->limit(1000)
+            ->get(['id', 'company', 'name', 'city', 'stage', 'converted_agency_id'])
+            ->map(fn ($l) => ['id' => (int) $l->id, 'name' => trim((string) ($l->company ?: $l->name)) ?: ('Lead #' . $l->id), 'city' => $l->city, 'stage' => $l->stage,
+                'agency_id' => $l->converted_agency_id ? (int) $l->converted_agency_id : null, 'taken' => in_array((int) $l->id, $taken, true)])->all();
+        return response()->json(['credits' => $rows, 'agencies' => $agencies, 'leads' => $leads, 'this_month' => \App\Support\AgencyTime::todayDate()->format('Y-m')]);
+    }
+
+    /** POST /platform/referral-credits {agency_id, referred_lead_id, type: fixed|percent, value, month: YYYY-MM, notes?} */
+    public function saveReferralCredit(Request $request): JsonResponse
+    {
+        $d = $request->validate(['agency_id' => ['required', 'integer'], 'referred_lead_id' => ['required', 'integer'], 'type' => ['required', 'in:fixed,percent'],
+            'value' => ['required', 'numeric', 'min:0.01', 'max:100000'], 'month' => ['required', 'string', 'max:7'], 'notes' => ['nullable', 'string', 'max:500']]);
+        return response()->json(['credit' => \App\Support\ReferralCredits::create($d, (int) $request->user()->id)], 201);
+    }
+
+    /** POST /platform/referral-credits/{id}/cancel: only before it is fully used; what is already on an invoice stays. */
+    public function cancelReferralCredit(Request $request, int $id): JsonResponse
+    {
+        return response()->json(['credit' => \App\Support\ReferralCredits::cancel($id, (int) $request->user()->id)]);
     }
 
     public function deleteExtra(Request $request, int $extra): JsonResponse

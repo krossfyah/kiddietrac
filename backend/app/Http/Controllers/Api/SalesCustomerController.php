@@ -146,6 +146,9 @@ class SalesCustomerController extends Controller
         // The price with every discount and the totals before/after, and the agency in full (2026-11-11).
         $out['pricing'] = SalesCustomers::pricing($c);
         $out['agency_info'] = $this->agencyInfo($c);
+        // Referral credits (2026-11-26): given to this customer, and who referred it. Amounts for superadmins only.
+        $out['referrals'] = $c->agency_id ? \App\Support\ReferralCredits::forAgency((int) $c->agency_id, $c->lead_id ? (int) $c->lead_id : null, $super)
+            : ['given' => [], 'referred_by' => null];
         if ($super && $c->agency_id) {
             $out['invoices'] = DB::table('platform_invoices')->where('agency_id', $c->agency_id)->orderByDesc('issued_at')->orderByDesc('id')->limit(100)
                 ->get(['id', 'number', 'status', 'amount_cents', 'amount_paid_cents', 'currency', 'issued_at', 'due_at', 'paid_at', 'period_start', 'period_end'])
