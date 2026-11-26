@@ -55,7 +55,7 @@ final class ParentReportCardController extends Controller
         $kids = $this->myChildren($request, $agencyId);
         $ids = array_keys($kids);
 
-        $cards = DB::table('report_cards')->whereIn('child_id', $ids ?: [0])->where('status', 'sent')
+        $cards = DB::table('report_cards')->whereIn('child_id', $ids ?: [0])->where('status', 'sent')->whereNull('replaced_by_id')
             ->orderByDesc('sent_at')->orderByDesc('id')
             ->get(['id', 'child_id', 'term', 'sent_at'])->groupBy('child_id');
         $asks = DB::table('report_card_requests')->whereIn('child_id', $ids ?: [0])

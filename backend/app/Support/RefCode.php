@@ -144,6 +144,22 @@ final class RefCode
         return self::format($agency, 'C', $no);
     }
 
+    /** A report card's visible number (2026-11-26): "ILH-R-0007", per agency, never reused. */
+    public static function ensureReportCard(int $cardId): ?string
+    {
+        $r = DB::table('report_cards')->where('id', $cardId)->first(['id', 'child_id', 'ref_no', 'ref_agency_id']);
+        if (! $r) return null;
+        if ($r->ref_no && $r->ref_agency_id) return self::format((int) $r->ref_agency_id, 'R', (int) $r->ref_no);
+        $family = DB::table('children')->where('id', $r->child_id)->value('family_id');
+        $agency = $family ? self::familyAgency((int) $family) : null;
+        if (! $agency) return null;
+        $no = self::next($agency, 'R');
+        $n = DB::table('report_cards')->where('id', $cardId)->whereNull('ref_no')->update(['ref_no' => $no, 'ref_agency_id' => $agency]);
+        if (! $n) return self::ensureReportCard($cardId);
+
+        return self::format($agency, 'R', $no);
+    }
+
     /** A person's code at an agency. $type null = staff if they are staff there, else parent. */
     public static function ensureUser(int $userId, int $agencyId, ?string $type = null): ?string
     {

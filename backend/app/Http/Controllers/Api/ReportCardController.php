@@ -121,7 +121,7 @@ final class ReportCardController extends Controller
 
         $rows = $q->orderByDesc('r.updated_at')->limit(2000)->get([
             'r.id', 'r.child_id', 'r.term', 'r.status', 'r.created_at', 'r.updated_at', 'r.submitted_at',
-            'r.approved_at', 'r.sent_at', 'r.review_note', 'r.generated_by_user_id',
+            'r.approved_at', 'r.sent_at', 'r.review_note', 'r.generated_by_user_id', 'r.version', 'r.replaces_id', 'r.replaced_by_id',
             'ch.first_name as child_first', 'ch.last_name as child_last',
             'c.id as centre_id', 'c.name as centre', 'rm.name as room',
             'gu.first_name as by_first', 'gu.last_name as by_last', 'gu.email as by_email',
@@ -161,6 +161,8 @@ final class ReportCardController extends Controller
             'mine' => (int) $r->generated_by_user_id === $uid,
             'submitted_by' => trim(($r->sub_first ?? '') . ' ' . (($r->sub_last ?? '') !== '' ? mb_substr((string) $r->sub_last, 0, 1) . '.' : '')) ?: null,
             'review_note' => $r->review_note,
+            'version' => (int) ($r->version ?? 1),
+            'replaced' => ! empty($r->replaced_by_id),
             'created_at' => $r->created_at,
             'updated_at' => $r->updated_at,
             'submitted_at' => $r->submitted_at,
@@ -172,7 +174,7 @@ final class ReportCardController extends Controller
      * ARCHIVED REPORT CARDS (2026-11-26, Anthony chose an "Archived" filter). Cards for withdrawn children,
      * de-enrolled families and closed centres in the ACTIVE agency - iLearn's 31 leaving drafts. Agency admins only
      * (platform admins acting in the agency count): directors, educators and parents are refused, failing closed.
-     * Read-only: every write on such a card is refused (refuseArchived), and the PDF is admin-only (pdf()).
+     * Every action on such a card (edit, approve, email, PDF) is for these admins only (mayTouch / mayApproveCard).
      */
     public function archived(Request $request): JsonResponse
     {
@@ -233,11 +235,475 @@ final class ReportCardController extends Controller
         return \App\Support\Live::archivedReason($child, $family, $centre);
     }
 
-    /** Archived cards are read-only (2026-11-26): no edit, submit, approve, send back or send. */
-    private function refuseArchived(object $row): void
+    // ─────────────────────────── ROW ACTIONS (2026-11-26) ───────────────────────────
+    /* Anthony: "need to add kebab to add ability for report cards (archived and other sections) to download, email to
+       parent, edit etc." Every action the ⋮ offers is re-checked here. Archived cards (child withdrawn, family
+       de-enrolled, centre closed) are for the agency admins of the card's agency only, every action included - the
+       same rule as the Archived list. A SENT card is never edited in place: Edit makes a new version (revise), which
+       is approved again; the old one is kept and marked Replaced once the new one is approved. */
+
+    /** An agency-wide admin (agency_admin, or a platform admin acting in the agency) of the agency this card is in. */
+    private function cardAgencyAdmin(Request $request, object $row): bool
     {
-        abort_if($this->archivedReasonOfChild((int) $row->child_id) !== null, 403,
-            'This report card is archived - the child has left or the centre has closed - so it can no longer be changed or sent.');
+        $ag = (int) $this->resolveAgencyId($request);
+        return $ag > 0 && $this->agencyOfChild((int) $row->child_id) === $ag
+            && \App\Support\CentreScope::ids($request, $ag) === null;
+    }
+
+    /** May this caller work on this card at all? Archived: agency admins of its agency. Live: the editor's child check. */
+    private function mayTouch(Request $request, object $row): bool
+    {
+        if ($this->archivedReasonOfChild((int) $row->child_id) !== null) {
+            return $this->cardAgencyAdmin($request, $row);
+        }
+        return $this->canAccessChildId($request->user(), (int) $row->child_id);
+    }
+
+    /** A version replaced by a newer approved one is history: never changed, approved or sent again. */
+    private function refuseReplaced(object $row): void
+    {
+        abort_if(! empty($row->replaced_by_id), 409, 'This version was replaced by a newer one. Open the newest version instead.');
+    }
+
+    /** One line on the card's own history (report_card_events). Never stops the action it records. */
+    private function logEvent(int $cardId, ?int $userId, string $action, array $detail = []): void
+    {
+        try {
+            $childId = (int) DB::table('report_cards')->where('id', $cardId)->value('child_id');
+            DB::table('report_card_events')->insert([
+                'report_card_id' => $cardId, 'agency_id' => $childId ? $this->agencyOfChild($childId) : null,
+                'user_id' => $userId, 'action' => $action,
+                'detail' => $detail ? json_encode($detail, JSON_UNESCAPED_UNICODE) : null, 'created_at' => now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('report card event not written', ['card' => $cardId, 'error' => $e->getMessage()]);
+        }
+    }
+
+    /** A new version was approved: the one it revises is kept, marked Replaced. */
+    private function finishVersion(object $row, ?int $userId): void
+    {
+        if (empty($row->replaces_id)) {
+            return;
+        }
+        $n = DB::table('report_cards')->where('id', $row->replaces_id)->whereNull('replaced_by_id')
+            ->update(['replaced_by_id' => $row->id, 'replaced_at' => now()]);
+        if ($n) {
+            $this->logEvent((int) $row->replaces_id, $userId, 'replaced', ['version' => (int) ($row->version ?? 2)]);
+        }
+    }
+
+    /** Every version of this card, oldest first. */
+    private function versionsOf(object $row): array
+    {
+        $root = $row;
+        for ($i = 0; ! empty($root->replaces_id) && $i < 50; $i++) {
+            $up = DB::table('report_cards')->where('id', $root->replaces_id)->first();
+            if (! $up) {
+                break;
+            }
+            $root = $up;
+        }
+        $out = [];
+        for ($cur = $root, $i = 0; $cur && $i < 50; $i++) {
+            $out[] = $cur;
+            $cur = DB::table('report_cards')->where('replaces_id', $cur->id)->orderBy('id')->first();
+        }
+        return $out;
+    }
+
+    /** First name only for staff (never a last name in anything a family may see); integrations read "System". */
+    private function staffFirst(?object $u): ?string
+    {
+        if (! $u) {
+            return null;
+        }
+        if (str_starts_with((string) ($u->email ?? ''), 'integration+')) {
+            return 'System';
+        }
+        return trim((string) ($u->first_name ?? '')) ?: null;
+    }
+
+    /** One card for the viewer / editor, with its sections (GET /report-cards/{id}). */
+    public function show(Request $request, int $id): JsonResponse
+    {
+        $this->assertStaff($request);
+        $row = DB::table('report_cards')->where('id', $id)->first();
+        abort_unless($row && $this->mayTouch($request, $row), 404);
+        $agencyId = $this->agencyOfChild((int) $row->child_id);
+        $fw = $this->frameworkOfCard($row, \App\Support\LearningFrameworks::forAgency($agencyId));
+        $child = DB::table('children')->where('id', $row->child_id)->first(['first_name', 'last_name', 'primary_room_id', 'family_id']);
+        $centreId = $child ? (int) DB::table('families')->where('id', $child->family_id)->value('centre_id') : 0;
+        $out = (array) $row;
+        $out['framework_info'] = ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']];
+        $out['sections'] = $this->sectionsOf($row, $fw);
+        $out['child'] = $child ? trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? '')) : '';
+        $out['centre'] = $centreId ? (string) DB::table('centres')->where('id', $centreId)->value('name') : '';
+        $out['room'] = ($child && $child->primary_room_id) ? DB::table('rooms')->where('id', $child->primary_room_id)->value('name') : null;
+        $out['archived'] = $this->archivedReasonOfChild((int) $row->child_id);
+        $out['replaced'] = ! empty($row->replaced_by_id);
+        $out['made_by'] = $this->staffFirst(DB::table('users')->where('id', $row->generated_by_user_id)->first(['first_name', 'email']));
+        $out['ref'] = \App\Support\RefCode::ensureReportCard((int) $row->id);
+        $u = $request->user();
+        $approver = $this->mayApproveCard($request, $row);
+        $out['can'] = [
+            'approve' => $approver && ($row->status ?? '') === 'submitted' && empty($row->replaced_by_id),
+            'revise' => ($row->status ?? '') === 'sent' && empty($row->replaced_by_id)
+                && ($approver || (int) $row->generated_by_user_id === (int) $u->id || (int) $row->submitted_by_user_id === (int) $u->id),
+            'email' => $approver && ($row->status ?? '') === 'sent' && empty($row->replaced_by_id),
+            'delete' => $this->cardAgencyAdmin($request, $row) && in_array((string) ($row->status ?: 'draft'), ['draft', 'reviewed'], true),
+            'approver' => $approver,
+        ];
+        return response()->json(['data' => $out]);
+    }
+
+    /** The card's versions and history (who made, edited, submitted, approved, sent back, emailed it - and to whom). */
+    public function history(Request $request, int $id): JsonResponse
+    {
+        $this->assertStaff($request);
+        $row = DB::table('report_cards')->where('id', $id)->first();
+        abort_unless($row && $this->mayTouch($request, $row), 404);
+        $versions = array_map(fn ($v) => [
+            'id' => (int) $v->id, 'version' => (int) ($v->version ?? 1), 'status' => (string) ($v->status ?: 'draft'),
+            'replaced' => ! empty($v->replaced_by_id), 'approved_at' => $v->approved_at, 'sent_at' => $v->sent_at,
+            'updated_at' => $v->updated_at,
+        ], $this->versionsOf($row));
+        $events = DB::table('report_card_events as e')->leftJoin('users as u', 'u.id', '=', 'e.user_id')
+            ->whereIn('e.report_card_id', array_column($versions, 'id') ?: [0])->orderByDesc('e.id')->limit(200)
+            ->get(['e.report_card_id', 'e.action', 'e.detail', 'e.created_at', 'u.first_name', 'u.email'])
+            ->map(fn ($e) => [
+                'card_id' => (int) $e->report_card_id, 'action' => $e->action,
+                'detail' => $e->detail ? json_decode((string) $e->detail, true) : null,
+                'at' => $e->created_at, 'by' => $this->staffFirst($e),
+            ])->values();
+        return response()->json(['versions' => $versions, 'events' => $events]);
+    }
+
+    /** Edit a SENT card: a new version (a draft copy) that is approved again. An open one is reused. */
+    public function revise(Request $request, int $id): JsonResponse
+    {
+        $this->assertStaff($request);
+        $row = DB::table('report_cards')->where('id', $id)->first();
+        abort_unless($row, 404);
+        abort_unless($this->mayTouch($request, $row), 403);
+        $this->refuseReplaced($row);
+        abort_unless(($row->status ?? '') === 'sent', 409, 'Only a sent report card is edited as a new version. A draft is edited directly.');
+        $u = $request->user();
+        abort_unless($this->mayApproveCard($request, $row) || (int) $row->generated_by_user_id === (int) $u->id
+            || (int) $row->submitted_by_user_id === (int) $u->id, 403,
+            'Only a director, an admin or the educator who wrote it can edit a sent report card.');
+        $open = DB::table('report_cards')->where('replaces_id', $row->id)->where('status', '!=', 'sent')->orderByDesc('id')->first();
+        if ($open) {
+            return response()->json(['id' => (int) $open->id, 'child_id' => (int) $open->child_id, 'existing' => true]);
+        }
+        $newId = DB::table('report_cards')->insertGetId([
+            'child_id' => $row->child_id, 'term' => $row->term, 'version' => (int) ($row->version ?? 1) + 1,
+            'replaces_id' => $row->id, 'generated_by_user_id' => $u->id,
+            'narrative_belonging' => $row->narrative_belonging, 'narrative_wellbeing' => $row->narrative_wellbeing,
+            'narrative_engagement' => $row->narrative_engagement, 'narrative_expression' => $row->narrative_expression,
+            'narratives' => $row->narratives, 'framework' => $row->framework, 'next_steps' => $row->next_steps,
+            'status' => 'draft', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->logEvent($newId, (int) $u->id, 'revised', ['from_version' => (int) ($row->version ?? 1)]);
+        $this->logEvent((int) $row->id, (int) $u->id, 'new_version', ['version' => (int) ($row->version ?? 1) + 1]);
+        return response()->json(['id' => $newId, 'child_id' => (int) $row->child_id, 'existing' => false]);
+    }
+
+    /** Delete an unsent draft. Agency admins only; the card's history keeps the line. */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $this->assertStaff($request);
+        $row = DB::table('report_cards')->where('id', $id)->first();
+        abort_unless($row, 404);
+        abort_unless($this->cardAgencyAdmin($request, $row), 403, 'Only an agency admin can delete a report card draft.');
+        abort_unless(in_array((string) ($row->status ?: 'draft'), ['draft', 'reviewed'], true) && empty($row->sent_at), 409,
+            'Only a draft that was never sent can be deleted.');
+        DB::transaction(function () use ($id) {
+            DB::table('report_card_requests')->where('report_card_id', $id)->update(['report_card_id' => null]);
+            DB::table('report_cards')->where('id', $id)->delete();
+        });
+        $this->logEvent($id, (int) $request->user()->id, 'deleted', ['term' => (string) $row->term, 'version' => (int) ($row->version ?? 1)]);
+        return response()->json(['status' => 'deleted']);
+    }
+
+    /** The card, child, family and agency for an email - only the current approved version, by an approver. */
+    private function emailable(Request $request, int $id): array
+    {
+        $this->assertStaff($request);
+        $row = DB::table('report_cards')->where('id', $id)->first();
+        abort_unless($row && $this->mayTouch($request, $row), 404);
+        abort_unless($this->mayApproveCard($request, $row), 403, 'Only a director or admin of this child\'s centre can email a report card.');
+        abort_unless(($row->status ?? '') === 'sent' && empty($row->replaced_by_id), 409, 'Only the current approved version of a report card can be emailed.');
+        $child = DB::table('children')->where('id', $row->child_id)->first();
+        abort_unless($child, 404);
+        return [$row, $child, (int) $this->agencyOfChild((int) $row->child_id)];
+    }
+
+    /** Guardians on file for the child's family who have an email address. */
+    private function guardiansFor(object $child)
+    {
+        return DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
+            ->where('g.family_id', $child->family_id)->whereNotNull('u.email')->where('u.email', '!=', '')
+            ->orderByDesc('g.is_primary')->orderBy('u.first_name')
+            ->get(['u.id', 'u.first_name', 'u.last_name', 'u.preferred_name', 'u.email', 'g.relationship']);
+    }
+
+    private function mailFields(object $row, object $child, int $agencyId, string $guardianFirst, Request $request, string $message, string $url): array
+    {
+        $centreId = (int) DB::table('families')->where('id', $child->family_id)->value('centre_id');
+        $provider = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: DB::table('centres')->where('id', $centreId)->value('name'));
+        $tz = \App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto';
+        return [
+            'agency_id' => $agencyId, 'child_first' => (string) ($child->preferred_name ?? '') ?: (string) $child->first_name,
+            'term' => (string) $row->term, 'provider' => $provider, 'guardian_first' => $guardianFirst,
+            'sender_first' => (string) ($request->user()->first_name ?? ''), 'message' => $message, 'url' => $url,
+            'expires' => now()->addDays(14)->setTimezone($tz)->format('F j, Y'),
+            'child_left' => $this->archivedReasonOfChild((int) $row->child_id) !== null,
+        ];
+    }
+
+    /** Who the card can be emailed to (nobody is pre-ticked in the popup; a recipient is never defaulted). */
+    public function recipients(Request $request, int $id): JsonResponse
+    {
+        [$row, $child, $agencyId] = $this->emailable($request, $id);
+        return response()->json([
+            'guardians' => $this->guardiansFor($child)->map(fn ($g) => [
+                'id' => (int) $g->id, 'name' => trim(((string) ($g->preferred_name ?: $g->first_name)) . ' ' . ($g->last_name ?? '')),
+                'email' => (string) $g->email, 'relationship' => $g->relationship,
+            ])->values(),
+            'child' => trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? '')),
+            'term' => (string) $row->term,
+            'child_left' => $this->archivedReasonOfChild((int) $row->child_id) !== null,
+            'test_agency' => \App\Support\TestAgency::isAgency($agencyId),
+        ]);
+    }
+
+    /** The email exactly as it would go out, for the popup's preview. Sends nothing. */
+    public function emailPreview(Request $request, int $id): JsonResponse
+    {
+        [$row, $child, $agencyId] = $this->emailable($request, $id);
+        $data = $request->validate(['message' => 'nullable|string|max:2000', 'to' => 'nullable|array', 'to.*' => 'integer']);
+        $g = null;
+        if (! empty($data['to'])) {
+            $g = $this->guardiansFor($child)->firstWhere('id', (int) $data['to'][0]);
+        }
+        $mail = \App\Support\ReportCardMail::build($this->mailFields($row, $child, $agencyId,
+            $g ? (string) ($g->preferred_name ?: $g->first_name) : '', $request, (string) ($data['message'] ?? ''), '#preview'));
+        return response()->json($mail);
+    }
+
+    /** Email the card to the guardians ticked in the popup: each gets their own 14-day secure link. */
+    public function email(Request $request, int $id): JsonResponse
+    {
+        [$row, $child, $agencyId] = $this->emailable($request, $id);
+        $data = $request->validate(['to' => 'required|array|min:1|max:10', 'to.*' => 'integer', 'message' => 'nullable|string|max:2000']);
+        $all = $this->guardiansFor($child)->keyBy('id');
+        $to = [];
+        foreach (array_unique(array_map('intval', $data['to'])) as $gid) {
+            abort_unless($all->has($gid), 422, 'Choose people from this child\'s family.');
+            $to[] = $all->get($gid);
+        }
+        $uid = (int) $request->user()->id;
+        $list = array_map(fn ($g) => ['name' => trim((string) ($g->preferred_name ?: $g->first_name) . ' ' . ($g->last_name ?? '')), 'email' => (string) $g->email], $to);
+        $hasMsg = trim((string) ($data['message'] ?? '')) !== '';
+
+        /* TEST AGENCIES SEND NOTHING (App\Support\TestAgency), whatever the mailer would do. */
+        if (\App\Support\TestAgency::blocks($agencyId)) {
+            $this->logEvent($id, $uid, 'email_blocked', ['to' => $list, 'reason' => 'test agency']);
+            return response()->json(['sent' => 0, 'blocked' => true,
+                'message' => 'This is a test agency, so nothing was sent. On a real agency each person ticked gets their own secure link.']);
+        }
+
+        $sent = 0;
+        $failed = [];
+        foreach ($to as $g) {
+            $url = \Illuminate\Support\Facades\URL::temporarySignedRoute('rc.signed', now()->addDays(14), ['id' => $id, 'u' => (int) $g->id]);
+            $mail = \App\Support\ReportCardMail::build($this->mailFields($row, $child, $agencyId,
+                (string) ($g->preferred_name ?: $g->first_name), $request, (string) ($data['message'] ?? ''), $url));
+            $email = mb_strtolower(trim((string) $g->email));
+            try {
+                \Illuminate\Support\Facades\Mail::html($mail['html'], function ($m) use ($email, $mail, $agencyId) {
+                    \App\Support\MailScope::agency($m, $agencyId);
+                    $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
+                    $m->to($email)->subject($mail['subject']);
+                });
+                $sent++;
+            } catch (\Throwable $e) {
+                $failed[] = $email;
+                \Illuminate\Support\Facades\Log::warning('report card email failed', ['card' => $id, 'error' => $e->getMessage()]);
+            }
+        }
+        $this->logEvent($id, $uid, 'emailed', ['to' => $list, 'sent' => $sent, 'failed' => $failed, 'message' => $hasMsg]);
+        try {
+            \App\Support\Audit::write(['user_id' => $uid, 'agency_id' => $agencyId, 'action' => 'report_card.emailed',
+                'entity_type' => 'report_card', 'entity_id' => $id, 'payload' => json_encode([
+                    'summary' => 'Emailed the ' . $row->term . ' report card to ' . implode(', ', array_column($list, 'email')),
+                    'to' => $list, 'sent' => $sent,
+                ], JSON_UNESCAPED_UNICODE), 'created_at' => now()]);
+        } catch (\Throwable $e) {
+        }
+        return response()->json(['sent' => $sent, 'failed' => $failed]);
+    }
+
+    /** Report card settings (agency admins): show the educator's registration (RECE) number. Default on. */
+    public static function showRegistry(?int $agencyId): bool
+    {
+        $s = json_decode((string) DB::table('agencies')->where('id', (int) $agencyId)->value('settings'), true) ?: [];
+        return (bool) ($s['report_cards']['show_registry'] ?? true);
+    }
+
+    public function settings(Request $request): JsonResponse
+    {
+        $ag = (int) $this->resolveAgencyId($request);
+        abort_unless($ag > 0 && \App\Support\CentreScope::ids($request, $ag) === null, 403);
+        return response()->json(['show_registry' => self::showRegistry($ag)]);
+    }
+
+    public function saveSettings(Request $request): JsonResponse
+    {
+        $ag = (int) $this->resolveAgencyId($request);
+        abort_unless($ag > 0 && \App\Support\CentreScope::ids($request, $ag) === null, 403);
+        $data = $request->validate(['show_registry' => 'required|boolean']);
+        DB::transaction(function () use ($ag, $data) {
+            $row = DB::table('agencies')->where('id', $ag)->lockForUpdate()->first(['settings']);
+            $s = json_decode((string) ($row->settings ?? ''), true) ?: [];
+            $s['report_cards'] = array_merge(is_array($s['report_cards'] ?? null) ? $s['report_cards'] : [], ['show_registry' => (bool) $data['show_registry']]);
+            DB::table('agencies')->where('id', $ag)->update(['settings' => json_encode($s, JSON_UNESCAPED_UNICODE)]);
+        });
+        return response()->json(['show_registry' => (bool) $data['show_registry']]);
+    }
+
+    /** Everything the PDF shows (resources/views/pdf/report_card.blade.php). */
+    private function pdfData(object $row): array
+    {
+        $child = DB::table('children')->where('id', $row->child_id)->first();
+        $family = $child ? DB::table('families')->where('id', $child->family_id)->first() : null;
+        $centre = $family ? DB::table('centres')->where('id', $family->centre_id)->first() : null;
+        $agency = $centre ? DB::table('agencies')->where('id', $centre->agency_id)->first() : null;
+        $agencyId = (int) ($agency->id ?? 0);
+        $brand = \App\Support\Brand::forAgency($agencyId);
+        $tz = \App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto';
+        $lang = strtolower(substr((string) ($family->preferred_lang ?? ''), 0, 2));
+        $lang = in_array($lang, ['fr', 'es'], true) ? $lang : 'en';
+        $L = self::pdfLabels($lang);
+        $day = function ($t) use ($tz, $lang) {
+            if (! $t) {
+                return null;
+            }
+            $c = Carbon::parse($t, 'UTC')->setTimezone($tz);
+            return $lang === 'en' ? $c->format('F j, Y') : $c->locale($lang)->isoFormat('LL');
+        };
+        $color = (string) ($brand['primary_color'] ?? '');
+        if (! preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
+            $color = '#1F6080';
+        }
+
+        $logo = ($agency->brand_logo_url ?? null) ?: (($agency->logo_url ?? null) ?: ($centre->logo_url ?? null));
+        if ($logo && ! preg_match('~^(https?:|data:)~i', (string) $logo)) {
+            $local = realpath(base_path('../parent-portal/' . ltrim((string) $logo, '/')));
+            $root = realpath(base_path('../parent-portal'));
+            if ($local && $root && str_starts_with($local, $root) && is_file($local) && filesize($local) < 2000000) {
+                $mime = function_exists('mime_content_type') ? (mime_content_type($local) ?: 'image/png') : 'image/png';
+                $logo = str_starts_with($mime, 'image/') ? 'data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($local)) : null;
+            } else {
+                $logo = 'https://app.kiddietrac.com/' . ltrim((string) $logo, '/');
+            }
+        }
+
+        $user = fn ($id) => $id ? DB::table('users')->where('id', $id)->first(['id', 'first_name', 'last_name', 'email', 'registry_number']) : null;
+        $isSystem = fn ($u) => $u && str_starts_with((string) ($u->email ?? ''), 'integration+');
+        $edu = $user($row->submitted_by_user_id ?: $row->generated_by_user_id);
+        if ($isSystem($edu)) {
+            $edu = null;
+        }
+        $eduName = $edu ? trim(($edu->first_name ?? '') . ' ' . (($edu->last_name ?? '') !== '' ? mb_substr((string) $edu->last_name, 0, 1) . '.' : '')) : null;
+        $registry = ($edu && trim((string) ($edu->registry_number ?? '')) !== '' && self::showRegistry($agencyId)) ? trim((string) $edu->registry_number) : null;
+
+        $appr = ($row->status ?? '') === 'sent' ? $user($row->approved_by_user_id) : null;
+        if ($isSystem($appr)) {
+            $appr = null;
+        }
+        $title = null;
+        if ($appr) {
+            $roles = DB::table('role_assignments')->where('user_id', $appr->id)->where('active', 1)
+                ->where(fn ($q) => $q->where('agency_id', $agencyId)->orWhere('role', 'platform_admin')
+                    ->orWhereIn('centre_id', DB::table('centres')->where('agency_id', $agencyId)->pluck('id')))
+                ->pluck('role')->all();
+            $title = array_intersect(['agency_admin', 'platform_admin'], $roles) ? $L['administrator']
+                : (in_array('centre_director', $roles, true) ? $L['director'] : null);
+        }
+        $sig = fn ($s) => (is_string($s) && str_starts_with($s, 'data:image/')) ? $s : null;
+        $approverSig = $appr ? $sig($row->admin_signature ?? null) : null;
+        if ($appr && ! $approverSig) {   // the approver's saved e-signature (Settings > My signature)
+            $saved = DB::table('user_signatures')->where('user_id', $appr->id)->where('kind', 'signature')
+                ->whereNull('revoked_at')->orderByDesc('id')->value('image');
+            $approverSig = $saved ? $sig(\App\Support\Sensitive::open($saved)) : null;
+        }
+
+        $fw = $this->frameworkOfCard($row, \App\Support\LearningFrameworks::forAgency($agencyId ?: null));
+        $address = trim(implode(', ', array_filter([
+            trim(($centre->address_line1 ?? '') . ' ' . ($centre->address_line2 ?? '')),
+            $centre->city ?? null, trim(($centre->province ?? '') . ' ' . ($centre->postal_code ?? '')),
+        ], fn ($v) => trim((string) $v) !== '')));
+        $status = (string) ($row->status ?: 'draft');
+
+        return [
+            'lang' => $lang, 'L' => $L, 'color' => $color, 'logo' => $logo,
+            'whiteLabel' => (bool) ($brand['white_label'] ?? false), 'poweredBy' => $L['powered'] . ' ' . \App\Support\Brand::nameFor(null),
+            'providerName' => (string) ($agency->name ?? ($centre->name ?? '')),
+            'centreName' => (string) ($centre->name ?? ''), 'address' => $address,
+            'phone' => (string) (($centre->phone ?? '') ?: ($agency->contact_phone ?? '')),
+            'email' => (string) (($centre->email ?? '') ?: ($agency->contact_email ?? '')),
+            'licence' => trim((string) ($centre->license_number ?? '')) ?: null,
+            'ref' => \App\Support\RefCode::ensureReportCard((int) $row->id),
+            'childRef' => $child ? \App\Support\RefCode::ensureChild((int) $child->id) : null,
+            'version' => (int) ($row->version ?? 1),
+            'issued' => $day($row->approved_at ?: now()),
+            'childName' => $child ? trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? '')) : '',
+            'room' => ($child && $child->primary_room_id) ? DB::table('rooms')->where('id', $child->primary_room_id)->value('name') : null,
+            'term' => (string) $row->term,
+            'educatorName' => $eduName, 'registry' => $registry,
+            'educatorSig' => $sig($row->educator_signature ?? null), 'submitted' => $day($row->submitted_at ?? null),
+            'approverName' => $appr ? trim((string) $appr->first_name) : null, 'approverTitle' => $title,
+            'approverSig' => $approverSig, 'approved' => $status === 'sent' ? $day($row->approved_at ?: $row->sent_at) : null,
+            'frameworkName' => $fw['name'] ?? null, 'sections' => $this->sectionsOf($row, $fw), 'nextSteps' => $row->next_steps,
+            'watermark' => $status !== 'sent' ? $L['draft'] : (! empty($row->replaced_by_id) ? $L['replaced'] : null),
+        ];
+    }
+
+    private static function pdfLabels(string $lang): array
+    {
+        $en = [
+            'report_card' => 'Report card', 'child' => 'Child', 'name' => 'Name', 'child_id' => 'Child ID', 'room' => 'Room',
+            'term' => 'Term', 'centre' => 'Centre', 'educator' => 'Educator', 'prepared_by' => 'Prepared by',
+            'approved_by' => 'Approved by', 'registration' => 'RECE registration', 'issued' => 'Issued',
+            'signed' => 'Signed', 'approved' => 'Approved', 'next_steps' => 'Next steps', 'framework' => 'Framework',
+            'page' => 'Page {PAGE_NUM} of {PAGE_COUNT}', 'reference' => 'Reference', 'version' => 'Version',
+            'licence' => 'Licence', 'draft' => 'DRAFT – not approved', 'replaced' => 'REPLACED',
+            'no_text' => 'No narrative recorded for this area.', 'seal' => 'Approved', 'not_approved' => 'Not yet approved',
+            'administrator' => 'Administrator', 'director' => 'Centre Director', 'powered' => 'Made with',
+        ];
+        $fr = [
+            'report_card' => 'Bulletin', 'child' => 'Enfant', 'name' => 'Nom', 'child_id' => 'No d’enfant', 'room' => 'Groupe',
+            'term' => 'Période', 'centre' => 'Centre', 'educator' => 'Éducatrice / éducateur', 'prepared_by' => 'Préparé par',
+            'approved_by' => 'Approuvé par', 'registration' => 'Inscription EPEI', 'issued' => 'Émis le',
+            'signed' => 'Signé le', 'approved' => 'Approuvé le', 'next_steps' => 'Prochaines étapes', 'framework' => 'Cadre',
+            'page' => 'Page {PAGE_NUM} sur {PAGE_COUNT}', 'reference' => 'Référence', 'version' => 'Version',
+            'licence' => 'Permis', 'draft' => 'BROUILLON – non approuvé', 'replaced' => 'REMPLACÉ',
+            'no_text' => 'Aucun récit consigné pour ce domaine.', 'seal' => 'Approuvé', 'not_approved' => 'Pas encore approuvé',
+            'administrator' => 'Administration', 'director' => 'Direction du centre', 'powered' => 'Réalisé avec',
+        ];
+        $es = [
+            'report_card' => 'Boleta de progreso', 'child' => 'Niño/a', 'name' => 'Nombre', 'child_id' => 'N.º de niño/a', 'room' => 'Sala',
+            'term' => 'Periodo', 'centre' => 'Centro', 'educator' => 'Educador/a', 'prepared_by' => 'Preparado por',
+            'approved_by' => 'Aprobado por', 'registration' => 'Registro RECE', 'issued' => 'Emitido',
+            'signed' => 'Firmado', 'approved' => 'Aprobado', 'next_steps' => 'Próximos pasos', 'framework' => 'Marco',
+            'page' => 'Página {PAGE_NUM} de {PAGE_COUNT}', 'reference' => 'Referencia', 'version' => 'Versión',
+            'licence' => 'Licencia', 'draft' => 'BORRADOR – no aprobado', 'replaced' => 'REEMPLAZADO',
+            'no_text' => 'No se registró una narrativa para esta área.', 'seal' => 'Aprobado', 'not_approved' => 'Aún no aprobado',
+            'administrator' => 'Administración', 'director' => 'Dirección del centro', 'powered' => 'Hecho con',
+        ];
+        return $lang === 'fr' ? $fr : ($lang === 'es' ? $es : $en);
     }
 
     public function listForChild(Request $request, int $childId): JsonResponse
@@ -268,8 +734,11 @@ final class ReportCardController extends Controller
         abort_if($this->archivedReasonOfChild((int) $data['child_id']) !== null, 403,
             'This child has left or their centre has closed, so a new report card cannot be written.');
 
+        abort_if(DB::table('report_cards')->where('child_id', $data['child_id'])->where('term', $data['term'])->where('status', 'sent')->exists(), 409,
+            'This child already has an approved report card for that term. Use Edit on it to make a new version.');
         $out = $this->draftFor((int) $data['child_id'], (string) $data['term'], (int) $request->user()->id);
         abort_unless($out, 404);
+        $this->logEvent((int) $out['id'], (int) $request->user()->id, 'generated');
 
         return response()->json($out);
     }
@@ -392,7 +861,9 @@ final class ReportCardController extends Controller
             $nextSteps = $this->templateNextSteps($child->first_name, $observations, $fw);
         }
 
-        $exists = DB::table('report_cards')->where('child_id', $child->id)->where('term', $data['term'])->first();
+        // Never a SENT card (2026-11-26): an approved card is changed only through a new version.
+        $exists = DB::table('report_cards')->where('child_id', $child->id)->where('term', $data['term'])
+            ->where('status', '!=', 'sent')->whereNull('replaces_id')->orderByDesc('id')->first();
         $payload = [
             'child_id' => $child->id,
             'term' => $data['term'],
@@ -534,8 +1005,9 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
-        $this->refuseArchived($row);
-        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
+        abort_unless($this->mayTouch($request, $row), 403);   // archived: the card's agency admins only (2026-11-26)
+        $this->refuseReplaced($row);
+        abort_if(($row->status ?? '') === 'sent', 409, 'This report card was already sent. Use Edit to make a new version, which is approved again.');
         $this->assertStaff($request);
         $data = $request->validate([
             'narrative_belonging' => 'nullable|string',
@@ -563,6 +1035,7 @@ final class ReportCardController extends Controller
             $data['narratives'] = json_encode($merged, JSON_UNESCAPED_UNICODE);
         }
         DB::table('report_cards')->where('id', $id)->update($data + ['updated_at' => now()]);
+        $this->logEvent($id, (int) $request->user()->id, 'edited');
         return response()->json(['status' => 'updated']);
     }
 
@@ -570,8 +1043,8 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
-        $this->refuseArchived($row);
-        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
+        abort_unless($this->mayTouch($request, $row), 403);   // archived: the card's agency admins only (2026-11-26)
+        $this->refuseReplaced($row);
         // A report card must be approved by a director/admin before it reaches a
         // parent — an educator can only submit it for review (see submit()).
         abort_unless($this->isApprover($request->user()), 403, 'Report cards must be approved by a director or admin before sending.');
@@ -581,6 +1054,8 @@ final class ReportCardController extends Controller
         DB::table('report_cards')->where('id', $id)->update([
             'status' => 'sent', 'sent_at' => now(), 'updated_at' => now(),
         ]);
+        $this->finishVersion($row, (int) $request->user()->id);
+        $this->logEvent($id, (int) $request->user()->id, 'sent');
         return response()->json(['status' => 'sent']);
     }
 
@@ -589,8 +1064,8 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
-        $this->refuseArchived($row);
-        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403);
+        abort_unless($this->mayTouch($request, $row), 403);   // archived: the card's agency admins only (2026-11-26)
+        $this->refuseReplaced($row);
         $this->assertStaff($request);
         $data = $request->validate(['educator_signature' => 'required|string']);
         DB::table('report_cards')->where('id', $id)->update([
@@ -602,6 +1077,7 @@ final class ReportCardController extends Controller
             'updated_at' => now(),
         ]);
         $this->notifyApprovers($row, $request->user());
+        $this->logEvent($id, (int) $request->user()->id, 'submitted');
         return response()->json(['status' => 'submitted']);
     }
 
@@ -610,8 +1086,8 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
-        $this->refuseArchived($row);
-        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403);
+        abort_unless($this->mayTouch($request, $row), 403);   // archived: the card's agency admins only (2026-11-26)
+        $this->refuseReplaced($row);
         abort_unless($this->isApprover($request->user()), 403, 'Only a director or admin can approve report cards.');
         // A director of THIS child's centre, not of any centre (2026-11-05 leak sweep; see mayApproveCard).
         abort_unless($this->mayApproveCard($request, $row), 403, 'Only a director or admin of this child\'s centre can approve this report card.');
@@ -625,6 +1101,8 @@ final class ReportCardController extends Controller
             'updated_at' => now(),
         ]);
         $this->sendToGuardians($row);
+        $this->finishVersion($row, (int) $request->user()->id);
+        $this->logEvent($id, (int) $request->user()->id, 'approved');
         // Let the educator know it was approved.
         if ($row->submitted_by_user_id) {
             $child = DB::table('children')->where('id', $row->child_id)->first();
@@ -644,7 +1122,8 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
-        $this->refuseArchived($row);
+        abort_unless($this->mayTouch($request, $row), 403);
+        $this->refuseReplaced($row);
         abort_unless($this->isApprover($request->user()), 403, 'Only a director or admin can review report cards.');
         /* The card's child must be at a centre you direct (2026-11-05 leak sweep): reject never looked at the
            child, so any director or admin could wipe the signature on, and send back, another agency's card. */
@@ -664,6 +1143,7 @@ final class ReportCardController extends Controller
                 'created_at' => now(),
             ]);
         }
+        $this->logEvent($id, (int) $request->user()->id, 'sent_back', ['note' => $note]);
         return response()->json(['status' => 'draft']);
     }
 
@@ -673,6 +1153,9 @@ final class ReportCardController extends Controller
        admin there, or holds centre_director at the child's own centre. */
     private function mayApproveCard(Request $request, object $row): bool
     {
+        if ($this->archivedReasonOfChild((int) $row->child_id) !== null) {
+            return $this->cardAgencyAdmin($request, $row);   // archived cards: agency admins only (2026-11-26)
+        }
         $childId = (int) $row->child_id;
         $agencyId = (int) $this->resolveAgencyId($request);
         if (! $agencyId || $this->agencyOfChild($childId) !== $agencyId || ! $this->canAccessChildScoped($request, $childId)) {
@@ -767,11 +1250,10 @@ final class ReportCardController extends Controller
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
         if ($this->archivedReasonOfChild((int) $row->child_id) !== null) {
-            $ag = (int) $this->resolveAgencyId($request);
-            abort_unless($ag > 0 && $this->agencyOfChild((int) $row->child_id) === $ag
-                && \App\Support\CentreScope::ids($request, $ag) === null, 404);
+            abort_unless($this->cardAgencyAdmin($request, $row), 404);   // archived: the card's agency admins only
+        } else {
+            abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
         }
-        abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
         /* 2026-11-04: canAccessChildId lets a guardian of the family in - which reached drafts, cards in review and
            the de-enrolment leaving drafts by id. Anyone who is not staff of the agency sees an approved card only. */
         if (($row->status ?? '') !== 'sent') {
@@ -785,32 +1267,24 @@ final class ReportCardController extends Controller
     /** The card as a PDF. Callers check access first. $inline: shown in the browser (the parent's signed link). */
     public function pdfResponse(object $row, bool $inline = false): Response
     {
-        $child = DB::table('children')->where('id', $row->child_id)->first();
-        $family = DB::table('families')->where('id', $child->family_id)->first();
-        $agency = DB::table('agencies')->where('id',
-            DB::table('centres')->where('id', $family->centre_id)->value('agency_id'))->first();
-        $nameOf = function ($uid) {
-            if (! $uid) {
-                return null;
-            }
-            $u = DB::table('users')->where('id', $uid)->first();
-            return $u ? (trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')) ?: $u->email) : null;
-        };
-        $fw = $this->frameworkOfCard($row, \App\Support\LearningFrameworks::forAgency($agency->id ?? null));
-        $html = view('pdf.report_card', [
-            'card' => $row, 'child' => $child, 'family' => $family, 'agency' => $agency,
-            'sections' => $this->sectionsOf($row, $fw), 'frameworkName' => $fw['name'],
-            'educatorName' => $nameOf($row->submitted_by_user_id ?? null),
-            'adminName' => $nameOf($row->approved_by_user_id ?? null),
-        ])->render();
-        $dompdf = new Dompdf();
+        $d = $this->pdfData($row);
+        $html = view('pdf.report_card', $d)->render();
+        $dompdf = new Dompdf(['isRemoteEnabled' => true]);
         $dompdf->loadHtml($html, 'UTF-8');
         $dompdf->setPaper('letter', 'portrait');
         $dompdf->render();
+        try {   // page x of y on every page (Dompdf fills the numbers in)
+            $canvas = $dompdf->getCanvas();
+            $font = $dompdf->getFontMetrics()->getFont('DejaVu Sans');
+            $canvas->page_text($canvas->get_width() - 120, $canvas->get_height() - 29, $d['L']['page'], $font, 7.5, [0.58, 0.64, 0.72]);
+        } catch (\Throwable $e) {
+        }
+        $name = 'ReportCard-' . trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', $d['childName']), '-') . '-'
+            . trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', (string) $row->term), '-')
+            . ((int) ($row->version ?? 1) > 1 ? '-v' . (int) $row->version : '') . '.pdf';
         return new Response($dompdf->output(), 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => ($inline ? 'inline' : 'attachment') . '; filename="ReportCard-' . preg_replace('/[^A-Za-z0-9]/', '-', $child->first_name) . '-'
-                . trim(preg_replace('/[^A-Za-z0-9]+/', '-', (string) $row->term), '-') . '.pdf"',
+            'Content-Disposition' => ($inline ? 'inline' : 'attachment') . '; filename="' . $name . '"',
         ]);
     }
 

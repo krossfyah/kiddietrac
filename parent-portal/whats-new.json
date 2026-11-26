@@ -2,6 +2,20 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "📑",
+            "title": "Report cards: ⋮ menu, new PDF, email to family",
+            "body": "Every report card list now has a ⋮ menu: view, edit, download, print, email to the family, approve, send back and delete draft. Editing a sent card makes a new version that is approved again. The PDF now shows your agency details, the educator, both signatures and the approval date. Writing a new card has its own tab: ✨ Generate with AI.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-26",
             "icon": "📃",

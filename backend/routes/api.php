@@ -2969,6 +2969,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/admin/compliance-settings', [\App\Http\Controllers\Api\DataRetentionController::class, 'update']);
         Route::post('/admin/centre-term', [\App\Http\Controllers\Api\AgencyTermController::class, 'set']);
         Route::post('/admin/learning-framework', [\App\Http\Controllers\Api\LearningFrameworkController::class, 'update']);
+        Route::get ('/admin/report-card-settings', [\App\Http\Controllers\Api\ReportCardController::class, 'settings']);   // 2026-11-26
+        Route::post('/admin/report-card-settings', [\App\Http\Controllers\Api\ReportCardController::class, 'saveSettings']);
         // Event RSVPs (2026-10-05). The controller re-checks agency_admin OF the active agency.
         Route::get   ('/admin/rsvp/templates', [\App\Http\Controllers\Api\RsvpController::class, 'templates']);
         Route::post  ('/admin/rsvp/templates', [\App\Http\Controllers\Api\RsvpController::class, 'saveTemplate']);
@@ -3597,7 +3599,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/report-cards/pending',         [\App\Http\Controllers\Api\ReportCardController::class, 'pending']);
         Route::get ('/report-cards/all',             [\App\Http\Controllers\Api\ReportCardController::class, 'index']);   // every card the caller may see (2026-11-26)
-        Route::get ('/report-cards/archived',        [\App\Http\Controllers\Api\ReportCardController::class, 'archived']);   // admins: withdrawn children / closed centres, read-only (2026-11-26)
+        Route::get ('/report-cards/archived',        [\App\Http\Controllers\Api\ReportCardController::class, 'archived']);   // admins: withdrawn children / closed centres (2026-11-26)
+        // Row actions (2026-11-26): view, history, edit as a new version, delete a draft, email the family.
+        Route::get ('/report-cards/{id}',               [\App\Http\Controllers\Api\ReportCardController::class, 'show'])->whereNumber('id');
+        Route::get ('/report-cards/{id}/history',       [\App\Http\Controllers\Api\ReportCardController::class, 'history'])->whereNumber('id');
+        Route::post('/report-cards/{id}/revise',        [\App\Http\Controllers\Api\ReportCardController::class, 'revise'])->whereNumber('id');
+        Route::delete('/report-cards/{id}',             [\App\Http\Controllers\Api\ReportCardController::class, 'destroy'])->whereNumber('id');
+        Route::get ('/report-cards/{id}/recipients',    [\App\Http\Controllers\Api\ReportCardController::class, 'recipients'])->whereNumber('id');
+        Route::post('/report-cards/{id}/email/preview', [\App\Http\Controllers\Api\ReportCardController::class, 'emailPreview'])->whereNumber('id');
+        Route::post('/report-cards/{id}/email',         [\App\Http\Controllers\Api\ReportCardController::class, 'email'])->whereNumber('id')->middleware('throttle:20,1,r-rc-email');
         Route::get ('/report-cards/requests',        [\App\Http\Controllers\Api\ReportCardController::class, 'requests']);
         Route::get ('/report-cards/child/{childId}', [\App\Http\Controllers\Api\ReportCardController::class, 'listForChild']);
         Route::post('/report-cards/generate',        [\App\Http\Controllers\Api\ReportCardController::class, 'generate']);

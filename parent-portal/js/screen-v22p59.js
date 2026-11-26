@@ -676,427 +676,521 @@
 
   exposePatternApi(renderAttendancePattern);
 
+  /* ═══════════════════ REPORT CARDS — staff screen (rebuilt 2026-11-26) ═══════════════════
+     Two sub-tabs (Anthony: "generate report card using AI this needs to be in its own subtab and not carried across
+     to all subtabs"):
+       📚 Report cards      parents' requests, cards awaiting approval, the All report cards list (status chips,
+                            Archived for agency admins) and the card itself, opened below the list
+       ✨ Generate with AI  the child + term picker and the draft it makes; only for the roles that may generate
+     Switching tabs re-draws the tab body only. Deep link: #report-cards?tab=generate[&child=ID&term=...].
+
+     Every list row has the standard ⋮ (kt-row-actions collapses the last cell's buttons; phones get it on the card):
+     View, Edit (a SENT card is edited as a new version, approved again), Download PDF, Print, Email to family,
+     Approve / Send back, Delete draft. Only what this person may do is offered; the server re-checks each one. */
+  const RC = {
+    tab: 'cards', kids: null, kidsErr: 0, reqs: null,
+    rows: [], approver: false, admin: false, archived: null, archivedCount: 0,
+    f: { st: '', q: '', term: '', by: '', centre: '' }, prefill: null,
+  };
+  const RC_GEN_ROLES = ['educator', 'centre_director', 'agency_admin', 'platform_admin'];
+  const rcRoles = () => { try { return window.ktRoles ? window.ktRoles() : ((JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []); } catch (e) { return []; } };
+  const rcCanGenerate = () => rcRoles().some(r => RC_GEN_ROLES.indexOf(r) !== -1);
+  const rcAiOn = () => { try { const u = (KT.Auth && KT.Auth.user && KT.Auth.user()) || {}; return u.ai_bundle === true; } catch (e) { return false; } };
+  const rcToast = (m, t) => { if (window.KT && KT.toast) KT.toast(m, t || 'info'); };
+  const rcSaid = (e, fb) => (e && e.message) || fb;
+  const rcQuery = () => {
+    const q = {}; const s = String(location.hash || '').split('?')[1] || '';
+    s.split('&').forEach(p => { const i = p.indexOf('='); if (i > 0) { try { q[p.slice(0, i)] = decodeURIComponent(p.slice(i + 1).replace(/\+/g, ' ')); } catch (e) {} } });
+    return q;
+  };
+  const rcSetHash = () => {
+    const h = '#report-cards' + (RC.tab === 'generate' ? '?tab=generate' : '');
+    try { if (location.hash !== h) history.replaceState(history.state, '', location.pathname + location.search + h); } catch (e) {}
+  };
+  const RC_ST = {
+    draft: ['Draft', '#F1F5F9', '#334155'], reviewed: ['Draft', '#F1F5F9', '#334155'],
+    submitted: ['Awaiting approval', '#FEF3C7', '#92400E'], sent: ['Sent', '#DCFCE7', '#166534'],
+  };
+  const RC_ARCH = { child_withdrawn: 'Archived — child withdrawn', centre_closed: 'Archived — centre closed' };
+  const rcGroup = (s) => (s === 'submitted' || s === 'sent') ? s : 'draft';
+  const rcChip = (label, bg, fg) => `<span class="rc-pill" style="background:${bg};color:${fg};border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;white-space:nowrap;">${esc(label)}</span>`;
+  const rcPill = (s, replaced) => replaced ? rcChip('Replaced', '#E2E8F0', '#475569') : rcChip(...(RC_ST[s] || RC_ST.draft));
+  const rcArchPill = (k) => rcChip(RC_ARCH[k] || RC_ARCH.child_withdrawn, '#E2E8F0', '#475569');
+  const rcVer = (v) => (+v > 1) ? ` <span style="font-size:11.5px;color:#64748B;font-weight:700;">v${+v}</span>` : '';
+  const rcDay = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''; };
+  const rcPdfUrl = (id) => (KT.API_BASE || '') + '/report-cards/' + id + '/pdf';
+  const rcName = (c) => (c.child || 'report-card') + ' — ' + (c.term || '');
+
+  /* Narrative boxes: one per area of the agency's learning framework; older cards without `sections` are HDLH. */
+  const rcLegacy = (card) => ['belonging', 'wellbeing', 'engagement', 'expression'].map(k => ({
+    key: k, label: k === 'wellbeing' ? 'Well-being' : k.charAt(0).toUpperCase() + k.slice(1), text: (card && card['narrative_' + k]) || '' }));
+  const rcBoxes = (sections) => (sections || []).map(x => `
+        <h4 style="margin:16px 0 6px;color:#1F6080;">${esc(x.label)}</h4>
+        <textarea data-rc-area="${esc(x.key)}" rows="5" style="width:100%;min-height:110px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(x.text || '')}</textarea>`).join('');
+  const rcCollect = () => { const out = {}; document.querySelectorAll('#rc-out [data-rc-area]').forEach(t => { out[t.getAttribute('data-rc-area')] = t.value; }); return out; };
+  const rcFwNote = (fw) => fw && fw.name ? `<div style="font-size:12.5px;color:#64748B;margin-top:6px;">Framework: <strong>${esc(fw.name)}</strong></div>` : '';
+
+  /* ── files ── */
+  function rcDownload(c) {
+    if (!(window.KT && KT.fetchFileBlob)) return;
+    const name = ('report-card-' + (c.child || '') + '-' + (c.term || '')).replace(/[^A-Za-z0-9]+/g, '-').replace(/-+$/, '') + '.pdf';
+    const p = KT.fetchFileBlob(rcPdfUrl(c.id));
+    const nativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    if (nativeApp && KT.openFile) { KT.openFile(p, { title: rcName(c), filename: name, mime: 'application/pdf' }); return; }
+    p.then(b => {
+      const u = URL.createObjectURL(new Blob([b], { type: 'application/pdf' }));
+      const a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 4000);
+    }, e => rcToast(rcSaid(e, 'Could not download the PDF.'), 'error'));
+  }
+  function rcPrint(c) {
+    if (!(window.KT && KT.printDoc && KT.fetchFileBlob)) return;
+    KT.fetchFileBlob(rcPdfUrl(c.id)).then(b => KT.printDoc({ blob: new Blob([b], { type: 'application/pdf' }) }, { title: rcName(c) }),
+      e => rcToast(rcSaid(e, 'Could not load the PDF to print.'), 'error'));
+  }
+
+  /* ── actions (each one re-checked by the server) ── */
+  async function rcApprove(id, save) {
+    try { if (save) await save(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); return; }
+    const sig = await KT.signaturePad({ title: 'Director / admin sign-off', subtitle: 'Your signature approves this report card and sends it to the family.', okLabel: 'Approve & send' });
+    if (!sig) return;
+    try { await Api.post('/report-cards/' + id + '/approve', { admin_signature: sig }); rcToast('Approved & sent to the family. ✓', 'success'); rcAfter(id); }
+    catch (e) { rcToast(rcSaid(e, 'Could not approve.'), 'error'); }
+  }
+  async function rcSubmit(id, save) {
+    try { if (save) await save(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); return; }
+    const sig = await KT.signaturePad({ title: 'Educator signature', subtitle: 'Sign to submit this report card to your director/admin for review & approval.', okLabel: 'Sign & submit' });
+    if (!sig) return;
+    try { await Api.post('/report-cards/' + id + '/submit', { educator_signature: sig }); rcToast('Submitted for approval — your director/admin was notified. ✓', 'success'); rcAfter(id); }
+    catch (e) { rcToast(rcSaid(e, 'Could not submit.'), 'error'); }
+  }
+  async function rcSendBack(id) {
+    const note = await window.KT.prompt({ title: 'Send back to the educator', description: 'What needs changing? The educator will see this note.',
+      fields: [{ key: 'note', label: 'Note', type: 'text' }], okLabel: 'Send back' });
+    if (note === null || note === undefined) return;
+    const text = typeof note === 'object' ? (note.note || '') : note;
+    try { await Api.post('/report-cards/' + id + '/reject', { note: text }); rcToast('Sent back to the educator.', 'success'); rcAfter(id); }
+    catch (e) { rcToast(rcSaid(e, 'Could not send back.'), 'error'); }
+  }
+  async function rcRevise(id) {
+    try {
+      const r = await Api.post('/report-cards/' + id + '/revise', {});
+      rcToast(r && r.existing ? 'A new version was already started. It is open below.' : 'New version started. Make your changes, then submit or approve it again. The sent one stays until then.', 'success');
+      await rcOpen(r.id, { edit: true }); rcReloadList();
+    } catch (e) { rcToast(rcSaid(e, 'Could not start a new version.'), 'error'); }
+  }
+  async function rcDelete(c) {
+    const ok = await KT.confirm({ title: 'Delete this draft?', description: `The ${c.term || ''} draft for ${c.child || 'this child'} will be deleted. This cannot be undone.`, okLabel: 'Delete draft', tone: 'danger' });
+    if (!ok) return;
+    try {
+      await Api.delete('/report-cards/' + c.id); rcToast('Draft deleted.', 'success');
+      const out = document.getElementById('rc-out'); if (out && +out.getAttribute('data-card') === +c.id) { out.innerHTML = ''; out.removeAttribute('data-card'); }
+      rcReloadList();
+    } catch (e) { rcToast(rcSaid(e, 'Could not delete the draft.'), 'error'); }
+  }
+  function rcAfter(id) {
+    rcReloadList();
+    const out = document.getElementById('rc-out');
+    if (out && +out.getAttribute('data-card') === +id) rcOpen(id, {});
+  }
+
+  /* ── email to the family: nobody pre-ticked, an optional note, a preview, then a secure 14-day link each ── */
+  async function rcEmail(c) {
+    let d; try { d = await Api.get('/report-cards/' + c.id + '/recipients'); } catch (e) { rcToast(rcSaid(e, 'Could not load the family.'), 'error'); return; }
+    const gs = (d && d.guardians) || [];
+    const body = document.createElement('div');
+    body.style.cssText = 'display:flex;flex-direction:column;gap:10px;';
+    body.innerHTML =
+      (d.child_left ? '<div style="border:1px solid #FDE68A;background:#FFFBEB;color:#92400E;border-radius:10px;padding:8px 12px;font-size:13px;">This child has left. Guardians still on file can still receive the report card.</div>' : '') +
+      (d.test_agency ? '<div style="border:1px solid #BAE6FD;background:#F0F9FF;color:#075985;border-radius:10px;padding:8px 12px;font-size:13px;">This is a test agency, so nothing is sent. You can still preview the email.</div>' : '') +
+      '<div style="font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.4px;">Send to</div>' +
+      (gs.length ? gs.map(g => `<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid #E2E8F0;border-radius:10px;cursor:pointer;">
+          <input type="checkbox" data-rc-to="${g.id}" style="width:17px;height:17px;margin-top:2px;accent-color:#2F8C86;">
+          <span><b>${esc(g.name)}</b>${g.relationship ? ' <span style="color:#64748B;font-size:12px;">· ' + esc(g.relationship) + '</span>' : ''}<br><span style="color:#475569;font-size:12.5px;">${esc(g.email)}</span></span></label>`).join('')
+        : '<div style="color:#64748B;font-size:13px;">No guardian on file has an email address.</div>') +
+      '<label style="font-size:12px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.4px;margin-top:4px;">Message (optional)</label>' +
+      '<textarea data-rc-msg rows="3" maxlength="2000" placeholder="Add a short note for the family" style="width:100%;min-height:80px;padding:9px;border:1px solid #CBD5E1;border-radius:8px;font-family:inherit;font-size:14px;"></textarea>' +
+      '<div><button type="button" class="kt-btn" data-rc-preview data-kt-iconized="1">👁️ Preview the email</button></div>' +
+      '<div data-rc-prev style="display:none;border:1px solid #E2E8F0;border-radius:10px;overflow:hidden;"></div>' +
+      '<div style="font-size:12px;color:#64748B;">Each person ticked gets their own secure link to the PDF. It works for 14 days.</div>' +
+      '<div data-rc-msgline style="font-size:12.5px;font-weight:700;color:#B91C1C;min-height:16px;"></div>';
+    const picked = () => Array.from(body.querySelectorAll('[data-rc-to]')).filter(x => x.checked).map(x => +x.getAttribute('data-rc-to'));
+    const msg = () => body.querySelector('[data-rc-msg]').value;
+    body.querySelector('[data-rc-preview]').onclick = async () => {
+      const box = body.querySelector('[data-rc-prev]');
+      try {
+        const p = await Api.post('/report-cards/' + c.id + '/email/preview', { to: picked(), message: msg() });
+        box.style.display = 'block';
+        box.innerHTML = `<div style="padding:8px 12px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;font-size:13px;"><b>Subject:</b> ${esc(p.subject || '')}</div>`;
+        const fr = document.createElement('iframe');
+        fr.setAttribute('sandbox', ''); fr.style.cssText = 'width:100%;height:380px;border:0;background:#fff;display:block;';
+        fr.srcdoc = p.html || ''; box.appendChild(fr);
+      } catch (e) { rcToast(rcSaid(e, 'Could not build the preview.'), 'error'); }
+    };
+    KT.Shell.Modal.open({
+      title: '✉️ Email ' + (d.child || 'report card') + "'s report card",
+      body: body,
+      actions: [
+        { label: 'Cancel' },
+        { label: d.test_agency ? 'Send (test: nothing goes out)' : 'Send', primary: true, busyLabel: 'Sending…', handler: function () {
+          const line = body.querySelector('[data-rc-msgline]'); line.textContent = '';
+          const to = picked();
+          if (!to.length) { line.textContent = 'Tick at least one person to send it to.'; return false; }
+          return Api.post('/report-cards/' + c.id + '/email', { to: to, message: msg() }).then(r => {
+            if (r && r.blocked) { rcToast(r.message || 'Test agency: nothing was sent.', 'info'); return; }
+            rcToast('Emailed to ' + (r && r.sent) + (r && r.sent === 1 ? ' person' : ' people') + '.', 'success');
+            const out = document.getElementById('rc-out'); if (out && +out.getAttribute('data-card') === +c.id) rcHistory(c.id, true);
+          }, e => { line.textContent = rcSaid(e, 'Could not send.'); return false; });
+        } },
+      ],
+    });
+  }
+
+  /* ── the card: View (read-only) or Edit ── */
+  async function rcOpen(id, opts) {
+    opts = opts || {};
+    const out = document.getElementById('rc-out'); if (!out) return;
+    let r; try { r = await Api.get('/report-cards/' + id); } catch (e) { rcToast(rcSaid(e, 'Could not load the card.'), 'error'); return; }
+    const c = (r && r.data) || {}; const can = c.can || {};
+    const st = c.status || 'draft', replaced = !!c.replaced;
+    const editableNow = !replaced && (st === 'draft' || st === 'reviewed' || (st === 'submitted' && can.approver));
+    const editable = editableNow && !!opts.edit;
+    out.setAttribute('data-card', c.id);
+    out.className = 'kt-card'; out.style.marginTop = '16px';
+    const meta = [c.made_by ? 'Made by ' + c.made_by : '', c.centre || '', c.room || '', c.ref ? 'Ref ' + c.ref : ''].filter(Boolean).map(esc).join(' · ');
+    out.innerHTML =
+      `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:4px;"><h3 style="margin:0;">${esc(c.child)} — ${esc(c.term)}${rcVer(c.version)}</h3>${rcPill(st, replaced)}${c.archived ? rcArchPill(c.archived) : ''}</div>` +
+      `<div style="font-size:12.5px;color:#64748B;">${meta}</div>` +
+      (c.review_note && (st === 'draft' || st === 'reviewed') ? `<div style="margin-top:10px;border:1px solid #FECACA;background:#FEF2F2;color:#991B1B;border-radius:10px;padding:8px 12px;font-size:13px;"><b>Sent back:</b> ${esc(c.review_note)}</div>` : '') +
+      (st === 'submitted' && !can.approver ? '<div style="margin-top:10px;font-size:13px;color:#92400E;">Waiting for a director or admin to approve it.</div>' : '') +
+      (replaced ? '<div style="margin-top:10px;font-size:13px;color:#475569;">A newer version replaced this one. It is kept here, with its PDF, for the record.</div>'
+        : st === 'sent' ? `<div style="margin-top:10px;font-size:13px;color:#166534;">Sent to the family${c.sent_at ? ' · ' + esc(rcDay(c.sent_at)) : ''}.${can.revise ? ' To change it, use Edit: it becomes a new version that is approved again.' : ''}</div>` : '') +
+      (editableNow && !editable ? '<div style="margin-top:10px;font-size:13px;color:#475569;">Viewing. Use Edit to change it.</div>' : '') +
+      rcFwNote(c.framework_info) + rcBoxes(Array.isArray(c.sections) && c.sections.length ? c.sections : rcLegacy(c)) +
+      `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;min-height:110px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(c.next_steps || '')}</textarea>` +
+      (c.educator_signature && st === 'submitted' ? `<div style="margin-top:14px;font-size:12px;color:#64748B;">Educator signature</div><img src="${esc(c.educator_signature)}" alt="" style="height:66px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:2px;">` : '') +
+      '<div id="rc-o-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"></div>' +
+      '<details id="rc-o-hist" style="margin-top:14px;"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1F6080;">History &amp; versions</summary><div data-rc-hist style="margin-top:8px;font-size:13px;color:#475569;">Loading…</div></details>';
+    if (!editable) out.querySelectorAll('textarea').forEach(t => { t.readOnly = true; t.style.background = '#F8FAFC'; });
+    const save = () => Api.patch('/report-cards/' + c.id, { narratives: rcCollect(), next_steps: document.getElementById('rc-next').value, status: st === 'submitted' ? undefined : 'reviewed' });
+    const B = (key, label, cls) => `<button type="button" class="kt-btn${cls ? ' ' + cls : ''}" data-rc-a="${key}" data-kt-iconized="1">${label}</button>`;
+    let h = '';
+    if (editable) {
+      h += B('save', '💾 Save edits', 'kt-btn-primary');
+      if (st === 'submitted') h += B('approve', '✍️ Sign, approve &amp; send', 'kt-btn-success') + B('back', '↩ Send back for changes');
+      else h += can.approver ? B('approve', '✍️ Sign, approve &amp; send', 'kt-btn-success') : B('submit', '✍️ Sign &amp; submit for approval', 'kt-btn-success');
+    } else if (editableNow) {
+      h += B('edit', st === 'submitted' ? '✍️ Review &amp; approve' : '✏️ Edit', 'kt-btn-primary');
+    }
+    if (can.revise) h += B('revise', '✏️ Edit (new version)', 'kt-btn-primary');
+    if (can.email) h += B('email', '✉️ Email to family');
+    h += B('pdf', '⬇️ Download PDF') + B('print', '🖨️ Print');
+    if (can.delete) h += B('delete', '🗑️ Delete draft');
+    const acts = document.getElementById('rc-o-actions'); acts.innerHTML = h;
+    const on = (k, fn) => { const b = acts.querySelector('[data-rc-a="' + k + '"]'); if (b) b.onclick = fn; };
+    on('save', async () => { try { await save(); rcToast('Saved.', 'success'); rcReloadList(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); } });
+    on('approve', () => rcApprove(c.id, editable ? save : null));
+    on('submit', () => rcSubmit(c.id, save));
+    on('back', () => rcSendBack(c.id));
+    on('edit', () => rcOpen(c.id, { edit: true }));
+    on('revise', () => rcRevise(c.id));
+    on('email', () => rcEmail(c));
+    on('pdf', () => rcDownload(c));
+    on('print', () => rcPrint(c));
+    on('delete', () => rcDelete(c));
+    document.getElementById('rc-o-hist').addEventListener('toggle', function () { if (this.open) rcHistory(c.id); });
+    if (!opts.noScroll) out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  const RC_EV = { generated: 'Drafted', revised: 'New version started', new_version: 'A new version was started', edited: 'Edited',
+    submitted: 'Signed & submitted', approved: 'Approved & sent', sent: 'Sent', sent_back: 'Sent back', replaced: 'Replaced by a newer version',
+    emailed: 'Emailed to the family', email_blocked: 'Email not sent (test agency)', deleted: 'Deleted' };
+  async function rcHistory(id, force) {
+    const det = document.getElementById('rc-o-hist'); if (!det) return;
+    if (force) det.open = true;
+    const box = det.querySelector('[data-rc-hist]');
+    let r; try { r = await Api.get('/report-cards/' + id + '/history'); } catch (e) { box.textContent = rcSaid(e, 'Could not load the history.'); return; }
+    const vs = (r && r.versions) || [], evs = (r && r.events) || [];
+    const vHtml = vs.length > 1 ? '<div style="font-weight:700;margin:0 0 4px;">Versions</div>' + vs.map(v =>
+      `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:4px 0;">v${v.version} ${rcPill(v.status, v.replaced)} <span style="color:#64748B;">${esc(rcDay(v.approved_at || v.updated_at))}</span>
+        <button type="button" class="kt-btn" data-rc-vpdf="${v.id}" data-kt-iconized="1" style="height:28px;padding:0 10px;font-size:12.5px;">⬇️ PDF</button>
+        ${+v.id !== +id ? `<button type="button" class="kt-btn" data-rc-vopen="${v.id}" data-kt-iconized="1" style="height:28px;padding:0 10px;font-size:12.5px;">👁️ Open</button>` : ''}</div>`).join('') : '';
+    const who = (e) => e.by ? esc(e.by) : 'Someone';
+    const eHtml = evs.length ? '<div style="font-weight:700;margin:10px 0 4px;">History</div>' + evs.map(e => {
+      const d = e.detail || {};
+      const to = Array.isArray(d.to) ? d.to.map(t => esc(t.name || t.email) + (t.email ? ' (' + esc(t.email) + ')' : '')).join(', ') : '';
+      return `<div style="padding:3px 0;"><b>${esc(RC_EV[e.action] || e.action)}</b>${to ? ' to ' + to : ''}${d.note ? ': “' + esc(d.note) + '”' : ''} · ${who(e)} · <span style="color:#64748B;">${esc(rcDay(e.at))}</span></div>`;
+    }).join('') : '<div style="color:#64748B;">No history recorded yet. Actions from 2026-11-26 on are listed here.</div>';
+    box.innerHTML = vHtml + eHtml;
+    const byId = {}; vs.forEach(v => { byId[v.id] = v; });
+    box.querySelectorAll('[data-rc-vpdf]').forEach(b => { b.onclick = () => { const cur = document.querySelector('#rc-out h3'); rcDownload({ id: +b.getAttribute('data-rc-vpdf'), child: cur ? cur.textContent.split(' — ')[0] : '', term: 'v' + (byId[b.getAttribute('data-rc-vpdf')] || {}).version }); }; });
+    box.querySelectorAll('[data-rc-vopen]').forEach(b => { b.onclick = () => rcOpen(+b.getAttribute('data-rc-vopen'), {}); });
+  }
+
+  /* ── the list ── */
+  function rcRowActions(r) {
+    const st = r.status || 'draft', g = rcGroup(st), live = !r.replaced;
+    const list = [['view', '👁️ View']];
+    if (live && g === 'draft') list.push(['edit', '✏️ Edit']);
+    if (live && st === 'submitted' && RC.approver) list.push(['edit', '✍️ Review & approve'], ['back', '↩ Send back']);
+    if (live && st === 'sent' && (RC.approver || r.mine)) list.push(['revise', '✏️ Edit (new version)']);
+    list.push(['pdf', '⬇️ Download PDF'], ['print', '🖨️ Print']);
+    if (live && st === 'sent' && RC.approver) list.push(['email', '✉️ Email to family']);
+    if (live && g === 'draft' && RC.admin) list.push(['delete', '🗑️ Delete draft']);
+    return list;
+  }
+  function rcRunAction(k, r) {
+    if (k === 'view') return rcOpen(r.id, {});
+    if (k === 'edit') return rcOpen(r.id, { edit: true });
+    if (k === 'back') return rcSendBack(r.id);
+    if (k === 'revise') return rcRevise(r.id);
+    if (k === 'pdf') return rcDownload(r);
+    if (k === 'print') return rcPrint(r);
+    if (k === 'email') return rcEmail(r);
+    if (k === 'delete') return rcDelete(r);
+  }
+  function rcPaintAll() {
+    const host = document.getElementById('rc-all'); if (!host) return;
+    const f = RC.f, arch = f.st === 'archived';
+    const all = arch ? (RC.archived || []) : RC.rows;
+    if (!RC.rows.length && !RC.archivedCount && !arch) { host.innerHTML = '<div class="kt-card" style="margin-bottom:16px;"><h3 style="margin:0 0 4px;">📚 All report cards</h3><div style="color:#64748B;font-size:13px;">No report cards yet.' + (rcCanGenerate() ? ' Use ✨ Generate with AI to write the first one.' : '') + '</div></div>'; return; }
+    const uniq = (k) => Array.from(new Set(all.map(r => r[k]).filter(Boolean))).sort();
+    const terms = uniq('term'), makers = uniq('made_by'), centres = uniq('centre');
+    const cnt = { '': RC.rows.length, draft: 0, submitted: 0, sent: 0, archived: RC.archivedCount };
+    RC.rows.forEach(r => { cnt[rcGroup(r.status)]++; });
+    const q = f.q.trim().toLowerCase();
+    const rows = all.filter(r => (!f.st || arch || rcGroup(r.status) === f.st) && (!f.term || r.term === f.term)
+      && (!f.by || r.made_by === f.by) && (!f.centre || r.centre === f.centre) && (!q || (r.child || '').toLowerCase().indexOf(q) !== -1));
+    const chip = (k, label) => `<button type="button" class="rc-chip${f.st === k ? ' on' : ''}" data-st="${k}">${esc(label)} <b>${cnt[k]}</b></button>`;
+    const opt = (list, cur, any) => `<option value="">${esc(any)}</option>` + list.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
+    host.innerHTML = '<div class="kt-card" style="--kt-edge:#1F6080;margin-bottom:16px;">' +
+      `<h3 style="margin:0 0 4px;">📚 All report cards <span style="background:#E0F2FE;color:#075985;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${RC.rows.length}</span></h3>` +
+      '<p style="font-size:12.5px;color:#64748B;margin:0 0 10px;">Every report card you can see, newest first. Tap one to open it, or use ⋮ for more.</p>' +
+      '<div class="rc-bar">' + chip('', 'All') + chip('draft', 'Draft') + chip('submitted', 'Awaiting approval') + chip('sent', 'Sent') + (RC.admin ? chip('archived', 'Archived') : '') + '</div>' +
+      (arch ? '<div style="font-size:12.5px;color:#64748B;margin:-4px 0 10px;">Cards for children who have left and centres that have closed. Only agency admins see these.</div>' : '') +
+      '<div class="rc-bar">' +
+        `<input type="search" id="rc-f-q" placeholder="Search a child" value="${esc(f.q)}">` +
+        (terms.length > 1 ? `<select id="rc-f-term">${opt(terms, f.term, 'All terms')}</select>` : '') +
+        (makers.length > 1 ? `<select id="rc-f-by">${opt(makers, f.by, 'Anyone')}</select>` : '') +
+        (centres.length > 1 ? `<select id="rc-f-centre">${opt(centres, f.centre, 'All centres')}</select>` : '') +
+      '</div>' +
+      (rows.length ? '<div class="kt-table-scroll"><table class="rc-table" data-kt-no-filter="1"><thead><tr><th>Child</th><th>Term</th><th>Made by</th><th>Status</th><th>Centre</th><th>Updated</th><th></th></tr></thead><tbody>' +
+        rows.slice(0, 300).map(r => `<tr class="rc-row" data-id="${r.id}" tabindex="0" style="cursor:pointer;"><td><b>${esc(r.child)}</b>${rcVer(r.version)}</td><td>${esc(r.term)}</td><td>${esc(r.made_by || '—')}${r.mine ? ' <span style="color:#64748B;font-size:11.5px;">(you)</span>' : ''}</td><td>${arch ? rcArchPill(r.archived) + ' ' : ''}${rcPill(r.status, r.replaced)}</td><td>${esc(r.centre || '')}${r.room ? ' · ' + esc(r.room) : ''}</td><td>${esc(rcDay(r.updated_at || r.created_at))}</td>` +
+          '<td class="rc-acts">' + rcRowActions(r).map(a => `<button type="button" class="kt-btn" data-rc-row="${a[0]}">${a[1]}</button>`).join('') + '</td></tr>').join('') +
+        '</tbody></table></div>' + (rows.length > 300 ? '<div style="font-size:12px;color:#64748B;margin-top:6px;">Showing the 300 most recent. Narrow the filters to see more.</div>' : '')
+        : '<div style="padding:14px;color:#64748B;font-size:13px;">No report cards match.</div>') +
+      '</div>';
+    host.querySelectorAll('.rc-chip').forEach(b => { b.onclick = async () => {
+      const next = b.getAttribute('data-st');
+      if ((next === 'archived') !== arch) { f.term = ''; f.by = ''; f.centre = ''; }
+      if (next === 'archived' && RC.archived === null) await rcLoadArchived();
+      f.st = next; rcPaintAll();
+    }; });
+    const qi = document.getElementById('rc-f-q');
+    if (qi) qi.addEventListener('input', () => { f.q = qi.value; const pos = qi.selectionStart; rcPaintAll(); const n = document.getElementById('rc-f-q'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } });
+    [['rc-f-term', 'term'], ['rc-f-by', 'by'], ['rc-f-centre', 'centre']].forEach(([id, k]) => { const s = document.getElementById(id); if (s) s.onchange = () => { f[k] = s.value; rcPaintAll(); }; });
+    const byId = {}; all.forEach(r => { byId[r.id] = r; });
+    host.querySelectorAll('.rc-row').forEach(tr => {
+      const r = byId[+tr.getAttribute('data-id')];
+      tr.querySelectorAll('[data-rc-row]').forEach(b => { b.addEventListener('click', (e) => { e.stopPropagation(); rcRunAction(b.getAttribute('data-rc-row'), r); }); });
+      tr.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('.rc-acts, .kt-ka-kebab, button, a')) return; rcOpen(r.id, {}); });
+      tr.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target === tr) rcOpen(r.id, {}); });
+    });
+    if (window.KT && KT.enhanceTables) { try { KT.enhanceTables(); } catch (e) {} }
+  }
+  async function rcLoadArchived() {
+    let r; try { r = await Api.get('/report-cards/archived'); } catch (e) { rcToast(rcSaid(e, 'Could not load archived report cards.'), 'error'); RC.archived = []; return; }
+    RC.archived = (r && r.data) || []; RC.archivedCount = RC.archived.length;
+  }
+  async function rcReloadList() {
+    if (!document.getElementById('rc-all')) return;
+    let r; try { r = await Api.get('/report-cards/all'); } catch (e) { return; }
+    RC.rows = (r && r.data) || []; RC.approver = !!(r && r.approver); RC.admin = !!(r && r.admin);
+    RC.archivedCount = (r && +r.archived_count) || 0;
+    if (RC.archived !== null && RC.f.st === 'archived') await rcLoadArchived(); else RC.archived = null;
+    rcPaintAll(); rcLoadPending();
+  }
+
+  /* ── parents' requests + awaiting approval ── */
+  async function rcLoadReqs() {
+    if (RC.reqs) return RC.reqs;
+    try { RC.reqs = await Api.get('/report-cards/requests'); } catch (e) { RC.reqs = { data: [], quarters: [], current: null }; }
+    return RC.reqs;
+  }
+  async function rcPaintRequests() {
+    const host = document.getElementById('rc-requests'); if (!host) return;
+    const r = await rcLoadReqs(); const asks = (r && r.data) || [];
+    if (!asks.length) { host.innerHTML = ''; return; }
+    const day = (s) => rcDay(s);
+    host.innerHTML = '<div class="kt-card" style="--kt-edge:#1F6080;margin-bottom:16px;">' +
+      `<h3 style="margin:0 0 4px;">📨 Requested by parents <span style="background:#E0F2FE;color:#075985;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${asks.length}</span></h3>` +
+      '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Families asked for these report cards. Write and submit each one; it reaches the family once a director or admin approves it.</p>' +
+      asks.map(a => `<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid #BAE6FD;background:#F0F9FF;border-radius:12px;padding:10px 14px;margin-bottom:8px;">
+        <div><b>${esc(((a.first_name || '') + ' ' + (a.last_name || '')).trim())}</b>${a.room ? ' · ' + esc(a.room) : ''} — ${esc(a.term)}<div style="font-size:12px;color:#075985;">Asked by ${esc(a.parent_first_name || 'a parent')} on ${esc(day(a.created_at))}</div></div>
+        ${rcCanGenerate() ? `<button type="button" class="kt-btn kt-btn-primary rc-write" data-kt-iconized="1" data-cid="${a.child_id}" data-term="${esc(a.term)}" data-name="${esc(((a.first_name || '') + ' ' + (a.last_name || '')).trim())}">✍️ Write it</button>` : ''}</div>`).join('') + '</div>';
+    host.querySelectorAll('.rc-write').forEach(b => {
+      b.onclick = () => { RC.prefill = { cid: b.getAttribute('data-cid'), term: b.getAttribute('data-term'), name: b.getAttribute('data-name') }; rcGoTab('generate'); };
+    });
+  }
+  async function rcLoadPending() {
+    const host = document.getElementById('rc-pending'); if (!host) return;
+    if (!RC.approver) { host.innerHTML = ''; return; }
+    let r; try { r = await Api.get('/report-cards/pending'); } catch (e) { return; }
+    const pend = (r && r.data) || [];
+    if (!pend.length) { host.innerHTML = ''; return; }
+    host.innerHTML = '<div class="kt-card" style="--kt-edge:#F59E0B;margin-bottom:16px;">' +
+      `<h3 style="margin:0 0 4px;">✍️ Awaiting your approval <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${pend.length}</span></h3>` +
+      '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Educators submitted these report cards for your review, signature and approval.</p>' +
+      pend.map(p => `<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:12px 14px;margin-bottom:8px;">
+        <div><b>${esc(p.child)}</b> — ${esc(p.term)}<div style="font-size:12px;color:#92400E;">Submitted by ${esc(p.submitted_by || 'an educator')}</div></div>
+        <div style="display:flex;gap:6px;align-items:center;"><button type="button" class="kt-btn kt-btn-primary rc-review" data-kt-iconized="1" data-id="${p.id}">Review &amp; sign</button>
+        <button type="button" class="kt-ka-kebab rc-pmenu" data-id="${p.id}" aria-label="More actions" data-kttip="More actions">⋮</button></div></div>`).join('') + '</div>';
+    const byId = {}; pend.forEach(p => { byId[p.id] = p; });
+    host.querySelectorAll('.rc-review').forEach(b => { b.onclick = () => rcOpen(+b.getAttribute('data-id'), { edit: true }); });
+    host.querySelectorAll('.rc-pmenu').forEach(b => {
+      b.onclick = () => {
+        const p = byId[+b.getAttribute('data-id')], c = { id: p.id, child: p.child, term: p.term };
+        const mk = (label, fn) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = label; x.addEventListener('click', fn); return x; };
+        KT.openActionMenu(b, [
+          mk('👁️ View', () => rcOpen(p.id, {})), mk('✍️ Review & approve', () => rcOpen(p.id, { edit: true })),
+          mk('↩ Send back', () => rcSendBack(p.id)), mk('⬇️ Download PDF', () => rcDownload(c)), mk('🖨️ Print', () => rcPrint(c)),
+        ]);
+      };
+    });
+  }
+
+  /* ── admin: report card settings ── */
+  async function rcPaintSettings() {
+    const host = document.getElementById('rc-settings'); if (!host || !RC.admin) { if (host) host.innerHTML = ''; return; }
+    let s; try { s = await Api.get('/admin/report-card-settings'); } catch (e) { host.innerHTML = ''; return; }
+    host.innerHTML = '<div class="kt-card" style="margin-top:16px;"><h3 style="margin:0 0 8px;">⚙️ Report card settings</h3>' +
+      `<label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:14px;"><input type="checkbox" id="rc-set-rece" ${s && s.show_registry ? 'checked' : ''} style="width:17px;height:17px;margin-top:2px;accent-color:#2F8C86;">` +
+      '<span><b>Show the educator\'s RECE registration number</b><br><span style="color:#64748B;font-size:12.5px;">Printed under "Prepared by" on report card PDFs when the educator has one on file.</span></span></label></div>';
+    const cb = document.getElementById('rc-set-rece');
+    cb.onchange = async () => {
+      try { await Api.post('/admin/report-card-settings', { show_registry: cb.checked }); rcToast('Saved.', 'success'); }
+      catch (e) { cb.checked = !cb.checked; rcToast(rcSaid(e, 'Could not save.'), 'error'); }
+    };
+  }
+
+  /* ── ✨ Generate with AI ── */
+  async function rcPaintGenerate(body) {
+    body.innerHTML = '<div class="kt-card"><div style="padding:8px;color:#64748B;">Loading…</div></div>';
+    if (RC.kids === null) {
+      let kids = [], err = 0;
+      try { const kr = await Api.get('/admin/children'); kids = (kr && Array.isArray(kr.children)) ? kr.children : Array.isArray(kr) ? kr : (kr && Array.isArray(kr.data)) ? kr.data : []; }
+      catch (e) { err = (e && e.status) || 0; }
+      if (!kids.length) { try { const pr = await Api.get('/provider/children'); if (pr && Array.isArray(pr.children) && pr.children.length) { kids = pr.children; err = 0; } } catch (e2) {} }
+      RC.kids = kids; RC.kidsErr = err;
+    }
+    const r = await rcLoadReqs();
+    if (RC.tab !== 'generate' || !body.isConnected) return;
+    const kidLabel = (c) => esc(((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.preferred_name || 'Child') + (c.centre_name ? ' · ' + esc(c.centre_name) : '');
+    const ai = rcAiOn();
+    body.innerHTML =
+      (ai ? '' : '<div class="kt-card" data-rc-aioff style="margin-bottom:16px;display:flex;gap:12px;align-items:flex-start;"><div style="font-size:26px;">🔌</div><div><b>AI is off for this agency</b><div style="font-size:13px;color:#475569;margin-top:4px;">New drafts are written from the child\'s logged observations instead. Read and edit every section before you submit it.</div></div></div>') +
+      '<div class="kt-card"><h3 style="margin:0 0 4px;">✨ Generate a report card</h3>' +
+      '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Pick a child and a term. A draft is written for each area of your learning framework. You edit it, then sign and submit it (educators) or sign, approve and send it (directors and admins).</p>' +
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:640px;">' +
+        '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Child</label>' +
+          '<style>#rc-cid,#rc-cid option,#rc-term,#rc-term option{background-color:#fff !important;color:#0F172A !important;}</style>' +
+          '<select id="rc-cid" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background-color:#fff;color:#0F172A;color-scheme:light;font-size:14px;"><option value="">Select a child…</option>' +
+          RC.kids.map(c => `<option value="${c.id}">${kidLabel(c)}</option>`).join('') + '</select>' +
+          (RC.kids.length ? '' : `<div style="margin-top:6px;color:#64748B;font-size:12.5px;">${RC.kidsErr === 403 ? 'Select an agency (top-bar switcher) to load its children.' : 'No children found for this agency.'}</div>`) + '</div>' +
+        '<div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Term</label>' +
+          '<select id="rc-term" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background-color:#fff;color:#0F172A;color-scheme:light;font-size:14px;"></select>' +
+          '<input id="rc-term-other" placeholder="Type the term, e.g. Summer 2027" maxlength="40" style="display:none;width:100%;margin-top:8px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;"></div>' +
+      '</div>' +
+      `<button type="button" id="rc-gen" class="kt-btn kt-btn-primary" data-kt-iconized="1" style="margin-top:18px;">${ai ? '✨ Generate with AI' : '📝 Draft from observations'}</button>` +
+      '</div><div id="rc-out"></div>';
+    const OTHER = '__other';
+    const sel = document.getElementById('rc-term'), other = document.getElementById('rc-term-other');
+    const labels = ((r && r.quarters) || []).map(q => q && q.label).filter(Boolean);
+    sel.innerHTML = (labels.length ? '' : '<option value="">Choose a term…</option>') + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('') + `<option value="${OTHER}">Another term…</option>`;
+    const pick = (label) => {
+      if (!label) return;
+      if (!Array.prototype.some.call(sel.options, o => o.value === label)) { const o = document.createElement('option'); o.value = label; o.textContent = label; sel.insertBefore(o, sel.querySelector(`option[value="${OTHER}"]`)); }
+      sel.value = label; other.style.display = 'none';
+    };
+    pick((r && r.current && r.current.label) || labels[0] || '');
+    sel.addEventListener('change', () => { const show = sel.value === OTHER; other.style.display = show ? 'block' : 'none'; if (show) other.focus(); });
+    const cidSel = document.getElementById('rc-cid');
+    const pre = RC.prefill || (() => { const q = rcQuery(); return q.child ? { cid: q.child, term: q.term || '' } : null; })();
+    RC.prefill = null;
+    if (pre && pre.cid) {
+      if (!cidSel.querySelector('option[value="' + pre.cid + '"]')) { const o = document.createElement('option'); o.value = pre.cid; o.textContent = pre.name || 'Child'; cidSel.appendChild(o); }
+      cidSel.value = pre.cid; if (pre.term) pick(pre.term);
+    }
+    const btn = document.getElementById('rc-gen');
+    btn.onclick = async () => {
+      const cid = +cidSel.value; const term = sel.value === OTHER ? (other.value || '').trim() : sel.value;
+      if (!cid || !term) { rcToast('Select a child and a term.', 'info'); return; }
+      const label = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Writing the draft… (15-30 sec)';
+      try {
+        const g = await Api.post('/report-cards/generate', { child_id: cid, term });
+        await rcOpen(g.id, { edit: true });
+        RC.reqs = null;
+      } catch (e) { rcToast(rcSaid(e, 'Could not write the draft.'), 'error'); }
+      finally { btn.disabled = false; btn.textContent = label; }
+    };
+  }
+
+  /* ── tabs ── */
+  function rcGoTab(tab) {
+    RC.tab = (tab === 'generate' && rcCanGenerate()) ? 'generate' : 'cards';
+    rcSetHash();
+    document.querySelectorAll('#rc-tabs [data-rc-tab]').forEach(b => {
+      const on = b.getAttribute('data-rc-tab') === RC.tab;
+      b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    const body = document.getElementById('rc-body'); if (!body) return;
+    if (RC.tab === 'generate') { rcPaintGenerate(body); return; }
+    body.innerHTML = '<div id="rc-requests"></div><div id="rc-pending"></div><div id="rc-all"><div class="kt-card" style="color:#64748B;">Loading report cards…</div></div><div id="rc-out"></div><div id="rc-settings"></div>';
+    rcPaintRequests();
+    rcReloadList().then(rcPaintSettings);
+  }
+  (function rcCss() {
+    if (document.getElementById('rc-all-css')) return;
+    const st = document.createElement('style'); st.id = 'rc-all-css';
+    st.textContent = '#rc-all .rc-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}'
+      + '#rc-all .rc-chip{height:30px;padding:0 12px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#334155}'
+      + '#rc-all .rc-chip b{margin-left:4px;font-weight:800}'
+      + '#rc-all .rc-chip.on{background:#0F172A;color:#fff;border-color:#0F172A}'
+      + '#rc-all .rc-bar input,#rc-all .rc-bar select{height:32px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;background:#fff;color:#0F172A;max-width:100%}'
+      + '#rc-all .rc-bar input{min-width:200px;flex:1 1 200px}'
+      + '#rc-all table.rc-table{width:100%;border-collapse:collapse;font-size:13.5px}'
+      + '#rc-all table.rc-table th{text-align:left;font-size:11.5px;color:#64748B;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:8px 10px;border-bottom:1px solid #E2E8F0}'
+      + '#rc-all table.rc-table td{padding:9px 10px;border-bottom:1px solid #F1F5F9;vertical-align:middle}'
+      + '#rc-all table.rc-table td.rc-acts{width:1%;white-space:nowrap;text-align:right}'
+      + '#rc-all tr.rc-row:hover td{background:#F8FAFC}'
+      + '.rc-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}'
+      + '@media (prefers-color-scheme:dark){html:not([data-theme="light"]) #rc-all .rc-chip,html:not([data-theme="light"]) #rc-all .rc-bar input,html:not([data-theme="light"]) #rc-all .rc-bar select{background:#0F172A;color:#E2E8F0;border-color:#334155}'
+      + 'html:not([data-theme="light"]) #rc-all .rc-chip.on{background:#E2E8F0;color:#0F172A}html:not([data-theme="light"]) #rc-all tr.rc-row:hover td{background:#1E293B}}'
+      + 'html[data-theme="dark"] #rc-all .rc-chip,html[data-theme="dark"] #rc-all .rc-bar input,html[data-theme="dark"] #rc-all .rc-bar select{background:#0F172A;color:#E2E8F0;border-color:#334155}'
+      + 'html[data-theme="dark"] #rc-all .rc-chip.on{background:#E2E8F0;color:#0F172A}html[data-theme="dark"] #rc-all tr.rc-row:hover td{background:#1E293B}';
+    document.head.appendChild(st);
+  })();
+
   async function renderReportCards(main) {
     main.setAttribute('data-kt-pretty', '1');
-    main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    // Children DROPDOWN (was a raw "Child ID" number box — with nowhere in the app to
-    // look that number up, it was unusable). Pull the agency's children so staff pick a
-    // name; /admin/children is agency-scoped and returns {children:[...]} (empty if no
-    // active agency is selected; 403 for a platform_admin with none).
-    let kids = [];
-    let kidsErr = 0;
-    try {
-      const kr = await Api.get('/admin/children');
-      kids = (kr && Array.isArray(kr.children)) ? kr.children
-           : Array.isArray(kr) ? kr
-           : (kr && Array.isArray(kr.data)) ? kr.data : [];
-    } catch (e) { kidsErr = (e && e.status) || 0; }
-    // Educators / home-visitors can't hit /admin/children (agency-admin only) → it
-    // 403s and the picker was empty. Fall back to their own centre roster.
-    if (!kids.length) {
-      try {
-        const pr = await Api.get('/provider/children');
-        if (pr && Array.isArray(pr.children) && pr.children.length) { kids = pr.children; kidsErr = 0; }
-      } catch (e2) {}
-    }
-    const kidLabel = (c) => {
-      const nm = ((c.first_name || '') + ' ' + (c.last_name || '')).trim() || c.preferred_name || ('Child #' + c.id);
-      return esc(nm) + (c.centre_name ? ' · ' + esc(c.centre_name) : '');
-    };
-    const kidOptions = kids.map(c => `<option value="${c.id}">${kidLabel(c)}</option>`).join('');
-    const noKidsMsg = kids.length ? '' :
-      `<div style="margin-top:6px;color:#64748B;font-size:12.5px;">${kidsErr === 403 ? 'Select an agency (top-bar switcher) to load its children.' : 'No children found for this agency.'}</div>`;
-    main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+    const gen = rcCanGenerate();
+    const q = rcQuery();
+    RC.tab = (q.tab === 'generate' && gen) ? 'generate' : 'cards';
+    RC.reqs = null; RC.kids = null; RC.archived = null; RC.f = { st: '', q: '', term: '', by: '', centre: '' };
+    main.innerHTML = `<div style="padding:24px;">
       <div class="kt-page-hero">
         <h2>📑 Report cards</h2>
-        <p>Generate AI-drafted narratives for each area of your learning framework. Educators sign &amp; submit; a director/admin signs &amp; approves before it reaches the family.</p>
+        <p>Every report card in one place. Educators sign &amp; submit; a director or admin signs &amp; approves before it reaches the family.</p>
       </div>
-      <div id="rc-requests"></div>
-      <div id="rc-pending"></div>
-      <div id="rc-all"></div>
-      <div class="kt-card">
-        <div style="max-width:920px;">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:620px;">
-            <div>
-              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Child</label>
-              <style>#rc-cid,#rc-cid option,#rc-term,#rc-term option{background-color:#fff !important;color:#0F172A !important;}</style>
-              <select id="rc-cid" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background-color:#fff;color:#0F172A;color-scheme:light;font-size:14px;">
-                <option value="">Select a child…</option>
-                ${kidOptions}
-              </select>
-              ${noKidsMsg}
-            </div>
-            <div>
-              <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Term</label>
-              <select id="rc-term" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;background-color:#fff;color:#0F172A;color-scheme:light;font-size:14px;">
-                <option value="">Loading terms…</option>
-              </select>
-              <input id="rc-term-other" placeholder="Type the term, e.g. Summer 2027" maxlength="60" style="display:none;width:100%;margin-top:8px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;">
-            </div>
-          </div>
-          <button id="rc-gen" class="kt-btn kt-btn-primary" style="margin-top:18px;">Generate via AI</button>
-          <div id="rc-out" style="margin-top:20px;"></div>
-        </div>
-      </div>
+      ${gen ? `<div class="rc-tabs" id="rc-tabs" role="tablist" data-kt-tabbar="1">
+        <button type="button" role="tab" class="rc-tab" data-rc-tab="cards" aria-selected="false">📚 Report cards</button>
+        <button type="button" role="tab" class="rc-tab" data-rc-tab="generate" aria-selected="false">✨ Generate with AI</button>
+      </div>` : ''}
+      <div id="rc-body"></div>
     </div>`;
-    /* One narrative box per area of the agency's learning framework (2026-09-29). The
-       server returns `sections` [{key,label,text}]; older cards without it are HDLH. */
-    const rcLegacy = (card) => ['belonging', 'wellbeing', 'engagement', 'expression'].map(k => ({
-      key: k, label: k === 'wellbeing' ? 'Well-being' : k.charAt(0).toUpperCase() + k.slice(1), text: (card && card['narrative_' + k]) || '' }));
-    const rcBoxes = (sections) => (sections || []).map(x => `
-          <h4 style="margin:16px 0 6px;color:#1F6080;">${esc(x.label)}</h4>
-          <textarea data-rc-area="${esc(x.key)}" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(x.text || '')}</textarea>`).join('');
-    const rcCollect = () => {
-      const out = {};
-      document.querySelectorAll('#rc-out [data-rc-area]').forEach(t => { out[t.getAttribute('data-rc-area')] = t.value; });
-      return out;
-    };
-    const rcFwNote = (fw) => fw && fw.name ? `<div style="font-size:12.5px;color:#64748B;margin-top:6px;">Framework: <strong>${esc(fw.name)}</strong></div>` : '';
-
-    /* TERM IS A DROPDOWN (2026-11-06, Anthony: "selecting the term is also not showing up correctly"). It was a text box
-       with suggestions, pre-filled with this quarter - and a suggestion list only offers what matches the text already
-       in the box, so the other quarters never showed (and phones barely show the list at all). Now a plain list of the
-       quarters the server knows, this one picked, plus "Another term…" for a name of your own. */
-    const OTHER_TERM = '__other';
-    const rcTerm = () => {
-      const sel = document.getElementById('rc-term'), other = document.getElementById('rc-term-other');
-      if (!sel) return '';
-      return sel.value === OTHER_TERM ? ((other && other.value) || '').trim() : sel.value;
-    };
-    const rcSetTerms = (quarters, current) => {
-      const sel = document.getElementById('rc-term'); if (!sel) return;
-      const keep = sel.value && sel.value !== OTHER_TERM ? sel.value : '';
-      const labels = (quarters || []).map(q => q && q.label).filter(Boolean);
-      sel.innerHTML = (labels.length ? '' : '<option value="">Choose a term…</option>')
-        + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('')
-        + `<option value="${OTHER_TERM}">Another term…</option>`;
-      const want = keep || (current && current.label) || labels[0] || '';
-      if (want) rcPickTerm(want);
-    };
-    // Choose a term by name; one not in the list goes in as its own option (a parent's request can name any term).
-    const rcPickTerm = (label) => {
-      const sel = document.getElementById('rc-term'); if (!sel || !label) return;
-      if (!Array.prototype.some.call(sel.options, o => o.value === label)) {
-        const o = document.createElement('option'); o.value = label; o.textContent = label;
-        sel.insertBefore(o, sel.querySelector(`option[value="${OTHER_TERM}"]`));
-      }
-      sel.value = label;
-      const other = document.getElementById('rc-term-other'); if (other) other.style.display = 'none';
-    };
-    document.getElementById('rc-term').addEventListener('change', (e) => {
-      const other = document.getElementById('rc-term-other');
-      if (other) { const show = e.target.value === OTHER_TERM; other.style.display = show ? 'block' : 'none'; if (show) other.focus(); }
-    });
-
-    document.getElementById('rc-gen').onclick = async () => {
-      const cid = +document.getElementById('rc-cid').value;
-      const term = rcTerm();
-      if (!cid || !term) { (window.KT && window.KT.toast) ? KT.toast('Select a child and enter a term', /save|sent|added|created|approved|deleted|removed|done|charged/i.test('Select a child and enter a term') ? 'success' : 'info') : alert('Select a child and enter a term'); return; }
-      const btn = document.getElementById('rc-gen');
-      btn.disabled = true; btn.textContent = 'Generating… (15-30 sec)';
-      try {
-        const r = await Api.post('/report-cards/generate', { child_id: cid, term });
-        const _secs = Array.isArray(r.sections) && r.sections.length ? r.sections
-          : rcLegacy({ narrative_belonging: (r.narratives || {}).belonging, narrative_wellbeing: (r.narratives || {}).wellbeing,
-                       narrative_engagement: (r.narratives || {}).engagement, narrative_expression: (r.narratives || {}).expression });
-        document.getElementById('rc-out').innerHTML = rcFwNote(r.framework) + rcBoxes(_secs) + `
-          <h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4>
-          <textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(r.next_steps || '')}</textarea>
-          <div id="rc-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"></div>
-          <p style="font-size:12px;color:#94A3B8;margin-top:8px;line-height:1.5;">Educators sign &amp; submit for their director/admin to review, sign and send to the family.</p>
-        `;
-        var _rcRoles = []; try { _rcRoles = (JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []; } catch (e) {}
-        var _rcApprover = ['centre_director', 'agency_admin', 'platform_admin'].some(function (x) { return _rcRoles.indexOf(x) !== -1; });
-        var saveEdits = async function (status) {
-          await Api.patch(`/report-cards/${r.id}`, {
-            narratives: rcCollect(),
-            next_steps: document.getElementById('rc-next').value,
-            status: status || 'reviewed',
-          });
-        };
-        var _acts = document.getElementById('rc-actions');
-        _acts.innerHTML = '<button id="rc-save" class="kt-btn kt-btn-primary">💾 Save edits</button>'
-          + (_rcApprover
-            ? '<button id="rc-approve" class="kt-btn kt-btn-success">✍️ Sign, approve &amp; send</button>'
-            : '<button id="rc-submit" class="kt-btn kt-btn-success">✍️ Sign &amp; submit for approval</button>');
-        document.getElementById('rc-save').onclick = async () => { await saveEdits('reviewed'); (window.KT && KT.toast) ? KT.toast('Saved.', 'success') : alert('Saved.'); };
-        if (_rcApprover) {
-          document.getElementById('rc-approve').onclick = async () => {
-            await saveEdits('reviewed');
-            var sig = await KT.signaturePad({ title: 'Director / admin sign-off', subtitle: 'Your signature approves this report card and sends it to the family.', okLabel: 'Approve & send' });
-            if (!sig) return;
-            try { await Api.post(`/report-cards/${r.id}/approve`, { admin_signature: sig }); (window.KT && KT.toast) ? KT.toast('Approved & sent to the family. ✓', 'success') : alert('Approved & sent.'); }
-            catch (e) { (window.KT && KT.toast) ? KT.toast(e.message || 'Could not approve', 'error') : alert(e.message); }
-          };
-        } else {
-          document.getElementById('rc-submit').onclick = async () => {
-            await saveEdits('reviewed');
-            var sig = await KT.signaturePad({ title: 'Educator signature', subtitle: 'Sign to submit this report card to your director/admin for review & approval.', okLabel: 'Sign & submit' });
-            if (!sig) return;
-            try { await Api.post(`/report-cards/${r.id}/submit`, { educator_signature: sig }); (window.KT && KT.toast) ? KT.toast('Submitted for approval — your director/admin was notified. ✓', 'success') : alert('Submitted for approval.'); }
-            catch (e) { (window.KT && KT.toast) ? KT.toast(e.message || 'Could not submit', 'error') : alert(e.message); }
-          };
-        }
-      } catch (e) { const _m = 'AI failed: ' + (e.message || e); (window.KT && window.KT.toast) ? KT.toast(_m, 'error') : alert(_m); }
-      finally { btn.disabled = false; btn.textContent = 'Generate via AI'; }
-    };
-
-    // ── Director/admin: report cards awaiting approval ──────────────────
-    async function reviewCard(childId, cardId) {
-      let list; try { list = await Api.get('/report-cards/child/' + childId); } catch (e) { alert('Could not load the card.'); return; }
-      const card = ((list && list.data) || []).find(c => +c.id === cardId);
-      if (!card) { alert('Card not found.'); return; }
-      const out = document.getElementById('rc-out'); if (!out) return;
-      out.innerHTML = rcFwNote(card.framework_info) + rcBoxes(Array.isArray(card.sections) && card.sections.length ? card.sections : rcLegacy(card)) +
-        `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(card.next_steps || '')}</textarea>` +
-        (card.educator_signature ? `<div style="margin-top:14px;font-size:12px;color:#64748B;">Educator signature</div><img src="${esc(card.educator_signature)}" style="height:66px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:2px;">` : '') +
-        `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;">
-          <button id="rc-r-save" class="kt-btn kt-btn-primary">💾 Save edits</button>
-          <button id="rc-r-approve" class="kt-btn kt-btn-success">✍️ Sign, approve &amp; send</button>
-          <button id="rc-r-reject" class="kt-btn" style="background:#FEE2E2;color:#B91C1C;">↩ Send back for changes</button>
-        </div>`;
-      out.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      const save = () => Api.patch('/report-cards/' + cardId, {
-        narratives: rcCollect(),
-        next_steps: document.getElementById('rc-next').value,
-      });
-      document.getElementById('rc-r-save').onclick = async () => { await save(); (window.KT && KT.toast) ? KT.toast('Saved.', 'success') : alert('Saved.'); };
-      document.getElementById('rc-r-approve').onclick = async () => {
-        await save();
-        const sig = await KT.signaturePad({ title: 'Director / admin sign-off', subtitle: 'Your signature approves this report card and sends it to the family.', okLabel: 'Approve & send' });
-        if (!sig) return;
-        try { await Api.post('/report-cards/' + cardId + '/approve', { admin_signature: sig }); (window.KT && KT.toast) ? KT.toast('Approved & sent to the family. ✓', 'success') : alert('Approved & sent.'); renderReportCards(main); }
-        catch (e) { alert(e.message || 'Could not approve.'); }
-      };
-      document.getElementById('rc-r-reject').onclick = async () => {
-        const note = await window.KT.prompt({
-          title: 'Send back to the educator',
-          description: 'What needs changing? The educator will see this note.',
-          fields: [{ key: 'note', label: 'Note', type: 'text' }],
-          okLabel: 'Send back',
-        }); if (note === null) return;
-        try { await Api.post('/report-cards/' + cardId + '/reject', { note: note }); (window.KT && KT.toast) ? KT.toast('Sent back to the educator.', 'success') : alert('Sent back.'); renderReportCards(main); }
-        catch (e) { alert(e.message || 'Could not send back.'); }
-      };
-    }
-
-    /* PARENTS' REQUESTS (2026-11-04). A parent asks for this quarter's card from the Report cards screen; the room's
-       educators and the director get a bell. Here: the open requests for the children this person can write for,
-       each with "Write it" (child + quarter filled in). Sending the approved card closes the request. The term box
-       starts on this quarter - the quarter label is how a card, a request and the quarter-end reminder match. */
-    (async () => {
-      let r; try { r = await Api.get('/report-cards/requests'); } catch (e) { rcSetTerms([], null); return; }
-      rcSetTerms(r && Array.isArray(r.quarters) ? r.quarters : [], r && r.current);
-      const host = document.getElementById('rc-requests'); if (!host) return;
-      const asks = (r && r.data) || [];
-      if (!asks.length) return;
-      const day = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''; };
-      host.innerHTML = '<div class="kt-card" style="--kt-edge:#1F6080;margin-bottom:16px;">' +
-        `<h3 style="margin:0 0 4px;">📨 Requested by parents <span style="background:#E0F2FE;color:#075985;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${asks.length}</span></h3>` +
-        '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Families asked for these report cards. Write and submit each one; it reaches the family once a director or admin approves it.</p>' +
-        asks.map(a => `<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid #BAE6FD;background:#F0F9FF;border-radius:12px;padding:10px 14px;margin-bottom:8px;">
-          <div><b>${esc(((a.first_name || '') + ' ' + (a.last_name || '')).trim())}</b>${a.room ? ' · ' + esc(a.room) : ''} — ${esc(a.term)}<div style="font-size:12px;color:#075985;">Asked by ${esc(a.parent_first_name || 'a parent')} on ${esc(day(a.created_at))}</div></div>
-          <button type="button" class="kt-btn kt-btn-primary rc-write" data-kt-iconized="1" data-cid="${a.child_id}" data-term="${esc(a.term)}" data-name="${esc(((a.first_name || '') + ' ' + (a.last_name || '')).trim())}">✍️ Write it</button></div>`).join('') + '</div>';
-      host.querySelectorAll('.rc-write').forEach(b => {
-        b.onclick = () => {
-          const sel = document.getElementById('rc-cid'), cid = b.getAttribute('data-cid');
-          if (sel && !sel.querySelector('option[value="' + cid + '"]')) { const o = document.createElement('option'); o.value = cid; o.textContent = b.getAttribute('data-name'); sel.appendChild(o); }
-          if (sel) sel.value = cid;
-          rcPickTerm(b.getAttribute('data-term'));
-          const gen = document.getElementById('rc-gen');
-          if (gen) { gen.scrollIntoView({ behavior: 'smooth', block: 'center' }); gen.focus(); }
-        };
-      });
-    })();
-
-    (async () => {
-      let roles = []; try { roles = window.ktRoles ? window.ktRoles() : ((JSON.parse(sessionStorage.getItem('kt_user') || '{}').roles) || []); } catch (e) {}
-      if (!['centre_director', 'agency_admin', 'platform_admin'].some(x => roles.indexOf(x) !== -1)) return;
-      const host = document.getElementById('rc-pending'); if (!host) return;
-      let r; try { r = await Api.get('/report-cards/pending'); } catch (e) { return; }
-      const pend = (r && r.data) || [];
-      if (!pend.length) return;
-      host.innerHTML = '<div class="kt-card" style="--kt-edge:#F59E0B;margin-bottom:16px;">' +
-        `<h3 style="margin:0 0 4px;">✍️ Awaiting your approval <span style="background:#FEF3C7;color:#92400E;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${pend.length}</span></h3>` +
-        '<p style="font-size:12.5px;color:#64748B;margin:0 0 12px;">Educators submitted these report cards for your review, signature and approval.</p>' +
-        pend.map(p => `<div style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:12px 14px;margin-bottom:8px;">
-          <div><b>${esc(p.child)}</b> — ${esc(p.term)}<div style="font-size:12px;color:#92400E;">Submitted by ${esc(p.submitted_by || 'an educator')}</div></div>
-          <button class="kt-btn kt-btn-primary rc-review" data-id="${p.id}" data-cid="${p.child_id}">Review &amp; sign</button></div>`).join('') + '</div>';
-      host.querySelectorAll('.rc-review').forEach(b => { b.onclick = () => reviewCard(+b.getAttribute('data-cid'), +b.getAttribute('data-id')); });
-    })();
-
-    /* ALL REPORT CARDS (2026-11-26, Anthony: "in report cards section where does it show the report cards that were
-       generated by a staff member"). Nowhere did: drafts were findable only by picking their child. GET
-       /report-cards/all returns every card this person may see (admins the agency, directors their centres,
-       educators their rooms' children plus cards they wrote), never a withdrawn child's or a closed centre's.
-       Filters are client-side (status chips, search, term, made by, centre); a row opens the card below. */
-    const RC_ST = {
-      draft: ['Draft', '#F1F5F9', '#334155'], reviewed: ['Draft', '#F1F5F9', '#334155'],
-      submitted: ['Awaiting approval', '#FEF3C7', '#92400E'], sent: ['Sent', '#DCFCE7', '#166534'],
-    };
-    const rcGroup = (s) => (s === 'submitted' || s === 'sent') ? s : 'draft';
-    const rcPill = (s) => { const v = RC_ST[s] || RC_ST.draft; return `<span class="rc-pill" style="background:${v[1]};color:${v[2]};border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;white-space:nowrap;">${esc(v[0])}</span>`; };
-    const rcDay = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''; };
-    const rcAll = { rows: [], approver: false, admin: false, archived: null, archivedCount: 0, f: { st: '', q: '', term: '', by: '', centre: '' } };
-    const rcToast = (m, t) => { if (window.KT && KT.toast) KT.toast(m, t || 'info'); };
-
-    async function rcOpenCard(c) {
-      if (c.status === 'submitted' && rcAll.approver) { reviewCard(c.child_id, c.id); return; }
-      let list; try { list = await Api.get('/report-cards/child/' + c.child_id); } catch (e) { rcToast('Could not load the card.', 'error'); return; }
-      const card = ((list && list.data) || []).find(x => +x.id === +c.id);
-      if (!card) { rcToast('Card not found.', 'error'); return; }
-      const out = document.getElementById('rc-out'); if (!out) return;
-      const sent = card.status === 'sent', waiting = card.status === 'submitted';
-      const locked = sent || waiting;
-      out.innerHTML =
-        `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;">${esc(c.child)} — ${esc(c.term)}</h3>${rcPill(card.status)}</div>` +
-        `<div style="font-size:12.5px;color:#64748B;">${c.made_by ? 'Made by ' + esc(c.made_by) + ' · ' : ''}${esc(c.centre || '')}${c.room ? ' · ' + esc(c.room) : ''}</div>` +
-        (card.review_note && !sent ? `<div style="margin-top:10px;border:1px solid #FECACA;background:#FEF2F2;color:#991B1B;border-radius:10px;padding:8px 12px;font-size:13px;"><b>Sent back:</b> ${esc(card.review_note)}</div>` : '') +
-        (waiting ? '<div style="margin-top:10px;font-size:13px;color:#92400E;">Waiting for a director or admin to approve it.</div>' : '') +
-        (sent ? `<div style="margin-top:10px;font-size:13px;color:#166534;">Sent to the family${card.sent_at ? ' · ' + esc(rcDay(card.sent_at)) : ''}.</div>` : '') +
-        rcFwNote(card.framework_info) + rcBoxes(Array.isArray(card.sections) && card.sections.length ? card.sections : rcLegacy(card)) +
-        `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(card.next_steps || '')}</textarea>` +
-        '<div id="rc-o-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"></div>';
-      if (locked) out.querySelectorAll('textarea').forEach(t => { t.readOnly = true; t.style.background = '#F8FAFC'; });
-      const acts = document.getElementById('rc-o-actions');
-      const pdfBtn = '<button type="button" id="rc-o-pdf" class="kt-btn" data-kt-iconized="1">📄 Open PDF</button>';
-      if (sent || waiting) {
-        acts.innerHTML = pdfBtn;
-      } else {
-        acts.innerHTML = '<button type="button" id="rc-o-save" class="kt-btn kt-btn-primary">💾 Save edits</button>'
-          + (rcAll.approver ? '<button type="button" id="rc-o-approve" class="kt-btn kt-btn-success">✍️ Sign, approve &amp; send</button>'
-                            : '<button type="button" id="rc-o-submit" class="kt-btn kt-btn-success">✍️ Sign &amp; submit for approval</button>')
-          + pdfBtn;
-        const save = () => Api.patch('/report-cards/' + card.id, { narratives: rcCollect(), next_steps: document.getElementById('rc-next').value, status: 'reviewed' });
-        document.getElementById('rc-o-save').onclick = async () => { try { await save(); rcToast('Saved.', 'success'); rcLoadAll(); } catch (e) { rcToast(e.message || 'Could not save.', 'error'); } };
-        const ap = document.getElementById('rc-o-approve');
-        if (ap) ap.onclick = async () => {
-          try { await save(); } catch (e) { rcToast(e.message || 'Could not save.', 'error'); return; }
-          const sig = await KT.signaturePad({ title: 'Director / admin sign-off', subtitle: 'Your signature approves this report card and sends it to the family.', okLabel: 'Approve & send' });
-          if (!sig) return;
-          try { await Api.post('/report-cards/' + card.id + '/approve', { admin_signature: sig }); rcToast('Approved & sent to the family. ✓', 'success'); renderReportCards(main); }
-          catch (e) { rcToast(e.message || 'Could not approve.', 'error'); }
-        };
-        const sb = document.getElementById('rc-o-submit');
-        if (sb) sb.onclick = async () => {
-          try { await save(); } catch (e) { rcToast(e.message || 'Could not save.', 'error'); return; }
-          const sig = await KT.signaturePad({ title: 'Educator signature', subtitle: 'Sign to submit this report card to your director/admin for review & approval.', okLabel: 'Sign & submit' });
-          if (!sig) return;
-          try { await Api.post('/report-cards/' + card.id + '/submit', { educator_signature: sig }); rcToast('Submitted for approval — your director/admin was notified. ✓', 'success'); rcLoadAll(); }
-          catch (e) { rcToast(e.message || 'Could not submit.', 'error'); }
-        };
-      }
-      document.getElementById('rc-o-pdf').onclick = () => {
-        if (!(window.KT && KT.openFile && KT.fetchFileBlob)) return;
-        KT.openFile(() => KT.fetchFileBlob(KT.API_BASE + '/report-cards/' + card.id + '/pdf'),
-          { title: c.child + ' — ' + c.term, filename: 'report-card-' + card.id + '.pdf', mime: 'application/pdf' });
-      };
-      out.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-
-    /* ARCHIVED (2026-11-26, agency admins only - the server refuses everyone else): cards for children who have
-       left and centres that have closed, from GET /report-cards/archived with their content. Read-only: no edit,
-       sign or send (the server refuses those too); Open PDF only. */
-    const RC_ARCH = { child_withdrawn: 'Archived — child withdrawn', centre_closed: 'Archived — centre closed' };
-    const rcArchPill = (k) => `<span class="rc-pill" style="background:#E2E8F0;color:#475569;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;white-space:nowrap;">${esc(RC_ARCH[k] || RC_ARCH.child_withdrawn)}</span>`;
-    function rcOpenArchived(c) {
-      const out = document.getElementById('rc-out'); if (!out || !c) return;
-      out.innerHTML =
-        `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;">${esc(c.child)} — ${esc(c.term)}</h3>${rcArchPill(c.archived)}${rcPill(c.status)}</div>` +
-        `<div style="font-size:12.5px;color:#64748B;">${c.made_by ? 'Made by ' + esc(c.made_by) + ' · ' : ''}${esc(c.centre || '')}${c.room ? ' · ' + esc(c.room) : ''}</div>` +
-        '<div style="margin-top:10px;font-size:13px;color:#475569;">Archived cards are read-only. They cannot be edited, signed or sent.</div>' +
-        rcFwNote(c.framework_info) + rcBoxes(Array.isArray(c.sections) && c.sections.length ? c.sections : rcLegacy(c)) +
-        `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(c.next_steps || '')}</textarea>` +
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button type="button" id="rc-o-pdf" class="kt-btn" data-kt-iconized="1">📄 Open PDF</button></div>';
-      out.querySelectorAll('textarea').forEach(t => { t.readOnly = true; t.style.background = '#F8FAFC'; });
-      document.getElementById('rc-o-pdf').onclick = () => {
-        if (!(window.KT && KT.openFile && KT.fetchFileBlob)) return;
-        KT.openFile(() => KT.fetchFileBlob(KT.API_BASE + '/report-cards/' + c.id + '/pdf'),
-          { title: c.child + ' — ' + c.term, filename: 'report-card-' + c.id + '.pdf', mime: 'application/pdf' });
-      };
-      out.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-    async function rcLoadArchived() {
-      let r; try { r = await Api.get('/report-cards/archived'); } catch (e) { rcToast((e && e.message) || 'Could not load archived report cards.', 'error'); rcAll.archived = []; return; }
-      rcAll.archived = (r && r.data) || [];
-      rcAll.archivedCount = rcAll.archived.length;
-    }
-
-    function rcPaintAll() {
-      const host = document.getElementById('rc-all'); if (!host) return;
-      const f = rcAll.f, arch = f.st === 'archived';
-      const all = arch ? (rcAll.archived || []) : rcAll.rows;
-      if (!rcAll.rows.length && !rcAll.archivedCount && !arch) { host.innerHTML = ''; return; }
-      const uniq = (k) => Array.from(new Set(all.map(r => r[k]).filter(Boolean))).sort();
-      const terms = uniq('term'), makers = uniq('made_by'), centres = uniq('centre');
-      const cnt = { '': rcAll.rows.length, draft: 0, submitted: 0, sent: 0, archived: rcAll.archivedCount };
-      rcAll.rows.forEach(r => { cnt[rcGroup(r.status)]++; });
-      const q = f.q.trim().toLowerCase();
-      const rows = all.filter(r => (!f.st || arch || rcGroup(r.status) === f.st) && (!f.term || r.term === f.term)
-        && (!f.by || r.made_by === f.by) && (!f.centre || r.centre === f.centre)
-        && (!q || (r.child || '').toLowerCase().indexOf(q) !== -1));
-      const chip = (k, label) => `<button type="button" class="rc-chip${f.st === k ? ' on' : ''}" data-st="${k}">${esc(label)} <b>${cnt[k]}</b></button>`;
-      const opt = (list, cur, any) => `<option value="">${esc(any)}</option>` + list.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
-      host.innerHTML = '<div class="kt-card" style="--kt-edge:#1F6080;margin-bottom:16px;">' +
-        `<h3 style="margin:0 0 4px;">📚 All report cards <span style="background:#E0F2FE;color:#075985;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${rcAll.rows.length}</span></h3>` +
-        '<p style="font-size:12.5px;color:#64748B;margin:0 0 10px;">Every report card you can see, newest first. Tap one to open it below.</p>' +
-        '<div class="rc-bar">' + chip('', 'All') + chip('draft', 'Draft') + chip('submitted', 'Awaiting approval') + chip('sent', 'Sent') + (rcAll.admin ? chip('archived', 'Archived') : '') + '</div>' +
-        (arch ? '<div style="font-size:12.5px;color:#64748B;margin:-4px 0 10px;">Cards for children who have left and centres that have closed. Read-only.</div>' : '') +
-        '<div class="rc-bar">' +
-          `<input type="search" id="rc-f-q" placeholder="Search a child" value="${esc(f.q)}">` +
-          (terms.length > 1 ? `<select id="rc-f-term">${opt(terms, f.term, 'All terms')}</select>` : '') +
-          (makers.length > 1 ? `<select id="rc-f-by">${opt(makers, f.by, 'Anyone')}</select>` : '') +
-          (centres.length > 1 ? `<select id="rc-f-centre">${opt(centres, f.centre, 'All centres')}</select>` : '') +
-        '</div>' +
-        (rows.length ? '<div class="kt-table-scroll"><table class="rc-table" data-kt-no-filter="1"><thead><tr><th>Child</th><th>Term</th><th>Made by</th><th>Status</th><th>Centre</th><th>Updated</th></tr></thead><tbody>' +
-          rows.slice(0, 300).map(r => `<tr class="rc-row" data-id="${r.id}" tabindex="0" style="cursor:pointer;"><td><b>${esc(r.child)}</b></td><td>${esc(r.term)}</td><td>${esc(r.made_by || '—')}${r.mine ? ' <span style="color:#64748B;font-size:11.5px;">(you)</span>' : ''}</td><td>${arch ? rcArchPill(r.archived) : rcPill(r.status)}</td><td>${esc(r.centre || '')}${r.room ? ' · ' + esc(r.room) : ''}</td><td>${esc(rcDay(r.updated_at || r.created_at))}</td></tr>`).join('') +
-          '</tbody></table></div>' + (rows.length > 300 ? '<div style="font-size:12px;color:#64748B;margin-top:6px;">Showing the 300 most recent. Narrow the filters to see more.</div>' : '')
-          : '<div style="padding:14px;color:#64748B;font-size:13px;">No report cards match.</div>') +
-        '</div>';
-      host.querySelectorAll('.rc-chip').forEach(b => { b.onclick = async () => {
-        const next = b.getAttribute('data-st');
-        if ((next === 'archived') !== arch) { f.term = ''; f.by = ''; f.centre = ''; }
-        if (next === 'archived' && rcAll.archived === null) await rcLoadArchived();
-        f.st = next; rcPaintAll();
-      }; });
-      const qi = document.getElementById('rc-f-q');
-      if (qi) qi.addEventListener('input', () => { f.q = qi.value; const pos = qi.selectionStart; rcPaintAll(); const n = document.getElementById('rc-f-q'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } });
-      [['rc-f-term', 'term'], ['rc-f-by', 'by'], ['rc-f-centre', 'centre']].forEach(([id, k]) => { const s = document.getElementById(id); if (s) s.onchange = () => { f[k] = s.value; rcPaintAll(); }; });
-      const byId = {}; all.forEach(r => { byId[r.id] = r; });
-      host.querySelectorAll('.rc-row').forEach(tr => {
-        const go = () => (arch ? rcOpenArchived : rcOpenCard)(byId[+tr.getAttribute('data-id')]);
-        tr.onclick = go; tr.onkeydown = (e) => { if (e.key === 'Enter') go(); };
-      });
-    }
-
-    async function rcLoadAll() {
-      let r; try { r = await Api.get('/report-cards/all'); } catch (e) { return; }
-      rcAll.rows = (r && r.data) || [];
-      rcAll.approver = !!(r && r.approver);
-      rcAll.admin = !!(r && r.admin);
-      rcAll.archivedCount = (r && +r.archived_count) || 0;
-      rcPaintAll();
-    }
-    (function rcAllCss() {
-      if (document.getElementById('rc-all-css')) return;
-      const st = document.createElement('style'); st.id = 'rc-all-css';
-      st.textContent = '#rc-all .rc-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}'
-        + '#rc-all .rc-chip{height:30px;padding:0 12px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#334155}'
-        + '#rc-all .rc-chip b{margin-left:4px;font-weight:800}'
-        + '#rc-all .rc-chip.on{background:#0F172A;color:#fff;border-color:#0F172A}'
-        + '#rc-all .rc-bar input,#rc-all .rc-bar select{height:32px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:13px;background:#fff;color:#0F172A;max-width:100%}'
-        + '#rc-all .rc-bar input{min-width:200px;flex:1 1 200px}'
-        + '#rc-all table.rc-table{width:100%;border-collapse:collapse;font-size:13.5px}'
-        + '#rc-all table.rc-table th{text-align:left;font-size:11.5px;color:#64748B;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:8px 10px;border-bottom:1px solid #E2E8F0}'
-        + '#rc-all table.rc-table td{padding:9px 10px;border-bottom:1px solid #F1F5F9;vertical-align:middle}'
-        + '#rc-all tr.rc-row:hover td{background:#F8FAFC}'
-        + '@media (prefers-color-scheme:dark){html:not([data-theme="light"]) #rc-all .rc-chip,html:not([data-theme="light"]) #rc-all .rc-bar input,html:not([data-theme="light"]) #rc-all .rc-bar select{background:#0F172A;color:#E2E8F0;border-color:#334155}'
-        + 'html:not([data-theme="light"]) #rc-all .rc-chip.on{background:#E2E8F0;color:#0F172A}html:not([data-theme="light"]) #rc-all tr.rc-row:hover td{background:#1E293B}}'
-        + 'html[data-theme="dark"] #rc-all .rc-chip,html[data-theme="dark"] #rc-all .rc-bar input,html[data-theme="dark"] #rc-all .rc-bar select{background:#0F172A;color:#E2E8F0;border-color:#334155}'
-        + 'html[data-theme="dark"] #rc-all .rc-chip.on{background:#E2E8F0;color:#0F172A}html[data-theme="dark"] #rc-all tr.rc-row:hover td{background:#1E293B}';
-      document.head.appendChild(st);
-    })();
-    rcLoadAll();
+    main.querySelectorAll('[data-rc-tab]').forEach(b => { b.addEventListener('click', () => rcGoTab(b.getAttribute('data-rc-tab'))); });
+    rcGoTab(RC.tab);
   }
 
   // ============================ Activity zones ============================
