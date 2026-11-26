@@ -2,6 +2,20 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "✨",
+            "title": "Tidier lists: one ⋮ per row, popups for records",
+            "body": "Row actions now sit only in the ⋮ menu, with no duplicate icons beside it. Report cards, saved Play Spark ideas and sales calendar entries open in a popup over the list, so you keep your place. Hovered rows use the same light tint everywhere.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-26",
             "icon": "📑",

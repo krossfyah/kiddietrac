@@ -2352,9 +2352,27 @@
     var bar = el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px' });
     var legend = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px' });
     var panel = el('div');
+    /* THE ENTRY OPENS IN THE HOUSE POPUP (2026-11-26, Anthony: "we need to keep thing consistent throughout the
+       portal" - full sweep after report cards). Viewing, adding or changing an entry and the working-hours form
+       used to open as a card above the calendar. Every one of them still draws into `panel` and empties it when
+       done, so the popup simply follows it: it opens when something is drawn there and closes when it is emptied
+       (Save, Cancel, Delete), and the ✕ or Escape empties it. The calendar behind it never moves. */
+    (function popupHost(p) {
+      var h = null;
+      new MutationObserver(function () {
+        if (p.firstChild && !h && window.KT && KT.Shell && KT.Shell.Modal) {
+          var head = p.querySelector('[style*="font-weight: 800"], [style*="font-weight:800"]');
+          var title = (head && head.textContent.trim()) || 'Calendar';
+          if (head && head.parentNode && head.parentNode.parentNode === p && head.textContent.trim() === title && head.children.length === 0) head.style.display = 'none';
+          var mine = KT.Shell.Modal.open({ title: '📅 ' + title.slice(0, 80), body: p, large: true,
+            onClose: function () { if (h === mine) { h = null; if (p.firstChild) clear(p); } } });
+          h = mine;
+        } else if (!p.firstChild && h) { var x = h; h = null; x.close(); }
+      }).observe(p, { childList: true });
+    })(panel);
     var body = el('div');
     // The whole window, not a centred column (Anthony, 2026-10-23).
-    container.appendChild(el('div', { style: 'width:100%' }, [bar, legend, panel, body]));
+    container.appendChild(el('div', { style: 'width:100%' }, [bar, legend, body]));
     function save() { try { localStorage.setItem('kt_salescal', JSON.stringify({ view: st.view, hidden: st.hidden })); } catch (e) {} }
 
     function range() {
@@ -2582,7 +2600,6 @@
       panel.appendChild(card([el('div', { style: 'font-weight:800;font-size:15px;margin-bottom:10px' }, [isNew ? 'Add to the calendar' : 'Change this entry']), row1, row2,
         el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-top:8px' }, [fld('Location', loc, 200)]), el('div', { style: 'margin-top:8px' }, [notes]), acts, msg], 'margin-bottom:12px'));
       sync();
-      try { panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {}
     }
 
     function hoursEditor() {

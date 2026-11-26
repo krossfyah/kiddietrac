@@ -32,7 +32,7 @@ Under the approvals on the **Report cards** screen, **All report cards** lists e
 - Agency admins see every card in the agency. Directors see the cards for their own centres.
 - Tap **Draft**, **Awaiting approval** or **Sent** to show just those. Each chip shows how many there are.
 - Search for a child, or narrow the list by term, by who made it, or by centre.
-- Tap a card to open it below the list, or use **⋮** on its row: **View**, **Edit**, **Download PDF**, **Print**, **Email to family**, **Review & approve**, **Send back** and **Delete draft**. You only see the ones you can use.
+- Tap a card to open it in a popup, or use **⋮** on its row: **View**, **Edit**, **Download PDF**, **Print**, **Email to family**, **Review & approve**, **Send back** and **Delete draft**. You only see the ones you can use.
 - **Editing a sent card** makes a new version (v2, v3…). The new version is approved again before it reaches the family. The earlier one stays, marked **Replaced**, and both PDFs are kept under **History & versions**.
 - **Email to family** lists the child's guardians who have an email address. Nobody is ticked for you. Add a note if you like, preview the email, then send. Each person gets a secure link to the PDF that works for 14 days. Who sent it, to whom and when is kept in the card's history.
 - **Delete draft** is for agency admins, and only for drafts that were never sent.

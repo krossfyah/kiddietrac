@@ -533,6 +533,16 @@
   }
 
   /* A team member's idea (Team ideas): read-only. Print, or save a copy to your own ideas - nothing else changes it. */
+  /* A SAVED IDEA OPENS IN THE HOUSE POPUP (2026-11-26, Anthony: "we need to keep thing consistent throughout the
+     portal" - full sweep after report cards). It used to open under the list, pushed below the fold. The same
+     showIdea() fills the popup, so every button on it works as before; the list behind it stays put. */
+  function openIdeaPopup(row, main) {
+    var box = document.createElement('div');
+    box.className = 'ps-popup';
+    showIdea(box, row, main);
+    if (!(window.KT && KT.Shell && KT.Shell.Modal)) return;
+    KT.Shell.Modal.open({ title: '✨ ' + String(row.title || 'Play idea'), body: box, large: true });
+  }
   function showTeamIdea(out, row) {
     out.innerHTML = '<div class="ps-card"><div class="ps-ctx" style="margin-bottom:8px">👥 ' + esc('Read only') + ' · ' +
       esc('Made by') + ' ' + esc(row.by || '') + (row.room ? ' · ' + esc(row.room) : '') + ' · ' + esc(String(row.created_at || '').slice(0, 10)) +
@@ -642,16 +652,14 @@
       el.querySelectorAll('[data-i]').forEach(function (c) {
         c.addEventListener('click', function () {
           var row = rows[+c.getAttribute('data-i')]; S.ack = false;
-          var o = el.querySelector('[data-open]'); showIdea(o, row, main);
-          o.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          openIdeaPopup(row, main);
         });
       });
       /* Opened from the top search: show that idea under the list (from the list, or fetched if it is older). */
       if (S.openIdeaId) {
         var want = S.openIdeaId; S.openIdeaId = null;
         var hit = rows.filter(function (x) { return x.id === want; })[0];
-        var o2 = el.querySelector('[data-open]');
-        var put = function (row) { S.ack = false; showIdea(o2, row, main); o2.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+        var put = function (row) { S.ack = false; openIdeaPopup(row, main); };
         if (hit) put(hit);
         else Api.get('/provider/play-spark/ideas/' + want).then(function (x) { if (x && x.idea) put(x.idea); })
           .catch(function (e) { toast(errMsg(e), 'error'); });

@@ -149,6 +149,7 @@
       // inside chat message bubbles (their own micro-layout).
       if ((label === '🗑️' || label === '🗑') && !b.closest('[data-del-mid], .kt-msg, .kt-bubble, .kt-message, .kt-chat-msg')) {
         b.removeAttribute('style');
+        if (b.classList.contains('kt-ka-hidden')) b.style.setProperty('display', 'none', 'important'); // folded into a ⋮
         b.classList.add('kt-act-icon', 'kt-act-danger');
         if (b.className.indexOf('kt-icon-tip') === -1) b.classList.add('kt-icon-tip');
         if (!b.getAttribute('data-kttip')) b.setAttribute('data-kttip', b.title || b.getAttribute('aria-label') || 'Delete');
@@ -194,6 +195,7 @@
       // edit / delete in a row all match. Hero-row actions keep the 38px pill.
       if (b.closest('td, th, tr, table')) {
         b.removeAttribute('style');
+        if (b.classList.contains('kt-ka-hidden')) b.style.setProperty('display', 'none', 'important'); // folded into a ⋮
         b.classList.add('kt-act-icon');
         var tone = toneFor(icon);
         if (tone) b.classList.add(tone);

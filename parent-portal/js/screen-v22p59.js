@@ -754,28 +754,28 @@
     try { if (save) await save(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); return; }
     const sig = await KT.signaturePad({ title: 'Director / admin sign-off', subtitle: 'Your signature approves this report card and sends it to the family.', okLabel: 'Approve & send' });
     if (!sig) return;
-    try { await Api.post('/report-cards/' + id + '/approve', { admin_signature: sig }); rcToast('Approved & sent to the family. ✓', 'success'); rcAfter(id); }
-    catch (e) { rcToast(rcSaid(e, 'Could not approve.'), 'error'); }
+    try { await Api.post('/report-cards/' + id + '/approve', { admin_signature: sig }); rcToast('Approved & sent to the family. ✓', 'success'); rcAfter(id); return true; }
+    catch (e) { rcToast(rcSaid(e, 'Could not approve.'), 'error'); return false; }
   }
   async function rcSubmit(id, save) {
     try { if (save) await save(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); return; }
     const sig = await KT.signaturePad({ title: 'Educator signature', subtitle: 'Sign to submit this report card to your director/admin for review & approval.', okLabel: 'Sign & submit' });
     if (!sig) return;
-    try { await Api.post('/report-cards/' + id + '/submit', { educator_signature: sig }); rcToast('Submitted for approval — your director/admin was notified. ✓', 'success'); rcAfter(id); }
-    catch (e) { rcToast(rcSaid(e, 'Could not submit.'), 'error'); }
+    try { await Api.post('/report-cards/' + id + '/submit', { educator_signature: sig }); rcToast('Submitted for approval — your director/admin was notified. ✓', 'success'); rcAfter(id); return true; }
+    catch (e) { rcToast(rcSaid(e, 'Could not submit.'), 'error'); return false; }
   }
   async function rcSendBack(id) {
     const note = await window.KT.prompt({ title: 'Send back to the educator', description: 'What needs changing? The educator will see this note.',
       fields: [{ key: 'note', label: 'Note', type: 'text' }], okLabel: 'Send back' });
     if (note === null || note === undefined) return;
     const text = typeof note === 'object' ? (note.note || '') : note;
-    try { await Api.post('/report-cards/' + id + '/reject', { note: text }); rcToast('Sent back to the educator.', 'success'); rcAfter(id); }
-    catch (e) { rcToast(rcSaid(e, 'Could not send back.'), 'error'); }
+    try { await Api.post('/report-cards/' + id + '/reject', { note: text }); rcToast('Sent back to the educator.', 'success'); rcAfter(id); rcCloseCard(id); return true; }
+    catch (e) { rcToast(rcSaid(e, 'Could not send back.'), 'error'); return false; }
   }
   async function rcRevise(id) {
     try {
       const r = await Api.post('/report-cards/' + id + '/revise', {});
-      rcToast(r && r.existing ? 'A new version was already started. It is open below.' : 'New version started. Make your changes, then submit or approve it again. The sent one stays until then.', 'success');
+      rcToast(r && r.existing ? 'A new version was already started. It is open now.' : 'New version started. Make your changes, then submit or approve it again. The sent one stays until then.', 'success');
       await rcOpen(r.id, { edit: true }); rcReloadList();
     } catch (e) { rcToast(rcSaid(e, 'Could not start a new version.'), 'error'); }
   }
@@ -784,15 +784,11 @@
     if (!ok) return;
     try {
       await Api.delete('/report-cards/' + c.id); rcToast('Draft deleted.', 'success');
-      const out = document.getElementById('rc-out'); if (out && +out.getAttribute('data-card') === +c.id) { out.innerHTML = ''; out.removeAttribute('data-card'); }
-      rcReloadList();
-    } catch (e) { rcToast(rcSaid(e, 'Could not delete the draft.'), 'error'); }
+      rcCloseCard(c.id);
+      rcReloadList(); return true;
+    } catch (e) { rcToast(rcSaid(e, 'Could not delete the draft.'), 'error'); return false; }
   }
-  function rcAfter(id) {
-    rcReloadList();
-    const out = document.getElementById('rc-out');
-    if (out && +out.getAttribute('data-card') === +id) rcOpen(id, {});
-  }
+  function rcAfter() { rcReloadList(); }
 
   /* ── email to the family: nobody pre-ticked, an optional note, a preview, then a secure 14-day link each ── */
   async function rcEmail(c) {
@@ -839,27 +835,35 @@
           return Api.post('/report-cards/' + c.id + '/email', { to: to, message: msg() }).then(r => {
             if (r && r.blocked) { rcToast(r.message || 'Test agency: nothing was sent.', 'info'); return; }
             rcToast('Emailed to ' + (r && r.sent) + (r && r.sent === 1 ? ' person' : ' people') + '.', 'success');
-            const out = document.getElementById('rc-out'); if (out && +out.getAttribute('data-card') === +c.id) rcHistory(c.id, true);
           }, e => { line.textContent = rcSaid(e, 'Could not send.'); return false; });
         } },
       ],
     });
   }
 
-  /* ── the card: View (read-only) or Edit ── */
+  /* ── the card: View (read-only) or Edit, in the house popup (2026-11-26, Anthony: "the kebab for the report cards
+     when viewing or editing it isn't a popup - we need to keep thing consistent throughout the portal").
+     KT.Shell.Modal gives the one header (gradient + teal line, ✕ top-right), the pinned header with ONE scroll
+     region, Escape, and the phone sheet. The card's actions sit in its footer. The list underneath is never
+     re-drawn by opening or closing it, so its filter and scroll stay where they were. ── */
+  let RC_MODAL = null;
+  function rcCloseCard(id) {
+    if (!RC_MODAL || (id && +RC_MODAL.id !== +id)) return;
+    const m = RC_MODAL; RC_MODAL = null;
+    try { m.h.close(); } catch (e) {}
+  }
   async function rcOpen(id, opts) {
     opts = opts || {};
-    const out = document.getElementById('rc-out'); if (!out) return;
     let r; try { r = await Api.get('/report-cards/' + id); } catch (e) { rcToast(rcSaid(e, 'Could not load the card.'), 'error'); return; }
     const c = (r && r.data) || {}; const can = c.can || {};
     const st = c.status || 'draft', replaced = !!c.replaced;
     const editableNow = !replaced && (st === 'draft' || st === 'reviewed' || (st === 'submitted' && can.approver));
     const editable = editableNow && !!opts.edit;
-    out.setAttribute('data-card', c.id);
-    out.className = 'kt-card'; out.style.marginTop = '16px';
+    const out = document.createElement('div');
+    out.id = 'rc-out'; out.setAttribute('data-card', c.id); out.setAttribute('data-child', c.child || '');
     const meta = [c.made_by ? 'Made by ' + c.made_by : '', c.centre || '', c.room || '', c.ref ? 'Ref ' + c.ref : ''].filter(Boolean).map(esc).join(' · ');
     out.innerHTML =
-      `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:4px;"><h3 style="margin:0;">${esc(c.child)} — ${esc(c.term)}${rcVer(c.version)}</h3>${rcPill(st, replaced)}${c.archived ? rcArchPill(c.archived) : ''}</div>` +
+      `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">${rcPill(st, replaced)}${c.archived ? rcArchPill(c.archived) : ''}${editable ? rcChip('Editing', '#E0F2FE', '#075985') : ''}</div>` +
       `<div style="font-size:12.5px;color:#64748B;">${meta}</div>` +
       (c.review_note && (st === 'draft' || st === 'reviewed') ? `<div style="margin-top:10px;border:1px solid #FECACA;background:#FEF2F2;color:#991B1B;border-radius:10px;padding:8px 12px;font-size:13px;"><b>Sent back:</b> ${esc(c.review_note)}</div>` : '') +
       (st === 'submitted' && !can.approver ? '<div style="margin-top:10px;font-size:13px;color:#92400E;">Waiting for a director or admin to approve it.</div>' : '') +
@@ -869,37 +873,36 @@
       rcFwNote(c.framework_info) + rcBoxes(Array.isArray(c.sections) && c.sections.length ? c.sections : rcLegacy(c)) +
       `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;min-height:110px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(c.next_steps || '')}</textarea>` +
       (c.educator_signature && st === 'submitted' ? `<div style="margin-top:14px;font-size:12px;color:#64748B;">Educator signature</div><img src="${esc(c.educator_signature)}" alt="" style="height:66px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:2px;">` : '') +
-      '<div id="rc-o-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"></div>' +
       '<details id="rc-o-hist" style="margin-top:14px;"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1F6080;">History &amp; versions</summary><div data-rc-hist style="margin-top:8px;font-size:13px;color:#475569;">Loading…</div></details>';
     if (!editable) out.querySelectorAll('textarea').forEach(t => { t.readOnly = true; t.style.background = '#F8FAFC'; });
     const save = () => Api.patch('/report-cards/' + c.id, { narratives: rcCollect(), next_steps: document.getElementById('rc-next').value, status: st === 'submitted' ? undefined : 'reviewed' });
-    const B = (key, label, cls) => `<button type="button" class="kt-btn${cls ? ' ' + cls : ''}" data-rc-a="${key}" data-kt-iconized="1">${label}</button>`;
-    let h = '';
+    /* Footer actions. A handler that returns false keeps the popup open (Save, PDF, Print, a cancelled
+       signature); one that finishes the card lets the popup close. */
+    const A = [];
+    const stay = (fn) => async () => { await fn(); return false; };
+    const done = (fn) => async () => ((await fn()) ? undefined : false);
     if (editable) {
-      h += B('save', '💾 Save edits', 'kt-btn-primary');
-      if (st === 'submitted') h += B('approve', '✍️ Sign, approve &amp; send', 'kt-btn-success') + B('back', '↩ Send back for changes');
-      else h += can.approver ? B('approve', '✍️ Sign, approve &amp; send', 'kt-btn-success') : B('submit', '✍️ Sign &amp; submit for approval', 'kt-btn-success');
+      A.push({ label: '💾 Save', busyLabel: 'Saving…', handler: stay(async () => { try { await save(); rcToast('Saved.', 'success'); rcReloadList(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); } }) });
+      if (st === 'submitted') A.push({ label: '↩ Send back', busyLabel: 'Sending back…', handler: done(() => rcSendBack(c.id)) });
+      if (st === 'submitted' || can.approver) A.push({ label: '✍️ Sign, approve & send', primary: true, busyLabel: 'Approving…', handler: done(() => rcApprove(c.id, save)) });
+      else A.push({ label: '✍️ Sign & submit', primary: true, busyLabel: 'Submitting…', handler: done(() => rcSubmit(c.id, save)) });
     } else if (editableNow) {
-      h += B('edit', st === 'submitted' ? '✍️ Review &amp; approve' : '✏️ Edit', 'kt-btn-primary');
+      A.push({ label: st === 'submitted' ? '✍️ Review & approve' : '✏️ Edit', primary: true, handler: stay(() => rcOpen(c.id, { edit: true })) });
     }
-    if (can.revise) h += B('revise', '✏️ Edit (new version)', 'kt-btn-primary');
-    if (can.email) h += B('email', '✉️ Email to family');
-    h += B('pdf', '⬇️ Download PDF') + B('print', '🖨️ Print');
-    if (can.delete) h += B('delete', '🗑️ Delete draft');
-    const acts = document.getElementById('rc-o-actions'); acts.innerHTML = h;
-    const on = (k, fn) => { const b = acts.querySelector('[data-rc-a="' + k + '"]'); if (b) b.onclick = fn; };
-    on('save', async () => { try { await save(); rcToast('Saved.', 'success'); rcReloadList(); } catch (e) { rcToast(rcSaid(e, 'Could not save.'), 'error'); } });
-    on('approve', () => rcApprove(c.id, editable ? save : null));
-    on('submit', () => rcSubmit(c.id, save));
-    on('back', () => rcSendBack(c.id));
-    on('edit', () => rcOpen(c.id, { edit: true }));
-    on('revise', () => rcRevise(c.id));
-    on('email', () => rcEmail(c));
-    on('pdf', () => rcDownload(c));
-    on('print', () => rcPrint(c));
-    on('delete', () => rcDelete(c));
+    if (can.revise) A.push({ label: '✏️ Edit (new version)', primary: !editableNow, busyLabel: 'Starting…', handler: stay(() => rcRevise(c.id)) });
+    if (can.email) A.push({ label: '✉️ Email to family', handler: stay(() => { rcCloseCard(c.id); return rcEmail(c); }) });
+    A.push({ label: '⬇️ Download PDF', busyLabel: 'Downloading…', handler: stay(() => rcDownload(c)) });
+    A.push({ label: '🖨️ Print', busyLabel: 'Opening…', handler: stay(() => rcPrint(c)) });
+    if (can.delete) A.push({ label: '🗑️ Delete draft', busyLabel: 'Deleting…', handler: done(() => rcDelete(c)) });
+    rcCloseCard();
+    const h = KT.Shell.Modal.open({
+      title: '📑 ' + (c.child || 'Report card') + ' — ' + (c.term || '') + (+c.version > 1 ? ' · v' + (+c.version) : ''),
+      body: out, actions: A, large: true,
+      onClose: () => { if (RC_MODAL && RC_MODAL.h === h) RC_MODAL = null; },
+    });
+    RC_MODAL = { id: c.id, h: h };
+    try { h.backdrop.querySelector('.modal').setAttribute('data-rc-card', c.id); } catch (e) {}
     document.getElementById('rc-o-hist').addEventListener('toggle', function () { if (this.open) rcHistory(c.id); });
-    if (!opts.noScroll) out.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   const RC_EV = { generated: 'Drafted', revised: 'New version started', new_version: 'A new version was started', edited: 'Edited',
@@ -923,7 +926,7 @@
     }).join('') : '<div style="color:#64748B;">No history recorded yet. Actions from 2026-11-26 on are listed here.</div>';
     box.innerHTML = vHtml + eHtml;
     const byId = {}; vs.forEach(v => { byId[v.id] = v; });
-    box.querySelectorAll('[data-rc-vpdf]').forEach(b => { b.onclick = () => { const cur = document.querySelector('#rc-out h3'); rcDownload({ id: +b.getAttribute('data-rc-vpdf'), child: cur ? cur.textContent.split(' — ')[0] : '', term: 'v' + (byId[b.getAttribute('data-rc-vpdf')] || {}).version }); }; });
+    box.querySelectorAll('[data-rc-vpdf]').forEach(b => { b.onclick = () => { const cur = document.getElementById('rc-out'); rcDownload({ id: +b.getAttribute('data-rc-vpdf'), child: cur ? cur.getAttribute('data-child') : '', term: 'v' + (byId[b.getAttribute('data-rc-vpdf')] || {}).version }); }; });
     box.querySelectorAll('[data-rc-vopen]').forEach(b => { b.onclick = () => rcOpen(+b.getAttribute('data-rc-vopen'), {}); });
   }
 
@@ -1102,7 +1105,7 @@
           '<input id="rc-term-other" placeholder="Type the term, e.g. Summer 2027" maxlength="40" style="display:none;width:100%;margin-top:8px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;"></div>' +
       '</div>' +
       `<button type="button" id="rc-gen" class="kt-btn kt-btn-primary" data-kt-iconized="1" style="margin-top:18px;">${ai ? '✨ Generate with AI' : '📝 Draft from observations'}</button>` +
-      '</div><div id="rc-out"></div>';
+      '</div>';
     const OTHER = '__other';
     const sel = document.getElementById('rc-term'), other = document.getElementById('rc-term-other');
     const labels = ((r && r.quarters) || []).map(q => q && q.label).filter(Boolean);
@@ -1146,9 +1149,9 @@
     });
     const body = document.getElementById('rc-body'); if (!body) return;
     if (RC.tab === 'generate') { rcPaintGenerate(body); return; }
-    body.innerHTML = '<div id="rc-requests"></div><div id="rc-pending"></div><div id="rc-all"><div class="kt-card" style="color:#64748B;">Loading report cards…</div></div><div id="rc-out"></div><div id="rc-settings"></div>';
+    body.innerHTML = '<div id="rc-requests"></div><div id="rc-pending"></div><div id="rc-all"><div class="kt-card" style="color:#64748B;">Loading report cards…</div></div><div id="rc-settings"></div>';
     rcPaintRequests();
-    rcReloadList().then(rcPaintSettings);
+    rcReloadList().then(() => { rcPaintSettings(); const q = rcQuery(); if (+q.card > 0) { rcOpen(+q.card, { edit: q.edit === '1' }); rcSetHash(); } });
   }
   (function rcCss() {
     if (document.getElementById('rc-all-css')) return;
@@ -1163,12 +1166,8 @@
       + '#rc-all table.rc-table th{text-align:left;font-size:11.5px;color:#64748B;font-weight:800;text-transform:uppercase;letter-spacing:.3px;padding:8px 10px;border-bottom:1px solid #E2E8F0}'
       + '#rc-all table.rc-table td{padding:9px 10px;border-bottom:1px solid #F1F5F9;vertical-align:middle}'
       + '#rc-all table.rc-table td.rc-acts{width:1%;white-space:nowrap;text-align:right}'
-      + '#rc-all tr.rc-row:hover td{background:#F8FAFC}'
-      + '.rc-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}'
-      + '@media (prefers-color-scheme:dark){html:not([data-theme="light"]) #rc-all .rc-chip,html:not([data-theme="light"]) #rc-all .rc-bar input,html:not([data-theme="light"]) #rc-all .rc-bar select{background:#0F172A;color:#E2E8F0;border-color:#334155}'
-      + 'html:not([data-theme="light"]) #rc-all .rc-chip.on{background:#E2E8F0;color:#0F172A}html:not([data-theme="light"]) #rc-all tr.rc-row:hover td{background:#1E293B}}'
-      + 'html[data-theme="dark"] #rc-all .rc-chip,html[data-theme="dark"] #rc-all .rc-bar input,html[data-theme="dark"] #rc-all .rc-bar select{background:#0F172A;color:#E2E8F0;border-color:#334155}'
-      + 'html[data-theme="dark"] #rc-all .rc-chip.on{background:#E2E8F0;color:#0F172A}html[data-theme="dark"] #rc-all tr.rc-row:hover td{background:#1E293B}';
+      + '#rc-all tr.rc-row:focus{outline:none}#rc-all tr.rc-row:focus-visible{outline:2px solid #2F8C86;outline-offset:-2px}'
+      + '.rc-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}';
     document.head.appendChild(st);
   })();
 

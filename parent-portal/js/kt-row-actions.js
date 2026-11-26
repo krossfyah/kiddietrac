@@ -35,7 +35,9 @@
       '.kt-ka-kebab{display:inline-flex;align-items:center;justify-content:center;width:32px;height:28px;min-height:0!important;padding:0!important;margin:0!important;border:1px solid #E2E8F0!important;border-radius:8px!important;background:#fff!important;color:#475569!important;cursor:pointer;font-size:18px;line-height:1;vertical-align:middle;transition:background .12s,border-color .12s;}',
       '.kt-ka-kebab:hover{background:#F1F5F9!important;border-color:#CBD5E1!important;}',
       '.kt-ka-kebab[aria-expanded="true"]{background:#E2E8F0!important;border-color:#94A3B8!important;}',
-      '.kt-ka-hidden{display:none!important;}',
+      /* 2026-11-26 (Anthony: "shows the kebab but then action buttons are also there"): ranked above any class rule -
+         [data-kt-pretty] .kt-btn{display:inline-flex!important} beat a bare .kt-ka-hidden. */
+      '.kt-ka-hidden,[data-kt-ka] .kt-ka-hidden,#appMain [data-kt-ka] .kt-ka-hidden,body [data-kt-row-actions] [data-kt-ka] .kt-ka-hidden,body [data-kt-list] [data-kt-ka] .kt-ka-hidden{display:none!important;}',
       '.kt-ka-menu{position:fixed;z-index:2147483000;min-width:172px;max-width:288px;background:#fff;border:1px solid #E2E8F0;border-radius:12px;box-shadow:0 12px 32px rgba(15,23,42,.18);padding:6px;font:500 14px/1.2 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1F2937;animation:kt-ka-in .11s ease-out;}',
       '@keyframes kt-ka-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}',
       '.kt-ka-item{display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;text-align:left;background:none;border:0;border-radius:8px;padding:9px 12px;cursor:pointer;color:inherit;font:inherit;min-height:0!important;}',
