@@ -47,3 +47,16 @@ aside.app-sidebar,
 .app-sidebar #navLinks::-webkit-scrollbar-thumb {
   background: rgba(31, 96, 128, 0.22) !important;
 }
+
+/* ═══ WHITE-LABEL ONLY: the right panel and the phone bar wear the brand's soft tint (2026-11-26) ═══
+   html.kt-tinted is set by branding-loader.js (applyTint) for a white-label brand alone; the plain portal never
+   matches these rules, so kt-right-panel.js and kt-mobilenav.js keep KiddieTrac's own colours there. */
+html.kt-tinted #kt-rp-rail { background: var(--kt-tint) !important; border-left-color: var(--kt-tint-border) !important; }
+html.kt-tinted .kt-rp-rb.on { background: var(--kt-tint-strong) !important; color: var(--kt-tint-ink) !important; }
+html.kt-tinted .kt-rp-cal-d.today { background: var(--kt-tint-strong) !important; color: var(--kt-tint-ink) !important; }
+html.kt-tinted .kt-rp-cal-d.sel { box-shadow: inset 0 0 0 1.5px var(--kt-tint-ink) !important; }
+html.kt-tinted #kt-rp-body .kt-rp-btn:not(.ghost) { background: var(--kt-tint-ink) !important; border-color: var(--kt-tint-ink) !important; }
+html.kt-tinted #kt-rp-body .kt-rp-link { color: var(--kt-tint-ink) !important; }
+html.kt-tinted #kt-rp-body .kt-rp-bar { background: var(--kt-tint-ink) !important; }
+html.kt-tinted #kt-mobilenav { --duo-fill: var(--kt-bar-fill) !important; }
+html.kt-tinted #kt-mobilenav button.on { --duo-fill: var(--kt-bar-fill-on) !important; }

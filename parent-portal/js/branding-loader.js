@@ -91,11 +91,14 @@
     var strong = mix(T, B, 0.08), tabTo = mix(T, B, 0.13);
     return { base: B, auto: mix(B, '#ffffff', 0.93), tint: T, tint2: mix(T, B, 0.03), border: mix(T, B, 0.12), hover: mix(T, B, 0.05),
       strong: strong, ink: readOn(t.primary_color, strong), edge: mix(T, B, 0.18), sep: mix(T, B, 0.14), row: mix(T, B, 0.05),
-      band: mix(T, B, 0.03), tabFrom: mix(T, B, 0.06), tabTo: tabTo, tabInk: readOn(t.primary_color, tabTo), tabEdge: mix(T, B, 0.35) };
+      band: mix(T, B, 0.03), tabFrom: mix(T, B, 0.06), tabTo: tabTo, tabInk: readOn(t.primary_color, tabTo), tabEdge: mix(T, B, 0.35),
+      // The phone bar's icon wash (kt-mobilenav --duo-fill), resting and on.
+      barFill: 'rgba(' + (hex2rgb(B) || [42, 143, 157]).join(',') + ',.16)', barFillOn: 'rgba(' + (hex2rgb(B) || [42, 143, 157]).join(',') + ',.30)' };
   }
   const TINT_VARS = { '--kt-tint': 'tint', '--kt-tint-2': 'tint2', '--kt-tint-border': 'border', '--kt-tint-hover': 'hover', '--kt-tint-strong': 'strong',
     '--kt-tint-ink': 'ink', '--kt-tint-edge': 'edge', '--kt-tint-sep': 'sep', '--kt-row-hover': 'row', '--kt-tab-band': 'band',
-    '--kt-tab-from': 'tabFrom', '--kt-tab-to': 'tabTo', '--kt-tab-ink': 'tabInk', '--kt-tab-edge': 'tabEdge' };
+    '--kt-tab-from': 'tabFrom', '--kt-tab-to': 'tabTo', '--kt-tab-ink': 'tabInk', '--kt-tab-edge': 'tabEdge',
+    '--kt-bar-fill': 'barFill', '--kt-bar-fill-on': 'barFillOn' };
   function applyTint(t) {
     const root = document.documentElement, v = t ? brandTint(t) : null;
     Object.keys(TINT_VARS).forEach(function (k) { if (v) root.style.setProperty(k, v[TINT_VARS[k]]); else root.style.removeProperty(k); });
