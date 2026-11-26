@@ -32,6 +32,14 @@
   }
 
   var tries = 0;
+  /* A popup / sheet / dialog is open (the dialog part of busy(), on its own). */
+  function dialogOpen() {
+    try {
+      var mr = document.getElementById('modalRoot');
+      if (mr && mr.firstElementChild) return true;
+      return !!document.querySelector('.modal-backdrop, [role="dialog"], .kt-modal, .kt-modal-overlay, .kt-doc-viewer');
+    } catch (e) { return false; }
+  }
   function busy() {
     try {
       // A dialog, sheet, lightbox or menu is open — reloading discards it.
@@ -117,7 +125,9 @@
     }
     /* Still behind the boot splash (an update that arrived while the app was opening): reload now, unseen, and
        tell the next page to keep showing the splash rather than the dark reload cover. */
-    if (bootCovered() && Date.now() - bootAt < 20000) {
+    /* ...unless a popup is already open behind it (2026-11-26: a #report-cards?card=ID deep link opened its card
+       while the splash was still up, and this reload threw the card away). Then it waits like any busy moment. */
+    if (bootCovered() && Date.now() - bootAt < 20000 && !dialogOpen()) {
       mark();
       try { sessionStorage.setItem('kt_boot_reload', '1'); } catch (e) {}
       try { location.reload(); } catch (e) {}
@@ -138,7 +148,13 @@
   try {
     // Tells the Capacitor listener below that this one owns the reload.
     try { window.__ktSwHandled = true; } catch (e) {}
+    /* A page that loaded with NO controller is already running the build the worker serves: the first
+       clients.claim() of a fresh install is not an update, and reloading for it rebuilt the screen a second
+       time ~1.5s into a first visit (or after site data was cleared), closing whatever popup had just opened.
+       Only a change FROM one controller TO another means new assets. (2026-11-26) */
+    var hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadController) { hadController = true; return; }
       if (recentlyReloaded()) return;
       go();
     });

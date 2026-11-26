@@ -847,10 +847,18 @@
      region, Escape, and the phone sheet. The card's actions sit in its footer. The list underneath is never
      re-drawn by opening or closing it, so its filter and scroll stay where they were. ── */
   let RC_MODAL = null;
+  /* The open card is in the address (replaceState: no hashchange, so the shell's navigate-away closer and the
+     dialog stamp both keep treating it as the same screen). */
+  function rcCardHash(id, edit) {
+    if (RC.tab !== 'cards' || !/^#report-cards(\?|$)/.test(location.hash)) return;
+    const h = '#report-cards' + (id ? '?card=' + id + (edit ? '&edit=1' : '') : '');
+    try { if (location.hash !== h) history.replaceState(history.state, '', location.pathname + location.search + h); } catch (e) {}
+  }
   function rcCloseCard(id) {
     if (!RC_MODAL || (id && +RC_MODAL.id !== +id)) return;
     const m = RC_MODAL; RC_MODAL = null;
     try { m.h.close(); } catch (e) {}
+    rcCardHash(0);
   }
   async function rcOpen(id, opts) {
     opts = opts || {};
@@ -898,9 +906,10 @@
     const h = KT.Shell.Modal.open({
       title: '📑 ' + (c.child || 'Report card') + ' — ' + (c.term || '') + (+c.version > 1 ? ' · v' + (+c.version) : ''),
       body: out, actions: A, large: true,
-      onClose: () => { if (RC_MODAL && RC_MODAL.h === h) RC_MODAL = null; },
+      onClose: () => { if (RC_MODAL && RC_MODAL.h === h) { RC_MODAL = null; rcCardHash(0); } },
     });
     RC_MODAL = { id: c.id, h: h };
+    rcCardHash(c.id, editable);
     try { h.backdrop.querySelector('.modal').setAttribute('data-rc-card', c.id); } catch (e) {}
     document.getElementById('rc-o-hist').addEventListener('toggle', function () { if (this.open) rcHistory(c.id); });
   }
@@ -1118,7 +1127,7 @@
     pick((r && r.current && r.current.label) || labels[0] || '');
     sel.addEventListener('change', () => { const show = sel.value === OTHER; other.style.display = show ? 'block' : 'none'; if (show) other.focus(); });
     const cidSel = document.getElementById('rc-cid');
-    const pre = RC.prefill || (() => { const q = rcQuery(); return q.child ? { cid: q.child, term: q.term || '' } : null; })();
+    const pre = RC.prefill || (() => { const q = RC.q0 || {}; RC.q0 = null; return q.child ? { cid: q.child, term: q.term || '' } : null; })();
     RC.prefill = null;
     if (pre && pre.cid) {
       if (!cidSel.querySelector('option[value="' + pre.cid + '"]')) { const o = document.createElement('option'); o.value = pre.cid; o.textContent = pre.name || 'Child'; cidSel.appendChild(o); }
@@ -1151,7 +1160,7 @@
     if (RC.tab === 'generate') { rcPaintGenerate(body); return; }
     body.innerHTML = '<div id="rc-requests"></div><div id="rc-pending"></div><div id="rc-all"><div class="kt-card" style="color:#64748B;">Loading report cards…</div></div><div id="rc-settings"></div>';
     rcPaintRequests();
-    rcReloadList().then(() => { rcPaintSettings(); const q = rcQuery(); if (+q.card > 0) { rcOpen(+q.card, { edit: q.edit === '1' }); rcSetHash(); } });
+    rcReloadList().then(() => { rcPaintSettings(); const q = RC.q0 || {}; RC.q0 = null; if (+q.card > 0) rcOpen(+q.card, { edit: q.edit === '1' }); });
   }
   (function rcCss() {
     if (document.getElementById('rc-all-css')) return;
@@ -1175,6 +1184,7 @@
     main.setAttribute('data-kt-pretty', '1');
     const gen = rcCanGenerate();
     const q = rcQuery();
+    RC.q0 = q; // read once by the card / generate deep link, after rcGoTab() has tidied the address
     RC.tab = (q.tab === 'generate' && gen) ? 'generate' : 'cards';
     RC.reqs = null; RC.kids = null; RC.archived = null; RC.f = { st: '', q: '', term: '', by: '', centre: '' };
     main.innerHTML = `<div style="padding:24px;">
