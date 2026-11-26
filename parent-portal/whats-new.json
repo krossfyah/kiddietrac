@@ -6,7 +6,7 @@
             "date": "2026-11-26",
             "icon": "🤝",
             "title": "Referral credits for KiddieTrac customers",
-            "body": "Thank a customer for a referral with a one-time credit off their invoice. Pick the customer, who they referred (from Sales), a $ amount or a % and the invoice month. It comes off before tax when that month is raised (or straight away on a draft), never takes the invoice below $0, and any unused $ carries to the next invoice. Find it in Accounting AR/AP > Referral credits and on the customer record in Sales > Customers.",
+            "body": "Thank a customer with a one-time credit off their invoice. Pick the customer, who they referred (any Sales lead or customer, or \"No specific referral\" with a reason that shows on the invoice), a $ amount or a % and the invoice month. It comes off before tax when that month is raised (or straight away on a draft), never takes the invoice below $0, and any unused $ carries to the next invoice. One credit per referral. Find it in Accounting AR/AP > Referral credits and on the customer record in Sales > Customers.",
             "roles": [
                 "platform_admin"
             ]

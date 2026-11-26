@@ -935,18 +935,14 @@ class PlatformInvoiceController extends Controller
         $nums = \App\Support\SalesCustomers::numbersForAgencies(DB::table('agencies')->whereNull('deleted_at')->pluck('id')->all());
         $agencies = DB::table('agencies')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name', 'plan_currency'])
             ->map(fn ($a) => ['id' => (int) $a->id, 'name' => $a->name, 'customer_number' => $nums[(int) $a->id] ?? null, 'currency' => $a->plan_currency ?: 'CAD'])->all();
-        $taken = \Illuminate\Support\Facades\Schema::hasTable('referral_credits') ? DB::table('referral_credits')->where('status', '!=', 'cancelled')->pluck('referred_lead_id')->map(fn ($v) => (int) $v)->all() : [];
-        $leads = DB::table('sales_leads')->whereNull('deleted_at')->orderByDesc('updated_at')->limit(1000)
-            ->get(['id', 'company', 'name', 'city', 'stage', 'converted_agency_id'])
-            ->map(fn ($l) => ['id' => (int) $l->id, 'name' => trim((string) ($l->company ?: $l->name)) ?: ('Lead #' . $l->id), 'city' => $l->city, 'stage' => $l->stage,
-                'agency_id' => $l->converted_agency_id ? (int) $l->converted_agency_id : null, 'taken' => in_array((int) $l->id, $taken, true)])->all();
-        return response()->json(['credits' => $rows, 'agencies' => $agencies, 'leads' => $leads, 'this_month' => \App\Support\AgencyTime::todayDate()->format('Y-m')]);
+        // The "They referred" picker: leads + customers without a lead, test agencies tagged (ReferralCredits::parties).
+        return response()->json(['credits' => $rows, 'agencies' => $agencies, 'parties' => \App\Support\ReferralCredits::parties(), 'this_month' => \App\Support\AgencyTime::todayDate()->format('Y-m')]);
     }
 
-    /** POST /platform/referral-credits {agency_id, referred_lead_id, type: fixed|percent, value, month: YYYY-MM, notes?} */
+    /** POST /platform/referral-credits {agency_id, referred?: "L:<lead>"|"A:<agency>"|empty, type: fixed|percent, value, month: YYYY-MM, notes (required with no referral)} */
     public function saveReferralCredit(Request $request): JsonResponse
     {
-        $d = $request->validate(['agency_id' => ['required', 'integer'], 'referred_lead_id' => ['required', 'integer'], 'type' => ['required', 'in:fixed,percent'],
+        $d = $request->validate(['agency_id' => ['required', 'integer'], 'referred' => ['nullable', 'string', 'max:24'], 'referred_lead_id' => ['nullable', 'integer'], 'type' => ['required', 'in:fixed,percent'],
             'value' => ['required', 'numeric', 'min:0.01', 'max:100000'], 'month' => ['required', 'string', 'max:7'], 'notes' => ['nullable', 'string', 'max:500']]);
         return response()->json(['credit' => \App\Support\ReferralCredits::create($d, (int) $request->user()->id)], 201);
     }
