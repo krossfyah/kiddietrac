@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Storage;
  * for CareersMail::KEEP_MONTHS months, until a stated date. This keeps that promise: an on_file application past its
  * keep_until date loses its files and its record (and its status history). Nightly.
  * An applicant who asks to be removed sooner: change the status (or delete) by hand; this is only the backstop.
+ * AGENCIES TOO (2026-11-28, KiddieTrac HR hiring): an agency's applicants live in the same table (agency_id set). Their
+ * keep_until is written from the agency's own setting (HR > Hiring > Settings, HrTalent keep_months) when they are kept
+ * on file, so this one pass keeps every promise. It runs even when the HR add-on is switched off: a privacy promise.
  */
 class CareersRetention extends Command
 {

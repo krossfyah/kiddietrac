@@ -173,7 +173,22 @@ final class CareersMail
                 $text = "Hi {$first},\n\nThank you for applying for the {$role} role at KiddieTrac. Your application arrived safely. A real person on our team reads every application, and we'll be in touch within 5 business days.\n\nIf you'd like to add anything, just reply to this email.\n\nWarm regards,\nThe KiddieTrac Team";
         }
 
-        return ['subject' => $subject, 'html' => self::frame($kind, $pre, $eyebrow, $title, $body), 'text' => $text];
+        /* AN AGENCY'S OWN HIRING (2026-11-28, KiddieTrac HR phase 2). The same four letters, written by the agency:
+           every "KiddieTrac" in a letter means the employer, so it becomes the agency's name; the careers link becomes
+           its jobs page, the keep-on-file months its own setting. With no org the letter is exactly as before. */
+        $org = is_array($o['org'] ?? null) ? $o['org'] : null;
+        if ($org) {
+            $n = (string) $org['name'];
+            $swap = function (string $s, bool $html) use ($org, $n) {
+                $s = str_replace(self::CAREERS_URL, (string) $org['careers_url'], $s);
+                $s = str_replace(self::KEEP_MONTHS . ' months', (int) ($org['keep_months'] ?? self::KEEP_MONTHS) . ' months', $s);
+                return str_replace('KiddieTrac', $html ? self::e($n) : $n, $s);
+            };
+            [$subject, $pre, $title, $text] = [$swap($subject, false), $swap($pre, false), $swap($title, false), $swap($text, false)];
+            $body = $swap($body, true);
+        }
+
+        return ['subject' => $subject, 'html' => self::frame($kind, $pre, $eyebrow, $title, $body, $org), 'text' => $text];
     }
 
     /**
@@ -187,16 +202,24 @@ final class CareersMail
         if (! filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
         $mail = self::build($kind, $a, $o);
         \Illuminate\Support\Facades\Mail::html($mail['html'], function ($m) use ($mail, $to, $testTo, $a, $ics) {
-            MailScope::platform($m);
+            $org = is_array($o['org'] ?? null) ? $o['org'] : null;
+            if ($org) {
+                // Tenant mail: the agency's own switches apply, and a test agency sends nothing (SuppressAgencyMail).
+                MailScope::agency($m, (int) $org['agency_id']);
+                $m->from((string) config('mail.from.address', 'noreply@kiddietrac.com'), (string) $org['name']);
+                if (! empty($org['reply_to'])) $m->replyTo((string) $org['reply_to'], (string) $org['name']);
+            } else {
+                MailScope::platform($m);
+            }
             $m->to($to, $testTo ? null : (trim((string) $a->first_name) ?: null))
-              ->subject(($testTo ? '[TEST] ' : '') . $mail['subject'])
-              ->replyTo(self::REPLY_TO, 'KiddieTrac');
+              ->subject(($testTo ? '[TEST] ' : '') . $mail['subject']);
+            if (! $org) $m->replyTo(self::REPLY_TO, 'KiddieTrac');
             if ($ics) $m->attachData($ics, 'invite.ics', ['mime' => 'text/calendar; charset=UTF-8; method=REQUEST']);
         });
         return true;
     }
 
-    private static function frame(string $kind, string $pre, string $eyebrow, string $title, string $body): string
+    private static function frame(string $kind, string $pre, string $eyebrow, string $title, string $body, ?array $org = null): string
     {
         $e = fn ($v) => self::e($v);
         // One dark palette, written twice: for prefers-color-scheme and for Outlook.com's [data-ogsc]/[data-ogsb].
@@ -223,7 +246,14 @@ final class CareersMail
             . '<div style="display:none;max-height:0;overflow:hidden">' . $e($pre) . '</div>'
             . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="bg" style="background-color:#EEF3F6"><tr><td align="center" style="padding:24px 10px">'
             . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="card" style="width:100%;max-width:600px;background-color:#ffffff;border-radius:16px;overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#0D1B2A">'
-            . '<tr><td bgcolor="' . self::BAND . '" class="kt-band" style="background-color:' . self::BAND . ';padding:20px 24px;text-align:center"><img src="https://api.kiddietrac.com/email/wordmark-tagline-navy.png" width="220" alt="KiddieTrac - Smart Childcare Management Platform" style="display:block;margin:0 auto;border:0;width:220px;max-width:70%;height:auto"></td></tr>'
+            . ($org
+                // The agency's logo on a white tile (any logo reads on it, in light and dark mode), or its name.
+                ? '<tr><td bgcolor="' . self::BAND . '" class="kt-band" style="background-color:' . self::BAND . ';padding:18px 24px;text-align:center">'
+                    . (! empty($org['logo'])
+                        ? '<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto"><tr><td bgcolor="#FFFFFF" style="background-color:#FFFFFF;border-radius:12px;padding:10px 16px"><img src="' . $e($org['logo']) . '" height="44" alt="' . $e($org['name']) . '" style="display:block;border:0;height:44px;max-width:220px;width:auto"></td></tr></table>'
+                        : '<div style="font-size:20px;font-weight:bold;color:#FFFFFF;letter-spacing:.3px">' . $e($org['name']) . '</div>')
+                    . '</td></tr>'
+                : '<tr><td bgcolor="' . self::BAND . '" class="kt-band" style="background-color:' . self::BAND . ';padding:20px 24px;text-align:center"><img src="https://api.kiddietrac.com/email/wordmark-tagline-navy.png" width="220" alt="KiddieTrac - Smart Childcare Management Platform" style="display:block;margin:0 auto;border:0;width:220px;max-width:70%;height:auto"></td></tr>')
             . '<tr><td bgcolor="#1FA2A6" style="font-size:0;line-height:0;background-color:#1FA2A6"><img src="https://api.kiddietrac.com/email/brand-gradient.png" width="600" height="6" alt="" style="display:block;border:0;width:100%;height:6px"></td></tr>'
             . '<tr><td class="pad" style="padding:28px 36px 4px">'
             . '<div class="eb" style="display:inline-block;font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase;font-weight:bold;color:' . self::TEAL . ';background-color:#E8F3F7;border-radius:999px;padding:5px 12px;margin:0 0 14px">' . $e($eyebrow) . '</div>'
@@ -232,9 +262,13 @@ final class CareersMail
             . '</td></tr>'
             . '<tr><td style="padding:26px 0 0"></td></tr>'
             . '<tr><td class="pad ft" style="background-color:#F6F9FB;border-top:1px solid #E5ECF1;padding:16px 36px;font-size:12px;line-height:1.6;color:#7A8B9A;text-align:center">'
-            . '<strong style="color:#1E2A5E">KiddieTrac</strong> &middot; Smart Childcare Management Platform<br>'
-            . 'You’re receiving this because you applied for a role at KiddieTrac. Questions? Just reply, or write to <a href="mailto:' . self::REPLY_TO . '" style="color:' . self::TEAL . ';text-decoration:none">' . self::REPLY_TO . '</a>.'
-            . '<div style="margin-top:10px">' . SocialLinks::block(SocialLinks::row()) . '</div>'
+            . ($org
+                ? '<strong style="color:#1E2A5E">' . $e($org['name']) . '</strong><br>'
+                    . 'You’re receiving this because you applied for a role at ' . $e($org['name']) . '. Questions? Just reply to this email.'
+                    . (empty($org['white_label']) ? '<div style="margin-top:8px;font-size:11px">Sent with KiddieTrac</div>' : '')
+                : '<strong style="color:#1E2A5E">KiddieTrac</strong> &middot; Smart Childcare Management Platform<br>'
+                    . 'You’re receiving this because you applied for a role at KiddieTrac. Questions? Just reply, or write to <a href="mailto:' . self::REPLY_TO . '" style="color:' . self::TEAL . ';text-decoration:none">' . self::REPLY_TO . '</a>.'
+                    . '<div style="margin-top:10px">' . SocialLinks::block(SocialLinks::row()) . '</div>')
             . '</td></tr></table></td></tr></table></body></html>';
     }
 }

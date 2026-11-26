@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jobs</title>
+  <meta name="description" content="Open positions at a childcare centre.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">
+  <link rel="stylesheet" href="/css/kt-fonts.css?v=20261014net">
+  <meta name="theme-color" content="#081C41">
+  <!-- KiddieTrac HR phase 2 (2026-11-28): an agency's public jobs page, jobs.html?a=<agency slug>. No sign-in.
+       White label (agencies.powered_by_visible = 0): the agency's name and logo only, no KiddieTrac anywhere. -->
+  <style>
+    :root { --brand: #1F6080; --ink: #0F172A; --muted: #64748B; --line: #E2E8F0; --bg: #F4F8FB; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 28px 16px 60px; }
+    .head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .head img { max-height: 48px; max-width: 170px; border-radius: 8px; }
+    .head b { font-size: 16px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 22px 24px; box-shadow: 0 18px 40px -28px rgba(15, 23, 42, .35); margin-bottom: 14px; }
+    h1 { font-size: 26px; margin: 0 0 8px; line-height: 1.25; }
+    h2 { font-size: 19px; margin: 0 0 4px; }
+    h3 { font-size: 16px; margin: 20px 0 10px; }
+    .intro { font-size: 15.5px; color: #334155; line-height: 1.65; white-space: pre-line; margin: 0 0 6px; }
+    .meta { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+    .tag { font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: #F1F5F9; color: #334155; }
+    .desc { font-size: 15px; color: #334155; line-height: 1.65; white-space: pre-line; margin: 0; }
+    .more { background: none; border: 0; padding: 0; color: var(--brand); font-weight: 700; cursor: pointer; font-family: inherit; font-size: 14px; margin-top: 6px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .full { grid-column: 1 / -1; }
+    label { display: block; font-size: 12.5px; font-weight: 700; margin-bottom: 4px; color: #334155; }
+    input, select, textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; font-size: 15px; font-family: inherit; background: #fff; color: var(--ink); }
+    input[type=file] { padding: 8px; }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); }
+    textarea { min-height: 110px; resize: vertical; }
+    .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    .btn { display: inline-block; border: 0; border-radius: 12px; padding: 12px 20px; font-size: 15px; font-weight: 800; color: #fff; background: var(--brand); cursor: pointer; font-family: inherit; }
+    .btn.block { display: block; width: 100%; margin-top: 16px; padding: 14px; font-size: 16px; }
+    .btn:disabled { opacity: .6; cursor: default; }
+    .note { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+    .err { color: #B91C1C; font-weight: 700; font-size: 13.5px; min-height: 18px; margin-top: 10px; }
+    .done { text-align: center; padding: 10px 0; }
+    .done .big { font-size: 54px; }
+    .foot { text-align: center; font-size: 12px; color: var(--muted); margin-top: 18px; }
+    .foot a { color: var(--muted); }
+    @media (max-width: 560px) { .grid { grid-template-columns: minmax(0, 1fr); } h1 { font-size: 22px; } .card { padding: 18px; } }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #F1F5F9; --muted: #94A3B8; --line: #334155; --bg: #0B1220; }
+      .card, input, select, textarea { background: #111827; }
+      .intro, .desc, label { color: #CBD5E1; } .tag { background: #1E293B; color: #E2E8F0; }
+      .head img { background: #fff; padding: 4px; }
+      .more { color: #A5B4FC; }
+    }
+  </style>
+</head>
+<body>
+<main class="wrap" id="app"><div class="card">Loading…</div></main>
+<script src="/js/kt-net.js?v=20261022raw"></script>
+<script>
+(function () {
+  'use strict';
+  var API = 'https://api.kiddietrac.com/api/v1';
+  var q = new URLSearchParams(location.search);
+  var slug = (q.get('a') || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  var app = document.getElementById('app');
+  var D = null;
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fail(msg) { app.innerHTML = '<div class="card"><h1>Sorry</h1><p class="intro">' + esc(msg) + '</p></div>'; }
+  if (!slug) { return fail('This jobs link is incomplete. Please check the link you were given.'); }
+
+  fetch(API + '/hr/public/jobs/' + slug, { headers: { Accept: 'application/json' } })
+    .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    .then(function (res) { if (!res.ok) { return fail(res.j.message || 'This jobs page is not available.'); } D = res.j; list(); })
+    .catch(function () { fail('We could not load this page. Please try again in a moment.'); });
+
+  function head() { return '<div class="head">' + (D.agency.logo ? '<img src="' + esc(D.agency.logo) + '" alt="">' : '') + '<b>' + esc(D.agency.name) + '</b></div>'; }
+  function foot() {
+    return D.agency.white_label ? '' : '<div class="foot">Powered by KiddieTrac · <a href="https://kiddietrac.com/privacy" target="_blank" rel="noopener">Privacy</a></div>';
+  }
+  function brand() {
+    // The agency colour, but only when white text stays readable on it.
+    var hex = String(D.agency.colour || '').replace('#', '');
+    if (/^[0-9a-f]{6}$/i.test(hex)) {
+      var ch = [0, 2, 4].map(function (i) { var v = parseInt(hex.substr(i, 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+      if (0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2] < 0.3) { document.documentElement.style.setProperty('--brand', '#' + hex); }
+    }
+  }
+  function tags(p) { return '<div class="meta">' + [p.centre && (p.centre + (p.city && p.centre.indexOf(p.city) < 0 ? ', ' + p.city : '')), p.type, p.pay].filter(Boolean).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div>'; }
+
+  function list() {
+    brand();
+    document.title = 'Jobs · ' + D.agency.name;
+    var posts = D.posts || [];
+    var want = +q.get('job') || 0;
+    if (want && posts.some(function (p) { return p.id === want; })) { return form(posts.filter(function (p) { return p.id === want; })[0]); }
+    app.innerHTML = head() + '<div class="card"><h1>Work with us</h1>' + (D.intro ? '<p class="intro">' + esc(D.intro) + '</p>' : '')
+      + '<p class="note">' + (posts.length ? posts.length + ' open position' + (posts.length === 1 ? '' : 's') + '.' : 'There are no open positions right now. Please check back soon.') + '</p></div>'
+      + posts.map(function (p) {
+        var long = (p.description || '').length > 420;
+        return '<div class="card"><h2>' + esc(p.title) + '</h2>' + tags(p)
+          + (p.description ? '<p class="desc" data-d="' + p.id + '">' + esc(long ? p.description.slice(0, 400) + '…' : p.description) + '</p>' + (long ? '<button type="button" class="more" data-more="' + p.id + '">Read more</button>' : '') : '')
+          + '<div style="margin-top:14px"><button type="button" class="btn" data-apply="' + p.id + '">Apply</button></div></div>';
+      }).join('') + foot();
+    app.querySelectorAll('[data-more]').forEach(function (b) {
+      b.onclick = function () { var p = posts.filter(function (x) { return String(x.id) === b.getAttribute('data-more'); })[0]; app.querySelector('[data-d="' + p.id + '"]').textContent = p.description; b.remove(); };
+    });
+    app.querySelectorAll('[data-apply]').forEach(function (b) {
+      b.onclick = function () { form(posts.filter(function (x) { return String(x.id) === b.getAttribute('data-apply'); })[0]); window.scrollTo(0, 0); };
+    });
+  }
+
+  function form(p) {
+    app.innerHTML = head() + '<div class="card"><button type="button" class="more" id="back" style="margin:0 0 10px">← All positions</button><h1>' + esc(p.title) + '</h1>' + tags(p)
+      + (p.description ? '<p class="desc">' + esc(p.description) + '</p>' : '')
+      + '<form id="f" novalidate><h3>Apply</h3><div class="grid">'
+      + '<div><label for="fn">First name *</label><input id="fn" name="first_name" autocomplete="given-name" maxlength="80" required></div>'
+      + '<div><label for="ln">Last name *</label><input id="ln" name="last_name" autocomplete="family-name" maxlength="80" required></div>'
+      + '<div><label for="em">Email *</label><input id="em" name="email" type="email" autocomplete="email" maxlength="160" required></div>'
+      + '<div><label for="ph">Phone</label><input id="ph" name="phone" type="tel" autocomplete="tel" maxlength="40"></div>'
+      + '<div class="full"><label for="li">LinkedIn (optional)</label><input id="li" name="linkedin" maxlength="255" placeholder="linkedin.com/in/…"></div>'
+      + '<div class="full"><label for="cv">Resume / CV * (PDF or Word, up to 8 MB)</label><input id="cv" name="resume" type="file" accept=".pdf,.doc,.docx" required></div>'
+      + '<div class="full"><label for="cl">Cover letter file (optional)</label><input id="cl" name="cover_file" type="file" accept=".pdf,.doc,.docx"></div>'
+      + '<div class="full"><label for="ct">Or a short note about you (optional)</label><textarea id="ct" name="cover_text" maxlength="6000"></textarea></div>'
+      + '<div class="hp" aria-hidden="true"><label>Website <input name="website" tabindex="-1" autocomplete="off"></label></div></div>'
+      + '<button class="btn block" type="submit" id="go">Send my application</button><div class="err" id="err" role="alert"></div>'
+      + '<p class="note">' + esc(D.agency.name) + ' uses your details only to consider you for this job. If they keep your application on file for future openings, it is deleted after ' + esc(D.keep_months || 24) + ' months.</p></form></div>' + foot();
+    document.getElementById('back').onclick = function () { list(); window.scrollTo(0, 0); };
+    var f = document.getElementById('f');
+    f.onsubmit = function (e) {
+      e.preventDefault();
+      var err = document.getElementById('err'); err.textContent = '';
+      if (!f.first_name.value.trim() || !f.last_name.value.trim()) { err.textContent = 'Please enter your first and last name.'; return; }
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.value.trim())) { err.textContent = 'Please enter a valid email address.'; return; }
+      if (!f.resume.files[0]) { err.textContent = 'Please attach your resume / CV.'; return; }
+      var big = [f.resume.files[0], f.cover_file.files[0]].some(function (x) { return x && x.size > 8 * 1024 * 1024; });
+      if (big) { err.textContent = 'Each file can be up to 8 MB.'; return; }
+      var fd = new FormData(f); fd.append('job_post_id', p.id);
+      var btn = document.getElementById('go'); btn.disabled = true; btn.textContent = 'Sending…';
+      fetch(API + '/hr/public/jobs/' + slug + '/apply', { method: 'POST', headers: { Accept: 'application/json' }, body: fd })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; }); })
+        .then(function (res) {
+          if (!res.ok || res.j.ok === false) {
+            btn.disabled = false; btn.textContent = 'Send my application';
+            var m = res.status === 429 ? 'Too many attempts. Please wait a few minutes and try again.' : (res.j.message || 'Something went wrong. Please try again.');
+            if (res.j.errors) { var first = Object.keys(res.j.errors)[0]; m = res.j.errors[first][0]; }
+            err.textContent = m; return;
+          }
+          app.innerHTML = head() + '<div class="card done"><div class="big">📨</div><h1>Thank you, ' + esc(f.first_name.value.trim()) + '!</h1>'
+            + '<p class="intro">Your application for <strong>' + esc(p.title) + '</strong> has been sent to ' + esc(D.agency.name) + '. They will be in touch by email.</p></div>' + foot();
+          window.scrollTo(0, 0);
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = 'Send my application'; err.textContent = 'We could not reach the server. Please try again.'; });
+    };
+  }
+})();
+</script>
+</body>
+</html>

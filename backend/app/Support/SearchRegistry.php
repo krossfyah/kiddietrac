@@ -165,6 +165,15 @@ final class SearchRegistry
         'hr_leave_ledger' => 'leave balance history; shown on the person\'s HR profile and time-off requests: search the staff member',
         'hr_employee_files' => 'employee file fields; search the staff member, whose HR profile shows them',
         'hr_staff_sin' => 'encrypted SIN / SSN (HR); never searched, listed or exported, and every reveal is audited',
+        // KiddieTrac HR phase 2 (2026-11-28): each lives on the person's HR profile / My HR; search the staff member
+        'hr_job_posts' => 'an agency\'s job posts (HR > Hiring) and its public jobs page; few per agency, listed on that screen',
+        'hr_onboardings' => 'a person\'s onboarding checklist; shown on their HR profile, HR > Onboarding and My HR: search the staff member',
+        'hr_onboarding_tasks' => 'the tasks of an onboarding checklist, shown with it',
+        'hr_reviews' => 'performance reviews: private to the employee, their reviewer, the agency admins and their centre\'s directors; never in a global box',
+        'hr_goals' => 'performance goals, as private as reviews; shown on the review, the HR profile and My HR',
+        'hr_one_on_ones' => 'one-to-one notes, private to the two people, the agency admins and their centre\'s directors; never in a global box',
+        'hr_courses' => 'an agency\'s own courses (HR > Courses); configuration, found on that screen',
+        'hr_course_assignments' => 'who has a course and when they finished it; shown on HR > Courses, the HR profile and My HR',
         'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',
         'calendar_links' => 'encrypted Outlook/Google calendar permissions per person or agency (Settings > Calendar); secrets, never searched or shown as a record',
@@ -237,7 +246,7 @@ final class SearchRegistry
         'report_cards' => 'Report cards: by child',
         'payroll_documents' => 'Payslips: admins only, by staff / period',
         'withdrawal_requests' => 'Withdrawal requests: by child / family',
-        'career_applications' => 'Career applications (platform only)',
+        'career_applications' => 'Career applications: KiddieTrac\'s (Platform > Careers) and agencies\' applicants (HR > Hiring), by name / role',
         'suppliers' => 'Suppliers: by name (their bills are already searchable by supplier name)',
         'purchase_orders' => 'Purchase orders: by PO number',
         'donations' => 'Donations: by donor',
@@ -251,6 +260,10 @@ final class SearchRegistry
      */
     public const PLUMBING = [
         'hr_leave_rules' => 'entitlement rules of a leave type (KiddieTrac HR), edited and shown with that type',
+        'hr_onboarding_templates' => 'onboarding checklist templates (KiddieTrac HR), edited on HR > Onboarding',
+        'hr_onboarding_template_tasks' => 'the tasks of an onboarding checklist template, edited with it',
+        'hr_review_templates' => 'review templates (sections + rating scale), edited on HR > Performance',
+        'hr_goal_checkins' => 'the check-ins of a goal, shown with the goal',
         'sign_in_lock_people' => 'who a sign-in lock held when it was made, for its unlock report (App\\Support\\SignInLocks)',
         // 'example_log' => 'telemetry',
         // 2026-11-10 (ticket #244)

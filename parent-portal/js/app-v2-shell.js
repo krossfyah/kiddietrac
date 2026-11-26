@@ -447,6 +447,7 @@
           { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
           { hash: 'hr',                 label: 'HR',                 icon: '🧑‍💼' },
+          { hash: 'my-hr',              label: 'My HR',              icon: '🧭' },
           { hash: 'background-checks',  label: 'Background checks',  icon: '🪪' },
           { hash: 'substitutes',        label: 'Substitutes',        icon: '🙋' },
           // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
@@ -685,6 +686,7 @@
           { hash: 'compliance',        label: 'Compliance',           icon: '✅' },
           { hash: 'policies',          label: 'Policies',             icon: '📘' },
           { hash: 'my-policies',       label: 'Policies to review',   icon: '✍️' },
+          { hash: 'my-hr', label: 'My HR', icon: '🧭' },   // KiddieTrac HR phase 2 (2026-11-28): own checklist, courses, reviews, goals
           { hash: 'my-training',       label: 'My training',          icon: '🎒' },
           { hash: 'my-certificates',   label: 'My certificates',      icon: '❤️' },
           { hash: 'household',         label: 'Household residents',  icon: '🛋️' },
@@ -775,6 +777,7 @@
              Terms/Privacy/NDA and anything an admin attached to their record.
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
+          { hash: 'my-hr', label: 'My HR', icon: '🧭' },   // KiddieTrac HR phase 2 (2026-11-28): own checklist, courses, reviews, goals
           { hash: 'my-training',   label: 'My training',  icon: '🎒' },
           { hash: 'my-certificates', label: 'My certificates', icon: '❤️' },
           { hash: 'my-points',     label: 'My points',    icon: '⭐' },
@@ -808,6 +811,7 @@
              Terms/Privacy/NDA and anything an admin attached to their record.
              Signed forms were only ever visible to admins before this. */
           { hash: 'my-documents',  label: 'My documents', icon: '📄', badgeKey: 'my_documents' },
+          { hash: 'my-hr', label: 'My HR', icon: '🧭' },   // KiddieTrac HR phase 2 (2026-11-28): own checklist, courses, reviews, goals
           { hash: 'my-training',   label: 'My training',  icon: '🎒' },
           { hash: 'my-certificates', label: 'My certificates', icon: '❤️' },
           { hash: 'my-points',     label: 'My points',    icon: '⭐' },
@@ -1468,7 +1472,8 @@
     'timesheets': 'Hours worked, ready for payroll.',
     'time-clock': 'Clock in and out.',
     'time-off': 'Leave requests awaiting a decision.',
-    'hr': 'Employee files, leave balances and the absence report.',
+    'hr': 'Employee files, leave, hiring, onboarding, reviews and courses.',
+    'my-hr': 'Your onboarding checklist, courses, reviews and goals.',
     'substitutes': 'Cover for absent staff.',
     'payroll': 'Pay runs and hours.',
     'workforce-funding': 'Ontario WEG and workforce compensation: wage components, the 32-day check and the year-end report.',

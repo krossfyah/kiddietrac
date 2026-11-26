@@ -387,6 +387,7 @@ final class AiConfig
             'api/v1/platform/ai/test' => 'Connection test',
             'api/v1/educator-points/thanks/note' => 'Thank-you notes',
             'api/v1/sales/prospects/parse' => 'Sales prospect reading',
+            'api/v1/hr/ai/draft' => 'HR: goals and review drafts',
         ];
         if (isset($known[$k])) return $known[$k];
         if (str_starts_with($k, 'job:')) {

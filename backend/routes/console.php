@@ -331,6 +331,8 @@ Schedule::command('kt:reset-web-demo')->dailyAt('03:30')->timezone('America/Toro
    03:45 Toronto = 00:45 in the demo agencies' own California night. One short CLI run, not every-minute work. */
 // KiddieTrac HR (2026-11-27): leave grants, accruals, carry-over and expiry. Ledger rows only, sends nothing.
 Schedule::command('hr:leave-accrue')->dailyAt('02:20')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
+// KiddieTrac HR phase 2 (2026-11-28): onboarding / course / review reminders (bell + phone), agency dates; test agencies skipped.
+Schedule::command('hr:talent-remind')->dailyAt('07:40')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
 Schedule::command('kt:web-demo-showcase --set=all')->dailyAt('03:45')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer()
     ->appendOutputTo(storage_path('logs/web-demo-showcase.log'));
 Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');

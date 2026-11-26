@@ -27,7 +27,7 @@ final class PlanUpsell
         'sms'              => 'Text and call families: announcements by text and voice, Safe Arrival check-ins when a child has not arrived, and the parent phone line for calling in absent or late.',
         'ai_tools'         => 'AI help across the portal: daily summaries for families, writing help, report-card drafts, play ideas and document reading.',
         'white_label'      => 'Your own brand on the portal, the apps, emails and your public site, with no KiddieTrac branding.',
-        'hr'               => 'KiddieTrac HR: each person\'s leave balances on every time-off request, your own leave types and rules, a full employee file and an absence report with Excel export.',
+        'hr'               => 'KiddieTrac HR: leave balances on every time-off request, your own leave types and rules, a full employee file, an absence report, hiring with your own jobs page, onboarding checklists, performance reviews and goals, and course assignments with certificates.',
         'payroll'          => 'Payroll documents and payslips for your team, with notices when a new payslip is ready.',
         'autopay'          => 'Families pay by card or bank automatically: saved payment methods and nightly autopay runs.',
         'expenses'         => 'Track expenses, suppliers and purchase orders by centre.',

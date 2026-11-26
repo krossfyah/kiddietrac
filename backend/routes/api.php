@@ -309,6 +309,9 @@ Route::post('/marketing-site/chat', [\App\Http\Controllers\Api\MarketingSiteCont
 // The website chat answered by Claude (2026-10-30, MarketingAiChatController): Maya asks this first, falls back to her scripted answers.
 // Job applications from www.kiddietrac.com/careers: CV + cover letter (2026-10-30, CareersController).
 Route::post('/marketing-site/careers/apply', [\App\Http\Controllers\Api\CareersController::class, 'apply'])->middleware('throttle:5,10,careers');
+// KiddieTrac HR phase 2 (2026-11-28): an agency's public jobs page (jobs.html?a=<agency slug>), no sign-in. Under hr/ so the HR add-on owns it.
+Route::get('/hr/public/jobs/{slug}', [\App\Http\Controllers\Api\HrHiringController::class, 'publicJobs'])->where('slug', '[a-z0-9-]+')->middleware('throttle:60,1,hrjobs');
+Route::post('/hr/public/jobs/{slug}/apply', [\App\Http\Controllers\Api\HrHiringController::class, 'publicApply'])->where('slug', '[a-z0-9-]+')->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:5,10,hrjobsapply']);
 Route::post('/marketing-site/chat/ai', [\App\Http\Controllers\Api\MarketingAiChatController::class, 'reply'])->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:20,1,mkai']);
 // The website's live phone demo: a 2-hour login to a fictional Brightwood account (2026-10-31, App\Support\PublicDemo).
 Route::post('/marketing-site/demo-session', [\App\Http\Controllers\Api\WebDemoController::class, 'start'])->middleware('throttle:10,1,webdemo');
@@ -2645,6 +2648,76 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/hr/absence',                        [\App\Http\Controllers\Api\HrController::class, 'absence']);
         Route::get   ('/hr/off-now',                        [\App\Http\Controllers\Api\HrController::class, 'offNow']);
         Route::get   ('/exports/hr-absence',                [\App\Http\Controllers\Api\HrController::class, 'exportAbsence']);
+    });
+
+    // ---- KiddieTrac HR phase 2 (2026-11-28): hiring, onboarding, performance, courses. All under hr/ (the HR add-on). ----
+    // Scoped inside the controllers (App\Http\Concerns\HrAccess): admins = agency, directors = own centres, everyone = their own records.
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get(    '/hr/me/talent',                               [\App\Http\Controllers\Api\HrOnboardingController::class, 'mine']);
+        Route::get(    '/hr/onboarding/{id}',                         [\App\Http\Controllers\Api\HrOnboardingController::class, 'show'])->whereNumber('id');
+        Route::post(   '/hr/onboarding-tasks/{id}/done',              [\App\Http\Controllers\Api\HrOnboardingController::class, 'done'])->whereNumber('id');
+        Route::post(   '/hr/onboarding-tasks/{id}/upload',            [\App\Http\Controllers\Api\HrOnboardingController::class, 'upload'])->whereNumber('id')->middleware('throttle:30,1,hronbup');
+        Route::get(    '/hr/onboarding-tasks/{id}/file',              [\App\Http\Controllers\Api\HrOnboardingController::class, 'file'])->whereNumber('id');
+        Route::get(    '/hr/reviews/{id}',                            [\App\Http\Controllers\Api\HrPerformanceController::class, 'show'])->whereNumber('id');
+        Route::put(    '/hr/reviews/{id}/self',                       [\App\Http\Controllers\Api\HrPerformanceController::class, 'saveSelf'])->whereNumber('id');
+        Route::put(    '/hr/reviews/{id}/manager',                    [\App\Http\Controllers\Api\HrPerformanceController::class, 'saveManager'])->whereNumber('id');
+        Route::post(   '/hr/reviews/{id}/sign',                       [\App\Http\Controllers\Api\HrPerformanceController::class, 'sign'])->whereNumber('id');
+        Route::get(    '/hr/goals',                                   [\App\Http\Controllers\Api\HrPerformanceController::class, 'goals']);
+        Route::post(   '/hr/goals',                                   [\App\Http\Controllers\Api\HrPerformanceController::class, 'createGoal']);
+        Route::patch(  '/hr/goals/{id}',                              [\App\Http\Controllers\Api\HrPerformanceController::class, 'updateGoal'])->whereNumber('id');
+        Route::post(   '/hr/goals/{id}/checkins',                     [\App\Http\Controllers\Api\HrPerformanceController::class, 'checkin'])->whereNumber('id');
+        Route::get(    '/hr/one-on-ones',                             [\App\Http\Controllers\Api\HrPerformanceController::class, 'oneOnOnes']);
+        Route::post(   '/hr/one-on-ones',                             [\App\Http\Controllers\Api\HrPerformanceController::class, 'saveOneOnOne']);
+        Route::patch(  '/hr/one-on-ones/{id}',                        [\App\Http\Controllers\Api\HrPerformanceController::class, 'updateOneOnOne'])->whereNumber('id');
+        Route::post(   '/hr/ai/draft',                                [\App\Http\Controllers\Api\HrPerformanceController::class, 'draft'])->middleware('throttle:20,1,hraidraft');
+        Route::get(    '/hr/course-assignments/{id}/open',            [\App\Http\Controllers\Api\HrCoursesController::class, 'open'])->whereNumber('id');
+        Route::post(   '/hr/course-assignments/{id}/complete',        [\App\Http\Controllers\Api\HrCoursesController::class, 'complete'])->whereNumber('id');
+        Route::get(    '/hr/course-assignments/{id}/certificate',     [\App\Http\Controllers\Api\HrCoursesController::class, 'certificate'])->whereNumber('id')->middleware('throttle:30,1,hrcert');
+    });
+    Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get(    '/hr/hiring',                                  [\App\Http\Controllers\Api\HrHiringController::class, 'index']);
+        Route::put(    '/hr/hiring/settings',                         [\App\Http\Controllers\Api\HrHiringController::class, 'saveSettings']);
+        Route::post(   '/hr/jobs',                                    [\App\Http\Controllers\Api\HrHiringController::class, 'createPost']);
+        Route::patch(  '/hr/jobs/{id}',                               [\App\Http\Controllers\Api\HrHiringController::class, 'updatePost'])->whereNumber('id');
+        Route::post(   '/hr/jobs/{id}/close',                         [\App\Http\Controllers\Api\HrHiringController::class, 'closePost'])->whereNumber('id');
+        Route::post(   '/hr/jobs/{id}/reopen',                        [\App\Http\Controllers\Api\HrHiringController::class, 'closePost'])->whereNumber('id');
+        Route::post(   '/hr/applications/bulk-status',                [\App\Http\Controllers\Api\HrHiringController::class, 'bulkMove']);
+        Route::get(    '/hr/applications/{id}',                       [\App\Http\Controllers\Api\HrHiringController::class, 'show'])->whereNumber('id');
+        Route::patch(  '/hr/applications/{id}',                       [\App\Http\Controllers\Api\HrHiringController::class, 'move'])->whereNumber('id');
+        Route::get(    '/hr/applications/{id}/file/{kind}',           [\App\Http\Controllers\Api\HrHiringController::class, 'file'])->whereNumber('id')->where('kind', 'resume|cover');
+        Route::get(    '/hr/applications/{id}/view/{kind}',           [\App\Http\Controllers\Api\HrHiringController::class, 'file'])->whereNumber('id')->where('kind', 'resume|cover');
+        Route::post(   '/hr/applications/{id}/preview',               [\App\Http\Controllers\Api\HrHiringController::class, 'preview'])->whereNumber('id')->middleware('throttle:120,1,hrappprev');
+        Route::post(   '/hr/applications/{id}/interview',             [\App\Http\Controllers\Api\HrHiringController::class, 'interview'])->whereNumber('id')->middleware('throttle:20,1,hrappout');
+        Route::post(   '/hr/applications/{id}/keep',                  [\App\Http\Controllers\Api\HrHiringController::class, 'keep'])->whereNumber('id')->middleware('throttle:20,1,hrappout');
+        Route::post(   '/hr/applications/{id}/decline',               [\App\Http\Controllers\Api\HrHiringController::class, 'decline'])->whereNumber('id')->middleware('throttle:20,1,hrappout');
+        Route::post(   '/hr/applications/{id}/hire',                  [\App\Http\Controllers\Api\HrHiringController::class, 'hire'])->whereNumber('id')->middleware('throttle:10,1,hrhire');
+        Route::get(    '/hr/onboarding',                              [\App\Http\Controllers\Api\HrOnboardingController::class, 'index']);
+        Route::post(   '/hr/onboarding',                              [\App\Http\Controllers\Api\HrOnboardingController::class, 'start']);
+        Route::post(   '/hr/onboarding/{id}/tasks',                   [\App\Http\Controllers\Api\HrOnboardingController::class, 'addTask'])->whereNumber('id');
+        Route::post(   '/hr/onboarding/{id}/cancel',                  [\App\Http\Controllers\Api\HrOnboardingController::class, 'cancel'])->whereNumber('id');
+        Route::post(   '/hr/onboarding-tasks/{id}/undo',              [\App\Http\Controllers\Api\HrOnboardingController::class, 'undo'])->whereNumber('id');
+        Route::post(   '/hr/onboarding-templates',                    [\App\Http\Controllers\Api\HrOnboardingController::class, 'saveTemplate']);
+        Route::put(    '/hr/onboarding-templates/{id}',               [\App\Http\Controllers\Api\HrOnboardingController::class, 'updateTemplate'])->whereNumber('id');
+        Route::post(   '/hr/onboarding-templates/{id}/archive',       [\App\Http\Controllers\Api\HrOnboardingController::class, 'archiveTemplate'])->whereNumber('id');
+        Route::post(   '/hr/onboarding-templates/{id}/restore',       [\App\Http\Controllers\Api\HrOnboardingController::class, 'archiveTemplate'])->whereNumber('id');
+        Route::get(    '/hr/people/{id}/talent',                      [\App\Http\Controllers\Api\HrOnboardingController::class, 'profileCards'])->whereNumber('id');
+        Route::get(    '/hr/performance',                             [\App\Http\Controllers\Api\HrPerformanceController::class, 'index']);
+        Route::post(   '/hr/reviews',                                 [\App\Http\Controllers\Api\HrPerformanceController::class, 'create']);
+        Route::post(   '/hr/reviews/{id}/cancel',                     [\App\Http\Controllers\Api\HrPerformanceController::class, 'cancel'])->whereNumber('id');
+        Route::post(   '/hr/review-templates',                        [\App\Http\Controllers\Api\HrPerformanceController::class, 'saveTemplate']);
+        Route::put(    '/hr/review-templates/{id}',                   [\App\Http\Controllers\Api\HrPerformanceController::class, 'updateTemplate'])->whereNumber('id');
+        Route::post(   '/hr/review-templates/{id}/archive',           [\App\Http\Controllers\Api\HrPerformanceController::class, 'archiveTemplate'])->whereNumber('id');
+        Route::post(   '/hr/review-templates/{id}/restore',           [\App\Http\Controllers\Api\HrPerformanceController::class, 'archiveTemplate'])->whereNumber('id');
+        Route::get(    '/hr/courses',                                 [\App\Http\Controllers\Api\HrCoursesController::class, 'index']);
+        Route::post(   '/hr/courses',                                 [\App\Http\Controllers\Api\HrCoursesController::class, 'create']);
+        Route::patch(  '/hr/courses/{id}',                            [\App\Http\Controllers\Api\HrCoursesController::class, 'update'])->whereNumber('id');
+        Route::post(   '/hr/courses/{id}/file',                       [\App\Http\Controllers\Api\HrCoursesController::class, 'uploadFile'])->whereNumber('id')->middleware('throttle:20,1,hrcoursefile');
+        Route::post(   '/hr/courses/{id}/archive',                    [\App\Http\Controllers\Api\HrCoursesController::class, 'archive'])->whereNumber('id');
+        Route::post(   '/hr/courses/{id}/restore',                    [\App\Http\Controllers\Api\HrCoursesController::class, 'archive'])->whereNumber('id');
+        Route::get(    '/hr/courses/{id}/assignments',                [\App\Http\Controllers\Api\HrCoursesController::class, 'assignments'])->whereNumber('id');
+        Route::post(   '/hr/courses/{id}/assign',                     [\App\Http\Controllers\Api\HrCoursesController::class, 'assign'])->whereNumber('id');
+        Route::post(   '/hr/course-assignments/remind',               [\App\Http\Controllers\Api\HrCoursesController::class, 'remind'])->middleware('throttle:20,1,hrcourseremind');
+        Route::delete( '/hr/course-assignments/{id}',                 [\App\Http\Controllers\Api\HrCoursesController::class, 'unassign'])->whereNumber('id');
     });
 
     // ---- Staff pay / payslips (educators = hourly, home visitors = per visit) ----

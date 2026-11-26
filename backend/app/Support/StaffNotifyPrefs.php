@@ -58,6 +58,8 @@ final class StaffNotifyPrefs
             ['portal_tip'], ['push'], ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'platform_admin']],
         'staff_cold_reach' => ['Outreach replies', 'Replies to sales outreach emails.',
             ['cold_reach'], ['push'], ['sales_rep', 'platform_admin']],
+        'staff_hr' => ['Team HR reminders', 'Your team\'s overdue onboarding tasks and courses, reviews to write or sign, and new job applicants (KiddieTrac HR). Your own HR reminders always reach you.',
+            ['hr'], ['push'], self::MGMT],
         'staff_tickets' => ['Support tickets', 'New tickets, replies and overdue tickets. The support inbox always gets the email.',
             ['support_ticket'], ['push', 'email'], ['platform_admin']],
     ];
@@ -73,6 +75,8 @@ final class StaffNotifyPrefs
 
     public static function topicOfType(string $type, array $data = []): ?string
     {
+        // KiddieTrac HR (2026-11-28): only notices about someone else (kind=team) can be muted; your own tasks always come.
+        if ($type === 'hr') return ($data['kind'] ?? '') === 'team' ? 'staff_hr' : null;
         if ($type === 'compliance') {
             // Only notices ABOUT STAFF certificates. A person's own certificate/training and privacy alerts stay on.
             $kind = (string) ($data['kind'] ?? '');

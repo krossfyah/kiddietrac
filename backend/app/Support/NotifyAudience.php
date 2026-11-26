@@ -76,6 +76,7 @@ final class NotifyAudience
         'email' => 'staff', 'proposal_opened' => 'staff', 'booking_request' => 'staff', 'child_note' => 'staff',
         'account_deletion' => 'staff', 'sub_request' => 'staff', 'staff_message' => 'staff', 'running_late' => 'staff', 'break_overrun' => 'staff', 'photo_permission' => 'staff',
         'cold_reach' => 'staff',   // sales outreach replies (ColdReach) (2026-11-24, ticket #260)
+        'hr' => 'staff',   // KiddieTrac HR phase 2: onboarding, courses, reviews, applicants (2026-11-28)
         // family: their own children and account
         'checkin' => 'family', 'checkin_reminder' => 'family', 'pickup_alarm' => 'family', 'moment' => 'family', 'photo' => 'family',
         'observation' => 'family', 'walk_started' => 'family', 'walk_ended' => 'family',

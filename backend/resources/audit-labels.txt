@@ -1276,3 +1276,50 @@ put hr/people/{id}/sin | Saved a staff member's SIN
 delete hr/people/{id}/sin | Removed a staff member's SIN
 post hr/people/{id}/sin/reveal | Revealed a staff member's SIN
 post hr/adjustments | Adjusted a leave balance
+put hr/hiring/settings | Changed the hiring settings
+post hr/jobs | Added a job post
+patch hr/jobs/{id} | Changed a job post
+post hr/jobs/{id}/close | Closed a job post
+post hr/jobs/{id}/reopen | Reopened a job post
+post hr/applications/bulk-status | Moved several job applicants to a stage
+patch hr/applications/{id} | Moved a job applicant to a stage
+post hr/applications/{id}/preview | Previewed a letter to a job applicant
+post hr/applications/{id}/interview | Booked an interview with a job applicant
+post hr/applications/{id}/keep | Kept a job application on file
+post hr/applications/{id}/decline | Declined a job applicant
+post hr/applications/{id}/hire | Hired a job applicant
+post hr/public/jobs/{slug}/apply | Applied for a job on an agency's jobs page
+post hr/onboarding | Started an onboarding checklist
+post hr/onboarding/{id}/tasks | Added an onboarding task
+post hr/onboarding/{id}/cancel | Cancelled an onboarding checklist
+post hr/onboarding-tasks/{id}/done | Ticked off an onboarding task
+post hr/onboarding-tasks/{id}/undo | Reopened an onboarding task
+post hr/onboarding-tasks/{id}/upload | Uploaded an onboarding document
+post hr/onboarding-templates | Added an onboarding checklist template
+put hr/onboarding-templates/{id} | Changed an onboarding checklist template
+post hr/onboarding-templates/{id}/archive | Archived an onboarding checklist template
+post hr/onboarding-templates/{id}/restore | Restored an onboarding checklist template
+post hr/reviews | Started a performance review
+post hr/reviews/{id}/cancel | Cancelled a performance review
+put hr/reviews/{id}/self | Saved a self review
+put hr/reviews/{id}/manager | Saved a manager review
+post hr/reviews/{id}/sign | Signed a performance review
+post hr/review-templates | Added a review template
+put hr/review-templates/{id} | Changed a review template
+post hr/review-templates/{id}/archive | Archived a review template
+post hr/review-templates/{id}/restore | Restored a review template
+post hr/goals | Added a goal
+patch hr/goals/{id} | Changed a goal
+post hr/goals/{id}/checkins | Added a goal check-in
+post hr/one-on-ones | Added a one-to-one note
+patch hr/one-on-ones/{id} | Changed a one-to-one note
+post hr/ai/draft | Asked AI to draft goals or review wording
+post hr/courses | Added a course
+patch hr/courses/{id} | Changed a course
+post hr/courses/{id}/file | Uploaded a course file
+post hr/courses/{id}/archive | Archived a course
+post hr/courses/{id}/restore | Restored a course
+post hr/courses/{id}/assign | Assigned a course
+post hr/course-assignments/remind | Sent course reminders
+delete hr/course-assignments/{id} | Removed a course assignment
+post hr/course-assignments/{id}/complete | Completed a course

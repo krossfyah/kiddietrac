@@ -1,7 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════════════
    KiddieTrac HR (#hr) — 2026-11-27, Phase 1 of the HR add-on (feature `hr`).
 
-   Tabs: People (the employee file + HR profile), Balances, Absence report, and for agency
+   Tabs: People (the employee file + HR profile), Balances, Absence report, Phase 2's Hiring,
+   Onboarding, Performance and Courses (screen-hr-talent.js, KTHrTalent), and for agency
    admins Leave types and Settings. Admins see the whole agency, directors their own
    centres' staff (the server scopes every list; nothing is filtered here).
 
@@ -78,6 +79,7 @@
 
   function tabsFor() {
     var t = [['people', 'People'], ['balances', 'Balances'], ['absence', 'Absence report']];
+    if (window.KTHrTalent) t = t.concat(window.KTHrTalent.tabs);   // Phase 2 (2026-11-28)
     if (S.admin) t.push(['types', 'Leave types'], ['settings', 'Settings']);
     return t;
   }
@@ -88,7 +90,7 @@
     var m = /[?&]tab=([a-z]+)/.exec(location.hash || '');
     if (m) S.tab = m[1];
     main.innerHTML = '<div class="kt-section"><div class="kt-hero"><div class="kt-hero-greet">🧑‍💼 YOUR TEAM</div><h1>HR</h1>'
-      + '<div class="kt-hero-sub">Employee files, leave balances and absences for your team, with the leave rules your agency sets.</div></div>'
+      + '<div class="kt-hero-sub">Employee files, leave, hiring, onboarding, reviews and courses for your team, with the rules your agency sets.</div></div>'
       + '<div class="hr-tabs" role="tablist" id="hr-tabs"></div><div id="hr-body"><div class="hr-sub" style="padding:12px 2px;">Loading…</div></div></div>';
     try { S.people = await Api.get('/hr/people'); }
     catch (e) { var b0 = main.querySelector('#hr-body'); if (b0) b0.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
@@ -119,6 +121,7 @@
     if (S.tab === 'absence') return drawAbsence(main);
     if (S.tab === 'types') return drawTypes(main);
     if (S.tab === 'settings') return drawSettings(main);
+    if (window.KTHrTalent) return window.KTHrTalent.draw(S.tab, b);
   }
 
   async function reloadPeople() { try { S.people = await Api.get('/hr/people'); } catch (e) {} }
@@ -199,7 +202,7 @@
           + '<button type="button" class="hr-b" data-sin="set">' + (p.sin.on_file ? 'Change' : 'Add') + '</button>'
           + (p.sin.on_file ? '<button type="button" class="hr-b" data-sin="clear">Remove</button>' : '') + '</div>'
           + '<div class="hr-sub" style="margin-top:6px;">Stored encrypted. Only agency admins can see or change it, and every reveal is recorded in the audit log.</div></div>' : '')
-      + '</div>';
+      + '</div>' + (window.KTHrTalent ? '<div data-hrtalent style="margin-top:10px;"></div>' : '');
     var close = null;
     var M = KT.Shell.Modal;
     M.open({ title: 'HR profile', body: box, large: true, actions: [
@@ -208,6 +211,7 @@
       { label: 'Edit file', primary: true, handler: function () { setTimeout(function () { openFile(main, id); }, 0); } }
     ] });
     box.querySelectorAll('[data-go]').forEach(function (g) { g.addEventListener('click', function () { closeModal(); location.hash = '#' + g.getAttribute('data-go'); }); });
+    var tl = box.querySelector('[data-hrtalent]'); if (tl && window.KTHrTalent) window.KTHrTalent.profile(tl, id);
     var ub = box.querySelector('[data-user]'); if (ub) ub.addEventListener('click', function () { closeModal(); try { KT.openUserRecord(id); } catch (e) {} });
     var lb = box.querySelector('[data-led]');
     if (lb) lb.addEventListener('click', function () {

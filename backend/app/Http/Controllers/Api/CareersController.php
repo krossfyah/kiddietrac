@@ -29,6 +29,15 @@ class CareersController extends Controller
     private const FILE_RULE = ['file', 'mimes:pdf,doc,docx,rtf,txt', 'max:8192'];
     public const STATUSES = ['new', 'reviewing', 'interview', 'offer', 'hired', 'on_file', 'declined', 'withdrawn'];   // on_file 2026-11-24
 
+    /**
+     * KiddieTrac's own applications only (2026-11-28). The same table now also holds agencies' applicants (KiddieTrac HR,
+     * HrHiringController: agency_id set); Platform -> Careers never lists, opens, counts or writes to one of those.
+     */
+    public static function platformRows()
+    {
+        return DB::table('career_applications')->whereNull('agency_id');
+    }
+
     private function cors(JsonResponse $r): JsonResponse
     {
         return $r->header('Access-Control-Allow-Origin', '*');
@@ -134,7 +143,7 @@ class CareersController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $rows = DB::table('career_applications')->orderByDesc('id')->limit(500)->get();
+        $rows = self::platformRows()->orderByDesc('id')->limit(500)->get();
         return response()->json(['applications' => $rows->map(function ($r) {
             return ['id' => $r->id, 'role' => $r->role, 'name' => trim($r->first_name . ' ' . $r->last_name), 'email' => $r->email,
                 'phone' => $r->phone, 'linkedin' => $r->linkedin, 'cover_text' => $r->cover_text, 'status' => $r->status,
@@ -147,7 +156,7 @@ class CareersController extends Controller
     public function file(Request $request, int $id, string $kind)
     {
         $col = $kind === 'cover' ? 'cover_path' : 'resume_path';
-        $path = DB::table('career_applications')->where('id', $id)->value($col);
+        $path = self::platformRows()->where('id', $id)->value($col);
         abort_unless($path && Storage::disk('local')->exists($path), 404, 'File not found.');
         return \App\Support\FileResponse::download($path, basename($path));
     }
@@ -160,7 +169,7 @@ class CareersController extends Controller
     public function view(Request $request, int $id, string $kind)
     {
         $col = $kind === 'cover' ? 'cover_path' : 'resume_path';
-        $path = DB::table('career_applications')->where('id', $id)->value($col);
+        $path = self::platformRows()->where('id', $id)->value($col);
         abort_unless($path && Storage::disk('local')->exists($path), 404, 'File not found.');
         $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
         if ($ext === 'docx') {
@@ -177,7 +186,7 @@ class CareersController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $data = $request->validate(['status' => 'required|in:' . implode(',', self::STATUSES)]);
-        $old = DB::table('career_applications')->where('id', $id)->value('status');
+        $old = self::platformRows()->where('id', $id)->value('status');
         abort_if($old === null, 404, 'Application not found.');
         $keep = $data['status'] === 'on_file'
             ? ['keep_until' => DB::table('career_applications')->where('id', $id)->value('keep_until') ?: now(\App\Support\BookingMail::TZ)->addMonths(\App\Support\CareersMail::KEEP_MONTHS)->toDateString()]
@@ -194,7 +203,7 @@ class CareersController extends Controller
 
     private function application(int $id): object
     {
-        $a = DB::table('career_applications')->where('id', $id)->first();
+        $a = self::platformRows()->where('id', $id)->first();
         abort_if(! $a, 404, 'Application not found.');
         return $a;
     }
@@ -393,7 +402,7 @@ class CareersController extends Controller
         $hasEvents = \Illuminate\Support\Facades\Schema::hasTable('career_application_events');
 
         $base = function () use ($role) {
-            $q = DB::table('career_applications');
+            $q = self::platformRows();
             if ($role !== '') $q->where('role', $role);
             return $q;
         };
@@ -435,7 +444,7 @@ class CareersController extends Controller
         $postings = $this->postings();
         $posted = [];
         foreach ($postings['items'] as $p) $posted[$p['role']] = $p;
-        $roleRows = DB::table('career_applications')->when($since, fn ($q) => $q->where('created_at', '>=', $since))
+        $roleRows = self::platformRows()->when($since, fn ($q) => $q->where('created_at', '>=', $since))
             ->select('role', DB::raw('COUNT(*) AS total'),
                 DB::raw("SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) AS waiting"),
                 DB::raw("SUM(CASE WHEN status IN ('interview','offer','hired') THEN 1 ELSE 0 END) AS interviewed"),
@@ -452,7 +461,7 @@ class CareersController extends Controller
                 'withdrawn' => (int) $r->withdrawn, 'last_at' => $r->last_at, 'posted' => (bool) $p,
                 'department' => $p['department'] ?? null, 'location' => $p['location'] ?? null, 'type' => $p['type'] ?? null];
         }
-        $allTimeByRole = DB::table('career_applications')->select('role', DB::raw('COUNT(*) AS c'))->groupBy('role')->pluck('c', 'role')->all();
+        $allTimeByRole = self::platformRows()->select('role', DB::raw('COUNT(*) AS c'))->groupBy('role')->pluck('c', 'role')->all();
         $postingRows = [];
         foreach ($postings['items'] as $p) {
             $postingRows[] = $p + ['period' => $roles[$p['role']]['total'] ?? 0, 'all_time' => (int) ($allTimeByRole[$p['role']] ?? 0)];
