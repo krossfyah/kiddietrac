@@ -558,16 +558,26 @@
         '<div style="font-size:11.5px;color:#94A3B8;margin-bottom:12px;">Leave blank to auto-detect from the agency admins (super admins are excluded).</div>'
         : '') +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">' +
-        '<div data-agmove="plan" hidden><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan</label><select id="ag-plan" style="' + agInput() + 'background:white;">' +
+        /* EDIT shows the licence, not a plan picker (2026-11-26, Anthony: "when I go to all agencies and I select an agency
+           to edit under plan it doesn't show all of the add-ons"). The plan and its add-ons live in Platform -> Licences
+           (agency_licences); Licences::sync() writes plan_code / plan_amount_cents FROM them, so a picker here showed a
+           stale code, no add-ons, and its Save overwrote the synced values. Creating still picks the starting plan
+           (store() needs plan_code and grants that plan's licence). The billing currency stays editable on both. */
+        (isEdit ? '' : '<div data-agmove="plan" hidden><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan</label><select id="ag-plan" style="' + agInput() + 'background:white;">' +
           [['starter','Starter — $49/mo'],['growth','Growth — $149/mo'],['enterprise','Enterprise — $349/mo']].map(function (p) { return '<option value="' + p[0] + '"' + (v('plan_code') === p[0] ? ' selected' : '') + '>' + p[1] + '</option>'; }).join('') +
-        '</select></div>' +
-        '<div data-agmove="plan" hidden><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Monthly <span id="ag-cur-label" style="font-weight:400;color:#6B7280;">(' + esc(v('plan_currency', 'CAD')) + ')</span></label>' +
+        '</select></div>') +
+        (isEdit
+          ? '<div data-agmove="plan" hidden><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Billing currency</label>' +
+              '<select id="ag-currency" style="' + agInput() + 'background:white;">' +
+                ['CAD','USD','GBP','AUD','NZD','EUR'].map(function (c) { return '<option value="' + c + '"' + (v('plan_currency','CAD') === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
+              '</select></div>'
+          : '<div data-agmove="plan" hidden><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Monthly <span id="ag-cur-label" style="font-weight:400;color:#6B7280;">(' + esc(v('plan_currency', 'CAD')) + ')</span></label>' +
           '<div style="display:flex;gap:8px;">' +
             '<input id="ag-amount" type="number" min="0" step="1" placeholder="149" value="' + (existing && existing.plan_amount_cents ? Math.round(existing.plan_amount_cents / 100) : '') + '" style="' + agInput() + 'flex:1;">' +
             '<select id="ag-currency" style="' + agInput() + 'background:white;width:auto;">' +
               ['CAD','USD','GBP','AUD','NZD','EUR'].map(function (c) { return '<option value="' + c + '"' + (v('plan_currency','CAD') === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') +
             '</select>' +
-          '</div></div>' +
+          '</div></div>') +
       '</div>' +
       '</div>' +
       // v22p92: agency details (address + residence country + default language)
@@ -598,7 +608,8 @@
       // ── White-label section ────────────────────────────────────────
       '<div data-agpane="plan" hidden>' +
 
-      '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">💳 Plan &amp; pricing</div>' +
+      '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">' + (isEdit ? '💳 Plan &amp; add-ons' : '💳 Plan &amp; pricing') + '</div>' +
+      (isEdit ? '<div id="ag-lic" style="margin-bottom:14px;font-size:13px;color:#64748B;">Loading the licence\u2026</div>' : '') +
       '<div id="ag-plan-slot" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;"></div>' +
       '</div>' +
 
@@ -723,6 +734,85 @@
       });
     })();
 
+    /* PLAN & ADD-ONS FROM THE LICENCE (2026-11-26). Read-only: the same lines Platform -> Licences shows (GET
+       /platform/licences, platform admins only), cancelled lines left out. Changes are made there; the link opens
+       Licences filtered to this agency. */
+    (function () {
+      var box = modal.querySelector('#ag-lic');
+      if (!box || !isEdit) return;
+      var IVL = { monthly: '/month', quarterly: '/quarter', semiannual: '/6 months', annual: '/year' };
+      var BILLED = { monthly: 'billed monthly', quarterly: 'billed quarterly', semiannual: 'billed semi-annually', annual: 'billed yearly' };
+      function money(n, cur) { return '$' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (cur && cur !== 'CAD' ? ' ' + cur : ''); }
+      function day(d) { if (!d) return '—'; try { return new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return d; } }
+      function pn(x) { return x ? '<span style="font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:#334155;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:6px;padding:1px 6px;">' + esc(x) + '</span>' : ''; }
+      function tag(t, fg, bg) { return '<span style="display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;color:' + fg + ';background:' + bg + ';">' + esc(t) + '</span>'; }
+      function link() {
+        return '<button type="button" data-ag-lic-open style="background:white;color:#1F6080;border:1px solid #1F6080;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;">Manage in Licences →</button>';
+      }
+      function wire() {
+        var b = box.querySelector('[data-ag-lic-open]');
+        if (b) b.addEventListener('click', function () {
+          try { sessionStorage.setItem('kt_lic_agency', String(existing.id)); } catch (e) {}
+          overlay.remove();
+          location.hash = '#licences';
+        });
+      }
+      Api.get('/platform/licences?agency_id=' + encodeURIComponent(existing.id)).then(function (d) {
+        var ls = ((d && d.licences) || []).filter(function (l) { return Number(l.agency_id) === Number(existing.id) && l.status !== 'cancelled'; });
+        var plan = ls.filter(function (l) { return l.kind === 'plan'; })[0];
+        var addons = ls.filter(function (l) { return l.kind !== 'plan'; });
+        if (!plan && !addons.length) {
+          /* Never licensed: Licences::planLabel() still names the plan from agencies.plan_code (the "Growth plan" in
+             the agency's own footer), so say that rather than "No plan yet"; no plan_code at all is "No plan yet". */
+          var code = String(existing.plan_code || '');
+          var legacy = code ? code.charAt(0).toUpperCase() + code.slice(1).replace(/_/g, ' ') + ' plan' : '';
+          box.innerHTML = '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 14px;border:1px dashed #CBD5E1;border-radius:10px;background:#F8FAFC;">'
+            + '<div style="flex:1 1 200px;min-width:0;"><div style="font-weight:700;color:#0F172A;">' + (legacy ? esc(legacy) + ' <span style="font-weight:500;color:#64748B;">(no licence yet)</span>' : 'No plan yet') + '</div>'
+            + '<div style="font-size:12px;color:#64748B;">' + (legacy ? 'No licence lines and no add-ons. Add the plan in Licences to manage add-ons, term and renewal.' : 'Add a plan in Licences to license this agency.') + '</div></div>' + link() + '</div>';
+          wire(); return;
+        }
+        var cur = (plan || addons[0]).currency;
+        var total = ls.reduce(function (n, l) { return n + l.unit_price * l.qty; }, 0);
+        var term = plan
+          ? (plan.status === 'grace' ? 'Grace until ' + day(plan.grace_until) : (plan.expires_at ? (plan.auto_renew ? 'Renews ' : 'Ends ') + day(plan.expires_at) : 'No end date'))
+            + ' · ' + (BILLED[plan.interval] || plan.interval || '') + (plan.term_months ? ' · ' + plan.term_months + '-month term' : '')
+          : 'No plan line: these add-ons have no plan to follow';
+        var chips = [];
+        if (plan && plan.source === 'trial') chips.push(tag('Trial', '#92400E', '#FEF3C7'));
+        if (plan && plan.source === 'comp') chips.push(tag('Complimentary', '#6D28D9', '#EDE9FE'));
+        if (plan && plan.status && plan.status !== 'active') chips.push(tag(plan.status.charAt(0).toUpperCase() + plan.status.slice(1), '#B45309', '#FFFBEB'));
+        // Licensed is not switched on: white-label is allowed by the licence, turned on in Features (same note as Licences).
+        var wlOff = String(existing.powered_by_visible) !== '0';
+        var addonHtml = addons.length
+          ? addons.map(function (l) {
+              return '<span style="display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px;max-width:100%;padding:4px 10px;border:1px solid #DDD6FE;background:#F5F3FF;border-radius:12px;font-size:12.5px;color:#4C1D95;">'
+                + pn(l.part_number) + '<b style="font-weight:700;">' + esc(l.name) + '</b>'
+                + '<span style="color:#6B7280;">' + money(l.unit_price * l.qty, l.currency) + (IVL[l.interval] || '') + '</span>'
+                + (/white/i.test(l.name || '') && wlOff ? '<span style="color:#B45309;">· available, not switched on</span>' : '')
+                + (l.status !== 'active' ? '<span style="color:#B45309;">· ' + esc(l.status) + '</span>' : '')
+                + '</span>';
+            }).join('')
+          : '<span style="font-size:12.5px;color:#94A3B8;">No add-ons</span>';
+        box.innerHTML = '<div style="border:1px solid #E5E7EB;border-radius:10px;padding:12px 14px;background:#FFFFFF;">'
+          + '<div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">'
+          + '<div style="flex:1 1 220px;min-width:0;">'
+          + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span style="font-weight:800;font-size:14.5px;color:#0F172A;">' + esc(plan ? plan.name : 'No plan') + '</span>' + (plan ? pn(plan.part_number) : '') + chips.join('') + '</div>'
+          + '<div style="font-size:12px;color:#475569;margin-top:3px;">' + esc(term) + '</div>'
+          + '</div>'
+          + '<div style="text-align:right;margin-left:auto;"><div style="font-weight:800;color:#0F172A;">' + money(total, cur) + (plan && IVL[plan.interval] ? IVL[plan.interval] : '') + '</div>'
+          + '<div style="font-size:11px;color:#94A3B8;">' + ls.length + ' line' + (ls.length === 1 ? '' : 's') + '</div></div>'
+          + '</div>'
+          + '<div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin:12px 0 6px;">Add-ons</div>'
+          + '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + addonHtml + '</div>'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid #F1F5F9;">'
+          + '<span style="font-size:11.5px;color:#94A3B8;">The plan, add-ons and term are changed in Licences.</span>' + link() + '</div>'
+          + '</div>';
+        wire();
+      }).catch(function (e) {
+        box.innerHTML = '<div style="color:#B91C1C;font-size:13px;">Could not load the licence' + (e && e.message ? ': ' + esc(e.message) : '') + '</div>';
+      });
+    })();
+
     /* Upload a logo for THIS agency — the endpoint defaults to the caller's own agency, so
        the id has to be explicit or a super admin brands the wrong tenant. */
     (function () {
@@ -809,8 +899,6 @@
         owner_last_name: (modal.querySelector('#ag-owner-last') ? modal.querySelector('#ag-owner-last').value.trim() : '') || null,
         plan_currency: (modal.querySelector('#ag-currency') ? modal.querySelector('#ag-currency').value : null) || null,
         owner_email: (modal.querySelector('#ag-owner-email') ? modal.querySelector('#ag-owner-email').value.trim() : '') || null,
-        plan_code: modal.querySelector('#ag-plan').value.trim() || null,
-        plan_amount_cents: (function () { var n = parseInt(modal.querySelector('#ag-amount').value, 10); return isNaN(n) ? 0 : n * 100; })(),
         /* The parts. The server rebuilds settings.brand_address from these, so the
            invoice PDF and branding endpoint keep reading the string they always have. */
         address_line1: modal.querySelector('#ag-addr1').value.trim() || null,
@@ -834,6 +922,12 @@
         email_from_address: modal.querySelector('#ag-from-addr').value.trim() || null,
         email_from_name: modal.querySelector('#ag-from-name').value.trim() || null,
       };
+
+      // Creating picks the starting plan; an edit never sends plan_code / plan_amount_cents (the licence owns them).
+      if (!isEdit) {
+        payload.plan_code = modal.querySelector('#ag-plan').value.trim() || null;
+        payload.plan_amount_cents = (function () { var n = parseInt(modal.querySelector('#ag-amount').value, 10); return isNaN(n) ? 0 : n * 100; })();
+      }
 
       var errBox = modal.querySelector('#ag-err');
       errBox.textContent = '';

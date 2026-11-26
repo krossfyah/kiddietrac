@@ -109,6 +109,8 @@
   var flt = { agency: '', status: '' };
   async function renderPlatform(main) {
     css();
+    // Opened from an agency's Edit popup ("Manage in Licences", 2026-11-26): start filtered to that agency.
+    try { var pre = sessionStorage.getItem('kt_lic_agency'); if (pre) { flt.agency = pre; flt.status = ''; sessionStorage.removeItem('kt_lic_agency'); } } catch (e) {}
     main.innerHTML = '';
     main.appendChild(hero('Licences', 'Plans and add-ons per agency: part number, term, expiry and renewal. Renewals bill through Platform → Accounting AR/AP when billing is on.', '🔑'));
     var wrap = el('div', { class: 'lic-wrap' }); main.appendChild(wrap);

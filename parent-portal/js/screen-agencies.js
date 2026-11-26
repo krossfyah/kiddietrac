@@ -401,12 +401,16 @@
                   </span>
                 </label>
               </div>
-              <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Plan</label>
-                <select name="plan" style="${inputStyle()}">
-                  <option value="starter" ${a.plan==='starter'?'selected':''}>Starter</option>
-                  <option value="centre"  ${a.plan==='centre' ?'selected':''}>Centre</option>
-                  <option value="agency"  ${a.plan==='agency' ?'selected':''}>Agency</option>
-                </select>
+              <!-- No plan picker here (2026-11-26, Anthony: "under plan it doesn't show all of the add-ons"). This
+                   select wrote settings.plan (Starter / Centre / Agency), which nothing bills or licenses from; the
+                   real plan and add-ons are the agency's licence lines. The form no longer sends "plan" at all, so a
+                   Save cannot write a stale value; the link opens the one place they are kept. -->
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border:1px solid #E5E7EB;border-radius:10px;padding:10px 14px;margin-bottom:10px;">
+                <div style="flex:1 1 200px;min-width:0;">
+                  <div style="font-size:13px;font-weight:600;color:#111827;">Plan &amp; add-ons</div>
+                  <div style="font-size:12px;color:#6B7280;line-height:1.5;">${data.is_platform_admin ? 'Set on the agency’s licence: plan, add-ons, term and renewal.' : 'Your plan, add-ons and renewal date are on your licence.'}</div>
+                </div>
+                <button type="button" id="kt-ag-licence" style="background:white;color:#1F6080;border:1px solid #1F6080;border-radius:8px;padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;">${data.is_platform_admin ? 'Manage in Licences →' : 'View my licence →'}</button>
               </div>
               <div><label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Billing status</label>
                 <select name="billing_status" style="${inputStyle()}">
@@ -447,6 +451,12 @@
       });
     });
     $('#kt-cancel', mount).addEventListener('click', close);
+    const licBtn = $('#kt-ag-licence', mount);
+    if (licBtn) licBtn.addEventListener('click', () => {
+      if (data.is_platform_admin) { try { sessionStorage.setItem('kt_lic_agency', String(a.id)); } catch (e) {} }
+      close();
+      location.hash = data.is_platform_admin ? '#licences' : '#licence';
+    });
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
     const delBtn = $('#kt-delete', mount);
