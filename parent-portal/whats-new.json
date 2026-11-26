@@ -4,6 +4,18 @@
         {
             "type": "improved",
             "date": "2026-11-26",
+            "icon": "🎨",
+            "title": "Your own soft tint",
+            "body": "With your own branding, the light colour behind the sidebar, tabs and highlighted rows now matches your brand, and buttons use your brand colour. Choose a different tint in Branding > White-label & logo > Soft tint, or leave it on automatic.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
             "icon": "🌴",
             "title": "Your leave balances",
             "body": "If your agency uses KiddieTrac HR, Time off shows how much leave you have, and each request shows your balance before and after.",
