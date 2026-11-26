@@ -2,6 +2,21 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "📃",
+            "title": "Notes: tidy list, roomier box, pictures",
+            "body": "Your notes list now shows just each note's title on one line. Tap it to read the whole note. Writing a note has its own optional Title line and a bigger box that grows as you type. You can also add up to 5 pictures to a note: paste a screenshot, drop a picture on it, or press 🖼 Add picture (camera or photos on a phone). Pictures are seen only by the people who can see the note.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "sales_rep"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-26",
             "icon": "🗄️",

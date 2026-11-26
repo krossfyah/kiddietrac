@@ -282,6 +282,7 @@ final class SearchRegistry
         'play_spark_pictures' => 'Play Spark end-result drawings (PlaySparkPicture), shown with their idea or lesson activity; never a record people look up',
         'calendar_event_links' => 'which Outlook/Google event a KiddieTrac meeting was written to, so it can be updated or cancelled; the meeting is the record',
         'quick_note_revisions' => 'who changed a quick note and which fields (QuickNotesController::history); shown as the note\'s History',
+        'quick_note_pictures' => 'pictures on a quick note (App\\Support\\QuickNotePictures); shown only inside their note, to whoever may see it; never searched',
         'reminder_states' => 'which reminder toasts a person dismissed or snoozed (App\Support\Reminders); their own interface state, never a record people look up',
         'sms_attendance_prompts' => 'today\'s "Reply 1 / 2" arrival texts awaiting an answer (AttendanceReply); expire at the agency\'s midnight, never a record people look up',
     ];

@@ -222,7 +222,7 @@
     if (c[k] && fresh(k, 120000)) return Promise.resolve(c[k]);
     return api().get('/quick-notes/reminders?from=' + from + '&to=' + to).then(function (j) {
       c[k] = ((j && j.notes) || []).map(function (n) {
-        return { qn: true, id: n.id, title: n.title || String(n.body || '').split('\n')[0].slice(0, 80), due_date: n.remind_on, is_private: n.visibility === 'private', centre_name: n.centre_name };
+        return { qn: true, id: n.id, title: (KT.quickNotes && KT.quickNotes.titleOf) ? KT.quickNotes.titleOf(n) : (n.title || String(n.body || '').split('\n')[0].slice(0, 80)), due_date: n.remind_on, is_private: n.visibility === 'private', centre_name: n.centre_name };
       });
       c.at[k] = Date.now(); return c[k];
     }).catch(function () { return []; });

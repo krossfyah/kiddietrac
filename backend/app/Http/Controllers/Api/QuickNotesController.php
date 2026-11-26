@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Support\AgencyTime;
 use App\Support\Audit;
+use App\Support\QuickNotePictures;
 use App\Support\QuickNotes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,9 @@ use Illuminate\Support\Facades\DB;
  *   DELETE /quick-notes/{id}                                         delete (soft)
  *   GET    /quick-notes/{id}/history                                 who changed what
  *   GET    /quick-notes/link-search?type=child|family|staff&q=       records this person may link a note to
+ *   POST   /quick-notes/{id}/pictures   (picture: file)              add a picture (App\Support\QuickNotePictures)
+ *   GET    /quick-notes/pictures/{pid}                               the picture, to whoever may see its note
+ *   DELETE /quick-notes/pictures/{pid}                               remove a picture
  */
 final class QuickNotesController extends Controller
 {
@@ -140,6 +144,9 @@ final class QuickNotesController extends Controller
         $n = QuickNotes::find($request, $id);
         abort_unless(QuickNotes::canDelete($ctx, $n), 403, 'Only its author, an admin or the centre director can delete a shared note.');
         DB::table('quick_notes')->where('id', $id)->update(['deleted_at' => now(), 'deleted_by' => $ctx['uid']]);
+        // Its pictures go with it, files and all (the note's words stay soft-deleted for the audit trail; a picture
+        // has nothing to keep).
+        QuickNotePictures::purge([$id]);
         $this->revision($id, $ctx['uid'], 'deleted', null);
         $this->audit($ctx, 'quick_note.deleted', $id, $n->visibility, []);
 
@@ -166,6 +173,64 @@ final class QuickNotesController extends Controller
         })->values();
 
         return response()->json(['history' => $out]);
+    }
+
+    /** POST /quick-notes/{id}/pictures - add one picture to a note this person may see (and so edit). */
+    public function pictureStore(Request $request, int $id): JsonResponse
+    {
+        $ctx = QuickNotes::ctx($request);
+        $n = QuickNotes::find($request, $id);
+        $request->validate(
+            ['picture' => 'required|file|max:' . QuickNotePictures::MAX_KB . '|mimetypes:' . implode(',', QuickNotePictures::TYPES)],
+            [
+                'picture.required' => 'Pick a picture to add.',
+                'picture.file' => 'Pick a picture to add.',
+                'picture.uploaded' => 'That picture is too big. Pictures can be up to 10 MB.',
+                'picture.max' => 'That picture is too big. Pictures can be up to 10 MB.',
+                'picture.mimetypes' => 'Only pictures can be added: PNG, JPG, WebP or GIF.',
+            ]
+        );
+        $pid = DB::transaction(function () use ($n, $request, $ctx) {
+            DB::table('quick_notes')->where('id', $n->id)->lockForUpdate()->first(['id']);
+            abort_if(QuickNotePictures::count((int) $n->id) >= QuickNotePictures::MAX, 422, 'A note can have up to ' . QuickNotePictures::MAX . ' pictures.');
+            return QuickNotePictures::store($n, $request->file('picture'), $ctx['uid']);
+        });
+        DB::table('quick_notes')->where('id', $n->id)->update(['updated_by' => $ctx['uid'], 'updated_at' => now()]);
+        $this->revision((int) $n->id, $ctx['uid'], 'picture_added', null);
+        $this->audit($ctx, 'quick_note.picture_added', (int) $n->id, $n->visibility, ['picture']);
+
+        return response()->json(['picture' => ['id' => $pid], 'note' => $this->present($request, $ctx, collect([QuickNotes::find($request, (int) $n->id)]))[0]], 201);
+    }
+
+    /** GET /quick-notes/pictures/{pid} - only to someone who may see the note right now, in the active agency. */
+    public function pictureShow(Request $request, int $pid)
+    {
+        $pic = DB::table('quick_note_pictures')->where('id', $pid)->first();
+        abort_unless($pic, 404, 'That picture is no longer available.');
+        $n = QuickNotes::find($request, (int) $pic->note_id);          // 404 unless this person may see the note
+        abort_unless((int) ($n->agency_id ?? 0) === (int) ($pic->agency_id ?? 0), 404, 'That picture is no longer available.');
+        $bytes = QuickNotePictures::bytes($pic);
+        abort_unless($bytes !== null, 404, 'That picture is no longer available.');
+
+        return response($bytes, 200, [
+            'Content-Type' => $pic->mime ?: 'image/webp', 'Content-Disposition' => 'inline; filename="note-picture-' . (int) $pic->id . '.webp"',
+            'Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    /** DELETE /quick-notes/pictures/{pid} - remove a picture from a note this person may see. */
+    public function pictureDestroy(Request $request, int $pid): JsonResponse
+    {
+        $ctx = QuickNotes::ctx($request);
+        $pic = DB::table('quick_note_pictures')->where('id', $pid)->first();
+        abort_unless($pic, 404, 'That picture is no longer available.');
+        $n = QuickNotes::find($request, (int) $pic->note_id);
+        QuickNotePictures::purge([], [$pid]);
+        DB::table('quick_notes')->where('id', $n->id)->update(['updated_by' => $ctx['uid'], 'updated_at' => now()]);
+        $this->revision((int) $n->id, $ctx['uid'], 'picture_removed', null);
+        $this->audit($ctx, 'quick_note.picture_removed', (int) $n->id, $n->visibility, ['picture']);
+
+        return response()->json(['ok' => true]);
     }
 
     /** Records to link a note to, within what this person may see. */
@@ -263,8 +328,9 @@ final class QuickNotesController extends Controller
         $tz = AgencyTime::tz($ctx['agency']);
         $name = fn ($id) => ($u = $users->get($id)) ? trim($u->first_name . ' ' . $u->last_name) : null;
         $local = fn ($t) => $t ? \Carbon\Carbon::parse($t, 'UTC')->setTimezone($tz)->format('Y-m-d H:i') : null;
+        $pics = QuickNotePictures::forNotes($rows->pluck('id')->map(fn ($v) => (int) $v)->all());
 
-        return $rows->map(function ($n) use ($request, $ctx, $name, $centres, $local) {
+        return $rows->map(function ($n) use ($request, $ctx, $name, $centres, $local, $pics) {
             $link = null;
             if ($n->linked_type && $n->linked_id) {
                 $rec = QuickNotes::record($request, $ctx, $n->linked_type, $n->linked_id);
@@ -278,6 +344,7 @@ final class QuickNotesController extends Controller
                 'author' => $name($n->owner_user_id), 'updated_by' => $name($n->updated_by),
                 'created_local' => $local($n->created_at), 'updated_local' => $local($n->updated_at),
                 'can_delete' => QuickNotes::canDelete($ctx, $n),
+                'pictures' => $pics[(int) $n->id] ?? [],
             ];
         })->values()->all();
     }

@@ -60,14 +60,28 @@
       + 'textarea.qn-in{height:auto;min-height:64px;padding:7px 10px;resize:vertical;line-height:1.4;width:100%;}'
       + '.qn-search{flex:1;min-width:120px;}'
       + '.qn-add{border:1px solid var(--qn-line);border-radius:12px;padding:8px;background:var(--qn-soft);margin:8px 0 10px;}'
-      + '.qn-add textarea.qn-in{min-height:44px;border-color:transparent;background:transparent;padding:4px 6px;}'
+      + '.qn-add .qn-add-title{width:100%;height:30px;border-color:transparent;background:transparent;padding:0 6px;font-weight:800;font-size:13.5px;}'
+      + '.qn-add .qn-add-title:focus{outline:none;}'
+      + '.qn-add textarea.qn-in{border-color:transparent;background:transparent;padding:4px 6px;border-top:1px solid var(--qn-line);border-radius:0;resize:none;overflow-y:hidden;}'
       + '.qn-add textarea.qn-in:focus{outline:none;}'
+      + '@media (max-width:700px){.qn-add .qn-add-title{height:36px;font-size:15px;}.qn-add textarea.qn-in{font-size:15px;}}'
       + '.qn-add-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;}'
       + '.qn-hint{font-size:11px;color:var(--qn-sub);margin-left:auto;}'
-      + '.qn-save{display:none;margin-left:auto;}'
+      + '.qn-save{display:none;margin-left:auto;}.qn-add.has-pics .qn-save{display:inline-block;}.qn-b:disabled{opacity:.5;cursor:default;}'
       + '@media (hover:none) and (pointer:coarse){.qn-hint{display:none;}.qn-save{display:inline-block;}}'
       + '.qn-b{height:28px;padding:0 11px;border-radius:8px;border:1px solid var(--qn-inb);background:var(--qn-card);color:var(--qn-ink);font-weight:700;font-size:12.5px;cursor:pointer;white-space:nowrap;}'
       + '.qn-b.p{background:#0F766E;border-color:#0F766E;color:#fff;}'
+      /* pictures: thumbnails in the composer and the note popup; a 🖼 count on the list */
+      + '.qn-pics{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 2px;}'
+      + '.qn-pics:empty{display:none;}'
+      + '.qn-th{position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;border:1px solid var(--qn-line);background:var(--qn-chip);cursor:zoom-in;flex:0 0 auto;}'
+      + '.qn-th img{width:100%;height:100%;object-fit:cover;display:block;}'
+      + '.qn-th.loading:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);animation:qn-sh 1s linear infinite;}'
+      + '@keyframes qn-sh{from{transform:translateX(-100%)}to{transform:translateX(100%)}}'
+      + '.qn-th-x{position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;background:rgba(15,23,42,.78);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;}'
+      + '.qn-th-x svg{width:12px;height:12px;}'
+      + '.qn-add.drop,.qn-e-drop.drop{outline:2px dashed var(--qn-accent);outline-offset:2px;}'
+      + '@media (hover:none) and (pointer:coarse){.qn-th{width:72px;height:72px;}.qn-th-x{width:26px;height:26px;}}'
       + '.qn-seg{display:inline-flex;border:1px solid var(--qn-inb);border-radius:8px;overflow:hidden;}'
       + '.qn-seg button{height:26px;padding:0 9px;border:0;background:var(--qn-card);color:var(--qn-sub);font-weight:700;font-size:12px;cursor:pointer;}'
       + '.qn-seg button.on{background:#0F766E;color:#fff;}'
@@ -84,9 +98,11 @@
       + '.qn-list{display:flex;flex-direction:column;gap:8px;}'
       + '.qn-grid .qn-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));align-items:start;}'
       + '.qn-card{position:relative;border:1px solid var(--qn-line);border-left:4px solid var(--qn-line);border-radius:10px;padding:8px 10px 6px;background:var(--qn-card);}'
-      + '.qn-card .qn-t{font-weight:800;font-size:13.5px;line-height:1.3;word-break:break-word;padding-right:22px;}'
-      + '.qn-card .qn-body{white-space:pre-wrap;word-break:break-word;line-height:1.4;margin-top:2px;}'
-      + '.qn-card.clamp .qn-body{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden;}'
+      /* The list shows each note's TITLE only, one line (Anthony: "should only show the title and not the contents
+         as this gets messy"). Tapping it opens the note. */
+      + '.qn-card .qn-t{display:block;padding-right:22px;color:var(--qn-ink);font-weight:800;font-size:13.5px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;}'
+      + '.qn-card .qn-t:hover{text-decoration:underline;text-underline-offset:2px;}'
+      + '.qn-card .qn-t:focus-visible{outline:2px solid var(--qn-accent);outline-offset:2px;border-radius:4px;}'
       + '.qn-pin{position:absolute;top:6px;right:8px;font-size:13px;}'
       + '.qn-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:6px;font-size:11.5px;color:var(--qn-sub);}'
       + '.qn-chip{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:999px;background:var(--qn-chip);color:var(--qn-sub);font-size:11.5px;font-weight:700;white-space:nowrap;border:0;font-family:inherit;}'
@@ -137,6 +153,23 @@
       + '.qn-rec-h{display:flex;align-items:center;gap:8px;font-weight:800;font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:var(--qn-sub);}';
     document.head.appendChild(s);
   }
+  /* A note's title for every list: its own title, or else the first line of its words with markdown marks taken
+     off, cut at 60 characters. Old notes (saved before the Title line) read the same way: nothing to migrate. */
+  function titleOf(n) {
+    var tt = String((n && n.title) || '').trim();
+    if (tt) return tt;
+    var lines = String((n && n.body) || '').split('\n'), line = '';
+    for (var i = 0; i < lines.length && !line; i++) line = stripMd(lines[i]);
+    if (!line) return T('Untitled note');
+    return line.length > 60 ? line.slice(0, 59).replace(/\s+\S*$/, '') + '…' : line;
+  }
+  function stripMd(s) {
+    return String(s || '')
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+\[[ xX]\]\s+|[-*+]\s+|\d+[.)]\s+)/, '')
+      .replace(/(\*\*|__|~~|`)/g, '').replace(/(^|\s)[*_](\S[^*_]*\S|\S)[*_](?=\s|$)/g, '$1$2')
+      .replace(/\s+/g, ' ').trim();
+  }
   function colourCss(n) {
     var c = n.colour && COLOURS[n.colour];
     if (!c) return '';
@@ -170,6 +203,7 @@
       chips.push(n.link.id ? '<button type="button" class="qn-chip" data-qn-go="' + esc(n.link.type) + ':' + n.link.id + '" data-kttip="' + esc(T('Open the record')) + '"><span data-no-i18n>' + ic + ' ' + esc(n.link.label) + '</span></button>'
         : '<span class="qn-chip">' + ic + ' ' + esc(T('A record you cannot open')) + '</span>');
     }
+    if (n.pictures && n.pictures.length) chips.push('<span class="qn-chip" data-kttip="' + esc(T('Pictures')) + '" aria-label="' + esc(n.pictures.length + ' ' + T('pictures')) + '">🖼 ' + n.pictures.length + '</span>');
     var who = n.visibility === 'agency' ? ((n.updated_by && n.updated_by !== n.author ? T('Edited by') + ' ' + n.updated_by : (n.author ? n.author : '')) + ' · ') : '';
     var acts = '<span class="qn-acts">'
       + '<button type="button" class="qn-ib" data-qn-act="pin" data-kttip="' + esc(n.pinned ? T('Unpin') : T('Pin to top')) + '" aria-label="' + esc(n.pinned ? T('Unpin') : T('Pin to top')) + '">' + (n.pinned ? '📍' : '📌') + '</button>'
@@ -180,8 +214,7 @@
       + '</span>';
     return '<div class="qn-card' + (opts && opts.clamp ? ' clamp' : '') + '" data-qn-id="' + n.id + '" style="' + colourCss(n) + '">'
       + (n.pinned ? '<span class="qn-pin" aria-label="' + esc(T('Pinned')) + '">📌</span>' : '')
-      + (n.title ? '<div class="qn-t" data-no-i18n>' + esc(n.title) + '</div>' : '')
-      + (n.body ? '<div class="qn-body" data-no-i18n>' + esc(n.body) + '</div>' : '')
+      + '<div class="qn-t" role="link" tabindex="0" data-qn-act="open" data-no-i18n title="' + esc(titleOf(n)) + '">' + esc(titleOf(n)) + '</div>'
       + '<div class="qn-meta">' + chips.join('') + '</div>'
       + '<div class="qn-meta"><span data-no-i18n>' + esc(who) + esc(when(n.updated_local)) + '</span>' + acts + '</div>'
       + '</div>';
@@ -206,7 +239,7 @@
   function mountList(host, opts) {
     css();
     opts = opts || {};
-    var st = { tab: opts.tab || 'mine', q: '', notes: [], colour: '', vis: opts.link ? 'agency' : null, centre: '' };
+    var st = { tab: opts.tab || 'mine', q: '', notes: [], colour: '', vis: opts.link ? 'agency' : null, centre: '', pics: [] };
     var root = document.createElement('div'); root.className = 'qn-root' + (opts.grid ? ' qn-grid' : '');
     host.innerHTML = ''; host.appendChild(root);
     var timer = null, seq = 0;
@@ -216,17 +249,21 @@
       var share = ctx.can_share;
       var vis = st.vis || (st.tab === 'agency' ? 'agency' : 'private');
       var centres = (ctx.centres || []);
-      var h = '<form class="qn-add" autocomplete="off">'
-        + '<textarea class="qn-in" name="body" rows="2" maxlength="5000" placeholder="' + esc(opts.link ? T('Add a note about this record…') : T('Write a quick note…')) + '" aria-label="' + esc(T('New note')) + '"></textarea>'
+      var phone = narrow(), rows = phone ? 4 : 5, minH = rows * (phone ? 21 : 19) + 10;
+      // min-height inline: kt-polish-v22 sizes textareas that carry no inline min-height of their own.
+      var h = '<form class="qn-add' + (st.pics.length ? ' has-pics' : '') + '" autocomplete="off">'
+        + '<input class="qn-in qn-add-title" name="title" maxlength="160" placeholder="' + esc(T('Title (optional)')) + '" aria-label="' + esc(T('Title')) + '">'
+        + '<textarea class="qn-in" name="body" rows="' + rows + '" data-qn-grow="' + (phone ? 260 : 320) + '" style="min-height:' + minH + 'px" maxlength="5000" placeholder="' + esc(opts.link ? T('Add a note about this record…') : T('Write a quick note…')) + '" aria-label="' + esc(T('New note')) + '"></textarea>'
+        + '<div class="qn-pics">' + thumbsHtml([], st.pics, true) + '</div>'
         + '<div class="qn-add-row">';
       if (share) h += '<span class="qn-seg" role="group" aria-label="' + esc(T('Who sees it')) + '"><button type="button" data-qn-vis="private" aria-pressed="' + (vis === 'private' ? 'true' : 'false') + '" class="' + (vis === 'private' ? 'on' : '') + '" data-kttip="' + esc(T('Only you can see this note')) + '">🔒 ' + esc(T('Just me')) + '</button><button type="button" data-qn-vis="agency" aria-pressed="' + (vis === 'agency' ? 'true' : 'false') + '" class="' + (vis === 'agency' ? 'on' : '') + '" data-kttip="' + esc(T('Staff can see and edit it')) + '">👥 ' + esc(T('Agency')) + '</button></span>';
       if (share && vis === 'agency' && !opts.link && centres.length > 1) {
         h += '<select class="qn-in" name="centre" aria-label="' + esc(T('Centre')) + '" style="height:28px;max-width:170px"><option value="">' + esc(T('Agency-wide')) + '</option>'
           + centres.map(function (c) { return '<option value="' + c.id + '"' + (String(st.centre) === String(c.id) ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>';
       }
-      h += dotsHtml(st.colour)
+      h += dotsHtml(st.colour) + picButtonHtml()
         + '<span class="qn-hint">' + esc(T('Enter saves · Shift+Enter new line')) + '</span>'
-        + '<button type="button" class="qn-b p qn-save" data-qn-save>' + esc(T('Save')) + '</button></div></form>';
+        + '<button type="button" class="qn-b p qn-save" data-qn-save data-kt-always-save>' + esc(T('Save')) + '</button></div></form>';
       return h;
     }
     function draw() {
@@ -249,7 +286,14 @@
       h += '</div>';
       if (opts.limit && st.notes.length > opts.limit) h += '<div style="margin-top:8px;text-align:right"><button type="button" class="qn-b" data-qn-all>' + esc(T('All notes')) + ' (' + st.notes.length + ')</button></div>';
       var keepFocus = document.activeElement && root.contains(document.activeElement) && document.activeElement.name === 'q';
+      var oT = root.querySelector('.qn-add input[name="title"]'), oB = root.querySelector('.qn-add textarea');
+      var draft = { t: oT ? oT.value : '', b: oB ? oB.value : '', f: document.activeElement === oT ? 't' : (document.activeElement === oB ? 'b' : '') };
       root.innerHTML = h;
+      var nT = root.querySelector('.qn-add input[name="title"]'), nB = root.querySelector('.qn-add textarea');
+      if (nT && draft.t) nT.value = draft.t;
+      if (nB && draft.b) { nB.value = draft.b; grow(nB); }
+      if (draft.f === 't' && nT) nT.focus(); else if (draft.f === 'b' && nB) nB.focus();
+      saveState();
       if (keepFocus) { var qi = root.querySelector('input[name="q"]'); if (qi) { qi.focus(); try { qi.setSelectionRange(qi.value.length, qi.value.length); } catch (e) {} } }
     }
     function load() {
@@ -261,38 +305,72 @@
     }
     function byId(id) { for (var i = 0; i < st.notes.length; i++) if (st.notes[i].id === id) return st.notes[i]; return null; }
     function submit(form) {
-      var ta = form.querySelector('textarea'), text = (ta.value || '').trim();
-      if (!text) return;
-      var lines = text.split('\n'), title = null, body = text;
-      if (lines.length > 1 && lines[0].length <= 80) { title = lines[0].trim(); body = lines.slice(1).join('\n').trim() || null; }
+      var ta = form.querySelector('textarea'), ti = form.querySelector('input[name="title"]');
+      var body = (ta.value || '').trim() || null, title = ti ? (ti.value || '').trim() || null : null;
+      var pics = st.pics.slice();
+      if (!body && !title && !pics.length) { ta.focus(); return; }
+      if (!body && !title) title = T('Pictures');
       var vis = (lastCtx && lastCtx.can_share) ? (st.vis || (st.tab === 'agency' ? 'agency' : 'private')) : 'private';
       var o = { title: title, body: body, visibility: vis, colour: st.colour || null };
       var cs = form.querySelector('select[name="centre"]'); if (cs && cs.value && vis === 'agency') o.centre_id = +cs.value;
       if (opts.link) { o.linked_type = opts.link.type; o.linked_id = opts.link.id; }
-      ta.disabled = true;
-      save(null, o).then(function () {
+      ta.disabled = true; if (ti) ti.disabled = true;
+      save(null, o).then(function (note) {
+        return (pics.length && note ? uploadPictures(note.id, pics).then(function () { changed(); }, function (e) {
+          toast('⚠️', T('The note is saved, but a picture could not be added'), errMsg(e), '#DC2626'); changed();
+        }) : Promise.resolve()).then(function () { return note; });
+      }).then(function () {
+        st.pics.forEach(function (p) { try { URL.revokeObjectURL(p.url); } catch (e) {} }); st.pics = [];
         toast('📃', T('Note saved'), vis === 'agency' ? T('Shared with staff') : T('Only you can see it'), '#0F766E');
         if (!opts.link && !opts.compact && st.tab !== (vis === 'agency' ? 'agency' : 'mine')) st.tab = vis === 'agency' ? 'agency' : 'mine';
+        ta.value = ''; if (ti) ti.value = '';
         st.vis = null; load().then(function () { var t2 = root.querySelector('.qn-add textarea'); if (t2) t2.focus(); });
-      }, function (e) { ta.disabled = false; toast('⚠️', T('Could not save the note'), errMsg(e), '#DC2626'); });
+      }, function (e) { ta.disabled = false; if (ti) ti.disabled = false; toast('⚠️', T('Could not save the note'), errMsg(e), '#DC2626'); });
     }
 
     root.addEventListener('keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.qn-card .qn-t, .qn-th, .qn-th-x')) { e.preventDefault(); e.target.click(); return; }
+      if (e.target.matches('.qn-add .qn-add-title') && e.key === 'Enter' && !e.isComposing) { e.preventDefault(); var b = e.target.form.querySelector('textarea'); if (b) b.focus(); return; }
       // Touch screens: Enter is a new line (there is no Shift on a phone keyboard); the Save button saves.
       if (e.target.matches('.qn-add textarea') && e.key === 'Enter' && !e.shiftKey && !e.isComposing && !touchOnly()) { e.preventDefault(); submit(e.target.form); }
     });
     root.addEventListener('submit', function (e) { e.preventDefault(); submit(e.target); });
     root.addEventListener('click', function (e) { var sb = e.target.closest && e.target.closest('[data-qn-save]'); if (sb && root.contains(sb)) { e.preventDefault(); submit(sb.form || sb.closest('form')); } });
+    function saveState() {
+      var f = root.querySelector('.qn-add'); if (!f) return;
+      var sb = f.querySelector('[data-qn-save]'), ta = f.querySelector('textarea'), ti = f.querySelector('input[name="title"]');
+      var has = !!((ta && ta.value.trim()) || (ti && ti.value.trim()) || st.pics.length);
+      if (sb && !(ta && ta.disabled)) sb.disabled = !has;
+    }
     root.addEventListener('input', function (e) {
+      if (e.target.matches && e.target.matches('.qn-add textarea, .qn-add input[name="title"]')) { if (e.target.tagName === 'TEXTAREA') grow(e.target); saveState(); return; }
       if (e.target.name !== 'q') return;
       clearTimeout(timer); var v = e.target.value;
       timer = setTimeout(function () { st.q = v.trim(); load(); }, 250);
     });
-    root.addEventListener('change', function (e) { if (e.target.name === 'centre') st.centre = e.target.value; });
+    root.addEventListener('change', function (e) {
+      if (e.target.name === 'centre') st.centre = e.target.value;
+      if (e.target.matches && e.target.matches('.qn-add [data-qn-file]')) { var fl = e.target.files; addPending(fl); e.target.value = ''; }
+    });
+    function addPending(files) { takePictures(files, PIC_MAX - st.pics.length, function (got) { st.pics = st.pics.concat(got); keepDraft(draw); }); }
+    root.addEventListener('paste', function (e) {
+      if (!e.target.closest || !e.target.closest('.qn-add')) return;
+      var fs = clipFiles(e); if (!fs.length) return;
+      e.preventDefault(); addPending(fs);
+    });
+    root.addEventListener('dragover', function (e) { var f = e.target.closest && e.target.closest('.qn-add'); if (!f) return; e.preventDefault(); f.classList.add('drop'); });
+    root.addEventListener('dragleave', function (e) { var f = e.target.closest && e.target.closest('.qn-add'); if (f && !f.contains(e.relatedTarget)) f.classList.remove('drop'); });
+    root.addEventListener('drop', function (e) {
+      var f = e.target.closest && e.target.closest('.qn-add'); if (!f) return;
+      e.preventDefault(); f.classList.remove('drop'); addPending(clipFiles(e));
+    });
     root.addEventListener('click', function (e) {
       var t = e.target;
       var tab = t.closest('[data-qn-tab]'); if (tab) { st.tab = tab.getAttribute('data-qn-tab'); st.vis = null; load(); return; }
       var vb = t.closest('[data-qn-vis]'); if (vb) { st.vis = vb.getAttribute('data-qn-vis'); keepDraft(draw); return; }
+      if (t.closest('.qn-add [data-qn-addpic]')) { var fi = root.querySelector('.qn-add [data-qn-file]'); if (fi) fi.click(); return; }
+      var up = t.closest('.qn-add [data-qn-unpend]'); if (up) { var gone = st.pics.splice(+up.getAttribute('data-qn-unpend'), 1)[0]; try { URL.revokeObjectURL(gone.url); } catch (er) {} keepDraft(draw); return; }
+      var pv = t.closest('.qn-add [data-qn-pend]'); if (pv) { var pp = st.pics[+pv.getAttribute('data-qn-pend')]; if (pp) viewPicture(pp.blob); return; }
       var dot = t.closest('.qn-add [data-qn-colour]'); if (dot) { st.colour = dot.getAttribute('data-qn-colour'); keepDraft(draw); return; }
       var go = t.closest('[data-qn-go]'); if (go) { goRecord(go.getAttribute('data-qn-go')); return; }
       if (t.closest('[data-qn-all]')) { openDrawer(); return; }
@@ -301,20 +379,150 @@
       var a = act.getAttribute('data-qn-act');
       if (a === 'pin') save(n.id, { pinned: !n.pinned }).then(load, function (er) { toast('⚠️', T('Could not save the note'), errMsg(er), '#DC2626'); });
       else if (a === 'colour') pickColour(act, n, load);
-      else if (a === 'edit') openEditor(n, load);
+      else if (a === 'edit' || a === 'open') openEditor(n, load);
       else if (a === 'history') openHistory(n);
       else if (a === 'delete') del(n, load);
     });
     // Redraw without losing what they were typing in the quick-add box.
     function keepDraft(fn) {
       var ta = root.querySelector('.qn-add textarea'), v = ta ? ta.value : '';
+      var ti = root.querySelector('.qn-add input[name="title"]'), tv = ti ? ti.value : '';
       fn();
-      var t2 = root.querySelector('.qn-add textarea'); if (t2) { t2.value = v; t2.focus(); }
+      var t3 = root.querySelector('.qn-add input[name="title"]'); if (t3) t3.value = tv;
+      var t2 = root.querySelector('.qn-add textarea'); if (t2) { t2.value = v; grow(t2); t2.focus(); }
+      saveState();
     }
     var onChange = function () { if (document.body.contains(root)) load(); else window.removeEventListener('kt:quick-notes-changed', onChange); };
     window.addEventListener('kt:quick-notes-changed', onChange);
     draw(); load();
     return { reload: load, root: root };
+  }
+  function narrow() { try { return matchMedia('(max-width:700px)').matches; } catch (e) { return false; } }
+  // Grow the quick-add box with its words, up to its cap; past that it scrolls.
+  function grow(ta) {
+    if (!ta) return;
+    var cap = +ta.getAttribute('data-qn-grow') || 320;
+    ta.style.height = 'auto';
+    var h = Math.min(ta.scrollHeight + 2, cap);
+    ta.style.height = h + 'px';
+    ta.style.overflowY = ta.scrollHeight + 2 > cap ? 'auto' : 'hidden';
+  }
+  /* ── pictures (2026-11-26, Anthony: "ability to add screenshots to notes as well wire this up") ──────────────
+     Paste (Ctrl/Cmd+V), drop, or the 🖼 Add picture button (camera or gallery on a phone). Each picture is shrunk on
+     the device to 1920px and redrawn through a canvas, which drops EXIF (location) before it leaves; the server
+     re-encodes again (App\Support\QuickNotePictures). Pictures are fetched signed in, never from a public link. */
+  var PIC_MAX = 5, PIC_BYTES = 10 * 1024 * 1024, PIC_SIDE = 1920;
+  var X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  function picErr(msg) { toast('⚠️', T('Could not add the picture'), T(msg), '#DC2626'); }
+  function isPicture(f) { return f && (/^image\//i.test(f.type || '') || /\.(heic|heif|png|jpe?g|webp|gif)$/i.test(f.name || '')); }
+  function decode(file) {
+    if (window.createImageBitmap) {
+      return createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return viaImg(file); });
+    }
+    return viaImg(file);
+  }
+  function viaImg(file) {
+    return new Promise(function (res, rej) {
+      var u = URL.createObjectURL(file), im = new Image();
+      im.onload = function () { res(im); }; im.onerror = function () { URL.revokeObjectURL(u); rej(new Error('decode')); };
+      im.src = u;
+    });
+  }
+  // Shrink to PIC_SIDE and redraw: the canvas copy carries no EXIF. HEIC is read wherever the phone can (Safari).
+  function prepPicture(file) {
+    if (!isPicture(file)) return Promise.reject(new Error('Only pictures can be added: PNG, JPG, WebP or GIF.'));
+    if (file.size > PIC_BYTES) return Promise.reject(new Error('That picture is too big. Pictures can be up to 10 MB.'));
+    return decode(file).then(function (img) {
+      var w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
+      if (!w || !h) throw new Error('That picture could not be read. Try a PNG or JPG.');
+      var k = Math.min(1, PIC_SIDE / Math.max(w, h)), cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k));
+      var c = document.createElement('canvas'); c.width = cw; c.height = ch;
+      c.getContext('2d').drawImage(img, 0, 0, cw, ch);
+      try { if (img.close) img.close(); } catch (e) {}
+      return new Promise(function (res, rej) {
+        c.toBlob(function (b) {
+          if (b && b.type === 'image/webp') return res(b);
+          c.toBlob(function (j) { j ? res(j) : rej(new Error('That picture could not be read. Try a PNG or JPG.')); }, 'image/jpeg', 0.86);
+        }, 'image/webp', 0.86);
+      });
+    }, function () {
+      throw new Error(/\.(heic|heif)$/i.test(file.name || '') || /hei[cf]/i.test(file.type || '')
+        ? 'This phone picture (HEIC) cannot be read here. Share it as a JPG, or take a screenshot of it.'
+        : 'That picture could not be read. Try a PNG or JPG.');
+    });
+  }
+  // Turn picked / pasted / dropped files into ready blobs, up to the room left. Calls back once with the new ones.
+  function takePictures(files, room, cb) {
+    files = [].slice.call(files || []).filter(function (f) { return f && (f.kind ? f.kind === 'file' : true); });
+    if (!files.length) return;
+    if (room <= 0) { picErr('A note can have up to ' + PIC_MAX + ' pictures.'); return; }
+    if (files.length > room) { picErr('A note can have up to ' + PIC_MAX + ' pictures.'); files = files.slice(0, room); }
+    var out = [];
+    files.reduce(function (pr, f) {
+      return pr.then(function () { return prepPicture(f).then(function (b) { out.push({ blob: b, url: URL.createObjectURL(b) }); }, function (e) { picErr(e.message); }); });
+    }, Promise.resolve()).then(function () { if (out.length) cb(out); });
+  }
+  function clipFiles(e) {
+    var dt = e.clipboardData || e.dataTransfer; if (!dt) return [];
+    var fs = [].slice.call(dt.files || []);
+    if (!fs.length && dt.items) [].forEach.call(dt.items, function (it) { if (it.kind === 'file') { var f = it.getAsFile(); if (f) fs.push(f); } });
+    return fs.filter(isPicture);
+  }
+  function uploadPictures(noteId, list) {
+    return list.reduce(function (pr, p) {
+      return pr.then(function () {
+        var fd = new FormData(); fd.append('picture', p.blob, 'picture.' + (p.blob.type === 'image/webp' ? 'webp' : 'jpg'));
+        return api().post('/quick-notes/' + noteId + '/pictures', fd, { quiet: true });
+      });
+    }, Promise.resolve());
+  }
+  var picCache = {};
+  function picBase() { return (window.KT_CONFIG && window.KT_CONFIG.apiBase) || 'https://api.kiddietrac.com/api/v1'; }
+  // A saved picture, fetched signed in and in the active agency (the server re-checks the note every time).
+  function picBlob(id) {
+    if (picCache[id]) return picCache[id];
+    var h = { Accept: 'image/*' };
+    try {
+      var tk = (KT.Auth && KT.Auth.token && KT.Auth.token()) || sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+      if (tk) h.Authorization = 'Bearer ' + tk;
+      var ag = sessionStorage.getItem('kt_active_agency_id'); if (ag) h['X-Active-Agency-Id'] = ag;
+    } catch (e) {}
+    var pr = fetch(picBase() + '/quick-notes/pictures/' + id, { headers: h, credentials: 'omit' }).then(function (r) {
+      if (!r.ok) throw new Error(r.status === 404 ? 'That picture is no longer available.' : 'Could not load the picture.');
+      return r.blob();
+    });
+    picCache[id] = pr; pr.catch(function () { delete picCache[id]; });
+    return pr;
+  }
+  function viewPicture(blobOrId, title) {
+    Promise.resolve(typeof blobOrId === 'number' ? picBlob(blobOrId) : blobOrId).then(function (b) {
+      if (KT.viewBlob) KT.viewBlob(b, { title: title || T('Picture'), filename: 'note-picture.' + (b.type === 'image/webp' ? 'webp' : 'jpg') });
+      else window.open(URL.createObjectURL(b), '_blank', 'noopener');
+    }, function (e) { toast('⚠️', T('Could not open the picture'), T(e.message), '#DC2626'); });
+  }
+  // Thumbnails: saved ({id}) and not yet saved ({url}). removable adds the round ✕.
+  function thumbsHtml(saved, pending, removable) {
+    var h = '';
+    (saved || []).forEach(function (p) {
+      h += '<div class="qn-th loading" role="button" tabindex="0" data-qn-pic="' + p.id + '" aria-label="' + esc(T('Open the picture')) + '"><img alt="" data-qn-pid="' + p.id + '">'
+        + (removable ? '<span class="qn-th-x" role="button" tabindex="0" data-qn-unpic="' + p.id + '" aria-label="' + esc(T('Remove picture')) + '" data-kttip="' + esc(T('Remove picture')) + '">' + X_SVG + '</span>' : '') + '</div>';
+    });
+    (pending || []).forEach(function (p, i) {
+      h += '<div class="qn-th" role="button" tabindex="0" data-qn-pend="' + i + '" aria-label="' + esc(T('Open the picture')) + '"><img alt="" src="' + esc(p.url) + '">'
+        + (removable ? '<span class="qn-th-x" role="button" tabindex="0" data-qn-unpend="' + i + '" aria-label="' + esc(T('Remove picture')) + '" data-kttip="' + esc(T('Remove picture')) + '">' + X_SVG + '</span>' : '') + '</div>';
+    });
+    return h;
+  }
+  function fillThumbs(host) {
+    [].forEach.call(host.querySelectorAll('img[data-qn-pid]:not([src])'), function (im) {
+      picBlob(+im.getAttribute('data-qn-pid')).then(function (b) {
+        im.src = URL.createObjectURL(b); var th = im.closest('.qn-th'); if (th) th.classList.remove('loading');
+      }, function () { var th = im.closest('.qn-th'); if (th) th.classList.remove('loading'); });
+    });
+  }
+  function picButtonHtml() {
+    return '<button type="button" class="qn-b qn-pic-btn" data-qn-addpic data-kttip="' + esc(T('Paste, drop or pick a picture')) + '">🖼 ' + esc(T('Add picture')) + '</button>'
+      + '<input type="file" accept="image/*" multiple hidden data-qn-file aria-hidden="true" tabindex="-1">';
   }
   function touchOnly() { try { return matchMedia('(hover: none) and (pointer: coarse)').matches; } catch (e) { return false; } }
   function dotsHtml(sel) {
@@ -364,9 +572,32 @@
       + '<div><span class="qn-l">' + esc(T('Colour')) + '</span><span id="qn-e-col">' + dotsHtml(colour) + '</span></div>'
       + '<div><span class="qn-l">' + esc(T('Pinned')) + '</span><label class="qn-row" style="height:30px"><input type="checkbox" id="qn-e-pin"' + (n.pinned ? ' checked' : '') + '> ' + esc(T('Pin to top')) + '</label></div>'
       + '</div>'
+      + '<span class="qn-l">' + esc(T('Pictures')) + '</span><div id="qn-e-pics" class="qn-pics"></div><input type="hidden" id="qn-e-picsig" value="">'
+      + '<div class="qn-row" id="qn-e-picrow">' + picButtonHtml() + '<span class="qn-sub" id="qn-e-pichint"></span></div>'
       + (ctx.can_share ? '<span class="qn-l">' + esc(T('Linked to')) + '</span><div id="qn-e-link"></div>' : '')
       + '<div class="qn-sub" id="qn-e-msg" style="margin-top:8px;min-height:16px"></div>';
     var linkHost = body.querySelector('#qn-e-link');
+    var savedPics = (n.pictures || []).slice(), dropPics = [], newPics = [];
+    function drawPics() {
+      var keep = savedPics.filter(function (p) { return dropPics.indexOf(p.id) < 0; });
+      var host = body.querySelector('#qn-e-pics');
+      host.innerHTML = thumbsHtml(keep, newPics, true); fillThumbs(host);
+      var left = PIC_MAX - keep.length - newPics.length;
+      body.querySelector('[data-qn-addpic]').style.display = left > 0 ? '' : 'none';
+      body.querySelector('#qn-e-pichint').textContent = left > 0 ? (touchOnly() ? '' : T('or paste / drop one into the note')) : T('A note can have up to 5 pictures.');
+      var sig = body.querySelector('#qn-e-picsig'), nv = dropPics.join(',') + '|' + newPics.length;
+      if (sig && sig.value !== (nv === '|0' ? '' : nv)) { sig.value = nv === '|0' ? '' : nv; try { sig.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} }
+    }
+    function roomLeft() { return PIC_MAX - savedPics.filter(function (p) { return dropPics.indexOf(p.id) < 0; }).length - newPics.length; }
+    function addNew(files) { takePictures(files, roomLeft(), function (got) { newPics = newPics.concat(got); drawPics(); }); }
+    body.classList.add('qn-e-drop');
+    body.addEventListener('paste', function (e) { var fs = clipFiles(e); if (!fs.length) return; e.preventDefault(); addNew(fs); });
+    body.addEventListener('dragover', function (e) { e.preventDefault(); body.classList.add('drop'); });
+    body.addEventListener('dragleave', function (e) { if (!body.contains(e.relatedTarget)) body.classList.remove('drop'); });
+    body.addEventListener('drop', function (e) { e.preventDefault(); body.classList.remove('drop'); addNew(clipFiles(e)); });
+    body.addEventListener('change', function (e) { if (e.target.matches && e.target.matches('[data-qn-file]')) { addNew(e.target.files); e.target.value = ''; } });
+    body.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.qn-th, .qn-th-x')) { e.preventDefault(); e.target.click(); } });
+    drawPics();
     function drawLink() {
       if (!linkHost) return;
       if (link) {
@@ -392,6 +623,11 @@
     });
     body.addEventListener('click', function (e) {
       var t = e.target;
+      if (t.closest('[data-qn-addpic]')) { body.querySelector('[data-qn-file]').click(); return; }
+      var ux = t.closest('[data-qn-unpic]'); if (ux) { dropPics.push(+ux.getAttribute('data-qn-unpic')); drawPics(); return; }
+      var un = t.closest('[data-qn-unpend]'); if (un) { var g = newPics.splice(+un.getAttribute('data-qn-unpend'), 1)[0]; try { URL.revokeObjectURL(g.url); } catch (er) {} drawPics(); return; }
+      var sp = t.closest('[data-qn-pic]'); if (sp) { viewPicture(+sp.getAttribute('data-qn-pic'), titleOf(n)); return; }
+      var np = t.closest('[data-qn-pend]'); if (np) { var q2 = newPics[+np.getAttribute('data-qn-pend')]; if (q2) viewPicture(q2.blob, titleOf(n)); return; }
       var pk = t.closest('[data-pick]'); if (pk) { link = { type: pk.getAttribute('data-type'), id: +pk.getAttribute('data-pick'), label: pk.getAttribute('data-label') }; drawLink(); return; }
       if (t.closest('[data-unlink]')) { link = null; drawLink(); return; }
       var d = t.closest('#qn-e-col [data-qn-colour]'); if (d) { colour = d.getAttribute('data-qn-colour'); body.querySelector('#qn-e-col').innerHTML = dotsHtml(colour); return; }
@@ -409,11 +645,20 @@
         colour: colour || null, pinned: body.querySelector('#qn-e-pin').checked, remind_on: body.querySelector('#qn-e-rem').value || null,
         visibility: vis
       };
-      if (!o.title && !o.body) { msg.style.color = '#B91C1C'; msg.textContent = T('Write something first.'); return false; }
+      var hasPics = savedPics.length - dropPics.length + newPics.length > 0;
+      if (!o.title && !o.body && !hasPics) { msg.style.color = '#B91C1C'; msg.textContent = T('Write something first.'); return false; }
+      if (!o.title && !o.body) o.title = T('Pictures');
       if (vis === 'agency') { var cs = body.querySelector('#qn-e-centre'); o.centre_id = cs && cs.value ? +cs.value : null; }
       if (linkHost) { o.linked_type = link ? link.type : null; o.linked_id = link ? link.id : null; }
       if (n.id && n.visibility === 'agency') delete o.visibility;
-      return save(n.id, o).then(function () { toast('📃', T('Note saved'), '', '#0F766E'); done && done(); },
+      return save(n.id, o).then(function (saved) {
+        var nid = n.id || (saved && saved.id);
+        var drops = dropPics.slice(), adds = newPics.slice();
+        if (!nid || (!drops.length && !adds.length)) return;
+        return drops.reduce(function (pr, pid) { return pr.then(function () { delete picCache[pid]; return api().delete('/quick-notes/pictures/' + pid, { quiet: true }); }); }, Promise.resolve())
+          .then(function () { return uploadPictures(nid, adds); })
+          .then(function () { changed(); }, function (e) { changed(); toast('⚠️', T('The note is saved, but a picture could not be changed'), errMsg(e), '#DC2626'); });
+      }).then(function () { toast('📃', T('Note saved'), '', '#0F766E'); done && done(); },
         function (e) { msg.style.color = '#B91C1C'; msg.textContent = errMsg(e); return false; });
     } });
     KT.Shell.Modal.open({ title: n.id ? T('Edit note') : T('New note'), body: body, actions: actions });
@@ -427,9 +672,10 @@
     KT.Shell.Modal.open({ title: T('Note history'), body: body, actions: [{ label: T('Close') }] });
     api().get('/quick-notes/' + n.id + '/history').then(function (j) {
       var rows = (j && j.history) || [];
-      if (!rows.length) { body.innerHTML = '<div class="qn-empty">' + esc(T('No history yet.')) + '</div>'; return; }
-      body.innerHTML = rows.map(function (r) {
-        var what = r.action === 'created' ? T('Created the note') : (r.action === 'deleted' ? T('Deleted the note') : T('Changed') + ' ' + r.fields.map(function (f) { return T(FIELD[f] || f); }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', '));
+      var head = '<div style="font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-bottom:6px;border-bottom:1px solid var(--qn-line)" data-no-i18n>' + esc(titleOf(n)) + '</div>';
+      if (!rows.length) { body.innerHTML = head + '<div class="qn-empty">' + esc(T('No history yet.')) + '</div>'; return; }
+      body.innerHTML = head + rows.map(function (r) {
+        var what = r.action === 'picture_added' ? T('Added a picture') : r.action === 'picture_removed' ? T('Removed a picture') : r.action === 'created' ? T('Created the note') : (r.action === 'deleted' ? T('Deleted the note') : T('Changed') + ' ' + r.fields.map(function (f) { return T(FIELD[f] || f); }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', '));
         var detail = '';
         if (r.action === 'updated' && r.changes && r.changes.body) {
           detail = '<div class="qn-sub" style="white-space:pre-wrap;margin-top:3px;border-left:3px solid var(--qn-line);padding-left:8px" data-no-i18n>' + esc(String(r.changes.body.from || '').slice(0, 400)) + '</div>';
@@ -509,7 +755,7 @@
     return wrap;
   }
 
-  KT.quickNotes = { toggle: toggle, open: open, openDrawer: openDrawer, closeDrawer: closeDrawer, widget: widget, recordCard: recordCard, render: render, edit: openEditor };
+  KT.quickNotes = { titleOf: titleOf, toggle: toggle, open: open, openDrawer: openDrawer, closeDrawer: closeDrawer, widget: widget, recordCard: recordCard, render: render, edit: openEditor };
 
   function registerScreens() {
     if (!KT.Shell || !KT.Shell.registerScreen) return false;

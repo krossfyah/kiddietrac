@@ -1248,3 +1248,5 @@ put platform/licences/centre-cap/{agencyId} | Changed an agency's included centr
 post quick-notes | Added a quick note
 patch quick-notes/{id} | Updated a quick note
 delete quick-notes/{id} | Deleted a quick note
+post quick-notes/{id}/pictures | Added a picture to a quick note
+delete quick-notes/pictures/{pid} | Removed a picture from a quick note

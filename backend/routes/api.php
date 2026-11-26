@@ -659,6 +659,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::patch('/{id}', [\App\Http\Controllers\Api\QuickNotesController::class, 'update'])->whereNumber('id');
             Route::delete('/{id}', [\App\Http\Controllers\Api\QuickNotesController::class, 'destroy'])->whereNumber('id');
             Route::get('/{id}/history', [\App\Http\Controllers\Api\QuickNotesController::class, 'history'])->whereNumber('id');
+            // Pictures on a note (App\Support\QuickNotePictures): served only through here, to whoever may see the note.
+            Route::post('/{id}/pictures', [\App\Http\Controllers\Api\QuickNotesController::class, 'pictureStore'])->whereNumber('id')->middleware('throttle:60,1,r-qn-pic');
+            Route::get('/pictures/{pid}', [\App\Http\Controllers\Api\QuickNotesController::class, 'pictureShow'])->whereNumber('pid')->middleware('throttle:300,1,r-qn-picget');
+            Route::delete('/pictures/{pid}', [\App\Http\Controllers\Api\QuickNotesController::class, 'pictureDestroy'])->whereNumber('pid');
             Route::get('/{id}', [\App\Http\Controllers\Api\QuickNotesController::class, 'show'])->whereNumber('id');
         });
 

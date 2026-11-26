@@ -128,6 +128,8 @@ final class WebDemoShowcase
                     if ($png && str_starts_with((string) $png, 'play-spark-pictures/' . $agencyId . '/')) @unlink(storage_path('app/private/' . $png));
                 }
             }
+            // Pictures someone added to a demo note go with the note (files and rows).
+            if (! empty($old['quick_notes'])) \App\Support\QuickNotePictures::purge($old['quick_notes']);
             // Only what this wrote last time: timeline rows first (they point at photos), then newest tables first.
             $order = array_reverse($old, true);
             if (isset($order['daily_events'])) $order = ['daily_events' => $order['daily_events']] + $order;
