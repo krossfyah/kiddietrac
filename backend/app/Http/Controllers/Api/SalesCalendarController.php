@@ -54,14 +54,17 @@ class SalesCalendarController extends Controller
                 'lead_id' => $e->lead_id, 'editable' => $this->mayEdit($request, (int) $e->user_id),
             ])->values();
 
-        $bookings = DB::table('marketing_bookings')->whereIn('status', ['requested', 'booked'])
+        $bookings = DB::table('marketing_bookings')->whereIn('status', ['requested', 'booked', 'held', 'no_show', 'rescheduled'])   // + outcomes (NoShow, 2026-11-28)
             ->where('starts_at', '<', $tu)->where('ends_at', '>', $fu)->orderBy('starts_at')->get()
             ->map(fn ($b) => [
                 'id' => (int) $b->id, 'status' => $b->status, 'user_id' => $b->host_user_id ? (int) $b->host_user_id : null,
                 'title' => BookingMail::typeName($b) . ' · ' . $b->name . ($b->agency ? ' (' . $b->agency . ')' : ''),
                 'start' => Carbon::parse($b->starts_at, 'UTC')->toIso8601String(), 'end' => Carbon::parse($b->ends_at, 'UTC')->toIso8601String(),
-                'via' => $b->meet_via, 'teams_url' => $b->teams_url,
+                'via' => $b->meet_via, 'teams_url' => $b->teams_url, 'lead_id' => $b->sales_lead_id ? (int) $b->sales_lead_id : null,
             ])->values();
+        // Which platform meetings in the range are with a sales lead (their menu offers held / no-show; NoShow, 2026-11-28).
+        $meetingLeads = \App\Support\NoShow::leadIdsForMeetings(DB::table('meetings')->where('scope', 'platform')->where('starts_at', '<', $tu)->where('ends_at', '>', $fu)
+            ->whereIn('status', ['scheduled', 'held', 'no_show', 'rescheduled'])->pluck('id')->map(fn ($x) => (int) $x)->all());
 
         // Pipeline meetings and follow-ups that are due in the range (all-day items).
         $acts = DB::table('sales_activities as a')->join('sales_leads as l', 'l.id', '=', 'a.lead_id')
@@ -77,7 +80,7 @@ class SalesCalendarController extends Controller
 
         return response()->json([
             'tz' => $tz, 'from' => $from->toDateString(), 'to' => $to->toDateString(), 'me' => (int) $request->user()->id, 'admin' => $this->isAdmin((int) $request->user()->id),
-            'staff' => $staff, 'events' => $events, 'bookings' => $bookings, 'activities' => $acts->concat($fups)->values(), 'where' => self::WHERE,
+            'staff' => $staff, 'events' => $events, 'bookings' => $bookings, 'meeting_leads' => (object) $meetingLeads, 'activities' => $acts->concat($fups)->values(), 'where' => self::WHERE,
         ]);
     }
 

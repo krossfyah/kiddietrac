@@ -59,6 +59,11 @@ final class EmailTemplate
         // force_brand ('kt' | 'agency') overrides white-label detection — used to
         // preview both looks. Omit for the normal per-agency behaviour.
         $brand = self::brand($agency, $opts['force_brand'] ?? null);
+        // support_email: a mail people are ASKED to reply to (Reply-To a real inbox) must not say "don't reply,
+        // noreply@ is not monitored" in its footer (no-show reschedule email, 2026-11-28).
+        if (! empty($opts['support_email'])) {
+            $brand['support_email'] = (string) $opts['support_email'];
+        }
         // Tells App\Listeners\WhiteLabelMail whose brand the words belong to (2026-10-21).
         $__brandMarker = ($brand['is_white_label'] && $agency && ! empty($agency->id)) ? '<!--kt-brand-agency:' . (int) $agency->id . '-->' : '';
 

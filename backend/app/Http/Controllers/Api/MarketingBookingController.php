@@ -107,6 +107,7 @@ class MarketingBookingController extends Controller
             'notes'   => ['nullable', 'string', 'max:1000'],
             'visitor_tz' => ['nullable', 'string', 'max:60'],
             'lang'    => ['nullable', 'in:en,fr,es,hi'],
+            'rebook'  => ['nullable', 'string', 'max:80'],   // the signed "pick a new time" link (App\Support\NoShow)
         ]);
         if ($data['meet_via'] === 'phone' && trim((string) ($data['phone'] ?? '')) === '') {
             return response()->json(['message' => 'Please add a phone number so we can call you.', 'errors' => ['phone' => ['required']]], 422);
@@ -147,7 +148,12 @@ class MarketingBookingController extends Controller
         }
         $b = DB::table('marketing_bookings')->where('id', $id)->first();
 
-        $leadId = $this->pipeline($b, $type['name']);
+        /* FROM A "PICK A NEW TIME" LINK (2026-11-28, App\Support\NoShow): the booking goes on the lead the link was made
+           for - even if they typed another address - and the missed meeting becomes 'rescheduled'. A bad or expired
+           token is ignored: the booking is filed the usual way. */
+        $rebook = \App\Support\NoShow::verify($data['rebook'] ?? null);
+        $leadId = $rebook ? \App\Support\NoShow::rebooked($b, $rebook, $type['name'], $this->when($b)) : null;
+        if (! $leadId) $leadId = $this->pipeline($b, $type['name']);
         $salesOk = \App\Support\BookingMail::salesRequest($b);
         $visitorOk = \App\Support\BookingMail::visitor($b, 'requested');
         \App\Http\Controllers\Api\SalesBookingController::alertSales($b);
@@ -161,6 +167,14 @@ class MarketingBookingController extends Controller
             'starts_at' => $start->toIso8601String(), 'tz' => self::TZ, 'confirmation_sent' => $visitorOk,
             'status' => 'requested', 'request_ack_sent' => $visitorOk,
         ], 201);
+    }
+
+    /** GET /marketing-site/rebook/{token} - what the booking wizard fills in for a "pick a new time" link (NoShow). */
+    public function rebook(Request $request, string $token): JsonResponse
+    {
+        $p = \App\Support\NoShow::prefill($token);
+        if (! $p) return response()->json(['ok' => false, 'message' => 'This link has expired. You can still pick a time below.'], 404);
+        return response()->json(['ok' => true] + $p);
     }
 
     /**

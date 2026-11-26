@@ -8,6 +8,40 @@
  * words only). New UI text goes HERE now.
  */
 window.KT_I18N_BASE && window.KT_I18N_BASE({
+    // Sales meeting no-show: held / no-show / undo, "pick a new time" email + text (screen-sales.js NoShow, 2026-11-28)
+    'Held': { fr: 'Tenue', es: 'Realizada', hi: 'हुई' },
+    'Rescheduled': { fr: 'Reprogrammée', es: 'Reprogramada', hi: 'पुनर्निर्धारित' },
+    'Scheduled': { fr: 'Prévue', es: 'Programada', hi: 'निर्धारित' },
+    'Meeting': { fr: 'Rencontre', es: 'Reunión', hi: 'मीटिंग' },
+    'Mark as no-show': { fr: 'Marquer comme absent', es: 'Marcar como ausente', hi: 'नहीं आए के रूप में चिह्नित करें' },
+    'Mark as held': { fr: 'Marquer comme tenue', es: 'Marcar como realizada', hi: 'हुई के रूप में चिह्नित करें' },
+    'Undo no-show': { fr: 'Annuler « absent »', es: 'Deshacer «ausente»', hi: '"नहीं आए" हटाएँ' },
+    'Undo held': { fr: 'Annuler « tenue »', es: 'Deshacer «realizada»', hi: '"हुई" हटाएँ' },
+    'Ask for a new time': { fr: 'Demander une nouvelle heure', es: 'Pedir una nueva hora', hi: 'नया समय माँगें' },
+    'No-show / held once it starts': { fr: 'Absent / tenue une fois commencée', es: 'Ausente / realizada cuando empiece', hi: 'शुरू होने के बाद नहीं आए / हुई' },
+    'Meeting actions': { fr: 'Actions de la rencontre', es: 'Acciones de la reunión', hi: 'मीटिंग की कार्रवाइयाँ' },
+    'Ask them to pick a new time': { fr: 'Leur demander de choisir une nouvelle heure', es: 'Pedirles que elijan una nueva hora', hi: 'उनसे नया समय चुनने को कहें' },
+    'Email from sales@kiddietrac.com': { fr: 'Courriel de sales@kiddietrac.com', es: 'Correo de sales@kiddietrac.com', hi: 'sales@kiddietrac.com से ईमेल' },
+    'Text from the KiddieTrac line': { fr: 'Texto de la ligne KiddieTrac', es: 'Mensaje de texto de la línea de KiddieTrac', hi: 'KiddieTrac लाइन से टेक्स्ट' },
+    'Mark only, don\'t send': { fr: 'Marquer seulement, ne pas envoyer', es: 'Solo marcar, no enviar', hi: 'सिर्फ़ चिह्नित करें, न भेजें' },
+    'Don\'t send': { fr: 'Ne pas envoyer', es: 'No enviar', hi: 'न भेजें' },
+    'Email preview': { fr: 'Aperçu du courriel', es: 'Vista previa del correo', hi: 'ईमेल पूर्वावलोकन' },
+    'Text preview': { fr: 'Aperçu du texto', es: 'Vista previa del mensaje', hi: 'टेक्स्ट पूर्वावलोकन' },
+    'characters': { fr: 'caractères', es: 'caracteres', hi: 'अक्षर' },
+    'No meetings with this lead yet.': { fr: 'Aucune rencontre avec ce prospect pour l\'instant.', es: 'Todavía no hay reuniones con este cliente potencial.', hi: 'इस लीड के साथ अभी कोई मीटिंग नहीं है।' },
+    'Meetings and website bookings with this lead. Once one has started, mark it held or no-show from the ⋮; a no-show can ask them to pick a new time.': {
+      fr: 'Rencontres et réservations du site web avec ce prospect. Une fois commencée, marquez-la tenue ou absent depuis le ⋮ ; une absence peut leur demander de choisir une nouvelle heure.',
+      es: 'Reuniones y reservas del sitio web con este cliente potencial. Cuando haya empezado, márquela como realizada o ausente desde el ⋮; una ausencia puede pedirles que elijan una nueva hora.',
+      hi: 'इस लीड के साथ मीटिंग और वेबसाइट बुकिंग। शुरू होने के बाद ⋮ से हुई या नहीं आए चिह्नित करें; नहीं आने पर उनसे नया समय चुनने को कहा जा सकता है।' },
+    'Marked as held': { fr: 'Marquée comme tenue', es: 'Marcada como realizada', hi: 'हुई के रूप में चिह्नित' },
+    'Marked as no-show': { fr: 'Marqué comme absent', es: 'Marcado como ausente', hi: 'नहीं आए के रूप में चिह्नित' },
+    'Undone': { fr: 'Annulé', es: 'Deshecho', hi: 'हटा दिया गया' },
+    'Not changed': { fr: 'Non modifié', es: 'Sin cambios', hi: 'नहीं बदला' },
+    'Asked for a new time': { fr: 'Nouvelle heure demandée', es: 'Se pidió una nueva hora', hi: 'नया समय माँगा गया' },
+    'Not everything went': { fr: 'Tout n\'est pas parti', es: 'No todo se envió', hi: 'सब कुछ नहीं गया' },
+    'Tick email or text, or choose "Mark only".': { fr: 'Cochez courriel ou texto, ou choisissez « Marquer seulement ».', es: 'Marque correo o mensaje, o elija «Solo marcar».', hi: 'ईमेल या टेक्स्ट चुनें, या "सिर्फ़ चिह्नित करें" चुनें।' },
+    'Could not load the meetings. Please try again.': { fr: 'Impossible de charger les rencontres. Veuillez réessayer.', es: 'No se pudieron cargar las reuniones. Inténtelo de nuevo.', hi: 'मीटिंग लोड नहीं हो सकीं। कृपया फिर से कोशिश करें।' },
+    'Automatic asking is on: a lead meeting nobody marks gets this 30 minutes after it starts.': { fr: 'La demande automatique est activée : une rencontre que personne ne marque reçoit ceci 30 minutes après son début.', es: 'La solicitud automática está activada: una reunión que nadie marque recibe esto 30 minutos después de empezar.', hi: 'अपने-आप पूछना चालू है: जिस मीटिंग को कोई चिह्नित नहीं करता, उसे शुरू होने के 30 मिनट बाद यह भेजा जाता है।' },
     // KiddieTrac HR follow-ups: director hiring, comments, declined deletion, role courses (screen-hr-talent.js, 2026-11-26)
     'Human Resources': { fr: 'Ressources humaines', es: 'Recursos humanos', hi: 'मानव संसाधन' },   // sidebar group (app-v2-shell.js)
     'HUMAN RESOURCES': { fr: 'RESSOURCES HUMAINES', es: 'RECURSOS HUMANOS', hi: 'मानव संसाधन' },

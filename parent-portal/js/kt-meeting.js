@@ -267,6 +267,16 @@
     api().get('/meetings/' + id).then(function (j) {
       var m = j.meeting, cancelled = m.status === 'cancelled';
       var box = el('div', { class: 'ktm-v', 'data-kt-nogrid': '1' });
+      /* A MEETING WITH A SALES LEAD (2026-11-28, NoShow in screen-sales.js): its outcome as a chip, and held / no-show /
+         undo from the house ⋮ - only when the sales screens are loaded and the meeting has a lead. */
+      if (m.scope === 'platform' && KT.NoShow) {
+        var nsRow = el('div', { style: 'display:flex;align-items:center;gap:8px;justify-content:flex-end;min-height:0' });
+        if (['no_show', 'held', 'rescheduled'].indexOf(m.status) >= 0) nsRow.appendChild(KT.NoShow.chip(m.status));
+        box.appendChild(nsRow);
+        api().get('/sales/no-show/meeting/' + m.id).then(function (x) {
+          if (x && x.meeting) nsRow.appendChild(KT.NoShow.kebab('meeting', m.id, function () { if (o.onChange) o.onChange(); }, { lead: true }));
+        }).catch(function () {});
+      }
       box.appendChild(el('div', { style: 'font-size:13.5px;color:#334155;line-height:1.7' }, [
         el('div', {}, ['🗓 ', el('b', {}, [m.when])]),
         m.location ? el('div', {}, ['📍 ' + m.location]) : null,
@@ -297,7 +307,7 @@
         box.appendChild(mine);
       }
       var actions = [{ label: 'Close' }];
-      if (j.meeting.can_change && !cancelled) {
+      if (j.meeting.can_change && m.status === 'scheduled') {
         actions.unshift({ label: '🚫 Cancel meeting', style: 'btn-secondary', handler: function () {
           var ask = KT.prompt ? KT.prompt({ title: 'Cancel this meeting?', description: 'Everyone invited is told, and it comes off their calendars.', okLabel: 'Cancel meeting', cancelLabel: 'Keep it',
               fields: [{ key: 'value', label: 'Reason (optional, goes in the email)', placeholder: 'e.g. Moved to next week' }] })

@@ -284,6 +284,8 @@ Route::post('/marketing-site/lead', [\App\Http\Controllers\Api\MarketingSiteCont
 // Website booking wizard (2026-09-29): month availability + book a meeting
 Route::get('/marketing-site/booking/availability', [\App\Http\Controllers\Api\MarketingBookingController::class, 'availability'])->middleware('throttle:60,1,mkbooka');
 Route::post('/marketing-site/booking', [\App\Http\Controllers\Api\MarketingBookingController::class, 'store'])->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:6,60,mkbook']);
+// A "pick a new time" link from a missed sales meeting (2026-11-28, App\Support\NoShow): the wizard's prefill. Signed token, throttled.
+Route::get('/marketing-site/rebook/{token}', [\App\Http\Controllers\Api\MarketingBookingController::class, 'rebook'])->where('token', '[a-z0-9-]{10,80}')->middleware([\App\Http\Middleware\RejectTestVisitors::class, 'throttle:30,1,mkrebook']);
 Route::get('/marketing-site/booking/{id}/calendar.ics', [\App\Http\Controllers\Api\MarketingBookingController::class, 'calendar'])->whereNumber('id')->middleware('throttle:60,1,mkbookics');
 // Calendar sync (2026-11-03, cal1103): a person's private subscription feed. No sign-in (calendar apps cannot);
 // the 256-bit token is the key. CalendarFeedController also rate-limits per link and per IP.
@@ -771,6 +773,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/campaigns/{id}/apply-template', [\App\Http\Controllers\Api\SalesCampaignTemplateController::class, 'apply'])->whereNumber('id');
             // Sales calendar: bookings, hours, time off, whereabouts (2026-10-23).
             Route::get('/calendar', [\App\Http\Controllers\Api\SalesCalendarController::class, 'index']);
+            // A lead meeting that has happened, or not: held / no-show / undo, and the "pick a new time" email + text (NoShow, 2026-11-28).
+            Route::get('/no-show/{kind}/{id}', [\App\Http\Controllers\Api\SalesNoShowController::class, 'show'])->where('kind', 'meeting|booking')->whereNumber('id');
+            Route::post('/no-show/{kind}/{id}/mark', [\App\Http\Controllers\Api\SalesNoShowController::class, 'mark'])->where('kind', 'meeting|booking')->whereNumber('id')->middleware('throttle:30,1,noshow-mark');
+            Route::post('/no-show/{kind}/{id}/send', [\App\Http\Controllers\Api\SalesNoShowController::class, 'send'])->where('kind', 'meeting|booking')->whereNumber('id')->middleware('throttle:10,1,noshow-send');
+            Route::get('/leads/{id}/meetings', [\App\Http\Controllers\Api\SalesNoShowController::class, 'forLead'])->whereNumber('id');
             Route::post('/calendar/events', [\App\Http\Controllers\Api\SalesCalendarController::class, 'store']);
             Route::patch('/calendar/events/{id}', [\App\Http\Controllers\Api\SalesCalendarController::class, 'update'])->whereNumber('id');
             Route::delete('/calendar/events/{id}', [\App\Http\Controllers\Api\SalesCalendarController::class, 'destroy'])->whereNumber('id');

@@ -27,7 +27,8 @@ class RejectTestVisitors
 {
     private const GOOGLE = ['66.249.64.0/19', '64.233.160.0/19', '74.125.0.0/16', '108.177.0.0/17', '72.14.192.0/18',
         '209.85.128.0/17', '216.239.32.0/19', '173.194.0.0/16', '142.250.0.0/15', '172.217.0.0/16', '34.68.194.64/29'];
-    private const TEST_DOMAINS = ['/@(.+\.)?testagency\.com$/', '/\.invalid$/', '/@(.+\.)?example\.(com|org|net)$/', '/@brightwood\.kiddietrac\.com$/', '/@starlight\.kiddietrac\.com$/', '/\.example$/'];
+    // Public: App\Support\NoShow sends nothing to these either (2026-11-28).
+    public const TEST_DOMAINS = ['/@(.+\.)?testagency\.com$/', '/\.invalid$/', '/@(.+\.)?example\.(com|org|net)$/', '/@brightwood\.kiddietrac\.com$/', '/@starlight\.kiddietrac\.com$/', '/\.example$/'];
 
     public function handle(Request $request, Closure $next)
     {

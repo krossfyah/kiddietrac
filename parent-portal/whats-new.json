@@ -2,6 +2,17 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "🙈",
+            "title": "Meeting no-shows",
+            "body": "When a lead misses a meeting, mark it a no-show from the ⋮ menu and send a friendly email or text with a link to pick a new time. Their new booking lands on the same lead and you get a notice.",
+            "roles": [
+                "platform_admin",
+                "sales_rep"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-26",
             "icon": "🗂️",

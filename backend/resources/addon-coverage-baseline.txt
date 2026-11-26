@@ -268,6 +268,7 @@ route marketing-site/hit
 route marketing-site/i18n
 route marketing-site/intake
 route marketing-site/lead
+route marketing-site/rebook
 route marketing-site/subscribe
 route marketing-site/support
 route marketing-site/unsubscribe
@@ -486,6 +487,7 @@ route sales/followups
 route sales/leads
 route sales/library
 route sales/messages
+route sales/no-show
 route sales/products
 route sales/proposal-defaults
 route sales/prospect-batches

@@ -1270,6 +1270,8 @@
       { key: 'details', label: '📋 Details', node: left },
       { key: 'activity', label: '🕒 Activity & history', count: (lead.activities || []).length, node: acWrap },
       { key: 'proposals', label: '📄 Proposals', count: (lead.quotes || []).length, node: renderQuotesPanel(id, lead, container, ctx) },
+      // Meetings and website bookings with this lead, each with held / no-show from the ⋮ (NoShow, 2026-11-28).
+      { key: 'meetings', label: '🤝 Meetings', count: null, node: null, meetings: true },
       { key: 'documents', label: '📁 Documents', count: leadFiles(lead).length || null, node: renderLeadDocuments(id, lead) },
     ];
     var want = ((window.location.hash.match(/[?&]tab=([a-z]+)/) || [])[1])
@@ -1294,6 +1296,7 @@
     TABS.forEach(function (t) {
       t.btn = el('button', { type: 'button', role: 'tab', class: 'kt-lead-tab', 'data-kt-iconized': '1', 'data-kt-inpage': '1',
         onclick: function () { show(t.key); } }, [t.label, t.count ? el('span', { class: 'kt-lead-count' }, [String(t.count)]) : '']);
+      if (t.meetings) { var mc = el('span', { class: 'kt-lead-count', style: 'display:none' }); t.btn.appendChild(mc); t.node = renderLeadMeetings(id, mc); }
       bar.appendChild(t.btn);
     });
     body.appendChild(bar);
@@ -2329,6 +2332,173 @@
      meetings, and each person's meetings, blocked time, time off and whereabouts - in
      Eastern Time, one colour per person. Working hours set here also decide which times the
      website's booking wizard offers. SalesCalendarController / App\Support\SalesCalendar. */
+  /* ── NO-SHOW ON A LEAD MEETING (2026-11-28, Anthony: "when a scheduled meeting is here based on a sales lead and
+     the recipient did not show up, can you add something to indicate recipient didn't show and trigger an email and
+     text to reschedule the meeting with kiddietrac"). SalesNoShowController / App\Support\NoShow.
+     One menu (the house ⋮, KT.openActionMenu) on the calendar, the meeting popup and the lead's Meetings tab:
+     Mark as no-show (opens the popup below), Mark as held, Undo. The popup shows exactly who the email and the text go
+     to (the lead's own address and mobile, never a default), a tick box for each (disabled with the reason when it
+     cannot go), a preview of both, and Send / Mark only. ─────────────────────────────────────────────────────── */
+  var NS_STATUS = {
+    no_show: ['🙈 No-show', '#B91C1C', '#FEE2E2'], held: ['✅ Held', '#047857', '#D1FAE5'], rescheduled: ['🔁 Rescheduled', '#6D28D9', '#EDE9FE'],
+    scheduled: ['Scheduled', '#1F6080', '#E0F2FE'], booked: ['Confirmed', '#047857', '#D1FAE5'], requested: ['Needs a decision', '#B45309', '#FEF3C7'],
+    cancelled: ['Cancelled', '#64748B', '#F1F5F9'], declined: ['Declined', '#64748B', '#F1F5F9'],
+  };
+  function nsChip(status) {
+    var x = NS_STATUS[status] || [status, '#475569', '#F1F5F9'];
+    return el('span', { class: 'kt-ns-chip', style: 'display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;font-size:11.5px;font-weight:800;white-space:nowrap;line-height:1;color:' + x[1] + ';background:' + x[2] }, [x[0]]);
+  }
+  function nsUrl(kind, id) { return '/sales/no-show/' + kind + '/' + id; }
+  function nsMark(m, to, done) {
+    return Api.post(nsUrl(m.kind, m.id) + '/mark', { status: to }).then(function (r) {
+      toast(to === 'held' ? '✅' : (to === 'undo' ? '↩️' : '🙈'), to === 'held' ? 'Marked as held' : (to === 'undo' ? 'Undone' : 'Marked as no-show'), m.lead ? m.lead.name : '');
+      if (done) done(r && r.meeting);
+      return r;
+    }).catch(function (e) { toast('⚠️', 'Not changed', (e && e.message) || 'Please try again.', '#DC2626'); return false; });
+  }
+  /* The menu's buttons for one meeting (shape from GET /sales/no-show/{kind}/{id}). opts.view = a View item first. */
+  function nsActions(m, onChange, opts) {
+    opts = opts || {};
+    var out = [];
+    function item(label, fn, danger) { var b = el('button', { type: 'button', class: danger ? 'kt-ka-danger' : '' }, [label]); b.addEventListener('click', fn); return b; }
+    if (opts.view) out.push(item('👁 View', opts.view));
+    if (m.can && m.can.no_show) out.push(item('🙈 Mark as no-show', function () { nsPopup(m, onChange); }));
+    if (m.can && m.can.held) out.push(item('✅ Mark as held', function () { nsMark(m, 'held', onChange); }));
+    if (m.status === 'no_show' && !m.asked_at) out.push(item('📅 Ask for a new time', function () { nsPopup(m, onChange); }));
+    if (m.can && m.can.undo) out.push(item(m.status === 'held' ? '↩️ Undo held' : '↩️ Undo no-show', function () { nsMark(m, 'undo', onChange); }));
+    if (opts.lead && m.lead) out.push(item('👤 Open lead', function () { go('sales-lead?id=' + m.lead.id); }));
+    if (!m.started && out.length <= (opts.view ? 1 : 0) + (opts.lead ? 1 : 0)) {
+      var wait = el('button', { type: 'button', disabled: 'disabled' }, ['⏳ No-show / held once it starts']);
+      out.push(wait);
+    }
+    return out;
+  }
+  /* The ⋮ for a lead meeting. Fetches its state, then opens the house menu on the anchor. */
+  function nsMenu(anchor, kind, id, onChange, opts) {
+    Api.get(nsUrl(kind, id)).then(function (j) {
+      if (!j || !j.meeting) return;
+      if (KT.openActionMenu) KT.openActionMenu(anchor, nsActions(j.meeting, onChange, opts));
+    }).catch(function (e) { toast('⚠️', 'Could not open', (e && e.message) || 'Please try again.', '#DC2626'); });
+  }
+  function nsKebab(kind, id, onChange, opts) {
+    return el('button', { type: 'button', class: 'kt-ka-kebab', title: 'Meeting actions', 'aria-label': 'Meeting actions', 'aria-haspopup': 'menu', 'data-kt-inpage': '1', 'data-kt-iconized': '1',
+      onclick: function (ev) { ev.preventDefault(); ev.stopPropagation(); nsMenu(ev.currentTarget, kind, id, onChange, opts); } }, ['⋮']);
+  }
+
+  /* THE POPUP: preview + recipients + Send / Mark only. */
+  function nsPopup(m0, onChange) {
+    var M = KT.Shell && KT.Shell.Modal; if (!M) return;
+    Api.get(nsUrl(m0.kind, m0.id) + '?preview=1').then(function (j) {
+      var m = j.meeting, ch = m.channels || {}, pv = m.preview || {};
+      var box = el('div', { 'data-kt-nogrid': '1', style: 'display:flex;flex-direction:column;gap:14px;font-size:13.5px;color:#334155' });
+      box.appendChild(el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' }, [
+        el('b', { style: 'font-size:15px;color:#0F172A' }, [m.lead.name + (m.lead.company ? ' · ' + m.lead.company : '')]),
+        nsChip(m.status),
+      ]));
+      box.appendChild(el('div', { style: 'color:#475569' }, ['🗓 ' + m.title + ' · ' + m.when]));
+      if (ch.test) box.appendChild(el('div', { style: 'background:#FEF3C7;color:#92400E;border-radius:10px;padding:9px 12px;font-weight:700' }, ['🧪 This is ' + ch.test + ', so nothing will be sent to it.']));
+
+      function pick(key, icon, label, c) {
+        var cb = el('input', { type: 'checkbox', style: 'width:18px;height:18px;margin:2px 0 0;flex:0 0 auto;accent-color:' + ACCENT });
+        cb.checked = !!c.ok; cb.disabled = !c.ok;
+        var row = el('label', { style: 'display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid ' + (c.ok ? '#CBD5E1' : '#E2E8F0') + ';border-radius:10px;cursor:' + (c.ok ? 'pointer' : 'not-allowed') + ';background:' + (c.ok ? '#fff' : '#F8FAFC') }, [
+          cb,
+          el('span', { style: 'min-width:0;flex:1' }, [
+            el('div', { style: 'font-weight:800;color:' + (c.ok ? '#0F172A' : '#94A3B8') }, [icon + ' ' + label]),
+            el('div', { style: 'margin-top:2px;color:' + (c.ok ? '#334155' : '#94A3B8') }, [c.to ? ('To: ' + c.to) : 'No ' + (key === 'email' ? 'email address' : 'mobile number') + ' on the lead']),
+            c.why ? el('div', { style: 'margin-top:3px;font-size:12.5px;color:#B45309;font-weight:700' }, [c.why]) : null,
+          ]),
+        ]);
+        return { row: row, cb: cb };
+      }
+      var pe = pick('email', '📧', 'Email from sales@kiddietrac.com', ch.email || {});
+      var ps = pick('sms', '💬', 'Text from the KiddieTrac line', ch.sms || {});
+      box.appendChild(el('div', {}, [el('div', { style: 'font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;margin-bottom:6px' }, ['Ask them to pick a new time']),
+        el('div', { style: 'display:grid;gap:8px' }, [pe.row, ps.row])]));
+
+      // Previews: the email exactly as it goes (sized to its content, so the popup is the only scroll), and the text.
+      var frame = el('iframe', { title: 'Email preview', sandbox: 'allow-same-origin', scrolling: 'no', style: 'width:100%;height:560px;border:0;display:block;background:#F4F6F9' });
+      frame.srcdoc = pv.html || '';
+      frame.addEventListener('load', function () { try { var h = frame.contentDocument.documentElement.scrollHeight; if (h > 80) frame.style.height = (h + 4) + 'px'; } catch (e) {} });
+      box.appendChild(el('div', { style: 'border:1px solid #E2E8F0;border-radius:12px;overflow:hidden' }, [
+        el('div', { style: 'padding:9px 12px;background:#F8FAFC;border-bottom:1px solid #E2E8F0;font-size:12.5px;line-height:1.6' }, [
+          el('div', {}, [el('b', {}, ['From: ']), pv.from || '']),
+          el('div', {}, [el('b', {}, ['Reply-To: ']), pv.reply_to || '']),
+          el('div', {}, [el('b', {}, ['Subject: ']), pv.subject || '']),
+        ]), frame]));
+      box.appendChild(el('div', {}, [
+        el('div', { style: 'font-size:11.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:#64748B;margin-bottom:6px' }, ['Text preview · ' + String(pv.sms || '').length + ' characters']),
+        el('div', { style: 'max-width:420px;background:#E9F5EC;color:#0F172A;border-radius:16px 16px 16px 4px;padding:10px 13px;line-height:1.5;white-space:pre-wrap;word-break:break-word' }, [pv.sms || '']),
+      ]));
+      var msg = el('div', { style: 'color:#B91C1C;font-weight:700;min-height:0' });
+      box.appendChild(msg);
+      if (j.meeting.auto) box.appendChild(el('div', { style: 'font-size:12px;color:#64748B' }, ['Automatic asking is on: a lead meeting nobody marks gets this 30 minutes after it starts.']));
+
+      var already = m.status === 'no_show';
+      M.open({ title: '🙈 ' + (already ? 'Ask for a new time' : 'Mark as no-show'), body: box, large: true, actions: [
+        { label: already ? 'Don\'t send' : 'Mark only, don\'t send', style: 'btn-secondary', busyLabel: 'Saving…', handler: function () {
+          if (already) return true;
+          return nsMark(m, 'no_show', onChange);
+        } },
+        { label: 'Send', primary: true, busyLabel: 'Sending…', handler: function () {
+          var wantE = pe.cb.checked && !pe.cb.disabled, wantS = ps.cb.checked && !ps.cb.disabled;
+          if (!wantE && !wantS) { msg.textContent = 'Tick email or text, or choose "Mark only".'; return false; }
+          var body = { email: wantE, sms: wantS };
+          if (wantE) body.to_email = ch.email.to;
+          if (wantS) body.to_phone = ch.sms.to;
+          return Api.post(nsUrl(m.kind, m.id) + '/send', body).then(function (r) {
+            var res = (r && r.result) || {}, parts = [], bad = [];
+            if (res.email) (res.email.sent ? parts : bad).push(res.email.sent ? 'email to ' + res.email.to : 'email: ' + (res.email.why || 'not sent'));
+            if (res.sms) (res.sms.sent ? parts : bad).push(res.sms.sent ? 'text to ' + res.sms.to : 'text: ' + (res.sms.why || 'not sent'));
+            if (parts.length) toast('✅', 'Asked for a new time', 'Sent ' + parts.join(' and ') + '.');
+            if (bad.length) toast('⚠️', 'Not everything went', bad.join(' · '), '#B45309');
+            if (onChange) onChange(r && r.meeting);
+          }).catch(function (e) { msg.textContent = (e && e.message) || 'Not sent. Please try again.'; return false; });
+        } },
+      ] });
+    }).catch(function (e) { toast('⚠️', 'Could not open', (e && e.message) || 'Please try again.', '#DC2626'); });
+  }
+
+  /* The lead's Meetings tab: every meeting and website booking with this lead, a status chip and the ⋮. */
+  function renderLeadMeetings(leadId, countEl) {
+    var host = card([el('div', { style: 'font-weight:800;margin-bottom:4px' }, ['Meetings']),
+      el('div', { style: 'font-size:12.5px;color:#64748B;margin-bottom:12px' }, ['Meetings and website bookings with this lead. Once one has started, mark it held or no-show from the ⋮; a no-show can ask them to pick a new time.'])], '');
+    var slot = el('div', { style: 'color:#94A3B8;font-size:13px' }, ['Loading…']);
+    host.appendChild(slot);
+    function load() {
+      Api.get('/sales/leads/' + leadId + '/meetings').then(function (j) {
+        var rows = (j && j.meetings) || [];
+        if (countEl) { countEl.textContent = rows.length ? String(rows.length) : ''; countEl.style.display = rows.length ? '' : 'none'; }
+        clear(slot); slot.removeAttribute('style');
+        if (!rows.length) { slot.appendChild(el('div', { style: 'color:#94A3B8;font-size:13px' }, ['No meetings with this lead yet.'])); return; }
+        var th = function (t) { return el('th', { style: 'text-align:left;padding:8px 12px;font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #E2E8F0' }, [t]); };
+        var tb = el('tbody');
+        rows.forEach(function (m) {
+          function act(label, fn) { return el('button', { type: 'button', title: label.replace(/^\S+\s/, ''), onclick: function (ev) { ev.stopPropagation(); fn(); } }, [label]); }
+          var view = m.kind === 'meeting' ? function () { if (KT.Meeting) KT.Meeting.view(m.id, { onChange: load }); } : function () { go('sales-bookings?id=' + m.id); };
+          var acts = nsActions(m, load, { view: view }).map(function (b) { return b; });
+          tb.appendChild(el('tr', { style: 'border-bottom:1px solid #F1F5F9' }, [
+            el('td', { style: 'padding:9px 12px;font-size:13px;white-space:nowrap;color:#334155', 'data-sort': m.start }, [m.when]),
+            el('td', { style: 'padding:9px 12px;font-size:13.5px;font-weight:700;color:#0F172A' }, [m.title]),
+            el('td', { style: 'padding:9px 12px;font-size:12.5px;color:#64748B' }, [m.kind === 'booking' ? 'Website booking' : 'Meeting']),
+            el('td', { style: 'padding:9px 12px' }, [nsChip(m.status)]),
+            el('td', { style: 'padding:6px 12px;text-align:center;white-space:nowrap' }, acts.filter(function (b) { return !b.disabled; }).map(function (b) {
+              // Plain labelled buttons in the last cell: kt-row-actions folds them into the house ⋮.
+              var lbl = b.textContent; return act(lbl, function () { b.click(); });
+            })),
+          ]));
+        });
+        slot.appendChild(el('div', { style: 'overflow-x:auto' }, [el('table', { class: 'kt-table', style: 'width:100%;border-collapse:collapse' }, [
+          el('thead', {}, [el('tr', {}, [th('When'), th('Meeting'), th('Kind'), th('Status'), th('')])]), tb])]));
+        if (window.KT && KT.enhanceTables) setTimeout(KT.enhanceTables, 0);
+      }).catch(function () { clear(slot); slot.appendChild(el('div', { style: 'color:#B91C1C;font-size:13px' }, ['Could not load the meetings. Please try again.'])); });
+    }
+    load();
+    return host;
+  }
+
+  KT.NoShow = { menu: nsMenu, kebab: nsKebab, popup: nsPopup, chip: nsChip, actions: nsActions, label: function (s) { return (NS_STATUS[s] || [s])[0]; } };
+
   var CAL_KIND = { meeting: ['🗓', 'Meeting'], block: ['⛔', 'Blocked'], time_off: ['🌴', 'Time off'], where: ['📍', 'Whereabouts'] };
   var WHERE_ICON = { office: '🏢', remote: '🏠', road: '🚗', client: '🤝', out: '🚫' };
   var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -2433,16 +2603,20 @@
       (d.bookings || []).forEach(function (b) {
         if (b.user_id && !shown(b.user_id)) return;
         var s = etParts(b.start), en = etParts(b.end), who = b.user_id ? ((staffOf(b.user_id) || {}).first_name || '') : '';
-        out.push({ date: s.date, all: false, start: s.h * 60 + s.m, end: en.h * 60 + en.m, label: (b.status === 'requested' ? '⏳ ' : '📅 ') + b.title,
-          sub: fmtHm(s.hm) + '–' + fmtHm(en.hm) + (b.status === 'requested' ? ' · needs a decision' : (who ? ' · ' + who : '')), color: b.user_id ? color(b.user_id) : '#B45309', dashed: b.status === 'requested', src: 'booking', raw: b });
+        var bOut = NS_STATUS[b.status] && ['no_show', 'held', 'rescheduled'].indexOf(b.status) >= 0 ? NS_STATUS[b.status][0] : '';   // NoShow (2026-11-28)
+        out.push({ date: s.date, all: false, start: s.h * 60 + s.m, end: en.h * 60 + en.m, label: (bOut ? bOut.split(' ')[0] + ' ' : (b.status === 'requested' ? '⏳ ' : '📅 ')) + b.title,
+          sub: fmtHm(s.hm) + '–' + fmtHm(en.hm) + (bOut ? ' · ' + bOut.replace(/^\S+\s/, '') : (b.status === 'requested' ? ' · needs a decision' : (who ? ' · ' + who : ''))), color: b.user_id ? color(b.user_id) : '#B45309', dashed: b.status === 'requested', src: 'booking', raw: b,
+          ns: b.lead_id ? ['booking', b.id] : null });
       });
       (st.meetings || []).forEach(function (m) {
         if (m.organizer && !shown(m.organizer.id)) return;
         var s = etParts(m.start), en = etParts(m.end), col = m.organizer ? color(m.organizer.id) : '#7C3AED';
-        var label = '🤝 ' + m.title + (m.video === 'teams' ? ' · Teams' : '');
-        var sub = (m.all_day ? 'All day' : fmtHm(s.hm) + '–' + fmtHm(en.hm)) + (m.attendees && m.attendees.length ? ' · ' + m.attendees.length + ' invited' : '');
+        var mOut = ['no_show', 'held', 'rescheduled'].indexOf(m.status) >= 0 ? NS_STATUS[m.status][0] : '';   // NoShow (2026-11-28)
+        var label = (mOut ? mOut.split(' ')[0] + ' ' : '🤝 ') + m.title + (m.video === 'teams' ? ' · Teams' : '');
+        var sub = (m.all_day ? 'All day' : fmtHm(s.hm) + '–' + fmtHm(en.hm)) + (mOut ? ' · ' + mOut.replace(/^\S+\s/, '') : (m.attendees && m.attendees.length ? ' · ' + m.attendees.length + ' invited' : ''));
+        var isLead = !!(d.meeting_leads && d.meeting_leads[m.id]);
         if (m.all_day) { for (var dd = s.date; dd < en.date; dd = addDays(dd, 1)) out.push({ date: dd, all: true, label: label, sub: sub, color: col, src: 'meeting', raw: m }); }
-        else out.push({ date: s.date, all: false, start: s.h * 60 + s.m, end: (en.date !== s.date ? 24 * 60 : en.h * 60 + en.m), label: label, sub: sub, color: col, src: 'meeting', raw: m });
+        else out.push({ date: s.date, all: false, start: s.h * 60 + s.m, end: (en.date !== s.date ? 24 * 60 : en.h * 60 + en.m), label: label, sub: sub, color: col, src: 'meeting', raw: m, ns: isLead ? ['meeting', m.id] : null });
       });
       (d.activities || []).forEach(function (a) {
         if (a.user_id && !shown(a.user_id)) return;
@@ -2536,6 +2710,8 @@
             el('div', { style: 'flex:0 0 74px;font-size:12px;color:#64748B;font-weight:700' }, [x.all ? 'All day' : (x.sub || '').split(' · ')[0]]),
             el('div', { style: 'flex:0 0 4px;align-self:stretch;border-radius:2px;background:' + x.color }),
             el('div', { style: 'min-width:0;flex:1' }, [el('div', { style: 'font-weight:700;font-size:13.5px;color:#0F172A' }, [x.label]), x.sub && !x.all ? el('div', { style: 'font-size:12px;color:#64748B' }, [x.sub.split(' · ').slice(1).join(' · ')]) : null]),
+            // A meeting with a sales lead: held / no-show / undo from the house ⋮ (NoShow, 2026-11-28).
+            x.ns ? nsKebab(x.ns[0], x.ns[1], load, { lead: true, view: function () { open(x); } }) : null,
           ]));
         });
         body.appendChild(c);
@@ -2653,7 +2829,8 @@
      how to prepare, calendar invite); Modify confirms at a new time; Decline sends a courteous
      note with a link to choose another time. SalesBookingController / BookingMail. */
   var BK_STATUS = { requested: ['Needs a decision', '#B45309', '#FEF3C7'], booked: ['Confirmed', '#047857', '#D1FAE5'],
-    declined: ['Declined', '#64748B', '#F1F5F9'], cancelled: ['Cancelled', '#64748B', '#F1F5F9'] };
+    declined: ['Declined', '#64748B', '#F1F5F9'], cancelled: ['Cancelled', '#64748B', '#F1F5F9'],
+    no_show: ['No-show', '#B91C1C', '#FEE2E2'], held: ['Held', '#047857', '#D1FAE5'], rescheduled: ['Rescheduled', '#6D28D9', '#EDE9FE'] };   // NoShow (2026-11-28)
   async function renderBookings(container) {
     clear(container);
     container.appendChild(hero('Bookings', 'Meeting requests from the website (nothing is confirmed to them until you accept), and the meetings on the sales@kiddietrac.com Outlook calendar.', '📅'));

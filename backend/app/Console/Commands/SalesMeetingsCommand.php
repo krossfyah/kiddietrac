@@ -23,6 +23,9 @@ class SalesMeetingsCommand extends Command
         /* Meetings made on the Meetings screen (App\Support\MeetingReminders, 2026-11-13): first, and whatever the
            sales@ calendar does - they come from KiddieTrac's own list, not from Graph. */
         $this->line('portal ' . json_encode(\App\Support\MeetingReminders::due((bool) $this->option('dry'))));
+        /* Lead meetings nobody marked, 30 min after the start: no-show + "pick a new time" (App\Support\NoShow, 2026-11-28).
+           OFF unless PlatformSettings sales.noshow_auto = 1 - it returns at once otherwise. */
+        try { $this->line('noshow ' . json_encode(\App\Support\NoShow::autoAsk((bool) $this->option('dry')))); } catch (\Throwable $e) { $this->line('noshow failed: ' . $e->getMessage()); }
         $s = SalesMeetings::sync((bool) $this->option('dry'));
         $this->line('sync ' . json_encode($s));
         if ($this->option('dry') || isset($s['error'])) return self::SUCCESS;

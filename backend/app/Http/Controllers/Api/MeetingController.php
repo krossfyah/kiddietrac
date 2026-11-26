@@ -102,7 +102,8 @@ class MeetingController extends Controller
                     ->orWhereExists(fn ($x) => $x->from('meeting_attendees as a')->whereColumn('a.meeting_id', 'meetings.id')->where('a.user_id', $uid)));
             }
         }
-        if (! $r->boolean('include_cancelled')) $q->where('status', 'scheduled');
+        // Held / no-show / rescheduled lead meetings stay on the calendar (App\Support\NoShow, 2026-11-28); cancelled ones do not.
+        if (! $r->boolean('include_cancelled')) $q->whereIn('status', ['scheduled', 'held', 'no_show', 'rescheduled']);
         $uid = (int) $r->user()->id;
         return response()->json(['meetings' => $q->orderBy('starts_at')->limit(500)->get()->map(fn ($m) => Meetings::shape($m, $uid))->values()]);
     }
@@ -242,7 +243,7 @@ class MeetingController extends Controller
         $m = $this->find($r, $id);
         if (! $m) return response()->json(['message' => 'That meeting is not available.'], 404);
         if (! $this->canChange($r, $m)) return response()->json(['message' => 'Only the organiser or an admin can change this meeting.'], 403);
-        if ($m->status !== 'scheduled') return response()->json(['message' => 'This meeting was cancelled.'], 422);
+        if ($m->status !== 'scheduled') return response()->json(['message' => $m->status === 'cancelled' ? 'This meeting was cancelled.' : 'This meeting is over (marked ' . str_replace('_', '-', $m->status) . '). Undo that first to change it.'], 422);
         [$row, $people, $err] = $this->read($r, $m->scope, $m->agency_id ? (int) $m->agency_id : null);
         if ($err) return response()->json(['message' => $err], 422);
         if (in_array($m->video, ['teams', 'meet'], true) && $row['video'] === $m->video) unset($row['join_url']);   // keep the Teams / Meet link

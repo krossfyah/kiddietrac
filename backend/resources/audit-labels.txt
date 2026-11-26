@@ -1080,6 +1080,8 @@ post sales/calendar/events | Added to the sales calendar
 patch sales/calendar/events/{id} | Changed a sales calendar entry
 delete sales/calendar/events/{id} | Removed a sales calendar entry
 put sales/calendar/availability | Set sales working hours
+post sales/no-show/{kind}/{id}/mark | Marked a sales meeting held or no-show
+post sales/no-show/{kind}/{id}/send | Asked a lead to pick a new meeting time
 put voice/dialer/alerts | Changed how they hear about missed calls and voicemails
 post voice/phone/answer | Answered a phone-line call from the app
 post voice/ivr/{token}/connect | Telnyx put a held caller through to the app

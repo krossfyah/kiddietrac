@@ -184,7 +184,7 @@ class PlatformReportsController extends Controller
         $calls = $touches->where('kind', 'call')->groupBy(fn ($t) => $t->outcome ?: 'logged')->map(fn ($s, $k) => ['outcome' => $k, 'count' => $s->count()])->values();
 
         $leadIds = (clone $p)->whereNotNull('lead_id')->pluck('lead_id')->all();
-        $meetings = $leadIds ? DB::table('marketing_bookings')->whereIn('sales_lead_id', $leadIds)->whereIn('status', ['booked', 'requested'])->count() : 0;
+        $meetings = $leadIds ? DB::table('marketing_bookings')->whereIn('sales_lead_id', $leadIds)->whereIn('status', ['booked', 'requested', 'held', 'no_show', 'rescheduled'])->count() : 0;
         $daily = $emails->where('outcome', 'sent')->groupBy(fn ($t) => substr((string) $t->created_at, 0, 10))->map(fn ($s, $k) => ['day' => $k, 'sent' => $s->count()])->sortBy('day')->values();
         $cap = null; try { $cap = (int) (\App\Support\ColdReach::settings()['daily_cap'] ?? 0) ?: null; } catch (\Throwable $e) {}
         $statuses = (clone $p)->groupBy('status')->selectRaw('status, COUNT(*) n')->pluck('n', 'status');
