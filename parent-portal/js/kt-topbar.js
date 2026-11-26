@@ -844,6 +844,10 @@
     var calcBtn = iconBtn('🧮', 'Calculator (Alt+C)', function () { if (window.KT && window.KT.toggleCalculator) window.KT.toggleCalculator(); });
     calcBtn.id = 'kt-tb-calc'; calcBtn.setAttribute('aria-pressed', 'false');
     right.appendChild(calcBtn);
+    // Quick notes (2026-11-26): the notepad drawer - private notes and the agency's shared ones (kt-quick-notes.js).
+    var notesBtn = iconBtn('📓', 'Quick notes', function () { if (window.KT && window.KT.quickNotes) window.KT.quickNotes.toggle(); else location.hash = '#notes'; });
+    notesBtn.id = 'kt-tb-notes'; notesBtn.setAttribute('aria-pressed', 'false');
+    right.appendChild(notesBtn);
     /* ONE AI BUTTON (Anthony, 2026-11-03: "should be combined into one on the top bar"). It was 🤖 (the help
        assistant) beside ✨ (Ask KiddieTrac). Decided at the tap, not when the bar is drawn, because kt-ask.js can load
        after the first bar: an admin or director with the AI Bundle gets the assistant that answers both "who owes

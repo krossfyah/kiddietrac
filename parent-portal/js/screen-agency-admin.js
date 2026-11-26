@@ -56,6 +56,21 @@
       title: 'Pending approvals',
       build: (ctx) => widgetPendingTasks(),
     },
+    // Quick notes (2026-11-26): quick add + the latest notes, private and shared (kt-quick-notes.js).
+    'quick-notes': {
+      title: 'Quick notes',
+      build: (ctx) => {
+        const card = widgetCard('Quick notes', 'Just for you, or shared with your staff', '');
+        if (window.KT && KT.quickNotes) {
+          const w = KT.quickNotes.widget();
+          // The card is draggable on the dashboard; typing in the note box must not start a drag.
+          w.addEventListener('focusin', () => { const d = card.closest('[draggable]'); if (d) d.setAttribute('draggable', 'false'); });
+          w.addEventListener('focusout', () => { const d = card.closest('[draggable]'); if (d) d.setAttribute('draggable', 'true'); });
+          card.appendChild(w);
+        }
+        return card;
+      },
+    },
     'recent-activity-mini': {
       title: 'Activity feed',
       build: (ctx) => widgetRecentActivityMini(ctx.data),

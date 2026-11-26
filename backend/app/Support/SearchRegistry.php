@@ -159,6 +159,7 @@ final class SearchRegistry
 
     /** Deliberately NOT in the global search, with the reason. */
     public const NOT_SEARCHABLE = [
+        'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',
         'calendar_links' => 'encrypted Outlook/Google calendar permissions per person or agency (Settings > Calendar); secrets, never searched or shown as a record',
         'invoice_lines' => 'part of an invoice; the invoice is searchable and shows its lines',
@@ -278,6 +279,7 @@ final class SearchRegistry
         'play_spark_runs' => 'Play Spark "We did it" ledger: which children did an idea and the day entries it wrote; the entries show on each child\'s day',
         'play_spark_pictures' => 'Play Spark end-result drawings (PlaySparkPicture), shown with their idea or lesson activity; never a record people look up',
         'calendar_event_links' => 'which Outlook/Google event a KiddieTrac meeting was written to, so it can be updated or cancelled; the meeting is the record',
+        'quick_note_revisions' => 'who changed a quick note and which fields (QuickNotesController::history); shown as the note\'s History',
         'sms_attendance_prompts' => 'today\'s "Reply 1 / 2" arrival texts awaiting an answer (AttendanceReply); expire at the agency\'s midnight, never a record people look up',
     ];
 

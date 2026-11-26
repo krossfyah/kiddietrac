@@ -1238,3 +1238,6 @@ post pickup-pass/view | A pickup person opened their pass
 post pickup-pass/sign-out | A temporary pickup person signed a child out
 post provider/temp-pickups/lookup | Looked up a temporary pickup pass at One-Tap
 put platform/licences/centre-cap/{agencyId} | Changed an agency's included centres
+post quick-notes | Added a quick note
+patch quick-notes/{id} | Updated a quick note
+delete quick-notes/{id} | Deleted a quick note

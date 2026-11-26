@@ -36,6 +36,9 @@ class AuditActivity
         // with the centre + duration), which the generic middleware entry can't.
         // staff/break/ (2026-11-05): breakStart / breakEnd write their own the same way.
         'push/device', 'push/subscribe', 'staff/punch', 'staff/break/',
+        // quick-notes (2026-11-26): QuickNotesController writes its own named entry (which fields changed). The raw
+        // request line would copy a PRIVATE note's words into the agency's audit log, readable by its admins.
+        'quick-notes',
         // diag/net: the browser's once-a-session connection-speed summary (NetQuality).
         'diag/net',
         // diag/search-words: a screen's on-screen words for the global search (SearchKeywords) - never stored in audit.

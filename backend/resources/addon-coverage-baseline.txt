@@ -779,3 +779,7 @@ job training:remind
 job walks:close-forgotten
 job walks:nudge-quiet
 job kt:addon-coverage
+route quick-notes
+route quick-notes/link-search
+route quick-notes/reminders
+screen notes

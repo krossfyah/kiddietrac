@@ -647,6 +647,17 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::patch('/{task}', [\App\Http\Controllers\Api\TaskController::class, 'update'])->where('task','[0-9]+');
             Route::delete('/{task}', [\App\Http\Controllers\Api\TaskController::class, 'destroy'])->where('task','[0-9]+');
         });
+        // Quick notes (2026-11-26): private + agency notepad for staff, sales and super admins (App\Support\QuickNotes).
+        Route::middleware('role:platform_admin,agency_admin,centre_director,educator,home_visitor,sales_rep')->prefix('quick-notes')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\QuickNotesController::class, 'index']);
+            Route::get('/reminders', [\App\Http\Controllers\Api\QuickNotesController::class, 'reminders']);
+            Route::get('/link-search', [\App\Http\Controllers\Api\QuickNotesController::class, 'linkSearch'])->middleware('throttle:60,1,r-qn-link');
+            Route::post('/', [\App\Http\Controllers\Api\QuickNotesController::class, 'store'])->middleware('throttle:60,1,r-qn-store');
+            Route::patch('/{id}', [\App\Http\Controllers\Api\QuickNotesController::class, 'update'])->whereNumber('id');
+            Route::delete('/{id}', [\App\Http\Controllers\Api\QuickNotesController::class, 'destroy'])->whereNumber('id');
+            Route::get('/{id}/history', [\App\Http\Controllers\Api\QuickNotesController::class, 'history'])->whereNumber('id');
+            Route::get('/{id}', [\App\Http\Controllers\Api\QuickNotesController::class, 'show'])->whereNumber('id');
+        });
 
         Route::middleware('role:home_visitor,agency_admin,centre_director,platform_admin')->prefix('home-visits')->group(function () {
             Route::get('/centres', [\App\Http\Controllers\Api\HomeVisitReportController::class, 'centres']);

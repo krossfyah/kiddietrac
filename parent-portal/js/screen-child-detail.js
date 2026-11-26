@@ -1321,8 +1321,12 @@
         else if (activeTab === 'attachments') renderAttachmentsTab(tabContent, child);
         else if (activeTab === 'history') renderHistoryTab(tabContent, child);
         else if (activeTab === 'notes') {
-          if (KT.renderChildNotes) KT.renderChildNotes(tabContent, child.id);
-          else tabContent.textContent = 'Reload the page to see notes.';
+          // renderChildNotes repaints its whole host, so it gets its own; the quick notes card sits under it (2026-11-26).
+          var _cnHost = document.createElement('div'); tabContent.appendChild(_cnHost);
+          if (KT.renderChildNotes) KT.renderChildNotes(_cnHost, child.id);
+          else _cnHost.textContent = 'Reload the page to see notes.';
+          // Quick notes linked to this child - only the ones this person may see.
+          if (KT.quickNotes) tabContent.appendChild(KT.quickNotes.recordCard('child', child.id));
         }
         else renderOverviewTab(tabContent, child);
       }

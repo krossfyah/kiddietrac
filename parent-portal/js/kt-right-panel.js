@@ -215,6 +215,22 @@
       c.overlays[k] = (j && j.events) || []; c.at['o:' + k] = Date.now(); return c.overlays[k];
     }).catch(function () { return []; });
   }
+  /* Quick notes with a reminder date (2026-11-26): their own private notes and the shared ones they can see
+     (QuickNotesController::reminders). They sit with tasks: the purple dot, "Due" in the agenda. */
+  function getNotes(from, to) {
+    var c = cache(), k = 'qn:' + from + ':' + to;
+    if (c[k] && fresh(k, 120000)) return Promise.resolve(c[k]);
+    return api().get('/quick-notes/reminders?from=' + from + '&to=' + to).then(function (j) {
+      c[k] = ((j && j.notes) || []).map(function (n) {
+        return { qn: true, id: n.id, title: n.title || String(n.body || '').split('\n')[0].slice(0, 80), due_date: n.remind_on, is_private: n.visibility === 'private', centre_name: n.centre_name };
+      });
+      c.at[k] = Date.now(); return c[k];
+    }).catch(function () { return []; });
+  }
+  w.addEventListener('kt:quick-notes-changed', function () {
+    try { Object.keys(C).forEach(function (k) { if (k.indexOf('qn:') === 0) delete C[k]; }); Object.keys(C.at || {}).forEach(function (k) { if (k.indexOf('qn:') === 0) delete C.at[k]; }); } catch (e) {}
+    try { if (isOpen() && (S.section === 'calendar' || S.section === 'tasks')) renderSection(); } catch (e) {}
+  });
   /* Outlook / Google events (ExternalCalendar). xcalNone: nothing connected - not asked again this session/agency. */
   function getExternal(from, to) {
     var c = cache();
@@ -541,14 +557,15 @@
     // One fetch covers the month on show and the Coming up days (which may run into next month).
     var from = r[0] < t0 ? r[0] : t0, to = r[1] > aheadTo ? r[1] : aheadTo;
     if (force) { cache(); C.at = {}; }
-    return Promise.all([getMeetings(from, to), getOverlays(from, to), getTasks(force).catch(function () { return { mine: [], byMe: [] }; }), getSales(from, to), getExternal(from, to)]).then(function (x) {
-      var ms = x[0], ev = x[1], tk = x[2], sl = x[3], xs = x[4];
+    return Promise.all([getMeetings(from, to), getOverlays(from, to), getTasks(force).catch(function () { return { mine: [], byMe: [] }; }), getSales(from, to), getExternal(from, to), getNotes(from, to)]).then(function (x) {
+      var ms = x[0], ev = x[1], tk = x[2], sl = x[3], xs = x[4], qn = x[5] || [];
       var by = {};
       var put = function (day, kind, item) { (by[day] = by[day] || { m: [], e: [], t: [], s: [], x: [] })[kind].push(item); };
       xs.forEach(function (e) { var dd = e.date, g = 0; while (dd <= e.last && g++ < 40) { put(dd, 'x', e); dd = addDays(dd, 1); } });
       ms.forEach(function (m) { var dd = m.date; var end = m.end_date || m.date; var g = 0; while (dd <= end && g++ < 40) { put(dd, 'm', m); dd = addDays(dd, 1); } });
       ev.forEach(function (e) { if (e.date) put(e.date, 'e', e); });
       tk.mine.concat(tk.byMe).forEach(function (t) { if (t.due_date) put(String(t.due_date).slice(0, 10), 't', t); });
+      qn.forEach(function (n) { if (n.due_date) put(String(n.due_date).slice(0, 10), 't', n); });
       sl.forEach(function (s) { put(s.date, 's', s); });
       C.calBy = by;
       var p = S.month.split('-'), y = +p[0], mo = +p[1];
@@ -625,6 +642,10 @@
       out.push({ k: 'ev', all: true, title: (x.icon ? x.icon + ' ' : '') + (x.title || ''), sub: x.detail || '', attr: 'data-go="staff-calendar"' });
     });
     (b.t || []).forEach(function (x) {
+      if (x.qn) {
+        out.push({ k: 'tk', all: true, allLabel: T('Note'), title: x.title, sub: T('Note reminder') + (x.centre_name ? ' · ' + x.centre_name : ''), priv: !!x.is_private, attr: 'data-qnote="' + x.id + '"' });
+        return;
+      }
       out.push({ k: 'tk', all: true, allLabel: T('Due'), title: x.title, sub: T('Task') + (x.centre_name ? ' · ' + x.centre_name : ''), priv: !!x.is_private,
         attr: tasksHash() ? 'data-go="' + tasksHash() + '"' : 'data-rp-sec-go="tasks"' });
     });
@@ -721,8 +742,13 @@
         : '<span class="kt-rp-sub">' + esc(who === 'mine' ? (t.assigned_by_name ? T('From') + ' ' + t.assigned_by_name : '') : (t.assigned_to_name ? T('For') + ' ' + t.assigned_to_name : '')) + (t.centre_name ? ' · ' + esc(t.centre_name) : '') + '</span>')
       + dueChip(t) + '</span></div>';
   }
+  function noteItem(n) {
+    return '<div class="kt-rp-item" role="button" tabindex="0" data-qnote="' + n.id + '"><span style="flex:1;min-width:0"><b data-no-i18n>' + esc(n.title) + '</b>'
+      + '<span class="kt-rp-sub">' + esc(n.is_private ? T('Private - only you can see it') : (T('Shared note') + (n.centre_name ? ' · ' + n.centre_name : ''))) + '</span>' + dueChip(n) + '</span></div>';
+  }
   function tasksHtml(force) {
-    return getTasks(force).then(function (tk) {
+    return Promise.all([getTasks(force), getNotes(addDays(today(), -14), addDays(today(), 7))]).then(function (rr) {
+      var tk = rr[0], qn = rr[1] || [];
       var h = '<div class="kt-rp-sec">';
       // "Me" first and chosen: a private to-do. Admins and directors can pick someone else instead.
       h += '<form class="kt-rp-add" id="kt-rp-add" autocomplete="off"><input class="kt-rp-in" name="title" maxlength="200" placeholder="Add a task…" aria-label="Add a task">'
@@ -739,6 +765,7 @@
         if (!tk.byMe.length) h += '<div class="kt-rp-muted">No open tasks you assigned.</div>';
         tk.byMe.slice(0, 40).forEach(function (t) { h += taskItem(t, 'byme'); });
       }
+      if (qn.length) { h += '<h4>' + esc(T('Note reminders')) + '</h4>'; qn.forEach(function (n) { h += noteItem(n); }); }
       if (tasksHash()) h += '<div class="kt-rp-row"><button type="button" class="kt-rp-link" data-go="tasks">All tasks</button></div>';
       h += '</div>';
       return h;
@@ -829,6 +856,8 @@
     var ck = t.closest('.kt-rp-chk'); if (ck) { tickDone(ck); return; }
     var xl = t.closest('[data-xlink]');
     if (xl) { var wn = null; try { wn = w.open(xl.getAttribute('data-xlink'), '_blank'); if (wn) wn.opener = null; } catch (er) {} return; }
+    var qnt = t.closest('[data-qnote]');
+    if (qnt) { if (KT.quickNotes) KT.quickNotes.open(+qnt.getAttribute('data-qnote')); return; }
     var mt = t.closest('[data-meeting]');
     if (mt) { if (KT.Meeting && KT.Meeting.view) KT.Meeting.view(+mt.getAttribute('data-meeting'), { onChange: function () { cacheFor = null; renderSection(true); } }); return; }
     var g = t.closest('[data-go]'); if (g) { go(g.getAttribute('data-go')); return; }

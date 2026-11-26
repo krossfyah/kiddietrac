@@ -3518,6 +3518,8 @@
           .then(function (d) { renderNotes(d.notes); }).catch(function () { noteBtn.disabled = false; alert('Failed to add note'); });
       });
       nb.appendChild(noteInput); nb.appendChild(noteBtn); if (!_dirMode) body.appendChild(nb);   // admin notes
+      // Quick notes linked to this staff member (2026-11-26) - directors see the ones at their centres.
+      if (window.KT && KT.quickNotes) body.appendChild(KT.quickNotes.recordCard('staff', uid));
 
       Api.get('/admin/users/' + uid + '/profile').then(function (d) {
         var ed = d.editable || {};
@@ -9329,6 +9331,8 @@
       var _notesHost = Dom.el('div', {});
       body.appendChild(_notesHost);
       renderFamilyNotes(_notesHost, familyId);
+    // Quick notes linked to this family (2026-11-26).
+    if (window.KT && KT.quickNotes) body.appendChild(KT.quickNotes.recordCard('family', familyId));
 
       if (opts.into) { opts.into.appendChild(body); return; }
       Shell.Modal.open({ title: 'At a glance', body: body, large: true });

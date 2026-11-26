@@ -2,6 +2,21 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "📓",
+            "title": "Quick notes",
+            "body": "Jot a note in seconds from the 📓 button or Notes in your menu. Keep it just for you, or share it with your staff, and pin it, colour it, link it to a child, family or staff member, or set a reminder that shows in your calendar.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "sales_rep"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-26",
             "icon": "🔔",
