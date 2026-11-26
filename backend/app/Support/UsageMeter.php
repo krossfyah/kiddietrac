@@ -3,6 +3,10 @@
 namespace App\Support;
 
 use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
@@ -21,11 +25,32 @@ use Illuminate\Support\Facades\Event;
  * summary as "No agency" so it is never silently lost.
  *
  * Recording never breaks the caller: any failure here is swallowed.
+ *
+ * THE PERSON (2026-11-26, AI usage "By user"). A web call is the signed-in person's. A QUEUED job is the person who
+ * started it: every job's payload carries who dispatched it (kt_meter: their id and agency, stamped by
+ * Queue::createPayloadUsing), and while the worker runs that job the meter uses them and names the feature after the
+ * job ("job:DrawPlaySparkPicture") instead of "cli:queue:work". Each job's context is put back when it ends, so one
+ * job's agency or person never leaks into the next one the long-running worker picks up. Scheduled commands
+ * (nightly digests) have no person: those calls show as "System".
  */
 class UsageMeter
 {
     /** Set by background work that knows which agency it is spending for. */
     public static ?int $agencyId = null;
+
+    /** Set by background work that knows which person it is working for (a queued job they started). */
+    public static ?int $userId = null;
+
+    /** Set by background work to name what is asking (e.g. "job:DrawPlaySparkPicture"). */
+    public static ?string $feature = null;
+
+    /** Saved context while a queued job runs, put back when it ends. */
+    private static array $stack = [];
+
+    public static function forUser(?int $userId): void
+    {
+        self::$userId = $userId ?: null;
+    }
 
     public static function forAgency(?int $agencyId): void
     {
@@ -48,6 +73,42 @@ class UsageMeter
         Event::listen(ResponseReceived::class, function (ResponseReceived $e) {
             try { self::record($e); } catch (\Throwable $ex) {}
         });
+
+        // Who started a queued job travels with it.
+        Queue::createPayloadUsing(function () {
+            try {
+                $user = null; $agency = self::$agencyId;
+                if (! app()->runningInConsole()) {
+                    $user = optional(request()->user())->id;
+                    if ($agency === null && $user) $agency = AuditScope::resolve((int) $user, request());
+                } else {
+                    $user = self::$userId;
+                }
+                return ['kt_meter' => ['u' => $user ? (int) $user : null, 'a' => $agency ? (int) $agency : null]];
+            } catch (\Throwable $e) {
+                return [];
+            }
+        });
+        Event::listen(JobProcessing::class, function (JobProcessing $e) {
+            self::$stack[] = [self::$agencyId, self::$userId, self::$feature];
+            try {
+                $p = $e->job->payload();
+                $m = is_array($p['kt_meter'] ?? null) ? $p['kt_meter'] : [];
+                self::$userId = isset($m['u']) ? ((int) $m['u'] ?: null) : null;
+                self::$agencyId = isset($m['a']) ? ((int) $m['a'] ?: null) : null;
+                $name = (string) ($p['displayName'] ?? $e->job->resolveName());
+                self::$feature = 'job:' . class_basename($name);
+            } catch (\Throwable $ex) {
+                self::$feature = 'job:unknown';
+            }
+        });
+        $restore = function () {
+            [$a, $u, $f] = array_pop(self::$stack) ?? [null, null, null];
+            self::$agencyId = $a; self::$userId = $u; self::$feature = $f;
+        };
+        // A job ends in exactly one of these (an exception fires JobExceptionOccurred, never JobProcessed).
+        Event::listen(JobProcessed::class, $restore);
+        Event::listen(JobExceptionOccurred::class, $restore);
     }
 
     private static function record(ResponseReceived $e): void
@@ -64,8 +125,8 @@ class UsageMeter
         if (! is_array($u)) return;
 
         $agency = self::$agencyId;
-        $userId = null;
-        if (! app()->runningInConsole()) {
+        $userId = self::$userId;
+        if ($userId === null && ! app()->runningInConsole()) {
             try {
                 $userId = optional(request()->user())->id;
                 if ($agency === null && $userId) $agency = AuditScope::resolve((int) $userId, request());
@@ -87,6 +148,7 @@ class UsageMeter
     /** What asked: the API route, or the artisan command. */
     private static function feature(): string
     {
+        if (self::$feature) return self::$feature;
         if (app()->runningInConsole()) {
             $argv = $_SERVER['argv'] ?? [];
             return 'cli:' . ($argv[1] ?? 'unknown');

@@ -217,7 +217,8 @@ final class SearchController extends Controller
        centre, and an idea with no centre is agency-wide, for agency admins only. No AI Bundle = no group. Fails closed. */
     private function srcPlaySparkIdeas(object $ctx, array $meta): array
     {
-        if (! $ctx->nameSearch || ! $ctx->userId || ! \App\Support\AiBundle::on($ctx->agencyId)) return [];
+        // The Play Spark LICENCE (AiBundle::licensed, 2026-11-26): saved ideas are searchable with AI switched off too.
+        if (! $ctx->nameSearch || ! $ctx->userId || ! \App\Support\AiBundle::licensed($ctx->agencyId)) return [];
         $centres = $ctx->centreIds;
         [$rk, $b] = $this->rankExpr(['i.title'], $ctx->q);
         return DB::table('play_spark_ideas as i')

@@ -325,6 +325,12 @@ Schedule::call(fn () => \App\Support\PublicDemo::endShifts())->name('public-demo
 Schedule::command('drip:dispatch')->hourlyAt(1);
 // The public website demo: remove what visitors added, revoke expired demo logins (2026-10-31).
 Schedule::command('kt:reset-web-demo')->dailyAt('03:30')->timezone('America/Toronto')->withoutOverlapping();
+/* THE WEBSITE DEMO STORY, FRESH EVERY NIGHT (2026-11-26, Anthony: yes). After the reset above, Brightwood (25) and
+   Starlight (26) get their linked story rewritten relative to the new day (App\Support\WebDemoShowcase): its ledger
+   removes exactly what the last run wrote first, so nothing piles up; it refuses any agency that is not a test agency.
+   03:45 Toronto = 00:45 in the demo agencies' own California night. One short CLI run, not every-minute work. */
+Schedule::command('kt:web-demo-showcase --set=all')->dailyAt('03:45')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer()
+    ->appendOutputTo(storage_path('logs/web-demo-showcase.log'));
 Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');
 
 // Mail goes out half an hour before the in-app bells, so the email about a birthday

@@ -40,6 +40,10 @@ If you add a room-specific plan, it takes over for your room while other rooms k
 
 When you set a plan, parents can see it in their app. It turns "what did you do today?" into a real conversation — they can ask about the specific project or story you had planned. A set plan is one of the quickest wins for parent engagement, which is why the **Today at a glance** brief nudges you when the week's plan is still empty.
 
+## Play Spark when AI is switched off
+
+If AI is switched off for your agency, **Spark an idea** and the materials **Scan** are paused. Your saved ideas, their pictures and **We did it** still work: open **Play Spark → Library → My ideas**. Families still see the activity in their day and in **Play at home**.
+
 ## Tips
 
 - **Plan a week ahead** where you can — it makes mornings calmer.

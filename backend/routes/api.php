@@ -531,6 +531,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             Route::post('/usage-summary/test', [\App\Http\Controllers\Api\PlatformUsageController::class, 'test'])->middleware('throttle:6,1,r-usage-summary-test');
             // Platform → AI usage: the Claude key + model, live state, credits estimate, full stats (2026-10-28).
             Route::get   ('/ai',             [\App\Http\Controllers\Api\PlatformAiController::class, 'show']);
+            // Breakdown tab: by user / feature / agency / model for a date range, and one person's calls (2026-11-26).
+            Route::get   ('/ai/breakdown',   [\App\Http\Controllers\Api\PlatformAiController::class, 'breakdown']);
+            Route::get   ('/ai/users/{id}/calls', [\App\Http\Controllers\Api\PlatformAiController::class, 'userCalls'])->whereNumber('id');
             Route::put   ('/ai/settings',    [\App\Http\Controllers\Api\PlatformAiController::class, 'save'])->middleware('throttle:10,1,r-grp-825');
             Route::post  ('/ai/test',        [\App\Http\Controllers\Api\PlatformAiController::class, 'test'])->middleware('throttle:10,1,r-grp-826');
             Route::put   ('/ai/off',         [\App\Http\Controllers\Api\PlatformAiController::class, 'saveOff']);

@@ -79,9 +79,9 @@ final class SearchRegistry
         ],
         'play_spark_ideas' => [
             'label' => 'Play Spark ideas', 'icon' => '✨', 'limit' => 5, 'tables' => ['play_spark_ideas'],
-            'billing' => false, 'feature' => null,   // the AI Bundle is checked in srcPlaySparkIdeas (AiBundle::on), fail closed
+            'billing' => false, 'feature' => null,   // the AI Bundle LICENCE is checked in srcPlaySparkIdeas (AiBundle::licensed: saved ideas need no AI call), fail closed
             'matches' => 'idea title',
-            'scope' => 'active agency, AI Bundle on; the caller\'s own ideas, plus ideas shared to the agency library from a centre the caller sees (CentreScope via Visibility::centreIds; agency-wide ideas for agency admins only). Search is admins and directors only; never parents',
+            'scope' => 'active agency with the AI Bundle licence (AI may be switched off); the caller\'s own ideas, plus ideas shared to the agency library from a centre the caller sees (CentreScope via Visibility::centreIds; agency-wide ideas for agency admins only). Search is admins and directors only; never parents',
             'link' => '#play-spark?tab=library&lib=mine|shared&idea={id}',
         ],
         'parents' => [

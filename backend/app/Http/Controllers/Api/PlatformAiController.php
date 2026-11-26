@@ -21,6 +21,24 @@ class PlatformAiController extends Controller
         return response()->json(AiConfig::overview());
     }
 
+    /** GET /platform/ai/breakdown?from=Y-m-d&to=Y-m-d - the Breakdown tab: KPIs and the tables by user, feature,
+     *  agency and model for one range (2026-11-26). */
+    public function breakdown(Request $request): JsonResponse
+    {
+        $d = $request->validate(['from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d']]);
+
+        return response()->json(AiConfig::breakdown($d['from'] ?? null, $d['to'] ?? null));
+    }
+
+    /** GET /platform/ai/users/{id}/calls?from&to - one person's latest AI calls (0 = System): feature, time, tokens,
+     *  cost. No prompt or answer is kept, so none is shown. */
+    public function userCalls(Request $request, int $id): JsonResponse
+    {
+        $d = $request->validate(['from' => ['nullable', 'date_format:Y-m-d'], 'to' => ['nullable', 'date_format:Y-m-d']]);
+
+        return response()->json(AiConfig::userCalls($id, $d['from'] ?? null, $d['to'] ?? null));
+    }
+
     /** PUT /platform/ai/settings {key?, model?} - a new key or model is tried against Anthropic before it is kept. */
     public function save(Request $request): JsonResponse
     {

@@ -112,22 +112,28 @@
   /* The same answer the server gives (AuthController ai_bundle = AiBundle::on), so a tab is shown exactly when its
      endpoints answer. hidden_screens carries the lesson_plans switch. */
   function aiOn() { return me().ai_bundle === true; }
+  /* SPLIT (2026-11-26, Anthony): the Play Spark LICENCE (/auth/me play_spark = AiBundle::licensed) shows saved ideas,
+     their pictures, "We did it", the library, Team ideas and the report even when AI is switched off for the agency.
+     Only what calls the AI - Spark an idea, Scan, Plan the week - needs aiOn(). A user saved before play_spark existed
+     falls back to ai_bundle. */
+  function psOn() { var u = me(); return u.play_spark === true || u.ai_bundle === true; }
+  var AI_OFF = 'AI is switched off for this agency, so new ideas and material scans are paused. Your saved ideas, their pictures and \u201cWe did it\u201d are in the Library.';
   function lpOn() { var h = me().hidden_screens; return !(Array.isArray(h) && h.indexOf('lesson-plans') !== -1); }
   function tabsFor() {
-    var r = myRole(), ai = aiOn(), lp = lpOn(), canWeek = lp && WEEK_ROLES.indexOf(r) !== -1, manage = MANAGE_ROLES.indexOf(r) !== -1, t = [];
-    if (ai) t.push(['now', '✨ Right now']);
+    var r = myRole(), ai = aiOn(), ps = psOn(), lp = lpOn(), canWeek = lp && WEEK_ROLES.indexOf(r) !== -1, manage = MANAGE_ROLES.indexOf(r) !== -1, t = [];
+    if (ps) t.push(['now', '✨ Right now']);
     if (canWeek) t.push(['week', '📅 This week']);
     if (ai && manage) t.push(['plan', '🗓️ Plan the week']);
-    if (ai || (lp && manage)) t.push(['library', '📚 Library']);
-    if (ai) t.push(['report', '📊 Monthly report']);
+    if (ps || (lp && manage)) t.push(['library', '📚 Library']);
+    if (ps) t.push(['report', '📊 Monthly report']);
     return t;
   }
   function libScopes() {
     var s = [];
-    if (aiOn()) s.push(['mine', 'My ideas'], ['favourites', '★ Favourites'], ['shared', '📚 Agency library']);
+    if (psOn()) s.push(['mine', 'My ideas'], ['favourites', '★ Favourites'], ['shared', '📚 Agency library']);
     /* 👥 Team ideas (2026-11-26, Anthony): every idea made at the centres you run, read-only (admins the agency,
        directors their centres; the server decides - PlaySparkController::team). */
-    if (aiOn() && MANAGE_ROLES.indexOf(myRole()) !== -1) s.push(['team', '👥 Team ideas']);
+    if (psOn() && MANAGE_ROLES.indexOf(myRole()) !== -1) s.push(['team', '👥 Team ideas']);
     if (lpOn() && MANAGE_ROLES.indexOf(myRole()) !== -1) s.push(['ideas', '💡 Activity ideas']);
     return s;
   }
@@ -156,7 +162,7 @@
     if (q.lib) S.libScope = q.lib;
     if (q.idea && /^\d+$/.test(q.idea)) S.openIdeaId = +q.idea;   // a link from the top search (2026-11-25)
     if (!has(S.tab)) S.tab = tabs.length ? tabs[0][0] : '';
-    var ai = aiOn();
+    var ai = psOn();   // the Play Spark licence: its tabs and context (AI calls check aiOn() themselves)
     var w = document.createElement('div'); w.className = 'ps-wrap'; w.setAttribute('data-kt-noband', '1'); w.setAttribute('data-kt-nosechead', '1'); main.appendChild(w);   // own chips, not tab bands
     w.innerHTML = hero(ai
         ? { title: 'Play ideas and weekly plans', sub: 'One tap. A fresh idea for every age in the room, and the week families see.' }
@@ -260,7 +266,10 @@
     form.querySelector('[data-ps-addmat]').addEventListener('click', add);
     form.querySelector('[data-ps-newmat]').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); add(); } });
     var file = form.querySelector('[data-ps-file]');
-    form.querySelector('[data-ps-scan]').addEventListener('click', function () { file.value = ''; file.click(); });
+    form.querySelector('[data-ps-scan]').addEventListener('click', function () {
+      if (!aiOn()) { toast(AI_OFF, 'error'); return; }   // a scan calls the AI
+      file.value = ''; file.click();
+    });
     file.addEventListener('change', function () { if (file.files && file.files[0]) scanPhoto(file.files[0], form.querySelector('[data-ps-scan]')); });
     form.querySelector('[data-ps-theme]').addEventListener('input', function (e) { S.theme = e.target.value; });
     form.querySelector('[data-ps-go]').addEventListener('click', function () { generate(body, main, this); });
@@ -428,6 +437,13 @@
 
   async function generate(body, main, btn) {
     if (S.busy) return;
+    if (!aiOn()) {   // a new idea calls the AI: say so plainly, with the way to what still works
+      var off = body.querySelector('[data-ps-out]');
+      off.innerHTML = '<div class="ps-card ps-empty" data-ps-aioff><div style="font-size:28px">🔌</div><div style="margin-top:8px;font-weight:700">AI is off for this agency</div>' +
+        '<div style="margin-top:6px">' + esc(AI_OFF) + '</div><button type="button" class="ps-btn" style="margin-top:12px" data-ps-tolib data-kt-iconized="1">📚 My saved ideas</button></div>';
+      off.querySelector('[data-ps-tolib]').addEventListener('click', function () { S.tab = 'library'; S.libScope = 'mine'; setHash(); renderStaff(main); });
+      return;
+    }
     S.busy = true; btn.disabled = true; btn.textContent = '✨ Sparking…';
     var out = body.querySelector('[data-ps-out]');
     out.innerHTML = '<div class="ps-card ps-load"><div class="spinner"></div>Putting an idea together for your room…</div>';

@@ -137,7 +137,9 @@
     if (!d) return '';
     try {
       var iso = (typeof d === 'string') ? d.replace(' ', 'T') : d;
-      var dt = new Date(iso);
+      // A bare "YYYY-MM-DD" is a calendar day, not UTC midnight (Jan 1 showed as Dec 31 in the Americas, 2026-11-26).
+      var ymd = typeof d === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(d);
+      var dt = ymd ? new Date(+ymd[1], +ymd[2] - 1, +ymd[3]) : new Date(iso);
       if (isNaN(dt.getTime())) return String(d);
       return dt.toLocaleDateString('en-CA', { dateStyle: 'medium' });
     } catch (e) { return String(d); }

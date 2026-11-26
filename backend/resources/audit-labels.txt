@@ -739,6 +739,7 @@ put platform/usage-settings | Changed usage rates and spend thresholds
 put platform/messaging-overage/settings | Changed the text & call allowances (SMS Incremental)
 post ai/assist/write | Used AI writing help (suggestion only)
 post ai/assist/ask | Asked Ask KiddieTrac a question
+get platform/ai/users/{id}/calls | Viewed one person's AI calls (AI usage)
 put platform/ai/settings | Changed the Claude (AI) key or model
 post platform/ai/test | Tested the Claude (AI) connection
 put platform/ai/off | Changed which agencies have AI switched off

@@ -245,11 +245,12 @@ final class FeatureFlagController extends Controller
             $hidden = array_values(array_diff($hidden, ['play-spark']));
         }
 
-        /* A PARENT'S AND A HOME VISITOR'S PLAY SPARK IS AI ONLY (2026-11-26, moved here from app-v2-shell.js
+        /* A PARENT'S AND A HOME VISITOR'S PLAY SPARK IS AI BUNDLE ONLY (2026-11-26, moved here from app-v2-shell.js
            aiOnlyHidden so the server's list is the one answer). For staff it also holds the weekly plan, so it
-           stays for them; for someone who is only a parent and/or home visitor it goes without the AI Bundle. */
+           stays for them; for someone who is only a parent and/or home visitor it goes without the AI Bundle LICENCE
+           (AiBundle::licensed - Play at home shows saved ideas and pictures, no AI call, so AI switched off keeps it). */
         if ($roles && ! array_diff($roles, ['guardian', 'home_visitor']) && ! in_array('play-spark', $hidden, true)
-            && ! rescue(fn () => \App\Support\AiBundle::on($agencyId), true, false)) {
+            && ! rescue(fn () => \App\Support\AiBundle::licensed($agencyId), true, false)) {
             $hidden[] = 'play-spark';
         }
 

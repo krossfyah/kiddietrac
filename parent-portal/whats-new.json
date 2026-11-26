@@ -4,6 +4,28 @@
         {
             "type": "new",
             "date": "2026-11-26",
+            "icon": "🤖",
+            "title": "AI usage: see who uses AI, with true costs",
+            "body": "Platform > AI usage > Breakdown now has its own date range, four summary tiles and one table at a time: By feature, By agency, By model and the new By user (name, role, agency, centre, calls, tokens, cost, last used and top features). Click a person to see their recent AI calls. Costs now use each model's own price (Haiku, Sonnet for pictures, Opus), so they are much closer to the real bill.",
+            "roles": [
+                "platform_admin"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "✨",
+            "title": "Play Spark with AI off",
+            "body": "If AI is switched off for your agency, Play Spark stays open: saved ideas and their pictures, We did it, the library, Team ideas, the monthly report and Play at home all keep working. Only new ideas and material scans wait until AI is back on.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
             "icon": "👥",
             "title": "Team ideas in Play Spark",
             "body": "Directors and admins can now see every Play Spark idea their educators made, not just shared ones. Open Play Spark > Library > 👥 Team ideas: admins see the whole agency, directors the centres they run. Each idea shows who made it, the room and the date. It is read only: Print it, or Save a copy to my ideas to use it as your own. Needs the AI Bundle.",

@@ -13,7 +13,10 @@
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function fmtDate(s) {
     if (!s) return '';
-    var d = new Date(String(s).replace(' ', 'T'));
+    /* A bare "YYYY-MM-DD" (desired start) is a calendar day: new Date() reads it as UTC midnight, the evening before in
+       the Americas, so Dec 1 showed as Nov 30 (2026-11-26). Built as a local date; date-times keep the old parse. */
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s));
+    var d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(String(s).replace(' ', 'T'));
     return isNaN(d.getTime()) ? esc(s) : d.toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
   }
   function originBadge(o) {

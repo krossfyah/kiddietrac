@@ -1688,6 +1688,9 @@ final class AuthController extends Controller
             'licence_label' => rescue(fn () => \App\Support\Licences::planLabel($featureAgencyId ? (int) $featureAgencyId : null), null, false),
             // The AI Bundle (2026-10-28): screens show their "✨ AI" help only when this is true (kt-ai-assist.js).
             'ai_bundle' => rescue(fn () => \App\Support\AiBundle::on($featureAgencyId ? (int) $featureAgencyId : null), false, false),
+            // The AI Bundle LICENCE alone (2026-11-26): Play Spark's saved ideas, pictures, "We did it", library and report.
+            // ai_bundle above is licence AND AI allowed - only that one may offer "Spark an idea" or a scan.
+            'play_spark' => rescue(fn () => \App\Support\AiBundle::licensed($featureAgencyId ? (int) $featureAgencyId : null), false, false),
             'hidden_screens' => \App\Http\Controllers\Api\FeatureFlagController::hiddenHashesFor(
                 $featureAgencyId ? (int) $featureAgencyId : null,
                 in_array('platform_admin', $roles ?? [], true),

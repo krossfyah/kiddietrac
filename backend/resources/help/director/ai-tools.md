@@ -40,3 +40,12 @@ Upload a photo or scan of a document — immunization record, certification, VSS
 4. The JSON appears below. Copy fields into the relevant child / staff record manually for now — auto-link comes in v22p52.
 
 Costs apply per Claude vision call. Budget ~$0.01-0.03 per document depending on size.
+
+## Play Spark when AI is switched off
+
+Play Spark comes with the **AI Bundle**. If AI is switched off for your agency, Play Spark stays on, with a few limits:
+
+- **Still works:** saved ideas and their pictures, **We did it**, favourites, the agency library, **Team ideas**, printing, the monthly report, and **Play at home** for families.
+- **Paused:** making a new idea (**Spark an idea**), scanning materials with the camera, and drawing pictures for new ideas. Tapping **Spark an idea** says that AI is off and links to the Library.
+
+If your plan does not include the AI Bundle, Play Spark shows only the weekly plan.

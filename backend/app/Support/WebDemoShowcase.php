@@ -39,7 +39,12 @@ use Illuminate\Support\Facades\DB;
  *  - quick notes (Maya's private one, Elena's shared centre note with a reminder, a note linked to Evelyn, Olivia's
  *    private one) and tasks (Elena -> Maya, Olivia's private to-do);
  *  - bell rows so each login has something in the notifications list: Megan's arrivals, moments, observation, photo;
- *    Maya's new task; Elena's time-off request; Olivia's task - inserted directly, so nothing rings or is sent.
+ *    Maya's new task; Elena's time-off request; Olivia's task - inserted directly, so nothing rings or is sent;
+ *  - Safe Arrival history for Sprouts over the last four weekdays, read off the room's REAL demo sign-ins: a late
+ *    arrival (alert, then the sign-in), a family's "running late" notice, an absence the parent answered (with the
+ *    child_absences row) and an all-clear day; every check already resolved, so the live run never touches them;
+ *  - tour bookings (completed, confirmed, requested) and agency waitlist families - fictional, .example addresses.
+ * NIGHTLY (routes/console.php, after kt:reset-web-demo): the ledger makes a rerun replace, never pile up.
  */
 final class WebDemoShowcase
 {
@@ -95,6 +100,8 @@ final class WebDemoShowcase
         $family = DB::table('families')->where('id', $fam)->first();
         $agencyId = (int) DB::table('role_assignments')->where('user_id', $elena)->where('role', 'centre_director')->value('agency_id');
         abort_unless($family && $agencyId && PublicDemo::isAgency($agencyId), 500, 'The website demo family / agency was not found.');
+        // Belt and braces for the nightly run: only ever a TEST agency (they send nothing - TestAgency::blocks).
+        abort_unless(TestAgency::isAgency($agencyId), 500, 'The website demo story only runs in a test agency.');
         $centreId = (int) $family->centre_id;
         $kids = DB::table('children')->where('family_id', $fam)->whereNull('deleted_at')->orderBy('first_name')->get(['id', 'first_name']);
         $james = $kids->firstWhere('first_name', 'James');
@@ -114,7 +121,7 @@ final class WebDemoShowcase
             ? ['Birch Aquarium at Scripps', '2300 Expedition Way, La Jolla, CA 92037']
             : ['Aquarium of the Pacific', '100 Aquarium Way, Long Beach, CA 90802'];
 
-        DB::transaction(function () use ($old, $megan, $maya, $elena, $olivia, $fam, $agencyId, $centreId, $james, $evelyn, $roomId, $area, $tripName, $tripWhere) {
+        DB::transaction(function () use ($old, $megan, $maya, $elena, $olivia, $fam, $agencyId, $centreId, $james, $evelyn, $roomId, $area, $tripName, $tripWhere, $set) {
             // The drawings' PNG copies (email) written last time go with their rows.
             if (! empty($old['play_spark_pictures'])) {
                 foreach (DB::table('play_spark_pictures')->whereIn('id', $old['play_spark_pictures'])->pluck('png_path') as $png) {
@@ -468,6 +475,102 @@ final class WebDemoShowcase
                 $this->add('tasks', ['agency_id' => $agencyId, 'centre_id' => null, 'assigned_to' => $olivia, 'assigned_by' => $olivia, 'is_private' => 1,
                     'title' => 'Approve the December menu', 'description' => null, 'priority' => 'normal',
                     'due_date' => $this->today->copy()->addDays(1)->toDateString(), 'status' => 'open', 'created_at' => $this->at(-1, 8, 30), 'updated_at' => $this->at(-1, 8, 30)]);
+            }
+
+            // ── Safe Arrival history (last four weekdays, Sprouts) ──
+            $saDays = array_slice($days, -4);
+            $sprouts = DB::table('enrollments as e')->join('children as ch', 'ch.id', '=', 'e.child_id')->where('e.room_id', $roomId)->whereNull('e.end_date')
+                ->whereNull('ch.deleted_at')->whereNotIn('ch.id', [(int) $james->id, (int) $evelyn->id])->orderBy('ch.id')
+                ->get(['ch.id', 'ch.family_id', 'ch.first_name'])->unique('id')->values();
+            $checkIn = function (int $cid, int $d) {
+                $from = $this->today->copy()->addDays($d)->utc();
+                $v = DB::table('check_events')->where('child_id', $cid)->where('event_type', 'check_in')
+                    ->whereBetween('occurred_at', [$from->format('Y-m-d H:i:s'), $from->copy()->addDay()->format('Y-m-d H:i:s')])->min('occurred_at');
+                return $v ? Carbon::parse($v, 'UTC')->setTimezone($this->tz) : null;
+            };
+            $parentOf = fn (int $famId) => (int) DB::table('guardians')->where('family_id', $famId)->whereNotNull('user_id')->orderBy('id')->value('user_id');
+            $used = [];
+            foreach ($saDays as $k => $d) {
+                $date = $this->today->copy()->addDays($d)->toDateString();
+                $in = $out = [];
+                foreach ($sprouts as $c) {
+                    if (isset($used[$c->id . ':' . $d])) continue;
+                    $t = $checkIn((int) $c->id, $d);
+                    if ($t) $in[] = [$c, $t]; else $out[] = $c;
+                }
+                $isLast = $k === count($saDays) - 1;
+                // A late arrival: the alert went out 15 minutes after the expected time, the sign-in followed.
+                if (! $isLast && $in) {
+                    [$c, $t] = $in[($k * 3) % count($in)];
+                    $exp = $t->copy()->subMinutes(30 + $t->minute % 5)->second(0);
+                    $due = $exp->copy()->addMinutes(15);
+                    $this->add('safe_arrival_checks', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'room_id' => $roomId, 'child_id' => $c->id,
+                        'check_date' => $date, 'expected_time' => $exp->format('H:i:s'), 'due_at' => $due->copy()->utc()->format('Y-m-d H:i:s'), 'status' => 'arrived',
+                        'parents_notified_at' => $due->copy()->utc()->format('Y-m-d H:i:s'), 'parents_notified' => 1, 'staff_alerted' => 0, 'up_alerted' => 0, 'calls_placed' => 0,
+                        'arrived_at' => $t->copy()->utc()->format('Y-m-d H:i:s'), 'resolved_at' => $t->copy()->addMinute()->utc()->format('Y-m-d H:i:s'), 'resolution' => 'arrived',
+                        'note' => null, 'created_at' => $due->copy()->utc()->format('Y-m-d H:i:s'), 'updated_at' => $t->copy()->addMinute()->utc()->format('Y-m-d H:i:s')]);
+                    $used[$c->id . ':' . $d] = 1;
+                }
+                // The family said "running late" before the day started: no alert, the sign-in came by the time they gave.
+                if ($k === 1 && count($in) > 1) {
+                    [$c, $t] = $in[(($k * 3) + 1) % count($in)];
+                    if (! isset($used[$c->id . ':' . $d]) && ($pu = $parentOf((int) $c->family_id))) {
+                        $by = $t->copy()->addMinutes(10 - $t->minute % 5)->second(0);
+                        $told = $t->copy()->setTime(7, 10);
+                        $this->add('safe_arrival_late', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'child_id' => $c->id, 'kind' => 'arrival', 'late_date' => $date,
+                            'arrive_by' => $by->format('H:i:s'), 'note' => 'Doctor\'s appointment first', 'source' => 'parent', 'reported_by_id' => $pu,
+                            'created_at' => $told->copy()->utc()->format('Y-m-d H:i:s'), 'updated_at' => $told->copy()->utc()->format('Y-m-d H:i:s')]);
+                        $used[$c->id . ':' . $d] = 1;
+                    }
+                }
+                // Not signed in that day: the alert, the parent's answer, marked absent.
+                if (! $isLast && $out && $k !== 1) {
+                    $c = $out[$k % count($out)];
+                    $exp = $this->today->copy()->addDays($d)->setTime(8, 30);
+                    $due = $exp->copy()->addMinutes(15);
+                    $ans = $due->copy()->addMinutes(6);
+                    $pu = $parentOf((int) $c->family_id);
+                    $this->add('safe_arrival_checks', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'room_id' => $roomId, 'child_id' => $c->id,
+                        'check_date' => $date, 'expected_time' => '08:30:00', 'due_at' => $due->copy()->utc()->format('Y-m-d H:i:s'), 'status' => 'absent',
+                        'parents_notified_at' => $due->copy()->utc()->format('Y-m-d H:i:s'), 'parents_notified' => 1, 'staff_alerted' => 0, 'up_alerted' => 0, 'calls_placed' => 0,
+                        'resolved_at' => $ans->copy()->utc()->format('Y-m-d H:i:s'), 'resolved_by_id' => $pu ?: null, 'resolution' => 'absent',
+                        'parent_response' => 'absent', 'parent_response_at' => $ans->copy()->utc()->format('Y-m-d H:i:s'), 'parent_response_by_id' => $pu ?: null,
+                        'note' => 'Parent replied: staying home with a cold today.',
+                        'created_at' => $due->copy()->utc()->format('Y-m-d H:i:s'), 'updated_at' => $ans->copy()->utc()->format('Y-m-d H:i:s')]);
+                    $this->add('child_absences', ['child_id' => $c->id, 'absent_on' => $date, 'reason' => 'sick', 'note' => 'A cold - back tomorrow.',
+                        'reported_by_id' => $pu ?: null, 'created_at' => $ans->copy()->utc()->format('Y-m-d H:i:s')]);
+                    $used[$c->id . ':' . $d] = 1;
+                }
+                // The newest day is the all-clear: everyone expected was signed in before an alert was due.
+            }
+
+            // ── Tours and the agency waitlist (fictional families; .example addresses never deliver) ──
+            $em = $set === 'white_label' ? 'starlightkids.example' : 'brightwood.example';
+            foreach ([
+                ['Priya Shah', 'priya.shah', 14, -6, 10, 'completed', 'Loved the garden. Asked about the toddler waitlist.'],
+                ['Daniel Kim', 'daniel.kim', 30, 2, 10, 'confirmed', 'Twins; wants to see the toddler room.'],
+                ['Hannah Lee', 'hannah.lee', 26, 6, 15, 'requested', 'Can only come after 3 pm.'],
+            ] as $i => [$name, $mail, $months, $d, $h, $status, $note]) {
+                $off = $d;
+                while ($this->today->copy()->addDays($off)->isWeekend()) $off += $d < 0 ? -1 : 1;   // tours are on weekdays
+                $when = $this->today->copy()->addDays($off)->setTime($h, 0);
+                $this->add('tour_bookings', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'parent_name' => $name, 'parent_email' => $mail . '@' . $em,
+                    'parent_phone' => $area . '-555-01' . (60 + $i), 'child_age_months' => $months,
+                    'preferred_start_date' => $this->today->copy()->addMonths(2)->startOfMonth()->toDateString(), 'notes' => $note,
+                    'tour_at' => $when->copy()->utc()->format('Y-m-d H:i:s'), 'status' => $status,
+                    'created_at' => $this->at(min($d, 0) - 5, 19, 20 + $i), 'updated_at' => $this->at(min($d, 0) - 1, 9, 0)]);
+            }
+            foreach ([
+                ['Mia Rivera', 'Carlos Rivera', 'carlos.rivera', 13, 'Infant', 1, 'Mon-Fri', 'High', 'Waiting', 'Website', 'Sibling of a former Sprouts family.'],
+                ['Leo Nguyen', 'Anna Nguyen', 'anna.nguyen', 22, 'Toddler', 2, 'Mon, Wed, Fri', 'Normal', 'Contacted', 'Tour', 'Toured last week; waiting on a Sprouts spot.'],
+                ['Zoe Patel', 'Ravi Patel', 'ravi.patel', 38, 'Preschool', 4, 'Mon-Fri', 'Normal', 'Waiting', 'Website', null],
+            ] as $i => [$child, $parent, $mail, $months, $group, $start, $days5, $prio, $wst, $src, $note]) {
+                $this->add('external_waitlist', ['agency_id' => $agencyId, 'from_centre_id' => null, 'origin' => 'kiddietrac', 'external_source' => 'kiddietrac',
+                    'external_id' => 'ktwl-demo-' . $agencyId . '-' . ($i + 1), 'child_name' => $child,
+                    'child_dob' => $this->today->copy()->subMonths($months)->subDays(9 * $i)->toDateString(), 'age_group' => $group, 'parent_name' => $parent,
+                    'email' => $mail . '@' . $em, 'phone' => $area . '-555-01' . (70 + $i), 'desired_start' => $this->today->copy()->addMonths($start)->startOfMonth()->toDateString(),
+                    'days_needed' => $days5, 'status' => $wst, 'priority' => $prio, 'source' => $src, 'position' => $i + 1, 'notes' => $note,
+                    'created_at' => $this->at(-30 + 7 * $i, 20, 0), 'updated_at' => $this->at(-2 - $i, 11, 0)]);
             }
 
             // ── Something in each login's bell (inserted directly: nothing rings, nothing is sent) ──

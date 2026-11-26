@@ -25,6 +25,7 @@ class PlaySparkController extends Controller
     use ResolvesCentreContext;
 
     private const OFF = 'Play Spark is part of the AI Bundle add-on. Ask your administrator to add it in Settings, then Licence.';
+    private const AI_OFF = 'AI is switched off for this agency, so new ideas and material scans are paused. Your saved ideas, their pictures and "We did it" still work.';
 
     private function agency(Request $request): int
     {
@@ -34,9 +35,22 @@ class PlaySparkController extends Controller
         return $a;
     }
 
+    /* SPLIT (2026-11-26, Anthony): gate() = the Play Spark LICENCE (AiBundle::licensed) for everything that needs no AI
+       call - saved ideas, their existing pictures, "We did it", library, Team ideas, report, Play at home. aiGate() =
+       licence AND AI allowed (AiBundle::on) for what calls the AI: a new idea, a material scan. New pictures already ask
+       AiBundle::on in PlaySparkPicture, so with AI off an idea shows the picture it has and never queues one. */
     private function gate(int $agencyId): ?JsonResponse
     {
-        return AiBundle::on($agencyId) ? null : response()->json(['message' => self::OFF, 'code' => 'ai_bundle'], 403);
+        return AiBundle::licensed($agencyId) ? null : response()->json(['message' => self::OFF, 'code' => 'ai_bundle'], 403);
+    }
+
+    private function aiGate(int $agencyId): ?JsonResponse
+    {
+        if ($r = $this->gate($agencyId)) {
+            return $r;
+        }
+
+        return AiBundle::on($agencyId) ? null : response()->json(['message' => self::AI_OFF, 'code' => 'ai_off'], 403);
     }
 
     private function room(Request $request, int $agencyId, int $roomId): object
@@ -98,7 +112,7 @@ class PlaySparkController extends Controller
     public function generate(Request $request): JsonResponse
     {
         $a = $this->agency($request);
-        if ($r = $this->gate($a)) {
+        if ($r = $this->aiGate($a)) {
             return $r;
         }
         $d = $request->validate([
@@ -236,7 +250,7 @@ class PlaySparkController extends Controller
     public function scan(Request $request): JsonResponse
     {
         $a = $this->agency($request);
-        if ($r = $this->gate($a)) {
+        if ($r = $this->aiGate($a)) {
             return $r;
         }
         $d = $request->validate(['image' => 'required|string|max:7000000']);

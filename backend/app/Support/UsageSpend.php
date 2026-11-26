@@ -117,12 +117,14 @@ class UsageSpend
             $rows[$k]['minutes'] += (int) $c->mins;
         }
 
+        // AI is priced per model (AiPricing, 2026-11-26): Haiku is far cheaper than the flat AI rate, pictures run on Sonnet.
         foreach (DB::table('ai_usage')->whereBetween('created_at', [$fromUtc, $toUtc])
-            ->select('agency_id', DB::raw('COUNT(*) n'), DB::raw('SUM(input_tokens) i'), DB::raw('SUM(output_tokens) o'))->groupBy('agency_id')->get() as $a) {
+            ->selectRaw('agency_id, model, ' . AiPricing::sumsSql())->groupBy('agency_id', 'model')->get() as $a) {
             $k = $row($a->agency_id ? (int) $a->agency_id : null);
             $rows[$k]['ai_requests'] += (int) $a->n;
             $rows[$k]['ai_input'] += (int) $a->i;
             $rows[$k]['ai_output'] += (int) $a->o;
+            $rows[$k]['cost']['ai'] += AiPricing::rowCost($a);
         }
 
         $names = DB::table('agencies')->pluck('name', 'id');
@@ -130,7 +132,7 @@ class UsageSpend
             $x['name'] = $x['agency_id'] ? (string) ($names[$x['agency_id']] ?? ('Agency #' . $x['agency_id'])) : 'No agency (platform)';
             $x['cost']['sms'] = round($x['segments'] * $r['sms_segment'], 2);
             $x['cost']['voice'] = round($x['minutes'] * $r['voice_minute'], 2);
-            $x['cost']['ai'] = round($x['ai_input'] / 1e6 * $r['ai_input_mtok'] + $x['ai_output'] / 1e6 * $r['ai_output_mtok'], 2);
+            $x['cost']['ai'] = round($x['cost']['ai'], 2);
             $x['total'] = round(array_sum($x['cost']), 2);
             $x['threshold'] = [];
             $x['over'] = [];

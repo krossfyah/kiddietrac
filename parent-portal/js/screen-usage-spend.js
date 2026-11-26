@@ -25,8 +25,10 @@
   var SMALL = 'height:28px;padding:2px 6px;border:1px solid #E2E8F0;border-radius:6px;font-size:12.5px;width:70px;min-width:70px;box-sizing:border-box;text-align:right;';
   var RATE_LABELS = [
     ['sms_segment', 'Text, per segment'], ['voice_minute', 'Call, per minute'],
-    ['ai_input_mtok', 'AI input, per 1M tokens'], ['ai_output_mtok', 'AI output, per 1M tokens'],
+    ['ai_input_mtok', 'AI input, per 1M tokens (unlisted models)'], ['ai_output_mtok', 'AI output, per 1M tokens (unlisted models)'],
   ];
+  /* AI is priced per model since 2026-11-26 (App\Support\AiPricing: Haiku, Sonnet, Opus, Fable at Anthropic's list prices).
+     These two AI rates now only price a model that is not on that list yet. */
   var days = 7;
 
   async function render(main) {

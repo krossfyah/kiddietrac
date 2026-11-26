@@ -30,6 +30,22 @@ final class AiBundle
         if (AiConfig::offFor($agencyId)) {
             return false;
         }
+
+        return self::licensed($agencyId);
+    }
+
+    /**
+     * THE LICENCE ALONE (2026-11-26, Anthony: split Play Spark). True when the agency's plan includes the AI Bundle,
+     * whether or not AI may run for it right now. For what the bundle UNLOCKS that needs no AI call - Play Spark's saved
+     * ideas, their existing pictures, "We did it", the library, the report, Play at home. Anything that CALLS the AI
+     * asks on() (licence AND AI allowed): a test agency or one switched off in Platform → AI usage is licensed() but
+     * never on().
+     */
+    public static function licensed(?int $agencyId): bool
+    {
+        if (! $agencyId) {
+            return false;
+        }
         if (! array_key_exists($agencyId, self::$memo)) {
             try {
                 self::$memo[$agencyId] = (bool) (\App\Http\Controllers\Api\FeatureFlagController::effectiveFor($agencyId)['ai_tools'] ?? false);
