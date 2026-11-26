@@ -158,12 +158,10 @@ final class ReportCardController extends Controller
            moved to draft"). Agency-wide admins (the same who could open Archived) see cards for children who left and
            closed centres in the normal lists under their real status, each marked by `archived`. Directors and
            educators never get them: the Live filters above stay, and mayTouch still refuses those cards by id. */
-        if ($admin) {
-            $out = $out->concat($this->archivedRows($request, $agencyId))
-                ->sortByDesc(fn ($r) => (string) ($r['updated_at'] ?? $r['created_at'] ?? ''))->values();
-        }
-
-        return response()->json(['data' => $out, 'approver' => $this->isApprover($u), 'admin' => $admin]);
+        /* They travel under `archived_rows` - a key kt:leak-sweep reads as the past by name (HISTORICAL_KEYS), like the
+           dashboard's archived_centres - so `data` stays the live list and is still swept; the screen merges the two. */
+        return response()->json(['data' => $out, 'archived_rows' => $admin ? $this->archivedRows($request, $agencyId) : [],
+            'approver' => $this->isApprover($u), 'admin' => $admin]);
     }
 
     /** One list row (GET /report-cards/all and /archived). Staff names are first name + initial. */

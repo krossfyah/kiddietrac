@@ -1153,7 +1153,9 @@
   async function rcReloadList() {
     if (!document.getElementById('rc-all')) return;
     let r; try { r = await Api.get('/report-cards/all'); } catch (e) { return; }
-    RC.rows = (r && r.data) || []; RC.approver = !!(r && r.approver); RC.admin = !!(r && r.admin);
+    // admins: cards for children who left / closed centres arrive as archived_rows; one list, newest first, each marked
+    RC.rows = ((r && r.data) || []).concat((r && r.archived_rows) || []).sort((x, y) => String(y.updated_at || y.created_at || '').localeCompare(String(x.updated_at || x.created_at || '')));
+    RC.approver = !!(r && r.approver); RC.admin = !!(r && r.admin);
     rcPaintAll(); rcLoadPending();
   }
 
