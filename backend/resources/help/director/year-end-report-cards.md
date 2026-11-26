@@ -39,7 +39,7 @@ Under the approvals on the **Report cards** screen, **All report cards** lists e
 - **Email to family** lists the child's guardians who have an email address. Nobody is ticked for you. Add a note if you like, preview the email, then send. Each person gets a secure link to the PDF that works for 14 days. Who sent it, to whom and when is kept in the card's history.
 - **Delete draft** is for agency admins, and only for drafts that were never sent.
 
-Cards for withdrawn children and closed centres are not listed there. Agency admins get one more chip, **Archived**: those cards, each marked *Archived — child withdrawn* or *Archived — centre closed*. Agency admins have the full **⋮** menu on them, including **Edit** and **Email to family**. If the child has left, guardians still on file can still be emailed. Directors and educators do not see archived cards.
+Cards for children who left and centres that closed are not listed for directors and educators. **Archived is gone:** agency admins see those cards in the normal lists (All, Draft, Awaiting approval, Sent) under their real status, marked **Child left** or **Centre closed**, with the full **⋮** menu and the bulk actions. No new card can be made for a child who has left.
 
 ## The PDF
 

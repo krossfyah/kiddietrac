@@ -2,6 +2,18 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "🗂️",
+            "title": "Report cards: Archived is gone",
+            "body": "Archived is gone; cards for children who left show in the normal lists for admins, marked Child left (or Centre closed), under their real status.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-26",
             "icon": "✅",

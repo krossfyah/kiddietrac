@@ -154,10 +154,16 @@ final class ReportCardController extends Controller
             return $row;
         })->values();
 
-        return response()->json([
-            'data' => $out, 'approver' => $this->isApprover($u), 'admin' => $admin,
-            'archived_count' => $admin ? $this->archivedQuery($agencyId)->count() : 0,
-        ]);
+        /* NO ARCHIVED TAB (2026-11-26, Anthony: "the report cards all under archived show draft status they should be
+           moved to draft"). Agency-wide admins (the same who could open Archived) see cards for children who left and
+           closed centres in the normal lists under their real status, each marked by `archived`. Directors and
+           educators never get them: the Live filters above stay, and mayTouch still refuses those cards by id. */
+        if ($admin) {
+            $out = $out->concat($this->archivedRows($request, $agencyId))
+                ->sortByDesc(fn ($r) => (string) ($r['updated_at'] ?? $r['created_at'] ?? ''))->values();
+        }
+
+        return response()->json(['data' => $out, 'approver' => $this->isApprover($u), 'admin' => $admin]);
     }
 
     /** One list row (GET /report-cards/all and /archived). Staff names are first name + initial. */
@@ -205,6 +211,12 @@ final class ReportCardController extends Controller
         abort_unless($agencyId > 0 && \App\Support\CentreScope::ids($request, $agencyId) === null, 403,
             'Only an agency admin can see archived report cards.');
 
+        return response()->json(['data' => $this->archivedRows($request, $agencyId), 'archived' => true]);
+    }
+
+    /** List rows for the agency's archived cards (Live::archived), each with its `archived` reason. Callers check agency-wide admin first. */
+    private function archivedRows(Request $request, int $agencyId)
+    {
         $rows = $this->archivedQuery($agencyId)
             ->leftJoin('rooms as rm', 'rm.id', '=', 'ch.primary_room_id')
             ->leftJoin('users as gu', 'gu.id', '=', 'r.generated_by_user_id')
@@ -219,8 +231,9 @@ final class ReportCardController extends Controller
             ]);
 
         $uid = (int) $request->user()->id;
+        $ownAdmin = \App\Support\AgencySignatories::mayApprove($uid);   // never a platform admin
         $current = \App\Support\LearningFrameworks::forAgency($agencyId);
-        $out = $rows->map(function ($r) use ($uid, $current) {
+        return $rows->map(function ($r) use ($uid, $current, $ownAdmin) {
             $row = $this->listRow($r, $uid);
             $row['archived'] = \App\Support\Live::archivedReason(
                 (object) ['deleted_at' => $r->child_deleted, 'enrollment_status' => $r->child_status],
@@ -231,11 +244,10 @@ final class ReportCardController extends Controller
             $row['framework_info'] = ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']];
             $row['sections'] = $this->sectionsOf($r, $fw);
             $row['next_steps'] = $r->next_steps;
-            $row['can_approve'] = \App\Support\AgencySignatories::mayApprove((int) $request->user()->id) && ($r->status ?: 'draft') !== 'sent' && empty($r->replaced_by_id);
+            $row['can_approve'] = $ownAdmin && ($r->status ?: 'draft') !== 'sent' && empty($r->replaced_by_id);
+            $row['can_review'] = ($r->status ?: 'draft') === 'submitted' && empty($r->replaced_by_id);
             return $row;
         })->values();
-
-        return response()->json(['data' => $out, 'archived' => true]);
     }
 
     /** Report cards in this agency whose child, family or centre has left (Live::archived). */

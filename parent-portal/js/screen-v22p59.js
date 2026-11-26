@@ -711,7 +711,7 @@
     draft: ['Draft', '#F1F5F9', '#334155'], reviewed: ['Draft', '#F1F5F9', '#334155'],
     submitted: ['Awaiting approval', '#FEF3C7', '#92400E'], sent: ['Sent', '#DCFCE7', '#166534'],
   };
-  const RC_ARCH = { child_withdrawn: 'Archived — child withdrawn', centre_closed: 'Archived — centre closed' };
+  const RC_ARCH = { child_withdrawn: 'Child left', centre_closed: 'Centre closed' };
   const rcGroup = (s) => (s === 'submitted' || s === 'sent') ? s : 'draft';
   const rcChip = (label, bg, fg) => `<span class="rc-pill" style="background:${bg};color:${fg};border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;white-space:nowrap;">${esc(label)}</span>`;
   const rcPill = (s, replaced) => replaced ? rcChip('Replaced', '#E2E8F0', '#475569') : rcChip(...(RC_ST[s] || RC_ST.draft));
@@ -1105,23 +1105,23 @@
   }
   function rcPaintAll() {
     const host = document.getElementById('rc-all'); if (!host) return;
-    const f = RC.f, arch = f.st === 'archived';
-    const all = arch ? (RC.archived || []) : RC.rows;
-    if (!RC.rows.length && !RC.archivedCount && !arch) { host.innerHTML = '<div class="kt-card" style="margin-bottom:16px;"><h3 style="margin:0 0 4px;">📚 All report cards</h3><div style="color:#64748B;font-size:13px;">No report cards yet.' + (rcCanGenerate() ? ' Use ✨ Generate with AI to write the first one.' : '') + '</div></div>'; return; }
+    const f = RC.f;
+    if (f.st === 'archived') f.st = '';   // no Archived tab now (2026-11-26): those cards are in All, marked
+    const all = RC.rows;
+    if (!RC.rows.length) { host.innerHTML = '<div class="kt-card" style="margin-bottom:16px;"><h3 style="margin:0 0 4px;">📚 All report cards</h3><div style="color:#64748B;font-size:13px;">No report cards yet.' + (rcCanGenerate() ? ' Use ✨ Generate with AI to write the first one.' : '') + '</div></div>'; return; }
     const uniq = (k) => Array.from(new Set(all.map(r => r[k]).filter(Boolean))).sort();
     const terms = uniq('term'), makers = uniq('made_by'), centres = uniq('centre');
-    const cnt = { '': RC.rows.length, draft: 0, submitted: 0, sent: 0, archived: RC.archivedCount };
+    const cnt = { '': RC.rows.length, draft: 0, submitted: 0, sent: 0 };
     RC.rows.forEach(r => { cnt[rcGroup(r.status)]++; });
     const q = f.q.trim().toLowerCase();
-    const rows = all.filter(r => (!f.st || arch || rcGroup(r.status) === f.st) && (!f.term || r.term === f.term)
+    const rows = all.filter(r => (!f.st || rcGroup(r.status) === f.st) && (!f.term || r.term === f.term)
       && (!f.by || r.made_by === f.by) && (!f.centre || r.centre === f.centre) && (!q || (r.child || '').toLowerCase().indexOf(q) !== -1));
     const chip = (k, label) => `<button type="button" class="rc-chip${f.st === k ? ' on' : ''}" data-st="${k}">${esc(label)} <b>${cnt[k]}</b></button>`;
     const opt = (list, cur, any) => `<option value="">${esc(any)}</option>` + list.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
     host.innerHTML = '<div class="kt-card" style="--kt-edge:#1F6080;margin-bottom:16px;">' +
       `<h3 style="margin:0 0 4px;">📚 All report cards <span style="background:#E0F2FE;color:#075985;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${RC.rows.length}</span></h3>` +
       '<p style="font-size:12.5px;color:#64748B;margin:0 0 10px;">Every report card you can see, newest first. Tap one to open it, or use ⋮ for more.</p>' +
-      '<div class="rc-bar">' + chip('', 'All') + chip('draft', 'Draft') + chip('submitted', 'Awaiting approval') + chip('sent', 'Sent') + (RC.admin ? chip('archived', 'Archived') : '') + '</div>' +
-      (arch ? '<div style="font-size:12.5px;color:#64748B;margin:-4px 0 10px;">Cards for children who have left and centres that have closed. Only agency admins see these.</div>' : '') +
+      '<div class="rc-bar">' + chip('', 'All') + chip('draft', 'Draft') + chip('submitted', 'Awaiting approval') + chip('sent', 'Sent') + '</div>' +
       '<div class="rc-bar">' +
         `<input type="search" id="rc-f-q" placeholder="Search a child" value="${esc(f.q)}">` +
         (terms.length > 1 ? `<select id="rc-f-term">${opt(terms, f.term, 'All terms')}</select>` : '') +
@@ -1129,16 +1129,13 @@
         (centres.length > 1 ? `<select id="rc-f-centre">${opt(centres, f.centre, 'All centres')}</select>` : '') +
       '</div>' +
       (rows.length ? '<div class="kt-table-scroll"><table class="rc-table" data-kt-no-filter="1"><thead><tr><th>Child</th><th>Term</th><th>Made by</th><th>Status</th><th>Centre</th><th>Updated</th><th></th></tr></thead><tbody>' +
-        rows.slice(0, 300).map(r => `<tr class="rc-row" data-id="${r.id}" tabindex="0" style="cursor:pointer;"><td><b>${esc(r.child)}</b>${rcVer(r.version)}</td><td>${esc(r.term)}</td><td>${esc(r.made_by || '—')}${r.mine ? ' <span style="color:#64748B;font-size:11.5px;">(you)</span>' : ''}</td><td>${arch ? rcArchPill(r.archived) + ' ' : ''}${rcPill(r.status, r.replaced)}</td><td>${esc(r.centre || '')}${r.room ? ' · ' + esc(r.room) : ''}</td><td>${esc(rcDay(r.updated_at || r.created_at))}</td>` +
+        rows.slice(0, 300).map(r => `<tr class="rc-row" data-id="${r.id}" tabindex="0" style="cursor:pointer;"><td><b>${esc(r.child)}</b>${rcVer(r.version)}</td><td>${esc(r.term)}</td><td>${esc(r.made_by || '—')}${r.mine ? ' <span style="color:#64748B;font-size:11.5px;">(you)</span>' : ''}</td><td>${rcPill(r.status, r.replaced)}${r.archived ? ' ' + rcArchPill(r.archived) : ''}</td><td>${esc(r.centre || '')}${r.room ? ' · ' + esc(r.room) : ''}</td><td>${esc(rcDay(r.updated_at || r.created_at))}</td>` +
           '<td class="rc-acts">' + rcRowActions(r).map(a => `<button type="button" class="kt-btn" data-rc-row="${a[0]}">${a[1]}</button>`).join('') + '</td></tr>').join('') +
         '</tbody></table></div>' + (rows.length > 300 ? '<div style="font-size:12px;color:#64748B;margin-top:6px;">Showing the 300 most recent. Narrow the filters to see more.</div>' : '')
         : '<div style="padding:14px;color:#64748B;font-size:13px;">No report cards match.</div>') +
       '</div>';
     host.querySelectorAll('.rc-chip').forEach(b => { b.onclick = async () => {
-      const next = b.getAttribute('data-st');
-      if ((next === 'archived') !== arch) { f.term = ''; f.by = ''; f.centre = ''; }
-      if (next === 'archived' && RC.archived === null) await rcLoadArchived();
-      f.st = next; rcPaintAll();
+      f.st = b.getAttribute('data-st'); rcPaintAll();
     }; });
     const qi = document.getElementById('rc-f-q');
     if (qi) qi.addEventListener('input', () => { f.q = qi.value; const pos = qi.selectionStart; rcPaintAll(); const n = document.getElementById('rc-f-q'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } });
@@ -1153,16 +1150,10 @@
     if (window.KT && KT.enhanceTables) { try { KT.enhanceTables(); } catch (e) {} }
     rcWireBulk(host.querySelector('table.rc-table'), rows);
   }
-  async function rcLoadArchived() {
-    let r; try { r = await Api.get('/report-cards/archived'); } catch (e) { rcToast(rcSaid(e, 'Could not load archived report cards.'), 'error'); RC.archived = []; return; }
-    RC.archived = (r && r.data) || []; RC.archivedCount = RC.archived.length;
-  }
   async function rcReloadList() {
     if (!document.getElementById('rc-all')) return;
     let r; try { r = await Api.get('/report-cards/all'); } catch (e) { return; }
     RC.rows = (r && r.data) || []; RC.approver = !!(r && r.approver); RC.admin = !!(r && r.admin);
-    RC.archivedCount = (r && +r.archived_count) || 0;
-    if (RC.archived !== null && RC.f.st === 'archived') await rcLoadArchived(); else RC.archived = null;
     rcPaintAll(); rcLoadPending();
   }
 
