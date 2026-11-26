@@ -5,6 +5,23 @@
             "type": "improved",
             "date": "2026-11-26",
             "icon": "🔔",
+            "title": "Switches only for your role",
+            "body": "Notify me about now lists only what your role receives in the agency you are working in - admins no longer see parent switches, and directors can now reach theirs. If you are staff and a parent there, each switch says which.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "🔔",
             "title": "Choose which notices reach you",
             "body": "Admins and directors can now switch each kind of notice on or off for themselves in Settings → Notifications → Notify me about: team clock-ins, absences, forms to countersign, staff certificates, payments, copies of parent billing reminders, pick-up list changes, closures, schedule changes and tips. Safety alerts always reach you. Your own Safe Arrival and other safety alerts now also show by name at the top of the 🔔 bell.",
             "roles": [
