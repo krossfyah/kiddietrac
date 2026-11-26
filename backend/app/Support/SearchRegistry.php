@@ -210,6 +210,8 @@ final class SearchRegistry
         'privacy_acknowledgments' => 'a record that a parent read the privacy notice; counted on Data retention, never surfaced in a global box',
         // 2026-11-10 (ticket #244: tables added 2026-11-09/10 without a classification)
         'drill_maps' => 'each centre or educator map kept with the Drill log, opened from Drill log; never a record people look up from the global box',
+        // 2026-11-28 (Fire plan tab of the Drill log)
+        'fire_plans' => 'each centre or room\'s drawn fire plan and decision tree, versioned, opened from Drill log > Fire plan; never a record people look up from the global box',
         'drill_staff_dates' => 'each educator\'s fire drill renewal and expiry dates and schedule, shown on the Drill log Educators tab; never surfaced in a global box',
         'pickup_alarms' => 'a parent\'s own pickup countdown and alarm for their child, private to that parent; never surfaced in a global box',
         'privacy_request_events' => 'the timeline of a privacy request, shown inside that request on Privacy requests; never surfaced in a global box',

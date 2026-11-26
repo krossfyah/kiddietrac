@@ -20,6 +20,8 @@
      👩‍🏫 Educators each person's training dates, fire drill day/time and drill map; ⋮ → view / add / replace / remove
                    map, set schedule, set dates (management)
      ⚙️ Settings   the centre fire drill rule (Ontario), notifications (who hears, educator reminders, admin notices)
+     🗺️ Fire plan  (2026-11-28) each centre's / room's drawn plan + "what we do" decision tree, versioned, reviewed by
+                   a director or admin - kt-fire-plan.js. A fire drill names the plan it followed (Record a drill).
    The banner and the tab strip are drawn once; a tab or a save repaints the tab body only.
    ═══════════════════════════════════════════════════════════════════════ */
 (function (window) {
@@ -110,17 +112,34 @@
     document.head.appendChild(s);
   }
 
-  var state = { month: null, centre: '', tab: 'drills' };
+  var state = { month: null, centre: '', tab: 'drills', openPlan: null };
+
+  /* FIRE PLAN (2026-11-28): the drawn plan + "what we do" decision tree lives in kt-fire-plan.js (a lazy dependency of
+     this screen). Loaded on demand if the screen got here first. */
+  function firePlan() {
+    if (KT.FirePlan) return Promise.resolve(KT.FirePlan);
+    return new Promise(function (res, rej) {
+      var src = Object.keys(window.__KT_LAZY || {}).filter(function (k) { return k.indexOf('js/kt-fire-plan.js') === 0; })[0] || 'js/kt-fire-plan.js';
+      var s = document.createElement('script'); s.src = '/' + src; s.onload = function () { KT.FirePlan ? res(KT.FirePlan) : rej(new Error('Fire plan did not load.')); };
+      s.onerror = function () { rej(new Error('Fire plan did not load.')); }; document.head.appendChild(s);
+    });
+  }
 
   function render(main) {
     css();
     var isAdmin = role().some(function (r) { return r === 'agency_admin' || r === 'platform_admin'; });
+    // A link from the bell: #drills?tab=fireplan&plan=12 opens the Fire plan tab on that plan.
+    try {
+      var hq = new URLSearchParams(String(window.location.hash || '').split('?')[1] || '');
+      if (hq.get('tab') === 'fireplan') state.tab = 'fireplan';
+      if (/^\d+$/.test(hq.get('plan') || '')) state.openPlan = +hq.get('plan');
+    } catch (e) {}
     main.innerHTML = '<div class="kt-section">'
       + '<div class="kt-hero" style="background:linear-gradient(135deg,#450A0A 0%,#991B1B 55%,#DC2626 100%);">'
       + '<div class="kt-hero-greet">🚒 SAFETY</div><h1>Drill log</h1>'
       + '<div class="kt-hero-sub" id="dr-sub">Record each drill as soon as it is done.</div></div>'
       + '<div class="dr-tabs kt-subtabs" role="tablist">'
-      + [['drills', '🚒 Drills'], ['educators', '👩‍🏫 Educators'], ['settings', '⚙️ Settings']].map(function (t) {
+      + [['drills', '🚒 Drills'], ['fireplan', '🗺️ Fire plan'], ['educators', '👩‍🏫 Educators'], ['settings', '⚙️ Settings']].map(function (t) {
           return '<button type="button" role="tab" data-tab="' + t[0] + '" aria-selected="' + (state.tab === t[0]) + '">' + t[1] + '</button>';
         }).join('') + '</div>'
       + '<div id="dr-pane" style="color:#64748B;">Loading drills…</div></div>';
@@ -160,6 +179,15 @@
     var pane = main.querySelector('#dr-pane'); if (!pane) return;
     pane.style.color = '';
     var again = function () { load(main, isAdmin); };
+    if (state.tab === 'fireplan') {
+      // The tab draws itself from /drills/fire-plans; a save there refreshes the drills answer quietly (the plan chips).
+      firePlan().then(function (FP) {
+        if (!pane.isConnected || state.tab !== 'fireplan') return;
+        var open = state.openPlan; state.openPlan = null;
+        FP.paintTab(pane, { centre: state.centre, openPlan: open, again: function () { Api.get('/drills' + (state.month ? '?month=' + state.month : '')).then(function (x) { if (lastD && lastD.main === main) lastD.d = x; }, function () {}); } });
+      }, function (e) { pane.innerHTML = '<div style="color:#B91C1C;">' + esc((e && e.message) || 'Could not load the fire plans.') + '</div>'; });
+      return;
+    }
     if (state.tab === 'educators') paintEducators(pane, d, again);
     else if (state.tab === 'settings') paintSettings(pane, d, isAdmin, again);
     else paintDrills(pane, d, again);
@@ -254,7 +282,16 @@
       var reqs = reqsOf(c), seen = {};
       reqs.forEach(function (q) { seen[q.type] = 1; });
       mine.forEach(function (r) { if (!seen[r.type]) { seen[r.type] = 1; reqs.push({ type: r.type }); } });
-      h += '<div class="dr-ctr"><div class="dr-ctr-h">' + esc(c.centre_name) + '<span>' + mine.length + ' recorded in ' + esc(month) + '</span></div>';
+      /* The centre's fire plan beside its drills (2026-11-28): current, "review due" once the current plan is 12 months
+         old (FirePlans::centreSummary - shown here only, nothing is sent), waiting for review, or none yet. */
+      var fp = c.fire_plan, fpChip = '';
+      if (fp) {
+        var FPS = { current: ['#ECFDF5', '#047857', '🗺️ Fire plan v' + fp.version + ' · reviewed ' + day(fp.reviewed_on)],
+          review_due: ['#FEF2F2', '#B91C1C', '🗺️ Fire plan not reviewed in 12 months'], pending: ['#FFFBEB', '#B45309', '🗺️ Fire plan waiting for review'],
+          none: ['#F1F5F9', '#475569', '🗺️ No fire plan yet'] }[fp.state] || null;
+        if (FPS) fpChip = '<button type="button" class="dr-chip" data-kt-no-tone data-fpgo="' + c.centre_id + '" style="border:0;cursor:pointer;background:' + FPS[0] + ';color:' + FPS[1] + ';margin-left:auto;">' + esc(FPS[2]) + '</button>';
+      }
+      h += '<div class="dr-ctr"><div class="dr-ctr-h">' + esc(c.centre_name) + '<span>' + mine.length + ' recorded in ' + esc(month) + '</span>' + fpChip + '</div>';
       if (!reqs.length) h += '<div class="dr-req"><span class="dr-none">No drill rules for this jurisdiction yet.</span></div>';
       reqs.forEach(function (q) {
         var list = mine.filter(function (r) { return r.type === q.type; });
@@ -267,6 +304,9 @@
     h += '</div>';
     pane.innerHTML = h;
 
+    pane.querySelectorAll('[data-fpgo]').forEach(function (b) {
+      b.addEventListener('click', function () { var t = document.querySelector('.dr-tabs [data-tab="fireplan"]'); if (t) t.click(); });
+    });
     pane.querySelector('#dr-m').addEventListener('change', function () { state.month = this.value; again(); });
     pane.querySelector('#dr-fc').addEventListener('change', function () { state.centre = this.value; again(); });
     pane.querySelectorAll('[data-rec]').forEach(function (b) {
@@ -355,10 +395,19 @@
       + '<div><label class="dr-l">Type</label><select class="dr-i" id="dr-t" style="width:100%;">' + Object.keys(d.types || {}).map(function (k) { return '<option value="' + k + '"' + (k === type ? ' selected' : '') + '>' + esc(d.types[k]) + '</option>'; }).join('') + '</select></div>'
       + '<div><label class="dr-l">When</label><input class="dr-i" id="dr-at" type="datetime-local" value="' + local + '" style="width:100%;"></div>'
       + '<div id="dr-s-w"><label class="dr-l">Evacuation time (seconds)</label><input class="dr-i" id="dr-s" type="number" min="0" style="width:100%;"></div>'
-      + '<div><label class="dr-l">Children present</label><input class="dr-i" id="dr-k" type="number" min="0" style="width:100%;"></div>'
+      + '<div><label class="dr-l" id="dr-k-l">Children present</label><input class="dr-i" id="dr-k" type="number" min="0" style="width:100%;"></div>'
       + '</div>'
       + '<div class="dr-g" style="margin-top:10px;"><div><label class="dr-l">Staff present</label><input class="dr-i" id="dr-st" maxlength="500" placeholder="Names" style="width:100%;"></div>'
       + '<div><label class="dr-l">Notes</label><input class="dr-i" id="dr-n" maxlength="2000" placeholder="Exit used, anything to fix" style="width:100%;"></div></div>'
+      /* FIRE PLAN (2026-11-28): a fire drill names the plan it followed (or draws / updates one right here), the route
+         used, attendance beside the children evacuated, and the issues found. */
+      + '<div id="dr-fp" hidden><div style="font-weight:800;font-size:13.5px;color:#0F172A;margin:14px 0 6px;">🗺️ Fire plan</div>'
+      + '<div class="dr-g"><div><label class="dr-l">Plan used</label><select class="dr-i" id="dr-fpid" style="width:100%;"><option value="">Loading…</option></select></div>'
+      + '<div style="display:flex;align-items:flex-end;gap:6px;flex-wrap:wrap;"><button type="button" class="dr-b" id="dr-fpdraw">✏️ Draw or update the plan</button><button type="button" class="dr-b" id="dr-fpview" hidden>ℹ️ View</button></div></div>'
+      + '<div class="dr-g" style="margin-top:10px;"><div><label class="dr-l">Route used</label><select class="dr-i" id="dr-rt" style="width:100%;"><option value="">—</option><option value="primary">Primary route</option><option value="alternate">Alternate route</option><option value="other">Other</option></select></div>'
+      + '<div><label class="dr-l">Route note (optional)</label><input class="dr-i" id="dr-rtn" maxlength="255" placeholder="e.g. Back door, front was blocked" style="width:100%;"></div>'
+      + '<div><label class="dr-l">Attendance (children here today)</label><input class="dr-i" id="dr-att" type="number" min="0" style="width:100%;"></div></div>'
+      + '<div style="margin-top:10px;"><label class="dr-l">Issues found</label><textarea class="dr-i" id="dr-iss" rows="2" maxlength="2000" placeholder="Anything that slowed you down or needs fixing" style="width:100%;height:auto;min-height:52px;padding:6px 10px;font-family:inherit;"></textarea></div></div>'
       // Missing-child drill (Ontario s.68.2) — shown only for that type.
       + '<div id="dr-mc" hidden><div class="dr-g" style="margin-top:10px;">'
       + '<div><label class="dr-l">Room(s) / area</label><input class="dr-i" id="dr-area" maxlength="255" placeholder="e.g. Toddler room, playground" style="width:100%;"></div>'
@@ -374,19 +423,60 @@
       $('dr-r').innerHTML = '<option value="">' + esc(KT.termText ? KT.termText('Whole centre') : 'Whole centre') + '</option>' + (d.rooms || []).filter(function (r) { return String(r.centre_id) === String(cid); }).map(function (r) { return '<option value="' + r.id + '">' + esc(r.name) + '</option>'; }).join('');
     }
     $('dr-c').addEventListener('change', fillRooms); fillRooms();
-    function typeFields() { var mc = $('dr-t').value === 'missing_child'; $('dr-mc').hidden = !mc; $('dr-s-w').style.display = mc ? 'none' : ''; }
+    // The fire plans of the chosen centre: the room's current plan first, else the centre's, else the newest.
+    var planList = [];
+    function fillPlans(pick) {
+      if (!KT.FirePlan && !pick) { firePlan().then(function () { fillPlans(); }, function () { $('dr-fpid').innerHTML = '<option value="">Fire plans could not be loaded</option>'; }); return; }
+      var cid = $('dr-c').value, rid = $('dr-r').value;
+      KT.FirePlan.list(cid, !!pick).then(function (L) {
+        if (!body.isConnected || $('dr-c').value !== cid) return;
+        planList = [];
+        (L.places || []).filter(function (p) { return String(p.centre_id) === String(cid); }).forEach(function (pl) {
+          (pl.versions || []).forEach(function (v) {
+            if (v.is_current || v === pl.versions[0]) planList.push({ id: v.id, room: pl.room_id, label: (pl.room_name || (KT.termText ? KT.termText('Whole centre') : 'Whole centre')) + ' · v' + v.version + ' · '
+              + (v.is_current ? 'current' : ({ submitted: 'waiting for review', changes: 'changes asked for', draft: 'your draft', approved: 'approved' }[v.status] || v.status)), current: v.is_current });
+          });
+        });
+        var want = pick || (planList.filter(function (p) { return p.current && String(p.room || '') === String(rid); })[0] || planList.filter(function (p) { return p.current && !p.room; })[0] || planList[0] || {}).id;
+        $('dr-fpid').innerHTML = '<option value="">No plan attached</option>' + planList.map(function (p) { return '<option value="' + p.id + '"' + (String(p.id) === String(want) ? ' selected' : '') + '>' + esc(p.label) + '</option>'; }).join('');
+        $('dr-fpview').hidden = !$('dr-fpid').value;
+      }, function () { $('dr-fpid').innerHTML = '<option value="">Fire plans could not be loaded</option>'; });
+    }
+    $('dr-fpid').addEventListener('change', function () { $('dr-fpview').hidden = !this.value; });
+    $('dr-fpview').addEventListener('click', function () {
+      // Print, not the plan popup: there is one #modalRoot, and opening the plan would replace this unsaved drill form.
+      var id = +$('dr-fpid').value; if (!id) return;
+      firePlan().then(function (FP) { FP.print(id, 'full'); });
+    });
+    $('dr-fpview').textContent = '🖨 Print';
+    $('dr-fpdraw').addEventListener('click', function () {
+      firePlan().then(function (FP) {
+        return FP.editor({ centre_id: $('dr-c').value, room_id: $('dr-r').value || null, base: +$('dr-fpid').value || null });
+      }).then(function (r) { if (r && r.id) fillPlans(r.id); });
+    });
+    $('dr-c').addEventListener('change', function () { if ($('dr-t').value === 'fire') fillPlans(); });
+    $('dr-r').addEventListener('change', function () { if ($('dr-t').value === 'fire') fillPlans(); });
+    function typeFields() {
+      var mc = $('dr-t').value === 'missing_child', fire = $('dr-t').value === 'fire';
+      $('dr-mc').hidden = !mc; $('dr-s-w').style.display = mc ? 'none' : '';
+      $('dr-fp').hidden = !fire; $('dr-k-l').textContent = fire ? 'Children evacuated' : 'Children present';
+      if (fire && !planList.length) fillPlans();
+    }
     $('dr-t').addEventListener('change', typeFields); typeFields();
     KT.Shell.Modal.open({ title: '🚒 Record a drill', body: body, large: true, actions: [
       { label: 'Cancel' },
       { label: 'Record drill', primary: true, busyLabel: 'Saving…', handler: async function () {
-        var mc = $('dr-t').value === 'missing_child'; $('dr-msg').textContent = '';
+        var mc = $('dr-t').value === 'missing_child', fire = $('dr-t').value === 'fire'; $('dr-msg').textContent = '';
         try {
           await Api.post('/drills', { centre_id: +$('dr-c').value, room_id: $('dr-r').value ? +$('dr-r').value : null, type: $('dr-t').value, drilled_at: $('dr-at').value,
             evacuation_seconds: mc || $('dr-s').value === '' ? null : +$('dr-s').value, children_count: $('dr-k').value === '' ? null : +$('dr-k').value,
             staff_present: $('dr-st').value.trim() || null, notes: $('dr-n').value.trim() || null,
             area: mc ? ($('dr-area').value.trim() || null) : null, led_by: mc ? ($('dr-led').value.trim() || null) : null,
             located_seconds: mc && $('dr-loc').value !== '' ? +$('dr-loc').value : null, scenario: mc ? ($('dr-scn').value.trim() || null) : null,
-            improvements: mc ? ($('dr-imp').value.trim() || null) : null, simulated_911: mc ? $('dr-911').checked : null, simulated_parent_call: mc ? $('dr-pc').checked : null });
+            improvements: mc ? ($('dr-imp').value.trim() || null) : null, simulated_911: mc ? $('dr-911').checked : null, simulated_parent_call: mc ? $('dr-pc').checked : null,
+            fire_plan_id: fire && $('dr-fpid').value ? +$('dr-fpid').value : null, route_used: fire ? ($('dr-rt').value || null) : null,
+            route_note: fire ? ($('dr-rtn').value.trim() || null) : null, attendance_count: fire && $('dr-att').value !== '' ? +$('dr-att').value : null,
+            issues_found: fire ? ($('dr-iss').value.trim() || null) : null });
         } catch (e) { $('dr-msg').textContent = (e && e.message) || 'Could not save.'; return false; }
         toast('🚒', 'Drill recorded', '', '#16A34A'); again();
       } },
@@ -403,7 +493,11 @@
       [mc ? 'Child located in' : 'Evacuation time', (mc ? r.located_seconds : r.evacuation_seconds) != null ? mmss(mc ? r.located_seconds : r.evacuation_seconds) : ''],
       ['Children present', r.children_count != null ? String(r.children_count) : ''], ['Staff present', r.staff_present],
       ['Area', r.area], ['Scenario', r.scenario], ['Led by', r.led_by], ['911 call simulated', yn(r.simulated_911)], ['Parent call simulated', yn(r.simulated_parent_call)],
-      ['What to improve', r.improvements], ['Notes', r.notes], ['Recorded by', r.recorded_by_name]]
+      ['What to improve', r.improvements], ['Notes', r.notes],
+      // Fire plan (2026-11-28)
+      ['Attendance', r.attendance_count != null ? String(r.attendance_count) + (r.children_count != null ? ' (' + r.children_count + ' evacuated)' : '') : ''],
+      ['Route used', r.route_used ? ({ primary: 'Primary route', alternate: 'Alternate route', other: 'Other' }[r.route_used] || r.route_used) + (r.route_note ? ' — ' + r.route_note : '') : ''],
+      ['Issues found', r.issues_found], ['Recorded by', r.recorded_by_name]]
       .filter(function (x) { return x[1] != null && String(x[1]) !== ''; });
     if (r.may_remove && !r.can_delete && r.kept_until) kv.push(['Kept until', r.kept_until + ' (drill records are kept 12 months)']);
     var body = document.createElement('div');
@@ -413,6 +507,7 @@
     // Remove lives here now that each drill is one line on the Drills tab (the server keeps 12 months and says so).
     if (r.can_delete) acts.unshift({ label: '🗑 Remove', busyLabel: 'Removing…', handler: async function () { return (await removeDrill(r, again)) ? undefined : false; } });
     // The map of the person who recorded it (their own, else their centre's).
+    if (r.fire_plan_id) acts.unshift({ label: '🗺️ Fire plan', handler: function () { setTimeout(function () { firePlan().then(function (FP) { FP.view(r.fire_plan_id); }); }, 50); } });
     var by = (d.educators || []).find(function (e) { return e.user_id === r.recorded_by && e.map; });
     if (by) acts.unshift({ label: '🗺️ Drill map', handler: function () { setTimeout(function () { showMap(by.map, 'Drill map · ' + by.name.split(' ')[0]); }, 50); } });
     else if (mapsByCentre(d)[r.centre_id]) acts.unshift({ label: '🗺️ Centre map', handler: function () { setTimeout(function () { openMap(d, r.centre_id); }, 50); } });
@@ -562,8 +657,13 @@
         + (d.ontario ? ck('dr-crem', d.cadence_reminders, 'Ontario schedule reminders: tell directors when a missing-child drill is due within 14 days or overdue, or a fire drill is overdue — once per change, admins on anything overdue') : '')
         + '</div>';
     }
-    if (!h) h = '<div class="dr-card" style="color:#64748B;font-size:13px;">Nothing to set up here for your centres.</div>';
+    var adminHere = d.is_admin != null ? d.is_admin : isAdmin;
+    if (!h && !adminHere) h = '<div class="dr-card" style="color:#64748B;font-size:13px;">Nothing to set up here for your centres.</div>';
+    // The fire plan steps every new plan starts from (agency admins; kt-fire-plan.js draws and saves it).
+    if (adminHere) h += '<div id="dr-fp-tpl" style="margin-top:14px;"></div>';
     pane.innerHTML = h;
+    var tpl = pane.querySelector('#dr-fp-tpl');
+    if (tpl) firePlan().then(function (FP) { if (tpl.isConnected) FP.templateCard(tpl); }, function () {});
 
     pane.querySelectorAll('[data-cad]').forEach(function (sel) {
       sel.addEventListener('change', function () {

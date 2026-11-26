@@ -2846,6 +2846,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/drills/notify-settings', [\App\Http\Controllers\Api\DrillController::class, 'notifySettingsSave']);
         Route::post  ('/drills/maps',      [\App\Http\Controllers\Api\DrillController::class, 'uploadMap']);
         Route::delete('/drills/maps/{id}', [\App\Http\Controllers\Api\DrillController::class, 'removeMap'])->whereNumber('id');
+        // Fire plan (2026-11-28): the drawn plan + decision tree, versioned; directors/admins review (FirePlanController).
+        Route::get   ('/drills/fire-plans',                   [\App\Http\Controllers\Api\FirePlanController::class, 'index']);
+        Route::post  ('/drills/fire-plans',                   [\App\Http\Controllers\Api\FirePlanController::class, 'store']);
+        Route::post  ('/drills/fire-plans/template',          [\App\Http\Controllers\Api\FirePlanController::class, 'template']);
+        Route::get   ('/drills/fire-plans/{id}',              [\App\Http\Controllers\Api\FirePlanController::class, 'show'])->whereNumber('id');
+        Route::post  ('/drills/fire-plans/{id}/review',       [\App\Http\Controllers\Api\FirePlanController::class, 'review'])->whereNumber('id');
+        Route::delete('/drills/fire-plans/{id}',              [\App\Http\Controllers\Api\FirePlanController::class, 'destroy'])->whereNumber('id');
+        Route::get   ('/drills/fire-plans/{id}/file/{kind}',  [\App\Http\Controllers\Api\FirePlanController::class, 'file'])->whereNumber('id')->where('kind', 'png|underlay');
     });
     /* HAZARD REGISTER (2026-10-13, Ontario s.24.3): anyone on staff reports; directors/admins
        manage and notify parents — checked per centre in HazardController. Its own group since

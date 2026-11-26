@@ -77,7 +77,9 @@ final class DrillController extends Controller
             ->orderByDesc('d.drilled_at')
             ->get(['d.id', 'd.centre_id', 'd.room_id', 'r.name as room_name', 'd.type', 'd.drilled_at', 'd.evacuation_seconds', 'd.children_count',
                 'd.staff_present', 'd.notes', 'd.recorded_by', 'u.first_name', 'u.last_name',
-                'd.area', 'd.scenario', 'd.led_by', 'd.located_seconds', 'd.simulated_911', 'd.simulated_parent_call', 'd.improvements', 'd.created_at'])
+                'd.area', 'd.scenario', 'd.led_by', 'd.located_seconds', 'd.simulated_911', 'd.simulated_parent_call', 'd.improvements', 'd.created_at',
+                // Fire plan (2026-11-28): the plan used, the route, attendance beside children evacuated, issues found.
+                ...(\Illuminate\Support\Facades\Schema::hasColumn('drills', 'fire_plan_id') ? ['d.fire_plan_id', 'd.route_used', 'd.route_note', 'd.attendance_count', 'd.issues_found'] : [])])
             ->map(function ($r) use ($centres, $tz, $request, $canManage) {
                 $r->centre_name = $centres[$r->centre_id] ?? null;
                 $r->type_label = DrillCadence::label((string) $r->type);
@@ -109,8 +111,11 @@ final class DrillController extends Controller
         $status = [];
         // Ontario (s.68 / s.68.2, 2026-10-13): rolling cadence per centre on top of the period rules.
         $ontario = DrillCadence::applies($agencyId);
+        // Each centre's fire plan and whether it has gone 12 months without a review (display only; nothing is sent).
+        $plans = \App\Support\FirePlans::centreSummary(array_map('intval', $ids), $tz);
         foreach ($ids as $id) $status[] = ['centre_id' => $id, 'centre_name' => $centres[$id] ?? '', 'rules' => DrillRules::status($agencyId, $id),
-                'latest' => (object) ($latest[$id] ?? []), 'off' => (object) $this->offFor((int) $id, $tz), 'can_manage' => $canManage[$id] ?? false]
+                'latest' => (object) ($latest[$id] ?? []), 'off' => (object) $this->offFor((int) $id, $tz), 'can_manage' => $canManage[$id] ?? false,
+                'fire_plan' => $plans[(int) $id] ?? null]
             + ($ontario ? ['cadence' => DrillCadence::status($agencyId, (int) $id), 'fire_cadence' => DrillCadence::fireCadence((int) $id)] : []);
         $j = Jurisdictions::forAgency($agencyId);
         $settings = json_decode((string) DB::table('agencies')->where('id', $agencyId)->value('settings'), true) ?: [];
@@ -152,11 +157,26 @@ final class DrillController extends Controller
             'simulated_911' => ['nullable', 'boolean'],
             'simulated_parent_call' => ['nullable', 'boolean'],
             'improvements' => ['nullable', 'string', 'max:2000'],
+            // Fire plan (2026-11-28): the plan this drill followed, the route used, attendance and issues found.
+            'fire_plan_id' => ['nullable', 'integer'],
+            'route_used' => ['nullable', 'in:primary,alternate,other'],
+            'route_note' => ['nullable', 'string', 'max:255'],
+            'attendance_count' => ['nullable', 'integer', 'min:0', 'max:1000'],
+            'issues_found' => ['nullable', 'string', 'max:2000'],
         ]);
         abort_unless(isset($centres[(int) $d['centre_id']]), 403, 'That centre is not one of yours.');
         if (! empty($d['room_id'])) {
             abort_unless(DB::table('rooms')->where('id', $d['room_id'])->where('centre_id', $d['centre_id'])->exists(), 422, 'That room is not in this centre.');
         }
+        // The plan must be one of THIS centre's (the destination is checked, not just the record - leak rule 6), and
+        // never someone else's unsubmitted draft.
+        $plan = null;
+        if (! empty($d['fire_plan_id'])) {
+            $plan = DB::table('fire_plans')->where('id', (int) $d['fire_plan_id'])->where('agency_id', $agencyId)->where('centre_id', (int) $d['centre_id'])->whereNull('deleted_at')
+                ->where(fn ($w) => $w->where('status', '!=', 'draft')->orWhere('created_by', (int) $request->user()->id))->first();
+            abort_unless($plan, 422, 'That fire plan is not one of this centre\'s.');
+        }
+        $hasPlanCols = \Illuminate\Support\Facades\Schema::hasColumn('drills', 'fire_plan_id');
         $tz = AgencyTime::tz($agencyId);
         $at = Carbon::createFromFormat('Y-m-d\TH:i', $d['drilled_at'], $tz);
         abort_if($at->gt(Carbon::now($tz)->addMinutes(5)), 422, 'A drill cannot be recorded in the future.');
@@ -170,7 +190,14 @@ final class DrillController extends Controller
             'simulated_parent_call' => array_key_exists('simulated_parent_call', $d) && $d['simulated_parent_call'] !== null ? (bool) $d['simulated_parent_call'] : null,
             'improvements' => $d['improvements'] ?? null,
             'created_at' => now(), 'updated_at' => now(),
-        ]);
+        ] + ($hasPlanCols ? [
+            'fire_plan_id' => $plan->id ?? null, 'route_used' => $d['route_used'] ?? null,
+            'route_note' => isset($d['route_note']) && trim($d['route_note']) !== '' ? trim($d['route_note']) : null,
+            'attendance_count' => $d['attendance_count'] ?? null,
+            'issues_found' => isset($d['issues_found']) && trim($d['issues_found']) !== '' ? trim($d['issues_found']) : null,
+        ] : []));
+        // A plan drawn or updated for this drill remembers it (the first drill only).
+        if ($plan && empty($plan->drill_id)) DB::table('fire_plans')->where('id', $plan->id)->whereNull('drill_id')->update(['drill_id' => $id]);
         try {
             \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => $agencyId, 'action' => 'drill.recorded', 'entity_type' => 'drill', 'entity_id' => $id,
                 'payload' => json_encode(['summary' => DrillCadence::label($d['type']) . ' drill recorded at ' . ($centres[(int) $d['centre_id']] ?? 'a centre') . ', ' . $at->format('M j, Y g:i A')]),
@@ -205,10 +232,14 @@ final class DrillController extends Controller
                     'Area' => $d['area'] ?? null,
                     'Led by' => $d['led_by'] ?? null,
                     'Child located in' => $mmss($d['located_seconds'] ?? null),
+                    'Attendance' => isset($d['attendance_count']) ? (string) $d['attendance_count'] : null,
+                    'Route used' => ! empty($d['route_used']) ? (['primary' => 'Primary route', 'alternate' => 'Alternate route', 'other' => 'Other'][$d['route_used']] ?? null)
+                        . (! empty($d['route_note']) ? ' - ' . $d['route_note'] : '') : null,
+                    'Fire plan' => $plan ? 'Version ' . $plan->version . ' (' . ['draft' => 'draft', 'submitted' => 'waiting for review', 'approved' => 'approved', 'changes' => 'changes asked for'][$plan->status] . ')' : null,
                 ], fn ($v) => $v !== null && $v !== '');
                 $box = implode('<br>', array_map(fn ($k, $v) => '<strong>' . $e($k) . ':</strong> ' . $e($v), array_keys($lines), $lines));
                 $more = '';
-                foreach (['Scenario' => 'scenario', 'Notes' => 'notes', 'Improvements' => 'improvements'] as $k => $f) {
+                foreach (['Scenario' => 'scenario', 'Notes' => 'notes', 'Improvements' => 'improvements', 'Issues found' => 'issues_found'] as $k => $f) {
                     if (! empty($d[$f])) $more .= '<p style="margin:12px 0 0;font-size:14px;color:#334155"><b>' . $k . ':</b> ' . nl2br($e($d[$f])) . '</p>';
                 }
                 $html = \App\Services\EmailTemplate::wrap($agencyId,

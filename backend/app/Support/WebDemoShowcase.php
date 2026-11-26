@@ -128,6 +128,12 @@ final class WebDemoShowcase
                     if ($png && str_starts_with((string) $png, 'play-spark-pictures/' . $agencyId . '/')) @unlink(storage_path('app/private/' . $png));
                 }
             }
+            // The sample fire plan's PNG written last time goes with its row.
+            if (! empty($old['fire_plans'])) {
+                foreach (DB::table('fire_plans')->whereIn('id', $old['fire_plans'])->pluck('png_path') as $png) {
+                    if ($png && str_starts_with((string) $png, 'fire-plans/' . $agencyId . '/demo-')) @unlink(storage_path('app/private/' . $png));
+                }
+            }
             // Pictures someone added to a demo note go with the note (files and rows).
             if (! empty($old['quick_notes'])) \App\Support\QuickNotePictures::purge($old['quick_notes']);
             // Only what this wrote last time: timeline rows first (they point at photos), then newest tables first.
@@ -600,12 +606,62 @@ final class WebDemoShowcase
                 $bell($olivia, 'task_assigned', '📋 Your to-do is due tomorrow', 'Approve the December menu', ['link' => '#my-tasks'], $this->at(-1, 8, 30), false);
             }
 
+            if ($set === 'white_label') $this->firePlanStory($agencyId, $centreId, $maya, $elena);
             if ($set === 'white_label') $this->hrStory($agencyId, $maya, $elena, $olivia, $now);
 
             PlatformSettings::set($this->key, json_encode($this->made));
         });
 
         return array_map('count', $this->made);
+    }
+
+    /**
+     * FIRE PLAN DEMO (2026-11-28, Starlight only): one approved whole-centre fire plan Maya drew from the home template,
+     * with the "what we do" steps filled and Elena's approval. Fixed drawing in resources/demo/fire-plan (drawing.json +
+     * plan.png); the PNG is copied to the agency's private fire-plans folder and removed with the row on a rerun.
+     */
+    private function firePlanStory(int $agencyId, int $centreId, int $maya, int $elena): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('fire_plans')) return;
+        $dir = resource_path('demo/fire-plan');
+        $drawing = \App\Support\FirePlans::cleanDrawing((string) @file_get_contents($dir . '/drawing.json'));
+        if (! $drawing) return;
+        $fill = [
+            's1' => ['Whoever finds it', 'Shout "Fire!", pull the nearest alarm, close the door on the fire', ''],
+            's2' => ['Elena', 'Calls 911 from outside on her cell, then the agency', ''],
+            's3' => ['Maya', 'Takes the attendance tablet and the red emergency bag', ''],
+            's4' => ['Maya', 'Infants go in the evacuation crib; toddlers hold the walking rope', ''],
+            's5' => ['Everyone', 'Walk, do not run; close doors behind you', 'Front door, down the side path'],
+            's6' => ['Maya', 'Line up by room', 'The church parking lot across the street (alternate: the corner of Birch Lane)'],
+            's7' => ['Elena', 'Counts every child and adult against today\'s attendance, out loud', ''],
+            's8' => ['Elena', 'Last out: checks the bathroom, nap room and closets if it is safe', ''],
+        ];
+        $tree = \App\Support\FirePlans::template($agencyId);
+        foreach ($tree['steps'] as &$st) {
+            [$who, $what, $where] = $fill[$st['k']] ?? ['', '', ''];
+            $st += ['who' => $who, 'what' => $what, 'where' => $where];
+        }
+        unset($st);
+        foreach ($tree['branches'] as &$br) {
+            $br += ['who' => '', 'what' => $br['after'] === 's5' ? 'Use the back door through the kitchen to the side gate' : 'Tell the firefighters where the child was last seen; never go back inside', 'where' => ''];
+        }
+        unset($br);
+        $tree = \App\Support\FirePlans::cleanTree($tree);
+        $submitted = $this->at(-41, 15, 20);
+        $approved = $this->at(-40, 9, 10);
+        $details = ['children_count' => 12, 'ages' => '3 infants, 5 toddlers, 4 preschool', 'staff_ids' => [$maya, $elena], 'staff_other' => '',
+            'exits_count' => 2, 'reviewed_on' => substr($approved, 0, 10), 'notes' => 'Practised monthly. The side gate code is on the key ring in the emergency bag.'];
+        $id = $this->add('fire_plans', ['agency_id' => $agencyId, 'centre_id' => $centreId, 'room_id' => null, 'version' => 1, 'status' => 'approved',
+            'title' => null, 'drawing' => json_encode($drawing, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'png_path' => null, 'underlay_path' => null,
+            'tree' => json_encode($tree, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), 'details' => json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'based_on_id' => null, 'drill_id' => null, 'created_by' => $maya, 'submitted_by' => $maya, 'submitted_at' => $submitted,
+            'reviewed_by' => $elena, 'reviewed_at' => $approved, 'review_comment' => null, 'created_at' => $submitted, 'updated_at' => $approved]);
+        if (is_file($dir . '/plan.png')) {
+            $rel = 'fire-plans/' . $agencyId . '/demo-' . $id . '.png';
+            $abs = storage_path('app/private/' . $rel);
+            if (! is_dir(dirname($abs))) @mkdir(dirname($abs), 0775, true);
+            if (@copy($dir . '/plan.png', $abs)) DB::table('fire_plans')->where('id', $id)->update(['png_path' => $rel]);
+        }
     }
 
     /**

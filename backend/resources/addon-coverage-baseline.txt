@@ -165,6 +165,7 @@ route directory/me
 route drills
 route drills/cadence
 route drills/cadence-reminders
+route drills/fire-plans
 route drills/maps
 route drills/notify-settings
 route drills/reminders
