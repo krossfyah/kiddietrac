@@ -349,15 +349,8 @@ class AbsenceController extends Controller
 
         // Email the director + agency admin — they are the ones who chase absences.
         try {
-            $emails = DB::table('role_assignments as ra')
-                ->join('users as u', 'u.id', '=', 'ra.user_id')
-                ->where('ra.active', true)
-                ->whereIn('ra.role', ['centre_director', 'agency_admin'])
-                ->where(function ($q) use ($child) {
-                    $q->where('ra.centre_id', $child->centre_id)
-                      ->orWhere('ra.agency_id', $child->agency_id);
-                })
-                ->whereNull('u.deleted_at')
+            // Admins agency-wide + THIS centre's directors only (was: every director in the agency, 2026-11-26).
+            $emails = \App\Support\CentreScope::managers((int) $child->agency_id, (int) $child->centre_id)
                 ->pluck('u.email')->unique()->values()->all();
             // Directors and admins who switched absence emails off (StaffNotifyPrefs, 2026-11-26).
             $emails = \App\Support\StaffNotifyPrefs::filterEmails($emails, 'staff_absences', (int) ($child->agency_id ?? 0) ?: null);

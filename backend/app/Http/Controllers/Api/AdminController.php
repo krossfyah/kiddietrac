@@ -5479,12 +5479,7 @@ final class AdminController extends Controller
             if ($previewTo) {
                 $to = [$previewTo];
             } else {
-                $to = DB::table('users as u')
-                    ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-                    ->where('ra.agency_id', $agencyId)->where('ra.active', true)
-                    ->whereIn('ra.role', ['agency_admin', 'centre_director'])
-                    ->whereNull('u.deleted_at')->whereNotNull('u.email')
-                    ->distinct()->pluck('u.email')->all();
+                $to = \App\Support\CentreScope::managers((int) $agencyId, (int) ($family->centre_id ?? 0))->whereNotNull('u.email')->distinct()->pluck('u.email')->all();
                 if (! empty($agency->contact_email)) { $to[] = $agency->contact_email; }
                 $to = array_values(array_unique(array_filter($to)));
             }
@@ -5703,12 +5698,7 @@ final class AdminController extends Controller
                 ->filter()->values()->all();
             $kidList = count($kids) ? implode(', ', $kids) : 'your child';
 
-            $oversight = DB::table('users as u')
-                ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-                ->where('ra.agency_id', $agencyId)->where('ra.active', true)
-                ->whereIn('ra.role', ['agency_admin', 'centre_director'])
-                ->whereNull('u.deleted_at')->whereNotNull('u.email')
-                ->distinct()->pluck('u.email')->all();
+            $oversight = \App\Support\CentreScope::managers((int) $agencyId, (int) ($family->centre_id ?? 0))->whereNotNull('u.email')->distinct()->pluck('u.email')->all();
             if (!empty($agency->contact_email)) $oversight[] = $agency->contact_email;
 
             /* ── OUTSTANDING BALANCE ──────────────────────────────────────────
@@ -5943,12 +5933,7 @@ final class AdminController extends Controller
 
             // The same oversight copy the deactivation notice takes: BCC, never CC,
             // so the family is not handed a list of who was told.
-            $oversight = DB::table('users as u')
-                ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-                ->where('ra.agency_id', $agencyId)->where('ra.active', true)
-                ->whereIn('ra.role', ['agency_admin', 'centre_director'])
-                ->whereNull('u.deleted_at')->whereNotNull('u.email')
-                ->distinct()->pluck('u.email')->all();
+            $oversight = \App\Support\CentreScope::managers((int) $agencyId, (int) ($family->centre_id ?? 0))->whereNotNull('u.email')->distinct()->pluck('u.email')->all();
             if (!empty($agency->contact_email)) $oversight[] = $agency->contact_email;
 
             $users = DB::table('users')->whereIn('id', $userIds)->whereNull('deleted_at')
@@ -6444,16 +6429,7 @@ final class AdminController extends Controller
                 // list of who was told, and the recipients do not need to see each
                 // other. It doubles as the agency's own copy of the notice, which is
                 // the record that matters if the removal is ever questioned.
-                $oversight = DB::table('users as u')
-                    ->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-                    ->where('ra.agency_id', $agencyId)
-                    ->where('ra.active', true)
-                    ->whereIn('ra.role', ['agency_admin', 'centre_director'])
-                    ->whereNull('u.deleted_at')
-                    ->whereNotNull('u.email')
-                    ->distinct()
-                    ->pluck('u.email')
-                    ->all();
+                $oversight = \App\Support\CentreScope::managers((int) $agencyId, \App\Support\CentreScope::centresOfUser((int) $userId, (int) $agencyId))->whereNotNull('u.email')->distinct()->pluck('u.email')->all();
                 if (!empty($agency->contact_email)) $oversight[] = $agency->contact_email;
 
                 // Never copy the person being removed on the notice about their own

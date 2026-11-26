@@ -1239,7 +1239,7 @@ final class SchedulingController extends Controller
         $centre = DB::table('centres')->where('id', $centreId)->first();
         $staffUserIds = DB::table('role_assignments')
             ->where(function ($q) use ($centreId, $centre) {
-                $q->where('centre_id', $centreId)->orWhere('agency_id', $centre->agency_id);
+                $q->where('centre_id', $centreId)->orWhere(fn ($w) => $w->where('agency_id', $centre->agency_id)->whereNull('centre_id')); /* this centre + agency-level staff, not other centres (2026-11-26) */
             })
             ->whereIn('role', ['educator', 'centre_director'])
             ->where('active', true)

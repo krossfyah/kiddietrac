@@ -96,9 +96,8 @@ class AttendanceReminder
 
         // Admins and directors in BCC — supervision without singling anyone out.
         $bcc = Audience::excludeOff(
-            DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
-                ->where('ra.active', true)->where('ra.agency_id', $agencyId)
-                ->whereIn('ra.role', ['agency_admin', 'centre_director'])
+            \App\Support\CentreScope::managers((int) $agencyId, DB::table('children as c')->join('families as f', 'f.id', '=', 'c.family_id')
+                    ->whereIn('c.id', $childIds ?: [0])->pluck('f.centre_id')->all())
                 ->whereNull('u.deleted_at')->whereNotNull('u.email')
         )->pluck('u.email')->unique()->values()
             // An integration inbox is not a person to supervise. integration+… holds an

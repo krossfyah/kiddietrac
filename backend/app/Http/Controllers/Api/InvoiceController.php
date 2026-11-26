@@ -2963,9 +2963,7 @@ final class InvoiceController extends Controller
                 } catch (\Throwable $inner) { report($inner); }
             }
 
-            $staff = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
-                ->where('ra.agency_id', $agencyId)->where('ra.active', 1)
-                ->whereIn('ra.role', ['agency_admin', 'centre_director'])
+            $staff = \App\Support\CentreScope::managers((int) $agencyId, (int) ($invoice->centre_id ?? 0))
                 ->whereNotNull('u.email')
                 ->get(['u.email', 'u.first_name', 'u.last_name'])->unique('email');
 

@@ -866,10 +866,7 @@ final class TimeOffController extends Controller
         }
 
         // ── ADMIN AND DIRECTORS — the record of what it did ─────────────────
-        $admins = DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
-            ->where('ra.agency_id', $agencyId)->where('ra.active', true)
-            ->whereIn('ra.role', ['agency_admin', 'centre_director'])
-            ->whereNull('u.deleted_at')
+        $admins = \App\Support\CentreScope::managers((int) $agencyId, $centreId ?: $closedCentreId)
             ->distinct()->pluck('u.email')->all();
 
         $parentCount = $closedCentreId ? $this->closureParentIds($closedCentreId)->count() : 0;

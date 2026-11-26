@@ -288,7 +288,7 @@ final class FormsController extends Controller
                 ->where('ra.active', true)
                 ->whereNull('u.deleted_at')->whereNotNull('u.email');
             if ($form->centre_id) {
-                $staffQ->where(function ($w) use ($form, $agencyId) { $w->where('ra.centre_id', $form->centre_id)->orWhere('ra.agency_id', $agencyId); });
+                $staffQ->where(function ($w) use ($form, $agencyId) { $w->where('ra.centre_id', $form->centre_id)->orWhere(fn ($a) => $a->where('ra.agency_id', $agencyId)->where(fn ($b) => $b->whereNull('ra.centre_id')->orWhere('ra.role', 'agency_admin'))); /* not other centres' staff (2026-11-26) */ });
             } else {
                 $staffQ->where('ra.agency_id', $agencyId);
             }

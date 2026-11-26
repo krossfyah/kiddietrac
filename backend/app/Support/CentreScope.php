@@ -83,4 +83,41 @@ final class CentreScope
         }
         return $centreId === null ? $shared : in_array((int) $centreId, $scope, true);
     }
+
+    /**
+     * WHO RUNS THESE CENTRES (2026-11-26, absence-email leak).
+     *
+     * Recipients for a notice about something AT a centre: the agency's admins
+     * (agency-wide) plus the directors placed at THOSE centres — never the directors
+     * of the agency's other centres. Centres outside this agency are dropped, and
+     * with no centre at all it is admins only (fails closed for directors).
+     *
+     * Returns a role_assignments(ra) JOIN users(u) builder: pluck('u.email') / ('u.id').
+     *
+     * @param  int|int[]|null $centreIds
+     */
+    public static function managers(int $agencyId, $centreIds)
+    {
+        $centreIds = array_values(array_unique(array_filter(array_map('intval', (array) $centreIds))));
+        if ($centreIds) {
+            $centreIds = DB::table('centres')->where('agency_id', $agencyId)->whereIn('id', $centreIds)
+                ->pluck('id')->map(fn ($v) => (int) $v)->all();
+        }
+        return DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', true)->whereNull('u.deleted_at')
+            ->where(function ($q) use ($agencyId, $centreIds) {
+                $q->where(fn ($w) => $w->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId));
+                if ($centreIds) {
+                    $q->orWhere(fn ($w) => $w->where('ra.role', 'centre_director')->whereIn('ra.centre_id', $centreIds));
+                }
+            });
+    }
+
+    /** The centres of this agency a person is (or was) placed at, from their role rows. @return int[] */
+    public static function centresOfUser(int $userId, int $agencyId): array
+    {
+        return DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')
+            ->where('ra.user_id', $userId)->where('c.agency_id', $agencyId)
+            ->pluck('c.id')->map(fn ($v) => (int) $v)->unique()->values()->all();
+    }
 }
