@@ -293,7 +293,9 @@ html.kt-tenant.kt-bio-pending::before{background:var(--ktt-bg)!important}
 @media (max-width:768px){
   html.kt-tenant .auth-body{background:var(--ktt-bg)!important}
   html.kt-tenant .ktl-form-side{background:transparent!important}
-  html.kt-tenant .ktl-form-side a{color:var(--ktt-accent)!important}
+  html.kt-tenant .ktl-form-side a{color:#fff!important;-webkit-text-fill-color:#fff!important;text-decoration:underline!important;text-underline-offset:2px}
+  /* The resting field label (the in-field placeholder) was white at 55%: 3.7:1 on the brand ground. */
+  html.kt-tenant .ktl-wrap .auth-form .form-row > label,html.kt-tenant .ktl-wrap .auth-form .pw-label-row label{color:rgba(255,255,255,.9)!important;-webkit-text-fill-color:rgba(255,255,255,.9)!important}
   /* On the brand background the button takes the brand colour that is NOT the background. */
   html.kt-tenant #submitBtn{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
   /* The logo sits on a white plate, as on the app's splash, so a logo in the primary colour reads. */
@@ -308,7 +310,7 @@ html.kt-tenant.kt-bio-pending::before{background:var(--ktt-bg)!important}
 html.kt-tenant body.auth-body{background:var(--ktt-bg)!important}
 html.kt-tenant.kt-native .ktl-form-side,html.kt-tenant .ktl-wrap .ktl-form-side{background:transparent!important}
 html.kt-tenant.kt-native .ktl-wrap #submitBtn{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
-html.kt-tenant.kt-native .ktl-form-side a{color:var(--ktt-accent)!important}
+html.kt-tenant.kt-native .ktl-form-side a{color:#fff!important;-webkit-text-fill-color:#fff!important}
 html.kt-tenant.kt-native .ktl-mhero-card{background:#fff!important;border-radius:22px!important;padding:14px 22px!important;box-shadow:0 18px 50px -18px rgba(0,0,0,.45)!important;filter:none!important;
   aspect-ratio:auto!important;height:auto!important;width:fit-content!important;max-width:min(80vw,320px)!important;margin-left:auto!important;margin-right:auto!important}
 html.kt-tenant.kt-native .ktl-mhero-card img{display:block!important;height:64px!important;width:auto!important;max-width:100%!important;margin:0 auto!important}
@@ -319,10 +321,18 @@ html.kt-tenant.kt-native .ktl-mhero-card img{display:block!important;height:64px
    partner's own tagline is added by kt-launch-scene's kt:brand handler), and "(c) KiddieTrac Inc." */
 html.kt-tenant .ktl-mhero-tag.kt-lockup,html.kt-tenant.kt-native .ktl-mhero-tag.kt-lockup,html.kt-wl-boot .ktl-mhero-tag.kt-lockup{display:none!important}
 html.kt-tenant .kt-copyright,html.kt-wl .kt-copyright{display:none!important}
+/* DESKTOP SITS ON THE BRAND GROUND TOO (2026-11-26, Anthony: "the starlight kids academy login page blends too much with
+   the logo"). `.ktl-wrap .ktl-form-side` above makes the form side transparent at every width, so on a computer the form
+   stands on --ktt-bg like the phone - but these rules still painted it for a WHITE form: the logo straight on the ground
+   (a primary-coloured wordmark vanished), "Welcome back" and links in the primary, the button in the primary. Desktop now
+   wears the phone's treatment: logo on a white plate, white text and links (AA on the ground), the brand button. */
 @media (min-width:769px){
   html.kt-tenant .ktl-brand-side{background:var(--ktt-bg)!important}
-  html.kt-tenant .ktl-title,html.kt-tenant .ktl-title *{background:none!important;color:var(--ktt-primary)!important;-webkit-text-fill-color:var(--ktt-primary)!important}
-  html.kt-tenant .ktl-form-side a{color:var(--ktt-primary)!important}
+  html.kt-tenant .ktl-form-side .auth-logo .ktl-anim{background:#fff!important;border-radius:22px!important;padding:14px 22px!important;box-shadow:0 18px 50px -18px rgba(0,0,0,.45)!important}
+  html.kt-tenant .ktl-title,html.kt-tenant .ktl-title *{background:none!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
+  html.kt-tenant .ktl-form-side .ktl-sub,html.kt-tenant .ktl-form-side .ktl-foot,html.kt-tenant .ktl-wrap .auth-form label,html.kt-tenant .ktl-form-side .ktl-legal,html.kt-tenant .ktl-form-side .ktl-legal *{color:#fff!important;-webkit-text-fill-color:#fff!important}
+  html.kt-tenant .ktl-form-side a{color:#fff!important;-webkit-text-fill-color:#fff!important;text-decoration:underline!important;text-underline-offset:2px}
+  html.kt-tenant .ktl-wrap #submitBtn{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
 }
   </style>
   <script>(function(w){
@@ -571,14 +581,14 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
       <span class="ktl-blob ktl-blob-2"></span>
       <span class="ktl-blob ktl-blob-3"></span>
       <div class="ktl-brand-content">
-        <div class="ktl-badge">✦ AI-AUGMENTED · CANADA-FIRST</div>
+        <div class="ktl-badge">✦ AI-AUGMENTED · #1 IN NORTH AMERICA</div>
         <h2 class="ktl-headline">Every moment,<br>every milestone —<br><span class="ktl-hl">beautifully captured.</span></h2>
         <p class="ktl-lede">From morning check-in to your AI-summarized day at 6&nbsp;pm, KiddieTrac brings your child's day to you with the warmth and clarity you deserve.</p>
 
         <div class="ktl-features">
           <div class="ktl-feat"><span class="ic">📸</span><div><h3>Real-time photos &amp; updates</h3><p>See what your child is doing, eating, and learning — as it happens.</p></div></div>
           <div class="ktl-feat"><span class="ic">💬</span><div><h3>Direct line to educators</h3><p>Message your child's room teacher anytime. Replies usually within an hour.</p></div></div>
-          <div class="ktl-feat"><span class="ic">💳</span><div><h3>Simple billing with CWELCC</h3><p>Your $10/day fee, applied automatically. Tax receipts every January.</p></div></div>
+          <div class="ktl-feat"><span class="ic">💳</span><div><h3>Easy online payments</h3><p>Pay by card or bank account, see your statement and download tax receipts anytime.</p></div></div>
         </div>
 
         <div class="ktl-trust"><span>CCEYA Compliant</span><span>HDLH Aligned</span><span>AI Augmented</span></div>
@@ -896,7 +906,7 @@ try{var C=window.Capacitor;if(C&&C.Plugins&&C.Plugins.SplashScreen)C.Plugins.Spl
   <!-- Freeze watchdog on the sign-in page too: a lock-up before anybody is signed in
        is still a lock-up, and it was the one screen it could not see. -->
   <script src="/js/kt-freeze-watch.js?v=20260831frz2" defer></script>
-  <script src="/js/kt-i18n.js?v=20261113imz2" defer></script>
+  <script src="/js/kt-i18n.js?v=20261127slg" defer></script>
   <!-- "Get the app" under the sign-in form + a one-time popup after a browser sign-in (2026-11-01). -->
   <script src="/js/kt-get-app.js?v=20261106gd17" defer></script>
   <!-- A dialog is left on purpose, not by tapping past it (2026-09-21).

@@ -2144,6 +2144,8 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     "Real-time photos & updates": { fr: "Photos et mises à jour en temps réel", es: "Fotos y actualizaciones en tiempo real", hi: "वास्तविक समय की तस्वीरें और अपडेट" },
     "Direct line to educators": { fr: "Ligne directe avec les éducateurs", es: "Línea directa con los educadores", hi: "शिक्षकों से सीधा संपर्क" },
     "Simple billing with CWELCC": { fr: "Facturation simple avec CWELCC", es: "Facturación sencilla con CWELCC", hi: "CWELCC के साथ सरल बिलिंग" },
+    "Easy online payments": { fr: "Paiements en ligne faciles", es: "Pagos en línea sencillos", hi: "आसान ऑनलाइन भुगतान" },
+    "Pay by card or bank account, see your statement and download tax receipts anytime.": { fr: "Payez par carte ou par compte bancaire, consultez votre relevé et téléchargez vos reçus fiscaux à tout moment.", es: "Pague con tarjeta o cuenta bancaria, consulte su estado de cuenta y descargue sus recibos fiscales en cualquier momento.", hi: "कार्ड या बैंक खाते से भुगतान करें, अपना विवरण देखें और कभी भी कर रसीदें डाउनलोड करें।" },
     "AI Augmented": { fr: "Augmenté par l'IA", es: "Potenciado por IA", hi: "एआई संवर्धित" },
     "CCEYA Compliant": { fr: "Conforme à la CCEYA", es: "Conforme con CCEYA", hi: "CCEYA अनुपालक" },
     "HDLH Aligned": { fr: "Aligné sur HDLH", es: "Alineado con HDLH", hi: "HDLH संरेखित" },
@@ -2162,6 +2164,7 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     "Authenticator code": { fr: "Code d'authentification", es: "Código de autenticación", hi: "प्रमाणक कोड" },
     "(6 digits, or a 10-char recovery code)": { fr: "(6 chiffres, ou un code de secours à 10 caractères)", es: "(6 dígitos, o un código de recuperación de 10 caracteres)", hi: "(6 अंक, या 10-अक्षर का रिकवरी कोड)" },
     // ── Batch 13: login hero subtitle + badge ──
+    "AI-AUGMENTED · #1 IN NORTH AMERICA": { fr: "AUGMENTÉ PAR L'IA · N° 1 EN AMÉRIQUE DU NORD", es: "POTENCIADO POR IA · N.º 1 EN NORTEAMÉRICA", hi: "एआई-संवर्धित · उत्तरी अमेरिका में नंबर 1" },
     "AI-AUGMENTED · CANADA-FIRST": { fr: "AUGMENTÉ PAR L'IA · CONÇU AU CANADA", es: "POTENCIADO POR IA · HECHO EN CANADÁ", hi: "एआई-संवर्धित · कनाडा-प्रथम" },
     "From morning check-in to your AI-summarized day at 6 pm, KiddieTrac brings your child's day to you with the warmth and clarity you deserve.": { fr: "De l'arrivée du matin au résumé de la journée par l'IA à 18 h, KiddieTrac vous transmet la journée de votre enfant avec toute la chaleur et la clarté que vous méritez.", es: "Desde el registro de la mañana hasta el resumen de IA del día a las 6 p. m., KiddieTrac le trae el día de su hijo con la calidez y claridad que merece.", hi: "सुबह के चेक-इन से लेकर शाम 6 बजे आपके एआई-सारांशित दिन तक, KiddieTrac आपके बच्चे का दिन उस गर्मजोशी और स्पष्टता के साथ लाता है जिसके आप हकदार हैं।" },
     // ── Batch 14: settings screen (language card + profile/security labels) ──
