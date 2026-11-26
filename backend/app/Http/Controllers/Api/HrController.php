@@ -495,7 +495,9 @@ final class HrController extends Controller
             'end_date' => $d['status'] === 'terminated' ? ($d['end_date'] ?? null) : ($d['end_date'] ?? null),
             'end_reason' => $d['end_reason'] ?? null, 'manager_user_id' => $d['manager_user_id'] ?? null,
             'primary_centre_id' => $d['primary_centre_id'] ?? null, 'updated_by_id' => $request->user()->id, 'updated_at' => now()];
-        DB::transaction(function () use ($aid, $id, $row, $d) {
+        $typeBefore = DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $id)->value('employment_type');
+        DB::transaction(function () use ($aid, $id, $row, $d, $typeBefore) {
+            HrLeave::syncContractorFlag($id, $typeBefore, $row['employment_type']);   // the contractor box follows "contract"
             $exists = DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $id)->exists();
             if ($exists) {
                 DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $id)->update($row);

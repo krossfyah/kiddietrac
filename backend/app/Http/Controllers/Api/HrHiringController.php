@@ -544,6 +544,7 @@ final class HrHiringController extends Controller
             'status' => 'active', 'manager_user_id' => $d['manager_user_id'] ?? null, 'primary_centre_id' => $d['centre_id'] ?? null,
             'updated_by_id' => $request->user()->id, 'updated_at' => now()];
         DB::transaction(function () use ($aid, $uid, $file, $d) {
+            \App\Support\HrLeave::syncContractorFlag($uid, DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $uid)->value('employment_type'), $file['employment_type'] ?? null);
             if (DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $uid)->exists()) {
                 DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $uid)->update($file);
             } else {

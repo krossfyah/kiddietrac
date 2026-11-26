@@ -155,6 +155,19 @@ final class HrLeave
         return $q->distinct()->pluck('u.id')->map(fn ($v) => (int) $v)->all();
     }
 
+    /**
+     * THE CONTRACTOR BOX AND THE HR EMPLOYMENT TYPE AGREE (2026-11-26, Anthony): users.is_contractor (who gets
+     * "contractors" announcements, App\Support\Audience) follows hr_employee_files.employment_type = 'contract'.
+     * Called with the type before and after a change: to 'contract' ticks the box, away from 'contract' clears it,
+     * no change leaves it alone. The director Staff toggle goes the other way (StaffController::setContractor).
+     */
+    public static function syncContractorFlag(int $userId, ?string $before, ?string $after): void
+    {
+        if ($before === $after) return;
+        if ($after === 'contract') DB::table('users')->where('id', $userId)->update(['is_contractor' => 1]);
+        elseif ($before === 'contract') DB::table('users')->where('id', $userId)->update(['is_contractor' => 0]);
+    }
+
     /** First day of the leave year that $date falls in, for this person. */
     public static function yearStart(int $agencyId, int $userId, string $date, ?array $settings = null, ?string $hireDate = null): string
     {

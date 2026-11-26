@@ -199,6 +199,21 @@ final class StaffController extends Controller
         DB::table('users')->where('id', $userId)
             ->update(['is_contractor' => $data['is_contractor'] ? 1 : 0]);
 
+        /* The HR employment type follows the box (2026-11-26, Anthony: "the two never disagree"). Ticked: the person's
+           HR file in this agency says Contract (the file is made on demand where the agency has HR). Unticked: a file
+           that said Contract is cleared to "not set" - the real type is not known, so none is guessed. */
+        $hrType = DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('user_id', $userId)->value('employment_type');
+        $hrFile = DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('user_id', $userId)->exists();
+        if ($data['is_contractor'] && $hrType !== 'contract' && ($hrFile || \App\Support\HrLeave::on($agencyId))) {
+            if ($hrFile) {
+                DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('user_id', $userId)->update(['employment_type' => 'contract', 'updated_at' => now()]);
+            } else {
+                DB::table('hr_employee_files')->insert(['agency_id' => $agencyId, 'user_id' => $userId, 'status' => 'active', 'employment_type' => 'contract', 'created_at' => now(), 'updated_at' => now()]);
+            }
+        } elseif (! $data['is_contractor'] && $hrType === 'contract') {
+            DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('user_id', $userId)->update(['employment_type' => null, 'updated_at' => now()]);
+        }
+
         \App\Support\Audit::write([
             'user_id' => $request->user()->id,
             'action' => 'staff.contractor_flag',
