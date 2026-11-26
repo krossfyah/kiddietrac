@@ -867,7 +867,12 @@
   // Refresh the signed-in user so the sidebar avatar reflects the latest photo.
   function refreshUser() {
     var t = store('kt_token'); if (!t) return;
-    fetch(API + '/auth/me', { headers: { 'Authorization': 'Bearer ' + t } })
+    /* The agency in view, so the plan answer below is that agency's (a super admin switches agencies). */
+    var meHdrs = { 'Authorization': 'Bearer ' + t };
+    var meAg = null;
+    try { meAg = sessionStorage.getItem('kt_active_agency_id'); } catch (e) {}
+    if (meAg && /^[0-9]+$/.test(meAg)) meHdrs['X-Active-Agency-Id'] = meAg;
+    fetch(API + '/auth/me', { headers: meHdrs })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         var fresh = d && (d.user || d); if (!fresh) return;
@@ -930,6 +935,45 @@
             sessionStorage.setItem('kt_user', JSON.stringify(cur));
             if (!sessionStorage.getItem('kt_view_as')) { window.location.reload(); return; }
           } catch (e) {}
+        }
+
+        /* THE PLAN AND ADD-ONS TAKE EFFECT WITHOUT A NEW SIGN-IN (2026-11-26, Anthony: "when agency is setup and
+           addon's are added does this reflect the addon's and functionality per agency setup correctly"). The menu,
+           the tiles and every "✨ AI" button read hidden_screens / ai_bundle from the user saved AT SIGN-IN, and
+           nothing refreshed them: an add-on bought (or a feature switched off) showed only after signing out and
+           back in, and in the meantime the API - which follows the licence at once - refused what the menu still
+           offered. Every boot already asks /auth/me; adopt its plan answer, and redraw once when it changed.
+           "All agencies" (a super admin's client-side scope) has no one agency to ask about, so it keeps its list. */
+        if (Array.isArray(fresh.hidden_screens) && meAg !== 'all') {
+          var featSig = function (u) {
+            return JSON.stringify([(Array.isArray(u.hidden_screens) ? u.hidden_screens.slice().sort() : null),
+              !!u.ai_bundle, !!u.licence_lapsed, u.licence_label || null]);
+          };
+          if (featSig(fresh) !== featSig(cur)) {
+            var hadPlan = Array.isArray(cur.hidden_screens);
+            cur.hidden_screens = fresh.hidden_screens;
+            cur.ai_bundle = !!fresh.ai_bundle;
+            cur.licence_lapsed = !!fresh.licence_lapsed;
+            cur.licence_label = fresh.licence_label || null;
+            var savedPlan = false;
+            try { sessionStorage.setItem('kt_user', JSON.stringify(cur)); savedPlan = true; } catch (e) {}
+            try {
+              var lu = JSON.parse(localStorage.getItem('kt_user') || 'null');
+              if (lu && lu.id === cur.id) {
+                lu.hidden_screens = cur.hidden_screens; lu.ai_bundle = cur.ai_bundle;
+                lu.licence_lapsed = cur.licence_lapsed; lu.licence_label = cur.licence_label;
+                localStorage.setItem('kt_user', JSON.stringify(lu));
+              }
+            } catch (e) {}
+            // Redraw once with the new menu - only when stored (or it would reload forever) and not twice a minute.
+            var lastPlanReload = 0;
+            try { lastPlanReload = +(sessionStorage.getItem('kt_plan_reload') || 0); } catch (e) {}
+            if (hadPlan && savedPlan && Date.now() - lastPlanReload > 60000) {
+              try { sessionStorage.setItem('kt_plan_reload', String(Date.now())); } catch (e) {}
+              window.location.reload();
+              return;
+            }
+          }
         }
 
         if (fresh.photo_url && fresh.photo_url !== cur.photo_url) {

@@ -37,6 +37,7 @@ class SendScheduledReports extends Command
 
         $sent = 0;
         foreach ($rows as $r) {
+            if (\App\Support\Features::skips((int) ($r->agency_id ?? 0) ?: null, 'reports', 'scheduled report')) continue;   // not in the agency's plan (2026-11-26)
             if (! $force) {
                 if ($r->frequency === 'weekly' && (int) ($r->day_of_week ?? 1) !== $dow) {
                     continue;

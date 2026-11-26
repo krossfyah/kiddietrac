@@ -31,6 +31,7 @@ class TimeOffRemindApprovers extends Command
         if ($this->option('agency')) $q->where('id', (int) $this->option('agency'));
         foreach ($q->pluck('id') as $agencyId) {
             $agencyId = (int) $agencyId;
+            if (\App\Support\Features::skips($agencyId, 'timesheets', 'time-off approver reminders')) continue;   // not in the agency's plan (2026-11-26)
             $s = TimeOffReminders::read($agencyId);
             $force = (bool) $this->option('force');
             if (! $s['enabled'] && ! ($force && $this->option('ignore-enabled'))) continue;

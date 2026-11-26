@@ -71,6 +71,7 @@ class ScheduleAutofillCommand extends Command
         $touched = 0;
 
         foreach ($centres as $centre) {
+            if (\App\Support\Features::skips((int) $centre->agency_id, 'staff_scheduling', 'schedule autofill')) continue;   // not in the agency's plan (2026-11-26)
             if (! $this->option('force')) {
                 $s = json_decode((string) ($agencySettings[$centre->agency_id] ?? ''), true);
                 if (! is_array($s) || empty($s['schedule_autofill'])) {

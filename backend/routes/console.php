@@ -561,6 +561,10 @@ Schedule::command('kt:leak-sweep')->dailyAt('05:40')->timezone('America/Toronto'
    type or a newly created table has no search source and no written reason. See
    App\Support\SearchRegistry and KtSearchCoverage. */
 Schedule::command('kt:search-coverage')->dailyAt('05:45')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
+/* Plan + add-on wiring (2026-11-26): fails (a ticket, like the other checks) when a new API route group, portal screen
+   or scheduled job is not tied to a feature or recorded as core, when a job mapped to a feature stops asking
+   App\Support\Features, or when an add-on product switches on a key that is no feature. See AddonCoverageCommand. */
+Schedule::command('kt:addon-coverage --quiet-ok')->dailyAt('05:55')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
 /* The global search words learned from use: retire stale ones, mail only when learning stops (SearchKeysCommand). */
 Schedule::command('search-keys:health')->dailyAt('05:50')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
 // Photo permissions (2026-11-06): hide photos of a child whose family said no; fail on code reading photos without the rule.

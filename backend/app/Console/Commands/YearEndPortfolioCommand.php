@@ -48,6 +48,7 @@ final class YearEndPortfolioCommand extends Command
         foreach ($children as $ch) {
             try {
                 if (!$ch->primary_email) { $skip++; continue; }
+                if (\App\Support\Features::skips((int) $ch->agency_id, 'observations', 'year-end portfolio')) { $skip++; continue; }   // not in the agency's plan (2026-11-26)
                 $observations = DB::table('observations')
                     ->where('child_id', $ch->id)
                     ->whereBetween('observed_at', [$start, $end])

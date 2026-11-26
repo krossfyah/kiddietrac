@@ -47,19 +47,19 @@ final class FeatureFlagController extends Controller
         'lesson_plans'      => ['label' => 'Lesson plans & curriculum',    'plan_min' => 'starter',    'group' => 'Daily care',
             'hashes' => ['lesson-plans', 'curriculum', 'hdlh-gaps', 'play-spark']],   // + Play Spark: the weekly plan lives in it (2026-11-24)
         'observations'      => ['label' => 'Observations & portfolios',    'plan_min' => 'starter',    'group' => 'Daily care',
-            'hashes' => ['observations', 'photos', 'videos', 'photo-tagging']],
+            'hashes' => ['observations', 'photos', 'videos', 'photo-tagging', 'observation-new', 'portfolio', 'milestones']],
         'daily_log'         => ['label' => 'Daily log & care records',     'plan_min' => 'free',       'group' => 'Daily care',
             'hashes' => ['care-log', 'menu']],
         'attendance'        => ['label' => 'Check-in, attendance & ratios', 'plan_min' => 'free',      'group' => 'Daily care',
             'hashes' => ['checkin', 'attendance-pattern', 'room-ratios', 'late-pickups', 'late-events']],
         'field_trips'       => ['label' => 'Walks, field trips & GPS',     'plan_min' => 'starter',    'group' => 'Daily care',
-            'hashes' => ['field-trips', 'trip-gps', 'bus-routes', 'zones']],
+            'hashes' => ['field-trips', 'trip-gps', 'bus-routes', 'zones', 'walks', 'walk']],   // + Walk Watch: the parent and educator tiles (2026-11-26)
         'conferences'       => ['label' => 'Parent conferences',           'plan_min' => 'starter',    'group' => 'Daily care',
             'hashes' => ['conferences']],
 
         // ── Health & safety ───────────────────────────────────────────────────────
         'immunizations'     => ['label' => 'Immunization tracking',        'plan_min' => 'starter',    'group' => 'Health & safety',
-            'hashes' => ['immunizations']],
+            'hashes' => ['immunizations', 'immun-schedule']],
         'medications'       => ['label' => 'Medication administration',    'plan_min' => 'starter',    'group' => 'Health & safety',
             'hashes' => ['medications']],
         'incidents'         => ['label' => 'Incident reporting',           'plan_min' => 'free',       'group' => 'Health & safety',
@@ -67,7 +67,7 @@ final class FeatureFlagController extends Controller
         'allergy_alerts'    => ['label' => 'Allergy alerts',               'plan_min' => 'free',       'group' => 'Health & safety',
             'hashes' => ['allergy-alerts']],
         'wellness'          => ['label' => 'Wellness screening & digest',  'plan_min' => 'starter',    'group' => 'Health & safety',
-            'hashes' => ['wellness-digest']],
+            'hashes' => ['wellness-digest', 'wellness']],
 
         // ── Family engagement ─────────────────────────────────────────────────────
         'chat'              => ['label' => 'Parent ↔ provider messaging',  'plan_min' => 'free',       'group' => 'Family engagement',
@@ -89,18 +89,20 @@ final class FeatureFlagController extends Controller
         'timesheets'        => ['label' => 'Time clock & timesheets',      'plan_min' => 'starter',    'group' => 'Staff',
             'hashes' => ['timesheets', 'time-clock', 'time-off']],
         'payroll'           => ['label' => 'Payroll documents & payslips', 'plan_min' => 'growth',     'group' => 'Staff',
-            'hashes' => ['payroll', 'payroll-settings', 'my-pay']],
+            'hashes' => ['payroll', 'payroll-settings', 'my-pay', 'payroll-report']],
         'certifications'    => ['label' => 'Certifications & background checks', 'plan_min' => 'starter', 'group' => 'Staff',
             'hashes' => ['certifications', 'background-checks', 'my-certificates']],
         'tasks'             => ['label' => 'Task assignment',              'plan_min' => 'free',       'group' => 'Staff',
             'hashes' => ['tasks', 'my-tasks']],
         'home_visits'       => ['label' => 'Home visits & inspection forms', 'plan_min' => 'starter',  'group' => 'Staff',
-            'hashes' => ['home-visits', 'home-visit-reports', 'new-home-visit', 'hcc-forms', 'inspection']],
+            'hashes' => ['home-visits', 'home-visit-reports', 'new-home-visit', 'hcc-forms', 'inspection',
+                'edit-home-visit', 'home-visit-view', 'inspection-forms', 'inspection-form', 'hcc-form-view']],
 
         // ── Billing & payments ────────────────────────────────────────────────────
         'billing'           => ['label' => 'Invoicing & billing',          'plan_min' => 'starter',    'group' => 'Billing & payments',
             'hashes' => ['billing', 'bulk-invoices', 'billing-schedule', 'billing-settings',
-                'payment-plans', 'tuition-increases', 'refunds', 'account-ledgers', 'tuition-plans', 'vacation-holds']],
+                'payment-plans', 'tuition-increases', 'refunds', 'account-ledgers', 'tuition-plans', 'vacation-holds',
+                'billing-setup', 'sibling-discounts', 'etransfer-requests']],
         'autopay'           => ['label' => 'Card & bank autopay',          'plan_min' => 'growth',     'group' => 'Billing & payments',
             'hashes' => ['payment-providers', 'payment-run']],
         'expenses'          => ['label' => 'Expenses, suppliers & POs',    'plan_min' => 'growth',     'group' => 'Billing & payments',
@@ -127,7 +129,7 @@ final class FeatureFlagController extends Controller
 
         // ── Growth ────────────────────────────────────────────────────────────────
         'waitlist'          => ['label' => 'Waitlist',                     'plan_min' => 'starter',    'group' => 'Growth',
-            'hashes' => ['synced-waitlist']],
+            'hashes' => ['synced-waitlist', 'waitlist']],
         'tours'             => ['label' => 'Tours & enquiries',            'plan_min' => 'starter',    'group' => 'Growth',
             'hashes' => ['tours']],
         'marketing'         => ['label' => 'Marketing & drip campaigns',   'plan_min' => 'growth',     'group' => 'Growth',
@@ -140,12 +142,12 @@ final class FeatureFlagController extends Controller
         'sales_crm'         => ['label' => 'Enquiries & enrolment pipeline', 'plan_min' => 'growth',   'group' => 'Growth',
             'hashes' => ['reenrollment', 'renewals']],
         'analytics'         => ['label' => 'Analytics & forecasting',      'plan_min' => 'enterprise', 'group' => 'Growth',
-            'hashes' => ['forecast', 'engagement', 'anomalies', 'retention']],
+            'hashes' => ['forecast', 'engagement', 'anomalies', 'retention', 'trends']],   // + the parent's Trends tile (analytics/trends) (2026-11-26)
         /* THE AI BUNDLE (2026-10-28, KT-ADD-0006, $25/month): no plan includes it - Anthony: "bundle required on every
            plan". Everything AI hangs off this key: the routes below in EnforcePlanFeatures, and App\Support\AiBundle
            for the AI inside shared endpoints and nightly jobs (parent end-of-day note, day story, photo tagging). */
         'ai_tools'          => ['label' => 'AI Bundle — summaries, writing help & report cards', 'plan_min' => 'addon', 'group' => 'Growth',
-            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status', 'lesson-plans-ai', 'photo-tagging']],   // Play Spark's AI tabs: hidden in the screen, refused by the API (2026-11-24)
+            'hashes' => ['ai-churn', 'ai-docs', 'report-cards', 'digest-status', 'lesson-plans-ai', 'photo-tagging', 'lesson-plan-new']],   // Play Spark's AI tabs: hidden in the screen, refused by the API (2026-11-24)
 
         // ── Platform ──────────────────────────────────────────────────────────────
         'multi_centre'      => ['label' => 'Multiple centres per agency',  'plan_min' => 'starter',    'group' => 'Platform',

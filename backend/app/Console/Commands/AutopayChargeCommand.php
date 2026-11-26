@@ -31,6 +31,7 @@ final class AutopayChargeCommand extends Command
         if (! \App\Support\StripeConfig::configured()) { $this->warn('STRIPE_SECRET not set; skipping'); return 0; }
 
         foreach ($candidates->pluck('agency_id')->unique() as $agencyId) {
+            if (\App\Support\Features::skips((int) $agencyId, 'autopay', 'nightly autopay')) { $this->line("Agency {$agencyId}: autopay is not in its plan - no cards charged"); continue; }   // (2026-11-26)
             $r = AutopayRunner::run((int) $agencyId, 'nightly');
             $s = $r['summary'];
             $this->info("Agency {$agencyId}: {$s['succeeded']} succeeded, {$s['failed']} failed, \${$s['charged']} charged");

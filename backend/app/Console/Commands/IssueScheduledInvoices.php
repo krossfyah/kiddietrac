@@ -62,6 +62,7 @@ final class IssueScheduledInvoices extends Command
 
         $issued = 0;
         foreach ($rows as $r) {
+            if (\App\Support\Features::forCentre((int) $r->centre_id, 'billing') === false) { $this->line('  ' . $r->invoice_number . ': billing is not in the agency\'s plan - left as a draft'); continue; }   // (2026-11-26)
             $this->line(sprintf('  %-24s family %-5d %10s  issue %s  due %s',
                 $r->invoice_number, $r->family_id, number_format((float) $r->total, 2), $r->issued_at, $r->due_at));
 

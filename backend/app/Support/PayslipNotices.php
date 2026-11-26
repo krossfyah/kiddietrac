@@ -92,6 +92,7 @@ final class PayslipNotices
         $cfgs = [];
         foreach ($docs as $doc) {
             $aid = (int) $doc->agency_id;
+            if (\App\Support\Features::skips($aid, 'payroll', 'payslip notice')) { $out['skipped']++; continue; }   // not in the agency's plan (2026-11-26)
             $cfg = $cfgs[$aid] ??= self::settings($aid);
             if (! $cfg['email_payslips']) { $out['skipped']++; continue; }
 

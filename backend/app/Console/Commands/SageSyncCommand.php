@@ -27,6 +27,7 @@ final class SageSyncCommand extends Command
         foreach ($q->pluck('agency_id') as $agencyId) {
             $agencyId = (int) $agencyId;
             if (! DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->exists()) continue;
+            if (\App\Support\Features::skips($agencyId, 'accounting_sync', 'Sage sync')) continue;   // not in the agency's plan (2026-11-26)
             $lock = Cache::lock('sage-sync-' . $agencyId, 300);
             if (! $lock->get()) { $this->line("agency {$agencyId}: busy"); continue; }
             try {

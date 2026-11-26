@@ -30,6 +30,7 @@ class CountersignRemindCommand extends Command
         if ($this->option('agency')) $q->where('id', (int) $this->option('agency'));
         foreach ($q->pluck('id') as $agencyId) {
             $agencyId = (int) $agencyId;
+            if (\App\Support\Features::skips($agencyId, 'forms', 'countersign reminders')) continue;   // not in the agency's plan (2026-11-26)
             $s = CountersignReminders::read($agencyId);
             $force = (bool) $this->option('force');
             if (! $s['enabled']) continue;

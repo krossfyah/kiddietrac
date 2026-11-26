@@ -45,6 +45,7 @@ class BillingReminders extends Command
            their own share, a blind copy to the chosen staff, at most one per invoice per person per day (logged in
            invoice_reminder_log). The two gates above and the agency's own switches are unchanged. */
         foreach (DB::table('agencies')->whereNull('deleted_at')->select('id', 'name', 'settings', 'timezone')->get() as $ag) {
+            if (\App\Support\Features::skips((int) $ag->id, 'billing', 'invoice reminders')) continue;   // not in the agency's plan (2026-11-26)
             $cfg = \App\Support\InvoiceReminders::cfg((int) $ag->id);
             if ((! $cfg['invoice_enabled'] && ! $cfg['overdue_enabled']) || ! $cfg['channel_email']) {
                 continue;

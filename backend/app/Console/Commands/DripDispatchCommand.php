@@ -34,6 +34,7 @@ final class DripDispatchCommand extends Command
 
         $totalSent = 0;
         foreach ($campaigns as $c) {
+            if (\App\Support\Features::skips((int) $c->agency_id, 'marketing', 'drip campaign')) continue;   // not in the agency's plan (2026-11-26)
             // Send from (white-label): the campaign's chosen sender account, else the agency default.
             $dripAgency = DB::table('agencies')->where('id', $c->agency_id)->first(['id', 'powered_by_visible']);
             $dripSender = \App\Support\CampaignSender::forCampaign($c, $dripAgency);

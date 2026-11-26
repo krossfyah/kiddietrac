@@ -29,26 +29,27 @@ final class EnforcePlanFeatures
     /** feature key => [path prefixes after api/v1/, optional HTTP methods (empty = all)] */
     public const MAP = [
         'lesson_plans'     => [['provider/lesson-plans', 'provider/lesson-plan-templates', 'parent/lesson-plan', 'curriculum', 'analytics/hdlh-gaps'], []],
-        'observations'     => [['provider/observations'], []],
-        'field_trips'      => [['operations/field-trips', 'field-trips/', 'operations/bus-routes', 'zones'], []],
+        'observations'     => [['provider/observations', 'care/portfolio', 'care/milestones'], []],   // + portfolios and milestones (2026-11-26)
+        'field_trips'      => [['operations/field-trips', 'field-trips/', 'operations/bus-routes', 'zones', 'provider/walks', 'parent/walks', 'parent/active-walks', 'admin/walk-settings'], []],   // + Walk Watch (2026-11-26)
         'conferences'      => [['conferences'], []],
         'immunizations'    => [['immunization/', 'director/immunizations', 'admin/immunization-records', 'admin/immunization-reminders'], []],
         'medications'      => [['provider/medications', 'director/medications'], []],
         'wellness'         => [['wellness/'], []],
         'awards'           => [['provider/awards', 'parent/awards'], []],
         'parent_feedback'  => [['engagement/nps', 'feedback/day', 'feedback/mine-educator'], []],
-        'sms'              => [['admin/sms', 'admin/sms-settings', 'sms-replies'], []],
+        'sms'              => [['admin/sms', 'admin/sms-settings', 'sms-replies', 'admin/voice'], []],   // + voice announcements: the feature is "SMS & voice announcements" (2026-11-26)
         'staff_scheduling' => [['director/schedule', 'operations/substitutes', 'operations/sub-requests', 'operations/room-rotations', 'provider/educator-rooms'], []],
-        'timesheets'       => [['director/timesheets', 'time-off', 'admin/time-off'], []],
-        'payroll'          => [['admin/payroll', 'admin/payroll-settings', 'exports/payroll', 'provider/payroll-documents', 'payroll-documents/', 'me/payslips', 'agency/payslip-settings'], []],
-        'certifications'   => [['director/certifications', 'admin/background-checks', 'staff-certifications', 'admin/staff-compliance'], []],
+        'timesheets'       => [['director/timesheets', 'time-off', 'admin/time-off', 'admin/timeoff-reminders'], []],
+        'payroll'          => [['admin/payroll', 'admin/payroll-settings', 'exports/payroll', 'provider/payroll-documents', 'payroll-documents/', 'me/payslips', 'agency/payslip-settings', 'me/payroll-documents', 'auth/me/payroll-documents'], []],
+        'certifications'   => [['director/certifications', 'admin/background-checks', 'staff-certifications', 'admin/staff-compliance', 'admin/cert-alerts', 'exports/background-checks'], []],
         'home_visits'      => [['home-visits', 'inspection-forms', 'operations/inspection'], []],
-        'billing'          => [['billing/schedule', 'billing/etransfer-requests', 'billing/etransfer-reports', 'admin/billing-settings', 'payment-plans', 'billing/tuition-increases', 'billing/vacation-holds', 'refunds', 'admin/account-ledgers', 'admin/fee-plans'], []],
+        'billing'          => [['billing/schedule', 'billing/etransfer-requests', 'billing/etransfer-reports', 'admin/billing-settings', 'payment-plans', 'billing/tuition-increases', 'billing/vacation-holds', 'refunds', 'admin/account-ledgers', 'admin/fee-plans',
+            'admin/invoices', 'director/invoices', 'admin/billing-reminders', 'admin/billing-setup', 'admin/sibling-discounts'], []],   // + the staff side of raising invoices (parents viewing and paying stay open) (2026-11-26)
         'autopay'          => [['admin/payment-providers', 'admin/payment-runs'], []],
         'expenses'         => [['admin/expenses', 'admin/expense-invoices', 'admin/suppliers', 'admin/purchase-orders'], []],
-        'accounting_sync'  => [['qbo/', 'xero/', 'sage/', 'sage50/', 'admin/qbo-config', 'admin/xero-config', 'admin/sage-config'], []],
+        'accounting_sync'  => [['qbo/', 'xero/', 'sage/', 'sage50/', 'admin/qbo-config', 'admin/xero-config', 'admin/sage-config', 'agency/external-invoices', 'provider/payee-invoices'], []],   // + the staff side of synced and payee invoices: global search already filed both under this feature (2026-11-26)
         'white_label'      => [['admin/branding'], ['POST', 'PUT', 'PATCH', 'DELETE']],   // reading the brand is for everyone
-        'forms'            => [['admin/forms', 'admin/managed-forms', 'doc-workflows', 'provider/document-templates'], []],
+        'forms'            => [['admin/forms', 'admin/managed-forms', 'doc-workflows', 'provider/document-templates', 'admin/countersign-reminders', 'exports/forms'], []],
         'compliance'       => [['compliance/expiry-calendar', 'director/compliance', 'admin/compliance'], []],
         'cwelcc_reporting' => [['compliance/cwelcc', 'occms/', 'cacfp/', 'exports/cwelcc-monthly', 'workforce-funding/', 'compliance/subsidies'], []],
         'reports'          => [['reports', 'admin/report-schedules', 'director/reports'], []],
@@ -57,11 +58,11 @@ final class EnforcePlanFeatures
         'waitlist'         => [['agency/waitlist', 'director/waitlist'], []],
         'sales_crm'        => [['engagement/reenrollment'], []],
         'tours'            => [['admin/tours'], []],
-        'marketing'        => [['marketing/campaigns', 'marketing/drip', 'marketing/assets', 'marketing/images', 'marketing/senders'], []],
+        'marketing'        => [['marketing/campaigns', 'marketing/campaigns-report', 'marketing/drip', 'marketing/assets', 'marketing/images', 'marketing/senders'], []],
         'analytics'        => [['analytics/trends', 'ai/enrollment-forecast', 'ai/attendance-anomalies', 'engagement/scores'], []],
         // + observation write-up help and AI drafting (2026-10-28, the AI Bundle).
         // Not 'ai/' as a whole: ai/enrollment-forecast and ai/attendance-anomalies are Analytics, and not AI.
-        'ai_tools'         => [['ai/churn-risk', 'ai/doc-extract', 'ai/weekly-recap', 'ai/tag-observation', 'ai/translate-message', 'ai/assist', 'report-cards', 'parent/report-cards', 'director/digest-status', 'director/lesson-plans-ai', 'provider/observations/structure', 'provider/play-spark', 'parent/play-spark'], []],   // + Play Spark (2026-11-24)
+        'ai_tools'         => [['ai/churn-risk', 'ai/doc-extract', 'ai/doc-extractions', 'ai/weekly-recap', 'ai/tag-observation', 'ai/translate-message', 'ai/assist', 'report-cards', 'parent/report-cards', 'director/digest-status', 'director/lesson-plans-ai', 'provider/observations/structure', 'provider/play-spark', 'parent/play-spark'], []],   // + Play Spark (2026-11-24)
         'mrr_dashboard'    => [['admin/mrr'], []],
     ];
 

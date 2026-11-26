@@ -39,6 +39,7 @@ final class ApplyLateFeesCommand extends Command
 
         $applied = 0; $skipped = 0; $promoted = 0;
         foreach ($candidates as $inv) {
+            if (\App\Support\Features::skips((int) $inv->agency_id, 'billing', 'late fees')) { $skipped++; continue; }   // not in the agency's plan (2026-11-26)
             // The family says they paid it by e-Transfer and a person has not confirmed it yet (2026-11-11): no late fee meanwhile.
             if (\App\Support\EtransferPending::has((int) $inv->agency_id, 'inv', (int) $inv->id)) { $skipped++; continue; }
             $pct = (float) ($inv->late_fee_percent ?? 1.50);

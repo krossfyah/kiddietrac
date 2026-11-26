@@ -38,6 +38,7 @@ final class OccmsRoaRemindCommand extends Command
         foreach ($q->get(['id', 'name', 'settings']) as $a) {
             $agencyId = (int) $a->id;
             if (! OccmsRoa::applies($agencyId)) continue;
+            if (\App\Support\Features::skips($agencyId, 'cwelcc_reporting', 'ROA reminders')) continue;   // not in the agency's plan (2026-11-26)
             $set = OccmsRoa::settings($agencyId);
             if (! $set['reminders']) continue;
             $now = Carbon::now(AgencyTime::tz($agencyId));
