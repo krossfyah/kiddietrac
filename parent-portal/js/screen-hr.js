@@ -390,8 +390,8 @@
   }
 
   // ── Leave types (agency admins) ────────────────────────────────────────
-  var ACCR = { lump: 'All at the start of the leave year', pay_period: 'Each pay period', hours_worked: 'By hours worked', none: 'Not tracked (no balance)' };
-  var CARRY = { none: 'Nothing carries over', all: 'Everything carries over', capped: 'Carry over up to a limit' };
+  var ACCR = { lump: 'Yearly, all at once', pay_period: 'Each pay period', hours_worked: 'By hours worked', none: 'Not tracked' };
+  var CARRY = { none: 'None', all: 'All of it', capped: 'Up to a limit' };
   async function loadSetup() { S.setup = await Api.get('/hr/setup'); return S.setup; }
   function ruleText(t) {
     if (t.accrual === 'none') return 'No balance';
@@ -405,16 +405,16 @@
     try { d = await loadSetup(); } catch (e) { b.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
     if (!b.isConnected || S.tab !== 'types') return;
     var rows = d.types || [], rt = d.request_types || {};
-    var h = '<div class="hr-note"><b>Your agency\'s own rules.</b> KiddieTrac does not apply any province\'s or state\'s employment law. Add the leave types your team uses and the entitlement for each. '
+    var h = '<div class="hr-note"><b>Your agency\'s own rules.</b> No province or state employment law is applied for you. Add the leave types your team uses and the entitlement for each. '
       + 'The example set is only a starting point to edit: it is never applied by itself.</div>'
       + '<div class="hr-bar"><button type="button" class="hr-b p" id="hr-tnew">Add leave type</button><button type="button" class="hr-b" id="hr-tex">Load example set</button>'
       + '<button type="button" class="hr-b" id="hr-tacc">Run grants and accruals now</button><span class="hr-sub">Grants and accruals also run every night.</span></div>';
-    h += '<div class="kt-card">' + (rows.length ? '<table><thead><tr><th>Leave type</th><th>Unit</th><th>Paid</th><th>Staff see it</th><th>Approval</th><th>Entitlement</th><th>How it builds up</th><th>Carry-over</th><th>Old requests filed as</th><th>Status</th><th></th></tr></thead><tbody>'
+    h += '<div class="kt-card">' + (rows.length ? '<table><thead><tr><th>Leave type</th><th>Unit</th><th>Paid</th><th>Staff see it</th><th>Approval</th><th>Entitlement</th><th>Builds up</th><th>Carry-over</th><th>Old requests</th><th>Status</th><th></th></tr></thead><tbody>'
       + rows.map(function (t) {
         var arch = !!t.archived_at;
         return '<tr' + (arch ? ' style="opacity:.6"' : '') + '><td>' + dot(t.colour) + '<b data-no-i18n>' + esc(t.name) + '</b>' + (t.is_example ? ' ' + pill('#F0F9FF', '#0369A1', 'Example') : '') + '</td>'
           + '<td>' + esc(t.unit === 'hours' ? 'Hours' : 'Days') + '</td><td>' + (+t.paid ? 'Paid' : 'Unpaid') + '</td><td>' + (+t.visible_to_staff ? 'Yes' : 'No') + '</td>'
-          + '<td>' + (+t.needs_approval ? 'Needs approval' : 'Approved on request') + '</td><td>' + ruleText(t) + '</td>'
+          + '<td>' + (+t.needs_approval ? 'Needs approval' : 'Automatic') + '</td><td>' + ruleText(t) + '</td>'
           + '<td>' + esc(ACCR[t.accrual] || t.accrual) + (t.accrual === 'pay_period' ? '<div class="hr-sub">' + esc(t.periods_per_year) + ' a year</div>' : '') + (t.accrual === 'hours_worked' ? '<div class="hr-sub">1 ' + esc(t.unit === 'hours' ? 'hour' : 'day') + ' per ' + esc(num(t.hours_per_unit)) + ' hours worked</div>' : '') + '</td>'
           + '<td>' + esc(CARRY[t.carry_mode] || '') + (t.carry_mode === 'capped' ? '<div class="hr-sub">up to ' + esc(amt(t.carry_cap, t.unit)) + '</div>' : '') + (t.carry_expiry_months ? '<div class="hr-sub">expires after ' + esc(t.carry_expiry_months) + ' months</div>' : '') + '</td>'
           + '<td>' + esc(t.maps_request_type ? rt[t.maps_request_type] : '') + '</td><td>' + (arch ? pill('#F1F5F9', '#475569', 'Archived') : pill('#ECFDF5', '#047857', 'In use')) + '</td>'

@@ -4,6 +4,32 @@
         {
             "type": "improved",
             "date": "2026-11-26",
+            "icon": "🌴",
+            "title": "Your leave balances",
+            "body": "If your agency uses KiddieTrac HR, Time off shows how much leave you have, and each request shows your balance before and after.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "🧑‍💼",
+            "title": "KiddieTrac HR",
+            "body": "Leave balances on every time-off request, a full employee file with an HR profile, and an absence report with Excel export. Part of the new KiddieTrac HR add-on.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
             "icon": "🗂️",
             "title": "Report cards: Archived is gone",
             "body": "Archived is gone; cards for children who left show in the normal lists for admins, marked Child left (or Centre closed), under their real status.",
