@@ -308,7 +308,10 @@ html.kt-tenant.kt-bio-pending::before{background:var(--ktt-bg)!important}
    with stronger selectors (body.auth-body, .ktl-wrap #submitBtn) and outside any media query, so a white-label app's
    sign-in kept the navy ground and the KiddieTrac button under its own logo. The partner's scheme wins there too. */
 html.kt-tenant body.auth-body{background:var(--ktt-bg)!important}
-html.kt-tenant.kt-native .ktl-form-side,html.kt-tenant .ktl-wrap .ktl-form-side{background:transparent!important}
+html.kt-tenant.kt-native .ktl-form-side{background:transparent!important}
+/* ...and on a phone-width browser, like KiddieTrac's own navy phone page. NOT on a computer (2026-11-26): there the form is
+   the light panel, exactly as on the plain sign-in - unscoped, this put the desktop form on the brand ground too. */
+@media (max-width:768px){html.kt-tenant .ktl-wrap .ktl-form-side{background:transparent!important}}
 html.kt-tenant.kt-native .ktl-wrap #submitBtn{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
 html.kt-tenant.kt-native .ktl-form-side a{color:#fff!important;-webkit-text-fill-color:#fff!important}
 html.kt-tenant.kt-native .ktl-mhero-card{background:#fff!important;border-radius:22px!important;padding:14px 22px!important;box-shadow:0 18px 50px -18px rgba(0,0,0,.45)!important;filter:none!important;
@@ -321,18 +324,19 @@ html.kt-tenant.kt-native .ktl-mhero-card img{display:block!important;height:64px
    partner's own tagline is added by kt-launch-scene's kt:brand handler), and "(c) KiddieTrac Inc." */
 html.kt-tenant .ktl-mhero-tag.kt-lockup,html.kt-tenant.kt-native .ktl-mhero-tag.kt-lockup,html.kt-wl-boot .ktl-mhero-tag.kt-lockup{display:none!important}
 html.kt-tenant .kt-copyright,html.kt-wl .kt-copyright{display:none!important}
-/* DESKTOP SITS ON THE BRAND GROUND TOO (2026-11-26, Anthony: "the starlight kids academy login page blends too much with
-   the logo"). `.ktl-wrap .ktl-form-side` above makes the form side transparent at every width, so on a computer the form
-   stands on --ktt-bg like the phone - but these rules still painted it for a WHITE form: the logo straight on the ground
-   (a primary-coloured wordmark vanished), "Welcome back" and links in the primary, the button in the primary. Desktop now
-   wears the phone's treatment: logo on a white plate, white text and links (AA on the ground), the brand button. */
+/* DESKTOP = THE PLAIN SIGN-IN'S LAYOUT (2026-11-26, Anthony: "one side is white and the other side is the glow effect
+   background"). The form side keeps KiddieTrac's light panel and fields; the partner's colours take KiddieTrac's places:
+   heading + links in --ktt-ink (the primary, darkened until it reads 4.5:1 on white), labels/helper text in slate, the
+   Log in button in --ktt-btn-desk (the hero gradient when white text reads 4.5:1 on both stops, as KiddieTrac's
+   teal->blue, else the primary). The glow side wears the partner's gradient. Not in the app (kt-native): its sign-in is
+   the brand ground at every width. */
 @media (min-width:769px){
   html.kt-tenant .ktl-brand-side{background:var(--ktt-bg)!important}
-  html.kt-tenant .ktl-form-side .auth-logo .ktl-anim{background:#fff!important;border-radius:22px!important;padding:14px 22px!important;box-shadow:0 18px 50px -18px rgba(0,0,0,.45)!important}
-  html.kt-tenant .ktl-title,html.kt-tenant .ktl-title *{background:none!important;color:#fff!important;-webkit-text-fill-color:#fff!important}
-  html.kt-tenant .ktl-form-side .ktl-sub,html.kt-tenant .ktl-form-side .ktl-foot,html.kt-tenant .ktl-wrap .auth-form label,html.kt-tenant .ktl-form-side .ktl-legal,html.kt-tenant .ktl-form-side .ktl-legal *{color:#fff!important;-webkit-text-fill-color:#fff!important}
-  html.kt-tenant .ktl-form-side a{color:#fff!important;-webkit-text-fill-color:#fff!important;text-decoration:underline!important;text-underline-offset:2px}
-  html.kt-tenant .ktl-wrap #submitBtn{background:var(--ktt-btn-on)!important;color:var(--ktt-btn-on-ink)!important}
+  html.kt-tenant:not(.kt-native) .ktl-title,html.kt-tenant:not(.kt-native) .ktl-title *{background:none!important;color:var(--ktt-ink)!important;-webkit-text-fill-color:var(--ktt-ink)!important}
+  html.kt-tenant:not(.kt-native) .ktl-wrap .auth-form label{color:#0F172A!important;-webkit-text-fill-color:#0F172A!important}
+  html.kt-tenant:not(.kt-native) .ktl-form-side .ktl-sub,html.kt-tenant:not(.kt-native) .ktl-form-side .ktl-foot,html.kt-tenant:not(.kt-native) .ktl-form-side .ktl-legal,html.kt-tenant:not(.kt-native) .ktl-form-side .ktl-legal *{color:#475569!important;-webkit-text-fill-color:#475569!important}
+  html.kt-tenant:not(.kt-native) .ktl-form-side a{color:var(--ktt-ink)!important;-webkit-text-fill-color:var(--ktt-ink)!important}
+  html.kt-tenant:not(.kt-native) .ktl-wrap #submitBtn{background:var(--ktt-btn-desk)!important;color:var(--ktt-btn-desk-ink)!important;border-color:transparent!important}
 }
   </style>
   <script>(function(w){
@@ -351,7 +355,12 @@ html.kt-tenant .kt-copyright,html.kt-wl .kt-copyright{display:none!important}
     var btn=(onWhite(pc)&&onWhite(ac))?'linear-gradient(135deg,'+pc+','+ac+')':pc;
     // On the brand background (phone, unlock): whichever brand colour is not the background.
     var on=(solid.toLowerCase()===pc.toLowerCase()||Math.abs(lum(pc)-lum(solid))<0.06)?ac:pc;   /* a primary as dark as the ground does not read as a button (2026-10-30) */
-    return {bg:bg,solid:solid,primary:pc,accent:ac,btn:btn,btnInk:ink(pc),btnOn:on,btnOnInk:ink(on),
+    // Text on the light panel (desktop): the primary, darkened toward black until it reads 4.5:1 on white.
+    var cr=function(c){return 1.05/(lum(c)+0.05);},txt=pc;
+    for(var k=1;cr(txt)<4.5&&k<=10;k++){var m=parseInt(pc.slice(1),16),f=1-k*0.08;txt='#'+[m>>16,(m>>8)&255,m&255].map(function(v){return ('0'+Math.round(v*f).toString(16)).slice(-2);}).join('');}
+    // The light panel's button, as KiddieTrac's teal->blue: the hero gradient when white reads 4.5:1 on both stops.
+    var desk=(hf&&ht&&cr(hf)>=4.5&&cr(ht)>=4.5)?'linear-gradient(135deg,'+hf+' 0%,'+ht+' 100%)':btn,deskInk=desk===btn?ink(pc):'#FFFFFF';
+    return {bg:bg,solid:solid,primary:pc,accent:ac,btn:btn,btnInk:ink(pc),btnOn:on,btnOnInk:ink(on),ink:txt,btnDesk:desk,btnDeskInk:deskInk,
       ring:'rgba('+(n>>16)+','+((n>>8)&255)+','+(n&255)+',.28)'};
   };
   /* Wear it (t = a white-label theme for this page's tenant), or take it off (null). */
@@ -362,6 +371,7 @@ html.kt-tenant .kt-copyright,html.kt-wl .kt-copyright{display:none!important}
     st.setProperty('--ktt-bg',s.bg);st.setProperty('--ktt-solid',s.solid);st.setProperty('--ktt-primary',s.primary);st.setProperty('--ktt-accent',s.accent);
     st.setProperty('--ktt-btn',s.btn);st.setProperty('--ktt-btn-ink',s.btnInk);st.setProperty('--ktt-ring',s.ring);
     st.setProperty('--ktt-btn-on',s.btnOn);st.setProperty('--ktt-btn-on-ink',s.btnOnInk);
+    st.setProperty('--ktt-ink',s.ink);st.setProperty('--ktt-btn-desk',s.btnDesk);st.setProperty('--ktt-btn-desk-ink',s.btnDeskInk);
     d.classList.add('kt-tenant');
     try{var m=document.querySelector('meta[name="theme-color"]');if(m)m.setAttribute('content',s.solid);}catch(e){}
   };
