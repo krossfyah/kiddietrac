@@ -34,14 +34,19 @@
   opacity: 0.92;
 }
 
-/* Decorative corner orb */
+/* Decorative corner orb.
+   ONE SCROLLBAR (2026-11-25, Anthony: "late pickup's section has two scroll bars"). The orb used to be a 280px
+   circle hung 120px OUTSIDE the card's top-right corner, relying on the card's overflow:hidden to cut it off. A
+   screen that gives its card overflow:auto (Late pickups, RSVP, Donations, rewards, external billing...) turned
+   that hidden 120px into a real scrollable area: a second, empty horizontal scrollbar on the card under the
+   table's own (.kt-tbl-scroll) one - and a vertical one on any card shorter than 160px. The same orb is now
+   painted INSIDE the card (same centre, size and stops), so it can never make anything scroll. */
 [data-kt-pretty] .kt-card::after {
   content: '';
   position: absolute;
-  top: -120px; right: -120px;
-  width: 280px; height: 280px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(74, 144, 184, 0.10) 0%, rgba(74, 144, 184, 0.02) 50%, transparent 70%);
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle 198px at calc(100% - 20px) 20px, rgba(74, 144, 184, 0.10) 0%, rgba(74, 144, 184, 0.02) 50%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }

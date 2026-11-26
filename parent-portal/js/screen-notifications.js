@@ -344,12 +344,14 @@
       if (_npage > pages) _npage = pages;
       if (_npage < 1) _npage = 1;
       var start = (_npage - 1) * N_PER, end = Math.min(start + N_PER, total);
-      // A bounded, internally-scrolling window — like a Gmail message list.
       // data-kt-list marks these rows for the kebab sweep. no-controls because the screen
       // already has its own filter + "Mark all read" bar and does not want a second one.
+      /* ONE SCROLLBAR (2026-11-25, Anthony: "two scroll bars ... full sweep"). This list was a box capped at
+         calc(100vh - 330px) with its own scrollbar, but the banner, filter bar and pager around it take more than
+         330px, so the page scrolled as well: two vertical scrollbars on one screen. The list is already paged
+         (12 per page), so it needs no box of its own: the page is the one scroll region. */
       var scroller = Dom.el('div', {
         'data-kt-list': '1', 'data-kt-no-controls': '1',
-        style: 'max-height:calc(100vh - 330px);min-height:140px;overflow-y:auto;',
       });
       rows.slice(start, end).forEach(function (g) {
         scroller.appendChild(renderRow(g.first));
