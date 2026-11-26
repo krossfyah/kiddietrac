@@ -922,14 +922,57 @@
   }
 
   // Refresh the signed-in user so the sidebar avatar reflects the latest photo.
-  function refreshUser() {
-    var t = store('kt_token'); if (!t) return;
+  /* ALSO MID-SESSION, NOT ONLY AT BOOT (2026-11-26, Anthony: added the HR add-on to iLearn, opened HR and got
+     "Not included in this plan"). This ran once per page load, so a licence or feature change made while the tab
+     was open never reached it: the menu, the tiles and the route guard kept the old plan until a reload (proven on
+     agency 6: a test add-on line on, the server's hidden list dropped the screen, the open tab still showed 🔒 after
+     38 s and a re-navigation, and never asked /auth/me). Now it also runs on kt:plan-changed (kt-badges.js, when
+     GET /badges plan_v moves - App\Support\PlanStamp) and from KT.refreshPlan (the 🔒 screen's re-check, an
+     in-place agency switch). opts.now = redraw at once (the person made the change, or is looking at a 🔒);
+     otherwise the redraw waits for their next navigation, so nobody loses a half-typed form to a reload.
+     Resolves {changed, reloading}. */
+  var __meBusy = null;
+  var __planReloadArmed = false;
+  function refreshUser(opts) {
+    opts = opts || {};
+    if (__meBusy) return __meBusy.then(function (r) { if (opts.now && r && r.changed && !r.reloading) { planRedraw(true); r.reloading = true; } return r; });
+    var res = { changed: false, reloading: false };
+    __meBusy = refreshUserNow(opts, res).then(function () { __meBusy = null; return res; }, function () { __meBusy = null; return res; });
+    return __meBusy;
+  }
+  /* Redraw with the new plan: now, or on the next navigation. Reloading is how every surface (sidebar, phone bars,
+     right panel, tiles, search, the native shell's web view) rebuilds from the one fresh kt_user. Not twice a
+     minute - a server answer that flip-flops must never become a reload loop; then it waits for the next navigation. */
+  function planRedraw(now) {
+    var last = 0;
+    try { last = +(sessionStorage.getItem('kt_plan_reload') || 0); } catch (e) {}
+    if (now && Date.now() - last > 60000) {
+      try { sessionStorage.setItem('kt_plan_reload', String(Date.now())); } catch (e) {}
+      window.location.reload();
+      return true;
+    }
+    if (!__planReloadArmed) {
+      __planReloadArmed = true;
+      window.addEventListener('hashchange', function () {
+        try { sessionStorage.setItem('kt_plan_reload', String(Date.now())); } catch (e) {}
+        window.location.reload();
+      }, { once: true });
+    }
+    return false;
+  }
+  window.KT = window.KT || {};
+  window.KT.refreshPlan = function (opts) { return refreshUser(opts || {}); };
+  window.addEventListener('kt:plan-changed', function (e) {
+    try { refreshUser({ now: !!(e && e.detail && e.detail.now) }); } catch (x) {}
+  });
+  function refreshUserNow(opts, res) {
+    var t = store('kt_token'); if (!t) return Promise.resolve();
     /* The agency in view, so the plan answer below is that agency's (a super admin switches agencies). */
     var meHdrs = { 'Authorization': 'Bearer ' + t };
     var meAg = null;
     try { meAg = sessionStorage.getItem('kt_active_agency_id'); } catch (e) {}
     if (meAg && /^[0-9]+$/.test(meAg)) meHdrs['X-Active-Agency-Id'] = meAg;
-    fetch(API + '/auth/me', { headers: meHdrs })
+    return fetch(API + '/auth/me', { headers: meHdrs, cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         var fresh = d && (d.user || d); if (!fresh) return;
@@ -1007,8 +1050,16 @@
               !!u.ai_bundle, !!u.play_spark, !!u.licence_lapsed, u.licence_label || null,
               Object.keys((u.locked_screens && typeof u.locked_screens === 'object') ? u.locked_screens : {}).sort()]);
           };
+          /* The fingerprint this answer was computed with (PlanStamp), kept even when nothing visible changed, so
+             kt-badges stops asking until the server's plan_v moves again. */
+          if (fresh.plan_v && fresh.plan_v !== cur.plan_v && featSig(fresh) === featSig(cur)) {
+            cur.plan_v = fresh.plan_v;
+            try { sessionStorage.setItem('kt_user', JSON.stringify(cur)); } catch (e) {}
+          }
           if (featSig(fresh) !== featSig(cur)) {
             var hadPlan = Array.isArray(cur.hidden_screens);
+            cur.plan_v = fresh.plan_v || null;
+            res.changed = true;
             cur.hidden_screens = fresh.hidden_screens;
             cur.ai_bundle = !!fresh.ai_bundle;
             cur.play_spark = !!fresh.play_spark;   // the Play Spark licence (2026-11-26)
@@ -1022,16 +1073,14 @@
               if (lu && lu.id === cur.id) {
                 lu.hidden_screens = cur.hidden_screens; lu.ai_bundle = cur.ai_bundle; lu.play_spark = cur.play_spark;
                 lu.licence_lapsed = cur.licence_lapsed; lu.licence_label = cur.licence_label; lu.locked_screens = cur.locked_screens;
+                lu.plan_v = cur.plan_v;
                 localStorage.setItem('kt_user', JSON.stringify(lu));
               }
             } catch (e) {}
-            // Redraw once with the new menu - only when stored (or it would reload forever) and not twice a minute.
-            var lastPlanReload = 0;
-            try { lastPlanReload = +(sessionStorage.getItem('kt_plan_reload') || 0); } catch (e) {}
-            if (hadPlan && savedPlan && Date.now() - lastPlanReload > 60000) {
-              try { sessionStorage.setItem('kt_plan_reload', String(Date.now())); } catch (e) {}
-              window.location.reload();
-              return;
+            // Redraw with the new menu - only when stored (or it would reload forever). At boot or on request: now;
+            // a change noticed by the badges poll: on the next navigation (planRedraw).
+            if (hadPlan && savedPlan) {
+              if (planRedraw(opts.boot || opts.now)) { res.reloading = true; return; }
             }
           }
         }
@@ -1150,8 +1199,8 @@
   function refreshBellBadge() { try { if (__staffNotifStarted) refreshStaffNotifBadge(); else refreshNotifBadge(); } catch (e) {} }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') { refreshBellBadge(); try { refreshUnread(); } catch (e) {} } });
   window.addEventListener('focus', function () { refreshBellBadge(); try { refreshUnread(); } catch (e) {} });
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { ensure(); refreshUser(); });
-  else { ensure(); refreshUser(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { ensure(); refreshUser({ boot: true }); });
+  else { ensure(); refreshUser({ boot: true }); }
   /* Exposed so the admin launcher can build its own pair on a phone, where this
      bar is hidden by kt-mobile-app.css. Same builders, so the two copies can
      never disagree about what a role or an agency switch does. */

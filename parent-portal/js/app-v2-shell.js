@@ -351,6 +351,8 @@
     });
   }
   window.KT.pruneHiddenLinks = pruneHiddenLinks;
+  // The screens this tab's plan leaves out (not the locked Upgrade ones), read fresh from kt_user each call - search uses it.
+  window.KT.hiddenHashes = hiddenHashes;
 
   function hideSwitchedOff(sections, user) {
     var hidden = notLocked((user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [], user);
@@ -3646,6 +3648,28 @@
        (CheckFeatureFlag); this is the part that explains itself. (2026-09-17) */
     try {
       var _hidden = (user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [];
+      /* ASK BEFORE SAYING NO (2026-11-26, Anthony: HR licensed for iLearn, and the tab still said "Not included in
+         this plan"). hidden_screens is the tab's copy of the plan; the licence may have changed since it was saved.
+         Before a 🔒 is drawn, one fresh /auth/me (KT.refreshPlan, kt-topbar.js): if the screen is open now, the tab
+         adopts the new plan and redraws; if it is still off, the 🔒 is the true answer. Once per screen per 30 s. */
+      if (_hidden.indexOf(hash) !== -1 && window.KT && KT.refreshPlan) {
+        var _lk = hash + '|' + (user.plan_v || '');
+        var _lc = window.__ktLockChecked || {};
+        if (!_lc.k || _lc.k !== _lk || Date.now() - _lc.at > 30000) {
+          window.__ktLockChecked = { k: _lk, at: Date.now() };
+          ensureTopbar(hash);
+          main.appendChild(emptyState('⏳', 'Checking your plan…', ''));
+          _ktReveal(true);
+          __ktDropSnapshot();
+          var _gen = __ktGen;
+          KT.refreshPlan({ now: true }).then(function (r) {
+            if (r && r.reloading) return;
+            if (window.__ktRenderGen !== _gen || (location.hash.replace(/^#/, '').split('?')[0]) !== hash) return;   // moved on
+            renderScreen();
+          }, function () { if (window.__ktRenderGen === _gen) renderScreen(); });
+          return;
+        }
+      }
       if (_hidden.indexOf(hash) !== -1 && lockedMap(user)[hash]) {
         ensureTopbar(hash);
         var _li = lockedMap(user)[hash];

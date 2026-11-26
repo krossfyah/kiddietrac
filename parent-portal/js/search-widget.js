@@ -401,12 +401,19 @@
     try {
       var S = window.KT && window.KT.Shell;
       var secs = (S && S.navItemsForRole) ? S.navItemsForRole(role) : null;
+      var hiddenNow = [];
+      try { hiddenNow = (window.KT && KT.hiddenHashes) ? (KT.hiddenHashes() || []) : []; } catch (e) { hiddenNow = []; }
       if (secs) {
         secs.forEach(function (sec) {
           (sec.items || []).forEach(function (it) {
             var hash = String(it.hash || '').replace(/^#/, '');
             if (!hash || seen[hash]) { return; }
             seen[hash] = 1;
+            /* NOT A SCREEN THE PLAN LEAVES OUT (2026-11-26): navItemsForRole is the whole role menu; the sidebar drops
+               what hidden_screens names, and search offered it anyway, straight to a 🔒. Read fresh each search
+               (KT.hiddenHashes, kt_user), so a licence change shows here as soon as the tab has it. Locked Upgrade
+               items stay - for an admin they open the Upgrade explanation. */
+            if (hiddenNow.indexOf(hash) !== -1) { return; }
             items.push({ label: it.label || hash, hash: '#' + hash, icon: it.icon, section: sec.label });
           });
         });

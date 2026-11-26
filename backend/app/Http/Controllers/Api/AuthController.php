@@ -1621,22 +1621,8 @@ final class AuthController extends Controller
            reading their flags from the role row would have shown them iLearn's menu
            while they were standing in Test Agency. Same rule as every other scoped read
            — honour X-Active-Agency-Id, but only for somebody entitled to use it. */
-        $featureAgencyId = $tzAgencyId ?: $agencyId;
-        try {
-            $hdr = (int) request()->header('X-Active-Agency-Id');
-            if ($hdr) {
-                $mayUse = DB::table('role_assignments')
-                    ->where('user_id', $user->id)->where('active', true)
-                    ->where(function ($q) use ($hdr) {
-                        $q->where('agency_id', $hdr)->orWhere('role', 'platform_admin');
-                    })->exists();
-                if ($mayUse) {
-                    $featureAgencyId = $hdr;
-                }
-            }
-        } catch (\Throwable $e) {
-            // No request context (a console render of this payload) — keep the role's agency.
-        }
+        // One rule, shared with GET /badges plan_v (App\Support\PlanStamp, 2026-11-26).
+        $featureAgencyId = \App\Support\PlanStamp::applyHeader((int) $user->id, ($tzAgencyId ?: $agencyId) ? (int) ($tzAgencyId ?: $agencyId) : null);
 
         /* WAITING FOR THE AGENCY (2026-10-21). A parent account made so a form could be sent
            to someone not on the system yet ("Created a not-yet-invited account ... so forms
@@ -1696,6 +1682,9 @@ final class AuthController extends Controller
                 in_array('platform_admin', $roles ?? [], true),
                 $roles ?? []
             ),
+            /* The fingerprint the plan fields above were computed from (App\Support\PlanStamp, 2026-11-26). GET /badges
+               carries the current one; when they differ the open tab asks /auth/me again and adopts the new plan. */
+            'plan_v' => rescue(fn () => \App\Support\PlanStamp::forAgency($featureAgencyId ? (int) $featureAgencyId : null, $roles ?? []), null, false),
             // An agency admin's features the plan leaves out, drawn greyed with "Upgrade" (App\Support\PlanUpsell, 2026-11-26).
             'locked_screens' => (object) rescue(fn () => \App\Support\PlanUpsell::lockedFor($featureAgencyId ? (int) $featureAgencyId : null, $roles ?? []), [], false),
             // Shown once when the app opens: the centre is closed today, or will be

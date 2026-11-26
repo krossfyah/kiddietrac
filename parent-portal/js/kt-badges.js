@@ -117,6 +117,7 @@
     if (from === 'net' && d.newest_id != null && (newest === null || +d.newest_id > newest)) { newest = +d.newest_id; fetchList(); }
     paintCounts();
     try { w.dispatchEvent(new CustomEvent('kt:badges', { detail: d })); } catch (e) {}
+    planCheck(d);
     if (from !== 'tab' && bc) { try { bc.postMessage({ t: 'state', u: uid(), k: scope(), d: d }); } catch (e) {} }
     phone(prev, d, from);
   }
@@ -261,6 +262,35 @@
         var u = String(e.name || '');
         if (u.indexOf('/badges') !== -1 || u.indexOf('/notifications/seen') !== -1) return;
         if (READS.test(u) || SMS_READ.test(u)) { reads.push(u.slice(-60)); soon(250); }
+      });
+    }).observe({ type: 'resource', buffered: false });
+  } catch (e) {}
+
+  /* THE PLAN MOVED (2026-11-26, App\Support\PlanStamp). /badges carries plan_v, the fingerprint of the licence
+     lines, feature switches and catalogue behind the agency in view; kt_user.plan_v is the one the tab's menu was
+     built from. When they differ, kt:plan-changed - kt-topbar asks /auth/me ONCE and adopts the new plan. This is
+     NOT a kt:badges listener and never fetches here (kt-badges-listener-no-fetch): it dispatches a different event,
+     on a timer, once per distinct plan_v (retried after a minute if that answer never landed). "All agencies" has
+     no one plan. now = this tab just changed a licence or a feature (Platform -> Licences / Agencies): redraw at once. */
+  var planAsked = '', planAskedAt = 0, planTouch = 0;
+  function planCheck(d) {
+    try {
+      var v = d && d.plan_v; if (!v) return;
+      if ((sessionStorage.getItem('kt_active_agency_id') || '') === 'all') return;
+      var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || 'null');
+      if (!u || u.plan_v === v) return;
+      if (planAsked === v && Date.now() - planAskedAt < 60000) return;
+      planAsked = v; planAskedAt = Date.now();
+      var now = Date.now() - planTouch < 15000;
+      setTimeout(function () { try { w.dispatchEvent(new CustomEvent('kt:plan-changed', { detail: { plan_v: v, now: now } })); } catch (e) {} }, 0);
+    } catch (e) {}
+  }
+  // A licence or feature switch saved in this tab: ask /badges now, so its plan_v (and the redraw) follow at once.
+  var PLAN_WRITE = /\/api\/v1\/(?:platform\/licences|admin\/agencies\/\d+\/features)(?:[\/?]|$)/;
+  try {
+    new PerformanceObserver(function (list) {
+      list.getEntries().forEach(function (e) {
+        if (PLAN_WRITE.test(String(e.name || ''))) { planTouch = Date.now(); soon(400); }
       });
     }).observe({ type: 'resource', buffered: false });
   } catch (e) {}

@@ -461,7 +461,13 @@
           var _land = 'dashboard';
           try { if (KT.Shell && KT.Shell.homeHashForRole) _land = KT.Shell.homeHashForRole('agency_admin') || 'dashboard'; } catch (e) {}
           window.location.hash = '#' + _land;
-          (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload());
+          /* THAT AGENCY'S PLAN, NOT THE LAST ONE'S (2026-11-26). Switching in place kept kt_user's menu and hidden
+             screens from the agency you were in, so its add-ons looked locked (or another's looked open) until a
+             reload. KT.refreshPlan asks /auth/me for the new agency and redraws when its plan differs. */
+          var _draw = function () { (window.KT && KT.Shell && KT.Shell.renderScreen ? KT.Shell.renderScreen() : window.location.reload()); };
+          if (window.KT && KT.refreshPlan) {
+            KT.refreshPlan({ now: true }).then(function (r) { if (!(r && r.reloading)) _draw(); }, _draw);
+          } else { _draw(); }
         });
         actionsTd.appendChild(switchBtn);
         // v22p24: edit branding / plan / white-label
