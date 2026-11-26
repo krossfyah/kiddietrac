@@ -151,12 +151,16 @@
 
     /* CENTRES vs THE LICENCE'S CAP (App\Support\CentreCap, 2026-11-26): open centres / cap, and the per-agency
        override of the included number (blank = the product's, e.g. the Reseller bundle's 5). */
-    function centreCapChip(d, aid, main) {
+    function centreCapInfo(d, aid) {
       var st = d.centre_caps && d.centre_caps[aid];
       if (!st || st.cap == null) return null;
       var over = st.used > st.cap;
-      return el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', 'data-kttip': 'Open centres / centres the licence allows. Click to change this agency\'s included centres.',
-        style: 'height:30px;padding:0 10px;font-size:12px;' + (over ? 'border-color:#DC2626;color:#B91C1C' : ''), onclick: function () {
+      return el('span', { 'data-kttip': 'Open centres / centres the licence allows', style: 'display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;white-space:nowrap;' + (over ? 'color:#B91C1C;background:#FEE2E2' : 'color:#1F6080;background:#EAF3F6') }, ['\uD83C\uDFEB ' + st.used + ' / ' + st.cap + ' centres']);
+    }
+    function centreCapItem(d, aid, main) {
+      var st = d.centre_caps && d.centre_caps[aid];
+      if (!st || st.cap == null) return null;
+      return mi('\uD83C\uDFEB Included centres\u2026', function () {
           var inp = el('input', { type: 'number', min: '0', step: '1', value: st.override == null ? '' : st.override, placeholder: 'The product\'s number', style: 'width:100%;height:36px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px' });
           KT.Shell.Modal.open({ title: '🏫 Included centres', body: el('div', {}, [
             el('div', { style: 'font-size:13px;color:#475569;margin-bottom:10px' }, [st.used + ' open of ' + st.cap + ' allowed. Extra-centre add-on lines each add one on top of the included number.']),
@@ -166,7 +170,7 @@
               await KT.Api.put('/platform/licences/centre-cap/' + aid, { included: inp.value === '' ? null : Math.max(0, parseInt(inp.value, 10) || 0) });
               toast('Included centres saved'); renderPlatform(main);
             } }] });
-        } }, ['🏫 ' + st.used + ' / ' + st.cap + ' centres']);
+        });
     }
 
     /* COLLAPSIBLE AGENCY GROUPS (2026-11-26, Anthony: "license section for each agency make it collapsible so it's
@@ -177,6 +181,16 @@
     var OPEN_KEY = 'kt_lic_open';
     function openMap() { try { return JSON.parse(localStorage.getItem(OPEN_KEY) || '{}') || {}; } catch (e) { return {}; } }
     function saveOpen(aid, on) { try { var m = openMap(); m[aid] = on ? 1 : 0; localStorage.setItem(OPEN_KEY, JSON.stringify(m)); } catch (e) {} }
+    /* ROW ACTIONS IN THE HOUSE ⋮ (2026-11-26, Anthony: "add kebab for the license table and clean up those action
+       buttons into the kebab"). Each agency header and each line has one ⋮ (KT.openActionMenu, kt-row-actions.js);
+       nothing else sits beside it. Same actions, same conditions, same confirms and toasts as the old inline buttons.
+       The ⋮ never toggles the group (the header's click handler ignores buttons). */
+    function mi(label, fn) { var b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.addEventListener('click', fn); return b; }
+    function kebab(build, label) {
+      return el('button', { type: 'button', class: 'kt-ka-kebab', 'data-kt-keep-size': '1', 'data-kt-iconized': '1', 'aria-label': label || 'Actions', 'aria-haspopup': 'menu',
+        style: 'flex:0 0 auto;width:30px;height:30px;border:1px solid #CFE3EB;background:#fff;border-radius:8px;font-size:17px;line-height:1;color:#475569;cursor:pointer;padding:0',
+        onclick: function (e) { e.stopPropagation(); KT.openActionMenu(e.currentTarget, build().filter(Boolean)); } }, ['\u22EE']);
+    }
     var groups = [];
     function setOpen(g, on, remember) {
       g.open = on;
@@ -212,22 +226,25 @@
             addonNames.length ? el('div', { class: 'lic-ag-chips' }, addonNames.map(function (n) { return el('span', { class: 'lic-ag-chip' }, ['\uFF0B ' + n]); })) : null,
           ]),
           plan ? chip(plan.status) : null,
-          centreCapChip(d, aid, main),
+          centreCapInfo(d, aid),
           plan && (plan.source === 'trial' || plan.source === 'comp') ? el('span', { style: 'display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;' + (plan.source === 'trial' ? 'color:#92400E;background:#FEF3C7' : 'color:#6D28D9;background:#EDE9FE') }, [plan.source === 'trial' ? 'Trial' : 'Complimentary']) : null,
-          plan && plan.source === 'trial' ? el('button', { type: 'button', class: 'lic-btn lic-btn-p', 'data-kt-iconized': '1', style: B, onclick: async function () {
-            if (!(await KT.confirm({ title: 'Convert this trial to a paid licence?', description: 'Every line takes its catalogue price (or the price you set with Price) and renews from its end date. Billing raises the invoices.', okLabel: 'Convert to paid' }))) return;
-            try { await KT.Api.post('/platform/licences/' + plan.id + '/convert', { to: 'paid' }); toast('Converted to paid'); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not convert', 'error'); }
-          } }, ['Convert to paid']) : null,
-          plan && plan.source !== 'trial' ? el('button', { type: 'button', class: 'lic-btn lic-btn-p', 'data-kt-iconized': '1', style: B, onclick: async function () {
-            if (!(await KT.confirm({ title: 'Renew the whole licence?', description: 'Every line (' + liveN + ') renews together to one new end date, from ' + day(plan.expires_at) + '. No invoice is raised here; billing raises its own.', okLabel: 'Renew all' }))) return;
-            try { var r = await KT.Api.post('/platform/licences/' + plan.id + '/renew', {}); toast('Renewed to ' + day(r.expires_at)); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not renew', 'error'); }
-          } }, ['Renew all']) : null,
-          plan ? el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: B, onclick: function () { termDialog(plan, liveN, main); } }, ['Term & renewal']) : null,
-          el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: B, onclick: function () { flt.addFor = aid; addDialog(d, main, aid, !!plan); } }, [plan ? '＋ Add add-on' : '＋ Add plan']),
-          plan ? el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: B, onclick: async function () {
-            if (!(await KT.confirm({ title: 'Cancel ' + (ls[0].agency_name || 'this agency') + '\'s licence?', description: 'The plan and every add-on are cancelled and their features switch off straight away - except invoicing and autopay, which run to the end of the period already paid. They stay listed as cancelled.', okLabel: 'Cancel licence', tone: 'danger' }))) return;
-            try { var res = await KT.Api.patch('/platform/licences/' + plan.id, { status: 'cancelled' }); toast('Licence cancelled'); await offerReissue(res, 'the cancelled licence'); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not cancel', 'error'); }
-          } }, ['Cancel licence']) : null,
+          kebab(function () { return [
+            plan && plan.source === 'trial' ? mi('\uD83D\uDCB3 Convert to paid', async function () {
+              if (!(await KT.confirm({ title: 'Convert this trial to a paid licence?', description: 'Every line takes its catalogue price (or the price you set with Price) and renews from its end date. Billing raises the invoices.', okLabel: 'Convert to paid' }))) return;
+              try { await KT.Api.post('/platform/licences/' + plan.id + '/convert', { to: 'paid' }); toast('Converted to paid'); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not convert', 'error'); }
+            }) : null,
+            plan && plan.source !== 'trial' ? mi('\uD83D\uDD01 Renew all', async function () {
+              if (!(await KT.confirm({ title: 'Renew the whole licence?', description: 'Every line (' + liveN + ') renews together to one new end date, from ' + day(plan.expires_at) + '. No invoice is raised here; billing raises its own.', okLabel: 'Renew all' }))) return;
+              try { var r = await KT.Api.post('/platform/licences/' + plan.id + '/renew', {}); toast('Renewed to ' + day(r.expires_at)); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not renew', 'error'); }
+            }) : null,
+            plan ? mi('\uD83D\uDCC5 Term & renewal', function () { termDialog(plan, liveN, main); }) : null,
+            mi(plan ? '\uFF0B Add add-on' : '\uFF0B Add plan', function () { flt.addFor = aid; addDialog(d, main, aid, !!plan); }),
+            centreCapItem(d, aid, main),
+            plan ? mi('\u26D4 Cancel licence', async function () {
+              if (!(await KT.confirm({ title: 'Cancel ' + (ls[0].agency_name || 'this agency') + '\'s licence?', description: 'The plan and every add-on are cancelled and their features switch off straight away - except invoicing and autopay, which run to the end of the period already paid. They stay listed as cancelled.', okLabel: 'Cancel licence', tone: 'danger' }))) return;
+              try { var res = await KT.Api.patch('/platform/licences/' + plan.id, { status: 'cancelled' }); toast('Licence cancelled'); await offerReissue(res, 'the cancelled licence'); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not cancel', 'error'); }
+            }) : null,
+          ]; }, (ls[0].agency_name || 'Agency') + ' licence actions'),
         ])])]);
         tb.appendChild(head);
         var g = { aid: String(aid), head: head, lines: [], open: false };
@@ -240,13 +257,13 @@
         ls.forEach(function (l) {
         var dd = daysTo(l.expires_at);
         var when = l.status === 'grace' ? 'Grace until ' + day(l.grace_until) : (l.expires_at ? (l.auto_renew ? 'Renews ' : 'Ends ') + day(l.expires_at) + (dd !== null && dd >= 0 && dd <= 30 ? ' (' + dd + 'd)' : '') : '—');
-        var acts = el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap' }, [
-          l.status !== 'cancelled' ? el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: 'height:30px;padding:0 10px;font-size:12px', onclick: function () { editDialog(l, main); } }, ['Price']) : null,
-          l.kind === 'addon' && l.status !== 'cancelled' ? el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: 'height:30px;padding:0 10px;font-size:12px', onclick: async function () {
+        var acts = l.status !== 'cancelled' ? kebab(function () { return [
+          mi('\u270F\uFE0F Edit (price, quantity, note)', function () { editDialog(l, main); }),
+          l.kind === 'addon' ? mi('\uD83D\uDDD1\uFE0F Remove add-on', async function () {
             if (!(await KT.confirm({ title: 'Remove ' + l.name + '?', description: 'Its features switch off for ' + (l.agency_name || 'the agency') + ' straight away. The rest of the licence is unchanged.', okLabel: 'Remove add-on', tone: 'danger' }))) return;
             try { var res = await KT.Api.patch('/platform/licences/' + l.id, { status: 'cancelled' }); toast(l.name + ' removed'); await offerReissue(res, l.name); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not remove', 'error'); }
-          } }, ['Remove']) : null,
-        ]);
+          }) : null,
+        ]; }, l.name + ' actions') : null;
         var lineRow = el('tr', { 'data-lic-ag': String(aid) }, [
           el('td', { style: 'color:#94A3B8;font-size:12px;padding-left:22px' }, [l.kind === 'plan' ? 'Plan' : 'Add-on']),
           el('td', {}, [part(l.part_number)]),
@@ -254,7 +271,7 @@
           el('td', { style: 'white-space:nowrap' }, [money(l.unit_price * l.qty, l.currency) + (IV[l.interval] || '') + (l.qty !== 1 ? ' (' + l.qty + '×)' : '')]),
           el('td', { style: 'white-space:nowrap' }, [when, l.auto_renew ? null : el('div', { style: 'font-size:11px;color:#B45309' }, ['Not renewing'])]),
           el('td', {}, [chip(l.status)]),
-          el('td', {}, [acts]),
+          el('td', { style: 'text-align:right;width:44px' }, [acts]),
         ]);
         g.lines.push(lineRow);
         tb.appendChild(lineRow);
