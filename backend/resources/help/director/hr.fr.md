@@ -30,4 +30,4 @@ Le panneau latéral **Aujourd'hui au centre** indique qui est absent aujourd'hui
 
 ## Demandes de congé
 
-Chaque demande affiche son type, la quantité utilisée et le solde. L'approbation retire du solde; un refus ou une annulation le rend.
+Chaque demande affiche son type, la quantité utilisée et le solde. L'approbation retire du solde; un refus ou une annulation le rend. Un congé sans approbation est déjà retiré et s'affiche **À examiner** : sous **Congés**, appuyez sur **Examiné**.

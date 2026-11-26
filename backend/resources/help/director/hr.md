@@ -30,4 +30,4 @@ The **Today at the centre** side panel lists who is off today and later this wee
 
 ## Time-off requests
 
-Each request now shows its leave type, how much it uses and the balance. Approving takes it off the balance; denying or cancelling gives it back.
+Each request now shows its leave type, how much it uses and the balance. Approving takes it off the balance; denying or cancelling gives it back. Leave that needs no approval is already taken off and shows as **To review**: open it under **Time off** and press **Reviewed**.

@@ -414,7 +414,7 @@
         var arch = !!t.archived_at;
         return '<tr' + (arch ? ' style="opacity:.6"' : '') + '><td>' + dot(t.colour) + '<b data-no-i18n>' + esc(t.name) + '</b>' + (t.is_example ? ' ' + pill('#F0F9FF', '#0369A1', 'Example') : '') + '</td>'
           + '<td>' + esc(t.unit === 'hours' ? 'Hours' : 'Days') + '</td><td>' + (+t.paid ? 'Paid' : 'Unpaid') + '</td><td>' + (+t.visible_to_staff ? 'Yes' : 'No') + '</td>'
-          + '<td>' + (+t.needs_approval ? 'Needs approval' : 'Automatic') + '</td><td>' + ruleText(t) + '</td>'
+          + '<td>' + (+t.needs_approval ? 'Needs approval' : 'Recorded, then reviewed') + '</td><td>' + ruleText(t) + '</td>'
           + '<td>' + esc(ACCR[t.accrual] || t.accrual) + (t.accrual === 'pay_period' ? '<div class="hr-sub">' + esc(t.periods_per_year) + ' a year</div>' : '') + (t.accrual === 'hours_worked' ? '<div class="hr-sub">1 ' + esc(t.unit === 'hours' ? 'hour' : 'day') + ' per ' + esc(num(t.hours_per_unit)) + ' hours worked</div>' : '') + '</td>'
           + '<td>' + esc(CARRY[t.carry_mode] || '') + (t.carry_mode === 'capped' ? '<div class="hr-sub">up to ' + esc(amt(t.carry_cap, t.unit)) + '</div>' : '') + (t.carry_expiry_months ? '<div class="hr-sub">expires after ' + esc(t.carry_expiry_months) + ' months</div>' : '') + '</td>'
           + '<td>' + esc(t.maps_request_type ? rt[t.maps_request_type] : '') + '</td><td>' + (arch ? pill('#F1F5F9', '#475569', 'Archived') : pill('#ECFDF5', '#047857', 'In use')) + '</td>'
@@ -464,7 +464,7 @@
       + '<div><label class="hr-l">Counted in</label>' + sel('unit', { days: 'Days', hours: 'Hours' }, t.unit) + '</div>'
       + '<div><label class="hr-l">Pay</label>' + yn('paid', t.paid, 'Paid', 'Unpaid') + '</div>'
       + '<div><label class="hr-l">Staff can see and request it</label>' + yn('visible_to_staff', t.visible_to_staff, 'Yes', 'No, managers only') + '</div>'
-      + '<div><label class="hr-l">Approval</label>' + yn('needs_approval', t.needs_approval, 'Needs approval', 'Approved as soon as it is requested') + '</div>'
+      + '<div><label class="hr-l">Approval</label>' + yn('needs_approval', t.needs_approval, 'Needs approval', 'No approval: recorded at once, manager reviews it') + '</div>'
       + '<div><label class="hr-l">How it builds up</label>' + sel('accrual', ACCR, t.accrual) + '</div>'
       + '<div data-show="pay_period"><label class="hr-l">Pay periods a year</label>' + sel('periods_per_year', { '12': '12 (monthly)', '24': '24 (twice a month)', '26': '26 (every two weeks)', '52': '52 (weekly)' }, t.periods_per_year || 26) + '</div>'
       + '<div data-show="hours_worked"><label class="hr-l">Hours worked to earn 1 unit</label><input class="hr-i" type="number" min="1" step="0.5" data-f="hours_per_unit" style="width:100%;" value="' + esc(t.hours_per_unit || 30) + '"></div>'
@@ -472,7 +472,7 @@
       + '<div data-show="capped"><label class="hr-l">Carry-over limit</label><input class="hr-i" type="number" min="0" step="0.5" data-f="carry_cap" style="width:100%;" value="' + esc(t.carry_cap == null ? '' : t.carry_cap) + '"></div>'
       + '<div data-show="carry"><label class="hr-l">Carried balance expires after (months)</label><input class="hr-i" type="number" min="1" max="24" data-f="carry_expiry_months" style="width:100%;" value="' + esc(t.carry_expiry_months || '') + '" placeholder="Never"></div>'
       + '<div><label class="hr-l">Old requests filed as</label><select class="hr-i" data-f="maps_request_type" style="width:100%;"><option value="">None</option>' + Object.keys(rt).map(function (k) { return '<option value="' + k + '"' + (t.maps_request_type === k ? ' selected' : '') + '>' + esc(rt[k]) + '</option>'; }).join('') + '</select></div>'
-      + '</div><div class="hr-sub" style="margin-top:8px;">"Old requests filed as" lets requests made before HR (Vacation, Sick, Personal…) count as this type. The requests themselves never change.</div>'
+      + '</div><div class="hr-sub" style="margin-top:8px;">Amounts count working days: weekends and the holidays and closures on each centre calendar are skipped. "Old requests filed as" lets requests made before HR (Vacation, Sick, Personal…) count as this type. The requests themselves never change.</div>'
       + '<div data-msg style="font-size:13px;color:#B91C1C;margin-top:6px;"></div>';
     var sync = function () {
       var v = function (k) { var el = box.querySelector('[data-f="' + k + '"]'); return el ? el.value : ''; };

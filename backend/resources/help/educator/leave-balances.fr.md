@@ -11,7 +11,9 @@ Si votre agence utilise KiddieTrac RH, **Congés** affiche vos soldes en haut : 
 
 Touchez **Demander un congé** et choisissez un type. Vous voyez ce qui est disponible et ce qui restera après la demande. Si la demande vous ferait passer sous zéro, votre agence la refuse ou l'envoie avec un avertissement.
 
-Certains types sont approuvés dès l'envoi. Les autres vont à votre directeur ou administrateur comme avant.
+Certains types n'exigent pas d'approbation : ils sont enregistrés et retirés de votre solde tout de suite, puis votre gestionnaire les examine. Les autres vont à votre directeur ou administrateur comme avant.
+
+Seuls les jours ouvrables comptent : les fins de semaine et les jours fériés et fermetures du calendrier de votre centre ne sont pas retirés.
 
 ## Après la décision
 

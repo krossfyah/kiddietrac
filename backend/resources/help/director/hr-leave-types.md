@@ -10,7 +10,7 @@ Agency admins set up leave under **HR → Leave types**. These are your agency's
 
 ## Leave types
 
-**Add leave type** asks for a name, colour, days or hours, paid or unpaid, whether staff can see and request it, and whether it needs approval. A type that does not need approval is approved as soon as it is requested.
+**Add leave type** asks for a name, colour, days or hours, paid or unpaid, whether staff can see and request it, and whether it needs approval. A type that does not need approval is recorded and taken off the balance as soon as it is requested. Managers still see it as **To review** until one of them marks it **Reviewed**, which changes nothing in the balance.
 
 **Load example set** adds Vacation, Sick days, Personal days, Bereavement and Unpaid leave with example amounts, marked **Example**. They are only a starting point: change every value to your own policy. Nothing is ever applied by itself.
 
@@ -24,6 +24,12 @@ Each type has rules: an amount a year, by employment type and years of service. 
 - **Each pay period** (12, 24, 26 or 52 a year).
 - **By hours worked**, from the time clock, up to the yearly amount.
 - **Not tracked**: requests are recorded but there is no balance.
+
+## How days are counted
+
+Requests count working days. Weekends are skipped, and so are the statutory holidays and closures on the person's centre calendar (**Closures**). A closure made for someone's own leave, or a PD day, still counts.
+
+Someone hired part-way through a leave year gets a share of a yearly grant for the days left, rounded to the nearest half day (quarter hour for hour-based types).
 
 ## Carry-over
 

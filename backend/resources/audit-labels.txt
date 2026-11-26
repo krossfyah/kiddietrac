@@ -220,6 +220,7 @@ delete admin/suppliers/{supplier} | Deleted a supplier
 post admin/temp-guardians/settings | Changed temporary pick-up settings
 delete admin/temp-guardians/{user} | Removed a temporary pick-up person
 patch admin/time-off/{id} | Decided a time-off request
+post admin/time-off/{id}/reviewed | Marked no-approval time off as reviewed
 post admin/time-off/{id}/close | Closed the schedule for a time-off request
 post admin/timeoff-reminders | Changed time-off reminder settings
 post admin/timeoff-reminders/preview | Previewed the time-off reminder

@@ -10,7 +10,7 @@ Les administrateurs d'agence configurent les congés sous **RH → Types de cong
 
 ## Types de congé
 
-**Ajouter un type de congé** demande un nom, une couleur, jours ou heures, payé ou non, s'il est visible par le personnel et s'il exige une approbation. Un type sans approbation est approuvé dès la demande.
+**Ajouter un type de congé** demande un nom, une couleur, jours ou heures, payé ou non, s'il est visible par le personnel et s'il exige une approbation. Un type sans approbation est enregistré et retiré du solde dès la demande. Les gestionnaires le voient **À examiner** jusqu'à ce que l'un d'eux le marque **Examiné**, ce qui ne change rien au solde.
 
 **Charger l'exemple** ajoute Vacances, Jours de maladie, Jours personnels, Deuil et Congé non payé avec des montants d'exemple, marqués **Exemple**. Modifiez chaque valeur selon votre politique. Rien n'est appliqué automatiquement.
 
@@ -24,6 +24,12 @@ Chaque type a des règles : un montant par an, selon le type d'emploi et les ann
 - **À chaque période de paie** (12, 24, 26 ou 52 par an).
 - **Selon les heures travaillées**, jusqu'au montant annuel.
 - **Non suivi** : pas de solde.
+
+## Comment les jours sont comptés
+
+Les demandes comptent les jours ouvrables. Les fins de semaine sont exclues, tout comme les jours fériés et fermetures du calendrier du centre de la personne (**Fermetures**). Une fermeture due au congé de la personne, ou une journée pédagogique, compte quand même.
+
+Une personne embauchée en cours d'année reçoit une part de l'octroi annuel selon les jours restants, arrondie à la demi-journée (au quart d'heure pour les types en heures).
 
 ## Report
 

@@ -348,23 +348,18 @@ final class TimeOffController extends Controller
             'updated_at'   => now(),
         ]);
 
-        /* A LEAVE TYPE THAT NEEDS NO APPROVAL (KiddieTrac HR) is approved as it is filed, through the same applyDecision
-           as a director's approval (balance, closure rule, the rota and admin notices), recorded as decided by the
-           person themselves. The approvers get a bell, not a request to act on. */
+        /* A LEAVE TYPE THAT NEEDS NO APPROVAL (KiddieTrac HR; Anthony 2026-11-26): recorded and taken off the balance
+           straight away, through the same applyDecision as a director's approval (balance, closure rule, the rota), and
+           flagged TO REVIEW. The managers get the usual notice (bell + email, without approve/deny buttons) and clear the
+           flag with Reviewed, which changes nothing in the balance. */
+        $autoApproved = false;
         if ($leaveType && ! $leaveType->needs_approval) {
             $row = DB::table('time_off_requests')->where('id', $id)->first();
             $this->applyDecision($row, 'approved', null, $user, 'auto', null);
-            $who = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: 'A team member';
-            $req = (object) ['id' => $id, 'user_id' => (int) $user->id, 'centre_id' => $data['centre_id'] ?? null,
-                'centre_ids' => ! empty($data['centre_id']) ? [(int) $data['centre_id']] : DB::table('role_assignments')->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
-                    ->where('user_id', $user->id)->where('agency_id', $agencyId)->where('active', true)->whereNotNull('centre_id')->pluck('centre_id')->map(fn ($v) => (int) $v)->unique()->values()->all()];
-            foreach (\App\Support\TimeOffReminders::approvers($agencyId, ['recipients' => 'both'], collect([$req])) as $o) {
-                \App\Support\Notify::write(['user_id' => (int) $o['user']->user_id, 'type' => 'time_off',
-                    'title' => $who . ' is off: ' . $leaveType->name, 'body' => self::whenPhrase($row) . ' · no approval needed',
-                    'data' => json_encode(['link' => '#time-off']), 'created_at' => now()]);
+            if (\Illuminate\Support\Facades\Schema::hasColumn('time_off_requests', 'review_pending')) {
+                DB::table('time_off_requests')->where('id', $id)->update(['review_pending' => 1]);
             }
-
-            return response()->json(['id' => $id, 'status' => 'approved', 'warning' => $warning], 201);
+            $autoApproved = true;
         }
 
         // Centre directors and agency admins are the people who can act on this, so
@@ -396,21 +391,22 @@ final class TimeOffController extends Controller
         // "Sep 3" in an inbox in December is genuinely ambiguous.
         $whenFull = $when . ', ' . Carbon::parse($data['start_at'])->format('Y');
 
+        $typeLabel = $leaveType ? $leaveType->name : (string) $data['request_type'];
         foreach ($approvers as $ap) {
             \App\Support\Notify::write([
                 'user_id'    => $ap->id,
                 'type'       => 'time_off',
-                'title'      => 'New time-off request from ' . $who,
-                'body'       => $data['request_type'] . ' · ' . $when,
+                'title'      => $autoApproved ? $who . ' booked ' . $typeLabel . ': to review' : 'New time-off request from ' . $who,
+                'body'       => ($autoApproved ? 'No approval needed, already taken off the balance' : $data['request_type']) . ' · ' . $when,
                 'data' => json_encode(['link' => '#time-off']),
                 'created_at' => now(),
             ]);
 
-            $this->mailApprover($agencyId, $ap, $who, (string) $data['request_type'], $whenFull,
-                $data['reason'] ?? null, (int) $id);
+            $this->mailApprover($agencyId, $ap, $who, $typeLabel, $whenFull,
+                $data['reason'] ?? null, (int) $id, $autoApproved);
         }
 
-        return response()->json(['id' => $id, 'status' => 'pending', 'warning' => $warning], 201);
+        return response()->json(['id' => $id, 'status' => $autoApproved ? 'approved' : 'pending', 'warning' => $warning, 'review' => $autoApproved], 201);
     }
 
     /**
@@ -537,6 +533,25 @@ final class TimeOffController extends Controller
         return $start->format('M j').', '.$t($row->start_time).' – '.$t($row->end_time);
     }
 
+    /** POST /admin/time-off/{id}/reviewed — clear the "To review" flag on leave that needed no approval. Changes nothing
+     *  in the balance. Same deciders as an approval (own centre for a director). */
+    public function markReviewed(Request $request, int $id): JsonResponse
+    {
+        $row = DB::table('time_off_requests')->where('id', $id)->first();
+        abort_unless($row, 404, 'That request was not found.');
+        $this->assertAgencyAccess($request, (int) $row->agency_id);
+        $this->assertDecider($request, $row);
+        abort_if((int) $row->user_id === (int) $request->user()->id, 403, 'Someone else reviews your own time off.');
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('time_off_requests', 'review_pending') || ! (int) ($row->review_pending ?? 0)) {
+            return response()->json(['ok' => true, 'already' => true]);
+        }
+        DB::table('time_off_requests')->where('id', $id)->update(['review_pending' => 0, 'reviewed_by_id' => (int) $request->user()->id, 'reviewed_at' => now()]);
+        \App\Support\Audit::write(['user_id' => (int) $request->user()->id, 'agency_id' => (int) $row->agency_id, 'action' => 'time_off.reviewed',
+            'entity_type' => 'time_off_request', 'entity_id' => $id, 'payload' => json_encode(['user_id' => (int) $row->user_id])]);
+
+        return response()->json(['ok' => true]);
+    }
+
     public function decide(Request $request, int $id): JsonResponse
     {
         $data = $request->validate([
@@ -624,7 +639,7 @@ final class TimeOffController extends Controller
      * saved and the bell is already written, and a bounced address for one director must
      * not hand the person requesting leave a 500.
      */
-    private function mailApprover(?int $agencyId, object $approver, string $who, string $type, string $when, ?string $reason, ?int $requestId = null): void
+    private function mailApprover(?int $agencyId, object $approver, string $who, string $type, string $when, ?string $reason, ?int $requestId = null, bool $review = false): void
     {
         if (! filter_var((string) $approver->email, FILTER_VALIDATE_EMAIL)) {
             return;
@@ -641,26 +656,26 @@ final class TimeOffController extends Controller
 
         $body = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
             . '<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">'
-            . $e($who) . ' has requested time off and is waiting on a decision.</td></tr>'
+            . $e($who) . ($review ? ' has booked time off that needs no approval. It is already recorded and taken off the balance: please review it.' : ' has requested time off and is waiting on a decision.') . '</td></tr>'
             . '<tr><td style="padding:6px 0;"><div style="background:#F1F5F9;border-radius:10px;padding:14px 16px;'
             . 'font-size:15px;color:#0F172A;"><strong>' . $e(ucfirst($type)) . '</strong><br>' . $e($when) . '</div></td></tr>'
             . $reasonRow
             . $this->balanceRow($requestId)
-            . $this->quickButtons($requestId, (int) $approver->id)
+            . ($review ? '' : $this->quickButtons($requestId, (int) $approver->id))
             . '<tr><td style="padding:16px 0 0;font-size:14px;line-height:1.6;color:#64748B;">'
-            . 'Or handle it under <strong>Time off</strong> in KiddieTrac.</td></tr></table>';
+            . ($review ? 'Mark it <strong>Reviewed</strong> under <strong>Time off</strong> in KiddieTrac.' : 'Or handle it under <strong>Time off</strong> in KiddieTrac.') . '</td></tr></table>';
 
         try {
             $html = EmailTemplate::wrap($agencyId, $body, [
-                'eyebrow' => 'ACTION NEEDED',
+                'eyebrow' => $review ? 'TO REVIEW' : 'ACTION NEEDED',
                 'title' => 'Time-off request from ' . $who,
                 'subtitle' => ucfirst($type) . ' · ' . $when,
-                'preheader' => $who . ' requested ' . $type . ' for ' . $when,
+                'preheader' => $who . ($review ? ' booked ' : ' requested ') . $type . ' for ' . $when,
             ]);
             $name = trim(($approver->first_name ?? '') . ' ' . ($approver->last_name ?? ''));
             // The dates go in the SUBJECT. An inbox full of "Time-off request from
             // Natasha" cannot be triaged without opening every one of them.
-            $subject = 'Time off: ' . $who . ' — ' . $when;
+            $subject = ($review ? 'Time off to review: ' : 'Time off: ') . $who . ' — ' . $when;
             AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($approver, $name, $subject) {
                 $m->to($approver->email, $name ?: null)->subject($subject);
             });

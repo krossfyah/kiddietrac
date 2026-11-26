@@ -109,6 +109,9 @@ final class HrController extends Controller
                 'needs_approval' => (bool) $t->needs_approval, 'maps_request_type' => $t->maps_request_type])->values(),
             'allow_negative' => (bool) $s['allow_negative'],
             'hours_per_day' => (float) $s['hours_per_day'],
+            // Holidays and closures on my centre calendar, so the request form shows the same amount the server books.
+            'closed' => HrLeave::closedDays($aid, $me, null, Carbon::parse(AgencyTime::today($aid))->subDays(60)->toDateString(),
+                Carbon::parse(AgencyTime::today($aid))->addDays(400)->toDateString()),
             'file' => $file ? ['job_title' => $file->job_title, 'employment_type' => $file->employment_type, 'status' => $file->status] : null,
         ]);
     }

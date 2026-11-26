@@ -10,7 +10,7 @@ Los administradores configuran los permisos en **RR. HH. → Tipos de permiso**.
 
 ## Tipos de permiso
 
-**Añadir tipo de permiso** pide nombre, color, días u horas, pagado o no, si el personal lo ve y si requiere aprobación. Un tipo sin aprobación se aprueba al solicitarlo.
+**Añadir tipo de permiso** pide nombre, color, días u horas, pagado o no, si el personal lo ve y si requiere aprobación. Un tipo sin aprobación se registra y se resta del saldo al solicitarlo. Los responsables lo ven **Por revisar** hasta que uno lo marca **Revisado**, lo que no cambia el saldo.
 
 **Cargar conjunto de ejemplo** añade Vacaciones, Días de enfermedad, Días personales, Duelo y Permiso sin goce de sueldo con cantidades de ejemplo, marcados **Ejemplo**. Cambia cada valor según tu política. Nada se aplica solo.
 
@@ -24,6 +24,12 @@ Cada tipo tiene reglas: una cantidad al año, por tipo de empleo y años de serv
 - **Cada periodo de pago** (12, 24, 26 o 52 al año).
 - **Por horas trabajadas**, hasta la cantidad anual.
 - **Sin seguimiento**: sin saldo.
+
+## Cómo se cuentan los días
+
+Las solicitudes cuentan días laborables. Se excluyen los fines de semana y los feriados y cierres del calendario del centro de la persona (**Cierres**). Un cierre por el propio permiso de la persona, o un día de formación, sí cuenta.
+
+Quien entra a mitad del año recibe una parte de la asignación anual según los días que quedan, redondeada a medio día (a un cuarto de hora en tipos por horas).
 
 ## Traspaso
 

@@ -2611,6 +2611,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get  ('/admin/time-off',        [\App\Http\Controllers\Api\TimeOffController::class, 'listAgency']);
         Route::patch('/admin/time-off/{id}',   [\App\Http\Controllers\Api\TimeOffController::class, 'decide']);
+        Route::post ('/admin/time-off/{id}/reviewed', [\App\Http\Controllers\Api\TimeOffController::class, 'markReviewed'])->whereNumber('id');
         // Close the centre for a request: what it would mean, and doing it after approval (2026-10-13).
         Route::get  ('/admin/time-off/{id}/closure-options', [\App\Http\Controllers\Api\TimeOffController::class, 'closureOptions'])->whereNumber('id');
         Route::post ('/admin/time-off/{id}/close',           [\App\Http\Controllers\Api\TimeOffController::class, 'closeForRequest'])->whereNumber('id');

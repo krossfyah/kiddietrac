@@ -29,8 +29,9 @@
        document.getElementById found nothing. A stale render now stops, and its lookups stay inside its own node. */
     if (!main.isConnected) return;   // replaced while loading: the newer screen draws itself (ticket #240)
     const allRows = all.data || [];
-    const pending = { data: allRows.filter(r => (r.status || 'pending').toLowerCase() === 'pending') };
-    const decided = { data: allRows.filter(r => (r.status || 'pending').toLowerCase() !== 'pending')
+    // KiddieTrac HR: leave that needed no approval is already approved but waits here "To review" until a manager clears it.
+    const pending = { data: allRows.filter(r => (r.status || 'pending').toLowerCase() === 'pending' || torReview(r)) };
+    const decided = { data: allRows.filter(r => (r.status || 'pending').toLowerCase() !== 'pending' && !torReview(r))
       .sort((a, b) => String(b.decided_at || '').localeCompare(String(a.decided_at || ''))).slice(0, 50) };
     main.innerHTML = '';
     main.appendChild(html(`
@@ -73,6 +74,13 @@
         + '<div style="font-size:16px;font-weight:800;color:' + (x.balance < 0 ? '#B91C1C' : '#0F172A') + ';">' + escapeHtml(hrAmt(x.balance, x.unit)) + '</div>'
         + (x.pending ? '<div style="font-size:11.5px;color:#64748B;">' + escapeHtml(hrAmt(x.pending, x.unit)) + ' pending</div>' : '') + '</div>';
     }).join('') + '</div>';
+  }
+  function torReview(r) { return !!(+r.review_pending) && (r.status || '').toLowerCase() === 'approved'; }
+  var REVIEW_PILL = '<span style="display:inline-block;margin-left:6px;padding:2px 8px;border-radius:999px;background:#FFFBEB;color:#B45309;font-size:11.5px;font-weight:800;">To review</span>';
+  async function markReviewed(id) {
+    try { await Api.post('/admin/time-off/' + id + '/reviewed', {}); if (KT.toast) KT.toast('✅', 'Saved', 'Marked as reviewed.', '#16A34A'); }
+    catch (e) { if (KT.toast) KT.toast('⚠️', 'Could not mark it reviewed', (e && e.data && e.data.message) || 'Please try again.', '#DC2626'); return; }
+    torReload();
   }
   function hrLine(r) {
     if (r.leave_balance == null) return '';
@@ -255,6 +263,16 @@
     if (decidedLine) {
       card.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-top:8px;padding-top:8px;border-top:1px solid #F1F5F9;' }, decidedLine));
     }
+    if (torReview(r)) {
+      var rv = el('div', { style: 'margin-top:10px;' });
+      rv.innerHTML = REVIEW_PILL + '<span style="font-size:12px;color:#64748B;margin-left:6px;">No approval needed, already taken off the balance.</span>';
+      card.appendChild(rv);
+      if (isApprover) {
+        var rb = el('button', { type: 'button', class: 'kt-btn kt-btn-secondary', style: 'width:100%;margin-top:10px;justify-content:center;' }, 'Reviewed');
+        rb.onclick = function () { markReviewed(r.id); };
+        card.appendChild(rb);
+      }
+    }
     if (isApprover && status === 'pending') {
       var actions = el('div', { style: 'display:flex;gap:8px;margin-top:12px;' });
       var appr = el('button', { type: 'button', style: 'flex:1;background:#16A34A;color:#fff;border:0;padding:11px;border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;' }, 'Approve');
@@ -306,8 +324,8 @@
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${r.leave_type_name ? '<span data-no-i18n>' + escapeHtml(r.leave_type_name) + '</span>' : '<span style="text-transform:capitalize;">' + escapeHtml(r.request_type) + '</span>'}${hrLine(r) ? '<div style="font-size:11.5px;font-weight:700;color:' + ((r.leave_balance_after < 0) ? '#B91C1C' : '#0E7490') + ';">' + escapeHtml(hrLine(r)) + '</div>' : ''}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(torWhen(r))}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:12.5px;color:#475569;">${decidedCell(r)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span>${r.closed_for_dates && status === 'approved' ? '<div style="font-size:11.5px;color:#92400E;font-weight:700;">🔒 Centre closed</div>' : ''}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${isApprover && status === 'pending'
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span>${torReview(r) ? REVIEW_PILL : ''}${r.closed_for_dates && status === 'approved' ? '<div style="font-size:11.5px;color:#92400E;font-weight:700;">🔒 Centre closed</div>' : ''}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${isApprover && torReview(r) ? `<button data-reviewed="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Reviewed</button>` : ''}${isApprover && status === 'pending'
           ? `<button data-act="approved" data-id="${r.id}" class="kt-btn kt-btn-success kt-btn-sm" style="margin-right:6px;">Approve</button><button data-act="denied" data-id="${r.id}" class="kt-btn kt-btn-danger kt-btn-sm">Deny</button>`
           : (torCanClose(r, isApprover)
             ? `<button data-closetor="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Mark centre closed</button>`
@@ -330,6 +348,7 @@
         torReload();
       };
     });
+    host.querySelectorAll('button[data-reviewed]').forEach(b => { b.onclick = function () { markReviewed(b.dataset.reviewed); }; });
     host.querySelectorAll('button[data-closetor]').forEach(b => {
       b.onclick = function () {
         var row = rows.filter(function (x) { return String(x.id) === b.dataset.closetor; })[0];
@@ -415,13 +434,19 @@
     function weekdays(a, b) {
       if (!a || !b || b < a) return 0;
       var d = new Date(a + 'T12:00:00'), e = new Date(b + 'T12:00:00'), n = 0, all = 0;
-      for (; d <= e && all < 400; d.setDate(d.getDate() + 1), all++) { var w = d.getDay(); if (w !== 0 && w !== 6) n++; }
-      return n || all;
+      var closed = {}; ((HR_ME && HR_ME.closed) || []).forEach(function (x) { closed[x] = 1; });
+      var wk = 0, ok = 0, okAll = 0;
+      for (; d <= e && all < 400; d.setDate(d.getDate() + 1), all++) {
+        var w = d.getDay(), ymd = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+        if (!closed[ymd]) okAll++;
+        if (w !== 0 && w !== 6) { wk++; if (!closed[ymd]) ok++; }
+      }
+      return wk ? ok : okAll;   // the server's rule: working days, less holidays and closures
     }
     function syncBal() {
       var bl = m.querySelector('#tor-bal'); if (!bl) return;
       var t = hrTypes.filter(function (x) { return String(x.id) === m.querySelector('#tor-type').value; })[0], b = t && hrBal[t.id];
-      if (!t || !b || !b.tracked) { bl.textContent = t && !t.needs_approval ? 'Approved as soon as you send it.' : ''; bl.style.color = '#0E7490'; return; }
+      if (!t || !b || !b.tracked) { bl.textContent = t && !t.needs_approval ? 'No approval needed: recorded and taken off your balance straight away.' : ''; bl.style.color = '#0E7490'; return; }
       var s = m.querySelector('#tor-start').value, e = allDayEl.checked ? m.querySelector('#tor-end').value : s, n = 0;
       if (s && e) {
         if (allDayEl.checked) n = weekdays(s, e);
@@ -488,7 +513,7 @@
       try { sent = await Api.post('/time-off', payload); }
       catch (e) { errEl.textContent = (e && e.data && e.data.message) || (e && e.message) || 'Could not send the request. Please try again.'; return; }
       m.remove();
-      try { if (sent && sent.warning && KT.toast) KT.toast('⚠️', 'Sent, below zero', sent.warning, '#D97706'); else if (sent && sent.status === 'approved' && KT.toast) KT.toast('✅', 'Approved', 'This leave type does not need approval.', '#16A34A'); } catch (e) {}
+      try { if (sent && sent.warning && KT.toast) KT.toast('⚠️', 'Sent, below zero', sent.warning, '#D97706'); else if (sent && sent.status === 'approved' && KT.toast) KT.toast('✅', 'Recorded', 'No approval needed. It is taken off your balance, and your manager will review it.', '#16A34A'); } catch (e) {}
       torReload();
     };
   }

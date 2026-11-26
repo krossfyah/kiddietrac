@@ -250,8 +250,9 @@ final class HrLeave
     }
 
     /**
-     * How much of a type's unit a request uses. Weekdays for all-day leave (a weekend-only request counts its calendar
-     * days); part of a day counts its hours. Hours = days x the agency's hours per day.
+     * How much of a type's unit a request uses. WORKING days for all-day leave: weekdays, less the statutory holidays and
+     * closures already on the person's centre calendar (Anthony, 2026-11-26); a weekend-only request counts its calendar
+     * days. Part of a day counts its hours (nothing on a closed day). Hours = days x the agency's hours per day.
      */
     public static function amountFor(object $row, object $type, ?array $settings = null): float
     {
@@ -263,11 +264,17 @@ final class HrLeave
         $start = substr((string) $row->start_at, 0, 10);
         $end = substr((string) $row->end_at, 0, 10);
         $allDay = ! isset($row->all_day) || (bool) $row->all_day || empty($row->start_time);
+        $aid = (int) $row->agency_id;
+        $uid = (int) ($row->user_id ?? 0);
+        $cid = ! empty($row->centre_id) ? (int) $row->centre_id : null;
         if (! $allDay) {
+            if (in_array($start, self::closedDays($aid, $uid, $cid, $start, $start), true)) {
+                return 0.0;
+            }
             $h = max(0, (strtotime('2000-01-01 ' . substr((string) $row->end_time, 0, 8)) - strtotime('2000-01-01 ' . substr((string) $row->start_time, 0, 8))) / 3600);
             return round($type->unit === 'hours' ? $h : $h / $hpd, 2);
         }
-        $days = self::weekdays($start, $end);
+        $days = count(self::workDays($aid, $uid, $cid, $start, $end));
 
         return round($type->unit === 'hours' ? $days * $hpd : $days, 2);
     }
@@ -289,6 +296,120 @@ final class HrLeave
         }
 
         return $n ?: $all;
+    }
+
+    /** Closure types that are days off for staff too. staff_leave (closed BECAUSE of someone's leave) and pd_day (staff
+     *  work) still count as working days. */
+    public const OFF_CLOSURES = ['stat_holiday', 'holiday', 'emergency', 'other'];
+
+    /** @var array<string,array> */
+    private static array $closedMemo = [];
+
+    /**
+     * The days in a range this person's centre is shut for a holiday or closure, from the agency's own centre calendar
+     * (centre_closures, where Settings > Closures and the statutory-holiday generator write). The centre is the request's,
+     * else the employee file's primary centre, else every open centre they work at; agency-level staff use the days EVERY
+     * open centre is shut. Nothing generated here: an agency that keeps no holidays on its calendar gets none skipped.
+     *
+     * @return string[] Y-m-d
+     */
+    public static function closedDays(int $agencyId, int $userId, ?int $centreId, string $start, string $end): array
+    {
+        if ($end < $start || ! Schema::hasTable('centre_closures')) {
+            return [];
+        }
+        $key = $agencyId . ':' . $userId . ':' . $centreId . ':' . $start . ':' . $end;
+        if (isset(self::$closedMemo[$key])) {
+            return self::$closedMemo[$key];
+        }
+        $open = Live::centreIds($agencyId);
+        $centres = $centreId && in_array($centreId, $open, true) ? [$centreId] : [];
+        if (! $centres && $userId) {
+            $f = self::file($agencyId, $userId);
+            if ($f && $f->primary_centre_id && in_array((int) $f->primary_centre_id, $open, true)) {
+                $centres = [(int) $f->primary_centre_id];
+            }
+        }
+        if (! $centres && $userId) {
+            $centres = DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)->whereIn('role', self::STAFF_ROLES)
+                ->whereIn('centre_id', $open ?: [0])->pluck('centre_id')->map(fn ($c) => (int) $c)->unique()->values()->all();
+        }
+        if (! $centres) {
+            $centres = $open;
+        }
+        if (! $centres) {
+            return self::$closedMemo[$key] = [];
+        }
+        $hits = [];
+        $rows = DB::table('centre_closures')->whereIn('centre_id', $centres)->whereIn('closure_type', self::OFF_CLOSURES)
+            ->whereDate('closure_date', '<=', $end)->where(fn ($q) => $q->whereNull('end_date')->orWhereDate('end_date', '>=', $start))
+            ->get(['centre_id', 'closure_date', 'end_date']);
+        foreach ($rows as $r) {
+            $a = max($start, substr((string) $r->closure_date, 0, 10));
+            $b = min($end, substr((string) ($r->end_date ?: $r->closure_date), 0, 10));
+            for ($d = Carbon::parse($a), $i = 0; $d->toDateString() <= $b && $i < 800; $d->addDay(), $i++) {
+                $hits[$d->toDateString()][(int) $r->centre_id] = true;
+            }
+        }
+        $out = [];
+        foreach ($hits as $day => $cs) {
+            if (count($cs) >= count($centres)) {
+                $out[] = $day;
+            }
+        }
+        sort($out);
+
+        return self::$closedMemo[$key] = $out;
+    }
+
+    /**
+     * The days a request actually uses: weekdays that are not holidays/closures. A request with no weekday in it at all
+     * (weekend work) uses its calendar days, still less closures.
+     *
+     * @return string[] Y-m-d
+     */
+    public static function workDays(int $agencyId, int $userId, ?int $centreId, string $start, string $end): array
+    {
+        if ($end < $start) {
+            return [];
+        }
+        $closed = array_flip(self::closedDays($agencyId, $userId, $centreId, $start, $end));
+        $week = [];
+        $all = [];
+        for ($d = Carbon::parse($start), $i = 0; $d->toDateString() <= $end && $i < 800; $d->addDay(), $i++) {
+            $ymd = $d->toDateString();
+            $all[] = $ymd;
+            if (! $d->isWeekend()) {
+                $week[] = $ymd;
+            }
+        }
+        $use = $week ?: $all;
+
+        return array_values(array_filter($use, fn ($x) => ! isset($closed[$x])));
+    }
+
+    /**
+     * A lump-sum grant for the leave year starting $ys. Someone hired part-way through that year gets the share of
+     * the days left from their start date (Anthony, 2026-11-26), rounded to the nearest half day, or quarter hour for
+     * an hour-based type.
+     *
+     * @return array{0:?float,1:bool} [amount, prorated]
+     */
+    public static function grantAmount(object $type, ?string $employmentType, ?string $hire, string $ys): array
+    {
+        $ent = self::entitlement($type, $employmentType, self::serviceYears($hire, $ys));
+        if (! $ent || ! $hire || $hire <= $ys) {
+            return [$ent, false];
+        }
+        $ye = self::addYears($ys, 1);
+        if ($hire >= $ye) {
+            return [null, false];
+        }
+        $total = max(1, (int) round((strtotime($ye) - strtotime($ys)) / 86400));
+        $left = max(0, (int) round((strtotime($ye) - strtotime($hire)) / 86400));
+        $step = ($type->unit ?? 'days') === 'hours' ? 0.25 : 0.5;
+
+        return [round(($ent * $left / $total) / $step) * $step, true];
     }
 
     /**
@@ -428,7 +549,10 @@ final class HrLeave
         $ent = self::entitlement($t, $etype, $years);
         $label = 'Leave year from ' . Carbon::parse($ys)->format('M j, Y');
         if ($t->accrual === 'lump' && $ent) {
-            $put(max($ys, $hire ?: $ys), $ent, 'grant', 'grant:' . $ys, $label);
+            [$amt, $pro] = self::grantAmount($t, $etype, $hire, $ys);
+            if ($amt) {
+                $put(max($ys, $hire ?: $ys), $amt, 'grant', 'grant:' . $ys, $label . ($pro ? ' (prorated from the start date)' : ''));
+            }
         } elseif ($t->accrual === 'pay_period' && $ent && in_array((int) $t->periods_per_year, self::PERIODS, true)) {
             $N = (int) $t->periods_per_year;
             for ($k = 0; $k < $N; $k++) {
@@ -517,14 +641,10 @@ final class HrLeave
             $end = substr((string) $r->end_at, 0, 10);
             $allDay = (bool) $r->all_day || empty($r->start_time);
             $hours = $allDay ? $hpd : max(0, (strtotime('2000-01-01 ' . $r->end_time) - strtotime('2000-01-01 ' . $r->start_time)) / 3600);
-            $dates = [];
-            for ($d = Carbon::parse($start), $i = 0; $d->toDateString() <= $end && $i < 800; $d->addDay(), $i++) {
-                $dates[] = [$d->toDateString(), $d->isWeekend()];
-            }
-            $weekdays = array_values(array_filter($dates, fn ($x) => ! $x[1]));
-            $use = $weekdays ?: $dates;
+            $use = $allDay ? self::workDays($agencyId, (int) $r->user_id, $r->centre_id ? (int) $r->centre_id : null, $start, $end)
+                : array_diff([$start], self::closedDays($agencyId, (int) $r->user_id, $r->centre_id ? (int) $r->centre_id : null, $start, $start));
             $len = count($use);
-            foreach ($use as [$day]) {
+            foreach ($use as $day) {
                 if ($day < $from || $day > $to) {
                     continue;
                 }

@@ -657,10 +657,11 @@ final class WebDemoShowcase
             $ys = HrLeave::yearStart($agencyId, (int) $u->id, $today, $s, $hire);
             foreach ($types as $t) {
                 if ($t->accrual !== 'lump') continue;
-                $amt = HrLeave::entitlement($t, $etype[$u->id] ?? null, HrLeave::serviceYears($hire, $ys));
+                [$amt, $pro] = HrLeave::grantAmount($t, $etype[$u->id] ?? null, $hire, $ys);
                 if (! $amt) continue;
                 $this->add('hr_leave_ledger', ['agency_id' => $agencyId, 'user_id' => $u->id, 'leave_type_id' => $t->id, 'entry_date' => max($ys, $hire ?: $ys),
-                    'amount' => $amt, 'kind' => 'grant', 'source_key' => 'grant:' . $ys, 'reason' => 'Leave year from ' . Carbon::parse($ys)->format('M j, Y'), 'created_at' => $now]);
+                    'amount' => $amt, 'kind' => 'grant', 'source_key' => 'grant:' . $ys,
+                    'reason' => 'Leave year from ' . Carbon::parse($ys)->format('M j, Y') . ($pro ? ' (prorated from the start date)' : ''), 'created_at' => $now]);
             }
         }
         // A weekday at or after $from days from today.
@@ -668,19 +669,24 @@ final class WebDemoShowcase
             for ($d = $from; $d < $from + 7; $d++) if (! $this->today->copy()->addDays($d)->isWeekend()) return $d;
             return $from;
         };
-        $req = function (string $who, string $type, int $d1, int $d2, string $status, string $reason, ?string $note = null) use ($agencyId, $byName, $centreOf, $types, $elena, $now) {
+        $req = function (string $who, string $type, int $d1, int $d2, string $status, string $reason, ?string $note = null, bool $review = false) use ($agencyId, $byName, $centreOf, $types, $elena, $now) {
             $uid = $byName[$who] ?? null;
             if (! $uid || ! isset($types[$type])) return;
             $t = $types[$type];
             $start = $this->today->copy()->addDays($d1)->toDateString();
             $end = $this->today->copy()->addDays($d2)->toDateString();
-            $amt = (float) HrLeave::weekdays($start, $end);
+            $amt = (float) count(HrLeave::workDays($agencyId, (int) $uid, isset($centreOf[$uid]) ? (int) $centreOf[$uid] : null, $start, $end));
+            if ($amt <= 0) return;
             $decided = $status === 'pending' ? null : $this->at(min(-1, $d1 - 7), 9, 30);
             $asked = $this->at(min(-2, $d1 - 9), 8, 10);
             $rid = $this->add('time_off_requests', ['agency_id' => $agencyId, 'user_id' => $uid, 'centre_id' => $centreOf[$uid] ?? null, 'request_type' => $type,
                 'leave_type_id' => $t->id, 'leave_amount' => $amt, 'start_at' => $start, 'end_at' => $end, 'all_day' => 1, 'reason' => $reason, 'status' => $status,
                 'decided_by_id' => $status === 'pending' ? null : ($t->needs_approval ? $elena : $uid), 'decided_at' => $decided, 'decision_notes' => $note,
                 'created_at' => $asked, 'updated_at' => $decided ?: $asked]);
+            // Sick days need no approval: the latest one is still waiting for Elena's review.
+            if ($review && \Illuminate\Support\Facades\Schema::hasColumn('time_off_requests', 'review_pending')) {
+                DB::table('time_off_requests')->where('id', $rid)->update(['review_pending' => 1]);
+            }
             if ($status === 'approved') {
                 $this->add('hr_leave_ledger', ['agency_id' => $agencyId, 'user_id' => $uid, 'leave_type_id' => $t->id, 'entry_date' => substr((string) $decided, 0, 10),
                     'amount' => -$amt, 'kind' => 'taken', 'time_off_request_id' => $rid, 'reason' => 'Time off approved', 'created_by_id' => $elena, 'created_at' => $now]);
@@ -693,7 +699,7 @@ final class WebDemoShowcase
         $req('Noah', 'vacation', $wd(21), $wd(21) + 4, 'pending', 'Winter break with my kids');
         $req('Ethan', 'vacation', $ago(6), $ago(6) + 2, 'approved', 'Long weekend away', 'Grace will cover Rainbows.');
         $req('Grace', 'sick', $ago(9), $ago(9), 'approved', 'Migraine');
-        $req('Lucas', 'sick', $ago(2), $ago(2), 'approved', 'Cold');
+        $req('Lucas', 'sick', $ago(2), $ago(2), 'approved', 'Cold', null, true);
         $req('Lucas', 'sick', $ago(11), $ago(11), 'approved', 'Stomach bug');
         $req('Lucas', 'sick', $ago(20), $ago(20), 'approved', 'Fever');
         $req('Ava', 'personal', $wd(10), $wd(10), 'pending', 'Dentist appointment');
