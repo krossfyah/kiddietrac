@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\DB;
  * (its own record where the screen can open one). Feed only: nothing here writes a Notify row, so no phone rings.
  *
  * WHO SEES WHAT (reader and guard together, fail closed):
- *   - an agency admin: their active agency; a centre director: only their CentreScope centres, and for records that
+ *   - an agency admin: their active agency; a centre director: only their own centres (centreScope), and for records that
  *     belong to a PERSON (forms, policies, certificates, HR) only the people placed at those centres;
  *   - open centres and children still with us only (App\Support\Live);
  *   - never the viewer's own submissions (they know), never another agency's;
@@ -30,6 +30,23 @@ use Illuminate\Support\Facades\DB;
 final class StaffSubmissionsFeed
 {
     private const STAFF_ROLES = ['educator', 'home_visitor', 'centre_director', 'assistant_director', 'cook', 'staff', 'supervisor'];
+
+    /**
+     * The centres of one agency this viewer may see in the bell: null = the whole agency (a platform admin, or an
+     * admin OF THAT agency); otherwise their own centres (Visibility::centreIds, what every record screen uses).
+     * Decided per agency, not from the active agency's roles, so an admin elsewhere is not widened here.
+     *
+     * @return int[]|null
+     */
+    public static function centreScope(Request $request, int $agencyId): ?array
+    {
+        $u = $request->user();
+        if (! $u || $agencyId <= 0) return [];
+        $wide = DB::table('role_assignments')->where('user_id', $u->id)->where('active', 1)
+            ->where(fn ($w) => $w->where('role', 'platform_admin')
+                ->orWhere(fn ($a) => $a->whereIn('role', ['agency_admin', 'admin'])->where('agency_id', $agencyId)))->exists();
+        return $wide ? null : array_values(array_map('intval', Visibility::centreIds($agencyId, $u)));
+    }
 
     /**
      * @param  int[] $agencyIds  the agencies the feed is scoped to (empty when $unscoped)
@@ -47,7 +64,7 @@ final class StaffSubmissionsFeed
         $scoped = [];      // centres of a director's scope (for person-owned records)
         if (! $unscoped) {
             foreach ($agencyIds as $aid) {
-                $s = CentreScope::ids($request, $aid);
+                $s = self::centreScope($request, $aid);
                 if ($s === null) {
                     $wide[] = $aid;
                     $centres = array_merge($centres, Live::centreIds($aid));
@@ -240,7 +257,7 @@ final class StaffSubmissionsFeed
             $centres = Live::centres(DB::table('centres'))->pluck('id')->map(fn ($v) => (int) $v)->all();
         } else {
             foreach ($agencyIds as $aid) {
-                $s = CentreScope::ids($request, $aid);
+                $s = self::centreScope($request, $aid);
                 $open = Live::centreIds($aid);
                 $centres = array_merge($centres, $s === null ? $open : array_values(array_intersect(array_map('intval', $s), $open)));
             }

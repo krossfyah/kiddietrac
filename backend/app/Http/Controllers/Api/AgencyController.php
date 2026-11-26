@@ -737,6 +737,32 @@ final class AgencyController extends Controller
             $centreIds = DB::table("centres")->whereIn("agency_id", $agencyIds)->pluck("id")->all();
         }
 
+        /* A DIRECTOR SEES THEIR OWN CENTRES (2026-11-26, memory kiddietrac-centre-director-scope). Every source below was
+           scoped to the director's whole AGENCY - check-ins, clock-ins, families, sign-ins, inspections, home visits, new
+           staff and time off from centres they do not run. $centreIds is now the centres they may see (all of an agency
+           they administer), $wideAgencies the agencies they see whole; records keyed only by agency are kept to those, and
+           a director's share goes by centre. Same answer as each record screen (Visibility::centreIds via
+           StaffSubmissionsFeed::centreScope). Agency admins and platform admins: unchanged. */
+        $wideAgencies = array_map("intval", $agencyIds);
+        if (! $unscoped) {
+            $wideAgencies = [];
+            $scopedCentres = [];
+            foreach ($agencyIds as $aid) {
+                $s = \App\Support\StaffSubmissionsFeed::centreScope($request, (int) $aid);
+                if ($s === null) {
+                    $wideAgencies[] = (int) $aid;
+                    $scopedCentres = array_merge($scopedCentres, DB::table("centres")->where("agency_id", (int) $aid)->pluck("id")->map(fn ($v) => (int) $v)->all());
+                } else {
+                    $scopedCentres = array_merge($scopedCentres, $s);
+                }
+            }
+            $centreIds = array_values(array_unique($scopedCentres));
+        }
+        // Rows that carry an agency and maybe a centre: an agency seen whole, or a centre in scope.
+        $agencyOrCentre = function ($q, string $agencyCol, string $centreCol) use ($wideAgencies, $centreIds) {
+            return $q->where(fn ($w) => $w->whereIn($agencyCol, $wideAgencies ?: [0])->orWhereIn($centreCol, $centreIds ?: [0]));
+        };
+
         $events = collect();
         $push = fn ($type, $icon, $text, $when, $link = null, $avatar = null, $device = null) => $events->push([
             "type" => $type, "icon" => $icon, "text" => $text, "when" => (string) $when, "link" => $link, "avatar" => $avatar,
@@ -757,7 +783,7 @@ final class AgencyController extends Controller
         $agencyUserIds = null;
         if (! $unscoped) {
             $staffIds = DB::table("role_assignments")->where("active", true)
-                ->where(function ($q) use ($agencyIds, $centreIds) { $q->whereIn("agency_id", $agencyIds ?: [0])->orWhereIn("centre_id", $centreIds ?: [0]); })
+                ->where(function ($q) use ($wideAgencies, $centreIds) { $q->whereIn("agency_id", $wideAgencies ?: [0])->orWhereIn("centre_id", $centreIds ?: [0]); })
                 ->pluck("user_id");
             $guardIds = DB::table("guardians as g")->join("families as f", "f.id", "=", "g.family_id")
                 ->whereIn("f.centre_id", $centreIds ?: [0])->pluck("g.user_id");
@@ -787,7 +813,7 @@ final class AgencyController extends Controller
         // Inspection reports (hcc_inspection_forms — agency_id direct).
         $insQ = DB::table("hcc_inspection_forms")->whereNull("deleted_at")->orderByDesc("created_at")->limit(15)
             ->select("form_type", "provider_name", "status", "created_at");
-        if (! $unscoped) $insQ->whereIn("agency_id", $agencyIds ?: [0]);
+        if (! $unscoped) $agencyOrCentre($insQ->whereIn("agency_id", $agencyIds ?: [0]), "agency_id", "centre_id");
         foreach ($insQ->get() as $r) {
             $ft = ucwords(str_replace("_", " ", (string) $r->form_type));
             $st = $r->status === "submitted" ? "submitted" : ($r->status ?: "updated");
@@ -797,7 +823,7 @@ final class AgencyController extends Controller
         // Home-visit reports.
         $hvQ = DB::table("home_visit_reports")->whereNull("deleted_at")->orderByDesc("created_at")->limit(12)
             ->select("family_name", "child_name", "visit_type", "created_at");
-        if (! $unscoped) $hvQ->whereIn("agency_id", $agencyIds ?: [0]);
+        if (! $unscoped) $agencyOrCentre($hvQ->whereIn("agency_id", $agencyIds ?: [0]), "agency_id", "centre_id");
         foreach ($hvQ->get() as $r) $push("home_visit", "\u{1F3E1}", "Home-visit report — " . ($r->family_name ?: $r->child_name ?: "family"), $r->created_at, "#home-visits");
 
         /* Incidents: who logged it, for which child, at which centre, and the link opens that incident (2026-11-26, staff
@@ -826,7 +852,7 @@ final class AgencyController extends Controller
             ->whereIn("ra.role", ["educator", "centre_director", "agency_admin", "home_visitor", "auditor"])
             ->orderByDesc("ra.created_at")->limit(12)
             ->select("u.first_name", "u.last_name", "u.photo_url", "ra.role", "ra.created_at");
-        if (! $unscoped) $stQ->whereIn("ra.agency_id", $agencyIds ?: [0]);
+        if (! $unscoped) $agencyOrCentre($stQ->whereIn("ra.agency_id", $agencyIds ?: [0]), "ra.agency_id", "ra.centre_id");
         foreach ($stQ->get() as $r) {
             $nm = trim(($r->first_name ?? "") . " " . ($r->last_name ?? "")) ?: "A team member";
             $push("staff", "\u{1F464}", "New " . str_replace("_", " ", (string) $r->role) . ": " . $nm, $r->created_at, "#admin", $r->photo_url);
@@ -877,7 +903,17 @@ final class AgencyController extends Controller
         $toQ = DB::table("time_off_requests as tor")->join("users as u", "u.id", "=", "tor.user_id")
             ->orderByDesc("tor.updated_at")->limit(15)
             ->select("u.first_name", "u.last_name", "u.photo_url", "tor.request_type", "tor.start_at", "tor.end_at", "tor.status", "tor.created_at", "tor.decided_at");
-        if (! $unscoped) $toQ->whereIn("tor.agency_id", $agencyIds ?: [0]);
+        if (! $unscoped) {
+            $toQ->whereIn("tor.agency_id", $agencyIds ?: [0])->where(function ($w) use ($wideAgencies, $centreIds) {
+                $w->whereIn("tor.agency_id", $wideAgencies ?: [0])
+                  ->orWhereIn("tor.centre_id", $centreIds ?: [0])
+                  ->orWhere(fn ($n) => $n->whereNull("tor.centre_id")->whereExists(fn ($e) => $e->from("role_assignments as sra")
+                      ->whereColumn("sra.user_id", "tor.user_id")->where("sra.active", 1)
+                      ->whereIn("sra.role", \App\Support\Visibility::STAFF_ROLES)->whereIn("sra.centre_id", $centreIds ?: [0])->select(DB::raw(1))))
+                  ->orWhere(fn ($n) => $n->whereNull("tor.centre_id")->whereExists(fn ($e) => $e->from("educator_rooms as er")->join("rooms as rm", "rm.id", "=", "er.room_id")
+                      ->whereColumn("er.user_id", "tor.user_id")->whereIn("rm.centre_id", $centreIds ?: [0])->select(DB::raw(1))));
+            });
+        }
         foreach ($toQ->get() as $r) {
             $nm = trim(($r->first_name ?? "") . " " . ($r->last_name ?? "")) ?: "A team member";
             $kind = ucfirst(str_replace("_", " ", (string) ($r->request_type ?: "time off")));
