@@ -2,6 +2,65 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "📣",
+            "title": "HR: hiring and your jobs page",
+            "body": "Post jobs on your own jobs page with your name and logo, move applicants from New to Hired, book interviews and send kind letters. Hire creates the account and starts onboarding.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "✅",
+            "title": "HR: onboarding checklists",
+            "body": "Give new staff a checklist of documents, certificates, policies and courses. Most tasks tick themselves off when the real thing is done, and reminders go out before anything is due.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "📈",
+            "title": "HR: reviews, goals and one-to-ones",
+            "body": "Run probation and annual reviews on your own template with a self review, a manager review and sign-off by both. Track goals with check-ins and keep private one-to-one notes.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "🎓",
+            "title": "HR: assign courses",
+            "body": "Assign courses to people or roles with due dates. Finishing one gives a certificate in your agency's name and can add PD hours.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "🧭",
+            "title": "My HR",
+            "body": "Your onboarding checklist, your courses and certificates, your reviews and your goals, in one place. It appears when your agency uses KiddieTrac HR.",
+            "roles": [
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-26",
             "icon": "🎨",
