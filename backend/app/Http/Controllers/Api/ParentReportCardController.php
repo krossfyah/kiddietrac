@@ -134,7 +134,8 @@ final class ParentReportCardController extends Controller
     public function signedPdf(Request $request, int $id)
     {
         $uid = (int) $request->query('u');
-        $card = DB::table('report_cards')->where('id', $id)->where('status', 'sent')->first();
+        // the current approved version only (2026-11-26): a link to a version since replaced no longer opens
+        $card = DB::table('report_cards')->where('id', $id)->where('status', 'sent')->whereNull('replaced_by_id')->first();
         abort_unless($card && $uid, 404);
         $ok = DB::table('guardians as g')->join('children as ch', 'ch.family_id', '=', 'g.family_id')
             ->where('g.user_id', $uid)->where('ch.id', $card->child_id)->exists();
