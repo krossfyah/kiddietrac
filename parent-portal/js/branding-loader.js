@@ -99,6 +99,8 @@
   function applyTint(t) {
     const root = document.documentElement, v = t ? brandTint(t) : null;
     Object.keys(TINT_VARS).forEach(function (k) { if (v) root.style.setProperty(k, v[TINT_VARS[k]]); else root.style.removeProperty(k); });
+    // The row-hover tint's switch (kt-consistency-polish.css): white-label only, never the plain portal.
+    root.classList.toggle('kt-tinted', !!v);
   }
 
   function buildColorMap(t) {
