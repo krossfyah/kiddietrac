@@ -52,6 +52,7 @@ final class ReportCardController extends Controller
         /* Scoped like GET /report-cards/all (2026-11-26): a director sees the centres they direct, not the agency. */
         $centreIds = \App\Support\CentreScope::ids($request, $agencyId);
         $admin = $centreIds === null;
+        $signs = $admin && \App\Support\AgencySignatories::mayApprove((int) $request->user()->id);   // the agency's own admins approve
         $rows = DB::table('report_cards as r')
             ->join('children as ch', 'ch.id', '=', 'r.child_id')
             ->join('families as f', 'f.id', '=', 'ch.family_id')
@@ -70,8 +71,8 @@ final class ReportCardController extends Controller
                 DB::raw("TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))) as submitted_by"),
                 'c.name as centre')
             ->get()
-            ->map(fn ($r) => (array) $r + ['can_approve' => $admin]);
-        return response()->json(['data' => $rows, 'admin' => $admin]);
+            ->map(fn ($r) => (array) $r + ['can_approve' => $signs]);
+        return response()->json(['data' => $rows, 'admin' => $signs]);
     }
 
     /**
@@ -142,11 +143,12 @@ final class ReportCardController extends Controller
         /* Per card, worked out once for the list - the same rules as mayApproveCard / mayReviewCard (2026-11-26):
            can_approve for agency-wide admins, can_review also for a director of the card's centre. */
         $approver = $this->isApprover($u);
+        $ownAdmin = \App\Support\AgencySignatories::mayApprove($uid);   // never a platform admin
         $directs = ($approver && ! $admin) ? DB::table('role_assignments')->where('user_id', $uid)->where('active', 1)
             ->where('role', 'centre_director')->pluck('centre_id')->map(fn ($v) => (int) $v)->all() : [];
-        $out = $rows->map(function ($r) use ($uid, $approver, $admin, $directs) {
+        $out = $rows->map(function ($r) use ($uid, $approver, $admin, $directs, $ownAdmin) {
             $row = $this->listRow($r, $uid);
-            $row['can_approve'] = $approver && $admin && ($r->status ?: 'draft') !== 'sent' && empty($r->replaced_by_id);
+            $row['can_approve'] = $approver && $admin && $ownAdmin && ($r->status ?: 'draft') !== 'sent' && empty($r->replaced_by_id);
             $row['can_review'] = $approver && ($admin || in_array((int) $r->centre_id, $directs, true))
                 && ($r->status ?: 'draft') === 'submitted' && empty($r->replaced_by_id);
             return $row;
@@ -229,7 +231,7 @@ final class ReportCardController extends Controller
             $row['framework_info'] = ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']];
             $row['sections'] = $this->sectionsOf($r, $fw);
             $row['next_steps'] = $r->next_steps;
-            $row['can_approve'] = ($r->status ?: 'draft') !== 'sent' && empty($r->replaced_by_id);
+            $row['can_approve'] = \App\Support\AgencySignatories::mayApprove((int) $request->user()->id) && ($r->status ?: 'draft') !== 'sent' && empty($r->replaced_by_id);
             return $row;
         })->values();
 
@@ -676,16 +678,10 @@ final class ReportCardController extends Controller
             $agency->city ?? null, trim(($agency->province ?? '') . ' ' . ($agency->postal_code ?? '')),
         ], fn ($v) => trim((string) $v) !== '')));
         $roomRow = ($child && $child->primary_room_id) ? DB::table('rooms')->where('id', $child->primary_room_id)->first(['name', 'age_group']) : null;
-        /* Director / Administrator: the centre's directors and the agency's admins today, full names, active people
-           only (no platform admins, no integration accounts), two of each and "+N". */
-        $people = fn ($q) => $q->join('users as u', 'u.id', '=', 'ra.user_id')->where('ra.active', 1)
-            ->where('u.status', 'active')->whereNull('u.deleted_at')
-            ->where(fn ($w) => $w->whereNull('u.email')->orWhere('u.email', 'not like', 'integration+%'))
-            ->orderBy('u.first_name')->orderBy('u.last_name')->get(['u.first_name', 'u.last_name'])
-            ->map(fn ($u) => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? '')))->filter()->unique()->values()->all();
-        $cap = fn (array $a) => count($a) > 2 ? implode(', ', array_slice($a, 0, 2)) . ' +' . (count($a) - 2) : implode(', ', $a);
-        $directors = $centre ? $cap($people(DB::table('role_assignments as ra')->where('ra.role', 'centre_director')->where('ra.centre_id', $centre->id))) : '';
-        $admins = $agencyId ? $cap($people(DB::table('role_assignments as ra')->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId))) : '';
+        /* Director / Administrator: EVERY active director and agency admin of the card's agency, full names, no cap;
+           never a platform admin, integration account or reseller grant - App\Support\AgencySignatories (2026-11-26). */
+        $sign = \App\Support\AgencySignatories::forAgency((int) $agencyId);
+        $directors = $sign['directors']; $admins = $sign['admins'];
         $att = $child ? self::termAttendance((int) $child->id, (string) $row->term, $agencyId, $tz) : null;
         $hints = [];
         foreach (($fw['areas'] ?? []) as $a) { $hints[$a['key'] ?? ''] = (string) ($a['hint'] ?? ''); }
@@ -1132,7 +1128,9 @@ final class ReportCardController extends Controller
         /* Marking a card sent is an approval (2026-11-05 leak sweep): PATCH status=sent let an educator skip the
            director's review and publish a card to the family. Only an approver of this child's centre may. */
         if (($data['status'] ?? null) === 'sent' && ($row->status ?? '') !== 'sent') {
-            abort_unless($this->mayApproveCard($request, $row), 403, 'Report cards must be approved by an agency admin before sending.');
+            $this->refuseOutsideApprover($request);
+            $this->refuseOutsideApprover($request);
+        abort_unless($this->mayApproveCard($request, $row), 403, 'Report cards must be approved by an agency admin before sending.');
         }
         // Per-area narratives (2026-09-29). Merged into what is stored; HDLH keys are
         // mirrored into the legacy columns so older readers stay in step.
@@ -1157,6 +1155,7 @@ final class ReportCardController extends Controller
         $this->refuseReplaced($row);
         // A report card must be approved by a director/admin before it reaches a
         // parent — an educator can only submit it for review (see submit()).
+        $this->refuseOutsideApprover($request);
         abort_unless($this->mayApproveCard($request, $row), 403, 'Report cards must be approved by an agency admin before sending.');
         $this->sendToGuardians($row);
         DB::table('report_cards')->where('id', $id)->update([
@@ -1196,6 +1195,7 @@ final class ReportCardController extends Controller
         abort_unless($row, 404);
         abort_unless($this->mayTouch($request, $row), 403);   // archived: the card's agency admins only (2026-11-26)
         $this->refuseReplaced($row);
+        $this->refuseOutsideApprover($request);
         abort_unless($this->mayApproveCard($request, $row), 403, 'Only an agency admin can approve report cards. A director can review it and send it back.');
         $data = $request->validate(['admin_signature' => 'required|string|max:3000000', 'note' => 'nullable|string|max:1000']);
         $this->doApprove($request, $row, $data['admin_signature'], $data['note'] ?? null);
@@ -1267,6 +1267,7 @@ final class ReportCardController extends Controller
     public function bulkApprove(Request $request): JsonResponse
     {
         $this->assertStaff($request);
+        $this->refuseOutsideApprover($request);
         abort_unless($this->agencyWide($request), 403, 'Only an agency admin can approve report cards.');
         $ids = $this->bulkIds($request);
         $data = $request->validate(['admin_signature' => 'required|string|max:3000000', 'note' => 'nullable|string|max:1000']);
@@ -1363,7 +1364,14 @@ final class ReportCardController extends Controller
        status=sent) use this one rule. Cards a director approved before keep that approval as it is. */
     private function mayApproveCard(Request $request, object $row): bool
     {
-        return $this->agencyWide($request) && $this->mayReviewCard($request, $row);
+        return $this->agencyWide($request) && \App\Support\AgencySignatories::mayApprove((int) $request->user()->id)
+            && $this->mayReviewCard($request, $row);
+    }
+
+    /** A platform admin / super admin is not one of the agency's own admins: a friendly refusal before any approval. */
+    private function refuseOutsideApprover(Request $request): void
+    {
+        abort_unless(\App\Support\AgencySignatories::mayApprove((int) $request->user()->id), 403, "Report cards are approved by the agency's own admins.");
     }
 
     /** An agency_admin / platform_admin in the ACTIVE agency (CentreScope's agency-wide roles). */
@@ -1414,8 +1422,8 @@ final class ReportCardController extends Controller
             return;
         }
         $ids = DB::table('role_assignments')->where('agency_id', $agencyId)
-            ->where('role', 'agency_admin')->where('active', 1)   // agency admins approve (2026-11-26)
-            ->pluck('user_id')->unique();
+            ->where('role', 'agency_admin')->where('active', 1)->whereNull('granted_by_reseller_id')   // agency admins approve (2026-11-26)
+            ->pluck('user_id')->unique()->reject(fn ($id) => ! \App\Support\AgencySignatories::mayApprove((int) $id));
         $by = trim(($submitter->first_name ?? '') . ' ' . ($submitter->last_name ?? '')) ?: 'an educator';
         foreach ($ids as $uid) {
             \App\Support\Notify::write([

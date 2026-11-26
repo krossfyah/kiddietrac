@@ -30,7 +30,7 @@ Each domain text is editable. Tweak as needed — the AI gets you 90% of the way
 Under the approvals on the **Report cards** screen, **All report cards** lists every card you can see, newest first: the child, the term, who made it, its status, the centre and when it was last changed.
 
 - Agency admins see every card in the agency. Directors see the cards for their own centres.
-- **Who approves:** the educator or provider signs and submits (*Prepared by*). An **agency admin** signs and approves (*Approved by*), which sends the card to the family. Directors review, edit and send back cards for their centres, but don't approve them. Cards a director approved before this change keep that approval.
+- **Who approves:** the educator or provider signs and submits (*Prepared by*). One of your agency's own **agency admins** signs and approves (*Approved by*; platform staff can't), which sends the card to the family. Directors review, edit and send back cards for their centres, but don't approve them. Cards a director approved before this change keep that approval.
 - Tap **Draft**, **Awaiting approval** or **Sent** to show just those. Each chip shows how many there are.
 - Search for a child, or narrow the list by term, by who made it, or by centre.
 - Tap a card to open it in a popup, or use **⋮** on its row: **View**, **Edit**, **Download PDF**, **Print**, **Email to family**, **Review & approve**, **Sign & approve**, **Send back** and **Delete draft**. You only see the ones you can use.
@@ -43,7 +43,7 @@ Cards for withdrawn children and closed centres are not listed there. Agency adm
 
 ## The PDF
 
-The PDF is laid out as a progress report. Your agency's logo and name sit at the top, with the term and date. A ruled grid shows the child, the card's reference, days absent, days late and late pick-ups for the term (from attendance; blank when the term has no dates), the room and educator, your agency and centre addresses, the centre's directors and the agency's admins (**Director / Administrator**), and both phone numbers. Each learning area of your framework has its own grey panel, followed by **Strengths / Next Steps for Growth** and the signatures of the educator and the approver. A reference number and page number are on every page. Drafts are stamped *DRAFT – not approved*. Print uses the same layout.
+The PDF is laid out as a progress report. Your agency's logo and name sit at the top, with the term and date. A ruled grid shows the child, the card's reference, days absent, days late and late pick-ups for the term (from attendance; blank when the term has no dates), the room and educator, your agency and centre addresses, every director and admin of your agency (**Director / Administrator**; platform staff are never listed), and both phone numbers. Each learning area of your framework has its own grey panel, followed by **Strengths / Next Steps for Growth** and the signatures of the educator and the approver. A reference number and page number are on every page. Drafts are stamped *DRAFT – not approved*. Print uses the same layout.
 
 Agency admins can choose whether the educator's RECE registration number is printed: **Report card settings** at the bottom of the Report cards tab. It is on unless you turn it off.
 

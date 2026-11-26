@@ -155,7 +155,11 @@
       </td>
     </tr>
     <tr>
-      <td style="width:30%;"><span class="lbl">{{ $L['director_lbl'] }}:</span>@if($directors)<span class="val-sm" style="font-weight:bold;">{{ $directors }}</span>@endif @if($admins)<span class="val-sm" style="font-weight:bold;">{{ $admins }}</span>@endif @if(! $directors && ! $admins)<span class="val">{{ $dash }}</span>@endif</td>
+      @php
+        $dirAdm = array_merge(array_map(fn ($n) => [$n, $L['director']], $directors ?? []), array_map(fn ($n) => [$n, $L['administrator']], $admins ?? []));
+        $dirCols = count($dirAdm) > 3 ? array_chunk($dirAdm, (int) ceil(count($dirAdm) / 2)) : [$dirAdm];
+      @endphp
+      <td style="width:30%;"><span class="lbl">{{ $L['director_lbl'] }}:</span>@if($dirAdm)<table style="width:100%; border-collapse:collapse; margin-top:1px;"><tr>@foreach($dirCols as $col)<td style="border:0; padding:0 4px 0 0; vertical-align:top; width:{{ count($dirCols) > 1 ? '50%' : '100%' }};">@foreach($col as $p)<div style="font-size:7.6pt; line-height:1.3; font-weight:bold;">{{ $p[0] }} <span style="font-weight:normal; color:#64748B; font-size:6.6pt;">{{ $p[1] }}</span></div>@endforeach</td>@endforeach</tr></table>@else<span class="val">{{ $dash }}</span>@endif</td>
       <td style="width:25%;"><span class="lbl">{{ $L['telephone'] }}:</span><span class="val">{{ $phone ?: $dash }}</span></td>
     </tr>
   </table>
