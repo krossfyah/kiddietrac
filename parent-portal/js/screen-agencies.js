@@ -419,7 +419,13 @@
                   <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;background:${a.billing_status==='suspended'?'#FEE2E2':a.billing_status==='active'?'#DCFCE7':'#E0F2FE'};color:${a.billing_status==='suspended'?'#B91C1C':a.billing_status==='active'?'#15803D':'#0369A1'};">${esc(a.billing_status || '\u2014')}</span>
                   ${data.is_platform_admin ? `<button type="button" id="kt-ag-suspend" style="background:white;color:${a.billing_status==='suspended'?'#15803D':'#B45309'};border:1px solid currentColor;border-radius:8px;padding:5px 12px;font-size:12.5px;font-weight:700;cursor:pointer;">${a.billing_status==='suspended'?'Resume':'Suspend'}</button>` : ''}
                 </div>
-                <div style="font-size:11.5px;color:#94A3B8;margin-top:4px;">Set by the licence.</div>
+                <div style="font-size:11.5px;color:#94A3B8;margin-top:4px;">${a.billing_status_pin ? 'Pinned: ' + esc(a.billing_status_pin) + ' (kept through licence changes)' : 'Set by the licence.'}</div>
+                ${data.is_platform_admin ? `<label style="display:block;font-size:12px;font-weight:600;color:#475569;margin:8px 0 4px;">Pin the status</label>
+                <select name="billing_status_pin" style="${inputStyle()}">
+                  <option value="" ${!a.billing_status_pin ? 'selected' : ''}>Not pinned (follows the licence)</option>
+                  <option value="trial" ${a.billing_status_pin === 'trial' ? 'selected' : ''}>Pinned: trial</option>
+                  <option value="active" ${a.billing_status_pin === 'active' ? 'selected' : ''}>Pinned: active</option>
+                </select>` : ''}
               </div>
             </div>
             <div id="kt-edit-status" style="min-height:20px;font-size:14px;"></div>
@@ -491,6 +497,9 @@
       if (notifBox) data.notifications_enabled = notifBox.checked;
       const sumBox = form.querySelector('[name="summaries_enabled"]');
       if (sumBox) data.summaries_enabled = sumBox.checked;
+      // "Not pinned" is an empty value, which the loop above drops; send it as null so a pin can be cleared.
+      const pinSel = form.querySelector('[name="billing_status_pin"]');
+      if (pinSel) data.billing_status_pin = pinSel.value || null;
       // Same reason — an unchecked box never reaches FormData, so it could be switched
       // on and never off.
       const autoBox = form.querySelector('[name="schedule_autofill"]');

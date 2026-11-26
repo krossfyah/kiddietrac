@@ -268,6 +268,20 @@ class Licences
        null = not licence-managed (or deleted): the stored value is left alone. */
     public const MANUAL_SUSPEND = 'billing_suspended_manually';
 
+    /* PINNED STATUS (2026-11-26, Anthony: Starlight 26 and Brightwood 25 "should STAY on trial" on comp licences).
+       settings.billing_status_pinned = 'trial' | 'active' holds the status through every sync and every renewal;
+       only a platform admin sets or clears it (My agency > Manage). A hand Suspend still wins over a pin. A pin never
+       starts billing: billingOn() also needs a next invoice date, which a pin does not set. */
+    public const PIN = 'billing_status_pinned';
+    public const PIN_VALUES = ['trial', 'active'];
+
+    public static function pinned(object $a): ?string
+    {
+        $s = json_decode((string) ($a->settings ?? ''), true);
+        $v = is_array($s) ? ($s[self::PIN] ?? null) : null;
+        return in_array($v, self::PIN_VALUES, true) ? $v : null;
+    }
+
     public static function manuallySuspended(object $a): bool
     {
         $s = json_decode((string) ($a->settings ?? ''), true);
@@ -280,6 +294,7 @@ class Licences
         $a = $a ?: DB::table('agencies')->where('id', $agencyId)->first();
         if (! $a || ! empty($a->deleted_at)) return null;
         if (self::manuallySuspended($a)) return 'suspended';
+        if ($pin = self::pinned($a)) return $pin;
         $p = DB::table('agency_licences')->where('agency_id', $agencyId)->where('kind', 'plan')->whereIn('status', self::LIVE)
             ->orderByRaw("FIELD(status,'active','grace')")->first();
         if (! $p) return 'suspended';

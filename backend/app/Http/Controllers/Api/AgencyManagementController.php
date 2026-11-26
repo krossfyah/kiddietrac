@@ -67,6 +67,7 @@ final class AgencyManagementController extends Controller
                 'billing_status' => $a->billing_status,
                 'trial_ends_at' => $a->trial_ends_at,
                 'plan' => $settings['plan'] ?? 'centre',
+                'billing_status_pin' => $settings[\App\Support\Licences::PIN] ?? null,
                 /* The card's plan (2026-11-26, Anthony): the licence, the same source as Platform > Edit agency > Plan -
                    not settings.plan, which nothing bills or licenses from. Never licensed: its plan_code, "(no licence yet)". */
                 'plan_label' => \App\Support\Licences::managed((int) $a->id)
@@ -319,6 +320,8 @@ final class AgencyManagementController extends Controller
             'email_from_name' => ['nullable', 'string', 'max:120'],
             'email_from_address' => ['nullable', 'email', 'max:190'],
             'billing_status' => ['nullable', 'in:trial,active,past_due,suspended'],
+            // Pinned billing status (Licences::PIN): platform admins only; null clears it.
+            'billing_status_pin' => ['sometimes', 'nullable', 'in:trial,active'],
             'trial_ends_at' => ['nullable', 'date'],
             'plan' => ['nullable', 'in:starter,centre,agency'],
             'notifications_enabled' => ['sometimes', 'boolean'],
@@ -348,7 +351,7 @@ final class AgencyManagementController extends Controller
                 || (($data['plan'] ?? null) !== null && (string) $data['plan'] !== (string) $curPlan)) {
                 return response()->json(['message' => 'Only KiddieTrac can change an agency\'s plan, trial or billing status.'], 403);
             }
-            unset($data['billing_status'], $data['trial_ends_at'], $data['plan']);
+            unset($data['billing_status'], $data['trial_ends_at'], $data['plan'], $data['billing_status_pin']);
         }
 
         // A licence-managed agency's billing status comes from its licence (Licences::derivedStatus), never a form.
@@ -426,8 +429,26 @@ final class AgencyManagementController extends Controller
                 }
             }
 
+            // The pin (platform admins only - stripped above for anyone else). Merged into whatever settings this save writes.
+            $pinChange = null;
+            if (array_key_exists('billing_status_pin', $data)) {
+                $cur = isset($update['settings']) ? (json_decode($update['settings'], true) ?: []) : (json_decode((string) DB::table('agencies')->where('id', $id)->value('settings'), true) ?: []);
+                $was = $cur[\App\Support\Licences::PIN] ?? null;
+                $now = $data['billing_status_pin'] ?: null;
+                if ($was !== $now) {
+                    if ($now) $cur[\App\Support\Licences::PIN] = $now; else unset($cur[\App\Support\Licences::PIN]);
+                    $update['settings'] = json_encode((object) $cur);
+                    $pinChange = [$was, $now];
+                }
+            }
+
             $update['updated_at'] = now();
             DB::table('agencies')->where('id', $id)->update($update);
+            if ($pinChange) {
+                \App\Support\Licences::sync((int) $id);
+                \App\Support\Audit::write(['user_id' => $user->id, 'agency_id' => $id, 'action' => 'agency.billing_status_pin', 'entity_type' => 'agency', 'entity_id' => $id,
+                    'payload' => json_encode(['summary' => 'Billing status pin ' . ($pinChange[0] ?: 'none') . ' -> ' . ($pinChange[1] ?: 'none (follows the licence)'), 'before' => $pinChange[0], 'after' => $pinChange[1]]), 'created_at' => now()]);
+            }
 
             // Nothing genuinely different: no row. An audit full of empty saves is an
             // audit nobody reads.
