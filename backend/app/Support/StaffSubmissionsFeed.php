@@ -243,6 +243,14 @@ final class StaffSubmissionsFeed
             foreach ($q->orderByDesc('rv.self_submitted_at')->limit(12)->get(array_merge($sel, ['rv.id', 'rv.user_id', 'rv.title', 'rv.self_submitted_at'])) as $r) {
                 $push('hr_review', "\u{1F5C2}\u{FE0F}", $first($r) . ' submitted a self review' . (trim((string) $r->title) !== '' ? ': ' . $r->title : ''), $r->self_submitted_at, '#hr?tab=people&person=' . $r->user_id, $r->photo_url);
             }
+            // A staff injury or near miss the person reported themselves (HR Phase 3). Never the health details.
+            if (\Illuminate\Support\Facades\Schema::hasTable('hr_injuries')) {
+                $q = $who(DB::table('hr_injuries as ij')->whereColumn('ij.reported_by_id', 'ij.user_id'), 'ij.user_id');
+                $byPerson($q, 'ij.agency_id', 'ij.user_id');
+                foreach ($q->orderByDesc('ij.created_at')->limit(12)->get(array_merge($sel, ['ij.id', 'ij.user_id', 'ij.kind', 'ij.created_at'])) as $r) {
+                    $push('hr_injury', "\u{1FA79}", $first($r) . ($r->kind === 'near_miss' ? ' reported a near miss' : ' reported a workplace injury'), $r->created_at, '#hr?tab=injuries&injury=' . $r->id, $r->photo_url);
+                }
+            }
         });
 
         return $out;

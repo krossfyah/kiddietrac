@@ -1327,3 +1327,9 @@ post hr/courses/{id}/assign | Assigned a course
 post hr/course-assignments/remind | Sent course reminders
 delete hr/course-assignments/{id} | Removed a course assignment
 post hr/course-assignments/{id}/complete | Completed a course
+post hr/injuries | Reported a staff injury or near miss
+post hr/injuries/{id}/reveal | Viewed the health details of a staff injury
+put hr/injuries/{id} | Updated a staff injury record
+put hr/injuries/{id}/form7 | Recorded a staff injury report to the compensation board
+put hr/injuries/{id}/return-to-work | Saved a return-to-work plan
+post hr/injuries/{id}/checkins | Added a return-to-work check-in

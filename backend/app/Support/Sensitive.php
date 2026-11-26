@@ -66,6 +66,19 @@ final class Sensitive
             'subject' => 'text',
             'preview' => 'text',
         ],
+        // A staff member's workplace injury (2026-11-26, KiddieTrac HR, App\Support\HrInjuries): health details.
+        'hr_injuries' => [
+            'what_happened' => 'text',
+            'body_part'     => 'text',
+            'injury_nature' => 'text',
+            'first_aid'     => 'text',
+            'medical_care'  => 'text',
+            'medical_notes' => 'text',
+            'rtw_duties'    => 'text',
+        ],
+        'hr_injury_checkins' => [
+            'note' => 'text',
+        ],
     ];
 
     private const UNREADABLE = '⚠ This information could not be decrypted (KT_DATA_KEY). Ask the office to check the record.';

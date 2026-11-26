@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RR. HH.: expedientes, saldos y ausencias
 
-**RR. HH.** (en **Personal**) es parte del complemento KiddieTrac HR. Los administradores de la agencia ven toda la agencia. Los directores de centro ven al personal de sus propios centros.
+**RR. HH.** (en **Recursos humanos**) es parte del complemento KiddieTrac HR. Los administradores de la agencia ven toda la agencia. Los directores de centro ven al personal de sus propios centros.
 
 ## Personas
 

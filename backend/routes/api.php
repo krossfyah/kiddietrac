@@ -2661,6 +2661,16 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Scoped inside the controllers (App\Http\Concerns\HrAccess): admins = agency, directors = own centres, everyone = their own records.
     Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get(    '/hr/me/talent',                               [\App\Http\Controllers\Api\HrOnboardingController::class, 'mine']);
+        // KiddieTrac HR Phase 3 (2026-11-26): staff injury / near-miss records (any staff role: the controller decides who sees and changes what) (App\Support\HrInjuries).
+        Route::get   ('/hr/injuries',                       [\App\Http\Controllers\Api\HrInjuryController::class, 'index']);
+        Route::get   ('/hr/me/injuries',                    [\App\Http\Controllers\Api\HrInjuryController::class, 'mine']);
+        Route::post  ('/hr/injuries',                       [\App\Http\Controllers\Api\HrInjuryController::class, 'store'])->middleware('throttle:30,1');
+        Route::get   ('/hr/injuries/{id}',                  [\App\Http\Controllers\Api\HrInjuryController::class, 'show'])->whereNumber('id');
+        Route::post  ('/hr/injuries/{id}/reveal',           [\App\Http\Controllers\Api\HrInjuryController::class, 'reveal'])->whereNumber('id')->middleware('throttle:60,1');
+        Route::put   ('/hr/injuries/{id}',                  [\App\Http\Controllers\Api\HrInjuryController::class, 'update'])->whereNumber('id');
+        Route::put   ('/hr/injuries/{id}/form7',            [\App\Http\Controllers\Api\HrInjuryController::class, 'form7'])->whereNumber('id');
+        Route::put   ('/hr/injuries/{id}/return-to-work',   [\App\Http\Controllers\Api\HrInjuryController::class, 'returnToWork'])->whereNumber('id');
+        Route::post  ('/hr/injuries/{id}/checkins',         [\App\Http\Controllers\Api\HrInjuryController::class, 'checkin'])->whereNumber('id');
         Route::get(    '/hr/onboarding/{id}',                         [\App\Http\Controllers\Api\HrOnboardingController::class, 'show'])->whereNumber('id');
         Route::post(   '/hr/onboarding-tasks/{id}/done',              [\App\Http\Controllers\Api\HrOnboardingController::class, 'done'])->whereNumber('id');
         Route::post(   '/hr/onboarding-tasks/{id}/upload',            [\App\Http\Controllers\Api\HrOnboardingController::class, 'upload'])->whereNumber('id')->middleware('throttle:30,1,hronbup');

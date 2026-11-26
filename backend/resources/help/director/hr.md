@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # HR: team files, balances and absences
 
-**HR** (under **Staff**) is part of the KiddieTrac HR add-on. Agency admins see the whole agency. Centre directors see the staff of their own centres.
+**HR** (under **Human Resources**) is part of the KiddieTrac HR add-on. Agency admins see the whole agency. Centre directors see the staff of their own centres.
 
 ## People
 

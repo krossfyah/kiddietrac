@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RH : dossiers, soldes et absences
 
-**RH** (sous **Personnel**) fait partie du module complémentaire KiddieTrac RH. Les administrateurs d'agence voient toute l'agence. Les directeurs de centre voient le personnel de leurs propres centres.
+**RH** (sous **Ressources humaines**) fait partie du module complémentaire KiddieTrac RH. Les administrateurs d'agence voient toute l'agence. Les directeurs de centre voient le personnel de leurs propres centres.
 
 ## Personnes
 

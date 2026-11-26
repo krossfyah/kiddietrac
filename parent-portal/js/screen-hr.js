@@ -80,6 +80,7 @@
   function tabsFor() {
     var t = [['people', 'People'], ['balances', 'Balances'], ['absence', 'Absence report']];
     if (window.KTHrTalent) t = t.concat(window.KTHrTalent.tabs);   // Phase 2 (2026-11-28)
+    if (window.KTHrSafety) t = t.concat(window.KTHrSafety.tabs);   // Phase 3: injuries (screen-hr-safety.js)
     if (S.admin) t.push(['types', 'Leave types'], ['settings', 'Settings']);
     return t;
   }
@@ -124,6 +125,7 @@
     if (S.tab === 'absence') return drawAbsence(main);
     if (S.tab === 'types') return drawTypes(main);
     if (S.tab === 'settings') return drawSettings(main);
+    if (window.KTHrSafety && window.KTHrSafety.has(S.tab)) return window.KTHrSafety.draw(S.tab, b);
     if (window.KTHrTalent) return window.KTHrTalent.draw(S.tab, b);
   }
 

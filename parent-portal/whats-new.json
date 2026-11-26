@@ -4,6 +4,29 @@
         {
             "type": "new",
             "date": "2026-11-26",
+            "icon": "🩹",
+            "title": "Staff injury records",
+            "body": "Record a staff injury or near miss in HR. Health details stay encrypted and hidden until you choose to show them. In Ontario, a countdown shows the business days left to file WSIB Form 7. Return-to-work plans and check-ins live on the same record.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "🩹",
+            "title": "Report an injury at work",
+            "body": "Hurt at work, or nearly? Report it from My HR. Only you, your director and your agency admin can see it.",
+            "roles": [
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
             "icon": "🙈",
             "title": "Meeting no-shows",
             "body": "When a lead misses a meeting, mark it a no-show from the ⋮ menu and send a friendly email or text with a link to pick a new time. Their new booking lands on the same lead and you get a notice.",

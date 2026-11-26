@@ -1003,6 +1003,7 @@
     b.querySelectorAll('[data-mcert]').forEach(function (x) { x.addEventListener('click', function () { blob('/hr/course-assignments/' + x.getAttribute('data-mcert') + '/certificate', 'certificate.pdf'); }); });
     b.querySelectorAll('[data-mr]').forEach(function (x) { x.addEventListener('click', function () { openReview(+x.getAttribute('data-mr'), reload); }); });
     var mg = b.querySelector('[data-mg]'); if (mg) mg.addEventListener('click', function () { openGoalsAndNotes(d.me, true, reload); });
+    if (window.KTHrSafety) window.KTHrSafety.mine(b);   // Phase 3: the person's own injury reports (screen-hr-safety.js)
   }
 
   window.KTHrTalent = {

@@ -716,6 +716,45 @@ final class WebDemoShowcase
                 'reason' => 'Two days for covering the summer camp weekend, agreed with Olivia', 'created_by_id' => $olivia ?: $elena, 'created_at' => $now]);
         }
         $this->hrTalentStory($agencyId, $byName->all(), $centreOf->all(), $maya, $elena, $olivia, $now);
+        $this->hrSafetyStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 3 DEMO (2026-11-26, Starlight only): staff injuries and near misses. Marcus slipped on a wet
+     * kitchen floor two days ago and saw a doctor (board report still to file, modified duties, one check-in); Ethan's
+     * loose shelf bracket was a near miss (closed); Grace's paper cut from last month needed only first aid (closed).
+     * Health details go in through the sealed columns like any other write. All rows in this builder's ledger.
+     */
+    private function hrSafetyStory(int $agencyId, array $byName, array $centreOf, int $elena, int $olivia, string $now): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_injuries')) return;
+        $local = fn (int $days, int $h, int $m) => $this->today->copy()->addDays($days)->setTime($h, $m)->format('Y-m-d H:i:s');
+        $d = fn (int $days) => $this->today->copy()->addDays($days)->toDateString();
+        $boss = $olivia ?: $elena;
+        $rows = [
+            ['Marcus', 'injury', -2, 15, 40, 'Kitchen, Starlight Learning Center', 'Ethan', 'Slipped on water by the dishwasher while carrying the lunch trays and landed on the left wrist.',
+                'Left wrist', 'Sprain, swelling', 'Ice pack, wrist kept raised, incident logged', 'doctor', 'Walk-in clinic the same afternoon: sprain, brace for two weeks', true, null, null,
+                [-1, 12], 'No lifting over 5 kg, no diaper changes; reading corner, sign-in desk and planning time.', 'open', [[-1, 'Brace on, managing the sign-in desk well. Wrist sore by the end of the day.']]],
+            ['Ethan', 'near_miss', -6, 10, 15, 'Rainbows room', null, 'A wall shelf bracket came loose while Ethan was lifting the paint bins down. Nobody was hurt.',
+                null, null, null, 'none', null, false, null, null, null, null, 'closed', []],
+            ['Grace', 'injury', -24, 9, 30, 'Art table, Sunflowers room', 'Noah', 'Cut a finger on a box cutter while opening a supply box.',
+                'Right index finger', 'Small cut', 'Cleaned and bandaged from the first aid kit', 'none', null, false, null, null, null, null, 'closed', []],
+        ];
+        foreach ($rows as [$who, $kind, $ago, $h, $m, $where, $wit, $what, $part, $nature, $aid, $care, $notes, $lost, $filed, $ref, $rtw, $duties, $status, $checks]) {
+            $uid = $byName[$who] ?? null;
+            if (! $uid) continue;
+            $id = $this->add('hr_injuries', ['agency_id' => $agencyId, 'centre_id' => isset($centreOf[$elena]) ? (int) $centreOf[$elena] : null, 'user_id' => $uid,   // all at Elena's centre (the location text names it)
+               
+                'reported_by_id' => $kind === 'near_miss' ? $uid : $boss, 'kind' => $kind, 'occurred_at' => $local($ago, $h, $m), 'learned_on' => $d($ago),
+                'location' => $where, 'witnesses' => $wit ? ($byName[$wit] ?? null ? $wit : null) : null, 'what_happened' => $what, 'body_part' => $part, 'injury_nature' => $nature,
+                'first_aid' => $aid, 'medical_care' => $care, 'medical_notes' => $notes, 'lost_time' => $lost ? 1 : 0,
+                'form7_needed' => $kind === 'injury' && ($care !== 'none' || $lost) ? 1 : 0, 'form7_filed_on' => $filed, 'form7_reference' => $ref,
+                'rtw_start' => $rtw ? $d($rtw[0]) : null, 'rtw_end' => $rtw ? $d($rtw[1]) : null, 'rtw_duties' => $duties, 'status' => $status,
+                'created_at' => $this->at($ago, $h + 1, 0), 'updated_at' => $now]);
+            foreach ($checks as [$on, $note]) {
+                $this->add('hr_injury_checkins', ['agency_id' => $agencyId, 'injury_id' => $id, 'on_date' => $d($on), 'note' => $note, 'by_id' => $elena, 'created_at' => $now, 'updated_at' => $now]);
+            }
+        }
     }
 
     /**

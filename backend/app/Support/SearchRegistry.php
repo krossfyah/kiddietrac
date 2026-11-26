@@ -174,6 +174,8 @@ final class SearchRegistry
         'hr_one_on_ones' => 'one-to-one notes, private to the two people, the agency admins and their centre\'s directors; never in a global box',
         'hr_courses' => 'an agency\'s own courses (HR > Courses); configuration, found on that screen',
         'hr_course_assignments' => 'who has a course and when they finished it; shown on HR > Courses, the HR profile and My HR',
+        'hr_injuries' => 'staff injury records (HR): health details sealed; never searched, listed with health, or exported; reveal is audited',
+        'hr_injury_checkins' => 'return-to-work check-ins on a staff injury: sealed notes, shown inside the record only',
         'hr_course_role_rules' => 'configuration: "this course goes to everyone in this role" on a course, shown in its Assigned popup',
         'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',
