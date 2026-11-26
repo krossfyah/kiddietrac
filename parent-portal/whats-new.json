@@ -1,6 +1,20 @@
 {
-    "updated": "2026-11-25",
+    "updated": "2026-11-26",
     "entries": [
+        {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "🌙",
+            "title": "One scrollbar on Late pickups",
+            "body": "Late pickups (and a few other cards with wide tables) showed a second, empty scrollbar under the table. Now there is just the table's own. The Notifications list also scrolls with the page instead of in a box of its own.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
         {
             "type": "improved",
             "date": "2026-11-25",
