@@ -102,7 +102,15 @@
     + '.lic-spec h4 em{font-style:normal;color:#64748B}'
     + '.lic-feat-row{display:flex;gap:8px;align-items:baseline;padding:4px 0;font-size:13.5px;color:#0F172A;border-bottom:1px dotted #E2E8F0}'
     + '.lic-feat-row.off{color:#94A3B8}.lic-tick{font-weight:900;color:#16A34A;width:14px}.lic-feat-row.off .lic-tick{color:#CBD5E1}'
-    + '.lic-need{font-size:11px;font-weight:800;color:#7C3AED;white-space:nowrap}';
+    + '.lic-need{font-size:11px;font-weight:800;color:#7C3AED;white-space:nowrap}'
+    /* Collapsible agency groups (2026-11-26) */
+    + '.lic-ag-h{cursor:pointer}.lic-ag-h:focus-visible{outline:2px solid #1F6080;outline-offset:-2px}'
+    + '.lic-chev{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;border:1px solid #CFE3EB;background:#fff;color:#1F6080;font-size:12px;line-height:1;transition:transform .15s}'
+    + '.lic-ag-h[aria-expanded="true"] .lic-chev{transform:rotate(90deg)}'
+    + '.lic-ag-chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}.lic-ag-h[aria-expanded="true"] .lic-ag-chips{display:none}'
+    + '.lic-ag-chip{font-size:11px;font-weight:700;color:#4C1D95;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:999px;padding:1px 8px;white-space:nowrap}'
+    + '.lic-tools{display:flex;justify-content:flex-end;gap:6px;margin:0 0 8px}'
+    + '@media (max-width:640px){.lic-tbl .lic-ag-h td{display:block;width:auto}.lic-ag-h .lic-btn{height:30px}}';
   function css() { if (!document.getElementById('kt-lic-css')) { var s = document.createElement('style'); s.id = 'kt-lic-css'; s.textContent = CSS + CSS2; document.head.appendChild(s); } }
 
   /* ── platform: every licence ─────────────────────────────────────── */
@@ -161,6 +169,22 @@
         } }, ['🏫 ' + st.used + ' / ' + st.cap + ' centres']);
     }
 
+    /* COLLAPSIBLE AGENCY GROUPS (2026-11-26, Anthony: "license section for each agency make it collapsible so it's
+       easier to manage and read"). Each agency's header row toggles its plan and add-on lines (click on the header's
+       empty space, Enter or Space; its buttons keep their own job). Collapsed by default; open when the list is one
+       agency (e.g. from Edit agency's "Manage in Licences") or the agency needs attention (grace, renewing or ending
+       within 30 days, no live plan). Each viewer's own open/closed choice per agency is remembered in localStorage. */
+    var OPEN_KEY = 'kt_lic_open';
+    function openMap() { try { return JSON.parse(localStorage.getItem(OPEN_KEY) || '{}') || {}; } catch (e) { return {}; } }
+    function saveOpen(aid, on) { try { var m = openMap(); m[aid] = on ? 1 : 0; localStorage.setItem(OPEN_KEY, JSON.stringify(m)); } catch (e) {} }
+    var groups = [];
+    function setOpen(g, on, remember) {
+      g.open = on;
+      g.head.setAttribute('aria-expanded', on ? 'true' : 'false');
+      g.lines.forEach(function (r) { r.style.display = on ? '' : 'none'; });
+      if (remember) saveOpen(g.aid, on);
+    }
+
     // table
     var card = el('div', { class: 'lic-card', style: 'overflow-x:auto' });
     if (!rows.length) card.appendChild(el('div', { style: 'color:#64748B;padding:10px' }, ['No licences' + (flt.agency || flt.status ? ' match these filters.' : ' yet. Approving a proposal creates them, or add one here.')]));
@@ -179,10 +203,13 @@
         var dd0 = plan ? daysTo(plan.expires_at) : null;
         var termTxt = plan ? ((plan.status === 'grace' ? 'Grace until ' + day(plan.grace_until) : (plan.auto_renew ? 'Renews ' : 'Ends ') + day(plan.expires_at) + (dd0 !== null && dd0 >= 0 && dd0 <= 30 ? ' (' + dd0 + 'd)' : ''))
           + ' · billed ' + ({ monthly: 'monthly', quarterly: 'quarterly', semiannual: 'semi-annually', annual: 'yearly' }[plan.interval] || plan.interval) + (plan.term_months ? ' · ' + plan.term_months + '-month term' : '')) : 'No plan: add one to license this agency';
-        tb.appendChild(el('tr', { style: 'background:#F1F7FB' }, [el('td', { colspan: '7', style: 'padding:10px 12px;border-top:2px solid #D7E6F0' }, [el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' }, [
-          el('div', { style: 'flex:1 1 260px;min-width:0' }, [
+        var addonNames = ls.filter(function (x) { return x.kind !== 'plan' && x.status !== 'cancelled'; }).map(function (x) { return x.name; });
+        var head = el('tr', { class: 'lic-ag-h', style: 'background:#F1F7FB', tabindex: '0', 'aria-expanded': 'false', 'aria-label': (ls[0].agency_name || ('#' + aid)) + ' licence' }, [el('td', { colspan: '7', style: 'padding:10px 12px;border-top:2px solid #D7E6F0' }, [el('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' }, [
+          el('span', { class: 'lic-chev', 'aria-hidden': 'true' }, ['\u25B8']),
+          el('div', { style: 'flex:1 1 220px;min-width:0' }, [
             el('div', { style: 'display:inline-block;font-weight:800;font-size:14.5px;color:#4C1D95;padding:3px 12px;margin:0 0 3px -4px;border-radius:8px;background:linear-gradient(90deg,#EDE9FE 0%,#F5E8FF 45%,rgba(252,231,243,.55) 75%,rgba(252,231,243,0) 100%)' }, [(ls[0].agency_name || ('#' + aid))]),
             el('div', { style: 'font-size:12px;color:#475569' }, [termTxt + (plan ? ' · ' + liveN + ' line' + (liveN === 1 ? '' : 's') + ' · ' + money(total, plan.currency) + (IV[plan.interval] || '') : '')]),
+            addonNames.length ? el('div', { class: 'lic-ag-chips' }, addonNames.map(function (n) { return el('span', { class: 'lic-ag-chip' }, ['\uFF0B ' + n]); })) : null,
           ]),
           plan ? chip(plan.status) : null,
           centreCapChip(d, aid, main),
@@ -201,7 +228,14 @@
             if (!(await KT.confirm({ title: 'Cancel ' + (ls[0].agency_name || 'this agency') + '\'s licence?', description: 'The plan and every add-on are cancelled and their features switch off straight away - except invoicing and autopay, which run to the end of the period already paid. They stay listed as cancelled.', okLabel: 'Cancel licence', tone: 'danger' }))) return;
             try { var res = await KT.Api.patch('/platform/licences/' + plan.id, { status: 'cancelled' }); toast('Licence cancelled'); await offerReissue(res, 'the cancelled licence'); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not cancel', 'error'); }
           } }, ['Cancel licence']) : null,
-        ])])]));
+        ])])]);
+        tb.appendChild(head);
+        var g = { aid: String(aid), head: head, lines: [], open: false };
+        groups.push(g);
+        var dPlan = plan ? daysTo(plan.expires_at) : null;
+        g.attention = !plan || plan.status !== 'active' || (dPlan !== null && dPlan <= 30);
+        head.addEventListener('click', function (e) { if (e.target.closest('button, a, input, select, label')) return; setOpen(g, !g.open, true); });
+        head.addEventListener('keydown', function (e) { if (e.target !== head) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(g, !g.open, true); } });
         ls.forEach(function (l) {
         var dd = daysTo(l.expires_at);
         var when = l.status === 'grace' ? 'Grace until ' + day(l.grace_until) : (l.expires_at ? (l.auto_renew ? 'Renews ' : 'Ends ') + day(l.expires_at) + (dd !== null && dd >= 0 && dd <= 30 ? ' (' + dd + 'd)' : '') : '—');
@@ -212,7 +246,7 @@
             try { var res = await KT.Api.patch('/platform/licences/' + l.id, { status: 'cancelled' }); toast(l.name + ' removed'); await offerReissue(res, l.name); renderPlatform(main); } catch (e) { toast((e && e.message) || 'Could not remove', 'error'); }
           } }, ['Remove']) : null,
         ]);
-        tb.appendChild(el('tr', {}, [
+        var lineRow = el('tr', { 'data-lic-ag': String(aid) }, [
           el('td', { style: 'color:#94A3B8;font-size:12px;padding-left:22px' }, [l.kind === 'plan' ? 'Plan' : 'Add-on']),
           el('td', {}, [part(l.part_number)]),
           el('td', {}, [el('div', { style: 'font-weight:700' }, [l.name]), el('div', { style: 'font-size:11.5px;color:#64748B' }, [l.kind === 'plan' ? 'Plan · ' + (l.plan_code || '') : 'Add-on' + (l.feature_keys && l.feature_keys.length ? ' · ' + l.feature_keys.join(', ') : '')])]),
@@ -220,9 +254,23 @@
           el('td', { style: 'white-space:nowrap' }, [when, l.auto_renew ? null : el('div', { style: 'font-size:11px;color:#B45309' }, ['Not renewing'])]),
           el('td', {}, [chip(l.status)]),
           el('td', {}, [acts]),
-        ]));
+        ]);
+        g.lines.push(lineRow);
+        tb.appendChild(lineRow);
         });
       });
+      // Starting state: one agency in the list = open; else the viewer's remembered choice, else open only when it needs attention.
+      var remembered = openMap();
+      groups.forEach(function (g) {
+        var on = groups.length === 1 || !!flt.agency ? true : (Object.prototype.hasOwnProperty.call(remembered, g.aid) ? !!remembered[g.aid] : g.attention);
+        setOpen(g, on, false);
+      });
+      if (groups.length > 1) {
+        card.appendChild(el('div', { class: 'lic-tools' }, [
+          el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: 'height:30px;padding:0 10px;font-size:12px', onclick: function () { groups.forEach(function (g) { setOpen(g, true, true); }); } }, ['\u25BE Expand all']),
+          el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', style: 'height:30px;padding:0 10px;font-size:12px', onclick: function () { groups.forEach(function (g) { setOpen(g, false, true); }); } }, ['\u25B8 Collapse all']),
+        ]));
+      }
       card.appendChild(el('table', { class: 'lic-tbl', 'data-kt-no-filter': '1', 'data-kt-no-kebab': '1' }, [el('thead', {}, [el('tr', {}, ['', 'Part #', 'Item', 'Price', 'Term', 'Status', ''].map(function (h) { return el('th', {}, [h]); }))]), tb]));
     }
     wrap.appendChild(card);
