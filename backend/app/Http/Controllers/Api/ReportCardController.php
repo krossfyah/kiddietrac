@@ -79,6 +79,9 @@ final class ReportCardController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        if ($request->boolean('archived')) {
+            return $this->archived($request);   // same admin-only guard as GET /report-cards/archived
+        }
         $this->assertStaff($request);
         $u = $request->user();
         $agencyId = (int) $this->resolveAgencyId($request);
@@ -126,35 +129,115 @@ final class ReportCardController extends Controller
         ]);
 
         $uid = (int) $u->id;
-        $out = $rows->map(function ($r) use ($uid) {
-            $by = trim(($r->by_first ?? '') . ' ' . (($r->by_last ?? '') !== '' ? mb_substr((string) $r->by_last, 0, 1) . '.' : ''));
-            // Drafts written by the system (a family's leaving report drafted on de-enrolment, by whoever - or
-            // whichever integration - did it) say so rather than naming an account nobody signs in as.
-            if (str_starts_with((string) ($r->by_email ?? ''), 'integration+')) {
-                $by = 'System';
-            }
-            return [
-                'id' => (int) $r->id,
-                'child_id' => (int) $r->child_id,
-                'child' => trim(($r->child_first ?? '') . ' ' . ($r->child_last ?? '')),
-                'term' => (string) $r->term,
-                'status' => (string) ($r->status ?: 'draft'),
-                'centre_id' => (int) $r->centre_id,
-                'centre' => (string) $r->centre,
-                'room' => $r->room,
-                'made_by' => $by !== '' ? $by : null,
-                'made_by_id' => $r->generated_by_user_id ? (int) $r->generated_by_user_id : null,
-                'mine' => (int) $r->generated_by_user_id === $uid,
-                'submitted_by' => trim(($r->sub_first ?? '') . ' ' . (($r->sub_last ?? '') !== '' ? mb_substr((string) $r->sub_last, 0, 1) . '.' : '')) ?: null,
-                'review_note' => $r->review_note,
-                'created_at' => $r->created_at,
-                'updated_at' => $r->updated_at,
-                'submitted_at' => $r->submitted_at,
-                'sent_at' => $r->sent_at,
-            ];
+        $out = $rows->map(fn ($r) => $this->listRow($r, $uid))->values();
+        $admin = \App\Support\CentreScope::ids($request, $agencyId) === null;
+
+        return response()->json([
+            'data' => $out, 'approver' => $this->isApprover($u), 'admin' => $admin,
+            'archived_count' => $admin ? $this->archivedQuery($agencyId)->count() : 0,
+        ]);
+    }
+
+    /** One list row (GET /report-cards/all and /archived). Staff names are first name + initial. */
+    private function listRow(object $r, int $uid): array
+    {
+        $by = trim(($r->by_first ?? '') . ' ' . (($r->by_last ?? '') !== '' ? mb_substr((string) $r->by_last, 0, 1) . '.' : ''));
+        // Drafts written by the system (a family's leaving report drafted on de-enrolment, by whoever - or
+        // whichever integration - did it) say so rather than naming an account nobody signs in as.
+        if (str_starts_with((string) ($r->by_email ?? ''), 'integration+')) {
+            $by = 'System';
+        }
+        return [
+            'id' => (int) $r->id,
+            'child_id' => (int) $r->child_id,
+            'child' => trim(($r->child_first ?? '') . ' ' . ($r->child_last ?? '')),
+            'term' => (string) $r->term,
+            'status' => (string) ($r->status ?: 'draft'),
+            'centre_id' => (int) $r->centre_id,
+            'centre' => (string) $r->centre,
+            'room' => $r->room,
+            'made_by' => $by !== '' ? $by : null,
+            'made_by_id' => $r->generated_by_user_id ? (int) $r->generated_by_user_id : null,
+            'mine' => (int) $r->generated_by_user_id === $uid,
+            'submitted_by' => trim(($r->sub_first ?? '') . ' ' . (($r->sub_last ?? '') !== '' ? mb_substr((string) $r->sub_last, 0, 1) . '.' : '')) ?: null,
+            'review_note' => $r->review_note,
+            'created_at' => $r->created_at,
+            'updated_at' => $r->updated_at,
+            'submitted_at' => $r->submitted_at,
+            'sent_at' => $r->sent_at,
+        ];
+    }
+
+    /**
+     * ARCHIVED REPORT CARDS (2026-11-26, Anthony chose an "Archived" filter). Cards for withdrawn children,
+     * de-enrolled families and closed centres in the ACTIVE agency - iLearn's 31 leaving drafts. Agency admins only
+     * (platform admins acting in the agency count): directors, educators and parents are refused, failing closed.
+     * Read-only: every write on such a card is refused (refuseArchived), and the PDF is admin-only (pdf()).
+     */
+    public function archived(Request $request): JsonResponse
+    {
+        $this->assertStaff($request);
+        $agencyId = (int) $this->resolveAgencyId($request);
+        abort_unless($agencyId > 0 && \App\Support\CentreScope::ids($request, $agencyId) === null, 403,
+            'Only an agency admin can see archived report cards.');
+
+        $rows = $this->archivedQuery($agencyId)
+            ->leftJoin('rooms as rm', 'rm.id', '=', 'ch.primary_room_id')
+            ->leftJoin('users as gu', 'gu.id', '=', 'r.generated_by_user_id')
+            ->leftJoin('users as su', 'su.id', '=', 'r.submitted_by_user_id')
+            ->orderByDesc('r.updated_at')->limit(1000)
+            ->get([
+                'r.*', 'ch.first_name as child_first', 'ch.last_name as child_last',
+                'ch.enrollment_status as child_status', 'ch.deleted_at as child_deleted', 'f.deleted_at as family_deleted',
+                'c.id as centre_id', 'c.name as centre', 'c.status as centre_status', 'c.deleted_at as centre_deleted',
+                'rm.name as room', 'gu.first_name as by_first', 'gu.last_name as by_last', 'gu.email as by_email',
+                'su.first_name as sub_first', 'su.last_name as sub_last',
+            ]);
+
+        $uid = (int) $request->user()->id;
+        $current = \App\Support\LearningFrameworks::forAgency($agencyId);
+        $out = $rows->map(function ($r) use ($uid, $current) {
+            $row = $this->listRow($r, $uid);
+            $row['archived'] = \App\Support\Live::archivedReason(
+                (object) ['deleted_at' => $r->child_deleted, 'enrollment_status' => $r->child_status],
+                (object) ['deleted_at' => $r->family_deleted],
+                (object) ['deleted_at' => $r->centre_deleted, 'status' => $r->centre_status]
+            ) ?? 'child_withdrawn';
+            $fw = $this->frameworkOfCard($r, $current);
+            $row['framework_info'] = ['key' => $fw['key'], 'name' => $fw['name'], 'short' => $fw['short']];
+            $row['sections'] = $this->sectionsOf($r, $fw);
+            $row['next_steps'] = $r->next_steps;
+            return $row;
         })->values();
 
-        return response()->json(['data' => $out, 'approver' => $this->isApprover($u)]);
+        return response()->json(['data' => $out, 'archived' => true]);
+    }
+
+    /** Report cards in this agency whose child, family or centre has left (Live::archived). */
+    private function archivedQuery(int $agencyId)
+    {
+        $q = DB::table('report_cards as r')
+            ->join('children as ch', 'ch.id', '=', 'r.child_id')
+            ->join('families as f', 'f.id', '=', 'ch.family_id')
+            ->join('centres as c', 'c.id', '=', 'f.centre_id')
+            ->where('c.agency_id', $agencyId);
+        return \App\Support\Live::archived($q, 'ch', 'f', 'c');
+    }
+
+    /** Why this child's cards are archived, or null while the child, family and centre are live. */
+    private function archivedReasonOfChild(int $childId): ?string
+    {
+        $child = DB::table('children')->where('id', $childId)->first();
+        $family = $child ? DB::table('families')->where('id', $child->family_id)->first() : null;
+        $centre = $family ? DB::table('centres')->where('id', $family->centre_id)->first() : null;
+        return \App\Support\Live::archivedReason($child, $family, $centre);
+    }
+
+    /** Archived cards are read-only (2026-11-26): no edit, submit, approve, send back or send. */
+    private function refuseArchived(object $row): void
+    {
+        abort_if($this->archivedReasonOfChild((int) $row->child_id) !== null, 403,
+            'This report card is archived - the child has left or the centre has closed - so it can no longer be changed or sent.');
     }
 
     public function listForChild(Request $request, int $childId): JsonResponse
@@ -182,6 +265,8 @@ final class ReportCardController extends Controller
         // SECURITY (v22p94): scope to a child the caller can actually access.
         abort_unless($this->canAccessChildId($request->user(), (int) $data['child_id']), 403);
         abort_unless(DB::table('children')->where('id', $data['child_id'])->exists(), 404);
+        abort_if($this->archivedReasonOfChild((int) $data['child_id']) !== null, 403,
+            'This child has left or their centre has closed, so a new report card cannot be written.');
 
         $out = $this->draftFor((int) $data['child_id'], (string) $data['term'], (int) $request->user()->id);
         abort_unless($out, 404);
@@ -449,6 +534,7 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        $this->refuseArchived($row);
         abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
         $this->assertStaff($request);
         $data = $request->validate([
@@ -484,6 +570,7 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        $this->refuseArchived($row);
         abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
         // A report card must be approved by a director/admin before it reaches a
         // parent — an educator can only submit it for review (see submit()).
@@ -502,6 +589,7 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        $this->refuseArchived($row);
         abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403);
         $this->assertStaff($request);
         $data = $request->validate(['educator_signature' => 'required|string']);
@@ -522,6 +610,7 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        $this->refuseArchived($row);
         abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403);
         abort_unless($this->isApprover($request->user()), 403, 'Only a director or admin can approve report cards.');
         // A director of THIS child's centre, not of any centre (2026-11-05 leak sweep; see mayApproveCard).
@@ -555,6 +644,7 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        $this->refuseArchived($row);
         abort_unless($this->isApprover($request->user()), 403, 'Only a director or admin can review report cards.');
         /* The card's child must be at a centre you direct (2026-11-05 leak sweep): reject never looked at the
            child, so any director or admin could wipe the signature on, and send back, another agency's card. */
@@ -676,6 +766,11 @@ final class ReportCardController extends Controller
     {
         $row = DB::table('report_cards')->where('id', $id)->first();
         abort_unless($row, 404);
+        if ($this->archivedReasonOfChild((int) $row->child_id) !== null) {
+            $ag = (int) $this->resolveAgencyId($request);
+            abort_unless($ag > 0 && $this->agencyOfChild((int) $row->child_id) === $ag
+                && \App\Support\CentreScope::ids($request, $ag) === null, 404);
+        }
         abort_unless($this->canAccessChildId($request->user(), (int) $row->child_id), 403); // v22p94
         /* 2026-11-04: canAccessChildId lets a guardian of the family in - which reached drafts, cards in review and
            the de-enrolment leaving drafts by id. Anyone who is not staff of the agency sees an approved card only. */

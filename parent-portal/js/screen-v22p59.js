@@ -937,7 +937,7 @@
     const rcGroup = (s) => (s === 'submitted' || s === 'sent') ? s : 'draft';
     const rcPill = (s) => { const v = RC_ST[s] || RC_ST.draft; return `<span class="rc-pill" style="background:${v[1]};color:${v[2]};border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;white-space:nowrap;">${esc(v[0])}</span>`; };
     const rcDay = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : ''; };
-    const rcAll = { rows: [], approver: false, f: { st: '', q: '', term: '', by: '', centre: '' } };
+    const rcAll = { rows: [], approver: false, admin: false, archived: null, archivedCount: 0, f: { st: '', q: '', term: '', by: '', centre: '' } };
     const rcToast = (m, t) => { if (window.KT && KT.toast) KT.toast(m, t || 'info'); };
 
     async function rcOpenCard(c) {
@@ -994,24 +994,54 @@
       out.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    /* ARCHIVED (2026-11-26, agency admins only - the server refuses everyone else): cards for children who have
+       left and centres that have closed, from GET /report-cards/archived with their content. Read-only: no edit,
+       sign or send (the server refuses those too); Open PDF only. */
+    const RC_ARCH = { child_withdrawn: 'Archived — child withdrawn', centre_closed: 'Archived — centre closed' };
+    const rcArchPill = (k) => `<span class="rc-pill" style="background:#E2E8F0;color:#475569;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;white-space:nowrap;">${esc(RC_ARCH[k] || RC_ARCH.child_withdrawn)}</span>`;
+    function rcOpenArchived(c) {
+      const out = document.getElementById('rc-out'); if (!out || !c) return;
+      out.innerHTML =
+        `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px;"><h3 style="margin:0;">${esc(c.child)} — ${esc(c.term)}</h3>${rcArchPill(c.archived)}${rcPill(c.status)}</div>` +
+        `<div style="font-size:12.5px;color:#64748B;">${c.made_by ? 'Made by ' + esc(c.made_by) + ' · ' : ''}${esc(c.centre || '')}${c.room ? ' · ' + esc(c.room) : ''}</div>` +
+        '<div style="margin-top:10px;font-size:13px;color:#475569;">Archived cards are read-only. They cannot be edited, signed or sent.</div>' +
+        rcFwNote(c.framework_info) + rcBoxes(Array.isArray(c.sections) && c.sections.length ? c.sections : rcLegacy(c)) +
+        `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(c.next_steps || '')}</textarea>` +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;"><button type="button" id="rc-o-pdf" class="kt-btn" data-kt-iconized="1">📄 Open PDF</button></div>';
+      out.querySelectorAll('textarea').forEach(t => { t.readOnly = true; t.style.background = '#F8FAFC'; });
+      document.getElementById('rc-o-pdf').onclick = () => {
+        if (!(window.KT && KT.openFile && KT.fetchFileBlob)) return;
+        KT.openFile(() => KT.fetchFileBlob(KT.API_BASE + '/report-cards/' + c.id + '/pdf'),
+          { title: c.child + ' — ' + c.term, filename: 'report-card-' + c.id + '.pdf', mime: 'application/pdf' });
+      };
+      out.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    async function rcLoadArchived() {
+      let r; try { r = await Api.get('/report-cards/archived'); } catch (e) { rcToast((e && e.message) || 'Could not load archived report cards.', 'error'); rcAll.archived = []; return; }
+      rcAll.archived = (r && r.data) || [];
+      rcAll.archivedCount = rcAll.archived.length;
+    }
+
     function rcPaintAll() {
       const host = document.getElementById('rc-all'); if (!host) return;
-      const all = rcAll.rows, f = rcAll.f;
-      if (!all.length) { host.innerHTML = ''; return; }
+      const f = rcAll.f, arch = f.st === 'archived';
+      const all = arch ? (rcAll.archived || []) : rcAll.rows;
+      if (!rcAll.rows.length && !rcAll.archivedCount && !arch) { host.innerHTML = ''; return; }
       const uniq = (k) => Array.from(new Set(all.map(r => r[k]).filter(Boolean))).sort();
       const terms = uniq('term'), makers = uniq('made_by'), centres = uniq('centre');
-      const cnt = { '': all.length, draft: 0, submitted: 0, sent: 0 };
-      all.forEach(r => { cnt[rcGroup(r.status)]++; });
+      const cnt = { '': rcAll.rows.length, draft: 0, submitted: 0, sent: 0, archived: rcAll.archivedCount };
+      rcAll.rows.forEach(r => { cnt[rcGroup(r.status)]++; });
       const q = f.q.trim().toLowerCase();
-      const rows = all.filter(r => (!f.st || rcGroup(r.status) === f.st) && (!f.term || r.term === f.term)
+      const rows = all.filter(r => (!f.st || arch || rcGroup(r.status) === f.st) && (!f.term || r.term === f.term)
         && (!f.by || r.made_by === f.by) && (!f.centre || r.centre === f.centre)
         && (!q || (r.child || '').toLowerCase().indexOf(q) !== -1));
       const chip = (k, label) => `<button type="button" class="rc-chip${f.st === k ? ' on' : ''}" data-st="${k}">${esc(label)} <b>${cnt[k]}</b></button>`;
       const opt = (list, cur, any) => `<option value="">${esc(any)}</option>` + list.map(v => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
       host.innerHTML = '<div class="kt-card" style="--kt-edge:#1F6080;margin-bottom:16px;">' +
-        `<h3 style="margin:0 0 4px;">📚 All report cards <span style="background:#E0F2FE;color:#075985;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${all.length}</span></h3>` +
+        `<h3 style="margin:0 0 4px;">📚 All report cards <span style="background:#E0F2FE;color:#075985;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:800;">${rcAll.rows.length}</span></h3>` +
         '<p style="font-size:12.5px;color:#64748B;margin:0 0 10px;">Every report card you can see, newest first. Tap one to open it below.</p>' +
-        '<div class="rc-bar">' + chip('', 'All') + chip('draft', 'Draft') + chip('submitted', 'Awaiting approval') + chip('sent', 'Sent') + '</div>' +
+        '<div class="rc-bar">' + chip('', 'All') + chip('draft', 'Draft') + chip('submitted', 'Awaiting approval') + chip('sent', 'Sent') + (rcAll.admin ? chip('archived', 'Archived') : '') + '</div>' +
+        (arch ? '<div style="font-size:12.5px;color:#64748B;margin:-4px 0 10px;">Cards for children who have left and centres that have closed. Read-only.</div>' : '') +
         '<div class="rc-bar">' +
           `<input type="search" id="rc-f-q" placeholder="Search a child" value="${esc(f.q)}">` +
           (terms.length > 1 ? `<select id="rc-f-term">${opt(terms, f.term, 'All terms')}</select>` : '') +
@@ -1019,17 +1049,22 @@
           (centres.length > 1 ? `<select id="rc-f-centre">${opt(centres, f.centre, 'All centres')}</select>` : '') +
         '</div>' +
         (rows.length ? '<div class="kt-table-scroll"><table class="rc-table" data-kt-no-filter="1"><thead><tr><th>Child</th><th>Term</th><th>Made by</th><th>Status</th><th>Centre</th><th>Updated</th></tr></thead><tbody>' +
-          rows.slice(0, 300).map(r => `<tr class="rc-row" data-id="${r.id}" tabindex="0" style="cursor:pointer;"><td><b>${esc(r.child)}</b></td><td>${esc(r.term)}</td><td>${esc(r.made_by || '—')}${r.mine ? ' <span style="color:#64748B;font-size:11.5px;">(you)</span>' : ''}</td><td>${rcPill(r.status)}</td><td>${esc(r.centre || '')}${r.room ? ' · ' + esc(r.room) : ''}</td><td>${esc(rcDay(r.updated_at || r.created_at))}</td></tr>`).join('') +
+          rows.slice(0, 300).map(r => `<tr class="rc-row" data-id="${r.id}" tabindex="0" style="cursor:pointer;"><td><b>${esc(r.child)}</b></td><td>${esc(r.term)}</td><td>${esc(r.made_by || '—')}${r.mine ? ' <span style="color:#64748B;font-size:11.5px;">(you)</span>' : ''}</td><td>${arch ? rcArchPill(r.archived) : rcPill(r.status)}</td><td>${esc(r.centre || '')}${r.room ? ' · ' + esc(r.room) : ''}</td><td>${esc(rcDay(r.updated_at || r.created_at))}</td></tr>`).join('') +
           '</tbody></table></div>' + (rows.length > 300 ? '<div style="font-size:12px;color:#64748B;margin-top:6px;">Showing the 300 most recent. Narrow the filters to see more.</div>' : '')
           : '<div style="padding:14px;color:#64748B;font-size:13px;">No report cards match.</div>') +
         '</div>';
-      host.querySelectorAll('.rc-chip').forEach(b => { b.onclick = () => { f.st = b.getAttribute('data-st'); rcPaintAll(); }; });
+      host.querySelectorAll('.rc-chip').forEach(b => { b.onclick = async () => {
+        const next = b.getAttribute('data-st');
+        if ((next === 'archived') !== arch) { f.term = ''; f.by = ''; f.centre = ''; }
+        if (next === 'archived' && rcAll.archived === null) await rcLoadArchived();
+        f.st = next; rcPaintAll();
+      }; });
       const qi = document.getElementById('rc-f-q');
       if (qi) qi.addEventListener('input', () => { f.q = qi.value; const pos = qi.selectionStart; rcPaintAll(); const n = document.getElementById('rc-f-q'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) {} } });
       [['rc-f-term', 'term'], ['rc-f-by', 'by'], ['rc-f-centre', 'centre']].forEach(([id, k]) => { const s = document.getElementById(id); if (s) s.onchange = () => { f[k] = s.value; rcPaintAll(); }; });
       const byId = {}; all.forEach(r => { byId[r.id] = r; });
       host.querySelectorAll('.rc-row').forEach(tr => {
-        const go = () => rcOpenCard(byId[+tr.getAttribute('data-id')]);
+        const go = () => (arch ? rcOpenArchived : rcOpenCard)(byId[+tr.getAttribute('data-id')]);
         tr.onclick = go; tr.onkeydown = (e) => { if (e.key === 'Enter') go(); };
       });
     }
@@ -1038,6 +1073,8 @@
       let r; try { r = await Api.get('/report-cards/all'); } catch (e) { return; }
       rcAll.rows = (r && r.data) || [];
       rcAll.approver = !!(r && r.approver);
+      rcAll.admin = !!(r && r.admin);
+      rcAll.archivedCount = (r && +r.archived_count) || 0;
       rcPaintAll();
     }
     (function rcAllCss() {

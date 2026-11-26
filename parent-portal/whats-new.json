@@ -2,6 +2,17 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "🗄️",
+            "title": "Archived report cards",
+            "body": "Agency admins can now tap Archived on the All report cards list to see the report cards of children who have left and centres that have closed. They open read-only, with the PDF.",
+            "roles": [
+                "agency_admin",
+                "platform_admin"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-26",
             "icon": "🚪",
@@ -9,6 +20,20 @@
             "body": "Centre directors now see and manage the tour bookings for their own centre under Tours: confirm, mark completed or no-show, or cancel. Tours at other centres stay with them and your agency admins.",
             "roles": [
                 "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-26",
+            "icon": "📚",
+            "title": "All report cards in one list",
+            "body": "The Report cards screen now lists every report card you can see, with who made it and whether it is a draft, awaiting approval or sent. Filter by status, term, who made it or centre, search for a child, and tap a card to open it.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
             ]
         },
         {

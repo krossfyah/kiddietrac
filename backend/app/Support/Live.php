@@ -62,6 +62,39 @@ final class Live
             ->where(fn ($w) => $w->whereNull($as . '.departure_applied_at'));
     }
 
+    /**
+     * THE EXPLICIT ARCHIVED PATH (2026-11-26, the agency admin's "Archived" report cards). The complement of
+     * children() + a live family + centres(): rows whose child is withdrawn, whose family was de-enrolled
+     * (soft-deleted), or whose centre is closed or deleted. Only for screens that deliberately show what has left,
+     * behind an admin-only guard; never for anything about today. A deleted child is gone, not archived: never here.
+     * $q joins children ($child), families ($family) and centres ($centre).
+     */
+    public static function archived($q, string $child = 'children', string $family = 'families', string $centre = 'centres')
+    {
+        return $q->whereNull($child . '.deleted_at')->where(function ($w) use ($child, $family, $centre) {
+            $w->where($child . '.enrollment_status', 'withdrawn')
+                ->orWhereNotNull($family . '.deleted_at')
+                ->orWhereNotNull($centre . '.deleted_at')
+                ->orWhereIn($centre . '.status', self::CLOSED_CENTRE_STATUSES);
+        });
+    }
+
+    /**
+     * Why one record is not live: 'centre_closed', 'child_withdrawn', or null while it is live. The same rule as
+     * archived() row by row, failing closed: a missing or deleted child, family or centre counts as archived.
+     */
+    public static function archivedReason(?object $child, ?object $family, ?object $centre): ?string
+    {
+        if (! $centre || ! empty($centre->deleted_at) || in_array((string) ($centre->status ?? ''), self::CLOSED_CENTRE_STATUSES, true)) {
+            return 'centre_closed';
+        }
+        if (! $child || ! $family || ! empty($child->deleted_at) || ! empty($family->deleted_at)
+            || (string) ($child->enrollment_status ?? '') === 'withdrawn') {
+            return 'child_withdrawn';
+        }
+        return null;
+    }
+
     /** Open centre ids for an agency. */
     public static function centreIds(int $agencyId): array
     {

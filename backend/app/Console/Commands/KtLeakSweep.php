@@ -51,6 +51,7 @@ class KtLeakSweep extends Command
         '#^api/v1/provider/observations#',           // the learning record of a child who has left
         '#^api/v1/integration/pull/new#',            // the feed TELLS the source system about departures
         '#^api/v1/safe-arrival/history#',            // past Safe Arrival checks (2026-11-03): who was there then
+        '#^api/v1/report-cards/archived#',      // admin-only archived report cards (2026-11-26): withdrawn children / closed centres by design
     ];
 
     /** Mail that is about leaving, so it names what has closed. Regex on the subject.

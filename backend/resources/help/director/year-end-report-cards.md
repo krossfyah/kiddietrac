@@ -34,7 +34,7 @@ Under the approvals on the **Report cards** screen, **All report cards** lists e
 - Search for a child, or narrow the list by term, by who made it, or by centre.
 - Tap a card to open it below the list. A draft can be edited, then signed, approved and sent. A card awaiting approval opens with **Sign, approve & send** and **Send back for changes**. A sent card opens read-only, with **Open PDF**.
 
-Cards for withdrawn children and closed centres are not listed.
+Cards for withdrawn children and closed centres are not listed there. Agency admins get one more chip, **Archived**: those cards, each marked *Archived — child withdrawn* or *Archived — centre closed*. They open read-only, with **Open PDF**; they cannot be edited, signed or sent. Directors and educators do not see archived cards.
 
 ## Statuses
 

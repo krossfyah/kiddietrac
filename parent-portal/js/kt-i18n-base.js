@@ -9,6 +9,12 @@
  */
 window.KT_I18N_BASE && window.KT_I18N_BASE({
     // All report cards list (screen-v22p59.js, 2026-11-26)
+    'Archived': { fr: 'Archivés', es: 'Archivadas', hi: 'संग्रहीत' },
+    'Archived — child withdrawn': { fr: 'Archivé — enfant retiré', es: 'Archivada — niño dado de baja', hi: 'संग्रहीत — बच्चा निकाला गया' },
+    'Archived — centre closed': { fr: 'Archivé — centre fermé', es: 'Archivada — centro cerrado', hi: 'संग्रहीत — केंद्र बंद' },
+    'Cards for children who have left and centres that have closed. Read-only.': { fr: 'Bulletins des enfants partis et des centres fermés. Lecture seule.', es: 'Boletas de niños que se fueron y de centros cerrados. Solo lectura.', hi: 'जो बच्चे चले गए और जो केंद्र बंद हो गए, उनके कार्ड। केवल पढ़ने के लिए।' },
+    'Archived cards are read-only. They cannot be edited, signed or sent.': { fr: 'Les bulletins archivés sont en lecture seule. Ils ne peuvent pas être modifiés, signés ni envoyés.', es: 'Las boletas archivadas son de solo lectura. No se pueden editar, firmar ni enviar.', hi: 'संग्रहीत कार्ड केवल पढ़ने के लिए हैं। इन्हें बदला, हस्ताक्षरित या भेजा नहीं जा सकता।' },
+    'Could not load archived report cards.': { fr: 'Impossible de charger les bulletins archivés.', es: 'No se pudieron cargar las boletas archivadas.', hi: 'संग्रहीत रिपोर्ट कार्ड लोड नहीं हो सके।' },
     'All report cards': { fr: 'Tous les bulletins', es: 'Todas las boletas', hi: 'सभी रिपोर्ट कार्ड' },
     'Every report card you can see, newest first. Tap one to open it below.': { fr: 'Tous les bulletins que vous pouvez voir, du plus récent au plus ancien. Touchez-en un pour l’ouvrir ci-dessous.', es: 'Todas las boletas que puede ver, de la más reciente a la más antigua. Toque una para abrirla abajo.', hi: 'आप जो भी रिपोर्ट कार्ड देख सकते हैं, सबसे नए पहले। नीचे खोलने के लिए किसी एक पर टैप करें।' },
     'Awaiting approval': { fr: 'En attente d’approbation', es: 'Pendiente de aprobación', hi: 'स्वीकृति की प्रतीक्षा में' },
