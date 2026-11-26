@@ -592,7 +592,7 @@ final class SalesCampaigns
         }
     }
 
-    /** A website booking from someone a campaign reached (same email, after the send) is a response. */
+    /** A website booking from someone a campaign reached (same email, after the send) is a response to the LAST such campaign. */
     public static function attributeBookings(): int
     {
         // Two steps, not a JOIN: the two tables' email columns use different collations.
@@ -608,9 +608,22 @@ final class SalesCampaigns
                 if (! isset($booked[$k]) || $b->created_at > $booked[$k]) $booked[$k] = $b->created_at;
             }
         }
+        // ONE booking = ONE response (2026-11-26): credit only the LAST campaign that reached them before they booked.
+        // Crediting every campaign the address ever got marked six campaigns "booked" for one booking (and sent six
+        // "booked a demo" alerts). Weighed against every sent row for the address, not just the open ones, so a
+        // campaign that already holds the booking keeps it and an older one is never credited instead.
+        $last = [];
+        foreach (array_chunk(array_keys($booked), 500) as $chunk) {
+            foreach (DB::table('sales_campaign_recipients')->where('status', 'sent')->whereNotNull('sent_at')
+                ->whereIn(DB::raw('LOWER(TRIM(email))'), $chunk)->get(['id', 'email', 'sent_at']) as $s) {
+                $k = mb_strtolower(trim($s->email));
+                if ($s->sent_at > $booked[$k]) continue;
+                if (! isset($last[$k]) || $s->sent_at > $last[$k][1] || ($s->sent_at == $last[$k][1] && $s->id > $last[$k][0])) $last[$k] = [(int) $s->id, $s->sent_at];
+            }
+        }
         foreach ($open as $r) {
             $k = mb_strtolower(trim($r->email));
-            if (isset($booked[$k]) && $booked[$k] >= $r->sent_at && $n < 50) { self::respond($r, 'booked'); $n++; }
+            if (isset($last[$k]) && $last[$k][0] === (int) $r->id && $n < 50) { self::respond($r, 'booked'); $n++; }
         }
         return $n;
     }
