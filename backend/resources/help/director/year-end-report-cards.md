@@ -25,6 +25,17 @@ The AI uses the child's HDLH-tagged observations + milestone records to write sp
 
 Each domain text is editable. Tweak as needed — the AI gets you 90% of the way, you tighten the language.
 
+## All report cards
+
+Under the approvals on the **Report cards** screen, **All report cards** lists every card you can see, newest first: the child, the term, who made it, its status, the centre and when it was last changed.
+
+- Agency admins see every card in the agency. Directors see the cards for their own centres.
+- Tap **Draft**, **Awaiting approval** or **Sent** to show just those. Each chip shows how many there are.
+- Search for a child, or narrow the list by term, by who made it, or by centre.
+- Tap a card to open it below the list. A draft can be edited, then signed, approved and sent. A card awaiting approval opens with **Sign, approve & send** and **Send back for changes**. A sent card opens read-only, with **Open PDF**.
+
+Cards for withdrawn children and closed centres are not listed.
+
 ## Statuses
 
 - **Draft** — generated, not yet sent

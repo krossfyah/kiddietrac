@@ -97,3 +97,7 @@ Aim for 2-4 observations per child per week. These are gold for parents — they
 Observations appear in the parent app under **Today → Recent observations** and on the child's detail page. They're saved permanently as part of the child's portfolio.
 
 At year-end, you can export all of a child's observations as a developmental summary — useful for transitioning to kindergarten.
+
+## Finding your report cards
+
+On the **Report cards** screen, **All report cards** lists the cards for the children in your rooms and the cards you wrote yourself. Use **Draft**, **Awaiting approval** and **Sent** to filter them, or search for a child. Tap a draft to finish it and **Sign & submit for approval**. Once your director or admin approves it, it is marked **Sent**.

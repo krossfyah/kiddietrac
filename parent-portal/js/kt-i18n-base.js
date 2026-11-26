@@ -8,6 +8,20 @@
  * words only). New UI text goes HERE now.
  */
 window.KT_I18N_BASE && window.KT_I18N_BASE({
+    // All report cards list (screen-v22p59.js, 2026-11-26)
+    'All report cards': { fr: 'Tous les bulletins', es: 'Todas las boletas', hi: 'सभी रिपोर्ट कार्ड' },
+    'Every report card you can see, newest first. Tap one to open it below.': { fr: 'Tous les bulletins que vous pouvez voir, du plus récent au plus ancien. Touchez-en un pour l’ouvrir ci-dessous.', es: 'Todas las boletas que puede ver, de la más reciente a la más antigua. Toque una para abrirla abajo.', hi: 'आप जो भी रिपोर्ट कार्ड देख सकते हैं, सबसे नए पहले। नीचे खोलने के लिए किसी एक पर टैप करें।' },
+    'Awaiting approval': { fr: 'En attente d’approbation', es: 'Pendiente de aprobación', hi: 'स्वीकृति की प्रतीक्षा में' },
+    'Search a child': { fr: 'Rechercher un enfant', es: 'Buscar un niño', hi: 'बच्चा खोजें' },
+    'All terms': { fr: 'Toutes les périodes', es: 'Todos los periodos', hi: 'सभी सत्र' },
+    'Anyone': { fr: 'Tout le monde', es: 'Cualquiera', hi: 'कोई भी' },
+    'All centres': { fr: 'Tous les centres', es: 'Todos los centros', hi: 'सभी केंद्र' },
+    'Made by': { fr: 'Créé par', es: 'Hecho por', hi: 'किसने बनाया' },
+    'No report cards match.': { fr: 'Aucun bulletin ne correspond.', es: 'Ninguna boleta coincide.', hi: 'कोई रिपोर्ट कार्ड मेल नहीं खाता।' },
+    'Open PDF': { fr: 'Ouvrir le PDF', es: 'Abrir PDF', hi: 'PDF खोलें' },
+    'Waiting for a director or admin to approve it.': { fr: 'En attente de l’approbation d’un directeur ou d’un administrateur.', es: 'Esperando la aprobación de un director o administrador.', hi: 'किसी निदेशक या एडमिन की स्वीकृति की प्रतीक्षा है।' },
+    'Sent back:': { fr: 'Renvoyé :', es: 'Devuelto:', hi: 'वापस भेजा गया:' },
+    'Showing the 300 most recent. Narrow the filters to see more.': { fr: 'Affichage des 300 plus récents. Affinez les filtres pour en voir davantage.', es: 'Se muestran las 300 más recientes. Ajuste los filtros para ver más.', hi: 'सबसे हाल के 300 दिखाए जा रहे हैं। और देखने के लिए फ़िल्टर सीमित करें।' },
     // Reminder toasts (kt-reminders.js, 2026-11-26)
     "1 reminder": { fr: "1 rappel", es: "1 recordatorio", hi: "1 रिमाइंडर" },
     "reminders": { fr: "rappels", es: "recordatorios", hi: "रिमाइंडर" },

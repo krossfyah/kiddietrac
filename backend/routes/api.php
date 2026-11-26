@@ -3592,6 +3592,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Report cards
     Route::middleware('role:educator,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/report-cards/pending',         [\App\Http\Controllers\Api\ReportCardController::class, 'pending']);
+        Route::get ('/report-cards/all',             [\App\Http\Controllers\Api\ReportCardController::class, 'index']);   // every card the caller may see (2026-11-26)
         Route::get ('/report-cards/requests',        [\App\Http\Controllers\Api\ReportCardController::class, 'requests']);
         Route::get ('/report-cards/child/{childId}', [\App\Http\Controllers\Api\ReportCardController::class, 'listForChild']);
         Route::post('/report-cards/generate',        [\App\Http\Controllers\Api\ReportCardController::class, 'generate']);

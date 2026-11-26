@@ -887,6 +887,7 @@ delete reactions | Removed a reaction
 post refunds | Issued a refund
 post refunds/invoice | Refunded an invoice
 post report-cards/generate | Generated report cards
+get report-cards/all | Viewed all report cards
 post parent/report-cards/request | Asked for a report card
 patch report-cards/{id} | Edited a report card
 post report-cards/{id}/approve | Approved a report card
