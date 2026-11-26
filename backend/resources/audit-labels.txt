@@ -1288,6 +1288,8 @@ post hr/applications/{id}/interview | Booked an interview with a job applicant
 post hr/applications/{id}/keep | Kept a job application on file
 post hr/applications/{id}/decline | Declined a job applicant
 post hr/applications/{id}/hire | Hired a job applicant
+post hr/applications/{id}/comment | Commented on a job applicant
+post hr/course-role-rules/{id}/stop | Stopped giving a course to new people in a role
 post hr/public/jobs/{slug}/apply | Applied for a job on an agency's jobs page
 post hr/onboarding | Started an onboarding checklist
 post hr/onboarding/{id}/tasks | Added an onboarding task

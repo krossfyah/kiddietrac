@@ -130,6 +130,7 @@ final class StaffController extends Controller
             ['user_id' => $userId, 'role' => $data['role'], 'centre_id' => $centreId, 'agency_id' => $centre->agency_id],
             ['active' => true, 'created_at' => now()]
         );
+        \App\Support\HrTalent::coursesForUser((int) $userId);   // KiddieTrac HR: courses that go to everyone in this role
 
         // Send welcome email
         $emailSent = false;

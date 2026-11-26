@@ -147,6 +147,11 @@ final class HrLeave
             $q->whereIn('ra.centre_id', array_values(array_intersect($centreScope, $open)) ?: [0]);
         }
 
+        // Staff only (2026-11-26, Anthony: "HR/people linked to the users that are staff to the agency"): a platform
+        // admin, integration or reseller account holding a role here is not the agency's staff, and a deactivated
+        // account has left. People, balances, accrual, reminders and every HR guard read this one list.
+        $q->whereNotIn('u.status', ['deactivated'])->whereNotIn('u.id', AgencySignatories::outsiderIds() ?: [0]);
+
         return $q->distinct()->pluck('u.id')->map(fn ($v) => (int) $v)->all();
     }
 

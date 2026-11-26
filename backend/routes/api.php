@@ -2691,6 +2691,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post(   '/hr/applications/{id}/keep',                  [\App\Http\Controllers\Api\HrHiringController::class, 'keep'])->whereNumber('id')->middleware('throttle:20,1,hrappout');
         Route::post(   '/hr/applications/{id}/decline',               [\App\Http\Controllers\Api\HrHiringController::class, 'decline'])->whereNumber('id')->middleware('throttle:20,1,hrappout');
         Route::post(   '/hr/applications/{id}/hire',                  [\App\Http\Controllers\Api\HrHiringController::class, 'hire'])->whereNumber('id')->middleware('throttle:10,1,hrhire');
+        Route::post(   '/hr/applications/{id}/comment',               [\App\Http\Controllers\Api\HrHiringController::class, 'comment'])->whereNumber('id')->middleware('throttle:60,1,hrappnote');
         Route::get(    '/hr/onboarding',                              [\App\Http\Controllers\Api\HrOnboardingController::class, 'index']);
         Route::post(   '/hr/onboarding',                              [\App\Http\Controllers\Api\HrOnboardingController::class, 'start']);
         Route::post(   '/hr/onboarding/{id}/tasks',                   [\App\Http\Controllers\Api\HrOnboardingController::class, 'addTask'])->whereNumber('id');
@@ -2717,6 +2718,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get(    '/hr/courses/{id}/assignments',                [\App\Http\Controllers\Api\HrCoursesController::class, 'assignments'])->whereNumber('id');
         Route::post(   '/hr/courses/{id}/assign',                     [\App\Http\Controllers\Api\HrCoursesController::class, 'assign'])->whereNumber('id');
         Route::post(   '/hr/course-assignments/remind',               [\App\Http\Controllers\Api\HrCoursesController::class, 'remind'])->middleware('throttle:20,1,hrcourseremind');
+        Route::post(   '/hr/course-role-rules/{id}/stop',             [\App\Http\Controllers\Api\HrCoursesController::class, 'stopRule'])->whereNumber('id');
         Route::delete( '/hr/course-assignments/{id}',                 [\App\Http\Controllers\Api\HrCoursesController::class, 'unassign'])->whereNumber('id');
     });
 

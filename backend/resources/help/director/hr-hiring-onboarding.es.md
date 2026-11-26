@@ -14,8 +14,10 @@ Estas cuatro pestañas están en la pantalla **RR. HH.** (en **Personal**) y for
 - La página de empleos lleva el nombre y el logotipo de su agencia. Las personas postulan allí con su currículum y una carta de presentación opcional.
 - Los candidatos pasan por **Nuevo**, **Preselección**, **Entrevista** y **Oferta** hasta **Contratado**, **Rechazado** o **En archivo**. Seleccione varias filas para moverlas juntas.
 - En el menú **⋮**: **Programar entrevista** la añade a su calendario y envía una invitación al candidato. **Guardar en archivo** y **Rechazar** envían una carta amable, y puede ver cada correo antes de enviarlo.
-- **Contratar** (administradores de agencia) crea la cuenta de KiddieTrac de la persona y le envía un enlace para crear su contraseña. También llena su expediente de empleado e inicia su lista de incorporación.
-- **Ajustes de contratación** define cuánto tiempo se guardan los candidatos en archivo (después se eliminan automáticamente), a quién llegan las respuestas y el texto al inicio de su página de empleos.
+- **Contratar** crea la cuenta de KiddieTrac de la persona y le envía un enlace para crear su contraseña. También llena su expediente de empleado e inicia su lista de incorporación. Los directores de centro contratan educadores y visitadores domiciliarios en sus propios centros; los administradores de agencia contratan en cualquier lugar.
+- **Añadir un comentario** deja una nota sobre un candidato para su equipo. El candidato nunca la ve.
+- Los puestos para toda la agencia (sin centro) los gestionan los administradores de agencia. Los directores de centro pueden verlos, ver sus candidatos y comentar, pero no cambiarlos.
+- **Ajustes de contratación** define cuánto tiempo se guardan los candidatos en archivo (después se eliminan automáticamente), cuándo se eliminan los candidatos rechazados (a los 90 días salvo que elija otra cosa, o Nunca), a quién llegan las respuestas y el texto al inicio de su página de empleos. El currículum, las cartas y el historial de un candidato eliminado se van con él.
 
 ## Incorporación
 
@@ -34,5 +36,5 @@ Estas cuatro pestañas están en la pantalla **RR. HH.** (en **Personal**) y for
 ## Cursos
 
 - Los administradores añaden un curso: un enlace, un enlace de video, un archivo subido o uno de los videos de capacitación de KiddieTrac. Un curso puede contar para las horas de desarrollo profesional.
-- **Asignar** lo da a personas, o a todo el personal de un rol hoy, con fecha de vencimiento. **Ver quién lo tiene** muestra el avance, envía recordatorios y descarga certificados.
+- **Asignar** lo da a personas, o a todo el personal de un rol, con fecha de vencimiento. Un curso dado a un rol también llega a quien se una a ese rol más tarde, con vencimiento el mismo número de días después de recibirlo. **Ver quién lo tiene** muestra el avance, envía recordatorios y descarga certificados, y **Detener para nuevas personas** termina la regla. A quien quite de un curso no se le vuelve a asignar.
 - Al terminar, la persona escribe su nombre para confirmarlo y recibe un certificado a nombre de su agencia. Si el curso cuenta, se le suman sus horas de desarrollo profesional.

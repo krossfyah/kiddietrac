@@ -167,13 +167,54 @@ final class HrCoursesController extends Controller
             ->whereIn('a.user_id', $ids ?: [0])->orderByRaw('a.completed_at IS NOT NULL')->orderBy('a.due_date')->orderBy('u.first_name')
             ->get(['a.*', 'u.first_name', 'u.last_name']);
 
-        return response()->json(['course' => $this->shape($c), 'assignments' => $rows->map(fn ($a) => ['id' => (int) $a->id, 'user_id' => (int) $a->user_id,
+        return response()->json(['course' => $this->shape($c), 'rules' => $this->roleRules($request, $aid, $id), 'assignments' => $rows->map(fn ($a) => ['id' => (int) $a->id, 'user_id' => (int) $a->user_id,
             'name' => $this->hrName($a), 'role' => $a->assigned_role, 'due_date' => $a->due_date ? substr((string) $a->due_date, 0, 10) : null,
             'completed_at' => $a->completed_at, 'certificate_no' => $a->certificate_no,
             'overdue' => ! $a->completed_at && $a->due_date && substr((string) $a->due_date, 0, 10) < $today])->values()]);
     }
 
-    /** POST hr/courses/{id}/assign {user_ids[], roles[], due_date} — roles = the role's current staff in this caller's scope. */
+    /**
+     * The "goes to everyone in this role" rules on a course, as this caller sees them: an admin every rule; a director the
+     * rules for their own centres (can stop them) and the agency-wide ones (read-only, CentreScope::canRead shared).
+     */
+    private function roleRules(Request $request, int $aid, int $courseId): array
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_course_role_rules')) return [];
+        $sc = CentreScope::ids($request, $aid);
+        $names = DB::table('centres')->where('agency_id', $aid)->pluck('name', 'id');
+        $out = [];
+        foreach (DB::table('hr_course_role_rules')->where('agency_id', $aid)->where('course_id', $courseId)->whereNull('archived_at')->orderBy('id')->get() as $r) {
+            $cs = $r->centre_ids !== null ? array_map('intval', json_decode((string) $r->centre_ids, true) ?: []) : null;
+            $mine = $sc === null || ($cs !== null && $cs && ! array_diff($cs, $sc));
+            if (! $mine && ! ($cs === null || array_intersect($cs, $sc))) continue;
+            $out[] = ['id' => (int) $r->id, 'role' => $r->role, 'role_label' => HrTalent::ROLES[$r->role] ?? $r->role, 'due_days' => $r->due_days !== null ? (int) $r->due_days : null,
+                'centres' => $cs === null ? null : array_values(array_filter(array_map(fn ($c) => $names[$c] ?? null, $cs))), 'can_stop' => $mine];
+        }
+
+        return $out;
+    }
+
+    /** POST hr/course-role-rules/{id}/stop — new people in the role no longer get it (who has it keeps it). */
+    public function stopRule(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->hrAgency($request);
+        $this->hrNeedManager($request);
+        $r = DB::table('hr_course_role_rules')->where('id', $id)->where('agency_id', $aid)->whereNull('archived_at')->first();
+        abort_unless($r, 404, 'That rule was not found.');
+        $sc = CentreScope::ids($request, $aid);
+        $cs = $r->centre_ids !== null ? array_map('intval', json_decode((string) $r->centre_ids, true) ?: []) : null;
+        abort_unless($sc === null || ($cs !== null && $cs && ! array_diff($cs, $sc)), 403, 'Only an agency admin can change this.');
+        DB::table('hr_course_role_rules')->where('id', $id)->update(['archived_at' => now(), 'updated_at' => now()]);
+        $this->hrNote($aid, 'hr.course_role_rule_stopped', 'hr_course', (int) $r->course_id, ['role' => $r->role, 'rule_id' => $id]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * POST hr/courses/{id}/assign {user_ids[], roles[], due_date} — roles = the role's current staff in this caller's scope,
+     * AND a kept rule so anyone who joins the role later gets it too (HrTalent::syncRoleCourses), due as many days after
+     * they get it as this due date is from today.
+     */
     public function assign(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
@@ -196,7 +237,13 @@ final class HrCoursesController extends Controller
             }
         }
         $want = array_diff_key($want, array_flip(AgencySignatories::outsiderIds()));
-        abort_unless($want, 422, 'Choose who should take this course.');
+        if (! empty($d['roles'])) {
+            $days = ! empty($d['due_date']) ? max(0, (int) \Illuminate\Support\Carbon::parse(AgencyTime::today($aid))->diffInDays(\Illuminate\Support\Carbon::parse($d['due_date']), false)) : null;
+            foreach (array_unique($d['roles']) as $role) {
+                HrTalent::saveRoleRule($aid, $id, $role, CentreScope::ids($request, $aid), $days, (int) $request->user()->id);
+            }
+        }
+        abort_unless($want || ! empty($d['roles']), 422, 'Choose who should take this course.');
         $new = 0;
         foreach ($want as $u => $role) {
             if (HrTalent::assignCourse($aid, $id, $u, $d['due_date'] ?? null, (int) $request->user()->id, $role)) {
@@ -251,6 +298,13 @@ final class HrCoursesController extends Controller
         $this->hrNeedPerson($request, $aid, (int) $a->user_id);
         abort_if($a->completed_at, 422, 'A completed course stays on the record.');
         DB::table('hr_course_assignments')->where('id', $id)->delete();
+        // Removed by a manager: a role rule on this course must not give it back to them.
+        if (\Illuminate\Support\Facades\Schema::hasTable('hr_course_role_rules')) {
+            foreach (DB::table('hr_course_role_rules')->where('agency_id', $aid)->where('course_id', $a->course_id)->whereNull('archived_at')->get(['id', 'skip_user_ids']) as $r) {
+                $skip = array_values(array_unique(array_merge(array_map('intval', json_decode((string) ($r->skip_user_ids ?? ''), true) ?: []), [(int) $a->user_id])));
+                DB::table('hr_course_role_rules')->where('id', $r->id)->update(['skip_user_ids' => json_encode($skip), 'updated_at' => now()]);
+            }
+        }
         $this->hrNote($aid, 'hr.course_unassigned', 'hr_course', (int) $a->course_id, ['user_id' => (int) $a->user_id]);
 
         return response()->json(['ok' => true]);

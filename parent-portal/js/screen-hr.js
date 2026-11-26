@@ -99,6 +99,9 @@
     if (!tabsFor().some(function (t) { return t[0] === S.tab; })) S.tab = 'people';
     drawTabs(main);
     drawTab(main);
+    // #hr?tab=people&person=ID: "Open HR file" from the user record (2026-11-26). Only someone on this list opens.
+    var pm = /[?&]person=(\d+)/.exec(location.hash || '');
+    if (pm && S.tab === 'people' && ((S.people && S.people.people) || []).some(function (p) { return p.id === +pm[1]; })) openProfile(main, +pm[1]);
   }
 
   function drawTabs(main) {
@@ -144,7 +147,8 @@
           + '<td style="white-space:nowrap;">' + esc(day(p.start_date)) + '</td><td data-no-i18n>' + esc(p.manager_name || '') + '</td><td>' + statusPill(p.status, st) + '</td>'
           + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-act="view" data-id="' + p.id + '">View HR profile</button>'
           + '<button type="button" data-act="edit" data-id="' + p.id + '">Edit file</button>'
-          + '<button type="button" data-act="adjust" data-id="' + p.id + '">Adjust balance</button></td></tr>';
+          + '<button type="button" data-act="adjust" data-id="' + p.id + '">Adjust balance</button>'
+          + (KT.openUserRecord ? '<button type="button" data-act="user" data-id="' + p.id + '">View user</button>' : '') + '</td></tr>';
       }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">Nobody matches these filters.</div>') + '</div>';
     b.innerHTML = h;
     var fs = b.querySelector('#hr-fs'); if (fs) fs.addEventListener('change', function () { S.status = fs.value; drawPeople(main); });
@@ -155,6 +159,7 @@
         if (a === 'view') openProfile(main, id);
         else if (a === 'edit') openFile(main, id);
         else if (a === 'adjust') openAdjust(main, id);
+        else if (a === 'user') { try { KT.openUserRecord(id); } catch (e) {} }   // the user record (2026-11-26)
       });
     });
   }

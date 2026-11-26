@@ -8,6 +8,31 @@
  * words only). New UI text goes HERE now.
  */
 window.KT_I18N_BASE && window.KT_I18N_BASE({
+    // KiddieTrac HR follow-ups: director hiring, comments, declined deletion, role courses (screen-hr-talent.js, 2026-11-26)
+    'Human Resources': { fr: 'Ressources humaines', es: 'Recursos humanos', hi: 'मानव संसाधन' },   // sidebar group (app-v2-shell.js)
+    'HUMAN RESOURCES': { fr: 'RESSOURCES HUMAINES', es: 'RECURSOS HUMANOS', hi: 'मानव संसाधन' },
+    'View only': { fr: 'Lecture seule', es: 'Solo lectura', hi: 'केवल देखें' },
+    'Whole agency · view only': { fr: 'Toute l\'agence · lecture seule', es: 'Toda la agencia · solo lectura', hi: 'पूरी एजेंसी · केवल देखें' },
+    'Add a comment': { fr: 'Ajouter un commentaire', es: 'Añadir un comentario', hi: 'टिप्पणी जोड़ें' },
+    'Add comment': { fr: 'Ajouter le commentaire', es: 'Añadir comentario', hi: 'टिप्पणी जोड़ें' },
+    'Comment': { fr: 'Commentaire', es: 'Comentario', hi: 'टिप्पणी' },
+    'Comment added.': { fr: 'Commentaire ajouté.', es: 'Comentario añadido.', hi: 'टिप्पणी जोड़ी गई।' },
+    'Write a comment first.': { fr: 'Écrivez d\'abord un commentaire.', es: 'Escriba primero un comentario.', hi: 'पहले टिप्पणी लिखें।' },
+    'For your team only: the applicant never sees it.': { fr: 'Pour votre équipe seulement : le candidat ne le voit jamais.', es: 'Solo para su equipo: el candidato nunca lo ve.', hi: 'केवल आपकी टीम के लिए: आवेदक इसे कभी नहीं देखता।' },
+    'History and comments': { fr: 'Historique et commentaires', es: 'Historial y comentarios', hi: 'इतिहास और टिप्पणियाँ' },
+    'A job for the whole agency: you can read and comment; an agency admin makes the changes.': { fr: 'Un poste pour toute l\'agence : vous pouvez lire et commenter; un administrateur d\'agence fait les changements.', es: 'Un puesto para toda la agencia: puede leer y comentar; un administrador de agencia hace los cambios.', hi: 'पूरी एजेंसी की नौकरी: आप पढ़ और टिप्पणी कर सकते हैं; बदलाव एजेंसी एडमिन करते हैं।' },
+    'Applicants to whole-agency jobs are changed by an agency admin.': { fr: 'Les candidats aux postes de toute l\'agence sont modifiés par un administrateur d\'agence.', es: 'Los candidatos a puestos de toda la agencia los cambia un administrador de agencia.', hi: 'पूरी एजेंसी की नौकरियों के आवेदक एजेंसी एडमिन बदलते हैं।' },
+    'Delete declined applicants after': { fr: 'Supprimer les candidats refusés après', es: 'Eliminar candidatos rechazados después de', hi: 'अस्वीकृत आवेदक इसके बाद हटाएँ' },
+    '30 days': { fr: '30 jours', es: '30 días', hi: '30 दिन' },
+    '60 days': { fr: '60 jours', es: '60 días', hi: '60 दिन' },
+    '90 days': { fr: '90 jours', es: '90 días', hi: '90 दिन' },
+    '180 days': { fr: '180 jours', es: '180 días', hi: '180 दिन' },
+    '1 year': { fr: '1 an', es: '1 año', hi: '1 वर्ष' },
+    'Stop for new people': { fr: 'Arrêter pour les nouveaux', es: 'Detener para nuevas personas', hi: 'नए लोगों के लिए रोकें' },
+    'Stop giving this course to new people?': { fr: 'Ne plus donner cette formation aux nouveaux?', es: '¿Dejar de dar este curso a nuevas personas?', hi: 'नए लोगों को यह कोर्स देना बंद करें?' },
+    'People who already have it keep it.': { fr: 'Ceux qui l\'ont déjà la gardent.', es: 'Quienes ya lo tienen lo conservan.', hi: 'जिनके पास पहले से है, उनके पास रहेगा।' },
+    'New people in the role will no longer get it.': { fr: 'Les nouveaux dans ce rôle ne la recevront plus.', es: 'Las nuevas personas en el rol ya no lo recibirán.', hi: 'भूमिका में नए लोगों को यह अब नहीं मिलेगा।' },
+    'Everyone in the role today, and anyone who joins it later: they get it the day they join, due as many days later as this due date is from today.': { fr: 'Tout le personnel du rôle aujourd\'hui, et toute personne qui le rejoint plus tard : elle la reçoit le jour où elle arrive, due autant de jours plus tard que cette échéance l\'est d\'aujourd\'hui.', es: 'Todo el personal del rol hoy, y quien se una más tarde: lo recibe el día que se une, con vencimiento tantos días después como esta fecha está de hoy.', hi: 'आज भूमिका में सभी लोग, और बाद में आने वाला हर व्यक्ति: उन्हें यह उसी दिन मिलता है, और यह उतने ही दिन बाद देय होता है जितनी यह तारीख आज से दूर है।' },
     // KiddieTrac HR phase 2: hiring, onboarding, performance, courses, My HR (screen-hr-talent.js, 2026-11-26)
     'Hiring': { fr: 'Recrutement', es: 'Contratación', hi: 'भर्ती' },
     'Performance': { fr: 'Rendement', es: 'Desempeño', hi: 'प्रदर्शन' },

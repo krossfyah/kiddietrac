@@ -333,6 +333,12 @@ Schedule::command('kt:reset-web-demo')->dailyAt('03:30')->timezone('America/Toro
 Schedule::command('hr:leave-accrue')->dailyAt('02:20')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
 // KiddieTrac HR phase 2 (2026-11-28): onboarding / course / review reminders (bell + phone), agency dates; test agencies skipped.
 Schedule::command('hr:talent-remind')->dailyAt('07:40')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer();
+// KiddieTrac HR (2026-11-28): courses assigned to a role reach people who join it later (the screens do it at once; this
+// catches imports and provisioning). Quiet unless a rule exists. Not every minute: every 15.
+Schedule::command('hr:role-courses')->everyFifteenMinutes()->withoutOverlapping(10)->onOneServer();
+// KiddieTrac HR (2026-11-28): declined agency applicants deleted after the agency's N days (default 90, Never allowed).
+// Deletes, sends nothing, so test agencies are included; platform careers keep kt:careers-retention below.
+Schedule::command('hr:declined-purge')->dailyAt('03:50')->timezone('America/Toronto')->withoutOverlapping(20)->onOneServer();
 Schedule::command('kt:web-demo-showcase --set=all')->dailyAt('03:45')->timezone('America/Toronto')->withoutOverlapping(30)->onOneServer()
     ->appendOutputTo(storage_path('logs/web-demo-showcase.log'));
 Schedule::command('portfolio:year-end')->yearlyOn(12, 15, '09:00');

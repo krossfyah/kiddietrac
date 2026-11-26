@@ -361,7 +361,7 @@
     return (sections || []).map(function (sec) {
       if (!sec || !Array.isArray(sec.items)) { return sec; }
       var kept = sec.items.filter(function (it) { return !(it && off[String(it.hash)]); });
-      return { label: sec.label, items: kept };
+      return { label: sec.label, keepOrder: sec.keepOrder, items: kept };   // keepOrder: Human Resources keeps its order (2026-11-26)
     }).filter(function (sec) { return sec && Array.isArray(sec.items) && sec.items.length; });
   }
 
@@ -416,7 +416,6 @@
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
           { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
-          { hash: 'timesheets',     label: 'Timesheets',       icon: '🕘' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'headcounts',    label: 'Headcounts',       icon: '🔢' },
           // Ontario sleep supervision (2026-10-13): hidden unless sleep checks are on (screen-sleep-room.js).
@@ -445,13 +444,19 @@
         { label: 'Staff', items: [
           { hash: 'tasks',              label: 'Tasks',              icon: '☑️' },
           { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
-          { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
-          { hash: 'hr',                 label: 'HR',                 icon: '🧑‍💼' },
-          { hash: 'my-hr',              label: 'My HR',              icon: '🧭' },
-          { hash: 'background-checks',  label: 'Background checks',  icon: '🪪' },
           { hash: 'substitutes',        label: 'Substitutes',        icon: '🙋' },
           // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
           { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
+        ]},
+        // HUMAN RESOURCES (2026-11-26, Anthony): HR, My HR, time off, timesheets, payroll and background checks in one group. Each item keeps
+        // its own gate (HR + My HR need the hr add-on via hidden_screens; the others show without it); an empty group is dropped.
+        { label: 'Human Resources', keepOrder: true, items: [
+          { hash: 'hr',                 label: 'HR',                 icon: '🧑‍💼' },
+          { hash: 'my-hr',              label: 'My HR',              icon: '🧭' },
+          { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
+          { hash: 'timesheets',         label: 'Timesheets',         icon: '🕘' },   // moved from Operations (2026-11-26, Anthony)
+          { hash: 'payroll',            label: 'Payroll',            icon: '💼' },   // moved from Finance (2026-11-26, Anthony)
+          { hash: 'background-checks',  label: 'Background checks',  icon: '🪪' },
         ]},
         // Home Visitors — own section (moved out of Compliance for clarity).
         { label: 'Home Visitors', items: [
@@ -497,7 +502,6 @@
           { hash: 'account-ledgers',  label: 'Account ledgers',  icon: '📔' },
           { hash: 'donations',        label: 'Donations',        icon: '💝' },
           { hash: 'grants',           label: 'Grants',           icon: '🏛️' },
-          { hash: 'payroll',            label: 'Payroll',            icon: '💼' },
           // Ontario WEG + workforce compensation (2026-10-13): hidden unless Ontario + on (screen-workforce-funding.js).
           { hash: 'workforce-funding',  label: 'Workforce funding',  icon: '🍁' },
         ]},
@@ -638,7 +642,6 @@
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
           { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
-          { hash: 'timesheets',     label: 'Timesheets',       icon: '🕘' },
           { hash: 'audit-logs',     label: 'Audit log',        icon: '📜' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'headcounts',    label: 'Headcounts',       icon: '🔢' },
@@ -668,12 +671,19 @@
           { hash: 'tasks',             label: 'Tasks',              icon: '☑️' },
           { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
-          { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
-          { hash: 'hr',                label: 'HR',                 icon: '🧑‍💼' },
-          { hash: 'background-checks', label: 'Background checks',  icon: '🪪' },
           { hash: 'substitutes',       label: 'Substitutes',        icon: '🙋' },
           // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
           { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
+        ]},
+        // HUMAN RESOURCES (2026-11-26, Anthony): HR, My HR, time off, timesheets, payroll and background checks in one group. Each item keeps
+        // its own gate (HR + My HR need the hr add-on via hidden_screens; the others show without it); an empty group is dropped.
+        { label: 'Human Resources', keepOrder: true, items: [
+          { hash: 'hr',                label: 'HR',                 icon: '🧑‍💼' },
+          { hash: 'my-hr',             label: 'My HR',              icon: '🧭' },
+          { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
+          { hash: 'timesheets',        label: 'Timesheets',         icon: '🕘' },   // moved from Operations (2026-11-26, Anthony)
+          { hash: 'payroll',           label: 'Payroll',            icon: '💼' },   // moved from Administration (2026-11-26, Anthony)
+          { hash: 'background-checks', label: 'Background checks',  icon: '🪪' },
         ]},
         { label: 'Programs', items: [
           { hash: 'curriculum',        label: 'Curriculum library', icon: '🌱' },   // Ontario units (2026-11-03)
@@ -686,7 +696,6 @@
           { hash: 'compliance',        label: 'Compliance',           icon: '✅' },
           { hash: 'policies',          label: 'Policies',             icon: '📘' },
           { hash: 'my-policies',       label: 'Policies to review',   icon: '✍️' },
-          { hash: 'my-hr', label: 'My HR', icon: '🧭' },   // KiddieTrac HR phase 2 (2026-11-28): own checklist, courses, reviews, goals
           { hash: 'my-training',       label: 'My training',          icon: '🎒' },
           { hash: 'my-certificates',   label: 'My certificates',      icon: '❤️' },
           { hash: 'household',         label: 'Household residents',  icon: '🛋️' },
@@ -715,7 +724,6 @@
           { hash: 'tuition-increases',label: 'Tuition increases',icon: '📈' },
           { hash: 'external-billing', label: 'Accounting',        icon: '🗃️' },
           { hash: 'grants',           label: 'Grants',           icon: '🏛️' },
-          { hash: 'payroll',           label: 'Payroll',            icon: '💼' },
         ]},
         { label: 'Settings', items: [
           { hash: 'settings', label: 'My settings', icon: '⚙️' },
@@ -1148,6 +1156,8 @@
       // Grouped sidebar layout (sections with labels)
       sections.forEach(section => {
         const sectionEl = Dom.el('div', { class: 'sidebar-section' });
+        // Anthony's own order for a group (Human Resources, 2026-11-26): kt-nav-sort.js leaves it as listed.
+        if (section.keepOrder) sectionEl.setAttribute('data-kt-keep-order', '1');
         if (section.label) {
           sectionEl.appendChild(Dom.el('div', { class: 'sidebar-section-label' }, section.label));
         }

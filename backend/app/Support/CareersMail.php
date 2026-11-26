@@ -201,7 +201,7 @@ final class CareersMail
         $to = $testTo ?: (string) ($a->email ?? '');
         if (! filter_var($to, FILTER_VALIDATE_EMAIL)) return false;
         $mail = self::build($kind, $a, $o);
-        \Illuminate\Support\Facades\Mail::html($mail['html'], function ($m) use ($mail, $to, $testTo, $a, $ics) {
+        \Illuminate\Support\Facades\Mail::html($mail['html'], function ($m) use ($mail, $to, $testTo, $a, $ics, $o) {   // $o carries the agency (org): without it tenant mail went out as platform mail
             $org = is_array($o['org'] ?? null) ? $o['org'] : null;
             if ($org) {
                 // Tenant mail: the agency's own switches apply, and a test agency sends nothing (SuppressAgencyMail).

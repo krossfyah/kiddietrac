@@ -2589,6 +2589,16 @@
     }, true);
   }
 
+  /* OPEN HR FILE from a staff member's user record (2026-11-26, Anthony: "make sure HR/people is linked to the users
+     that are staff to the agency"). Only for a staff role, only when the agency's HR screen is on (hidden_screens);
+     the HR screen opens that person's profile (#hr?tab=people&person=ID) and the server re-checks who may see it. */
+  function _hrFileFor(user) {
+    var staff = ['educator', 'home_visitor', 'centre_director', 'agency_admin'];
+    if (!user || !(user.roles || []).some(function (r) { return staff.indexOf(r) >= 0; })) return null;
+    var me = {}; try { me = JSON.parse(sessionStorage.getItem('kt_user') || '{}') || {}; } catch (e) {}
+    if ((me.hidden_screens || []).indexOf('hr') >= 0) return null;
+    return '#hr?tab=people&person=' + encodeURIComponent(user.id);
+  }
   function showUserModal(user, content, opts) {
     opts = opts || {};
     /* View (the ℹ️ on the list, "View profile", a reference-ID search): this same record, locked - viewOnlyLock. */
@@ -4238,12 +4248,16 @@
 
     if (_viewOnly) {
       var _canEdit = !_dirMode || !!user.can_manage;
+      var _hrFileAction = function () {
+        var to = _hrFileFor(user);
+        return to ? [{ label: '🧑‍💼 Open HR file', onClick: function () { Shell.Modal.close(); location.hash = to; } }] : [];
+      };
       Shell.Modal.open({
         title: '👁️ ' + (user.name || user.email),
         body: root,
         actions: (_canEdit ? [{ label: '✏️ Edit', primary: true, onClick: function () {
           Shell.Modal.close(); setTimeout(function () { showUserModal(user, content); }, 60);
-        } }] : []).concat([{ label: 'Close', primary: !_canEdit, onClick: function () { Shell.Modal.close(); } }]),
+        } }] : []).concat(_hrFileAction()).concat([{ label: 'Close', primary: !_canEdit, onClick: function () { Shell.Modal.close(); } }]),
       });
       markRecordModal(true);
       viewOnlyLock(root);

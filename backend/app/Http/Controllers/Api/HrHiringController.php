@@ -173,40 +173,66 @@ final class HrHiringController extends Controller
         return CentreScope::ids($request, $aid);
     }
 
-    private function postQuery(Request $request, int $aid)
+    /*
+     * READER AND GUARD MOVE TOGETHER (2026-11-28, Anthony). A director READS their own centres' posts and applicants and
+     * the agency-wide ones (no centre); they CHANGE only their own centres' (CentreScope::canRead shared / canWrite, the
+     * house rule for agency-wide rows). Agency-wide = read-only for directors: view, files, comments; no edit, letters,
+     * stage moves or hire. Admins: everything. $write picks the guard; every write path passes true.
+     */
+    private function postQuery(Request $request, int $aid, bool $write = false)
     {
         $sc = $this->scope($request, $aid);
 
-        return DB::table('hr_job_posts')->where('agency_id', $aid)->when($sc !== null, fn ($q) => $q->whereIn('centre_id', $sc ?: [0]));
+        return DB::table('hr_job_posts')->where('agency_id', $aid)->when($sc !== null, fn ($q) => $q->where(fn ($w) => $w->whereIn('centre_id', $sc ?: [0])
+            ->when(! $write, fn ($o) => $o->orWhereNull('centre_id'))));
     }
 
-    private function appQuery(Request $request, int $aid)
+    private function appQuery(Request $request, int $aid, bool $write = false)
     {
         $sc = $this->scope($request, $aid);
 
-        return DB::table('career_applications')->where('agency_id', $aid)->when($sc !== null, fn ($q) => $q->whereIn('centre_id', $sc ?: [0]));
+        return DB::table('career_applications')->where('agency_id', $aid)->when($sc !== null, fn ($q) => $q->where(fn ($w) => $w->whereIn('centre_id', $sc ?: [0])
+            ->when(! $write, fn ($o) => $o->orWhereNull('centre_id'))));
     }
 
-    private function ownPost(Request $request, int $aid, int $id): object
+    private function ownPost(Request $request, int $aid, int $id, bool $write = false): object
     {
         $p = $this->postQuery($request, $aid)->where('id', $id)->first();
         abort_unless($p, 404, 'That job post was not found.');
+        abort_if($write && ! CentreScope::canWrite(CentreScope::ids($request, $aid), $p->centre_id), 403, 'This job is for the whole agency. Only an agency admin can change it.');
 
         return $p;
     }
 
-    private function ownApp(Request $request, int $aid, int $id): object
+    private function ownApp(Request $request, int $aid, int $id, bool $write = false): object
     {
         $a = $this->appQuery($request, $aid)->where('id', $id)->first();
         abort_unless($a, 404, 'That application was not found.');
+        abort_if($write && ! CentreScope::canWrite(CentreScope::ids($request, $aid), $a->centre_id), 403, 'This applicant is for a job for the whole agency. Only an agency admin can change it.');
 
         return $a;
+    }
+
+    /** POST hr/applications/{id}/comment {note} — anyone who can see the applicant (agency-wide ones too). */
+    public function comment(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->hrAgency($request);
+        $a = $this->ownApp($request, $aid, $id);
+        $note = trim((string) $request->validate(['note' => 'required|string|max:2000'])['note']);
+        abort_if($note === '', 422, 'Write a comment first.');
+        DB::table('career_application_events')->insert(['application_id' => $id, 'from_status' => $a->status, 'to_status' => $a->status, 'note' => $note,
+            'user_id' => $request->user()->id, 'created_at' => now()]);
+        $this->hrNote($aid, 'hr.applicant_commented', 'career_application', $id);
+
+        return response()->json(['ok' => true], 201);
     }
 
     public function index(Request $request): JsonResponse
     {
         $aid = $this->hrAgency($request);
         $posts = $this->postQuery($request, $aid)->orderByRaw("status = 'open' DESC")->orderByDesc('created_at')->get();
+        $sc = CentreScope::ids($request, $aid);
+        $rw = fn ($row) => CentreScope::canWrite($sc, $row->centre_id);
         $apps = $this->appQuery($request, $aid)->orderByDesc('created_at')->limit(1000)->get();
         $centres = DB::table('centres')->where('agency_id', $aid)->pluck('name', 'id');
         $counts = $apps->groupBy('job_post_id')->map(fn ($g) => $g->countBy('status'));
@@ -218,16 +244,17 @@ final class HrHiringController extends Controller
                 'pay_min' => $p->pay_min !== null ? (float) $p->pay_min : null, 'pay_max' => $p->pay_max !== null ? (float) $p->pay_max : null,
                 'pay_unit' => $p->pay_unit, 'pay' => $this->payText($p), 'description' => $p->description, 'status' => $p->status,
                 'created_at' => $p->created_at, 'applicants' => (int) array_sum(($counts[$p->id] ?? collect())->all()),
-                'open_applicants' => (int) collect(($counts[$p->id] ?? collect())->all())->only(self::OPEN)->sum()])->values(),
+                'open_applicants' => (int) collect(($counts[$p->id] ?? collect())->all())->only(self::OPEN)->sum(), 'read_only' => ! $rw($p)])->values(),
             'applications' => $apps->map(fn ($a) => ['id' => (int) $a->id, 'job_post_id' => $a->job_post_id ? (int) $a->job_post_id : null, 'role' => $a->role,
                 'name' => trim($a->first_name . ' ' . $a->last_name), 'email' => $a->email, 'phone' => $a->phone, 'status' => $a->status,
                 'centre' => $a->centre_id ? ($centres[$a->centre_id] ?? null) : null, 'created_at' => $a->created_at,
                 'has_resume' => (bool) $a->resume_path, 'has_cover' => (bool) ($a->cover_path || $a->cover_text), 'keep_until' => $a->keep_until,
-                'hired_user_id' => $a->hired_user_id ? (int) $a->hired_user_id : null,
+                'hired_user_id' => $a->hired_user_id ? (int) $a->hired_user_id : null, 'read_only' => ! $rw($a),
                 'interview' => $a->meeting_id && isset($meet[$a->meeting_id]) ? \App\Support\Meetings::whenText($meet[$a->meeting_id]) : null])->values(),
-            'stages' => HrTalent::STAGES, 'employment_types' => HrLeave::EMPLOYMENT, 'can_hire' => $this->hrIsAdmin($request),
+            'stages' => HrTalent::STAGES, 'employment_types' => HrLeave::EMPLOYMENT, 'can_hire' => true,
+            'hire_roles' => $this->hrIsAdmin($request) ? ['educator', 'centre_director', 'home_visitor'] : ['educator', 'home_visitor'],
             'centres' => Live::centres(DB::table('centres'), 'centres')->where('agency_id', $aid)
-                ->when(($sc = CentreScope::ids($request, $aid)) !== null, fn ($q) => $q->whereIn('id', $sc ?: [0]))->orderBy('name')->get(['id', 'name']),
+                ->when($sc !== null, fn ($q) => $q->whereIn('id', $sc ?: [0]))->orderBy('name')->get(['id', 'name']),
             'public_url' => self::org($aid)['careers_url'], 'settings' => HrTalent::settings($aid), 'can_settings' => $this->hrIsAdmin($request),
         ]);
     }
@@ -268,7 +295,7 @@ final class HrHiringController extends Controller
     public function updatePost(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
-        $this->ownPost($request, $aid, $id);
+        $this->ownPost($request, $aid, $id, true);
         $row = $this->postRow($request, $aid, $request->validate($this->postRules()));
         DB::table('hr_job_posts')->where('id', $id)->update($row);
         $this->hrNote($aid, 'hr.job_post_updated', 'hr_job_post', $id, ['title' => $row['title']]);
@@ -280,7 +307,7 @@ final class HrHiringController extends Controller
     public function closePost(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
-        $this->ownPost($request, $aid, $id);
+        $this->ownPost($request, $aid, $id, true);
         $open = str_ends_with($request->path(), '/reopen');
         DB::table('hr_job_posts')->where('id', $id)->update(['status' => $open ? 'open' : 'closed', 'closed_at' => $open ? null : now(), 'updated_at' => now()]);
         $this->hrNote($aid, $open ? 'hr.job_post_reopened' : 'hr.job_post_closed', 'hr_job_post', $id);
@@ -302,8 +329,9 @@ final class HrHiringController extends Controller
             'created_at' => $a->created_at, 'keep_until' => $a->keep_until, 'centre_id' => $a->centre_id ? (int) $a->centre_id : null,
             'job_post_id' => $a->job_post_id ? (int) $a->job_post_id : null, 'hired_user_id' => $a->hired_user_id ? (int) $a->hired_user_id : null,
             'last_email_kind' => $a->last_email_kind, 'last_emailed_at' => $a->last_emailed_at,
+            'read_only' => ! CentreScope::canWrite(CentreScope::ids($request, $aid), $a->centre_id),
             'interview' => $m ? ['when' => \App\Support\Meetings::whenText($m), 'where' => $m->location, 'join_url' => $m->join_url, 'status' => $m->status] : null],
-            'events' => $ev->map(fn ($e) => ['from' => $e->from_status, 'to' => $e->to_status, 'at' => $e->created_at, 'by' => $e->user_id ? ($by[(int) $e->user_id] ?? null) : null])->values(),
+            'events' => $ev->map(fn ($e) => ['from' => $e->from_status, 'to' => $e->to_status, 'note' => $e->note ?? null, 'at' => $e->created_at, 'by' => $e->user_id ? ($by[(int) $e->user_id] ?? null) : null])->values(),
             'stages' => HrTalent::STAGES]);
     }
 
@@ -334,7 +362,7 @@ final class HrHiringController extends Controller
     public function move(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
-        $a = $this->ownApp($request, $aid, $id);
+        $a = $this->ownApp($request, $aid, $id, true);
         $to = (string) $request->validate(['status' => 'required|in:new,reviewing,interview,offer,declined,withdrawn'])['status'];
         $this->setStatus($a, $to, (int) $request->user()->id);
         $this->hrNote($aid, 'hr.applicant_moved', 'career_application', $id, ['from' => $a->status, 'to' => $to]);
@@ -347,7 +375,7 @@ final class HrHiringController extends Controller
     {
         $aid = $this->hrAgency($request);
         $d = $request->validate(['ids' => 'required|array|max:200', 'ids.*' => 'integer', 'status' => 'required|in:new,reviewing,interview,offer,declined,withdrawn']);
-        $rows = $this->appQuery($request, $aid)->whereIn('id', $d['ids'])->get();
+        $rows = $this->appQuery($request, $aid, true)->whereIn('id', $d['ids'])->get();
         foreach ($rows as $a) {
             if ($a->status !== 'hired') $this->setStatus($a, $d['status'], (int) $request->user()->id);
         }
@@ -358,7 +386,8 @@ final class HrHiringController extends Controller
 
     private function setStatus(object $a, string $to, ?int $by, array $extra = []): void
     {
-        DB::table('career_applications')->where('id', $a->id)->update(array_merge(['status' => $to, 'updated_at' => now()], $extra));
+        $stamp = $to === 'declined' ? ($a->status === 'declined' && ($a->declined_at ?? null) ? $a->declined_at : now()) : null;   // hr:declined-purge counts from here
+        DB::table('career_applications')->where('id', $a->id)->update(array_merge(['status' => $to, 'declined_at' => $stamp, 'updated_at' => now()], $extra));
         if ($a->status !== $to) $this->logStatus((int) $a->id, $a->status, $to, $by);
     }
 
@@ -395,7 +424,7 @@ final class HrHiringController extends Controller
     public function preview(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
-        $a = $this->ownApp($request, $aid, $id);
+        $a = $this->ownApp($request, $aid, $id, true);
         $kind = (string) $request->validate(['kind' => 'required|in:interview,on_file,decline'])['kind'];
         $o = ['note' => mb_substr(trim((string) $request->input('note', '')), 0, 2000), 'org' => self::org($aid, $request->user())];
         if ($kind === 'interview') {
@@ -416,7 +445,7 @@ final class HrHiringController extends Controller
     public function interview(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
-        $a = $this->ownApp($request, $aid, $id);
+        $a = $this->ownApp($request, $aid, $id, true);
         abort_unless(filter_var($a->email, FILTER_VALIDATE_EMAIL), 422, 'This application has no valid email address.');
         $s = $this->slot($request, $aid);
         $user = $request->user();
@@ -447,7 +476,7 @@ final class HrHiringController extends Controller
     public function keep(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
-        $a = $this->ownApp($request, $aid, $id);
+        $a = $this->ownApp($request, $aid, $id, true);
         abort_unless(filter_var($a->email, FILTER_VALIDATE_EMAIL), 422, 'This application has no valid email address.');
         $until = now(AgencyTime::tz($aid))->addMonths(HrTalent::settings($aid)['keep_months'])->toDateString();
         $ok = CareersMail::send('on_file', $a, ['note' => mb_substr(trim((string) $request->input('note', '')), 0, 2000), 'keep_until' => $until,
@@ -461,7 +490,7 @@ final class HrHiringController extends Controller
     public function decline(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
-        $a = $this->ownApp($request, $aid, $id);
+        $a = $this->ownApp($request, $aid, $id, true);
         abort_unless(filter_var($a->email, FILTER_VALIDATE_EMAIL), 422, 'This application has no valid email address.');
         $ok = CareersMail::send('decline', $a, ['note' => mb_substr(trim((string) $request->input('note', '')), 0, 2000), 'org' => self::org($aid, $request->user())]);
         $this->setStatus($a, 'declined', (int) $request->user()->id, ['keep_until' => null, 'last_email_kind' => 'decline', 'last_emailed_at' => now()]);
@@ -475,8 +504,10 @@ final class HrHiringController extends Controller
     public function hire(Request $request, int $id): JsonResponse
     {
         $aid = $this->hrAgency($request);
-        $this->hrNeedAdmin($request);
-        $a = $this->ownApp($request, $aid, $id);
+        // Admins: anyone. Directors (2026-11-28, Anthony): applicants to their own centres' posts (not agency-wide ones),
+        // into one of their own centres, as an educator or home visitor (a new director is an admin's call).
+        $a = $this->ownApp($request, $aid, $id, true);
+        $sc = CentreScope::ids($request, $aid);
         abort_if($a->status === 'hired' || $a->hired_user_id, 422, 'This person has already been hired.');
         $d = $request->validate([
             'role' => 'required|in:educator,centre_director,home_visitor', 'centre_id' => 'nullable|integer',
@@ -486,6 +517,10 @@ final class HrHiringController extends Controller
             'email' => 'nullable|email|max:180', 'send_invite' => 'nullable|boolean',
         ]);
         if (! empty($d['centre_id'])) abort_unless(in_array((int) $d['centre_id'], Live::centreIds($aid), true), 422, 'Choose one of your centres.');
+        if ($sc !== null) {
+            abort_if(empty($d['centre_id']) || ! CentreScope::canWrite($sc, (int) $d['centre_id']), 422, 'Choose one of your centres.');
+            abort_if($d['role'] === 'centre_director', 403, 'Only an agency admin can hire a centre director.');
+        }
         if (! empty($d['manager_user_id'])) abort_unless(in_array((int) $d['manager_user_id'], HrTalent::managerIds($aid), true), 422, 'Choose a manager from this agency.');
         if (! empty($d['template_id'])) abort_unless(DB::table('hr_onboarding_templates')->where('id', $d['template_id'])->where('agency_id', $aid)->whereNull('archived_at')->exists(), 422, 'Choose one of your onboarding checklists.');
 
@@ -497,6 +532,7 @@ final class HrHiringController extends Controller
         $sub->headers->set('X-Active-Agency-Id', (string) $aid);
         $sub->headers->set('Accept', 'application/json');
         $sub->setUserResolver(fn () => $request->user());
+        if ($sc !== null) $sub->attributes->set('kt_hr_hire_agency', $aid);   // a director: AdminController::createUser honours it (scope checked above)
         $resp = app(AdminController::class)->createUser($sub);
         $body = json_decode((string) $resp->getContent(), true) ?: [];
         if ($resp->getStatusCode() >= 300 || empty($body['id'])) {
@@ -519,6 +555,7 @@ final class HrHiringController extends Controller
             ->where(fn ($q) => $q->where('role', $d['role'])->orWhereNull('role'))->orderByRaw('role IS NULL')->orderBy('id')->value('id');
         $oid = HrTalent::startOnboarding($aid, $uid, $tpl ? (int) $tpl : null, $d['start_date'], (int) $request->user()->id, (int) $a->id);
         $this->setStatus($a, 'hired', (int) $request->user()->id, ['hired_user_id' => $uid, 'keep_until' => null]);
+        HrTalent::coursesForUser($uid);   // courses that go to everyone in their role
         $this->hrNote($aid, 'hr.applicant_hired', 'career_application', $id, ['user_id' => $uid, 'onboarding_id' => $oid]);
 
         return response()->json(['ok' => true, 'user_id' => $uid, 'onboarding_id' => $oid, 'invite_sent' => (bool) ($body['invite_sent'] ?? false), 'note' => $body['note'] ?? null], 201);
@@ -530,9 +567,13 @@ final class HrHiringController extends Controller
     {
         $aid = $this->hrAgency($request);
         $this->hrNeedAdmin($request);
-        $d = $request->validate(['keep_months' => 'required|integer|min:1|max:60', 'reply_to' => 'nullable|email|max:180', 'apply_intro' => 'nullable|string|max:1500']);
-        $out = HrTalent::saveSettings($aid, ['keep_months' => (int) $d['keep_months'], 'reply_to' => $d['reply_to'] ?? null, 'apply_intro' => isset($d['apply_intro']) ? trim($d['apply_intro']) : null]);
-        $this->hrNote($aid, 'hr.hiring_settings_updated', 'agency', $aid, ['keep_months' => $out['keep_months']]);
+        $d = $request->validate(['keep_months' => 'required|integer|min:1|max:60', 'reply_to' => 'nullable|email|max:180', 'apply_intro' => 'nullable|string|max:1500',
+            'declined_days' => 'nullable|integer|min:1|max:3650']);
+        // declined_days: null = Never; left out = unchanged.
+        $days = $request->exists('declined_days') ? ($d['declined_days'] ?? null) : HrTalent::settings($aid)['declined_days'];
+        $out = HrTalent::saveSettings($aid, ['keep_months' => (int) $d['keep_months'], 'reply_to' => $d['reply_to'] ?? null, 'apply_intro' => isset($d['apply_intro']) ? trim($d['apply_intro']) : null,
+            'declined_days' => $days === null ? null : (int) $days]);
+        $this->hrNote($aid, 'hr.hiring_settings_updated', 'agency', $aid, ['keep_months' => $out['keep_months'], 'declined_days' => $out['declined_days']]);
 
         return response()->json(['settings' => $out]);
     }

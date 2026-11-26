@@ -14,8 +14,10 @@ These four tabs are on the **HR** screen (under **Staff**) and are part of the K
 - The jobs page carries your agency's name and logo. People apply there with their resume and an optional cover letter.
 - Applicants move through **New**, **Screening**, **Interview** and **Offer** to **Hired**, **Declined** or **On file**. Select several rows to move them together.
 - From the **⋮** menu: **Book an interview** books it on your calendar and emails the applicant an invitation. **Keep on file** and **Decline** send a kind letter, and you can preview every email before it goes.
-- **Hire** (agency admins) creates the person's KiddieTrac account and emails them a link to set their password. It also fills their employee file and starts their onboarding checklist.
-- **Hiring settings** sets how long applicants kept on file are kept (they are deleted automatically after that), who replies go to, and the words at the top of your jobs page.
+- **Hire** creates the person's KiddieTrac account and emails them a link to set their password. It also fills their employee file and starts their onboarding checklist. Centre directors hire educators and home visitors into their own centres; agency admins hire anyone, anywhere.
+- **Add a comment** leaves a note on an applicant for your team. The applicant never sees it.
+- Jobs for the whole agency (no centre) are run by the agency admins. Centre directors can see them and their applicants and add comments, but not change them.
+- **Hiring settings** sets how long applicants kept on file are kept (they are deleted automatically after that), when declined applicants are deleted (after 90 days unless you choose otherwise, or Never), who replies go to, and the words at the top of your jobs page. A deleted applicant's resume, letters and history go with them.
 
 ## Onboarding
 
@@ -34,5 +36,5 @@ These four tabs are on the **HR** screen (under **Staff**) and are part of the K
 ## Courses
 
 - Admins add a course: a link, a video link, an uploaded file or one of KiddieTrac's training videos. A course can count toward PD hours.
-- **Assign** gives it to people, or to everyone in a role today, with a due date. **See who has it** shows progress, sends reminders and downloads certificates.
+- **Assign** gives it to people, or to everyone in a role, with a due date. A course given to a role also goes to anyone who joins that role later, due the same number of days after they get it. **See who has it** shows progress, sends reminders and downloads certificates, and **Stop for new people** ends a role rule. Someone you remove from a course does not get it back.
 - When someone finishes a course they type their name to confirm it and get a certificate in your agency's name. If the course counts, its PD hours are added for them.

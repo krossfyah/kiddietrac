@@ -83,9 +83,15 @@
       + '.hr-pf{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:10px;}'
       + '.hr-link{background:none;border:0;padding:0;color:#0E7490;font-weight:700;font-size:12.5px;cursor:pointer;text-decoration:underline;}'
       + '.hrt-bar{display:inline-block;width:90px;height:8px;border-radius:99px;background:#E2E8F0;overflow:hidden;vertical-align:middle;}.hrt-bar i{display:block;height:100%;}'
-      + '.hrt-chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px;}'
-      + '.hrt-chip{height:28px;padding:0 11px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#475569;}'
-      + '.hrt-chip[aria-pressed="true"]{background:#E0F2FE;border-color:#7DD3FC;color:#075985;}'
+      /* Filter chips. NOT aria-pressed: the portal treats an aria-pressed button as a switch and strips its padding
+         (kt-consistency-polish.css), which is why these drew as bare text. State is the .on class + aria-current. */
+      + '.hrt-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px;}'
+      + '#appMain .hrt-chips button.hrt-chip{display:inline-flex;align-items:center;gap:5px;height:30px;min-height:30px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;'
+      + 'background:#fff;font-size:12.5px;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer;color:#334155;box-shadow:none;flex:0 0 auto;}'
+      + '#appMain .hrt-chips button.hrt-chip .n{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#F1F5F9;color:#475569;font-size:11px;}'
+      + '#appMain .hrt-chips button.hrt-chip.on{background:#0E7490;border-color:#0E7490;color:#fff;}'
+      + '#appMain .hrt-chips button.hrt-chip.on .n{background:rgba(255,255,255,.22);color:#fff;}'
+      + '#appMain .hrt-chips select{height:30px;}'
       + '.hrt-sec{font-weight:800;font-size:14px;margin:16px 0 8px;color:#0F172A;}'
       + '.hrt-task{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #F1F5F9;}'
       + '.hrt-task:last-child{border-bottom:0;}.hrt-task .t{flex:1;min-width:0;}.hrt-task .t b{font-size:13.5px;}'
@@ -104,14 +110,14 @@
       + '.hrt-pick label{display:flex;align-items:center;gap:7px;font-size:13px;padding:3px 0;}'
       + 'html.kt-dark .hr-i,html.kt-dark .hr-b,html.kt-dark .hr-pc,html.kt-dark .hrt-chip,html.kt-dark .hrt-sect,html.kt-dark .hrt-pick,html.kt-dark .hrt-rate label{background:#0F172A;border-color:#334155;color:#E2E8F0;}'
       + 'html.kt-dark .hr-b.p{background:#0E7490;border-color:#0E7490;color:#fff;}html.kt-dark .hr-l{color:#CBD5E1;}html.kt-dark .hr-pc h4{color:#5EEAD4;}'
-      + 'html.kt-dark .hrt-chip[aria-pressed="true"]{background:#0B2530;border-color:#155E75;color:#CFFAFE;}html.kt-dark .hrt-sec{color:#F1F5F9;}'
+      + 'html.kt-dark #appMain .hrt-chips button.hrt-chip.on{background:#0E7490;border-color:#0E7490;color:#fff;}html.kt-dark #appMain .hrt-chips button.hrt-chip .n{background:#1E293B;color:#CBD5E1;}html.kt-dark .hrt-sec{color:#F1F5F9;}'
       + 'html.kt-dark .hrt-ro{background:#111827;color:#E2E8F0;}html.kt-dark .hrt-task{border-color:#1E293B;}html.kt-dark .hrt-bar{background:#334155;}'
       + 'html.kt-dark .hr-note{background:#0B2530;border-color:#155E75;color:#CFFAFE;}';
     document.head.appendChild(s);
   }
 
   var STAGE_TONE = { new: ['#E0F2FE', '#075985'], reviewing: ['#EDE9FE', '#5B21B6'], interview: ['#FEF3C7', '#92400E'], offer: ['#DCFCE7', '#166534'],
-    hired: ['#16A34A', '#FFFFFF'], declined: ['#F1F5F9', '#475569'], on_file: ['#F1F5F9', '#334155'], withdrawn: ['#F1F5F9', '#64748B'] };
+    hired: ['#16A34A', '#FFFFFF'], declined: ['#FEE2E2', '#991B1B'], on_file: ['#CCFBF1', '#115E59'], withdrawn: ['#F1F5F9', '#64748B'] };
   var REVIEW_LBL = { open: 'Not started', self_done: 'Self review in', manager_done: 'Manager review in', signing: 'Ready to sign', complete: 'Complete', cancelled: 'Cancelled' };
   var REVIEW_TONE = { open: ['#F1F5F9', '#475569'], self_done: ['#E0F2FE', '#075985'], manager_done: ['#EDE9FE', '#5B21B6'], signing: ['#FEF3C7', '#92400E'], complete: ['#DCFCE7', '#166534'], cancelled: ['#F1F5F9', '#64748B'] };
   var GOAL_TONE = { not_started: ['#F1F5F9', '#475569'], on_track: ['#DCFCE7', '#166534'], at_risk: ['#FEF3C7', '#92400E'], done: ['#16A34A', '#FFFFFF'], dropped: ['#F1F5F9', '#64748B'] };
@@ -144,29 +150,28 @@
       + '<div class="kt-card">' + ((d.posts || []).length ? '<table data-hrt="posts"><thead><tr><th>Job</th><th>Centre</th><th>Type</th><th>Pay</th><th>Applicants</th><th>Status</th><th></th></tr></thead><tbody>'
         + d.posts.map(function (p) {
           return '<tr data-id="' + p.id + '"><td><b data-no-i18n>' + esc(p.title) + '</b><div class="hr-sub">Posted ' + esc(tsDay(p.created_at)) + '</div></td>'
-            + '<td data-no-i18n>' + esc(p.centre || 'All centres') + '</td><td>' + esc(et[p.employment_type] || '') + '</td><td data-no-i18n>' + esc(p.pay || '') + '</td>'
+            + '<td><span data-no-i18n>' + esc(p.centre || 'All centres') + '</span>' + (p.read_only ? '<div class="hr-sub">View only</div>' : '') + '</td><td>' + esc(et[p.employment_type] || '') + '</td><td data-no-i18n>' + esc(p.pay || '') + '</td>'
             + '<td>' + p.applicants + (p.open_applicants ? ' <span class="hr-sub">(' + p.open_applicants + ' active)</span>' : '') + '</td>'
             + '<td>' + (p.status === 'open' ? pill('#DCFCE7', '#166534', 'Open') : pill('#F1F5F9', '#475569', 'Closed')) + '</td>'
             + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-pa="applicants" data-id="' + p.id + '">See applicants</button>'
-            + '<button type="button" data-pa="edit" data-id="' + p.id + '">Edit</button>'
-            + '<button type="button" data-pa="' + (p.status === 'open' ? 'close' : 'reopen') + '" data-id="' + p.id + '">' + (p.status === 'open' ? 'Close' : 'Reopen') + '</button></td></tr>';
+            + (p.read_only ? '' : '<button type="button" data-pa="edit" data-id="' + p.id + '">Edit</button>'
+            + '<button type="button" data-pa="' + (p.status === 'open' ? 'close' : 'reopen') + '" data-id="' + p.id + '">' + (p.status === 'open' ? 'Close' : 'Reopen') + '</button>') + '</td></tr>';
         }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">No job posts yet. Add one and share your jobs page.</div>') + '</div>';
     h += '<div class="hrt-sec">Applicants</div><div class="hrt-chips">'
       + [['open', 'Active'], ['new', st.new], ['reviewing', st.reviewing], ['interview', st.interview], ['offer', st.offer], ['hired', st.hired], ['declined', st.declined], ['on_file', st.on_file], ['all', 'All']].map(function (c) {
         var n = c[0] === 'all' ? apps.length : c[0] === 'open' ? apps.filter(function (a) { return openSet[a.status]; }).length : (counts[c[0]] || 0);
         var on = H.stage === c[0];
-        return '<button type="button" class="hrt-chip" data-stage="' + c[0] + '" aria-pressed="' + on + '" style="height:28px;padding:0 11px;border-radius:999px;font-size:12.5px;font-weight:700;cursor:pointer;'
-          + (on ? 'background:#E0F2FE;border:1px solid #7DD3FC;color:#075985;' : 'background:#fff;border:1px solid #E2E8F0;color:#475569;') + '">' + esc(c[1] || c[0]) + ' · ' + n + '</button>';
+        return '<button type="button" class="hrt-chip' + (on ? ' on' : '') + '" data-stage="' + c[0] + '"' + (on ? ' aria-current="true"' : '') + '>' + esc(c[1] || c[0]) + ' <span class="n">' + n + '</span></button>';
       }).join('')
       + ((d.posts || []).length > 1 ? '<select class="hr-i" id="hj-post"><option value="">Every job</option>' + d.posts.map(function (p) { return '<option value="' + p.id + '"' + (String(p.id) === String(H.post) ? ' selected' : '') + '>' + esc(p.title) + '</option>'; }).join('') + '</select>' : '')
       + '</div>';
     h += '<div class="kt-card">' + (shown.length ? '<table data-hrt="apps"><thead><tr><th>Applicant</th><th>Job</th><th>Applied</th><th>Stage</th><th>Interview</th><th></th></tr></thead><tbody>'
       + shown.map(function (a) {
-        var live = openSet[a.status];
+        var live = openSet[a.status] && !a.read_only;
         return '<tr data-id="' + a.id + '"><td><b data-no-i18n>' + esc(a.name) + '</b><div class="hr-sub" data-no-i18n>' + esc(a.email || '') + '</div></td>'
-          + '<td data-no-i18n>' + esc(postTitle[a.job_post_id] || a.role || '') + (a.centre ? '<div class="hr-sub">' + esc(a.centre) + '</div>' : '') + '</td>'
+          + '<td data-no-i18n>' + esc(postTitle[a.job_post_id] || a.role || '') + (a.centre ? '<div class="hr-sub">' + esc(a.centre) + '</div>' : '') + (a.read_only ? '<div class="hr-sub">Whole agency · view only</div>' : '') + '</td>'
           + '<td style="white-space:nowrap;">' + esc(tsDay(a.created_at)) + '</td><td>' + stagePill(a.status, st) + '</td><td data-no-i18n>' + esc(a.interview || '') + '</td>'
-          + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-aa="view" data-id="' + a.id + '">View application</button>'
+          + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-aa="view" data-id="' + a.id + '">View application</button><button type="button" data-aa="comment" data-id="' + a.id + '">Add a comment</button>'
           + (live ? '<button type="button" data-aa="move" data-id="' + a.id + '">Move to a stage</button><button type="button" data-aa="interview" data-id="' + a.id + '">Book an interview</button>'
             + (d.can_hire ? '<button type="button" data-aa="hire" data-id="' + a.id + '">Hire</button>' : '')
             + '<button type="button" data-aa="on_file" data-id="' + a.id + '">Keep on file</button><button type="button" data-aa="decline" data-id="' + a.id + '">Decline</button>' : '')
@@ -191,6 +196,7 @@
       b.addEventListener('click', function () {
         var id = +b.getAttribute('data-id'), a = b.getAttribute('data-aa'), app = apps.filter(function (x) { return x.id === id; })[0];
         if (a === 'view') return openApplication(id, redraw);
+        if (a === 'comment') return openComment(app, redraw);
         if (a === 'move') return openMove([id], redraw);
         if (a === 'interview') return openInterview(app, redraw);
         if (a === 'hire') return openHire(app, redraw);
@@ -199,7 +205,12 @@
     });
     var t = host.querySelector('table[data-hrt="apps"]');
     if (t) t.ktBulkActions = [
-      { label: 'Move to a stage', run: function (rows) { openMove(rows.map(function (r) { return +r.getAttribute('data-id'); }), redraw); } }
+      { label: 'Move to a stage', run: function (rows) {
+        var ro = {}; apps.forEach(function (x) { if (x.read_only) ro[x.id] = 1; });
+        var ids = rows.map(function (r) { return +r.getAttribute('data-id'); }).filter(function (i) { return !ro[i]; });
+        if (!ids.length) return toast('ℹ️', 'View only', 'Applicants to whole-agency jobs are changed by an agency admin.', '#0E7490');
+        openMove(ids, redraw);
+      } }
     ];
   }
 
@@ -220,12 +231,15 @@
 
   function openHiringSettings(s) {
     var box = el('<div class="hr-g">' + field('Keep applicants on file for (months)', input('keep_months', s.keep_months || 24, 'number', ' min="1" max="60"'))
+      + field('Delete declined applicants after', select('declined_days', opts({ '30': '30 days', '60': '60 days', '90': '90 days', '180': '180 days', '365': '1 year', 'never': 'Never' },
+          s.declined_days == null ? (Object.prototype.hasOwnProperty.call(s, 'declined_days') ? 'never' : '90') : String(s.declined_days))))
       + field('Replies to applicants go to', input('reply_to', s.reply_to, 'email', ' placeholder="hiring@yourcentre.ca"'))
       + field('Words at the top of your jobs page', area('apply_intro', s.apply_intro, 4), true) + '</div>'
-      + '<div class="hr-sub" style="margin-top:6px;">An applicant kept on file is told how long you keep their resume; after that it is deleted automatically.</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+      + '<div class="hr-sub" style="margin-top:6px;">An applicant kept on file is told how long you keep their resume; after that it is deleted automatically. A declined applicant, with their files, letters and history, is deleted after the time you choose here.</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
     modal({ title: 'Hiring settings', body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
-      return Api.put('/hr/hiring/settings', { keep_months: +val(box, 'keep_months'), reply_to: val(box, 'reply_to'), apply_intro: val(box, 'apply_intro') })
-        .then(function () { saved('Hiring settings saved.'); }, function (e) { msg(box, errMsg(e)); return false; });
+      var dd = val(box, 'declined_days');
+      return Api.put('/hr/hiring/settings', { keep_months: +val(box, 'keep_months'), reply_to: val(box, 'reply_to'), apply_intro: val(box, 'apply_intro'), declined_days: dd === 'never' ? null : +dd })
+        .then(function (r) { if (H.hiring && r && r.settings) H.hiring.settings = r.settings; saved('Hiring settings saved.'); }, function (e) { msg(box, errMsg(e)); return false; });
     } }] });
   }
 
@@ -242,10 +256,19 @@
       + '<div class="hr-pc"><h4>Files</h4><div class="hrt-acts">' + (a.has_resume ? '<button type="button" class="hr-b" data-file="view/resume">View resume</button><button type="button" class="hr-b" data-file="file/resume">Download resume</button>' : '<span class="hr-sub">No resume.</span>')
       + (a.has_cover ? '<button type="button" class="hr-b" data-file="file/cover">Download cover letter</button>' : '') + '</div>'
       + (a.cover_text ? '<div class="hr-l" style="margin-top:10px;">Cover note</div><div class="hrt-ro" data-no-i18n>' + esc(a.cover_text) + '</div>' : '') + '</div>'
-      + '<div class="hr-pc"><h4>History</h4>' + (r.events || []).map(function (e) {
+      + '<div class="hr-pc"><h4>History and comments</h4>' + (a.read_only ? '<div class="hr-sub" style="margin-bottom:6px;">A job for the whole agency: you can read and comment; an agency admin makes the changes.</div>' : '')
+      + (r.events || []).map(function (e) {
+        if (e.note) return '<div style="padding:5px 0;font-size:13px;"><span class="hr-sub">' + esc(tsDay(e.at)) + (e.by ? ' · <span data-no-i18n>' + esc(e.by) + '</span>' : '') + '</span><div class="hrt-ro" data-no-i18n>' + esc(e.note) + '</div></div>';
         return '<div class="hr-sub" style="padding:3px 0;">' + esc(tsDay(e.at)) + ' · ' + esc(st[e.to] || e.to) + (e.by ? ' · <span data-no-i18n>' + esc(e.by) + '</span>' : '') + '</div>';
-      }).join('') + '</div></div>');
+      }).join('')
+      + '<div style="margin-top:8px;">' + area('note', '', 2) + '<div class="hr-bar" style="margin-top:6px;"><button type="button" class="hr-b" data-comment>Add a comment</button></div><div data-msg style="color:#B91C1C;font-size:13px;"></div></div>'
+      + '</div></div>');
     modal({ title: 'Job application', body: box, large: true, actions: [{ label: 'Close' }] });
+    box.querySelector('[data-comment]').addEventListener('click', async function () {
+      var n = val(box, 'note');
+      if (!n) return msg(box, 'Write a comment first.');
+      try { await Api.post('/hr/applications/' + id + '/comment', { note: n }); saved('Comment added.'); closeModal(); setTimeout(function () { openApplication(id, done); }, 0); } catch (e) { msg(box, errMsg(e)); }
+    });
     box.querySelectorAll('[data-file]').forEach(function (b) {
       b.addEventListener('click', async function () {
         var k = b.getAttribute('data-file');
@@ -259,6 +282,15 @@
         blob('/hr/applications/' + id + '/' + k, k.indexOf('cover') > 0 ? 'cover-letter' : 'resume');
       });
     });
+  }
+
+  function openComment(a, done) {
+    var box = el(field('Comment', area('note', '', 4), true) + '<div class="hr-sub" style="margin-top:6px;">For your team only: the applicant never sees it.</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    modal({ title: 'Comment: ' + a.name, body: box, actions: [{ label: 'Cancel' }, { label: 'Add comment', primary: true, busyLabel: 'Saving…', handler: function () {
+      var n = val(box, 'note');
+      if (!n) { msg(box, 'Write a comment first.'); return false; }
+      return Api.post('/hr/applications/' + a.id + '/comment', { note: n }).then(function () { saved('Comment added.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
   }
 
   function openMove(ids, done) {
@@ -318,8 +350,9 @@
     var tpls = (ob.templates || []).filter(function (t) { return !t.archived; });
     var mgrs = []; try { mgrs = (await Api.get('/hr/performance')).managers || []; } catch (e) {}
     var box = el('<div class="hr-note">This creates their KiddieTrac account (the same as adding someone on the Users screen), emails them a link to set their password, fills their employee file and starts their onboarding checklist.</div>'
-      + '<div class="hr-g">' + field('Role', select('role', opts({ educator: 'Educator', centre_director: 'Centre director', home_visitor: 'Home visitor' }, 'educator')))
-      + field('Centre', select('centre_id', list(d.centres, post.centre_id, '—'))) + field('Start date', input('start_date', addDays(today(), 7), 'date'))
+      + '<div class="hr-g">' + field('Role', select('role', opts((function () { var all = { educator: 'Educator', centre_director: 'Centre director', home_visitor: 'Home visitor' }, o = {};
+          (d.hire_roles || Object.keys(all)).forEach(function (k) { if (all[k]) o[k] = all[k]; }); return o; })(), 'educator')))
+      + field('Centre', select('centre_id', list(d.centres, post.centre_id || ((d.centres || []).length === 1 ? d.centres[0].id : ''), d.can_settings ? '—' : null))) + field('Start date', input('start_date', addDays(today(), 7), 'date'))
       + field('Job title', input('job_title', post.title || a.role)) + field('Employment', select('employment_type', opts(d.employment_types || {}, post.employment_type, '—')))
       + field('Manager', select('manager_user_id', list(mgrs, '', '—'))) + field('Onboarding checklist', select('template_id', list(tpls, (tpls[0] || {}).id, 'None for now')))
       + field('Email for their account', input('email', a.email, 'email')) + field('Username (optional)', input('username', ''))
@@ -777,7 +810,7 @@
     var roles = CO.roles || {};
     var box = el(field('Due', input('due_date', addDays(today(), 30), 'date')) + '<div class="hrt-sec" style="margin-top:10px;">Everyone in a role</div><div class="hrt-pick" style="max-height:none;">'
       + Object.keys(roles).map(function (k) { return '<label><input type="checkbox" data-role="' + k + '"> ' + esc(roles[k]) + '</label>'; }).join('') + '</div>'
-      + '<div class="hr-sub" style="margin-top:4px;">The people in the role today. Someone who joins later is assigned by hand (or from their onboarding checklist).</div>'
+      + '<div class="hr-sub" style="margin-top:4px;">Everyone in the role today, and anyone who joins it later: they get it the day they join, due as many days later as this due date is from today.</div>'
       + '<div class="hrt-sec">Or choose people</div><input class="hr-i" data-q placeholder="Search names" style="width:100%;margin-bottom:6px;"><div class="hrt-pick">'
       + (CO.people || []).map(function (p) { return '<label data-name="' + esc(p.name.toLowerCase()) + '"><input type="checkbox" data-user="' + p.id + '"> <span data-no-i18n>' + esc(p.name) + '</span></label>'; }).join('') + '</div>'
       + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
@@ -787,7 +820,7 @@
       var o = { due_date: val(box, 'due_date'), roles: [], user_ids: [] };
       box.querySelectorAll('[data-role]:checked').forEach(function (x) { o.roles.push(x.getAttribute('data-role')); });
       box.querySelectorAll('[data-user]:checked').forEach(function (x) { o.user_ids.push(+x.getAttribute('data-user')); });
-      return Api.post('/hr/courses/' + c.id + '/assign', o).then(function (r) { saved(r.assigned + ' assigned' + (r.already ? ', ' + r.already + ' already had it' : '') + '.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+      return Api.post('/hr/courses/' + c.id + '/assign', o).then(function (r) { saved(r.assigned + ' assigned' + (r.already ? ', ' + r.already + ' already had it' : '') + (o.roles.length ? '. New people in the role get it too.' : '.')); done(); }, function (e) { msg(box, errMsg(e)); return false; });
     } }] });
   }
 
@@ -796,7 +829,14 @@
     try { r = await Api.get('/hr/courses/' + c.id + '/assignments'); } catch (e) { return fail('Could not load the course', e); }
     var rows = r.assignments || [];
     var open = rows.filter(function (a) { return !a.completed_at; });
-    var box = el((open.length > 1 ? '<div class="hr-bar"><button type="button" class="hr-b" data-remindall>Remind everyone not done (' + open.length + ')</button></div>' : '')
+    var rules = r.rules || [];
+    var box = el((rules.length ? '<div class="hr-note" style="margin-bottom:8px;">' + rules.map(function (x) {
+        return '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:2px 0;"><span>Goes to everyone in <b>' + esc(x.role_label) + '</b>'
+          + (x.centres ? ' at <span data-no-i18n>' + esc(x.centres.join(', ')) + '</span>' : '') + ', including people who join later'
+          + (x.due_days != null ? ' (due ' + x.due_days + ' days after they get it)' : '') + '.</span>'
+          + (x.can_stop ? '<button type="button" class="hr-b" data-stoprule="' + x.id + '">Stop for new people</button>' : '') + '</div>';
+      }).join('') + '</div>' : '')
+      + (open.length > 1 ? '<div class="hr-bar"><button type="button" class="hr-b" data-remindall>Remind everyone not done (' + open.length + ')</button></div>' : '')
       + (rows.length ? rows.map(function (a) {
         return '<div class="hrt-task"><span class="hrt-ck' + (a.completed_at ? ' on' : (a.overdue ? ' late' : '')) + '">' + (a.completed_at ? '✓' : '') + '</span><div class="t"><b data-no-i18n>' + esc(a.name) + '</b> '
           + (a.completed_at ? pill('#DCFCE7', '#166534', 'Completed ' + tsDay(a.completed_at)) : (a.overdue ? pill('#FEF3C7', '#92400E', 'Overdue') : pill('#E0F2FE', '#075985', 'To do')))
@@ -819,6 +859,13 @@
     });
     var ra = box.querySelector('[data-remindall]');
     if (ra) ra.addEventListener('click', function () { remind(open.map(function (a) { return a.id; })); });
+    box.querySelectorAll('[data-stoprule]').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        var ok = await KT.confirm({ title: 'Stop giving this course to new people?', description: 'People who already have it keep it.', okLabel: 'Stop' });
+        if (!ok) return;
+        try { await Api.post('/hr/course-role-rules/' + b.getAttribute('data-stoprule') + '/stop', {}); saved('New people in the role will no longer get it.'); reopen(); } catch (e) { fail('Could not change it', e); }
+      });
+    });
   }
 
   // ══ MY COURSES (the person) ══════════════════════════════════════════════

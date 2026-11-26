@@ -29,7 +29,8 @@ final class HrTalent
     public const GOAL_STATUS = ['not_started' => 'Not started', 'on_track' => 'On track', 'at_risk' => 'At risk', 'done' => 'Done', 'dropped' => 'Dropped'];
     public const COURSE_KINDS = ['link' => 'A link', 'video' => 'A video link', 'file' => 'An uploaded file', 'library' => 'A KiddieTrac training video'];
 
-    public const DEFAULTS = ['keep_months' => 24, 'reply_to' => null, 'apply_intro' => null];
+    /** declined_days: delete declined applicants after N days (hr:declined-purge); null = Never. */
+    public const DEFAULTS = ['keep_months' => 24, 'reply_to' => null, 'apply_intro' => null, 'declined_days' => 90];
 
     public const DEFAULT_SCALE = [['value' => 1, 'label' => 'Needs improvement'], ['value' => 2, 'label' => 'Developing'],
         ['value' => 3, 'label' => 'Meets expectations'], ['value' => 4, 'label' => 'Exceeds expectations'], ['value' => 5, 'label' => 'Outstanding']];
@@ -49,6 +50,7 @@ final class HrTalent
         $out = array_replace(self::DEFAULTS, array_intersect_key($s, self::DEFAULTS));
         $out['keep_months'] = max(1, min(60, (int) $out['keep_months']));
         $out['reply_to'] = filter_var((string) $out['reply_to'], FILTER_VALIDATE_EMAIL) ? (string) $out['reply_to'] : null;
+        $out['declined_days'] = $out['declined_days'] === null ? null : max(1, min(3650, (int) $out['declined_days']));
 
         return $out;
     }
@@ -261,5 +263,108 @@ final class HrTalent
 
         return ['scale' => $t ? (json_decode((string) $t->scale, true) ?: self::DEFAULT_SCALE) : self::DEFAULT_SCALE,
             'sections' => $t ? (json_decode((string) $t->sections, true) ?: self::DEFAULT_SECTIONS) : self::DEFAULT_SECTIONS];
+    }
+
+    // ── courses that follow a role (2026-11-28, Anthony) ─────────────────────────────────────────
+
+    /**
+     * A course assigned to a ROLE keeps going to that role: everyone who holds it now, and anyone who joins it later
+     * (added to the role, or their role changed to it). One rule, read live, called from the user create / role
+     * change paths (coursesForUser) and swept every 15 minutes (hr:role-courses) for every other way a role row
+     * appears (imports, provisioning). Only while the role row is active, never for a closed account (suspended,
+     * deactivated, deleted, HR file terminated), never at a closed centre, never twice (assignCourse is one per
+     * person per course), never for someone a manager removed from it (skip_user_ids), never for a super admin.
+     * Due date: N days after the person gets it (due_days), like the first assignment.
+     *
+     * @return int how many new assignments (or, dry, how many it would make)
+     */
+    public static function syncRoleCourses(?int $agencyId = null, ?int $userId = null, bool $dry = false): int
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_course_role_rules')) return 0;
+        $rules = DB::table('hr_course_role_rules as r')->join('hr_courses as c', 'c.id', '=', 'r.course_id')
+            ->whereNull('r.archived_at')->whereNull('c.archived_at')->whereColumn('c.agency_id', 'r.agency_id')
+            ->when($agencyId, fn ($q) => $q->where('r.agency_id', $agencyId))
+            ->get(['r.*', 'c.title']);
+        $new = 0;
+        $outsiders = AgencySignatories::outsiderIds();
+        foreach ($rules->groupBy('agency_id') as $aid => $list) {
+            $aid = (int) $aid;
+            if (! HrLeave::on($aid)) continue;
+            $open = Live::centreIds($aid);
+            $staff = HrLeave::staffIds($aid);
+            $today = AgencyTime::today($aid);
+            foreach ($list as $r) {
+                $centres = $r->centre_ids !== null ? array_map('intval', json_decode((string) $r->centre_ids, true) ?: []) : null;
+                $skip = array_map('intval', json_decode((string) ($r->skip_user_ids ?? ''), true) ?: []);
+                $q = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+                    ->where('ra.active', 1)->whereNull('ra.closed_with_account_at')->where('ra.role', $r->role)
+                    ->whereNull('u.deleted_at')->whereNotIn('u.status', ['suspended', 'deactivated'])
+                    ->whereIn('u.id', $staff ?: [0])
+                    ->whereNotExists(fn ($w) => $w->from('hr_course_assignments as x')->whereColumn('x.user_id', 'u.id')->where('x.course_id', $r->course_id))
+                    ->whereNotExists(fn ($w) => $w->from('hr_employee_files as f')->whereColumn('f.user_id', 'u.id')->where('f.agency_id', $aid)->where('f.status', 'terminated'))
+                    ->when($userId, fn ($w) => $w->where('u.id', $userId));
+                if ($centres !== null) {
+                    $q->whereIn('ra.centre_id', array_values(array_intersect($centres, $open)) ?: [0]);
+                } else {
+                    $q->where(fn ($w) => $w->where(fn ($a) => $a->where('ra.agency_id', $aid)->whereNull('ra.centre_id'))->orWhereIn('ra.centre_id', $open ?: [0]));
+                }
+                $ids = array_values(array_diff($q->distinct()->pluck('u.id')->map(fn ($v) => (int) $v)->all(), $skip, $outsiders));
+                foreach ($ids as $u) {
+                    if ($dry) { $new++; continue; }
+                    $due = $r->due_days !== null ? Carbon::parse($today)->addDays((int) $r->due_days)->toDateString() : null;
+                    if (! self::assignCourse($aid, (int) $r->course_id, $u, $due, $r->created_by_id ? (int) $r->created_by_id : null, $r->role)) continue;
+                    $new++;
+                    try {
+                        Audit::write(['user_id' => null, 'agency_id' => $aid, 'action' => 'hr.course_assigned_by_role', 'entity_type' => 'hr_course',
+                            'entity_id' => (int) $r->course_id, 'payload' => json_encode(['user_id' => $u, 'role' => $r->role, 'rule_id' => (int) $r->id])]);
+                    } catch (\Throwable $e) {
+                    }
+                    if (! TestAgency::isAgency($aid)) {   // test agencies send nothing
+                        try {
+                            Notify::write(['user_id' => $u, 'agency_id' => $aid, 'type' => 'hr', 'title' => 'New course: ' . $r->title,
+                                'body' => $due ? 'Due ' . Carbon::parse($due)->format('M j') . '. Open it under My HR.' : 'Open it under My HR.',
+                                'data' => json_encode(['link' => '#my-hr', 'kind' => 'own']), 'created_at' => now()]);
+                        } catch (\Throwable $e) {
+                            report($e);
+                        }
+                    }
+                }
+            }
+        }
+
+        return $new;
+    }
+
+    /** After someone's role was added or changed: their role courses, now. Never throws (the caller's save stands). */
+    public static function coursesForUser(int $userId): void
+    {
+        try {
+            if (! \Illuminate\Support\Facades\Schema::hasTable('hr_course_role_rules')) return;
+            $aids = DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)->pluck('agency_id')
+                ->merge(DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')->where('ra.user_id', $userId)->where('ra.active', 1)->pluck('c.agency_id'))
+                ->filter()->map(fn ($v) => (int) $v)->unique();
+            foreach ($aids as $aid) {
+                if (DB::table('hr_course_role_rules')->where('agency_id', $aid)->whereNull('archived_at')->exists()) self::syncRoleCourses($aid, $userId);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /** Keep the rule behind a by-role assignment. Same course + role + centres = one rule (its due_days updated). */
+    public static function saveRoleRule(int $agencyId, int $courseId, string $role, ?array $centreIds, ?int $dueDays, ?int $actorId): int
+    {
+        $norm = fn ($ids) => $ids === null ? null : json_encode(array_values(array_unique(array_map('intval', $ids))));
+        $key = $norm($centreIds);
+        $row = DB::table('hr_course_role_rules')->where('agency_id', $agencyId)->where('course_id', $courseId)->where('role', $role)
+            ->whereNull('archived_at')->get()->first(fn ($r) => $norm($r->centre_ids === null ? null : (json_decode((string) $r->centre_ids, true) ?: [])) === $key);
+        if ($row) {
+            DB::table('hr_course_role_rules')->where('id', $row->id)->update(['due_days' => $dueDays, 'updated_at' => now()]);
+
+            return (int) $row->id;
+        }
+
+        return (int) DB::table('hr_course_role_rules')->insertGetId(['agency_id' => $agencyId, 'course_id' => $courseId, 'role' => $role,
+            'centre_ids' => $key, 'due_days' => $dueDays, 'created_by_id' => $actorId, 'created_at' => now(), 'updated_at' => now()]);
     }
 }

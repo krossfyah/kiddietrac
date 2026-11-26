@@ -13,6 +13,7 @@
      its own siblings.
    - Anything in a section that is not a link keeps its place after the links.
    - The order of the SECTIONS and the flat educator / parent menus (no sections) are left as they are.
+   - A section marked data-kt-keep-order (app-v2-shell keepOrder) keeps its listed order (Human Resources, 2026-11-26).
    - Nothing is moved when the section is already in order, so the observer settles after one pass. */
 (function () {
   'use strict';
@@ -30,6 +31,9 @@
   function isSub(n) { return isLink(n) && n.classList.contains('nav-link--sub'); }
 
   function sortSection(sec) {
+    // A section built with an explicit order (data-kt-keep-order, e.g. Human Resources: HR, My HR, Time off requests,
+    // Timesheets, Payroll, Background checks - Anthony 2026-11-26) keeps it.
+    if (sec.hasAttribute('data-kt-keep-order')) return false;
     var kids = Array.prototype.slice.call(sec.children);
     var groups = [], rest = [], cur = null;
     kids.forEach(function (n) {

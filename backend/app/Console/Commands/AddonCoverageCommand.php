@@ -59,6 +59,8 @@ final class AddonCoverageCommand extends Command
         'portfolio:year-end' => ['observations', 'app/Console/Commands/YearEndPortfolioCommand.php'],
         'hr:leave-accrue' => ['hr', 'app/Console/Commands/HrLeaveAccrueCommand.php'],
         'hr:talent-remind' => ['hr', 'app/Console/Commands/HrTalentRemindCommand.php'],
+        'hr:role-courses' => ['hr', 'app/Console/Commands/HrRoleCoursesCommand.php'],
+        'hr:declined-purge' => ['hr', 'app/Console/Commands/HrDeclinedPurgeCommand.php'],
         'timeoff:remind-approvers' => ['timesheets', 'app/Console/Commands/TimeOffRemindApprovers.php'],
         'forms:remind-countersign' => ['forms', 'app/Console/Commands/CountersignRemindCommand.php'],
         'kt:payslip-notices' => ['payroll', 'app/Support/PayslipNotices.php'],

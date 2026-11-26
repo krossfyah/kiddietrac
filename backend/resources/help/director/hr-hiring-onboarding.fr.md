@@ -14,8 +14,10 @@ Ces quatre onglets se trouvent sur l'écran **RH** (sous **Personnel**) et font 
 - La page d'emplois porte le nom et le logo de votre agence. Les candidats y postulent avec leur CV et une lettre de motivation facultative.
 - Les candidatures passent par **Nouveau**, **Présélection**, **Entrevue** et **Offre** jusqu'à **Embauché**, **Refusé** ou **En dossier**. Sélectionnez plusieurs lignes pour les déplacer ensemble.
 - Dans le menu **⋮** : **Planifier une entrevue** l'ajoute à votre calendrier et envoie une invitation au candidat. **Garder en dossier** et **Refuser** envoient une lettre aimable, et vous pouvez prévisualiser chaque courriel avant l'envoi.
-- **Embaucher** (administrateurs d'agence) crée le compte KiddieTrac de la personne et lui envoie un lien pour choisir son mot de passe. Son dossier d'employé est rempli et sa liste d'intégration commence.
-- **Paramètres de recrutement** fixe la durée de conservation des candidatures gardées en dossier (elles sont ensuite supprimées automatiquement), l'adresse des réponses et le texte en haut de votre page d'emplois.
+- **Embaucher** crée le compte KiddieTrac de la personne et lui envoie un lien pour choisir son mot de passe. Son dossier d'employé est rempli et sa liste d'intégration commence. Les directeurs de centre embauchent des éducateurs et des visiteurs à domicile dans leurs propres centres; les administrateurs d'agence embauchent partout.
+- **Ajouter un commentaire** laisse une note sur un candidat pour votre équipe. Le candidat ne la voit jamais.
+- Les postes pour toute l'agence (sans centre) sont gérés par les administrateurs d'agence. Les directeurs de centre peuvent les voir, voir leurs candidats et commenter, mais pas les modifier.
+- **Paramètres de recrutement** fixe la durée de conservation des candidatures gardées en dossier (elles sont ensuite supprimées automatiquement), le moment où les candidats refusés sont supprimés (après 90 jours sauf autre choix, ou Jamais), l'adresse des réponses et le texte en haut de votre page d'emplois. Le CV, les lettres et l'historique d'un candidat supprimé partent avec lui.
 
 ## Intégration
 
@@ -34,5 +36,5 @@ Ces quatre onglets se trouvent sur l'écran **RH** (sous **Personnel**) et font 
 ## Formations
 
 - Les administrateurs ajoutent une formation : un lien, un lien vidéo, un fichier téléversé ou une vidéo de formation KiddieTrac. Une formation peut compter pour les heures de perfectionnement.
-- **Assigner** la donne à des personnes, ou à tout le personnel d'un rôle aujourd'hui, avec une échéance. **Voir qui l'a** montre la progression, envoie des rappels et télécharge les certificats.
+- **Assigner** la donne à des personnes, ou à tout le personnel d'un rôle, avec une échéance. Une formation donnée à un rôle va aussi à toute personne qui rejoint ce rôle plus tard, due le même nombre de jours après qu'elle la reçoit. **Voir qui l'a** montre la progression, envoie des rappels et télécharge les certificats, et **Arrêter pour les nouveaux** met fin à la règle. Une personne retirée d'une formation ne la reçoit pas de nouveau.
 - À la fin, la personne tape son nom pour confirmer et reçoit un certificat au nom de votre agence. Si la formation compte, ses heures de perfectionnement sont ajoutées.

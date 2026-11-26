@@ -2,6 +2,42 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "🗂️",
+            "title": "Human Resources in the sidebar",
+            "body": "HR, My HR, Time off requests, Timesheets, Payroll and Background checks now sit together, in that order, under Human Resources in the menu.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "📣",
+            "title": "HR hiring: directors hire, comments, tidy-up",
+            "body": "Centre directors can hire for their own centres and comment on whole-agency applicants. Declined applicants are deleted after 90 days, or the time you choose in Hiring settings.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "🎓",
+            "title": "Role courses reach new staff",
+            "body": "A course assigned to a role now also goes to anyone who joins that role later, with the same number of days to finish it.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-26",
             "icon": "📣",

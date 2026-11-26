@@ -2725,6 +2725,13 @@ final class AdminController extends Controller
     public function createUser(Request $request): JsonResponse
     {
         $agencyId = $this->getAgencyId($request);
+        /* KiddieTrac HR hire by a centre director (2026-11-28, Anthony). HrHiringController::hire calls this in process
+           after checking the director's own centre, the applicant's post and the role (educator / home visitor), and
+           marks the request with a server-side attribute no HTTP client can set. Everything below applies unchanged. */
+        if (($hrAgency = (int) $request->attributes->get('kt_hr_hire_agency'))
+            && in_array($request->input('role'), ['educator', 'home_visitor'], true) && filled($request->input('centre_id'))) {
+            $agencyId = $hrAgency;
+        }
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
 
         $data = $request->validate([
@@ -2886,6 +2893,7 @@ final class AdminController extends Controller
             'created_at' => now(),
         ]);
 
+        \App\Support\HrTalent::coursesForUser((int) $userId);   // KiddieTrac HR: courses that go to everyone in this role
         $this->audit($request->user()->id, $isRevive ? 'user.revived' : 'user.created', 'user', $userId, [
             'email' => $data['email'],
             'role' => $data['role'],
@@ -3477,6 +3485,7 @@ final class AdminController extends Controller
             ['active' => $data['active'] ?? true]
         );
 
+        \App\Support\HrTalent::coursesForUser((int) $userId);   // KiddieTrac HR: courses that go to everyone in this role
         $this->audit($request->user()->id, 'user.role_set', 'user', $userId, $data);
         return response()->json(['message' => 'Role updated']);
     }
