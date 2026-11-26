@@ -715,5 +715,150 @@ final class WebDemoShowcase
                 'entry_date' => $this->today->copy()->addDays($ago(15))->toDateString(), 'amount' => 2, 'kind' => 'adjustment',
                 'reason' => 'Two days for covering the summer camp weekend, agreed with Olivia', 'created_by_id' => $olivia ?: $elena, 'created_at' => $now]);
         }
+        $this->hrTalentStory($agencyId, $byName->all(), $centreOf->all(), $maya, $elena, $olivia, $now);
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 2 DEMO (2026-11-28, Starlight only): two open job posts on the jobs page with four applicants
+     * at different stages (one with an interview booked), Nina mid-onboarding (3 of 6 tasks done, one overdue), Maya's
+     * annual review in progress (her self review in, Elena's part drafted) with two goals and check-ins and a one-to-one,
+     * and two courses with assignments: Maya finished Safe sleep (certificate + PD hours), Lucas is overdue.
+     * Inserted directly, all in this builder's ledger: nothing sends, a rerun gives the same rows.
+     */
+    private function hrTalentStory(int $agencyId, array $byName, array $centreOf, int $maya, int $elena, int $olivia, string $now): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_course_assignments')) return;
+        $centre = (int) ($centreOf[$elena] ?? 0) ?: null;
+        $nina = $byName['Nina'] ?? null;
+        $boss = $olivia ?: $elena;
+        $d = fn (int $days) => $this->today->copy()->addDays($days)->toDateString();
+        \App\Support\HrTalent::saveSettings($agencyId, ['keep_months' => 24, 'reply_to' => null,
+            'apply_intro' => "We are a warm, play-based early learning centre in San Diego. We look for kind, curious people who love being with young children.\nPaid planning time, PD days and a team that has your back."]);
+
+        // ── Hiring ──
+        $p1 = $this->add('hr_job_posts', ['agency_id' => $agencyId, 'centre_id' => $centre, 'title' => 'Preschool Teacher', 'employment_type' => 'full_time',
+            'pay_min' => 21, 'pay_max' => 25, 'pay_unit' => 'hour', 'status' => 'open', 'created_by_id' => $elena, 'created_at' => $this->at(-12, 9, 0), 'updated_at' => $this->at(-12, 9, 0),
+            'description' => "Lead play-based learning for our Rainbows room (ages 3 to 5) with a co-teacher.\n\nYou will plan activities from the children's interests, write learning observations in KiddieTrac and keep families in the loop.\n\nWhat you bring: an ECE permit or degree, CPR and first aid (or willing to get them), and a love of messy play."]);
+        $p2 = $this->add('hr_job_posts', ['agency_id' => $agencyId, 'centre_id' => $centre, 'title' => 'Infant Room Assistant', 'employment_type' => 'part_time',
+            'pay_min' => 18, 'pay_max' => 20, 'pay_unit' => 'hour', 'status' => 'open', 'created_by_id' => $elena, 'created_at' => $this->at(-6, 10, 0), 'updated_at' => $this->at(-6, 10, 0),
+            'description' => "Mornings, Monday to Friday, in our Sprouts infant room.\n\nFeeding, naps, diapering and lots of floor time, alongside our lead teacher. Training provided."]);
+        $role = ['Preschool Teacher', 'Infant Room Assistant'];
+        $apps = [
+            [$p1, 'Jordan', 'Reyes', 'new', -1, 'I have taught preschool for three years and love building forts with four-year-olds.'],
+            [$p1, 'Priya', 'Natarajan', 'reviewing', -5, 'Montessori-trained, bilingual in English and Tamil.'],
+            [$p1, 'Daniel', 'Kim', 'interview', -9, null],
+            [$p2, 'Sam', 'Ortiz', 'offer', -4, 'Two years as a nanny for twins, CPR certified.'],
+        ];
+        foreach ($apps as [$post, $fn, $ln, $status, $ago, $cover]) {
+            $at = $this->at($ago, 14, 20);
+            $meeting = null;
+            if ($status === 'interview' && \Illuminate\Support\Facades\Schema::hasTable('meetings')) {
+                $start = $this->today->copy()->addDays(2)->setTime(10, 0);
+                $meeting = $this->add('meetings', array_intersect_key([
+                    'scope' => 'agency', 'agency_id' => $agencyId, 'title' => 'Interview: ' . $fn . ' ' . $ln . ' (' . $role[$post === $p1 ? 0 : 1] . ')',
+                    'starts_at' => $start->copy()->utc()->format('Y-m-d H:i:s'), 'ends_at' => $start->copy()->addMinutes(45)->utc()->format('Y-m-d H:i:s'),
+                    'timezone' => $this->tz, 'all_day' => 0, 'location' => 'Starlight Kids Academy, front office', 'video' => 'none', 'status' => 'scheduled',
+                    'organizer_id' => $elena, 'created_by_id' => $elena, 'created_at' => $this->at(-2, 11, 0), 'updated_at' => $this->at(-2, 11, 0),
+                ], array_flip(\Illuminate\Support\Facades\Schema::getColumnListing('meetings'))));
+            }
+            $aid = $this->add('career_applications', ['agency_id' => $agencyId, 'job_post_id' => $post, 'centre_id' => $centre, 'role' => $role[$post === $p1 ? 0 : 1],
+                'first_name' => $fn, 'last_name' => $ln, 'email' => strtolower($fn . '.' . $ln) . '@applicant.example', 'phone' => '(619) 555-01' . (10 + count($this->made['career_applications'] ?? [])),
+                'cover_text' => $cover, 'status' => $status, 'meeting_id' => $meeting, 'created_at' => $at, 'updated_at' => $at]);
+            $this->add('career_application_events', ['application_id' => $aid, 'from_status' => null, 'to_status' => 'new', 'user_id' => null, 'created_at' => $at]);
+            $prev = 'new';
+            foreach (['reviewing', 'interview', 'offer'] as $k => $st) {
+                if (array_search($status, ['new', 'reviewing', 'interview', 'offer'], true) <= $k) break;
+                $this->add('career_application_events', ['application_id' => $aid, 'from_status' => $prev, 'to_status' => $st, 'user_id' => $elena, 'created_at' => $this->at($ago + $k + 1, 9, 30)]);
+                $prev = $st;
+            }
+        }
+
+        // ── Courses ──
+        $video = \Illuminate\Support\Facades\Schema::hasTable('training_videos') ? DB::table('training_videos')->where('status', 'published')->orderBy('id')->value('id') : null;
+        $c1 = $this->add('hr_courses', ['agency_id' => $agencyId, 'title' => 'Safe sleep for infants', 'content_kind' => 'link', 'url' => 'https://safetosleep.nichd.nih.gov/',
+            'description' => 'Read the Safe to Sleep guide and the centre\'s nap room routine. About 90 minutes.', 'pd_hours' => 1.5, 'counts_pd' => 1, 'needs_ack' => 1,
+            'created_by_id' => $boss, 'created_at' => $this->at(-30, 9, 0), 'updated_at' => $this->at(-30, 9, 0)]);
+        $c2 = $this->add('hr_courses', ['agency_id' => $agencyId, 'title' => 'Positive guidance refresher', 'content_kind' => $video ? 'library' : 'link',
+            'url' => $video ? null : 'https://www.naeyc.org/resources/topics/guidance', 'training_video_id' => $video ?: null,
+            'description' => 'Redirecting, naming feelings and setting kind limits.', 'pd_hours' => 1, 'counts_pd' => 1, 'needs_ack' => 1,
+            'created_by_id' => $boss, 'created_at' => $this->at(-20, 9, 0), 'updated_at' => $this->at(-20, 9, 0)]);
+        $prefix = \App\Support\RefCode::prefix($agencyId);
+        $assign = function (int $course, ?int $uid, int $dueIn, ?int $doneAgo = null, ?string $ack = null, ?string $roleName = null) use ($agencyId, $boss, $prefix, $now) {
+            if (! $uid) return null;
+            $pd = null;
+            $cert = null;
+            if ($doneAgo !== null) {
+                $c = DB::table('hr_courses')->where('id', $course)->first();
+                $pd = $this->add('pd_hours', ['agency_id' => $agencyId, 'user_id' => $uid, 'taken_on' => $this->today->copy()->addDays($doneAgo)->toDateString(),
+                    'title' => $c->title, 'provider' => DB::table('agencies')->where('id', $agencyId)->value('name'), 'hours' => $c->pd_hours, 'status' => 'approved',
+                    'reviewed_by' => $boss, 'reviewed_at' => $this->at($doneAgo, 16, 0), 'created_by' => $uid, 'created_at' => $this->at($doneAgo, 16, 0), 'updated_at' => $this->at($doneAgo, 16, 0)]);
+                $cert = $prefix . '-CRT-0001';   // the demo's one completion
+            }
+            return $this->add('hr_course_assignments', ['agency_id' => $agencyId, 'course_id' => $course, 'user_id' => $uid, 'assigned_role' => $roleName,
+                'due_date' => $this->today->copy()->addDays($dueIn)->toDateString(), 'completed_at' => $doneAgo !== null ? $this->at($doneAgo, 16, 0) : null,
+                'acknowledged_name' => $ack, 'certificate_no' => $cert, 'pd_hours_id' => $pd, 'assigned_by_id' => $boss, 'created_at' => $this->at(-21, 9, 0), 'updated_at' => $now]);
+        };
+        $assign($c1, $maya, -3, -6, DB::table('users')->where('id', $maya)->value('first_name') . ' ' . DB::table('users')->where('id', $maya)->value('last_name'), 'educator');
+        $assign($c1, $byName['Noah'] ?? null, 9, null, null, 'educator');
+        $assign($c1, $byName['Sofia'] ?? null, 9, null, null, 'educator');
+        $assign($c1, $byName['Lucas'] ?? null, -2, null, null, 'educator');
+        $assign($c2, $byName['Grace'] ?? null, 14);
+        $ninaCourse = $assign($c2, $nina, 5);
+
+        // ── Onboarding: Nina, started five days ago ──
+        if ($nina) {
+            $start = $this->today->copy()->addDays(-5)->toDateString();
+            $cert = collect((array) (\App\Support\Jurisdictions::forAgency($agencyId)['certifications'] ?? []))->first();
+            $tasks = [
+                ['document', 'Upload your background check clearance', null, null, 0, -4, 'upload'],
+                ['custom', 'Tour of the centre with Elena', null, null, 0, -5, 'manager'],
+                ['custom', 'Read the emergency and evacuation plan', null, null, 2, -2, 'self'],
+                ['certificate', 'CPR and first aid on file', null, $cert['code'] ?? 'cpr', 7, null, null],
+                ['course', 'Finish: Positive guidance refresher', $c2, null, 10, null, null],
+                ['custom', 'Shadow Maya in Sprouts for a full day', null, null, 3, null, null],
+            ];
+            $tpl = $this->add('hr_onboarding_templates', ['agency_id' => $agencyId, 'name' => 'New educator', 'role' => 'educator', 'created_by_id' => $boss,
+                'created_at' => $this->at(-40, 9, 0), 'updated_at' => $this->at(-40, 9, 0)]);
+            foreach ($tasks as $i => $t) {
+                $this->add('hr_onboarding_template_tasks', ['agency_id' => $agencyId, 'template_id' => $tpl, 'kind' => $t[0], 'title' => $t[1], 'ref_id' => $t[2], 'ref_key' => $t[3],
+                    'due_days' => $t[4], 'sort' => $i, 'created_at' => $now, 'updated_at' => $now]);
+            }
+            $ob = $this->add('hr_onboardings', ['agency_id' => $agencyId, 'user_id' => $nina, 'template_id' => $tpl, 'start_date' => $start, 'status' => 'active',
+                'created_by_id' => $boss, 'created_at' => $this->at(-6, 15, 0), 'updated_at' => $now]);
+            foreach ($tasks as $i => $t) {
+                $this->add('hr_onboarding_tasks', ['agency_id' => $agencyId, 'onboarding_id' => $ob, 'user_id' => $nina, 'kind' => $t[0], 'title' => $t[1], 'ref_id' => $t[2], 'ref_key' => $t[3],
+                    'due_date' => Carbon::parse($start)->addDays($t[4])->toDateString(), 'sort' => $i,
+                    'done_at' => $t[5] !== null ? $this->at($t[5], 13, 0) : null, 'done_by_id' => $t[5] !== null ? ($t[6] === 'manager' ? $elena : $nina) : null, 'done_how' => $t[6],
+                    'file_name' => $t[6] === 'upload' ? 'Background-check-clearance.pdf' : null, 'created_at' => $this->at(-6, 15, 0), 'updated_at' => $now]);
+            }
+        }
+
+        // ── Performance: Maya's annual review, in progress ──
+        $scale = \App\Support\HrTalent::DEFAULT_SCALE;
+        $secs = \App\Support\HrTalent::DEFAULT_SECTIONS;
+        $self = ['sections' => [], 'overall' => 'A year I am proud of: the Sprouts routines are calmer and families tell me they feel in the loop every day.'];
+        // In the order of HrTalent::DEFAULT_SECTIONS (safety, learning, families, teamwork).
+        $mine = [[5, 'Nap and meal routines run smoothly; I updated the allergy board with Elena.'],
+            [4, 'I write learning observations most days and plan from what the twins and their friends are curious about.'],
+            [4, 'Daily notes and photos go out every day. I want to try a family morning in spring.'],
+            [4, 'I mentor new staff when they shadow in Sprouts.']];
+        foreach ($secs as $i => $s0) $self['sections'][] = ['rating' => $mine[$i][0] ?? 4, 'comment' => $mine[$i][1] ?? ''];
+        $mgr = ['sections' => [['rating' => 5, 'comment' => 'Calm, consistent routines; the infant room is a model for the centre.'], ['rating' => 5, 'comment' => 'Maya\'s observations are some of the most thoughtful in the centre.']], 'overall' => ''];
+        $rev = $this->add('hr_reviews', ['agency_id' => $agencyId, 'user_id' => $maya, 'manager_user_id' => $elena, 'template_id' => null, 'cycle' => 'annual',
+            'title' => 'Annual review ' . $this->today->year, 'period_start' => $this->today->year . '-01-01', 'period_end' => $d(0), 'due_date' => $d(10),
+            'scale' => json_encode($scale), 'sections' => json_encode($secs), 'self_answers' => json_encode($self), 'manager_answers' => json_encode($mgr),
+            'self_submitted_at' => $this->at(-2, 17, 10), 'status' => 'self_done', 'created_by_id' => $elena, 'created_at' => $this->at(-14, 9, 0), 'updated_at' => $this->at(-1, 16, 0)]);
+        $g1 = $this->add('hr_goals', ['agency_id' => $agencyId, 'user_id' => $maya, 'review_id' => $rev, 'title' => 'Host a spring family morning in Sprouts',
+            'detail' => 'Invite families for songs and a shared snack; ask two parents to help plan.', 'due_date' => $d(120), 'status' => 'on_track', 'progress' => 25,
+            'created_by_id' => $elena, 'created_at' => $this->at(-14, 9, 30), 'updated_at' => $this->at(-3, 11, 0)]);
+        $g2 = $this->add('hr_goals', ['agency_id' => $agencyId, 'user_id' => $maya, 'review_id' => $rev, 'title' => 'Finish the infant and toddler PD series (6 hours)',
+            'due_date' => $d(60), 'status' => 'at_risk', 'progress' => 30, 'created_by_id' => $maya, 'created_at' => $this->at(-14, 9, 40), 'updated_at' => $this->at(-4, 15, 0)]);
+        $this->add('hr_goal_checkins', ['agency_id' => $agencyId, 'goal_id' => $g1, 'author_id' => $maya, 'note' => 'Picked a date in April and asked the Kims and the Garcias to help.',
+            'status' => 'on_track', 'progress' => 25, 'created_at' => $this->at(-3, 11, 0)]);
+        $this->add('hr_goal_checkins', ['agency_id' => $agencyId, 'goal_id' => $g2, 'author_id' => $elena, 'note' => 'Two of six sessions done; the November one was cancelled. Let\'s find a makeup date.',
+            'status' => 'at_risk', 'progress' => 30, 'created_at' => $this->at(-4, 15, 0)]);
+        $this->add('hr_one_on_ones', ['agency_id' => $agencyId, 'user_id' => $maya, 'manager_user_id' => $elena, 'met_on' => $d(-7),
+            'notes' => 'Talked about the twins\' transition to Rainbows in the new year and Maya\'s interest in mentoring.', 'next_steps' => 'Elena to look at a mentoring stipend; Maya to draft the family morning plan.',
+            'author_id' => $elena, 'created_at' => $this->at(-7, 15, 30), 'updated_at' => $this->at(-7, 15, 30)]);
     }
 }
