@@ -4,6 +4,21 @@
         {
             "type": "improved",
             "date": "2026-11-26",
+            "icon": "📑",
+            "title": "Report cards: progress-report layout",
+            "body": "Report card PDFs and prints now use a ruled progress-report layout with your logo, the child and centre details, term attendance, a panel for each learning area, and the signatures.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
             "icon": "✨",
             "title": "Tidier lists: one ⋮ per row, popups for records",
             "body": "Row actions now sit only in the ⋮ menu, with no duplicate icons beside it. Report cards, saved Play Spark ideas and sales calendar entries open in a popup over the list, so you keep your place. Hovered rows use the same light tint everywhere.",

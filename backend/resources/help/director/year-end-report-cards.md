@@ -41,7 +41,7 @@ Cards for withdrawn children and closed centres are not listed there. Agency adm
 
 ## The PDF
 
-The PDF carries your agency's logo, name, centre address, phone, email and licence number, the child's room and term, and a **Prepared by** box for the educator. It ends with the educator's signature beside the approver's signature, title and approval date, and a reference number on every page. Drafts are stamped *DRAFT – not approved*.
+The PDF is laid out as a progress report. Your agency's logo and name sit at the top, with the term and date. A ruled grid shows the child, the card's reference, days absent, days late and late pick-ups for the term (from attendance; blank when the term has no dates), the room and educator, your agency and centre addresses, the director and the phone number. Each learning area of your framework has its own grey panel, followed by **Strengths / Next Steps for Growth** and the signatures of the educator and the approver. A reference number and page number are on every page. Drafts are stamped *DRAFT – not approved*. Print uses the same layout.
 
 Agency admins can choose whether the educator's RECE registration number is printed: **Report card settings** at the bottom of the Report cards tab. It is on unless you turn it off.
 

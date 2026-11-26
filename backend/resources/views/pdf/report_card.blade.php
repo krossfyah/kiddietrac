@@ -1,167 +1,220 @@
 {{--
-  THE REPORT CARD AS A DOCUMENT (redesigned 2026-11-26, Anthony: "the report card should have the agency information
-  including educator information and nicely formatted with a signature from the agency as approval").
+  THE REPORT CARD AS A DOCUMENT - progress-report layout (2026-11-26, Anthony: lay it out like the Ontario
+  elementary report card, on the agency's own logo and details).
 
-  It is the family's document, on the AGENCY's branding: its logo, name, colour, centre address and licence. No
-  KiddieTrac mark on a white-label account. Dompdf draws it, so the layout is tables and plain CSS (no flex, grid or
-  custom properties). Page numbers and the reference are drawn by ReportCardController::pdfResponse on every page.
-  Labels follow the family's language (en / fr / es); the narratives are printed as written.
+  The LAYOUT of a provincial report card, not its identity: no government mark, no ministry wording, no
+  "provincial" title. The agency's logo and name head the page; KiddieTrac appears only in the footer, and never on a
+  white-label account. Ruled info grid, a two-column grid of grey panels with charcoal tabs (one per learning area of
+  the card's framework), then full-width ruled boxes. The agency colour is a thin accent only (title rule, outer rule).
+
+  Cards carry narratives, not ratings, so the panels hold the educator's narrative as bullets and the box on the
+  right of the section heading names the framework - no rating letters are invented.
+
+  Dompdf draws it: tables and plain CSS only. Helvetica for the print look; DejaVu Sans is the per-glyph fallback so
+  any name or narrative character Helvetica lacks still prints. Page x of y is drawn by ReportCardController::pdfResponse.
   All values come from ReportCardController::pdfData.
 --}}
+@php
+  $bullets = function ($text) {
+      $text = trim((string) $text);
+      if ($text === '') return [];
+      $paras = preg_split('/\R+/u', $text) ?: [];
+      $out = [];
+      foreach ($paras as $p) {
+          $p = trim(preg_replace('/^[\-\*•·]\s*/u', '', trim($p)));
+          if ($p === '') continue;
+          // A long paragraph reads as the reference's bullets: one sentence each.
+          $parts = mb_strlen($p) > 220 ? preg_split('/(?<=[.!?])\s+(?=[A-ZÀ-ÖØ-Þ¿¡"“])/u', $p) : [$p];
+          $buf = '';
+          foreach ($parts as $x) {   // a fragment under ~70 characters stays with its neighbour, never a bullet of its own
+              $x = trim($x); if ($x === '') continue;
+              $buf = $buf === '' ? $x : $buf . ' ' . $x;
+              if (mb_strlen($buf) >= 70) { $out[] = $buf; $buf = ''; }
+          }
+          if ($buf !== '') { if ($out && mb_strlen($buf) < 70) $out[count($out) - 1] .= ' ' . $buf; else $out[] = $buf; }
+      }
+      return $out;
+  };
+  $pairs = array_chunk($sections, 2);
+  $att = $attendance ?? null;
+  $dash = '';
+@endphp
 <!doctype html>
-<html lang="{{ $lang }}"><head><meta charset="utf-8"><title>{{ $L['report_card'] }} · {{ $childName }}</title>
+<html lang="{{ $lang }}"><head><meta charset="utf-8"><title>{{ $L['progress_report'] }} · {{ $childName }}</title>
 <style>
-  @page { margin: 36px 42px 64px; }
-  body { font-family: 'DejaVu Sans', sans-serif; color: #1E293B; font-size: 10.5pt; line-height: 1.55; }
+  @page { margin: 30px 34px 58px; }
+  body { font-family: Helvetica, 'DejaVu Sans', sans-serif; color: #000; font-size: 9pt; line-height: 1.3; }
   table { border-collapse: collapse; }
+  .sym { font-family: 'DejaVu Sans', sans-serif; }
 
-  .band { width: 100%; border-bottom: 3px solid {{ $color }}; }
-  .band td { vertical-align: top; padding-bottom: 10px; }
-  .logo { max-height: 54px; max-width: 190px; }
-  .provider { font-size: 15pt; font-weight: bold; color: #0F172A; }
-  .centre { font-size: 10pt; color: #334155; font-weight: bold; margin-top: 2px; }
-  .contact { font-size: 8.5pt; color: #64748B; line-height: 1.45; margin-top: 3px; }
-  .doctype { text-align: right; font-size: 8.5pt; letter-spacing: 1.6px; font-weight: bold; color: {{ $color }}; text-transform: uppercase; }
-  .docmeta { text-align: right; font-size: 8.5pt; color: #64748B; line-height: 1.5; }
+  .head { width: 100%; }
+  .head td { vertical-align: middle; padding: 0 0 6px; }
+  .logo { max-height: 46px; max-width: 150px; }
+  .agency { font-size: 11pt; font-weight: bold; }
+  .agency-sub { font-size: 7.5pt; color: #333; margin-top: 1px; }
+  .title { font-size: 17pt; font-weight: bold; text-align: right; line-height: 1.1; }
+  .title-term { font-size: 11pt; font-weight: bold; text-align: right; margin-top: 2px; }
+  .title-date { font-size: 8.5pt; font-weight: bold; text-align: right; margin-top: 4px; }
+  .rule { border-top: 2.5px solid {{ $color }}; height: 0; margin: 0 0 6px; }
 
-  h1 { font-size: 20pt; color: #0F172A; margin: 18px 0 2px; }
-  .term { font-size: 11pt; color: {{ $color }}; font-weight: bold; margin: 0 0 14px; }
+  .grid { width: 100%; table-layout: fixed; }
+  .grid td { border: 1px solid #000; vertical-align: top; padding: 2px 5px 4px; height: 26px; }
+  .lbl { font-size: 7pt; display: block; }
+  .val { font-size: 9.5pt; font-weight: bold; display: block; margin-top: 1px; }
+  .val-sm { font-size: 8pt; display: block; margin-top: 1px; line-height: 1.3; }
+  .sub { font-size: 7pt; color: #333; display: block; }
 
-  .facts { width: 100%; margin: 0 0 6px; }
-  .facts td { width: 50%; vertical-align: top; padding: 0; }
-  .box { border: 1px solid #E2E8F0; border-radius: 8px; padding: 10px 12px; background: #F8FAFC; }
-  .box-h { font-size: 7.5pt; letter-spacing: 1.2px; text-transform: uppercase; color: #64748B; font-weight: bold; margin: 0 0 5px; }
-  .kv td { padding: 1.5px 0; font-size: 9.5pt; vertical-align: top; width: auto; }
-  .kv td.k { color: #64748B; width: 96px; }
-  .kv td.v { color: #0F172A; }
+  .start { margin: 12px 0 10px; font-size: 9pt; font-weight: bold; text-transform: uppercase; }
+  .start .blank { display: inline-block; min-width: 150px; border-bottom: 1px solid #000; padding: 0 6px; text-transform: none; font-weight: bold; }
 
-  .fw { font-size: 8.5pt; color: #64748B; margin: 10px 0 0; }
-  .sec { page-break-inside: avoid; margin-top: 16px; }
-  .sec h2 { font-size: 12pt; color: {{ $color }}; margin: 0 0 6px; padding-bottom: 4px; border-bottom: 1.5px solid {{ $color }}; }
-  .sec p { margin: 0; white-space: pre-wrap; }
-  .empty { color: #94A3B8; font-style: italic; }
-  .next { page-break-inside: avoid; margin-top: 18px; background: #FFF7ED; border-left: 3px solid #F59E0B; padding: 10px 14px; border-radius: 0 6px 6px 0; }
-  .next h2 { font-size: 12pt; color: #B45309; margin: 0 0 6px; }
+  .sechead { width: 100%; margin-top: 4px; }
+  .sechead td { vertical-align: bottom; padding: 0; }
+  .sectitle { font-size: 11pt; font-weight: bold; padding-bottom: 3px !important; }
+  .legend { border: 1.5px solid #000; border-bottom: 0; padding: 3px 8px !important; font-size: 8pt; text-align: center; }
 
-  .signs { width: 100%; margin-top: 30px; page-break-inside: avoid; }
-  .signs td { width: 50%; vertical-align: bottom; }
-  .sig-img { height: 54px; display: block; margin-bottom: 2px; }
-  .sig-blank { height: 54px; }
-  .sig-line { border-top: 1px solid #334155; padding-top: 4px; font-size: 9pt; color: #334155; line-height: 1.45; }
-  .sig-line .role { font-size: 7.5pt; letter-spacing: 1.1px; text-transform: uppercase; color: #64748B; font-weight: bold; }
-  .seal { margin-top: 14px; page-break-inside: avoid; border: 1.5px solid #15803D; color: #15803D; border-radius: 8px; padding: 7px 12px;
-          font-size: 9.5pt; font-weight: bold; text-align: center; }
-  .seal-pending { border-color: #B45309; color: #B45309; }
+  .panels { width: 100%; table-layout: fixed; border: 1px solid #000; }
+  .panels td.p { width: 50%; vertical-align: top; background: #D9D9D9; border: 1px solid #000; padding: 0; }
+  .tab { background: #3A3A3A; color: #fff; font-weight: bold; font-size: 9.5pt; padding: 3px 8px; display: inline-block; min-width: 46%; }
+  .focus { font-size: 7.5pt; font-style: italic; color: #222; margin: 4px 8px 0; }
+  ul.b { margin: 4px 8px 7px 0; padding: 0 0 0 20px; }
+  ul.b li { margin: 0 0 2px; font-size: 8.5pt; line-height: 1.32; }
+  .empty { font-size: 8.5pt; font-style: italic; color: #444; margin: 5px 8px 8px; }
+  .panelrow { page-break-inside: avoid; }
+
+  .box { border: 1px solid #000; margin-top: 10px; page-break-inside: avoid; }
+  .box-h { font-size: 10pt; font-weight: bold; padding: 3px 6px; border-bottom: 1px solid #000; }
+  .box-b { padding: 6px 8px 8px; font-size: 9pt; line-height: 1.42; min-height: 40px; }
+
+  .signs { width: 100%; table-layout: fixed; border: 1px solid #000; margin-top: 10px; page-break-inside: avoid; }
+  .signs td { vertical-align: top; padding: 4px 10px 6px; border: 1px solid #000; }
+  .sig-img { height: 44px; display: block; }
+  .sig-blank { height: 44px; }
+  .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 8.5pt; height: 46px; }
+  .sig-role { font-size: 7pt; text-transform: uppercase; font-weight: bold; }
+  .approved { margin-top: 8px; font-size: 9pt; font-weight: bold; page-break-inside: avoid; }
+  .approved.pending { color: #8A4B00; }
 
   .wm { position: fixed; top: 330px; left: -60px; width: 820px; text-align: center; white-space: nowrap; font-size: 40pt; font-weight: bold;
         color: #DC2626; opacity: .10; transform: rotate(-32deg); }
-  .foot { position: fixed; bottom: -40px; left: 0; right: 0; font-size: 7.5pt; color: #94A3B8; border-top: 1px solid #E2E8F0; padding-top: 5px; }
+  .foot { position: fixed; bottom: -38px; left: 0; right: 0; font-size: 7pt; color: #333; border-top: 1px solid {{ $color }}; padding-top: 4px; }
 </style></head>
 <body>
   @if ($watermark)
     <div class="wm">{{ $watermark }}</div>
   @endif
   <div class="foot">
-    {{ $providerName }}@if($ref) · {{ $L['reference'] }} {{ $ref }}@endif @if(! $whiteLabel) · {{ $poweredBy }}@endif
+    {{ $providerName }}@if($ref) · {{ $L['reference'] }} {{ $ref }}@endif @if($version > 1) · {{ $L['version'] }} {{ $version }}@endif @if(! $whiteLabel) · {{ $poweredBy }}@endif
   </div>
 
-  <table class="band"><tr>
-    <td style="width:62%;">
-      @if ($logo)
-        <img src="{{ $logo }}" class="logo" alt="">
-      @endif
-      <div class="provider" @if($logo) style="margin-top:6px;" @endif>{{ $providerName }}</div>
-      @if ($centreName && $centreName !== $providerName)
-        <div class="centre">{{ $centreName }}</div>
-      @endif
-      <div class="contact">
-        @if ($address){{ $address }}<br>@endif
-        @if ($phone){{ $phone }}@endif @if ($phone && $email) · @endif @if ($email){{ $email }}@endif
-        @if ($licence)<br>{{ $L['licence'] }} {{ $licence }}@endif
-      </div>
+  {{-- header: agency logo + name on the left, the document title on the right --}}
+  <table class="head"><tr>
+    <td style="width:56%;">
+      <table><tr>
+        @if ($logo)<td style="padding:0 10px 0 0; vertical-align:middle;"><img src="{{ $logo }}" class="logo" alt=""></td>@endif
+        <td style="padding:0; vertical-align:middle;">
+          <div class="agency">{{ $providerName }}</div>
+          @if ($centreName && $centreName !== $providerName)<div class="agency-sub">{{ $centreName }}</div>@endif
+        </td>
+      </tr></table>
     </td>
-    <td style="width:38%;">
-      <div class="doctype">{{ $L['report_card'] }}</div>
-      <div class="docmeta">
-        @if ($ref){{ $L['reference'] }} {{ $ref }}<br>@endif
-        @if ($version > 1){{ $L['version'] }} {{ $version }}<br>@endif
-        {{ $L['issued'] }} {{ $issued }}
-      </div>
+    <td style="width:44%;">
+      <div class="title">{{ $L['progress_report'] }}</div>
+      <div class="title-term">{{ $term }}</div>
+      <div class="title-date">{{ $L['date'] }}: {{ $issued }}</div>
     </td>
   </tr></table>
+  <div class="rule"></div>
 
-  <h1>{{ $childName }}</h1>
-  <div class="term">{{ $term }}</div>
+  {{-- info grid --}}
+  <table class="grid">
+    <tr>
+      <td style="width:40%;"><span class="lbl">{{ $L['child'] }}:</span><span class="val">{{ $childName }}</span>@if($childRef)<span class="sub">{{ $L['child_id'] }} {{ $childRef }}</span>@endif</td>
+      <td style="width:22%;"><span class="lbl">{{ $L['reference'] }}:</span><span class="val">{{ $ref }}</span>@if($version > 1)<span class="sub">{{ $L['version'] }} {{ $version }}</span>@endif</td>
+      <td style="width:19%;"><span class="lbl">{{ $L['days_absent'] }}:</span><span class="val">{{ $att ? $att['absent'] : $dash }}</span></td>
+      <td style="width:19%;"><span class="lbl">{{ $L['days_late'] }}:</span><span class="val">{{ $att ? $att['late'] : $dash }}</span></td>
+    </tr>
+  </table>
+  <table class="grid">
+    <tr>
+      <td style="width:28%; border-top:0;"><span class="lbl">{{ $L['room_age'] }}:</span><span class="val">{{ $roomAge ?: $dash }}</span></td>
+      <td style="width:53%; border-top:0;"><span class="lbl">{{ $L['educator'] }}:</span><span class="val">{{ $educatorName ?: $dash }}</span>@if($registry)<span class="sub">{{ $L['registration'] }} {{ $registry }}</span>@endif</td>
+      <td style="width:19%; border-top:0;"><span class="lbl">{{ $L['late_pickups'] }}:</span><span class="val">{{ $att ? $att['pickups'] : $dash }}</span></td>
+    </tr>
+  </table>
+  <table class="grid">
+    <tr>
+      <td style="width:45%; border-top:0;" rowspan="2">
+        <span class="lbl">{{ $L['agency'] }}:</span><span class="val">{{ $providerName }}</span>
+        <span class="lbl" style="margin-top:5px;">{{ $L['address'] }}:</span><span class="val-sm">{{ $agencyAddress ?: $dash }}</span>
+      </td>
+      <td colspan="2" style="width:55%; border-top:0; height:52px;">
+        <span class="lbl">{{ $L['centre'] }}:</span><span class="val">{{ $centreName ?: $providerName }}</span>
+        <span class="lbl" style="margin-top:5px;">{{ $L['address'] }}:</span>
+        <span class="val-sm">{{ $address ?: $dash }}@if($email)<br>{{ $email }}@endif @if($licence)<br>{{ $L['licence'] }} {{ $licence }}@endif</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="width:30%;"><span class="lbl">{{ $L['director_lbl'] }}:</span><span class="val">{{ $director ?: $dash }}</span></td>
+      <td style="width:25%;"><span class="lbl">{{ $L['telephone'] }}:</span><span class="val">{{ $phone ?: $dash }}</span></td>
+    </tr>
+  </table>
 
-  <table class="facts"><tr>
-    <td style="padding-right:8px;">
-      <div class="box">
-        <div class="box-h">{{ $L['child'] }}</div>
-        <table class="kv">
-          <tr><td class="k">{{ $L['name'] }}</td><td class="v">{{ $childName }}</td></tr>
-          @if ($childRef)<tr><td class="k">{{ $L['child_id'] }}</td><td class="v">{{ $childRef }}</td></tr>@endif
-          @if ($room)<tr><td class="k">{{ $L['room'] }}</td><td class="v">{{ $room }}</td></tr>@endif
-          <tr><td class="k">{{ $L['term'] }}</td><td class="v">{{ $term }}</td></tr>
-        </table>
-      </div>
-    </td>
-    <td style="padding-left:8px;">
-      <div class="box">
-        <div class="box-h">{{ $L['prepared_by'] }}</div>
-        <table class="kv">
-          <tr><td class="k">{{ $L['educator'] }}</td><td class="v">{{ $educatorName ?: '—' }}</td></tr>
-          @if ($registry)<tr><td class="k">{{ $L['registration'] }}</td><td class="v">{{ $registry }}</td></tr>@endif
-          @if ($room)<tr><td class="k">{{ $L['room'] }}</td><td class="v">{{ $room }}</td></tr>@endif
-          @if ($centreName)<tr><td class="k">{{ $L['centre'] }}</td><td class="v">{{ $centreName }}</td></tr>@endif
-        </table>
-      </div>
-    </td>
+  <div class="start">{{ $L['room_start'] }} <span class="sym">➜</span> <span class="blank">{{ $room ?: '' }}</span></div>
+
+  {{-- learning areas: heading row with the framework in the bordered box, then the panel grid --}}
+  <table class="sechead"><tr>
+    <td class="sectitle" style="width:50%;">{{ $L['learning'] }}</td>
+    <td style="width:50%; text-align:right;">@if($frameworkName)<table style="width:100%;"><tr><td class="legend">{{ $L['framework'] }}: {{ $frameworkName }}</td></tr></table>@endif</td>
   </tr></table>
+  <table class="panels">
+    @foreach ($pairs as $pair)
+      <tr class="panelrow">
+        @foreach ($pair as $s)
+          <td class="p">
+            <div class="tab">{{ $s['label'] }}</div>
+            @if (! empty($s['hint']))<div class="focus">{{ $L['focus'] }}: {{ $s['hint'] }}</div>@endif
+            @php $bs = $bullets($s['text'] ?? ''); @endphp
+            @if ($bs)
+              <ul class="b">@foreach ($bs as $b)<li>{{ $b }}</li>@endforeach</ul>
+            @else
+              <div class="empty">{{ $L['no_text'] }}</div>
+            @endif
+          </td>
+        @endforeach
+        @if (count($pair) === 1)<td class="p" style="background:#fff;"></td>@endif
+      </tr>
+    @endforeach
+  </table>
 
-  @if ($frameworkName)
-    <div class="fw">{{ $L['framework'] }}: {{ $frameworkName }}</div>
-  @endif
+  {{-- strengths / next steps --}}
+  <div class="box">
+    <div class="box-h">{{ $L['strengths'] }}</div>
+    <div class="box-b">@if (trim((string) ($nextSteps ?? '')) !== ''){!! nl2br(e(trim((string) $nextSteps))) !!}@else<span style="font-style:italic;color:#444;">{{ $L['no_text'] }}</span>@endif</div>
+  </div>
 
-  @foreach ($sections as $s)
-    <div class="sec">
-      <h2>{{ $s['label'] }}</h2>
-      @if (trim((string) ($s['text'] ?? '')) !== '')
-        <p>{{ trim((string) $s['text']) }}</p>
-      @else
-        <p class="empty">{{ $L['no_text'] }}</p>
-      @endif
-    </div>
-  @endforeach
-
-  @if (trim((string) ($nextSteps ?? '')) !== '')
-    <div class="next">
-      <h2>{{ $L['next_steps'] }}</h2>
-      <div>{!! nl2br(e(trim((string) $nextSteps))) !!}</div>
-    </div>
-  @endif
-
+  {{-- signatures --}}
   <table class="signs"><tr>
-    <td style="padding-right:22px;">
+    <td style="width:50%;">
       @if ($educatorSig)<img src="{{ $educatorSig }}" class="sig-img" alt="">@else<div class="sig-blank"></div>@endif
       <div class="sig-line">
-        <span class="role">{{ $L['prepared_by'] }}</span><br>
+        <span class="sig-role">{{ $L['prepared_by'] }}</span><br>
         {{ $educatorName ?: '—' }}@if($registry) · {{ $L['registration'] }} {{ $registry }}@endif
-        @if ($submitted)<br><span style="color:#64748B;">{{ $L['signed'] }} {{ $submitted }}</span>@endif
+        @if ($submitted)<br>{{ $L['signed'] }} {{ $submitted }}@endif
       </div>
     </td>
-    <td style="padding-left:22px;">
+    <td style="width:50%;">
       @if ($approverSig)<img src="{{ $approverSig }}" class="sig-img" alt="">@else<div class="sig-blank"></div>@endif
       <div class="sig-line">
-        <span class="role">{{ $L['approved_by'] }}</span><br>
+        <span class="sig-role">{{ $L['approved_by'] }}</span><br>
         {{ $approverName ?: '—' }}@if($approverTitle) · {{ $approverTitle }}@endif
-        @if ($approved)<br><span style="color:#64748B;">{{ $L['approved'] }} {{ $approved }}</span>@endif
+        @if ($approved)<br>{{ $L['approved'] }} {{ $approved }}@endif
       </div>
     </td>
   </tr></table>
 
   @if ($approved && ! $watermark)
-    <div class="seal">✔ {{ $L['seal'] }} · {{ $providerName }} · {{ $approved }}</div>
+    <div class="approved"><span class="sym">✔</span> {{ $L['seal'] }} · {{ $providerName }} · {{ $approved }}@if($ref) · {{ $L['reference'] }} {{ $ref }}@endif</div>
   @elseif (! $approved)
-    <div class="seal seal-pending">{{ $L['not_approved'] }}</div>
+    <div class="approved pending">{{ $L['not_approved'] }}@if($ref) · {{ $L['reference'] }} {{ $ref }}@endif</div>
   @endif
 </body></html>

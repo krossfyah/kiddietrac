@@ -616,7 +616,8 @@ final class ReportCardController extends Controller
         if ($isSystem($edu)) {
             $edu = null;
         }
-        $eduName = $edu ? trim(($edu->first_name ?? '') . ' ' . (($edu->last_name ?? '') !== '' ? mb_substr((string) $edu->last_name, 0, 1) . '.' : '')) : null;
+        $initial = fn ($u) => trim(($u->first_name ?? '') . ' ' . (($u->last_name ?? '') !== '' ? mb_substr((string) $u->last_name, 0, 1) . '.' : ''));
+        $eduName = $edu ? $initial($edu) : null;
         $registry = ($edu && trim((string) ($edu->registry_number ?? '')) !== '' && self::showRegistry($agencyId)) ? trim((string) $edu->registry_number) : null;
 
         $appr = ($row->status ?? '') === 'sent' ? $user($row->approved_by_user_id) : null;
@@ -646,6 +647,18 @@ final class ReportCardController extends Controller
             $centre->city ?? null, trim(($centre->province ?? '') . ' ' . ($centre->postal_code ?? '')),
         ], fn ($v) => trim((string) $v) !== '')));
         $status = (string) ($row->status ?: 'draft');
+        $agencyAddress = trim(implode(', ', array_filter([
+            trim(($agency->address_line1 ?? '') . ' ' . ($agency->address_line2 ?? '')),
+            $agency->city ?? null, trim(($agency->province ?? '') . ' ' . ($agency->postal_code ?? '')),
+        ], fn ($v) => trim((string) $v) !== '')));
+        $roomRow = ($child && $child->primary_room_id) ? DB::table('rooms')->where('id', $child->primary_room_id)->first(['name', 'age_group']) : null;
+        /* The Director cell: whoever approved the card; before approval, the centre's own supervisor. */
+        $director = $appr ? $initial($appr) : (($centre && trim((string) ($centre->supervisor_first_name ?? '')) !== '')
+            ? $initial((object) ['first_name' => $centre->supervisor_first_name, 'last_name' => $centre->supervisor_last_name ?? '']) : null);
+        $att = $child ? self::termAttendance((int) $child->id, (string) $row->term, $agencyId, $tz) : null;
+        $hints = [];
+        foreach (($fw['areas'] ?? []) as $a) { $hints[$a['key'] ?? ''] = (string) ($a['hint'] ?? ''); }
+        $sections = array_map(fn ($x) => $x + ['hint' => $hints[$x['key']] ?? ''], $this->sectionsOf($row, $fw));
 
         return [
             'lang' => $lang, 'L' => $L, 'color' => $color, 'logo' => $logo,
@@ -658,22 +671,77 @@ final class ReportCardController extends Controller
             'ref' => \App\Support\RefCode::ensureReportCard((int) $row->id),
             'childRef' => $child ? \App\Support\RefCode::ensureChild((int) $child->id) : null,
             'version' => (int) ($row->version ?? 1),
-            'issued' => $day($row->approved_at ?: now()),
+            'issued' => $day($row->approved_at ?: ($row->sent_at ?: now())),
             'childName' => $child ? trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? '')) : '',
             'room' => ($child && $child->primary_room_id) ? DB::table('rooms')->where('id', $child->primary_room_id)->value('name') : null,
             'term' => (string) $row->term,
             'educatorName' => $eduName, 'registry' => $registry,
             'educatorSig' => $sig($row->educator_signature ?? null), 'submitted' => $day($row->submitted_at ?? null),
-            'approverName' => $appr ? trim((string) $appr->first_name) : null, 'approverTitle' => $title,
+            'approverName' => $appr ? $initial($appr) : null, 'approverTitle' => $title,
             'approverSig' => $approverSig, 'approved' => $status === 'sent' ? $day($row->approved_at ?: $row->sent_at) : null,
-            'frameworkName' => $fw['name'] ?? null, 'sections' => $this->sectionsOf($row, $fw), 'nextSteps' => $row->next_steps,
+            'frameworkName' => $fw['name'] ?? null, 'sections' => $sections, 'nextSteps' => $row->next_steps,
+            'agencyAddress' => $agencyAddress, 'roomAge' => $roomRow ? trim((string) $roomRow->name . (trim((string) ($roomRow->age_group ?? '')) !== '' ? ' · ' . $roomRow->age_group : '')) : null,
+            'director' => $director, 'attendance' => $att,
             'watermark' => $status !== 'sent' ? $L['draft'] : (! empty($row->replaced_by_id) ? $L['replaced'] : null),
         ];
+    }
+
+    /** The term label's dates. Quarter labels ("Q1 2026–27 (Sep–Nov)"), seasons ("Spring 2026"), a leaving report
+        ("Final term (Sep 2026)": its quarter up to the end of that month) or a bare year. Anything else: null. */
+    public static function termRange(string $term, string $tz): ?array
+    {
+        $t = trim($term);
+        $q = null;
+        if (preg_match('/^Q([1-4])\s+(\d{4})/u', $t, $m)) {
+            $first = [1 => [0, 9], 2 => [0, 12], 3 => [1, 3], 4 => [1, 6]][(int) $m[1]];
+            $q = \App\Support\ReportCardQuarter::forDate(Carbon::create((int) $m[2] + $first[0], $first[1], 15, 0, 0, 0, $tz));
+            $r = [$q['start'], $q['end']];
+        } elseif (preg_match('/\b(winter|spring|summer|fall|autumn)\s+(\d{4})\b/i', $t, $m)) {
+            $y = (int) $m[2];
+            $mm = ['winter' => [1, 3], 'spring' => [4, 6], 'summer' => [7, 8], 'fall' => [9, 12], 'autumn' => [9, 12]][strtolower($m[1])];
+            $r = [Carbon::create($y, $mm[0], 1, 0, 0, 0, $tz)->toDateString(), Carbon::create($y, $mm[1], 1, 0, 0, 0, $tz)->endOfMonth()->toDateString()];
+        } elseif (preg_match('/\((jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{4})\)/i', $t, $m)) {
+            $d = Carbon::parse('1 ' . $m[1] . ' ' . $m[2], $tz);
+            $r = [\App\Support\ReportCardQuarter::forDate($d)['start'], $d->copy()->endOfMonth()->toDateString()];
+        } elseif (preg_match('/^(\d{4})$/', $t, $m)) {
+            $r = [$m[1] . '-01-01', $m[1] . '-12-31'];
+        } else {
+            return null;
+        }
+        $today = Carbon::now($tz)->toDateString();
+        if ($r[0] > $today) return null;
+        return [$r[0], min($r[1], $today)];
+    }
+
+    /** Days absent, days late (arrival) and late pick-ups in the card's term, from the attendance records. */
+    private static function termAttendance(int $childId, string $term, int $agencyId, string $tz): ?array
+    {
+        $r = self::termRange($term, $tz);
+        if (! $r) return null;
+        try {
+            $late = fn ($kind) => (int) DB::table('late_events')->where('child_id', $childId)->where('kind', $kind)
+                ->whereBetween('occurred_on', $r)->count();
+            return [
+                'absent' => (int) DB::table('child_absences')->where('child_id', $childId)->whereBetween('absent_on', $r)
+                    ->distinct()->count('absent_on'),
+                'late' => (int) DB::table('late_events')->where('child_id', $childId)->where('kind', 'arrival')
+                    ->whereBetween('occurred_on', $r)->distinct()->count('occurred_on'),
+                'pickups' => $late('departure'),
+                'from' => $r[0], 'to' => $r[1],
+            ];
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private static function pdfLabels(string $lang): array
     {
         $en = [
+            'progress_report' => 'Progress Report', 'date' => 'Date', 'days_absent' => 'Days absent', 'days_late' => 'Days late',
+            'late_pickups' => 'Late pick-ups', 'room_age' => 'Room / age group', 'agency' => 'Agency', 'address' => 'Address',
+            'director_lbl' => 'Director', 'telephone' => 'Telephone', 'room_start' => 'Room at start of term',
+            'learning' => 'Learning and Development', 'strengths' => 'Strengths / Next Steps for Growth', 'focus' => 'Looks at',
+            'attendance_from' => 'Attendance', 'details' => 'Card details',
             'report_card' => 'Report card', 'child' => 'Child', 'name' => 'Name', 'child_id' => 'Child ID', 'room' => 'Room',
             'term' => 'Term', 'centre' => 'Centre', 'educator' => 'Educator', 'prepared_by' => 'Prepared by',
             'approved_by' => 'Approved by', 'registration' => 'RECE registration', 'issued' => 'Issued',
@@ -684,6 +752,11 @@ final class ReportCardController extends Controller
             'administrator' => 'Administrator', 'director' => 'Centre Director', 'powered' => 'Made with',
         ];
         $fr = [
+            'progress_report' => 'Bulletin de progrès', 'date' => 'Date', 'days_absent' => 'Jours d’absence', 'days_late' => 'Jours de retard',
+            'late_pickups' => 'Départs tardifs', 'room_age' => 'Groupe / âge', 'agency' => 'Organisme', 'address' => 'Adresse',
+            'director_lbl' => 'Direction', 'telephone' => 'Téléphone', 'room_start' => 'Groupe au début de la période',
+            'learning' => 'Apprentissage et développement', 'strengths' => 'Forces / prochaines étapes', 'focus' => 'Porte sur',
+            'attendance_from' => 'Présences', 'details' => 'Détails du bulletin',
             'report_card' => 'Bulletin', 'child' => 'Enfant', 'name' => 'Nom', 'child_id' => 'No d’enfant', 'room' => 'Groupe',
             'term' => 'Période', 'centre' => 'Centre', 'educator' => 'Éducatrice / éducateur', 'prepared_by' => 'Préparé par',
             'approved_by' => 'Approuvé par', 'registration' => 'Inscription EPEI', 'issued' => 'Émis le',
@@ -694,6 +767,11 @@ final class ReportCardController extends Controller
             'administrator' => 'Administration', 'director' => 'Direction du centre', 'powered' => 'Réalisé avec',
         ];
         $es = [
+            'progress_report' => 'Informe de progreso', 'date' => 'Fecha', 'days_absent' => 'Días de ausencia', 'days_late' => 'Días de llegada tarde',
+            'late_pickups' => 'Recogidas tardías', 'room_age' => 'Sala / edad', 'agency' => 'Agencia', 'address' => 'Dirección',
+            'director_lbl' => 'Dirección', 'telephone' => 'Teléfono', 'room_start' => 'Sala al inicio del periodo',
+            'learning' => 'Aprendizaje y desarrollo', 'strengths' => 'Fortalezas / próximos pasos', 'focus' => 'Abarca',
+            'attendance_from' => 'Asistencia', 'details' => 'Detalles del informe',
             'report_card' => 'Boleta de progreso', 'child' => 'Niño/a', 'name' => 'Nombre', 'child_id' => 'N.º de niño/a', 'room' => 'Sala',
             'term' => 'Periodo', 'centre' => 'Centro', 'educator' => 'Educador/a', 'prepared_by' => 'Preparado por',
             'approved_by' => 'Aprobado por', 'registration' => 'Registro RECE', 'issued' => 'Emitido',
@@ -1276,7 +1354,7 @@ final class ReportCardController extends Controller
         try {   // page x of y on every page (Dompdf fills the numbers in)
             $canvas = $dompdf->getCanvas();
             $font = $dompdf->getFontMetrics()->getFont('DejaVu Sans');
-            $canvas->page_text($canvas->get_width() - 120, $canvas->get_height() - 29, $d['L']['page'], $font, 7.5, [0.58, 0.64, 0.72]);
+            $canvas->page_text($canvas->get_width() - 120, $canvas->get_height() - 29, $d['L']['page'], $font, 7, [0.2, 0.2, 0.2]);
         } catch (\Throwable $e) {
         }
         $name = 'ReportCard-' . trim((string) preg_replace('/[^A-Za-z0-9]+/', '-', $d['childName']), '-') . '-'
