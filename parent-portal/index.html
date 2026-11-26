@@ -339,6 +339,26 @@ html.kt-tenant .kt-copyright,html.kt-wl .kt-copyright{display:none!important}
   html.kt-tenant:not(.kt-native) .ktl-wrap #submitBtn{background:var(--ktt-btn-desk)!important;color:var(--ktt-btn-desk-ink)!important;border-color:transparent!important}
 }
   </style>
+  <!-- READABLE HELPER TEXT ON THE PLAIN SIGN-IN (2026-11-26, Anthony said yes to AA). The faint greys measured 1.6-4.3:1:
+       on the light panel #94A3B8 (No account yet, the "or" line), #64748B (subtitle, "or sign in with email"), #B6C2CE
+       (version, (c) line); on the navy phone page #64748B ("or sign in with email") and #5F7690 (version, (c) line).
+       Desktop greys become #475569 (6.8:1 on the panel's darkest #EAF5FA); the navy failures take the phone subtitle's
+       #93A8C2 (6.4:1). White-label pages carry their own colours (kt-tenant-signin), except the two desktop "or" lines. The two "or"
+       dividers carry inline colours (kt-social-login.js, #ktPasskeyWrap), hence !important. -->
+  <style id="kt-signin-aa">
+@media (min-width:769px){
+  html:not(.kt-tenant):not(.kt-native) .ktl-form-side .ktl-sub,
+  html:not(.kt-tenant):not(.kt-native) .ktl-form-side .ktl-foot,
+  html:not(.kt-tenant):not(.kt-native) .ktl-form-side .ktl-legal,
+  html:not(.kt-native) #kt-social > div:last-child,
+  html:not(.kt-native) #ktPasskeyWrap > div:first-child{color:#475569!important}   /* white-label desktop too: the same light panel */
+}
+@media (max-width:768px){
+  html:not(.kt-tenant) .ktl-form-side .ktl-legal,
+  html:not(.kt-tenant) #kt-social > div:last-child{color:#93A8C2!important}
+}
+html.kt-native:not(.kt-tenant) .ktl-form-side .ktl-legal,html.kt-native:not(.kt-tenant) #kt-social > div:last-child{color:#93A8C2!important}
+  </style>
   <script>(function(w){
   function hex(c){return (typeof c==='string'&&/^#[0-9a-f]{6}$/i.test(c.trim()))?c.trim():null;}
   function lum(c){var n=parseInt(c.slice(1),16),f=function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);};return 0.2126*f(n>>16)+0.7152*f((n>>8)&255)+0.0722*f(n&255);}
