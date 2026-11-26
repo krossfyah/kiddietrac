@@ -31,6 +31,16 @@ class BellAlertsController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        return response()->json(['alerts' => self::listFor($request)]);
+    }
+
+    /**
+     * The one reader of "your own safety alerts", shared by this route and the admin bell's feed
+     * (AgencyController::activityFeed with ?alerts=1 merges these into its events in time order, 2026-11-26).
+     * Same scope either way: the caller's own rows, the agency on screen, fail closed.
+     */
+    public static function listFor(Request $request): array
+    {
         $user = $request->user();
         $uid = (int) $user->id;
         $agency = AgencyRole::activeAgency($request);
@@ -40,7 +50,7 @@ class BellAlertsController extends Controller
             $isPlatform = DB::table('role_assignments')->where('user_id', $uid)->where('role', 'platform_admin')->where('active', 1)->exists();
             if ($h > 0 && $isPlatform) $agency = $h;
             // Fail closed: only a platform admin's "All agencies" view lists rows without choosing an agency.
-            if (! $agency && ! $isPlatform) return response()->json(['alerts' => []]);
+            if (! $agency && ! $isPlatform) return [];
         }
 
         $q = DB::table('notifications')->where('user_id', $uid)->whereIn('type', self::TYPES)
@@ -64,6 +74,6 @@ class BellAlertsController extends Controller
                 'link' => $link, 'read' => $r->read_at !== null, 'when' => $r->created_at];
         }
 
-        return response()->json(['alerts' => $out]);
+        return $out;
     }
 }

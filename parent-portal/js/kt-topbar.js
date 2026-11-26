@@ -220,7 +220,7 @@
     var h = { 'Authorization': 'Bearer ' + t };
     try { var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa; } catch (e) {}
     __feedAt = Date.now();   // asked now: a repaint in the meantime does not ask again
-    fetch(API + '/admin/activity-feed', { headers: h })
+    fetch(API + '/admin/activity-feed?alerts=1', { headers: h })   // ?alerts=1: own safety alerts merged in time order (2026-11-26)
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (d && d.events) { __feedMemo = { at: Date.now(), tok: t.slice(-12), agency: h['X-Active-Agency-Id'] || '', d: d }; __feedLast = __feedMemo; __feedAt = Date.now(); }
@@ -308,7 +308,8 @@
         return;
       }
 
-      var unread = d.events.filter(function (e) { return e.when && e.when > seen; }).length;
+      // Alert rows (e.alert) are the person's own Notify rows, already in __ownUnread: counted once, there.
+      var unread = d.events.filter(function (e) { return !e.alert && e.when && e.when > seen; }).length;
       setNotifBadge(unread + __ownUnread);
     });
     });
@@ -360,52 +361,53 @@
   }
   /* YOUR SAFETY ALERTS IN THE BELL (2026-11-26, Anthony: "the safe arrival alerts should show up in the bell as well").
      The admin bell lists the agency activity feed and only summed the person's own alerts in one "N alerts for you"
-     row, so a Safe Arrival alert never appeared by name. /notifications/alerts returns their own safety alerts for the
-     agency on screen (last 48 h); they head the list, unread ones tinted, each opening its screen and marked read. */
-  var __bellAlerts = null;
+     row, so a Safe Arrival alert never appeared by name.
+
+     IN TIME ORDER, NOT PINNED (same day, Anthony: "the notification bell at the top bar keeps showing the safe alerts as
+     priority it should be treated the same as once new notifications are issue it should show based on the time"). They
+     were drawn in their own "Alerts for you" block above the feed, so this morning's alert sat over everything since.
+     Now /admin/activity-feed?alerts=1 merges them into the one list and sorts it by when things happened (server side,
+     one page); each alert row keeps its own icon, a small "Alert" chip and an unread tint, and a click marks it read and
+     opens its screen. They are Notify rows, so the badge counts them through /badges only (refreshNotifBadge skips
+     e.alert). /notifications/alerts stays for a non-admin opening this panel, drawn the same way. */
   function loadAlerts(cb) {
     var t = store('kt_token'); if (!t) { cb(null); return; }
     var h = { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' };
     try { var aa = sessionStorage.getItem('kt_active_agency_id'); if (aa) h['X-Active-Agency-Id'] = aa; } catch (e) {}
     fetch(API + '/notifications/alerts', { headers: h })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { cb(d && d.alerts ? d.alerts : null); })
+      .then(function (d) {
+        if (!d || !d.alerts) { cb(null); return; }
+        cb({ events: d.alerts.map(function (x) {
+          return { type: 'alert', alert: true, id: x.id, kind: x.type, text: x.title, body: x.body, when: x.when, link: x.link || '#notifications', read: !!x.read };
+        }) });
+      })
       .catch(function () { cb(null); });
   }
   function markAlertRead(id) {
     var t = store('kt_token'); if (!t) return;
     try { fetch(API + '/notifications/' + id + '/read', { method: 'PATCH', headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/json' }, ktQuiet: true }); } catch (e) {}
   }
-  function prependAlerts(list) {
-    if (!list) return;
-    var old = document.getElementById('kt-notif-alerts'); if (old && old.parentNode) old.parentNode.removeChild(old);
-    var a = __bellAlerts;
-    if (!a || !a.length) return;
-    var box = document.createElement('div');
-    box.id = 'kt-notif-alerts';
-    box.innerHTML = '<div style="padding:8px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#B45309;">Alerts for you</div>';
-    a.forEach(function (x) {
-      var m = /^(\p{Extended_Pictographic}\uFE0F?)\s*/u.exec(x.title || '');
-      var icon = m ? m[1] : '\uD83D\uDEE1\uFE0F';
-      var title = m ? (x.title || '').slice(m[0].length) : (x.title || '');
-      var row = document.createElement('div');
-      var unread = !x.read;
-      var bg = unread ? '#FFF7ED' : '';
-      row.style.cssText = 'display:flex;gap:11px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid #F8FAFC;cursor:pointer;' + (bg ? 'background:' + bg + ';' : '');
-      row.onmouseover = function () { row.style.background = '#F1F5F9'; };
-      row.onmouseout = function () { row.style.background = bg; };
-      row.innerHTML = '<span style="font-size:17px;line-height:1.25;flex-shrink:0;">' + esc(icon) + '</span>'
-        + '<div style="min-width:0;flex:1;"><div style="font-size:13px;color:#1E293B;line-height:1.4;' + (unread ? 'font-weight:700;' : '') + '">' + esc(title) + '</div>'
-        + (x.body ? '<div style="font-size:12px;color:#64748B;line-height:1.35;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + esc(x.body) + '</div>' : '')
-        + '<div style="font-size:11px;color:#94A3B8;margin-top:2px;">' + esc(relTime(x.when)) + '</div></div>';
-      row.onclick = function () { if (unread) { x.read = true; markAlertRead(x.id); } closeNotif(); go(x.link || '#notifications'); };
-      box.appendChild(row);
-    });
-    var sep = document.createElement('div');
-    sep.style.cssText = 'padding:10px 16px 4px;font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8;';
-    sep.textContent = 'Agency activity';
-    box.appendChild(sep);
-    list.insertBefore(box, list.firstChild);
+  // One alert row, in the list wherever its time puts it.
+  function alertRow(x) {
+    var m = /^(\p{Extended_Pictographic}\uFE0F?)\s*/u.exec(x.text || '');
+    var icon = m ? m[1] : '\uD83D\uDEE1\uFE0F';
+    var title = m ? (x.text || '').slice(m[0].length) : (x.text || '');
+    var row = document.createElement('div');
+    var unread = !x.read;
+    var bg = unread ? '#FFF7ED' : '';
+    row.className = 'kt-notif-alert';
+    row.style.cssText = 'display:flex;gap:11px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid #F8FAFC;cursor:pointer;' + (bg ? 'background:' + bg + ';' : '');
+    row.onmouseover = function () { row.style.background = '#F1F5F9'; };
+    row.onmouseout = function () { row.style.background = bg; };
+    row.innerHTML = '<span style="font-size:17px;line-height:1.25;flex-shrink:0;">' + esc(icon) + '</span>'
+      + '<div style="min-width:0;flex:1;"><div style="font-size:13px;color:#1E293B;line-height:1.4;' + (unread ? 'font-weight:700;' : '') + '">' + esc(title) + '</div>'
+      + (x.body ? '<div style="font-size:12px;color:#64748B;line-height:1.35;margin-top:1px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + esc(x.body) + '</div>' : '')
+      + '<div style="font-size:11px;color:#94A3B8;margin-top:2px;display:flex;align-items:center;gap:6px;">'
+      + '<span style="font-size:10px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:#B45309;background:#FEF3C7;border-radius:999px;padding:0 6px;line-height:16px;">Alert</span>'
+      + '<span>' + esc(relTime(x.when)) + '</span></div></div>';
+    row.onclick = function () { if (unread) { x.read = true; markAlertRead(x.id); } closeNotif(); go(x.link || '#notifications'); };
+    return row;
   }
   function toggleNotif() {
     if (notifPanel) { closeNotif(); return; }
@@ -447,25 +449,26 @@
       if (events[0] && events[0].when) { setNotifSeen(events[0].when); }
       setNotifBadge(__ownUnread);   // opening the FEED does not read their inbox
 
-      /* Alerts addressed to this person, above the agency's activity. Without this
-         the badge could show a number with nothing in the panel to explain it. */
+      /* The way to the person's own inbox. Without it the badge could show a number with nothing in the panel to
+         explain it. A footer under the one list, not a pinned block above it (2026-11-26, Anthony: "on the bell alerts
+         for you and agency activity should be combined and not separated"). */
       if (openOwn > 0) {
         var own = document.createElement('div');
         own.id = 'kt-notif-own';
-        own.style.cssText = 'display:flex;gap:11px;align-items:center;padding:11px 16px;'
-          + 'border-bottom:1px solid #E2E8F0;background:#F0F9FF;cursor:pointer;';
-        own.innerHTML = '<span style="font-size:17px;">📬</span>'
-          + '<span style="flex:1;min-width:0;font-size:13px;color:#0D1B2A;">'
-          + '<strong>' + (openOwn > 99 ? '99+' : openOwn) + '</strong> '
-          + (openOwn === 1 ? 'alert for you' : 'alerts for you') + '</span>'
+        own.style.cssText = 'display:flex;gap:11px;align-items:center;padding:9px 16px;flex-shrink:0;'
+          + 'border-top:1px solid #E2E8F0;background:#F8FAFC;cursor:pointer;';
+        own.innerHTML = '<span style="font-size:15px;">📬</span>'
+          + '<span style="flex:1;min-width:0;font-size:12.5px;color:#0D1B2A;">Your inbox · '
+          + '<strong>' + (openOwn > 99 ? '99+' : openOwn) + '</strong> new</span>'
           + '<span style="font-size:12px;color:#1F6080;font-weight:700;">Open ›</span>';
         own.addEventListener('click', function () { closeNotif(); go('#notifications'); });
-        list.parentNode.insertBefore(own, list);
+        list.parentNode.appendChild(own);
       }
 
-      if (!events.length) { list.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;font-size:13px;">Nothing new yet.</div>'; prependAlerts(list); return; }
+      if (!events.length) { list.innerHTML = '<div style="padding:28px;text-align:center;color:#94A3B8;font-size:13px;">Nothing new yet.</div>'; return; }
       list.innerHTML = '';
       events.forEach(function (e) {
+        if (e.alert) { list.appendChild(alertRow(e)); return; }   // already in time order (server-sorted)
         var isNew = e.when && (!seen || e.when > seen);
         var row = document.createElement('div');
         row.style.cssText = 'display:flex;gap:11px;align-items:flex-start;padding:10px 16px;border-bottom:1px solid #F8FAFC;cursor:' + (e.link ? 'pointer' : 'default') + ';' + (isNew ? 'background:#F0F9FF;' : '');
@@ -488,16 +491,11 @@
         list.appendChild(row);
       });
       // (seen + badge were already set above, before the rows were built)
-      prependAlerts(list);
     };
     var memo = feedMemo();
     if (memo) { drawFeed(memo); drewFromMemory = true; }
-    loadAlerts(function (a) {
-      if (a) __bellAlerts = a;
-      var l = document.getElementById('kt-notif-list');
-      if (l && l.isConnected && !/Loading/.test(l.textContent || '')) prependAlerts(l);
-    });
-    loadFeed(function (d) {
+    // Admins: one server-sorted list (feed + own alerts). Anyone else who opens this panel: their own alerts alone.
+    (isAdminRole(user()) ? loadFeed : loadAlerts)(function (d) {
       if (!d && drewFromMemory) return;   // a failed refresh keeps the rows already on screen
       var l = document.getElementById('kt-notif-list'), top = l ? l.scrollTop : 0;
       drawFeed(d);

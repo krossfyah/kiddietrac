@@ -905,6 +905,31 @@ final class AgencyController extends Controller
                 . " \u{00B7} invoice " . $r->invoice_number . " \u{00B7} " . $how, $r->at, "#admin-billing");
         }
 
+        /* YOUR SAFETY ALERTS IN TIME ORDER, NOT PINNED ON TOP (2026-11-26, Anthony: "the notification bell at the top bar
+           keeps showing the safe alerts as priority it should be treated the same as once new notifications are issue it
+           should show based on the time"). The bell used to fetch /notifications/alerts separately and draw those rows in
+           their own "Alerts for you" block above the feed, so a Safe Arrival alert from this morning sat above everything
+           that happened since. With ?alerts=1 (the bell asks for it; older cached scripts do not, so they never get the rows
+           twice) the person's own alerts go into this same list and the one sort below places them by when they happened.
+           Scope is BellAlertsController::listFor's, unchanged: the caller's own rows, the agency on screen, fail closed.
+           They carry alert=true, id and read, so the bell counts them once (they are Notify rows, already in /badges) and
+           marks them read on click. */
+        if ($request->boolean("alerts")) {
+            try {
+                foreach (\App\Http\Controllers\Api\BellAlertsController::listFor($request) as $a) {
+                    if (empty($a["when"])) continue;
+                    $events->push([
+                        "type" => "alert", "alert" => true, "id" => $a["id"], "kind" => $a["type"], "icon" => null,
+                        "text" => $a["title"], "body" => $a["body"], "when" => (string) $a["when"],
+                        "link" => $a["link"] !== "" ? $a["link"] : "#notifications",
+                        "read" => (bool) $a["read"], "avatar" => null, "device" => null,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                report($e);   // the agency feed still answers without them
+            }
+        }
+
         $feed = $events->filter(fn ($e) => ! empty($e["when"]))->sortByDesc("when")->take(40)->values()->all();
         return response()->json(["events" => $feed, "scope" => $unscoped ? "all" : "agency"]);
     }
