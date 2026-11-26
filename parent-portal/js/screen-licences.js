@@ -172,8 +172,8 @@
     /* COLLAPSIBLE AGENCY GROUPS (2026-11-26, Anthony: "license section for each agency make it collapsible so it's
        easier to manage and read"). Each agency's header row toggles its plan and add-on lines (click on the header's
        empty space, Enter or Space; its buttons keep their own job). Collapsed by default; open when the list is one
-       agency (e.g. from Edit agency's "Manage in Licences") or the agency needs attention (grace, renewing or ending
-       within 30 days, no live plan). Each viewer's own open/closed choice per agency is remembered in localStorage. */
+       agency (e.g. from Edit agency's "Manage in Licences") or the agency needs attention (grace, no live plan, or
+       ending within 30 days without auto-renew; an auto-renewing licence stays shut). Each viewer's own open/closed choice per agency is remembered in localStorage. */
     var OPEN_KEY = 'kt_lic_open';
     function openMap() { try { return JSON.parse(localStorage.getItem(OPEN_KEY) || '{}') || {}; } catch (e) { return {}; } }
     function saveOpen(aid, on) { try { var m = openMap(); m[aid] = on ? 1 : 0; localStorage.setItem(OPEN_KEY, JSON.stringify(m)); } catch (e) {} }
@@ -233,7 +233,8 @@
         var g = { aid: String(aid), head: head, lines: [], open: false };
         groups.push(g);
         var dPlan = plan ? daysTo(plan.expires_at) : null;
-        g.attention = !plan || plan.status !== 'active' || (dPlan !== null && dPlan <= 30);
+        // Attention = grace / lapsed / no live plan, or ENDING within 30 days with no auto-renew (monthly renewals stay shut).
+        g.attention = !plan || plan.status !== 'active' || (!plan.auto_renew && dPlan !== null && dPlan <= 30);
         head.addEventListener('click', function (e) { if (e.target.closest('button, a, input, select, label')) return; setOpen(g, !g.open, true); });
         head.addEventListener('keydown', function (e) { if (e.target !== head) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(g, !g.open, true); } });
         ls.forEach(function (l) {
