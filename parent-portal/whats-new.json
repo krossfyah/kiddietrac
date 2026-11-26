@@ -2,6 +2,18 @@
     "updated": "2026-11-26",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "🏫",
+            "title": "Centres included in the Reseller bundle, and bigger SMS blocks",
+            "body": "The Reseller bundle includes 5 centres, and each Reseller extra centre adds one more. Your open centres always stay open and closed centres don't count. When you reach the limit, opening another centre shows an Upgrade popup. Each SMS Incremental block now raises both your monthly text and call allowance.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-26",
             "icon": "🔓",

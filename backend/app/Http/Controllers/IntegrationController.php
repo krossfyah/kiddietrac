@@ -83,6 +83,12 @@ class IntegrationController extends Controller
         $attrs['country'] = $attrs['country'] ?? 'Canada';
         $attrs['status'] = $attrs['status'] ?? 'active';
 
+        /* An import opening a centre - a new one, or a closed one sent as open - counts against the licence's
+           centre cap (App\Support\CentreCap, 2026-11-26). */
+        $opening = $created || (in_array((string) ($centre->status ?? ''), \App\Support\Live::CLOSED_CENTRE_STATUSES, true)
+            && ! in_array((string) ($attrs['status'] ?? ''), \App\Support\Live::CLOSED_CENTRE_STATUSES, true));
+        if ($opening && ($capped = \App\Support\CentreCap::refusal((int) $agencyId))) return $capped;
+
         if ($created) {
             $attrs['slug'] = $this->uniqueSlug($data['name']);
             $centre = Centre::create($attrs);

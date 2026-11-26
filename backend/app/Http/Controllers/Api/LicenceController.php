@@ -54,7 +54,22 @@ class LicenceController extends Controller
             'products' => DB::table('sales_products')->whereIn('kind', ['plan', 'addon'])->where('active', 1)->orderBy('kind')->orderBy('sort')->orderBy('id')
                 ->get(['id', 'name', 'kind', 'part_number', 'price', 'unit', 'plan_code', 'feature_keys']),
             'agencies' => DB::table('agencies')->whereNull('deleted_at')->orderBy('name')->get(['id', 'name']),
+            // Centres open vs the licence's cap, per agency on this page (App\Support\CentreCap, 2026-11-26).
+            'centre_caps' => (object) $rows->pluck('agency_id')->unique()->mapWithKeys(fn ($a) => [(int) $a => \App\Support\CentreCap::status((int) $a)])->all(),
         ]);
+    }
+
+    /** PUT /platform/licences/centre-cap/{agencyId} {included: int|null} - this agency's included centres (null = the product's). */
+    public function centreCap(Request $r, int $agencyId): JsonResponse
+    {
+        abort_unless(DB::table('agencies')->where('id', $agencyId)->exists(), 404, 'Agency not found');
+        $d = $r->validate(['included' => 'nullable|integer|min:0|max:100000']);
+        $before = \App\Support\CentreCap::override($agencyId);
+        \App\Support\CentreCap::setOverride($agencyId, isset($d['included']) ? (int) $d['included'] : null);
+        $this->audit($r, 'licence.centre_cap', $agencyId, 'Set agency #' . $agencyId . '\'s included centres to '
+            . (isset($d['included']) ? (int) $d['included'] : 'the product\'s number'), ['agency_id' => $agencyId, 'before' => $before]);
+
+        return response()->json(\App\Support\CentreCap::status($agencyId));
     }
 
     /** POST /platform/licences {agency_id, product_id, qty?, unit_price?, interval?, starts_at?, expires_at?, auto_renew?, notes?} */

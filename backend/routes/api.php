@@ -2449,6 +2449,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::post  ('/platform/licences',                     [\App\Http\Controllers\Api\LicenceController::class, 'store'])->middleware('role:platform_admin');
     Route::patch ('/platform/licences/{id}',                [\App\Http\Controllers\Api\LicenceController::class, 'update'])->whereNumber('id')->middleware('role:platform_admin');
     Route::post  ('/platform/licences/{id}/convert',        [\App\Http\Controllers\Api\LicenceController::class, 'convert'])->whereNumber('id')->middleware('role:platform_admin');
+    Route::put   ('/platform/licences/centre-cap/{agencyId}', [\App\Http\Controllers\Api\LicenceController::class, 'centreCap'])->whereNumber('agencyId')->middleware('role:platform_admin');   // CentreCap override (2026-11-26)
     Route::post  ('/platform/licences/{id}/renew',          [\App\Http\Controllers\Api\LicenceController::class, 'renew'])->whereNumber('id')->middleware('role:platform_admin');
     Route::get   ('/admin/licence',                         [\App\Http\Controllers\Api\LicenceController::class, 'mine'])->middleware('role:agency_admin,platform_admin');
     Route::get   ('/platform/resellers',                    [\App\Http\Controllers\Api\ResellerController::class, 'index'])->middleware('role:platform_admin');

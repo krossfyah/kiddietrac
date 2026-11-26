@@ -582,6 +582,11 @@
     constructor(type, message, status, data) {
       super(message);
       this.type = type; this.status = status; this.data = data;
+      /* A refusal that is really an upgrade (the licence centre cap, App\Support\CentreCap, 2026-11-26) opens the
+         Upgrade popup (app-v2-shell listens for kt:upsell), whichever screen made the call. */
+      if (status === 403 && data && data.upsell && typeof data.upsell === 'object') {
+        try { window.dispatchEvent(new CustomEvent('kt:upsell', { detail: data.upsell })); } catch (e) {}
+      }
     }
   }
 

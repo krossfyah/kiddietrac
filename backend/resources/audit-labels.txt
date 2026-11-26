@@ -1237,3 +1237,4 @@ post provider/temp-pickups/{id}/cancel | Cancelled a temporary pickup person
 post pickup-pass/view | A pickup person opened their pass
 post pickup-pass/sign-out | A temporary pickup person signed a child out
 post provider/temp-pickups/lookup | Looked up a temporary pickup pass at One-Tap
+put platform/licences/centre-cap/{agencyId} | Changed an agency's included centres

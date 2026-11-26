@@ -547,6 +547,7 @@ final class PlatformController extends Controller
                 'updated_at'          => now(),
             ]);
 
+            abort_unless(\App\Support\CentreCap::allows((int) $agencyId), 403, 'This licence has no centre left.');   // the licence's centre cap (App\Support\CentreCap, 2026-11-26)
             // Default first centre from the agency address — keeps rooms/families/
             // children functional. The admin can rename / add more under Centres.
             $centreId = DB::table('centres')->insertGetId([

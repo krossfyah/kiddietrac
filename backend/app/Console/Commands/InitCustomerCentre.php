@@ -179,6 +179,7 @@ final class InitCustomerCentre extends Command
 
     private function createCentre(string $name, string $slug, string $license, int $capacity, string $city, string $postal, string $address, string $phone): int
     {
+        abort_unless(\App\Support\CentreCap::allows(1), 403, 'This licence has no centre left.');   // the licence's centre cap (App\Support\CentreCap, 2026-11-26)
         return (int) DB::table('centres')->insertGetId([
             'agency_id' => 1, // Stay in your single agency
             'name' => $name,

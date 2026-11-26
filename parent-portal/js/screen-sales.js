@@ -3001,17 +3001,22 @@
         b.addEventListener('click', function () { feats[f[0]] = !feats[f[0]]; paint(); }); paint();
         return b;
       })) : null;
+      /* Centres the item includes (App\Support\CentreCap, 2026-11-26): the Reseller bundle's 5; each "Reseller extra
+         centre" line adds one. Blank = this item sets no centre cap. */
+      var centresIn = kind === 'addon' || kind === 'plan' ? input({ type: 'number', min: '0', step: '1', value: p.included_centres == null ? '' : p.included_centres, placeholder: 'No cap', style: 'width:140px;' + FLD }) : null;
       return card([
         el('div', { style: 'display:flex;justify-content:space-between;align-items:center;margin-bottom:9px' }, [partBadge(p.part_number), p.active === false ? el('span', { style: 'font-size:11px;color:#B91C1C;font-weight:700' }, ['Inactive']) : el('span')]),
         el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:11px' }, [n, pr, u]),
         lvl ? field('Feature level', lvl) : null,
         featBox ? field('Switches on', featBox) : null,
+        centresIn ? field('Centres included (blank = no centre cap)', centresIn) : null,
         field('Description', d),
         actions(p, reload, function () {
           if (!(n.value || '').trim()) { toast('⚠️', 'Give it a name', '', '#DC2626'); return null; }
           if (lvl && !lvl.value) { toast('⚠️', 'Choose the feature level this plan gives', '', '#DC2626'); return null; }
           return { name: n.value, description: d.value, price: pr.value || 0, unit: u.value, active: true, kind: kind,
-            plan_code: lvl ? lvl.value : null, feature_keys: featBox ? Object.keys(feats).filter(function (k) { return feats[k]; }) : null };
+            plan_code: lvl ? lvl.value : null, feature_keys: featBox ? Object.keys(feats).filter(function (k) { return feats[k]; }) : null,
+            included_centres: centresIn && centresIn.value !== '' ? Math.max(0, parseInt(centresIn.value, 10) || 0) : null };
         }),
       ], 'padding:15px 16px;--kt-edge:' + (kind === 'addon' ? '#7C3AED' : kind === 'service' ? '#F59E0B' : '#1F6080'));
     }

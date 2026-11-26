@@ -27,8 +27,11 @@ prochaine ouverture de l'application — personne n'a besoin de se déconnecter.
   **Safe Arrival**, et la **ligne téléphonique des parents** (signaler une absence ou un retard).
 - **AI Bundle** — résumés, aide à la rédaction, ébauches de bulletins et idées Play Spark.
 - **Marque blanche** — votre propre marque partout.
-- **SMS Incremental** — chaque bloc ajoute un mois de textos inclus, pour que les textos
-  supplémentaires ne soient pas facturés en dépassement.
+- **SMS Incremental** — chaque bloc ajoute un mois de textos **et** d'appels inclus, pour que les textos et
+  appels supplémentaires ne soient pas facturés en dépassement. Rien n'est jamais bloqué.
+- **Forfait revendeur** — comprend 5 centres. Chaque **centre supplémentaire revendeur** en ajoute un.
+  Vos centres ouverts restent ouverts et les centres fermés ne comptent pas. À la limite, ouvrir un autre
+  centre affiche plutôt une fenêtre **Upgrade**.
 
 ## Quand le forfait diminue
 

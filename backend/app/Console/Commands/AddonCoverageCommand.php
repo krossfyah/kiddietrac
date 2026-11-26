@@ -152,6 +152,20 @@ final class AddonCoverageCommand extends Command
             }
         }
 
+        // 7. CENTRE CAP ---------------------------------------------------------------------------------------
+        /* Every path that opens a centre asks App\Support\CentreCap (2026-11-26, Anthony: "Apply to every centre-create
+           path ... reader and guard together"). The seeders that build a brand-new demo agency are exempt: a new agency
+           holds no licence, so it has no cap. */
+        $seedOk = ['SeedDemo.php', 'SeedOhioDemo.php', 'SeedBrightwoodDemo.php', 'SeedStarlightDemo.php'];
+        foreach (\Illuminate\Support\Facades\File::allFiles(app_path()) as $file) {
+            if ($file->getExtension() !== 'php' || in_array($file->getFilename(), $seedOk, true)) continue;
+            $src = (string) @file_get_contents($file->getPathname());
+            if (preg_match('/table\([\'"]centres[\'"]\)->insert(GetId)?\(|Centre::(create|firstOrCreate|updateOrCreate)\(/', $src)
+                && ! str_contains($src, 'CentreCap::')) {
+                $this->fail[] = 'centre created in ' . str_replace(base_path() . '/', '', $file->getPathname()) . ' without asking App\\Support\\CentreCap (the licence centre cap)';
+            }
+        }
+
         // 6. LICENCE ------------------------------------------------------------------------------------------
         foreach (DB::table('agencies')->whereNull('deleted_at')->get(['id', 'name', 'settings']) as $a) {
             if (\App\Support\Licences::managed((int) $a->id)) continue;

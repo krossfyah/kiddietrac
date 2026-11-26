@@ -25,8 +25,11 @@ one needs to sign out.
   and the **parent phone line** (calling in absent or late).
 - **AI Bundle** — summaries, writing help, report-card drafts and Play Spark ideas.
 - **White-label** — your own brand everywhere.
-- **SMS Incremental** — each block adds one month's text allowance, so extra texts aren't
-  billed as overage.
+- **SMS Incremental** — each block adds one month's text allowance **and** call allowance, so extra
+  texts and calls aren't billed as overage. Nothing is ever blocked.
+- **Reseller bundle** — includes 5 centres. Each **Reseller extra centre** adds one more. Your open
+  centres always stay open, and closed centres don't count. When you reach the limit, opening another
+  centre shows an **Upgrade** popup instead.
 
 ## When a plan gets smaller
 

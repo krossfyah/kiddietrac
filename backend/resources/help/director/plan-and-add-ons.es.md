@@ -25,8 +25,11 @@ aplicación — nadie necesita cerrar sesión.
   **Safe Arrival**, y la **línea telefónica para padres** (avisar ausencia o retraso).
 - **AI Bundle** — resúmenes, ayuda para redactar, borradores de boletines e ideas de Play Spark.
 - **Marca blanca** — su propia marca en todas partes.
-- **SMS Incremental** — cada bloque añade un mes de mensajes incluidos, para que los
-  mensajes adicionales no se cobren como excedente.
+- **SMS Incremental** — cada bloque añade un mes de mensajes **y** llamadas incluidos, para que los
+  mensajes y llamadas adicionales no se cobren como excedente. Nunca se bloquea nada.
+- **Paquete de revendedor** — incluye 5 centros. Cada **centro adicional de revendedor** añade uno.
+  Sus centros abiertos siguen abiertos y los cerrados no cuentan. Al llegar al límite, abrir otro centro
+  muestra en su lugar una ventana **Upgrade**.
 
 ## Cuando el plan se reduce
 

@@ -53,6 +53,11 @@
         const err = new Error(data.message || ('HTTP ' + res.status));
         err.status = res.status;
         err.data = data;
+        /* A refusal that is really an upgrade (e.g. the licence's centre cap, App\Support\CentreCap, 2026-11-26) opens
+           the same Upgrade popup as a locked feature - app-v2-shell listens - whichever screen made the call. */
+        if (res.status === 403 && data && data.upsell && typeof data.upsell === 'object') {
+          try { window.dispatchEvent(new CustomEvent('kt:upsell', { detail: data.upsell })); } catch (e) {}
+        }
         throw err;
       }
       return data;

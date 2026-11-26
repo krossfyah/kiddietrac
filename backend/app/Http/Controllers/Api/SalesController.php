@@ -1220,6 +1220,8 @@ TXT;
             'plan_code'   => 'nullable|in:starter,growth,enterprise',
             'feature_keys' => 'nullable|array',
             'feature_keys.*' => 'string|max:40',
+            // Centres the item includes (App\Support\CentreCap, 2026-11-26): the Reseller bundle's 5. Blank = no cap.
+            'included_centres' => 'nullable|integer|min:0|max:100000',
             'discount_type' => 'nullable|required_if:kind,discount|in:percent,amount',
             'applies_to'  => 'nullable|in:all,recurring,one-time',
         ]);
@@ -1237,6 +1239,8 @@ TXT;
         }
         $data['plan_code'] = ($data['kind'] ?? '') === 'plan' ? ($data['plan_code'] ?? null) : null;
         $data['feature_keys'] = ($data['kind'] ?? '') === 'addon' && ! empty($data['feature_keys']) ? json_encode(array_values(array_unique($data['feature_keys']))) : null;
+        if (! $r->has('included_centres')) unset($data['included_centres']);
+        elseif (! in_array($data['kind'] ?? '', ['plan', 'addon'], true)) $data['included_centres'] = null;
         $p = $product ? SalesProduct::findOrFail($product) : new SalesProduct();
         /* A PART NUMBER FOR EVERY ITEM (2026-10-24): given once, when the item is created (or the
            first time an older item is saved), and never changed, so reports and past proposals

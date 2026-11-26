@@ -79,11 +79,13 @@ final class MessagingOverage
 
         /* A PREPAID SMS INCREMENTAL RAISES THE ALLOWANCE (2026-11-26, Anthony: give 'SMS Incremental' "a real monthly SMS
            quota increase"). Each live SMS Incremental line on the agency's licence adds its qty in blocks, each the size
-           of the agency's text allowance, to the texts allowed each month - so a block bought ahead is not charged again
-           as overage. Nothing here stops a text: the allowance only decides what is billed. */
-        $texts += self::prepaidBlocks($agencyId) * $texts;
+           of the agency's allowance, to BOTH the texts and the calls allowed each month (Anthony, 2026-11-26: "one block
+           raises both the text AND call allowance") - so a block bought ahead is not charged again as overage. Nothing
+           here stops a text or a call: the allowance only decides what is billed. */
+        $calls = $s['agencies'][$agencyId]['calls'] ?? $s['default']['calls'];
+        $blocks = self::prepaidBlocks($agencyId);
 
-        return ['texts' => $texts, 'calls' => $s['agencies'][$agencyId]['calls'] ?? $s['default']['calls']];
+        return ['texts' => $texts + $blocks * $texts, 'calls' => $calls + $blocks * $calls];
     }
 
     /** Blocks of texts bought ahead: the qty on the agency's live SMS Incremental licence lines. */

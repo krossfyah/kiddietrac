@@ -92,6 +92,7 @@ class DemoBuildCentres extends Command
                 $centreId = $existing->id;
                 $this->line("  ~ re-branded centre #{$centreId} → {$p['name']}");
             } else {
+                if (! \App\Support\CentreCap::allows((int) $agencyId)) { $this->warn('  ! centre cap reached - ' . $p['name'] . ' not created'); continue; }   // the licence's centre cap (App\Support\CentreCap, 2026-11-26)
                 $centreId = DB::table('centres')->insertGetId(array_merge($brandData, [
                     'agency_id'        => $agencyId,
                     'slug'             => substr($slug, 0, 80),

@@ -139,6 +139,26 @@
     wrap.appendChild(el('div', { class: 'lic-filter' }, [el('label', {}, ['Agency', agSel]), el('label', {}, ['Status', stSel]),
       el('span', { style: 'flex:1' }), el('button', { type: 'button', class: 'lic-btn lic-btn-p', 'data-kt-iconized': '1', onclick: function () { addDialog(d, main); } }, ['＋ Add licence'])]));
 
+    /* CENTRES vs THE LICENCE'S CAP (App\Support\CentreCap, 2026-11-26): open centres / cap, and the per-agency
+       override of the included number (blank = the product's, e.g. the Reseller bundle's 5). */
+    function centreCapChip(d, aid, main) {
+      var st = d.centre_caps && d.centre_caps[aid];
+      if (!st || st.cap == null) return null;
+      var over = st.used > st.cap;
+      return el('button', { type: 'button', class: 'lic-btn', 'data-kt-iconized': '1', 'data-kttip': 'Open centres / centres the licence allows. Click to change this agency\'s included centres.',
+        style: 'height:30px;padding:0 10px;font-size:12px;' + (over ? 'border-color:#DC2626;color:#B91C1C' : ''), onclick: function () {
+          var inp = el('input', { type: 'number', min: '0', step: '1', value: st.override == null ? '' : st.override, placeholder: 'The product\'s number', style: 'width:100%;height:36px;padding:0 10px;border:1px solid #CBD5E1;border-radius:8px;font-size:14px' });
+          KT.Shell.Modal.open({ title: '🏫 Included centres', body: el('div', {}, [
+            el('div', { style: 'font-size:13px;color:#475569;margin-bottom:10px' }, [st.used + ' open of ' + st.cap + ' allowed. Extra-centre add-on lines each add one on top of the included number.']),
+            inp,
+            el('div', { style: 'font-size:12px;color:#64748B;margin-top:8px' }, ['Leave blank to use the product\'s included centres. Existing centres are never closed; only opening a new one is blocked.'])]),
+            actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, handler: async function () {
+              await KT.Api.put('/platform/licences/centre-cap/' + aid, { included: inp.value === '' ? null : Math.max(0, parseInt(inp.value, 10) || 0) });
+              toast('Included centres saved'); renderPlatform(main);
+            } }] });
+        } }, ['🏫 ' + st.used + ' / ' + st.cap + ' centres']);
+    }
+
     // table
     var card = el('div', { class: 'lic-card', style: 'overflow-x:auto' });
     if (!rows.length) card.appendChild(el('div', { style: 'color:#64748B;padding:10px' }, ['No licences' + (flt.agency || flt.status ? ' match these filters.' : ' yet. Approving a proposal creates them, or add one here.')]));
@@ -163,6 +183,7 @@
             el('div', { style: 'font-size:12px;color:#475569' }, [termTxt + (plan ? ' · ' + liveN + ' line' + (liveN === 1 ? '' : 's') + ' · ' + money(total, plan.currency) + (IV[plan.interval] || '') : '')]),
           ]),
           plan ? chip(plan.status) : null,
+          centreCapChip(d, aid, main),
           plan && (plan.source === 'trial' || plan.source === 'comp') ? el('span', { style: 'display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;' + (plan.source === 'trial' ? 'color:#92400E;background:#FEF3C7' : 'color:#6D28D9;background:#EDE9FE') }, [plan.source === 'trial' ? 'Trial' : 'Complimentary']) : null,
           plan && plan.source === 'trial' ? el('button', { type: 'button', class: 'lic-btn lic-btn-p', 'data-kt-iconized': '1', style: B, onclick: async function () {
             if (!(await KT.confirm({ title: 'Convert this trial to a paid licence?', description: 'Every line takes its catalogue price (or the price you set with Price) and renews from its end date. Billing raises the invoices.', okLabel: 'Convert to paid' }))) return;

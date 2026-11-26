@@ -541,6 +541,7 @@ final class AdminController extends Controller
     {
         $agencyId = $this->getAgencyId($request);
         if (!$agencyId) return response()->json(['message' => 'No agency access'], 403);
+        if ($capped = \App\Support\CentreCap::refusal((int) $agencyId)) return $capped;   // the licence's centre cap (App\Support\CentreCap, 2026-11-26)
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:180'],
@@ -681,6 +682,9 @@ final class AdminController extends Controller
            as Archive (no enrolled children) and the same clean-up, or the centre is
            "closed" while its staff, enrolments and families carry on as if it were not. */
         $closing = ($data['status'] ?? null) === 'closed' && ($centre->status ?? null) !== 'closed';
+        // Reopening a closed centre makes it count against the licence's centre cap again (2026-11-26).
+        if (isset($data['status']) && ! in_array($data['status'], \App\Support\Live::CLOSED_CENTRE_STATUSES, true) && in_array((string) ($centre->status ?? ''), \App\Support\Live::CLOSED_CENTRE_STATUSES, true)
+            && ($capped = \App\Support\CentreCap::refusal((int) $agencyId))) return $capped;
         if ($closing) {
             $enrolled = DB::table('children')->join('families', 'families.id', '=', 'children.family_id')
                 ->where('families.centre_id', $centreId)->where('children.enrollment_status', 'enrolled')
@@ -784,6 +788,7 @@ final class AdminController extends Controller
         if (!$centre || !$this->canManageCentre($request, $centre)) {
             return response()->json(['message' => 'Archived centre not found'], 404);
         }
+        if ($capped = \App\Support\CentreCap::refusal((int) $centre->agency_id)) return $capped;   // a restored centre counts again (2026-11-26)
         DB::table('centres')->where('id', $centreId)->update(['deleted_at' => null, 'status' => 'active']);
         $this->audit($request->user()->id, 'centre.restored', 'centre', $centreId, []);
         return response()->json(['message' => 'Centre restored']);

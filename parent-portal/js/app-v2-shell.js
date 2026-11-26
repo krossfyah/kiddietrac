@@ -281,8 +281,8 @@
     var wrap = Dom.el('div', { class: 'kt-upsell' });
     wrap.appendChild(Dom.el('p', {}, info.blurb || info.label));
     wrap.appendChild(Dom.el('div', { class: 'kt-upsell-via' }, 'Comes with ' + (info.via || 'an upgrade')));
-    wrap.appendChild(Dom.el('p', { class: 'kt-upsell-note' },
-      'Only agency admins see this. Your team and families will see it once it is part of your plan.'));
+    wrap.appendChild(Dom.el('p', { class: 'kt-upsell-note' }, typeof info.note === 'string' ? info.note
+      : 'Only agency admins see this. Your team and families will see it once it is part of your plan.'));
     return wrap;
   }
   async function askForUpgrade(info, hash) {
@@ -298,17 +298,32 @@
   function openUpsell(hash) {
     var info = lockedMap()[hash];
     if (!info) { return; }
+    openUpsellInfo(info, hash);
+  }
+  function openUpsellInfo(info, hash) {
+    var platform = false;
+    try { platform = Roles.primaryRoleOf(Auth.user()) === 'platform_admin'; } catch (e) {}
     Modal.open({
       title: '🔒 ' + info.label,
       body: upsellBody(info),
-      actions: [
+      actions: platform
+        // A platform admin adds it themselves, on the Licences screen.
+        ? [{ label: 'Not now' }, { label: 'Open Licences', primary: true, handler: function () { location.hash = '#licences'; } }]
+        : [
         { label: 'Not now' },
         { label: 'See my plan', handler: function () { location.hash = '#licence'; } },
-        { label: 'Ask about adding it', primary: true, busyLabel: 'Sending…', handler: function () { return askForUpgrade(info, hash); } },
+        { label: 'Ask about adding it', primary: true, busyLabel: 'Sending…', handler: function () { return askForUpgrade(info, hash || (location.hash || '').slice(1)); } },
       ],
     });
   }
   window.KT.openUpsell = openUpsell;
+  window.KT.openUpsellInfo = openUpsellInfo;
+  // An API refusal carrying an upsell (the centre cap) - raised by api-helpers-v10.js.
+  window.addEventListener('kt:upsell', function (ev) {
+    var info = ev && ev.detail;
+    if (!info || !info.label) { return; }
+    setTimeout(function () { openUpsellInfo(info); }, 0);   // after the caller's own popup has closed or reset
+  });
   // A tap on a locked item explains instead of opening a screen the plan does not include.
   document.addEventListener('click', function (ev) {
     var a = ev.target && ev.target.closest ? ev.target.closest('[data-kt-locked]') : null;
