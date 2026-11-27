@@ -2,7 +2,7 @@
 title: Roles & responsibilities
 category: Getting Started
 order: 5
-screens: ~payroll, ~my-hr, ~children, ~forms, ~forms-manager, ~admin-users, ~contacts, ~admin-centres, ~email, ~safe-arrival, ~immunizations, ~edocuments
+screens: ~payroll, ~my-hr, ~children, ~admin-users, ~contacts, ~admin-centres, ~safe-arrival, ~immunizations
 ---
 # Roles & responsibilities
 

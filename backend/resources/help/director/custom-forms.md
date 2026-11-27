@@ -5,71 +5,94 @@ category: Daily Operations
 order: 68
 screens: admin-forms
 ---
-# Custom forms
+# Custom forms builder
 
-Build registration, consent, survey, and feedback forms without code. Find it under **Administration → Custom forms**.
+**Administration → Custom forms** lets you build your own online forms, question by
+question: registration, consent, surveys, feedback, even a form that takes a payment.
+Families fill them in from their parent portal and every answer comes back here, ready to
+read or download.
 
-## Building a form
+[[open: #admin-forms | Open Custom forms]]
 
-Click **+ New form** and fill in:
+> 💡 Custom forms are forms you **build** on screen. To send a ready-made PDF for people to sign, use **Forms Manager** instead.
 
-- **Title** — what staff see in the list
-- **Description** — shown to respondents above the questions
-- **Audience** — all families / currently enrolled / waitlist / prospects / staff only
-- **Status** — Draft (only you see it) / Published (live for audience) / Archived
+## Building a new form
 
-Then add fields. Ten types supported:
+1. Open **Custom forms** and press **+ New form**.
+2. Type the **Form title**, for example "Field-trip permission".
+3. Write the **Description (shown to parents above the form)**: what the form is for and when it is due.
+4. Choose the **Audience**: **All families**, **Currently enrolled**, **Waitlist**, **Prospects** or **Staff only**.
+5. Leave **Status** on **Draft (only you see it)** while you build.
+6. Under **Fields**, a first question is already there. Type its label in **Field label (visible to respondent)** and pick its type.
+7. Add more questions with the buttons under the list: **+ Short text**, **+ Long text**, **+ Email**, **+ Number**, **+ Date**, **+ Dropdown**, **+ Checkbox**, **+ Multiple choice**, **+ ✍️ Signature** and **+ 💳 Payment**.
+8. Press **Create form**. The form appears in the list with a **DRAFT** label.
 
-| Type | Use it for |
+### Setting up each question
+
+- **Required**: tick it when the question must be answered.
+- **Placeholder (optional)** and **Help text (optional)**: hint text inside and under the box.
+- **Options (one per line)**: for **Dropdown** and **Multiple choice**. A question needs at least two options; the form will not save with fewer.
+- **Amount to charge ($)**: for **💳 Payment**. When the family submits, the charge is recorded against their account.
+- **✍️ Signature** gives the respondent a pad to sign with a finger or the mouse. The signature is saved with their answers.
+- The small arrows move a question up or down; the red **×** removes it.
+
+### Showing a question only when it matters
+
+From the second question on, each question has **🔀 Show only when another field has a specific value**.
+
+1. Tick it.
+2. In **— pick a field —**, choose the earlier question it depends on.
+3. Type the answer that should reveal it, or leave **equals (leave blank = any non-empty)** empty to show it whenever the earlier question has any answer.
+
+For example, ask "What is the reason?" only when "Will your child attend?" is answered "No".
+
+## Publishing a form and telling families
+
+1. Click the form's row (or **⋮ > Edit form**).
+2. Change **Status** to **Published (live for audience)**.
+3. Press **Save changes**. The row now shows **LIVE**, and families in the audience see the form in their portal.
+4. To email them the link, press **⋮ > Email to parents** and confirm. A green message says how many parents it went to.
+
+> ⚠️ Only a published form can be emailed. A draft says "Publish this form first — only published forms can be emailed to parents."
+
+Press **⋮ > Preview** at any time, even on a draft, to see the form exactly as families
+will, with your logo and colours when white-label branding is on.
+
+## Reading the answers
+
+1. Press the **responses** pill on the form's row (for example **3 responses**), or **⋮ > View responses**.
+2. Each response shows who sent it and when, then every answer beside its question. Signatures show as a picture; a payment shows as an amount **authorised**.
+3. Press **⤓ Download CSV** to save every response as a spreadsheet, one column per question.
+
+Use the **🔍 Search forms…** box above the list to find a form by its title. Long lists are
+split into pages of eight.
+
+## Retiring or deleting a form
+
+- To stop taking answers but keep the form: edit it, set **Status** to **Archived (hidden, kept for records)**, and press **Save changes**.
+- To remove it: **⋮ > Delete form**, then confirm. The responses already received are kept.
+
+## Who can do what
+
+| Role | What they can do |
 |---|---|
-| Short text | Names, addresses, single-line answers |
-| Long text | Multi-line notes, descriptions |
-| Email | Validated email format |
-| Number | Numeric input |
-| Date | Date picker |
-| Dropdown | Pick one from a list |
-| Checkbox | Yes/no |
-| Multiple choice | Pick one from radio buttons |
-| ✍️ Signature | A signature pad — respondents sign with finger or mouse |
-| 💳 Payment | A charge (set the amount); recorded against the family's account when authorised |
+| Agency admin | Build, publish, email, preview and delete forms; read and download every response. |
+| Auditor | Has a read-only **Forms** entry in their menu for the same forms. See [Custom forms for auditors](forms-auditor-view). |
+| Parent | Fills in published forms whose audience matches their family, from their portal. |
+| Centre director, educator | No access to the builder. |
 
-Each field has: label, required toggle, placeholder, help text, options (for dropdown / radio), and — for Payment — an **amount to charge**.
+## FAQs and when something goes wrong
 
-## Conditional visibility
+??? A family cannot see my form. | Check it says LIVE, and that the Audience matches them: a family on the waitlist does not see a form for Currently enrolled.
+??? "Field ... needs at least 2 options." | A Dropdown or Multiple choice question has fewer than two options. Add another line under Options (one per line).
+??? "Title is required." | Type a Form title before pressing Create form.
+??? Can I change a form after people answered it? | Yes. Answers already given are kept with the labels they had. Avoid removing questions people have answered if you still need them in the CSV.
+??? Who sees a payment? | The amount is recorded on the family's account when they submit. Check it under the family's billing.
+??? Does publishing send an email? | No. Publishing makes the form visible in the portal. Only ⋮ > Email to parents sends an email.
 
-Any field after the first can be set to "Show only when another field has a specific value". Pick the dependency field and either leave the equals box blank (matches any non-empty value) or enter a specific value.
+## Related screens
 
-Example: ask "Why are you opting out?" only when the "Will your child attend?" radio is set to "No".
+[[open: #forms-manager | Forms Manager]] [[open: #edocuments | eDocuments]]
 
-## Responses
-
-Click the **N responses** chip on a form's row to open the responses modal. Each response shows submitter name, timestamp, and every answer mapped to its label.
-
-The green **⤓ Download CSV** button exports all responses with one column per field, ordered to match the schema.
-
-## Preview
-
-Click **👁 Preview** on any form to see exactly what respondents will see —
-including your white-label logo and primary colour in the header. Preview works
-on Draft forms, so you can check a form before publishing.
-
-## Emailing a form to parents
-
-From a published form, click **✉ Email to parents** to send the form link to the
-matching audience. The email goes out from your agency's own address (when email
-is enabled and a sender is configured under **Settings → Billing → Settings**).
-
-## White-label
-
-Forms — and the form **Preview** — carry your **logo and primary colour** when
-white-label branding is set up. See *White-label branding & invoices*.
-
-## Finding forms and responses
-
-Long lists are searchable and paged: use the **search box** above the forms list
-to filter by title, and the **pager** at the bottom of the responses modal to
-move through large response sets.
-
-## Parent side
-
-Guardians see published forms whose audience matches their family status in the **Your child → Forms** sidebar entry. Already-submitted forms show a green ✅ badge. Forms with a **signature** or **payment** field prompt for those before they can submit.
+- [Forms Manager and form packages](forms-manager)
+- [eDocuments — PDFs every family signs](edocuments)

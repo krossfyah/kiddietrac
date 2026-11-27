@@ -2,7 +2,7 @@
 title: Compliance and reporting
 category: Compliance
 order: 1
-screens: ~children, ~forms, ~forms-manager
+screens: ~children
 ---
 
 # Compliance and reporting

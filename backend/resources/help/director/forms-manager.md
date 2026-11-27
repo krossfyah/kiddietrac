@@ -2,7 +2,7 @@
 title: Forms Manager and form packages
 category: Administration
 order: 66
-roles: agency_admin, platform_admin
+roles: agency_admin, platform_admin, centre_director
 screens: forms-manager
 ---
 # Forms Manager and form packages
@@ -80,9 +80,9 @@ The **⋮** menu on each send offers:
   person.
 - **Print summary** and **Download PDF**. The download merges every completed form into
   one PDF. If nothing has been signed yet, it gives you the blank forms instead.
-- **Send reminder** emails the package again. Anyone who has already signed everything
+- **Send reminder (… unsigned)** emails the package again. Anyone who has already signed everything
   in it is skipped.
-- **Resend completed copies** sends each finished form to your agency's admins and
+- **Resend … completed copy(ies)** (it shows how many are signed) sends each finished form to your agency's admins and
   directors, with a copy back to the person who signed it.
 - **Delete from history** removes the record that it was sent. The forms, assignments
   and signatures stay exactly as they are.

@@ -1,64 +1,73 @@
 ---
-roles: agency_admin, platform_admin
-title: Flujos de documentos de varios pasos
-category: Administration
-order: 65
+title: Flujos de documentos en varios pasos
 ---
-# Flujos de documentos
+# Flujos de documentos en varios pasos
 
-Aprobación de documentos con varios firmantes y registro de auditoría completo. El padre firma → el administrador revisa → el director contrafirma, en secuencia.
+**Administración → Flujos de documentos** sirve para un acuerdo breve que varias personas
+deben firmar **en orden**: por ejemplo, firma un padre y luego el director contrafirma.
+Usted escribe el texto una vez, indica quién firma y en qué orden, y cada persona firma en
+pantalla cuando le toca. Cada firma queda sellada y el documento terminado se bloquea.
 
-## Crear un flujo (administrador)
+[[open: #doc-workflows | Abrir Flujos de documentos]]
 
-1. Barra lateral → **Flujos de documentos**.
-2. Toque **+ Nuevo flujo**.
-3. Escriba el título, el tipo de documento y el texto completo del documento.
-4. Indique la lista ordenada de firmantes (máximo 6 pasos). Cada paso tiene:
-   - **Rol** (guardian / educator / centre_director / agency_admin)
-   - **ID de usuario específico** (opcional: déjelo en blanco para permitir a cualquier usuario con ese rol)
-   - **Etiqueta del firmante** (texto visible como «Firma del padre» o «Contrafirma del director»)
-5. Guarde.
+> 💡 Para que firmen un **PDF** subido, ver quién lo ha firmado y revisarlo o devolverlo, use el **Gestor de formularios**. Los flujos de documentos son para un texto escrito que pasa de un firmante al siguiente.
 
-## Progreso del flujo
+## Iniciar un flujo
 
-- Se avisa automáticamente al firmante del paso 1.
-- Firma con un panel de firma (dibujo en lienzo) y su nombre.
-- El sistema registra: la imagen de la firma, el usuario firmante, la marca de tiempo, la dirección IP y el hash SHA-256 de (document_text + user_id + timestamp).
-- Se avisa automáticamente al firmante del paso 2 cuando se completa el paso 1.
-- Y así sucesivamente hasta el último paso.
+1. Abra **Flujos de documentos** y pulse **+ Nuevo flujo**.
+2. En **Nuevo flujo de documentos**, escriba el **Título** (por ejemplo «Consentimiento para la excursión»).
+3. Escriba el **Tipo de documento**, una palabra corta para agrupar, como `consent` o `contract`.
+4. Escriba o pegue el texto completo en **Document text (what signers agree to)**.
+5. Pulse **Continuar**.
+6. En **Orden de firma**, escriba en **Firmantes en orden** los roles de los firmantes en orden, separados por comas: `guardian`, `educator`, `centre_director` o `agency_admin`. Por ejemplo `guardian, centre_director`. Hasta seis.
+7. Confirme. Aparece el mensaje **Flujo creado** y el flujo se suma a la lista en el **Paso 1**.
 
-## Estado final
+## Firmar su paso
 
-Cuando se firma el último paso:
-- El estado del flujo pasa a `complete`.
-- El originador recibe una notificación.
-- El documento completo, cada firma y cada paso de auditoría quedan bloqueados.
+1. Abra **Flujos de documentos** y pulse **Abierto** junto al flujo.
+2. Lea el texto de arriba y la lista **Firmantes** debajo: **✓ signed** con fecha, **… awaiting** para el paso actual y **· pending** para los pasos por venir.
+3. Cuando sea su turno, aparece la sección **Firmar ahora**. Escriba su nombre completo en **Su nombre completo**.
+4. Dibuje su firma en el recuadro. **Borrar firma** vuelve a empezar.
+5. Pulse **Firmar y avanzar**. Aparece el mensaje **Firmado** y el flujo pasa al siguiente paso.
 
-## Qué registra cada paso
+Cuando firma la última persona, el estado cambia a **complete** y quien inició el flujo recibe
+una notificación: «Document fully signed».
 
-- Orden del paso
-- Rol de firmante requerido
-- Usuario firmante real
-- Marca de tiempo de la firma
-- Imagen de la firma (PNG en base64)
-- Hash de la firma (SHA-256)
-- Dirección IP del firmante
-- Etiqueta del firmante
-- Notas opcionales
+## Leer la lista
 
-## Cuándo usarlo
+| Columna | Significado |
+|---|---|
+| **Título** | El nombre que le dio. |
+| **Tipo** | El tipo de documento que escribió. |
+| **Paso actual** | El firmante al que se espera: **Paso 1**, **Paso 2** … |
+| **Estado** | **in_progress** mientras falten firmas, **complete** cuando estén todas. |
+| **Creado** | Cuándo se inició. |
 
-- Contratos de inscripción (padre + director)
-- Autorización médica (padre + director + enfermera, si corresponde)
-- Permiso para excursiones (padre + educador principal)
-- Aceptación de políticas (solo padre, un solo paso)
-- Documentos de terminación (padre + administrador)
+## Lo que registra cada firma
 
-## Registro de auditoría
+Bajo cada paso firmado, la pantalla muestra el nombre del firmante y su sello: la fecha y la
+hora en la zona horaria de su agencia, la dirección IP y la ubicación aproximada de esa
+dirección. El servidor también guarda una huella (un hash) del texto con cada firma, de modo
+que más adelante se puede demostrar que el texto no cambió después de firmarse.
 
-Todo documento firmado es inmutable una vez completado. La cadena de hash le permite demostrar ante un tribunal que el documento no fue alterado después de la firma.
+## Quién puede hacer qué
 
-> **Nota:** Para enviar un formulario PDF subido a padres o personal, saber quién lo ha firmado, y revisarlo, contrafirmarlo o devolverlo, use en su lugar el **Gestor de formularios**. Consulte [Gestor de formularios y paquetes de formularios](forms-manager).
+- Los **administradores de la agencia** inician flujos y ven todos los de su agencia.
+- **Cualquier persona con el rol del paso actual** en su agencia puede firmar ese paso: un padre para un paso `guardian`, un director para un paso `centre_director`.
+- Nadie puede firmar un paso que todavía no le toca, y un flujo completo no se puede cambiar.
 
-Vea también: [Gestor de formularios y paquetes de formularios](forms-manager),
-[Revisar, contrafirmar y devolver formularios](reviewing-and-counter-signing-forms).
+## Preguntas frecuentes y cuando algo falla
+
+??? ¿Se avisa al siguiente firmante de que es su turno? | No en los pasos definidos por rol, que es como los crea esta pantalla. Avise al siguiente firmante que abra Flujos de documentos, o use el Gestor de formularios, que envía correos.
+??? No veo Firmar ahora. | Aún no es su turno, o su rol no es el que necesita este paso. Revise la lista Firmantes para ver a quién le toca.
+??? «Name required» o «Please sign first». | Escriba su nombre completo y dibuje su firma antes de pulsar Firmar y avanzar.
+??? Escribí mal los roles. | Un flujo no se puede editar. Inicie uno nuevo con el orden correcto y deje el anterior sin firmar.
+??? ¿Puedo adjuntar un PDF? | No. Un flujo contiene texto escrito. Para un PDF, use el Gestor de formularios o los Documentos electrónicos.
+??? La lista dice «No workflows yet.» | Nadie en su agencia ha iniciado uno. Pulse + Nuevo flujo.
+
+## Pantallas relacionadas
+
+[[open: #forms-manager | Gestor de formularios]] [[open: #edocuments | Documentos electrónicos]]
+
+- [Gestor de formularios y paquetes de formularios](forms-manager)
+- [Revisar, contrafirmar y devolver formularios](reviewing-and-counter-signing-forms)
