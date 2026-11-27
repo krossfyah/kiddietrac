@@ -1535,6 +1535,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // The end-result picture (2026-11-24, App\Support\PlaySparkPicture): an idea's, or a weekly lesson-plan activity's.
             Route::get('/play-spark/ideas/{id}/picture',  [\App\Http\Controllers\Api\PlaySparkController::class, 'picture'])->whereNumber('id');
             Route::post('/play-spark/lesson-picture',     [\App\Http\Controllers\Api\PlaySparkController::class, 'lessonPicture']);
+            // ↻ Redraw picture (2026-11-27, v2 pictures): staff ask for a fresh drawing; AI on, 12 an hour a person, one per picture per 10 min.
+            Route::post('/play-spark/ideas/{id}/picture/redraw', [\App\Http\Controllers\Api\PlaySparkController::class, 'redrawPicture'])->whereNumber('id')->middleware('throttle:20,60,r-ps-redraw');
+            Route::post('/play-spark/lesson-picture/redraw',     [\App\Http\Controllers\Api\PlaySparkController::class, 'redrawLessonPicture'])->middleware('throttle:20,60,r-ps-redraw');
             Route::get('/day-brief', [DayBriefController::class, 'brief']);
             Route::get('/day-activity', [DayBriefController::class, 'dayActivity']);
 

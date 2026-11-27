@@ -322,7 +322,7 @@
         if (Array.isArray(a.materials) && a.materials.length) notes += (notes ? ' ' : '') + 'Materials: ' + a.materials.join(', ') + '.';
         var body = { title: String(a.title).trim(), notes: notes.trim(), theme: plan.theme || params.theme || '' };
         KT.PlaySparkPic.mount(el, function () { return Api.post('/provider/play-spark/lesson-picture', body); },
-          { key: 'l' + body.title + '|' + body.notes, title: body.title, link: true });
+          { key: 'l' + body.title + '|' + body.notes, title: body.title, link: true, redraw: KT.PlaySparkPic.redrawLesson ? KT.PlaySparkPic.redrawLesson(body) : null });
       });
     }
 

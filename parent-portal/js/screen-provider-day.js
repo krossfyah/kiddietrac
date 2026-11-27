@@ -894,10 +894,10 @@
         if (!b) return;
         ev.preventDefault();
         var id = b.getAttribute('data-pd-ps'), t = b.getAttribute('data-t') || 'Play Spark';
-        var c = KT.PlaySparkPic.cached('i' + id);
-        if (c) { KT.PlaySparkPic.open(c, t); return; }
+        var c = KT.PlaySparkPic.cached('i' + id), po = { key: 'i' + id, redraw: KT.PlaySparkPic.redrawIdea ? KT.PlaySparkPic.redrawIdea(id) : null };
+        if (c) { KT.PlaySparkPic.open(c, t, po); return; }
         KT.Api.get('/provider/play-spark/ideas/' + id + '/picture').then(function (r) {
-          if (r && r.status === 'ready' && r.svg) { KT.PlaySparkPic.remember('i' + id, r.svg); KT.PlaySparkPic.open(r.svg, t); }
+          if (r && r.status === 'ready' && r.svg) { KT.PlaySparkPic.remember('i' + id, r.svg, r.steps); KT.PlaySparkPic.open(r.svg, t, Object.assign({ steps: r.steps }, po)); }
           else if (KT.toast) KT.toast('🎨', 'Play Spark', r && r.status === 'drawing' ? 'The picture is still being drawn. Try again in a minute.' : 'There is no picture for this one.');
         }).catch(function (er) { if (KT.toast) KT.toast('🎨', 'Play Spark', (er && er.message) || 'The picture could not open.'); });
       });

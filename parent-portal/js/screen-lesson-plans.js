@@ -45,10 +45,12 @@
     if (a.play_spark_id) body.play_spark_id = a.play_spark_id;
     if (!parent) body.theme = currentTheme || '';
     const key = a.play_spark_id ? 'i' + a.play_spark_id : 'l' + body.title + '|' + body.notes;
+    // Staff get "↻ Redraw picture" in the big view (v2 pictures, 2026-11-27); families never do.
+    const po = { key: key, redraw: parent ? null : (KT.PlaySparkPic.redrawLesson ? KT.PlaySparkPic.redrawLesson(body) : null) };
     const cached = KT.PlaySparkPic.cached(key);
-    if (cached) { KT.PlaySparkPic.open(cached, body.title); return; }
+    if (cached) { KT.PlaySparkPic.open(cached, body.title, po); return; }
     api('POST', parent ? '/parent/play-spark/lesson-picture' : '/provider/play-spark/lesson-picture', body).then(r => {
-      if (r && r.status === 'ready' && r.svg) { KT.PlaySparkPic.remember(key, r.svg); KT.PlaySparkPic.open(r.svg, body.title); }
+      if (r && r.status === 'ready' && r.svg) { KT.PlaySparkPic.remember(key, r.svg, r.steps); KT.PlaySparkPic.open(r.svg, body.title, Object.assign({ steps: r.steps }, po)); }
       else if (window.KT && KT.toast) KT.toast('🎨', 'Play Spark', 'The picture is still being drawn. Try again in a minute.');
     }).catch(e => { if (window.KT && KT.toast) KT.toast('🎨', 'Play Spark', e.message || 'The picture could not open.'); });
   }

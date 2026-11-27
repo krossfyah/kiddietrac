@@ -200,6 +200,74 @@ class PlaySparkController extends Controller
         return response()->json($out);
     }
 
+    /* ── ↻ Redraw picture (2026-11-27, v2 pictures) ─────────────────────────────────────────────────────────
+       Staff ask for a fresh drawing of an idea's or a lesson activity's picture. It costs an AI call, so: AI must be
+       on (aiGate), at most 12 a person an hour (route throttle + this limiter), and one per picture per 10 minutes
+       (PlaySparkPicture::redraw). The old picture stays up until the new one is ready. Nothing is sent to anyone. */
+
+    /** POST provider/play-spark/ideas/{id}/picture/redraw -> {ok, message, status...} */
+    public function redrawPicture(Request $request, int $id): JsonResponse
+    {
+        $a = $this->agency($request);
+        if ($r = $this->aiGate($a)) {
+            return $r;
+        }
+        $idea = $this->find($request, $a, $id, true);
+        if ($r = $this->redrawLimit($request)) {
+            return $r;
+        }
+        $ok = PlaySparkPicture::redraw($a, 'idea', (string) $idea->id, (json_decode((string) $idea->idea, true) ?: []) + ['title' => $idea->title]);
+
+        return $this->redrawReply($request, $ok, PlaySparkPicture::status($a, 'idea', (string) $idea->id, [], false, false));
+    }
+
+    /** POST provider/play-spark/lesson-picture/redraw {title, notes?, theme?, play_spark_id?} -> {ok, message, status...} */
+    public function redrawLessonPicture(Request $request): JsonResponse
+    {
+        $a = $this->agency($request);
+        if ($r = $this->aiGate($a)) {
+            return $r;
+        }
+        $d = $request->validate(['title' => 'required|string|max:200', 'notes' => 'nullable|string|max:1500',
+            'theme' => 'nullable|string|max:160', 'play_spark_id' => 'nullable|integer']);
+        if ($r = $this->redrawLimit($request)) {
+            return $r;
+        }
+        if (! empty($d['play_spark_id'])) {
+            $idea = DB::table('play_spark_ideas')->where('id', (int) $d['play_spark_id'])->where('agency_id', $a)->whereNull('deleted_at')->first();
+            if ($idea) {
+                $ok = PlaySparkPicture::redraw($a, 'idea', (string) $idea->id, (json_decode((string) $idea->idea, true) ?: []) + ['title' => $idea->title]);
+
+                return $this->redrawReply($request, $ok, PlaySparkPicture::status($a, 'idea', (string) $idea->id, [], false, false));
+            }
+        }
+        $key = PlaySparkPicture::lessonKey($d['title'], (string) ($d['notes'] ?? ''));
+        $ok = PlaySparkPicture::redraw($a, 'lesson', $key, ['title' => $d['title'], 'notes' => $d['notes'] ?? '', 'theme' => $d['theme'] ?? '']);
+
+        return $this->redrawReply($request, $ok, PlaySparkPicture::status($a, 'lesson', $key, [], false, false));
+    }
+
+    private function redrawLimit(Request $request): ?JsonResponse
+    {
+        $k = 'ps-redraw:' . $request->user()->id;
+        if (\Illuminate\Support\Facades\RateLimiter::tooManyAttempts($k, 12)) {
+            return response()->json(['message' => 'You have asked for a lot of fresh pictures this hour. Try again a little later.', 'code' => 'redraw_limit'], 429);
+        }
+
+        return null;
+    }
+
+    private function redrawReply(Request $request, bool $ok, array $st): JsonResponse
+    {
+        if ($ok) {
+            \Illuminate\Support\Facades\RateLimiter::hit('ps-redraw:' . $request->user()->id, 3600);
+        }
+
+        return response()->json(['ok' => $ok, 'message' => $ok
+            ? 'A fresh picture is being drawn. It takes two or three minutes and replaces this one when it is ready.'
+            : 'A fresh picture is already on its way for this one. Check back in a few minutes.'] + $st);
+    }
+
     /** GET parent/play-spark/picture/{id} - a family sees the picture of an idea their own child did (never queues one). */
     public function parentPicture(Request $request, int $id): JsonResponse
     {

@@ -1247,6 +1247,8 @@ post provider/play-spark/materials | Added play materials to a room (Play Spark)
 delete provider/play-spark/materials/{id} | Removed a play material from a room (Play Spark)
 post provider/play-spark/lesson-picture | Opened the end-result picture of a lesson-plan activity (Play Spark)
 post parent/play-spark/lesson-picture | Opened the end-result picture of a lesson-plan activity (Play at home)
+post provider/play-spark/ideas/{id}/picture/redraw | Asked for a fresh end-result picture of a Play Spark idea
+post provider/play-spark/lesson-picture/redraw | Asked for a fresh end-result picture of a lesson-plan activity (Play Spark)
 put parent/phone-line/pin | Set their phone PIN for the KiddieTrac line
 delete parent/phone-line/pin | Removed their phone PIN for the KiddieTrac line
 post safe-arrival/phone-messages/{id}/approve | Approved a parent's phone message

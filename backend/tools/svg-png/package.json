@@ -1,0 +1,8 @@
+{
+  "name": "kt-svg-png",
+  "private": true,
+  "description": "Play Spark pictures: SVG to PNG with resvg, run by the queue worker (PlaySparkPicture::png)",
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  }
+}

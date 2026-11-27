@@ -458,10 +458,16 @@ Schedule::command('immunization:reminders')->hourlyAt(11)->withoutOverlapping();
 
    100, not 128: the check is made BETWEEN jobs, so the headroom has to cover the
    largest single job, and a send peaks at ~32 MB from a ~28 MB floor. */
-/* "pictures" LAST (2026-11-24): Play Spark end-result drawings take ~30 s each (App\Jobs\DrawPlaySparkPicture), so they
-   run only when no email or other job is waiting. */
-Schedule::command("queue:work --queue=mail,default,pictures --stop-when-empty --max-time=55 --memory=100 --tries=3 --sleep=2 --backoff=30")
+/* Play Spark end-result pictures have their OWN worker (2026-11-27). v2 drawings (plan, five drawings at once, a check,
+   maybe a redraw - App\Jobs\DrawPlaySparkPicture) take one to three minutes, and this mail worker is one process at a
+   time (withoutOverlapping), so a picture in its queue held every email up for that long. The pictures worker only
+   starts when a picture is waiting (a cheap jobs-table read inside schedule:run, no extra artisan start otherwise),
+   one at a time, and its --timeout matches the job's. */
+Schedule::command("queue:work --queue=mail,default --stop-when-empty --max-time=55 --memory=100 --tries=3 --sleep=2 --backoff=30")
     ->everyMinute()->withoutOverlapping(5)->runInBackground();
+Schedule::command("queue:work --queue=pictures --stop-when-empty --max-time=50 --timeout=420 --memory=160 --tries=1 --sleep=3")
+    ->everyMinute()->withoutOverlapping(12)->runInBackground()
+    ->when(fn () => \Illuminate\Support\Facades\DB::table('jobs')->where('queue', 'pictures')->exists());
 
 
 // Daily sales-lead follow-up reminders (email owner/superadmin about due/overdue follow-ups).

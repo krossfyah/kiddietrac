@@ -564,7 +564,7 @@
     // The picture prints too: fetch it first if this screen has not shown it yet (ready only; no waiting at the printer).
     if (row.id && Pic() && !Pic().cached('i' + row.id) && row.picture !== 'off') {
       Api.get('/provider/play-spark/ideas/' + row.id + '/picture').then(function (r) {
-        if (r && r.status === 'ready' && r.svg) Pic().remember('i' + row.id, r.svg);
+        if (r && r.status === 'ready' && r.svg) Pic().remember('i' + row.id, r.svg, r.steps);
       }).catch(function () {}).then(function () { printIdeaNow(row); });
       return;
     }
