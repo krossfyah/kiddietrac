@@ -1,82 +1,80 @@
 ---
 title: Pointeuse du personnel
-category: Daily Operations
-order: 76
 ---
 # Pointeuse du personnel
 
-Chaque membre du personnel pointe son arrivée au début de son quart et son départ à la fin. Vous la trouverez sous **Personnel → Pointeuse** dans la barre latérale.
+La **Pointeuse** sert à pointer votre arrivée au début du quart, à sortir pour le dîner ou une pause, et à pointer votre départ à la fin. Chaque pointage alimente les heures que votre agence voit dans les feuilles de temps et la paie. Les directions l'utilisent pour leurs propres quarts; pour voir et corriger les heures des autres, utilisez **Clock-ins & timesheets**.
 
-## Pointer
+[[open: #time-clock | Ouvrir la Pointeuse]]
 
-L’écran affiche un seul gros bouton :
+La carte au centre indique où vous en êtes : « You're currently clocked out. », « You're clocked in since » suivi d'une heure et des heures écoulées, ou « You're on lunch » / « You're on a break ».
 
-- **« Pointer l’arrivée » en vert** lorsque vous n’êtes pas en quart
-- **« Pointer le départ » en rouge** lorsque vous l’êtes, avec les heures écoulées affichées
+## Pointer l'arrivée
 
-Touchez-le. C’est tout le processus.
+1. Ouvrez **Operations > Pointeuse**.
+2. Appuyez sur le bouton vert **Pointer l'arrivée**.
+3. Si votre agence demande votre position, la fenêtre « Share your location to clock in » s'ouvre. Appuyez sur **Share location** pour continuer.
+4. Le bouton devient rouge et affiche **Pointer le départ**, et la carte indique l'heure de votre arrivée.
 
-## Pointages récents
+## Prendre le dîner ou une courte pause
 
-La liste sous le bouton affiche vos 60 derniers pointages avec les heures d’arrivée et de départ et le total d’heures. Un quart ouvert (en cours) affiche « — en cours — » au lieu d’une durée.
+Pendant que vous êtes pointé, deux boutons apparaissent sous le grand bouton.
 
-## Vue du gestionnaire
+1. Appuyez sur **🍽️ Dîner** ou **☕ Short break** quand vous quittez le plancher. Vous restez sur le quart du jour.
+2. Le grand bouton devient mauve et affiche **I'm back**, et la carte indique depuis quand vous êtes absent.
+3. À votre retour, appuyez sur **I'm back**.
+4. Confirmez **Yes, I’m back** dans la fenêtre qui demande « Are you back from lunch? » (ou « from your break? »). Appuyez sur **Still on lunch** ou **Still on break** si vous avez appuyé par erreur.
 
-Les directeurs et les administrateurs d’agence voient les pointages de chaque membre du personnel de leur centre dans
-**Feuilles de temps**, qui regroupe les entrées de la pointeuse et les éventuels quarts saisis manuellement.
+## Pointer le départ
 
-Chaque ligne y comporte un menu **⋮** : corriger un quart, en ajouter un qui n’a jamais été pointé, ou
-supprimer un quart qui n’a pas eu lieu. La pointeuse d’un éducateur ne fait que basculer; un quart laissé ouvert
-pendant la nuit ne peut donc être corrigé que là. Voir [Feuilles de temps et correction des heures](timesheets).
+1. Appuyez sur le bouton rouge **Pointer le départ**.
+2. Si des enfants que vous avez accueillis sont encore inscrits comme présents, une fenêtre les énumère et explique quoi faire. Faites d'abord leur départ, ou appuyez sur **Go ahead anyway** si quelqu'un d'autre s'en occupe.
+3. Le bouton redevient vert et le quart apparaît dans **Pointages récents** avec ses heures.
 
-## Champ source
+## Lire vos pointages récents
 
-Chaque pointage enregistre sa provenance (web, borne ou mobile), ce qui vous permet de savoir comment un quart a été pointé.
+**Pointages récents** liste vos quarts, du plus récent au plus ancien. Chaque rangée affiche la date, les heures d'arrivée et de départ, « lunch » ou « break » quand c'est la raison de la sortie, et le nombre d'heures. Un point vert est un quart terminé; un point ambre avec **In progress** est le quart en cours.
 
-## Paramètres de rappel et de fermeture automatique
+> 💡 Vous avez oublié de pointer? Vous ne pouvez pas modifier un pointage ici. Demandez à votre direction ou à votre administrateur d'agence de le corriger dans **Clock-ins & timesheets**, ou consultez [Feuilles de temps et correction des heures](timesheets).
 
-**Paramètres → Paramètres du pointage** regroupe les deux volets de la pointeuse :
+## Rappels et fin de journée automatique
 
-- **Rappels** — quand relancer une personne qui n’a pas pointé son arrivée, et une personne encore
-  en quart. Réglez les heures selon votre journée; un centre qui ouvre à 6 h ne devrait pas recevoir
-  le rappel à 10 h comme tout le monde.
-- **Déconnexion automatique** — ferme les quarts et les journées d’enfants que quelqu’un a oublié de fermer.
-  Le même réglage se trouve aussi sous **Paramètres → Gestion des salles → Déconnexion automatique**.
+**Paramètres > Paramètres du pointage** (administrateurs d'agence) regroupe les deux volets de la pointeuse :
 
-Les rappels sont vérifiés une fois par heure; ils partent donc pendant l’heure choisie plutôt qu’à une
-minute précise. Les deux sont réglés par agence, dans votre propre fuseau horaire.
+- **Reminders** : quand avertir quelqu'un qui n'a pas pointé son arrivée, et quelqu'un encore pointé. Un centre qui ouvre à 6 h peut recevoir ses rappels plus tôt que les autres.
+- **Auto sign-off** : ferme les quarts et les journées d'enfants que quelqu'un a oublié de fermer. Le même réglage se trouve dans **Settings > Room Controls > Auto sign-off**.
 
-## Qui reçoit le rappel « encore en quart »
+Les rappels sont vérifiés une fois par heure; ils arrivent donc pendant l'heure choisie plutôt qu'à la minute près, selon le fuseau horaire de votre agence.
 
-À l’heure que vous avez fixée pour **Rappeler aux personnes encore en quart**, KiddieTrac examine chaque
-quart encore ouvert, y compris un quart resté ouvert un jour antérieur (jusqu’à 14 jours en arrière). Une
-personne reçoit un rappel lorsque :
+### Qui reçoit le rappel « encore pointé »
 
-- son quart prévu à l’horaire pour la journée est terminé, si elle en a un; et
-- elle est en quart depuis plus longtemps que sa journée habituelle plus une heure. Sans historique,
-  cela donne 6 heures. Ce n’est jamais moins de 5 heures et **jamais plus de 8 heures**, de sorte que le
-  rappel arrive toujours avant la déconnexion automatique de nuit.
+À l'heure réglée pour **Remind people still on the clock**, KiddieTrac regarde chaque quart encore ouvert, y compris un quart laissé ouvert un jour précédent (jusqu'à 14 jours). Une personne reçoit un rappel quand son quart prévu est terminé (si elle en a un) et qu'elle est pointée depuis plus longtemps que sa journée habituelle plus une heure. Sans historique, c'est 6 heures. Ce n'est jamais moins de 5 heures ni plus de 8 heures, pour que le rappel arrive toujours avant la fin de journée automatique de la nuit. Les quarts fermés automatiquement ne comptent pas dans le calcul de la journée habituelle, et personne ne reçoit de rappel un jour de congé approuvé.
 
-Les quarts fermés par la déconnexion automatique sont exclus du calcul de la journée habituelle d’une personne.
-Sans cela, une personne qui oublie souvent semblerait travailler des journées de 12 heures et ne
-recevrait jamais de rappel.
+À la même heure, les éducatrices sont averties des enfants encore présents : la personne qui a fait l'arrivée de chaque enfant, ou les éducatrices de la salle quand c'est un parent qui l'a faite. Le rappel énumère les enfants et, si la fin de journée automatique des enfants est activée, indique à quelle heure ils seront sortis automatiquement. Il n'est envoyé que si **Remind people still on the clock** est activé.
 
-Personne ne reçoit de rappel un jour où un congé est approuvé.
+Les interrupteurs **Send by email** et **Send to the app** de l’onglet **Reminders** s’appliquent aux deux rappels. La notification dans l'application est toujours ajoutée.
 
-## Enfants encore présents
+## Qui peut faire quoi
 
-À la même heure, les éducateurs sont aussi avisés des **enfants encore présents**. Le rappel
-est envoyé à la personne qui a enregistré l’arrivée de chaque enfant. Si c’est un parent qui l’a fait, il va
-aux éducateurs affectés à la salle de l’enfant. Il énumère les enfants, demande à l’éducateur
-d’enregistrer leur départ au moment du départ, et, si la déconnexion automatique des enfants est activée, indique à quelle heure
-ils seront déconnectés automatiquement.
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Direction de centre | Pointer, prendre le dîner et les pauses, voir ses propres pointages. Corriger les quarts des autres dans **Clock-ins & timesheets**. |
+| Administrateur d'agence | La même chose, plus **Paramètres du pointage** pour toute l'agence. |
+| Éducatrice | Pointer et voir ses propres pointages seulement. |
 
-Ce rappel n’est envoyé que si **Rappeler aux personnes encore en quart** est activé.
+## FAQ et dépannage
 
-## Commutateurs courriel et notification push
+??? Le bouton affiche « Could not update the clock. » | Le pointage n'a pas été enregistré. Vérifiez votre connexion et appuyez de nouveau. Vos pointages récents montrent s'il est passé.
+??? J'ai laissé un quart ouvert toute la nuit. | La pointeuse ne fait qu'alterner entre arrivée et départ. Pointez votre départ maintenant, puis demandez à une direction ou à un administrateur d'agence de corriger l'heure de départ dans **Clock-ins & timesheets**.
+??? Pourquoi m'a-t-on parlé d'enfants encore présents? | C'est vous qui avez fait leur arrivée et leur départ n'a pas été fait. Faites leur départ à l'écran des présences, ou appuyez sur **Go ahead anyway** si une autre éducatrice les a pris en charge.
+??? On me demande sans cesse ma position. | Votre agence utilise la zone de pointage du module RH. Autorisez la localisation pour le site dans votre navigateur ou l'application, et pointez depuis le centre.
+??? Comment sait-on d'où j'ai pointé? | Chaque pointage enregistre s'il vient du Web, d'un kiosque ou de l'application mobile, pour que les gestionnaires sachent comment le quart a été pointé.
 
-Les commutateurs **Envoyer par courriel** et **Envoyer à l’application** de l’onglet **Rappels** s’appliquent aux
-deux rappels. Si vous désactivez le courriel, seuls la notification et le push sont envoyés; si vous désactivez le push,
-seuls la notification et le courriel sont envoyés. La notification dans l’application est toujours ajoutée.
+## Voir aussi
 
-Voir aussi : [Déconnexion automatique](auto-sign-off), [Feuilles de temps et correction des heures](timesheets).
+[[open: #timesheets | Clock-ins & timesheets]]
+
+- [Feuilles de temps et correction des heures](timesheets)
+- [Fin de journée automatique](auto-sign-off)
+- [[hr-clock]]
+- [[time-clock-settings]]

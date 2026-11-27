@@ -1,43 +1,60 @@
 ---
-roles: agency_admin, platform_admin
-title: Feed para compartir videos
-category: Family Engagement
-order: 22
+title: Muro de videos para compartir
 ---
-# Feed de videos
+# Muro de videos para compartir
 
-Como las fotos, pero para videos cortos: mismo flujo de subida, etiquetado y reacciones.
+**Vídeos** reúne los videos cortos que su equipo comparte desde el centro: los primeros pasos, una canción en el círculo, una presentación o la llegada de una excursión. El personal sube un video con una descripción, todo el equipo puede reproducirlo y cada persona puede reaccionar con un emoji. Úselo cuando un momento necesite sonido y movimiento; para lo demás, las fotos cargan más rápido y ocupan menos espacio.
 
-## Personal: subir
+[[open: #videos | Abrir Vídeos]]
 
-1. Barra lateral → **Vídeos**.
-2. Toque **+ Subir vídeo**.
-3. Elija un archivo MP4 / MOV / WebM (máx. 64 MB tras el aumento del límite de PHP en v22p60).
-4. Opcionalmente añada un pie de foto y etiquete a los niños que aparecen.
-5. Suba.
+El encabezado indica cuántos videos hay en el muro. Debajo, cada video es una tarjeta con el reproductor, la fecha y quién lo compartió, la descripción y una fila de botones de reacción.
 
-## Vista del padre o madre
+## Compartir un video
 
-- Barra lateral → **Vídeos** bajo Su hijo.
-- Vea los videos en que aparecen sus hijos, del más reciente al más antiguo.
-- Toque para reproducir; toque los botones de reacción (❤️ 😊 😮 🎉 👏) para reaccionar.
-- Bajo cada video se muestran el pie de foto, el nombre de quien lo subió y la fecha.
+1. Abra **Engagement > Vídeos**.
+2. Pulse **+ Subir video** en el encabezado. Se abre la ventana **Compartir un video**.
+3. Pulse el cuadro de archivo y elija un video de su computadora o teléfono. Funcionan los archivos MP4, MOV (QuickTime) y WebM.
+4. Escriba una **Descripción**, por ejemplo «Los primeros pasos de Maya en el salón de los pequeños».
+5. Pulse **Subir**. Al terminar, un aviso dice «Video uploaded» y el video aparece arriba en el muro.
 
-## Reacciones
+Pulse **Cancelar** para cerrar la ventana sin compartir nada.
 
-Mismo sistema de reacciones que las fotos. Los padres tocan un botón de emoji para dar acuse de recibo o agradecer. El personal ve el número de cada reacción bajo cada video.
+> ⚠️ Mantenga los videos cortos. El video más grande que puede compartir es de 50 MB, más o menos uno o dos minutos de video de teléfono. Recorte los videos más largos en su teléfono antes de subirlos.
 
-## Límites
+## Ver y reaccionar
 
-- Máx. 64 MB por video (PHP `upload_max_filesize`)
-- Duración máxima de 10 minutos por video (campo `duration_seconds`, aplicado en el cliente)
-- Archivos guardados en `/storage/videos/YYYY/MM/`
+1. Busque el video en el muro. El más nuevo va primero.
+2. Pulse reproducir en el reproductor. Use sus controles para el volumen y la pantalla completa.
+3. Pulse una reacción: **❤️**, **😊**, **😮**, **🎉** o **👏**. El número a su lado sube en uno.
 
-## Cuándo usar videos
+Cada botón de reacción muestra cuántas veces se ha pulsado, para ver de un vistazo qué videos les gustaron a las familias y al personal.
 
-- Primeros pasos / primeras palabras
-- Actuaciones de programas especiales (recital, presentación)
-- Eventos de toda la familia (desfile, llegada de una excursión)
-- Mostrar un momento de enseñanza en acción
+## Qué videos ve
 
-Para momentos estáticos, las **fotos** siguen siendo la mejor opción: se descargan más rápido, se comparten con más facilidad y ocupan menos almacenamiento.
+- El muro muestra los 80 videos más recientes.
+- El personal ve los videos compartidos en los centros donde trabaja. Un administrador de agencia ve todos los centros de la agencia.
+- Un video se guarda en el primer centro que usted puede ver al subirlo. La ventana no tiene selector de centro, así que el personal de otros centros quizá no lo vea.
+
+## Quién puede hacer qué
+
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador de agencia | Compartir videos, ver y reaccionar a los videos de todos los centros. |
+| Administrador de plataforma | Lo mismo, para la agencia elegida. |
+| Director de centro, educador | El muro no está en su menú. |
+| Padres | Solo ven los videos en los que aparece su propio hijo. |
+
+## Preguntas frecuentes y solución de problemas
+
+??? Aparece «Pick a video». | No eligió ningún archivo. Pulse el cuadro de archivo, elija un video y pulse **Subir** otra vez.
+??? Aparece «File too large. Max video size is 50MB.» | Recorte el video o grabe uno más corto y súbalo otra vez.
+??? Aparece «Choose a centre you work at before sharing a video.» | Su cuenta no está vinculada a un centro de esta agencia. Pida a un administrador de agencia que lo agregue a un centro, o cambie primero a la agencia correcta.
+??? La subida falló con otro mensaje. | Revise su conexión y que el archivo sea MP4, MOV o WebM. Otros formatos se rechazan.
+??? La página dice «No videos yet.» | Nadie en sus centros ha compartido un video. Pulse **+ Subir video** para compartir el primero.
+??? ¿Se avisa a las familias cuando comparto un video? | Solo se avisa a las familias de un video en el que aparece su hijo. Un video compartido desde esta ventana no está vinculado a ningún niño, así que no se avisa a ninguna familia.
+??? ¿Puedo eliminar un video? | No desde esta pantalla. Pida ayuda a su administrador de agencia o abra un ticket si compartió un video por error.
+
+## Relacionado
+
+- [[child-portfolios]]
+- [[announcements]]

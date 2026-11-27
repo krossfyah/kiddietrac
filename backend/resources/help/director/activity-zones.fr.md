@@ -1,42 +1,68 @@
 ---
-roles: agency_admin, platform_admin
-title: Suivi des zones d’activité
-category: Daily Operations
-order: 50
+title: Suivi des zones d'activité
 ---
-# Zones d’activité
+# Suivi des zones d'activité
 
-Suivez le coin, l’espace ou la station auquel chaque enfant a participé pendant la journée. Consignation des activités dans le style de Brightwheel.
+Les **Zones d'activité** suivent les aires de jeu où chaque enfant passe du temps pendant la journée : le coin bricolage, le coin lecture, le bac sensoriel, le jeu extérieur. Vous créez les zones une seule fois pour une salle ou pour tout le centre, les éducatrices consignent une visite en deux touches, et l'écran montre les visites du jour par zone et par enfant pour voir qui a une journée variée.
 
-## Configurer les zones (directeur)
+[[open: #zones | Ouvrir les Zones d'activité]]
 
-1. Barre latérale → **Zones d’activité**.
-2. Touchez **+ Nouvelle zone**.
-3. Saisissez un nom (coin arts, coin lecture, bac sensoriel, jeux extérieurs, etc.), une icône emoji et une couleur.
-4. Enregistrez. Répétez l’opération pour chaque grande aire d’activité.
+La bannière indique ce que vous regardez (le centre et la salle), la date du jour et le nombre de visites consignées aujourd'hui.
 
-## Consigner les visites (éducateur)
+## Choisir le centre et la salle
 
-1. Ouvrez **Zones d’activité**.
-2. Chaque zone s’affiche sous forme de tuile colorée avec son emoji.
-3. Touchez **+ Consigner une visite** sur la zone voulue.
-4. Saisissez l’identifiant de l’enfant.
-5. La visite est enregistrée avec l’heure.
+1. Ouvrez **Administration > Zones d'activité**.
+2. Si votre agence a plus d'un centre, choisissez-en un dans **Choisir un centre…**.
+3. Utilisez la liste des centres en haut pour changer de centre, et la liste des salles pour choisir une salle ou **Toutes les salles**.
 
-Facultatif : saisissez une durée (en minutes). Sans elle, seule l’heure de début est consignée.
+Les éducatrices ne voient que leurs propres salles. Si elles en ont plusieurs, elles passent de l'une à l'autre avec la puce **Toutes mes salles** et une puce par salle.
 
-## Rapport quotidien
+## Ajouter une zone
 
-La barre latérale affiche l’activité du jour dans toutes les zones :
-- Total des visites et répartition par zone
-- Chronologie par enfant des zones visitées et des heures
+1. Appuyez sur **+ Nouvelle zone** dans la bannière. La fenêtre **Nouvelle zone d'activité** s'ouvre.
+2. Inscrivez un **Nom**, par exemple « Coin bricolage » ou « Coin lecture ».
+3. Dans **Où**, choisissez une salle, ou **Tout le centre** pour un espace utilisé par toutes les salles, comme le gymnase ou la cour.
+4. Inscrivez une **Icon (emoji)**, par exemple 📚 ou 🧱. Elle commence à 🎨.
+5. Choisissez une **Couleur** pour la tuile de la zone.
+6. Appuyez sur **Enregistrer**. Un message confirme « Zone added » et la tuile apparaît sous **Activité du jour**.
 
-Utile en fin de journée pour s’assurer que chaque enfant a profité de zones variées.
+Recommencez pour chaque aire à suivre. De quatre à six zones par salle suffisent : assez pour voir une tendance, assez peu pour que les éducatrices consignent vraiment les visites.
 
-## Confidentialité
+## Consigner une visite
 
-Les visites des zones sont visibles par le personnel du centre et par les tuteurs de l’enfant. Les autres familles ne peuvent pas voir l’historique de visites d’un autre enfant.
+1. Sous **Activité du jour**, trouvez la tuile de la zone. Elle affiche l'icône, le nom, la salle (ou « Whole centre ») et le nombre de visites du jour.
+2. Appuyez sur **+ Consigner une visite** sur la tuile. Une fenêtre « Log a visit to » la zone s'ouvre avec les enfants de la salle.
+3. Tapez dans **Search children…** pour réduire la liste si la salle est grande.
+4. Touchez l'enfant, par exemple Maya. Un message confirme « Visit logged », la fenêtre se ferme et le compteur de la zone augmente de un.
 
-## Bonne pratique
+Pour une zone de tout le centre, la liste montre les enfants de la salle choisie, ou de toutes les salles affichées.
 
-Commencez avec 4 à 6 zones. N’en faites pas trop : vous voulez que les éducateurs utilisent réellement le suivi, pas qu’ils se sentent submergés.
+## Lire la journée
+
+**Visites par enfant aujourd'hui** liste chaque enfant qui a visité une zone aujourd'hui, avec une étiquette par visite indiquant la zone et l'heure, par exemple « 📚 Coin lecture @ 10:15 ». Parcourez la liste en fin de journée : un enfant dont toutes les visites sont dans la même zone pourrait avoir besoin d'un coup de pouce vers autre chose demain.
+
+## Qui peut faire quoi
+
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Administrateur d'agence | Tous les centres et salles de l'agence; peut ajouter des zones de salle et des zones de tout le centre. |
+| Administrateur de plateforme | La même chose, pour l'agence choisie. |
+| Direction de centre | Son propre centre, quand l'écran lui est ouvert. |
+| Éducatrice | Seulement ses propres salles : les zones de ces salles, les zones de tout le centre et ses propres enfants. Elle peut ajouter des zones pour ses salles, pas des zones de tout le centre. |
+
+## FAQ et dépannage
+
+??? L'écran affiche « No centres you can see. » | Votre compte n'est lié à aucun centre de cette agence. Vérifiez l'agence choisie ou demandez à un administrateur d'agence.
+??? Une éducatrice voit « You are not assigned to a room yet — ask your director to add you to one. » | Ajoutez-la à une salle dans les réglages du personnel ou des salles. Les zones suivent les salles où une personne travaille.
+??? L'écran affiche « No zones here yet. » | Aucune zone n'a été créée pour ce centre ou cette salle. Appuyez sur **+ Nouvelle zone** pour en ajouter une.
+??? J'obtiens « Give the zone a name ». | Le **Nom** est obligatoire. Inscrivez-en un et appuyez de nouveau sur **Enregistrer**.
+??? La liste des enfants affiche « No children in this room. » | Aucun enfant n'est inscrit dans cette salle aujourd'hui. Vérifiez la liste des salles ou choisissez-en une autre.
+??? J'obtiens « That child is not in one of your rooms. » | Les éducatrices ne peuvent consigner des visites que pour les enfants de leurs propres salles. Demandez à l'éducatrice de la salle de l'enfant, ou à une direction, de la consigner.
+??? Puis-je renommer ou supprimer une zone? | Pas encore à partir de cet écran. Ajoutez une nouvelle zone avec le bon nom et cessez de consigner des visites dans l'ancienne.
+??? Les parents voient-ils les visites des zones? | Non. Les zones d'activité servent uniquement à la planification du personnel.
+
+## Voir aussi
+
+- [[daily-care-logs]]
+- [[room-assignments]]
+- [[developmental-milestones]]

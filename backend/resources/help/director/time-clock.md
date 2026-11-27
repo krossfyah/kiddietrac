@@ -6,78 +6,78 @@ screens: time-clock, ~clock-settings
 ---
 # Staff time clock
 
-Each staff member punches in at the start of their shift and out at the end. Find it under **Staff → Time clock** in the sidebar.
+The **Time clock** is where you punch in at the start of your shift, step out for lunch or a break, and punch out at the end. Every punch feeds the hours your agency sees on timesheets and in payroll. Directors use it for their own shifts; to see and fix everyone else's hours, use **Clock-ins & timesheets**.
 
-## Punching
+[[open: #time-clock | Open Time clock]]
 
-The screen shows a single big button:
+The card in the middle tells you where you stand: "You're currently clocked out.", "You're clocked in since" a time with the hours elapsed, or "You're on lunch" / "You're on a break".
 
-- **Green "Clock in"** when you're not currently on a shift
-- **Red "Clock out"** when you are — with the elapsed hours displayed
+## Clocking in
 
-Tap it. That's the entire flow.
+1. Open **Operations > Time clock**.
+2. Press the green **Clock in** button.
+3. If your agency asks for your location, a window "Share your location to clock in" opens. Press **Share location** to go on.
+4. The button turns red and reads **Clock out**, and the card shows the time you clocked in.
 
-## Recent punches
+## Taking lunch or a short break
 
-The list below the button shows your last 60 punches with in/out timestamps and total hours. An open (in-progress) shift shows "— in progress —" instead of a duration.
+While you are clocked in, two buttons show under the big button.
 
-## Manager view
+1. Press **🍽️ Lunch** or **☕ Short break** when you leave the floor. You stay on today's shift.
+2. The big button turns purple and reads **I'm back**, and the card says since when you have been away.
+3. When you return, press **I'm back**.
+4. Confirm **Yes, I’m back** in the window that asks "Are you back from lunch?" (or "from your break?"). Press **Still on lunch** or **Still on break** if you tapped by mistake.
 
-Directors and agency admins see every staff member's punches at their centre on
-**Timesheets**, which rolls up time-clock entries plus any manual shift records.
+## Clocking out
 
-Each row there carries a **⋮** menu: correct a shift, add one that was never clocked, or
-remove one that never happened. An educator's own clock only toggles, so a shift left open
-overnight can only be fixed from there. See [Timesheets and correcting hours](timesheets).
+1. Press the red **Clock out** button.
+2. If children you signed in are still signed in, a window lists them and says what to do. Sign them out first, or press **Go ahead anyway** if someone else has them.
+3. The button turns green again and the shift shows in **Recent punches** with its hours.
 
-## Source field
+## Reading your recent punches
 
-Every punch records where it came from (web, kiosk or mobile), so you can tell how a shift was clocked.
+**Recent punches** lists your shifts, newest first. Each row shows the date, the in and out times, "lunch" or "break" when that is why you stepped out, and the hours. A green dot is a finished shift; an amber dot with **In progress** is the shift you are on now.
 
-## Reminder and auto sign-off settings
+> 💡 Forgot to clock in or out? You cannot change a punch here. Ask your director or agency admin to correct it on **Clock-ins & timesheets**, or see [Timesheets and correcting hours](timesheets).
 
-**Settings → Clock settings** holds both halves of the time clock:
+## Reminders and auto sign-off
 
-- **Reminders** — when to nudge somebody who has not clocked in, and somebody still on
-  the clock. Set the hours to suit your day; a centre opening at 06:00 should not be
-  reminded at 10:00 like everybody else.
-- **Auto sign-off** — close shifts and children's days that somebody forgot to close.
-  The same setting is also on **Settings → Room Controls → Auto sign-off**.
+**Settings > Clock settings** (agency admins) holds both halves of the time clock:
 
-Reminders are checked once an hour, so they go out during the hour you choose rather
-than at an exact minute. Both are set per agency, in your own timezone.
+- **Reminders**: when to nudge somebody who has not clocked in, and somebody still on the clock. A centre opening at 06:00 can be reminded earlier than everyone else.
+- **Auto sign-off**: closes shifts and children's days that somebody forgot to close. The same setting is on **Settings > Room Controls > Auto sign-off**.
 
-## Who gets the "still clocked in" reminder
+Reminders are checked once an hour, so they arrive during the hour you choose rather than at an exact minute, in your agency's time zone.
 
-At the hour you set for **Remind people still on the clock**, KiddieTrac looks at every
-shift still open, including one left open on an earlier day (up to 14 days back). A
-person is reminded when:
+### Who gets the "still clocked in" reminder
 
-- their rostered shift for the day has ended, if they have one; and
-- they have been on the clock longer than their usual day plus an hour. With no history,
-  that is 6 hours. It is never less than 5 hours and **never more than 8 hours**, so the
-  reminder always arrives before the nightly auto sign-off.
+At the hour set for **Remind people still on the clock**, KiddieTrac looks at every shift still open, including one left open on an earlier day (up to 14 days back). A person is reminded when their rostered shift has ended (if they have one) and they have been on the clock longer than their usual day plus an hour. With no history that is 6 hours. It is never less than 5 hours and never more than 8 hours, so the reminder always comes before the nightly auto sign-off. Shifts closed by auto sign-off are left out when working out someone's usual day, and nobody is reminded on a day of approved time off.
 
-Shifts that auto sign-off closed are left out when working out someone's usual day.
-Without that, a person who often forgets would look like they work 12-hour days and would
-never be reminded.
+At the same hour, educators are told about **children still signed in**: whoever signed each child in, or the room's educators when a parent did. The reminder lists the children and, if auto sign-off for children is on, says when they will be signed out automatically. This only goes out when **Remind people still on the clock** is on.
 
-Nobody is reminded on a day they have approved time off.
+The **Send by email** and **Send to the app** switches on the **Reminders** tab apply to both reminders. The in-app notification is always added.
 
-## Children still signed in
+## Who can do what
 
-At the same hour, educators are also told about **children still signed in**. The
-reminder goes to whoever signed each child in. If a parent signed the child in, it goes
-to the educators assigned to that child's room. It lists the children, asks the educator
-to sign them out at pick-up, and, if auto sign-off for children is on, says what time
-they will be signed out automatically.
+| Role | What they can do |
+|---|---|
+| Centre director | Punch in and out, take lunch and breaks, see their own punches. Fix other people's shifts on **Clock-ins & timesheets**. |
+| Agency admin | The same, plus **Settings > Clock settings** for the whole agency. |
+| Educator | Punch in and out and see their own punches only. |
 
-This only goes out when **Remind people still on the clock** is switched on.
+## FAQs and troubleshooting
 
-## Email and push switches
+??? The button says "Could not update the clock." | The punch did not save. Check your connection and press the button again. Your recent punches show whether it went through.
+??? I left a shift open overnight. | The time clock only switches between in and out. Clock out now, then ask a director or agency admin to correct the out time on **Clock-ins & timesheets**.
+??? Why did it ask about children still signed in? | You are the one who signed them in and they have not been signed out. Sign them out on the attendance screen, or press **Go ahead anyway** if another educator has taken them over.
+??? It keeps asking for my location. | Your agency uses the HR add-on's clock-in area. Allow location for the site in your browser or the app, and clock in from the centre.
+??? How does it record where I punched from? | Each punch saves whether it came from the web, a kiosk or the mobile app, so managers can tell how a shift was clocked.
 
-The **Send by email** and **Send to the app** switches on the **Reminders** tab apply to
-both reminders. Turn off email and only the notification and push are sent; turn off push
-and only the notification and email are sent. The in-app notification is always added.
+## Related
 
-See also: [Auto sign-off](auto-sign-off), [Timesheets and correcting hours](timesheets).
+[[open: #timesheets | Clock-ins & timesheets]]
+
+- [Timesheets and correcting hours](timesheets)
+- [Auto sign-off](auto-sign-off)
+- [[hr-clock]]
+- [[time-clock-settings]]

@@ -1,82 +1,80 @@
 ---
 title: Reloj de fichaje del personal
-category: Daily Operations
-order: 76
 ---
 # Reloj de fichaje del personal
 
-Cada miembro del personal ficha su entrada al comenzar el turno y su salida al terminar. Lo encontrará en **Personal → Reloj de fichaje** en la barra lateral.
+El **Reloj de fichaje** es donde usted ficha la entrada al empezar su turno, sale a almorzar o a un descanso, y ficha la salida al terminar. Cada fichaje alimenta las horas que su agencia ve en las hojas de horas y en la nómina. Los directores lo usan para sus propios turnos; para ver y corregir las horas de los demás, use **Clock-ins & timesheets**.
 
-## Fichar
+[[open: #time-clock | Abrir Reloj de fichaje]]
 
-La pantalla muestra un único botón grande:
+La tarjeta del centro le dice cómo está: «You're currently clocked out.», «You're clocked in since» con una hora y las horas transcurridas, o «You're on lunch» / «You're on a break».
 
-- **«Fichar entrada» en verde** cuando no está en un turno
-- **«Fichar salida» en rojo** cuando sí lo está, con las horas transcurridas a la vista
+## Fichar entrada
 
-Púlselo. Ese es todo el proceso.
+1. Abra **Operations > Reloj de fichaje**.
+2. Pulse el botón verde **Fichar entrada**.
+3. Si su agencia pide su ubicación, se abre la ventana «Share your location to clock in». Pulse **Share location** para continuar.
+4. El botón se vuelve rojo y dice **Fichar salida**, y la tarjeta muestra la hora de entrada.
 
-## Fichajes recientes
+## Tomar el almuerzo o un descanso corto
 
-La lista bajo el botón muestra sus últimos 60 fichajes con las marcas de entrada y salida y el total de horas. Un turno abierto (en curso) muestra «— en curso —» en lugar de una duración.
+Mientras tiene la entrada fichada, aparecen dos botones debajo del botón grande.
 
-## Vista del gerente
+1. Pulse **🍽️ Almuerzo** o **☕ Short break** cuando deje el salón. Sigue en el turno de hoy.
+2. El botón grande se vuelve morado y dice **I'm back**, y la tarjeta indica desde cuándo está fuera.
+3. Al regresar, pulse **I'm back**.
+4. Confirme **Yes, I’m back** en la ventana que pregunta «Are you back from lunch?» (o «from your break?»). Pulse **Still on lunch** o **Still on break** si lo tocó por error.
 
-Los directores y administradores de agencia ven los fichajes de cada miembro del personal de su centro en
-**Hojas de horas**, que reúne las entradas del reloj de fichaje y los registros de turnos manuales.
+## Fichar salida
 
-Cada fila allí tiene un menú **⋮**: corregir un turno, añadir uno que nunca se fichó o
-eliminar uno que nunca ocurrió. El reloj de un educador solo alterna entre entrada y salida, así que un turno dejado abierto
-durante la noche solo puede corregirse desde allí. Vea [Hojas de horas y corrección de horas](timesheets).
+1. Pulse el botón rojo **Fichar salida**.
+2. Si los niños a los que usted registró la entrada siguen registrados, una ventana los muestra y explica qué hacer. Regístreles la salida primero, o pulse **Go ahead anyway** si otra persona está a cargo de ellos.
+3. El botón vuelve a verde y el turno aparece en **Fichajes recientes** con sus horas.
 
-## Campo de origen
+## Leer sus fichajes recientes
 
-Cada fichaje registra de dónde vino (web, quiosco o móvil), para que pueda saber cómo se fichó un turno.
+**Fichajes recientes** muestra sus turnos, del más nuevo al más antiguo. Cada fila muestra la fecha, las horas de entrada y salida, «lunch» o «break» cuando ese fue el motivo de la salida, y las horas. Un punto verde es un turno terminado; un punto ámbar con **In progress** es el turno en curso.
 
-## Ajustes de recordatorios y cierre automático
+> 💡 ¿Olvidó fichar la entrada o la salida? No puede cambiar un fichaje aquí. Pida a su director o administrador de agencia que lo corrija en **Clock-ins & timesheets**, o vea [Hojas de horas y corrección de horas](timesheets).
 
-**Ajustes → Ajustes del reloj** contiene las dos mitades del reloj de fichaje:
+## Recordatorios y cierre automático
 
-- **Recordatorios** — cuándo avisar a alguien que no ha fichado la entrada, y a alguien que sigue
-  fichado. Ajuste las horas a su jornada; un centro que abre a las 06:00 no debería recibir el recordatorio
-  a las 10:00 como todos los demás.
-- **Cierre automático** — cierra los turnos y las jornadas de niños que alguien olvidó cerrar.
-  El mismo ajuste también está en **Ajustes → Control de salas → Cierre automático**.
+**Configuración > Ajustes del reloj** (administradores de agencia) reúne las dos mitades del reloj de fichaje:
 
-Los recordatorios se comprueban una vez por hora, así que salen durante la hora que elija en lugar de
-a un minuto exacto. Ambos se configuran por agencia, en su propia zona horaria.
+- **Reminders**: cuándo avisar a alguien que no ha fichado la entrada y a alguien que sigue fichado. Un centro que abre a las 6:00 puede recibir sus recordatorios antes que los demás.
+- **Auto sign-off**: cierra los turnos y los días de los niños que alguien olvidó cerrar. El mismo ajuste está en **Settings > Room Controls > Auto sign-off**.
 
-## Quién recibe el recordatorio de «sigue fichado»
+Los recordatorios se revisan una vez por hora, así que llegan durante la hora que elija y no a un minuto exacto, en la zona horaria de su agencia.
 
-A la hora que establezca en **Recordar a quienes siguen fichados**, KiddieTrac revisa cada
-turno aún abierto, incluido uno dejado abierto un día anterior (hasta 14 días atrás). Se recuerda a una
-persona cuando:
+### Quién recibe el recordatorio de «sigue fichado»
 
-- su turno programado para el día ha terminado, si tiene uno; y
-- lleva fichada más tiempo que su jornada habitual más una hora. Sin historial,
-  son 6 horas. Nunca es menos de 5 horas y **nunca más de 8 horas**, de modo que el
-  recordatorio siempre llega antes del cierre automático nocturno.
+A la hora fijada en **Remind people still on the clock**, KiddieTrac revisa cada turno todavía abierto, incluso uno que quedó abierto un día anterior (hasta 14 días atrás). Una persona recibe el recordatorio cuando su turno programado ya terminó (si tiene uno) y lleva fichada más tiempo que su jornada habitual más una hora. Sin historial, son 6 horas. Nunca es menos de 5 horas ni más de 8, para que el recordatorio llegue siempre antes del cierre automático de la noche. Los turnos cerrados automáticamente no cuentan al calcular la jornada habitual, y nadie recibe el recordatorio en un día de ausencia aprobada.
 
-Los turnos que cerró el cierre automático se excluyen al calcular la jornada habitual de alguien.
-Sin eso, una persona que olvida con frecuencia parecería trabajar jornadas de 12 horas y
-nunca recibiría el recordatorio.
+A la misma hora, los educadores reciben aviso de los niños que siguen registrados: quien registró la entrada de cada niño, o los educadores del salón cuando lo hizo un padre. El recordatorio muestra a los niños y, si el cierre automático de niños está activado, indica a qué hora se les registrará la salida automáticamente. Solo se envía cuando **Remind people still on the clock** está activado.
 
-Nadie recibe recordatorio en un día con tiempo libre aprobado.
+Los interruptores **Send by email** y **Send to the app** de la pestaña **Reminders** se aplican a los dos recordatorios. La notificación dentro de la app siempre se agrega.
 
-## Niños que siguen registrados
+## Quién puede hacer qué
 
-A la misma hora, también se avisa a los educadores sobre los **niños que siguen registrados**. El recordatorio
-va a quien registró la entrada de cada niño. Si lo hizo un padre o madre, va a
-los educadores asignados a la sala de ese niño. Enumera a los niños, pide al educador
-que registre su salida a la hora de recogida y, si el cierre automático de niños está activado, indica a qué hora
-se les cerrará automáticamente.
+| Rol | Qué puede hacer |
+|---|---|
+| Director de centro | Fichar entrada y salida, tomar almuerzo y descansos, ver sus propios fichajes. Corregir los turnos de otros en **Clock-ins & timesheets**. |
+| Administrador de agencia | Lo mismo, además de **Ajustes del reloj** para toda la agencia. |
+| Educador | Fichar entrada y salida y ver solo sus propios fichajes. |
 
-Esto solo se envía cuando **Recordar a quienes siguen fichados** está activado.
+## Preguntas frecuentes y solución de problemas
 
-## Interruptores de correo electrónico y push
+??? El botón dice «Could not update the clock.» | El fichaje no se guardó. Revise su conexión y pulse el botón otra vez. Sus fichajes recientes muestran si se registró.
+??? Dejé un turno abierto toda la noche. | El reloj solo cambia entre entrada y salida. Fiche la salida ahora y pida a un director o administrador de agencia que corrija la hora de salida en **Clock-ins & timesheets**.
+??? ¿Por qué me preguntó por niños que siguen registrados? | Usted registró su entrada y todavía no se les ha registrado la salida. Regístreles la salida en la pantalla de asistencia, o pulse **Go ahead anyway** si otro educador quedó a cargo.
+??? Me sigue pidiendo mi ubicación. | Su agencia usa la zona de fichaje del complemento de RR. HH. Permita la ubicación para el sitio en su navegador o en la app, y fiche desde el centro.
+??? ¿Cómo se registra desde dónde fiché? | Cada fichaje guarda si vino de la web, de un quiosco o de la app móvil, para que los gerentes sepan cómo se fichó el turno.
 
-Los interruptores **Enviar por correo electrónico** y **Enviar a la aplicación** de la pestaña **Recordatorios** se aplican a
-ambos recordatorios. Si desactiva el correo, solo se envían la notificación y el push; si desactiva el push,
-solo se envían la notificación y el correo. La notificación dentro de la aplicación siempre se añade.
+## Relacionado
 
-Vea también: [Cierre automático](auto-sign-off), [Hojas de horas y corrección de horas](timesheets).
+[[open: #timesheets | Clock-ins & timesheets]]
+
+- [Hojas de horas y corrección de horas](timesheets)
+- [Cierre automático](auto-sign-off)
+- [[hr-clock]]
+- [[time-clock-settings]]
