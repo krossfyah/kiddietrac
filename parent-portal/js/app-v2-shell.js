@@ -430,8 +430,9 @@
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
         ]},
-        { label: 'Growth', items: [
-          { hash: 'marketing-campaigns', label: 'Marketing',   icon: '📯' },
+        // "Growth" -> "Marketing", and its "Marketing" entry -> "Campaigns" (Anthony, 2026-11-27). Hashes unchanged.
+        { label: 'Marketing', items: [
+          { hash: 'marketing-campaigns', label: 'Campaigns',   icon: '📯' },
           { hash: 'tours',               label: 'Tours',       icon: '🚪' },
           { hash: 'sms',                 label: 'SMS broadcast', icon: '📱', badgeKey: 'sms_replies' },
           { hash: 'ai-churn',            label: 'Churn risk',  icon: '📉' },
@@ -662,8 +663,9 @@
           { hash: 'forms-manager',     label: 'Forms Manager',     icon: '🗂️' },
           { hash: 'digest-status', label: 'AI digest status', icon: '📰' },
         ]},
-        { label: 'Growth', items: [
-          { hash: 'marketing-campaigns', label: 'Marketing',  icon: '📯' },
+        // "Growth" -> "Marketing", and its "Marketing" entry -> "Campaigns" (Anthony, 2026-11-27). Hashes unchanged.
+        { label: 'Marketing', items: [
+          { hash: 'marketing-campaigns', label: 'Campaigns',  icon: '📯' },
           { hash: 'tours',              label: 'Tours',       icon: '🚪' },
           { hash: 'sms',                label: 'SMS broadcast', icon: '📱', badgeKey: 'sms_replies' },
           { hash: 'ai-churn',           label: 'Churn risk',  icon: '📉' },

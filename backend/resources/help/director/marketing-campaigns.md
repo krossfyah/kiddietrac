@@ -7,7 +7,7 @@ order: 36
 # Marketing campaigns
 
 Compose rich newsletters, open-house invites and promotions, then send them to
-the families you choose. Sidebar → **Campaigns**.
+the families you choose. Sidebar → **Marketing → Campaigns** (this group used to be called Growth).
 
 ![Click + New campaign on the Campaigns screen](https://api.kiddietrac.com/help-img/campaigns.png)
 
@@ -18,11 +18,18 @@ the families you choose. Sidebar → **Campaigns**.
    - **Campaign title** (internal) and **Email subject**.
    - **Audience** — all families / currently enrolled / waitlist / prospects /
      staff.
-   - **Channel** — in-portal, email, or both.
+   - **Channel** — in-portal (a News post), email, or both (the email plus a News post).
    - **Hero image** (optional) — upload a banner shown at the top of the message.
    - **Body** — use the rich-text editor (fonts, colours, headings, lists,
      links, images).
    - **Schedule** (optional) — leave blank to send manually.
+
+## Greeting each family by name
+
+Type **{first_name}** anywhere in the body or the email subject, or press **👤 First name** in the editor
+toolbar. Each family's email then uses their own first name: "Hi {first_name}," arrives as "Hi Sarah,".
+Where there is no single reader (the News post every family sees) or no first name on file, it reads
+"there" ("Hi there,"). Preview and View show it with a sample name.
 
 ## White-label header
 
@@ -39,6 +46,12 @@ plan and above; it's switched on when the agency is enrolled in that package.)
 Click **👁 Preview** to see the campaign exactly as recipients will get it — the
 white-label header, your hero image and body, and the footer. Always preview
 before you send.
+
+## Viewing a campaign
+
+In the campaigns list, open a row's **⋮** and choose **View**. A popup shows the email exactly as
+families get it (with a sample first name), plus its status, audience, channel, subject, preview text,
+schedule and, once sent, the delivery counts. View never sends anything.
 
 ## The footer
 

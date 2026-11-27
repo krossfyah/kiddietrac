@@ -5,7 +5,7 @@ order: 78
 ---
 # Reservas de visitas
 
-Las familias interesadas pueden solicitar una visita al centro a través de su punto de acceso público de reservas. Las visitas confirmadas pasan al calendario del personal para que los directores sepan quién viene y cuándo. La vista de gestión está en **Crecimiento → Visitas**.
+Las familias interesadas pueden solicitar una visita al centro a través de su punto de acceso público de reservas. Las visitas confirmadas pasan al calendario del personal para que los directores sepan quién viene y cuándo. La vista de gestión está en **Marketing → Visitas**.
 
 ## El enlace público
 

@@ -91,4 +91,47 @@ final class FamilyNoticeMail
             ]),
         ];
     }
+
+    /**
+     * The parent welcome with sign-in details (App\Mail\WelcomeEmail, role parent; sent from FamilyController::invite
+     * when a director adds a guardian who has no account yet). It used the old KiddieTrac-only Blade layout
+     * (emails.welcome); now the house frame, so a white-label agency's branding, footer and dark palette apply.
+     *
+     * The content is the same as before: the sign-in email, the temporary password the invite created (the only way
+     * this flow gives one; it is printed exactly as the Blade one was, never stored or logged here), the same sign-in
+     * link ($appUrl), and "please change your password after your first login". The centre is named the way families
+     * know it (FamilyFacingName: the agency for a provider-named home), the product by the agency's brand.
+     *
+     * @return array{subject:string, html:string}
+     */
+    public static function welcome(?int $agencyId, ?int $centreId, string $first, string $email, string $tempPassword,
+        ?string $childNames, string $appUrl): array
+    {
+        $org = FamilyFacingName::org($centreId, $agencyId, 'your child care');
+        $product = Brand::name($agencyId) ?: 'KiddieTrac';
+        $team = self::team($agencyId);
+        $creds = '<table role="presentation" class="kt-panel" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:12px;margin:0 0 16px;"><tr>'
+            . '<td style="padding:14px 18px;font-size:14px;line-height:1.7;color:#0F172A;">'
+            . '<strong>Email:</strong> ' . self::e($email) . '<br>'
+            . '<strong>Temporary password:</strong> <span style="font-family:\'SF Mono\',Menlo,Consolas,monospace;">' . self::e($tempPassword) . '</span>'
+            . '</td></tr></table>';
+        $body = self::p('Hi ' . self::e($first) . ',')
+            . self::p('You\'ve been invited by <strong>' . self::e($org) . '</strong> to use ' . self::e($product) . ', a modern way to stay connected to your child\'s day.')
+            . ($childNames ? self::p('Your account is linked to: <strong>' . self::e($childNames) . '</strong>') : '')
+            . self::p('Through the parent app, you can see daily updates, get photos, chat with your educators, and view your billing.')
+            . '<div class="kt-h" style="margin:6px 0 8px;font-size:17px;font-weight:800;color:#0B1F3A;">Your login</div>'
+            . $creds
+            . self::button($agencyId, 'Log in to ' . $product, $appUrl)
+            . self::p('Please change your password after your first login. If you didn\'t expect this email, you can safely ignore it.', 'font-size:13px;color:#64748B;')
+            . self::signoff($team);
+
+        return [
+            'subject' => 'You\'ve been invited to ' . $org . ' on ' . $product,
+            'html' => EmailTemplate::wrap($agencyId, $body, [
+                'eyebrow' => '👋 WELCOME', 'title' => 'Welcome to ' . $product,
+                'subtitle' => 'From ' . $org,
+                'preheader' => 'You\'ve been invited to ' . $org . ' on ' . $product . '. Your login details are inside.',
+            ]),
+        ];
+    }
 }

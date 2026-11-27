@@ -196,6 +196,7 @@ final class EmailTemplate
             // KiddieTrac's LinkedIn / YouTube / Facebook row (App\Support\SocialLinks, 2026-11-02).
             . '.kt-footer .kt-social a,.kt-footer .kt-social span{color:#7CC3E8 !important;}'
             . '.kt-logobox{background:#FFFFFF !important;}'
+            . '.kt-footer img.kt-flogo{background:#FFFFFF !important;padding:6px 10px !important;border-radius:8px !important;opacity:1 !important;}'
             . '}'
             /* OUTLOOK.COM / OUTLOOK APPS IN DARK MODE (2026-10-31). They ignore prefers-color-scheme and instead mark
                what they recolour with [data-ogsc] (text) / [data-ogsb] (backgrounds). The same palette as above, so a
@@ -217,6 +218,7 @@ final class EmailTemplate
             // name in "You're receiving this from", the agency phone) - same palette as the prefers-color-scheme rules.
             . '[data-ogsc] .kt-footer strong{color:#CBD5E1 !important;}[data-ogsc] .kt-footer a{color:#7CC3E8 !important;}'
             . '[data-ogsc] .kt-footer .kt-fname{color:#E2E8F0 !important;}'
+            . '[data-ogsb] .kt-footer img.kt-flogo{background:#FFFFFF !important;padding:6px 10px !important;border-radius:8px !important;}'
             . '</style>'
             . '</head>'
             . '<body class="kt-bg" style="margin:0;padding:24px 12px;background:#F4F6F9;' . $css . '">'
@@ -635,7 +637,10 @@ final class EmailTemplate
                 // contents, and this is contact information now, not a decorative mark.
                 $html .= '<div style="text-align:left;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #E7EBF0;">';
                 if ($agencyLogo) {
-                    $html .= '<img src="' . htmlspecialchars($agencyLogo) . '" alt="' . $agencyName
+                    /* class kt-flogo (2026-11-27, Anthony: a white-label agency's footer logo looked faint in dark
+                       mode). Nothing changes in light mode; the dark rules below put it on a small white plate, the
+                       way .kt-logobox already backs the header logo, so a dark or transparent logo stays readable. */
+                    $html .= '<img class="kt-flogo" src="' . htmlspecialchars($agencyLogo) . '" alt="' . $agencyName
                         . '" height="34" style="max-height:34px;width:auto;display:block;margin:0 0 8px;border:0;">';
                 }
                 if ($agencyName !== '') {

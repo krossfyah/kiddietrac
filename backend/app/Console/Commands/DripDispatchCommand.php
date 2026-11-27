@@ -62,11 +62,16 @@ final class DripDispatchCommand extends Command
                     continue;
                 }
                 try {
-                    $bodyHtml = EmailTemplate::wrap((int) $c->agency_id, $c->body_html, [
+                    /* {first_name} (2026-11-27): the person's own first name when the address is someone's account,
+                       else "there", so the token never goes out as written. */
+                    $first = \App\Support\CampaignMerge::has($c->body_html . ' ' . $c->subject)
+                        ? DB::table('users')->where('email', $s['email'])->whereNull('deleted_at')->value('first_name') : null;
+                    $bodyHtml = \App\Support\CampaignMerge::html(EmailTemplate::wrap((int) $c->agency_id, $c->body_html, [
                         'eyebrow' => 'A NOTE FROM US', 'title' => $c->subject,
-                    ]);
-                    $dripBuild = function ($m) use ($s, $c) {
-                        $m->to($s['email'])->subject($c->subject);
+                    ]), $first);
+                    $dripSubject = \App\Support\CampaignMerge::text($c->subject, $first);
+                    $dripBuild = function ($m) use ($s, $dripSubject) {
+                        $m->to($s['email'])->subject($dripSubject);
                     };
                     if ($dripSender) {
                         \App\Support\RsvpSender::html($dripSender, (int) $c->agency_id, $bodyHtml, $dripBuild);

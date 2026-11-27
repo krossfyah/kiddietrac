@@ -5,7 +5,7 @@ order: 78
 ---
 # Réservations de visites
 
-Les familles intéressées peuvent demander une visite du centre par l’intermédiaire de votre point d’accès public de réservation. Les visites confirmées alimentent le calendrier du personnel afin que les directeurs sachent qui vient et quand. La vue de gestion se trouve sous **Croissance → Visites**.
+Les familles intéressées peuvent demander une visite du centre par l’intermédiaire de votre point d’accès public de réservation. Les visites confirmées alimentent le calendrier du personnel afin que les directeurs sachent qui vient et quand. La vue de gestion se trouve sous **Marketing → Visites**.
 
 ## Le lien public
 

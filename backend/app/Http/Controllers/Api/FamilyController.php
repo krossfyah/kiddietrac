@@ -261,6 +261,8 @@ final class FamilyController extends Controller
                     centreName: $centre->name,
                     role: 'parent',
                     childNames: $childNames ?: null,
+                    agencyId: (int) $centre->agency_id ?: null,
+                    centreId: (int) $centre->id,
                 ))->withSymfonyMessage(function ($msg) use ($centre) {
                     \App\Support\MailScope::centre($msg, (int) $centre->id);
                 }));

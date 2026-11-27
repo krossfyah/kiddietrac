@@ -20,6 +20,11 @@
   }
   function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
   function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return d; } }
+  /* {first_name} (2026-11-27): the server fills it per recipient (App\Support\CampaignMerge, same spellings).
+     Preview and View show it with a sample name. */
+  var FIRST_NAME_RE = /\{\{?\s*first[\s_-]?name\s*\}?\}/gi;
+  var SAMPLE_NAME = 'Sarah';
+  function withSample(s, isHtml) { return s == null ? s : String(s).replace(FIRST_NAME_RE, isHtml ? esc(SAMPLE_NAME) : SAMPLE_NAME); }
   function normUrl(u) { if (!u) return ''; return /^https?:\/\//i.test(u) ? u : 'https://' + u; }
   function activeAgencyId() {
     try { var a = parseInt(sessionStorage.getItem('kt_active_agency_id'), 10); if (a) return a; } catch (e) {}
@@ -116,6 +121,9 @@
     // standard ⋮ kebab because the list is [data-kt-list] and this is the row's last
     // child holding only action buttons. Row click still opens the composer.
     var actionsBar = Dom.el('div', { style: 'display:flex;gap:6px;flex-shrink:0;' });
+    // View (2026-11-27): the email as families get it, read-only, in the house popup. Never sends.
+    var viewBtn = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-view kt-icon-tip', 'data-kttip': 'View', 'aria-label': 'View' }, '👁️');
+    viewBtn.addEventListener('click', function (e) { e.stopPropagation(); openView(c, container); });
     var editBtn = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-edit kt-icon-tip', 'data-kttip': 'Edit', 'aria-label': 'Edit' }, '✏️');
     editBtn.addEventListener('click', function (e) { e.stopPropagation(); openComposer(c, container); });
     var delBtn = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-danger kt-icon-tip', 'data-kttip': 'Delete', 'aria-label': 'Delete' }, '🗑️');
@@ -124,6 +132,7 @@
       if (!await KT.confirm('Delete this campaign? This cannot be undone.')) return;
       Api.delete('/marketing/campaigns/' + c.id).then(function () { render(container); });
     });
+    actionsBar.appendChild(viewBtn);
     actionsBar.appendChild(editBtn);
     actionsBar.appendChild(delBtn);
     row.appendChild(actionsBar);
@@ -191,7 +200,7 @@
     body.appendChild(titleIn);
 
     // Subject (email)
-    body.appendChild(labelEl('Email subject (used when channel includes email)'));
+    body.appendChild(labelEl('Email subject (used when channel includes email) · {first_name} works here too'));
     var subjectIn = Dom.el('input', { type: 'text', placeholder: 'Save the date: our spring open house', value: existing ? (existing.subject || '') : '', style: inputStyle() });
     body.appendChild(subjectIn);
 
@@ -557,6 +566,9 @@
     });
 
     body.appendChild(buildRichEditor(existing ? existing.body_html : '', function () { return null; }));
+    body.appendChild(Dom.el('div', { class: 'kt-campaign-merge-hint', style: 'font-size:12px;color:#64748B;line-height:1.45;margin:-8px 0 14px;' },
+      'Tip: press 👤 First name (or type {first_name}) to greet each family by name, e.g. "Hi {first_name}," arrives as "Hi Sarah,". '
+      + 'In the News post, and for anyone without a first name on file, it reads "there" ("Hi there,").'));
 
     // Schedule
     body.appendChild(labelEl('Schedule (optional — leave blank to send manually)'));
@@ -765,6 +777,16 @@
     }));
     toolbar.appendChild(divider());
 
+    // ── Merge field: the reader's first name (2026-11-27) ──────────
+    // Inserted as plain text so it is never split across tags (the server only fills a whole token).
+    toolbar.appendChild(btn('👤 First name', 'Insert the reader’s first name. "Hi {first_name}," arrives as "Hi Sarah,"', function () {
+      editor.focus();
+      if (!document.execCommand('insertText', false, '{first_name}')) {
+        document.execCommand('insertHTML', false, '{first_name}');
+      }
+    }));
+    toolbar.appendChild(divider());
+
     // ── Link + image ──────────────────────────────────────────────
     toolbar.appendChild(btn('🔗', 'Insert link', async function () {
       // A KiddieTrac dialog takes focus: keep the selection and put it back before linking.
@@ -827,6 +849,8 @@
     var name = brand.brand_name || 'Your agency';
     var logo = brand.brand_logo_url ? absUrl(brand.brand_logo_url) : '';
     var hero = payload.hero_image_url ? absUrl(payload.hero_image_url) : '';
+    // The reader's first name shows as the sample name, as it will for each family.
+    payload = Object.assign({}, payload, { subject: withSample(payload.subject, false), body_html: withSample(payload.body_html, true) });
 
     var headerHtml;
     if (whiteLabel) {
@@ -896,6 +920,92 @@
     overlay.appendChild(frame);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
+  }
+
+  // ── View (read-only) ───────────────────────────────────────────────
+  /* THE ⋮ VIEW (2026-11-27, Anthony: "with the campaign table and kebab add ability to view the campaign in a
+     popup"). The house popup (KT.Shell.Modal: navy-to-teal header, ✕ in the header, the body is the one scroll
+     region). The email is the server's own build (GET /marketing/campaigns/{id}?render=1, the same builder the
+     send uses) with {first_name} shown as a sample name. Reads only: nothing here sends or saves. */
+  var AUDIENCE_LABEL = { all_families: 'All families', active_families: 'Currently enrolled', waitlist: 'Waitlist', prospects: 'Prospects (no active child)', staff: 'Staff only', custom: 'Custom' };
+  var CHANNEL_LABEL = { in_portal: 'In-portal (News post)', email: 'Email', both: 'Email + News post' };
+  function when(ts) {
+    if (!ts) return '—';
+    try { return KT.fmtDateTime ? KT.fmtDateTime(ts) : fmtDate(ts); } catch (e) { return String(ts); }
+  }
+  function openView(c, container) {
+    var M = KT.Shell && KT.Shell.Modal;
+    if (!M || !M.open) { openComposer(c, container); return; }
+    var bodyEl = Dom.el('div', { class: 'kt-campaign-view', 'data-kt-scroll': '1' });
+    bodyEl.appendChild(Dom.el('div', { style: 'padding:24px;text-align:center;color:#64748B;' }, 'Loading…'));
+    var actions = [{ label: 'Close' }];
+    if (c.status !== 'sent' && c.status !== 'sending') {
+      actions.push({ label: 'Edit', primary: true, handler: function () { openComposer(c, container); } });
+    }
+    M.open({ title: '👁 ' + (c.title || 'Campaign'), body: bodyEl, actions: actions, large: true });
+
+    Api.get('/marketing/campaigns/' + c.id + '?render=1&sample=' + encodeURIComponent(SAMPLE_NAME)).then(function (r) {
+      var row = (r && r.campaign) || c;
+      var em = (r && r.email) || null;
+      Dom.clear(bodyEl);
+
+      var facts = [
+        ['Status', (row.status || '').charAt(0).toUpperCase() + (row.status || '').slice(1)],
+        ['Audience', AUDIENCE_LABEL[row.audience] || row.audience || '—'],
+        ['Channel', CHANNEL_LABEL[row.channel] || row.channel || '—'],
+        ['Subject', em ? em.subject : (row.subject || '—')],
+        ['Preview text', em && em.preheader ? em.preheader : '—'],
+        ['Scheduled for', when(row.scheduled_for)],
+        ['Sent', when(row.sent_at)],
+      ];
+      if (row.sent_at) {
+        facts.push(['Recipients', row.recipient_count != null ? String(row.recipient_count) : '—']);
+        if (row.channel === 'email' || row.channel === 'both') {
+          facts.push(['Emailed', row.email_sent_at
+            ? (row.email_delivery_count || 0) + ' delivered' + (row.email_failure_count ? ', ' + row.email_failure_count + ' failed' : '') + ' · ' + when(row.email_sent_at)
+            : 'Sending' + (row.email_progress ? ' (' + row.email_progress + ' / ' + (row.recipient_count || '?') + ')' : '')]);
+          if (row.email_from) facts.push(['Sent from', row.email_from]);
+        }
+        facts.push(['Opens · clicks', (row.open_count || 0) + ' · ' + (row.click_count || 0)]);
+      }
+      var grid = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 18px;margin:0 0 16px;' });
+      facts.forEach(function (f) {
+        var cell = Dom.el('div', { style: 'min-width:0;' });
+        cell.appendChild(Dom.el('div', { style: 'font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#64748B;' }, f[0]));
+        cell.appendChild(Dom.el('div', { style: 'font-size:13.5px;color:#0F172A;overflow-wrap:anywhere;' }, f[1] || '—'));
+        grid.appendChild(cell);
+      });
+      bodyEl.appendChild(grid);
+
+      if (!em) {
+        bodyEl.appendChild(Dom.el('div', { style: 'padding:14px;border:1px dashed #CBD5E1;border-radius:10px;color:#64748B;font-size:13px;' }, 'The email could not be shown.'));
+        return;
+      }
+      bodyEl.appendChild(Dom.el('div', { style: 'font-size:12px;color:#64748B;margin:0 0 8px;' },
+        row.channel === 'in_portal'
+          ? 'In-portal only: families read this in News. Shown here in the email frame.'
+          : (em.uses_first_name ? 'The email each family receives. {first_name} is shown as "' + (em.sample_name || SAMPLE_NAME) + '"; each family sees their own.' : 'The email each family receives.')));
+
+      /* The email in a sandboxed frame: no scripts run, links open in a new tab, the frame grows to the email's
+         height so the popup body stays the one scroll region. */
+      var frame = Dom.el('iframe', { title: 'Campaign email', sandbox: 'allow-same-origin allow-popups allow-popups-to-escape-sandbox', scrolling: 'no',
+        style: 'display:block;width:100%;min-height:420px;border:1px solid #E2E8F0;border-radius:12px;background:#F4F6F9;' });
+      var html = String(em.html || '').replace(/<head>/i, '<head><base target="_blank">');
+      frame.srcdoc = html;
+      function fit() {
+        try { var d = frame.contentDocument; if (d && d.documentElement) frame.style.height = (d.documentElement.scrollHeight + 4) + 'px'; } catch (e) {}
+      }
+      frame.addEventListener('load', function () {
+        fit();
+        try { Array.prototype.forEach.call(frame.contentDocument.images || [], function (im) { if (!im.complete) im.addEventListener('load', fit); }); } catch (e) {}
+      });
+      var onResize = function () { if (!frame.isConnected) { window.removeEventListener('resize', onResize); return; } fit(); };
+      window.addEventListener('resize', onResize);
+      bodyEl.appendChild(frame);
+    }).catch(function (e) {
+      Dom.clear(bodyEl);
+      bodyEl.appendChild(Dom.el('div', { style: 'padding:18px;color:#B91C1C;' }, 'Could not open this campaign. ' + ((e && e.message) || '')));
+    });
   }
 
   // ── Tiny styling helpers ───────────────────────────────────────────

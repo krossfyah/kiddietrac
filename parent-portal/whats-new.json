@@ -4,6 +4,42 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "👤",
+            "title": "Greet each family by first name in campaigns",
+            "body": "In Marketing › Campaigns, press 👤 First name in the editor (or type {first_name}) and each family's email greets them by their own first name: \"Hi {first_name},\" arrives as \"Hi Sarah,\". In the News post, and for anyone without a first name on file, it reads \"there\". Preview shows a sample name.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Saluez chaque famille par son prénom dans les campagnes",
+            "body_fr": "Dans Marketing › Campagnes, appuyez sur 👤 Prénom dans l'éditeur (ou tapez {first_name}) : le courriel de chaque famille la salue par son propre prénom. « Hi {first_name}, » arrive sous la forme « Hi Sarah, ». Dans la publication Nouvelles, et pour toute personne sans prénom au dossier, le texte affiche « there ». L'aperçu montre un prénom d'exemple.",
+            "title_es": "Salude a cada familia por su nombre en las campañas",
+            "body_es": "En Marketing › Campañas, pulse 👤 Nombre en el editor (o escriba {first_name}) y el correo de cada familia la saludará por su propio nombre: «Hi {first_name},» llega como «Hi Sarah,». En la publicación de Noticias, y para quien no tenga nombre registrado, se lee «there». La vista previa muestra un nombre de ejemplo.",
+            "title_hi": "अभियानों में हर परिवार को उसके पहले नाम से संबोधित करें",
+            "body_hi": "मार्केटिंग › अभियान में एडिटर में 👤 पहला नाम दबाएँ (या {first_name} लिखें), और हर परिवार का ईमेल उन्हें उनके अपने पहले नाम से संबोधित करेगा: \"Hi {first_name},\" \"Hi Sarah,\" के रूप में पहुँचता है। समाचार पोस्ट में, और जिनका पहला नाम दर्ज नहीं है उनके लिए, यह \"there\" दिखाता है। पूर्वावलोकन एक नमूना नाम दिखाता है।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "📯",
+            "title": "Growth is now Marketing, with Campaigns and a View popup",
+            "body": "The sidebar group Growth is now called Marketing, and its Marketing screen is now Campaigns (same place, same links). In the campaigns list, ⋮ › View opens any campaign in a popup: the email exactly as families get it, plus status, audience, channel, subject, preview text, dates and delivery counts. View never sends anything.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Croissance devient Marketing, avec Campagnes et une fenêtre Voir",
+            "body_fr": "Le groupe Croissance de la barre latérale s'appelle maintenant Marketing, et son écran Marketing s'appelle Campagnes (même endroit, mêmes liens). Dans la liste des campagnes, ⋮ › Voir ouvre une campagne dans une fenêtre : le courriel tel que les familles le reçoivent, avec le statut, les destinataires, le canal, l'objet, le texte d'aperçu, les dates et les nombres d'envois. Voir n'envoie jamais rien.",
+            "title_es": "Crecimiento ahora es Marketing, con Campañas y una ventana Ver",
+            "body_es": "El grupo Crecimiento de la barra lateral ahora se llama Marketing, y su pantalla Marketing ahora es Campañas (mismo lugar, mismos enlaces). En la lista de campañas, ⋮ › Ver abre cualquier campaña en una ventana: el correo tal como lo reciben las familias, con estado, audiencia, canal, asunto, texto de vista previa, fechas y totales de entrega. Ver nunca envía nada.",
+            "title_hi": "विकास अब मार्केटिंग है, अभियान और देखें पॉपअप के साथ",
+            "body_hi": "साइडबार का समूह विकास अब मार्केटिंग कहलाता है, और उसकी मार्केटिंग स्क्रीन अब अभियान है (वही जगह, वही लिंक)। अभियानों की सूची में ⋮ › देखें किसी भी अभियान को पॉपअप में खोलता है: ईमेल ठीक वैसा जैसा परिवारों को मिलता है, साथ में स्थिति, दर्शक, चैनल, विषय, पूर्वावलोकन पाठ, तारीखें और डिलीवरी की गिनती। देखें कभी कुछ नहीं भेजता।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "📊",
             "title": "HR reports: headcount, turnover, leave liability and more",
             "body": "HR > Reports has headcount by centre and type, starters and leavers with turnover and retention, length of service, leave liability (for people who can see pay), overtime, lateness, schedule vs worked, leave this year vs last, team absence for any dates and everything we hold about one person. Print any report, or export it as CSV, Excel or PDF.",

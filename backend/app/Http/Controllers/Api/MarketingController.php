@@ -205,6 +205,24 @@ final class MarketingController extends Controller
         if (! \App\Support\CentreScope::canRead($this->campaignScope($request, (int) $agencyId), $row->centre_id, true)) {
             return response()->json(['message' => 'Not found'], 404);
         }
+        /* ?render=1 (2026-11-27, the list's ⋮ View): the email exactly as the sender builds it
+           (SendCampaignEmailsCommand::build), with {first_name} filled by a sample name. Read-only: builds HTML,
+           sends nothing, writes nothing. */
+        if ($request->boolean('render')) {
+            $agency = DB::table('agencies')->where('id', $row->agency_id)->first();
+            if ($agency) {
+                $sample = \App\Support\CampaignMerge::firstName((string) $request->query('sample', 'Sarah'));
+                $built = \App\Console\Commands\SendCampaignEmailsCommand::build($row, $agency);
+
+                return response()->json(['campaign' => $row, 'email' => [
+                    'subject' => \App\Support\CampaignMerge::text($built['subject'], $sample),
+                    'preheader' => \App\Support\CampaignMerge::text($built['preheader'], $sample),
+                    'html' => \App\Support\CampaignMerge::html($built['html'], $sample),
+                    'sample_name' => $sample,
+                    'uses_first_name' => \App\Support\CampaignMerge::has($row->body_html . ' ' . $row->subject . ' ' . $row->title),
+                ]]);
+            }
+        }
         return response()->json(['campaign' => $row]);
     }
 
@@ -352,10 +370,11 @@ final class MarketingController extends Controller
             DB::table('announcements')->insert([
                 'scope_type' => $row->centre_id ? 'centre' : 'agency',
                 'scope_id' => $row->centre_id ?: $agencyId,
-                'title' => $row->title,
+                // The News post is one copy every family reads, so {first_name} reads "there" ("Hi there,").
+                'title' => \App\Support\CampaignMerge::text($row->title, null),
                 // The header and footer go out with it, so the in-portal copy reads
                 // the same as the emailed one.
-                'body' => strip_tags($this->composeBody($row), '<p><br><a><img><ul><ol><li><strong><em><h1><h2><h3>'),
+                'body' => strip_tags(\App\Support\CampaignMerge::html($this->composeBody($row), null), '<p><br><a><img><ul><ol><li><strong><em><h1><h2><h3>'),
                 'send_email' => 0,
                 'send_push' => 1,
                 'sent_at' => now(),

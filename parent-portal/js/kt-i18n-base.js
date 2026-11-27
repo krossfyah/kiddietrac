@@ -4365,5 +4365,23 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     'No employment type': { fr: 'Aucun type d\'emploi', es: 'Sin tipo de empleo', hi: 'रोज़गार का प्रकार नहीं' },
     'No pay deposit details': { fr: 'Aucune coordonnée de dépôt de paie', es: 'Sin datos de depósito de nómina', hi: 'वेतन जमा करने का विवरण नहीं' },
     'No SIN / SSN on file': { fr: 'Aucun NAS / SSN au dossier', es: 'Sin SIN / SSN en el expediente', hi: 'फ़ाइल में SIN / SSN नहीं' },
+    // Marketing > Campaigns: {first_name} merge field + the ⋮ View popup (2026-11-27)
+    'First name': { fr: 'Prénom', es: 'Nombre', hi: 'पहला नाम' },
+    '👤 First name': { fr: '👤 Prénom', es: '👤 Nombre', hi: '👤 पहला नाम' },
+    '{first_name} works here too': { fr: '{first_name} fonctionne aussi ici', es: '{first_name} también funciona aquí', hi: '{first_name} यहाँ भी काम करता है' },
+    'Channel': { fr: 'Canal', es: 'Canal', hi: 'चैनल' },
+    'Preview text': { fr: 'Texte d\'aperçu', es: 'Texto de vista previa', hi: 'पूर्वावलोकन पाठ' },
+    'Scheduled for': { fr: 'Prévu pour', es: 'Programado para', hi: 'के लिए निर्धारित' },
+    'Recipients': { fr: 'Destinataires', es: 'Destinatarios', hi: 'प्राप्तकर्ता' },
+    'Emailed': { fr: 'Envoyé par courriel', es: 'Enviado por correo', hi: 'ईमेल किया गया' },
+    'Sent from': { fr: 'Envoyé depuis', es: 'Enviado desde', hi: 'यहाँ से भेजा गया' },
+    'Opens · clicks': { fr: 'Ouvertures · clics', es: 'Aperturas · clics', hi: 'खोले गए · क्लिक' },
+    'View': { fr: 'Voir', es: 'Ver', hi: 'देखें' },
+    'Email + News post': { fr: 'Courriel + publication dans Nouvelles', es: 'Correo + publicación en Noticias', hi: 'ईमेल + समाचार पोस्ट' },
+    'In-portal (News post)': { fr: 'Dans le portail (publication dans Nouvelles)', es: 'En el portal (publicación en Noticias)', hi: 'पोर्टल में (समाचार पोस्ट)' },
+    'The email each family receives.': { fr: 'Le courriel que reçoit chaque famille.', es: 'El correo que recibe cada familia.', hi: 'वह ईमेल जो हर परिवार को मिलता है।' },
+    'The email could not be shown.': { fr: 'Le courriel n\'a pas pu être affiché.', es: 'No se pudo mostrar el correo.', hi: 'ईमेल नहीं दिखाया जा सका।' },
+    'In-portal only: families read this in News. Shown here in the email frame.': { fr: 'Dans le portail seulement : les familles le lisent dans Nouvelles. Affiché ici dans le cadre du courriel.', es: 'Solo en el portal: las familias lo leen en Noticias. Se muestra aquí en el marco del correo.', hi: 'केवल पोर्टल में: परिवार इसे समाचार में पढ़ते हैं। यहाँ ईमेल फ़्रेम में दिखाया गया है।' },
+    'Tip: press 👤 First name (or type {first_name}) to greet each family by name, e.g. "Hi {first_name}," arrives as "Hi Sarah,". In the News post, and for anyone without a first name on file, it reads "there" ("Hi there,").': { fr: 'Astuce : appuyez sur 👤 Prénom (ou tapez {first_name}) pour saluer chaque famille par son prénom; p. ex. « Hi {first_name}, » arrive sous la forme « Hi Sarah, ». Dans la publication Nouvelles, et pour toute personne sans prénom au dossier, le texte affiche « there » (« Hi there, »).', es: 'Consejo: pulse 👤 Nombre (o escriba {first_name}) para saludar a cada familia por su nombre; p. ej., «Hi {first_name},» llega como «Hi Sarah,». En la publicación de Noticias, y para quien no tenga nombre registrado, se lee «there» («Hi there,»).', hi: 'सुझाव: हर परिवार को उसके नाम से संबोधित करने के लिए 👤 पहला नाम दबाएँ (या {first_name} लिखें), जैसे "Hi {first_name}," "Hi Sarah," के रूप में पहुँचता है। समाचार पोस्ट में, और जिनका पहला नाम दर्ज नहीं है उनके लिए, यह "there" दिखाता है ("Hi there,")।' },
 
 });

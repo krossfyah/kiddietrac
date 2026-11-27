@@ -28,7 +28,7 @@
   // Static shortcuts — show even when the search box is empty
   var SHORTCUTS = [
     { label: 'Dashboard',     icon: '🏠', hash: '#dashboard',          kbd: 'D' },
-    { label: 'Marketing',     icon: '📣', hash: '#marketing-campaigns', kbd: 'M' },
+    { label: 'Campaigns',     icon: '📣', hash: '#marketing-campaigns', kbd: 'M' },
     { label: 'Calendar', icon: '📅', hash: '#staff-calendar',     kbd: 'C' },
     { label: 'Children',      icon: '🧒', hash: '#admin-children',     kbd: null },
     { label: 'Families',      icon: '👪', hash: '#admin-families',     kbd: null },

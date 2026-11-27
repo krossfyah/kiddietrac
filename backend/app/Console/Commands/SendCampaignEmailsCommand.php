@@ -75,16 +75,8 @@ final class SendCampaignEmailsCommand extends Command
                 continue;
             }
 
-            $brand = $agency->brand_primary_color ?: '#1F6080';
-            $subjectFallback = '[' . $agency->name . '] ' . $c->title;
-            $subject = $c->subject ?: $subjectFallback;
-            $bodyHtml = EmailTemplate::wrap((int) $agency->id, $c->body_html, [
-                'eyebrow'   => 'A MESSAGE FROM',
-                'title'     => $agency->name,
-                'subtitle'  => $c->title,
-                'preheader' => mb_strimwidth(strip_tags($c->body_html), 0, 140, '…'),
-                'footer_note' => 'You\'re receiving this because you are connected to ' . htmlspecialchars($agency->name) . '. To stop receiving marketing emails, contact us at ' . ($agency->brand_support_email ?: $agency->contact_email ?: 'support@kiddietrac.com') . '.',
-            ]);
+            // One builder for the send and the portal's View (MarketingController::show), so the two cannot differ.
+            ['subject' => $subject, 'html' => $bodyHtml] = self::build($c, $agency);
 
             if ($dry) {
                 $this->line("--- Campaign #{$c->id}: {$c->title} -> " . count($recipients) . ' recipients ---');
@@ -108,14 +100,18 @@ final class SendCampaignEmailsCommand extends Command
             foreach ($batch as $r) {
                 if ($paced && $i++ > 0) { sleep(\App\Support\CampaignSender::GAP_SECONDS); }
                 try {
-                    $build = function ($m) use ($subject, $r) {
+                    /* {first_name} (2026-11-27): the frame was built once above; only the token is filled in here,
+                       per recipient, with their own first name (escaped), so batching and pacing are unchanged. */
+                    $oneHtml = \App\Support\CampaignMerge::html($bodyHtml, $r->first_name ?? null);
+                    $oneSubject = \App\Support\CampaignMerge::text($subject, $r->first_name ?? null);
+                    $build = function ($m) use ($oneSubject, $r) {
                         $name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? ''));
-                        $m->to($r->email, $name ?: $r->email)->subject($subject);
+                        $m->to($r->email, $name ?: $r->email)->subject($oneSubject);
                     };
                     if ($sender) {
-                        \App\Support\RsvpSender::html($sender, (int) $agency->id, $bodyHtml, $build);
+                        \App\Support\RsvpSender::html($sender, (int) $agency->id, $oneHtml, $build);
                     } else {
-                        $mailer->html($bodyHtml, $build);
+                        $mailer->html($oneHtml, $build);
                     }
                     $delivered++;
                 } catch (\Throwable $e) {
@@ -161,13 +157,13 @@ final class SendCampaignEmailsCommand extends Command
             // in-portal inbox shows the campaign even if the email lands
             // in spam or the user prefers to read inside the portal.
             $notifRows = [];
-            $bodyPreview = mb_strimwidth(strip_tags($c->body_html ?? ''), 0, 200, '…');
+            $bodyPreview = \App\Support\CampaignMerge::excerpt(strip_tags($c->body_html ?? ''), 200);
             foreach ($recipients as $r) {
                 $notifRows[] = [
                     'user_id' => (int) $r->id,
                     'type' => 'marketing',
-                    'title' => $c->title,
-                    'body' => $bodyPreview,
+                    'title' => \App\Support\CampaignMerge::text($c->title, $r->first_name ?? null),
+                    'body' => \App\Support\CampaignMerge::text($bodyPreview, $r->first_name ?? null),
                     'data' => json_encode([
                         'url' => '/dashboard.html#announcements',
                         'campaign_id' => (int) $c->id,
@@ -185,6 +181,33 @@ final class SendCampaignEmailsCommand extends Command
             $this->info("Campaign #{$c->id}: emailed $delivered / " . count($recipients) . " (failed: $failed)");
         }
         return self::SUCCESS;
+    }
+
+    /**
+     * THE CAMPAIGN EMAIL, BUILT ONCE (2026-11-27). Pure: no sends, no writes. {first_name} is still in the result;
+     * the send fills it per recipient (CampaignMerge::html / ::text) and the portal's View fills it with a sample
+     * name. 'email' => 'announcement' names the catalogue entry, so an agency's own wording applies the same way
+     * whoever calls this.
+     *
+     * @return array{subject:string, html:string, preheader:string}
+     */
+    public static function build(object $c, object $agency): array
+    {
+        // Families see the agency's name without Inc / Ltd (FamilyFacingName, 2026-11-27).
+        $name = \App\Support\FamilyFacingName::agency((int) $agency->id) ?: (string) $agency->name;
+        $subjectFallback = '[' . $name . '] ' . $c->title;
+        $subject = $c->subject ?: $subjectFallback;
+        $preheader = \App\Support\CampaignMerge::excerpt(strip_tags((string) $c->body_html), 140);
+        $html = EmailTemplate::wrap((int) $agency->id, (string) $c->body_html, [
+            'email'     => 'announcement',
+            'eyebrow'   => 'A MESSAGE FROM',
+            'title'     => $name,
+            'subtitle'  => $c->title,
+            'preheader' => $preheader,
+            'footer_note' => 'You\'re receiving this because you are connected to ' . htmlspecialchars($name) . '. To stop receiving marketing emails, contact us at ' . ($agency->brand_support_email ?: $agency->contact_email ?: 'support@kiddietrac.com') . '.',
+        ]);
+
+        return ['subject' => $subject, 'html' => $html, 'preheader' => $preheader];
     }
 
     /**

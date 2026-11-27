@@ -5,7 +5,7 @@ order: 78
 ---
 # Tour bookings
 
-Prospective families can request a centre tour through your public booking endpoint. Confirmed tours feed into the staff calendar so directors know who's coming when. Find the management view under **Growth → Tours**.
+Prospective families can request a centre tour through your public booking endpoint. Confirmed tours feed into the staff calendar so directors know who's coming when. Find the management view under **Marketing → Tours**.
 
 ## The public link
 

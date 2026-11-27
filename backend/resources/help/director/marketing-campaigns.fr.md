@@ -6,7 +6,7 @@ order: 36
 ---
 # Campagnes de marketing
 
-Rédigez des infolettres enrichies, des invitations à des portes ouvertes et des promotions, puis envoyez-les aux familles de votre choix. Barre latérale → **Campagnes**.
+Rédigez des infolettres enrichies, des invitations à des portes ouvertes et des promotions, puis envoyez-les aux familles de votre choix. Barre latérale → **Marketing → Campagnes** (ce groupe s’appelait auparavant Croissance).
 
 ![Cliquez sur + Nouvelle campagne dans l’écran Campagnes](https://api.kiddietrac.com/help-img/campaigns.png)
 
@@ -16,10 +16,14 @@ Rédigez des infolettres enrichies, des invitations à des portes ouvertes et de
 2. Remplissez :
    - **Titre de la campagne** (interne) et **Objet du courriel**.
    - **Destinataires** — toutes les familles / actuellement inscrites / liste d’attente / prospects / personnel.
-   - **Canal** — dans le portail, par courriel, ou les deux.
+   - **Canal** — dans le portail (une publication dans Nouvelles), par courriel, ou les deux (le courriel et une publication dans Nouvelles).
    - **Image d’en-tête** (facultatif) — téléversez une bannière affichée en haut du message.
    - **Corps** — utilisez l’éditeur de texte enrichi (polices, couleurs, titres, listes, liens, images).
    - **Horaire** (facultatif) — laissez vide pour envoyer manuellement.
+
+## Saluer chaque famille par son prénom
+
+Tapez **{first_name}** n’importe où dans le corps ou l’objet du courriel, ou appuyez sur **👤 First name** dans la barre d’outils de l’éditeur. Le courriel de chaque famille utilise alors son propre prénom : « Hi {first_name}, » arrive sous la forme « Hi Sarah, ». Là où il n’y a pas un seul lecteur (la publication dans Nouvelles que voient toutes les familles) ou aucun prénom au dossier, le texte affiche « there » (« Hi there, »). L’aperçu et la vue affichent un prénom d’exemple.
 
 ## En-tête en marque blanche
 
@@ -28,6 +32,10 @@ La marque blanche **fait partie de votre forfait** : ce n’est pas un choix pro
 ## Aperçu avant l’envoi
 
 Cliquez sur **👁 Aperçu** pour voir la campagne exactement comme les destinataires la recevront : l’en-tête en marque blanche, votre image d’en-tête et le corps, ainsi que le pied de page. Faites toujours un aperçu avant d’envoyer.
+
+## Consulter une campagne
+
+Dans la liste des campagnes, ouvrez le **⋮** d’une ligne et choisissez **View**. Une fenêtre affiche le courriel exactement comme les familles le reçoivent (avec un prénom d’exemple), ainsi que son statut, ses destinataires, son canal, son objet, son texte d’aperçu, sa programmation et, une fois envoyée, les nombres d’envois. La vue n’envoie jamais rien.
 
 ## Le pied de page
 
