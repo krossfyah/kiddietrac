@@ -455,6 +455,14 @@
           { hash: 'withdrawals',   label: 'Withdrawals',      icon: '🚸' },
           { hash: 'medications',   label: 'Medications',      icon: '💊' },
           { hash: 'immunizations', label: 'Immunizations',    icon: '🩹' },
+          // From the old Staff group, now removed (2026-11-27, Anthony: "move notes and substitutes and tasks under operations
+          // and remove staff section all together").
+          { hash: 'tasks',              label: 'Tasks',              icon: '☑️' },
+          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
+          { hash: 'substitutes',        label: 'Substitutes',        icon: '🙋' },
+          // Drill log lives in Human Resources > Health & safety (2026-11-27, Anthony: "move drill log to health & safety"). It stays
+          // here only while Health & safety is unavailable (no HR add-on / switched off) so those agencies keep it.
+          { hash: 'drills',             label: 'Drill log',          icon: '🚒', onlyIfNo: 'hr-safety' },
         ]},
         // "Growth" -> "Marketing", and its "Marketing" entry -> "Campaigns" (Anthony, 2026-11-27). Hashes unchanged.
         { label: 'Marketing', items: [
@@ -469,14 +477,6 @@
           { hash: 'menu',                label: 'Weekly menu',     icon: '🍽' },
           { hash: 'field-trips',         label: 'Field trips',     icon: '🚐' },
           { hash: 'allergy-alerts',      label: 'Allergy alerts',  icon: '🥜' },
-        ]},
-        { label: 'Staff', items: [
-          { hash: 'tasks',              label: 'Tasks',              icon: '☑️' },
-          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
-          { hash: 'substitutes',        label: 'Substitutes',        icon: '🙋' },
-          // Drill log lives in Human Resources > Health & safety (2026-11-27, Anthony: "move drill log to health & safety"). It stays
-          // here only while Health & safety is unavailable (no HR add-on / switched off) so those agencies keep it.
-          { hash: 'drills',             label: 'Drill log',          icon: '🚒', onlyIfNo: 'hr-safety' },
         ]},
         /* HUMAN RESOURCES (2026-11-27, Anthony: "create new subsections under Human resources to help jump right to the sections").
            Each entry is its own screen with only its own tabs (kt-hr-sections.js). Time off, Rota & shifts (the Schedule, moved from
@@ -699,6 +699,15 @@
           // Their centres' forms, sign-offs and file requests; uploads tie to their centre (CentreScope::people, 2026-11-13).
           { hash: 'forms-manager',     label: 'Forms Manager',     icon: '🗂️' },
           { hash: 'digest-status', label: 'AI digest status', icon: '📰' },
+          // From the old Staff group, now removed (2026-11-27, Anthony: "move notes and substitutes and tasks under operations
+          // and remove staff section all together").
+          { hash: 'tasks',             label: 'Tasks',              icon: '☑️' },
+          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
+          { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
+          { hash: 'substitutes',       label: 'Substitutes',        icon: '🙋' },
+          // Drill log lives in Human Resources > Health & safety (2026-11-27, Anthony: "move drill log to health & safety"). It stays
+          // here only while Health & safety is unavailable (no HR add-on / switched off) so those agencies keep it.
+          { hash: 'drills',             label: 'Drill log',          icon: '🚒', onlyIfNo: 'hr-safety' },
         ]},
         // "Growth" -> "Marketing", and its "Marketing" entry -> "Campaigns" (Anthony, 2026-11-27). Hashes unchanged.
         { label: 'Marketing', items: [
@@ -707,15 +716,6 @@
           { hash: 'sms',                label: 'SMS broadcast', icon: '📱', badgeKey: 'sms_replies' },
           { hash: 'ai-churn',           label: 'Churn risk',  icon: '📉' },
           { hash: 'ai-docs',            label: 'AI doc extract', icon: '🪄' },
-        ]},
-        { label: 'Staff', items: [
-          { hash: 'tasks',             label: 'Tasks',              icon: '☑️' },
-          { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
-          { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
-          { hash: 'substitutes',       label: 'Substitutes',        icon: '🙋' },
-          // Drill log lives in Human Resources > Health & safety (2026-11-27, Anthony: "move drill log to health & safety"). It stays
-          // here only while Health & safety is unavailable (no HR add-on / switched off) so those agencies keep it.
-          { hash: 'drills',             label: 'Drill log',          icon: '🚒', onlyIfNo: 'hr-safety' },
         ]},
         /* HUMAN RESOURCES (2026-11-27, Anthony: "create new subsections under Human resources to help jump right to the sections").
            Each entry is its own screen with only its own tabs (kt-hr-sections.js). Time off, Rota & shifts (the Schedule, moved from
