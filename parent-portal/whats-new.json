@@ -4,6 +4,26 @@
         {
             "type": "improved",
             "date": "2026-11-27",
+            "icon": "🎨",
+            "title": "Play Spark pictures you can follow",
+            "body": "Play Spark's end-result pictures are now drawn step by step: each step is a big close-up of the hands doing it, with the full instruction underneath and name tags on the less obvious materials. Not quite right? Open the picture and tap ↻ Redraw picture.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Des images Play Spark faciles à suivre",
+            "body_fr": "Les images du résultat final de Play Spark sont maintenant dessinées étape par étape : chaque étape est un grand gros plan des mains qui la font, avec la consigne complète en dessous et des étiquettes sur le matériel moins évident. Pas tout à fait juste ? Ouvrez l'image et touchez ↻ Redraw picture.",
+            "title_es": "Imágenes de Play Spark fáciles de seguir",
+            "body_es": "Las imágenes del resultado final de Play Spark ahora se dibujan paso a paso: cada paso es un primer plano grande de las manos haciéndolo, con la instrucción completa debajo y etiquetas en los materiales menos obvios. ¿No quedó bien? Abra la imagen y toque ↻ Redraw picture.",
+            "title_hi": "Play Spark की तस्वीरें जिन्हें आसानी से समझा जा सके",
+            "body_hi": "Play Spark की अंतिम परिणाम वाली तस्वीरें अब चरण-दर-चरण बनती हैं: हर चरण उस काम को करते हाथों का बड़ा नज़दीकी चित्र है, नीचे पूरा निर्देश लिखा होता है और कम पहचानी जाने वाली सामग्रियों पर नाम के लेबल होते हैं। ठीक नहीं लगी? तस्वीर खोलें और ↻ Redraw picture दबाएँ।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
             "icon": "📝",
             "title": "Reusable column in the Forms library",
             "body": "The Forms library now shows whether each form is reusable. Daily Overview and the provider's Forms today card now treat one-time forms as one-time: once a provider signs one, it leaves their daily list instead of showing as not started every day.",
