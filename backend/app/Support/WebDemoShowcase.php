@@ -709,8 +709,9 @@ final class WebDemoShowcase
             $etype[$u->id] = $et;
             if (DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('user_id', $u->id)->exists()) continue;
             $mine = (int) ($centreOf[$u->id] ?? 0);
-            $mgr = in_array($u->first_name, ['Harper', 'Olivia'], true) ? null
-                : (($mine && $mine === (int) ($centreOf[$elena] ?? -1) && (int) $u->id !== $elena) ? $elena : ($olivia ?: null));
+            // Olivia (Operations Manager) reports to Harper (Executive Director), so the org chart has one top (2026-11-27)
+            $mgr = $u->first_name === 'Harper' ? null : ($u->first_name === 'Olivia' ? (($byName['Harper'] ?? 0) ?: null)
+                : (($mine && $mine === (int) ($centreOf[$elena] ?? -1) && (int) $u->id !== $elena) ? $elena : ($olivia ?: null)));
             $this->add('hr_employee_files', ['agency_id' => $agencyId, 'user_id' => $u->id, 'job_title' => $title, 'employment_type' => $et, 'status' => 'active',
                 'manager_user_id' => $mgr, 'primary_centre_id' => $centreOf[$u->id] ?? null, 'updated_by_id' => $olivia ?: null, 'created_at' => $now, 'updated_at' => $now]);
         }

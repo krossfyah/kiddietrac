@@ -12,7 +12,9 @@ Parte del complemento de RR. HH. de KiddieTrac. Los administradores de la agenci
 
 Abre **Recursos humanos > Personas > Directorio**. Aparece todo el personal con su rol, centros y responsable. El correo y el teléfono solo se muestran si la persona eligió compartirlos en **Mis RR. HH. > Directorio del equipo**, también para los administradores. Pulsa ⋮ para ver a la persona o abrir su expediente.
 
-**Recursos humanos > Personas > Organigrama** dibuja el árbol a partir del responsable del expediente de cada persona. Quien no tiene responsable aparece en **Sin responsable**.
+**Recursos humanos > Personas > Organigrama** dibuja un diagrama a partir del responsable del expediente de cada persona. Cada recuadro muestra la foto, el nombre, el puesto, el centro, el tipo de empleo (por ejemplo Tiempo completo o Contrato), desde cuándo trabaja y a quién reporta. El correo y el teléfono solo aparecen si la persona eligió compartirlos. Toca un recuadro para ver los datos de la persona. Toca ▾ debajo de un recuadro para plegar ese equipo, y usa −, **Ajustar** y + para el zoom. Elige un centro para ver solo ese centro; los responsables por encima de su personal siguen en el organigrama en recuadros discontinuos. Quien no tiene responsable aparece en **Sin responsable**, para que lo corrijas en su expediente.
+
+Pulsa **🖨 Imprimir / Guardar como PDF** para obtener un organigrama horizontal con el logotipo, el nombre, la dirección, el teléfono y el correo de tu agencia, el centro elegido, la fecha de hoy y números de página. Para guardar un PDF, elige **Guardar como PDF** en la ventana de impresión. Un organigrama grande se reparte por equipos en varias páginas, y el recuadro donde continúa un equipo indica la página. El personal puede abrir el mismo organigrama desde **Mis RR. HH. > Directorio del equipo > Organigrama**, con las personas de sus propios centros.
 
 ## Reconocimiento (felicitaciones)
 

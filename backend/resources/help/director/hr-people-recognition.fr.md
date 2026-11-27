@@ -12,7 +12,9 @@ Fait partie du module RH de KiddieTrac. Les administrateurs d'agence voient tout
 
 Ouvrez **Ressources humaines > Personnel > Annuaire**. Chaque membre du personnel y figure avec son rôle, ses centres et son gestionnaire. Le courriel et le téléphone n'apparaissent que si la personne a choisi de les partager dans **Mes RH > Annuaire de l'équipe**, y compris pour les administrateurs. Appuyez sur ⋮ pour voir la personne ou ouvrir son dossier RH.
 
-**Ressources humaines > Personnel > Organigramme** trace l'arbre à partir du gestionnaire inscrit au dossier RH de chacun. Les personnes sans gestionnaire sont listées sous **Aucun gestionnaire indiqué**.
+**Ressources humaines > Personnel > Organigramme** trace un diagramme à partir du gestionnaire inscrit au dossier RH de chacun. Chaque case montre la photo, le nom, le poste, le centre, le type d'emploi (par exemple Temps plein ou Contrat), la date d'arrivée et la personne dont elle relève. Le courriel et le téléphone n'apparaissent que si la personne a choisi de les partager. Touchez une case pour voir les détails de la personne. Touchez ▾ sous une case pour replier cette équipe, et utilisez −, **Ajuster** et + pour le zoom. Choisissez un centre pour ne voir que ce centre ; les gestionnaires au-dessus de son personnel restent sur l'organigramme dans des cadres en pointillés. Les personnes sans gestionnaire sont listées sous **Aucun gestionnaire indiqué**, pour que vous puissiez corriger leur dossier.
+
+Appuyez sur **🖨 Imprimer / Enregistrer en PDF** pour obtenir un organigramme en paysage avec le logo, le nom, l'adresse, le téléphone et le courriel de votre agence, le centre choisi, la date du jour et les numéros de page. Pour garder un PDF, choisissez **Enregistrer en PDF** dans la fenêtre d'impression. Un grand organigramme est réparti par équipe sur plusieurs pages, et la case où une équipe continue indique la page. Le personnel peut ouvrir le même organigramme depuis **Mes RH > Annuaire de l'équipe > Organigramme**, avec les personnes de ses propres centres.
 
 ## Reconnaissance (bravos)
 

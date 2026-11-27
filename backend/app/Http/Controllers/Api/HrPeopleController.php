@@ -69,8 +69,8 @@ final class HrPeopleController extends Controller
         $ids = $this->scope($request, $aid);
         $me = (int) $request->user()->id;
         $users = DB::table('users')->whereIn('id', $ids ?: [0])->orderBy('first_name')->orderBy('last_name')
-            ->get(['id', 'first_name', 'last_name', 'preferred_name', 'photo_url', 'sex', 'email', 'phone']);
-        $files = DB::table('hr_employee_files')->where('agency_id', $aid)->whereIn('user_id', $ids ?: [0])->get(['user_id', 'job_title', 'manager_user_id'])->keyBy('user_id');
+            ->get(['id', 'first_name', 'last_name', 'preferred_name', 'photo_url', 'sex', 'email', 'phone', 'hire_date']);
+        $files = DB::table('hr_employee_files')->where('agency_id', $aid)->whereIn('user_id', $ids ?: [0])->get(['user_id', 'job_title', 'manager_user_id', 'employment_type'])->keyBy('user_id');
         $shares = DB::table('hr_directory_shares')->where('agency_id', $aid)->whereIn('user_id', $ids ?: [0])->get()->keyBy('user_id');
         $centres = DB::table('centres')->where('agency_id', $aid)->pluck('name', 'id');
         $order = array_flip(['agency_admin', 'centre_director', 'educator', 'home_visitor']);
@@ -93,9 +93,12 @@ final class HrPeopleController extends Controller
             if ($mgr && ! in_array($mgr, $ids, true)) $outside[$mgr] = true;
             $sh = $shares[$id] ?? null;
 
+            // Org chart diagram (2026-11-27): employment type and the month they started (users.hire_date) — no pay, no SIN.
             return ['id' => $id, 'name' => trim(($u->preferred_name ?: $u->first_name) . ' ' . $u->last_name), 'photo_url' => $u->photo_url, 'sex' => $u->sex,
                 'job_title' => $f && $f->job_title ? $f->job_title : null, 'role' => $rs[0] ?? null, 'role_label' => isset($rs[0]) ? $labels[$rs[0]] : '',
-                'centres' => array_values($roles[$id]['centres'] ?? []), 'manager_id' => $mgr,
+                'centres' => array_values($roles[$id]['centres'] ?? []), 'centre_ids' => array_keys($roles[$id]['centres'] ?? []), 'manager_id' => $mgr,
+                'employment_type' => $f && $f->employment_type ? (string) $f->employment_type : null,
+                'since' => $u->hire_date ? substr((string) $u->hire_date, 0, 7) : null,
                 'email' => $sh && $sh->share_email ? $u->email : null, 'phone' => $sh && $sh->share_phone && $u->phone ? $u->phone : null];
         })->values()->all();
         $out = [];
@@ -109,7 +112,31 @@ final class HrPeopleController extends Controller
 
         return response()->json(['people' => $people, 'outside' => $out, 'me' => $me,
             'share' => ['email' => (bool) ($mine->share_email ?? false), 'phone' => (bool) ($mine->share_phone ?? false)],
-            'is_manager' => $this->hrIsManager($request)]);
+            'is_manager' => $this->hrIsManager($request), 'today' => AgencyTime::today($aid), 'doc' => self::orgDoc($aid)]);
+    }
+
+    /**
+     * The printed org chart's letterhead (2026-11-27): the agency's own logo, name, address, phone and email from the
+     * agency record, and its brand colour. A white-label agency's logo and colour come from its brand (Brand::forAgency);
+     * "Prepared with KiddieTrac" is left off for white-label agencies, as on the fire plan.
+     */
+    public static function orgDoc(int $aid): array
+    {
+        $a = DB::table('agencies')->where('id', $aid)->first(['name', 'logo_url', 'brand_logo_url', 'address_line1', 'address_line2', 'city', 'province', 'postal_code', 'contact_phone', 'contact_email']);
+        $brand = rescue(fn () => \App\Support\Brand::forAgency($aid), [], false);
+        $wl = (bool) ($brand['white_label'] ?? false);
+        $logo = $wl ? ($brand['logo_wordmark_url'] ?? null) : null;
+        $logo = $logo ?: (($a->brand_logo_url ?? null) ?: ($a->logo_url ?? null));
+        if ($logo && str_starts_with((string) $logo, '/storage/')) $logo = rtrim((string) config('app.url', 'https://api.kiddietrac.com'), '/') . $logo;
+        if ($logo && ! preg_match('~^(https?:|data:image/)~i', (string) $logo)) $logo = null;
+        $color = (string) ($brand['primary_color'] ?? '');
+        if (! preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) $color = '#1F6080';
+        $address = trim(implode(', ', array_filter([
+            trim(($a->address_line1 ?? '') . ' ' . ($a->address_line2 ?? '')), $a->city ?? null, trim(($a->province ?? '') . ' ' . ($a->postal_code ?? '')),
+        ], fn ($v) => trim((string) $v) !== '')));
+
+        return ['agency_name' => (string) ($a->name ?? ''), 'logo' => $logo ?: null, 'color' => $color, 'address' => $address,
+            'phone' => (string) ($a->contact_phone ?? ''), 'email' => (string) ($a->contact_email ?? ''), 'white_label' => $wl];
     }
 
     /** PUT hr/me/directory {share_email, share_phone} — what I show colleagues. */

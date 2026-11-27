@@ -4,7 +4,7 @@
    screen-hr-talent.js (like screen-hr-reports.js).
 
    Where it draws:
-     Human Resources › People          tabs Directory, Org chart        (directory, orgchart)
+     Human Resources › People          tabs Directory, Org chart        (directory, orgchart: a diagram + print/PDF)
      Human Resources › Educator awards tab Recognition                  (#educator-rewards?tab=kudos)
      Human Resources › HR settings     tab Approvers (admins)           (approvers)
      My HR (everyone on staff)         sections Team directory, Kudos; for directors "Cover while I'm away"
@@ -138,29 +138,359 @@
   }
 
   // ══ ORG CHART ══════════════════════════════════════════════════════════
-  function chartHtml(d) {
-    var people = d.people || [], out = d.outside || [];
-    var by = {}; people.concat(out).forEach(function (p) { by[p.id] = p; });
-    var kids = {}; people.forEach(function (p) { if (p.manager_id && by[p.manager_id]) (kids[p.manager_id] = kids[p.manager_id] || []).push(p); });
+  /* THE DIAGRAM + PRINTABLE CHART (2026-11-27, Anthony: "for org chart there should be a way to generate a printable pdf
+     org chart that uses a diagram view with the agency logo and information and details on each person's position").
+     A top-down tree drawn from the manager on each person's HR file. GET hr/directory already scopes who the caller may
+     see (admins the agency, everyone else their own centres; leavers and outside accounts dropped; contact only when the
+     person shared it), so nothing here widens anything: the centre filter only narrows what was sent.
+       - teams of three or more people with no reports of their own stack in columns under their manager; a level wider
+         than OC.MAXW wraps onto another row off a trunk line, so wide levels stay readable;
+       - the centre filter keeps the managers above that centre's people (dashed, "outside this centre") so the line
+         upward is never cut; a manager at another centre is dashed too (the server sends only name and job title);
+       - ▾ / ▸ under a card folds that branch; zoom − / Fit / +; drag the background sideways to pan;
+       - 🖨 Print / Save as PDF: KT.printDoc (the house print path: apps KtPrint, phones the top page, desktop a frame),
+         letter landscape, the agency letterhead (Brand logo for white-label agencies), "As of" the agency's today, page
+         footer with page numbers (scaled with CSS zoom, not transform: a transformed box is paginated at its unscaled
+         size and Chrome cut the bottom of a full page). A chart that would print smaller than OC.MIN_S splits by branch: the top of the tree
+         on one page with "Team continues on page N", each big team on its own page with "Reports to X · page M".
+     Why not a server PDF: there is no headless Chrome on the host (and web PHP has no proc_open), and dompdf has no
+     flexbox / transforms / SVG paths good enough for a diagram; the browser's "Save as PDF" of this page is vector, uses
+     exactly the drawing on screen and works in the apps' print sheets too. */
+  var EMP = { full_time: 'Full-time', part_time: 'Part-time', casual: 'Casual', student: 'Student', contract: 'Contract' };
+  var OC = { W: 230, H: 118, GX: 24, GY: 44, SX: 14, SY: 10, IND: 18, MAXW: 1500, GAP: 56, AW: 980, AH: 588, MIN_S: 0.5 };
+  function T(s) { try { return KT.i18n && KT.i18n.t ? KT.i18n.t(s) : s; } catch (e) { return s; } }
+  function lang() { var l = ''; try { l = (KT.i18n && KT.i18n.locale && KT.i18n.locale()) || ''; } catch (e) {} return !l || /^en/i.test(l) ? 'en-US' : l; }
+  function fmtDate(ymd, o) { var m = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(ymd || ''); if (!m) return ''; try { return new Date(Date.UTC(+m[1], +m[2] - 1, +(m[3] || 15), 12)).toLocaleDateString(lang(), Object.assign({ timeZone: 'UTC' }, o)); } catch (e) { return m[3] ? day(ymd) : MON[+m[2] - 1] + ' ' + m[1]; } }
+  function tenure(ym, now) {
+    var a = /^(\d{4})-(\d{2})/.exec(ym || ''), b = /^(\d{4})-(\d{2})/.exec(now || ''); if (!a || !b) return '';
+    var mo = (+b[1] * 12 + +b[2]) - (+a[1] * 12 + +a[2]); if (mo < 0) return T('Starting soon');
+    if (mo < 1) return T('New');
+    if (mo < 12) return mo + ' ' + T(mo === 1 ? 'month' : 'months');
+    var y = Math.floor(mo / 12); return y + ' ' + T(y === 1 ? 'year' : 'years');
+  }
+  function initialsAv(p, size, color) {
+    var nm = String(p.name || '').trim(), ini = (nm.split(/\s+/).map(function (w) { return w.charAt(0); }).slice(0, 2).join('') || '?').toUpperCase();
+    var base = 'width:' + size + 'px;height:' + size + 'px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:' + Math.round(size * 0.4) + 'px;color:#fff;background:' + color + ';overflow:hidden;position:relative;';
+    var src = p.photo_url ? String(p.photo_url) : '';
+    if (src) { try { src = new URL(src, location.href).href; } catch (e) {} }
+    return '<span style="' + base + '">' + esc(ini) + (src ? '<img src="' + esc(src) + '" alt="" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">' : '') + '</span>';
+  }
+
+  /* The forest for one centre filter (0 = everyone the caller may see). */
+  function ocModel(d, centreId) {
+    var people = d.people || [], by = {}, show = {}, cid = +centreId || 0;
+    people.forEach(function (p) { by[p.id] = p; });
+    (d.outside || []).forEach(function (p) { if (!by[p.id]) by[p.id] = Object.assign({ outside: true }, p); });
+    people.forEach(function (p) { if (!cid || (p.centre_ids || []).indexOf(cid) >= 0) show[p.id] = 1; });
+    Object.keys(show).forEach(function (id) { var m = by[id].manager_id, g = 0; while (m && by[m] && !show[m] && g++ < 25) { show[m] = 2; m = by[m].manager_id; } });
+    var kids = {};
+    Object.keys(show).forEach(function (id) { var p = by[id]; if (p.manager_id && show[p.manager_id] && +p.manager_id !== +id) (kids[p.manager_id] = kids[p.manager_id] || []).push(p); });
     var seen = {};
-    function node(p, depth) {
-      if (seen[p.id] || depth > 12) return '';
+    function size(id, g) { return g > 14 ? 0 : (kids[id] || []).reduce(function (s, k) { return s + 1 + size(k.id, g + 1); }, 0); }
+    function mk(p, depth) {
       seen[p.id] = 1;
-      var ch = (kids[p.id] || []).map(function (c) { return node(c, depth + 1); }).join('');
-      return '<li><div class="hp-node' + (p.outside ? ' out' : '') + '">' + (p.outside ? '' : avatar(p, 30)) + '<div><b data-no-i18n style="font-size:13.5px;">' + esc(p.name) + '</b><div class="hp-nt">' + roleLine(p)
-        + (p.outside ? ' · another centre' : (kids[p.id] ? ' · ' + kids[p.id].length + ' report' + (kids[p.id].length === 1 ? '' : 's') : '')) + '</div></div></div>'
-        + (ch ? '<ul class="hp-tree">' + ch + '</ul>' : '') + '</li>';
+      var ks = (kids[p.id] || []).filter(function (k) { return !seen[k.id]; });
+      ks.sort(function (a, b) { return (kids[a.id] ? 0 : 1) - (kids[b.id] ? 0 : 1) || String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); });
+      return { p: p, ctx: show[p.id] === 2 || !!p.outside, kids: depth > 14 ? [] : ks.map(function (k) { return mk(k, depth + 1); }) };
     }
-    var roots = people.concat(out).filter(function (p) { return (!p.manager_id || !by[p.manager_id]) && kids[p.id]; });
-    var tree = roots.map(function (r) { return node(r, 0); }).join('');
-    var loose = people.filter(function (p) { return !seen[p.id]; });
-    return (tree ? '<ul class="hp-tree">' + tree + '</ul>' : '<div class="hr-sub" style="padding:8px 2px;">No managers are set yet. Set each person\'s manager on their HR file (People › ⋮ › Open HR file).</div>')
-      + (loose.length ? '<div class="hp-sec">No manager set</div><div class="hr-sub" style="margin-bottom:6px;">' + loose.map(function (p) { return '<span data-no-i18n>' + esc(p.name) + '</span>'; }).join(' · ') + '</div>' : '');
+    var ids = Object.keys(show).map(Number);
+    var roots = ids.filter(function (id) { var p = by[id]; return (!p.manager_id || !show[p.manager_id]) && kids[id]; })
+      .sort(function (a, b) { return size(b, 0) - size(a, 0) || String(by[a].name).localeCompare(String(by[b].name)); });
+    var trees = roots.map(function (id) { return mk(by[id], 0); });
+    var loose = ids.filter(function (id) { return !seen[id] && show[id] === 1; }).map(function (id) { return by[id]; })
+      .sort(function (a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); });
+    return { trees: trees, loose: loose, by: by, people: ids.filter(function (id) { return show[id] === 1; }).length, managers: Object.keys(kids).length };
+  }
+
+  /* Layout: measure() sizes each branch, place() gives every card its x/y and collects the connector segments. */
+  function ocVis(n, o) { return o.collapsed && o.collapsed[n.p.id] ? [] : n.kids; }
+  function ocCols(c, o) { return o.print ? Math.min(6, Math.max(1, Math.ceil(c / 5))) : (c <= 5 ? 1 : c <= 12 ? 2 : 3); }
+  function ocMeasure(n, o) {
+    var ks = ocVis(n, o);
+    n.mode = 'leaf'; n.w = OC.W; n.h = OC.H;
+    if (!ks.length) return;
+    ks.forEach(function (k) { ocMeasure(k, o); });
+    if (ks.length >= 3 && ks.every(function (k) { return k.mode === 'leaf'; })) {
+      var c = Math.min(ocCols(ks.length, o), ks.length), r = Math.ceil(ks.length / c);
+      n.mode = 'stack'; n.rows = r; n.bw = c * (OC.IND + OC.W) + (c - 1) * OC.SX;
+      n.w = Math.max(OC.W, n.bw); n.h = OC.H + OC.GY + r * OC.H + (r - 1) * OC.SY;
+      return;
+    }
+    var rows = [], cur = [], cw = 0, maxW = o.maxW || OC.MAXW;
+    ks.forEach(function (k) {
+      var add = (cur.length ? OC.GX : 0) + k.w;
+      if (cur.length && cw + add > maxW) { rows.push({ ks: cur, w: cw }); cur = []; cw = 0; add = k.w; }
+      cur.push(k); cw += add;
+    });
+    rows.push({ ks: cur, w: cw });
+    rows.forEach(function (r) { r.h = Math.max.apply(null, r.ks.map(function (k) { return k.h; })); });
+    n.mode = 'rows'; n.rowsL = rows; n.trunk = rows.length > 1 ? 16 : 0;
+    n.w = Math.max(OC.W, n.trunk + Math.max.apply(null, rows.map(function (r) { return r.w; })));
+    n.h = OC.H + rows.reduce(function (s, r) { return s + OC.GY + r.h; }, 0);
+  }
+  function ocPlace(n, x, y, o, out) {
+    n.x = x + (n.w - OC.W) / 2; n.y = y; out.cards.push(n);
+    var ks = ocVis(n, o); if (!ks.length) return;
+    var px = n.x + OC.W / 2, pb = y + OC.H, L = out.lines;
+    if (n.mode === 'stack') {
+      var left = x + (n.w - n.bw) / 2, top = pb + OC.GY, bus = pb + OC.GY / 2, spines = [];
+      ks.forEach(function (k, i) {
+        var c = Math.floor(i / n.rows), r = i % n.rows, cx = left + c * (OC.IND + OC.W + OC.SX);
+        k.x = cx + OC.IND; k.y = top + r * (OC.H + OC.SY); out.cards.push(k);
+        var my = k.y + OC.H / 2, sx = cx + OC.IND / 2;
+        L.push([sx, my, k.x, my]);
+        spines[c] = { x: sx, y: my };
+      });
+      var xs = spines.map(function (s) { return s.x; }).concat([px]);
+      L.push([px, pb, px, bus]); L.push([Math.min.apply(null, xs), bus, Math.max.apply(null, xs), bus]);
+      spines.forEach(function (s) { L.push([s.x, bus, s.x, s.y]); });
+      return;
+    }
+    var ty = pb, tx = x + 6, prev = 0;
+    n.rowsL.forEach(function (r, ri) {
+      var bus = ty + OC.GY / 2, top = ty + OC.GY, cx = x + n.trunk + (n.w - n.trunk - r.w) / 2, xs = [];
+      r.ks.forEach(function (k) { ocPlace(k, cx, top, o, out); var kc = k.x + OC.W / 2; xs.push(kc); L.push([kc, bus, kc, k.y]); cx += k.w + OC.GX; });
+      if (ri === 0) { xs.push(px); L.push([px, pb, px, bus]); }
+      if (n.trunk) { xs.push(tx); if (ri > 0) L.push([tx, prev, tx, bus]); }
+      L.push([Math.min.apply(null, xs), bus, Math.max.apply(null, xs), bus]);
+      prev = bus; ty = top + r.h;
+    });
+  }
+  /* items: [{tree}] and [{group:[people]}] (No manager set), packed into rows no wider than maxW. */
+  function ocForest(items, o) {
+    var out = { cards: [], lines: [], groups: [], w: 0, h: 0 }, maxW = o.maxW || OC.MAXW;
+    items.forEach(function (it) {
+      if (it.tree) { ocMeasure(it.tree, o); it.w = it.tree.w; it.h = it.tree.h; return; }
+      var c = Math.max(1, Math.min(it.group.length, o.print ? 6 : Math.max(1, Math.floor((maxW - 28 + OC.SX) / (OC.W + OC.SX))))), r = Math.ceil(it.group.length / c);
+      it.cols = c; it.w = c * (OC.W + OC.SX) - OC.SX + 28; it.h = 34 + r * (OC.H + OC.SY) - OC.SY + 14;
+    });
+    var rows = [], cur = [], cw = 0;
+    items.forEach(function (it) {
+      var add = (cur.length ? OC.GAP : 0) + it.w;
+      if (cur.length && (cw + add > maxW || it.group)) { rows.push(cur); cur = []; cw = 0; add = it.w; }
+      cur.push(it); cw += add;
+    });
+    if (cur.length) rows.push(cur);
+    var y = 6;
+    rows.forEach(function (row) {
+      var x = 6, rh = 0;
+      row.forEach(function (it) {
+        if (it.tree) ocPlace(it.tree, x, y + 4, o, out);
+        else {
+          out.groups.push({ x: x, y: y, w: it.w, h: it.h, title: T('No manager set') });
+          it.group.forEach(function (p, i) { out.cards.push({ p: p, loose: true, kids: [], x: x + 14 + (i % it.cols) * (OC.W + OC.SX), y: y + 34 + Math.floor(i / it.cols) * (OC.H + OC.SY) }); });
+        }
+        x += it.w + OC.GAP; rh = Math.max(rh, it.h + 4);
+        out.w = Math.max(out.w, x - OC.GAP + 6);
+      });
+      y += rh + 40;
+    });
+    out.h = y - 40 + 14;
+    return out;
+  }
+  function ocCard(n, o, by, today) {
+    var p = n.p, mgr = p.manager_id && by[p.manager_id], c = OC.W;
+    var lines = [];
+    if (n.ctx) {
+      lines.push('<div class="oc-l oc-ctx">' + esc(T(p.outside ? 'Outside your centres' : (p.centres || []).length ? 'Outside this centre' : 'Agency-wide')) + '</div>');
+    } else {
+      var cen = (p.centres || []).length ? p.centres.join(', ') : (p.role === 'agency_admin' ? T('Agency-wide') : '');
+      if (cen) lines.push('<div class="oc-l oc-cen" title="' + esc(cen) + '">' + esc(cen) + '</div>');
+      var tn = p.since ? tenure(p.since, today) : '';
+      var meta = [p.employment_type ? T(EMP[p.employment_type] || p.employment_type) : '', p.since ? T('Since') + ' ' + fmtDate(p.since, { month: 'short', year: 'numeric' }) : '', tn].filter(Boolean).join(' · ');
+      if (meta) lines.push('<div class="oc-l" title="' + esc(meta) + '">' + esc(meta) + '</div>');
+      if (mgr) lines.push('<div class="oc-l">' + esc(T('Reports to')) + ' <b>' + esc(mgr.name) + '</b>' + (n.fromItem && n.fromItem.page ? ' · ' + esc(T('page')) + ' ' + n.fromItem.page : '') + '</div>');
+      else if (n.loose) lines.push('<div class="oc-l oc-ctx">' + esc(T('No manager set')) + '</div>');
+      var ct = [p.email, p.phone].filter(Boolean).join(' · ');
+      if (ct && !n.cont) lines.push('<div class="oc-l oc-ct" title="' + esc(ct) + '">' + esc(ct) + '</div>');
+    }
+    if (n.cont) lines.push('<div class="oc-l oc-more">' + esc(T('Team continues on page')) + ' ' + (n.cont.page || '?') + ' →</div>');
+    var nk = n.kids ? n.kids.length : 0, folded = o.collapsed && o.collapsed[p.id];
+    var title = p.job_title || p.role_label || '';
+    return '<div class="oc-card' + (n.ctx ? ' ctx' : '') + '" data-oc-id="' + p.id + '" style="left:' + Math.round(n.x) + 'px;top:' + Math.round(n.y) + 'px;width:' + c + 'px;height:' + OC.H + 'px;">'
+      + '<div class="oc-h">' + (o.print ? initialsAv(p, 36, o.color) : (n.ctx ? initialsAv(p, 36, '#94A3B8') : avatar(p, 36))) + '<div class="oc-nm"><b title="' + esc(p.name) + '">' + esc(p.name) + '</b><span title="' + esc(title) + '">' + esc(title) + '</span></div></div>'
+      + lines.slice(0, 4).join('')
+      + (!o.print && nk ? '<button type="button" class="oc-tog" data-oc-tog="' + p.id + '" data-kt-iconized="1" aria-label="' + esc(T(folded ? 'Show team' : 'Hide team')) + '">' + (folded ? '▸ ' + nk : '▾ ' + nk) + '</button>' : '')
+      + '</div>';
+  }
+  function ocStage(L, o, by, today) {
+    var d = L.lines.map(function (s) { return 'M' + Math.round(s[0]) + ' ' + Math.round(s[1]) + 'L' + Math.round(s[2]) + ' ' + Math.round(s[3]); }).join('');
+    return '<svg class="oc-svg" width="' + Math.ceil(L.w) + '" height="' + Math.ceil(L.h) + '" style="position:absolute;left:0;top:0;" aria-hidden="true"><path d="' + d + '"/></svg>'
+      + L.groups.map(function (g) { return '<div class="oc-grp" style="left:' + g.x + 'px;top:' + g.y + 'px;width:' + g.w + 'px;height:' + g.h + 'px;"><div class="oc-gt">' + esc(g.title) + '</div></div>'; }).join('')
+      + L.cards.map(function (n) { return ocCard(n, o, by, today); }).join('');
+  }
+  var OC_CARD_CSS = '.oc-card{position:absolute;box-sizing:border-box;background:#fff;border:1px solid #CBD5E1;border-top:3px solid var(--oc-c,#1F6080);border-radius:10px;padding:7px 9px 6px;font-size:11.5px;line-height:1.4;color:#334155;text-align:left;}'
+    + '.oc-h{display:flex;gap:8px;align-items:center;margin-bottom:4px;}.oc-nm{min-width:0;flex:1;}'
+    + '.oc-nm b{display:block;font-size:13px;color:#0F172A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+    + '.oc-nm span{display:block;font-weight:700;font-size:11.5px;color:var(--oc-c,#1F6080);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}'
+    + '.oc-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.oc-l b{color:#0F172A;}.oc-ctx{color:#64748B;font-style:italic;}.oc-ct{color:#475569;}.oc-cen{font-weight:700;color:#0F172A;}'
+    + '.oc-more{font-weight:800;color:var(--oc-c,#1F6080);}'
+    + '.oc-card.ctx{background:#F8FAFC;border-style:dashed;border-top-style:dashed;}'
+    + '.oc-grp{position:absolute;box-sizing:border-box;border:1.5px dashed #CBD5E1;border-radius:14px;}'
+    + '.oc-gt{position:absolute;left:14px;top:9px;font-size:11.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#64748B;}'
+    + '.oc-svg{overflow:visible;}.oc-svg path{fill:none;stroke:#94A3B8;stroke-width:1.5;}';
+  function ocCss() {
+    if (document.getElementById('kt-hroc-css')) return;
+    var s = document.createElement('style'); s.id = 'kt-hroc-css';
+    s.textContent = OC_CARD_CSS
+      + '.oc-vp{position:relative;overflow-x:auto;overflow-y:hidden;border:1px solid #E2E8F0;border-radius:12px;background:#F8FAFC;cursor:grab;touch-action:pan-x pan-y;}'
+      + '.oc-vp.drag{cursor:grabbing;user-select:none;}.oc-sz{position:relative;margin:0 auto;}.oc-stage{position:absolute;left:0;top:0;transform-origin:0 0;}'
+      + '.oc-card{cursor:pointer;transition:box-shadow .12s;}.oc-card:hover{box-shadow:0 3px 12px rgba(15,23,42,.13);}.oc-card.ctx{cursor:default;}.oc-card.ctx:hover{box-shadow:none;}'
+      + '.oc-tog{position:absolute;left:50%;top:calc(100% + 3px);transform:translateX(-50%);height:21px;min-width:38px;padding:0 8px;border-radius:999px;border:1px solid #CBD5E1;background:#fff;font-size:11px;font-weight:800;color:#334155;cursor:pointer;z-index:2;line-height:19px;}'
+      + '.oc-tog:hover{border-color:var(--oc-c,#1F6080);color:var(--oc-c,#1F6080);}'
+      + '.oc-zoom{display:inline-flex;gap:4px;align-items:center;}.oc-zoom .hr-b{min-width:30px;padding:0 9px;}.oc-pct{font-size:12px;color:#64748B;min-width:38px;text-align:center;}'
+      + 'html.kt-dark .oc-vp{background:#0B1220;border-color:#334155;}html.kt-dark .oc-card{background:#0F172A;border-color:#334155;color:#CBD5E1;}'
+      + 'html.kt-dark .oc-nm b,html.kt-dark .oc-l b,html.kt-dark .oc-cen{color:#F1F5F9;}html.kt-dark .oc-card.ctx{background:#111827;}html.kt-dark .oc-ct{color:#94A3B8;}'
+      + 'html.kt-dark .oc-tog{background:#0F172A;border-color:#475569;color:#E2E8F0;}html.kt-dark .oc-grp{border-color:#334155;}html.kt-dark .oc-svg path{stroke:#475569;}';
+    document.head.appendChild(s);
+  }
+  function ocCentres(d) {
+    var seen = {}, list = [];
+    (d.people || []).forEach(function (p) { (p.centre_ids || []).forEach(function (id, i) { if (!seen[id]) { seen[id] = 1; list.push({ id: id, name: (p.centres || [])[i] || '' }); } }); });
+    return list.sort(function (a, b) { return String(a.name).localeCompare(String(b.name), undefined, { numeric: true }); });
+  }
+
+  /* ── print: pages, split by branch when one page would be too small ── */
+  function ocPages(m, o) {
+    var queue = m.trees.map(function (t) { return { tree: t }; });
+    for (var gi = 0; gi < m.loose.length; gi += 24) queue.push({ group: m.loose.slice(gi, gi + 24) });
+    function scale(items) { var L = ocForest(items, o); return Math.min(1, OC.AW / L.w, OC.AH / L.h); }
+    function depth(n) { return n.kids.length ? 1 + Math.max.apply(null, n.kids.map(depth)) : 0; }
+    function cut(n, D, conts) {
+      var c = { p: n.p, ctx: n.ctx, fromItem: n.fromItem, kids: [] };
+      if (D <= 0 && n.kids.length) { var ci = { tree: n }; c.cont = ci; conts.push(ci); return c; }
+      c.kids = n.kids.map(function (k) { return cut(k, D - 1, conts); });
+      return c;
+    }
+    var pages = [], cur = null;
+    for (var i = 0; i < queue.length; i++) {
+      var it = queue[i];
+      if (cur) { if (scale(cur.concat([it])) >= OC.MIN_S) { cur.push(it); continue; } pages.push(cur); cur = null; }
+      if (it.tree && scale([it]) < OC.MIN_S && depth(it.tree) >= 2) {
+        // keep the top of the branch here; every team below the cut gets its own place in the queue (the next pages)
+        var orig = it.tree, D = depth(orig) - 1, conts, t;
+        do { conts = []; t = cut(orig, D, conts); D--; } while (D >= 1 && scale([{ tree: t }]) < OC.MIN_S);
+        it.tree = t;
+        conts.forEach(function (ci) { ci.tree.fromItem = it; });
+        queue.splice.apply(queue, [i + 1, 0].concat(conts));
+      }
+      cur = [it];
+    }
+    if (cur) pages.push(cur);
+    pages.forEach(function (pg, pi) { pg.forEach(function (it) { it.page = pi + 1; }); });
+    return pages;
+  }
+  function ocPrintHtml(d, centreId, centreName) {
+    var doc = d.doc || {}, color = /^#[0-9A-Fa-f]{6}$/.test(doc.color || '') ? doc.color : '#1F6080';
+    var o = { print: true, maxW: 1400, collapsed: {}, color: color };
+    var m = ocModel(d, centreId), pages = ocPages(m, o), N = pages.length || 1;
+    var asOf = fmtDate(d.today || today(), { year: 'numeric', month: 'long', day: 'numeric' });
+    var contact = [doc.address, doc.phone, doc.email].filter(Boolean).map(esc).join(' · ');
+    var sub = esc(centreName || T('All centres')) + ' · ' + esc(T('As of')) + ' ' + esc(asOf);
+    var head = '<div class="hd">' + (doc.logo ? '<img src="' + esc(doc.logo) + '" alt="">' : '')
+      + '<div class="ag"><b>' + esc(doc.agency_name || '') + '</b>' + (contact ? '<span>' + contact + '</span>' : '') + '</div>'
+      + '<div class="tt"><b>' + esc(T('Organisation chart')) + '</b><span>' + sub + '</span></div></div><div class="rule"></div>';
+    var note = esc(m.people + ' ' + T(m.people === 1 ? 'person' : 'people')) + ' · ' + esc(T('Dashed boxes: a manager outside this centre or outside your centres.')) + ' ' + esc(T('Email and phone show only where the person chose to share them.'));
+    var body = (pages.length ? pages : [[]]).map(function (pg, i) {
+      var L = ocForest(pg, o), s = Math.min(1, OC.AW / Math.max(1, L.w), OC.AH / Math.max(1, L.h));
+      var cont = pg.filter(function (it) { return it.tree && it.tree.fromItem; }).map(function (it) { return it.tree.p.name; });
+      return '<section class="pg">' + head
+        + (cont.length ? '<div class="cn">' + esc(T('Continued')) + ': ' + esc(cont.join(', ')) + '</div>' : '')
+        + '<div class="dg">' + (pg.length ? '<div style="position:relative;width:' + Math.ceil(L.w) + 'px;height:' + Math.ceil(L.h) + 'px;zoom:' + s.toFixed(4) + ';">' + ocStage(L, o, m.by, d.today || today()) + '</div>' : '<div style="color:#64748B;padding:40px;">' + esc(T('No one to show yet.')) + '</div>') + '</div>'
+        + '<div class="ft"><span>' + (i === 0 ? note : esc(T('Organisation chart')) + ' · ' + esc(doc.agency_name || '')) + '</span>' + (doc.white_label ? '' : '<span>' + esc(T('Prepared with')) + ' KiddieTrac</span>') + '<span>' + esc(T('Page')) + ' ' + (i + 1) + ' ' + esc(T('of')) + ' ' + N + '</span></div></section>';
+    }).join('');
+    var css = '@page{size:letter landscape;margin:9mm;}*{box-sizing:border-box;}html,body{margin:0;background:#fff;}'
+      + 'body{font-family:Helvetica,Arial,"Segoe UI",sans-serif;color:#0F172A;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      + '.pg{height:7.68in;display:flex;flex-direction:column;overflow:hidden;page-break-after:always;break-after:page;}.pg:last-child{page-break-after:auto;break-after:auto;}'
+      + '.hd{display:flex;align-items:center;gap:14px;padding-bottom:6px;}.hd img{max-height:46px;max-width:170px;object-fit:contain;}'
+      + '.ag{flex:1;min-width:0;}.ag b{font-size:13pt;display:block;}.ag span{font-size:8.5pt;color:#334155;display:block;margin-top:2px;}'
+      + '.tt{text-align:right;}.tt b{font-size:17pt;display:block;line-height:1.05;color:' + color + ';}.tt span{font-size:9pt;font-weight:bold;display:block;margin-top:3px;}'
+      + '.rule{border-top:2.5px solid ' + color + ';margin:0 0 8px;}.cn{font-size:9pt;font-weight:bold;color:' + color + ';margin:0 0 6px;}'
+      + '.dg{flex:1;display:flex;align-items:flex-start;justify-content:center;min-height:0;}'
+      + '.ft{display:flex;justify-content:space-between;gap:16px;font-size:7.5pt;color:#64748B;border-top:1px solid #E2E8F0;padding-top:4px;margin-top:6px;}'
+      + ':root{--oc-c:' + color + ';}' + OC_CARD_CSS + '.oc-svg path{stroke:#64748B;}';
+    return '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(T('Organisation chart') + ' · ' + (doc.agency_name || '') + ' · ' + (d.today || today())) + '</title><style>' + css + '</style></head><body>' + body + '</body></html>';
+  }
+
+  /* ── the screen ── */
+  function orgChartView(host, d) {
+    ocCss();
+    var color = (d.doc && /^#[0-9A-Fa-f]{6}$/.test(d.doc.color || '')) ? d.doc.color : '#1F6080';
+    var st = { centre: 0, collapsed: {}, scale: 0, user: false };
+    var centres = ocCentres(d);
+    try { if (d.doc && d.doc.logo) { var im = new Image(); im.src = d.doc.logo; } } catch (e) {}
+    host.innerHTML = '<div class="hr-note">' + esc(T('Drawn from the manager on each person\'s HR file (not from teams). A manager at another centre shows by name only.')) + ' ' + esc(T('Press a person to see their details.')) + '</div>'
+      + '<div class="hr-bar oc-tools">'
+      + (centres.length > 1 ? '<select class="hr-i" data-oc-centre aria-label="' + esc(T('Centre')) + '" style="max-width:260px;"><option value="0">' + esc(T('All centres')) + '</option>' + centres.map(function (c) { return '<option value="' + c.id + '" data-no-i18n>' + esc(c.name) + '</option>'; }).join('') + '</select>' : '')
+      + '<span class="oc-zoom"><button type="button" class="hr-b" data-oc-z="-1" data-kt-iconized="1" aria-label="' + esc(T('Zoom out')) + '">−</button><button type="button" class="hr-b" data-oc-fit data-kt-iconized="1">' + esc(T('Fit')) + '</button><button type="button" class="hr-b" data-oc-z="1" data-kt-iconized="1" aria-label="' + esc(T('Zoom in')) + '">+</button><span class="oc-pct" data-oc-pct></span></span>'
+      + '<button type="button" class="hr-b" data-oc-all="0" data-kt-iconized="1">' + esc(T('Expand all')) + '</button><button type="button" class="hr-b" data-oc-all="1" data-kt-iconized="1">' + esc(T('Collapse all')) + '</button>'
+      + '<button type="button" class="hr-b p" data-oc-print data-kt-iconized="1">🖨 ' + esc(T('Print / Save as PDF')) + '</button>'
+      + '<span class="hr-sub" data-oc-count></span></div>'
+      + '<div class="oc-vp" data-oc-vp data-kt-nogrid data-no-i18n style="--oc-c:' + color + ';"><div class="oc-sz" data-oc-sz><div class="oc-stage" data-oc-stage></div></div></div>'
+      + '<div data-oc-empty></div>';
+    var vp = host.querySelector('[data-oc-vp]'), sz = host.querySelector('[data-oc-sz]'), stage = host.querySelector('[data-oc-stage]');
+    var L = null, m = null;
+    function fit() { var w = Math.max(200, vp.clientWidth - 2); return Math.max(0.2, Math.min(1, w / L.w)); }
+    function apply() {
+      if (!L) return;
+      if (!st.user) st.scale = Math.max(fit(), window.innerWidth < 700 ? 0.5 : 0.35);
+      st.scale = Math.max(0.2, Math.min(1.6, st.scale));
+      stage.style.transform = 'scale(' + st.scale + ')';
+      sz.style.width = Math.ceil(L.w * st.scale) + 'px'; sz.style.height = Math.ceil(L.h * st.scale) + 'px';
+      var pct = host.querySelector('[data-oc-pct]'); if (pct) pct.textContent = Math.round(st.scale * 100) + '%';
+      // wider than the screen (phones): start with the top of the chart in view, not its left edge
+      if (!st.user && vp.scrollWidth > vp.clientWidth && L.cards[0]) vp.scrollLeft = Math.max(0, (L.cards[0].x + OC.W / 2) * st.scale - vp.clientWidth / 2);
+    }
+    function draw() {
+      m = ocModel(d, st.centre);
+      var items = m.trees.map(function (t) { return { tree: t }; }).concat(m.loose.length ? [{ group: m.loose }] : []);
+      var o = { collapsed: st.collapsed, maxW: OC.MAXW };
+      L = ocForest(items, o);
+      stage.style.width = Math.ceil(L.w) + 'px'; stage.style.height = Math.ceil(L.h) + 'px';
+      stage.innerHTML = items.length ? ocStage(L, o, m.by, d.today || today()) : '';
+      vp.style.display = items.length ? '' : 'none';
+      host.querySelector('[data-oc-empty]').innerHTML = items.length ? '' : '<div class="kt-card" style="padding:14px;"><span class="hr-sub">' + esc(T('No one to show yet.')) + '</span></div>';
+      host.querySelector('[data-oc-count]').textContent = m.people + ' ' + T(m.people === 1 ? 'person' : 'people') + (m.trees.length ? '' : ' · ' + T('No managers are set yet. Set each person\'s manager on their HR file (People › ⋮ › Open HR file).'));
+      apply();
+    }
+    var cs = host.querySelector('[data-oc-centre]');
+    if (cs) cs.addEventListener('change', function () { st.centre = +cs.value || 0; st.user = false; draw(); });
+    host.querySelectorAll('[data-oc-z]').forEach(function (b) { b.addEventListener('click', function () { st.user = true; st.scale = Math.round((st.scale + (+b.getAttribute('data-oc-z')) * 0.1) * 10) / 10; apply(); }); });
+    host.querySelector('[data-oc-fit]').addEventListener('click', function () { st.user = true; st.scale = fit(); apply(); });
+    host.querySelectorAll('[data-oc-all]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        st.collapsed = {};
+        if (b.getAttribute('data-oc-all') === '1') { var walk = function (n, dp) { if (n.kids.length && dp >= 1) st.collapsed[n.p.id] = 1; n.kids.forEach(function (k) { walk(k, dp + 1); }); }; m.trees.forEach(function (t) { walk(t, 0); }); }
+        st.user = false; draw();
+      });
+    });
+    host.querySelector('[data-oc-print]').addEventListener('click', function () {
+      var name = ''; if (cs && +cs.value) { var op = cs.options[cs.selectedIndex]; name = op ? op.textContent : ''; }
+      var html = ocPrintHtml(d, st.centre, name);
+      if (KT.printDoc) KT.printDoc({ html: html }, { title: T('Organisation chart') });
+      else { var w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); w.print(); } }
+    });
+    stage.addEventListener('click', function (ev) {
+      var tg = ev.target.closest && ev.target.closest('[data-oc-tog]');
+      if (tg) { ev.stopPropagation(); var id = +tg.getAttribute('data-oc-tog'); if (st.collapsed[id]) delete st.collapsed[id]; else st.collapsed[id] = 1; draw(); return; }
+      if (vp.__ocMoved) return;
+      var cd = ev.target.closest && ev.target.closest('.oc-card'); if (!cd || cd.classList.contains('ctx')) return;
+      var p = (d.people || []).filter(function (x) { return x.id === +cd.getAttribute('data-oc-id'); })[0];
+      if (p) viewPerson(d, p);
+    });
+    // drag the background sideways to pan (mouse / pen; touch scrolls natively)
+    var drag = null;
+    vp.addEventListener('pointerdown', function (ev) { if (ev.pointerType === 'touch' || ev.button !== 0 || (ev.target.closest && ev.target.closest('button'))) return; drag = { x: ev.clientX, l: vp.scrollLeft, moved: false }; vp.__ocMoved = false; });
+    window.addEventListener('pointermove', function (ev) { if (!drag) return; var dx = ev.clientX - drag.x; if (Math.abs(dx) > 4) { drag.moved = true; vp.classList.add('drag'); } if (drag.moved) vp.scrollLeft = drag.l - dx; });
+    window.addEventListener('pointerup', function () { if (!drag) return; vp.__ocMoved = drag.moved; vp.classList.remove('drag'); drag = null; setTimeout(function () { vp.__ocMoved = false; }, 0); });
+    draw();
+    // the tab's width is only final once the screen has settled
+    setTimeout(function () { if (host.isConnected && !st.user) apply(); }, 120);
   }
   async function drawOrgChart(host) {
     var d; try { d = await Api.get('/hr/directory'); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
     if (!host.isConnected) return;
-    host.innerHTML = '<div class="hr-note">Drawn from the manager on each person\'s HR file (not from teams). A manager at another centre shows by name only.</div><div class="kt-card" style="padding:10px 14px;" data-kt-nogrid>' + chartHtml(d) + '</div>';
+    orgChartView(host, d);
   }
 
   // ══ RECOGNITION ════════════════════════════════════════════════════════
@@ -356,7 +686,7 @@
         });
       });
       var ch = holder.querySelector('[data-chart]');
-      if (ch) ch.addEventListener('click', function () { modal({ title: 'Org chart', body: el('<div data-kt-nogrid>' + chartHtml(dir) + '</div>'), large: true, actions: [{ label: 'Close' }] }); });
+      if (ch) ch.addEventListener('click', function () { var bx = el(''); bx.setAttribute('data-kt-nogrid', ''); modal({ title: 'Org chart', body: bx, large: true, actions: [{ label: 'Close' }] }); orgChartView(bx, dir); });
     }
     if (kd) wireFeed(holder, kd, reload);
     var cb = holder.querySelector('[data-cover]'); if (cb) cb.addEventListener('click', function () { coverForm(cover, cover.me, reload); });
@@ -448,6 +778,7 @@
       if (tab === 'kudos') return drawKudos(host);
       if (tab === 'approvers') return drawApprovers(host);
     },
+    orgChart: orgChartView, orgChartPrintHtml: ocPrintHtml,
     mine: mine, quizEditor: quizEditor, quizInfo: quizInfo, quizTake: quizTake, quizSummary: quizSummary, giveKudos: giveKudos
   };
 })(window);

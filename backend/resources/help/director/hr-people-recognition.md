@@ -12,7 +12,9 @@ Part of the KiddieTrac HR add-on. Agency admins see the whole agency; directors 
 
 Open **Human Resources > People > Directory**. Everyone on staff is listed with their role, centres and manager. Email and phone show only when the person chose to share them under **My HR > Team directory**. This applies to admins too. Press ⋮ to view a person or open their HR file.
 
-**Human Resources > People > Org chart** draws the tree from the manager on each person's HR file. Anyone without a manager is listed under **No manager set**, so you can fix it on their file.
+**Human Resources > People > Org chart** draws a diagram from the manager on each person's HR file. Each box shows the person's photo, name, job title, centre, employment type (for example Full-time or Contract), when they started and who they report to. Email and phone appear only if the person chose to share them. Press a box to see the person's details. Press ▾ under a box to fold that team away, and use −, **Fit** and + to zoom. Pick a centre to see only that centre; the managers above its staff stay on the chart in dashed boxes. Anyone without a manager is listed under **No manager set**, so you can fix it on their file.
+
+Press **🖨 Print / Save as PDF** for a landscape chart with your agency's logo, name, address, phone and email, the centre you picked and today's date, with page numbers. To keep a PDF, choose **Save as PDF** in the print window. A large chart is split by team across pages, and the box where a team continues says which page it is on. Staff can open the same chart from **My HR > Team directory > Org chart**, showing the people at their own centres.
 
 ## Recognition (kudos)
 

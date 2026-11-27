@@ -2,6 +2,42 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🔒",
+            "title": "Your messages are now encrypted when stored",
+            "body": "The messages you exchange with your child care team are now stored encrypted on our servers. Phone notifications and emails now tell you who sent a message, but not what it says. Open the app to read it. Everything still reads as before inside the app, and search still works.",
+            "roles": [
+                "guardian"
+            ],
+            "title_fr": "Vos messages sont maintenant chiffrés une fois enregistrés",
+            "body_fr": "Les messages que vous échangez avec l’équipe de votre service de garde sont maintenant enregistrés chiffrés sur nos serveurs. Les notifications sur le téléphone et les courriels vous disent qui a envoyé un message, mais pas ce qu’il dit. Ouvrez l’application pour le lire. Tout s’affiche comme avant dans l’application, et la recherche fonctionne toujours.",
+            "title_es": "Tus mensajes ahora se guardan cifrados",
+            "body_es": "Los mensajes que intercambias con el equipo de cuidado infantil ahora se guardan cifrados en nuestros servidores. Las notificaciones del teléfono y los correos te dicen quién envió un mensaje, pero no lo que dice. Abre la aplicación para leerlo. Dentro de la aplicación todo se ve como antes y la búsqueda sigue funcionando.",
+            "title_hi": "आपके संदेश अब एन्क्रिप्ट करके सहेजे जाते हैं",
+            "body_hi": "आप अपनी चाइल्ड केयर टीम के साथ जो संदेश भेजते हैं, वे अब हमारे सर्वर पर एन्क्रिप्ट करके सहेजे जाते हैं। फ़ोन सूचनाएँ और ईमेल अब बताते हैं कि संदेश किसने भेजा, लेकिन उसमें क्या लिखा है यह नहीं। इसे पढ़ने के लिए ऐप खोलें। ऐप के अंदर सब कुछ पहले जैसा दिखता है, और खोज भी काम करती है।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🔒",
+            "title": "Messages are now encrypted when stored",
+            "body": "Family messages, Team chat, message translations and message notifications are now stored encrypted on our servers. Phone notifications and the unread-message emails now say who wrote and in which conversation, not what the message says. 🚨 Emergency messages still ring as before. Inside KiddieTrac everything reads the same, and searching Chat audit still finds words inside messages.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Les messages sont maintenant chiffrés une fois enregistrés",
+            "body_fr": "Les messages avec les familles, le clavardage d’équipe, les traductions et les notifications de messages sont maintenant enregistrés chiffrés sur nos serveurs. Les notifications sur le téléphone et les courriels de messages non lus indiquent qui a écrit et dans quelle conversation, pas le contenu du message. Les messages 🚨 d’urgence sonnent toujours comme avant. Dans KiddieTrac, tout s’affiche de la même façon, et la recherche de l’audit des conversations trouve toujours les mots dans les messages.",
+            "title_es": "Los mensajes ahora se guardan cifrados",
+            "body_es": "Los mensajes con las familias, el chat del equipo, las traducciones y las notificaciones de mensajes ahora se guardan cifrados en nuestros servidores. Las notificaciones del teléfono y los correos de mensajes no leídos dicen quién escribió y en qué conversación, no lo que dice el mensaje. Los mensajes de 🚨 emergencia siguen sonando como antes. Dentro de KiddieTrac todo se ve igual, y la búsqueda de la auditoría de chats sigue encontrando palabras dentro de los mensajes.",
+            "title_hi": "संदेश अब एन्क्रिप्ट करके सहेजे जाते हैं",
+            "body_hi": "परिवारों के साथ संदेश, टीम चैट, संदेशों के अनुवाद और संदेश सूचनाएँ अब हमारे सर्वर पर एन्क्रिप्ट करके सहेजी जाती हैं। फ़ोन सूचनाएँ और बिना पढ़े संदेशों के ईमेल अब बताते हैं कि किसने और किस बातचीत में लिखा, संदेश में क्या लिखा है यह नहीं। 🚨 आपातकालीन संदेश पहले की तरह ही बजते हैं। KiddieTrac के अंदर सब कुछ पहले जैसा दिखता है, और चैट ऑडिट की खोज अब भी संदेशों के अंदर शब्द ढूँढती है।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "✍️",
@@ -23,6 +59,26 @@
             "body_es": "Cada firma en un formulario o documento firmado ahora muestra la fecha y la hora de la firma, la dirección IP desde la que se firmó y la ubicación aproximada de esa dirección (ciudad, provincia o estado, país). Aparece debajo de la firma en la pantalla, en el PDF y en las copias enviadas por correo, y solo la pueden ver las personas que ya pueden ver ese documento. La ubicación se obtiene de la dirección IP, no del GPS de su teléfono. Los formularios firmados antes de hoy indican que la IP y la ubicación no se registraron.",
             "title_hi": "हस्ताक्षरित फ़ॉर्म दिखाते हैं कि वे कब और कहाँ से हस्ताक्षरित हुए",
             "body_hi": "हस्ताक्षरित फ़ॉर्म या दस्तावेज़ पर हर हस्ताक्षर अब हस्ताक्षर की तारीख और समय, जिस IP पते से हस्ताक्षर किया गया, और उस पते का अनुमानित स्थान (शहर, प्रांत या राज्य, देश) दिखाता है। यह स्क्रीन पर, PDF में और ईमेल की गई प्रतियों पर हस्ताक्षर के नीचे दिखता है, और केवल वही लोग इसे देख सकते हैं जो पहले से वह दस्तावेज़ देख सकते हैं। स्थान IP पते से आता है, आपके फ़ोन के GPS से नहीं। आज से पहले हस्ताक्षरित फ़ॉर्म पर लिखा होता है कि IP और स्थान दर्ज नहीं किए गए थे।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🗂️",
+            "title": "Org chart diagram you can print",
+            "body": "Human Resources › People › Org chart is now a diagram: a box for each person with their photo, job title, centre, employment type, when they started and who they report to (email and phone only if they chose to share them). Pick a centre, fold teams away, zoom to fit, and press 🖨 Print / Save as PDF for a landscape chart with your agency's logo, address and today's date. Big charts split by team across pages.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Organigramme imprimable",
+            "body_fr": "Ressources humaines › Personnel › Organigramme est maintenant un diagramme : une case par personne avec sa photo, son poste, son centre, son type d'emploi, sa date d'arrivée et la personne dont elle relève (courriel et téléphone seulement si elle a choisi de les partager). Choisissez un centre, repliez des équipes, ajustez le zoom, puis appuyez sur 🖨 Imprimer / Enregistrer en PDF pour un organigramme en paysage avec le logo, l'adresse de votre agence et la date du jour. Les grands organigrammes se répartissent par équipe sur plusieurs pages.",
+            "title_es": "Organigrama que puedes imprimir",
+            "body_es": "Recursos humanos › Personas › Organigrama ahora es un diagrama: un recuadro por persona con su foto, puesto, centro, tipo de empleo, desde cuándo trabaja y a quién reporta (correo y teléfono solo si decidió compartirlos). Elige un centro, pliega equipos, ajusta el zoom y pulsa 🖨 Imprimir / Guardar como PDF para un organigrama horizontal con el logotipo, la dirección de tu agencia y la fecha de hoy. Los organigramas grandes se reparten por equipos en varias páginas.",
+            "title_hi": "प्रिंट करने योग्य संगठन चार्ट",
+            "body_hi": "मानव संसाधन › लोग › संगठन चार्ट अब एक आरेख है: हर व्यक्ति का एक बॉक्स, जिसमें फ़ोटो, पद, केंद्र, रोज़गार का प्रकार, कब से काम कर रहे हैं और किसे रिपोर्ट करते हैं (ईमेल और फ़ोन तभी, जब उन्होंने साझा करना चुना हो)। केंद्र चुनें, टीमें समेटें, ज़ूम फ़िट करें, और अपनी एजेंसी के लोगो, पते और आज की तारीख वाले लैंडस्केप चार्ट के लिए 🖨 प्रिंट करें / PDF के रूप में सहेजें दबाएँ। बड़े चार्ट टीम के अनुसार कई पृष्ठों में बँटते हैं।"
         },
         {
             "type": "new",
