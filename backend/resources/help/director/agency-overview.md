@@ -2,71 +2,82 @@
 title: Agency overview
 category: Getting Started
 order: 3
-roles: agency_admin, platform_admin
+roles: agency_admin, platform_admin, centre_director
 screens: dashboard
 ---
 # Agency overview
 
-**Agency overview** is the agency admin's home screen. It shows every centre or provider in your agency at a glance: who is in, who is not, and who is working today.
-
-Sidebar → **Overview** → **Agency overview**.
+**Agency overview** is the home screen for agency admins, and the **Dashboard** for centre directors. It shows every centre or provider you look after at a glance: who is here, who is working, what needs attention and what happened recently. The figures refresh by themselves every 30 seconds. Open it from the sidebar: **Overview > Agency overview** (directors: **Overview > Dashboard**).
 
 [[open: #dashboard | Open Agency overview]]
 
-## The centre cards
+## Reading the figures at the top
 
-Each centre or provider has its own card. Across the top:
+The banner shows your agency name, how many centres and enrolled children you have, and whether agency email is on. Under it is a row of tiles, such as:
 
-- **Enrolled** — children enrolled, out of the licensed capacity when one is set.
-- **Present** — children checked in right now. Hover to see their names.
-- **Staff** — staff clocked in right now. Hover to see who. It turns red at 0.
-- The ring shows how full the centre is right now. The tag beside it reads **Compliant**, or the number of ratio breaches.
+- **Total enrolled**, **At Centre now** and **Staff on floor** (red when nobody is clocked in);
+- **Receivables** and **Overdue invoices** (red when money is owed);
+- **Centres**, **Licensed capacity**, **Families**, **Team members** and **Ratio alerts**.
 
-### Provider and staff today
+A number that changes fades in briefly so you notice it.
 
-Under the counts, the **Provider · today** list (or **Provider & staff · today** when others clocked in there) shows clock in and clock out, the same way children show check in and out:
+## Checking a centre's day
 
-- **✓ Clocked in 8:02 AM** — on shift now.
-- **8:02 AM → 4:30 PM** — clocked in and out today.
-- **Not clocked in** — the provider has not clocked in yet today.
-- **Absent** — the provider never clocked in and their day is over.
+Each centre has a card under **Your centres**.
 
-The provider is always listed first. Anyone else who clocked in at that centre today follows, marked **· staff**.
+1. Look at the ring at the top right. It shows how full the centre is right now; hover it for "x of y spaces filled right now". Beside it the tag reads **Compliant**, or the number of ratio breaches.
+2. Read the three counters: **Enrolled** (out of capacity), **At Centre** and **Staff**. Hover **At Centre** or **Staff** to see the names.
+3. Check **Provider & educators · today**. Each person shows **✓ Clocked in** with a time, a time range once they have left, **☕ On break** or **🍽️ On lunch**, **Not clocked in**, **Not scheduled**, or **Absent** once their day is over.
+4. Check **Children · today**. Each child shows **✓ At Centre** with the arrival time, **Not at Centre** with their times once they have left, **Not arrived**, **Not scheduled**, or **Absent** after closing. A "×2" badge means they came in twice.
+5. Press **📅 Review day** to open that centre in **Daily Overview** for the full day.
 
-### Children today
+"Not arrived" turns into "Absent" once the centre's closing time has passed (or the automatic sign-off time if no closing time is set). A provider becomes "Absent" after the end of their rostered shift.
 
-Below that is today's attendance for every enrolled child, with a count of **checked in** and **not in**:
+## Managing a centre from its card
 
-- **✓ In 8:15 AM** — here now.
-- **8:15 AM → 3:40 PM** — came and went.
-- **Not in** — has not arrived yet, during the day.
-- **Absent** — never arrived, and the day is over.
+1. Press **⋮** at the bottom right of the card.
+2. Choose **👁 View details** to read the centre's status, enrolment and capacity, or **📅 Review day**.
+3. Agency admins also see **🚷 Sign-in lock…** to stop everyone at that centre signing in, and **🗄 Archive**. Archiving asks you to confirm; nothing is deleted and you can restore it from **Centres > Archived**.
+4. Agency admins can press **⚙️** on the card to open the centre's settings.
 
-## When does "Not in" become "Absent"?
+## Arranging Business insights
 
-During the day a child who has not arrived shows **Not in**, and a provider who has not clocked in shows **Not clocked in**. Once the day is over, both switch to **Absent**, and the count changes from "not in" to "absent".
+1. Under **Business insights**, press **+ Add widget**.
+2. Under **Available widgets**, click a widget (for example **Attendance today**, **Centre occupancy** or **Pending approvals**) to add it.
+3. Drag the tiles under **On your dashboard — drag to arrange** into the order you want, or press **×** to remove one.
+4. Press **Done**. Your layout is saved in this browser.
 
-The day is over when:
+Use **↻ Refresh** to reload everything, and **✏️ Edit agency** (agency admins) to change the agency's name, contact details, country and what facilities are called.
 
-- **Children:** it is past the centre's closing time. If the centre has no closing time, the automatic sign-off time for children is used, and if that is not set, 6 p.m.
-- **The provider:** it is past the end of their rostered shift today. With no shift on the roster, the centre's closing time is used, as above.
+## Further down the page
 
-Times follow your agency's time zone.
+- **🏆 Educator points** for the month, A to Z, with **Open Educator rewards →** (hidden when points are off);
+- **📲 Staff notifications**: which staff can receive app notifications, with **Settings →**;
+- **Team & family demographics** from onboarding;
+- **Recent activity**: the latest key events in the agency.
 
-> **Tip:** Set each centre's closing time so "Absent" appears at the right moment.
+## Who can do what
 
-## Card buttons
+| Role | What they see |
+|---|---|
+| Agency admin | Every centre, all tiles and widgets, **✏️ Edit agency**, **⚙️**, **🚷 Sign-in lock…**, **🗄 Archive** and the email on/off badges |
+| Centre director | Only their own centres. No agency-wide money widgets (revenue, receivables), no **✏️ Edit agency**, settings, sign-in lock or archive |
+| Platform admin | The agency they are currently viewing, as an agency admin |
 
-- **📅 Review day** opens that provider's **Daily Overview**.
-- **⚙️** opens the centre's settings.
-- **⋮** has more actions, such as viewing details or archiving.
+## FAQs and troubleshooting
 
-## The cards below
+??? The screen says "Could not load". | The overview could not be fetched. Press **↻ Refresh** or reload the page.
+??? It says "No centres yet". | No centre has been added. Agency admins press **+ Add your first centre**, which opens **Centres**.
+??? A child shows Absent but they were here. | Their sign-in was missed. Open **📅 Review day** and use **⏱ Fix** to record the real time.
+??? Staff shows 0 in red. | Nobody is clocked in at that centre right now. Ask the team to clock in, or check the **Time clock**.
+??? A widget I want is not in the list. | Directors are not offered agency-wide widgets. Agency admins see every widget their agency's plan allows.
+??? My widget layout is gone. | The layout is kept in your browser. A different browser or a cleared browser starts with the default widgets again.
 
-Under the centres is a row of cards:
+## Related
 
-- **Calendar** — the month, with today highlighted. Underneath, the **Today** block is shaded so today's events read first, then what is coming up.
-- **Team on the floor** — how many staff are working now and who they are. Click a name to send them a quick message.
-- **Upcoming birthdays**, **Security alerts** and **Recent activity**.
+[[open: #provider-day | Daily Overview]] [[open: #staff-calendar | Calendar]] [[open: #contacts | All contacts]]
 
-You can also add and arrange **Business insights** widgets — see **Customizing your dashboard**.
+- [[customizing-your-dashboard]]
+- [[understanding-the-dashboard]]
+- [[understanding-ratios]]
+- [[setting-up-your-centre]]

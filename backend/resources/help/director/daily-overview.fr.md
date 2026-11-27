@@ -1,59 +1,75 @@
 ---
 title: Aperçu quotidien : un prestataire, une journée
-category: Daily Operations
-order: 12
 ---
 # Aperçu quotidien : un prestataire, une journée
 
-L’**Aperçu quotidien** donne un coup d’œil rapide sur un prestataire (milieu ou centre),
-n’importe quel jour : qui est venu, qui travaille, ce qui a été mangé et fait, et chaque
-consignation quotidienne. Il s’ouvre sur aujourd’hui; tout jour passé fonctionne aussi.
+**Aperçu quotidien** donne un coup d’œil rapide sur un prestataire (un milieu familial ou un centre) pour une journée : quels enfants sont venus et repartis, qui a travaillé, ce qui a été mangé, prévu et consigné, et comment la journée s’est passée. Il s’ouvre sur aujourd’hui, et n’importe quel jour passé fonctionne aussi. Les administrateurs d’agence l’ouvrent depuis **Aperçu > Aperçu quotidien**; toute personne qui a l’**Aperçu de l’agence** ou le **Tableau de bord** peut aussi appuyer sur **📅 Revoir la journée** sur la carte d’un centre.
 
-[[open: #provider-day | Ouvrir l’aperçu quotidien]]
+[[open: #provider-day | Ouvrir Aperçu quotidien]]
 
-> Qui peut l’utiliser : **Administrateur de l’agence**, **Directeur du centre**, **Administrateur de la plateforme**.
+## Choisir le prestataire et la journée
 
-## Pour y accéder
+1. Ouvrez **Aperçu quotidien**. Si aucun prestataire n’est encore choisi, l’écran affiche « Select a provider to see its day. »
+2. Choisissez-en un dans la liste **Prestataire** (**Choisir un fournisseur de services…**).
+3. Utilisez **‹** (**Jour précédent**) et **›** (**Jour suivant**) à côté de la **Date** pour parcourir la semaine, ou choisissez une date. Le nom du jour (« Aujourd’hui », « Hier » ou le jour de la semaine) s’affiche à côté de l’étiquette **Date**.
+4. Appuyez sur **Aujourd’hui** pour revenir à aujourd’hui. **›** est grisé aujourd’hui, puisqu’il n’y a pas de jour futur à montrer.
 
-- Dans le menu : **Aperçu de l’agence → 🗓️ Aperçu quotidien**.
-- Depuis l’écran **Aperçu de l’agence** : le lien **📅 Revoir la journée** d’un prestataire ouvre
-  sa journée.
+## Vérifier les enfants
 
-Choisissez le prestataire en haut. Utilisez **‹ ›** (**Jour précédent** / **Jour suivant**) pour
-parcourir la semaine; le nom du jour est affiché pour que vous sachiez toujours où vous êtes.
+Le tableau **Enfants — arrivées / départs et soins** liste chaque enfant attendu ce jour-là, avec les totaux en haut : au centre, pas au centre, absents et non prévus.
 
-## L’équipe : prestataire et éducateurs
+1. Lisez chaque ligne : **Enfant**, **Arrivée**, **Départ**, **Soins aujourd’hui** (repas, siestes et soins consignés), **Par** (One-Tap ou manuel) et **Statut**.
+2. Repérez les petits badges sur les heures : **automatique** veut dire que personne n’a fait le départ de l’enfant et que l’heure a été remplie automatiquement; **saisi par le parent** ou **saisi par l’éducateur** veut dire que l’heure réelle vient du courriel de départ automatique; **corrected** veut dire que le personnel l’a corrigée plus tard.
+3. Un enfant marqué **Non réservé** n’est pas prévu ce jour-là.
 
-**Prestataire et éducateurs — pointages** liste toutes les personnes qui travaillent ce jour-là,
-avec leurs heures d’arrivée et de départ. Un point vert signifie qu’elles sont actives dans
-l’application; orange, en quart mais inactives. Dans l’Aperçu de l’agence, un milieu où personne
-n’a pointé affiche **Aucun membre du personnel n’a pointé**, et le survol indique qui y est affecté.
+## Faire l’arrivée ou le départ d’un enfant aujourd’hui
 
-Toutes les personnes affectées au milieu sont listées, même avant leur arrivée : **Pas encore
-pointé** (aujourd’hui), **N’a pas pointé** (jour passé) ou **Non prévu** (absent de l’horaire ce jour-là).
+1. À la date d’aujourd’hui, trouvez l’enfant et appuyez sur **Se connecter** (ou **Se déconnecter**) dans la colonne **Action**.
+2. Confirmez dans l’avertissement jaune **Not using One-Tap**. L’enfant est inscrit à l’heure actuelle et sa famille est avisée.
+3. Pour un enfant pas encore arrivé dont la famille sera en retard, appuyez sur **⏰ Late drop-off**; pour un enfant présent, sur **⏰ Départ**. Entrez l’heure et enregistrez.
 
-## Les enfants
+## Corriger une heure manquée ou erronée
 
-**Enfants — arrivées / départs et soins** liste chaque enfant prévu ce jour-là : son heure
-d’arrivée et de départ, le mode d’arrivée (One-Tap ou manuel) et les soins consignés. Un
-départ marqué **automatique** a été inscrit parce que personne n’a enregistré le départ; **saisi
-par le parent** ou **saisi par l’éducateur** signifie que l’heure réelle vient du courriel de
-départ automatique. Les enfants
-**Encore présents**, **Partis à la maison** ou **Absents** sont comptés en haut.
+1. Appuyez sur **⏱ Corriger** sur la ligne de l’enfant. Le bouton est là aujourd’hui et les jours passés.
+2. Dans **Ajouter une arrivée ou un départ manqué**, remplissez **Arrivé**, **Parti** ou les deux, et choisissez **Why is this being added late?**.
+3. Appuyez sur **Enregistrer**. « Attendance recorded. » s’affiche, la ligne indique **corrected** et la famille reçoit un courriel disant que le dossier a été corrigé.
 
-Aujourd’hui, vous pouvez indiquer ici qu’un enfant est présent ou parti à la maison. Sa famille
-en est avisée.
+## Vérifier l’équipe
+
+**Prestataire et éducateurs — pointages** liste toutes les personnes affectées à ce milieu, avec leurs heures d’arrivée et de départ. Un point vert veut dire qu’elles sont actives dans l’application en ce moment. Une personne qui n’est pas encore là affiche **Pas encore pointé** (aujourd’hui), **N’a pas pointé** (un jour passé) ou **Non prévu**; une personne en pause affiche « on lunch now » ou « on a break now ».
 
 ## Le reste de la journée
 
-- **Menu de la semaine** — ou un rappel d’en ajouter un pour que les parents le voient.
-- **Activités et consignations quotidiennes** — repas, siestes, soins et moments.
-- **📚 Prévu pour ce jour**, **🧮 Dernier comptage — par éducateur**, **📸 Photos et vidéos
-  prises**, **👀 Observations consignées**, **📝 Formulaires quotidiens remis**, **🚶 Promenades
-  et sorties** et **💬 Clavardage éducateur ↔ parent**.
-- **📊 Performance du prestataire** — les chiffres de la journée, comme les moments par enfant.
+- **Menu de la semaine** : le menu de la semaine, avec aujourd’hui en évidence, ou « No menu published for the week of … ».
+- **📚 Prévu pour ce jour** : les activités de la planification.
+- **🧮 Dernier comptage — par éducateur** : **✓ Tout le monde est là**, ou **⚠** le nombre d’enfants non comptés, en plus des comptages manqués.
+- **Mode d’arrivée** : combien d’arrivées sont passées par One-Tap et combien ont été faites à la main.
+- **🚶 Walk Watch** : les promenades et sorties, avec **● LIVE** et une **Carte en direct** pour celle en cours.
+- **📊 Performance du prestataire** : présences, repas et collations, siestes, activités, incidents et moments, plus les ⭐ points des éducateurs du mois.
+- **👀 Observations consignées**, **📸 Photos et vidéos prises** et **💬 Clavardage éducateur ↔ parent**.
+- **📝 Formulaires quotidiens remis** : les formulaires dus ce jour-là. Un formulaire **unique** ne s’affiche que jusqu’à sa signature.
+- **Activités et consignations quotidiennes** : toutes les consignations de la journée; utilisez **Tous les enfants** pour filtrer sur un seul enfant.
 
-> **Remarque :** **📝 Formulaires quotidiens remis** liste les formulaires réutilisables attendus chaque jour. Un formulaire unique (marqué **one-time**) n’apparaît que jusqu’à ce que le prestataire le signe, puis il quitte la liste.
+## Qui peut faire quoi
 
-??? Un enfant apparaît absent alors qu’il était là. | Indiquez qu’il est présent dans l’Aperçu quotidien (aujourd’hui), ou corrigez les heures dans Présences pour un jour passé.
-??? Pourquoi une section est-elle vide? | Rien n’a été consigné ce jour-là. La section l’indique, par exemple « Aucune observation consignée ce jour-là. »
+- **Administrateur d’agence** et **administrateur de la plateforme** : tous les prestataires de l’agence, avec arrivée et départ, heures de retard et **⏱ Corriger**.
+- **Directeur de centre** : ses propres centres, ouverts avec **📅 Revoir la journée** dans son **Tableau de bord**, y compris **⏱ Corriger**.
+- **Éducateurs, parents et vérificateurs** : ne voient pas cet écran.
+
+## FAQ et dépannage
+
+??? Un enfant est indiqué Absent alors qu’il était là. | Utilisez **⏱ Corriger** sur sa ligne pour inscrire ses vraies heures d’arrivée et de départ, avec une raison.
+??? Pourquoi n’y a-t-il pas de bouton d’arrivée un jour passé? | L’arrivée et le départ enregistrent « maintenant », donc ils n’apparaissent qu’aujourd’hui. Pour un jour passé, utilisez **⏱ Corriger**.
+??? Une section est vide. | Rien n’a été consigné ce jour-là. La carte le dit, par exemple « No observations recorded on this day. »
+??? L’écran affiche « Could not load: … ». | La journée n’a pas pu être chargée. Choisissez de nouveau le prestataire ou rechargez la page.
+??? Il affiche « This provider’s day could not be displayed. » | Les données ont été chargées mais n’ont pas pu être affichées. Rechargez la page; si cela se répète, indiquez au soutien KiddieTrac le prestataire et la date.
+??? Il affiche « No providers found. » | Votre agence n’a pas encore de centre ouvert, ou aucun dans votre périmètre. Ajoutez-en un dans **Centres**.
+
+## Voir aussi
+
+[[open: #dashboard | Aperçu de l’agence]] [[open: #care-log | Journal quotidien]] [[open: #headcounts | Comptages]]
+
+- [[agency-overview]]
+- [[correcting-attendance]]
+- [[daily-care-logs]]
+- [[headcounts-and-acting-supervisor]]

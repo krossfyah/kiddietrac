@@ -1,71 +1,79 @@
 ---
 title: Aperçu de l’agence
-category: Getting Started
-order: 3
-roles: agency_admin, platform_admin
 ---
 # Aperçu de l’agence
 
-**Aperçu de l’agence** est l’écran d’accueil de l’administrateur de l’agence. Il présente d’un coup d’œil chaque centre ou prestataire de votre agence : qui est présent, qui ne l’est pas et qui travaille aujourd’hui.
+**Aperçu de l’agence** est l’écran d’accueil des administrateurs d’agence, et le **Tableau de bord** des directeurs de centre. Il montre d’un coup d’œil chaque centre ou prestataire dont vous vous occupez : qui est là, qui travaille, ce qui demande votre attention et ce qui s’est passé récemment. Les chiffres se mettent à jour d’eux-mêmes toutes les 30 secondes. Ouvrez-le depuis le menu latéral : **Aperçu > Aperçu de l’agence** (directeurs : **Aperçu > Tableau de bord**).
 
-Menu latéral → **Aperçu** → **Aperçu de l’agence**.
+[[open: #dashboard | Ouvrir Aperçu de l’agence]]
 
-[[open: #dashboard | Ouvrir l’aperçu de l’agence]]
+## Lire les chiffres du haut
 
-## Les cartes des centres
+La bannière affiche le nom de votre agence, le nombre de centres et d’enfants inscrits, et si les courriels de l’agence sont activés. En dessous, une rangée de tuiles, par exemple :
 
-Chaque centre ou prestataire a sa propre carte. En haut :
+- **Total inscrits**, **Au centre maintenant** et **Personnel sur place** (en rouge quand personne n’a pointé);
+- **Créances** et **Factures en retard** (en rouge quand de l’argent est dû);
+- **Centres**, **Capacité autorisée**, **Familles**, **Membres de l’équipe** et **Alertes de ratio**.
 
-- **Inscrit** — les enfants inscrits, sur la capacité autorisée lorsqu’elle est définie.
-- **Présent** — les enfants arrivés en ce moment. Survolez pour voir leurs noms.
-- **Personnel** — le personnel qui a pointé son arrivée en ce moment. Survolez pour voir qui. Le chiffre devient rouge à 0.
-- L’anneau indique le taux de remplissage actuel du centre. L’étiquette à côté affiche **Conforme**, ou le nombre de dépassements de ratio.
+Un chiffre qui change apparaît en fondu pour attirer votre attention.
 
-### Prestataire et personnel aujourd’hui
+## Vérifier la journée d’un centre
 
-Sous les compteurs, la liste **Prestataire · aujourd’hui** (ou **Prestataire et personnel · aujourd’hui** lorsque d’autres personnes ont pointé à cet endroit) affiche les pointages d’arrivée et de départ, tout comme les enfants affichent leurs arrivées et départs :
+Chaque centre a sa carte sous **Vos centres**.
 
-- **✓ Arrivée pointée 8:02 AM** — en service actuellement.
-- **8:02 AM → 4:30 PM** — a pointé son arrivée et son départ aujourd’hui.
-- **Pas encore pointé** — le prestataire n’a pas encore pointé son arrivée aujourd’hui.
-- **Absent** — le prestataire n’a jamais pointé son arrivée et sa journée est terminée.
+1. Regardez l’anneau en haut à droite. Il montre à quel point le centre est plein en ce moment; survolez-le pour voir « x of y spaces filled right now ». À côté, l’étiquette indique **Conforme**, ou le nombre de dépassements de ratio.
+2. Lisez les trois compteurs : **Inscrit** (sur la capacité), **Au centre** et **Personnel**. Survolez **Au centre** ou **Personnel** pour voir les noms.
+3. Vérifiez **Prestataire et éducateurs · today**. Chaque personne affiche **✓ Arrivée pointée** avec une heure, une plage d’heures une fois partie, **☕ On break** ou **🍽️ On lunch**, **Pas encore pointé**, **Non prévu**, ou **Absent** une fois sa journée terminée.
+4. Vérifiez **Children · today**. Chaque enfant affiche **✓ Au centre** avec l’heure d’arrivée, **Pas au centre** avec ses heures une fois parti, **Pas encore arrivé**, **Non prévu**, ou **Absent** après la fermeture. Un badge « ×2 » veut dire qu’il est venu deux fois.
+5. Appuyez sur **📅 Revoir la journée** pour ouvrir ce centre dans **Aperçu quotidien** et voir toute la journée.
 
-Le prestataire figure toujours en premier. Toute autre personne qui a pointé son arrivée à ce centre aujourd’hui suit, avec la mention **· personnel**.
+« Pas encore arrivé » devient « Absent » une fois l’heure de fermeture du centre passée (ou l’heure de départ automatique si aucune heure de fermeture n’est réglée). Un prestataire devient « Absent » après la fin de son quart prévu.
 
-### Les enfants aujourd’hui
+## Gérer un centre depuis sa carte
 
-Plus bas, on trouve les présences du jour de chaque enfant inscrit, avec le nombre d’enfants **arrivés** et **absents** :
+1. Appuyez sur **⋮** en bas à droite de la carte.
+2. Choisissez **👁 Voir les détails** pour lire le statut, les inscriptions et la capacité du centre, ou **📅 Revoir la journée**.
+3. Les administrateurs d’agence voient aussi **🚷 Sign-in lock…**, pour empêcher tout le monde de ce centre de se connecter, et **🗄 Archiver**. L’archivage demande une confirmation; rien n’est supprimé et vous pouvez le restaurer depuis **Centres > Archivé**.
+4. Les administrateurs d’agence peuvent appuyer sur **⚙️** sur la carte pour ouvrir les paramètres du centre.
 
-- **✓ Arrivé 8:15 AM** — est ici en ce moment.
-- **8:15 AM → 3:40 PM** — est venu puis reparti.
-- **Absent** — n’est pas encore arrivé, pendant la journée.
-- **Absent** — n’est jamais arrivé, et la journée est terminée.
+## Organiser les analyses d’activité
 
-## Quand « Absent » (pas encore arrivé) devient-il « Absent » ?
+1. Sous **Analyses d’activité**, appuyez sur **+ Ajouter un widget**.
+2. Sous **Widgets disponibles**, cliquez sur un widget (par exemple **Présences aujourd’hui**, **Occupation des centres** ou **Approbations en attente**) pour l’ajouter.
+3. Glissez les tuiles sous **Sur votre tableau de bord — glissez pour réorganiser** dans l’ordre voulu, ou appuyez sur **×** pour en retirer une.
+4. Appuyez sur **Terminé**. Votre disposition est gardée dans ce navigateur.
 
-Pendant la journée, un enfant qui n’est pas arrivé s’affiche comme **Absent** (pas encore arrivé), et un prestataire qui n’a pas pointé s’affiche comme **Pas encore pointé**. Une fois la journée terminée, les deux passent à **Absent**, et le compteur passe de « pas arrivés » à « absents ».
+Utilisez **↻ Actualiser** pour tout recharger, et **✏️ Modifier l’agence** (administrateurs d’agence) pour changer le nom de l’agence, ses coordonnées, son pays et le nom donné aux installations.
 
-La journée est terminée lorsque :
+## Plus bas dans la page
 
-- **Enfants :** l’heure de fermeture du centre est passée. Si le centre n’a pas d’heure de fermeture, l’heure de départ automatique des enfants est utilisée, et à défaut, 18 h.
-- **Le prestataire :** la fin de son quart prévu aujourd’hui est passée. Sans quart à l’horaire, l’heure de fermeture du centre est utilisée, comme ci-dessus.
+- **🏆 Points des éducateurs** du mois, de A à Z, avec **Open Educator rewards →** (caché quand les points sont désactivés);
+- **📲 Notifications du personnel** : quels membres du personnel peuvent recevoir les notifications de l’application, avec **Settings →**;
+- **Données démographiques de l’équipe et des familles**, tirées de l’accueil;
+- **Activité récente** : les derniers événements importants de l’agence.
 
-Les heures suivent le fuseau horaire de votre agence.
+## Qui peut faire quoi
 
-> **Astuce :** Définissez l’heure de fermeture de chaque centre afin que « Absent » s’affiche au bon moment.
+| Rôle | Ce qu’il voit |
+|---|---|
+| Administrateur d’agence | Tous les centres, toutes les tuiles et tous les widgets, **✏️ Modifier l’agence**, **⚙️**, **🚷 Sign-in lock…**, **🗄 Archiver** et les badges de courriel activé ou désactivé |
+| Directeur de centre | Seulement ses propres centres. Aucun widget financier à l’échelle de l’agence (revenus, créances), ni **✏️ Modifier l’agence**, paramètres, verrouillage de connexion ou archivage |
+| Administrateur de la plateforme | L’agence qu’il consulte, comme un administrateur d’agence |
 
-## Boutons de la carte
+## FAQ et dépannage
 
-- **📅 Revoir la journée** ouvre l’**Aperçu quotidien** de ce prestataire.
-- **⚙️** ouvre les paramètres du centre.
-- **⋮** offre d’autres actions, comme consulter les détails ou archiver.
+??? L’écran affiche « Could not load ». | L’aperçu n’a pas pu être chargé. Appuyez sur **↻ Actualiser** ou rechargez la page.
+??? Il affiche « No centres yet ». | Aucun centre n’a encore été ajouté. Les administrateurs d’agence appuient sur **+ Ajouter votre premier centre**, qui ouvre **Centres**.
+??? Un enfant est indiqué Absent alors qu’il était là. | Son arrivée n’a pas été enregistrée. Ouvrez **📅 Revoir la journée** et utilisez **⏱ Corriger** pour inscrire l’heure réelle.
+??? Personnel affiche 0 en rouge. | Personne n’a pointé à ce centre en ce moment. Demandez à l’équipe de pointer, ou vérifiez la **Pointeuse**.
+??? Un widget que je veux n’est pas dans la liste. | Les directeurs ne se voient pas offrir les widgets à l’échelle de l’agence. Les administrateurs d’agence voient tous les widgets permis par le forfait de leur agence.
+??? Ma disposition de widgets a disparu. | La disposition est gardée dans votre navigateur. Un autre navigateur, ou un navigateur vidé, repart avec les widgets par défaut.
 
-## Les cartes plus bas
+## Voir aussi
 
-Sous les centres se trouve une rangée de cartes :
+[[open: #provider-day | Aperçu quotidien]] [[open: #staff-calendar | Calendrier]] [[open: #contacts | Tous les contacts]]
 
-- **Calendrier** — le mois, avec la journée d’aujourd’hui en évidence. En dessous, le bloc **Aujourd’hui** est ombré pour que les événements du jour se lisent en premier, puis ceux à venir.
-- **Équipe sur le plancher** — le nombre de membres du personnel qui travaillent en ce moment et leurs noms. Cliquez sur un nom pour lui envoyer un message rapide.
-- **Anniversaires à venir**, **Alertes de sécurité** et **Activité récente**.
-
-Vous pouvez aussi ajouter et organiser des widgets **Analyses d’activité** — voir **Personnaliser votre tableau de bord**.
+- [[customizing-your-dashboard]]
+- [[understanding-the-dashboard]]
+- [[understanding-ratios]]
+- [[setting-up-your-centre]]

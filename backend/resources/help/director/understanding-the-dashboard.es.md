@@ -1,52 +1,75 @@
 ---
-title: Entender el panel
-category: Getting Started
-order: 2
+title: La lista de hoy y su pantalla de inicio
 ---
+# La lista de hoy y su pantalla de inicio
 
-# Entender el panel
+Esta guía cubre dos pantallas. Los directores de centro tienen **Hoy** (**Operaciones > Hoy**): una lista en vivo de cada sala, donde puede registrar la entrada o salida de un niño, anotar una llegada tardía y corregir un registro omitido. Los auditores tienen **Inicio** (**Menú > Inicio**): un lanzador de solo lectura para las pantallas que un auditor puede abrir. Su **Panel** se explica en [[agency-overview]].
 
-Su panel es lo primero que ve al iniciar sesión. Está diseñado para darle el pulso de su centro en tiempo real en 10 segundos.
+## Para directores de centro: la lista de Hoy
 
-## Los cuatro recuadros de estadísticas
+[[open: #today | Abrir Hoy]]
 
-En la parte superior del panel:
+### Leer la lista
 
-- **Matriculado** — total de niños actualmente matriculados en todas las salas. Se actualiza al instante cuando matricula o da de baja a un niño.
-- **Presentes ahora** — niños que han registrado su entrada hoy y aún no su salida. Debería coincidir con lo que ve en las salas.
-- **Personal presente** — personal que ha fichado en este momento. Si es 0 y hay niños presentes, sus salas mostrarán BREACH.
-- **Cuentas por cobrar** — saldo total de facturas pendientes de todas las familias. Se actualiza cuando se generan facturas o se registran pagos.
+1. Abra **Operaciones > Hoy**. El título dice **Lista de hoy** con la fecha de hoy.
+2. Cada sala tiene su propia tarjeta. Junto al nombre de la sala está su insignia de proporción: **COMPLIANT**, **TIGHT**, **BREACH**, **CHECK STAFFING** o **TAMAÑO DE GRUPO EXCEDIDO**, y a la derecha "x children · y educators".
+3. Cada tarjeta de niño muestra su nombre, su edad y dónde está: **At Centre since** una hora, **No está en el centro**, **Absent today**, o **Late drop-off · by** una hora cuando la familia avisó que llegará tarde.
 
-## Las tarjetas de sala
+Si una sala dice "No children enrolled in this room.", todavía no hay nadie matriculado allí.
 
-Debajo de las estadísticas verá una tarjeta por sala. Cada tarjeta muestra:
+### Registrar la entrada o salida de un niño
 
-- **Nombre y color de la sala**
-- **Insignia de estado** — COMPLIANT (verde), TIGHT (naranja) o BREACH (rojo). Consulte **Entender las proporciones** para saber qué significan.
-- **Niños presentes / educadores presentes**
-- **% de capacidad**
+1. Busque la tarjeta del niño y pulse **Iniciar sesión** (o **Cerrar sesión** si ya está aquí).
+2. Un aviso amarillo, **Not using One-Tap**, le recuerda que normalmente los padres registran la entrada ellos mismos. Pulse **Registrar entrada de todos modos** (o **Check out anyway**) para continuar, o **Cancelar**.
+3. Un aviso verde lo confirma, por ejemplo "Maya signed in". Se registra al niño con la hora actual y se notifica a su familia.
 
-Si alguna sala muestra BREACH, debe atenderla de inmediato. O bien un educador debe fichar en esa sala, o bien hay que trasladar niños.
+### Anotar una llegada tardía o una recogida tardía
 
-## Navegación de la barra lateral
+1. Para un niño que todavía no llegó, pulse **⏰ Late drop-off**. Para un niño que está aquí, pulse **⏰ Recogida tardía**.
+2. Escriba la hora que dio la familia (**Expected by** o **Picked up by**) y pulse **Guardar**. El botón muestra entonces esa hora. Safe Arrival espera hasta esa hora antes de contactar a la familia.
 
-- **Panel** — esta pantalla
-- **Niños** — su lista de matrícula, filtrable por sala y estado
-- **Familias** — lista de todas las familias con los datos del contacto principal
-- **Personal** — su equipo, certificaciones, horarios
-- **Lista en vivo (Hoy)** — vea quién está presente ahora, sala por sala
-- **Cumplimiento** — estado de proporciones, avisos de vencimiento de certificaciones, vacunas pendientes
+### Corregir una entrada o salida omitida
 
-## Lo que NO está en el panel (pero debería)
+1. En la tarjeta del niño, pulse **⏱ Corregir un registro omitido**. Se abre la ventana **Añadir una entrada o salida omitida**.
+2. Elija **Qué día** y luego complete **Llegó**, **Se fue**, o ambos.
+3. Elija un motivo en **Why is this being added late?** y agregue **Notas** si hace falta (obligatorio para "Other").
+4. Pulse **Guardar**. Aparece "Attendance recorded.". El registro queda marcado como corrección posterior con su nombre, se envía un correo a la familia diciendo que el registro se corrigió (sin su motivo), y se avisa a los administradores y al director.
 
-Mantenemos el panel simple a propósito. Otras cosas que puede hacer pero que no están en el panel:
+## Para auditores: la pantalla de Inicio
 
-- **Generar facturas** — Familias → sección Facturas
-- **Revisar incidentes** — Cumplimiento → Incidentes
-- **Exportar informes de cumplimiento** — Cumplimiento → Exportar
+[[open: #home | Abrir Inicio]]
 
-## Qué revisar a diario
+Inicio es un lanzador de solo lectura. El encabezado dice **Auditoría y cumplimiento** y "Read-only · tap to open".
 
-- **Por la mañana:** confirme que Personal presente coincide con quienes realmente están. Si ve 0, pida a sus educadores que fichen.
-- **A mediodía:** eche un vistazo a las salas: ¿alguna en TIGHT o BREACH?
-- **Al final del día:** compruebe que todos los niños que estaban «Presentes ahora» tengan registrada su salida.
+1. Abra **Menú > Inicio** (o toque el logotipo arriba).
+2. En **Acceso rápido**, toque un mosaico: **Cumplimiento**, **Registros de auditoría**, **Niños**, **Formularios** o **Ayuda**.
+3. La pantalla se abre en solo lectura. Regrese con **Inicio** en el menú. **Gestor de formularios** también está en el menú.
+4. Cuando termine, toque **🏃 Cerrar sesión** al final de Inicio.
+
+Los auditores no pueden cambiar registros, registrar entradas o salidas de niños ni enviar mensajes.
+
+## Quién puede hacer qué
+
+| Rol | Qué ve |
+|---|---|
+| Director de centro | **Hoy** para sus propios centros, con entrada/salida, llegada tardía, recogida tardía y **⏱ Corregir un registro omitido** |
+| Administrador de la agencia | Usa **Resumen de la agencia** y **Resumen diario** para las mismas tareas, en todos los centros |
+| Auditor | **Inicio** y las pantallas de solo lectura que abre; no tiene **Hoy** |
+
+## Preguntas frecuentes y solución de problemas
+
+??? Hoy dice "Could not load roster". | No se pudo obtener la lista. Recargue la página; si continúa, contacte a su administrador de la agencia.
+??? Falta una sala en Hoy. | Una sala cuya lista no se puede cargar se omite. Recargue la página; si sigue faltando, revise la sala en los ajustes de su centro con su administrador de la agencia.
+??? La ventana de corrección dice "Give an arrival time, a departure time, or both." | Complete **Llegó**, **Se fue** o ambos antes de guardar.
+??? Dice "Choose why this is being added late — it goes on the record." | Elija un motivo de la lista. Si eligió "Other", "Add a note explaining the reason." significa que también hace falta el cuadro **Notas**.
+??? ¿La familia recibe un mensaje cuando registro la entrada de un niño? | Sí. Una entrada o salida manual notifica a la familia, igual que la de un educador.
+??? Como auditor, un mosaico dice "This section isn't available." | Esa pantalla no está abierta a los auditores en su agencia. Pregunte al administrador de la agencia que lo invitó.
+
+## Relacionado
+
+[[open: #compliance | Cumplimiento]]
+
+- [[agency-overview]]
+- [[correcting-attendance]]
+- [[safe-arrival]]
+- [[understanding-ratios]]

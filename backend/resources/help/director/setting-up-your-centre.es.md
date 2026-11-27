@@ -1,103 +1,79 @@
 ---
 title: Configurar su centro
-category: Getting Started
-order: 1
-roles: agency_admin, centre_director
 ---
+# Configurar su centro
 
-# Configurar su centro — sus primeros 30 minutos
+**Centros** es donde un administrador de la agencia agrega y mantiene cada ubicación de la agencia: un centro, un proveedor de cuidado en el hogar o una sala, según como los llame su agencia. Cada centro guarda su dirección, proveedor (titular), capacidad, horario, marca, quiosco y ajustes de correo. Ábralo desde la barra lateral: **Resumen > Centros**.
 
-Le damos la bienvenida a Kiddietrac. Esta guía le acompaña en sus primeros 30 minutos de configuración de la plataforma. Al final tendrá una sala, una familia, un niño inscrito y un miembro del personal invitado.
+[[open: #admin-centres | Abrir Centros]]
 
-## Antes de empezar
+## Agregar un centro
 
-Necesitará:
+1. Abra **Centros** y pulse **+ Añadir centro** (arriba a la derecha). Se abre el formulario **Nuevo centro**.
+2. Escriba el **Nombre del centro**, por ejemplo "Starlight Learning Centre".
+3. Complete **Nombre del proveedor (titular)** y **Apellido del proveedor (titular)**. Es la persona que dirige el hogar o el centro, no su visitador domiciliario.
+4. Si lo desea, agregue el **Número de licencia**, **Maximum children enrolled (capacity)** y **Máximo de niños a la vez**. La matrícula puede superar el segundo número; la asistencia no.
+5. Empiece a escribir en **Buscar la dirección** y elija la coincidencia. Esto llena **Dirección**, **Ciudad**, **Province / State** y **Código postal**; revíselos o escríbalos usted mismo.
+6. Marque los **Días de apertura** y fije **Abre** y **Cierra**. La hora de cierre es la referencia para una recogida tardía; déjela en blanco solo si el proveedor no tiene una hora de cierre fija.
+7. Pulse **Crear centro**. El nuevo centro aparece en la lista.
 
-- El número de licencia de su centro (licencia CCEYA)
-- Una lista de sus salas con capacidad y rangos de edad
-- Los datos de al menos una familia (correo electrónico y dirección de un padre o madre)
-- Los correos electrónicos de su personal
+> 💡 La dirección es lo que ubica el centro en el **Mapa de proveedores**, así que una dirección completa le ahorra volver aquí.
 
-## Paso 1 — Añada sus salas (5 minutos)
+## Editar un centro
 
-En la barra lateral izquierda, busque **AÑADIR RÁPIDO** y haga clic en **🏫 Nueva sala**.
+1. Busque el centro en la lista y abra su menú **⋮**.
+2. Pulse **Editar**. Se abre el mismo formulario con los datos del centro.
+3. Cambie lo que necesite. En **Marca** puede **Subir logotipo** (máximo 2 MB), elegir un **Color principal** y un **Color de énfasis**, y escribir un **Tagline (shown on the centre card)**.
+4. Actualice la **Biografía del proveedor** si las familias deben ver una nueva presentación. Una vez escrita no puede quedar vacía, porque se envía a las familias cuando se unen.
+5. Use el interruptor de correo para activar o desactivar los correos de este centro.
+6. Pulse **Guardar cambios**. La fila se actualiza al instante.
 
-Para cada sala definirá:
+Para leer un centro sin riesgo de cambiar nada, use **⋮ > Ver**.
 
-- **Nombre de la sala** — cómo la llama su personal (p. ej. «Sala Sol», «Tigres»)
-- **Grupo de edad** — bebés / niños pequeños / preescolar / kínder / edad escolar
-- **Edad mín./máx. en meses** — se usa para calcular las proporciones
-- **Capacidad** — el número máximo de niños con licencia para esta sala
-- **Proporción** — el estándar de Ontario es 1 educador por cada 3 bebés, 1:5 niños pequeños, 1:8 preescolar, 1:13 kínder
-- **Color** — elija un color para identificar la sala visualmente en toda la aplicación
+## Activar el quiosco
 
-Repita el proceso para cada sala de su centro. La mayoría de los centros CCEYA de Ontario tienen de 3 a 5 salas.
+1. Abra **⋮ > Editar** en el centro y baje hasta **🛡 Modo quiosco**.
+2. Marque **Activar el quiosco para este centro**. Los padres podrán registrar la entrada o salida de los niños en una tableta en la puerta con su PIN de 4 a 6 dígitos.
+3. Pulse **Generar token** si todavía no hay enlace, luego **Copiar URL** y ábralo en la tableta.
+4. Si una tableta del quiosco se pierde o la roban, pulse **Sign out all kiosks**. El enlace anterior deja de funcionar en todas las tabletas a la vez; abra el nuevo enlace en las que siga usando.
 
-## Paso 2 — Añada familias (10 minutos)
+## Nombrar un supervisor interino
 
-Una «familia» es un grupo de personas relacionadas: normalmente uno o dos padres con uno o más hijos. Cada niño pertenece a una sola familia.
+1. Abra **⋮ > Supervisor interino** en el centro.
+2. Elija quién actúa por el supervisor cuando no está en el sitio y guarde. Vea [[headcounts-and-acting-supervisor]].
 
-Haga clic en **👪 Nueva familia** en AÑADIR RÁPIDO.
+## Cerrar un proveedor
 
-Para cada familia, introduzca:
+1. Abra **⋮ > 🚪 Close this provider…**.
+2. Elija el **Último día de operación**.
+3. Para cada familia, elija a dónde va: una sala en otro centro, **Baja: deja el cuidado** o **Waitlist — place with a new educator later**.
+4. Pulse **Vista previa** para revisar el plan y luego **Cerrar proveedor**. Se aplican los traslados y las bajas, se envía un correo a los padres y el proveedor pasa a **Archivado**.
 
-- **Apellido de la familia** — p. ej. «La familia Williams» o «La familia Smith-Patel»
-- **Correo electrónico y teléfono principales** — se usan para la facturación si más adelante no se define un contacto específico
-- **Dirección** — se usa como dirección postal de la familia
+Los administradores de la agencia pueden cambiar entre **Activo** y **Archivado** bajo el encabezado para ver o restaurar centros cerrados.
 
-No se preocupe por añadir aún a los padres; eso viene en el Paso 4.
+## Quién puede hacer qué
 
-## Paso 3 — Inscriba a los niños (10 minutos)
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador de la agencia | Todo en esta pantalla: agregar, editar, quiosco, bloqueo de inicio de sesión, cerrar y restaurar centros |
+| Administrador de la plataforma | Lo mismo, dentro de la agencia que está viendo |
+| Director de centro | No tiene la pantalla **Centros**. Los directores ven sus propios centros en el **Panel** y piden los cambios a un administrador de la agencia |
 
-Haga clic en **👶 Nuevo niño** en AÑADIR RÁPIDO.
+## Preguntas frecuentes y solución de problemas
 
-Para cada niño, introduzca:
+??? Pulsé Crear centro y no se guardó nada. | El formulario muestra el motivo en rojo. "Name is required." significa que el **Nombre del centro** está vacío. Al agregar un centro, el nombre del proveedor y la dirección también son obligatorios.
+??? La pantalla dice "Could not load centres". | No se pudo obtener la lista. Actualice la página; si sigue pasando, revise su conexión o contacte al soporte de KiddieTrac.
+??? ¿Por qué no puedo borrar la biografía del proveedor? | "The provider bio cannot be removed — families are sent it when they join." Edite el texto en su lugar.
+??? Nunca se marcan recogidas tardías en un centro. | No tiene hora en **Cierra**. Sin hora de cierre nada puede contarse como tardío. Agréguela en **Días de apertura**.
+??? Un centro muestra Correo desactivado. | Los correos de ese centro están desactivados, así que sus familias no reciben correos de KiddieTrac. Vuelva a activar el interruptor en **⋮ > Editar**.
+??? No veo Centros en mi menú. | Solo los administradores de la agencia lo tienen. Un director de centro se lo pide a su administrador de la agencia.
 
-- Nombre, nombre preferido (apodo), fecha de nacimiento, género
-- La familia a la que pertenece (de su lista del Paso 2)
-- La sala en la que está inscrito (de su lista del Paso 1)
-- **Fecha de inicio** — normalmente hoy, pero puede ser una fecha futura
-- **Cuota mensual** — lo que paga la familia al mes a tarifa completa
-- **Elegible para CWELCC** — la mayoría de los niños menores de 6 años son elegibles para la subvención CWELCC de Ontario
-- **Notas médicas** — alergias, afecciones, ubicación del EpiPen, etc.
-- **Notas dietéticas** — vegetariano, kosher, sin lácteos, etc.
+## Relacionado
 
-También es el momento de marcar las alergias graves (cacahuete, etc.): aparecerán como avisos rojos en la tableta del educador.
+[[open: #dashboard | Resumen de la agencia]] [[open: #provider-map | Mapa de proveedores]] [[open: #provider-day | Resumen diario]]
 
-## Paso 4 — Invite a los padres (5 minutos)
-
-Haga clic en **💌 Invitar a un padre** en AÑADIR RÁPIDO.
-
-Elija la familia a la que quiere invitar a un padre o madre. Luego introduzca:
-
-- El nombre, apellido y correo electrónico del padre o madre
-- Su relación (madre / padre / tutor / etc.)
-- **Contacto principal** — ¿es esta persona el contacto principal de facturación y comunicación?
-- **Puede recoger** — ¿puede esta persona firmar la salida del niño al final del día?
-- **Recibe correos de facturación** — ¿debe esta persona recibir la factura mensual?
-
-Al hacer clic en **Enviar invitación**, Kiddietrac le envía un correo de bienvenida con una contraseña temporal. Puede iniciar sesión de inmediato y ver la actividad diaria de su hijo.
-
-Si la familia tiene dos padres, invitará a cada uno por separado. Ambos verán al mismo niño, pero tendrán su propio acceso.
-
-## Paso 5 — Invite a su personal
-
-Haga clic en **👨‍🏫 Invitar al personal** en AÑADIR RÁPIDO.
-
-Para cada educador y cada codirector:
-
-- Nombre y correo electrónico
-- Rol: **Educador** (vista de tableta, centrada en la sala) o **Director** (administración completa)
-- Enviar correo de bienvenida — recibirán sus datos de acceso
-
-Tras iniciar sesión por primera vez y cambiar su contraseña, estarán listos para registrar actividades.
-
-## ¿Y ahora qué?
-
-Ya tiene su centro configurado. El día a día funciona así:
-
-- Los **educadores** usan la vista de tableta para registrar la llegada de los niños, anotar comidas, siestas y actividades, y hacer fotos
-- Los **padres** ven todo esto en su aplicación
-- **Usted** revisa el panel para las proporciones, genera las facturas mensuales y gestiona los incidentes
-
-Consulte **Generar facturas mensuales** para saber cómo funciona la facturación.
+- [[kiosk-mode]]
+- [[closing-a-provider-or-educator]]
+- [[centres-or-rooms]]
+- [[archived-records]]
+- [[first-time-setup]]
