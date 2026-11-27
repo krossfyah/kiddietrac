@@ -7,81 +7,100 @@ screens: external-billing
 ---
 # Accounting
 
-**Finance → Accounting.** Every invoice on the agency is in one list, whoever it is with and wherever it was raised. From here you can open invoices, record payments, resend, edit and void them.
+**Finance → Accounting** puts every invoice on your agency in one list, whoever it is with and wherever it was raised. From here you open invoices, record payments, confirm Interac e-Transfers, resend, edit and void. Open it when money comes in, when a family asks for their invoice again, or when an invoice needs to be cancelled.
 
 [[open: #external-billing | Open Accounting]]
 
 ## What is in the list
 
-Accounting reads all three places an invoice can come from, so no money is missing from it:
+Accounting reads all three places an invoice can come from, so no money is missing:
 
-- **KiddieTrac invoices**: raised inside KiddieTrac, for example by a monthly run or a payment schedule. They are tagged **KIDDIETRAC** under the number.
+- **KiddieTrac invoices**: raised inside KiddieTrac, for example by the Bulk invoice run or a payment schedule. They are tagged **KIDDIETRAC** under the number.
 - **Synced invoices**: raised in an outside billing system and synced in.
-- **Payee invoices**: money billed to or paid to somebody who is not a family, such as an educator or a contractor. These are raised in **My Pay**, and the row says **Raised in My Pay** instead of offering actions.
+- **Payee invoices**: money billed to or paid to someone who is not a family, such as an educator or contractor. The row says **Raised in My Pay** instead of offering actions.
 
-The **Outstanding** and **Collected** cards at the top add up whatever the list is showing, so they always describe the filter you have chosen.
+The **Outstanding** and **Collected** cards at the top add up whatever the list is showing, so they always describe the filter you chose.
 
-> **Note:** A pending payment-schedule invoice is listed but **not counted as outstanding**. Nobody has been asked for that money yet. See [Payment schedules](payment-plans).
+> ℹ️ A pending payment-schedule invoice is listed but not counted as outstanding. Nobody has been asked for that money yet. See [Payment schedules](payment-plans).
 
-## Filtering
+## Finding an invoice
 
-**Tabs**: **Outstanding** (everything except voided), **Paid**, **Overdue** and **Voided**. Voided invoices are kept out of the default view because they are no longer owed, but they are one click away.
+1. Pick a tab: **Outstanding** (everything except voided), **Paid**, **Overdue**, **Voided**, or **e-Transfers to confirm**.
+2. In the first list, choose who the invoice is with: **Everyone**, **Parents**, **Educators** or **Providers** (the word follows your agency's setting), **Contractors**, or **Other** (anything not yet given a kind, listed so it gets checked).
+3. Optional: pick one family in the family list. Choosing anything other than Parents clears the family filter, because a contractor has no family.
+4. Optional: search by invoice number, description or status.
 
 [[show: #external-billing @ Voided | Show me the Voided tab]]
 
-**Who the invoice is with**: the first list narrows the invoices to one kind of counterparty:
+## Recording a payment that arrived
 
-- **Everyone**
-- **Parents**: every family-billed invoice, whether KiddieTrac or synced
-- **Educators** or **Providers**: the word follows your agency's setting for what its facilities are called
-- **Contractors**
-- **Other**: anything that has not been given a kind. It is listed rather than hidden, because an unlabelled row is exactly the one worth checking
+1. Find the invoice and open its **⋮** menu.
+2. Choose **Record payment**. The dialog shows the **Invoice total** and what is **Outstanding**.
+3. Check the **Amount being settled**. It starts at the full balance; a partial payment is allowed.
+4. Choose **How it was paid**: e-Transfer / EFT, Cash, Cheque, Bank transfer, Card (taken offline) or Other.
+5. Set the **Date received** and type the **Reference number** (e-Transfer or cheque number). Add a **Note (optional)** if useful.
+6. If your agency charges a surcharge for that method, a tick-box offers to add the service fee. It is off unless you tick it. See [Payment surcharges](payment-surcharges).
+7. Press **Record payment**. The row's balance and status update.
 
-Choosing anything other than Parents clears the **family** filter, because a contractor has no family.
+## Confirming an Interac e-Transfer a family reported
 
-**Family** and **search** (invoice number, description or status) work on whatever is selected.
+When a family says in their billing screen that they sent an e-Transfer, it waits for you on the **e-Transfers to confirm** tab (the tab shows how many).
 
-## Row actions
+1. Open the **e-Transfers to confirm** tab, or use **⋮ > Confirm e-Transfer** on the invoice.
+2. The **Confirm Interac e-Transfer** window shows who it is from, the **Amount sent**, the **Reference** and the invoices it covers.
+3. Check your bank for that e-Transfer before you approve it.
+4. If your bank shows a different amount, change **Amount received**.
+5. Press **✅ Approve & record payment**. The payment is recorded on the invoice(s).
+6. If it has not arrived, press **Reject**, write why under **Why? The family is sent this**, and press **Reject and tell the family**.
 
-**On a KiddieTrac invoice:**
+## Requesting an e-Transfer from a family
 
-- **View invoice**: opens the invoice sheet. Staff see the invoice without the family's **Pay** button, so nobody pays a family's invoice on their own card by mistake.
-- **Record payment**: see below.
-- **Resend invoice**
-- **Edit**: changes who the invoice is for and what is on it.
-- **Download invoice**
-- **Void invoice**
+KiddieTrac never sends the money request itself; your centre does, from its own bank's Request money.
 
-**On a synced invoice:** **View** and **Download** (when the source provides a document), **Edit**, **Resend invoice**, **Record payment** and **Void invoice**.
+1. On an unpaid KiddieTrac or synced invoice, open **⋮ > Send e-Transfer request**.
+2. The window lays out what your bank's form asks for, each with a **Copy** button, and the billing guardian's contacts under **Request it from**. Only contacts already on a guardian's profile are offered.
+3. In your bank, open Interac e-Transfer → Request money and paste the details.
+4. Back in KiddieTrac, press **Mark as requested**. The invoice records the request, and a family who asked for one is told to look in their bank app.
 
-> **Important:** A synced invoice belongs to the billing system it came from. Editing or voiding it changes KiddieTrac's copy only, and that system's next sync may overwrite your change. Make the same change at the source if it needs to last.
+## Other row actions
 
-## Recording a payment
+**On a KiddieTrac invoice:** **View invoice** (staff see it without the family's Pay button), **Record payment**, **Resend invoice**, **Edit** (who it is for and what is on it), **Guardian copies** (each guardian's own copy, when the bill is split), **Download invoice** and **Void invoice**.
 
-**Record payment** opens a dialog that shows the invoice total and what is outstanding. Enter:
+**On a synced invoice:** **View** and **Download** when the source provides a document, **Edit**, **Resend invoice**, **Record payment** and **Void invoice**.
 
-- **Amount being settled**. As you type, it tells you whether this pays the invoice in full, leaves a balance, or is more than is owed. A partial payment is allowed.
-- **How it was paid**: e-Transfer / EFT, Cash, Cheque, Bank transfer, Card (taken offline) or Other.
-- **Date received**, a **Reference number**, and an optional **Note**.
-
-If your agency charges a card or EFT surcharge, a tick-box appears offering to add the service fee. See [Payment surcharges](payment-surcharges).
+> ⚠️ A synced invoice belongs to the billing system it came from. Editing or voiding it changes KiddieTrac's copy only, and that system's next sync may overwrite your change. Make the same change at the source if it needs to last.
 
 ## Voiding an invoice
 
-**Void invoice** cancels the invoice for good, after you confirm and give a reason:
+1. Open the invoice's **⋮** menu and choose **Void invoice**.
+2. Give the reason when asked and confirm.
+3. The invoice keeps its number and stays in the list marked **Void**, under the **Voided** tab.
 
-- It keeps its number and stays in the list marked **Void**.
-- If a payment schedule raised it, **that instalment is retired** from the schedule.
-- The family is emailed to say it is cancelled and that they owe nothing, and the office is emailed too. Nothing is sent if your agency's email is switched off.
+What else happens: if a payment schedule raised it, that instalment is retired from the schedule. The family is emailed to say it is cancelled and that they owe nothing, and the office is emailed too. Nothing is sent if your agency's email is switched off.
 
-An invoice with money paid against it cannot be voided. Refund the money first, then void. An invoice with an online payment still in progress also cannot be voided until that payment settles or fails.
+To void several, tick their rows and use the bulk bar (**Download** or void). Voiding several shows the total being cancelled first, and skips any invoice with money against it or already void.
 
-## Working on several at once
+## Who can do what
 
-Tick rows to act on them together: **Download** and **Void**. Voiding several shows the total being cancelled first, and skips any invoice that has money against it or is already void.
+| Role | What they can do |
+|---|---|
+| Agency admin | Everything on this screen, for every centre |
+| Centre director | Everything on this screen, for their own centres |
+| Platform admin | Everything, for the agency chosen in the top-bar switcher |
+| Educator, parent | No access. Parents see their invoices in their **Billing** tab |
 
-## Who can use this
+## Common questions
 
-**Agency admins**, **centre directors** and **platform admins**.
+??? Void invoice is missing or refused. | An invoice with money paid against it cannot be voided. Refund the money first (Finance → Refunds), then void. An invoice with an online payment still in progress also waits until that payment settles or fails.
+??? Send e-Transfer request is missing. | It shows only on an invoice with a balance that is not void, paid, draft or refunded.
+??? The request window says "No email or mobile on their profile." | Add an email or mobile number to the billing guardian's profile, then try again.
+??? The list is empty. | Check the tab and the "who" filter. Voided invoices only show on the Voided tab; a family filter hides everyone else.
+??? A pending instalment is listed but not in Outstanding. | It has not been issued yet, so nobody owes it. It counts once its notice period begins.
+??? Does Record payment email the family? | On a KiddieTrac invoice, yes: the payer is emailed a receipt, and once the invoice is paid in full the family and you are told it is paid. Nothing is sent if your agency's email is switched off.
+??? The e-Transfer window says "That e-Transfer no longer exists." | Someone else already dealt with it. Refresh the tab.
+
+## Related screens
+
+[[open: #payment-plans | Payment schedules]] [[open: #refunds | Refunds]] [[open: #billing-schedule | Billing schedule]]
 
 See also: [Account ledgers](account-ledgers) · [Refunding a payment](refunds) · [Payment schedules](payment-plans) · [What an invoice status means](invoice-statuses)

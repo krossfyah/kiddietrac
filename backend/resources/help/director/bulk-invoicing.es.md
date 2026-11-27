@@ -2,51 +2,77 @@
 title: Generación masiva de facturas
 category: Billing
 order: 70
+roles: agency_admin, platform_admin
 ---
 # Generación masiva de facturas
 
-Ejecute la facturación mensual de todas las familias inscritas de un centro con un clic. Lo encontrará en **Administración → Facturación masiva** en la barra lateral.
+**Finanzas → Facturación masiva** genera de una vez las facturas de cuotas del mes para cada familia inscrita en un centro y luego las envía por correo. Los descuentos para hermanos y el subsidio CWELCC se aplican automáticamente. La misma pantalla también permite crear una sola factura para una familia, un educador o un contratista.
 
-## Cómo funciona
+[[open: #bulk-invoices | Abrir Facturación masiva]]
 
-1. Elija el **periodo de facturación** en la parte superior: mes y año. Por defecto, el mes actual.
-2. Elija un centro de la lista y haga clic en **Generar facturas**.
-3. Confirme el aviso. Se crea una factura por cada familia inscrita con:
-   - Líneas de matrícula por niño (una fila por cada niño inscrito en este centro)
-   - Líneas de **subvención CWELCC** restadas automáticamente cuando el centro participa
-   - Líneas de **descuento por hermanos** aplicadas cuando la agencia tiene niveles configurados (consulte `sibling-discounts.md`)
-   - Inicio y fin del periodo establecidos en el mes completo
-   - `issued_at` fijado el día uno del mes y `due_at` 15 días después
-   - Estado = `sent`
-4. Tras la ejecución, la etiqueta de resultado de cada fila de centro muestra cuántas facturas se crearon y su valor total en $.
+La pantalla tiene tres pestañas: **👪 Padres** (facturas de cuotas para familias, por centro), **🧑‍🏫 Educadores** y **🧾 Contratistas y proveedores**.
 
-## Volver a ejecutar
+## Generar las facturas del mes de un centro
 
-Las facturas ya generadas para ese mes **no se duplican**: las filas existentes se quedan como están. Ejecutar de nuevo el mismo mes crea facturas solo para las familias que aún no tienen una para ese periodo. Es seguro volver a lanzarlo.
+1. En el menú lateral, abra **Finanzas** y elija **Facturación masiva**.
+2. Arriba, elija el **Período de facturación**: el mes y el año. Empieza en el mes actual.
+3. En la pestaña **👪 Padres**, busque el centro. Cada fila muestra su ciudad, cuántos niños hay inscritos y cuántas familias.
+4. Abra el menú **⋮** del centro y elija **Generar facturas**.
+5. Lea el mensaje y confirme. Se crea una factura por familia inscrita; se omiten las familias ya facturadas para ese mes, aquí o en un sistema de facturación conectado.
+6. La fila muestra "✓ N created" con el total, y el aviso **Facturas generadas** indica cuántas se crearon y cuántas ya estaban facturadas.
 
-Si necesita borrar y rehacer, elimine primero las facturas manualmente (o mediante SQL).
+Cada factura lleva:
 
-## Permisos
+- una línea de **cuota** por niño inscrito, según la cuota mensual de su inscripción;
+- una línea de **subsidio CWELCC** que se descuenta cuando el centro participa;
+- una línea de **descuento para hermanos** cuando su agencia tiene niveles configurados (vea [Descuentos para hermanos](sibling-discounts));
+- el mes completo como periodo, emitida el primer día del mes y con vencimiento 15 días después.
 
-- **Administrador de agencia** — ejecuta en cualquier centro de su agencia
-- **Administrador de la plataforma** — ejecuta en cualquier centro de la plataforma mediante el selector de agencia
-- **Director del centro** — usa la ruta existente `/director/invoices/generate` desde su panel (solo su propio centro)
-- **Educador** — sin acceso
+## Revisar y enviar las facturas
 
-## Qué se factura
+1. Abra el menú **⋮** del centro y elija **Ver facturas**. Una ventana lista las facturas de ese centro para el periodo elegido.
+2. Presione el ícono del ojo (**Ver factura**) en cualquier fila para abrir la factura con la imagen de su agencia.
+3. Para cancelar una incorrecta, use el botón de anular de su fila y confirme. Una factura pagada muestra **PAID** en su lugar: primero reembolse el pago y después podrá anularla.
+4. Cuando todo esté bien, cierre la ventana y elija **⋮ > Enviar las facturas a las familias por correo electrónico**.
+5. Confirme. El aviso **Facturas enviadas por correo electrónico** indica cuántas se enviaron y cuántas se omitieron por no tener correo registrado.
 
-- Una línea de **matrícula** por niño inscrito, calculada con la tarifa mensual de su sala
-- Una línea de **subvención** por niño cuando el centro participa en CWELCC (se resta del total)
-- Una línea de **ajuste** por cada nivel de descuento por hermanos que corresponda (se resta del total)
+> ⚠️ Generar facturas no envía nada. Las familias solo reciben correo cuando usted elige **Enviar las facturas a las familias por correo electrónico**, y solo si el correo de su agencia está activado.
 
-El encabezado de la factura contiene los importes acumulados `subtotal`, `subsidy_amount`, `discount_amount`, `total` y `balance_due`.
+## Crear una sola factura
 
-## Solución de problemas
+1. Presione **🧾 Generar una factura** en la pestaña que necesite (en **🧑‍🏫 Educadores** también puede presionar **Invoice** junto a una persona).
+2. Elija **Quién** de la lista, o escriba un nombre.
+3. En **Basado en**, elija **Un monto fijo** e ingrese el **Importe**, o **Hours worked × a rate** e ingrese **Hours** y **Rate / hour** (para un educador, **Usar las horas de la hoja de horas** completa las horas).
+4. Opcional: fije **Periodo desde** / **to**, **Detalles**, **Partidas adicionales** (**+ Add a line**), **Aplicar impuesto** y **Repetir según un horario** (cada semana, cada dos semanas o cada mes).
+5. Presione **Generar**. Revise el resumen en **Revise esto antes de crearlo**.
+6. Presione **Crear esta factura** (o, para una que se repite, revise cada periodo en **Confirme cada periodo** y presione **Crear estas facturas**). El aviso **Invoice created** lo confirma.
 
-Si una ejecución devuelve 0 generadas, compruebe:
+La factura aparece en la lista de esa pestaña, donde puede usar **View**, **Resend**, **Marcar como emitida**, **Marcar como pagada** o **Anular**. No se envía nada al crearla.
 
-- ¿Hay niños del centro actualmente `enrolled` (no en lista de espera, retirados o graduados)?
-- ¿Esos niños tienen una matrícula activa (`enrollments.end_date IS NULL`)?
-- ¿Las familias ya tenían una factura v22p42 para ese mes exacto? Las filas existentes se omiten.
+> 💡 Normalmente a los educadores se les paga según sus horas registradas en **Nómina**, y las facturas de proveedores se manejan mejor en **Gastos**. Las pestañas lo indican y llevan ahí.
 
-La pantalla de facturación masiva llama al mismo servicio que el botón «Generar este mes» del portal del director: misma lógica, mismos resultados, pero se puede operar centro por centro en toda una agencia.
+## Volver a ejecutar un mes
+
+Las facturas ya generadas para ese mes no se duplican. Ejecutar de nuevo el mismo mes crea facturas solo para las familias que aún no tienen una para ese periodo, así que es seguro hacerlo después de inscribir una familia nueva. Para rehacer la factura de una familia, primero anule la anterior (en **Ver facturas** o en **Contabilidad**) y vuelva a ejecutar.
+
+## Quién puede hacer qué
+
+- **Administradores de la agencia**: ejecutan cualquier centro de su agencia.
+- **Administradores de la plataforma**: ejecutan cualquier centro de la agencia elegida en el selector de la barra superior.
+- **Directores de centro**: no tienen esta pantalla. Pida al administrador de su agencia que ejecute el mes, o cree facturas una por una desde **Contabilidad**.
+- **Educadores** y **padres**: sin acceso.
+
+## Preguntas frecuentes
+
+??? La ejecución creó 0 facturas. | Revise que los niños del centro estén Inscritos (no en lista de espera, retirados ni graduados) con una inscripción abierta, y que sus familias no se hayan facturado ya este mes, aquí o en un sistema de facturación conectado.
+??? El aviso dice "Error al generar". | El texto de abajo dice por qué. Corríjalo (por ejemplo, elija la agencia correcta) y vuelva a ejecutar. Las familias facturadas en el primer intento se omiten.
+??? Se omitieron algunas familias al enviar. | No tienen correo registrado. Agregue uno al perfil del tutor y envíe de nuevo, o use Reenviar factura en Contabilidad.
+??? Error "Pop-up blocked". | Permita las ventanas emergentes para este sitio para ver una factura.
+??? "No centres in this agency." | Un administrador de la plataforma puede necesitar elegir primero una agencia en el selector de la barra superior.
+??? ¿Qué incluye Exportar facturas en CSV? | Todas las facturas de la agencia, no solo las de este centro o este mes.
+
+## Pantallas relacionadas
+
+[[open: #external-billing | Contabilidad]] [[open: #payment-plans | Planes de pago]] [[open: #billing-settings | Ajustes de facturación]]
+
+Vea también: [Generar las facturas mensuales](generating-monthly-invoices) · [Descuentos para hermanos](sibling-discounts) · [Contabilidad](accounting)

@@ -3,109 +3,95 @@ title: Subsidies — CWELCC and provincial fee subsidy
 category: Billing
 order: 12
 roles: agency_admin, centre_director, platform_admin
-screens: cwelcc, ~grants
+screens: cwelcc
 ---
 # Subsidies — CWELCC and provincial fee subsidy
 
-**Sidebar → Subsidies** has two tabs: **CWELCC** and **Provincial subsidy**. The screen
-remembers the tab you were on.
+**Compliance → Subsidies** holds the two kinds of fee help your families get. The **CWELCC** tab is the monthly CWELCC report for your claim. The **Provincial subsidy** tab records each child's fee subsidy from the province or municipality, which then comes off that child's tuition on the family's invoice. The screen remembers the tab you were on.
 
 [[open: #cwelcc | Open Subsidies]]
 
-Agency admins see the whole agency. A centre director sees and manages only their own
-centres.
+Agency admins see the whole agency. A centre director sees and manages only their own centres.
 
-## CWELCC
-
-The monthly CWELCC report: one row per enrolled family, with its children, the fees
-invoiced that month, the subsidy at the family's rate, and the parent portion. Pick a
-**Month** to see another month, and download it with **⤓ CSV** or **⤓ PDF** for your
-claim.
-
-The report reads each family's **enrolment periods**, so a past month always shows what
-applied then: a family that has since left CWELCC still appears in the months it was
-enrolled, and a rate change only affects months from its start date. Voided and draft
-invoices are not counted.
+## Running the CWELCC monthly report
 
 [[show: #cwelcc @ CWELCC | Show me the CWELCC tab]]
 
-## On the family record
+1. Open **Compliance → Subsidies** and press **CWELCC**.
+2. Pick the **Month**. The **CWELCC monthly report** reloads for that month.
+3. Read the tiles: **CHILDREN**, then (in Ontario) **BASE FEE REVENUE**, **FEE SUBSIDY PAID** and **PARENTS PAID**.
+4. Check the rows: one per enrolled family, with the **Children**, the **Centre**, the enrolment dates and the **Base fee**, **Fee subsidy** and **Parents** amounts for the month.
+5. Press **⤓ CSV** or **⤓ PDF** to download the month for your claim.
 
-Open a family (**Families**, then the family) and scroll to **Subsidies**. It shows the
-family's whole history: every CWELCC enrolment period with its rate and who recorded it,
-and every provincial subsidy granted under the family, including ended ones and ones
-removed as mistakes.
+In Ontario since 2025, parents pay the base fee, less any fee subsidy. The base-fee limits and extra-fee checks are on **Compliance → OCCMS reporting**.
 
-Directors and admins record CWELCC changes there:
+The report reads each family's **enrolment periods**, so a past month always shows what applied then: a family that has since left CWELCC still appears in the months it was enrolled, and a change only affects months from its start date. Voided and draft invoices are not counted.
 
-- **Enrol in CWELCC** — from a date, at a rate.
-- **Change rate** — the new rate applies from the date you pick; earlier months keep the
-  old rate.
-- **End CWELCC** — the last day. Earlier months keep their enrolment.
+## Enrolling a family in CWELCC
 
-A change never rewrites an earlier period, so a claim reads the same later as it did
-when it was filed. Every change is written to the audit log.
+1. Open **Administration → Families** and open the family.
+2. Scroll to **Subsidies**. It shows the family's whole history: every CWELCC enrolment period with who recorded it, and every provincial subsidy, including ended ones.
+3. Press **Enrol in CWELCC**, set **From** (the first day) and the **Subsidy rate (%)** if your province uses one, then press **Save**.
+4. When something changes, press **Change rate** (the new rate applies from the date you pick; earlier months keep the old one) or **End CWELCC** and set the **Last day** (earlier months keep their enrolment).
 
-## Provincial subsidy
+A change never rewrites an earlier period, so a claim reads the same later as it did when it was filed. Every change is in the audit log.
 
-A child's **provincial fee subsidy**: the case number from the approval letter, the
-amount (per month or per day), the dates it applies, and the government's documents.
-**While it applies, the subsidy comes off that child's tuition on the family's invoice**
-— the family is only billed the rest, and never less than zero.
-
-- **Per month** — the monthly amount comes off each invoice.
-- **Per day** — the daily amount × the days the child is **scheduled** to attend that
-  month (their booked weekdays), not counting days the centre is closed. Worked out when
-  the invoice is generated; the invoice line shows it, e.g. *Subsidy (21 scheduled days
-  × $20.00)*. Record holidays in the centre's calendar so they are not counted.
+## Adding a provincial fee subsidy
 
 [[show: #cwelcc @ Provincial subsidy | Show me the Provincial subsidy tab]]
 
-### Recording one
+1. Open **Compliance → Subsidies** and press **Provincial subsidy**.
+2. Press **＋ Add subsidy**. The **Add a provincial subsidy** window opens.
+3. Choose the **Child**.
+4. Type the **Case number** from the approval letter.
+5. Under **The subsidy is paid**, choose **Per month** or **Per day**, then enter the **Monthly amount ($)** or **Daily amount ($)**.
+6. Set the **First day**, and the **Last day (optional)** if the approval has one. Add **Approved on (optional)** and **Notes (optional)** if useful.
+7. Under **Documents from the province or government**, attach the approval letter (PDF, photo or Word, up to 15 MB each). You can attach several.
+8. Press **Save**. The subsidy appears in the month's list.
 
-- [ ] Press **＋ Add subsidy**.
-- [ ] Choose the **child**.
-- [ ] Enter the **case number**, choose **Per month** or **Per day**, and enter the amount.
-- [ ] Set the **first day**, and the **last day** if the approval has one.
-- [ ] Under **Documents from the province or government**, attach the approval letter (PDF, photo or Word, up to 15 MB each). You can attach several.
-- [ ] Press **Save**.
+How it comes off the invoice while it applies:
 
-Documents are private: only signed-in directors and admins can open them, from the
-subsidy's **Edit** window or the family record. Removing one hides it; every upload and
-removal is in the audit log.
+- **Per month**: the monthly amount comes off each monthly invoice.
+- **Per day**: the daily amount × the days the child is **scheduled** to attend that month, not counting days the centre is closed. The invoice line shows it, for example *Subsidy (21 scheduled days × $20.00)*. Record holidays in the centre's calendar so they are not counted.
 
-The list shows each child's tuition beside the subsidy, and turns the amount red if the
-subsidy is more than the tuition — worth a second look.
+The family is billed only the rest, never less than zero. Invoices already issued are not changed.
 
-### When it changes
+## Changing, ending or removing a subsidy
 
-- **Edit** corrects the amount, case number or dates.
-- **End subsidy** sets its last day. Invoices issued after that day no longer include it.
-  Use this when a subsidy stops, so its history is kept.
-- **Remove** is only for a subsidy entered by mistake.
+1. On the **Provincial subsidy** tab, find the child's row. Its **Subsidy** amount turns red if it is more than the **Tuition**: worth a second look.
+2. Open the row's **⋮** menu.
+3. Choose **Edit** to correct the amount, case number, dates or documents.
+4. Choose **End subsidy** and set the **Last day** when the subsidy stops. Invoices after that day no longer include it, and its history is kept.
+5. Choose **Remove** only for a subsidy entered by mistake, and confirm.
 
-All three are in the row's **⋮** menu.
+> ⚠️ A child can have one provincial subsidy at a time. If the dates overlap an existing one, the save is refused and names it. For a renewal, end the old one on the day before the new one starts.
 
-> **Important:** A child can have one subsidy at a time, because invoices apply one per child. If the dates overlap an existing subsidy, the save is refused and names the one in the way. End the old one first — for a renewal, end it on the day before the new one starts.
+The tab lists the subsidies that apply in the chosen **Month**, with **CHILDREN** and **SUBSIDY THIS MONTH**. Tick **Show every subsidy, including ended** for the full history. **⤓ CSV** downloads the month for reconciling with the province or municipality. Every add, edit, end and removal is in the audit log.
 
-> **Note:** Changes apply to invoices generated from now on. Invoices already issued keep the amounts they were issued with.
+## Who can do what
 
-### The monthly list
+| Role | What they can do |
+|---|---|
+| Agency admin | Both tabs for every centre; records CWELCC changes and provincial subsidies. |
+| Centre director | The same, for their own centres only. |
+| Platform admin | The same as an agency admin, in the agency they are working in. |
 
-The tab shows the subsidies that apply in the chosen **Month**, with the number of
-children and the month's total. Tick **Show every subsidy, including ended** to see the
-full history. **⤓ CSV** downloads the month for reconciling with the province or
-municipality.
+Educators do not see this screen. Parents see only the result: a **Subsidy** line on their invoice. Subsidy documents can be opened only by signed-in directors and admins.
 
-Every add, edit, end and removal is written to the audit log with the child, case number,
-amount and dates.
-
-## Questions
+## FAQs and when something goes wrong
 
 ??? A family left CWELCC. Will it vanish from last spring's report? | No. The report reads the enrolment periods, so the family stays in every month it was enrolled.
-??? Where did "CWELCC subsidies" go? | It is now Subsidies, with CWELCC as the first tab. The report is unchanged.
-??? Does a provincial subsidy show on the parent's invoice? | Yes. The invoice shows the tuition, a Subsidy line taking the amount off, and the balance the family owes.
-??? Can a child have CWELCC and a provincial subsidy? | The CWELCC report is worked out from the family's CWELCC enrolment. On an invoice, a child has one subsidy line at a time, and the Provincial subsidy tab refuses an overlapping one.
+??? The CWELCC tab says "No CWELCC-enrolled families for this month." | No family of your centres was enrolled that month. Enrol families from their family record, under **Subsidies**.
+??? "Choose the child." / "Enter the monthly amount." / "Enter the first day." | A required field is empty. Fill it in and press **Save** again.
+??? "The last day cannot be before the first day." | Check the two dates; the last day must be on or after the first day.
+??? "The subsidy was saved, but the document was not uploaded" | The subsidy is in. Open it with **Edit** and attach the document again (PDF, photo or Word, up to 15 MB).
+??? Does a provincial subsidy show on the parent's invoice? | Yes. The invoice shows the tuition, a **Subsidy** line taking the amount off, and the balance the family owes.
+??? Can a child have CWELCC and a provincial subsidy? | Yes. The CWELCC report comes from the family's CWELCC enrolment; the provincial subsidy is one line per child on the invoice.
+??? Where did "CWELCC subsidies" go? | It is now **Subsidies**, with **CWELCC** as the first tab. The report is unchanged.
+??? Is grant funding recorded here? | No. Operating and wage grants the agency receives are on **Finance → Grants**.
 
-See also: [Generating monthly invoices](generating-monthly-invoices),
-[Invoice statuses](invoice-statuses).
+## Related screens
+
+[[open: #subsidy-roa | OCCMS reporting]] [[open: #admin-families | Families]] [[open: #grants | Grants]]
+
+See also: [OCCMS reporting](occms-reporting) · [Generating monthly invoices](generating-monthly-invoices) · [Invoice statuses](invoice-statuses)

@@ -6,70 +6,102 @@ roles: agency_admin, platform_admin
 ---
 # Grands livres des comptes
 
-Un seul écran qui répond, pour une personne donnée : qu’est-ce qui lui a été facturé, qu’a-t-elle payé, que reste-t-il à payer et qu’est-ce qui s’en vient.
+**Finances → Grands livres des comptes** répond à quatre questions sur n'importe quelle personne de votre agence : ce qui lui a été facturé, ce qu'elle a payé, ce qu'elle doit encore et ce qui s'en vient. Ouvrez-le quand un parent vous questionne sur son solde, avant d'envoyer un relevé ou avant d'émettre un remboursement.
 
-![Le grand livre du compte : choisissez une personne, et tout son historique financier tient sur une seule page](https://api.kiddietrac.com/help-img/account-ledger.png)
+[[open: #account-ledgers | Ouvrir les grands livres des comptes]]
 
-## Trouver un compte
+![Le grand livre : choisissez une personne, et tout son historique financier tient sur une page](https://api.kiddietrac.com/help-img/account-ledger.png)
 
-Le sélecteur en haut comporte trois parties :
+## Ouvrir le grand livre d'une personne
 
-- **Rôle** — restreint la liste aux parents, aux éducateurs, aux directeurs, etc.
-- **Rechercher** — nom ou courriel. Il attend que vous appuyiez sur **Entrée** ou sur le bouton de recherche; il ne filtre pas au fil de la saisie.
-- **Compte** — la personne elle-même, affichée sous la forme **nom et rôle entre parenthèses** : *Amarachi Ihenekwe (Parent)*.
+1. Dans le menu latéral, ouvrez **Finances** et choisissez **Grands livres des comptes**.
+2. Facultatif : choisissez un **Rôle** pour limiter la liste aux parents, éducatrices, directions, etc. Chaque rôle indique combien de comptes il compte.
+3. Facultatif : tapez un nom ou un courriel dans la recherche et appuyez sur **Entrée**. La recherche attend Entrée ; elle ne filtre pas pendant la saisie.
+4. Choisissez la personne dans la liste **Compte**. Chacune apparaît avec son nom et son rôle entre parenthèses, par exemple *Maya (Parent)*.
+5. Le grand livre s'ouvre : **Account details**, les chiffres du haut, les graphiques, **Toujours impayé**, **À venir** et l'**Historique du compte**.
 
-La liste des comptes n’affiche volontairement **pas** les soldes. Dans une liste de soixante-huit personnes, cela ferait soixante-huit montants à parcourir pour trouver quelqu’un, et le solde est la première chose qu’indique le grand livre une fois ouvert.
+> ℹ️ La liste des comptes n'affiche volontairement pas les soldes. Dans une liste de soixante personnes, ce serait soixante montants à parcourir pour trouver quelqu'un, et le solde est la première chose que le grand livre affiche une fois ouvert.
 
-**⊞ Tous les comptes** affiche tous les comptes à la fois, avec ce que chacun doit. **📄 Un compte** permet de revenir en arrière.
+## Voir tous les comptes d'un coup
 
-## Ce que signifient les chiffres
+1. Appuyez sur **⊞ Tous les comptes**. Chaque compte est listé avec ce qu'il doit, et les totaux **Billed**, **Collected**, **En souffrance**, **Annulée** et **Versé** s'affichent en haut.
+2. Utilisez le filtre pour afficher **Tout le monde**, seulement les comptes **Owing money**, ou seulement les personnes **Paid by us** (le personnel et les bénéficiaires que vous payez).
+3. Sur une ligne, utilisez **⋮ > 📄 Ouvrir le grand livre** pour ouvrir le grand livre de la personne, ou **⋮ > ✉️ Envoyer le relevé par courriel** pour lui envoyer son relevé.
+4. Appuyez sur **📄 Un compte** pour revenir à la vue d'un seul compte.
 
-Quatre chiffres concordent toujours :
+## Lire les chiffres
 
-> **Facturé − (Encaissé − Remboursé) = Solde**
+Les chiffres concordent toujours :
 
-- **Facturé** — tout ce qui a été facturé, à l’exclusion de ce qui a été annulé. Une facture annulée ne porte aucun solde et est déclarée séparément.
-- **Encaissé** — ce que les factures elles-mêmes indiquent comme réglé.
-- **Remboursé** — l’argent rendu. Un remboursement *annule un encaissement* : le solde remonte exactement du montant rendu.
-- **Solde** — ce qui reste à payer aujourd’hui.
+> 💡 **Facturé − (Reçu − Remboursé) = En souffrance**
 
-**L’argent n’est compté qu’une fois, à partir de la facture.** Lorsqu’un enregistrement de paiement existe, il s’affiche sur sa propre ligne — avec le mode de paiement, la référence et la vraie date, ce qui est plus informatif qu’un résumé — mais il n’est pas ajouté une seconde fois. Si les deux divergent un jour, c’est la facture qui a raison.
+- **Facturé** : tout ce qui a été facturé, sauf ce qui a été annulé. Une facture annulée ne porte aucun solde et apparaît dans son propre chiffre **Annulée**.
+- **Reçu** : ce que les factures elles-mêmes indiquent comme réglé.
+- **Remboursé** : l'argent rendu. Un remboursement « dé-encaisse » : le solde remonte exactement du montant rendu.
+- **En souffrance** : ce qui est encore dû aujourd'hui. **En retard** est la partie dont l'échéance est passée.
+- **À payer ce mois-ci**, **Manqués** et **Scheduled in total** apparaissent quand la personne a des versements ou une facturation récurrente à venir.
 
-**Le trop-perçu est signalé, jamais compensé.** Lorsqu’on a reçu plus que ce qui a été facturé, la ligne le précise et le montant apparaît dans son propre chiffre. Qu’il s’agisse d’un crédit dont la famille peut se servir ou d’un paiement enregistré deux fois à la source, c’est à la personne qui lit d’en décider : il est donc indiqué, et non absorbé silencieusement.
+**L'argent est compté une seule fois, à partir de la facture.** Quand un paiement est enregistré, il apparaît sur sa propre ligne, avec le mode, la référence et la vraie date, mais il n'est pas additionné une deuxième fois. Si les deux ne concordent pas, c'est la facture qui a raison.
 
-## À venir
+**Un trop-perçu est signalé, jamais compensé.** Si on a reçu plus que ce qui a été facturé, un chiffre **Trop-perçu** l'indique. À vous de décider s'il s'agit d'un crédit pour la famille ou d'un paiement enregistré deux fois : c'est donc affiché plutôt qu'absorbé en silence.
 
-Tout ce qui est encore attendu sur le compte : chaque paiement d’un échéancier, ainsi que toute facturation récurrente.
+### À venir
 
-Chaque ligne indique **la facture derrière le montant**, et son menu **⋮** permet d’ouvrir, de télécharger ou d’envoyer cette facture par courriel. Deux cas sont signalés plutôt que cachés :
+Tout ce qui est encore attendu sur le compte : chaque paiement d'un plan de paiement et toute facturation récurrente. Chaque ligne nomme la facture derrière le montant, et son **⋮** ouvre, télécharge ou envoie cette facture par courriel. Deux cas sont signalés :
 
-- **« Aucune facture n’a encore été émise »** — un calendrier de facturation récurrente signifie seulement *« nous émettrons quelque chose le 1er »*. Le montant n’est pas arrêté avant l’émission; il n’y a donc rien à ouvrir.
-- **« Le total de la facture diffère de ce montant »** — l’échéancier et la facture ne concordent pas, généralement parce que la facture a été modifiée après la convention de l’échéancier. À vérifier.
+- **No invoice raised yet.** Un calendrier de facturation dit seulement « nous émettrons quelque chose à cette date ». Le montant n'est fixé qu'à l'émission ; il n'y a donc rien à ouvrir.
+- Le total de la facture diffère du montant prévu : habituellement, la facture a été modifiée après l'entente. À vérifier.
 
-Un paiement manqué est conservé dans ce tableau et marqué **manqué**, au lieu d’être supprimé. C’est ce qu’il y a de plus utile sur la page.
+Un paiement manqué reste dans ce tableau, marqué comme manqué. C'est l'élément le plus utile de la page.
 
-## Toujours en souffrance
+### Toujours impayé et l'historique
 
-Chaque facture impayée, de la plus ancienne à la plus récente, avec le nombre de jours de retard. Le menu **⋮** de chaque ligne ouvre le document de la facture.
+**Toujours impayé** liste chaque facture impayée, de la plus ancienne à la plus récente, avec le nombre de jours de retard. Le **⋮ > 📄 Document de la facture** de chaque ligne l'ouvre. L'**Historique du compte**, plus bas, liste chaque ligne ; filtrez-le avec **Tout**, **Factures**, **Paiements**, **Remboursements**, **Annulations** ou **Versé**.
 
-## Générer un relevé
+## Générer et envoyer un relevé
 
-**📄 Générer un relevé** produit un relevé complet du compte. Dans cette fenêtre, vous pouvez définir une période, le lire à l’écran, télécharger le PDF ou l’envoyer par courriel.
+1. Ouvrez le grand livre de la personne.
+2. Appuyez sur **📄 Générer un relevé**. La fenêtre **Générer un relevé de compte** s'ouvre.
+3. Choisissez une **Période** : **Depuis le début**, **Ce mois-ci**, **Le mois dernier**, **3 derniers mois**, **Cette année** ou **Custom range…** (remplissez alors **From** et **To**).
+4. Appuyez sur **👁 Voir** pour le lire à l'écran, **⤓ Télécharger** pour le PDF, ou **✉️ Email…** pour l'envoyer.
+5. Pour l'envoi : vérifiez l'adresse **Envoyer à** (préremplie avec celle du compte), ajoutez une note facultative, cochez **Me mettre en copie** si vous voulez une copie, puis appuyez sur **Envoyer le relevé**.
+6. Un message confirme « Statement emailed to » suivi de l'adresse à laquelle il est réellement parti.
 
-Le relevé porte l’image de marque de votre agence, les coordonnées du titulaire du compte et chaque ligne : factures, reçus, remboursements, annulations et ce qui reste dû. Sur une période, il indique aussi le solde reporté et le solde à reporter.
+Le relevé porte l'image de marque de votre agence, les coordonnées du titulaire du compte et chaque ligne : factures, reçus, remboursements, annulations et ce qui reste dû. Sur une période, il montre aussi le solde reporté au début et à la fin.
 
-**L’envoi par courriel demande l’adresse chaque fois.** Elle est préremplie avec celle du compte, et il faut la confirmer — il n’y a aucun destinataire par défaut, car un relevé envoyé à la mauvaise personne ne se rattrape pas.
+> ⚠️ L'adresse est demandée chaque fois et doit être confirmée. Il n'y a aucun destinataire par défaut, car un relevé envoyé à la mauvaise personne ne peut pas être repris.
 
-Si l’envoi est bloqué — l’interrupteur de courriel de l’agence est désactivé ou une règle de livraison bloque ce destinataire — on vous le dit clairement. Ici, « Envoyé » signifie que le message est réellement parti.
+## Émettre un remboursement à partir du grand livre
 
-## Émettre un remboursement
+1. Ouvrez le grand livre de la personne et appuyez sur **↩ Remboursement**. La fenêtre **Émettre un remboursement** liste les factures sur lesquelles il reste de l'argent remboursable.
+2. Choisissez la facture et, si elle a été payée en plusieurs paiements, choisissez **Quel paiement**.
+3. Entrez le **Montant** (il commence au maximum remboursable) et choisissez un **Motif**, par exemple **Demandé par la famille**, **Paiement en trop** ou **Débit en double**. Ajoutez des **Notes** au besoin.
+4. Sous **Approbation**, tapez **Votre nom complet** et signez dans le cadre.
+5. Appuyez sur **Approuver le remboursement**. Le grand livre se recharge et le solde bouge aussitôt.
 
-Voir **[Rembourser un paiement](refunds)**.
+Pour savoir comment l'argent retourne à la famille, voyez [Rembourser un paiement](refunds).
 
-## Une personne, ou toutes les factures
+## Qui peut faire quoi
 
-Cet écran répond aux questions sur **un seul compte**. Pour travailler sur toutes les factures de l’agence, y compris enregistrer des paiements, annuler des factures et filtrer selon la personne visée par la facture (parents, éducateurs, entrepreneurs), utilisez **Finances → Comptabilité**.
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Administration de l'agence | Tout sur cet écran, pour chaque compte de l'agence |
+| Administration de la plateforme | La même chose, pour l'agence choisie dans le sélecteur de la barre du haut |
+| Direction de centre | N'a pas cet écran. Les directions utilisent **Finances → Comptabilité**, qui couvre leurs centres |
+| Éducatrice, parent | Aucun accès. Les parents voient leur propre solde dans leur onglet **Facturation** |
 
-[[open: #external-billing | Ouvrir la comptabilité]]
+## Questions fréquentes
 
-Voir aussi : [Comptabilité](accounting) · [Rembourser un paiement](refunds) · [Échéanciers de paiement](payment-plans)
+??? Générer un relevé et Remboursement sont grisés. | Ils ne fonctionnent qu'une fois un compte ouvert. Choisissez d'abord une personne dans la liste Compte.
+??? La personne cherchée n'est pas dans la liste. | Vérifiez que le filtre Rôle ne restreint pas la liste, videz la recherche et appuyez sur Entrée. Les dossiers fermés sont exclus.
+??? La fenêtre de remboursement dit que rien ne peut être remboursé. | « Nothing on this account has money against it that can be refunded. » Une facture n'y apparaît qu'une fois un paiement reçu et pas déjà rendu.
+??? Le message dit qu'aucun argent n'a encore été envoyé. | « Refund approved … no money has been sent yet » signifie que le remboursement est enregistré, mais que l'argent est rendu en dehors de KiddieTrac (comptant, chèque ou virement Interac). Envoyez-le comme d'habitude.
+??? Le relevé n'est pas parti par courriel. | Si l'interrupteur courriel de votre agence est éteint, ou si une règle de livraison bloque cette adresse, on vous le dit clairement. « Envoyé » veut dire ici qu'il est vraiment parti.
+??? Pourquoi une ligne À venir dit-elle qu'aucune facture n'est émise? | Elle vient d'un calendrier de facturation. Le montant n'est connu qu'à l'émission de la facture.
+??? Erreur « The signature pad did not load ». | Rechargez la page. Un remboursement ne peut pas être approuvé sans signature.
+
+## Écrans connexes
+
+[[open: #external-billing | Comptabilité]] [[open: #payment-plans | Plans de paiement]] [[open: #refunds | Remboursements]]
+
+Voir aussi : [Comptabilité](accounting) · [Rembourser un paiement](refunds) · [Plans de paiement](payment-plans) · [Calendrier de facturation](weekly-billing)

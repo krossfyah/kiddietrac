@@ -6,70 +6,102 @@ roles: agency_admin, platform_admin
 ---
 # Libros de cuentas
 
-Una sola pantalla que responde, para cualquier persona: qué se le facturó, qué ha pagado, qué se le sigue debiendo y qué viene.
+**Finanzas → Libros de cuentas** responde cuatro preguntas sobre cualquier persona de su agencia: qué se le facturó, qué ha pagado, qué debe todavía y qué viene. Ábralo cuando un padre pregunte por su saldo, antes de enviar un estado de cuenta o antes de emitir un reembolso.
 
-![El libro de cuentas: elija una persona y todo su historial financiero está en una sola página](https://api.kiddietrac.com/help-img/account-ledger.png)
+[[open: #account-ledgers | Abrir Libros de cuentas]]
 
-## Cómo encontrar una cuenta
+![El libro de cuentas: elija una persona y todo su historial financiero cabe en una página](https://api.kiddietrac.com/help-img/account-ledger.png)
 
-El selector de la parte superior tiene tres partes:
+## Abrir el libro de una persona
 
-- **Rol** — reduce la lista a padres, educadores, directores, etc.
-- **Buscar** — nombre o correo electrónico. Espera a que pulse **Intro** o el botón de búsqueda; no filtra mientras escribe.
-- **Cuenta** — la persona en sí, mostrada como **nombre y rol entre paréntesis**: *Amarachi Ihenekwe (Padre/Madre)*.
+1. En el menú lateral, abra **Finanzas** y elija **Libros de cuentas**.
+2. Opcional: elija un **Rol** para limitar la lista a padres, educadores, directores, etc. Cada rol muestra cuántas cuentas tiene.
+3. Opcional: escriba un nombre o correo en la búsqueda y presione **Enter**. La búsqueda espera a Enter; no filtra mientras escribe.
+4. Elija a la persona en la lista **Cuenta**. Cada una aparece con su nombre y su rol entre paréntesis, por ejemplo *Maya (Parent)*.
+5. Se abre el libro: **Account details**, las cifras de arriba, los gráficos, **Aún pendiente**, **Próximamente** y el **Historial de la cuenta**.
 
-La lista de cuentas deliberadamente **no** muestra saldos. En una lista de sesenta y ocho personas serían sesenta y ocho importes que ignorar para encontrar a alguien, y el saldo es lo primero que indica el libro al abrirse.
+> ℹ️ La lista de cuentas no muestra saldos a propósito. En una lista de sesenta personas serían sesenta montos que leer para encontrar a alguien, y el saldo es lo primero que muestra el libro al abrirse.
 
-**⊞ Todas las cuentas** cambia a todas las cuentas a la vez, con lo que debe cada una. **📄 Una cuenta** vuelve atrás.
+## Ver todas las cuentas a la vez
 
-## Qué significan las cifras
+1. Presione **⊞ Todas las cuentas**. Cada cuenta aparece con lo que debe, y arriba se muestran los totales **Billed**, **Collected**, **Pendiente**, **Anulada** y **Pagado**.
+2. Use el filtro para mostrar a **Todos**, solo las cuentas **Owing money**, o solo las personas **Paid by us** (personal y beneficiarios a quienes usted paga).
+3. En una fila, use **⋮ > 📄 Abrir libro** para abrir el libro de esa persona, o **⋮ > ✉️ Enviar extracto por correo electrónico** para enviarle su estado de cuenta.
+4. Presione **📄 Una cuenta** para volver a la vista de una sola cuenta.
 
-Cuatro cifras siempre cuadran:
+## Cómo leer las cifras
 
-> **Facturado − (Cobrado − Reembolsado) = Saldo**
+Las cifras siempre cuadran:
 
-- **Facturado** — todo lo facturado, excluyendo lo anulado. Una factura anulada no tiene saldo y se informa por separado.
-- **Cobrado** — lo que las propias facturas indican como liquidado.
-- **Reembolsado** — dinero devuelto. Un reembolso *deshace un cobro*: el saldo vuelve a subir exactamente por lo devuelto.
-- **Saldo** — lo que todavía se debe hoy.
+> 💡 **Facturado − (Recibido − Reembolsado) = Pendiente**
 
-**El dinero se cuenta una sola vez, a partir de la factura.** Cuando existe un registro de pago, se muestra en su propia línea —con el método, la referencia y la fecha real, que es mejor información que un resumen—, pero no se suma otra vez. Si alguna vez ambos discrepan, la factura tiene razón.
+- **Facturado**: todo lo facturado, sin contar lo anulado. Una factura anulada no tiene saldo y aparece en su propia cifra **Anulada**.
+- **Recibido**: lo que las propias facturas indican como pagado.
+- **Reembolsado**: dinero devuelto. Un reembolso "des-cobra": el saldo vuelve a subir exactamente lo devuelto.
+- **Pendiente**: lo que se debe hoy. **Vencido** es la parte cuya fecha de vencimiento ya pasó.
+- **Vence este mes**, **Perdidas** y **Scheduled in total** aparecen cuando la persona tiene cuotas o facturación recurrente por venir.
 
-**El pago en exceso se informa, nunca se compensa.** Cuando se recibió más de lo facturado, la línea lo indica y el importe aparece en su propia cifra. Si se trata de un crédito que la familia puede usar o de un pago registrado dos veces en origen, lo decide la persona que lo lee; por eso se declara en lugar de absorberse en silencio.
+**El dinero se cuenta una sola vez, desde la factura.** Si existe un registro de pago, aparece en su propia línea, con el método, la referencia y la fecha real, pero no se suma otra vez. Si los dos no coinciden, la factura es la que vale.
 
-## Próximamente
+**El pago en exceso se informa, nunca se compensa.** Si se recibió más de lo facturado, una cifra **Pagado de más** lo indica. Usted decide si es un crédito para la familia o un pago registrado dos veces; por eso se muestra en lugar de absorberse en silencio.
 
-Todo lo que todavía se espera en la cuenta: cada pago de un calendario y cualquier facturación recurrente.
+### Próximamente
 
-Cada fila indica **la factura que respalda el importe**, y su menú **⋮** abrirá, descargará o enviará por correo electrónico esa factura. Dos casos se señalan en lugar de ocultarse:
+Todo lo que todavía se espera en la cuenta: cada pago de un plan de pago y toda facturación recurrente. Cada fila nombra la factura detrás del monto, y su **⋮** abre, descarga o envía esa factura por correo. Se señalan dos casos:
 
-- **«Aún no se ha emitido factura»** — un calendario de facturación recurrente es solo *«emitiremos algo el día 1»*. El importe no se decide hasta que se emite, así que no hay nada que abrir.
-- **«El total de la factura difiere de este importe»** — el calendario y la factura no coinciden, normalmente porque la factura se ajustó después de acordar el calendario. Conviene revisarlo.
+- **No invoice raised yet.** Un calendario de facturación solo dice "emitiremos algo en esta fecha". El monto no se decide hasta que se emite, así que no hay nada que abrir.
+- El total de la factura difiere del monto previsto: normalmente la factura se ajustó después de acordar el plan. Conviene revisarlo.
 
-Un pago omitido se conserva en esta tabla y se marca como **omitido**, no se elimina. Es lo más útil de la página.
+Un pago no realizado se queda en esta tabla, marcado como no pagado. Es lo más útil de la página.
 
-## Aún pendiente
+### Aún pendiente y el historial
 
-Todas las facturas impagadas, de la más antigua a la más reciente, con los días de retraso. El menú **⋮** de cada fila abre el documento de la factura.
+**Aún pendiente** lista cada factura sin pagar, de la más antigua a la más reciente, con los días de atraso. El **⋮ > 📄 Documento de la factura** de cada fila la abre. Más abajo, el **Historial de la cuenta** lista cada línea; fíltrelo con **Todo**, **Facturas**, **Pagos**, **Reembolsos**, **Anulaciones** o **Pagado**.
 
-## Generar un estado de cuenta
+## Generar y enviar un estado de cuenta
 
-**📄 Generar estado de cuenta** crea un estado de cuenta completo. Desde esa ventana puede fijar un intervalo de fechas, leerlo en pantalla, descargar el PDF o enviarlo por correo electrónico.
+1. Abra el libro de la persona.
+2. Presione **📄 Generar estado de cuenta**. Se abre la ventana **Generar extracto de cuenta**.
+3. Elija un **Periodo**: **Desde siempre**, **Este mes**, **El mes pasado**, **Últimos 3 meses**, **Este año** o **Custom range…** (y complete **From** y **To**).
+4. Presione **👁 Ver** para leerlo en pantalla, **⤓ Descargar** para el PDF o **✉️ Email…** para enviarlo.
+5. Para enviarlo: revise la dirección en **Enviar a** (viene con la de la cuenta), agregue una nota opcional, marque **Enviarme copia** si quiere una copia y presione **Enviar extracto**.
+6. Un mensaje confirma "Statement emailed to" seguido de la dirección a la que realmente salió.
 
-El estado de cuenta lleva la marca de su agencia, los datos de contacto del titular y cada línea: facturas, recibos, reembolsos, anulaciones y lo que aún se debe. En un intervalo de fechas también muestra el saldo anterior y el saldo a trasladar.
+El estado de cuenta lleva la imagen de su agencia, los datos de contacto del titular y cada línea: facturas, recibos, reembolsos, anulaciones y lo que queda por pagar. En un rango de fechas también muestra el saldo inicial y el saldo final.
 
-**El envío por correo electrónico pide la dirección cada vez.** Aparece rellenada con la de la propia cuenta y debe confirmarse: no hay destinatario predeterminado, porque un estado de cuenta enviado a la persona equivocada no se puede deshacer.
+> ⚠️ La dirección se pide cada vez y debe confirmarse. No hay destinatario predeterminado, porque un estado de cuenta enviado a la persona equivocada no se puede recuperar.
 
-Si el envío queda retenido —el interruptor de correo de la agencia está apagado o una regla de entrega bloquea a ese destinatario—, se le informa con claridad. Aquí «Enviado» significa que realmente salió.
+## Emitir un reembolso desde el libro
 
-## Emitir un reembolso
+1. Abra el libro de la persona y presione **↩ Reembolso**. La ventana **Emitir un reembolso** lista las facturas con dinero que aún puede reembolsarse.
+2. Elija la factura y, si se pagó en más de un pago, elija **Qué pago**.
+3. Ingrese el **Importe** (empieza en el máximo reembolsable) y elija un **Motivo**, por ejemplo **Solicitado por la familia**, **Pago en exceso** o **Cargo duplicado**. Agregue **Notas** si sirve.
+4. En **Aprobación**, escriba **Su nombre completo** y firme en el recuadro.
+5. Presione **Aprobar reembolso**. El libro se recarga y el saldo cambia de inmediato.
 
-Consulte **[Reembolsar un pago](refunds)**.
+Para saber cómo vuelve el dinero a la familia, vea [Reembolsar un pago](refunds).
 
-## Una persona o todas las facturas
+## Quién puede hacer qué
 
-Esta pantalla responde a preguntas sobre **una cuenta**. Para trabajar con todas las facturas de la agencia, incluido registrar pagos, anular y filtrar por la parte con la que está la factura (padres, educadores, contratistas), use **Finanzas → Contabilidad**.
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador de la agencia | Todo en esta pantalla, para cada cuenta de la agencia |
+| Administrador de la plataforma | Lo mismo, para la agencia elegida en el selector de la barra superior |
+| Director de centro | No tiene esta pantalla. Los directores usan **Finanzas → Contabilidad**, que cubre sus centros |
+| Educador, padre | Sin acceso. Los padres ven su propio saldo en su pestaña **Facturación** |
 
-[[open: #external-billing | Abrir Contabilidad]]
+## Preguntas frecuentes
 
-Vea también: [Contabilidad](accounting) · [Reembolsar un pago](refunds) · [Calendarios de pago](payment-plans)
+??? Generar estado de cuenta y Reembolso están en gris. | Solo funcionan con una cuenta abierta. Elija primero a una persona en la lista Cuenta.
+??? La persona que busco no está en la lista. | Revise que el filtro Rol no esté limitando la lista, borre la búsqueda y presione Enter. Los registros cerrados no aparecen.
+??? La ventana de reembolso dice que no hay nada que reembolsar. | "Nothing on this account has money against it that can be refunded." Una factura aparece ahí solo cuando se recibió un pago que no se ha devuelto.
+??? El aviso dice que todavía no se envió dinero. | "Refund approved … no money has been sent yet" significa que el reembolso quedó registrado, pero el dinero se devuelve fuera de KiddieTrac (efectivo, cheque o transferencia Interac). Envíelo como lo hace normalmente.
+??? El estado de cuenta no salió por correo. | Si el interruptor de correo de su agencia está apagado, o una regla de entrega bloquea esa dirección, se le dice claramente. Aquí "enviado" significa que realmente salió.
+??? ¿Por qué una fila de Próximamente dice que no hay factura emitida? | Viene de un calendario de facturación. El monto solo se conoce cuando se emite la factura.
+??? Error "The signature pad did not load". | Recargue la página. Un reembolso no puede aprobarse sin firma.
+
+## Pantallas relacionadas
+
+[[open: #external-billing | Contabilidad]] [[open: #payment-plans | Planes de pago]] [[open: #refunds | Reembolsos]]
+
+Vea también: [Contabilidad](accounting) · [Reembolsar un pago](refunds) · [Planes de pago](payment-plans) · [Calendario de facturación](weekly-billing)

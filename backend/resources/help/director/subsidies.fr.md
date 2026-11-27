@@ -1,110 +1,96 @@
 ---
-title: Subventions — CWELCC et subvention provinciale pour frais de garde
+title: Subventions — CWELCC et subvention provinciale des frais de garde
 category: Billing
 order: 12
 roles: agency_admin, centre_director, platform_admin
 ---
-# Subventions — CWELCC et subvention provinciale pour frais de garde
+# Subventions — CWELCC et subvention provinciale des frais de garde
 
-**Barre latérale → Subventions** comporte deux onglets : **CWELCC** et **Subvention provinciale**. L’écran
-se souvient de l’onglet où vous étiez.
+**Conformité → Subventions** regroupe les deux formes d'aide aux frais que reçoivent vos familles. L'onglet **CWELCC** présente le rapport mensuel CWELCC pour votre réclamation. L'onglet **Subvention provinciale** consigne la subvention des frais de chaque enfant accordée par la province ou la municipalité, qui est ensuite déduite des frais de garde de cet enfant sur la facture de la famille. L'écran se souvient de l'onglet où vous étiez.
 
-[[open: #cwelcc | Ouvrir les subventions]]
+[[open: #cwelcc | Ouvrir Subventions]]
 
-Les administrateurs d’agence voient toute l’agence. Un directeur de centre voit et gère uniquement ses propres
-centres.
+Les administrateurs d'agence voient toute l'agence. Un directeur de centre ne voit et ne gère que ses propres centres.
 
-## CWELCC
+## Produire le rapport mensuel CWELCC
 
-Le rapport mensuel CWELCC : une ligne par famille inscrite, avec ses enfants, les frais
-facturés ce mois-là, la subvention au taux de la famille et la portion du parent. Choisissez un
-**Mois** pour en voir un autre, et téléchargez-le avec **⤓ CSV** ou **⤓ PDF** pour votre
-demande de remboursement.
+[[show: #cwelcc @ CWELCC | Me montrer l'onglet CWELCC]]
 
-Le rapport s’appuie sur les **périodes d’inscription** de chaque famille, de sorte qu’un mois passé montre toujours ce qui
-s’appliquait à l’époque : une famille qui a depuis quitté le CWELCC apparaît encore dans les mois où elle était
-inscrite, et un changement de taux n’affecte que les mois à partir de sa date de début. Les factures annulées et les brouillons
-ne sont pas comptés.
+1. Ouvrez **Conformité → Subventions** et appuyez sur **CWELCC**.
+2. Choisissez le **Mois**. Le **Rapport mensuel CWELCC** se recharge pour ce mois.
+3. Lisez les tuiles : **CHILDREN** (enfants), puis (en Ontario) **BASE FEE REVENUE**, **FEE SUBSIDY PAID** et **PARENTS PAID**.
+4. Vérifiez les lignes : une par famille inscrite, avec les **Enfants**, le **Centre**, les dates d'inscription et les montants **Base fee**, **Subvention des frais** et **Parents** du mois.
+5. Appuyez sur **⤓ CSV** ou **⤓ PDF** pour télécharger le mois pour votre réclamation.
 
-[[show: #cwelcc @ CWELCC | Montrez-moi l’onglet CWELCC]]
+En Ontario depuis 2025, les parents paient les frais de base, moins toute subvention des frais. Les plafonds des frais de base et la vérification des frais supplémentaires sont dans **Conformité → Rapports OCCMS**.
 
-## Dans le dossier de la famille
+Le rapport lit les **périodes d'inscription** de chaque famille : un mois passé montre toujours ce qui s'appliquait alors. Une famille qui a quitté le CWELCC apparaît encore dans les mois où elle était inscrite, et un changement ne touche que les mois à partir de sa date de début. Les factures annulées et les brouillons ne sont pas comptés.
 
-Ouvrez une famille (**Familles**, puis la famille) et faites défiler jusqu’à **Subventions**. Vous y voyez
-tout l’historique de la famille : chaque période d’inscription au CWELCC avec son taux et la personne qui l’a enregistrée,
-et chaque subvention provinciale accordée à la famille, y compris celles qui sont terminées et celles
-supprimées par erreur.
+## Inscrire une famille au CWELCC
 
-Les directeurs et les administrateurs y enregistrent les changements CWELCC :
+1. Ouvrez **Administration → Familles** et ouvrez la famille.
+2. Faites défiler jusqu'à **Subventions**. Vous y voyez tout l'historique de la famille : chaque période d'inscription au CWELCC avec la personne qui l'a saisie, et chaque subvention provinciale, y compris celles qui sont terminées.
+3. Appuyez sur **Inscrire au CWELCC**, indiquez **De** (le premier jour) et le **Subsidy rate (%)** si votre province en utilise un, puis appuyez sur **Enregistrer**.
+4. Quand quelque chose change, appuyez sur **Modifier le taux** (le nouveau taux s'applique à partir de la date choisie; les mois précédents gardent l'ancien) ou sur **Mettre fin au CWELCC** et indiquez le **Dernier jour** (les mois précédents gardent leur inscription).
 
-- **Inscrire au CWELCC** — à partir d’une date, à un taux.
-- **Changer le taux** — le nouveau taux s’applique à partir de la date que vous choisissez; les mois antérieurs gardent
-  l’ancien taux.
-- **Mettre fin au CWELCC** — le dernier jour. Les mois antérieurs conservent leur inscription.
+Un changement ne réécrit jamais une période antérieure : une réclamation se lit plus tard comme au moment où elle a été déposée. Chaque changement est dans le journal d'audit.
 
-Un changement ne réécrit jamais une période antérieure, de sorte qu’une demande se lit plus tard comme elle se lisait
-lorsqu’elle a été déposée. Chaque changement est consigné dans le journal d’audit.
+## Ajouter une subvention provinciale des frais
 
-## Subvention provinciale
+[[show: #cwelcc @ Provincial subsidy | Me montrer l'onglet Subvention provinciale]]
 
-La **subvention provinciale pour frais de garde** d’un enfant : le numéro de dossier figurant sur la lettre d’approbation, le
-montant (par mois ou par jour), les dates d’application et les documents du gouvernement.
-**Tant qu’elle s’applique, la subvention est déduite des frais de scolarité de cet enfant sur la facture de la famille**
-— la famille ne paie que le reste, et jamais moins que zéro.
+1. Ouvrez **Conformité → Subventions** et appuyez sur **Subvention provinciale**.
+2. Appuyez sur **＋ Ajouter une subvention**. La fenêtre **Ajouter une subvention provinciale** s'ouvre.
+3. Choisissez l'**Enfant**.
+4. Saisissez le **Numéro de dossier** inscrit sur la lettre d'approbation.
+5. Sous **La subvention est versée**, choisissez **Par mois** ou **Par jour**, puis saisissez le **Monthly amount ($)** ou le **Daily amount ($)**.
+6. Indiquez le **Premier jour**, et le **Last day (optional)** si l'approbation en prévoit un. Ajoutez **Approved on (optional)** et **Notes (optional)** au besoin.
+7. Sous **Documents de la province ou du gouvernement**, joignez la lettre d'approbation (PDF, photo ou Word, jusqu'à 15 Mo chacun). Vous pouvez en joindre plusieurs.
+8. Appuyez sur **Enregistrer**. La subvention apparaît dans la liste du mois.
 
-- **Par mois** — le montant mensuel est déduit de chaque facture.
-- **Par jour** — le montant quotidien × le nombre de jours où l’enfant est **prévu** à l’horaire ce
-  mois-là (ses jours de semaine réservés), sans compter les jours de fermeture du centre. Calculé à la
-  génération de la facture; la ligne de facture l’indique, p. ex. *Subvention (21 jours prévus
-  × 20,00 $)*. Consignez les jours fériés dans le calendrier du centre pour qu’ils ne soient pas comptés.
+Comment elle est déduite de la facture pendant qu'elle s'applique :
 
-[[show: #cwelcc @ Provincial subsidy | Montrez-moi l’onglet Subvention provinciale]]
+- **Par mois** : le montant mensuel est déduit de chaque facture mensuelle.
+- **Par jour** : le montant quotidien × le nombre de jours où l'enfant est **prévu** ce mois-là, sans compter les jours de fermeture du centre. La ligne de la facture l'indique, par exemple *Subsidy (21 scheduled days × $20.00)*. Inscrivez les congés au calendrier du centre pour qu'ils ne soient pas comptés.
 
-### En saisir une
+La famille ne paie que le reste, jamais moins de zéro. Les factures déjà émises ne changent pas.
 
-- [ ] Appuyez sur **＋ Ajouter une subvention**.
-- [ ] Choisissez l’**enfant**.
-- [ ] Saisissez le **numéro de dossier**, choisissez **Par mois** ou **Par jour**, et saisissez le montant.
-- [ ] Définissez le **premier jour**, et le **dernier jour** si l’approbation en comporte un.
-- [ ] Sous **Documents de la province ou du gouvernement**, joignez la lettre d’approbation (PDF, photo ou Word, jusqu’à 15 Mo chacun). Vous pouvez en joindre plusieurs.
-- [ ] Appuyez sur **Enregistrer**.
+## Modifier, terminer ou supprimer une subvention
 
-Les documents sont privés : seuls les directeurs et administrateurs connectés peuvent les ouvrir, depuis la fenêtre
-**Modifier** de la subvention ou le dossier de la famille. En supprimer un le masque; chaque téléversement et chaque
-suppression figure dans le journal d’audit.
+1. Dans l'onglet **Subvention provinciale**, trouvez la ligne de l'enfant. Le montant **Subvention** devient rouge s'il dépasse les **Frais de garde** : à vérifier.
+2. Ouvrez le menu **⋮** de la ligne.
+3. Choisissez **Modifier** pour corriger le montant, le numéro de dossier, les dates ou les documents.
+4. Choisissez **Mettre fin à la subvention** et indiquez le **Dernier jour** quand la subvention s'arrête. Les factures après ce jour ne l'incluent plus, et son historique est conservé.
+5. Choisissez **Supprimer** seulement pour une subvention saisie par erreur, et confirmez.
 
-La liste montre les frais de scolarité de chaque enfant à côté de la subvention, et affiche le montant en rouge si la
-subvention dépasse les frais de scolarité — à vérifier de plus près.
+> ⚠️ Un enfant ne peut avoir qu'une subvention provinciale à la fois. Si les dates chevauchent une subvention existante, l'enregistrement est refusé et la nomme. Pour un renouvellement, terminez l'ancienne la veille du début de la nouvelle.
 
-### Quand elle change
+L'onglet liste les subventions qui s'appliquent dans le **Mois** choisi, avec **CHILDREN** et **SUBVENTION CE MOIS-CI**. Cochez **Afficher toutes les subventions, y compris celles qui sont terminées** pour tout l'historique. **⤓ CSV** télécharge le mois pour le rapprochement avec la province ou la municipalité. Chaque ajout, modification, fin et suppression est dans le journal d'audit.
 
-- **Modifier** corrige le montant, le numéro de dossier ou les dates.
-- **Mettre fin à la subvention** fixe son dernier jour. Les factures émises après ce jour ne l’incluent plus.
-  Utilisez-le lorsqu’une subvention prend fin, pour en conserver l’historique.
-- **Supprimer** est réservé à une subvention saisie par erreur.
+## Qui peut faire quoi
 
-Les trois se trouvent dans le menu **⋮** de la ligne.
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Administrateur d'agence | Les deux onglets pour chaque centre; saisit les changements CWELCC et les subventions provinciales. |
+| Directeur de centre | La même chose, pour ses propres centres seulement. |
+| Administrateur de plateforme | Comme un administrateur d'agence, dans l'agence où il travaille. |
 
-> **Important :** Un enfant ne peut avoir qu’une subvention à la fois, car les factures en appliquent une par enfant. Si les dates chevauchent une subvention existante, l’enregistrement est refusé et nomme celle qui gêne. Mettez d’abord fin à l’ancienne — pour un renouvellement, terminez-la la veille du début de la nouvelle.
+Les éducatrices ne voient pas cet écran. Les parents ne voient que le résultat : une ligne **Subvention** sur leur facture. Seuls les directeurs et administrateurs connectés peuvent ouvrir les documents de subvention.
 
-> **Remarque :** Les changements s’appliquent aux factures générées à partir de maintenant. Les factures déjà émises conservent les montants avec lesquels elles ont été émises.
+## FAQ et problèmes courants
 
-### La liste mensuelle
+??? Une famille a quitté le CWELCC. Va-t-elle disparaître du rapport du printemps dernier? | Non. Le rapport lit les périodes d'inscription : la famille reste dans chaque mois où elle était inscrite.
+??? L'onglet CWELCC indique « No CWELCC-enrolled families for this month. » | Aucune famille de vos centres n'était inscrite ce mois-là. Inscrivez les familles à partir de leur dossier, sous **Subventions**.
+??? « Choose the child. » / « Enter the monthly amount. » / « Enter the first day. » | Un champ obligatoire est vide. Remplissez-le et appuyez de nouveau sur **Enregistrer**.
+??? « The last day cannot be before the first day. » | Vérifiez les deux dates; le dernier jour doit être le même jour que le premier ou après.
+??? « The subsidy was saved, but the document was not uploaded » | La subvention est enregistrée. Ouvrez-la avec **Modifier** et joignez de nouveau le document (PDF, photo ou Word, jusqu'à 15 Mo).
+??? La subvention provinciale paraît-elle sur la facture du parent? | Oui. La facture montre les frais de garde, une ligne **Subvention** qui déduit le montant, et le solde dû par la famille.
+??? Un enfant peut-il avoir le CWELCC et une subvention provinciale? | Oui. Le rapport CWELCC vient de l'inscription CWELCC de la famille; la subvention provinciale est une ligne par enfant sur la facture.
+??? Où est passé « Subventions CWELCC »? | C'est maintenant **Subventions**, avec **CWELCC** comme premier onglet. Le rapport n'a pas changé.
+??? Le financement par subvention se saisit-il ici? | Non. Les subventions de fonctionnement et salariales que reçoit l'agence sont dans **Finances → Subventions** (l'écran des subventions reçues).
 
-L’onglet affiche les subventions qui s’appliquent dans le **Mois** choisi, avec le nombre d’enfants
-et le total du mois. Cochez **Afficher toutes les subventions, y compris terminées** pour voir
-tout l’historique. **⤓ CSV** télécharge le mois pour le rapprochement avec la province ou
-la municipalité.
+## Écrans liés
 
-Chaque ajout, modification, fin et suppression est consigné dans le journal d’audit avec l’enfant, le numéro de dossier,
-le montant et les dates.
+[[open: #subsidy-roa | Rapports OCCMS]] [[open: #admin-families | Familles]] [[open: #grants | Subventions reçues]]
 
-## Questions
-
-??? Une famille a quitté le CWELCC. Disparaîtra-t-elle du rapport du printemps dernier? | Non. Le rapport s’appuie sur les périodes d’inscription, de sorte que la famille reste dans tous les mois où elle était inscrite.
-??? Où sont passées les « subventions CWELCC »? | Elles s’appellent maintenant Subventions, avec CWELCC comme premier onglet. Le rapport est inchangé.
-??? Une subvention provinciale apparaît-elle sur la facture du parent? | Oui. La facture montre les frais de scolarité, une ligne Subvention qui déduit le montant, et le solde que la famille doit.
-??? Un enfant peut-il avoir le CWELCC et une subvention provinciale? | Le rapport CWELCC est calculé à partir de l’inscription de la famille au CWELCC. Sur une facture, un enfant n’a qu’une ligne de subvention à la fois, et l’onglet Subvention provinciale refuse une subvention qui en chevauche une autre.
-
-Voir aussi : [Générer les factures mensuelles](generating-monthly-invoices),
-[États des factures](invoice-statuses).
+Voir aussi : [Rapports OCCMS](occms-reporting) · [Générer les factures mensuelles](generating-monthly-invoices) · [Statuts des factures](invoice-statuses)

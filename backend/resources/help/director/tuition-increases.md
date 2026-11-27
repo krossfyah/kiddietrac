@@ -2,44 +2,61 @@
 title: Tuition increase scheduling
 category: Billing
 order: 83
-roles: agency_admin, platform_admin
+roles: agency_admin, centre_director, platform_admin
 screens: tuition-increases
 ---
-# Tuition increases
+# Tuition increase scheduling
 
-Schedule a future percent or flat-dollar increase. Families auto-notified ahead of time.
+**Finance → Tuition increases** is where you plan a future rise in tuition: a percentage (for example 3.5%) or a flat dollar amount, from a set date. The list keeps every increase your agency has planned, with its date, amount, notice period and status, so everyone in the office works from the same schedule.
 
-## Scheduling an increase (agency admin)
+[[open: #tuition-increases | Open Tuition increases]]
 
-1. Sidebar → **Tuition increases**.
-2. Tap **+ Schedule increase**.
-3. Enter:
-   - **Effective date** (must be future).
-   - **Type**: percent (e.g. 3.5) or flat ($).
-   - **Amount**.
-   - **Notify N days before** — default 60.
-4. Save.
+## Scheduling an increase
 
-## What happens
+[[show: #tuition-increases @ + Schedule increase | Show me Schedule increase]]
 
-- Families don't see the increase until the effective date.
-- A scheduled email / notification goes out N days before with the new amount.
-- On the effective date, new invoices use the new rate.
+1. Open **Finance → Tuition increases**.
+2. Press **+ Schedule increase**. The **Schedule a tuition increase** window opens.
+3. Pick the **Effective date**. It must be after today.
+4. Type the **Amount (number)**: the percentage (3.5) or the dollar amount (25), without a % or $ sign.
+5. In **Type: "percent" or "flat"**, leave **percent** or type **flat** for a dollar amount.
+6. Press **Schedule increase**. The window closes and the increase joins the list.
 
-## Cancelling
+## Reading the list
 
-Open the scheduled increase and tap delete. Future invoices revert to the old rate.
+1. Each row shows the **Effective** date, the **Type**, the **Amount** (as a % or in dollars) and **Notify** (how many days before the date families should hear about it, 60 by default).
+2. The **Status** pill reads **Scheduled** for an increase you have planned.
+3. The newest effective date is at the top. You can plan several increases (for example January and September); each has its own row and date.
 
-## Multiple increases
+## Putting the increase into effect
 
-You can stack increases — January's bump + September's bump — and each fires on its own date independently. Useful for staged rollouts.
+> ⚠️ The schedule is a plan and a record. Today KiddieTrac does not email families or change invoice amounts by itself when the date comes, so do these steps yourself.
 
-## When to use
+1. At least the **Notify** period before the date, tell families the new fee: send an announcement or a message from **Communications**.
+2. On the effective date, open **Finance → Tuition plans** and change each plan's **Amount ($)**, or update the family's own billing.
+3. Check the first invoices after the date on **Finance → Accounting**.
 
-- Annual fee adjustments (CPI-tied)
-- New-program launch pricing
-- Subsidy program transitions
+## Who can do what
 
-## When not to use
+| Role | What they can do |
+|---|---|
+| Agency admin | Schedules increases and sees the agency's whole schedule. |
+| Centre director | Sees the agency's schedule and can schedule an increase. Agree it with your agency admin first: an increase is agency-wide. |
+| Platform admin | The same as an agency admin, in the agency they are working in. |
 
-For individual family discounts → use **Custom payment plans** or family-specific invoice notes instead.
+Educators and parents do not see this screen.
+
+## FAQs and when something goes wrong
+
+??? I pressed Schedule increase but nothing was added. | Check the three fields: the **Effective date** must be after today, the **Amount (number)** must be a number, and the type must be exactly **percent** or **flat**. Correct it and try again.
+??? The list says "No tuition increases scheduled." | No increase has been planned yet. Press **+ Schedule increase**.
+??? How do I change or cancel an increase? | The screen has no edit or delete yet. Ask your agency admin or KiddieTrac support to correct a wrong entry, and schedule the right one.
+??? Can I set a different notice period? | The window uses 60 days. Tell families earlier if your contract or the province asks for more notice.
+??? Is this the right place for one family's discount? | No. Use a payment schedule or the family's own billing for one family. Tuition increases are for everyone.
+??? Will families get an email or a text from this screen? | No. Nothing is sent from here; tell families yourself as described above.
+
+## Related screens
+
+[[open: #tuition-plans | Tuition plans]] [[open: #payment-plans | Payment schedules]] [[open: #external-billing | Accounting]]
+
+See also: [Tuition & fee plans](tuition-plans) · [Generating monthly invoices](generating-monthly-invoices)

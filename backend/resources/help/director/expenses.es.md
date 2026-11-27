@@ -1,57 +1,98 @@
 ---
-title: Gastos (proveedores, órdenes de compra y facturas)
+title: Gastos (proveedores, órdenes de compra y facturas de proveedores)
 category: Billing
 order: 85
-roles: agency_admin, platform_admin
+roles: agency_admin, centre_director, platform_admin
 ---
-# Gastos
+# Gastos (proveedores, órdenes de compra y facturas de proveedores)
 
-**Finanzas → Gastos.** Es el dinero que su agencia paga. Haga el seguimiento de proveedores, órdenes de compra y facturas de proveedores, desde el pedido hasta la aprobación y el pago.
+**Finanzas → Gastos** es el dinero que su agencia o centro paga. Lleve la lista de proveedores, emita órdenes de compra, registre la factura del proveedor cuando llegue, apruébela y registre cada pago. Ábralo cuando reciba la factura de un proveedor o cuando quiera ver lo que aún se debe.
 
 [[open: #expenses | Abrir Gastos]]
 
-La pantalla tiene cuatro pestañas.
+La pantalla tiene cuatro pestañas: **📊 Resumen**, **🧾 Facturas de proveedores**, **📦 Órdenes de compra** y **🏢 Proveedores**.
 
-## 📊 Resumen
+## Leer el resumen
 
-- **Pendiente**: el saldo impagado de todas las facturas.
-- **Vencido**: el importe que ha pasado su fecha de vencimiento y cuántas facturas son.
-- **Pagado este mes**, **Proveedores** y **Órdenes de compra abiertas** (borradores y pedidos aún no recibidos).
+1. Abra **Finanzas → Gastos**. Primero se abre la pestaña **📊 Resumen**.
+2. Lea los recuadros: **Pendiente** (el saldo sin pagar de las facturas), **Vencido** (el monto vencido y cuántas facturas), **Pagado este mes**, **Proveedores** y **Órdenes de compra abiertas** (órdenes en borrador o pedidas).
+3. Desplácese hasta **Por estado** y **Gasto por categoría** para ver a dónde va el dinero.
 
-Debajo de los mosaicos, el gasto se desglosa **Por estado** y **Gasto por categoría**.
+## Agregar un proveedor
 
-## 🏢 Proveedores
+1. Abra la pestaña **🏢 Proveedores**.
+2. Pulse **+ Nuevo proveedor**.
+3. Escriba el **Nombre del proveedor** (el único campo obligatorio).
+4. Agregue el **Nombre del contacto**, **Correo**, **Teléfono**, **Dirección** y **Tax / business #** (número fiscal o de empresa) si los tiene.
+5. Elija el **Centro** al que atiende el proveedor, o deje **All centres**, y una **Categoría predeterminada** para que las facturas nuevas la tomen.
+6. Pulse **Crear proveedor**. Aparece el aviso **Supplier saved** y el proveedor se suma a la lista, con lo que aún le debe.
 
-**+ Nuevo proveedor** registra un proveedor: **Nombre del proveedor** (obligatorio), **Nombre del contacto**, **Centro**, **Correo**, **Teléfono**, **Categoría predeterminada**, **N.º de impuesto / empresa**, **Dirección** y un interruptor **Activo**. La lista muestra lo que aún debe a cada proveedor. Haga clic en un proveedor para editarlo o eliminarlo.
+> 💡 Un proveedor que ya no usa: abra el menú de su fila y elija **🗄 Archivar**. Se mantiene en las facturas anteriores y puede volver con **♻️ Restaurar**. Elimine solo un proveedor registrado por error.
 
-> **Consejo:** Desmarque **Activo** en un proveedor que ya no utilice. Permanece registrado con su historial en lugar de eliminarse.
+## Emitir una orden de compra
 
-## 📦 Órdenes de compra
+[[show: #expenses @ Purchase orders > + New purchase order | Muéstreme Nueva orden de compra]]
 
-[[show: #expenses @ Purchase orders > + New purchase order | Mostrarme Nueva orden de compra]]
+1. Abra la pestaña **📦 Órdenes de compra**.
+2. Pulse **+ Nueva orden de compra**.
+3. Elija el **Proveedor**, y el **Centro** si la orden es para un solo centro.
+4. Indique la **Fecha del pedido** y la **Categoría**.
+5. En **Conceptos**, escriba para cada artículo una **Descripción**, la **Qty** y el **Unit $**, y luego el impuesto en **Tax ($)**. El subtotal y el total se actualizan mientras escribe.
+6. Pulse **Crear orden de compra**. Aparece el aviso **PO created** y la orden se suma a la lista.
 
-**+ Nueva orden de compra**: elija el **Proveedor** y, opcionalmente, un **Centro**, indique la **Fecha del pedido** y la **Categoría**, y luego añada las **Líneas** y los impuestos. **Crear OC** la guarda como pedida.
+## Convertir una orden en factura
 
-Abra una orden de compra para avanzarla:
+1. En la pestaña **📦 Órdenes de compra**, abra la orden.
+2. Cuando llegue la factura del proveedor, pulse **→ Convertir en factura de proveedor**. La factura se crea con las líneas de la orden, sin escribir nada dos veces, y la pantalla pasa a **🧾 Facturas de proveedores**.
+3. Si la orden no seguirá adelante, elija en su lugar **🚫 Cancelar el pedido** en el menú de su fila.
 
-- **Marcar como recibido** cuando llegue la mercancía.
-- **→ Convertir en factura** cuando llegue la factura del proveedor. Esto crea la factura a partir del pedido, así no se escribe nada dos veces. Se ofrece hasta que el pedido se marca como recibido.
-- **Editar** para modificarla.
+> ⚠️ **→ Convertir en factura de proveedor** solo se ofrece mientras la orden no esté marcada como recibida ni cancelada. Convierta primero la orden; use **Marcar como recibido** solo para una orden que no tendrá su propia factura.
 
-## 🧾 Facturas
+## Registrar una factura de proveedor
 
-Las facturas son las facturas de proveedores. **+ Nueva factura** registra una con su **Proveedor**, **Centro**, **N.º de factura del proveedor**, **Categoría**, **Fecha de vencimiento** y **Líneas**. Puede filtrar la lista por estado: **Pendiente de aprobación**, **Aprobada**, **Pagada parcialmente**, **Vencida**, **Pagada** o **Borrador**.
+1. Abra la pestaña **🧾 Facturas de proveedores**.
+2. Pulse **+ Nueva factura de proveedor**.
+3. Elija el **Proveedor**. Su categoría predeterminada se completa.
+4. Elija el **Centro**, escriba el **Supplier invoice #** (número de factura del proveedor) y la **Fecha de vencimiento**.
+5. Escriba los **Conceptos** y el impuesto en **Tax ($)**.
+6. Pulse **Crear factura de proveedor**. Aparece el aviso **Bill created**.
 
-Abra una factura para actuar sobre ella:
+Use el filtro de estado sobre la lista para ver solo facturas en **Borrador**, **Pendiente de aprobación**, **Aprobado**, **Pagado parcialmente**, **Vencido** o **Pagado**.
 
-- [ ] **✓ Aprobar**: para una factura en borrador o pendiente de aprobación.
-- [ ] **💵 Registrar pago**: introduzca el **Importe**, el **Método** (transferencia bancaria, cheque, transferencia electrónica, tarjeta de crédito, efectivo u otro) y una **Referencia** opcional. Un pago parcial deja el resto como pendiente.
-- [ ] **Anular**: cancela una factura que no debe pagar. Se le pide confirmación.
+## Aprobar y pagar una factura
 
-> **Nota:** Registrar un pago aquí deja constancia de que usted pagó. No envía dinero al proveedor.
+1. En la pestaña **🧾 Facturas de proveedores**, abra la factura (o elija **👁 Ver** en el menú de su fila).
+2. Pulse **✓ Aprobar**. Aparece el aviso **Factura de proveedor aprobada**.
+3. Al pagar, pulse **💵 Registrar pago**.
+4. Escriba el **Monto**, elija el **Método** (**Bank transfer**, **Cheque**, **e-Transfer**, **Credit card**, **Cash** u **Other**) y agregue una **Reference (optional)**, como el número de cheque.
+5. Pulse **Registrar pago**. Aparece el aviso **Pago registrado**. Un pago parcial deja el resto como saldo y la factura queda en **Pagado parcialmente**.
 
-## Quién puede usarlo
+> ℹ️ Registrar un pago solo deja constancia de que usted pagó. KiddieTrac no envía dinero al proveedor.
 
-Está en el menú **Finanzas** para los **administradores de la agencia** y los **administradores de la plataforma**.
+Para cancelar una factura que no pagará, elija **🚫 Anular** en el menú de su fila y confirme. Queda registrada como **Void**.
 
-Vea también: [Contabilidad](accounting) · [Ciclos de nómina, horas y recibos de nómina](payroll-documents)
+## Quién puede hacer qué
+
+| Rol | Lo que puede hacer |
+|---|---|
+| Administrador de agencia | Todo, para cada centro y para los registros de toda la agencia. |
+| Director de centro | Agrega y cambia proveedores, órdenes y facturas de sus propios centros. Ve los proveedores y registros de toda la agencia, pero no puede cambiarlos. |
+| Administrador de plataforma | Lo mismo que un administrador de agencia, en la agencia donde trabaja. |
+
+Los educadores y los padres no ven esta pantalla. Gastos forma parte de su plan de KiddieTrac; si el plan de su agencia no lo incluye, la pantalla no aparece en el menú.
+
+## Preguntas frecuentes y problemas
+
+??? No encuentro Gastos en el menú. | Está en **Finanzas** para administradores de agencia y directores de centro. Si no aparece, el plan de su agencia no incluye Gastos: consulte a su administrador de agencia.
+??? Al guardar aparece "Choose one of your centres." | Como director de centro solo puede guardar registros de sus propios centros. Elija uno en **Centro**.
+??? "Only a record of one of your centres can be changed." | La factura o la orden pertenece a otro centro o a toda la agencia. Pida a su administrador de agencia que la cambie.
+??? "Elija un proveedor" o "Agregue al menos una línea" | Una factura u orden necesita un proveedor y al menos una línea con monto. Agréguelos y guarde de nuevo.
+??? La lista dice "No bills yet." | No se ha registrado nada para sus centros. Pulse **+ Nueva factura de proveedor**, o convierta una orden de compra.
+??? ¿Alguien recibe un correo cuando apruebo o pago una factura? | No. Gastos no envía correos ni notificaciones. Cada cambio queda en el registro de auditoría.
+??? ¿Puedo vincular una factura a una subvención? | Sí. En **Finanzas → Subvenciones**, registre un gasto y elija la factura en **Linked expense bill (optional)**.
+
+## Pantallas relacionadas
+
+[[open: #grants | Subvenciones]] [[open: #external-billing | Contabilidad]]
+
+Vea también: [Subvenciones](grants) · [Contabilidad](accounting) · [Nóminas, horas y recibos de pago](payroll-documents)
