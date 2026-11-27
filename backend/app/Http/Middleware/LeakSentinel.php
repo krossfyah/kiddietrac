@@ -34,7 +34,9 @@ final class LeakSentinel
     public static array $seen = [];
 
     private const MAX_BYTES = 3_000_000;
-    private const SKIP_PREFIX = '#^api/v1/(platform|sales|reseller|auth/me$)#';
+    /* Not looked at: platform-level areas, and /branding - a public brand lookup BY DESIGN (any agency's colours and
+       logo for its sign-in page; names stripped for strangers since the 2026-11-05 sweep). */
+    private const SKIP_PREFIX = '#^api/v1/(platform|sales|reseller|auth/me$|branding$)#';
 
     public function handle(Request $request, Closure $next): Response
     {

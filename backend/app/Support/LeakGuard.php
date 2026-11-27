@@ -90,6 +90,7 @@ final class LeakGuard
         try {
             $last = function (string $kind, ?string $mode = null) {
                 $r = DB::table('leak_guard_runs')->where('kind', $kind)->whereNotNull('finished_at')
+                    ->where(fn ($q) => $q->whereNull('mode')->orWhere('mode', 'not like', '% of #%'))   // not a full run's working slices
                     ->when($mode, fn ($q) => $q->where('mode', $mode))->orderByDesc('id')->first();
                 if (! $r) {
                     return null;

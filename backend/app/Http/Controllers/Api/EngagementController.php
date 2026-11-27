@@ -319,7 +319,7 @@ final class EngagementController extends Controller
                     ->pluck('centre_id')->all();
             } else {
                 // Agency admin / platform admin: the active agency they're viewing.
-                $agencyId = $isPlatform ? (int) $request->header('X-Active-Agency-Id') : (\App\Support\AuditScope::ownAgency((int) $u->id) ?? 0);
+                $agencyId = $isPlatform ? (int) $request->header('X-Active-Agency-Id') : (int) (\App\Support\AgencyRole::activeAgency($request) ?? \App\Support\AuditScope::ownAgency((int) $u->id) ?? 0);
                 if ($agencyId && DB::table('agencies')->where('id', $agencyId)->whereNull('deleted_at')->exists()) {
                     $centreIds = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
                     $agencyStaff = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)->pluck('user_id')->all();
@@ -338,6 +338,12 @@ final class EngagementController extends Controller
         $rows = DB::table('signed_documents as sd')
             ->leftJoin('users as u', 'u.id', '=', 'sd.signer_user_id')
             ->whereIn('sd.signer_user_id', $scopedUserIds ?: [(int) $u->id])
+            /* TENANT, NOT JUST PERSON (leak guard, 2026-11-27): the signer list is a PERSON filter - someone who is
+               staff or a parent here may have signed papers for ANOTHER agency (Test Agency's admin was shown a
+               platform admin's iLearn NDA, signature and IP included). Your own papers always; anyone else's only
+               when filed under the agency on screen. */
+            ->where(fn ($q) => $q->where('sd.signer_user_id', (int) $u->id)
+                ->orWhere('sd.agency_id', ($isPlatform ? (int) $request->header('X-Active-Agency-Id') : (int) (\App\Support\AgencyRole::activeAgency($request) ?? 0)) ?: -1))
             ->orderByDesc('sd.signed_at')
             ->limit(200)
             ->select('sd.*', DB::raw("CONCAT(u.first_name,' ',u.last_name) as signer_full_name"), DB::raw("(CASE WHEN sd.document_type='privacy_nda' THEN (SELECT d.file_url FROM documents d WHERE d.scope_type='user' AND d.scope_id=sd.signer_user_id AND d.category='agreement' ORDER BY d.id DESC LIMIT 1) ELSE NULL END) as doc_file_url"))
@@ -362,6 +368,10 @@ final class EngagementController extends Controller
             ->whereIn('role', ['agency_admin', 'centre_director', 'platform_admin'])
             ->where('active', 1)->exists();
         abort_unless((int) $sd->signer_user_id === (int) $u->id || $isAdmin, 403);
+        // Someone else's paper: only one filed under the agency on screen (leak guard, 2026-11-27 - was any id, any agency).
+        $onScreen = DB::table('role_assignments')->where('user_id', $u->id)->where('role', 'platform_admin')->where('active', 1)->exists()
+            ? (int) $request->header('X-Active-Agency-Id') : (int) (\App\Support\AgencyRole::activeAgency($request) ?? 0);
+        abort_unless((int) $sd->signer_user_id === (int) $u->id || ((int) $sd->agency_id > 0 && (int) $sd->agency_id === $onScreen), 404);
 
         $disk = Storage::disk('public');
         $rel = null;

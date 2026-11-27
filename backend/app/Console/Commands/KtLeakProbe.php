@@ -39,7 +39,7 @@ use Throwable;
 final class KtLeakProbe extends Command
 {
     protected $signature = 'kt:leak-probe {--all} {--hourly} {--slice=} {--slices=24} {--route=} {--role=}
-        {--gate : full run, no alert, exit 1 on findings} {--no-alert} {--quiet-ok} {--max-secs=0}';
+        {--gate : full run, no alert, exit 1 on findings} {--no-alert} {--quiet-ok} {--max-secs=0} {--parent= : (internal) full run this slice belongs to}';
 
     protected $description = 'Call every GET API route as canary people of one test agency and fail on any other agency\'s canary data.';
 
@@ -134,6 +134,13 @@ final class KtLeakProbe extends Command
             $slice = $this->option('slice') !== null ? (int) $this->option('slice') : ((int) now()->format('G')) % $slices;
             $routes = array_filter($routes, fn ($r, $u) => crc32($u) % $slices === $slice, ARRAY_FILTER_USE_BOTH);
             $mode = "slice {$slice}/{$slices}";
+        }
+
+        if ($all) {
+            return $this->fullInSlices($gate, $totalGet, count($routes), $t0);
+        }
+        if ($parent = (int) $this->option('parent')) {
+            $mode .= " of #{$parent}";
         }
 
         $runId = DB::table('leak_guard_runs')->insertGetId(['kind' => 'probe', 'mode' => $mode, 'started_at' => now()]);
@@ -288,7 +295,7 @@ final class KtLeakProbe extends Command
             $this->info('Clean: no agency saw another agency\'s canary data.');
         }
 
-        if (! $gate && ! $this->option('no-alert')) {
+        if (! $gate && ! $this->option('no-alert') && ! $this->option('parent')) {
             // Mail/HTTP are faked in this process, so the platform alert goes out from a fresh one.
             try {
                 $p = new \Symfony\Component\Process\Process([PHP_BINARY, base_path('artisan'), 'kt:leak-alert', '--run=' . $runId]);
@@ -301,6 +308,119 @@ final class KtLeakProbe extends Command
         }
 
         return ($lines || ($all && $blind)) ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * THE FULL RUN = the 24 slices, each in a FRESH process (2026-11-27). One process for ~25,000 in-process calls
+     * slowed from ~25 ms to ~450 ms a call (state that every request leaves behind), so a full run took 90+ minutes;
+     * 24 short processes take a few minutes each and cover exactly the same routes (crc32(uri) % 24).
+     */
+    private function fullInSlices(bool $gate, int $totalGet, int $routeCount, float $t0): int
+    {
+        $runId = DB::table('leak_guard_runs')->insertGetId(['kind' => 'probe', 'mode' => 'all', 'started_at' => now()]);
+        $this->line("Leak probe (all): {$routeCount} of {$totalGet} GET routes in 24 slices, agencies " . implode(' <-> ', LeakGuard::AGENCIES));
+        $failedSlices = [];
+        for ($i = 0; $i < 24; $i++) {
+            $p = new \Symfony\Component\Process\Process([PHP_BINARY, base_path('artisan'), 'kt:leak-probe', '--slice=' . $i, '--slices=24',
+                '--no-alert', '--quiet-ok', '--parent=' . $runId]);
+            $p->setTimeout(1800);
+            try {
+                $p->run();
+            } catch (Throwable $e) {
+                $failedSlices[] = $i;
+                continue;
+            }
+            if (! DB::table('leak_guard_runs')->where('mode', "slice {$i}/24 of #{$runId}")->whereNotNull('finished_at')->exists()) {
+                $failedSlices[] = $i;
+            }
+            if ($this->output->isVerbose()) {
+                $this->line("  slice {$i}: " . trim(preg_replace('/\s+/', ' ', mb_substr($p->getOutput(), 0, 300))));
+            }
+        }
+
+        $lines = [];
+        $own = [];
+        $calls = 0;
+        $routes = 0;
+        $statuses = [];
+        $slow = [];
+        $unmapped = [];
+        $ms = 0.0;
+        foreach (DB::table('leak_guard_runs')->where('mode', 'like', "slice %/24 of #{$runId}")->get() as $c) {
+            $s = json_decode((string) $c->summary, true) ?: [];
+            $calls += (int) $c->calls;
+            $routes += (int) $c->routes_checked;
+            foreach ($s['lines'] ?? [] as $l) {
+                $lines[$l] = true;
+            }
+            foreach ($s['coverage']['own_visible'] ?? [] as $who => $n) {
+                $own[$who] = ($own[$who] ?? 0) + $n;
+            }
+            foreach ($s['coverage']['statuses'] ?? [] as $k => $n) {
+                $statuses[$k] = ($statuses[$k] ?? 0) + $n;
+            }
+            foreach ($s['slowest'] ?? [] as $k => $v) {
+                $slow[$k] = $v;
+            }
+            foreach ($s['unmapped'] ?? [] as $u) {
+                $unmapped[$u] = true;
+            }
+            $ms += ($s['coverage']['avg_ms'] ?? 0) * (int) $c->calls;
+        }
+        $blind = [];
+        foreach (LeakGuard::AGENCIES as $A) {
+            foreach (self::ROLES as $role) {
+                if ($role !== 'integration' && empty($own["agency {$A} {$role}"])) {
+                    $blind[] = "agency {$A} {$role}";
+                }
+            }
+        }
+        if ($failedSlices) {
+            $lines['probe slices did not finish: ' . implode(', ', $failedSlices) . ' (those routes were NOT checked)'] = true;
+        }
+        $lines = array_keys($lines);
+        sort($lines);
+        arsort($slow);
+        $secs = (int) round(microtime(true) - $t0);
+        DB::table('leak_guard_runs')->where('id', $runId)->update([
+            'finished_at' => now(), 'routes_checked' => $routes, 'calls' => $calls, 'findings' => count($lines), 'blind' => count($blind),
+            'summary' => json_encode(['secs' => $secs, 'lines' => array_slice($lines, 0, 300), 'blind' => $blind, 'coverage' => [
+                'get_routes' => $totalGet, 'probed' => $routes, 'id_routes_unmapped' => count($unmapped), 'roles' => count(self::ROLES),
+                'own_visible' => $own, 'statuses' => $statuses, 'avg_ms' => $calls ? round($ms / $calls, 1) : null, 'slices_failed' => $failedSlices,
+            ], 'slowest' => array_slice($slow, 0, 15, true), 'unmapped' => array_slice(array_keys($unmapped), 0, 400)], JSON_UNESCAPED_SLASHES),
+        ]);
+        // The slice rows were only working storage for this run.
+        DB::table('leak_guard_runs')->where('mode', 'like', "slice %/24 of #{$runId}")->delete();
+
+        $this->line("  {$routes} routes, {$calls} calls in {$secs}s");
+        foreach ($own as $who => $n) {
+            if ($this->output->isVerbose()) {
+                $this->line("  {$who}: own canary visible on {$n} routes");
+            }
+        }
+        if ($blind) {
+            $this->warn('  BLIND (own canary never visible): ' . implode(', ', $blind));
+        }
+        if ($lines) {
+            $this->error(count($lines) . ' cross-agency finding(s):');
+            foreach ($lines as $l) {
+                $this->line('   ' . $l);
+            }
+        } elseif (! $this->option('quiet-ok')) {
+            $this->info('Clean: no agency saw another agency\'s canary data.');
+        }
+        if (! $gate && ! $this->option('no-alert')) {
+            try {
+                $p = new \Symfony\Component\Process\Process([PHP_BINARY, base_path('artisan'), 'kt:leak-alert', '--run=' . $runId]);
+                $p->setTimeout(120);
+                $p->run();
+                $this->line(trim($p->getOutput()));
+            } catch (Throwable $e) {
+                $this->warn('alert process failed: ' . $e->getMessage());
+            }
+        }
+
+        return ($lines || $blind) ? self::FAILURE : self::SUCCESS;
     }
 
     /** Fill every {param} with a canary id of the right kind, or null when one cannot be mapped. */
