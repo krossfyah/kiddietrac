@@ -23,20 +23,72 @@ use Illuminate\Support\Facades\DB;
 class PrivateThreads
 {
     /**
-     * The 1:1 thread between two people, creating it if it does not exist.
+     * A THREAD BELONGS TO THE AGENCY IT WAS STARTED IN (2026-11-27, leak guard finding).
+     *
+     * Threads 69 and 98 were filed under iLearn (2) but were DMs between Anthony and people
+     * who are ONLY in Test Agency 6. The callers guessed the agency from somebody's FIRST
+     * role row ("the recipient's agency"): when the recipient was Anthony, whose first row is
+     * iLearn's agency_admin, an agency-6 admin's message to him was filed under iLearn.
+     *
+     * The rule now: the thread takes the ACTIVE agency of the request that starts it (the
+     * caller passes it in; never derived from a person), and every participant must belong
+     * to that agency. A platform admin may join a thread in any agency, because they can
+     * work in any agency, but they never decide which agency a thread is in.
+     */
+    public static function mayJoin(int $userId, int $agencyId): bool
+    {
+        if ($userId <= 0 || $agencyId <= 0) return false;
+        if (DB::table('role_assignments')->where('user_id', $userId)->where('role', 'platform_admin')->where('active', true)->exists()) {
+            return true;
+        }
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        $role = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)
+            ->where(fn ($q) => $q->where('agency_id', $agencyId)->orWhereIn('centre_id', $centres ?: [0]))
+            ->exists();
+        if ($role) return true;
+
+        // A parent: a guardian of a family at one of the agency's centres.
+        return DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')
+            ->where('g.user_id', $userId)->whereIn('f.centre_id', $centres ?: [0])->exists();
+    }
+
+    /** The user ids in $userIds that may NOT be in a thread of $agencyId. */
+    public static function outsiders(array $userIds, int $agencyId): array
+    {
+        return array_values(array_filter(array_map('intval', $userIds), fn ($u) => ! self::mayJoin($u, $agencyId)));
+    }
+
+    /**
+     * The 1:1 thread between two people IN THIS AGENCY, creating it if it does not exist.
      *
      * "The 1:1 thread" means a thread they are both in that has EXACTLY two
      * participants — without that count a group thread containing both of them would
      * match, and a broadcast would land in front of an audience.
+     *
+     * Two people who work together in two agencies have one thread per agency: a
+     * conversation is that agency's record, and one shared thread would show agency A's
+     * messages while working in agency B.
+     *
+     * @throws \DomainException when the agency is unknown or either person is not in it
      */
     public static function findOrCreate(int $userA, int $userB, ?int $agencyId = null): int
     {
         if ($userA === $userB) {
             throw new \InvalidArgumentException('A private thread needs two different people.');
         }
+        // Fail CLOSED: no agency means no thread, never a guessed one.
+        $agencyId = (int) ($agencyId ?? 0);
+        if ($agencyId <= 0) {
+            throw new \DomainException('A private thread needs the agency it belongs to.');
+        }
+        if (self::outsiders([$userA, $userB], $agencyId)) {
+            throw new \DomainException('Both people must belong to the agency this conversation is in.');
+        }
 
         $existing = DB::table('staff_thread_participants as a')
             ->join('staff_thread_participants as b', 'a.thread_id', '=', 'b.thread_id')
+            ->join('staff_threads as t', 't.id', '=', 'a.thread_id')
+            ->where('t.agency_id', $agencyId)
             ->where('a.user_id', $userA)->where('b.user_id', $userB)
             ->whereRaw('(SELECT COUNT(*) FROM staff_thread_participants p WHERE p.thread_id = a.thread_id) = 2')
             ->value('a.thread_id');

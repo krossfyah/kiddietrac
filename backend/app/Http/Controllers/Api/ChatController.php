@@ -1567,9 +1567,10 @@ final class ChatController extends Controller
                     // invisible to the missed-message emailer and has nothing to reply
                     // to — the parent half of this broadcast lands in a real thread, and
                     // the staff half should behave the same way.
-                    /* Same helper the parent half uses. The old copy here also
-                       filtered on t.agency_id, which split one pair's history across
-                       agencies; a 1:1 conversation is one conversation. */
+                    /* Same helper the parent half uses. It finds the pair's 1:1 IN THIS
+                       AGENCY (2026-11-27): a thread is that agency's record, so two people
+                       who share two agencies have one thread in each, never one filed
+                       under whichever agency was guessed first. */
                     $threadId = \App\Support\PrivateThreads::findOrCreate((int) $user->id, (int) $uid, $agencyId);
                     \App\Support\PrivateThreads::post((int) $user->id, $threadId, $body);
 
@@ -1675,6 +1676,13 @@ final class ChatController extends Controller
             if ($allowed && DB::table('agencies')->where('id', $header)->exists()) {
                 return $header;
             }
+        }
+
+        /* A platform admin broadcasts into the agency they CHOSE, never their first role row's
+           (2026-11-27, threads 69/98): with no valid header that guess was iLearn, and the 1:1
+           threads it wrote were filed there. Fail closed. */
+        if (in_array('platform_admin', $roles, true)) {
+            return null;
         }
 
         $own = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)

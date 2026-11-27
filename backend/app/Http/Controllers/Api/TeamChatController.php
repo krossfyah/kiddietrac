@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class TeamChatController extends Controller
 {
+    use \App\Http\Concerns\ResolvesCentreContext;
+
     private const STAFF_ROLES = ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'auditor', 'platform_admin'];
 
     /**
@@ -34,6 +36,17 @@ final class TeamChatController extends Controller
             ->where('role', 'platform_admin')->where('active', true)->exists();
     }
 
+    /**
+     * The agency a new thread is filed under: the request's ACTIVE agency via the shared
+     * resolver (a platform admin's chosen agency, anyone else's header only when they belong
+     * there, else their own). Null = fail closed. Never derived from a participant.
+     */
+    private function threadAgencyId(Request $request): ?int
+    {
+        $a = (int) ($this->resolveAgencyId($request) ?: 0);
+        return $a > 0 ? $a : null;
+    }
+
     /** Agencies the current user belongs to (direct role or via a centre). */
     private function myAgencyIds(int $uid, ?Request $request = null): array
     {
@@ -49,14 +62,17 @@ final class TeamChatController extends Controller
         //
         // Fails CLOSED: no active agency and no agency of their own means no contacts,
         // rather than everybody.
+        //
+        // Everyone else is scoped the same way (2026-11-27): contacts, start() and the group
+        // vetting all ask about the agency you are WORKING IN, so the picker never offers
+        // somebody a new thread could not be filed with. The full role list below is only
+        // the fallback for a call with no request.
+        if ($request) {
+            $active = $this->threadAgencyId($request);
+            if ($active) return [$active];
+        }
         if ($this->isPlatformAdmin($uid)) {
-            // Taken from the request that was handed in, not the global helper: the
-            // active agency is a property of THIS call, and reaching for a global makes
-            // the scoping depend on container state rather than on the caller.
-            $active = (int) (($request ? $request->header('X-Active-Agency-Id') : null) ?: 0);
-            if ($active && DB::table('agencies')->where('id', $active)->exists()) {
-                return [$active];
-            }
+            return [];
         }
 
         $direct = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
@@ -217,19 +233,8 @@ final class TeamChatController extends Controller
             ->pluck('id')->map(fn ($v) => (int) $v)->all();
     }
 
-    /** The agency a user actually belongs to, for filing a thread against. */
-    private function agencyOfUser(int $uid): ?int
-    {
-        $direct = DB::table('role_assignments')->where('user_id', $uid)->where('active', true)
-            ->whereNotNull('agency_id')->value('agency_id');
-        if ($direct) {
-            return (int) $direct;
-        }
-        $viaCentre = DB::table('role_assignments as ra')->join('centres as c', 'c.id', '=', 'ra.centre_id')
-            ->where('ra.user_id', $uid)->where('ra.active', true)->value('c.agency_id');
-
-        return $viaCentre ? (int) $viaCentre : null;
-    }
+    /* agencyOfUser() was removed (2026-11-27): "a person's FIRST role row" is not the agency a
+       thread belongs to, and filing by it misfiled threads 69/98. Use threadAgencyId(). */
 
     /** GET /provider/team-contacts — colleagues the user can start a chat with. */
     public function contacts(Request $request): JsonResponse
@@ -456,17 +461,26 @@ final class TeamChatController extends Controller
         $recipient = (int) $data['recipient_user_id'];
         if ($recipient === $uid) return response()->json(['message' => 'You can’t message yourself.'], 422);
 
-        // Recipient must be a colleague in a shared agency.
-        if (! in_array($recipient, $this->staffUserIds($this->myAgencyIds($uid, $request), $uid), true)) {
+        /* The thread is filed under the agency you are WORKING IN, never one guessed from
+           a person (2026-11-27). "The recipient's agency" was their FIRST role row: an
+           agency-6 admin messaging Anthony got a thread filed under iLearn, because his
+           first row is iLearn's. Fails closed when there is no active agency. */
+        $agencyId = $this->threadAgencyId($request);
+        if (! $agencyId) {
+            return response()->json(['message' => 'Choose an agency before starting a conversation.'], 403);
+        }
+
+        // Recipient must be a colleague in THIS agency.
+        if (! in_array($recipient, $this->staffUserIds([$agencyId], $uid), true)) {
             return response()->json(['message' => 'That person isn’t a colleague you can message.'], 403);
         }
-        // Stamp the thread with the RECIPIENT's agency, not the sender's first one. For a
-        // platform admin the sender's list is every agency, so taking the first would file
-        // a conversation with an agency-6 director under agency 2.
-        $agencyId = $this->agencyOfUser($recipient) ?? ($this->myAgencyIds($uid, $request)[0] ?? null);
 
         // One implementation, shared with the broadcast path — see PrivateThreads.
-        $threadId = \App\Support\PrivateThreads::findOrCreate($uid, $recipient, $agencyId);
+        try {
+            $threadId = \App\Support\PrivateThreads::findOrCreate($uid, $recipient, $agencyId);
+        } catch (\DomainException $e) {
+            return response()->json(['message' => 'That person isn’t a colleague you can message.'], 403);
+        }
         $now = now();
         $this->post($uid, (int) $threadId, (string) $data['body'], $now);
         return response()->json(['thread_id' => $threadId], 201);
@@ -496,9 +510,15 @@ final class TeamChatController extends Controller
             return response()->json(['message' => 'A group needs at least two other people.'], 422);
         }
 
-        // The agency of the people in it, not the creator's first one — a platform admin
-        // belongs to every agency, so "the first" would file the group under the wrong one.
-        $agencyId = $this->agencyOfUser($ids[0]) ?? ($this->myAgencyIds($uid, $request)[0] ?? null);
+        // The agency you are working in (vetColleagues already checked everyone against it),
+        // never the first member's first role row — see start().
+        $agencyId = $this->threadAgencyId($request);
+        if (! $agencyId) {
+            return response()->json(['message' => 'Choose an agency before starting a conversation.'], 403);
+        }
+        if (\App\Support\PrivateThreads::outsiders(array_merge([$uid], $ids), $agencyId)) {
+            return response()->json(['message' => 'Someone you picked isn’t a colleague you can message.'], 403);
+        }
         $now = now();
 
         $threadId = (int) DB::table('staff_threads')->insertGetId([
@@ -560,14 +580,11 @@ final class TeamChatController extends Controller
         /* The thread's own agency is the bound, not the caller's. A platform admin is a
            colleague of everybody, so vetting against the CALLER alone would let them pull
            an agency-2 educator into an agency-6 group. */
-        if ($row->agency_id) {
-            $outsiders = [];
-            foreach ($ids as $id) {
-                if ((int) ($this->agencyOfUser($id) ?? 0) !== (int) $row->agency_id) $outsiders[] = $id;
-            }
-            if ($outsiders) {
-                return response()->json(['message' => 'Those people are not in this conversation’s agency.'], 403);
-            }
+        /* Membership of the thread's agency, not "their FIRST role row equals it": someone
+           in two agencies was refused from one, and the first-row guess is what misfiled
+           threads 69/98. A thread with no agency takes nobody new (fails closed). */
+        if (! $row->agency_id || \App\Support\PrivateThreads::outsiders($ids, (int) $row->agency_id)) {
+            return response()->json(['message' => 'Those people are not in this conversation’s agency.'], 403);
         }
 
         $already = DB::table('staff_thread_participants')->where('thread_id', $thread)
@@ -1108,7 +1125,8 @@ final class TeamChatController extends Controller
                "Tap to open and read it." The bell row keeps the preview, sealed at rest. */
             $pushWho = \App\Support\ChatPrivacy::first((string) ($me->first_name ?? '')) ?: \App\Support\ChatPrivacy::first($meName);
             if ($emergency) {
-                \App\Support\EmergencyMessage::audit($uid, $this->agencyOfUser($uid), 'staff_thread', $thread, (int) $id,
+                \App\Support\EmergencyMessage::audit($uid,
+                    ((int) DB::table('staff_threads')->where('id', $thread)->value('agency_id')) ?: null, 'staff_thread', $thread, (int) $id,
                     $others->map(fn ($v) => (int) $v)->all());
             }
             foreach ($others as $oid) {

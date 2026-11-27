@@ -350,7 +350,7 @@ final class DashboardExtrasController extends Controller
             ->whereIn('role', ['educator', 'centre_director', 'agency_admin', 'platform_admin', 'home_visitor'])->exists();
         $link = '#notifications';
         if ($recipientIsStaff && (int) $data['user_id'] !== (int) $sender->id) {
-            $link = $this->quickMessageToThread((int) $sender->id, (int) $data['user_id'], (string) $data['message']);
+            $link = $this->quickMessageToThread((int) $sender->id, (int) $data['user_id'], (string) $data['message'], (int) $agencyId);
         }
 
         \App\Support\Notify::write([
@@ -374,16 +374,19 @@ final class DashboardExtrasController extends Controller
      * staff_thread_participants / staff_messages) so quick messages and Team
      * messages share one conversation. Returns the deep-link hash for the thread.
      */
-    private function quickMessageToThread(int $senderId, int $recipientId, string $body): string
+    private function quickMessageToThread(int $senderId, int $recipientId, string $body, int $agencyId): string
     {
         $now = now();
-        /* Shared with the chat + broadcast paths. The copy that used to live here
-           took the agency from the SENDER's first role assignment — for a platform
-           admin that is an arbitrary agency, filing the thread under the wrong one.
-           PrivateThreads takes the agency it is given. */
-        $agencyId = DB::table('role_assignments')->where('user_id', $recipientId)->where('active', true)
-            ->whereNotNull('agency_id')->value('agency_id');
-        $threadId = \App\Support\PrivateThreads::findOrCreate($senderId, $recipientId, $agencyId ? (int) $agencyId : null);
+        /* Shared with the chat + broadcast paths. The thread is filed under the agency the
+           sender is WORKING IN (the membership-checked $agencyId above), never a guess from
+           a person's first role row: that guess filed an agency-6 conversation with Anthony
+           under iLearn (threads 69/98, 2026-11-27). If either person is not in that agency
+           the bell still goes, but no thread is written. */
+        try {
+            $threadId = \App\Support\PrivateThreads::findOrCreate($senderId, $recipientId, $agencyId);
+        } catch (\DomainException $e) {
+            return '#notifications';
+        }
 
         DB::table('staff_messages')->insert([
             'thread_id' => $threadId, 'sender_id' => $senderId, 'body' => trim($body),
