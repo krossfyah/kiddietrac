@@ -341,7 +341,11 @@ final class HrCoursesController extends Controller
         $v = $c->content_kind === 'library' ? DB::table('training_videos')->where('id', $c->training_video_id)->first(['title', 'video_url', 'captions_url', 'poster_url']) : null;
 
         return response()->json(['kind' => $c->content_kind, 'title' => $c->title, 'description' => $c->description, 'url' => $c->url,
-            'video' => $v ? ['title' => $v->title, 'url' => $v->video_url, 'captions' => $v->captions_url, 'poster' => $v->poster_url] : null]);
+            'video' => $v ? ['title' => $v->title, 'url' => $v->video_url, 'captions' => $v->captions_url, 'poster' => $v->poster_url] : null,
+            // Signature stamp for the person's own acknowledgement (2026-11-27).
+            'ack_name' => $a->completed_at ? $a->acknowledged_name : null,
+            'ack_stamp' => $a->completed_at && $a->acknowledged_name
+                ? (\App\Support\SignatureStamp::lines($a->completed_at, $a->acknowledged_ip ?? null, $a->acknowledged_location ?? null, $aid) ?: null) : null]);
     }
 
     /** POST hr/course-assignments/{id}/complete {name?} — the person themselves only. */
@@ -356,6 +360,12 @@ final class HrCoursesController extends Controller
         $name = trim((string) $request->input('name', ''));
         if ($c->needs_ack) abort_if(mb_strlen($name) < 2, 422, 'Type your name to confirm you finished and understood the course.');
         $r = HrTalent::completeCourse($aid, $a, $c->needs_ack ? mb_substr($name, 0, 120) : null, (int) $request->user()->id);
+        // Signature stamp (2026-11-27): a typed-name acknowledgement records the signer's IP + approximate place.
+        if ($c->needs_ack) {
+            $stamp = \App\Support\SignatureStamp::capture($request);
+            DB::table('hr_course_assignments')->where('id', $a->id)->whereNotNull('acknowledged_name')->whereNull('acknowledged_location')
+                ->update(['acknowledged_ip' => $stamp['ip'], 'acknowledged_location' => $stamp['location']]);
+        }
         $this->hrNote($aid, 'hr.course_completed', 'hr_course', (int) $c->id, ['certificate_no' => $r['certificate_no']]);
 
         return response()->json(['ok' => true] + $r);
@@ -410,6 +420,11 @@ final class HrCoursesController extends Controller
         $name = trim((string) ($d['name'] ?? ''));
         if ($c->needs_ack) abort_if(mb_strlen($name) < 2, 422, 'Type your name to confirm you finished and understood the course.');
         $r = \App\Support\HrQuiz::submit($aid, $c, $a, $d['answers'], $c->needs_ack ? mb_substr($name, 0, 120) : null, (int) $request->user()->id);
+        if ($c->needs_ack && ! empty($r['passed'])) {   // signature stamp (2026-11-27): the typed acknowledgement's IP + approximate place
+            $stamp = \App\Support\SignatureStamp::capture($request);
+            DB::table('hr_course_assignments')->where('id', $a->id)->whereNotNull('acknowledged_name')->whereNull('acknowledged_location')
+                ->update(['acknowledged_ip' => $stamp['ip'], 'acknowledged_location' => $stamp['location']]);
+        }
         $this->hrNote($aid, $r['passed'] ? 'hr.course_quiz_passed' : 'hr.course_quiz_failed', 'hr_course', (int) $c->id,
             ['score' => $r['score'], 'pass_mark' => $r['pass_mark']] + ($r['passed'] ? ['certificate_no' => $r['certificate_no'] ?? null] : []));
 
@@ -450,6 +465,7 @@ final class HrCoursesController extends Controller
             'person' => trim($u->first_name . ' ' . $u->last_name), 'course' => $c->title,
             'date' => \Illuminate\Support\Carbon::parse($a->completed_at, 'UTC')->setTimezone($tz)->format('F j, Y'),
             'number' => $a->certificate_no, 'hours' => $a->pd_hours_id ? (float) $c->pd_hours : null, 'ack' => $a->acknowledged_name,
+            'ackStamp' => $a->acknowledged_name ? \App\Support\SignatureStamp::lines($a->completed_at, $a->acknowledged_ip ?? null, $a->acknowledged_location ?? null, $aid) : [],
         ])->render();
         $opts = new Options();
         $opts->set('isRemoteEnabled', true);

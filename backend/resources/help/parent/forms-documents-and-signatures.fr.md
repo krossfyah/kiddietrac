@@ -81,6 +81,7 @@ Ouvrez n’importe quel document et utilisez l’option de partage ou d’enregi
 ??? Mon partenaire peut-il signer à ma place? | S’il est un tuteur inscrit avec son propre identifiant, oui — la signature enregistre la personne connectée. Pour les ententes légales, signez depuis votre propre compte.
 ??? J’ai signé quelque chose par erreur. | Communiquez avec votre directeur. Il peut voir ce qui a été signé et vous le renvoyer ou le retirer pour que vous puissiez signer de nouveau.
 ??? Un formulaire que j’ai déjà signé est de retour sous À signer. | Le centre l’a renvoyé. Lisez la note jaune — elle indique quoi modifier.
+??? Qu'est-ce que la signature enregistre à mon sujet? | La date et l'heure de votre signature (dans le fuseau horaire de votre centre), l'adresse IP de l'appareil utilisé et l'emplacement approximatif de cette adresse (ville, province ou État, pays). L'emplacement est déduit de l'adresse IP, pas du GPS de votre téléphone : aucune autorisation de localisation n'est demandée. Ces informations sont imprimées sous votre signature sur la copie signée et ne sont visibles que par les personnes qui peuvent déjà voir ce document.
 
 ## Garder vos renseignements à jour
 

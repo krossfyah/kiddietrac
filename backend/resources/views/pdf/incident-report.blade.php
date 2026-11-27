@@ -80,6 +80,12 @@
      copy filed to the family's documents, which must not carry staff-internal
      remarks. Set by IncidentReportFiler; every other caller gets 'staff'. */
   $forParent = ($audience ?? 'staff') === 'parent';
+  /* SIGNATURE STAMP (2026-11-27): date + time, IP and approximate location under every signature
+     (App\Support\SignatureStamp). Read here so every caller of this template prints it. */
+  $stampAg = isset($agency->id) ? (int) $agency->id : null;
+  $stampCss = 'font-size:9px;line-height:1.45;color:#64748B;margin-top:2px;';
+  $acks = \Illuminate\Support\Facades\DB::table('incident_acknowledgments')->where('incident_id', $incident->id)
+      ->orderBy('signed_at')->get(['signed_name', 'signature_data', 'comment', 'signed_at', 'ip_address', 'signer_location']);
 
   $interactions = collect($notes)->where('kind', 'interaction');
   $plainNotes   = collect($notes)->where('kind', '!=', 'interaction');
@@ -214,7 +220,8 @@
         <div style="border-top:1px solid #0F172A; margin-top:2px; padding-top:3px; font-size:10px; color:#64748B;">
           <strong style="color:#0F172A;">{{ $incident->recorder_signed_name
               ?: trim(($recorder->first_name ?? '') . ' ' . ($recorder->last_name ?? '')) }}</strong><br>
-          Recorded this report &middot; {{ $fmtAt($incident->recorder_signed_at) }}
+          Recorded this report
+          {!! \App\Support\SignatureStamp::html($incident->recorder_signed_at, $incident->recorder_signature_ip, $incident->recorder_signature_location, $stampAg, true, $stampCss) !!}
         </div>
       @else
         <div style="border-top:1px solid #CBD5E1; padding-top:3px; font-size:10px; color:#64748B;">
@@ -231,7 +238,8 @@
              style="max-width:215px; max-height:68px;" alt="Signature">
         <div style="border-top:1px solid #0F172A; margin-top:2px; padding-top:3px; font-size:10px; color:#64748B;">
           <strong style="color:#0F172A;">{{ $incident->closer_signed_name ?: 'Director' }}</strong><br>
-          Reviewed and closed &middot; {{ $fmtAt($incident->closer_signed_at) }}
+          Reviewed and closed
+          {!! \App\Support\SignatureStamp::html($incident->closer_signed_at, $incident->closer_signature_ip, $incident->closer_signature_location, $stampAg, true, $stampCss) !!}
         </div>
       @else
         <div style="border-top:1px solid #CBD5E1; padding-top:3px; font-size:10px; color:#64748B;">
@@ -243,6 +251,23 @@
     </td>
   </tr>
 </table>
+
+@if($acks->count())
+<table style="width:100%; border-collapse:collapse; margin-top:12px;">
+  @foreach($acks as $ak)
+  <tr><td style="padding:6px 0 0; vertical-align:bottom;">
+    @if($ak->signature_data)
+      <img src="{{ $ak->signature_data }}" style="max-width:215px; max-height:60px;" alt="Signature">
+    @endif
+    <div style="border-top:1px solid #0F172A; margin-top:2px; padding-top:3px; font-size:10px; color:#64748B; width:48%;">
+      <strong style="color:#0F172A;">{{ $ak->signed_name }}</strong><br>
+      Acknowledged this report{{ $ak->comment ? ' · “' . $ak->comment . '”' : '' }}
+      {!! \App\Support\SignatureStamp::html($ak->signed_at, $ak->ip_address, $ak->signer_location, $stampAg, true, $stampCss) !!}
+    </div>
+  </td></tr>
+  @endforeach
+</table>
+@endif
 
 <div style="font-size:9.5px; color:#94A3B8; margin-top:7px; line-height:1.45;">
   Signatures above were captured electronically in {{ \App\Support\Brand::nameFor($agency ?? null) }} and are stored with this record.

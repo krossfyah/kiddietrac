@@ -931,7 +931,9 @@
       (editableNow && !editable ? '<div style="margin-top:10px;font-size:13px;color:#475569;">Viewing. Use Edit to change it.</div>' : '') +
       rcFwNote(c.framework_info) + rcBoxes(Array.isArray(c.sections) && c.sections.length ? c.sections : rcLegacy(c)) +
       `<h4 style="margin:16px 0 6px;color:#F59E0B;">Next steps</h4><textarea id="rc-next" rows="5" style="width:100%;min-height:110px;padding:11px;border:1px solid #E2E8F0;border-radius:8px;font-family:inherit;font-size:14px;">${esc(c.next_steps || '')}</textarea>` +
-      (c.educator_signature && st === 'submitted' ? `<div style="margin-top:14px;font-size:12px;color:#64748B;">Educator signature</div><img src="${esc(c.educator_signature)}" alt="" style="height:66px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:2px;">` : '') +
+      (c.educator_signature && st === 'submitted' ? `<div style="margin-top:14px;font-size:12px;color:#64748B;">Educator signature</div><img src="${esc(c.educator_signature)}" alt="" style="height:66px;border:1px solid #E2E8F0;border-radius:8px;background:#fff;padding:2px;">`
+        /* Signature stamp (2026-11-27): Signed date + time, IP, approximate location - server-built. */
+        + ((window.KT && KT.sigStampHtml) ? KT.sigStampHtml((c.signature_stamps || {}).educator) : '') : '') +
       '<details id="rc-o-hist" style="margin-top:14px;"><summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1F6080;">History &amp; versions</summary><div data-rc-hist style="margin-top:8px;font-size:13px;color:#475569;">Loading…</div></details>';
     if (!editable) out.querySelectorAll('textarea').forEach(t => { t.readOnly = true; t.style.background = '#F8FAFC'; });
     const save = () => Api.patch('/report-cards/' + c.id, { narratives: rcCollect(), next_steps: document.getElementById('rc-next').value, status: st === 'submitted' ? undefined : 'reviewed' });

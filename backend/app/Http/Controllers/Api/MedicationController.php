@@ -151,6 +151,12 @@ class MedicationController extends Controller
         $data['created_by_id'] = $request->user()->id;
         $data['route']         = $data['route'] ?? 'oral';
         $data['status']        = 'pending_auth';
+        /* Signature stamp (2026-11-27): the parent's IP and approximate place, fixed when they sign. */
+        if (! empty($data['parent_signature_data'])) {
+            $st = \App\Support\SignatureStamp::capture($request);
+            $data['parent_signed_ip'] = $st['ip'];
+            $data['parent_signed_location'] = $st['location'];
+        }
 
         $med = Medication::create($data);
 
@@ -250,7 +256,15 @@ class MedicationController extends Controller
         if (! $med) {
             return response()->json(['message' => 'Medication not found'], 404);
         }
-        return response()->json(['medication' => $this->hydrate(collect([$med]))->first()]);
+        $one = $this->hydrate(collect([$med]))->first();
+        /* Signature stamp (2026-11-27), on the single authorization only - never the lists. A signature saved by
+           authorize() was made then; one saved with the parent's request, when it was filed. */
+        if ($one && ! empty($med->parent_signature_data)) {
+            $ag = DB::table('centres')->where('id', $med->centre_id)->value('agency_id');
+            $one['parent_signature_stamp'] = \App\Support\SignatureStamp::lines(
+                $med->authorized_at ?: $med->created_at, $med->parent_signed_ip, $med->parent_signed_location, $ag ? (int) $ag : null);
+        }
+        return response()->json(['medication' => $one]);
     }
 
     public function update(Request $request, int $id): JsonResponse
@@ -294,6 +308,9 @@ class MedicationController extends Controller
         $med->update([
             'authorized_by_id'      => $data['authorized_by_id'],
             'parent_signature_data' => $data['parent_signature_data'] ?? null,
+            // Signature stamp (2026-11-27): follows the signature this call stores (or clears).
+            'parent_signed_ip'       => ! empty($data['parent_signature_data']) ? \App\Support\SignatureStamp::capture($request)['ip'] : null,
+            'parent_signed_location' => ! empty($data['parent_signature_data']) ? \App\Support\SignatureStamp::capture($request)['location'] : null,
             'authorized_at'         => now(),
             'status'                => 'active',
         ]);

@@ -377,6 +377,11 @@ final class ReportCardController extends Controller
         $out['replaced'] = ! empty($row->replaced_by_id);
         $out['made_by'] = $this->staffFirst(DB::table('users')->where('id', $row->generated_by_user_id)->first(['first_name', 'email']));
         $out['ref'] = \App\Support\RefCode::ensureReportCard((int) $row->id);
+        /* Signature stamp (2026-11-27), for the signature blocks on the open card only. */
+        $out['signature_stamps'] = [
+            'educator' => ! empty($row->educator_signature) ? \App\Support\SignatureStamp::lines($row->submitted_at, $row->educator_signed_ip ?? null, $row->educator_signed_location ?? null, $agencyId) : [],
+            'approver' => (! empty($row->admin_signature) && ($row->status ?? '') === 'sent') ? \App\Support\SignatureStamp::lines($row->approved_at ?: $row->sent_at, $row->admin_signed_ip ?? null, $row->admin_signed_location ?? null, $agencyId) : [],
+        ];
         $u = $request->user();
         $approver = $this->mayApproveCard($request, $row);
         $reviewer = $this->mayReviewCard($request, $row);
@@ -734,6 +739,11 @@ final class ReportCardController extends Controller
             'educatorSig' => $sig($row->educator_signature ?? null), 'submitted' => $day($row->submitted_at ?? null),
             'approverName' => $appr ? $full($appr) : null, 'approverTitle' => $title,
             'approverSig' => $approverSig, 'approved' => $status === 'sent' ? $day($row->approved_at ?: $row->sent_at) : null,
+            /* Signature stamp (2026-11-27): Signed date + time (agency zone), IP and approximate location. */
+            'educatorStamp' => $sig($row->educator_signature ?? null)
+                ? \App\Support\SignatureStamp::lines($row->submitted_at ?? null, $row->educator_signed_ip ?? null, $row->educator_signed_location ?? null, $agencyId ?: null) : [],
+            'approverStamp' => ($status === 'sent' && $approverSig)
+                ? \App\Support\SignatureStamp::lines($row->approved_at ?: $row->sent_at, $row->admin_signed_ip ?? null, $row->admin_signed_location ?? null, $agencyId ?: null) : [],
             'frameworkName' => $fw['name'] ?? null, 'sections' => $sections, 'nextSteps' => $row->next_steps,
             'agencyAddress' => $agencyAddress, 'roomAge' => $roomRow ? trim((string) $roomRow->name . (trim((string) ($roomRow->age_group ?? '')) !== '' ? ' · ' . $roomRow->age_group : '')) : null,
             'directors' => $directors, 'admins' => $admins, 'attendance' => $att,
@@ -1208,6 +1218,9 @@ final class ReportCardController extends Controller
             'submitted_at' => now(),
             'submitted_by_user_id' => $request->user()->id,
             'educator_signature' => $data['educator_signature'],
+            // Signature stamp (2026-11-27): the signer's IP and approximate place, fixed at signing.
+            'educator_signed_ip' => ($st = \App\Support\SignatureStamp::capture($request))['ip'],
+            'educator_signed_location' => $st['location'],
             'review_note' => null,
             'updated_at' => now(),
         ]);
@@ -1239,6 +1252,9 @@ final class ReportCardController extends Controller
             'approved_by_user_id' => $request->user()->id,
             'approved_at' => now(),
             'admin_signature' => $signature,
+            // Signature stamp (2026-11-27): the approver's IP and approximate place, fixed at signing.
+            'admin_signed_ip' => ($st = \App\Support\SignatureStamp::capture($request))['ip'],
+            'admin_signed_location' => $st['location'],
             'sent_at' => now(),
             'updated_at' => now(),
         ]);

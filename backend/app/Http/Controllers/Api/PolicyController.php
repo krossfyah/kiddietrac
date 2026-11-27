@@ -646,9 +646,11 @@ final class PolicyController extends Controller
         }, PolicyLibrary::outstandingFor($agencyId, $uid));
         $signed = DB::table('policy_acknowledgements as a')->join('policy_versions as v', 'v.id', '=', 'a.policy_version_id')->join('policies as p', 'p.id', '=', 'a.policy_id')
             ->where('a.user_id', $uid)->where('p.agency_id', $agencyId)->where('p.archived', false)->whereColumn('p.current_version_id', 'a.policy_version_id')
-            ->orderBy('p.title')->get(['p.id', 'p.title', 'p.category', 'v.id as version_id', 'v.version', 'a.acknowledged_at', 'a.typed_name'])
+            ->orderBy('p.title')->get(['p.id', 'p.title', 'p.category', 'v.id as version_id', 'v.version', 'a.acknowledged_at', 'a.typed_name', 'a.ip', 'a.location'])
             ->map(fn ($r) => ['policy_id' => (int) $r->id, 'title' => $r->title, 'category' => $r->category, 'version_id' => (int) $r->version_id, 'version' => (int) $r->version,
-                'signed_at' => $this->fmt($r->acknowledged_at, $tz), 'typed_name' => $r->typed_name])->values();
+                'signed_at' => $this->fmt($r->acknowledged_at, $tz), 'typed_name' => $r->typed_name,
+                // The signer's own sign-off record carries its signature stamp (2026-11-27).
+                'stamp' => \App\Support\SignatureStamp::lines($r->acknowledged_at, $r->ip, $r->location, $agencyId) ?: null])->values();
         $u = DB::table('users')->where('id', $uid)->first(['first_name', 'last_name']);
 
         return response()->json(['is_staff' => true, 'outstanding' => $out, 'signed' => $signed, 'full_name' => trim(($u->first_name ?? '') . ' ' . ($u->last_name ?? ''))]);
@@ -674,10 +676,11 @@ final class PolicyController extends Controller
             return response()->json(['ok' => true, 'already' => true]);
         }
         $statement = 'I have read and understand ' . mb_substr($p->title, 0, 150) . ' (version ' . $v->version . ').';
+        $stamp = \App\Support\SignatureStamp::capture($request);   // signature stamp (2026-11-27): IP + approximate place
         try {
             DB::table('policy_acknowledgements')->insert(['policy_version_id' => $versionId, 'policy_id' => (int) $p->id, 'agency_id' => $agencyId, 'user_id' => $uid,
                 'acknowledged_at' => now(), 'method' => 'e-sign', 'typed_name' => $typed, 'signature_data' => null, 'statement' => mb_substr($statement, 0, 255),
-                'viewed_at' => $view->first_viewed_at, 'ip' => substr((string) $request->ip(), 0, 45), 'user_agent' => mb_substr((string) $request->userAgent(), 0, 255),
+                'viewed_at' => $view->first_viewed_at, 'ip' => substr((string) $request->ip(), 0, 45), 'location' => $stamp['location'], 'user_agent' => mb_substr((string) $request->userAgent(), 0, 255),
                 'created_at' => now(), 'updated_at' => now()]);
         } catch (\Illuminate\Database\QueryException $e) {
             return response()->json(['ok' => true, 'already' => true]);   // a double tap

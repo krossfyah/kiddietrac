@@ -442,6 +442,7 @@ Route::get ('/meetings/rsvp/{attendee}/{response}', [\App\Http\Controllers\Api\M
 Route::get ('/forms/fill/{form}/{u}',       [\App\Http\Controllers\Api\SignedFormController::class, 'page'])->name('forms.fill')->middleware('signed')->whereNumber('form')->whereNumber('u');
 Route::post('/forms/fill/{form}/{u}',       [\App\Http\Controllers\Api\SignedFormController::class, 'submit'])->name('forms.fill.submit')->middleware('signed')->whereNumber('form')->whereNumber('u');
 Route::post('/forms/fill/{form}/{u}/draft', [\App\Http\Controllers\Api\SignedFormController::class, 'draft'])->name('forms.fill.draft')->middleware('signed')->whereNumber('form')->whereNumber('u');
+Route::get ('/forms/fill/{form}/{u}/stamp', [\App\Http\Controllers\Api\SignedFormController::class, 'stamp'])->name('forms.fill.stamp')->middleware(['signed', 'throttle:30,1,r-sigstamp'])->whereNumber('form')->whereNumber('u');
 
 /* THE TEXT-ALERT CONSENT PAGE. No login, because the people least likely to have a
    working password are exactly the ones who have never set up their account - and this
@@ -1252,6 +1253,7 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/managed-forms/mine',                      [\App\Http\Controllers\Api\ManagedFormController::class, 'mine']);
         Route::get   ('/managed-forms/assigned',                  [\App\Http\Controllers\Api\ManagedFormController::class, 'assigned']);
         Route::post  ('/managed-forms/{id}/sign',                 [\App\Http\Controllers\Api\ManagedFormController::class, 'sign']);
+        Route::get   ('/managed-forms/{id}/sign-stamp',           [\App\Http\Controllers\Api\ManagedFormController::class, 'signStamp'])->whereNumber('id');
         Route::post  ('/managed-forms/{id}/draft',                [\App\Http\Controllers\Api\ManagedFormController::class, 'draft']);
         Route::get   ('/provider/children/{child}',  [\App\Http\Controllers\Api\EducatorSelfController::class, 'childRecord'])->middleware(KT_PROVIDER_ROLES);
         Route::get   ('/admin/tours',               [\App\Http\Controllers\Api\CareController::class, 'listTours']);

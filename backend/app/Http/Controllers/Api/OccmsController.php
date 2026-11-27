@@ -142,6 +142,7 @@ final class OccmsController extends Controller
                 'status' => $status, 'locked' => in_array($status, ['signed_off', 'submitted'], true), 'frozen' => $b['frozen'], 'live_diff' => $b['live_diff'],
                 'reviewed_by' => $roa && $roa->reviewed_by_id ? ($names[(int) $roa->reviewed_by_id] ?? '') : null, 'reviewed_by_id' => $roa->reviewed_by_id ?? null, 'reviewed_at' => $fmt($roa->reviewed_at ?? null),
                 'signed_off_by' => $roa && $roa->signed_off_by_id ? ($names[(int) $roa->signed_off_by_id] ?? '') : null, 'signed_off_at' => $fmt($roa->signed_off_at ?? null),
+                'signed_off_stamp' => $roa && $roa->signed_off_by_id ? (\App\Support\SignatureStamp::lines($roa->signed_off_at ?? null, $roa->signed_off_ip ?? null, $roa->signed_off_location ?? null, $agencyId, true, $tz) ?: null) : null,
                 'submitted_by' => $roa && $roa->submitted_by_id ? ($names[(int) $roa->submitted_by_id] ?? '') : null, 'submitted_at' => $fmt($roa->submitted_at ?? null),
                 'occms_entered_on' => $roa->occms_entered_on ?? null, 'occms_reference' => $roa->occms_reference ?? null, 'amendments' => (int) ($roa->amendments ?? 0),
             ],
@@ -255,7 +256,9 @@ final class OccmsController extends Controller
             abort_if($d['occms_date'] <= $monthEnd, 422, 'The ROA is entered in OCCMS after the month ends.');
         }
 
-        $summary = DB::transaction(function () use ($agencyId, $cid, $month, $d, $a, $uid) {
+        // Signature stamp (2026-11-27): read from the request before the transaction; only a sign-off stores it.
+        $stamp = $a === 'signoff' ? \App\Support\SignatureStamp::capture($request) : ['ip' => null, 'location' => null];
+        $summary = DB::transaction(function () use ($agencyId, $cid, $month, $d, $a, $uid, $stamp) {
             $roa = $this->lockRow($agencyId, $cid, $month);
             $st = $roa->status;
             $upd = ['updated_at' => now()];
@@ -271,6 +274,7 @@ final class OccmsController extends Controller
                     abort_if((int) $roa->reviewed_by_id === $uid, 422, 'A different person must sign off. You reviewed this month.');
                     $b = OccmsRoa::build($agencyId, $cid, $month);
                     $upd += ['status' => 'signed_off', 'signed_off_by_id' => $uid, 'signed_off_at' => now(),
+                        'signed_off_ip' => $stamp['ip'], 'signed_off_location' => $stamp['location'],
                         'snapshot' => json_encode(['children' => $b['children'], 'capacity' => $b['capacity'], 'frozen_at' => now()->toIso8601String()])];
                     $msg = 'Signed off';
                     break;
@@ -282,13 +286,15 @@ final class OccmsController extends Controller
                     break;
                 case 'reopen':
                     abort_unless(in_array($st, ['reviewed', 'signed_off'], true), 422, $st === 'submitted' ? 'A submitted month is amended, not reopened.' : 'This month is already open.');
-                    $upd += ['status' => 'draft', 'reviewed_by_id' => null, 'reviewed_at' => null, 'signed_off_by_id' => null, 'signed_off_at' => null, 'snapshot' => null];
+                    $upd += ['status' => 'draft', 'reviewed_by_id' => null, 'reviewed_at' => null, 'signed_off_by_id' => null, 'signed_off_at' => null, 'snapshot' => null,
+                        'signed_off_ip' => null, 'signed_off_location' => null];
                     $note = trim((string) $d['reason']);
                     $msg = 'Reopened';
                     break;
                 default:   // amend
                     abort_unless($st === 'submitted', 422, 'Only a submitted month is amended.');
                     $upd += ['status' => 'draft', 'reviewed_by_id' => null, 'reviewed_at' => null, 'signed_off_by_id' => null, 'signed_off_at' => null, 'snapshot' => null,
+                        'signed_off_ip' => null, 'signed_off_location' => null,
                         'submitted_by_id' => null, 'submitted_at' => null, 'occms_entered_on' => null, 'occms_reference' => null, 'amendments' => (int) $roa->amendments + 1];
                     $note = trim((string) $d['reason']) . ' (was entered in OCCMS on ' . $roa->occms_entered_on . ')';
                     $msg = 'Amendment started';
@@ -392,7 +398,9 @@ final class OccmsController extends Controller
         $tz = $b['tz'];
         $fmt = fn ($ts) => $ts ? Carbon::parse($ts, 'UTC')->setTimezone($tz)->format('M j, Y g:i A') : '';
         $html .= '<table style="width:80%"><tr><td class="l" style="height:26px;width:33%"><b>Reviewed by:</b> ' . $e($roa && $roa->reviewed_by_id ? ($names[(int) $roa->reviewed_by_id] ?? '') : '') . '<br>' . $e($fmt($roa->reviewed_at ?? null)) . '</td>'
-            . '<td class="l" style="width:33%"><b>Authorized (signed off) by:</b> ' . $e($roa && $roa->signed_off_by_id ? ($names[(int) $roa->signed_off_by_id] ?? '') : '') . '<br>' . $e($fmt($roa->signed_off_at ?? null)) . '</td>'
+            . '<td class="l" style="width:33%"><b>Authorized (signed off) by:</b> ' . $e($roa && $roa->signed_off_by_id ? ($names[(int) $roa->signed_off_by_id] ?? '') : '') . '<br>'
+            . (($__st = ($roa && $roa->signed_off_by_id) ? \App\Support\SignatureStamp::lines($roa->signed_off_at ?? null, $roa->signed_off_ip ?? null, $roa->signed_off_location ?? null, null, true, $tz) : [])
+                ? implode('<br>', array_map($e, $__st['lines'])) : $e($fmt($roa->signed_off_at ?? null))) . '</td>'
             . '<td class="l"><b>Entered in OCCMS on:</b> ' . $e($roa->occms_entered_on ?? '') . ($roa && $roa->occms_reference ? '<br>Ref ' . $e($roa->occms_reference) : '') . '</td></tr></table>';
         $html .= '</body></html>';
 

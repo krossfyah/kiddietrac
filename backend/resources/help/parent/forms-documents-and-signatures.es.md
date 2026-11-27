@@ -81,6 +81,7 @@ Abra cualquier documento y use la opción de compartir o guardar de su dispositi
 ??? ¿Puede firmar mi pareja en mi lugar? | Si es un tutor registrado con su propio acceso, sí: la firma registra a quien haya iniciado sesión. Para acuerdos legales, firme desde su propia cuenta.
 ??? Firmé algo por error. | Comuníquese con su director. Puede ver qué se firmó y devolvérselo o retirarlo para que usted pueda firmar de nuevo.
 ??? Un formulario que ya firmé volvió a Por firmar. | El centro lo devolvió. Lea la nota amarilla: dice qué cambiar.
+??? ¿Qué registra la firma sobre mí? | La fecha y la hora en que firmó (en la zona horaria de su centro), la dirección IP del dispositivo desde el que firmó y la ubicación aproximada de esa dirección (ciudad, provincia o estado, país). La ubicación se obtiene de la dirección IP, no del GPS de su teléfono, así que no se pide permiso de ubicación. Se imprime debajo de su firma en la copia firmada y solo la pueden ver las personas que ya pueden ver ese documento.
 
 ## Mantener sus datos al día
 

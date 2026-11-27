@@ -258,9 +258,25 @@
     return new Blob([out], { type: type || 'application/pdf' });
   }
 
+  /* THE SIGNATURE STAMP (2026-11-27). The server says what to print under the signature - "Signed: <date> at
+     <time> <zone>", the IP address it sees and the approximate place from that address - with a token. The token
+     goes back with the submit and the server checks it against the address the submit came from, so the printed
+     page and the record always agree. null = print the date only (the server still records the address). */
+  function getStamp(form) {
+    var p;
+    if (noAuth(form)) {
+      if (!form.links.stamp) { return Promise.resolve(null); }
+      p = fetch(form.links.stamp, { headers: { Accept: 'application/json' } }).then(function (r) { return r.ok ? r.json() : null; });
+    } else {
+      p = KT.Api.get('/managed-forms/' + form.id + '/sign-stamp');
+    }
+    return p.then(function (s) { return (s && s.token && s.lines && s.lines.length) ? s : null; }, function () { return null; });
+  }
+
   function ffSubmit(form, path, fields, filledB64, signedUrl) {
     var fd = new FormData();
     fd.append('signature', fields.signature);
+    if (fields.sign_stamp) { fd.append('sign_stamp', fields.sign_stamp); }
     fd.append('field_values', JSON.stringify(fields.field_values || {}));
     if (filledB64) {
       fd.append('filled_file', b64ToBlob(filledB64, 'application/pdf'), 'completed-form.pdf');
@@ -272,7 +288,7 @@
       return fetch(signedUrl, { method: 'POST', headers: { Accept: 'application/json' }, body: fd })
         .then(function (r) {
           return r.json().catch(function () { return {}; }).then(function (j) {
-            if (!r.ok) { throw new Error(j.message || httpHint(r.status)); }
+            if (!r.ok) { var er = new Error(j.message || httpHint(r.status)); er.code = j.code || ''; throw er; }
             return j;
           });
         });
@@ -729,7 +745,8 @@
           if (!sigDataUrl) return;
           submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
           msg.style.color = '#64748B'; msg.textContent = 'Preparing your completed form…';
-          fillAndFlatten(pdfBytes, values, sigDataUrl, signerName(), new Date().toLocaleDateString(undefined,
+          var attempt = function (tries) { return getStamp(form).then(function (stamp) {
+          return fillAndFlatten(pdfBytes, values, sigDataUrl, signerName(), stamp || new Date().toLocaleDateString(undefined,
             { year: 'numeric', month: 'long', day: 'numeric' }))
             .catch(function (err) {
               // Previously this swallowed the error and submitted with no completed
@@ -745,8 +762,18 @@
               return ffSubmit(form, '/managed-forms/' + form.id + '/sign', {
                 signature: sigDataUrl,
                 field_values: values,
+                sign_stamp: (stamp && stamp.token) || '',
               }, filledB64, form.links && form.links.submit);
-            })
+            });
+          }).catch(function (e) {
+            /* The network changed between printing the stamp and submitting: print it again, once. */
+            if (!tries && e && (e.code === 'sign_stamp_changed' || /connection changed/i.test(String(e.message || '')))) {
+              msg.style.color = '#64748B'; msg.textContent = 'Your connection changed \u2014 preparing the form again\u2026';
+              return attempt(1);
+            }
+            throw e;
+          }); };
+          attempt(0)
             .then(function () {
               if (KT.toast) KT.toast('✅', 'Form submitted', 'Thank you — your completed form has been filed.', '#16A34A');
               close(true);
@@ -1019,7 +1046,10 @@
             var last = pages[pages.length - 1];
             var pw = last.getWidth(), ph = last.getHeight();
 
-            var BLOCK_H = 120;                 // the band the block needs
+            // signedOn is the server's signature stamp ({lines:[Signed…, IP address…, Location…]}) or a date string.
+            var stampLines = (signedOn && typeof signedOn === 'object' && signedOn.lines && signedOn.lines.length)
+              ? signedOn.lines.slice(0, 4) : ['Date signed: ' + signedOn];
+            var BLOCK_H = 120 + (stampLines.length - 1) * 11;   // the band the block needs
             var MARGIN = 36;
 
             // ALWAYS a dedicated signature page.
@@ -1071,8 +1101,19 @@
               x: x + PAD, y: cy, size: 11, font: bold, color: ink,
             });
 
-            cy -= 13;
-            page.drawText('Date signed: ' + signedOn + (signerRef ? '   \u00b7   ID ' + signerRef : ''), { x: x + PAD, y: cy, size: 9, font: font, color: grey });
+            /* Helvetica here is WinAnsi: a character outside Latin-1 (a city like Łódź) would throw and lose the whole
+               PDF, so anything it can't draw is reduced to its plain letter. */
+            var winSafe = function (t) {
+              return String(t).split('').map(function (c) {
+                if (c.charCodeAt(0) <= 0xFF) { return c; }
+                var b = c.normalize ? c.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
+                return (b && b.charCodeAt(0) <= 0xFF) ? b : '?';
+              }).join('');
+            };
+            stampLines.forEach(function (t, i) {
+              cy -= (i ? 11 : 13);
+              page.drawText(winSafe(t) + (i === 0 && signerRef ? '   \u00b7   ID ' + signerRef : ''), { x: x + PAD, y: cy, size: i ? 8 : 9, font: font, color: grey });
+            });
 
             if (formObj) { try { formObj.flatten(); } catch (e) {} }
             return pdfDoc.saveAsBase64();

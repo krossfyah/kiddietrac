@@ -179,7 +179,10 @@ final class HrPerformanceController extends Controller
             'scale' => json_decode((string) $r->scale, true) ?: [], 'sections' => json_decode((string) $r->sections, true) ?: [],
             'self' => $self, 'manager_part' => $mgr, 'self_submitted_at' => $r->self_submitted_at, 'manager_submitted_at' => $r->manager_submitted_at,
             'employee_signed_at' => $r->employee_signed_at, 'employee_signed_name' => $r->employee_signed_name,
-            'manager_signed_at' => $r->manager_signed_at, 'manager_signed_name' => $r->manager_signed_name, 'status' => HrTalent::reviewStatus($r)],
+            'manager_signed_at' => $r->manager_signed_at, 'manager_signed_name' => $r->manager_signed_name, 'status' => HrTalent::reviewStatus($r),
+            // Signature stamp under each sign-off (only on the review itself, to the people who can open it).
+            'employee_stamp' => \App\Support\SignatureStamp::lines($r->employee_signed_at, $r->employee_signed_ip ?? null, $r->employee_signed_location ?? null, $aid) ?: null,
+            'manager_stamp' => \App\Support\SignatureStamp::lines($r->manager_signed_at, $r->manager_signed_ip ?? null, $r->manager_signed_location ?? null, $aid) ?: null],
             'goals' => $this->shapeGoals($aid, $goals),
             'can' => ['self' => $isEmp && ! $r->self_submitted_at && $r->status !== 'cancelled', 'manager' => $isMgr && ! $isEmp && ! $r->manager_submitted_at && $r->status !== 'cancelled',
                 'sign' => ($isEmp || $isMgr) && $r->self_submitted_at && $r->manager_submitted_at && ! ($isEmp ? $r->employee_signed_at : $r->manager_signed_at),
@@ -248,7 +251,10 @@ final class HrPerformanceController extends Controller
         $name = trim((string) $request->validate(['name' => 'required|string|min:2|max:120'])['name']);
         $col = $isEmp ? 'employee' : 'manager';
         abort_if($r->{$col . '_signed_at'}, 422, 'You have already signed this review.');
-        DB::table('hr_reviews')->where('id', $id)->update([$col . '_signed_at' => now(), $col . '_signed_name' => $name, 'updated_at' => now()]);
+        // Signature stamp (2026-11-27): the signer's IP and approximate place, from the request (App\Support\SignatureStamp).
+        $stamp = \App\Support\SignatureStamp::capture($request);
+        DB::table('hr_reviews')->where('id', $id)->update([$col . '_signed_at' => now(), $col . '_signed_name' => $name,
+            $col . '_signed_ip' => $stamp['ip'], $col . '_signed_location' => $stamp['location'], 'updated_at' => now()]);
         $this->syncStatus($id);
         $fresh = DB::table('hr_reviews')->where('id', $id)->first();
         $this->bell($aid, [$isEmp ? (int) $r->manager_user_id : (int) $r->user_id], $fresh->employee_signed_at && $fresh->manager_signed_at ? 'Review signed by both of you' : 'Review signed: your signature is next',

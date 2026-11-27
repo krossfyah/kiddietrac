@@ -1216,9 +1216,13 @@
         <div style="flex:1;background:#FEE2E2;padding:12px;border-radius:6px;text-align:center;"><div style="font-size:11px;color:#B91C1C;font-weight:600;">DENIED</div><div style="font-size:22px;font-weight:700;color:#B91C1C;">${r.counts.denied}</div></div>
         <div style="flex:1;background:#FEF3C7;padding:12px;border-radius:6px;text-align:center;"><div style="font-size:11px;color:#92400E;font-weight:600;">PENDING</div><div style="font-size:22px;font-weight:700;color:#92400E;">${r.counts.pending}</div></div>
       </div>
-      <div style="max-height:300px;overflow:auto;">${(r.data || []).map(p => `<div style="padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:13px;display:flex;justify-content:space-between;">
+      <div style="max-height:300px;overflow:auto;">${(r.data || []).map(p => `<div style="padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:13px;"><div style="display:flex;justify-content:space-between;">
         <span>${esc(p.first_name)} ${esc(p.last_name)}</span>
-        <span style="color:${p.status === 'approved' ? '#047857' : p.status === 'denied' ? '#B91C1C' : '#D97706'};font-weight:600;">${p.status}</span></div>`).join('')}</div>
+        <span style="color:${p.status === 'approved' ? '#047857' : p.status === 'denied' ? '#B91C1C' : '#D97706'};font-weight:600;">${p.status}</span></div>${
+        /* The signed slip (2026-11-27): the parent's signature with its stamp - Signed date + time, IP, approximate location. */
+        p.signature_data ? `<details style="margin-top:4px;"><summary style="cursor:pointer;color:#1F6080;font-size:12px;font-weight:600;">✍️ View signature</summary>
+          <img src="${esc(p.signature_data)}" alt="Signature" style="max-width:220px;max-height:70px;display:block;margin-top:6px;background:#fff;">
+          ${window.KT && KT.sigStampHtml ? KT.sigStampHtml(p.signature_stamp) : ''}</details>` : ''}</div>`).join('')}</div>
       <div style="margin-top:14px;text-align:right;"><button id="pm-close" style="background:#1F6080;color:#fff;border:0;padding:9px 16px;border-radius:4px;cursor:pointer;">Close</button></div>
     </div>`;
     document.body.appendChild(m);

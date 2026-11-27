@@ -145,7 +145,14 @@ final class DocumentWorkflowController extends Controller
             ->where('s.workflow_id', $id)
             ->orderBy('s.step_order')
             ->select('s.*', DB::raw("CONCAT(u.first_name,' ',u.last_name) as signer_name"))
-            ->get();
+            ->get()
+            // Signature stamp (2026-11-27): signed date + time, IP and approximate place under each signer.
+            ->map(function ($s) use ($w) {
+                $s->stamp = $s->signed_at
+                    ? (\App\Support\SignatureStamp::lines($s->signed_at, $s->signer_ip ?? null, $s->signer_location ?? null, (int) $w->agency_id) ?: null)
+                    : null;
+                return $s;
+            });
         return response()->json(['workflow' => $w, 'steps' => $steps]);
     }
 
@@ -172,12 +179,15 @@ final class DocumentWorkflowController extends Controller
         abort_unless($this->maySignStep($request, $workflow, $step), 403, 'Not the assigned signer');
 
         $hash = hash('sha256', $workflow->document_text . '|' . $u->id . '|' . $step->id . '|' . microtime(true));
+        // Signature stamp (2026-11-27): IP + approximate place, read on the server at signing time.
+        $stamp = \App\Support\SignatureStamp::capture($request);
         DB::table('document_workflow_steps')->where('id', $step->id)->update([
             'signer_user_id' => $u->id,
             'signed_at' => now(),
             'signature_data' => $data['signature_data'],
             'signature_hash' => $hash,
-            'signer_ip' => $request->ip(),
+            'signer_ip' => $stamp['ip'] ?? $request->ip(),
+            'signer_location' => $stamp['location'],
             'status' => 'signed',
             'notes' => $data['notes'] ?? null,
         ]);

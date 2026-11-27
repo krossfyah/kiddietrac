@@ -1963,6 +1963,7 @@
         ${steps.map(s => `<li style="padding:6px 0;color:${s.status === 'signed' ? '#15803D' : s.status === 'awaiting' ? '#1F6080' : '#94A3B8'};font-weight:600;">
           ${esc(s.signer_label)} ${s.status === 'signed' ? '✓ signed ' + fmtDate(s.signed_at) : s.status === 'awaiting' ? '… awaiting' : '· pending'}
           ${s.signer_name ? `<span style="color:#64748B;font-weight:400;">— ${esc(s.signer_name)}</span>` : ''}
+          ${(s.status === 'signed' && s.stamp && window.KT && KT.sigStampHtml) ? KT.sigStampHtml(s.stamp, 'font-size:12px;line-height:1.5;color:#64748B;font-weight:400;margin-top:2px') : ''}
         </li>`).join('')}
       </ol>
       ${isMyTurn ? `

@@ -285,6 +285,7 @@ final class RefundsController extends Controller
             'approver_signed_name' => trim($data['signed_name']),
             'approver_signed_at' => now(),
             'approver_signature_ip' => $request->ip(),
+            'approver_signature_location' => \App\Support\SignatureStamp::capture($request)['location'],   // signature stamp (2026-11-27)
             'created_at' => now(),
             'updated_at' => now(),
         ]);

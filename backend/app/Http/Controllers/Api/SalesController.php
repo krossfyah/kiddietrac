@@ -702,7 +702,10 @@ class SalesController extends Controller
         $q->countersigner_name = trim($d['name']);
         $q->countersigner_title = trim((string) ($d['title'] ?? '')) ?: null;
         $q->countersignature = $d['signature'];
-        $q->countersign_ip = substr((string) $r->ip(), 0, 45);
+        // Signature stamp (2026-11-27): IP + approximate place, read on the server at signing time.
+        $stamp = \App\Support\SignatureStamp::capture($r);
+        $q->countersign_ip = $stamp['ip'] ?? substr((string) $r->ip(), 0, 45);
+        $q->countersign_location = $stamp['location'];
         $q->status = 'accepted';
         $q->save();
 
@@ -1760,14 +1763,18 @@ TXT;
         // Print name, Title and Date each on their own line under the signature (2026-11-10: "print your name").
         $sigLine = fn (string $w, string $val, string $cap, string $pad) => '<td style="width:' . $w . ';padding:0 ' . $pad . ' 0 0"><div style="border-bottom:1px solid #94a3b8;height:16px;padding-bottom:3px;font-size:9.5px;line-height:15px;white-space:nowrap;overflow:hidden">'
             . e($val) . '</div><div style="font-size:8.5px;color:' . $muted . ';margin-top:2px">' . $cap . '</div></td>';
-        $sig = fn ($who, ?string $img = null, string $name = '', string $title = '', string $date = '') => '<td style="width:50%;padding:0 10px 0 0;vertical-align:top">'
+        /* Signature stamp (2026-11-27): under each signature, "Signed: date at time zone", the IP address and the
+           approximate location stored when it was signed (agency-free sales document: Toronto time). */
+        $stampOf = fn ($at, $ip, $loc) => $at ? \App\Support\SignatureStamp::html($at, $ip ? (string) $ip : null, $loc !== null ? (string) $loc : null, null, true,
+            'font-size:7.8px;line-height:1.45;color:' . $muted . ';margin-top:5px') : '';
+        $sig = fn ($who, ?string $img = null, string $name = '', string $title = '', string $date = '', string $stampHtml = '') => '<td style="width:50%;padding:0 10px 0 0;vertical-align:top">'
             . $label($who)
             . ($img ? '<div style="border-bottom:1px solid #94a3b8;height:36px"><img src="' . e($img) . '" alt="Signature" style="height:34px;max-width:210px"></div>'
                     : '<div style="border-bottom:1px solid #94a3b8;height:26px"></div>')
             . '<div style="font-size:8.5px;color:' . $muted . ';margin:2px 0 6px">Signature</div>'
             . '<table style="width:100%;border-collapse:collapse"><tr>'
             . $sigLine('42%', $name, 'Print name', '8px') . $sigLine('30%', $title, 'Title', '8px') . $sigLine('28%', $date, 'Date', '0')
-            . '</tr></table></td>';
+            . '</tr></table>' . $stampHtml . '</td>';
         $cName = trim((string) $q->client_signer_name . ($q->client_signer_title ? ', ' . $q->client_signer_title : ''));
         $kName = trim((string) $q->countersigner_name . ($q->countersigner_title ? ', ' . $q->countersigner_title : ''));
         $record = '';
@@ -1785,8 +1792,10 @@ TXT;
             . '<div style="font-size:12px;font-weight:bold;color:' . $navy . ';margin-bottom:4px">Acceptance</div>'
             . '<div style="font-size:10px;color:#334155;margin-bottom:10px">By signing, the customer accepts this proposal' . ($conditions !== '' ? ' and the Terms &amp; Conditions above' : '') . ($q->valid_until ? ', before ' . e($validTxt) : '') . '.</div>'
             . '<table class="r-stack" style="width:100%;border-collapse:collapse"><tr>'
-            . $sig('For ' . e($q->client_signer_org ?: ($pf['company'] ?: ($pf['name'] ?: 'the customer'))), $q->client_signature, (string) $q->client_signer_name, (string) $q->client_signer_title, $sigDate($q->client_signed_at))
-            . $sig('For KiddieTrac', $q->countersignature, (string) $q->countersigner_name, (string) $q->countersigner_title, $sigDate($q->countersigned_at))
+            . $sig('For ' . e($q->client_signer_org ?: ($pf['company'] ?: ($pf['name'] ?: 'the customer'))), $q->client_signature, (string) $q->client_signer_name, (string) $q->client_signer_title, $sigDate($q->client_signed_at),
+                $stampOf($q->client_signed_at, $q->client_sign_ip, $q->client_sign_location ?? null))
+            . $sig('For KiddieTrac', $q->countersignature, (string) $q->countersigner_name, (string) $q->countersigner_title, $sigDate($q->countersigned_at),
+                $stampOf($q->countersigned_at, $q->countersign_ip, $q->countersign_location ?? null))
             . '</tr></table>' . $record . '</div>';
 
         $css = '@page{margin:34px 40px 50px}'

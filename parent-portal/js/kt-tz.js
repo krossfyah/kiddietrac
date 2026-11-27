@@ -123,4 +123,15 @@
     try { return new Date().toLocaleDateString(locale, Object.assign({ timeZone: tz() }, opts || {})); }
     catch (e) { return new Date().toLocaleDateString(locale, opts || {}); }
   };
+
+  /* THE SIGNATURE STAMP (2026-11-27). The server builds it (App\Support\SignatureStamp::lines, agency timezone):
+     { signed:'Signed: Nov 27, 2026 at 3:42 PM EST', ip:'IP address: …', location:'Location: … (approximate, from IP
+     address)', lines:[…] }. KT.sigStampHtml(stamp) draws it under a signature; '' when there is none. Only ever
+     shown on the signed document itself - never in a list, search or export. */
+  KT.sigStampHtml = function (stamp, style) {
+    if (!stamp || !stamp.lines || !stamp.lines.length) return '';
+    var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
+    return '<div class="kt-sigstamp" style="' + (style || 'font-size:11px;line-height:1.5;color:var(--kt-muted,#64748B);margin-top:4px') + '">'
+      + stamp.lines.map(esc).join('<br>') + '</div>';
+  };
 })(window);

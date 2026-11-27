@@ -501,6 +501,28 @@
       document.head.appendChild(_ds);
     }
 
+    const sst = inc.signature_stamps || {};
+    /* The two staff signatures (recorded / reviewed and closed), each with its stamp underneath. */
+    let sigsHtml = '';
+    const _sigBox = function (img, name, what, stamp) {
+      return '<div style="flex:1 1 240px; min-width:0;">' +
+        (img ? '<img src="' + esc(img) + '" alt="Signature" style="max-width:220px; max-height:70px; display:block; background:#fff; border-radius:6px;">' : '') +
+        '<div style="border-top:1px solid var(--kt-border); margin-top:4px; padding-top:4px; font-size:13px;">' +
+          '<strong>' + esc(name || '-') + '</strong> &middot; <span style="color:var(--kt-text-muted);">' + esc(what) + '</span>' +
+          ((window.KT && KT.sigStampHtml) ? KT.sigStampHtml(stamp) : '') +
+        '</div></div>';
+    };
+    if (inc.recorder_signature_data || inc.closer_signature_data) {
+      sigsHtml =
+        '<div style="background:var(--kt-surface); border:1px solid var(--kt-border); border-radius:14px; padding:20px; margin-bottom:16px;">' +
+          '<h2 style="font-family:var(--kt-font-display); font-size:16px; margin-bottom:12px;">Signatures</h2>' +
+          '<div style="display:flex; flex-wrap:wrap; gap:18px;">' +
+            (inc.recorder_signature_data ? _sigBox(inc.recorder_signature_data, inc.recorder_signed_name || personName(inc.recorded_by), 'Recorded this report', sst.recorder) : '') +
+            (inc.closer_signature_data ? _sigBox(inc.closer_signature_data, inc.closer_signed_name || 'Director', 'Reviewed and closed', sst.closer) : '') +
+          '</div>' +
+        '</div>';
+    }
+
     let acksHtml = '';
     if (Array.isArray(inc.acknowledgments) && inc.acknowledgments.length > 0) {
       acksHtml =
@@ -508,9 +530,12 @@
           '<h2 style="font-family:var(--kt-font-display); font-size:16px; margin-bottom:12px;">Acknowledgments</h2>' +
           inc.acknowledgments.map(function (a) {
             return '<div style="padding:10px 0; border-bottom:1px solid var(--kt-border); font-size:13px;">' +
-              '<strong>' + esc(a.signed_name) + '</strong> &middot; ' + fmtInstant(a.signed_at) + '<br>' +
+              '<strong>' + esc(a.signed_name) + '</strong><br>' +
               (a.comment ? '<em style="color:var(--kt-text-muted);">' + esc(a.comment) + '</em><br>' : '') +
-              '<span style="color:var(--kt-text-faint); font-size:11px;">IP ' + esc(a.ip_address || '-') + '</span>' +
+              /* Signature stamp (2026-11-27): Signed date + time, IP, approximate location - server-built. */
+              ((window.KT && KT.sigStampHtml && sst.acks && sst.acks[String(a.id)])
+                ? KT.sigStampHtml(sst.acks[String(a.id)])
+                : fmtInstant(a.signed_at)) +
             '</div>';
           }).join('') +
         '</div>';
@@ -576,6 +601,7 @@
         '</div>' +
       '</div>' +
 
+      sigsHtml +
       acksHtml +
       '<div id="kt-notes"></div>' +
       '<div id="kt-actions"></div>'

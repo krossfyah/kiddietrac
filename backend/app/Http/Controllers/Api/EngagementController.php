@@ -276,6 +276,8 @@ final class EngagementController extends Controller
         $u = $request->user();
         $agencyId = $this->resolveAgencyId($request);
         $hash = hash('sha256', $data['document_text'] . '|' . $u->id . '|' . microtime(true));
+        // Signature stamp (2026-11-27): IP + approximate place, read on the server at signing time.
+        $stamp = \App\Support\SignatureStamp::capture($request);
         $id = DB::table('signed_documents')->insertGetId([
             'agency_id' => $agencyId,
             'document_type' => $data['document_type'],
@@ -286,7 +288,8 @@ final class EngagementController extends Controller
             'signature_data' => $data['signature_data'],
             'document_hash' => $hash,
             'signed_at' => now(),
-            'ip_address' => $request->ip(),
+            'ip_address' => $stamp['ip'] ?? $request->ip(),
+            'signer_location' => $stamp['location'],
             'user_agent' => substr((string) $request->userAgent(), 0, 300),
             'created_at' => now(),
         ]);
@@ -338,7 +341,14 @@ final class EngagementController extends Controller
             ->orderByDesc('sd.signed_at')
             ->limit(200)
             ->select('sd.*', DB::raw("CONCAT(u.first_name,' ',u.last_name) as signer_full_name"), DB::raw("(CASE WHEN sd.document_type='privacy_nda' THEN (SELECT d.file_url FROM documents d WHERE d.scope_type='user' AND d.scope_id=sd.signer_user_id AND d.category='agreement' ORDER BY d.id DESC LIMIT 1) ELSE NULL END) as doc_file_url"))
-            ->get();
+            ->get()
+            /* The signature stamp (2026-11-27) is drawn only in the signed-document view this list opens, for the
+               same people who can already open it; the raw location column is not passed on. */
+            ->map(function ($r) {
+                $r->stamp = \App\Support\SignatureStamp::lines($r->signed_at, $r->ip_address ?? null, $r->signer_location ?? null, $r->agency_id ? (int) $r->agency_id : null) ?: null;
+                unset($r->signer_location);
+                return $r;
+            });
         return response()->json(['data' => $rows]);
     }
 

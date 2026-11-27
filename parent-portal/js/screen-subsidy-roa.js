@@ -209,7 +209,7 @@
       + '<div class="roa-steps">'
       + step('1. Check the days', r.status !== 'draft' || false, 'Correct any day below. Changes are kept in the history.')
       + step('2. Reviewed', !!r.reviewed_by, r.reviewed_by ? esc(r.reviewed_by) + '<br>' + esc(r.reviewed_at) : 'Person 1')
-      + step('3. Signed off', !!r.signed_off_by, r.signed_off_by ? esc(r.signed_off_by) + '<br>' + esc(r.signed_off_at) : 'Person 2 — not the reviewer')
+      + step('3. Signed off', !!r.signed_off_by, r.signed_off_by ? esc(r.signed_off_by) + (r.signed_off_stamp && window.KT && KT.sigStampHtml ? '<span data-no-i18n>' + KT.sigStampHtml(r.signed_off_stamp) + '</span>' : '<br>' + esc(r.signed_off_at)) : 'Person 2 — not the reviewer')
       + step('4. Entered in OCCMS', r.status === 'submitted', r.occms_entered_on ? esc(day(r.occms_entered_on)) + (r.occms_reference ? ' · ref ' + esc(r.occms_reference) : '') + '<br>recorded by ' + esc(r.submitted_by || '') : 'Record the date you entered it')
       + '</div><div class="roa-row" style="margin-top:10px;">' + actions(d) + '<span id="roa-msg" style="font-size:12.5px;color:#64748B;"></span></div>'
       + (r.frozen && r.live_diff ? '<div style="margin-top:8px;font-size:12.5px;color:#B45309;">⚠️ ' + r.live_diff + ' day' + (r.live_diff === 1 ? '' : 's') + ' in attendance changed after sign-off. The grid shows what was signed. Reopen or amend to bring them in.</div>' : '')

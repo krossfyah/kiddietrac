@@ -105,6 +105,10 @@ class AgreementController extends Controller
         // Stored in UTC (like the rest of the schema); shown in agency time.
         $signedAt = now();
         $signedAtLocal = $signedAt->copy()->timezone($this->agencyTz($agencyId));
+        // Signature stamp (2026-11-27): the signer's IP and the approximate place it resolves to, read here on the
+        // server and stored with the signature - shown under it on the PDF and the emailed copy.
+        $stamp = \App\Support\SignatureStamp::capture($request);
+        $stampLines = \App\Support\SignatureStamp::lines($signedAt, $stamp['ip'], $stamp['location'], null, true, $this->agencyTz($agencyId));
 
         $dir = 'agreements/' . $user->id;
         $sigPath = $dir . '/signature-' . $signedAt->format('Ymd-His') . '-' . Str::random(6) . '.png';
@@ -112,7 +116,7 @@ class AgreementController extends Controller
 
         // The filed copy is a PDF: the full agreement with the signature image and
         // the date rendered into it, so the record stands on its own.
-        $pdf = $this->renderPdf($user, $data['full_name'], $signedAtLocal->toDayDateTimeString(), $data['signature']);
+        $pdf = $this->renderPdf($user, $data['full_name'], $signedAtLocal->toDayDateTimeString(), $data['signature'], $stampLines);
         $pdfPath = $dir . '/privacy-nda-v' . self::AGREEMENT_VERSION . '-' . $signedAt->format('Ymd-His') . '.pdf';
         Storage::disk('public')->put($pdfPath, $pdf);
 
@@ -127,7 +131,8 @@ class AgreementController extends Controller
             'signature_data' => '/storage/' . $sigPath,
             'document_hash' => $this->documentHash(),
             'signed_at' => $signedAt,
-            'ip_address' => $request->ip(),
+            'ip_address' => $stamp['ip'] ?? $request->ip(),
+            'signer_location' => $stamp['location'],
             'user_agent' => substr((string) $request->userAgent(), 0, 500),
             'created_at' => now(),
         ]);
@@ -155,7 +160,8 @@ class AgreementController extends Controller
                 trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')) ?: $data['full_name'],
                 $data['full_name'],
                 $signedAtLocal->toDayDateTimeString(),
-                $pdfPath
+                $pdfPath,
+                $stampLines
             );
         } catch (\Throwable $e) {
             // A failed email must never invalidate a signature we have already recorded.
@@ -243,15 +249,19 @@ class AgreementController extends Controller
     // ── Emails ──────────────────────────────────────────────────────────
 
     /** Emails the signer their copy, with the PDF attached. */
-    public function emailSignedCopy(string $email, string $toName, string $signerName, string $signedAtHuman, string $pdfPath): void
+    public function emailSignedCopy(string $email, string $toName, string $signerName, string $signedAtHuman, string $pdfPath, array $stampLines = []): void
     {
+        // The signature stamp replaces the bare date when we have one (Signed: date at time zone / IP / location).
+        $dateLine = ! empty($stampLines['lines'])
+            ? implode('<br>', array_map(fn ($l) => e($l), $stampLines['lines']))
+            : '<strong>Date:</strong> ' . e($signedAtHuman);
         $body = '<p style="margin:0 0 14px;">Hi ' . e($toName) . ',</p>'
             . '<p style="margin:0 0 14px;line-height:1.6;">Thank you — you have accepted the KiddieTrac '
             . '<strong>Terms of Use, Privacy Policy &amp; Non-Disclosure Agreement</strong>. '
             . 'Your signed copy is attached as a PDF for your records.</p>'
             . EmailTemplate::calloutBox(
                 '<strong>Signed by:</strong> ' . e($signerName) . '<br>'
-                . '<strong>Date:</strong> ' . e($signedAtHuman) . '<br>'
+                . $dateLine . '<br>'
                 . '<strong>Version:</strong> ' . self::AGREEMENT_VERSION,
                 'info'
             )
@@ -382,7 +392,7 @@ class AgreementController extends Controller
     }
 
     /** The signed PDF: the full agreement, with the signature and date rendered in. */
-    private function renderPdf($user, string $signerName, string $signedAtHuman, string $signatureDataUrl): string
+    private function renderPdf($user, string $signerName, string $signedAtHuman, string $signatureDataUrl, array $stampLines = []): string
     {
         $name = e(trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? '')));
         $html = '<!doctype html><html><head><meta charset="utf-8"><style>'
@@ -400,7 +410,9 @@ class AgreementController extends Controller
             . '<img class="sig" src="' . $signatureDataUrl . '" alt="Signature">'
             . '<p><strong>Signed by:</strong> ' . e($signerName) . '<br>'
             . '<strong>Account:</strong> ' . $name . ' (' . e((string) $user->email) . ')<br>'
-            . '<strong>Date and time:</strong> ' . e($signedAtHuman) . '</p>'
+            . (! empty($stampLines['lines'])
+                ? implode('<br>', array_map(fn ($l) => e($l), $stampLines['lines']))
+                : '<strong>Date and time:</strong> ' . e($signedAtHuman)) . '</p>'
             . '</div>'
             . '</body></html>';
 

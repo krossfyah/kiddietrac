@@ -217,7 +217,8 @@ class EDocumentController extends Controller
             ->select('id', 'family_name', 'primary_email')
             ->get();
 
-        $out = $sigs->map(function ($s) use ($users, $families) {
+        $tz = \App\Support\AgencyTime::tzForCentre($centreId);
+        $out = $sigs->map(function ($s) use ($users, $families, $tz) {
             $u = $users[$s->signed_by_user_id] ?? null;
             $f = $families[$s->family_id] ?? null;
             return [
@@ -230,6 +231,8 @@ class EDocumentController extends Controller
                 'typed_name'     => $s->typed_name,
                 'signed_at'      => $s->signed_at,
                 'ip_address'     => $s->ip_address,
+                // Signature stamp (2026-11-27): signed date + time, IP and approximate place, for this signature record.
+                'stamp'          => \App\Support\SignatureStamp::lines($s->signed_at, $s->ip_address, $s->signer_location ?? null, null, true, $tz) ?: null,
             ];
         });
 
@@ -350,6 +353,8 @@ class EDocumentController extends Controller
             return response()->json(['signature' => $existing, 'message' => 'Already signed'], 200);
         }
 
+        // Signature stamp (2026-11-27): IP + approximate place, read on the server at signing time.
+        $stamp = \App\Support\SignatureStamp::capture($request);
         $sig = EDocumentSignature::create([
             'template_id'       => $id,
             'centre_id'         => $template->centre_id,
@@ -359,7 +364,8 @@ class EDocumentController extends Controller
             'signature_data'    => $data['signature_data'],
             'typed_name'        => $data['typed_name'] ?? null,
             'signed_at'         => now(),
-            'ip_address'        => $request->ip(),
+            'ip_address'        => $stamp['ip'] ?? $request->ip(),
+            'signer_location'   => $stamp['location'],
             'user_agent'        => substr((string) $request->userAgent(), 0, 500),
         ]);
 

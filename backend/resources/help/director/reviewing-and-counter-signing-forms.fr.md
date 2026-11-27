@@ -89,6 +89,7 @@ Vous pouvez renvoyer un formulaire autant de fois que nécessaire pour une corre
 ??? Où se trouve le formulaire corrigé? | Il arrive sous la forme d’une nouvelle ligne terminée. La ligne que vous avez renvoyée passe à Soumis de nouveau.
 ??? Pourquoi un formulaire terminé ne figure-t-il pas dans les Documents de la famille? | Sa colonne Synchronisé indiquera Non classé. Appuyez sur Synchroniser maintenant au-dessus du tableau.
 ??? Pourquoi ne puis-je pas contresigner ce formulaire? | Il a été renvoyé et attend le signataire. Contresignez plutôt sa nouvelle soumission.
+??? Qu'est-ce qui est imprimé sous chaque signature? | Signé : la date et l'heure dans le fuseau horaire de votre agence, l'adresse IP du signataire et l'emplacement approximatif déduit de cette adresse (ville, province ou État, pays). Le serveur les enregistre au moment de la signature (la personne ne les saisit jamais) et ils figurent à l'écran, dans le PDF et dans les copies envoyées par courriel, pour le signataire comme pour votre contre-signature. Les formulaires signés avant le 27 nov. 2026 indiquent que l'IP et l'emplacement n'ont pas été enregistrés.
 
 Voir aussi : [Gestionnaire de formulaires et trousses de formulaires](forms-manager), [Demander des fichiers](requesting-files),
 [Flux de travail documentaires](doc-workflows).

@@ -38,6 +38,9 @@ use Illuminate\Support\Facades\Mail;
  */
 final class FormSubmissionNotice
 {
+    /** The signer's IP address + location lines for the callouts below; set per send(). */
+    private static string $stampHtml = '';
+
     /** Send both letters for one sign-off. Safe to call from any signing path. */
     public static function send(int $signoffId): void
     {
@@ -48,6 +51,7 @@ final class FormSubmissionNotice
                 ->whereNotNull('s.signed_at')
                 ->first([
                     's.id', 's.user_id', 's.signed_at', 's.signer_name', 's.filled_file_url',
+                    's.ip_address', 's.signer_location',
                     'f.id as form_id', 'f.title', 'f.description', 'f.agency_id', 'f.audiences',
                     // The one field that says who is told about this form. See officeEmails().
                     'f.notify_email',
@@ -70,6 +74,9 @@ final class FormSubmissionNotice
             $stampFull = $when->format('D, M j, Y') . ' at ' . $when->format('g:i A')
                 . ' (' . $when->format('T') . ')';
             $stampShort = $when->format('M j, Y');
+            // IP address + approximate location under "Submitted" (App\Support\SignatureStamp, 2026-11-27).
+            self::$stampHtml = \App\Support\SignatureStamp::labelledHtml(
+                \App\Support\SignatureStamp::lines($s->signed_at, $s->ip_address ?? null, $s->signer_location ?? null, $agencyId));
 
             /* THE FAMILY, when there is one.
                A signer is often a guardian, and then the family is the thing the office
@@ -180,7 +187,7 @@ final class FormSubmissionNotice
             . 'has been submitted to <strong>' . e($agencyName) . '</strong>.</p>'
             . EmailTemplate::calloutBox(
                 '<strong>Form submitted:</strong> ' . e((string) $s->title)
-                . '<br><strong>Submitted:</strong> ' . e($stampFull)
+                . '<br><strong>Submitted:</strong> ' . e($stampFull) . self::$stampHtml
                 . '<br><strong>Agency:</strong> ' . e($agencyName)
                 . ($familyName ? '<br><strong>Family:</strong> ' . e($familyName) : '')
                 . '<br><strong>Signed by:</strong> ' . e($who),
@@ -239,7 +246,7 @@ final class FormSubmissionNotice
                 . (($user->email ?? '') ? ' (' . e((string) $user->email) . ')' : '')
                 . '<br><strong>Form:</strong> ' . e((string) $s->title)
                 . ((string) ($s->description ?? '') !== '' ? '<br><strong>About:</strong> ' . e((string) $s->description) : '')
-                . '<br><strong>Submitted:</strong> ' . e($stampFull),
+                . '<br><strong>Submitted:</strong> ' . e($stampFull) . self::$stampHtml,
                 'info'
             )
             . '<p style="margin:16px 0 4px;font-size:13.5px;font-weight:700;color:#334155;">Completed by this person</p>'

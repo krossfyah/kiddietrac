@@ -52,6 +52,7 @@ class SendCompletedWorkflow implements ShouldQueue
             ->leftJoin('users as u', 'u.id', '=', 's.signer_user_id')
             ->where('s.workflow_id', $w->id)->orderBy('s.step_order')
             ->get(['s.step_order', 's.signer_label', 's.signer_user_id', 's.signed_at', 's.signature_data', 's.signature_hash', 's.notes',
+                   's.signer_ip', 's.signer_location',
                    'u.first_name', 'u.last_name', 'u.email']);
 
         $agencyId = (int) $w->agency_id;
@@ -84,7 +85,9 @@ class SendCompletedWorkflow implements ShouldQueue
                 ? '<img src="' . e((string) $s->signature_data) . '" alt="">' : '';
             $html .= '<div class="sig"><div class="k">Step ' . (int) $s->step_order . ' &middot; ' . e((string) $s->signer_label) . '</div>'
                 . $img
-                . '<div><strong>' . e($name($s)) . '</strong> &middot; ' . e($when($s->signed_at)) . '</div>'
+                // Signature stamp (2026-11-27): Signed date at time / IP address / approximate location.
+                . '<div><strong>' . e($name($s)) . '</strong></div>'
+                . \App\Support\SignatureStamp::html($s->signed_at, $s->signer_ip ?? null, $s->signer_location ?? null, $agencyId, true, 'font-size:10px;color:#475569;line-height:1.5;margin-top:2px')
                 . ($s->notes ? '<div class="k">Note: ' . e((string) $s->notes) . '</div>' : '')
                 . ($s->signature_hash ? '<div class="k">Signature record ' . e(substr((string) $s->signature_hash, 0, 16)) . '</div>' : '')
                 . '</div>';
@@ -115,7 +118,9 @@ class SendCompletedWorkflow implements ShouldQueue
 
         $list = '';
         foreach ($steps as $s) {
-            $list .= '<br><strong>' . e((string) $s->signer_label) . ':</strong> ' . e($name($s)) . ', ' . e($when($s->signed_at));
+            $st = \App\Support\SignatureStamp::lines($s->signed_at, $s->signer_ip ?? null, $s->signer_location ?? null, $agencyId);
+            $list .= '<br><strong>' . e((string) $s->signer_label) . ':</strong> ' . e($name($s))
+                . ($st ? '<br><span style="font-size:12.5px;">' . implode('<br>', array_map(fn ($l) => e($l), $st['lines'])) . '</span>' : ', ' . e($when($s->signed_at)));
         }
         $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">Everyone has signed <strong>' . e((string) $w->title)
             . '</strong>. The signed document is attached for your records.</p>'

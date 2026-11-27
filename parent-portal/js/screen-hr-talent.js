@@ -646,8 +646,8 @@
     var mgrBox = '<div class="hrt-sect" data-part="manager"><h5>Manager review · <span data-no-i18n>' + esc(v.manager) + '</span></h5><div class="hr-sub" style="margin-bottom:8px;">'
       + (v.manager_submitted_at ? 'Submitted ' + esc(tsDay(v.manager_submitted_at)) : 'Not submitted yet') + '</div>'
       + (can.manager ? answersHtml(scale, secs, v.manager_part, true, 'manager') : (v.manager_part ? answersHtml(scale, secs, v.manager_part, false, 'manager') : '<span class="hr-sub">The manager review shows here once it is submitted.</span>')) + '</div>';
-    var sig = '<div class="hrt-sect"><h5>Sign-off</h5><div class="hr-sub">' + (v.employee_signed_at ? 'Signed by <span data-no-i18n>' + esc(v.employee_signed_name) + '</span> on ' + esc(tsDay(v.employee_signed_at)) : 'Employee: not signed yet') + '<br>'
-      + (v.manager_signed_at ? 'Signed by <span data-no-i18n>' + esc(v.manager_signed_name) + '</span> on ' + esc(tsDay(v.manager_signed_at)) : 'Reviewer: not signed yet') + '</div>'
+    var sig = '<div class="hrt-sect"><h5>Sign-off</h5><div class="hr-sub">' + (v.employee_signed_at ? 'Signed by <span data-no-i18n>' + esc(v.employee_signed_name) + '</span>' + (v.employee_stamp && KT.sigStampHtml ? '<span data-no-i18n>' + KT.sigStampHtml(v.employee_stamp) + '</span>' : ' on ' + esc(tsDay(v.employee_signed_at))) : 'Employee: not signed yet') + '<br>'
+      + (v.manager_signed_at ? 'Signed by <span data-no-i18n>' + esc(v.manager_signed_name) + '</span>' + (v.manager_stamp && KT.sigStampHtml ? '<span data-no-i18n>' + KT.sigStampHtml(v.manager_stamp) + '</span>' : ' on ' + esc(tsDay(v.manager_signed_at))) : 'Reviewer: not signed yet') + '</div>'
       + (can.sign ? '<div class="hr-bar" style="margin-top:8px;"><input class="hr-i" data-sign placeholder="Type your full name to sign" style="flex:1;min-width:200px;"><button type="button" class="hr-b p" data-dosign>Sign</button></div>' : '') + '</div>';
     var goals = '<div class="hrt-sect"><h5>Goals</h5><div data-goals>' + goalsHtml(r.goals) + '</div><div class="hrt-acts" style="margin-top:8px;"><button type="button" class="hr-b" data-goal>Add a goal</button>'
       + (can.ai ? '<button type="button" class="hr-b" data-aigoals>✨ Suggest goals</button>' : '') + '</div></div>';
@@ -887,7 +887,8 @@
       if (r.description) body += '<div class="hrt-ro" style="margin-top:8px;" data-no-i18n>' + esc(r.description) + '</div>';
     } else body = '<div class="hr-sub">The course file opened in a new tab. Come back here to mark it complete.</div>';
     if (qz) body += '<div class="hrt-sect" style="margin-top:10px;"><h5>Quiz</h5><div class="hr-sub" style="margin-bottom:4px;">Finish the course by passing its quiz. Your certificate is issued when you pass.</div>' + window.KTHrPeople.quizSummary(qz) + '</div>';
-    else body += a.completed_at ? '<div class="hr-note" style="margin-top:10px;">Completed ' + esc(tsDay(a.completed_at)) + '. Certificate ' + esc(a.certificate_no || '') + '.</div>'
+    else body += a.completed_at ? '<div class="hr-note" style="margin-top:10px;">Completed ' + esc(tsDay(a.completed_at)) + '. Certificate ' + esc(a.certificate_no || '') + '.'
+        + (r && r.ack_stamp && KT.sigStampHtml ? '<div class="hr-sub" style="margin-top:4px;">Acknowledged by <span data-no-i18n>' + esc(r.ack_name || '') + '</span></div><span data-no-i18n>' + KT.sigStampHtml(r.ack_stamp) + '</span>' : '') + '</div>'
       : '<div class="hrt-sect" style="margin-top:10px;"><h5>Finished?</h5>' + (a.needs_ack ? '<div class="hr-sub" style="margin-bottom:6px;">Type your name to confirm you completed this course and understood it.</div><input class="hr-i" data-ack style="width:100%;" placeholder="Your full name">' : '<div class="hr-sub">Mark it complete to get your certificate.</div>') + '</div>';
     var box = el(body + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
     var acts = [{ label: 'Close' }];

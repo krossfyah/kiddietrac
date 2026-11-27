@@ -514,7 +514,7 @@
     }
     if (d.signed.length) {
       h += '<div style="font-weight:800;font-size:15px;margin:16px 0 8px;">Signed (' + d.signed.length + ')</div><div class="pl-card" style="padding:4px 14px;">'
-        + d.signed.map(function (s) { return '<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid #F1F5F9;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13.5px;">' + esc(s.title) + '</div><div class="pl-sub">Version ' + s.version + ' · signed ' + esc(s.signed_at || '') + '</div></div>'
+        + d.signed.map(function (s) { return '<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-top:1px solid #F1F5F9;"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13.5px;">' + esc(s.title) + '</div><div class="pl-sub">Version ' + s.version + (s.stamp && window.KT && KT.sigStampHtml ? (s.typed_name ? ' · signed as <span data-no-i18n>' + esc(s.typed_name) + '</span>' : '') + '</div><span data-no-i18n>' + KT.sigStampHtml(s.stamp) + '</span>' : ' · signed ' + esc(s.signed_at || '') + '</div>') + '</div>'
           + '<button class="pl-b mp-view" type="button" data-v="' + s.version_id + '" data-t="' + esc(s.title) + '">View</button></div>'; }).join('').replace('border-top:1px solid #F1F5F9;', '')
         + '</div>';
     }

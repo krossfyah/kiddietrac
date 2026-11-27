@@ -254,7 +254,7 @@
         : '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:18px;">' +
             '<thead><tr style="background:#F9FAFB;text-align:left;"><th style="padding:8px;">Family</th><th style="padding:8px;">Signed by</th><th style="padding:8px;">When</th></tr></thead><tbody>' +
             sigs.map(function (s) {
-              return '<tr style="border-top:1px solid #E5E7EB;"><td style="padding:8px;">' + esc(s.family_name) + '</td><td style="padding:8px;">' + esc(s.signed_by_name) + ' <span style="color:#64748B;">(' + esc(s.signed_by_email || '') + ')</span></td><td style="padding:8px;color:#6B7280;">' + fmtDateTime(s.signed_at) + '</td></tr>';
+              return '<tr style="border-top:1px solid #E5E7EB;"><td style="padding:8px;">' + esc(s.family_name) + '</td><td style="padding:8px;">' + esc(s.signed_by_name) + ' <span style="color:#64748B;">(' + esc(s.signed_by_email || '') + ')</span></td><td style="padding:8px;color:#6B7280;">' + ((s.stamp && window.KT && KT.sigStampHtml) ? KT.sigStampHtml(s.stamp, 'font-size:12px;line-height:1.5;color:#64748B') : fmtDateTime(s.signed_at)) + '</td></tr>';
             }).join('') +
             '</tbody></table>') +
       '<h3 style="margin:14px 0 10px;font-size:15px;color:#DC2626;">Not yet signed (' + missing.length + ')</h3>' +

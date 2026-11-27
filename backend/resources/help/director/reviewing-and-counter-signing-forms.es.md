@@ -89,6 +89,7 @@ Puede devolver un formulario tantas veces como requiera una corrección.
 ??? ¿Dónde está el formulario corregido? | Llega como una nueva fila completada. La fila que devolvió cambia a Reenviado.
 ??? ¿Por qué un formulario completado no está en los Documentos de la familia? | Su columna Sincronizado dirá Sin archivar. Pulse Sincronizar ahora sobre la tabla.
 ??? ¿Por qué no puedo contrafirmar este formulario? | Se devolvió y está esperando al firmante. Contrafirme su reenvío en su lugar.
+??? ¿Qué se imprime debajo de cada firma? | Firmado: la fecha y la hora en la zona horaria de su agencia, la dirección IP de quien firma y la ubicación aproximada obtenida de esa dirección (ciudad, provincia o estado, país). El servidor los registra en el momento de la firma (la persona nunca los escribe) y aparecen en la pantalla, en el PDF y en las copias enviadas por correo, tanto para quien firma como para su contrafirma. Los formularios firmados antes del 27 de nov. de 2026 indican que la IP y la ubicación no se registraron.
 
 Véase también: [Gestor de formularios y paquetes de formularios](forms-manager), [Solicitar archivos](requesting-files),
 [Flujos de documentos](doc-workflows).

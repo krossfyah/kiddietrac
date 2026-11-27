@@ -215,7 +215,10 @@ class ProspectNdaController extends Controller
         $tz = 'America/Toronto';
         $human = $signedAt->copy()->setTimezone($tz)->format('M j, Y g:i A T');
         $hash = hash('sha256', AgreementController::AGREEMENT_VERSION . '|' . AgreementController::agreementBodyHtml());
-        $pdf = $this->renderPdf($r, $d, $human, $d['signature'], $hash);
+        // Signature stamp (2026-11-27): the signer's IP + approximate place, read on the server at signing time.
+        $stamp = \App\Support\SignatureStamp::capture($request);
+        $stampLines = \App\Support\SignatureStamp::lines($signedAt, $stamp['ip'], $stamp['location'], null, true, $tz);
+        $pdf = $this->renderPdf($r, $d, $human, $d['signature'], $hash, $stampLines);
         $path = 'prospect-ndas/' . $r->id . '-' . Str::random(10) . '.pdf';
         Storage::disk('local')->put($path, $pdf);
 
@@ -223,7 +226,8 @@ class ProspectNdaController extends Controller
             'status' => 'signed', 'signed_at' => $signedAt, 'signer_name' => trim($d['signer_name']),
             'role_title' => trim($d['role_title']), 'business_name' => trim($d['business_name']),
             'business_address' => trim($d['business_address']), 'document_hash' => $hash, 'pdf_path' => $path,
-            'ip_address' => substr((string) $request->ip(), 0, 45), 'user_agent' => substr((string) $request->userAgent(), 0, 300),
+            'ip_address' => $stamp['ip'] ?? substr((string) $request->ip(), 0, 45), 'signer_location' => $stamp['location'],
+            'user_agent' => substr((string) $request->userAgent(), 0, 300),
             'updated_at' => now(),
         ]);
         $r = DB::table('prospect_ndas')->find($r->id);
@@ -261,7 +265,7 @@ class ProspectNdaController extends Controller
         return 'KiddieTrac-NDA-' . trim($b, '-') . '.pdf';
     }
 
-    private function renderPdf(object $r, array $d, string $human, ?string $sig, string $hash): string
+    private function renderPdf(object $r, array $d, string $human, ?string $sig, string $hash, array $stampLines = []): string
     {
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $html = '<!doctype html><html><head><meta charset="utf-8"><style>'
@@ -287,7 +291,9 @@ class ProspectNdaController extends Controller
             . ($sig ? '<img class="sig" src="' . $sig . '" alt="Signature">' : '<div style="height:46px;border-bottom:1px solid #94A3B8;max-width:280px;"></div>')
             . '<p><strong>Signed by:</strong> ' . $e($d['signer_name']) . ', ' . $e($d['role_title']) . '<br>'
             . '<strong>For:</strong> ' . $e($d['business_name']) . '<br>'
-            . '<strong>Date and time:</strong> ' . $e($human) . '<br>'
+            . (! empty($stampLines['lines'])
+                ? implode('<br>', array_map($e, $stampLines['lines'])) . '<br>'
+                : '<strong>Date and time:</strong> ' . $e($human) . '<br>')
             . '<span class="muted">Document fingerprint (SHA-256 of the agreement text): ' . $e($hash) . '</span></p></div>'
             . '</body></html>';
         $o = new Options(); $o->set('isRemoteEnabled', true); $o->set('defaultFont', 'DejaVu Sans');
@@ -339,9 +345,12 @@ class ProspectNdaController extends Controller
         $abs = Storage::disk('local')->path($r->pdf_path);
         $name = $this->fileName($r);
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        // Signature stamp (2026-11-27) from what was stored at signing; falls back to the bare date.
+        $st = \App\Support\SignatureStamp::lines($r->signed_at, $r->ip_address ?? null, $r->signer_location ?? null, null, true, 'America/Toronto');
+        $dateLine = $st ? implode('<br>', array_map($e, $st['lines'])) : '<strong>Date:</strong> ' . $e($human);
         $box = EmailTemplate::calloutBox('<strong>Signed by:</strong> ' . $e($r->signer_name) . ', ' . $e($r->role_title) . '<br>'
             . '<strong>Business:</strong> ' . $e($r->business_name) . '<br><strong>Address:</strong> ' . nl2br($e($r->business_address)) . '<br>'
-            . '<strong>Date:</strong> ' . $e($human) . '<br><strong>Version:</strong> ' . $e($r->agreement_version), 'info');
+            . $dateLine . '<br><strong>Version:</strong> ' . $e($r->agreement_version), 'info');
         $mk = function (string $intro) use ($box) {
             return EmailTemplate::wrap(null, '<p style="margin:0 0 14px;line-height:1.6;">' . $intro . '</p>' . $box, [
                 'eyebrow' => 'NDA SIGNED', 'title' => 'Non-Disclosure Agreement', 'subtitle' => 'Signed copy attached', 'preheader' => 'Signed copy of the KiddieTrac NDA.']);

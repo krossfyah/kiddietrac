@@ -120,6 +120,8 @@ final class SignedFormController extends Controller
             'links'       => [
                 'submit' => URL::temporarySignedRoute('forms.fill.submit', now()->addDays(self::LINK_DAYS), ['form' => $form, 'u' => $u]),
                 'draft'  => URL::temporarySignedRoute('forms.fill.draft', now()->addDays(self::LINK_DAYS), ['form' => $form, 'u' => $u]),
+                // The signature stamp (IP + approximate location) the filler prints under the signature.
+                'stamp'  => URL::temporarySignedRoute('forms.fill.stamp', now()->addDays(self::LINK_DAYS), ['form' => $form, 'u' => $u]),
             ],
         ];
 
@@ -152,6 +154,17 @@ final class SignedFormController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** GET /forms/fill/{form}/{u}/stamp — the signature stamp to print (SignatureStamp::issue). Signed, no login. */
+    public function stamp(Request $request, int $form, int $u): JsonResponse
+    {
+        $found = $this->resolve($form, $u);
+        if (! $found) {
+            return response()->json(['message' => 'This link is no longer valid.'], 404);
+        }
+
+        return response()->json(\App\Support\SignatureStamp::issue('mf:' . $form . ':' . $u, (int) $found['form']->agency_id, $request));
+    }
+
     /** POST /forms/fill/{form}/{u} — the signature. Signed, no login. */
     public function submit(Request $request, int $form, int $u): JsonResponse
     {
@@ -177,6 +190,15 @@ final class SignedFormController extends Controller
             'filled_file'  => ['nullable'],
         ]);
 
+        /* THE SIGNATURE STAMP (2026-11-27) - exactly as the in-portal sign(): the token the filler printed is
+           checked against this request's address; refused if it differs, so the browser rebuilds the PDF. */
+        $stampTok = \App\Support\SignatureStamp::redeem((string) $request->input('sign_stamp', ''), 'mf:' . $form . ':' . $u, $request);
+        if ($stampTok === false) {
+            return response()->json(['code' => 'sign_stamp_changed',
+                'message' => 'Your connection changed while you were signing. Please press Sign & submit again.'], 409);
+        }
+        $sigStamp = $stampTok ?: \App\Support\SignatureStamp::capture($request);
+
         $user = $found['user'];
         /* The same guards the in-portal sign() applies, deliberately duplicated rather than
            loosened: a 20MB ceiling and a real %PDF header, so this route can never write
@@ -190,10 +212,11 @@ final class SignedFormController extends Controller
             'signature'       => mb_substr((string) $data['signature'], 0, 400000),
             'field_values'    => json_encode($fieldValues),
             'filled_file_url' => $filledUrl,
-            'signed_at'       => now(),
+            'signed_at'       => $stampTok ? $stampTok['at'] : now(),
             /* The address it came from, kept for the same reason the in-portal route keeps
                it: a signature is a record, and a record says where it was made. */
-            'ip_address'      => $request->ip(),
+            'ip_address'      => $sigStamp['ip'] ?? $request->ip(),
+            'signer_location' => $sigStamp['location'] ?? null,
             'updated_at'      => now(),
         ];
 

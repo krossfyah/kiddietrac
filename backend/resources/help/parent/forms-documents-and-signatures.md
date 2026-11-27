@@ -81,6 +81,7 @@ Open any document and use your device's share or save option to keep a PDF — h
 ??? Can my partner sign instead of me? | If they're a listed guardian with their own login, yes — whoever is signed in is who the signature records. For legal agreements, sign from your own account.
 ??? I signed something by mistake. | Contact your director. They can see what was signed and can send it back to you or withdraw it so you can sign again.
 ??? A form I already signed is back in To sign. | The centre sent it back. Read the yellow note — it says what to change.
+??? What does the signature record about me? | The date and time you signed (in your centre's time zone), the IP address of the device you signed from, and the approximate location of that address (city, province or state, country). The location comes from the IP address, not your phone's GPS, so nothing asks for location permission. It is printed under your signature on the signed copy, and only people who can already see that document can see it.
 
 ## Keeping your details current
 

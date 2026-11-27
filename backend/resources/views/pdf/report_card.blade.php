@@ -89,7 +89,8 @@
   .signs td { vertical-align: top; padding: 4px 10px 6px; border: 1px solid #000; }
   .sig-img { height: 44px; display: block; }
   .sig-blank { height: 44px; }
-  .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 8.5pt; height: 46px; }
+  .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 8.5pt; min-height: 46px; }
+  .sig-stamp { font-size: 7pt; color: #333; line-height: 1.35; }   /* signature stamp (2026-11-27) */
   .sig-role { font-size: 7pt; text-transform: uppercase; font-weight: bold; }
   .approved { margin-top: 8px; font-size: 9pt; font-weight: bold; page-break-inside: avoid; }
   .approved.pending { color: #8A4B00; }
@@ -204,7 +205,7 @@
       <div class="sig-line">
         <span class="sig-role">{{ $L['prepared_by'] }}</span><br>
         {{ $educatorName ?: '—' }}@if($registry) · {{ $L['registration'] }} {{ $registry }}@endif
-        @if ($submitted)<br>{{ $L['signed'] }} {{ $submitted }}@endif
+        @if (! empty($educatorStamp['lines']))<div class="sig-stamp">{!! implode('<br>', array_map('e', $educatorStamp['lines'])) !!}</div>@elseif ($submitted)<br>{{ $L['signed'] }} {{ $submitted }}@endif
       </div>
     </td>
     <td style="width:50%;">
@@ -212,7 +213,7 @@
       <div class="sig-line">
         <span class="sig-role">{{ $L['approved_by'] }}</span><br>
         {{ $approverName ?: '—' }}@if($approverTitle) · {{ $approverTitle }}@endif
-        @if ($approved)<br>{{ $L['approved'] }} {{ $approved }}@endif
+        @if (! empty($approverStamp['lines']))<div class="sig-stamp">{!! implode('<br>', array_map('e', $approverStamp['lines'])) !!}</div>@elseif ($approved)<br>{{ $L['approved'] }} {{ $approved }}@endif
       </div>
     </td>
   </tr></table>

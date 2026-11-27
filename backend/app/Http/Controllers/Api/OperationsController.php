@@ -624,6 +624,16 @@ final class OperationsController extends Controller
             ->where('p.field_trip_id', $tripId)
             ->select('p.*', 'c.first_name', 'c.last_name')
             ->get();
+        /* Signature stamp (2026-11-27): each SIGNED slip carries its Signed date + time, IP and approximate place,
+           for the slip view in this popup. The raw ip/location columns are not sent with the roster. */
+        $rows = $rows->map(function ($r) use ($tripAgency) {
+            $r->signature_stamp = $r->signature_data
+                ? \App\Support\SignatureStamp::lines($r->responded_at, $r->signer_ip ?? null, $r->signer_location ?? null, $tripAgency)
+                : [];
+            unset($r->signer_ip, $r->signer_location);
+
+            return $r;
+        });
         $counts = [
             'total' => $rows->count(),
             'approved' => $rows->where('status', 'approved')->count(),
@@ -651,6 +661,9 @@ final class OperationsController extends Controller
             'notes' => $data['notes'] ?? null,
             'guardian_user_id' => $request->user()->id,
             'responded_at' => now(),
+            // Signature stamp (2026-11-27): the parent's IP and approximate place, fixed when they answer.
+            'signer_ip' => \App\Support\SignatureStamp::capture($request)['ip'],
+            'signer_location' => \App\Support\SignatureStamp::capture($request)['location'],
             'updated_at' => now(),
         ]);
         return response()->json(['status' => $data['status']]);

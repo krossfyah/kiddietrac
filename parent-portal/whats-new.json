@@ -4,6 +4,29 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "✍️",
+            "title": "Signed forms show when and where they were signed",
+            "body": "Every signature on a signed form or document now shows the date and time it was signed, the IP address it was signed from, and the approximate location of that address (city, province or state, country). It appears under the signature on screen, in the PDF and on emailed copies, and only people who can already see that document can see it. The location comes from the IP address, not your phone's GPS. Forms signed before today say the IP and location were not recorded.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ],
+            "title_fr": "Les formulaires signés indiquent quand et d'où ils ont été signés",
+            "body_fr": "Chaque signature sur un formulaire ou un document signé indique maintenant la date et l'heure de la signature, l'adresse IP utilisée et l'emplacement approximatif de cette adresse (ville, province ou État, pays). Ces informations figurent sous la signature à l'écran, dans le PDF et dans les copies envoyées par courriel, et seules les personnes qui peuvent déjà voir ce document peuvent les voir. L'emplacement provient de l'adresse IP, pas du GPS de votre téléphone. Les formulaires signés avant aujourd'hui indiquent que l'IP et l'emplacement n'ont pas été enregistrés.",
+            "title_es": "Los formularios firmados muestran cuándo y desde dónde se firmaron",
+            "body_es": "Cada firma en un formulario o documento firmado ahora muestra la fecha y la hora de la firma, la dirección IP desde la que se firmó y la ubicación aproximada de esa dirección (ciudad, provincia o estado, país). Aparece debajo de la firma en la pantalla, en el PDF y en las copias enviadas por correo, y solo la pueden ver las personas que ya pueden ver ese documento. La ubicación se obtiene de la dirección IP, no del GPS de su teléfono. Los formularios firmados antes de hoy indican que la IP y la ubicación no se registraron.",
+            "title_hi": "हस्ताक्षरित फ़ॉर्म दिखाते हैं कि वे कब और कहाँ से हस्ताक्षरित हुए",
+            "body_hi": "हस्ताक्षरित फ़ॉर्म या दस्तावेज़ पर हर हस्ताक्षर अब हस्ताक्षर की तारीख और समय, जिस IP पते से हस्ताक्षर किया गया, और उस पते का अनुमानित स्थान (शहर, प्रांत या राज्य, देश) दिखाता है। यह स्क्रीन पर, PDF में और ईमेल की गई प्रतियों पर हस्ताक्षर के नीचे दिखता है, और केवल वही लोग इसे देख सकते हैं जो पहले से वह दस्तावेज़ देख सकते हैं। स्थान IP पते से आता है, आपके फ़ोन के GPS से नहीं। आज से पहले हस्ताक्षरित फ़ॉर्म पर लिखा होता है कि IP और स्थान दर्ज नहीं किए गए थे।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "🦺",
             "title": "Risk assessments for each centre",
             "body": "Human Resources > Health & safety > Risk assessments: list each hazard, who could be harmed, likelihood × severity, your controls and the risk that is left. Start from an example (outdoor play, field trips, sleep room, kitchen, water play), set an owner and a review date, and have another director or an admin sign it off. Reminders come before each review.",

@@ -113,10 +113,13 @@ class ProposalSignController extends Controller
         // Fingerprint of exactly what they are signing (before the signature is added).
         $hash = hash('sha256', $this->sales()->proposalHtmlFor($q, true));
 
+        // Signature stamp (2026-11-27): the signer's IP + approximate place, read on the server at signing time.
+        $stamp = \App\Support\SignatureStamp::capture($request);
         $updated = SalesQuote::where('id', $q->id)->whereNull('client_signed_at')->update([
             'client_signed_at' => now(), 'client_signer_name' => trim($d['signer_name']), 'client_signer_title' => trim($d['signer_title']),
             'client_signer_org' => trim($d['organisation']), 'client_signature' => $d['signature'],
-            'client_sign_ip' => substr((string) $request->ip(), 0, 45), 'client_sign_ua' => substr((string) $request->userAgent(), 0, 300),
+            'client_sign_ip' => $stamp['ip'] ?? substr((string) $request->ip(), 0, 45), 'client_sign_location' => $stamp['location'],
+            'client_sign_ua' => substr((string) $request->userAgent(), 0, 300),
             'document_hash' => $hash, 'status' => 'signed', 'sent_at' => $q->sent_at ?: now(), 'updated_at' => now(),
         ]);
         if (! $updated) {
@@ -192,6 +195,8 @@ class ProposalSignController extends Controller
         $html = \App\Services\EmailTemplate::wrap(null,
             '<p style="margin:0 0 14px;line-height:1.6">Hi ' . $e(strtok((string) $q->client_signer_name, ' ')) . ',</p>'
             . '<p style="margin:0 0 14px;line-height:1.6">Thank you for signing KiddieTrac proposal <strong>' . $e($q->number) . '</strong>. Your signature was recorded on ' . $e($human) . '.</p>'
+            // Signature stamp (2026-11-27): what was recorded with the signature.
+            . \App\Support\SignatureStamp::html($q->client_signed_at, $q->client_sign_ip, $q->client_sign_location ?? null, null, true, 'margin:0 0 14px;font-size:12.5px;line-height:1.6;color:#64748B')
             . '<p style="margin:0 0 14px;line-height:1.6">KiddieTrac will now countersign, and you will receive the fully signed copy by email. If you have any questions in the meantime, just reply to this email.</p>'
             . '<p style="margin:0;font-size:12.5px;color:#64748B;line-height:1.6">If you did not sign this proposal, please contact us right away at ' . $e($pb['email'] ?: 'sales@kiddietrac.com') . '.</p>',
             ['force_brand' => 'kt', 'eyebrow' => 'PROPOSAL SIGNED', 'title' => 'Thank you for signing', 'subtitle' => $q->number, 'preheader' => 'We have your signature. KiddieTrac will countersign next.']);

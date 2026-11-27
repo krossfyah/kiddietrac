@@ -1055,10 +1055,12 @@
     m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
     m.innerHTML = '<div style="background:#fff;padding:24px;border-radius:14px;max-width:520px;width:100%;">'
       + '<h3 style="margin:0 0 4px;color:#0F172A;">✍ ' + esc(sdTypeLabel(s.document_type)) + '</h3>'
-      + '<p style="margin:0 0 14px;color:#64748B;font-size:13px;">Signed by ' + esc(s.signer_name || '') + ' · ' + fmtStamp(s.signed_at) + '</p>'
+      /* Signature stamp (2026-11-27): Signed date at time zone / IP / approximate location, built by the server. */
+      + '<p style="margin:0 0 14px;color:#64748B;font-size:13px;">Signed by ' + esc(s.signer_name || '') + ((s.stamp && window.KT && KT.sigStampHtml) ? '' : ' · ' + fmtStamp(s.signed_at)) + '</p>'
       + (src ? '<div style="border:1px solid #E2E8F0;border-radius:8px;padding:10px;text-align:center;background:#fff;"><img src="' + src + '" alt="Signature" style="max-width:100%;max-height:200px;"></div>'
              : '<p style="color:#64748B;">No downloadable document is stored for this signature — only the audit record below.</p>')
-      + '<div style="margin-top:12px;font-size:12px;color:#64748B;font-family:ui-monospace,monospace;word-break:break-all;">SHA-256: ' + esc(s.document_hash || '—') + '<br>IP: ' + esc(s.ip_address || '—') + '</div>'
+      + ((s.stamp && window.KT && KT.sigStampHtml) ? KT.sigStampHtml(s.stamp, 'margin-top:10px;font-size:12px;line-height:1.5;color:#64748B') : '')
+      + '<div style="margin-top:12px;font-size:12px;color:#64748B;font-family:ui-monospace,monospace;word-break:break-all;">SHA-256: ' + esc(s.document_hash || '—') + ((s.stamp && window.KT && KT.sigStampHtml) ? '' : '<br>IP: ' + esc(s.ip_address || '—')) + '</div>'
       + '<div style="text-align:right;margin-top:16px;"><button class="kt-btn kt-btn-primary" style="padding:7px 16px;">Close</button></div>'
       + '</div>';
     m.querySelector('button').onclick = () => m.remove();

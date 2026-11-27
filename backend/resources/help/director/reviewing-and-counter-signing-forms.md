@@ -91,6 +91,7 @@ You can send a form back as many times as a correction needs.
 ??? Where is the corrected form? | It arrives as a new completed row. The row you sent back changes to Resubmitted.
 ??? Why is a completed form not in the family's Documents? | Its Synced column will say Not filed. Press Sync now above the table.
 ??? Why can I not counter-sign this form? | It has been sent back and is waiting on the signer. Counter-sign their resubmission instead.
+??? What is printed under each signature? | Signed: the date and time in your agency's time zone, the signer's IP address, and the approximate location from that address (city, province or state, country). The server records it at the moment of signing (the person never types it) and it appears on the screen view, the PDF and emailed copies, for the signer and for your counter-signature. Forms signed before Nov 27, 2026 say the IP and location were not recorded.
 
 See also: [Forms Manager and form packages](forms-manager), [Requesting files](requesting-files),
 [Document workflows](doc-workflows).

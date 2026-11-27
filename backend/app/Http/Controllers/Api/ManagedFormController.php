@@ -2183,7 +2183,13 @@ class ManagedFormController extends Controller
         if (! $row) {
             return response()->json(['message' => 'Not found'], 404);
         }
-        return response()->json(['signoff' => $row]);
+        return response()->json([
+            'signoff' => $row,
+            'stamp' => \App\Support\SignatureStamp::lines($row->signed_at, $row->ip_address ?? null, $row->signer_location ?? null, $agencyId) ?: null,
+            'countersign_stamp' => $row->countersigned_at
+                ? (\App\Support\SignatureStamp::lines($row->countersigned_at, $row->countersigner_ip ?? null, $row->countersigner_location ?? null, $agencyId) ?: null)
+                : null,
+        ]);
     }
 
     /* ───────────── ROLE INBOX: assigned + sign ───────────── */
@@ -2407,6 +2413,19 @@ class ManagedFormController extends Controller
     }
 
     /** POST /forms/{id}/sign — record the caller's e-signature. */
+    /** GET /managed-forms/{id}/sign-stamp - the stamp the filler prints under the signature (SignatureStamp::issue). */
+    public function signStamp(Request $request, int $id): JsonResponse
+    {
+        $uid = (int) $request->user()->id;
+        $agencyId = $this->agencyId($request);
+        $form = DB::table('managed_forms')->where('id', $id)->where('agency_id', $agencyId)->where('active', 1)->first();
+        if (! $form || ! $this->mayUseForm($form, $uid)) {
+            return response()->json(['message' => 'Not found'], 404);
+        }
+
+        return response()->json(\App\Support\SignatureStamp::issue('mf:' . $id . ':' . $uid, $agencyId, $request));
+    }
+
     public function sign(Request $request, int $id): JsonResponse
     {
         $uid = (int) $request->user()->id;
@@ -2436,6 +2455,17 @@ class ManagedFormController extends Controller
         // submission 500'd, the plain read-and-sign flow included.
         $name = ($data['name'] ?? null) ?: trim((string) (($u->first_name ?? '') . ' ' . ($u->last_name ?? '')));
 
+        /* THE SIGNATURE STAMP (2026-11-27). The browser printed "Signed / IP address / Location" into the PDF from
+           GET sign-stamp; redeem() checks that token against the address THIS request came from, so the record and
+           the printed page cannot disagree. A token from another address is refused and the filler rebuilds. No
+           token (an older cached filler, read-and-sign) = captured here. See App\Support\SignatureStamp. */
+        $stampTok = \App\Support\SignatureStamp::redeem((string) $request->input('sign_stamp', ''), 'mf:' . $id . ':' . $uid, $request);
+        if ($stampTok === false) {
+            return response()->json(['code' => 'sign_stamp_changed',
+                'message' => 'Your connection changed while you were signing. Please press Sign & submit again.'], 409);
+        }
+        $sigStamp = $stampTok ?: \App\Support\SignatureStamp::capture($request);
+
         // Store the completed PDF next to the original.
         $filledUrl = $this->storeFilledPdf($request, $id, $uid);
         $fieldValues = $this->filledFieldValues($request);
@@ -2449,8 +2479,9 @@ class ManagedFormController extends Controller
                 'signature'   => mb_substr($data['signature'], 0, 400000),
                 'field_values' => $fieldValues ? json_encode($fieldValues) : null,
                 'filled_file_url' => $filledUrl,
-                'signed_at'   => now(),
-                'ip_address'  => substr((string) $request->ip(), 0, 45),
+                'signed_at'   => $stampTok ? $stampTok['at'] : now(),
+                'ip_address'  => substr((string) ($sigStamp['ip'] ?? $request->ip()), 0, 45),
+                'signer_location' => $sigStamp['location'] ?? null,
                 'updated_at'  => now(),
         ];
         /* Closing the loop. The new submission is a NEW row (or a finished draft) - the
@@ -2634,6 +2665,14 @@ class ManagedFormController extends Controller
         $stampFull = $signedAt->format('D, M j, Y') . ' at ' . $signedAt->format('g:i A')
             . ' (' . $signedAt->format('T') . ')';
 
+        $stampHtml = '';
+        if ($signoffId) {
+            $sr = DB::table('managed_form_signoffs')->where('id', $signoffId)->first(['signed_at', 'ip_address', 'signer_location']);
+            if ($sr && $sr->signed_at) {
+                $stampHtml = \App\Support\SignatureStamp::labelledHtml(\App\Support\SignatureStamp::lines($sr->signed_at, $sr->ip_address, $sr->signer_location, (int) $form->agency_id));
+            }
+        }
+
         $subject = 'Completed form: ' . $form->title . ($placeName ? " \u{2014} " . $placeName : '')
             . " \u{2014} " . $stamp;
 
@@ -2645,7 +2684,7 @@ class ManagedFormController extends Controller
                     . ($form->description ? '<br><strong>About:</strong> ' . e($form->description) : '')
                     . '<br><strong>Signed by:</strong> ' . e($who) . ($signerEmail ? ' (' . e($signerEmail) . ')' : '')
                     . ($placeName ? '<br><strong>' . e(ucfirst($placeWord)) . ':</strong> ' . e($placeName) : '')
-                    . '<br><strong>Signed at:</strong> ' . e($when),
+                    . '<br><strong>Signed at:</strong> ' . e($when) . $stampHtml,
                     'info'
                 )
               . '<p style="margin:14px 0 0;font-size:13.5px;color:#64748B;line-height:1.6;">'
@@ -2841,6 +2880,8 @@ class ManagedFormController extends Controller
             'countersigned_by_id' => (int) $me->id,
             'countersigner_name' => $counterName,
             'countersigner_role' => $counterRole ?: null,
+            'countersigner_ip' => ($csStamp = \App\Support\SignatureStamp::capture($request))['ip'],
+            'countersigner_location' => $csStamp['location'],
             'countersignature' => mb_substr((string) $data['signature'], 0, 400000),
             'countersign_note' => $data['note'] ?? null,
             'countersigned_file_url' => null,
@@ -2941,6 +2982,7 @@ class ManagedFormController extends Controller
                 's.countersignature', 's.countersign_note', 's.countersigned_file_url',
                 's.countersign_reviewed_url', 's.countersign_annotations', 's.countersign_options',
                 's.countersign_finished_at', 's.returned_at',
+                's.ip_address', 's.signer_location', 's.countersigner_ip', 's.countersigner_location',
                 'f.id as form_id', 'f.title', 'f.description', 'f.notify_email', 'f.agency_id',
                 'u.email as signer_email', 'u.first_name as signer_first', 'u.last_name as signer_last',
             ]);
@@ -2980,7 +3022,11 @@ class ManagedFormController extends Controller
                 $base, (string) $row->title, $signerName, (string) $row->signed_at,
                 $counterName, str_replace('_', ' ', (string) $row->countersigner_role), (string) $row->countersignature,
                 $row->countersign_note, $agencyName, $annotations,
-                (string) $row->countersigned_at
+                (string) $row->countersigned_at,
+                [
+                    'signer' => \App\Support\SignatureStamp::lines($row->signed_at, $row->ip_address, $row->signer_location, $agencyId),
+                    'counter' => \App\Support\SignatureStamp::lines($row->countersigned_at, $row->countersigner_ip, $row->countersigner_location, $agencyId),
+                ]
             );
             if ($made) {
                 if ($persist) {

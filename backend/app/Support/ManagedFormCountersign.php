@@ -40,6 +40,9 @@ final class ManagedFormCountersign
      */
     private static string $when = '';
 
+    /** SignatureStamp::lines() for 'signer' and 'counter' (2026-11-27); [] for a caller that has none. */
+    private static array $stamps = [];
+
     public static function append(
         string $filledAbs,
         string $formTitle,
@@ -51,8 +54,10 @@ final class ManagedFormCountersign
         ?string $note,
         string $agencyName,
         ?array $annotations = null,
-        ?string $counterSignedAt = null
+        ?string $counterSignedAt = null,
+        ?array $stamps = null
     ): ?string {
+        self::$stamps = is_array($stamps) ? $stamps : [];
         if (! is_file($filledAbs)) {
             return null;
         }
@@ -117,8 +122,9 @@ final class ManagedFormCountersign
                    its own page rather than overprinting the document. */
                 if ($i === $count) {
                     $free = self::blankBandAtBottom($flat, $i, (float) $size['height'], (float) $size['width']);
-                    if ($free >= self::INLINE_BLOCK_H) {
-                        self::inlineBlock($pdf, (float) $size['height'] - $free + 6,
+                    if ($free >= self::INLINE_BLOCK_H + (empty(self::$stamps['counter']['lines']) ? 0 : 22) + 14) {
+                        /* +20, not +6: the scan reads a faint box border (the signer's panel) as blank, so the last INK is the text inside it and the border sits ~14pt lower. */
+                        self::inlineBlock($pdf, (float) $size['height'] - $free + 20,
                             (float) $size['width'], $counterName, $counterRole, $sigPng, $note, $agencyName);
                         $stampedInline = true;
                     }
@@ -259,7 +265,16 @@ final class ManagedFormCountersign
         $pdf->SetX($m);
         $pdf->SetFont('Helvetica', '', 8.5);
         $pdf->SetTextColor(90, 100, 115);
-        $pdf->Cell(230, 11, self::t('Counter-signed ' . self::stamp(self::$when)), 0, 1);
+        $cl = self::$stamps['counter']['lines'] ?? [];
+        if ($cl) {
+            // Signed / IP address / Location under the counter-signature (SignatureStamp).
+            foreach ($cl as $k => $x) {
+                $pdf->SetX($m);
+                $pdf->Cell(230, $k ? 10 : 11, self::t($k ? $x : preg_replace('/^Signed: /', 'Counter-signed: ', $x)), 0, 1);
+            }
+        } else {
+            $pdf->Cell(230, 11, self::t('Counter-signed ' . self::stamp(self::$when)), 0, 1);
+        }
 
         /* A short note rides along; a long one would not fit the band that was measured,
            and silently clipping a reviewer's words is worse than putting them overleaf. */
@@ -317,9 +332,17 @@ final class ManagedFormCountersign
 
         $line('Form', $formTitle);
         $line('Completed by', $signerName !== '' ? $signerName : 'Not recorded');
-        $line('Completed on', $signerSignedAt ? self::stamp($signerSignedAt) : 'Not recorded');
+        $sl = self::$stamps['signer']['lines'] ?? [];
+        $line('Completed on', $sl ? preg_replace('/^Signed: /', '', $sl[0]) : ($signerSignedAt ? self::stamp($signerSignedAt) : 'Not recorded'));
+        foreach (array_slice($sl, 1) as $x) {
+            $line('', $x);   // IP address / Location, under the date signed
+        }
         $line('Reviewed by', trim($counterName . ($counterRole ? ' (' . $counterRole . ')' : '')));
-        $line('Reviewed on', self::stamp(self::$when));
+        $cl = self::$stamps['counter']['lines'] ?? [];
+        $line('Reviewed on', $cl ? preg_replace('/^Signed: /', '', $cl[0]) : self::stamp(self::$when));
+        foreach (array_slice($cl, 1) as $x) {
+            $line('', $x);
+        }
 
         /* WHAT THE AGENCY WROTE ONTO THE FORM, LISTED IN FULL.
  
@@ -390,6 +413,11 @@ final class ManagedFormCountersign
         $pdf->SetFont('Helvetica', '', 9);
         $pdf->SetTextColor(90, 100, 115);
         $pdf->Cell(240, 12, self::t($counterName), 0, 1);
+        foreach (self::$stamps['counter']['lines'] ?? [] as $x) {
+            $pdf->SetX($m);
+            $pdf->SetFont('Helvetica', '', 8.5);
+            $pdf->Cell(400, 11, self::t($x), 0, 1);
+        }
     }
 
     private static function signatureToFile(string $dataUrl, string $dir): ?string

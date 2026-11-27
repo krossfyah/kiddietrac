@@ -203,6 +203,8 @@ class IncidentController extends Controller
             'recorder_signed_name'    => $signedName ?: null,
             'recorder_signed_at'      => now(),
             'recorder_signature_ip'   => substr((string) $request->ip(), 0, 64),
+            // Signature stamp (2026-11-27): approximate place from the local IP database, fixed at signing.
+            'recorder_signature_location' => \App\Support\SignatureStamp::capture($request)['location'],
         ]);
 
         /* Notify the directors of the centre this child belongs to.
@@ -425,6 +427,23 @@ class IncidentController extends Controller
         if (! $this->isStaff($request->user())) {
             $incident->unsetRelation('notes');
         }
+
+        /* Signature stamp (2026-11-27): the date + time, IP and approximate location printed under each
+           signature, built here in the agency's zone. Only on the record itself - never on the list. */
+        $stampAg = DB::table('rooms as r')->join('centres as c', 'c.id', '=', 'r.centre_id')
+            ->where('r.id', $incident->room_id)->value('c.agency_id');
+        $stampAg = $stampAg ? (int) $stampAg : null;
+        $stamps = [
+            'recorder' => $incident->recorder_signature_data || $incident->recorder_signed_at
+                ? \App\Support\SignatureStamp::lines($incident->recorder_signed_at, $incident->recorder_signature_ip, $incident->recorder_signature_location, $stampAg) : [],
+            'closer' => $incident->closer_signature_data || $incident->closer_signed_at
+                ? \App\Support\SignatureStamp::lines($incident->closer_signed_at, $incident->closer_signature_ip, $incident->closer_signature_location, $stampAg) : [],
+            'acks' => [],
+        ];
+        foreach ($incident->acknowledgments ?? [] as $ak) {
+            $stamps['acks'][(string) $ak->id] = \App\Support\SignatureStamp::lines($ak->signed_at, $ak->ip_address, $ak->signer_location, $stampAg);
+        }
+        $incident->setAttribute('signature_stamps', $stamps);
 
         return response()->json(['data' => $incident]);
     }
@@ -772,6 +791,7 @@ class IncidentController extends Controller
                 'signature_data' => $data['signature_data'] ?? null,
                 'comment'        => $data['comment'] ?? null,
                 'ip_address'     => $request->ip(),
+                'signer_location' => \App\Support\SignatureStamp::capture($request)['location'],
                 'user_agent'     => substr((string) $request->userAgent(), 0, 255),
                 'signed_at'      => now(),
             ]);
@@ -1112,6 +1132,7 @@ class IncidentController extends Controller
             'closer_signed_name'    => $signedName ?: null,
             'closer_signed_at'      => now(),
             'closer_signature_ip'   => substr((string) $request->ip(), 0, 64),
+            'closer_signature_location' => \App\Support\SignatureStamp::capture($request)['location'],
         ]);
 
         /* Re-file the report, now that it carries the closing sign-off and the
