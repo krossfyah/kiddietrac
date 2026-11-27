@@ -426,11 +426,17 @@
      agency-date terms via ymd() so a range that ends at midnight does not bleed into the
      following day. Capped at a year in case of a bad range — an open-ended loop over dates
      is how a calendar hangs the browser. */
+  function calDay(v) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v);
+  }
   function indexTimeOff(rows) {
     var byDay = {};
     (rows || []).forEach(function (r) {
-      var s = new Date(r.start_at);
-      var e = new Date(r.end_at);
+      /* start_at / end_at are DATE columns ("2026-12-18"): new Date() of that is UTC midnight, the day before west of
+         UTC, so leave sat a day early on the calendar (2026-11-27). A bare date is that local calendar day. */
+      var s = calDay(r.start_at);
+      var e = calDay(r.end_at);
       if (isNaN(s) || isNaN(e) || e < s) return;
       var cur = new Date(s.getFullYear(), s.getMonth(), s.getDate());
       var last = new Date(e.getFullYear(), e.getMonth(), e.getDate());

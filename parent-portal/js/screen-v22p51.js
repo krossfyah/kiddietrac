@@ -277,6 +277,12 @@
     }
     torReload();
   }
+  /* NOBODY DECIDES THEIR OWN TIME OFF (2026-11-27). A director's or admin's own request also sits in Team requests;
+     it gets no Approve / Deny / Reviewed there (the server refuses them too), only Withdraw. */
+  function torMyId() {
+    try { var u = JSON.parse(sessionStorage.getItem('kt_user') || localStorage.getItem('kt_user') || '{}') || {}; return +u.id || 0; } catch (e) { return 0; }
+  }
+  function torOwn(r) { var me = torMyId(); return !!me && +r.user_id === me; }
   function torCanClose(r, isApprover) {
     return isApprover && (r.status || '').toLowerCase() === 'approved' && r.close_centre_id && !r.closed_for_dates;
   }
@@ -306,13 +312,16 @@
       var rv = el('div', { style: 'margin-top:10px;' });
       rv.innerHTML = REVIEW_PILL + '<span style="font-size:12px;color:#64748B;margin-left:6px;">No approval needed, already taken off the balance.</span>';
       card.appendChild(rv);
-      if (isApprover) {
+      if (isApprover && !torOwn(r)) {
         var rb = el('button', { type: 'button', class: 'kt-btn kt-btn-secondary', style: 'width:100%;margin-top:10px;justify-content:center;' }, 'Reviewed');
         rb.onclick = function () { markReviewed(r.id); };
         card.appendChild(rb);
       }
     }
-    if (isApprover && status === 'pending') {
+    if (isApprover && torOwn(r) && (status === 'pending' || torReview(r))) {
+      card.appendChild(el('div', { style: 'font-size:12px;color:#64748B;margin-top:10px;' }, 'Your own request: another director or an agency admin decides it.'));
+    }
+    if (isApprover && status === 'pending' && !torOwn(r)) {
       var actions = el('div', { style: 'display:flex;gap:8px;margin-top:12px;' });
       var appr = el('button', { type: 'button', style: 'flex:1;background:#16A34A;color:#fff;border:0;padding:11px;border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;' }, 'Approve');
       var deny = el('button', { type: 'button', style: 'flex:1;background:#fff;color:#B91C1C;border:1.5px solid #FCA5A5;padding:11px;border-radius:11px;font-size:14px;font-weight:800;cursor:pointer;' }, 'Deny');
@@ -330,7 +339,7 @@
       card.appendChild(cl);
     }
     // Your own request — you can take it back, approved or not.
-    if (!isApprover && canWithdraw(r)) {
+    if ((!isApprover || torOwn(r)) && canWithdraw(r)) {
       var wd = el('button', { type: 'button', class: 'kt-btn kt-btn-secondary',
         style: 'width:100%;margin-top:12px;justify-content:center;' }, 'Withdraw');
       wd.onclick = function () { withdrawTor(r); };
@@ -364,11 +373,11 @@
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(torWhen(r))}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:12.5px;color:#475569;">${decidedCell(r)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span>${torReview(r) ? REVIEW_PILL : ''}${r.closed_for_dates && status === 'approved' ? '<div style="font-size:11.5px;color:#92400E;font-weight:700;">🔒 Centre closed</div>' : ''}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${isApprover && torReview(r) ? `<button data-reviewed="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Reviewed</button>` : ''}${isApprover && status === 'pending'
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${isApprover && torReview(r) && !torOwn(r) ? `<button data-reviewed="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Reviewed</button>` : ''}${isApprover && status === 'pending' && !torOwn(r)
           ? `<button data-act="approved" data-id="${r.id}" class="kt-btn kt-btn-success kt-btn-sm" style="margin-right:6px;">Approve</button><button data-act="denied" data-id="${r.id}" class="kt-btn kt-btn-danger kt-btn-sm">Deny</button>`
           : (torCanClose(r, isApprover)
             ? `<button data-closetor="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Mark centre closed</button>`
-            : (!isApprover && canWithdraw(r)
+            : ((!isApprover || torOwn(r)) && canWithdraw(r)
               ? `<button data-withdraw="${r.id}" class="kt-btn kt-btn-secondary kt-btn-sm">Withdraw</button>` : ''))}</td>`;
       tb.appendChild(tr);
     });
@@ -3141,7 +3150,16 @@
     + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#334155;font-family:inherit;';
   var SLIP_BTN_P = 'background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:6px 12px;'
     + 'font-size:12.5px;font-weight:700;cursor:pointer;color:#1E40AF;font-family:inherit;';
-  function fmtDate(s) { if (!s) return ''; const d = new Date(s); return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
+  /* A DATE-ONLY VALUE IS A CALENDAR DAY, NOT AN INSTANT (2026-11-27). time_off_requests.start_at / end_at are DATE
+     columns, so the API sends "2026-12-18"; new Date("2026-12-18") reads that as UTC midnight, which is the evening of
+     Dec 17 anywhere west of UTC, and the list showed every request a day early (the approve popup, worded on the
+     server, was right). A bare YYYY-MM-DD is now built as that local calendar day; timestamps are unchanged. */
+  function fmtDate(s) {
+    if (!s) return '';
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s));
+    const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(s);
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
   /* SMS / call timestamps, in the AGENCY timezone (kt-tz.js). "Today, 3:37 p.m." or
      "26 Sep, 3:37 p.m."; the tooltip adds the year and seconds for the record. */
   function smsStamp(ts) {

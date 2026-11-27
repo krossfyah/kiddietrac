@@ -578,6 +578,12 @@ final class TimeOffController extends Controller
         $row = DB::table('time_off_requests')->where('id', $id)->first();
         abort_unless($row, 404);
         $this->assertAgencyAccess($request, (int) $row->agency_id);
+        /* NOBODY DECIDES THEIR OWN TIME OFF (2026-11-27, HR Phase 4). A director or admin who asks for leave saw their own
+           request in Team requests with Approve / Deny, and the server accepted it. Someone else decides; the person can
+           still withdraw it from their own list (cancel). Same rule as markReviewed and the email buttons below. */
+        if ((int) $row->user_id === (int) $request->user()->id) {
+            return response()->json(['message' => 'Someone else approves or declines your own time off. You can withdraw it from Your requests.'], 403);
+        }
         $mode = $data['close'] ?? 'auto';
         $centre = $mode === 'centre' ? $this->checkedCentre($row, $data['close_centre_id'] ?? null) : null;
         abort_if($mode === 'centre' && ! $centre, 422, 'Choose the centre to close.');
@@ -778,6 +784,12 @@ final class TimeOffController extends Controller
                 ->header('Content-Type', 'text/html');
         }
 
+        if ((int) $approver->id === (int) $row->user_id) {   // nobody decides their own time off (2026-11-27)
+            return response($this->actShell('Someone else decides this one.',
+                'This is your own request, so another director or an agency admin approves or declines it.'), 403)
+                ->header('Content-Type', 'text/html');
+        }
+
         if ($row->status !== 'pending') {
             $by = DB::table('users')->where('id', $row->decided_by_id)
                 ->selectRaw("TRIM(CONCAT(COALESCE(first_name,''),' ',COALESCE(last_name,''))) as n")->value('n');
@@ -803,6 +815,11 @@ final class TimeOffController extends Controller
         $approver = $row ? DB::table('users')->where('id', (int) $request->query('u')) ->first() : null;
         if (! $row || ! $approver || ! $this->isApproverFor((int) $approver->id, (int) $row->agency_id)) {
             return response($this->actShell('You cannot action this request.', ''), 403)
+                ->header('Content-Type', 'text/html');
+        }
+        if ((int) $approver->id === (int) $row->user_id) {   // nobody decides their own time off (2026-11-27)
+            return response($this->actShell('Someone else decides this one.',
+                'This is your own request, so another director or an agency admin approves or declines it.'), 403)
                 ->header('Content-Type', 'text/html');
         }
         if ($row->status !== 'pending') {
