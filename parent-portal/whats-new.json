@@ -4,6 +4,30 @@
         {
             "type": "improved",
             "date": "2026-11-27",
+            "icon": "🔑",
+            "title": "Welcome emails: a set-password link, no more temporary passwords",
+            "body": "New parents, staff and directors now get a secure \"Set your password\" link in their welcome email instead of a printed temporary password. It works once and lasts 7 days. Resend invite (on a user's record and in HR) sends the same link, and anyone who already has a temporary password can keep using it. Manual sign-in still shows you a temporary password to pass on yourself; it is never emailed.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🎯",
+            "title": "Campaign News posts reach only the campaign's audience",
+            "body": "When a campaign posts to News, only the people it was aimed at see it: a staff campaign shows to staff, a waitlist campaign to those waitlist families, a centre campaign to that centre. Posts sent to educators or admins only no longer show in families' News either.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
             "icon": "🧑‍💼",
             "title": "Human Resources, one entry per job",
             "body": "The Human Resources menu now has its own entry for each part: HR dashboard, People, Time off, Absence & lateness, Rota & shifts, Clock-ins & timesheets, Payroll, Hiring & onboarding, Performance & learning, Educator awards, Health & safety, Documents & letters, HR reports and HR settings. Schedule moved here from Operations as Rota & shifts, and Educator awards moved in with its settings as a tab.",

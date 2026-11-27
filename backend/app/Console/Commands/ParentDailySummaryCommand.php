@@ -325,7 +325,13 @@ class ParentDailySummaryCommand extends Command
             ]);
 
         // Announcements sent to this child's centre (or agency) today.
+        /* Only ones meant for families, and a marketing campaign's post only when it lists this family
+           (2026-11-27, App\Support\CampaignNews): staff-only and waitlist-only posts were in every summary. */
+        $famUsers = DB::table('guardians')->where('family_id', (int) ($child->family_id ?? 0))->whereNotNull('user_id')->pluck('user_id')->all();
         $announcements = DB::table('announcements')
+            ->whereNotNull('sent_at')
+            ->where(fn ($w) => \App\Support\CampaignNews::familyAudience($w))
+            ->where(fn ($w) => \App\Support\CampaignNews::visibleToAny($w, $famUsers))
             ->where(function ($q) use ($child) {
                 $q->where(fn ($w) => $w->where('scope_type', 'centre')->where('scope_id', $child->centre_id))
                   ->orWhere(fn ($w) => $w->where('scope_type', 'agency')->where('scope_id', $child->agency_id));

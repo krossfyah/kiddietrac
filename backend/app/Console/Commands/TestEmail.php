@@ -31,7 +31,7 @@ final class TestEmail extends Command
             Mail::to($email)->send((new WelcomeEmail(
                 recipientName: 'Test User',
                 recipientEmail: $email,
-                tempPassword: 'TestPass123',
+                setPasswordUrl: \App\Support\SetPasswordLink::PORTAL . '/set-password.html?token=SAMPLE-PREVIEW-TOKEN',
                 centreName: 'Test Centre',
                 role: 'parent',
                 childNames: 'Test Child',

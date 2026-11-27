@@ -6920,8 +6920,12 @@ final class AdminController extends Controller
 
     /**
      * POST /admin/users/{user}/resend-welcome
-     * Re-send the welcome invite email. Always generates a fresh temp password
-     * since the previous one was effectively lost.
+     * Re-send the welcome invite email (user record, Users list, HR "Resend invite").
+     *
+     * NO PASSWORD IN THE EMAIL (2026-11-27, Anthony). A never-claimed account is emailed a one-time
+     * "Set your password" link (App\Support\SetPasswordLink: 7 days, works once). Its password is NOT
+     * changed, so a temporary password someone already received keeps working. Body {manual:true} is
+     * "Manual sign-in": the admin is shown a temporary password to read out, and nothing is emailed.
      */
     public function resendWelcome(Request $request, int $userId): JsonResponse
     {
@@ -6956,7 +6960,10 @@ final class AdminController extends Controller
            account can still ask for it explicitly with reset_password=true. */
         $wasClaimed = ! in_array((string) $user->status, ['invited', 'not_invited'], true);
         $forceReset = $request->boolean('reset_password');
-        $issueTemp = $forceReset || ! $wasClaimed;
+        // Only "Manual sign-in" makes a temporary password now, and it is shown to the admin, never emailed.
+        $manual = $request->boolean('manual');
+        $issueTemp = $manual;
+        $sendInvite = ! $manual && ($forceReset || ! $wasClaimed);
 
         $tempPassword = null;
         if ($issueTemp) {
@@ -6976,17 +6983,9 @@ final class AdminController extends Controller
         $name = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
 
         if ($issueTemp) {
-            $emailed = $this->sendAccountEmail(
-                $user->email,
-                $name,
-                'Welcome to Kiddietrac',
-                "Welcome to Kiddietrac!\n\n" .
-                "Your account is ready at https://app.kiddietrac.com\n\n" .
-                "Temporary password: {$tempPassword}\n\n" .
-                "Sign in with it, then change it under your profile." .
-                $this->signInHint($user),
-                $agencyId
-            );
+            $emailed = false;   // manual sign-in: the admin passes it on; no password ever goes by email
+        } elseif ($sendInvite) {
+            $emailed = $this->sendWelcomeLink($request, $user, $userId, $name, (int) $agencyId);
         } else {
             /* A reset link rather than a temp password: it proves they own the
                address, needs nothing typed twice, and leaves their current password
@@ -7052,22 +7051,55 @@ final class AdminController extends Controller
             }
         }
 
+        $mode = $issueTemp ? 'manual' : ($sendInvite ? 'set_password_link' : 'reset_link');
         $this->audit($request->user()->id, 'user.welcome_resent', 'user', $userId, [
             'email_sent' => $emailed,
-            'mode' => $issueTemp ? 'temp_password' : 'reset_link',
+            'mode' => $mode,
             'was_claimed' => $wasClaimed,
         ]);
 
         return response()->json([
             'message' => $issueTemp
-                ? ($emailed ? 'Welcome email sent with a temporary password.'
-                            : 'Welcome email failed to send (temp password saved — share it manually).')
-                : ($emailed ? 'This account is already in use, so a password-reset link was sent instead — their current password still works.'
-                            : 'Could not send the reset link. Their current password is unchanged.'),
+                ? 'Temporary password made. Share it with them directly; nothing was emailed.'
+                : ($sendInvite
+                    ? ($emailed ? 'Welcome email sent with a link to set their password (works once, for ' . \App\Support\SetPasswordLink::DAYS . ' days).'
+                                : 'The welcome email could not be sent. Nothing about their account was changed.')
+                    : ($emailed ? 'This account is already in use, so a password-reset link was sent instead — their current password still works.'
+                                : 'Could not send the reset link. Their current password is unchanged.')),
             'temp_password' => $tempPassword,
             'email_sent'    => $emailed,
-            'mode'          => $issueTemp ? 'temp_password' : 'reset_link',
+            'mode'          => $mode,
         ]);
+    }
+
+    /**
+     * The welcome email with a one-time "Set your password" link (2026-11-27). Changes nothing on the account
+     * except moving a never-invited one to 'invited'; its password (and any temporary one already sent) still works.
+     */
+    private function sendWelcomeLink(Request $request, object $user, int $userId, string $name, ?int $agencyId): bool
+    {
+        try {
+            $link = \App\Support\SetPasswordLink::issue($userId, (string) $user->email, $request->ip());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Welcome link failed', ['user' => $userId, 'error' => $e->getMessage()]);
+            return false;
+        }
+        if ((string) $user->status === 'not_invited') {
+            DB::table('users')->where('id', $userId)->update(['status' => 'invited', 'updated_at' => now()]);
+        }
+
+        return $this->sendAccountEmail(
+            (string) $user->email,
+            $name,
+            'Welcome to Kiddietrac',
+            "Welcome to Kiddietrac!\n\n" .
+            "Your account is ready. Use the button below to choose your own password, then sign in with your email and that password.\n\n" .
+            "The link works once and expires in " . \App\Support\SetPasswordLink::DAYS . " days. If it has expired, use \"Forgot password\" on the sign-in page." .
+            $this->signInHint($user),
+            $agencyId,
+            'Set your password',
+            $link
+        );
     }
 
     /**
@@ -7380,7 +7412,8 @@ final class AdminController extends Controller
     }
 
     /**
-     * Give one never-claimed guardian a temporary password and email it.
+     * Send one never-claimed guardian their welcome: a one-time "Set your password" link (2026-11-27; it emailed a
+     * temporary password). Their password is not changed, so one they already received keeps working.
      *
      * Mirrors resendWelcome's unclaimed branch — the caller has ALREADY checked the
      * status, and this checks again rather than trusting it, because the cost of
@@ -7393,26 +7426,7 @@ final class AdminController extends Controller
             return false;
         }
 
-        $temp = Str::random(12);
-        DB::transaction(function () use ($userId, $temp) {
-            DB::table('users')->where('id', $userId)->update([
-                'password'   => Hash::make($temp),
-                'status'     => 'invited',
-                'updated_at' => now(),
-            ]);
-            DB::table('personal_access_tokens')->where('tokenable_id', $userId)->delete();
-        });
-
-        return $this->sendAccountEmail(
-            $email,
-            $name,
-            'Welcome to Kiddietrac',
-            "Welcome to Kiddietrac!\n\n" .
-            "Your account is ready at https://app.kiddietrac.com\n\n" .
-            "Temporary password: {$temp}\n\n" .
-            "Sign in with it, then change it under your profile.",
-            $agencyId
-        );
+        return $this->sendWelcomeLink(request(), (object) (['email' => $email] + (array) $user), $userId, $name, $agencyId);
     }
 
     /** GET /admin/email-template/provider-welcome — the agency's editable blocks. */
@@ -7925,7 +7939,8 @@ final class AdminController extends Controller
      * v22p3.3: was Mail::raw() — now uses the branded HTML layout with
      * logo, primary colour, and footer (privacy + terms + contact).
      */
-    private function sendAccountEmail(string $to, string $name, string $subject, string $body, ?int $agencyId = null): bool
+    private function sendAccountEmail(string $to, string $name, string $subject, string $body, ?int $agencyId = null,
+        ?string $ctaLabel = null, ?string $ctaUrl = null): bool
     {
         /* Onboarding emails carry the Google Play card (2026-10-28): every caller here is a welcome, an invitation or a
            pick-up login except the password reset, which is told apart by its subject. */
@@ -7938,8 +7953,8 @@ final class AdminController extends Controller
                 recipientName: $name ?: 'there',
                 subjectLine:   $subject,
                 bodyText:      $body,
-                ctaLabel:      'Sign in to Kiddietrac',
-                ctaUrl:        config('app.url', 'https://app.kiddietrac.com'),
+                ctaLabel:      $ctaLabel ?: 'Sign in to Kiddietrac',
+                ctaUrl:        $ctaUrl ?: config('app.url', 'https://app.kiddietrac.com'),
                 agencyId:      $agencyId,
                 showApp:       $showApp,
             );

@@ -219,7 +219,7 @@
           { title: 'Minimum wages used (checked ' + day(mw.checked) + ')', cols: [['name', 'Province / state'], ['rates', 'Rates', txt(function (v) { return esc((v || []).map(function (x) { return money(x.rate) + ' from ' + day(x.from); }).join(' · ')); }, function (v) { return (v || []).map(function (x) { return x.rate + ' from ' + x.from; }).join('; '); })], ['note', 'Note'], ['source', 'Source']], rows: mw.regions }] };
     }
     if (k === 'invites') return { stats: [[d.signed_in + ' of ' + d.people, 'Have signed in'], [d.expired, 'Invites expired']],
-      note: 'Staff who have never signed in. An invite older than ' + d.invite_days + ' days is marked expired (change it in the Dashboard settings). ' + (can.admin ? 'Resend sends a new welcome email with a new temporary password.' : 'An agency admin can resend the invite.'),
+      note: 'Staff who have never signed in. An invite older than ' + d.invite_days + ' days is marked expired (change it in the Dashboard settings). ' + (can.admin ? 'Resend emails a new welcome with a link to set their own password (works once, for 7 days); any password they already have keeps working.' : 'An agency admin can resend the invite.'),
       tables: [{ title: 'Not signed in yet', cols: [['name', 'Name'], ['centre', 'Centre'], ['email', 'Email'], ['invited_on', 'Invited', 'day'], ['days', 'Days ago', 'num'],
           ['expired', 'Invite', txt(function (v, r) { return r.no_email ? pill('#F1F5F9', '#475569', 'No email address') : v ? pill('#FEF2F2', '#B91C1C', 'Expired') : pill('#E0F2FE', '#075985', 'Waiting'); }, function (v, r) { return r.no_email ? 'No email address' : v ? 'Expired' : 'Waiting'; })]], rows: d.rows,
         act: function (r) { return [can.admin && !r.no_email ? ['Resend invite', function () { resend(r); }] : null, KT.openUserRecord ? ['View user', function () { try { KT.openUserRecord(r.user_id); } catch (e) {} }] : null]; } }] };
@@ -304,7 +304,7 @@
   }
 
   async function resend(r) {
-    var box = el('<div>Send <b data-no-i18n>' + esc(r.name) + '</b> a new welcome email at <b data-no-i18n>' + esc(r.email) + '</b>? It carries a new temporary password; any earlier one stops working.</div>' + ERR);
+    var box = el('<div>Send <b data-no-i18n>' + esc(r.name) + '</b> a new welcome email at <b data-no-i18n>' + esc(r.email) + '</b>? It carries a link to set their own password (works once, for 7 days). Any password they already have keeps working.</div>' + ERR);
     modal({ title: 'Resend invite', body: box, actions: [{ label: 'Cancel' }, { label: 'Resend', primary: true, busyLabel: 'Sending…', handler: function () {
       return Api.post('/admin/users/' + r.user_id + '/resend-welcome', {}).then(function (x) {
         toast(x && x.email_sent ? '✅' : '⚠️', x && x.email_sent ? 'Invite sent' : 'Not sent', (x && x.message) || '', x && x.email_sent ? '#16A34A' : '#B45309');

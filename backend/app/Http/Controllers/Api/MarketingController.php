@@ -367,9 +367,21 @@ final class MarketingController extends Controller
         // scheduled command — for now we just mark recipient_count so the
         // operator sees the projected fan-out.
         if (in_array($row->channel, ['in_portal', 'both'], true)) {
-            DB::table('announcements')->insert([
+            /* ONLY THE CAMPAIGN'S PEOPLE SEE IT (2026-11-27, App\Support\CampaignNews). This row was scoped to the
+               whole centre/agency as 'parents', so a staff-only or waitlist-only campaign showed in every family's
+               News. It is now linked to the campaign and lists exactly the people the campaign resolved to; every
+               News reader shows a campaign row to listed people only (no list = nobody). */
+            if (! \App\Support\CampaignNews::ready()) {
+                DB::table('marketing_campaigns')->where('id', $id)->update(['status' => $row->status, 'updated_at' => now()]);
+                return response()->json(['message' => 'Campaigns cannot post to News right now. Please try again shortly.'], 503);
+            }
+            $annId = DB::table('announcements')->insertGetId([
                 'scope_type' => $row->centre_id ? 'centre' : 'agency',
                 'scope_id' => $row->centre_id ?: $agencyId,
+                'agency_id' => $agencyId,
+                'audience' => \App\Support\CampaignNews::audienceFor($row->audience),
+                'ref_type' => \App\Support\CampaignNews::REF,
+                'ref_id' => (int) $row->id,
                 // The News post is one copy every family reads, so {first_name} reads "there" ("Hi there,").
                 'title' => \App\Support\CampaignMerge::text($row->title, null),
                 // The header and footer go out with it, so the in-portal copy reads
@@ -381,6 +393,7 @@ final class MarketingController extends Controller
                 'created_by_id' => $row->created_by_user_id,
                 'created_at' => now(),
             ]);
+            \App\Support\CampaignNews::record((int) $annId, $recipients);
         }
 
         /* Only the in-portal copy has been delivered at this point. The email goes out from

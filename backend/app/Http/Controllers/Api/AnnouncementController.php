@@ -341,6 +341,26 @@ final class AnnouncementController extends Controller
             );
 
         $rows = $q->get();
+        /* WHO IT WAS FOR (2026-11-27, fail closed). Staff News matched on scope alone: an educator read posts for
+           admins and directors only, and every staff member read a campaign meant for waitlist families. A post
+           for families or everyone stays visible to staff in scope (they look after those families); anything
+           narrower is shown only to the people it was for, or to someone who could have sent it there. */
+        $uidInt = (int) $user->id;
+        $manageMemo = [];
+        $forMemo = [];
+        $rows = $rows->filter(function ($a) use ($uidInt, &$manageMemo, &$forMemo) {
+            $campaign = \App\Support\CampaignNews::isCampaign($a);
+            $aud = $a->audience ?: 'parents';
+            if (! $campaign && in_array($aud, ['parents', 'all'], true)) return true;
+            if ((int) $a->created_by_id === $uidInt) return true;
+            $sk = $a->scope_type . ':' . $a->scope_id;
+            if (! isset($manageMemo[$sk])) $manageMemo[$sk] = in_array($a->scope_type, ['agency', 'centre', 'room'], true) && $this->canBroadcast($uidInt, $a->scope_type, (int) $a->scope_id);
+            if ($manageMemo[$sk]) return true;
+            $fk = $campaign ? 'c:' . $a->id : $sk . ':' . $aud;
+            if (! isset($forMemo[$fk])) $forMemo[$fk] = array_flip(array_map('intval', $this->audienceOf($a)));
+
+            return isset($forMemo[$fk][$uidInt]);
+        })->values();
         $reminders = $this->remindersFor($rows->pluck('id')->all());
         // Just for this person (an invoice when they are also a parent; payslips live on My pay, not here).
         $personal = \App\Support\PersonalAnnouncements::forUser((int) $user->id, 20, (int) $request->header('X-Active-Agency-Id') ?: (count(array_unique($agencyIds ?? [])) === 1 ? (int) array_values(array_unique($agencyIds))[0] : null));
@@ -433,6 +453,12 @@ final class AnnouncementController extends Controller
 
         $rows = DB::table('announcements')
             ->whereNotNull('sent_at')
+            /* WHO IT WAS FOR (2026-11-27, fail closed). This feed matched on scope alone, so a staff-only post
+               (audience educators/admins/contractors/staff) and a staff-only or waitlist-only campaign showed in
+               every family's News of that centre/agency. Families get posts for families; a campaign post only
+               when it lists them (App\Support\CampaignNews). */
+            ->where(fn ($w) => \App\Support\CampaignNews::familyAudience($w))
+            ->where(fn ($w) => \App\Support\CampaignNews::visibleTo($w, (int) $user->id))
             ->where(function ($q) use ($centreIds, $roomIds, $agencyIds, $familyIds) {
                 $q->orWhere(function ($qq) use ($familyIds) {
                     $qq->where('scope_type', 'family')->whereIn('scope_id', $familyIds);
@@ -637,7 +663,7 @@ final class AnnouncementController extends Controller
     }
 
     private const AUDIENCE_LABEL = ['parents' => 'Parents', 'educators' => 'Educators', 'contractors' => 'Contractors',
-        'admins' => 'Admins and directors', 'all' => 'Everyone'];
+        'admins' => 'Admins and directors', 'all' => 'Everyone', 'staff' => 'Staff'];
 
     public function details(Request $request, int $id): JsonResponse
     {
@@ -751,7 +777,7 @@ final class AnnouncementController extends Controller
         $reached = array_keys($this->reachedUsers($id));
         $basis = 'reached';
         if (! $reached) {   // its bell rows are gone (very old): the people it is addressed to today
-            $reached = array_map('intval', $this->recipientUserIds($a->scope_type, (int) $a->scope_id, $a->audience ?: 'parents'));
+            $reached = array_map('intval', $this->audienceOf($a));
             $basis = 'addressed';
         }
         // Only accounts still open: a closed or suspended account gets nothing.
@@ -930,7 +956,7 @@ final class AnnouncementController extends Controller
             }
             $ids = ($a->remind_who ?? 'all') === 'pending'
                 ? $this->pendingUserIds($a)
-                : $this->recipientUserIds($a->scope_type, (int) $a->scope_id, $a->audience ?: 'parents');
+                : $this->audienceOf($a);
             $delivered = 0;
             if ($ids) {
                 $sender = DB::table('users')->where('id', $a->created_by_id)->first();
@@ -971,7 +997,7 @@ final class AnnouncementController extends Controller
     /** Recipients who have not done it. A parent is done when anyone in their family is. */
     private function pendingUserIds(object $a): array
     {
-        $all = $this->recipientUserIds($a->scope_type, (int) $a->scope_id, $a->audience ?: 'parents');
+        $all = $this->audienceOf($a);
 
         return array_values(array_diff($all, $this->doneUserIds((int) $a->id)));
     }
@@ -1022,7 +1048,7 @@ final class AnnouncementController extends Controller
         $out = $none;
         $out['my_done'] = in_array($userId, $done, true);
         if ($withCounts) {
-            $all = $this->recipientUserIds($a->scope_type, (int) $a->scope_id, $a->audience ?: 'parents');
+            $all = $this->audienceOf($a);
             $out['recipient_count'] = count($all);
             $out['done_count'] = count(array_intersect($all, $done));
             $out['for_me'] = in_array($userId, array_map('intval', $all), true);
@@ -1042,7 +1068,7 @@ final class AnnouncementController extends Controller
         if (! $a || empty($a->sent_at) || ($a->remind_who ?? null) !== 'pending') {
             return response()->json(['message' => 'That announcement is not asking for anything.'], 404);
         }
-        $all = array_map('intval', $this->recipientUserIds($a->scope_type, (int) $a->scope_id, $a->audience ?: 'parents'));
+        $all = array_map('intval', $this->audienceOf($a));
         if (! in_array((int) $user->id, $all, true)) {
             return response()->json(['message' => 'That announcement was not sent to you.'], 403);
         }
@@ -1085,7 +1111,7 @@ final class AnnouncementController extends Controller
         if (! $a || ! $this->canBroadcast((int) $user->id, $a->scope_type, (int) $a->scope_id)) {
             return response()->json(['message' => 'Not found.'], 404);
         }
-        $all = array_map('intval', $this->recipientUserIds($a->scope_type, (int) $a->scope_id, $a->audience ?: 'parents'));
+        $all = array_map('intval', $this->audienceOf($a));
         $tapped = DB::table('announcement_done')->where('announcement_id', $id)->pluck('done_at', 'user_id')->all();
         $doneIds = $this->doneUserIds($id);
         $people = $all ? DB::table('users')->whereIn('id', $all)->get(['id', 'first_name', 'last_name', 'email']) : collect();
@@ -1394,6 +1420,8 @@ final class AnnouncementController extends Controller
     private const AUDIENCE_ROLES = [
         'educators' => ['educator'],
         'admins' => ['agency_admin', 'centre_director'],
+        // A staff-only marketing campaign (2026-11-27): everyone on staff.
+        'staff' => ['agency_admin', 'centre_director', 'educator'],
     ];
 
     /**
@@ -1432,6 +1460,19 @@ final class AnnouncementController extends Controller
         }
 
         return $q->pluck('user_id')->unique()->all();
+    }
+
+    /**
+     * Who ONE stored announcement is for. A marketing campaign's News post (App\Support\CampaignNews) is for the
+     * people listed when it was sent, and nobody else: never the whole scope (2026-11-27).
+     */
+    private function audienceOf(object $a): array
+    {
+        if (\App\Support\CampaignNews::isCampaign($a)) {
+            return \App\Support\CampaignNews::recipients((int) $a->id);
+        }
+
+        return $this->recipientUserIds($a->scope_type, (int) $a->scope_id, $a->audience ?: 'parents');
     }
 
     private function recipientUserIds(string $scopeType, int $scopeId, string $audience = 'parents'): array

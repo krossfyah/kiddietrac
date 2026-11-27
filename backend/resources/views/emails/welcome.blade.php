@@ -1,4 +1,4 @@
-@include('emails.layout', ['title' => 'Welcome to Kiddietrac', 'preheader' => 'You\'ve been invited to ' . $centreName . ' on Kiddietrac. Your login details are inside.', 'appUrl' => $appUrl, 'content' => '
+@include('emails.layout', ['title' => 'Welcome to Kiddietrac', 'preheader' => 'You\'ve been invited to ' . $centreName . ' on Kiddietrac. ' . (! empty($setPasswordUrl) ? 'Set your password to get started.' : 'Sign in to get started.'), 'appUrl' => $appUrl, 'content' => '
 <h1>Hi ' . e($recipientName) . ',</h1>
 
 ' . ($role === 'parent'
@@ -12,11 +12,12 @@
 
 <h2>Your login</h2>
 <div class="creds">
-<strong>Email:</strong> ' . e($recipientEmail) . '<br>
-<strong>Temporary password:</strong> ' . e($tempPassword) . '
+<strong>Email:</strong> ' . e($recipientEmail) . '
 </div>
 
-<p><a href="' . e($appUrl) . '" class="btn">Log in to Kiddietrac</a></p>
-
-<p style="font-size: 13px; color: #6B7280;">Please change your password after your first login. If you didn\'t expect this email, you can safely ignore it.</p>
+' . (! empty($setPasswordUrl)
+    ? '<p><a href="' . e($setPasswordUrl) . '" class="btn">Set your password</a></p>
+<p style="font-size: 13px; color: #6B7280;">This link works once and expires in ' . \App\Support\SetPasswordLink::DAYS . ' days. After that, sign in with your email and the password you chose. If it has expired, use "Forgot password" on the sign-in page. If you didn\'t expect this email, you can safely ignore it.</p>'
+    : '<p><a href="' . e($appUrl) . '" class="btn">Log in to Kiddietrac</a></p>
+<p style="font-size: 13px; color: #6B7280;">Sign in with your email and the password you chose. If you didn\'t expect this email, you can safely ignore it.</p>') . '
 '])

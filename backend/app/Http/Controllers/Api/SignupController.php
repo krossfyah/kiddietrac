@@ -164,7 +164,7 @@ final class SignupController extends Controller
             Mail::to($data['director_email'])->send((new WelcomeEmail(
                 recipientName: $data['director_first_name'],
                 recipientEmail: $data['director_email'],
-                tempPassword: '(use the password you just set during signup)',
+                setPasswordUrl: null,   // they chose a password while signing up: the email says to sign in with it
                 centreName: $data['centre_name'],
                 role: 'director',
             ))->withSymfonyMessage(function ($msg) use ($agencyId) {

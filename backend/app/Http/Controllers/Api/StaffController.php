@@ -90,7 +90,6 @@ final class StaffController extends Controller
         ]);
 
         $existing = DB::table('users')->where('email', $data['email'])->first();
-        $tempPassword = null;
         $isNewUser = false;
 
         $centre = DB::table('centres')->where('id', $centreId)->first();
@@ -112,10 +111,11 @@ final class StaffController extends Controller
             $userId = (int) $existing->id;
         } else {
             $isNewUser = true;
-            $tempPassword = Str::random(12);
+            /* NO TEMPORARY PASSWORD (2026-11-27, Anthony): the account gets a password nobody knows, and the
+               welcome email carries a one-time "Set your password" link (App\Support\SetPasswordLink). */
             $userId = (int) DB::table('users')->insertGetId([
                 'email' => $data['email'],
-                'password' => Hash::make($tempPassword),
+                'password' => \App\Support\SetPasswordLink::unusablePassword(),
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
                 'locale' => 'en-CA',
@@ -139,7 +139,7 @@ final class StaffController extends Controller
                 Mail::to($data['email'])->send((new WelcomeEmail(
                     recipientName: $data['first_name'],
                     recipientEmail: $data['email'],
-                    tempPassword: $tempPassword,
+                    setPasswordUrl: \App\Support\SetPasswordLink::issue($userId, (string) $data['email'], $request->ip()),
                     centreName: $centre->name,
                     role: $data['role'] === 'centre_director' ? 'director' : 'educator',
                 ))->withSymfonyMessage(function ($msg) use ($centre) {
@@ -154,7 +154,6 @@ final class StaffController extends Controller
         return response()->json([
             'message' => $existing ? 'Existing user added to centre' : 'New user invited',
             'user_id' => $userId,
-            'temp_password' => $tempPassword,
             'email_sent' => $emailSent,
         ], 201);
     }

@@ -2291,7 +2291,7 @@
       + '<div style="font-size:12px;color:#475569;margin-top:12px;padding-top:10px;border-top:1px solid #E2E8F0;">'
       + (emailSent
           ? 'The welcome email was accepted for delivery. Check the email log to confirm it was not suppressed.'
-          : 'The email did not send. Share these details directly.')
+          : 'Nothing was emailed. Share these details with them directly; they choose their own password when they sign in.')
       + '</div>';
     var copy = Dom.el('button', { class: 'kt-btn kt-btn-secondary kt-btn-sm',
       'data-kt-iconized': '1', style: 'margin-top:12px;' }, 'Copy details');
@@ -2313,7 +2313,7 @@
     if (!await _confirm('Generate a temporary password for ' + (u.name || u.email)
         + '? Their current password will stop working.')) { return; }
     try {
-      var r = await Api.post('/admin/users/' + u.id + '/resend-welcome', {});
+      var r = await Api.post('/admin/users/' + u.id + '/resend-welcome', { manual: true });
       showSignInDetails(u, r && r.temp_password, !!(r && r.email_sent));
     } catch (e) {
       _toast('⚠️', 'Could not generate a link', (e && e.message) || 'error', '#DC2626');
@@ -2331,7 +2331,8 @@
     var msg = _claimed(u)
       ? (who + ' has already signed in, so this sends a password-reset link. '
          + 'Their current password keeps working until they choose a new one. Continue?')
-      : ('Resend the welcome invite to ' + who + '? A new temporary password will be generated.');
+      : ('Resend the welcome invite to ' + who + '? They are emailed a link to set their own password (it works once, for 7 days). '
+         + 'Any password they already have keeps working.');
     if (!await _confirm(msg)) return;
     try {
       var r = await Api.post('/admin/users/' + u.id + '/resend-welcome', {});
@@ -4060,7 +4061,7 @@
       const restore = 'Manual sign-in link';
       linkBtn.textContent = 'Generating...';
       try {
-        const r = await Api.post('/admin/users/' + user.id + '/resend-welcome', {});
+        const r = await Api.post('/admin/users/' + user.id + '/resend-welcome', { manual: true });
         const portal = 'https://app.kiddietrac.com';
         const who = user.username ? (user.email + '  (username: ' + user.username + ')') : user.email;
         const pw = r.temp_password || '(not returned)';
@@ -4084,7 +4085,7 @@
           + '<div style="font-size:12px;color:#475569;margin-top:10px;">'
           + (r.email_sent
               ? 'The welcome email was accepted for delivery. Check the email log to confirm it was not suppressed.'
-              : 'The email did not send. Share these details directly.')
+              : 'Nothing was emailed. Share these details with them directly; they choose their own password when they sign in.')
           + '</div>';
         const copy = Dom.el('button', { class: 'kt-btn kt-btn-secondary kt-btn-sm',
           'data-kt-iconized': '1', style: 'margin-top:10px;' }, 'Copy details');
@@ -4140,7 +4141,8 @@
       if (!await KT.confirm(_alreadyIn
         ? (user.email + ' has already signed in, so this sends a password-reset link — '
            + 'their current password keeps working until they choose a new one. Continue?')
-        : ('Resend the welcome invite to ' + user.email + '? A new temporary password will be generated.'))) return;
+        : ('Resend the welcome invite to ' + user.email + '? They are emailed a link to set their own password (it works once, for 7 days). '
+           + 'Any password they already have keeps working.'))) return;
       resendBtn.disabled = true; resendBtn.textContent = 'Sending...';
       try {
         const r = await Api.post('/admin/users/' + user.id + '/resend-welcome', {});

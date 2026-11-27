@@ -17,7 +17,9 @@ final class WelcomeEmail extends Mailable
     public function __construct(
         public readonly string $recipientName,
         public readonly string $recipientEmail,
-        public readonly string $tempPassword,
+        // A one-time set-password link (App\Support\SetPasswordLink), never a password (2026-11-27).
+        // Null = the account already has a password (director signup): the email says to sign in with it.
+        public readonly ?string $setPasswordUrl,
         public readonly string $centreName,
         public readonly string $role, // 'parent', 'educator', 'director'
         public readonly ?string $childNames = null,
@@ -38,7 +40,7 @@ final class WelcomeEmail extends Mailable
         }
 
         return $this->framed ??= \App\Support\FamilyNoticeMail::welcome($this->agencyId, $this->centreId,
-            $this->recipientName, $this->recipientEmail, $this->tempPassword, $this->childNames,
+            $this->recipientName, $this->recipientEmail, $this->setPasswordUrl, $this->childNames,
             (string) config('app.url', 'https://app.kiddietrac.com'));
     }
 
@@ -66,7 +68,7 @@ final class WelcomeEmail extends Mailable
             with: [
                 'recipientName' => $this->recipientName,
                 'recipientEmail' => $this->recipientEmail,
-                'tempPassword' => $this->tempPassword,
+                'setPasswordUrl' => $this->setPasswordUrl,
                 'centreName' => $this->centreName,
                 'role' => $this->role,
                 'childNames' => $this->childNames,

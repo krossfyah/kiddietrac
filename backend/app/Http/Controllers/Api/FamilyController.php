@@ -200,7 +200,6 @@ final class FamilyController extends Controller
         ]);
 
         $existingUser = DB::table('users')->where('email', $data['email'])->first();
-        $tempPassword = null;
         $isNewUser = false;
 
         if ($existingUser) {
@@ -212,10 +211,11 @@ final class FamilyController extends Controller
             }
         } else {
             $isNewUser = true;
-            $tempPassword = Str::random(12);
+            /* NO TEMPORARY PASSWORD (2026-11-27, Anthony): the account gets a password nobody knows, and the
+               welcome email carries a one-time "Set your password" link (App\Support\SetPasswordLink). */
             $userId = (int) DB::table('users')->insertGetId([
                 'email' => $data['email'],
-                'password' => Hash::make($tempPassword),
+                'password' => \App\Support\SetPasswordLink::unusablePassword(),
                 'first_name' => $data['first_name'],
                 'last_name' => $data['last_name'],
                 'locale' => 'en-CA',
@@ -257,7 +257,7 @@ final class FamilyController extends Controller
                 Mail::to($data['email'])->send((new WelcomeEmail(
                     recipientName: $data['first_name'],
                     recipientEmail: $data['email'],
-                    tempPassword: $tempPassword,
+                    setPasswordUrl: \App\Support\SetPasswordLink::issue($userId, (string) $data['email'], $request->ip()),
                     centreName: $centre->name,
                     role: 'parent',
                     childNames: $childNames ?: null,
@@ -311,7 +311,6 @@ final class FamilyController extends Controller
         return response()->json([
             'message' => $existingUser ? 'Existing user added to family' : 'New parent invited',
             'user_id' => $userId,
-            'temp_password' => $tempPassword,
             'email_sent' => $emailSent,
         ], 201);
     }

@@ -97,14 +97,14 @@ final class FamilyNoticeMail
      * when a director adds a guardian who has no account yet). It used the old KiddieTrac-only Blade layout
      * (emails.welcome); now the house frame, so a white-label agency's branding, footer and dark palette apply.
      *
-     * The content is the same as before: the sign-in email, the temporary password the invite created (the only way
-     * this flow gives one; it is printed exactly as the Blade one was, never stored or logged here), the same sign-in
-     * link ($appUrl), and "please change your password after your first login". The centre is named the way families
-     * know it (FamilyFacingName: the agency for a provider-named home), the product by the agency's brand.
+     * NO PASSWORD IN THE EMAIL (2026-11-27, Anthony). It printed the temporary password the invite generated. It now
+     * carries a one-time "Set your password" link ($setPasswordUrl, App\Support\SetPasswordLink: 7 days, works once,
+     * void once used). With no link (an account that already has a password) it says to sign in with it. The centre
+     * is named the way families know it (FamilyFacingName), the product by the agency's brand.
      *
      * @return array{subject:string, html:string}
      */
-    public static function welcome(?int $agencyId, ?int $centreId, string $first, string $email, string $tempPassword,
+    public static function welcome(?int $agencyId, ?int $centreId, string $first, string $email, ?string $setPasswordUrl,
         ?string $childNames, string $appUrl): array
     {
         $org = FamilyFacingName::org($centreId, $agencyId, 'your child care');
@@ -112,8 +112,8 @@ final class FamilyNoticeMail
         $team = self::team($agencyId);
         $creds = '<table role="presentation" class="kt-panel" cellpadding="0" cellspacing="0" border="0" width="100%" style="width:100%;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:12px;margin:0 0 16px;"><tr>'
             . '<td style="padding:14px 18px;font-size:14px;line-height:1.7;color:#0F172A;">'
-            . '<strong>Email:</strong> ' . self::e($email) . '<br>'
-            . '<strong>Temporary password:</strong> <span style="font-family:\'SF Mono\',Menlo,Consolas,monospace;">' . self::e($tempPassword) . '</span>'
+            . '<strong>Email:</strong> ' . self::e($email)
+            . ($setPasswordUrl ? '<br>Choose your own password with the button below, then sign in with your email and that password.' : '')
             . '</td></tr></table>';
         $body = self::p('Hi ' . self::e($first) . ',')
             . self::p('You\'ve been invited by <strong>' . self::e($org) . '</strong> to use ' . self::e($product) . ', a modern way to stay connected to your child\'s day.')
@@ -121,8 +121,12 @@ final class FamilyNoticeMail
             . self::p('Through the parent app, you can see daily updates, get photos, chat with your educators, and view your billing.')
             . '<div class="kt-h" style="margin:6px 0 8px;font-size:17px;font-weight:800;color:#0B1F3A;">Your login</div>'
             . $creds
-            . self::button($agencyId, 'Log in to ' . $product, $appUrl)
-            . self::p('Please change your password after your first login. If you didn\'t expect this email, you can safely ignore it.', 'font-size:13px;color:#64748B;')
+            . ($setPasswordUrl
+                ? self::button($agencyId, 'Set your password', $setPasswordUrl)
+                    . self::p('This link works once and expires in ' . \App\Support\SetPasswordLink::DAYS . ' days. If it has expired, use "Forgot password" on the sign-in page or ask '
+                        . self::e($org) . ' to send a new invite. If you didn\'t expect this email, you can safely ignore it.', 'font-size:13px;color:#64748B;')
+                : self::button($agencyId, 'Log in to ' . $product, $appUrl)
+                    . self::p('Sign in with your email and your password. Forgot it? Use "Forgot password" on the sign-in page.', 'font-size:13px;color:#64748B;'))
             . self::signoff($team);
 
         return [
@@ -130,7 +134,7 @@ final class FamilyNoticeMail
             'html' => EmailTemplate::wrap($agencyId, $body, [
                 'eyebrow' => '👋 WELCOME', 'title' => 'Welcome to ' . $product,
                 'subtitle' => 'From ' . $org,
-                'preheader' => 'You\'ve been invited to ' . $org . ' on ' . $product . '. Your login details are inside.',
+                'preheader' => 'You\'ve been invited to ' . $org . ' on ' . $product . '. Set your password to get started.',
             ]),
         ];
     }

@@ -283,6 +283,8 @@ final class DayBriefController extends Controller
             $annRooms = $roomIds instanceof \Illuminate\Support\Collection ? $roomIds->all() : (array) $roomIds;
             $ann = DB::table('announcements')
                 ->whereNotNull('sent_at')->where('sent_at', '>=', now($tz)->subDays(3))
+                // A marketing campaign's post counts only for the people it lists (2026-11-27, CampaignNews).
+                ->where(fn ($w) => \App\Support\CampaignNews::visibleTo($w, (int) $user->id))
                 ->where(function ($q) use ($annAgency, $annCentres, $annRooms, $user) {
                     $q->where(function ($qq) use ($annAgency) {
                         $qq->where('scope_type', 'agency')->where('scope_id', $annAgency);
