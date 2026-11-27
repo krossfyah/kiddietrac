@@ -91,17 +91,22 @@ final class TimeOffController extends Controller
            by the agency only, so a director saw (and now would have seen the balances of) another centre's staff.
            Same rule as who may decide one (assertDecider): the request's centre, or a centre the requester works at. */
         $scope = \App\Support\CentreScope::ids($request, (int) $agencyId);
+        /* HR4B6 (2026-11-27): + the people and centres an approver grant or a cover gives this person (HrApprovers);
+           those rows are then kept only when via() allows them, and say why they are here. */
+        $extra = $scope !== null ? \App\Support\HrApprovers::listExtras((int) $agencyId, (int) $request->user()->id) : null;
+        $wide = $extra ? array_values(array_unique(array_merge($scope, $extra['centres']))) : $scope;
         $q = DB::table('time_off_requests as tor')
             ->join('users as u', 'u.id', '=', 'tor.user_id')
             ->where('tor.agency_id', $agencyId)
-            ->when($scope !== null, function ($w) use ($scope) {
-                $w->where(function ($s) use ($scope) {
-                    $s->whereIn('tor.centre_id', $scope ?: [0])
+            ->when($scope !== null, function ($w) use ($wide, $extra) {
+                $w->where(function ($s) use ($wide, $extra) {
+                    $s->whereIn('tor.centre_id', $wide ?: [0])
                       ->orWhere(fn ($n) => $n->whereNull('tor.centre_id')->whereExists(fn ($e) => $e->from('role_assignments as sra')
                           ->whereColumn('sra.user_id', 'tor.user_id')->where('sra.active', 1)
-                          ->whereIn('sra.role', \App\Support\Visibility::STAFF_ROLES)->whereIn('sra.centre_id', $scope ?: [0])->select(DB::raw(1))))
+                          ->whereIn('sra.role', \App\Support\Visibility::STAFF_ROLES)->whereIn('sra.centre_id', $wide ?: [0])->select(DB::raw(1))))
                       ->orWhere(fn ($n) => $n->whereNull('tor.centre_id')->whereExists(fn ($e) => $e->from('educator_rooms as er')->join('rooms as rm', 'rm.id', '=', 'er.room_id')
-                          ->whereColumn('er.user_id', 'tor.user_id')->whereIn('rm.centre_id', $scope ?: [0])->select(DB::raw(1))));
+                          ->whereColumn('er.user_id', 'tor.user_id')->whereIn('rm.centre_id', $wide ?: [0])->select(DB::raw(1))));
+                    if ($extra && $extra['users']) $s->orWhereIn('tor.user_id', $extra['users']);
                 });
             })
             ->orderByDesc('tor.start_at')
@@ -116,6 +121,19 @@ final class TimeOffController extends Controller
             ->leftJoin('users as d', 'd.id', '=', 'tor.decided_by_id');
         if ($status) $q->where('tor.status', $status);
         $rows = $q->get();
+        if ($extra) {   // HR4B6: a row reached only through a grant stays only if the grant really covers it
+            $me = (int) $request->user()->id;
+            $rows = $rows->filter(function ($r) use ($scope, $me) {
+                if (array_intersect(\App\Support\HrApprovers::requestCentres($r), $scope)) return true;
+                $via = \App\Support\HrApprovers::via($me, $r);
+                if (! $via) return false;
+                $r->via_kind = $via['kind'];
+                $r->via_label = \App\Support\HrApprovers::label($via);
+                $r->via_can_close = (bool) $via['close'];
+
+                return true;
+            })->values();
+        }
         // Which centre each request would close, and whether it already is closed for those
         // dates — so the screen can offer "Mark closed" on an approved request (2026-10-13).
         foreach ($rows as $r) {
@@ -587,7 +605,8 @@ final class TimeOffController extends Controller
         $mode = $data['close'] ?? 'auto';
         $centre = $mode === 'centre' ? $this->checkedCentre($row, $data['close_centre_id'] ?? null) : null;
         abort_if($mode === 'centre' && ! $centre, 422, 'Choose the centre to close.');
-        $this->assertDecider($request, $row, $centre ?: ($mode === 'auto' ? $this->centreFor($row) : null));
+        $via = $this->assertDecider($request, $row, $centre ?: ($mode === 'auto' ? $this->centreFor($row) : null), $mode === 'auto');
+        if ($via && ! empty($via['no_close'])) $mode = 'none';   // HR4B6: a grant never closes a centre its holder may not close
         if ($data['status'] === 'approved' && $row->status !== 'approved' && ($no = $this->negativeRefusal($row))) {
             return response()->json(['message' => $no], 422);
         }
@@ -597,6 +616,7 @@ final class TimeOffController extends Controller
         }
 
         $result = $this->applyDecision($row, $data['status'], $data['decision_notes'] ?? null, $request->user(), $mode, $centre);
+        if ($via) $this->noteGrantDecision($row, $via, $data['status'], (int) $request->user()->id);
 
         return response()->json($result);
     }
@@ -789,6 +809,11 @@ final class TimeOffController extends Controller
                 'This is your own request, so another director or an agency admin approves or declines it.'), 403)
                 ->header('Content-Type', 'text/html');
         }
+        if ($this->emailDecider((int) $approver->id, $row) === false) {   // HR4B6
+            return response($this->actShell('You cannot action this request.',
+                'You no longer approve time off for this person (a cover may have ended). Someone else will decide it.'), 403)
+                ->header('Content-Type', 'text/html');
+        }
 
         if ($row->status !== 'pending') {
             $by = DB::table('users')->where('id', $row->decided_by_id)
@@ -822,6 +847,12 @@ final class TimeOffController extends Controller
                 'This is your own request, so another director or an agency admin approves or declines it.'), 403)
                 ->header('Content-Type', 'text/html');
         }
+        $via = $this->emailDecider((int) $approver->id, $row);   // HR4B6
+        if ($via === false) {
+            return response($this->actShell('You cannot action this request.',
+                'You no longer approve time off for this person (a cover may have ended). Someone else will decide it.'), 403)
+                ->header('Content-Type', 'text/html');
+        }
         if ($row->status !== 'pending') {
             return response($this->actShell('Already decided.',
                 'Someone got to it first — no change made.'), 200)->header('Content-Type', 'text/html');
@@ -837,8 +868,11 @@ final class TimeOffController extends Controller
         }
         // The page shows the closure box only when there is one centre to close.
         $mode = $request->has('close_shown') ? ($request->input('close') === '1' ? 'centre' : 'none') : 'auto';
+        // HR4B6: through a grant, a centre is closed only when the grant allows closing that centre.
+        if (is_array($via) && $mode !== 'none' && ! in_array((int) $this->centreFor($row), $via['close'], true)) $mode = 'none';
 
         $res = $this->applyDecision($row, $status, $notes, $approver, $mode, $mode === 'centre' ? $this->centreFor($row) : null);
+        if (is_array($via)) $this->noteGrantDecision($row, $via, $status, (int) $approver->id);
 
         $msg = $status === 'approved' ? 'Approved.' : 'Declined.';
         $sub = 'We have let them know'.($notes ? ', along with your note' : '').'.'
@@ -1343,17 +1377,17 @@ final class TimeOffController extends Controller
        that centre (emailing its families). Same rule as who is asked (TimeOffReminders::approvers): an agency
        admin of the request's agency, or a director of the request's centre (or of a centre the requester works
        at), and any centre being closed must be one they direct. A platform admin only in the agency they chose. */
-    private function assertDecider(Request $request, object $row, ?int $closeCentre = null): void
+    private function assertDecider(Request $request, object $row, ?int $closeCentre = null, bool $autoClose = false): ?array
     {
         $u = $request->user();
         $agencyId = (int) $row->agency_id;
         $roles = DB::table('role_assignments')->where('user_id', $u->id)->where('active', true)->get(['role', 'agency_id', 'centre_id']);
         if ($roles->contains(fn ($r) => $r->role === 'platform_admin')) {
             abort_unless($this->resolveAgencyId($request) === $agencyId, 403);
-            return;
+            return null;
         }
         if ($roles->contains(fn ($r) => $r->role === 'agency_admin' && (int) $r->agency_id === $agencyId)) {
-            return;
+            return null;
         }
         $inAgency = \App\Support\AgencyRole::centreIds($agencyId);
         $directs = $roles->filter(fn ($r) => $r->role === 'centre_director' && $r->centre_id)
@@ -1365,8 +1399,47 @@ final class TimeOffController extends Controller
                 ->merge(DB::table('educator_rooms as er')->join('rooms as r', 'r.id', '=', 'er.room_id')
                     ->where('er.user_id', $row->user_id)->whereIn('r.centre_id', $inAgency ?: [0])->pluck('r.centre_id'))
                 ->map(fn ($v) => (int) $v)->unique()->values()->all();
-        abort_unless(array_intersect($directs, $requestCentres), 403, 'You can only decide time off for a centre you direct.');
+        if (! array_intersect($directs, $requestCentres)) {
+            /* HR4B6 (2026-11-27): an approver grant for this person, or cover for a director who is away
+               (App\Support\HrApprovers). Never more than the grant gives: a cover closes only the centres the
+               director it covers directs; a 'people' grant never closes one ("auto" then simply does not close). */
+            $via = \App\Support\HrApprovers::via((int) $u->id, $row);
+            abort_unless($via, 403, 'You can only decide time off for a centre you direct.');
+            if ($closeCentre && ! in_array((int) $closeCentre, $via['close'], true)) {
+                abort_unless($autoClose, 403, 'You can only close a centre you direct.');
+                $via['no_close'] = true;
+            }
+
+            return $via;
+        }
         abort_if($closeCentre && ! \App\Support\CentreScope::canWrite($directs, $closeCentre), 403, 'You can only close a centre you direct.');
+
+        return null;
+    }
+
+    /**
+     * HR4B6: may this approver decide THIS request from an emailed button? false = no; null = the ordinary rule
+     * (an admin of the agency, a platform admin, or a director of the request's centre); an array = through a grant.
+     */
+    private function emailDecider(int $userId, object $row)
+    {
+        $agencyId = (int) $row->agency_id;
+        $roles = DB::table('role_assignments')->where('user_id', $userId)->where('active', true)->get(['role', 'agency_id', 'centre_id']);
+        if ($roles->contains(fn ($r) => $r->role === 'platform_admin' || ($r->role === 'agency_admin' && (int) $r->agency_id === $agencyId))) return null;
+        if (array_intersect(\App\Support\HrApprovers::directs($userId, $agencyId), \App\Support\HrApprovers::requestCentres($row))) return null;
+        $via = \App\Support\HrApprovers::via($userId, $row);
+
+        return $via ?: false;
+    }
+
+    private function noteGrantDecision(object $row, array $via, string $status, int $actorId): void
+    {
+        try {
+            \App\Support\Audit::write(['user_id' => $actorId, 'agency_id' => (int) $row->agency_id, 'action' => 'hr.time_off_decided_via_grant',
+                'entity_type' => 'time_off_request', 'entity_id' => (int) $row->id,
+                'payload' => json_encode(['status' => $status, 'kind' => $via['kind'], 'grant_id' => $via['grant'], 'covering_for' => $via['for']])]);
+        } catch (\Throwable $e) {
+        }
     }
 
     private function assertAgencyAccess(Request $request, int $agencyId): void

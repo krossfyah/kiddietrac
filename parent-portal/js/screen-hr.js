@@ -97,7 +97,7 @@
     catch (e) { var b0 = main.querySelector('#hr-body'); if (b0) b0.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
     if (!main.isConnected) return;
     S.admin = !!S.people.can_manage_setup;
-    if ((S.tab === 'types' || S.tab === 'settings') && !S.admin) { var b1 = body(main); if (b1) b1.innerHTML = '<div class="hr-note">Only your agency\'s admins can change this.</div>'; return; }
+    if ((S.tab === 'types' || S.tab === 'settings' || S.tab === 'approvers') && !S.admin) { var b1 = body(main); if (b1) b1.innerHTML = '<div class="hr-note">Only your agency\'s admins can change this.</div>'; return; }
     drawTab(main);
     // ?person=ID: "Open HR file" from the user record (2026-11-26). Only someone on this list opens.
     var pm = /[?&]person=(\d+)/.exec(location.hash || '');
@@ -126,6 +126,7 @@
     if (window.KTHrSafety && window.KTHrSafety.has(S.tab)) return window.KTHrSafety.draw(S.tab, b);
     if (window.KTHrFile && window.KTHrFile.has(S.tab)) return window.KTHrFile.draw(S.tab, b);
     if (window.KTHrReports && window.KTHrReports.has(S.tab)) return window.KTHrReports.draw(S.tab, b);
+    if (window.KTHrPeople && window.KTHrPeople.has(S.tab)) return window.KTHrPeople.draw(S.tab, b);   // HR Phase 4 batch 6 (screen-hr-people.js)
     if (window.KTHrTalent) return window.KTHrTalent.draw(S.tab, b);
   }
 

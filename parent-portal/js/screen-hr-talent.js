@@ -752,14 +752,14 @@
     var h = (CO.can_manage ? '<div class="hr-bar"><button type="button" class="hr-b p" id="hc-new">New course</button></div>' : '')
       + '<div class="kt-card">' + (rows.length ? '<table data-hrt="courses"><thead><tr><th>Course</th><th>Content</th><th>PD hours</th><th>Assigned</th><th>Completed</th><th>Overdue</th><th>Status</th><th></th></tr></thead><tbody>'
         + rows.map(function (c) {
-          return '<tr data-id="' + c.id + '"><td><b data-no-i18n>' + esc(c.title) + '</b></td><td>' + esc(kinds[c.content_kind] || '') + '</td>'
+          return '<tr data-id="' + c.id + '"><td><b data-no-i18n>' + esc(c.title) + '</b></td><td>' + esc(kinds[c.content_kind] || '') + (c.quiz_questions ? '<div class="hr-sub">Quiz: ' + c.quiz_questions + ' question' + (c.quiz_questions === 1 ? '' : 's') + ', pass ' + c.pass_mark + '%</div>' : '') + '</td>'
             + '<td>' + (c.counts_pd ? esc(c.pd_hours) : '<span class="hr-sub">—</span>') + '</td><td>' + c.assigned + '</td>'
             + '<td style="white-space:nowrap;">' + c.completed + (c.assigned ? ' ' + bar(Math.round(c.completed * 100 / c.assigned)) : '') + '</td>'
             + '<td>' + (c.overdue ? pill('#FEF3C7', '#92400E', c.overdue + ' overdue') : '<span class="hr-sub">—</span>') + '</td>'
             + '<td>' + (c.archived ? pill('#F1F5F9', '#475569', 'Archived') : pill('#DCFCE7', '#166534', 'In use')) + '</td>'
             + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-ca="who" data-id="' + c.id + '">See who has it</button>'
             + (!c.archived ? '<button type="button" data-ca="assign" data-id="' + c.id + '">Assign</button>' : '')
-            + (CO.can_manage ? '<button type="button" data-ca="edit" data-id="' + c.id + '">Edit</button><button type="button" data-ca="' + (c.archived ? 'restore' : 'archive') + '" data-id="' + c.id + '">' + (c.archived ? 'Restore' : 'Archive') + '</button>' : '') + '</td></tr>';
+            + (CO.can_manage ? '<button type="button" data-ca="edit" data-id="' + c.id + '">Edit</button><button type="button" data-ca="quiz" data-id="' + c.id + '">' + (c.quiz_questions ? 'Edit quiz' : 'Add a quiz') + '</button><button type="button" data-ca="' + (c.archived ? 'restore' : 'archive') + '" data-id="' + c.id + '">' + (c.archived ? 'Restore' : 'Archive') + '</button>' : '') + '</td></tr>';
         }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">No courses yet.' + (CO.can_manage ? ' Add a link, a video, a file or one of KiddieTrac\'s training videos, then assign it.' : ' Your agency admin adds them.') + '</div>') + '</div>'
       + '<div class="hr-sub" style="margin-top:8px;">Completing a course issues a certificate. A course set to count toward PD hours adds them to the person\'s professional development hours.</div>';
     host.innerHTML = h;
@@ -771,6 +771,7 @@
         if (a === 'who') return openAssignments(c, redraw);
         if (a === 'assign') return openAssign(c, redraw);
         if (a === 'edit') return openCourse(c, redraw);
+        if (a === 'quiz') return window.KTHrPeople ? window.KTHrPeople.quizEditor(c, redraw) : null;   // HR Phase 4 batch 6
         try { await Api.post('/hr/courses/' + id + '/' + a, {}); saved(a === 'archive' ? 'Course archived.' : 'Course restored.'); redraw(); } catch (e) { fail('Could not change the course', e); }
       });
     });
@@ -840,9 +841,9 @@
       + (rows.length ? rows.map(function (a) {
         return '<div class="hrt-task"><span class="hrt-ck' + (a.completed_at ? ' on' : (a.overdue ? ' late' : '')) + '">' + (a.completed_at ? '✓' : '') + '</span><div class="t"><b data-no-i18n>' + esc(a.name) + '</b> '
           + (a.completed_at ? pill('#DCFCE7', '#166534', 'Completed ' + tsDay(a.completed_at)) : (a.overdue ? pill('#FEF3C7', '#92400E', 'Overdue') : pill('#E0F2FE', '#075985', 'To do')))
-          + '<div class="hr-sub">' + (a.due_date ? 'Due ' + esc(day(a.due_date)) : 'No due date') + (a.certificate_no ? ' · Certificate <span data-no-i18n>' + esc(a.certificate_no) + '</span>' : '') + '</div>'
+          + '<div class="hr-sub">' + (a.due_date ? 'Due ' + esc(day(a.due_date)) : 'No due date') + (a.certificate_no ? ' · Certificate <span data-no-i18n>' + esc(a.certificate_no) + '</span>' : '') + (a.tries != null && a.tries ? ' · Quiz: ' + a.tries + ' tr' + (a.tries === 1 ? 'y' : 'ies') + (a.tries_allowed != null ? ' of ' + a.tries_allowed : '') + ', best ' + a.best + '%' : '') + (a.out_of_tries ? ' · no tries left' : '') + '</div>'
           + '<div class="hrt-acts">' + (a.completed_at ? '<button type="button" class="hr-b" data-xa="cert" data-id="' + a.id + '">Download certificate</button>'
-            : '<button type="button" class="hr-b" data-xa="remind" data-id="' + a.id + '">Send a reminder</button><button type="button" class="hr-b" data-xa="remove" data-id="' + a.id + '">Remove</button>') + '</div></div></div>';
+            : (a.can_retry ? '<button type="button" class="hr-b" data-xa="retry" data-id="' + a.id + '">Allow another try</button>' : '') + '<button type="button" class="hr-b" data-xa="remind" data-id="' + a.id + '">Send a reminder</button><button type="button" class="hr-b" data-xa="remove" data-id="' + a.id + '">Remove</button>') + '</div></div></div>';
       }).join('') : '<div class="hr-sub">Nobody has this course yet.</div>'));
     modal({ title: c.title, body: box, large: true, actions: [{ label: 'Close' }, { label: 'Assign more', primary: true, handler: function () { setTimeout(function () { openAssign(c, done); }, 0); } }], onClose: null });
     var reopen = function () { closeModal(); done(); setTimeout(function () { openAssignments(c, done); }, 0); };
@@ -852,6 +853,7 @@
         var id = +b.getAttribute('data-id'), a = b.getAttribute('data-xa');
         if (a === 'cert') return blob('/hr/course-assignments/' + id + '/certificate', 'certificate.pdf');
         if (a === 'remind') return remind([id]);
+        if (a === 'retry') { try { await Api.post('/hr/course-assignments/' + id + '/retry', {}); saved('They can take the quiz once more.'); reopen(); } catch (e) { fail('Could not allow it', e); } return; }
         var ok = await KT.confirm({ title: 'Remove this assignment?', description: 'They will no longer have this course to do.', okLabel: 'Remove' });
         if (!ok) return;
         try { await Api.delete('/hr/course-assignments/' + id); saved('Assignment removed.'); reopen(); } catch (e) { fail('Could not remove it', e); }
@@ -870,7 +872,8 @@
 
   // ══ MY COURSES (the person) ══════════════════════════════════════════════
   async function openMyCourse(a, reload) {
-    var r;
+    var r, qz = null;
+    if (!a.completed_at && window.KTHrPeople) { qz = await window.KTHrPeople.quizInfo(a.id); if (qz && !qz.has_quiz) qz = null; }   // HR Phase 4 batch 6
     if (a.kind === 'file') {
       await blob('/hr/course-assignments/' + a.id + '/open', a.title, true);
     } else {
@@ -883,11 +886,13 @@
       else if (r.url) body = '<div class="hr-bar"><a class="hr-b p" style="display:inline-flex;align-items:center;text-decoration:none;" href="' + esc(r.url) + '" target="_blank" rel="noopener">Open the course</a><span class="hr-sub">It opens in a new tab. Come back here to mark it complete.</span></div>';
       if (r.description) body += '<div class="hrt-ro" style="margin-top:8px;" data-no-i18n>' + esc(r.description) + '</div>';
     } else body = '<div class="hr-sub">The course file opened in a new tab. Come back here to mark it complete.</div>';
-    body += a.completed_at ? '<div class="hr-note" style="margin-top:10px;">Completed ' + esc(tsDay(a.completed_at)) + '. Certificate ' + esc(a.certificate_no || '') + '.</div>'
+    if (qz) body += '<div class="hrt-sect" style="margin-top:10px;"><h5>Quiz</h5><div class="hr-sub" style="margin-bottom:4px;">Finish the course by passing its quiz. Your certificate is issued when you pass.</div>' + window.KTHrPeople.quizSummary(qz) + '</div>';
+    else body += a.completed_at ? '<div class="hr-note" style="margin-top:10px;">Completed ' + esc(tsDay(a.completed_at)) + '. Certificate ' + esc(a.certificate_no || '') + '.</div>'
       : '<div class="hrt-sect" style="margin-top:10px;"><h5>Finished?</h5>' + (a.needs_ack ? '<div class="hr-sub" style="margin-bottom:6px;">Type your name to confirm you completed this course and understood it.</div><input class="hr-i" data-ack style="width:100%;" placeholder="Your full name">' : '<div class="hr-sub">Mark it complete to get your certificate.</div>') + '</div>';
     var box = el(body + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
     var acts = [{ label: 'Close' }];
     if (a.completed_at) acts.push({ label: 'Download certificate', primary: true, handler: function () { blob('/hr/course-assignments/' + a.id + '/certificate', 'certificate.pdf'); return false; } });
+    else if (qz) { if (qz.can_try) acts.push({ label: 'Take the quiz', primary: true, handler: function () { setTimeout(function () { window.KTHrPeople.quizTake(a, qz, reload); }, 0); } }); }
     else acts.push({ label: 'Mark complete', primary: true, busyLabel: 'Saving…', handler: function () {
       var n = box.querySelector('[data-ack]');
       return Api.post('/hr/course-assignments/' + a.id + '/complete', { name: n ? n.value.trim() : '' }).then(function (x) {
@@ -970,7 +975,7 @@
     css();
     main.setAttribute('data-kt-pretty', '1');
     main.innerHTML = '<div class="kt-section"><div class="kt-hero"><div class="kt-hero-greet">🧭 MY HR</div><h1>My HR</h1>'
-      + '<div class="kt-hero-sub">Your onboarding checklist, your courses, your reviews and goals, in one place.</div></div><div id="mh-body"><div class="hr-sub" style="padding:12px 2px;">Loading…</div></div></div>';
+      + '<div class="kt-hero-sub">Your onboarding checklist, courses, reviews and goals, the team directory and kudos, in one place.</div></div><div id="mh-body"><div class="hr-sub" style="padding:12px 2px;">Loading…</div></div></div>';
     var b = main.querySelector('#mh-body'), d;
     try { d = await Api.get('/hr/me/talent'); } catch (e) { b.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
     if (!main.isConnected) return;
@@ -1005,6 +1010,7 @@
     var mg = b.querySelector('[data-mg]'); if (mg) mg.addEventListener('click', function () { openGoalsAndNotes(d.me, true, reload); });
     if (window.KTHrSafety) window.KTHrSafety.mine(b);   // Phase 3: the person's own injury reports (screen-hr-safety.js)
     if (window.KTHrFile) window.KTHrFile.mine(b);       // Phase 4 batch 4: my documents + company documents (screen-hr-file.js)
+    if (window.KTHrPeople) window.KTHrPeople.mine(b);   // Phase 4 batch 6: cover while away, team directory, kudos (screen-hr-people.js)
     wireTiles(b);
   }
 
@@ -1018,7 +1024,9 @@
     ['🧾', 'Claims', null, /claims/i],
     ['⏱️', 'Overtime', null, /^overtime/i],
     ['🎓', 'Courses', null, /^your courses/i],
-    ['⭐', 'Reviews', null, /^your reviews/i]
+    ['⭐', 'Reviews', null, /^your reviews/i],
+    ['📇', 'Team directory', null, /^team directory/i],
+    ['🙌', 'Kudos', null, /^kudos/i]
   ];
   function myTiles(d) {
     var todo = [];

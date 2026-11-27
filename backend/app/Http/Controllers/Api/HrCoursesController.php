@@ -40,7 +40,10 @@ final class HrCoursesController extends Controller
             'file_name' => $c->file_name, 'training_video_id' => $c->training_video_id ? (int) $c->training_video_id : null,
             'pd_hours' => $c->pd_hours !== null ? (float) $c->pd_hours : null, 'counts_pd' => (bool) $c->counts_pd, 'needs_ack' => (bool) $c->needs_ack,
             'archived' => (bool) $c->archived_at, 'assigned' => (int) ($counts[$c->id]['n'] ?? 0), 'completed' => (int) ($counts[$c->id]['done'] ?? 0),
-            'overdue' => (int) ($counts[$c->id]['late'] ?? 0)];
+            'overdue' => (int) ($counts[$c->id]['late'] ?? 0),
+            // HR Phase 4 batch 6: the course's quiz (HrQuiz) — questions, pass mark, tries.
+            'quiz_questions' => (int) ($counts[$c->id]['quiz'] ?? 0), 'pass_mark' => isset($c->pass_mark) && $c->pass_mark !== null ? (int) $c->pass_mark : null,
+            'max_attempts' => isset($c->max_attempts) && $c->max_attempts !== null ? (int) $c->max_attempts : null];
     }
 
     public function index(Request $request): JsonResponse
@@ -57,7 +60,10 @@ final class HrCoursesController extends Controller
             $c['late'] = ($c['late'] ?? 0) + (! $a->completed_at && $a->due_date && substr((string) $a->due_date, 0, 10) < $today ? 1 : 0);
             unset($c);
         }
-        $roles = DB::table('role_assignments')->whereIn('user_id', $ids ?: [0])->where('active', 1)->whereIn('role', HrLeave::STAFF_ROLES)->get(['user_id', 'role'])->groupBy('user_id');
+        foreach (\App\Support\HrQuiz::counts(DB::table('hr_courses')->where('agency_id', $aid)->pluck('id')->map(fn ($v) => (int) $v)->all()) as $cid => $n) {
+            $counts[$cid]['quiz'] = $n;
+        }
+        $roles =DB::table('role_assignments')->whereIn('user_id', $ids ?: [0])->where('active', 1)->whereIn('role', HrLeave::STAFF_ROLES)->get(['user_id', 'role'])->groupBy('user_id');
 
         return response()->json([
             'courses' => DB::table('hr_courses')->where('agency_id', $aid)->orderByRaw('archived_at IS NOT NULL')->orderBy('title')->get()->map(fn ($c) => $this->shape($c, $counts))->values(),
@@ -166,11 +172,23 @@ final class HrCoursesController extends Controller
         $rows = DB::table('hr_course_assignments as a')->join('users as u', 'u.id', '=', 'a.user_id')->where('a.agency_id', $aid)->where('a.course_id', $id)
             ->whereIn('a.user_id', $ids ?: [0])->orderByRaw('a.completed_at IS NOT NULL')->orderBy('a.due_date')->orderBy('u.first_name')
             ->get(['a.*', 'u.first_name', 'u.last_name']);
+        $quiz = \App\Support\HrQuiz::has($c);
+        $tries = $quiz ? \App\Support\HrQuiz::triesFor($rows->pluck('id')->map(fn ($v) => (int) $v)->all()) : [];
+        $me = (int) $request->user()->id;
 
-        return response()->json(['course' => $this->shape($c), 'rules' => $this->roleRules($request, $aid, $id), 'assignments' => $rows->map(fn ($a) => ['id' => (int) $a->id, 'user_id' => (int) $a->user_id,
-            'name' => $this->hrName($a), 'role' => $a->assigned_role, 'due_date' => $a->due_date ? substr((string) $a->due_date, 0, 10) : null,
-            'completed_at' => $a->completed_at, 'certificate_no' => $a->certificate_no,
-            'overdue' => ! $a->completed_at && $a->due_date && substr((string) $a->due_date, 0, 10) < $today])->values()]);
+        return response()->json(['course' => $this->shape($c, [$c->id => ['quiz' => $quiz ? 1 : 0]]), 'rules' => $this->roleRules($request, $aid, $id), 'quiz' => $quiz,
+            'assignments' => $rows->map(function ($a) use ($today, $quiz, $tries, $c, $me) {
+                $t = $tries[(int) $a->id] ?? ['n' => 0, 'best' => null, 'passed' => false];
+                $allowed = $quiz ? \App\Support\HrQuiz::allowed($c, $a) : null;
+
+                return ['id' => (int) $a->id, 'user_id' => (int) $a->user_id,
+                    'name' => $this->hrName($a), 'role' => $a->assigned_role, 'due_date' => $a->due_date ? substr((string) $a->due_date, 0, 10) : null,
+                    'completed_at' => $a->completed_at, 'certificate_no' => $a->certificate_no,
+                    'overdue' => ! $a->completed_at && $a->due_date && substr((string) $a->due_date, 0, 10) < $today,
+                    'tries' => $quiz ? $t['n'] : null, 'best' => $quiz && $t['n'] ? $t['best'] : null, 'tries_allowed' => $allowed,
+                    'out_of_tries' => $quiz && ! $a->completed_at && $allowed !== null && $t['n'] >= $allowed,
+                    'can_retry' => $quiz && ! $a->completed_at && $allowed !== null && $t['n'] >= $allowed && (int) $a->user_id !== $me];
+            })->values()]);
     }
 
     /**
@@ -333,12 +351,86 @@ final class HrCoursesController extends Controller
         $a = $this->ownAssignment($request, $aid, $id);
         abort_unless((int) $a->user_id === (int) $request->user()->id, 403, 'Only the person taking the course can mark it complete.');
         $c = $this->ownCourse($aid, (int) $a->course_id);
+        // A course with a quiz is finished by passing it (POST .../quiz), never by marking it complete.
+        abort_if(\App\Support\HrQuiz::has($c), 422, 'Pass the quiz to finish this course.');
         $name = trim((string) $request->input('name', ''));
         if ($c->needs_ack) abort_if(mb_strlen($name) < 2, 422, 'Type your name to confirm you finished and understood the course.');
         $r = HrTalent::completeCourse($aid, $a, $c->needs_ack ? mb_substr($name, 0, 120) : null, (int) $request->user()->id);
         $this->hrNote($aid, 'hr.course_completed', 'hr_course', (int) $c->id, ['certificate_no' => $r['certificate_no']]);
 
         return response()->json(['ok' => true] + $r);
+    }
+
+    // ── quizzes (HR Phase 4 batch 6, App\Support\HrQuiz) ───────────────────────────────────────────
+
+    /** GET hr/courses/{id}/quiz — the quiz with its answers, for the editor (agency admins). */
+    public function quiz(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->hrAgency($request);
+        $this->hrNeedAdmin($request);
+
+        return response()->json(\App\Support\HrQuiz::forEditor($this->ownCourse($aid, $id)));
+    }
+
+    /** PUT hr/courses/{id}/quiz {pass_mark, max_attempts, questions[]} — replaces it; no questions = no quiz. */
+    public function saveQuiz(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->hrAgency($request);
+        $this->hrNeedAdmin($request);
+        $c = $this->ownCourse($aid, $id);
+        $d = $request->validate(['pass_mark' => 'nullable|integer|min:1|max:100', 'max_attempts' => 'nullable|integer|min:1|max:20',
+            'questions' => 'present|array|max:' . \App\Support\HrQuiz::MAX_QUESTIONS, 'questions.*.prompt' => 'nullable|string|max:600',
+            'questions.*.kind' => 'nullable|in:single,multi', 'questions.*.options' => 'nullable|array|max:8', 'questions.*.options.*' => 'nullable|string|max:240',
+            'questions.*.correct' => 'nullable|array|max:8', 'questions.*.correct.*' => 'integer|min:0|max:7']);
+        $r = \App\Support\HrQuiz::save($aid, $c, isset($d['pass_mark']) ? (int) $d['pass_mark'] : null, isset($d['max_attempts']) ? (int) $d['max_attempts'] : null, $d['questions']);
+        $this->hrNote($aid, 'hr.course_quiz_saved', 'hr_course', $id, $r);
+
+        return response()->json(['ok' => true] + $r);
+    }
+
+    /** GET hr/course-assignments/{id}/quiz — the person's own quiz: questions without answers, tries used and left. */
+    public function myQuiz(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->hrAgency($request);
+        $a = $this->ownAssignment($request, $aid, $id);
+        abort_unless((int) $a->user_id === (int) $request->user()->id, 403, 'Only the person taking the course sees its quiz.');
+
+        return response()->json(\App\Support\HrQuiz::forTaker($this->ownCourse($aid, (int) $a->course_id), $a));
+    }
+
+    /** POST hr/course-assignments/{id}/quiz {answers: {question id: [option indexes]}, name?} — one try; a pass completes the course. */
+    public function submitQuiz(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->hrAgency($request);
+        $a = $this->ownAssignment($request, $aid, $id);
+        abort_unless((int) $a->user_id === (int) $request->user()->id, 403, 'Only the person taking the course can answer its quiz.');
+        $c = $this->ownCourse($aid, (int) $a->course_id);
+        $d = $request->validate(['answers' => 'present|array|max:' . \App\Support\HrQuiz::MAX_QUESTIONS, 'answers.*' => 'array|max:8', 'answers.*.*' => 'integer|min:0|max:7',
+            'name' => 'nullable|string|max:120']);
+        $name = trim((string) ($d['name'] ?? ''));
+        if ($c->needs_ack) abort_if(mb_strlen($name) < 2, 422, 'Type your name to confirm you finished and understood the course.');
+        $r = \App\Support\HrQuiz::submit($aid, $c, $a, $d['answers'], $c->needs_ack ? mb_substr($name, 0, 120) : null, (int) $request->user()->id);
+        $this->hrNote($aid, $r['passed'] ? 'hr.course_quiz_passed' : 'hr.course_quiz_failed', 'hr_course', (int) $c->id,
+            ['score' => $r['score'], 'pass_mark' => $r['pass_mark']] + ($r['passed'] ? ['certificate_no' => $r['certificate_no'] ?? null] : []));
+
+        return response()->json(['ok' => true] + $r);
+    }
+
+    /** POST hr/course-assignments/{id}/retry — a manager allows one more try (never for themselves). */
+    public function allowRetry(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->hrAgency($request);
+        $a = $this->ownAssignment($request, $aid, $id);
+        abort_if((int) $a->user_id === (int) $request->user()->id, 403, 'Someone else allows you another try.');
+        $this->hrNeedPerson($request, $aid, (int) $a->user_id);
+        abort_if($a->completed_at, 422, 'This course is already complete.');
+        $c = $this->ownCourse($aid, (int) $a->course_id);
+        abort_unless(\App\Support\HrQuiz::has($c) && $c->max_attempts !== null, 422, 'This course has no limit on tries.');
+        DB::table('hr_course_assignments')->where('id', $id)->update(['extra_attempts' => DB::raw('extra_attempts + 1'), 'updated_at' => now()]);
+        $this->bell($aid, (int) $a->user_id, 'Another try: ' . $c->title, 'You can take the quiz again. Open it under My HR.');
+        $this->hrNote($aid, 'hr.course_retry_allowed', 'hr_course', (int) $c->id, ['user_id' => (int) $a->user_id, 'assignment_id' => $id]);
+
+        return response()->json(['ok' => true]);
     }
 
     /** GET hr/course-assignments/{id}/certificate — the completion certificate PDF (person or their managers). */

@@ -35,8 +35,8 @@
   var SECTIONS = [
     { id: 'dashboard', hash: 'hr', icon: '🧑‍💼', label: 'HR dashboard', sub: 'Your HR setup, who is off, probation and what needs doing next.',
       tabs: [{ k: 'dashboard', label: 'Dashboard' }] },
-    { id: 'people', hash: 'hr-people', icon: '👥', label: 'People', sub: 'Employee files, pay and role history, each person\'s documents, and leavers.',
-      tabs: [{ k: 'people', label: 'People' }, { k: 'leavers', label: 'Leavers' }] },
+    { id: 'people', hash: 'hr-people', icon: '👥', label: 'People', sub: 'Employee files, pay and role history, each person\'s documents, the staff directory, the org chart and leavers.',
+      tabs: [{ k: 'people', label: 'People' }, { k: 'directory', label: 'Directory' }, { k: 'orgchart', label: 'Org chart' }, { k: 'leavers', label: 'Leavers' }] },
     { id: 'timeoff', hash: 'time-off', alt: 'hr-time-off', icon: '🌴', label: 'Time off', sub: 'Time off requests, leave balances and leave types.',
       tabs: [{ k: 'requests', label: 'Requests', screen: 'time-off' }, { k: 'balances', label: 'Balances' }, { k: 'types', label: 'Leave types', admin: true }] },
     { id: 'absence', hash: 'hr-absence', icon: '🤒', label: 'Absence & lateness', sub: 'Absence report, lateness against the rota, and absence scores.',
@@ -52,15 +52,15 @@
     { id: 'performance', hash: 'hr-performance', icon: '🎯', label: 'Performance & learning', sub: 'Reviews, goals, one-to-ones and courses.',
       tabs: [{ k: 'performance', label: 'Reviews & goals' }, { k: 'courses', label: 'Courses' }] },
     { id: 'awards', hash: 'educator-rewards', icon: '⭐', label: 'Educator awards', sub: '',
-      tabs: [{ k: 'rewards', label: 'Awards & points', screen: 'educator-rewards' }, { k: 'awardsettings', label: 'Award settings', screen: 'educator-award-settings' }] },
+      tabs: [{ k: 'rewards', label: 'Awards & points', screen: 'educator-rewards' }, { k: 'kudos', label: 'Recognition' }, { k: 'awardsettings', label: 'Award settings', screen: 'educator-award-settings' }] },
     { id: 'safety', hash: 'hr-safety', icon: '🦺', label: 'Health & safety', sub: 'Staff injury reports and drills.',
       tabs: [{ k: 'injuries', label: 'Staff injuries' }, { k: 'drills', label: 'Drill log', screen: 'drills' }] },
     { id: 'documents', hash: 'hr-documents', icon: '📂', label: 'Documents & letters', sub: 'Company documents, HR letters and background checks.',
       tabs: [{ k: 'docs', label: 'Company documents' }, { k: 'letters', label: 'Letters' }, { k: 'checks', label: 'Background checks', screen: 'background-checks' }] },
     { id: 'reports', hash: 'hr-reports', icon: '📑', label: 'HR reports', sub: 'Headcount, turnover, leave, overtime, lateness, probation and more.',
       tabs: [{ k: 'reports', label: 'Reports' }] },
-    { id: 'settings', hash: 'hr-settings', icon: '🛠️', label: 'HR settings', admin: true, sub: 'Leave year, short absences and attendance rules.',
-      tabs: [{ k: 'settings', label: 'Settings', admin: true }] }
+    { id: 'settings', hash: 'hr-settings', icon: '🛠️', label: 'HR settings', admin: true, sub: 'Leave year, short absences, attendance rules, and who approves time off.',
+      tabs: [{ k: 'settings', label: 'Settings', admin: true }, { k: 'approvers', label: 'Approvers', admin: true }] }
   ];
   var BY_ID = {};
   SECTIONS.forEach(function (s) { BY_ID[s.id] = s; });
@@ -70,7 +70,8 @@
     types: ['timeoff', 'types'], absence: ['absence'], reports: ['reports'], hiring: ['hiring', 'hiring'], onboarding: ['hiring', 'onboarding'],
     performance: ['performance', 'performance'], courses: ['performance', 'courses'], injuries: ['safety', 'injuries'],
     claims: ['payroll', 'claims'], overtime: ['time', 'overtime'], timesheets: ['time', 'lock'], rota: ['rota', 'rota'],
-    openshifts: ['rota', 'openshifts'], letters: ['documents', 'letters'], docs: ['documents', 'docs'], settings: ['settings'] };
+    openshifts: ['rota', 'openshifts'], letters: ['documents', 'letters'], docs: ['documents', 'docs'], settings: ['settings'],
+    directory: ['people', 'directory'], orgchart: ['people', 'orgchart'], kudos: ['awards', 'kudos'], approvers: ['settings', 'approvers'] };
 
   function user() { try { return (KT.Auth && KT.Auth.user && KT.Auth.user()) || JSON.parse(sessionStorage.getItem('kt_user') || '{}') || {}; } catch (e) { return {}; } }
   // Every hash the plan leaves out, locked (Upgrade) ones included: a locked screen does not open either.

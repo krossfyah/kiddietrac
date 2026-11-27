@@ -33,3 +33,11 @@ Your documents are in **My documents**: papers your manager shared with you, and
 When you ask for time off you can add a note or a photo, for example a sick note taken with your phone camera, and say which days it covers. You can also add one later from the request with **📎 Add a note or photo**. Sick notes are seen only by you, your director and your agency admins.
 
 If your bank or e-Transfer details for pay are changed, you get an email. If it wasn't you, tell your director straight away.
+
+## Team directory and kudos
+
+Press **Team directory** to see your colleagues and the org chart. Your email and phone are hidden unless you switch on **my email** or **my phone**. Press **Kudos** to thank a colleague with a short message and the values it shows. Kudos add points to Educator awards; you can't send one to yourself.
+
+Some courses end with a quiz: press **Take the quiz** and pass it to finish the course and get your certificate. You see how many you got right. If you run out of tries, ask your manager for another try.
+
+Directors and admins also see **Cover while I'm away**: choose who gets your time-off approvals and emails while you are away. It ends by itself after the last day.

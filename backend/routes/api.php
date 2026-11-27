@@ -2797,6 +2797,14 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get(    '/hr/course-assignments/{id}/open',            [\App\Http\Controllers\Api\HrCoursesController::class, 'open'])->whereNumber('id');
         Route::post(   '/hr/course-assignments/{id}/complete',        [\App\Http\Controllers\Api\HrCoursesController::class, 'complete'])->whereNumber('id');
         Route::get(    '/hr/course-assignments/{id}/certificate',     [\App\Http\Controllers\Api\HrCoursesController::class, 'certificate'])->whereNumber('id')->middleware('throttle:30,1,hrcert');
+        // HR Phase 4 batch 6 (2026-11-27): course quizzes, staff directory, recognition (all staff).
+        Route::get(    '/hr/course-assignments/{id}/quiz',            [\App\Http\Controllers\Api\HrCoursesController::class, 'myQuiz'])->whereNumber('id');
+        Route::post(   '/hr/course-assignments/{id}/quiz',            [\App\Http\Controllers\Api\HrCoursesController::class, 'submitQuiz'])->whereNumber('id')->middleware('throttle:30,1,hrquiz');
+        Route::get(    '/hr/directory',                               [\App\Http\Controllers\Api\HrPeopleController::class, 'directory']);
+        Route::put(    '/hr/me/directory',                            [\App\Http\Controllers\Api\HrPeopleController::class, 'saveShare']);
+        Route::get(    '/hr/kudos',                                   [\App\Http\Controllers\Api\HrPeopleController::class, 'feed']);
+        Route::post(   '/hr/kudos',                                   [\App\Http\Controllers\Api\HrPeopleController::class, 'give'])->middleware('throttle:20,1,hrkudos');
+        Route::post(   '/hr/kudos/{id}/remove',                       [\App\Http\Controllers\Api\HrPeopleController::class, 'remove'])->whereNumber('id');
     });
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get(    '/hr/hiring',                                  [\App\Http\Controllers\Api\HrHiringController::class, 'index']);
@@ -2844,6 +2852,17 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post(   '/hr/course-assignments/remind',               [\App\Http\Controllers\Api\HrCoursesController::class, 'remind'])->middleware('throttle:20,1,hrcourseremind');
         Route::delete( '/hr/course-assignments/{id}',                 [\App\Http\Controllers\Api\HrCoursesController::class, 'unassign'])->whereNumber('id');
         Route::post(   '/hr/course-role-rules/{id}/stop',             [\App\Http\Controllers\Api\HrCoursesController::class, 'stopRule'])->whereNumber('id');
+        // HR Phase 4 batch 6 (2026-11-27): quiz editor, retries, recognition settings, approvers and cover (managers; admin-only ones check inside).
+        Route::get(    '/hr/courses/{id}/quiz',                       [\App\Http\Controllers\Api\HrCoursesController::class, 'quiz'])->whereNumber('id');
+        Route::put(    '/hr/courses/{id}/quiz',                       [\App\Http\Controllers\Api\HrCoursesController::class, 'saveQuiz'])->whereNumber('id');
+        Route::post(   '/hr/course-assignments/{id}/retry',           [\App\Http\Controllers\Api\HrCoursesController::class, 'allowRetry'])->whereNumber('id');
+        Route::get(    '/hr/recognition/settings',                    [\App\Http\Controllers\Api\HrPeopleController::class, 'settings']);
+        Route::put(    '/hr/recognition/settings',                    [\App\Http\Controllers\Api\HrPeopleController::class, 'saveSettings']);
+        Route::get(    '/hr/approvers',                               [\App\Http\Controllers\Api\HrApproversController::class, 'index']);
+        Route::post(   '/hr/approvers',                               [\App\Http\Controllers\Api\HrApproversController::class, 'create']);
+        Route::post(   '/hr/approvers/{id}/end',                      [\App\Http\Controllers\Api\HrApproversController::class, 'end'])->whereNumber('id');
+        Route::get(    '/hr/me/cover',                                [\App\Http\Controllers\Api\HrApproversController::class, 'mine']);
+        Route::post(   '/hr/me/cover',                                [\App\Http\Controllers\Api\HrApproversController::class, 'setMine']);
     });
 
     // ---- Staff pay / payslips (educators = hourly, home visitors = per visit) ----

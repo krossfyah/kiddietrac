@@ -164,6 +164,7 @@ final class TimeOffReminders
         $mode = in_array($s['recipients'], self::RECIPIENTS, true) ? $s['recipients'] : 'both';
 
         $out = [];
+        $extraUsers = [];
         $add = function ($p, $req) use (&$out) {
             if ((int) $p->user_id === (int) $req->user_id) return;
             if (! isset($out[$p->user_id])) $out[$p->user_id] = ['user' => $p, 'requests' => []];
@@ -174,6 +175,13 @@ final class TimeOffReminders
             $useAdmins = $mode !== 'directors' || $dirs->filter(fn ($d) => (int) $d->user_id !== (int) $req->user_id)->isEmpty();
             if ($mode !== 'admins') foreach ($dirs as $d) $add($d, $req);
             if ($useAdmins) foreach ($admins as $a) $add($a, $req);
+            /* HR4B6 (2026-11-27): + an approver named for this person, and the cover of a director who is away
+               (App\Support\HrApprovers; only with the hr add-on, never the requester). */
+            foreach (\App\Support\HrApprovers::extraApproverIds($agencyId, $req) as $xid) {
+                $p = $extraUsers[$xid] ??= DB::table('users')->where('id', $xid)->whereNull('deleted_at')
+                    ->first([DB::raw('id as user_id'), DB::raw("'cover' as role"), DB::raw('NULL as centre_id'), 'email', 'first_name', 'last_name']);
+                if ($p) $add($p, $req);
+            }
         }
         foreach ($out as &$o) $o['requests'] = array_values($o['requests']);
 

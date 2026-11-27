@@ -2,6 +2,64 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🙌",
+            "title": "Kudos and a team directory",
+            "body": "Thank a colleague from My HR > Kudos with a short message and the values it shows. Kudos add points to Educator awards, and there is no leaderboard. My HR > Team directory lists your colleagues and the org chart; your email and phone show only if you choose to share them.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Bravos et annuaire de l'équipe",
+            "body_fr": "Remerciez un collègue depuis Mes RH > Bravos avec un court message et les valeurs illustrées. Les bravos ajoutent des points aux prix des éducateurs, sans classement. Mes RH > Annuaire de l'équipe présente vos collègues et l'organigramme; votre courriel et votre téléphone n'apparaissent que si vous choisissez de les partager.",
+            "title_es": "Felicitaciones y directorio del equipo",
+            "body_es": "Agradece a un compañero desde Mis RR. HH. > Felicitaciones con un mensaje breve y los valores que muestra. Suman puntos a los premios de educadores y no hay clasificación. Mis RR. HH. > Directorio del equipo muestra a tus compañeros y el organigrama; tu correo y teléfono solo aparecen si decides compartirlos.",
+            "title_hi": "शाबाशी और टीम निर्देशिका",
+            "body_hi": "My HR > शाबाशी से छोटे संदेश और मूल्यों के साथ किसी सहकर्मी को धन्यवाद दें। शाबाशी शिक्षक पुरस्कार अंकों में जुड़ती है, कोई लीडरबोर्ड नहीं है। My HR > टीम निर्देशिका में आपके सहकर्मी और संगठन चार्ट हैं; आपका ईमेल और फ़ोन तभी दिखते हैं जब आप उन्हें साझा करना चुनें।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "📝",
+            "title": "Course quizzes",
+            "body": "A course can now end with a quiz. Pass it to finish the course and get your certificate; you see how many you got right, and a manager can allow another try.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Quiz de cours",
+            "body_fr": "Un cours peut maintenant se terminer par un quiz. Réussissez-le pour terminer le cours et obtenir votre certificat; vous voyez combien de réponses sont justes, et un gestionnaire peut permettre un autre essai.",
+            "title_es": "Cuestionarios en los cursos",
+            "body_es": "Un curso ahora puede terminar con un cuestionario. Apruébalo para terminar el curso y recibir tu certificado; ves cuántas acertaste y un responsable puede permitir otro intento.",
+            "title_hi": "कोर्स क्विज़",
+            "body_hi": "अब कोई कोर्स क्विज़ के साथ ख़त्म हो सकता है। कोर्स पूरा करने और प्रमाणपत्र पाने के लिए इसे पास करें; आप देखते हैं कि कितने सही थे, और प्रबंधक एक और प्रयास दे सकता है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🛠️",
+            "title": "Time-off approvers and cover",
+            "body": "In HR settings > Approvers, let a director or admin approve named people's time off, or set cover while a director is away: the cover gets that director's approvals and emails until the last day, then it stops by itself. Directors can set their own cover in My HR. Nobody approves their own request, and every change is audited.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Approbateurs de congés et remplacements",
+            "body_fr": "Dans Paramètres RH > Approbateurs, permettez à un directeur ou administrateur d'approuver les congés de personnes nommées, ou désignez un remplaçant pendant l'absence d'un directeur : il reçoit ses approbations et courriels jusqu'au dernier jour, puis cela s'arrête seul. Les directeurs peuvent désigner leur remplaçant dans Mes RH. Personne n'approuve sa propre demande, et tout est audité.",
+            "title_es": "Aprobadores de ausencias y suplencias",
+            "body_es": "En Ajustes de RR. HH. > Aprobadores, permite que un director o administrador apruebe las ausencias de personas concretas, o asigna un suplente mientras un director no está: recibe sus aprobaciones y correos hasta el último día y luego se detiene solo. Los directores pueden asignar su suplente en Mis RR. HH. Nadie aprueba su propia solicitud y todo queda auditado.",
+            "title_hi": "छुट्टी स्वीकृतकर्ता और कवर",
+            "body_hi": "HR सेटिंग्स > स्वीकृतकर्ता में किसी निदेशक या एडमिन को चुने हुए लोगों की छुट्टी स्वीकृत करने दें, या निदेशक के दूर रहने पर कवर तय करें: कवर को अंतिम दिन तक उस निदेशक की स्वीकृतियाँ और ईमेल मिलते हैं, फिर यह अपने आप रुक जाता है। निदेशक My HR में अपना कवर ख़ुद तय कर सकते हैं। कोई अपना अनुरोध स्वीकृत नहीं करता, और हर बदलाव ऑडिट होता है।"
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "📣",

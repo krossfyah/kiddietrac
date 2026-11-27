@@ -33,3 +33,11 @@ Vos documents sont dans **Mes documents** : les papiers que votre gestionnaire a
 Quand vous demandez un congé, vous pouvez ajouter une note ou une photo, par exemple un billet médical pris avec l’appareil photo du téléphone, et indiquer les jours couverts. Vous pouvez aussi en ajouter une plus tard depuis la demande avec **📎 Ajouter une note ou une photo**. Les billets médicaux ne sont vus que par vous, votre directeur et les administrateurs de l’agence.
 
 Si vos coordonnées bancaires ou de virement pour la paie sont modifiées, vous recevez un courriel. Si ce n’était pas vous, prévenez votre directeur tout de suite.
+
+## Annuaire de l'équipe et bravos
+
+Appuyez sur **Annuaire de l'équipe** pour voir vos collègues et l'organigramme. Votre courriel et votre téléphone restent cachés sauf si vous activez **mon courriel** ou **mon téléphone**. Appuyez sur **Bravos** pour remercier un collègue avec un court message et les valeurs illustrées. Les bravos ajoutent des points aux prix des éducateurs; vous ne pouvez pas vous en envoyer.
+
+Certains cours se terminent par un quiz : appuyez sur **Faire le quiz** et réussissez-le pour terminer le cours et obtenir votre certificat. Vous voyez combien de réponses sont justes. Sans essai restant, demandez-en un autre à votre gestionnaire.
+
+Les directeurs et administrateurs voient aussi **Remplacement pendant mon absence** : choisissez qui reçoit vos approbations et courriels de congés pendant votre absence. Cela prend fin seul après le dernier jour.

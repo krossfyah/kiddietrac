@@ -796,6 +796,7 @@ final class WebDemoShowcase
         $this->hrFileStory($agencyId, $byName->all(), $elena, $olivia, $now);   // HR Phase 4, batch 4
         $this->hrLettersStory($agencyId, $olivia);   // HR Phase 3, item 12
         $this->hrReportsStory($agencyId, $byName->all());   // HR Phase 4, batch 5
+        $this->hrPeopleStory($agencyId, $byName->all(), $elena, $olivia);   // HR Phase 4, batch 6
     }
 
     /**
@@ -916,6 +917,56 @@ final class WebDemoShowcase
             }
         }
         if (isset($byName['Nina'])) DB::table('users')->where('id', $byName['Nina'])->update(['pay_rate' => 16.50, 'pay_type' => 'hourly']);
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 4 BATCH 6 DEMO (2026-11-27, Starlight only): a quiz on "Safe sleep for infants" (3 questions,
+     * pass 80%, 3 tries); Lucas and Sofia share their email in the directory, Ava her phone; five kudos on the team feed;
+     * Elena approves Grace's time off (Sunridge has no director of its own); Elena away for five days in three weeks with
+     * Harper covering. Rows in this builder's ledger (rebuilt each run); the directory shares are set, not added.
+     */
+    private function hrPeopleStory(int $agencyId, array $byName, int $elena, int $olivia): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_kudos')) return;
+        $course = DB::table('hr_courses')->where('agency_id', $agencyId)->where('title', 'Safe sleep for infants')->first();
+        if ($course && ! DB::table('hr_course_questions')->where('course_id', $course->id)->exists()) {
+            $qs = [['Where should a baby be put down to sleep?', 'single', ['On their back', 'On their tummy', 'On their side'], [0]],
+                ['Which of these belong in a crib at nap time?', 'multi', ['A firm, flat mattress', 'A fitted sheet', 'A pillow', 'Bumper pads'], [0, 1]],
+                ['How often do we check on sleeping infants here?', 'single', ['Every 15 minutes, and we log it', 'Once an hour', 'Only if they cry'], [0]]];
+            foreach ($qs as $i => [$p, $k, $o, $c]) {
+                $this->add('hr_course_questions', ['agency_id' => $agencyId, 'course_id' => $course->id, 'position' => $i + 1, 'prompt' => $p, 'kind' => $k,
+                    'options' => json_encode($o), 'correct' => json_encode($c), 'created_at' => now(), 'updated_at' => now()]);
+            }
+            DB::table('hr_courses')->where('id', $course->id)->update(['pass_mark' => 80, 'max_attempts' => 3]);
+        }
+        foreach (['Lucas' => [1, 0], 'Sofia' => [1, 0], 'Ava' => [0, 1]] as $who => [$em, $ph]) {
+            if (! isset($byName[$who])) continue;
+            DB::table('hr_directory_shares')->updateOrInsert(['agency_id' => $agencyId, 'user_id' => $byName[$who]],
+                ['share_email' => $em, 'share_phone' => $ph, 'updated_at' => now(), 'created_at' => now()]);
+        }
+        $kudos = [['Maya', 'Lucas', ['Teamwork'], 'Thank you for jumping in at lunch when the Sprouts room was short. The children didn\'t miss a beat.', -1],
+            ['Elena', 'Sofia', ['Above and beyond', 'Care for children'], 'Sofia stayed with a nervous new toddler all morning and sent the family a lovely photo. That first day matters.', -3],
+            ['Ethan', 'Ava', ['Great communication'], 'Your handover notes made the afternoon so easy. Clear, short, and every allergy flagged.', -4],
+            ['Noah', 'Maya', ['Safety first'], 'Spotted the loose gate latch before outdoor play and got it fixed. Thank you!', -6],
+            ['Grace', 'Marcus', ['Learning together'], 'Thanks for showing me the new sensory bin ideas. The kids loved the rice and scoops.', -9]];
+        foreach ($kudos as [$from, $to, $tags, $msg, $days]) {
+            if (! isset($byName[$to]) || (! isset($byName[$from]) && $from !== 'Elena')) continue;
+            $fid = $from === 'Elena' ? $elena : $byName[$from];
+            if (! $fid || $fid === $byName[$to]) continue;
+            $this->add('hr_kudos', ['agency_id' => $agencyId, 'from_user_id' => $fid, 'to_user_id' => $byName[$to], 'centre_id' => null, 'tags' => json_encode($tags),
+                'message' => $msg, 'created_at' => $this->at($days, 10 + (-$days % 5), 15), 'updated_at' => now()]);
+        }
+        if ($elena && isset($byName['Grace'])) {
+            $this->add('hr_approver_grants', ['agency_id' => $agencyId, 'kind' => 'people', 'approver_user_id' => $elena, 'subject_user_ids' => json_encode([$byName['Grace']]),
+                'leave_type_ids' => null, 'note' => 'Sunridge has no director of its own', 'created_by_id' => $olivia ?: null, 'created_at' => now(), 'updated_at' => now()]);
+        }
+        $harper = (int) DB::table('role_assignments')->where('agency_id', $agencyId)->where('role', 'agency_admin')->whereNull('centre_id')->where('active', 1)
+            ->whereNotIn('user_id', array_filter([$olivia])) ->whereNotIn('user_id', AgencySignatories::outsiderIds() ?: [0])->orderBy('user_id')->value('user_id');
+        if ($elena && ($harper || $olivia)) {
+            $this->add('hr_approver_grants', ['agency_id' => $agencyId, 'kind' => 'cover', 'approver_user_id' => $harper ?: $olivia, 'covering_for_user_id' => $elena,
+                'starts_on' => $this->today->copy()->addDays(21)->toDateString(), 'ends_on' => $this->today->copy()->addDays(25)->toDateString(),
+                'note' => 'Elena at the ECE conference', 'created_by_id' => $elena, 'created_at' => now(), 'updated_at' => now()]);
+        }
     }
 
     /**

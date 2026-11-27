@@ -1385,3 +1385,13 @@ post hr/leavings/{id}/undo | Undid an employee's leaving
 post hr/people/{id}/rehire | Rehired a returning employee
 post hr/people/{id}/probation | Updated a staff member's probation (passed, extended or reset)
 put hr/compliance/settings | Changed the probation and invite settings
+post hr/course-assignments/{id}/quiz | Took a course quiz
+put hr/me/directory | Changed what they show in the staff directory
+post hr/kudos | Gave a colleague kudos
+post hr/kudos/{id}/remove | Took down a kudos message
+put hr/courses/{id}/quiz | Changed a course's quiz
+post hr/course-assignments/{id}/retry | Allowed another try at a course quiz
+put hr/recognition/settings | Changed the recognition settings
+post hr/approvers | Added a time-off approver or cover
+post hr/approvers/{id}/end | Ended a time-off approver permission or cover
+post hr/me/cover | Named cover for their time-off approvals while away

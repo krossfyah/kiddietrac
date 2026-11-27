@@ -39,6 +39,9 @@ final class EducatorPoints
         'incident'    => ['Incident reports', '⚠️', 5, 5],
         'photo'       => ['Photos & videos shared', '📸', 3, 10],
         'daily_log'   => ['Daily logs', '✅', 1, 40],
+        // HR4B6 (2026-11-27): kudos from colleagues (hr_kudos, KiddieTrac HR recognition). Same rule as the rest: worked
+        // out from the rows, never stored; a removed kudos takes its points with it. Only agencies with HR have rows.
+        'kudos'       => ['Kudos from colleagues', '🙌', 5, 3],
     ];
 
     public const METHODS_ALLOWED = ['payroll_bonus', 'payout', 'gift_card_manual', 'gift_card_provider'];
@@ -228,6 +231,13 @@ final class EducatorPoints
             ->where('ce.agency_id', $agencyId)
             ->whereIn('lp.created_by_id', $ids)->where('lp.created_at', '>=', $from)->where('lp.created_at', '<', $to)
             ->get(['lp.created_by_id as u', 'lp.created_at as t']));
+
+        if (\Illuminate\Support\Facades\Schema::hasTable('hr_kudos')) {   // HR4B6
+            $add('kudos', DB::table('hr_kudos')->where('agency_id', $agencyId)->whereNull('hidden_at')
+                ->whereIn('to_user_id', $ids)->whereColumn('from_user_id', '!=', 'to_user_id')
+                ->where('created_at', '>=', $from)->where('created_at', '<', $to)
+                ->get(['to_user_id as u', 'created_at as t']));
+        }
 
         foreach ($hits as $k => $list) {
             $perDay = [];

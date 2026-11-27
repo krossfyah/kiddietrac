@@ -195,6 +195,12 @@ final class SearchRegistry
         'hr_leavings' => 'leaving records (checklist, ROE prep, payout): HR > Leavers and the person\'s HR file; search the staff member',
         'hr_letter_templates' => 'the agency\'s HR letter templates (configuration): edited in HR > Letters, never a record people look up',
         'hr_letters' => 'which HR letters were sent to whom (HR): the letter itself is the Managed Forms record; listed in HR > Letters only',
+        // KiddieTrac HR Phase 4, batch 6 (2026-11-27): quizzes, directory shares, recognition, approver grants.
+        'hr_course_questions' => 'a course\'s quiz questions (configuration): edited in the course, never a record people look up',
+        'hr_course_attempts' => 'quiz tries on a course (HR): shown with the course assignment; search the staff member',
+        'hr_directory_shares' => 'what a staff member chose to show in the staff directory (a preference): never searched',
+        'hr_kudos' => 'peer recognition messages (HR): shown on the team feed under Educator awards > Recognition and My HR; never searched',
+        'hr_approver_grants' => 'who else approves time off for named people, and cover while a director is away (HR): HR settings > Approvers; never searched',
         'hr_course_role_rules' => 'configuration: "this course goes to everyone in this role" on a course, shown in its Assigned popup',
         'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',

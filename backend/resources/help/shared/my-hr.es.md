@@ -33,3 +33,11 @@ Sus documentos están en **Mis documentos**: los papeles que su responsable comp
 Al pedir tiempo libre puede añadir una nota o una foto, por ejemplo un justificante médico hecho con la cámara del teléfono, e indicar qué días cubre. También puede añadirla después desde la solicitud con **📎 Añadir una nota o foto**. Los justificantes médicos solo los ven usted, su director y los administradores de la agencia.
 
 Si cambian sus datos bancarios o de transferencia para el pago, recibe un correo. Si no fue usted, avise a su director enseguida.
+
+## Directorio del equipo y felicitaciones
+
+Pulsa **Directorio del equipo** para ver a tus compañeros y el organigrama. Tu correo y teléfono quedan ocultos salvo que actives **mi correo** o **mi teléfono**. Pulsa **Felicitaciones** para agradecer a un compañero con un mensaje breve y los valores que muestra. Suman puntos a los premios de educadores; no puedes felicitarte a ti mismo.
+
+Algunos cursos terminan con un cuestionario: pulsa **Hacer el cuestionario** y apruébalo para terminar el curso y recibir tu certificado. Ves cuántas acertaste. Si te quedas sin intentos, pide otro a tu responsable.
+
+Los directores y administradores también ven **Suplencia mientras no estoy**: elige quién recibe tus aprobaciones y correos de ausencias mientras no estás. Termina sola después del último día.
