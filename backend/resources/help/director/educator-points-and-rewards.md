@@ -10,7 +10,9 @@ screens: educator-rewards, educator-award-settings
 Educators earn **points** every month for using KiddieTrac. At month end you can turn
 those points into a reward: a **bonus in the next pay run**, a **payout**, or a **gift card**.
 
-Open **⭐ Educator rewards** in the menu.
+Open **Human Resources > Educator awards**. It has three tabs: **Awards & points**, **Recognition** and **Award settings**.
+
+[[open: #educator-rewards | Open Educator awards]]
 
 ## How points are earned
 
@@ -25,7 +27,7 @@ Points come from what each person logged in KiddieTrac. Nobody has to keep a tal
 | Photos & videos shared | 3 | 10 |
 | Daily logs | 1 | 40 |
 
-These are the starting values. An **agency admin** can change them under **Settings → 🏅 Educator awards → ⚙️ Point values & rewards**,
+These are the starting values. An **agency admin** can change them under **Human Resources > Educator awards > Award settings > ⚙️ Point values & rewards**,
 along with the daily limits (past the limit, an activity still counts but stops adding points
 that day) and an optional **points-to-dollars rate** that suggests an amount for each award.
 
@@ -105,10 +107,10 @@ My points, with Tango's instructions for using it.
 
 ## Award history
 
-**⭐ Educator rewards → 🗂 Award history** lists every award ever given, month by month (newest first): who, what, the points and amount at the time, the method, who approved it, the date, and whether it was automatic. Filter by months, centre and educator, and export it with the CSV, Excel or PDF buttons under the table. Directors see their own centres.
+**Human Resources > Educator awards > Awards & points > 🗂 Award history** lists every award ever given, month by month (newest first): who, what, the points and amount at the time, the method, who approved it, the date, and whether it was automatic. Filter by months, centre and educator, and export it with the CSV, Excel or PDF buttons under the table. Directors see their own centres.
 
 ## Where the settings live
 
-All educator award settings are in **Settings → 🏅 Educator awards**: automatic thank-you awards (and the drafts waiting for review), point values and the suggested award, and the method the Award dialog starts on. Directors can read them; agency admins change them.
+All educator award settings are on the **Award settings** tab of **Human Resources > Educator awards** (**🏅 Automatic awards** and **⚙️ Point values & rewards**): automatic thank-you awards (and the drafts waiting for review), point values and the suggested award, and the method the Award dialog starts on. Directors can read them; agency admins change them.
 
 The gift card accounts (Giftbit and Tango Card, testbed/sandbox or live) are with the other payment accounts in **Settings → 💳 Payment providers → 🎁 Gift cards** (agency admins).

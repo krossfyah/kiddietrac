@@ -9,7 +9,9 @@ order: 20
 Les éducateurs gagnent des **points** chaque mois en utilisant KiddieTrac. À la fin du mois, vous pouvez
 transformer ces points en récompense : un **boni dans la prochaine paie**, un **versement** ou une **carte-cadeau**.
 
-Ouvrez **⭐ Récompenses des éducateurs** dans le menu.
+Ouvrez **Ressources humaines > Récompenses des éducateurs**. L’écran a trois onglets : **Prix et points**, **Reconnaissance** et **Paramètres des récompenses**.
+
+[[open: #educator-rewards | Ouvrir Récompenses des éducateurs]]
 
 ## Comment les points sont gagnés
 
@@ -24,7 +26,7 @@ Les points proviennent de ce que chaque personne a consigné dans KiddieTrac. Pe
 | Photos et vidéos partagées | 3 | 10 |
 | Journaux quotidiens | 1 | 40 |
 
-Ce sont les valeurs de départ. Un **administrateur de l’agence** peut les modifier sous **Paramètres → 🏅 Prix des éducateurs → ⚙️ Valeurs des points et récompenses**,
+Ce sont les valeurs de départ. Un **administrateur de l’agence** peut les modifier sous **Ressources humaines > Récompenses des éducateurs > Paramètres des récompenses > ⚙️ Valeurs des points et récompenses**,
 de même que les limites quotidiennes (au-delà de la limite, une activité compte toujours, mais n’ajoute plus de points
 pour la journée) et un **taux points-dollars** facultatif qui suggère un montant pour chaque récompense.
 
@@ -104,10 +106,10 @@ de l’éducateur, avec les instructions d’utilisation de Tango.
 
 ## Historique des récompenses
 
-**⭐ Récompenses des éducateurs → 🗂 Historique des récompenses** liste toutes les récompenses accordées, mois par mois (les plus récentes d’abord) : qui, quoi, les points et le montant à ce moment-là, le mode, qui l’a approuvée, la date, et si elle était automatique. Filtrez par mois, centre et éducateur, et exportez-la avec les boutons CSV, Excel ou PDF sous le tableau. Les directeurs voient leurs propres centres.
+**Ressources humaines > Récompenses des éducateurs > Prix et points > 🗂 Historique des récompenses** liste toutes les récompenses accordées, mois par mois (les plus récentes d’abord) : qui, quoi, les points et le montant à ce moment-là, le mode, qui l’a approuvée, la date, et si elle était automatique. Filtrez par mois, centre et éducateur, et exportez-la avec les boutons CSV, Excel ou PDF sous le tableau. Les directeurs voient leurs propres centres.
 
 ## Où se trouvent les paramètres
 
-Tous les paramètres des prix des éducateurs sont dans **Paramètres → 🏅 Prix des éducateurs** : les prix de remerciement automatiques (et les brouillons en attente de révision), les valeurs des points et la récompense suggérée, ainsi que le mode proposé par défaut dans la boîte de dialogue Récompenser. Les directeurs peuvent les consulter; les administrateurs de l’agence les modifient.
+Tous les paramètres des prix des éducateurs se trouvent dans l’onglet **Paramètres des récompenses** de **Ressources humaines > Récompenses des éducateurs** (**🏅 Prix automatiques** et **⚙️ Valeurs des points et récompenses**) : les prix de remerciement automatiques (et les brouillons en attente de révision), les valeurs des points et la récompense suggérée, ainsi que le mode proposé par défaut dans la boîte de dialogue Récompenser. Les directeurs peuvent les consulter; les administrateurs de l’agence les modifient.
 
 Les comptes de cartes-cadeaux (Giftbit et Tango Card, testbed/bac à sable ou en direct) se trouvent avec les autres comptes de paiement dans **Paramètres → 💳 Prestataires de paiement → 🎁 Cartes-cadeaux** (administrateurs de l’agence).

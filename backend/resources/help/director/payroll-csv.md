@@ -4,33 +4,53 @@ category: Staff Management
 order: 32
 screens: ~payroll
 ---
-# Payroll export
+# Payroll-ready CSV export
 
-Pull a pay-period CSV of every staff member's clocked hours. Drop straight into ADP, Wave, or your payroll provider.
+Download a spreadsheet of every staff member's clocked hours for a pay period, ready to import into ADP, Wave or whichever payroll provider your agency uses. The file comes from the **Payroll** screen in **Human Resources**.
 
-## How to run
+[[open: #payroll | Open Payroll]]
 
-1. Sidebar → **Payroll**.
-2. Pick a date range (it defaults to the last 30 days).
-3. Click **Run** to see a per-staff summary, or **⤓ CSV** to download the file.
+## Downloading the hours file
 
-## What's included
+1. Open **Human Resources > Payroll**. The **⏱️ Hours & payslips** view opens on the last 30 days.
+2. Press a quick period such as **Last pay period** or **Last month**, or type the **From** and **To** dates.
+3. Press **Run** to check the hours on screen first.
+4. Press **⤓ CSV**. The file downloads to your computer.
 
-For each (staff × centre) combination within the range:
-- Staff name + email
-- Centre name
-- Punch count (how many clock-in events)
-- Total minutes
-- Total hours (rounded to two decimals)
+The file is named `payroll-YYYY-MM-DD-to-YYYY-MM-DD.csv`. It is saved as UTF-8 with a byte-order mark, so accents and names open cleanly in Excel, Numbers and Google Sheets.
 
-Only closed punches are counted — anyone still clocked in won't show until they punch out.
+## What the file contains
 
-## File format
+One row for each staff member at each centre they clocked in at, with:
 
-`payroll-YYYY-MM-DD-to-YYYY-MM-DD.csv`, UTF-8 with BOM, opens cleanly in Excel / Numbers / Sheets.
+- staff name and email;
+- centre name;
+- punch count (how many times they clocked in);
+- total minutes;
+- total hours, rounded to two decimals.
+
+Only closed punches count. Anyone still clocked in is left out until they clock out.
+
+> ℹ️ It is an hours file. People paid without clocking in (salaried staff, contractors) have no punches, so they are on the screen with their payslips but not in the CSV.
 
 ## Correcting the hours first
 
-The export reads the same punches as **Timesheets**. If a shift is wrong — a clock-out
-nobody pressed, a shift that was never clocked — fix it there before you export, not in
-the spreadsheet afterwards. See [Timesheets and correcting hours](timesheets).
+The export reads the same punches as **Clock-ins & timesheets**. If a shift is wrong (a clock-out nobody pressed, a shift that was never clocked), fix it there before you export, not in the spreadsheet afterwards.
+
+1. Open **Human Resources > Clock-ins & timesheets**.
+2. Correct the shift with its **⋮** menu.
+3. Come back to **Payroll** and press **⤓ CSV** again.
+
+## Who can use it
+
+Agency admins and centre directors. Directors get the staff of their own centres.
+
+## FAQs
+
+??? The file is empty. | Nobody clocked in between the dates. Widen the dates and press **Run** to check.
+??? A person is missing from the file. | They have no closed punch in the period, or they are still clocked in.
+
+## Related
+
+- [Payroll runs, hours and payslips](payroll-documents)
+- [Timesheets and correcting hours](timesheets)

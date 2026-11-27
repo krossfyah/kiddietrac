@@ -9,7 +9,9 @@ order: 20
 Los educadores ganan **puntos** cada mes por usar KiddieTrac. Al final del mes puede convertir
 esos puntos en una recompensa: un **bono en la próxima nómina**, un **pago** o una **tarjeta de regalo**.
 
-Abra **⭐ Recompensas para educadores** en el menú.
+Abra **Recursos humanos > Premios para educadores**. Tiene tres pestañas: **Premios y puntos**, **Reconocimiento** y **Ajustes de premios**.
+
+[[open: #educator-rewards | Abrir Premios para educadores]]
 
 ## Cómo se ganan los puntos
 
@@ -24,7 +26,7 @@ Los puntos provienen de lo que cada persona registró en KiddieTrac. Nadie tiene
 | Fotos y videos compartidos | 3 | 10 |
 | Registros diarios | 1 | 40 |
 
-Estos son los valores iniciales. Un **administrador de la agencia** puede cambiarlos en **Ajustes → 🏅 Reconocimientos a educadores → ⚙️ Valores de puntos y recompensas**,
+Estos son los valores iniciales. Un **administrador de la agencia** puede cambiarlos en **Recursos humanos > Premios para educadores > Ajustes de premios > ⚙️ Valores de puntos y recompensas**,
 junto con los límites diarios (superado el límite, una actividad sigue contando, pero deja de sumar puntos
 ese día) y una **tasa de puntos a dólares** opcional que sugiere un importe para cada reconocimiento.
 
@@ -104,10 +106,10 @@ los 5 días posteriores al envío. De lo contrario, KiddieTrac muestra el motivo
 
 ## Historial de reconocimientos
 
-**⭐ Recompensas para educadores → 🗂 Historial de reconocimientos** muestra todos los reconocimientos otorgados, mes a mes (los más recientes primero): quién, qué, los puntos y el importe en ese momento, el método, quién lo aprobó, la fecha y si fue automático. Filtre por meses, centro y educador, y expórtelo con los botones CSV, Excel o PDF bajo la tabla. Los directores ven sus propios centros.
+**Recursos humanos > Premios para educadores > Premios y puntos > 🗂 Historial de reconocimientos** muestra todos los reconocimientos otorgados, mes a mes (los más recientes primero): quién, qué, los puntos y el importe en ese momento, el método, quién lo aprobó, la fecha y si fue automático. Filtre por meses, centro y educador, y expórtelo con los botones CSV, Excel o PDF bajo la tabla. Los directores ven sus propios centros.
 
 ## Dónde están los ajustes
 
-Todos los ajustes de reconocimientos a educadores están en **Ajustes → 🏅 Reconocimientos a educadores**: los reconocimientos automáticos de agradecimiento (y los borradores pendientes de revisión), los valores de puntos y el reconocimiento sugerido, y el método con el que se abre el cuadro de diálogo. Los directores pueden consultarlos; los administradores de la agencia los cambian.
+Todos los ajustes de reconocimientos a educadores están en la pestaña **Ajustes de premios** de **Recursos humanos > Premios para educadores** (**🏅 Reconocimientos automáticos** y **⚙️ Valores de puntos y recompensas**): los reconocimientos automáticos de agradecimiento (y los borradores pendientes de revisión), los valores de puntos y el reconocimiento sugerido, y el método con el que se abre el cuadro de diálogo. Los directores pueden consultarlos; los administradores de la agencia los cambian.
 
 Las cuentas de tarjetas de regalo (Giftbit y Tango Card, testbed/entorno de pruebas o en vivo) están junto con las demás cuentas de pago en **Ajustes → 💳 Proveedores de pago → 🎁 Tarjetas de regalo** (administradores de la agencia).

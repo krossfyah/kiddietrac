@@ -2,72 +2,83 @@
 title: Ciclos de nómina, horas y recibos de nómina
 category: Staff Management
 order: 30
-roles: agency_admin, platform_admin
+roles: agency_admin, platform_admin, centre_director
 ---
 # Ciclos de nómina, horas y recibos de nómina
 
-Una sola pantalla responde a las dos mitades de la misma pregunta: qué trabajó esta persona y cuánto se le pagó por ello.
+La pantalla **Nómina** responde una sola pregunta: qué trabajó cada persona en un período y cuánto se le pagó por ello. Muestra las horas fichadas junto a los recibos emitidos para las mismas fechas, le permite abrir, imprimir, enviar por correo o marcar cada recibo, y es donde un administrador de la agencia hace una nómina. Ábrala desde **Recursos humanos > Nómina**.
 
-![Nómina: Educadores, Otro personal y Contratistas, cada uno con sus recibos de nómina](https://api.kiddietrac.com/help-img/payroll.png)
+[[open: #payroll | Abrir Nómina]]
 
-## Tres grupos
+La pantalla tiene dos vistas: **⏱️ Hours & payslips** (lo trabajado, con los recibos de cada persona en su fila) y **📅 Pay periods** (una fila por período de pago, con totales y una revisión de horas).
 
-**Educadores**, **Otro personal** y **Contratistas** son pestañas separadas, no una lista larga. Se les paga en condiciones distintas y los aprueban personas distintas, y cada una lleva su propio subtotal. La pantalla se abre en la primera pestaña que tiene a alguien.
+## Ver las horas y los recibos de un período
 
-El **Total de horas** general de ambos grupos de personal permanece visible debajo.
+1. Abra **Recursos humanos > Nómina**. La vista **⏱️ Hours & payslips** se abre con los últimos 30 días.
+2. Pulse un período rápido: **Este período de pago**, **Último período de pago**, **This month** o **Last month**. O escriba las fechas **From** y **To** y pulse **Ejecutar**.
+3. Elija una pestaña: **🧑‍🏫 Educadores**, **👥 Otro personal** o **📄 Contratistas**. La pantalla se abre en la primera pestaña que tenga a alguien.
+4. Lea cada fila: **Staff**, **Role**, **Centre**, **Punches**, **Hours** y **Payslips**. Cada grupo tiene su subtotal, y el total general queda bajo las pestañas.
+5. Pulse el enlace **Payslips** de una fila (por ejemplo "2 payslips · $1,850.00") para ver los documentos de esa persona en el período.
 
-## Los contratistas son diferentes, a propósito
+Solo cuentan los fichajes cerrados. Quien sigue fichado aparece nombrado en su fila para que vea qué quedó fuera. Las personas pagadas sin fichar (un gerente asalariado, una visitadora pagada por visita) también aparecen, con 0 fichajes y sus recibos.
 
-Un contratista no registra su entrada. No tiene acceso de inicio de sesión y se le paga por nombre, así que no hay fichajes ni horas que informar: mostrarlo junto a personas con recuento de fichajes pondría una columna vacía y cero horas junto a dinero que sí se pagó.
+> ℹ️ Los contratistas no fichan ni tienen cuenta, así que su pestaña muestra lo que se les **pagó** en el período en lugar de horas.
 
-Su pestaña informa en cambio **lo que se les pagó** en el periodo, y lo indica en la página.
+## Abrir, enviar o marcar un recibo
 
-## Alguien pagado sin fichar
+1. Abra los recibos de la persona desde el enlace **Payslips**.
+2. Pulse **👁 View** para leer el PDF, **⬇️ Download** para guardarlo o **🖨 Print** para imprimirlo.
+3. Pulse **✉️ Resend payslip** para enviarlo por correo. Confirme la **Email address** (viene del expediente, pero nunca se envía sin su confirmación), agregue una copia o una nota si quiere, y envíelo.
+4. Pulse **Marcar como pagado** cuando el dinero haya salido. **Marcar como no pagado** lo deshace.
+5. Pulse **Enviar por Interac** para pagar un recibo por Interac. Indica el importe y la persona y pide confirmación, porque mueve dinero real.
 
-El informe incluye a cualquier persona **pagada** en el periodo, no solo a quien **fichó**. Un visitador domiciliario pagado por visita, un gerente asalariado, cualquiera con un importe fijo: aparecen con 0 fichajes y 0 horas, lo cual es cierto en su caso, junto con sus recibos de nómina.
+**Enviar por Interac** solo aparece para una persona con cuenta; a los contratistas se les paga a mano y se marcan como pagados.
 
-Sin esto, un mes en el que nadie fichó se mostraba como un informe vacío aunque existieran recibos de nómina para ese mes.
+## Revisar un período de pago completo
 
-## Recibos de nómina en la fila
+1. Pulse **📅 Pay periods**.
+2. Elija el **Year** (año) o **All years**.
+3. Lea las tarjetas: **Net paid**, **People paid**, **Average per person**, **Outstanding** (recibos aún no marcados como pagados) y **Hours check**.
+4. Pulse **Open period ›** en una fila.
+5. Compare **Payslip hrs** con **Clock hrs** de cada persona. Una fila **⚠ to review** tiene una diferencia; **✓ all match** significa ninguna.
+6. Use **Ver recibo de nómina**, **Descargar recibo de nómina**, **✉️ Resend payslip** o **Mark paid** en una fila, o **✉️ Resend all payslips** para todo el período.
 
-La columna **Recibos de nómina** muestra cuántos documentos tiene una persona en el periodo y a cuánto ascienden. Ábrala y cada documento aparece debajo con su propio menú **⋮**:
+## Hacer una nómina (administradores de la agencia)
 
-- **Recibo de nómina**: abre el PDF.
-- **Imprimir**: lo abre y lo envía a la impresora.
-- **Descargar**: guarda el PDF.
-- **Enviar recibo de nómina por correo electrónico**: lo envía, con el PDF adjunto, a una dirección que usted confirma.
-- **Enviar por Interac**: lo paga, si la persona tiene una cuenta (vea más abajo).
-- **Marcar como pagado** / **Marcar como no pagado**: el registro manual, que alterna.
+1. Pulse **＋ Generate payroll**.
+2. Escriba **Period start** y **Period end** y pulse **Read the clock**.
+3. En las pestañas **Educadores**, **Otro personal** y **Contratistas**, marque a quién pagar.
+4. Escriba la tarifa (**Rate**) de cada persona. **Pay** se llena con horas × tarifa como punto de partida; puede cambiarlo.
+5. Pulse **Líneas y notas** en una fila para **+ Add a line** (kilometraje, un extra, una deducción) o escribir **Notes on this payslip**.
+6. Pulse **Aprobar y crear recibos de pago**.
 
-El envío por correo electrónico pide la dirección cada vez. Viene rellenada cuando hay una en el archivo y debe confirmarse: no existe un destinatario predeterminado para el pago de alguien.
+La tarifa nunca se llena sola: escríbala en cada nómina. Quien ya tiene un recibo del mismo período se omite, y la nómina le dice cuántos se omitieron y por qué, para que nadie cobre dos veces. Si las hojas de horas del período aún no están aprobadas, la nómina le avisa que las apruebe en **Fichajes y hojas de horas > Aprobar y bloquear**.
 
-## Pagar un recibo de nómina
+## Exportar las horas
 
-**Enviar por Interac** mueve dinero real, por lo que primero pide confirmación y nombra el importe y la persona:
+Pulse **⤓ CSV** para descargar el informe de horas de las fechas mostradas. Es un archivo de horas: las personas pagadas sin fichajes están en pantalla, no en el archivo. Vea [Exportación CSV lista para nómina](payroll-csv).
 
-> ¿Enviar $1,424.90 por Interac a Bruni Meeser? Esto mueve dinero real.
+## Quién puede hacer qué
 
-El pago queda vinculado al recibo de nómina que liquida, de modo que el registro muestra qué se pagó y por qué.
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador de la agencia | Todo lo de aquí, incluidos **＋ Generate payroll** y **Enviar por Interac**. |
+| Director de centro | Ver horas y recibos de sus propios centros; abrir, imprimir, enviar y marcar recibos. Los directores no hacen nóminas. |
+| Personal | Ve sus propios recibos en **Mis RR. HH.**, no en esta pantalla. |
 
-**A los contratistas no se les puede pagar de este modo.** Interac envía a la cuenta de una persona, y un contratista es un nombre y no una cuenta. Sus recibos de nómina se marcan como pagados a mano; todo lo demás del menú funciona con normalidad.
+## Preguntas frecuentes y qué hacer si algo falla
 
-## Generar la nómina
+??? Dice "No punches in range." | Nadie fichó entre esas fechas. Pruebe **Último período de pago** o fechas más amplias; el personal asalariado solo aparece si tiene recibo.
+??? Las horas de alguien parecen incorrectas. | Las horas vienen del reloj. Corrija el turno en **Fichajes y hojas de horas** y pulse **Ejecutar** otra vez.
+??? "No payroll documents for the agency you are viewing." | Aún no se emitieron recibos en esta agencia. Aparecen al hacer una nómina o cuando llegan de su sistema de nómina.
+??? Pulsé ＋ Generate payroll y no se abrió. | Las nóminas son para administradores de la agencia. Pida a un administrador que la haga.
+??? Se omitió a una persona en la nómina. | Ya tiene un recibo del mismo período. Ábralo desde el enlace **Payslips**.
+??? ¿De dónde salen las pestañas Pay runs y Remittances? | Son del motor de nómina, que solo se muestra cuando su agencia lo activó. Vea [Motor de nómina: nóminas, recibos y remesas](payroll-engine).
 
-**＋ Generar nómina** abre el asistente del ciclo: elija el periodo, marque a las personas y las horas se calculan a partir de sus fichajes cerrados. Añada conceptos y notas, apruebe, y se crean los recibos de nómina.
+## Pantallas relacionadas
 
-Solo cuentan los fichajes **cerrados**. Quien sigue con la entrada registrada aparece nombrado en su fila para que vea qué se dejó fuera.
+[[open: #timesheets | Fichajes y hojas de horas]] [[open: #payroll?tab=claims | Gastos y kilometraje]]
 
-El ciclo tiene las mismas tres pestañas: **Educadores**, **Otro personal** y **Contratistas**. La pestaña **Contratistas** lista los beneficiarios a quienes su agencia ya ha pagado antes. No tienen reloj, así que solo se introduce un importe. El **Conceptos y notas** de cada fila contiene conceptos (kilometraje, un complemento, una deducción) y una nota para el recibo de nómina. **Aprobar y crear recibos de nómina** los crea.
-
-Cuando marca a alguien y escribe su tarifa por hora, **Pago** se rellena como horas × tarifa como punto de partida. Puede sobrescribirlo. A quien **ya tiene un recibo de nómina manual para el mismo periodo se le omite**, y se le indica cuántas filas se omitieron y por qué, de modo que un ciclo no pueda pagar dos veces a la misma persona.
-
-**La tarifa nunca se rellena por usted.** Empieza vacía y alguien la escribe, en cada ciclo. Las cifras históricas no distinguen una tarifa por hora del pago de un periodo completo: los datos indican «horas» junto a importes que claramente no son por hora, y multiplicar por el valor equivocado produce un recibo de nómina que nadie quería aprobar.
-
-## La exportación CSV
-
-**⤓ CSV** exporta el informe de horas del periodo. Es un archivo de horas, así que lista a las personas que ficharon; los recibos de nómina de quienes no tienen fichajes están en la pantalla y no en el archivo.
-
-## De dónde salen las horas
-
-Cada hora de esta pantalla fue un fichaje en el reloj de control. **Hojas de horas** es donde se leen y corrigen esos fichajes, con un **⋮** por turno, y es el lugar para resolver un turno abierto o ausente *antes* de un ciclo de nómina y no después de que existan los recibos de nómina.
-Vea [Hojas de horas y corrección de horas](timesheets).
+- [Hojas de horas y corrección de horas](timesheets)
+- [RR. HH.: gastos y kilometraje](hr-claims)
+- [Exportación CSV lista para nómina](payroll-csv)

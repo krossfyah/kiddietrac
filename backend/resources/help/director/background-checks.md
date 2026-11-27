@@ -10,7 +10,7 @@ Track vulnerable sector (VSS), criminal record, driver and reference checks for 
 
 ## Where it is
 
-Sidebar → **Background checks**. Agency admins and centre directors can use it.
+Open **Human Resources > Documents & letters > Background checks**. When your agency does not have the HR add-on, **Background checks** sits directly in the **Human Resources** menu. Agency admins and centre directors can use it.
 
 - **Agency admins** see the checks of all current staff in the agency.
 - **Directors** see and edit the checks of their own centres' staff only.

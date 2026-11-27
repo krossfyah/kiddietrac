@@ -2,75 +2,84 @@
 title: Payroll runs, hours and payslips
 category: Staff Management
 order: 30
-roles: agency_admin, platform_admin
+roles: agency_admin, platform_admin, centre_director
 screens: payroll
 ---
 # Payroll runs, hours and payslips
 
-One screen answers both halves of the same question: what did this person work, and what were they paid for it.
+The **Payroll** screen answers one question: what did each person work in a period, and what were they paid for it. It shows clocked hours beside the payslips issued for the same dates, lets you open, print, email or mark each payslip, and is where an agency admin makes a payroll run. Open it from **Human Resources > Payroll**.
 
-![Payroll: Educators, Other staff and Contractors, each with their payslips](https://api.kiddietrac.com/help-img/payroll.png)
+[[open: #payroll | Open Payroll]]
 
-## Three groups
+The screen has two views: **⏱️ Hours & payslips** (what was worked, with each person's payslips on their row) and **📅 Pay periods** (one row per pay period, with totals and a hours check).
 
-**Educators**, **Other staff** and **Contractors** are separate tabs, not one long list. They are paid on different terms and signed off by different people, and each carries its own subtotal. The screen opens on the first tab that has anybody in it.
+## Seeing hours and payslips for a period
 
-The overall **Total hours** across both staff groups stays visible underneath.
+1. Open **Human Resources > Payroll**. The **⏱️ Hours & payslips** view opens on the last 30 days.
+2. Press a quick period: **This pay period**, **Last pay period**, **This month** or **Last month**. Or type the **From** and **To** dates and press **Run**.
+3. Choose a tab: **🧑‍🏫 Educators**, **👥 Other staff** or **📄 Contractors**. The screen opens on the first tab with anyone in it.
+4. Read each row: **Staff**, **Role**, **Centre**, **Punches**, **Hours** and **Payslips**. Each group has its own subtotal, and the overall total stays under the tabs.
+5. Press the **Payslips** link on a row (for example "2 payslips · $1,850.00") to list that person's documents for the period.
 
-## Contractors are different, deliberately
+Only closed punches count. Someone still clocked in is named on their row so you can see what was left out. People paid without clocking in (a salaried manager, a home visitor paid per visit) still appear, with 0 punches and their payslips.
 
-A contractor does not clock in. They hold no login and are paid by name, so there are no punches and no hours to report — showing them beside people with punch counts would put a blank column and zero hours against money that was really paid.
+> ℹ️ Contractors do not clock in and have no login, so their tab shows what they were **paid** in the period instead of hours.
 
-Their tab reports **what they were paid** in the period instead, and says so on the page.
+## Opening, emailing or marking a payslip
 
-## Somebody paid without clocking in
+1. Open the person's payslips from the **Payslips** link.
+2. Press **👁 View** to read the PDF, **⬇️ Download** to save it, or **🖨 Print** to print it.
+3. Press **✉️ Resend payslip** to email it. Confirm the **Email address** (it is filled in from the file but never sent without you confirming), add **Also send a copy to (optional)** or a **Note (optional)**, and send.
+4. Press **Mark as paid** once the money has gone out. Press **Mark unpaid** to undo it.
+5. Press **Send by Interac** to pay a payslip by Interac. It names the amount and the person and asks you to confirm, because it moves real money.
 
-The report includes anyone **paid** in the period, not only anyone **clocked**. A home visitor paid per visit, a salaried manager, anyone on a flat amount — they appear with 0 punches and 0 hours, which is true of them, and their payslips.
+**Send by Interac** shows only for a person with an account; contractors are paid by hand and marked paid.
 
-Without that, a month in which nobody happened to punch a clock rendered as an empty report while payslips existed for it.
+## Reviewing a whole pay period
 
-## Payslips on the row
+1. Press **📅 Pay periods**.
+2. Choose the **Year**, or **All years**.
+3. Read the cards: **Net paid**, **People paid**, **Average per person**, **Outstanding** (payslips not marked paid yet) and the **Hours check**.
+4. Press **Open period ›** on a row.
+5. Compare **Payslip hrs** with **Clock hrs** for each person. A row marked **⚠ to review** has a difference; **✓ all match** means none.
+6. Use **View payslip**, **Download payslip**, **✉️ Resend payslip** or **Mark paid** on a row, or **✉️ Resend all payslips** for the period.
 
-The **Payslips** column shows how many documents a person has in the period and what they add up to. Open it and each document is listed underneath with its own **⋮** menu:
+## Making a payroll run (agency admins)
 
-- **Payslip** — opens the PDF.
-- **Print** — opens it and sends it to the printer.
-- **Download** — saves the PDF.
-- **Email payslip** — sends it to an address you confirm, with the PDF attached.
-- **Send by Interac** — pays it, if the person has an account (see below).
-- **Mark as paid** / **Mark unpaid** — the manual record, which toggles.
+1. Press **＋ Generate payroll**.
+2. Enter the **Period start** and **Period end**, then press **Read the clock**.
+3. On the **Educators**, **Other staff** and **Contractors** tabs, tick the people to pay.
+4. Type each person's **Rate**. **Pay** fills in as hours × rate as a starting point; you can overwrite it.
+5. Press **Lines & notes** on a row to **+ Add a line** (mileage, a top-up, a deduction) or write **Notes on this payslip**.
+6. Press **Approve and create payslips**.
 
-Emailing asks for the address every time. It is prefilled where one is on file, and it must be confirmed — there is no default recipient for somebody's pay.
+The rate is never filled in for you: type it every run. Anyone who already has a payslip for the same period is skipped, and the run tells you how many were skipped and why, so nobody is paid twice. If timesheets for the period are not approved yet, the run warns you to approve them in **Clock-ins & timesheets > Approve & lock**.
 
-## Paying a payslip
+## Exporting the hours
 
-**Send by Interac** moves real money, so it confirms first and names the amount and the person:
+Press **⤓ CSV** to download the hours report for the dates shown. It is an hours file: people paid without punches are on the screen, not in the file. See [Payroll-ready CSV export](payroll-csv).
 
-> Send $1,424.90 by Interac to Bruni Meeser? This moves real money.
+## Who can do what
 
-The payment is tied to the payslip it settles, so the record shows what was paid and for what.
+| Role | What they can do |
+|---|---|
+| Agency admin | Everything here, including **＋ Generate payroll** and **Send by Interac**. |
+| Centre director | See hours and payslips for their own centres, open, print, email and mark payslips. Directors do not make payroll runs. |
+| Staff | See their own payslips in **My HR**, not this screen. |
 
-**Contractors cannot be paid this way.** Interac sends to a person's account, and a contractor is a name rather than an account. Their payslips are marked paid by hand — everything else on the menu works normally.
+## FAQs and when something goes wrong
 
-## Generating payroll
+??? It says "No punches in range." | Nobody clocked in between the dates. Try **Last pay period** or wider dates; salaried staff show only when a payslip exists.
+??? Someone's hours look wrong. | Hours come from the time clock. Correct the shift in **Clock-ins & timesheets** first, then press **Run** again.
+??? "No payroll documents for the agency you are viewing." | No payslips have been issued for this agency yet. They appear once a payroll run is made or payslips arrive from your payroll system.
+??? I pressed ＋ Generate payroll and the run did not open. | Payroll runs are for agency admins. Ask an agency admin to run it.
+??? A person was skipped in the run. | They already have a payslip for the same period. Open it from the **Payslips** link instead.
+??? Where do the Pay runs and Remittances tabs come from? | They belong to the payroll engine, shown only when your agency has switched it on. See [Payroll engine: pay runs, payslips and remittances](payroll-engine).
 
-**＋ Generate payroll** opens the run wizard: pick the period, tick the people, and hours are calculated from their closed clock punches. Add line items and notes, approve, and payslips are written.
+## Related screens
 
-Only **closed** punches count. Anyone still clocked in is named on their row so you can see what was left out.
+[[open: #timesheets | Clock-ins & timesheets]] [[open: #payroll?tab=claims | Claims & mileage]]
 
-The run has the same three tabs: **Educators**, **Other staff** and **Contractors**. The **Contractors** tab lists payees your agency has paid before. They have no clock, so you enter an amount only. Each row's **Lines & notes** holds line items (mileage, a top-up, a deduction) and a note for the payslip. **Approve and create payslips** writes them.
-
-When you tick somebody and type their hourly rate, **Pay** is filled in as hours × rate as a starting point. You can overwrite it. Somebody who **already has a manual payslip for the same period is skipped**, and you are told how many rows were skipped and why, so a run cannot pay the same person twice.
-
-**The rate is never filled in for you.** It starts empty and somebody types it, every run. The historical figures cannot tell an hourly rate from a whole period's pay — the data says "hours" against amounts that are plainly not hourly — and multiplying by the wrong one produces a payslip nobody meant to approve.
-
-## The CSV export
-
-**⤓ CSV** exports the hours report for the period. It is an hours file, so it lists people who clocked in; payslips for people with no punches are on the screen rather than in it.
-
-## Where the hours come from
-
-Every hour on this screen was a punch on the time clock. **Timesheets** is where those
-punches are read and corrected, one **⋮** per shift — and it is the place to settle an
-open shift or a missing one *before* a payroll run rather than after payslips exist.
-See [Timesheets and correcting hours](timesheets).
+- [Timesheets and correcting hours](timesheets)
+- [HR: expense and mileage claims](hr-claims)
+- [Payroll-ready CSV export](payroll-csv)

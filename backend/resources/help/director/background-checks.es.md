@@ -9,7 +9,7 @@ Haga seguimiento de las verificaciones del sector vulnerable (VSS), de anteceden
 
 ## Dónde está
 
-Barra lateral → **Verificación de antecedentes**. Los administradores de agencia y los directores de centro pueden usarla.
+Abra **Recursos humanos > Documentos y cartas > Verificación de antecedentes**. Si su agencia no tiene el complemento de RR. HH., **Verificación de antecedentes** está directamente en el menú **Recursos humanos**. Los administradores de agencia y los directores de centro pueden usarla.
 
 - **Los administradores de agencia** ven las verificaciones de todo el personal actual de la agencia.
 - **Los directores** ven y editan únicamente las verificaciones del personal de sus propios centros.

@@ -9,7 +9,7 @@ Suivez les vérifications du secteur vulnérable (VSS), du casier judiciaire, du
 
 ## Où la trouver
 
-Menu latéral → **Vérifications d’antécédents**. Les administrateurs d’agence et les directeurs de centre peuvent l’utiliser.
+Ouvrez **Ressources humaines > Documents et lettres > Vérifications d’antécédents**. Si votre agence n’a pas le module RH, **Vérifications d’antécédents** se trouve directement dans le menu **Ressources humaines**. Les administrateurs d’agence et les directeurs de centre peuvent l’utiliser.
 
 - **Les administrateurs d’agence** voient les vérifications de tout le personnel actuel de l’agence.
 - **Les directeurs** voient et modifient uniquement les vérifications du personnel de leurs propres centres.
