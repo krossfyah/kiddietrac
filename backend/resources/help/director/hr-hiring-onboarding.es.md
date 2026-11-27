@@ -18,6 +18,7 @@ Son dos entradas en **Recursos humanos**: **Contratación e incorporación** (Co
 - **Añadir un comentario** deja una nota sobre un candidato para su equipo. El candidato nunca la ve.
 - Los puestos para toda la agencia (sin centro) los gestionan los administradores de agencia. Los directores de centro pueden verlos, ver sus candidatos y comentar, pero no cambiarlos.
 - **Ajustes de contratación** define cuánto tiempo se guardan los candidatos en archivo (después se eliminan automáticamente), cuándo se eliminan los candidatos rechazados (a los 90 días salvo que elija otra cosa, o Nunca), a quién llegan las respuestas y el texto al inicio de su página de empleos. El currículum, las cartas y el historial de un candidato eliminado se van con él.
+- **Google Jobs** (Recursos humanos › Ajustes de RR. HH., administradores de la agencia) está desactivado hasta que lo actives. Cuando está activado, cada empleo abierto de tu página de empleos lleva lo que Google necesita para mostrarlo en Google Jobs: el título, la descripción, el tipo, el sueldo si lo indicaste, el nombre y el logotipo de tu agencia y la ciudad, nunca una dirección. Los empleos cerrados o cubiertos desaparecen solos. Mientras esté desactivado, se pide a los buscadores que no incluyan tu página de empleos.
 
 ## Incorporación
 

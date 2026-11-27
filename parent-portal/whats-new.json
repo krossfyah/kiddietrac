@@ -2,6 +2,22 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🔎",
+            "title": "Your jobs in Google Jobs",
+            "body": "Human Resources › HR settings has a new Google Jobs switch. Turn it on and the open jobs on your jobs page can show up in Google Jobs with your agency's name and logo. It is off until you turn it on.",
+            "roles": [
+                "agency_admin"
+            ],
+            "title_fr": "Vos postes dans Google Jobs",
+            "body_fr": "Ressources humaines › Paramètres RH a un nouveau réglage Google Jobs. Activez-le et les postes ouverts de votre page d'emplois peuvent apparaître dans Google Jobs avec le nom et le logo de votre agence. Il reste désactivé tant que vous ne l'activez pas.",
+            "title_es": "Tus empleos en Google Jobs",
+            "body_es": "Recursos humanos › Ajustes de RR. HH. tiene un nuevo ajuste de Google Jobs. Actívalo y los empleos abiertos de tu página de empleos pueden aparecer en Google Jobs con el nombre y el logotipo de tu agencia. Está desactivado hasta que lo actives.",
+            "title_hi": "आपकी नौकरियाँ Google Jobs में",
+            "body_hi": "मानव संसाधन › HR सेटिंग्स में नया Google Jobs स्विच है। इसे चालू करें और आपके जॉब पेज की खुली नौकरियाँ आपकी एजेंसी के नाम और लोगो के साथ Google Jobs में दिख सकती हैं। जब तक आप इसे चालू न करें, यह बंद रहता है।"
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "🔒",

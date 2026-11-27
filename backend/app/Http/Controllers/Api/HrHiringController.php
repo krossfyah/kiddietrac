@@ -82,7 +82,9 @@ final class HrHiringController extends Controller
                 'pay' => $this->payText($p), 'description' => $p->description])->values();
 
         return response()->json(['agency' => ['name' => $org['name'], 'logo' => $org['logo'], 'colour' => $org['colour'], 'white_label' => $org['white_label']],
-            'intro' => HrTalent::settings((int) $a->id)['apply_intro'], 'posts' => $posts, 'keep_months' => $org['keep_months']]);
+            'intro' => HrTalent::settings((int) $a->id)['apply_intro'], 'posts' => $posts, 'keep_months' => $org['keep_months'],
+            // seo1127: JobPosting data per open post, only when the agency switched Google Jobs on (else null = noindex).
+            'google_jobs' => (fn ($g) => $g === null ? null : (object) $g)(\App\Support\HrGoogleJobs::forPublic((int) $a->id, $org))]);
     }
 
     private function payText(object $p): ?string

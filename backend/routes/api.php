@@ -2814,6 +2814,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get(    '/hr/hiring',                                  [\App\Http\Controllers\Api\HrHiringController::class, 'index']);
         Route::put(    '/hr/hiring/settings',                         [\App\Http\Controllers\Api\HrHiringController::class, 'saveSettings']);
+        Route::get(    '/hr/hiring/google-jobs',                      [\App\Http\Controllers\Api\HrGoogleJobsController::class, 'show']);   // seo1127
+        Route::put(    '/hr/hiring/google-jobs',                      [\App\Http\Controllers\Api\HrGoogleJobsController::class, 'save']);
         Route::post(   '/hr/jobs',                                    [\App\Http\Controllers\Api\HrHiringController::class, 'createPost']);
         Route::patch(  '/hr/jobs/{id}',                               [\App\Http\Controllers\Api\HrHiringController::class, 'updatePost'])->whereNumber('id');
         Route::post(   '/hr/jobs/{id}/close',                         [\App\Http\Controllers\Api\HrHiringController::class, 'closePost'])->whereNumber('id');

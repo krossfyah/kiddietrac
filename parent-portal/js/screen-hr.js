@@ -685,6 +685,30 @@
     });
   }
 
+  // ── Google Jobs (seo1127, 2026-11-27): list the open posts of the agency's jobs page in Google Jobs ──
+  // Off by default; agency admins switch it. jobs.html carries JobPosting data only while it is on, noindex otherwise.
+  async function drawGoogleJobs(host) {
+    if (!host) return;
+    var d;
+    try { d = await Api.get('/hr/hiring/google-jobs'); } catch (e) { host.innerHTML = ''; return; }
+    if (!host.isConnected) return;
+    host.innerHTML = '<div class="kt-card" style="padding:14px 16px;margin-top:12px;" data-kt-nogrid>'
+      + '<div style="font-weight:800;font-size:13.5px;">Google Jobs</div>'
+      + '<div class="hr-sub" style="margin:2px 0 8px;">List the open jobs on your jobs page in Google Jobs. Each job then carries its title, description, type, pay if you set it, your agency\'s name and logo, and the town it is in, never a street address. Closed and filled jobs drop out by themselves. While this is off, search engines are asked not to list your jobs page.</div><div class="hr-g">'
+      + '<div><label class="hr-l">List our open jobs in Google Jobs</label><select class="hr-i" id="hg-on" style="width:100%;"' + (d.can_change ? '' : ' disabled') + '><option value="0"' + (!d.enabled ? ' selected' : '') + '>No (default)</option><option value="1"' + (d.enabled ? ' selected' : '') + '>Yes, list them</option></select></div>'
+      + '<div><label class="hr-l">Open jobs on your jobs page</label><div style="padding:6px 0;font-weight:700;" data-no-i18n>' + esc(d.open_posts) + '</div></div></div>'
+      + (d.jobs_url ? '<div class="hr-sub" style="margin-top:8px;"><a href="' + esc(d.jobs_url) + '" target="_blank" rel="noopener">Open your jobs page</a></div><div class="hr-sub">Google can take a few days to show new jobs.</div>' : '')
+      + (d.can_change ? '<div class="hr-bar" style="margin:14px 0 0;"><button type="button" class="hr-b p" id="hg-save">Save Google Jobs</button><span id="hg-msg" style="font-size:13px;color:#B91C1C;"></span></div>' : '<div class="hr-sub" style="margin-top:8px;">Only an agency admin can change this.</div>')
+      + '</div>';
+    var sv = host.querySelector('#hg-save');
+    if (sv) sv.addEventListener('click', async function () {
+      this.disabled = true;
+      try { await Api.put('/hr/hiring/google-jobs', { enabled: host.querySelector('#hg-on').value === '1' }); host.querySelector('#hg-msg').textContent = ''; saved('Google Jobs setting saved.'); }
+      catch (e) { host.querySelector('#hg-msg').textContent = errMsg(e); }
+      this.disabled = false;
+    });
+  }
+
   // ── Settings (agency admins) ───────────────────────────────────────────
   async function drawSettings(main) {
     var b = body(main), d;
@@ -705,8 +729,9 @@
       + '<div><label class="hr-l">Of this many days or less</label><input class="hr-i" type="number" min="0.5" max="10" step="0.5" id="hs-md" style="width:100%;" value="' + esc(sa.max_days || 2) + '"></div>'
       + '<div><label class="hr-l">Within (months)</label><input class="hr-i" type="number" min="1" max="24" id="hs-mo" style="width:100%;" value="' + esc(sa.months || 6) + '"></div>'
       + '</div><div class="hr-bar" style="margin:14px 0 0;"><button type="button" class="hr-b p" id="hs-save">Save settings</button><span id="hs-msg" style="font-size:13px;color:#B91C1C;"></span></div></div>'
-      + '<div id="hs-att"></div>';
+      + '<div id="hs-att"></div><div id="hs-gj"></div>';
     drawAttendanceSettings(b.querySelector('#hs-att'));   // HR Phase 4
+    drawGoogleJobs(b.querySelector('#hs-gj'));   // seo1127
     var ly = b.querySelector('#hs-ly'), fx = b.querySelector('#hs-fx');
     var syncLy = function () { fx.style.display = ly.value === 'fixed' ? '' : 'none'; };
     ly.addEventListener('change', syncLy); syncLy();

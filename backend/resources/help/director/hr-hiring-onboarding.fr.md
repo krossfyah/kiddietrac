@@ -18,6 +18,7 @@ Ce sont deux entrées sous **Ressources humaines** : **Embauche et intégration*
 - **Ajouter un commentaire** laisse une note sur un candidat pour votre équipe. Le candidat ne la voit jamais.
 - Les postes pour toute l'agence (sans centre) sont gérés par les administrateurs d'agence. Les directeurs de centre peuvent les voir, voir leurs candidats et commenter, mais pas les modifier.
 - **Paramètres de recrutement** fixe la durée de conservation des candidatures gardées en dossier (elles sont ensuite supprimées automatiquement), le moment où les candidats refusés sont supprimés (après 90 jours sauf autre choix, ou Jamais), l'adresse des réponses et le texte en haut de votre page d'emplois. Le CV, les lettres et l'historique d'un candidat supprimé partent avec lui.
+- **Google Jobs** (Ressources humaines › Paramètres RH, administrateurs de l'agence) est désactivé tant que vous ne l'activez pas. Une fois activé, chaque poste ouvert de votre page d'emplois contient ce dont Google a besoin pour l'afficher dans Google Jobs : le titre, la description, le type, le salaire si vous l'avez indiqué, le nom et le logo de votre agence et la ville, jamais une adresse. Les postes fermés ou pourvus disparaissent d'eux-mêmes. Tant que c'est désactivé, on demande aux moteurs de recherche de ne pas répertorier votre page d'emplois.
 
 ## Intégration
 

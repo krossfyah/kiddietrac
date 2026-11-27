@@ -1285,6 +1285,7 @@ delete hr/people/{id}/sin | Removed a staff member's SIN
 post hr/people/{id}/sin/reveal | Revealed a staff member's SIN
 post hr/adjustments | Adjusted a leave balance
 put hr/hiring/settings | Changed the hiring settings
+put hr/hiring/google-jobs | Switched listing jobs in Google Jobs on or off
 post hr/jobs | Added a job post
 patch hr/jobs/{id} | Changed a job post
 post hr/jobs/{id}/close | Closed a job post

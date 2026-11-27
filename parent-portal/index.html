@@ -173,8 +173,12 @@
       var cp=d.getElementById('ktl-copy');if(cp)cp.textContent='© '+new Date().getFullYear()+' '+name;});
   }catch(e){}})(window,document);</script>
   <script>window.KT_VERSION='4.24';</script>
-  <title>Sign in · Kiddietrac</title>
-  <meta name="description" content="Sign in to your Kiddietrac parent account">
+  <title>Sign in · KiddieTrac</title>
+  <meta name="description" content="Sign in to your KiddieTrac parent account">
+  <!-- seo1127 (2026-11-27): every /?tenant=... and /index.html?... variant is the same sign-in page; search engines
+       fold them into one. Only on app.kiddietrac.com: another host (a white-label domain or the apps) drops it. -->
+  <link rel="canonical" href="https://app.kiddietrac.com/">
+  <script>if(location.hostname!=='app.kiddietrac.com'){var c=document.querySelector('link[rel="canonical"]');if(c)c.remove();}</script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260901b">
   <link rel="alternate icon" type="image/x-icon" href="/favicon.ico?v=20260901b">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260901b">

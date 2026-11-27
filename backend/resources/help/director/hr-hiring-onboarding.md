@@ -18,6 +18,7 @@ These are two entries under **Human Resources**: **Hiring & onboarding** (Hiring
 - **Add a comment** leaves a note on an applicant for your team. The applicant never sees it.
 - Jobs for the whole agency (no centre) are run by the agency admins. Centre directors can see them and their applicants and add comments, but not change them.
 - **Hiring settings** sets how long applicants kept on file are kept (they are deleted automatically after that), when declined applicants are deleted (after 90 days unless you choose otherwise, or Never), who replies go to, and the words at the top of your jobs page. A deleted applicant's resume, letters and history go with them.
+- **Google Jobs** (Human Resources › HR settings, agency admins) is off unless you switch it on. When it is on, each open job on your jobs page carries what Google needs to list it in Google Jobs: the title, description, type, pay if you set it, your agency's name and logo, and the town, never a street address. Closed and filled jobs drop out by themselves. While it is off, search engines are asked not to list your jobs page.
 
 ## Onboarding
 
