@@ -76,6 +76,38 @@
     }).join('') + '</div>';
   }
   function torReview(r) { return !!(+r.review_pending) && (r.status || '').toLowerCase() === 'approved'; }
+  /* KIDDIETRAC HR PHASE 4 (2026-11-27): leave clashes. The server says how many others at the centre are off or have
+     asked (clash_others) and whether approving goes below the centre's minimum staff (clash_short). Approvers see the
+     names in the Approve popup; the person asking sees a count only. */
+  function torClash(r) {
+    if ((r.status || '').toLowerCase() !== 'pending') return '';
+    var bits = [];
+    if (+r.clash_others) bits.push(r.clash_others + ' other' + (+r.clash_others === 1 ? '' : 's') + ' off or asking');
+    if (r.clash_short) bits.push('below minimum staff');
+    return bits.length ? '⚠️ ' + bits.join(' · ') : '';
+  }
+  function torDay(d) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1] + ' ' + (+m[3]) : (d || ''); }
+  function clashHtml(c, names) {
+    if (!c || !c.centres || !c.centres.length) return '';
+    var out = '';
+    c.centres.forEach(function (x) {
+      var others = names ? (x.others || []) : [];
+      if (c.warn !== false && (names ? others.length : x.others_count)) {
+        out += '<div style="font-weight:800;margin-bottom:3px;">Also away at <span data-no-i18n>' + torEsc(x.centre_name || 'the centre') + '</span></div>'
+          + (names ? others.map(function (o) {
+            return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:2px 0;"><span><b data-no-i18n>' + torEsc(o.name) + '</b> · <span data-no-i18n>' + torEsc(o.type) + '</span>' + (o.part_day ? ' (part of a day)' : '') + '</span>'
+              + '<span style="white-space:nowrap;">' + torEsc(o.when) + ' · ' + (o.status === 'approved' ? 'approved' : 'asked') + '</span></div>';
+          }).join('') : '<div style="font-size:12.5px;">' + x.others_count + ' other' + (x.others_count === 1 ? ' person is' : ' people are') + ' already off or asking on some of these days.</div>');
+      }
+      if (x.short_days && x.short_days.length) {
+        out += '<div style="font-weight:800;margin:6px 0 3px;color:#B91C1C;">Below the minimum of ' + x.min_staff + ' staff</div><div style="font-size:12.5px;">'
+          + x.short_days.slice(0, 8).map(function (d) { return torEsc(torDay(d.date)) + ': ' + d.working + ' working'; }).join(' · ')
+          + (x.short_days.length > 8 ? ' and ' + (x.short_days.length - 8) + ' more' : '') + '</div>'
+          + (names && c.min_mode === 'block' ? '<div style="font-size:12.5px;margin-top:3px;">Your agency does not allow approving this: arrange cover first, or decline.</div>' : '');
+      }
+    });
+    return out ? '<div data-clash style="background:#FFFBEB;border:1px solid #FCD34D;color:#78350F;border-radius:10px;padding:9px 12px;font-size:13px;line-height:1.45;margin:0 0 10px;">' + out + '</div>' : '';
+  }
   var REVIEW_PILL = '<span style="display:inline-block;margin-left:6px;padding:2px 8px;border-radius:999px;background:#FFFBEB;color:#B45309;font-size:11.5px;font-weight:800;">To review</span>';
   async function markReviewed(id) {
     try { await Api.post('/admin/time-off/' + id + '/reviewed', {}); if (KT.toast) KT.toast('✅', 'Saved', 'Marked as reviewed.', '#16A34A'); }
@@ -183,18 +215,23 @@
   function torEsc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function torReload() { renderTimeOff(document.getElementById('appMain') || document.querySelector('main')); }
   async function approveTor(id) {
-    var o = null;
+    var o = null, cl = null;
     try { o = await Api.get('/admin/time-off/' + id + '/closure-options'); } catch (e) {}
+    if (HR_ME) { try { cl = await Api.get('/hr/time-off/' + id + '/clash'); } catch (e) {} }   // HR Phase 4: leave clashes
+    var clash = clashHtml(cl, true);
     var M = window.KT && KT.Shell && KT.Shell.Modal;
-    if (!o || !o.centre_id || !M) {
+    if ((!o || !o.centre_id) && !clash || !M) {
       await Api.patch('/admin/time-off/' + id, { status: 'approved' });
       return torReload();
     }
-    var closeDefault = !o.already_closed && o.sole_staff && o.all_day;
+    var hasCentre = !!(o && o.centre_id);
+    o = o || {};
+    var closeDefault = hasCentre && !o.already_closed && o.sole_staff && o.all_day;
     var box = document.createElement('div');
     var parents = o.parents + ' parent' + (o.parents === 1 ? '' : 's');
-    box.innerHTML = '<div style="font-size:13.5px;color:#334155;margin-bottom:10px;">' + torEsc(o.when) + ' &middot; <b>' + torEsc(o.centre_name || 'their centre') + '</b></div>'
-      + (o.already_closed
+    box.innerHTML = (o.when ? '<div style="font-size:13.5px;color:#334155;margin-bottom:10px;">' + torEsc(o.when) + (hasCentre ? ' &middot; <b>' + torEsc(o.centre_name || 'their centre') + '</b>' : '') + '</div>' : '')
+      + clash
+      + (!hasCentre ? '' : o.already_closed
         ? '<div style="background:#F1F5F9;border-radius:10px;padding:10px 12px;font-size:13px;color:#475569;">The centre is already closed for these dates, so nothing more is needed.</div>'
         : '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:10px;margin-bottom:8px;cursor:pointer;">'
           + '<input type="radio" name="tor-close" value="none"' + (closeDefault ? '' : ' checked') + ' style="margin-top:3px;">'
@@ -216,11 +253,12 @@
             var payload = { status: 'approved', close: pick ? pick.value : 'none' };
             var note = (box.querySelector('[data-note]').value || '').trim();
             if (note) payload.decision_notes = note;
+            if (!hasCentre) payload.close = 'auto';
             if (payload.close === 'centre') payload.close_centre_id = o.centre_id;
             return Api.patch('/admin/time-off/' + id, payload).then(function (r) {
               if (window.KT && KT.toast) KT.toast('✅', 'Approved', r && r.closure_created ? (o.centre_name || 'Centre') + ' marked closed; parents emailed.' : '', '#16A34A');
               torReload();
-            }).catch(function (e) { box.querySelector('[data-out]').textContent = (e && e.message) || 'Could not approve.'; return false; });
+            }).catch(function (e) { box.querySelector('[data-out]').textContent = (e && e.data && e.data.message) || (e && e.message) || 'Could not approve.'; return false; });
           } },
       ],
     });
@@ -257,6 +295,7 @@
     card.appendChild(head);
     card.appendChild(el('div', { style: 'font-size:13.5px;font-weight:600;color:#334155;margin-top:11px;padding-top:11px;border-top:1px solid #F1F5F9;' }, '📅 ' + torWhen(r)));
     if (hrLine(r)) card.appendChild(el('div', { style: 'font-size:12.5px;font-weight:700;color:' + ((r.leave_balance_after < 0) ? '#B91C1C' : '#0E7490') + ';margin-top:6px;' }, hrLine(r)));
+    if (isApprover && torClash(r)) card.appendChild(el('div', { style: 'font-size:12.5px;font-weight:700;color:#B45309;margin-top:6px;' }, torClash(r)));
     if (r.reason) card.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:6px;line-height:1.45;' }, r.reason));
     // Mobile renders cards, not the table, so the decision has to be added here too.
     var decidedLine = decidedText(r);
@@ -321,7 +360,7 @@
       const status = (r.status || 'pending').toLowerCase();
       const color = status === 'approved' ? '#047857' : status === 'denied' ? '#B91C1C' : '#D97706';
       tr.innerHTML = `<td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.user_name || 'You')}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${r.leave_type_name ? '<span data-no-i18n>' + escapeHtml(r.leave_type_name) + '</span>' : '<span style="text-transform:capitalize;">' + escapeHtml(r.request_type) + '</span>'}${hrLine(r) ? '<div style="font-size:11.5px;font-weight:700;color:' + ((r.leave_balance_after < 0) ? '#B91C1C' : '#0E7490') + ';">' + escapeHtml(hrLine(r)) + '</div>' : ''}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${r.leave_type_name ? '<span data-no-i18n>' + escapeHtml(r.leave_type_name) + '</span>' : '<span style="text-transform:capitalize;">' + escapeHtml(r.request_type) + '</span>'}${hrLine(r) ? '<div style="font-size:11.5px;font-weight:700;color:' + ((r.leave_balance_after < 0) ? '#B91C1C' : '#0E7490') + ';">' + escapeHtml(hrLine(r)) + '</div>' : ''}${isApprover && torClash(r) ? '<div style="font-size:11.5px;font-weight:700;color:#B45309;">' + escapeHtml(torClash(r)) + '</div>' : ''}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(torWhen(r))}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:12.5px;color:#475569;">${decidedCell(r)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span>${torReview(r) ? REVIEW_PILL : ''}${r.closed_for_dates && status === 'approved' ? '<div style="font-size:11.5px;color:#92400E;font-weight:700;">🔒 Centre closed</div>' : ''}</td>
@@ -460,6 +499,28 @@
     m.addEventListener('change', syncBal);
     m.addEventListener('input', syncBal);
     setTimeout(syncBal, 0);
+    var clashEl = null, clashT = null, clashKey = '';
+    if (HR_ME) {
+      clashEl = document.createElement('div');
+      clashEl.id = 'tor-clash';
+      clashEl.style.cssText = 'margin-top:10px;';
+      m.querySelector('#tor-reason').closest('label').before(clashEl);
+    }
+    function syncClash() {
+      if (!clashEl) return;
+      var s0 = m.querySelector('#tor-start').value, all = m.querySelector('#tor-allday').checked, e0 = all ? m.querySelector('#tor-end').value : s0;
+      if (!s0 || !e0 || e0 < s0) { clashEl.innerHTML = ''; clashKey = ''; return; }
+      var key = s0 + '|' + e0 + '|' + all;
+      if (key === clashKey) return;
+      clashKey = key;
+      clearTimeout(clashT);
+      clashT = setTimeout(function () {
+        Api.get('/hr/me/clash?start_at=' + s0 + '&end_at=' + e0 + '&all_day=' + (all ? 1 : 0)).then(function (c) {
+          if (clashKey === key) clashEl.innerHTML = clashHtml(c, false);
+        }, function () { if (clashKey === key) clashEl.innerHTML = ''; });
+      }, 350);
+    }
+    m.addEventListener('change', syncClash);
 
     var allDayEl = m.querySelector('#tor-allday');
     var timesEl = m.querySelector('#tor-times');

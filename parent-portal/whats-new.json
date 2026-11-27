@@ -2,6 +2,62 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "⏰",
+            "title": "Lateness against the schedule",
+            "body": "HR > Absence report > Lateness compares each first clock-in with the scheduled shift start: how often, how many minutes and any pattern, such as mostly Mondays. Your agency sets the grace time and can tell directors when someone is late.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Retards par rapport à l'horaire",
+            "body_fr": "RH > Rapport d'absences > Retards compare chaque premier pointage au début du quart prévu : combien de fois, combien de minutes et une tendance, comme surtout le lundi. Votre agence fixe le délai de grâce et peut prévenir les directeurs d'un retard.",
+            "title_es": "Retrasos frente al horario",
+            "body_es": "RR. HH. > Informe de ausencias > Retrasos compara cada primer fichaje con el inicio del turno programado: cuántas veces, cuántos minutos y un patrón, como sobre todo los lunes. Tu agencia fija el margen de cortesía y puede avisar a los directores de un retraso.",
+            "title_hi": "शेड्यूल की तुलना में देरी",
+            "body_hi": "एचआर > अनुपस्थिति रिपोर्ट > देरी हर पहले क्लॉक-इन को निर्धारित शिफ्ट की शुरुआत से मिलाता है: कितनी बार, कितने मिनट और कोई पैटर्न, जैसे ज़्यादातर सोमवार। आपकी एजेंसी छूट समय तय करती है और देरी होने पर निदेशकों को बता सकती है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "📊",
+            "title": "Absence score",
+            "body": "The absence report now scores frequent short absences higher than one long one and marks anyone above your agency's threshold (50 by default). A prompt for a conversation, never an automatic decision.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Score d'absence",
+            "body_fr": "Le rapport d'absences donne maintenant plus de poids aux absences courtes et fréquentes qu'à une longue absence, et signale toute personne au-dessus du seuil de votre agence (50 par défaut). Une invitation à en parler, jamais une décision automatique.",
+            "title_es": "Puntuación de ausencias",
+            "body_es": "El informe de ausencias ahora puntúa más las ausencias cortas y frecuentes que una larga, y marca a quien supere el umbral de tu agencia (50 por defecto). Una invitación a conversar, nunca una decisión automática.",
+            "title_hi": "अनुपस्थिति स्कोर",
+            "body_hi": "अनुपस्थिति रिपोर्ट अब बार-बार की छोटी अनुपस्थितियों को एक लंबी अनुपस्थिति से अधिक स्कोर देती है और आपकी एजेंसी की सीमा (डिफ़ॉल्ट 50) से ऊपर वाले हर व्यक्ति को चिह्नित करती है। बातचीत का संकेत, कभी स्वचालित निर्णय नहीं।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🗓️",
+            "title": "See who else is off",
+            "body": "Asking for time off now shows how many others at your centre are already off those days. Approvers see who, and are warned when a centre would drop below the minimum staff your agency sets.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Voir qui d'autre est absent",
+            "body_fr": "Une demande de congé indique maintenant combien d'autres personnes de votre centre sont déjà absentes ces jours-là. La personne qui approuve voit qui, et est avertie si un centre passe sous le personnel minimum fixé par votre agence.",
+            "title_es": "Ver quién más está ausente",
+            "body_es": "Al pedir tiempo libre ahora ves cuántas otras personas de tu centro ya están ausentes esos días. Quien aprueba ve quiénes y recibe un aviso si un centro queda por debajo del personal mínimo que fija tu agencia.",
+            "title_hi": "देखें कि और कौन छुट्टी पर है",
+            "body_hi": "छुट्टी माँगते समय अब दिखता है कि आपके केंद्र में उन दिनों कितने और लोग पहले से छुट्टी पर हैं। स्वीकृति देने वाले देखते हैं कि कौन, और अगर कोई केंद्र आपकी एजेंसी के न्यूनतम स्टाफ़ से कम होगा तो उन्हें चेतावनी मिलती है।"
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "🏷️",

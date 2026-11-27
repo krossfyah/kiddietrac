@@ -700,6 +700,8 @@ final class CareController extends Controller
         if ($geo && ! empty($geo['row'])) {
             DB::table('time_punches')->where('id', $id)->update($geo['row']);   // the answer only, never the location
         }
+        // HR add-on (Phase 4): compared with the scheduled shift; optional bell to the director past the grace window. Never throws.
+        \App\Support\HrAttendance::onClockIn((int) $id);
         $this->notifyClockEvent($request->user(), (int) $centreId, 'in');
         $this->auditClock($request, $userId, 'in', (int) $centreId, null);
         return response()->json(['action' => 'in', 'id' => $id, 'message' => 'Clocked in']);

@@ -15,6 +15,8 @@ Certains types n'exigent pas d'approbation : ils sont enregistrés et retirés d
 
 Seuls les jours ouvrables comptent : les fins de semaine et les jours fériés et fermetures du calendrier de votre centre ne sont pas retirés.
 
+Si d'autres personnes de votre centre sont déjà absentes ou ont demandé les mêmes jours, le formulaire vous indique combien, pour vous aider à planifier. Votre directeur le voit aussi avant de décider.
+
 ## Après la décision
 
 Une demande approuvée est retirée de votre solde. Si elle est refusée ou que vous la retirez, le temps revient.

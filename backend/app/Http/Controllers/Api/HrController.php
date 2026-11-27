@@ -12,6 +12,7 @@ use App\Support\AgencyTime;
 use App\Support\Audit;
 use App\Support\CentreScope;
 use App\Support\Features;
+use App\Support\HrAttendance;
 use App\Support\HrLeave;
 use App\Support\Live;
 use Illuminate\Http\JsonResponse;
@@ -717,22 +718,34 @@ final class HrController extends Controller
             $rows[$key]['people'][$d['user_id']] = true;
             $rows[$key]['by_type'][$d['type_name']] = ($rows[$key]['by_type'][$d['type_name']] ?? 0) + $d['days'];
         }
+        /* ABSENCE SCORE (HR Phase 4, App\Support\HrAttendance::scores): spells x spells x days over the agency's window
+           ending on $to, for the leave types it counts. Beside the short-absence flag, per person. */
+        $sc = HrAttendance::scores($aid, $to, $ids);
         $out = [];
         foreach ($rows as $r) {
             $uid = $r['user_id'];
+            $score = $uid ? ($sc['people'][$uid] ?? ['spells' => 0, 'days' => 0, 'score' => 0]) : null;
             $out[] = ['key' => $r['key'], 'label' => $r['label'], 'colour' => $r['colour'], 'centre' => $r['centre'], 'user_id' => $uid,
                 'days' => round($r['days'], 2), 'hours' => round($r['hours'], 2), 'occurrences' => count($r['occurrences']), 'people' => count($r['people']),
                 'short_count' => $uid ? count($short[$uid] ?? []) : null, 'flagged' => $uid ? isset($flagged[$uid]) : null,
+                'score' => $score ? $score['score'] : null, 'score_spells' => $score ? $score['spells'] : null, 'score_days' => $score ? $score['days'] : null,
+                'score_flag' => $score ? $score['score'] >= $sc['threshold'] : null,
                 'by_type' => collect($r['by_type'])->map(fn ($v, $k) => ['type' => $k, 'days' => round($v, 2)])->values()];
         }
         if ($group === 'person' && $request->boolean('short_only')) {
             $out = array_values(array_filter($out, fn ($r) => $r['flagged']));
         }
+        if ($group === 'person' && $request->boolean('score_only')) {
+            $out = array_values(array_filter($out, fn ($r) => $r['score_flag']));
+        }
+        $scoreFlagged = $group === 'person' ? count(array_filter($out, fn ($r) => $r['score_flag']))
+            : count(array_filter($sc['people'], fn ($p) => $p['score'] >= $sc['threshold']));
         usort($out, fn ($a, $b) => $group === 'month' ? strcmp($a['key'], $b['key']) : ($b['days'] <=> $a['days'] ?: strcasecmp($a['label'], $b['label'])));
 
         return ['agency' => $aid, 'from' => $from, 'to' => $to, 'group' => $group, 'rows' => $out, 'rule' => $rule,
+            'score_rule' => ['threshold' => $sc['threshold'], 'months' => $sc['months'], 'from' => $sc['window_from'], 'types' => $sc['types']],
             'totals' => ['days' => round(array_sum(array_column($out, 'days')), 2), 'hours' => round(array_sum(array_column($out, 'hours')), 2),
-                'people' => count(array_unique(array_column($days, 'user_id'))), 'flagged' => count($flagged)],
+                'people' => count(array_unique(array_column($days, 'user_id'))), 'flagged' => count($flagged), 'score_flagged' => $scoreFlagged],
             'types' => HrLeave::types($aid)->map(fn ($t) => ['id' => (int) $t->id, 'name' => $t->name])->values(),
             'centres' => Live::centres(DB::table('centres'), 'centres')->where('agency_id', $aid)
                 ->when(($sc = CentreScope::ids($request, $aid)) !== null, fn ($q) => $q->whereIn('id', $sc ?: [0]))->orderBy('name')->get(['id', 'name'])];
@@ -750,6 +763,16 @@ final class HrController extends Controller
     /** GET /exports/hr-absence — the same report as an Excel file (the branded XLSX exports). */
     public function exportAbsence(Request $request, XlsxExportService $xlsx): Response
     {
+        if ($request->query('view') === 'late') {   // the Lateness tab of the same report (HR Phase 4)
+            $d = $this->latenessData($request);
+            $cols = [['header' => 'Person', 'key' => 'name', 'width' => 28], ['header' => 'Centre', 'key' => 'centre', 'width' => 24],
+                ['header' => 'Clock-ins compared', 'key' => 'compared', 'width' => 18], ['header' => 'Late', 'key' => 'late', 'width' => 8],
+                ['header' => 'Minutes late in all', 'key' => 'minutes', 'width' => 18], ['header' => 'Average minutes late', 'key' => 'average', 'width' => 20],
+                ['header' => 'Most minutes late', 'key' => 'worst', 'width' => 17], ['header' => 'On time %', 'key' => 'on_time_pct', 'width' => 11],
+                ['header' => 'Pattern', 'key' => 'pattern', 'width' => 30]];
+
+            return $xlsx->download($d['agency'], 'Lateness ' . $d['from'] . ' to ' . $d['to'], 'lateness-' . $d['from'] . '-to-' . $d['to'] . '.xlsx', $cols, $d['rows']);
+        }
         $d = $this->reportData($request);
         $g = $d['group'];
         $first = ['person' => 'Person', 'type' => 'Leave type', 'month' => 'Month', 'centre' => 'Centre'][$g];
@@ -763,13 +786,166 @@ final class HrController extends Controller
         if ($g === 'person') {
             $cols[] = ['header' => 'Short absences', 'key' => 'short_count', 'width' => 15];
             $cols[] = ['header' => 'Repeated short absences', 'key' => 'flag', 'width' => 24];
+            $cols[] = ['header' => 'Absence score', 'key' => 'score', 'width' => 14];
+            $cols[] = ['header' => 'Above the absence score threshold', 'key' => 'score_mark', 'width' => 30];
         } else {
             $cols[] = ['header' => 'People', 'key' => 'people', 'width' => 10];
         }
         $cols[] = ['header' => 'By leave type (days)', 'key' => 'by', 'width' => 40];
-        $rows = array_map(fn ($r) => $r + ['flag' => $r['flagged'] ? 'Yes' : '', 'by' => collect($r['by_type'])->map(fn ($b) => $b['type'] . ' ' . $b['days'])->implode(', ')], $d['rows']);
+        $rows = array_map(fn ($r) => $r + ['flag' => $r['flagged'] ? 'Yes' : '', 'score_mark' => $r['score_flag'] ? 'Yes' : '', 'by' => collect($r['by_type'])->map(fn ($b) => $b['type'] . ' ' . $b['days'])->implode(', ')], $d['rows']);
 
         return $xlsx->download($d['agency'], 'Absence report ' . $d['from'] . ' to ' . $d['to'], 'absence-report-' . $d['from'] . '-to-' . $d['to'] . '.xlsx', $cols, $rows);
+    }
+
+    // ── HR Phase 4, batch 1: lateness, attendance settings, leave clashes (App\Support\HrAttendance) ──────────
+
+    /** The date range + centre filter the reports share (the absence report's defaults). */
+    private function range(Request $request, int $aid): array
+    {
+        $today = AgencyTime::today($aid);
+        $from = (string) $request->query('from', Carbon::parse($today)->subMonthsNoOverflow(2)->startOfMonth()->toDateString());
+        $to = (string) $request->query('to', $today);
+        abort_unless(preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $to) && $from <= $to, 422, 'Choose a valid date range.');
+        abort_if(Carbon::parse($from)->diffInDays(Carbon::parse($to)) > 731, 422, 'Choose two years or less.');
+
+        return [$from, $to];
+    }
+
+    private function latenessData(Request $request): array
+    {
+        $aid = $this->agency($request);
+        $ids = $this->people($request, $aid);
+        [$from, $to] = $this->range($request, $aid);
+        $centreF = (int) $request->query('centre_id', 0);
+        // A centre filter is only ever one of this caller's own open centres.
+        if ($centreF && ! (in_array($centreF, Live::centreIds($aid), true) && CentreScope::canWrite(CentreScope::ids($request, $aid), $centreF))) {
+            $centreF = 0;
+        }
+        $r = HrAttendance::lateness($aid, $from, $to, $ids, $centreF ?: null);
+        $users = DB::table('users')->whereIn('id', array_column($r['rows'], 'user_id') ?: [0])->get(['id', 'first_name', 'last_name'])->keyBy('id');
+        $cn = DB::table('centres')->where('agency_id', $aid)->pluck('name', 'id');
+        $rows = array_map(fn ($x) => $x + ['name' => $this->name($users[$x['user_id']] ?? null),
+            'centre' => implode(', ', array_filter(array_map(fn ($c) => $cn[$c] ?? null, $x['centre_ids'])))], $r['rows']);
+        usort($rows, fn ($a, $b) => ($b['late'] <=> $a['late']) ?: ($b['minutes'] <=> $a['minutes']) ?: strcasecmp($a['name'], $b['name']));
+        if ($request->boolean('late_only')) {
+            $rows = array_values(array_filter($rows, fn ($x) => $x['late'] > 0));
+        }
+
+        return ['agency' => $aid, 'from' => $from, 'to' => $to, 'grace' => $r['grace'], 'rows' => $rows,
+            'totals' => ['compared' => array_sum(array_column($rows, 'compared')), 'late' => array_sum(array_column($rows, 'late')),
+                'minutes' => array_sum(array_column($rows, 'minutes')), 'people_late' => count(array_filter($rows, fn ($x) => $x['late'] > 0))],
+            'centres' => Live::centres(DB::table('centres'), 'centres')->where('agency_id', $aid)
+                ->when(($sc = CentreScope::ids($request, $aid)) !== null, fn ($q) => $q->whereIn('id', $sc ?: [0]))->orderBy('name')->get(['id', 'name'])];
+    }
+
+    /** GET /hr/lateness — clock-ins compared with the schedule, per person (the absence report's Lateness tab). */
+    public function lateness(Request $request): JsonResponse
+    {
+        $d = $this->latenessData($request);
+        unset($d['agency']);
+
+        return response()->json($d);
+    }
+
+    /** GET /hr/lateness/{id} — one person's compared clock-ins. */
+    public function latenessPerson(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->agency($request);
+        $this->needPerson($request, $aid, $id);
+        [$from, $to] = $this->range($request, $aid);
+
+        return response()->json(['person' => $this->name(DB::table('users')->where('id', $id)->first(['first_name', 'last_name'])),
+            'grace' => HrAttendance::settings($aid)['lateness']['grace_minutes'], 'from' => $from, 'to' => $to,
+            'entries' => HrAttendance::latenessDetail($aid, $id, $from, $to)]);
+    }
+
+    /** GET /hr/attendance/settings — lateness, absence score and leave-clash rules, with each centre's minimum staff. */
+    public function attendanceSettings(Request $request): JsonResponse
+    {
+        $aid = $this->agency($request);
+        abort_unless($this->isManager($request), 403, 'Directors and admins only.');
+        $mins = HrAttendance::minStaff($aid);
+        $scope = CentreScope::ids($request, $aid);
+
+        return response()->json(['settings' => HrAttendance::settings($aid), 'can_manage' => $this->isAdmin($request),
+            'default_score_types' => DB::table('hr_leave_types')->where('agency_id', $aid)->where('maps_request_type', 'sick')->pluck('name'),
+            'types' => HrLeave::types($aid)->map(fn ($t) => ['id' => (int) $t->id, 'name' => $t->name, 'colour' => $t->colour])->values(),
+            'centres' => Live::centres(DB::table('centres'), 'centres')->where('agency_id', $aid)
+                ->when($scope !== null, fn ($q) => $q->whereIn('id', $scope ?: [0]))->orderBy('name')->get(['id', 'name'])
+                ->map(fn ($c) => ['id' => (int) $c->id, 'name' => $c->name, 'min_staff' => $mins[(int) $c->id] ?? null,
+                    'staff' => count(HrLeave::staffIds($aid, [(int) $c->id]))])->values()]);
+    }
+
+    /** PUT /hr/attendance/settings — agency admins. */
+    public function saveAttendanceSettings(Request $request): JsonResponse
+    {
+        $aid = $this->agency($request);
+        $this->needAdmin($request);
+        $d = $request->validate([
+            'lateness.grace_minutes' => 'required|integer|min:0|max:120',
+            'lateness.notify_directors' => 'required|boolean',
+            'lateness.skip_contractors' => 'required|boolean',
+            'absence_score.threshold' => 'required|integer|min:1|max:100000',
+            'absence_score.months' => 'required|integer|min:1|max:24',
+            'absence_score.type_ids' => 'nullable|array|max:50',
+            'absence_score.type_ids.*' => 'integer',
+            'clash.warn' => 'required|boolean',
+            'clash.min_mode' => 'required|in:' . implode(',', HrAttendance::MIN_MODES),
+            'min_staff' => 'nullable|array|max:200',
+            'min_staff.*.centre_id' => 'required|integer',
+            'min_staff.*.min' => 'nullable|integer|min:0|max:500',
+        ]);
+        $own = HrLeave::types($aid, true)->pluck('id')->map(fn ($v) => (int) $v)->all();
+        $types = array_values(array_intersect(array_map('intval', $d['absence_score']['type_ids'] ?? []), $own));
+        $out = HrAttendance::saveSettings($aid, [
+            'lateness' => ['grace_minutes' => (int) $d['lateness']['grace_minutes'], 'notify_directors' => (bool) $d['lateness']['notify_directors'],
+                'skip_contractors' => (bool) $d['lateness']['skip_contractors']],
+            'absence_score' => ['threshold' => (int) $d['absence_score']['threshold'], 'months' => (int) $d['absence_score']['months'], 'type_ids' => $types ?: null],
+            'clash' => ['warn' => (bool) $d['clash']['warn'], 'min_mode' => $d['clash']['min_mode']],
+        ]);
+        // Each centre's minimum: only this agency's open centres (the destination is authorised, never trusted).
+        $open = Live::centreIds($aid);
+        $mins = [];
+        foreach ($d['min_staff'] ?? [] as $m) {
+            $cid = (int) $m['centre_id'];
+            if (! in_array($cid, $open, true)) continue;
+            HrAttendance::saveMinStaff($cid, ! empty($m['min']) ? (int) $m['min'] : null);
+            $mins[$cid] = ! empty($m['min']) ? (int) $m['min'] : null;
+        }
+        $this->note($aid, 'hr.attendance_settings_updated', 'agency', $aid, ['settings' => $out, 'min_staff' => $mins]);
+
+        return response()->json(['settings' => $out, 'min_staff' => HrAttendance::minStaff($aid)]);
+    }
+
+    /** GET /hr/time-off/{id}/clash — for the approver: who else at the centre is off or has asked, and the minimum-staff check. */
+    public function requestClash(Request $request, int $id): JsonResponse
+    {
+        $aid = $this->agency($request);
+        $r = DB::table('time_off_requests')->where('id', $id)->where('agency_id', $aid)->first();
+        abort_unless($r, 404, 'That request was not found.');
+        $this->needPerson($request, $aid, (int) $r->user_id);
+
+        return response()->json(HrAttendance::forRequest($r, true));
+    }
+
+    /** GET /hr/me/clash?start_at=&end_at=&all_day=&centre_id= — for the request form: counts only, never names. */
+    public function myClash(Request $request): JsonResponse
+    {
+        $aid = $this->agency($request);
+        $d = $request->validate(['start_at' => 'required|date_format:Y-m-d', 'end_at' => 'required|date_format:Y-m-d|after_or_equal:start_at',
+            'all_day' => 'nullable|boolean', 'centre_id' => 'nullable|integer']);
+        abort_if(Carbon::parse($d['start_at'])->diffInDays(Carbon::parse($d['end_at'])) > 400, 422, 'Choose a shorter range.');
+        $me = (int) $request->user()->id;
+        $cid = ! empty($d['centre_id']) && DB::table('role_assignments')->where('user_id', $me)->where('active', 1)
+            ->whereIn('role', HrLeave::STAFF_ROLES)->where('centre_id', (int) $d['centre_id'])->exists() ? (int) $d['centre_id'] : null;
+        $c = HrAttendance::clash($aid, $me, $cid, $d['start_at'], $d['end_at'], ! array_key_exists('all_day', $d) || $d['all_day'] === null || (bool) $d['all_day'], null, false);
+        if (! $c['warn']) {   // the agency turned the clash note off: only the minimum-staff part stays
+            foreach ($c['centres'] as &$x) $x['others_count'] = 0;
+            unset($x);
+            $c['others'] = 0;
+        }
+
+        return response()->json($c);
     }
 
     /** GET /hr/off-now — who is off today and the rest of the week (approved leave). */

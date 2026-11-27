@@ -1349,6 +1349,7 @@ post hr/swaps/{id}/accept | Accepted a colleague's shift giveaway or swap
 post hr/swaps/{id}/cancel | Cancelled or let go of a shift giveaway or swap
 post hr/swaps/{id}/decide | Approved or declined a shift giveaway or swap
 put hr/clock/settings | Changed the clock-in location rule or the overtime warning
+put hr/attendance/settings | Changed the lateness, absence score or leave-clash rules (and each centre's minimum staff)
 put hr/clock/centres/{id}/fence | Set or removed a centre's clock-in area (geofence)
 put hr/letters/templates/{id} | Edited an HR letter template
 post hr/letters/templates/{id}/review | Marked an HR letter template reviewed by the agency's lawyer (or cleared it)

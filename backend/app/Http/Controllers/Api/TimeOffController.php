@@ -125,6 +125,20 @@ final class TimeOffController extends Controller
             $r->closed_for_dates = $cid ? $this->closureFor($cid, $r) !== null : false;
         }
         $this->withLeave($rows);
+        /* KIDDIETRAC HR PHASE 4 (2026-11-27, App\Support\HrAttendance): on a request still waiting, how many others at the
+           centre are off or have asked, and whether approving would go below the centre's minimum staff. */
+        if ($agencyId && \App\Support\HrLeave::on((int) $agencyId)) {
+            foreach ($rows as $r) {
+                if (($r->status ?? '') !== 'pending') continue;
+                try {
+                    $c = \App\Support\HrAttendance::forRequest($r, false);
+                    $r->clash_others = $c['warn'] ? (int) $c['others'] : 0;
+                    $r->clash_short = (bool) $c['short'];
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
         return response()->json(['data' => $rows]);
     }
 
@@ -571,6 +585,10 @@ final class TimeOffController extends Controller
         if ($data['status'] === 'approved' && $row->status !== 'approved' && ($no = $this->negativeRefusal($row))) {
             return response()->json(['message' => $no], 422);
         }
+        // HR minimum staff, when the agency set it to block (App\Support\HrAttendance; warn = the popup only says so).
+        if ($data['status'] === 'approved' && $row->status === 'pending' && ($no = \App\Support\HrAttendance::minStaffRefusal($row))) {
+            return response()->json(['message' => $no, 'min_staff' => true], 422);
+        }
 
         $result = $this->applyDecision($row, $data['status'], $data['decision_notes'] ?? null, $request->user(), $mode, $centre);
 
@@ -692,8 +710,13 @@ final class TimeOffController extends Controller
         $r = $requestId ? DB::table('time_off_requests')->where('id', $requestId)->first() : null;
         [, $line] = $r ? \App\Support\HrLeave::emailLine($r) : [null, null];
 
-        return $line ? '<tr><td style="padding:10px 0 0;font-size:14px;line-height:1.6;color:#0E7490;"><strong>Balance:</strong> '
+        $out = $line ? '<tr><td style="padding:10px 0 0;font-size:14px;line-height:1.6;color:#0E7490;"><strong>Balance:</strong> '
             . htmlspecialchars($line, ENT_QUOTES, 'UTF-8') . '</td></tr>' : '';
+        // HR Phase 4: who else at the centre is away, and the minimum-staff check (first names only).
+        $clash = $r ? \App\Support\HrAttendance::emailLine($r) : null;
+
+        return $out . ($clash ? '<tr><td style="padding:8px 0 0;font-size:14px;line-height:1.6;color:#B45309;"><strong>Also away:</strong> '
+            . htmlspecialchars($clash, ENT_QUOTES, 'UTF-8') . '</td></tr>' : '');
     }
 
     /** Tell the requester what was decided, and by whom. */
@@ -790,6 +813,9 @@ final class TimeOffController extends Controller
         $status = $request->input('decision') === 'denied' ? 'denied' : 'approved';
         $notes = trim((string) $request->input('decision_notes', '')) ?: null;
         if ($status === 'approved' && ($no = $this->negativeRefusal($row))) {
+            return response($this->actShell('Not approved yet.', e($no)), 422)->header('Content-Type', 'text/html');
+        }
+        if ($status === 'approved' && ($no = \App\Support\HrAttendance::minStaffRefusal($row))) {
             return response($this->actShell('Not approved yet.', e($no)), 422)->header('Content-Type', 'text/html');
         }
         // The page shows the closure box only when there is one centre to close.

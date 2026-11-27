@@ -2631,6 +2631,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/hr/me',     [\App\Http\Controllers\Api\HrController::class, 'me']);
         Route::get ('/hr/ledger', [\App\Http\Controllers\Api\HrController::class, 'ledger']);
+        // HR Phase 4 (2026-11-27): the request form's leave-clash note (counts only, never names) (App\Support\HrAttendance).
+        Route::get ('/hr/me/clash', [\App\Http\Controllers\Api\HrController::class, 'myClash'])->middleware('throttle:120,1,hrclash');
     });
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/hr/setup',                          [\App\Http\Controllers\Api\HrController::class, 'setup']);
@@ -2653,6 +2655,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/hr/adjustments',                    [\App\Http\Controllers\Api\HrController::class, 'adjust']);
         Route::get   ('/hr/absence',                        [\App\Http\Controllers\Api\HrController::class, 'absence']);
         Route::get   ('/hr/off-now',                        [\App\Http\Controllers\Api\HrController::class, 'offNow']);
+        // HR Phase 4, batch 1 (2026-11-27, App\Support\HrAttendance): lateness against the schedule, the attendance rules, the approver's clash view.
+        Route::get   ('/hr/lateness',                       [\App\Http\Controllers\Api\HrController::class, 'lateness']);
+        Route::get   ('/hr/lateness/{id}',                  [\App\Http\Controllers\Api\HrController::class, 'latenessPerson'])->whereNumber('id');
+        Route::get   ('/hr/attendance/settings',            [\App\Http\Controllers\Api\HrController::class, 'attendanceSettings']);
+        Route::put   ('/hr/attendance/settings',            [\App\Http\Controllers\Api\HrController::class, 'saveAttendanceSettings']);
+        Route::get   ('/hr/time-off/{id}/clash',            [\App\Http\Controllers\Api\HrController::class, 'requestClash'])->whereNumber('id');
         Route::get   ('/exports/hr-absence',                [\App\Http\Controllers\Api\HrController::class, 'exportAbsence']);
         // KiddieTrac HR Phase 3, item 9 (2026-11-26): claims, the director / admin side (own centres / the agency; nobody decides their own).
         Route::get   ('/hr/claims',                         [\App\Http\Controllers\Api\HrClaimController::class, 'index']);

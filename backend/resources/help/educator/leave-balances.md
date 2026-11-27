@@ -15,6 +15,8 @@ Some leave types need no approval: they are recorded and taken off your balance 
 
 Only working days count: weekends, and the holidays and closures on your centre's calendar, are not taken off.
 
+If others at your centre are already off or asking for the same days, the form tells you how many, so you can plan. Your director sees the same before deciding.
+
 ## After a decision
 
 An approved request is taken off your balance. If it is denied, or you withdraw it, the time goes back.

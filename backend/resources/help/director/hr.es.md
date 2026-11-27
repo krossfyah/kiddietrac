@@ -22,7 +22,7 @@ Cada persona en cada tipo de permiso. Un saldo es la suma de su historial: asign
 
 ## Informe de ausencias
 
-Permisos aprobados por persona, tipo, mes o centro. **Solo ausencias cortas repetidas** muestra a quienes alcanzan la regla de tu agencia. **Exportar a Excel** descarga el informe.
+Permisos aprobados por persona, tipo, mes o centro. **Solo ausencias cortas repetidas** muestra a quienes alcanzan la regla de tu agencia. **Exportar a Excel** descarga el informe. La columna **Puntuación de ausencias** y la vista **Retrasos** se explican en *RR. HH.: retrasos, puntuación de ausencias y coincidencias de permisos*.
 
 ## Quién falta
 

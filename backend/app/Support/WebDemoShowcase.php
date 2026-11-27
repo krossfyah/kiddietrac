@@ -768,6 +768,11 @@ final class WebDemoShowcase
         $req('Lucas', 'sick', $ago(11), $ago(11), 'approved', 'Stomach bug');
         $req('Lucas', 'sick', $ago(20), $ago(20), 'approved', 'Fever');
         $req('Ava', 'personal', $wd(10), $wd(10), 'pending', 'Dentist appointment');
+        // HR Phase 4: a two-day sick spell for Lucas (his absence score goes over 50), and Ethan's approved day inside
+        // Noah's pending winter break, so approving Noah shows the clash and San Diego's minimum staff.
+        $req('Lucas', 'sick', $ago(16), $ago(15), 'approved', 'Flu');
+        $ethanDay = $wd($wd(21) + 1);
+        $req('Ethan', 'vacation', $ethanDay, $ethanDay, 'approved', 'Family wedding', 'Approved before the winter break requests came in.');
         // Maya's personal day (the request written above) counts against her Personal days.
         $mayaOff = DB::table('time_off_requests')->whereIn('id', $this->made['time_off_requests'] ?? [0])->where('user_id', $maya)
             ->whereNull('leave_type_id')->where('status', 'approved')->first();
@@ -785,6 +790,7 @@ final class WebDemoShowcase
         $this->hrClaimsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);   // HR Phase 3, item 9
         $this->hrRotaStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 3, item 10
         $this->hrClockStory($agencyId, $byName->all(), $centreOf->all());   // HR Phase 3, item 11
+        $this->hrAttendanceStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 1
         $this->hrLettersStory($agencyId, $olivia);   // HR Phase 3, item 12
     }
 
@@ -910,6 +916,72 @@ final class WebDemoShowcase
             if (! isset($byName[$who])) continue;
             $id = DB::table('time_punches')->where('user_id', $byName[$who])->where('punched_in_at', '>=', $from)->orderByDesc('punched_in_at')->value('id');
             if ($id) DB::table('time_punches')->where('id', $id)->whereNull('geo_status')->update(['geo_status' => $st, 'geo_distance_m' => $m]);
+        }
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 4 DEMO, BATCH 1 (2026-11-27, Starlight only): attendance insights (App\Support\HrAttendance).
+     *  - Lateness: San Diego shifts for the last three weeks, read off each person's REAL demo clock-in that day (so the
+     *    hours on the timesheet never change): Lucas's Monday shifts started before he clocked in (late on Mondays),
+     *    Noah late twice, everyone else on time. Days that already have a shift (the rota story, Maya's) are left alone.
+     *    The punches' stored comparison is cleared, so the report re-reads them against these shifts.
+     *  - Leave clash: San Diego keeps a minimum of (staff - 1) on a working day, and Ethan's approved day off sits inside
+     *    Noah's pending winter break (the request is written in hrStory), so approving Noah shows the clash and the day
+     *    below the minimum.
+     *  - Rules: grace 5 minutes, absence score 50 over 12 months (sick days), clash warnings on, warn only. Only set when
+     *    the agency has none yet. Elena has one lateness notice in her bell (inserted, so nothing rings).
+     */
+    private function hrAttendanceStory(int $agencyId, array $byName, array $centreOf, int $elena, string $now): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('time_punches', 'late_minutes')) return;
+        $s = json_decode((string) DB::table('agencies')->where('id', $agencyId)->value('settings'), true);
+        if (! is_array($s['hr_attendance'] ?? null)) {
+            \App\Support\HrAttendance::saveSettings($agencyId, ['lateness' => ['grace_minutes' => 5, 'notify_directors' => true, 'skip_contractors' => true],
+                'absence_score' => ['threshold' => 50, 'months' => 12, 'type_ids' => null], 'clash' => ['warn' => true, 'min_mode' => 'warn']]);
+        }
+        $centre = isset($byName['Noah'], $centreOf[$byName['Noah']]) ? (int) $centreOf[$byName['Noah']] : null;
+        if (! $centre) return;
+        if (! isset(\App\Support\HrAttendance::minStaff($agencyId)[$centre])) {
+            $total = count(HrLeave::staffIds($agencyId, [$centre]));
+            if ($total >= 3) \App\Support\HrAttendance::saveMinStaff($centre, $total - 1);
+        }
+        $rooms = DB::table('rooms')->where('centre_id', $centre)->orderBy('id')->pluck('id')->map(fn ($v) => (int) $v)->all();
+        if (! $rooms) return;
+        $late = ['Lucas' => ['mon' => 14, 'extra' => []], 'Noah' => ['mon' => 0, 'extra' => [3 => 22, 8 => 7]]];
+        $i = 0;
+        $firstLucas = null;
+        foreach (['Lucas', 'Sofia', 'Noah', 'Ethan', 'Ava', 'Grace', 'Marcus'] as $n) {
+            $uid = $byName[$n] ?? null;
+            if (! $uid || (int) ($centreOf[$uid] ?? 0) !== $centre) continue;
+            $room = (int) (DB::table('educator_rooms')->where('user_id', $uid)->whereIn('room_id', $rooms)->value('room_id') ?: $rooms[$i % count($rooms)]);
+            $i++;
+            foreach ($this->pastWeekdays(15) as $k => $d) {
+                $day = $this->today->copy()->addDays($d);
+                [$a, $b] = [$day->copy()->utc()->format('Y-m-d H:i:s'), $day->copy()->addDay()->utc()->format('Y-m-d H:i:s')];
+                $p = DB::table('time_punches')->where('user_id', $uid)->where('centre_id', $centre)->where('punched_in_at', '>=', $a)->where('punched_in_at', '<', $b)
+                    ->orderBy('punched_in_at')->first(['punched_in_at']);
+                if (! $p) continue;
+                if (DB::table('shifts')->where('user_id', $uid)->where('starts_at', '>=', $day->format('Y-m-d 00:00:00'))->where('starts_at', '<', $day->copy()->addDay()->format('Y-m-d 00:00:00'))->exists()) continue;
+                $in = Carbon::parse($p->punched_in_at, 'UTC')->setTimezone($this->tz);
+                $mins = $late[$n] ?? null;
+                $by = $mins ? ($day->dayOfWeekIso === 1 && $mins['mon'] ? $mins['mon'] : ($mins['extra'][$k] ?? 0)) : 0;
+                // Late: the shift began $by minutes before the clock-in. On time: it began at the next quarter hour.
+                $start = $by ? $in->copy()->subMinutes($by)->second(0) : $in->copy()->addMinutes(15 - ($in->minute % 15))->second(0);
+                $this->add('shifts', ['user_id' => $uid, 'room_id' => $room, 'starts_at' => $start->format('Y-m-d H:i:s'), 'ends_at' => $start->copy()->addHours(8)->format('Y-m-d H:i:s'),
+                    'role' => 'lead', 'status' => 'completed', 'created_at' => $now]);
+                if ($n === 'Lucas' && $by && ! $firstLucas) $firstLucas = [$by, $start, $in];
+            }
+        }
+        // The stored comparisons go: the report re-reads every punch of the window against the shifts written now.
+        $from = $this->today->copy()->subDays(35)->utc()->format('Y-m-d H:i:s');
+        DB::table('time_punches')->whereIn('centre_id', DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all() ?: [0])
+            ->where('punched_in_at', '>=', $from)->update(['late_minutes' => null, 'late_shift_id' => null, 'late_checked_at' => null]);
+        if ($elena && $firstLucas) {
+            [$by, $start, $in] = $firstLucas;
+            $this->add('notifications', ['user_id' => $elena, 'agency_id' => $agencyId, 'type' => 'hr', 'title' => 'Lucas clocked in ' . $by . ' min late',
+                'body' => 'Shift started at ' . $start->format('g:i A') . '; clocked in at ' . $in->format('g:i A') . '.',
+                'data' => json_encode(['link' => '#hr?tab=absence&view=late', 'kind' => 'team', 'severity' => 'info']), 'read_at' => null,
+                'created_at' => $in->copy()->utc()->format('Y-m-d H:i:s')]);
         }
     }
 

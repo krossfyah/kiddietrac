@@ -22,7 +22,7 @@ Every person against every leave type. A balance is the sum of its history: gran
 
 ## Absence report
 
-Approved time off by person, leave type, month or centre, for any date range. **Only repeated short absences** shows people who reached your agency's count (for example 3 absences of 2 days or less in 6 months). **Export to Excel** downloads the report.
+Approved time off by person, leave type, month or centre, for any date range. **Only repeated short absences** shows people who reached your agency's count (for example 3 absences of 2 days or less in 6 months). **Export to Excel** downloads the report. The **Absence score** column and the **Lateness** view are explained in *HR: lateness, absence score and leave clashes*.
 
 ## Who's off
 

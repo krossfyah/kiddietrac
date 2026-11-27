@@ -22,7 +22,7 @@ Chaque personne pour chaque type de congé. Un solde est la somme de son histori
 
 ## Rapport d'absences
 
-Les congés approuvés par personne, type, mois ou centre. **Seulement les absences courtes répétées** affiche les personnes qui atteignent le seuil de votre agence. **Exporter vers Excel** télécharge le rapport.
+Les congés approuvés par personne, type, mois ou centre. **Seulement les absences courtes répétées** affiche les personnes qui atteignent le seuil de votre agence. **Exporter vers Excel** télécharge le rapport. La colonne **Score d'absence** et la vue **Retards** sont expliquées dans *RH : retards, score d'absence et chevauchements de congés*.
 
 ## Qui est absent
 

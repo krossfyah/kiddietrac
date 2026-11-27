@@ -668,7 +668,8 @@ final class HrLeave
                 }
                 $out[] = ['request_id' => (int) $r->id, 'user_id' => (int) $r->user_id, 'date' => $day, 'centre_id' => $r->centre_id ? (int) $r->centre_id : null,
                     'leave_type_id' => $type ? (int) $type->id : null, 'type_name' => $type ? $type->name : (self::REQUEST_TYPES[$r->request_type] ?? ucfirst((string) $r->request_type)),
-                    'colour' => $type->colour ?? '#64748B', 'days' => $allDay ? 1.0 : round($hours / $hpd, 2), 'hours' => round($hours, 2), 'request_days' => $allDay ? $len : round($hours / $hpd, 2)];
+                    'colour' => $type->colour ?? '#64748B', 'days' => $allDay ? 1.0 : round($hours / $hpd, 2), 'hours' => round($hours, 2), 'request_days' => $allDay ? $len : round($hours / $hpd, 2),
+                    'request_type' => $r->request_type];   // HrAttendance::scores counts old Sick requests by it
             }
         }
 

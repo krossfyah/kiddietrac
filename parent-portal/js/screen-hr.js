@@ -75,7 +75,7 @@
   }
 
   var S = { tab: 'people', status: 'active', centre: '', admin: false, people: null, setup: null,
-    abs: { from: '', to: '', group: 'person', centre: '', type: '', short_only: false } };
+    abs: { from: '', to: '', group: 'person', centre: '', type: '', short_only: false, score_only: false, view: 'leave', late_only: false } };
 
   function tabsFor() {
     var t = [['people', 'People'], ['balances', 'Balances'], ['absence', 'Absence report']];
@@ -90,6 +90,7 @@
     main.setAttribute('data-kt-pretty', '1');
     var m = /[?&]tab=([a-z]+)/.exec(location.hash || '');
     if (m) S.tab = m[1];
+    if (/[?&]view=late\b/.test(location.hash || '')) S.abs.view = 'late';   // the lateness bell (HR Phase 4)
     main.innerHTML = '<div class="kt-section"><div class="kt-hero"><div class="kt-hero-greet">🧑‍💼 YOUR TEAM</div><h1>HR</h1>'
       + '<div class="kt-hero-sub">Employee files, leave, hiring, onboarding, reviews and courses for your team, with the rules your agency sets.</div></div>'
       + '<div class="hr-tabs" role="tablist" id="hr-tabs"></div><div id="hr-body"><div class="hr-sub" style="padding:12px 2px;">Loading…</div></div></div>';
@@ -346,33 +347,53 @@
     if (a.from) q.push('from=' + a.from); if (a.to) q.push('to=' + a.to);
     if (a.centre) q.push('centre_id=' + a.centre); if (a.type) q.push('leave_type_id=' + a.type);
     if (a.short_only && a.group === 'person') q.push('short_only=1');
+    if (a.score_only && a.group === 'person') q.push('score_only=1');
     return q.join('&');
   }
+  /* Time off | Lateness (HR Phase 4, 2026-11-27): the same report, two views sharing the dates and centre. */
+  function absViews(cur) {
+    return '<div class="hr-tabs" role="tablist" style="margin:0 0 10px;">' + [['leave', 'Time off'], ['late', 'Lateness']].map(function (v) {
+      return '<button type="button" role="tab" class="hr-tab" data-absview="' + v[0] + '" aria-selected="' + (cur === v[0]) + '">' + v[1] + '</button>';
+    }).join('') + '</div>';
+  }
+  function wireViews(main, b) {
+    b.querySelectorAll('[data-absview]').forEach(function (x) {
+      x.addEventListener('click', function () { S.abs.view = x.getAttribute('data-absview'); drawAbsence(main); });
+    });
+  }
   async function drawAbsence(main) {
+    if (S.abs.view === 'late') return drawLateness(main);
     var b = body(main), d;
     try { d = await Api.get('/hr/absence?' + absQuery()); } catch (e) { b.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
-    if (!b.isConnected || S.tab !== 'absence') return;
+    if (!b.isConnected || S.tab !== 'absence' || S.abs.view !== 'leave') return;
     var a = S.abs; a.from = d.from; a.to = d.to;
     var first = { person: 'Person', type: 'Leave type', month: 'Month', centre: 'Centre' }[d.group];
-    var r = d.rule || {};
-    var h = '<div class="hr-bar" data-kt-nogrid>'
+    var r = d.rule || {}, sr = d.score_rule || {};
+    var h = absViews('leave') + '<div class="hr-bar" data-kt-nogrid>'
       + '<label class="hr-sub">From <input class="hr-i" type="date" id="hr-af" value="' + esc(d.from) + '"></label>'
       + '<label class="hr-sub">To <input class="hr-i" type="date" id="hr-at" value="' + esc(d.to) + '"></label>'
       + '<select class="hr-i" id="hr-ag">' + [['person', 'By person'], ['type', 'By leave type'], ['month', 'By month'], ['centre', 'By centre']].map(function (o) { return '<option value="' + o[0] + '"' + (d.group === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select>'
       + ((d.centres || []).length > 1 ? '<select class="hr-i" id="hr-ac"><option value="">All centres</option>' + d.centres.map(function (c) { return '<option value="' + c.id + '"' + (String(c.id) === String(a.centre) ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>' : '')
       + '<select class="hr-i" id="hr-aty"><option value="">All leave types</option>' + (d.types || []).map(function (t) { return '<option value="' + t.id + '"' + (String(t.id) === String(a.type) ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select>'
-      + (d.group === 'person' ? '<label class="hr-sub" style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="hr-as"' + (a.short_only ? ' checked' : '') + ' style="flex:0 0 auto;width:16px;height:16px;"> Only repeated short absences</label>' : '')
+      + (d.group === 'person' ? '<label class="hr-sub" style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="hr-as"' + (a.short_only ? ' checked' : '') + ' style="flex:0 0 auto;width:16px;height:16px;"> Only repeated short absences</label>'
+        + '<label class="hr-sub" style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="hr-asc"' + (a.score_only ? ' checked' : '') + ' style="flex:0 0 auto;width:16px;height:16px;"> Only above the absence score</label>' : '')
       + '<button type="button" class="hr-b p" id="hr-ax">Export to Excel</button></div>'
       + '<div class="hr-stats"><div class="hr-stat"><b>' + esc(num(d.totals.days)) + '</b><span>Days off</span></div><div class="hr-stat"><b>' + esc(num(d.totals.hours)) + '</b><span>Hours off</span></div>'
-      + '<div class="hr-stat"><b>' + esc(d.totals.people) + '</b><span>People</span></div><div class="hr-stat"><b style="color:' + (d.totals.flagged ? '#B45309' : '#0F172A') + ';">' + esc(d.totals.flagged) + '</b><span>Repeated short absences</span></div></div>'
-      + '<div class="hr-sub" style="margin:0 0 8px;">Approved time off, ' + esc(day(d.from)) + ' to ' + esc(day(d.to)) + '. Repeated short absences: ' + esc(r.count) + ' or more absences of ' + esc(num(r.max_days)) + ' day' + (+r.max_days === 1 ? '' : 's') + ' or less in ' + esc(r.months) + ' months' + (S.admin ? ' (change it under Settings).' : '.') + '</div>';
+      + '<div class="hr-stat"><b>' + esc(d.totals.people) + '</b><span>People</span></div><div class="hr-stat"><b style="color:' + (d.totals.flagged ? '#B45309' : '#0F172A') + ';">' + esc(d.totals.flagged) + '</b><span>Repeated short absences</span></div>'
+      + '<div class="hr-stat"><b style="color:' + (d.totals.score_flagged ? '#B45309' : '#0F172A') + ';">' + esc(d.totals.score_flagged || 0) + '</b><span>Above the absence score</span></div></div>'
+      + '<div class="hr-sub" style="margin:0 0 8px;">Approved time off, ' + esc(day(d.from)) + ' to ' + esc(day(d.to)) + '. Repeated short absences: ' + esc(r.count) + ' or more absences of ' + esc(num(r.max_days)) + ' day' + (+r.max_days === 1 ? '' : 's') + ' or less in ' + esc(r.months) + ' months' + (S.admin ? ' (change it under Settings).' : '.')
+      + ' Absence score: absences × absences × days off, for ' + esc((sr.types || []).length ? sr.types.join(', ') : 'sick leave') + ', ' + esc(day(sr.from)) + ' to ' + esc(day(d.to))
+      + '; ' + esc(sr.threshold) + ' or more is marked. Many short absences score higher than one long one.</div>';
     var rows = d.rows || [];
     h += '<div class="kt-card">' + (rows.length ? '<table><thead><tr><th>' + first + '</th>' + (d.group === 'person' ? '<th>Centre</th>' : '') + '<th>Days off</th><th>Hours off</th><th>Absences</th>'
-      + (d.group === 'person' ? '<th>Short absences</th>' : '<th>People</th>') + '<th>By leave type</th>' + (d.group === 'person' ? '<th></th>' : '') + '</tr></thead><tbody>'
+      + (d.group === 'person' ? '<th>Short absences</th><th>Absence score</th>' : '<th>People</th>') + '<th>By leave type</th>' + (d.group === 'person' ? '<th></th>' : '') + '</tr></thead><tbody>'
       + rows.map(function (x) {
         return '<tr><td>' + (x.colour ? dot(x.colour) : '') + '<b data-no-i18n>' + esc(x.label) + '</b>' + (x.flagged ? ' ' + pill('#FFFBEB', '#B45309', 'Repeated short absences') : '') + '</td>'
           + (d.group === 'person' ? '<td data-no-i18n>' + esc(x.centre || '') + '</td>' : '') + '<td>' + esc(num(x.days)) + '</td><td>' + esc(num(x.hours)) + '</td><td>' + esc(x.occurrences) + '</td>'
-          + '<td>' + esc(d.group === 'person' ? x.short_count : x.people) + '</td><td class="hr-sub" data-no-i18n>' + esc((x.by_type || []).map(function (t) { return t.type + ' ' + num(t.days); }).join(', ')) + '</td>'
+          + '<td>' + esc(d.group === 'person' ? x.short_count : x.people) + '</td>'
+          + (d.group === 'person' ? '<td style="white-space:nowrap;"><b' + (x.score_flag ? ' style="color:#B45309;"' : '') + '>' + esc(x.score || 0) + '</b>' + (x.score_flag ? ' ' + pill('#FFFBEB', '#B45309', 'Above ' + sr.threshold) : '')
+            + (x.score_spells ? '<div class="hr-sub">' + esc(x.score_spells + ' × ' + x.score_spells + ' × ' + num(x.score_days)) + '</div>' : '') + '</td>' : '')
+          + '<td class="hr-sub" data-no-i18n>' + esc((x.by_type || []).map(function (t) { return t.type + ' ' + num(t.days); }).join(', ')) + '</td>'
           + (d.group === 'person' ? '<td style="text-align:center;"><button type="button" data-act="view" data-id="' + x.user_id + '">View HR profile</button></td>' : '') + '</tr>';
       }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">No approved time off in this range.</div>') + '</div>';
     b.innerHTML = h;
@@ -383,21 +404,93 @@
     var ac = b.querySelector('#hr-ac'); if (ac) ac.addEventListener('change', function () { a.centre = this.value; redraw(); });
     b.querySelector('#hr-aty').addEventListener('change', function () { a.type = this.value; redraw(); });
     var as = b.querySelector('#hr-as'); if (as) as.addEventListener('change', function () { a.short_only = this.checked; redraw(); });
+    var asc = b.querySelector('#hr-asc'); if (asc) asc.addEventListener('change', function () { a.score_only = this.checked; redraw(); });
+    wireViews(main, b);
     b.querySelector('#hr-ax').addEventListener('click', function () { exportXlsx(this); });
     b.querySelectorAll('[data-act="view"]').forEach(function (x) { x.addEventListener('click', function () { openProfile(main, +x.getAttribute('data-id')); }); });
   }
-  async function exportXlsx(btn) {
+  async function exportXlsx(btn, late) {
     btn.disabled = true;
     try {
-      var url = (KT.API_BASE || '/api/v1') + '/exports/hr-absence?' + absQuery(), blob;
+      var url = (KT.API_BASE || '/api/v1') + '/exports/hr-absence?' + (late ? lateQuery() + '&view=late' : absQuery()), blob;
       if (KT.fetchFileBlob) blob = await KT.fetchFileBlob(url);
       else throw new Error('');
       var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-      a.download = 'absence-report-' + S.abs.from + '-to-' + S.abs.to + '.xlsx'; document.body.appendChild(a); a.click();
+      a.download = (late ? 'lateness-' : 'absence-report-') + S.abs.from + '-to-' + S.abs.to + '.xlsx'; document.body.appendChild(a); a.click();
       setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
       toast('📥', 'Excel file ready', '', '#16A34A');
     } catch (e) { fail('Could not export', e); }
     btn.disabled = false;
+  }
+
+  // ── Lateness (HR Phase 4, 2026-11-27) ──────────────────────────────────
+  /* Clock-ins compared with the scheduled shift (the server stores the minutes on each punch; the agency's grace
+     window decides what counts as late). Same dates and centre as the Time off view. */
+  function lateQuery() {
+    var a = S.abs, q = [];
+    if (a.from) q.push('from=' + a.from); if (a.to) q.push('to=' + a.to);
+    if (a.centre) q.push('centre_id=' + a.centre);
+    if (a.late_only) q.push('late_only=1');
+    return q.join('&');
+  }
+  function minsText(m) { m = +m || 0; if (m < 60) return m + ' min'; var h = Math.floor(m / 60), r = m % 60; return h + ' h' + (r ? ' ' + r + ' min' : ''); }
+  async function drawLateness(main) {
+    var b = body(main), d;
+    try { d = await Api.get('/hr/lateness?' + lateQuery()); } catch (e) { b.innerHTML = absViews('late') + '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; wireViews(main, b); return; }
+    if (!b.isConnected || S.tab !== 'absence' || S.abs.view !== 'late') return;
+    var a = S.abs; a.from = d.from; a.to = d.to;
+    var t = d.totals || {};
+    var h = absViews('late') + '<div class="hr-bar" data-kt-nogrid>'
+      + '<label class="hr-sub">From <input class="hr-i" type="date" id="hr-lf" value="' + esc(d.from) + '"></label>'
+      + '<label class="hr-sub">To <input class="hr-i" type="date" id="hr-lt" value="' + esc(d.to) + '"></label>'
+      + ((d.centres || []).length > 1 ? '<select class="hr-i" id="hr-lc"><option value="">All centres</option>' + d.centres.map(function (c) { return '<option value="' + c.id + '"' + (String(c.id) === String(a.centre) ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>' : '')
+      + '<label class="hr-sub" style="display:inline-flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="hr-lo"' + (a.late_only ? ' checked' : '') + ' style="flex:0 0 auto;width:16px;height:16px;"> Only people who were late</label>'
+      + '<button type="button" class="hr-b p" id="hr-lx">Export to Excel</button></div>'
+      + '<div class="hr-stats"><div class="hr-stat"><b>' + esc(t.compared || 0) + '</b><span>Clock-ins compared</span></div>'
+      + '<div class="hr-stat"><b style="color:' + (t.late ? '#B45309' : '#0F172A') + ';">' + esc(t.late || 0) + '</b><span>Late</span></div>'
+      + '<div class="hr-stat"><b>' + esc(minsText(t.minutes)) + '</b><span>Late in all</span></div>'
+      + '<div class="hr-stat"><b>' + esc(t.people_late || 0) + '</b><span>People late</span></div></div>'
+      + '<div class="hr-sub" style="margin:0 0 8px;">Each person\'s first clock-in of a scheduled shift, ' + esc(day(d.from)) + ' to ' + esc(day(d.to)) + '. Late means more than '
+      + esc(d.grace) + ' minute' + (+d.grace === 1 ? '' : 's') + ' after the shift started' + (S.admin ? ' (change the grace time under Settings).' : '.')
+      + ' Back from a break and days with no shift are not counted.</div>';
+    var rows = d.rows || [];
+    h += '<div class="kt-card">' + (rows.length ? '<table><thead><tr><th>Person</th><th>Centre</th><th>Compared</th><th>Late</th><th>Late in all</th><th>Average</th><th>Most</th><th>On time</th><th>Pattern</th><th></th></tr></thead><tbody>'
+      + rows.map(function (x) {
+        return '<tr><td><b data-no-i18n>' + esc(x.name) + '</b></td><td data-no-i18n>' + esc(x.centre || '') + '</td><td>' + esc(x.compared) + '</td>'
+          + '<td>' + (x.late ? '<b style="color:#B45309;">' + esc(x.late) + '</b>' : '0') + '</td><td>' + esc(x.late ? minsText(x.minutes) : '') + '</td>'
+          + '<td>' + esc(x.late ? minsText(x.average) : '') + '</td><td>' + esc(x.late ? minsText(x.worst) : '') + '</td>'
+          + '<td>' + (x.on_time_pct == null ? '' : esc(x.on_time_pct + '%')) + '</td><td>' + esc(x.pattern || '') + '</td>'
+          + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-act="late" data-id="' + x.user_id + '">View clock-ins</button>'
+          + '<button type="button" data-act="view" data-id="' + x.user_id + '">View HR profile</button></td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">No clock-ins to compare in this range. Lateness needs shifts on the Schedule: a clock-in on a day with no shift is not compared.</div>') + '</div>';
+    b.innerHTML = h;
+    var redraw = function () { drawLateness(main); };
+    b.querySelector('#hr-lf').addEventListener('change', function () { a.from = this.value; redraw(); });
+    b.querySelector('#hr-lt').addEventListener('change', function () { a.to = this.value; redraw(); });
+    var lc = b.querySelector('#hr-lc'); if (lc) lc.addEventListener('change', function () { a.centre = this.value; redraw(); });
+    b.querySelector('#hr-lo').addEventListener('change', function () { a.late_only = this.checked; redraw(); });
+    b.querySelector('#hr-lx').addEventListener('click', function () { exportXlsx(this, true); });
+    wireViews(main, b);
+    b.querySelectorAll('[data-act]').forEach(function (x) {
+      x.addEventListener('click', function () {
+        var id = +x.getAttribute('data-id');
+        if (x.getAttribute('data-act') === 'late') openLateness(id); else openProfile(main, id);
+      });
+    });
+  }
+  async function openLateness(id) {
+    var r;
+    try { r = await Api.get('/hr/lateness/' + id + '?from=' + S.abs.from + '&to=' + S.abs.to); } catch (e) { return fail('Could not open the clock-ins', e); }
+    var box = document.createElement('div');
+    var list = r.entries || [];
+    box.innerHTML = '<div class="hr-sub" style="margin-bottom:8px;"><span data-no-i18n>' + esc(r.person) + '</span> · ' + esc(day(r.from)) + ' to ' + esc(day(r.to))
+      + ' · late = more than ' + esc(r.grace) + ' min after the shift started</div>'
+      + (list.length ? list.map(function (e) {
+        return '<div class="hr-kv"><span>' + esc(e.weekday + ', ' + day(e.date)) + (e.room ? ' · <span data-no-i18n>' + esc(e.room) + '</span>' : '') + '</span><b>'
+          + esc('Shift ' + (e.shift_start || '') + ', in ' + e.clocked_in) + ' '
+          + (e.late ? pill('#FFFBEB', '#B45309', minsText(e.late_minutes) + ' late') : pill('#ECFDF5', '#047857', e.late_minutes ? minsText(e.late_minutes) + ', within grace' : 'On time')) + '</b></div>';
+      }).join('') : '<span class="hr-sub">No compared clock-ins in this range.</span>');
+    KT.Shell.Modal.open({ title: 'Clock-ins against the schedule', body: box, large: true, actions: [{ label: 'Close' }] });
   }
 
   // ── Leave types (agency admins) ────────────────────────────────────────
@@ -539,6 +632,54 @@
     } }] });
   }
 
+  /* Attendance rules (HR Phase 4, 2026-11-27): lateness, the absence score and leave clashes with each centre's
+     minimum staff. Saved on their own (PUT /hr/attendance/settings), so the leave settings above are untouched. */
+  async function drawAttendanceSettings(host) {
+    var d;
+    try { d = await Api.get('/hr/attendance/settings'); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
+    if (!host.isConnected) return;
+    var s = d.settings || {}, l = s.lateness || {}, a = s.absence_score || {}, c = s.clash || {};
+    var picked = {}; (a.type_ids || []).forEach(function (id) { picked[id] = 1; });
+    var yn = function (id, v, y, n) { return '<select class="hr-i" id="' + id + '" style="width:100%;"><option value="1"' + (v ? ' selected' : '') + '>' + esc(y) + '</option><option value="0"' + (!v ? ' selected' : '') + '>' + esc(n) + '</option></select>'; };
+    var dflt = (d.default_score_types || []).length ? d.default_score_types.join(', ') : 'old requests filed as Sick';
+    host.innerHTML = '<div class="kt-card" style="padding:14px 16px;margin-top:12px;" data-kt-nogrid>'
+      + '<div style="font-weight:800;font-size:13.5px;">Lateness</div>'
+      + '<div class="hr-sub" style="margin:2px 0 8px;">Each first clock-in of a scheduled shift is compared with the shift start. The absence report\'s Lateness view lists it.</div><div class="hr-g">'
+      + '<div><label class="hr-l">Grace time (minutes)</label><input class="hr-i" type="number" min="0" max="120" id="ha-gr" style="width:100%;" value="' + esc(l.grace_minutes == null ? 5 : l.grace_minutes) + '"></div>'
+      + '<div><label class="hr-l">Tell the centre\'s directors</label>' + yn('ha-nd', l.notify_directors, 'Yes, a notice when someone is late', 'No, the report only') + '</div>'
+      + '<div><label class="hr-l">Contractors</label>' + yn('ha-sc', l.skip_contractors !== false, 'Not compared', 'Compared like everyone') + '</div></div>'
+      + '<div style="margin-top:14px;font-weight:800;font-size:13.5px;">Absence score</div>'
+      + '<div class="hr-sub" style="margin:2px 0 8px;">Absences × absences × days off over the period, so many short absences score higher than one long one (the Bradford formula). The absence report marks anyone at or above the threshold. A prompt for a conversation, never an automatic decision.</div><div class="hr-g">'
+      + '<div><label class="hr-l">Mark at or above</label><input class="hr-i" type="number" min="1" max="100000" id="ha-th" style="width:100%;" value="' + esc(a.threshold || 50) + '"></div>'
+      + '<div><label class="hr-l">Over the last (months)</label><input class="hr-i" type="number" min="1" max="24" id="ha-mo" style="width:100%;" value="' + esc(a.months || 12) + '"></div></div>'
+      + '<label class="hr-l" style="margin-top:10px;">Leave types it counts</label><div>' + ((d.types || []).length ? d.types.map(function (t) {
+          return '<label class="hr-chip" style="cursor:pointer;"><input type="checkbox" data-st="' + t.id + '"' + (picked[t.id] ? ' checked' : '') + ' style="width:15px;height:15px;margin:0;">' + dot(t.colour) + '<span data-no-i18n>' + esc(t.name) + '</span></label>';
+        }).join('') : '') + '</div><div class="hr-sub">None ticked = <span data-no-i18n>' + esc(dflt) + '</span>.</div>'
+      + '<div style="margin-top:14px;font-weight:800;font-size:13.5px;">Leave clashes and minimum staff</div>'
+      + '<div class="hr-sub" style="margin:2px 0 8px;">When someone asks for time off, they see how many others at their centre are already off, and the approver sees who. With a minimum set, the approver is told which days would go below it.</div><div class="hr-g">'
+      + '<div><label class="hr-l">Show who else is off</label>' + yn('ha-cw', c.warn !== false, 'Yes', 'No') + '</div>'
+      + '<div><label class="hr-l">Below the minimum staff</label><select class="hr-i" id="ha-mm" style="width:100%;"><option value="warn"' + (c.min_mode !== 'block' ? ' selected' : '') + '>Warn the approver</option><option value="block"' + (c.min_mode === 'block' ? ' selected' : '') + '>Don\'t allow approving it</option></select></div></div>'
+      + '<div class="hr-sub" style="margin:8px 0 4px;">Leave that needs no approval (such as sick days) is never refused, only shown.</div>'
+      + '<div class="kt-card" style="margin-top:6px;"><table><thead><tr><th>Centre</th><th>Staff placed there</th><th>Minimum staff on a working day</th></tr></thead><tbody>'
+      + (d.centres || []).map(function (x) {
+        return '<tr><td data-no-i18n>' + esc(x.name) + '</td><td>' + esc(x.staff) + '</td><td><input class="hr-i" type="number" min="0" max="500" data-min="' + x.id + '" style="width:110px;" value="' + esc(x.min_staff || '') + '" placeholder="No minimum"></td></tr>';
+      }).join('') + '</tbody></table></div>'
+      + (d.can_manage ? '<div class="hr-bar" style="margin:14px 0 0;"><button type="button" class="hr-b p" id="ha-save">Save attendance rules</button><span id="ha-msg" style="font-size:13px;color:#B91C1C;"></span></div>' : '')
+      + '</div>';
+    var sv = host.querySelector('#ha-save');
+    if (sv) sv.addEventListener('click', async function () {
+      var g = function (id) { return host.querySelector('#' + id).value; };
+      var types = []; host.querySelectorAll('[data-st]').forEach(function (x) { if (x.checked) types.push(+x.getAttribute('data-st')); });
+      var mins = []; host.querySelectorAll('[data-min]').forEach(function (x) { mins.push({ centre_id: +x.getAttribute('data-min'), min: x.value === '' ? null : Math.max(0, +x.value || 0) }); });
+      var o = { lateness: { grace_minutes: Math.max(0, Math.min(120, +g('ha-gr') || 0)), notify_directors: g('ha-nd') === '1', skip_contractors: g('ha-sc') === '1' },
+        absence_score: { threshold: Math.max(1, +g('ha-th') || 50), months: Math.max(1, Math.min(24, +g('ha-mo') || 12)), type_ids: types.length ? types : null },
+        clash: { warn: g('ha-cw') === '1', min_mode: g('ha-mm') }, min_staff: mins };
+      this.disabled = true;
+      try { await Api.put('/hr/attendance/settings', o); host.querySelector('#ha-msg').textContent = ''; saved('Attendance rules saved.'); } catch (e) { host.querySelector('#ha-msg').textContent = errMsg(e); }
+      this.disabled = false;
+    });
+  }
+
   // ── Settings (agency admins) ───────────────────────────────────────────
   async function drawSettings(main) {
     var b = body(main), d;
@@ -558,7 +699,9 @@
       + '<div><label class="hr-l">Absences</label><input class="hr-i" type="number" min="2" max="50" id="hs-c" style="width:100%;" value="' + esc(sa.count || 3) + '"></div>'
       + '<div><label class="hr-l">Of this many days or less</label><input class="hr-i" type="number" min="0.5" max="10" step="0.5" id="hs-md" style="width:100%;" value="' + esc(sa.max_days || 2) + '"></div>'
       + '<div><label class="hr-l">Within (months)</label><input class="hr-i" type="number" min="1" max="24" id="hs-mo" style="width:100%;" value="' + esc(sa.months || 6) + '"></div>'
-      + '</div><div class="hr-bar" style="margin:14px 0 0;"><button type="button" class="hr-b p" id="hs-save">Save settings</button><span id="hs-msg" style="font-size:13px;color:#B91C1C;"></span></div></div>';
+      + '</div><div class="hr-bar" style="margin:14px 0 0;"><button type="button" class="hr-b p" id="hs-save">Save settings</button><span id="hs-msg" style="font-size:13px;color:#B91C1C;"></span></div></div>'
+      + '<div id="hs-att"></div>';
+    drawAttendanceSettings(b.querySelector('#hs-att'));   // HR Phase 4
     var ly = b.querySelector('#hs-ly'), fx = b.querySelector('#hs-fx');
     var syncLy = function () { fx.style.display = ly.value === 'fixed' ? '' : 'none'; };
     ly.addEventListener('change', syncLy); syncLy();

@@ -15,6 +15,8 @@ Algunos tipos no requieren aprobación: se registran y se restan de tu saldo al 
 
 Solo cuentan los días laborables: no se restan los fines de semana ni los feriados y cierres del calendario de tu centro.
 
+Si otras personas de tu centro ya están ausentes o han pedido los mismos días, el formulario te dice cuántas, para que puedas planificar. Tu director lo ve también antes de decidir.
+
 ## Después de la decisión
 
 Una solicitud aprobada se resta de tu saldo. Si se deniega o la retiras, el tiempo vuelve.
