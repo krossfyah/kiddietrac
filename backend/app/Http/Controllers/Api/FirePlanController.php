@@ -59,8 +59,11 @@ final class FirePlanController extends Controller
     }
 
     /** An agency admin of this agency, or a director of this centre. Platform admins look, but never approve. */
-    private function canReview(Request $request, int $agencyId, int $centreId): bool
+    private function canReview(Request $request, int $agencyId, int $centreId, ?object $plan = null): bool
     {
+        // Nobody reviews a plan they wrote, a director included: it goes to another director of the centre or an
+        // agency admin (Anthony, 2026-11-28).
+        if ($plan && FirePlans::authorId($plan) === (int) $request->user()->id) return false;
         $roles = DB::table('role_assignments')->where('user_id', $request->user()->id)->where('active', true)->get(['role', 'agency_id', 'centre_id']);
         if ($roles->contains(fn ($r) => $r->role === 'platform_admin')) return false;
         foreach ($roles as $r) {
@@ -122,7 +125,7 @@ final class FirePlanController extends Controller
             'drill_id' => $r->drill_id ? (int) $r->drill_id : null, 'based_on_id' => $r->based_on_id ? (int) $r->based_on_id : null,
             'is_current' => in_array((int) $r->id, $currentIds, true),
             'is_mine' => (int) $r->created_by === $me,
-            'can_review' => $r->status === 'submitted' && $this->canReview($request, $agencyId, (int) $r->centre_id),
+            'can_review' => $r->status === 'submitted' && $this->canReview($request, $agencyId, (int) $r->centre_id, $r),
             'can_edit_draft' => $r->status === 'draft' && (int) $r->created_by === $me,
         ];
     }
@@ -356,7 +359,8 @@ final class FirePlanController extends Controller
     {
         $agencyId = $this->agencyId($request);
         $row = $this->planOr404($request, $agencyId, $id);
-        abort_unless($this->canReview($request, $agencyId, (int) $row->centre_id), 403, 'Only a director of this centre or an agency admin can review a fire plan.');
+        abort_if(FirePlans::authorId($row) === (int) $request->user()->id, 403, 'You cannot review a plan you wrote. Another director of this centre or an agency admin reviews it.');
+        abort_unless($this->canReview($request, $agencyId, (int) $row->centre_id, $row), 403, 'Only a director of this centre or an agency admin can review a fire plan.');
         $d = $request->validate(['decision' => ['required', 'in:approve,changes'], 'comment' => ['nullable', 'string', 'max:2000']]);
         abort_unless($row->status === 'submitted', 422, 'Only a plan waiting for review can be reviewed.');
         $comment = trim((string) ($d['comment'] ?? ''));
@@ -367,6 +371,9 @@ final class FirePlanController extends Controller
         ]);
         $this->audit($request, $agencyId, $d['decision'] === 'approve' ? 'fire_plan.approved' : 'fire_plan.changes_requested', $id,
             ($d['decision'] === 'approve' ? 'Fire plan approved: ' : 'Changes asked for on the fire plan: ') . $this->placeName($row, $this->centres($request, $agencyId)) . ', version ' . $row->version);
+        // The author hears about it: bell + email with the comment (their prefs; test agencies send nothing).
+        try { FirePlans::tellReviewed($agencyId, $row, (int) $request->user()->id, $d['decision'], $comment); }
+        catch (\Throwable $e) { \Illuminate\Support\Facades\Log::warning('fire plan review notice failed', ['plan' => $id, 'error' => $e->getMessage()]); }
 
         return response()->json(['ok' => true]);
     }

@@ -694,6 +694,7 @@ job demo:seed-daily
 job drills:cadence-remind
 job drills:educator-schedule
 job drills:remind
+job fire-plans:remind
 job expiry:warn
 job families:apply-departures
 job forms:sync-documents

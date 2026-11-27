@@ -72,7 +72,7 @@ final class NotifyAudience
         'voicemail' => 'staff', 'content_report' => 'staff', 'countersign_reminder' => 'staff', 'walk_quiet' => 'staff',
         'walk_auto_closed' => 'staff', 'sleep_check' => 'staff', 'immunization_record' => 'staff',
         'pfcc_copay_unpaid' => 'staff', 'family_joined' => 'staff', 'user_invited' => 'staff', 'occms_roa_due' => 'staff',
-        'occms_roa_ready' => 'staff', 'drill_recorded' => 'staff', 'drill_scheduled' => 'staff', 'drill_missed' => 'staff', 'document_shared' => 'staff', 'family_file' => 'staff',
+        'occms_roa_ready' => 'staff', 'drill_recorded' => 'staff', 'drill_scheduled' => 'staff', 'drill_missed' => 'staff', 'fire_plan' => 'staff', 'document_shared' => 'staff', 'family_file' => 'staff',
         'email' => 'staff', 'proposal_opened' => 'staff', 'booking_request' => 'staff', 'child_note' => 'staff',
         'account_deletion' => 'staff', 'sub_request' => 'staff', 'staff_message' => 'staff', 'running_late' => 'staff', 'break_overrun' => 'staff', 'photo_permission' => 'staff',
         'cold_reach' => 'staff',   // sales outreach replies (ColdReach) (2026-11-24, ticket #260)
@@ -121,6 +121,7 @@ final class NotifyAudience
         'staff_payments' => 'staff', 'staff_billing_copies' => 'staff', 'staff_pickup' => 'staff', 'staff_closures' => 'staff',
         'staff_schedule' => 'staff', 'staff_tips' => 'staff', 'staff_cold_reach' => 'staff', 'staff_tickets' => 'staff',
         'staff_records' => 'staff',   // escalated daily records copies (RecordEscalation, 2026-11-26)
+        'staff_fire_plans' => 'staff',   // fire plan approved / sent back / yearly review due (FirePlans, 2026-11-28)
         'staff_submissions' => 'staff',   // StaffSubmissionsFeed: what the team submitted, in the admin bell (2026-11-26)
     ];
 

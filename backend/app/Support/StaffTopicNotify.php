@@ -28,7 +28,7 @@ final class StaffTopicNotify
 
     /** Staff bell types that belong to each topic. */
     public const TYPES = ['immunization_record' => 'immunization', 'drill_recorded' => 'drills', 'drill_due' => 'drills',
-        'drill_scheduled' => 'drills', 'drill_missed' => 'drills'];
+        'drill_scheduled' => 'drills', 'drill_missed' => 'drills', 'fire_plan' => 'drills'];
 
     public static function settings(int $agencyId): array
     {

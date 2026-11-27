@@ -91,6 +91,8 @@ Schedule::command('kt:minute fifteen')->cron('6-59/15 * * * *')->withoutOverlapp
 // A parent's pickup alarm (the countdown on the parent Today screen, 2026-11-09).
 // Every minute in kt:minute safety (App\Console\Commands\MinuteBatchCommand) - one process for the group.
 Schedule::command('drills:cadence-remind')->dailyAt('08:00')->timezone('America/Toronto')->withoutOverlapping();
+// Fire plans 12 months past their last review: the author + the centre directors, once then weekly (2026-11-28).
+Schedule::command('fire-plans:remind')->dailyAt('08:10')->timezone('America/Toronto')->withoutOverlapping();
 
 /* Clear out dead API tokens. Every sign-in mints one and nothing ever removed one -- 796
    had accumulated, 281 of them already expired: full-access credentials (`["*"]`) sitting

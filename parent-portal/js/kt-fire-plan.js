@@ -832,6 +832,7 @@
         p.reviewed_by_name ? (p.status === 'approved' ? 'approved by ' : 'reviewed by ') + p.reviewed_by_name + ' ' + day(p.reviewed_at) : ''].filter(Boolean).join(' · ');
       body.innerHTML = '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;"><b style="font-size:14px;">Version ' + p.version + '</b>' + chip(statusOf(p))
         + '<span style="font-size:12.5px;color:#64748B;">' + esc(who) + '</span></div>'
+        + (p.status === 'submitted' && p.is_mine && !p.can_review ? '<div class="fp-comment" style="background:#FFFBEB;border-color:#FDE68A;color:#78350F;">' + 'Waiting for review by another director or an agency admin.' + '</div>' : '')
         + (p.status === 'changes' && p.review_comment ? '<div class="fp-comment"><b>What to change:</b> ' + esc(p.review_comment) + '</div>' : '')
         + (p.status === 'approved' && p.review_comment ? '<div class="fp-comment" style="background:#ECFDF5;border-color:#A7F3D0;color:#064E3B;">' + esc(p.review_comment) + '</div>' : '')
         + '<div class="fp-sec">Drawing</div><div id="fpv-draw"><div class="fpv-none">Loading the drawing…</div></div>' + legendHtml()

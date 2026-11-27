@@ -55,7 +55,7 @@ final class Notify
         'safe_arrival' => 'safety', 'absence' => 'safety', 'ratio_breach' => 'safety', 'children_still_in' => 'safety',
         'walk_started' => 'safety', 'walk_ended' => 'safety', 'walk_quiet' => 'safety', 'walk_auto_closed' => 'safety',
         'immunization_reminder' => 'safety', 'immunization_record' => 'safety', 'incident' => 'safety',
-        'drill_recorded' => 'safety', 'drill_scheduled' => 'safety', 'drill_missed' => 'safety', 'running_late' => 'safety',
+        'drill_recorded' => 'safety', 'drill_scheduled' => 'safety', 'drill_missed' => 'safety', 'fire_plan' => 'safety', 'running_late' => 'safety',
         'checkin' => 'checkin', 'checkin_reminder' => 'checkin', 'pickup_alarm' => 'checkin', 'attendance' => 'checkin', 'transfer' => 'checkin',
         'clock' => 'staff', 'clock_reminder' => 'staff', 'break_overrun' => 'staff', 'time_off' => 'staff', 'time_off_reminder' => 'staff',
         'schedule' => 'staff', 'award' => 'staff', 'educator_reward' => 'staff', 'bio_reminder' => 'staff',

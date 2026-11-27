@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Services\AgencyMailer;
+use App\Services\EmailTemplate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -277,8 +279,7 @@ final class FirePlans
 
     /**
      * Per centre, for the Drills tab: the plan for the whole centre (room NULL) - else any room's - and whether it
-     * has gone 12 months without a review. Display only: nothing here sends (Anthony's brief: report it, send nothing
-     * new by default).
+     * has gone 12 months without a review. Display only: the reminders are fire-plans:remind (reviewDue below).
      *
      * @param  int[] $centreIds
      * @return array<int,array<string,mixed>>
@@ -302,6 +303,115 @@ final class FirePlans
             $rev = self::reviewedOn($current);
             $out[$cid] = ['state' => $rev && $rev >= $yearAgo ? 'current' : 'review_due', 'id' => (int) $current->id, 'version' => (int) $current->version,
                 'reviewed_on' => $rev, 'review_by' => $rev ? Carbon::parse($rev)->addYear()->toDateString() : $today, 'pending' => $pending];
+        }
+
+        return $out;
+    }
+
+    /** Who wrote this version: the person who sent it for review, else who started it. Nobody reviews their own plan. */
+    public static function authorId(object $plan): int
+    {
+        return (int) ($plan->submitted_by ?: $plan->created_by);
+    }
+
+    /** "Sunflower" or "Sunflower · Toddler room". */
+    public static function placeLabel(int $centreId, ?int $roomId): string
+    {
+        $c = (string) DB::table('centres')->where('id', $centreId)->value('name');
+        $r = $roomId ? (string) DB::table('rooms')->where('id', $roomId)->value('name') : '';
+
+        return $r !== '' ? $c . ' · ' . $r : $c;
+    }
+
+    /** "Open the fire plan" button. kt-btn keeps its text white in dark mode (the card's link colour would win otherwise). */
+    public static function button(int $planId): string
+    {
+        return '<div style="margin:20px 0;text-align:center;"><a class="kt-btn" href="' . htmlspecialchars(self::link($planId), ENT_QUOTES, 'UTF-8') . '" style="background-color:#1F6080;color:#FFFFFF;padding:12px 26px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none;display:inline-block;">Open the fire plan</a></div>';
+    }
+
+    public static function link(int $planId): string
+    {
+        return 'https://app.kiddietrac.com/dashboard.html#drills?tab=fireplan&plan=' . $planId;
+    }
+
+    /**
+     * The author hears when a reviewer approves their plan or sends it back (Anthony, 2026-11-28): a bell row (type
+     * fire_plan: StaffNotifyPrefs topic staff_fire_plans + the agency's drills switch, both checked in Notify::write)
+     * and an email with the reviewer's comment and a link to the plan. First names only. Test agencies send nothing.
+     */
+    public static function tellReviewed(int $agencyId, object $plan, int $reviewerId, string $decision, string $comment): void
+    {
+        $uid = self::authorId($plan);
+        if (! $uid || $uid === $reviewerId) return;
+        $ok = $decision === 'approve';
+        $who = (string) DB::table('users')->where('id', $reviewerId)->value('first_name');
+        $place = self::placeLabel((int) $plan->centre_id, $plan->room_id !== null ? (int) $plan->room_id : null);
+        $title = $ok ? 'Your fire plan was approved' : 'Changes asked for on your fire plan';
+        $short = $comment !== '' ? mb_strimwidth($comment, 0, 140, '…') : '';
+        $body = $place . ' · version ' . (int) $plan->version . ' · ' . ($ok ? ($who !== '' ? $who . ' approved it' : 'approved') : ($who !== '' ? $who . ': ' : '') . $short)
+            . ($ok && $short !== '' ? ' - "' . $short . '"' : '');
+        Notify::write(['user_id' => $uid, 'agency_id' => $agencyId, 'type' => 'fire_plan', 'title' => ($ok ? "\u{2705} " : "\u{21A9}\u{FE0F} ") . $title,
+            'body' => $body, 'data' => json_encode(['link' => '#drills?tab=fireplan&plan=' . (int) $plan->id])]);
+
+        self::email($agencyId, $uid, ($ok ? 'Fire plan approved: ' : 'Changes asked for: fire plan, ') . $place, $title, $place, self::reviewedMail($plan, $who, $ok, $comment, $place));
+    }
+
+    /** The body of the "approved / sent back" email (pure: no sending, so it can be rendered in a test). */
+    public static function reviewedMail(object $plan, string $who, bool $ok, string $comment, string $place): string
+    {
+        $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        return '<p style="margin:0 0 10px;font-size:15px;color:#334155">' . ($ok
+                ? 'Your fire plan for <b>' . $e($place) . '</b> (version ' . (int) $plan->version . ') was approved' . ($who !== '' ? ' by ' . $e($who) : '') . '. It is now the plan everyone follows, prints and posts.'
+                : ($who !== '' ? $e($who) : 'Your reviewer') . ' asked for changes to your fire plan for <b>' . $e($place) . '</b> (version ' . (int) $plan->version . '). Open the plan, make the changes and send the new version for review.') . '</p>'
+            . ($comment !== '' ? EmailTemplate::calloutBox('<b>' . ($who !== '' ? $e($who) : 'Comment') . ':</b> ' . nl2br($e($comment)), $ok ? 'success' : 'warning') : '')
+            . self::button((int) $plan->id);
+    }
+
+    /**
+     * One staff email about fire plans, through the agency's mailer in the house template (dark-mode rules included).
+     * Skipped when the person switched fire plan emails off, the agency switched drill notices off for their role,
+     * the address is a service one, or the agency is a test agency.
+     */
+    public static function email(int $agencyId, int $uid, string $subject, string $title, string $subtitle, string $bodyHtml): bool
+    {
+        if (TestAgency::blocks($agencyId, $uid)) return false;
+        if (! StaffNotifyPrefs::wants($uid, 'staff_fire_plans', 'email', $agencyId)) return false;
+        if (! StaffTopicNotify::allows($agencyId, 'drills', $uid)) return false;
+        $u = DB::table('users')->where('id', $uid)->whereNull('deleted_at')->first(['email', 'first_name']);
+        if (! $u || ! filter_var((string) $u->email, FILTER_VALIDATE_EMAIL) || ChatAudience::isServiceEmail((string) $u->email)) return false;
+        $hi = trim((string) $u->first_name) !== '' ? '<p style="margin:0 0 10px;font-size:15px;color:#334155">Hi ' . htmlspecialchars((string) $u->first_name, ENT_QUOTES, 'UTF-8') . ',</p>' : '';
+        $html = EmailTemplate::wrap($agencyId, $hi . $bodyHtml, ['eyebrow' => 'SAFETY', 'title' => $title, 'subtitle' => $subtitle]);
+        try {
+            AgencyMailer::forAgency($agencyId)->html($html, fn ($m) => $m->to((string) $u->email)->subject($subject));
+            return true;
+        } catch (\Throwable $ex) {
+            \Illuminate\Support\Facades\Log::warning('fire plan email failed', ['user' => $uid, 'error' => $ex->getMessage()]);
+            return false;
+        }
+    }
+
+    /**
+     * Current plans (the newest approved version of each place) that have gone 12 months without a review, in one
+     * agency. A place whose newer version is already waiting for review is left out: the review queue has it.
+     */
+    public static function reviewDue(int $agencyId, ?Carbon $now = null): array
+    {
+        if (! Schema::hasTable('fire_plans')) return [];
+        $tz = AgencyTime::tz($agencyId) ?: 'America/Toronto';
+        $now = $now ?: Carbon::now($tz);
+        $yearAgo = $now->copy()->subYear()->toDateString();
+        $centres = Live::centreIds($agencyId);
+        if (! $centres) return [];
+        $rows = DB::table('fire_plans')->where('agency_id', $agencyId)->whereIn('centre_id', $centres)->whereNull('deleted_at')
+            ->whereIn('status', ['approved', 'submitted'])->orderByDesc('version')->get();
+        $out = [];
+        foreach ($rows->groupBy(fn ($r) => $r->centre_id . '|' . ($r->room_id ?? '')) as $place) {
+            $current = $place->firstWhere('status', 'approved');
+            if (! $current) continue;
+            if ($place->contains(fn ($r) => $r->status === 'submitted' && (int) $r->version > (int) $current->version)) continue;
+            $rev = self::reviewedOn($current);
+            if ($rev && $rev >= $yearAgo) continue;
+            $out[] = $current;
         }
 
         return $out;
