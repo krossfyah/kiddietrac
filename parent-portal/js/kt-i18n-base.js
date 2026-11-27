@@ -8,6 +8,11 @@
  * words only). New UI text goes HERE now.
  */
 window.KT_I18N_BASE && window.KT_I18N_BASE({
+    // Forms: reusable column + one-time tag on the day's forms (2026-11-27)
+    'one-time': { fr: 'unique', es: 'una sola vez', hi: 'एक बार का' },
+    'One-time form: once signed it leaves this list': { fr: 'Formulaire unique : une fois signé, il quitte cette liste', es: 'Formulario de una sola vez: al firmarse sale de esta lista', hi: 'एक बार का फ़ॉर्म: हस्ताक्षर होते ही यह इस सूची से हट जाता है' },
+    'One-time: once signed it leaves the list': { fr: 'Unique : une fois signé, il quitte la liste', es: 'Una sola vez: al firmarse sale de la lista', hi: 'एक बार का: हस्ताक्षर होते ही यह सूची से हट जाता है' },
+    'Stays on the list after signing, so it can be filled again': { fr: 'Reste dans la liste après la signature, pour être rempli à nouveau', es: 'Sigue en la lista después de firmarse, para volver a llenarlo', hi: 'हस्ताक्षर के बाद भी सूची में रहता है, ताकि इसे फिर से भरा जा सके' },
     // Fire plan notices (Settings > Notifications topic, 2026-11-28)
     'When a fire plan you wrote is approved or sent back for changes, and when a fire plan you wrote or oversee is due for its yearly review.': { fr: 'Quand un plan d’évacuation que vous avez rédigé est approuvé ou renvoyé pour modifications, et quand un plan que vous avez rédigé ou supervisez doit être révisé chaque année.', es: 'Cuando un plan de evacuación que usted escribió se aprueba o se devuelve con cambios, y cuando un plan que escribió o supervisa debe revisarse cada año.', hi: 'जब आपकी लिखी आग से बचाव की योजना स्वीकृत होती है या बदलाव के लिए लौटाई जाती है, और जब आपकी लिखी या देखी जाने वाली योजना की सालाना समीक्षा का समय आता है।' },
     'You cannot review a plan you wrote. Another director of this centre or an agency admin reviews it.': { fr: 'Vous ne pouvez pas réviser un plan que vous avez rédigé. Une autre direction du centre ou un administrateur de l’agence le révise.', es: 'No puede revisar un plan que usted escribió. Lo revisa otro director del centro o un administrador de la agencia.', hi: 'आप अपनी लिखी योजना की समीक्षा नहीं कर सकते। इस केंद्र का कोई दूसरा निदेशक या एजेंसी एडमिन इसकी समीक्षा करता है।' },

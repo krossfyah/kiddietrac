@@ -155,7 +155,10 @@
         return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">'
           + '<span style="width:13px;text-align:center;color:' + col + ';font-size:13px;">' + mark + '</span>'
           + '<span style="flex:1;min-width:0;font-size:12.5px;color:#334155;overflow:hidden;'
-            + 'text-overflow:ellipsis;white-space:nowrap;">' + esc(f.title) + '</span>'
+            + 'text-overflow:ellipsis;white-space:nowrap;">' + esc(f.title)
+            /* Only reusable forms are due every day; a one-time form shows until it is
+               signed, then leaves the list (formDayItem, 2026-11-27). */
+            + '</span>' + (f.reusable === false ? '<span data-kttip="One-time form: once signed it leaves this list" style="flex:0 0 auto;font-size:10px;font-weight:800;color:#6D28D9;background:#F3F0FF;border-radius:999px;padding:1px 7px;white-space:nowrap;">one-time</span>' : '')
           + '<span style="font-size:11px;color:' + col + ';white-space:nowrap;">' + note + '</span>'
           + '</div>';
       }).join('');

@@ -52,5 +52,7 @@ Hoy puede marcar desde aquí que un niño está presente o se fue a casa. Se avi
   salidas** y **💬 Chat educador ↔ padre**.
 - **📊 Rendimiento del proveedor**: las cifras del día, como los momentos por niño.
 
+> **Nota:** **📝 Formularios diarios enviados** muestra los formularios reutilizables que se deben cada día. Un formulario de una sola vez (marcado **one-time**) solo aparece hasta que el proveedor lo firma; después sale de la lista.
+
 ??? Un niño aparece como ausente, pero estuvo. | Márquelo como presente en el Resumen diario (hoy) o corrija las horas en Asistencia para un día anterior.
 ??? ¿Por qué una sección está vacía? | Ese día no se registró nada en ella. La sección lo indica, por ejemplo «No se registraron observaciones este día.»

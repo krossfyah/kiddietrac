@@ -2050,7 +2050,7 @@
       var forms = (d && d.forms) || [];
       if (!forms.length) { el.innerHTML = '<div style="padding:30px;text-align:center;color:#64748B;background:#F8FAFC;border-radius:12px;">No forms uploaded yet.</div>'; return; }
       el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Assigned to', 'Email copy', 'Uploaded by', 'Signed', 'Status', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
+        + '<thead><tr style="background:#F9FAFB;">' + ['Form', 'Description', 'Assigned to', 'Reusable', 'Email copy', 'Uploaded by', 'Signed', 'Status', ''].map(function (h) { return '<th style="text-align:left;padding:9px 14px;font-size:11px;color:#6B7280;text-transform:uppercase;">' + h + '</th>'; }).join('') + '</tr></thead><tbody>'
         + forms.map(function (f) {
           var auds = (f.audiences || []).map(function (a) { return '<span style="display:inline-block;background:#EFF6FB;color:#1F6080;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700;margin:1px 3px 1px 0;">' + esc(audLabel(a)) + '</span>'; }).join('');
           return '<tr style="border-top:1px solid #F3F4F6;">'
@@ -2065,6 +2065,12 @@
                named-recipient count is still on the form's Edit dialog, where it can be
                acted on rather than just counted at. */
             + '<td style="padding:9px 14px;">' + (auds || '—') + '</td>'
+            /* REUSABLE AT A GLANCE (2026-11-27, Anthony: "forms library table add a column
+               that shows reusable"). Reusable = stays on the list after signing and is due
+               again each day (daily charts); No = one-time, done once it is signed. */
+            + '<td data-kt-sort="' + (f.reusable ? 'Yes' : 'No') + '" style="padding:9px 14px;white-space:nowrap;">' + (f.reusable
+                ? '<span data-kttip="Stays on the list after signing, so it can be filled again" style="font-size:11px;font-weight:800;color:#0F766E;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:999px;padding:2px 9px;">Yes</span>'
+                : '<span data-kttip="One-time: once signed it leaves the list" style="font-size:11px;font-weight:800;color:#64748B;background:#F1F5F9;border:1px solid #E2E8F0;border-radius:999px;padding:2px 9px;">No</span>') + '</td>'
             // Whether a completed copy is emailed on, and where to. Without this the
             // only way to know was to open Edit on every form one at a time.
             + '<td style="padding:9px 14px;white-space:nowrap;">' + (f.notify_email
@@ -2844,7 +2850,7 @@
               reviewMode: true,
               reviewSignature: sg.signature || null,
               reviewSignerName: r.signer_name || '',
-              reviewSignedOn: fmtStamp(r.signed_at)
+              reviewSignedOn: (d && d.stamp) || fmtStamp(r.signed_at)   // the stored signature stamp, re-printed as signed
             }).then(function (res) {
               if (!res || !res.base64) { ov.style.display = 'flex'; return; }
               /* WHICH FIELDS CHANGED, NAMED INDIVIDUALLY. The rebuilt document carries
@@ -3036,6 +3042,12 @@
         + '<div style="padding:20px;">'
         + '<div style="font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Signature</div>'
         + (s.signature ? '<img src="' + esc(s.signature) + '" alt="signature" style="max-width:100%;border:1px solid #E5E7EB;border-radius:10px;background:#fff;">' : '<div style="color:#94A3B8;">No signature on file.</div>')
+        /* The signature stamp: Signed date + time, IP address, approximate location (SignatureStamp, 2026-11-27). */
+        + (KT.sigStampHtml ? KT.sigStampHtml(d.stamp, 'font-size:11.5px;line-height:1.55;color:#64748B;margin-top:8px') : '')
+        + (d.countersign_stamp && KT.sigStampHtml
+            ? '<div style="font-size:11.5px;font-weight:800;color:#64748B;text-transform:uppercase;letter-spacing:.5px;margin:14px 0 4px;">Counter-signed by ' + esc(s.countersigner_name || 'the agency') + '</div>'
+              + KT.sigStampHtml(d.countersign_stamp, 'font-size:11.5px;line-height:1.55;color:#64748B')
+            : '')
         + '<div style="display:flex;gap:10px;margin-top:16px;">'
         + '<button id="fm-vform" style="flex:1;background:#1F6080;color:#fff;border:0;border-radius:10px;padding:11px;font-weight:800;font-size:13px;cursor:pointer;">Open the form (PDF)</button>'
         + '<button id="fm-vclose" style="flex:0 0 auto;background:#F1F5F9;color:#334155;border:0;border-radius:10px;padding:11px 18px;font-weight:700;font-size:13px;cursor:pointer;">Close</button>'

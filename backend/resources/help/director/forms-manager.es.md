@@ -20,6 +20,8 @@ La Biblioteca es donde se sube y se guarda un formulario. Al subir uno, usted le
 - **Permitir que este formulario se reutilice**: mantiene el formulario abierto después de enviarlo, para que se pueda completar de nuevo, una vez por niño o semana tras semana. Cada envío se conserva como un registro propio.
 - **Enviar los formularios completados por correo electrónico a** (opcional): cada vez que alguien firma, el PDF completado se envía por correo electrónico a esta dirección.
 
+La tabla de la Biblioteca tiene una columna **Reutilizable**: **Sí** significa que el formulario sigue en la lista después de firmarse y vuelve cada día (hojas diarias como una hoja de siesta); **No** significa que es un formulario de una sola vez, terminado al firmarse.
+
 > **Nota:** Asignar un formulario desde la Biblioteca no envía correo a nadie. Para avisar a las personas, envíelo desde **Varios formularios**.
 
 ## Varios formularios: enviar un paquete

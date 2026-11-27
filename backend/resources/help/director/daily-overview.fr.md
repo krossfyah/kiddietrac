@@ -53,5 +53,7 @@ en est avisée.
   et sorties** et **💬 Clavardage éducateur ↔ parent**.
 - **📊 Performance du prestataire** — les chiffres de la journée, comme les moments par enfant.
 
+> **Remarque :** **📝 Formulaires quotidiens remis** liste les formulaires réutilisables attendus chaque jour. Un formulaire unique (marqué **one-time**) n’apparaît que jusqu’à ce que le prestataire le signe, puis il quitte la liste.
+
 ??? Un enfant apparaît absent alors qu’il était là. | Indiquez qu’il est présent dans l’Aperçu quotidien (aujourd’hui), ou corrigez les heures dans Présences pour un jour passé.
 ??? Pourquoi une section est-elle vide? | Rien n’a été consigné ce jour-là. La section l’indique, par exemple « Aucune observation consignée ce jour-là. »

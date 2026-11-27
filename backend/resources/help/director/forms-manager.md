@@ -30,6 +30,8 @@ The Library is where a form is uploaded and kept. When you upload one you give i
 - **Email completed forms to** (optional): every time someone signs, the completed PDF
   is emailed to this address.
 
+The Library table has a **Reusable** column: **Yes** means the form stays on the list after it is signed and is due again each day (daily charts such as a sleep chart); **No** means it is a one-time form, done once it is signed.
+
 > **Note:** Assigning a form from the Library does not email anybody. To tell people, send it from **Multiple forms**.
 
 ## Multiple forms: sending a package

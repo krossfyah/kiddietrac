@@ -421,36 +421,28 @@ class EducatorSelfController extends Controller
             ->where('agency_id', $targetAgencyId)
             ->where('active', 1)
             ->orderBy('title')
-            ->get(['id', 'title', 'audiences', 'fillable', 'named_extends_audience']);
+            ->get(['id', 'title', 'audiences', 'fillable', 'named_extends_audience', 'reusable']);
         $forms = \App\Support\FormAudience::filter($allForms, $targetId, $roleNames);
+
+        // Every sign-off this person has on these forms up to the end of the day viewed:
+        // a one-time form signed last week is answered by that earlier row (formDayItem).
+        $formIds = collect($forms)->pluck('id')->all();
+        $rowsByForm = $formIds
+            ? DB::table('managed_form_signoffs')
+                ->whereIn('managed_form_id', $formIds)
+                ->where('user_id', $targetId)
+                ->where('created_at', '<=', $toUtc)
+                ->orderBy('id')
+                ->get(['id', 'managed_form_id', 'signed_at', 'created_at', 'correction_requested_at', 'corrected_at'])
+                ->groupBy('managed_form_id')
+            : collect();
 
         $expected = [];
         foreach ($forms as $f) {
-
-            $signoff = DB::table('managed_form_signoffs')
-                ->where('managed_form_id', $f->id)
-                ->where('user_id', $targetId)
-                ->whereBetween('created_at', [$fromUtc, $toUtc])
-                ->orderByDesc('id')
-                ->first();
-
-            $state = 'not_started';
-            $at = null;
-            if ($signoff && $signoff->signed_at) {
-                $state = 'submitted';
-                $at = Carbon::parse($signoff->signed_at, 'UTC')->setTimezone($tz)->format('H:i');
-            } elseif ($signoff) {
-                $state = 'draft';
-                $at = Carbon::parse($signoff->created_at, 'UTC')->setTimezone($tz)->format('H:i');
+            $item = self::formDayItem($f, $rowsByForm->get($f->id, collect()), $fromUtc->toDateTimeString(), $toUtc->toDateTimeString(), $tz);
+            if ($item !== null) {
+                $expected[] = $item;
             }
-
-            $expected[] = [
-                'id' => (int) $f->id,
-                'title' => $f->title,
-                'state' => $state,
-                'at' => $at,
-                'signoff_id' => $signoff->id ?? null,
-            ];
         }
 
         $submitted = count(array_filter($expected, fn ($f) => $f['state'] === 'submitted'));
@@ -512,6 +504,76 @@ class EducatorSelfController extends Controller
         abort_unless($first, 400);
 
         return (int) $first;
+    }
+
+    /**
+     * One form, one person, one day: what the day's forms list says about it.
+     *
+     * ONLY A REUSABLE FORM IS DUE EVERY DAY (2026-11-27, Anthony: "check to see why
+     * providers are still showing this as a reusable form if it's not set as a reusable
+     * (daily overview)"). Both day lists used to treat every active educator form as a
+     * daily form: they looked only for a sign-off made on the day being viewed and never
+     * read `managed_forms.reusable`. So iLearn's one-time provider paperwork (Provider
+     * Manual-CWELLC, Provider Agreement-CWELLC, Provider Policy Acknowledgement, KiddieTrac
+     * Documentation and Compliance, Policy Sign Off), switched off reusable on 11-09 and
+     * signed by every provider, still showed as "not started" on every day after.
+     *
+     * - Reusable: judged by that day's sign-off only, as before (Sleep Chart, Supervision).
+     * - One-time: judged by the person's latest signed copy up to the end of the day.
+     *   Signed before the day: done, and it leaves the list (null). Signed that day: shown
+     *   as submitted. Never signed, or sent back for a correction not yet resubmitted:
+     *   still owed, shown every day until it is signed.
+     *
+     * $rows: this person's sign-offs on this form created up to $toUtc, oldest first.
+     */
+    private static function formDayItem(object $f, $rows, string $fromUtc, string $toUtc, string $tz): ?array
+    {
+        $reusable = (bool) ($f->reusable ?? false);
+        $rows = collect($rows);
+        $state = 'not_started';
+        $at = null;
+        $row = null;
+
+        if ($reusable) {
+            $row = $rows->filter(fn ($r) => (string) $r->created_at >= $fromUtc)->last();
+            if ($row && $row->signed_at) {
+                $state = 'submitted';
+                $at = Carbon::parse($row->signed_at, 'UTC')->setTimezone($tz)->format('H:i');
+            } elseif ($row) {
+                $state = 'draft';
+                $at = Carbon::parse($row->created_at, 'UTC')->setTimezone($tz)->format('H:i');
+            }
+        } else {
+            $signed = $rows->filter(fn ($r) => $r->signed_at && (string) $r->signed_at <= $toUtc)->last();
+            // Sent back for a correction by that day and not resubmitted by then.
+            $returned = $signed && $signed->correction_requested_at && (string) $signed->correction_requested_at <= $toUtc
+                && (! $signed->corrected_at || (string) $signed->corrected_at > $toUtc);
+            if ($signed && ! $returned) {
+                if ((string) $signed->signed_at < $fromUtc) {
+                    return null;          // a one-time form already done on an earlier day
+                }
+                $row = $signed;
+                $state = 'submitted';
+                $at = Carbon::parse($signed->signed_at, 'UTC')->setTimezone($tz)->format('H:i');
+            } else {
+                $row = $rows->filter(fn ($r) => ! $r->signed_at)->last();
+                if ($row) {
+                    $state = 'draft';
+                    $started = Carbon::parse($row->created_at, 'UTC')->setTimezone($tz);
+                    // A draft begun on an earlier day reads as that day, not a bare time.
+                    $at = (string) $row->created_at >= $fromUtc ? $started->format('H:i') : $started->format('M j');
+                }
+            }
+        }
+
+        return [
+            'id' => (int) $f->id,
+            'title' => $f->title,
+            'reusable' => $reusable,
+            'state' => $state,
+            'at' => $at,
+            'signoff_id' => $row->id ?? null,
+        ];
     }
 
     public function formsTodayRollup(Request $request): JsonResponse
@@ -605,7 +667,7 @@ class EducatorSelfController extends Controller
 
         $forms = DB::table('managed_forms')
             ->where('agency_id', $agencyId)->where('active', 1)
-            ->orderBy('title')->get(['id', 'title', 'audiences', 'named_extends_audience', 'centre_id']);
+            ->orderBy('title')->get(['id', 'title', 'audiences', 'named_extends_audience', 'centre_id', 'reusable']);
 
         /* Only the forms an educator is actually asked for.
 
@@ -627,16 +689,27 @@ class EducatorSelfController extends Controller
         $formIds = $forEducators->pluck('id')->all();
         $userIds = $staffRows->pluck('id')->unique()->values()->all();
 
-        // One query for the whole day rather than one per person per form.
+        /* One query rather than one per person per form. A reusable (daily) form needs
+           only the day's rows; a one-time form needs earlier ones too, because a copy
+           signed last week is what makes it done (formDayItem). */
+        $oneTimeIds = $forEducators->filter(fn ($f) => ! $f->reusable)->pluck('id')->all();
         $signoffs = ($formIds && $userIds)
             ? DB::table('managed_form_signoffs')
                 ->whereIn('managed_form_id', $formIds)
                 ->whereIn('user_id', $userIds)
-                ->whereBetween('created_at', [$fromUtc, $toUtc])
+                ->where('created_at', '<=', $toUtc)
+                ->where(function ($w) use ($fromUtc, $oneTimeIds) {
+                    $w->where('created_at', '>=', $fromUtc);
+                    if ($oneTimeIds) {
+                        $w->orWhereIn('managed_form_id', $oneTimeIds);
+                    }
+                })
                 ->orderBy('id')
-                ->get(['managed_form_id', 'user_id', 'signed_at', 'created_at'])
+                ->get(['id', 'managed_form_id', 'user_id', 'signed_at', 'created_at', 'correction_requested_at', 'corrected_at'])
                 ->groupBy(fn ($r) => $r->user_id.':'.$r->managed_form_id)
             : collect();
+        $fromStr = $fromUtc->toDateTimeString();
+        $toStr = $toUtc->toDateTimeString();
 
         $staff = [];
         foreach ($staffRows->unique('id') as $u) {
@@ -646,17 +719,11 @@ class EducatorSelfController extends Controller
                 if ($f->centre_id && (int) $f->centre_id !== (int) $u->centre_id) {
                     continue;
                 }
-                $row = optional($signoffs->get($u->id.':'.$f->id))->last();
-                $state = 'not_started';
-                $at = null;
-                if ($row && $row->signed_at) {
-                    $state = 'submitted';
-                    $at = Carbon::parse($row->signed_at, 'UTC')->setTimezone($tz)->format('H:i');
-                } elseif ($row) {
-                    $state = 'draft';
-                    $at = Carbon::parse($row->created_at, 'UTC')->setTimezone($tz)->format('H:i');
+                $item = self::formDayItem($f, $signoffs->get($u->id.':'.$f->id, collect()), $fromStr, $toStr, $tz);
+                if ($item !== null) {
+                    unset($item['signoff_id']);
+                    $items[] = $item;
                 }
-                $items[] = ['id' => (int) $f->id, 'title' => $f->title, 'state' => $state, 'at' => $at];
             }
 
             $staff[] = [
@@ -682,7 +749,8 @@ class EducatorSelfController extends Controller
         return response()->json([
             'date' => $day->toDateString(),
             'timezone' => $tz,
-            'expected' => $forEducators->count(),
+            // The most forms anyone owes that day: one-time forms already done drop out.
+            'expected' => $staff ? max(array_column($staff, 'expected')) : $forEducators->count(),
             'staff_count' => count($staff),
             'complete' => count(array_filter($staff, fn ($s) => $s['submitted'] >= $s['expected'])),
             'staff' => $staff,

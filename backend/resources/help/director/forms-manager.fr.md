@@ -20,6 +20,8 @@ La Bibliothèque est l’endroit où l’on téléverse et conserve un formulair
 - **Permettre la réutilisation de ce formulaire** : garde le formulaire ouvert après sa soumission, afin qu’il puisse être rempli de nouveau, une fois par enfant ou semaine après semaine. Chaque soumission est conservée comme un dossier distinct.
 - **Envoyer les formulaires remplis par courriel à** (facultatif) : chaque fois que quelqu’un signe, le PDF rempli est envoyé par courriel à cette adresse.
 
+Le tableau de la Bibliothèque a une colonne **Réutilisable** : **Oui** signifie que le formulaire reste dans la liste après sa signature et revient chaque jour (fiches quotidiennes comme une fiche de sieste) ; **Non** signifie qu’il s’agit d’un formulaire unique, terminé une fois signé.
+
 > **Remarque :** Attribuer un formulaire depuis la Bibliothèque n’envoie de courriel à personne. Pour avertir les gens, envoyez-le depuis **Plusieurs formulaires**.
 
 ## Plusieurs formulaires : envoyer une trousse

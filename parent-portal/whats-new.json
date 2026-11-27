@@ -2,6 +2,24 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "📝",
+            "title": "Reusable column in the Forms library",
+            "body": "The Forms library now shows whether each form is reusable. Daily Overview and the provider's Forms today card now treat one-time forms as one-time: once a provider signs one, it leaves their daily list instead of showing as not started every day.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Colonne Réutilisable dans la bibliothèque de formulaires",
+            "body_fr": "La bibliothèque de formulaires indique maintenant si chaque formulaire est réutilisable. L’aperçu quotidien et la carte Formulaires du jour du prestataire traitent désormais les formulaires uniques comme uniques : une fois signé, le formulaire quitte la liste quotidienne au lieu d’apparaître chaque jour comme non commencé.",
+            "title_es": "Columna Reutilizable en la biblioteca de formularios",
+            "body_es": "La biblioteca de formularios ahora muestra si cada formulario es reutilizable. La vista diaria y la tarjeta Formularios de hoy del proveedor tratan los formularios de una sola vez como tales: cuando el proveedor firma uno, sale de su lista diaria en lugar de aparecer cada día como no iniciado.",
+            "title_hi": "फ़ॉर्म लाइब्रेरी में पुन: प्रयोज्य कॉलम",
+            "body_hi": "फ़ॉर्म लाइब्रेरी अब दिखाती है कि हर फ़ॉर्म पुन: प्रयोज्य है या नहीं। दैनिक अवलोकन और प्रदाता का आज के फ़ॉर्म कार्ड अब एक बार के फ़ॉर्म को एक बार का ही मानते हैं: प्रदाता के हस्ताक्षर करते ही वह दैनिक सूची से हट जाता है, हर दिन शुरू नहीं हुआ के रूप में नहीं दिखता।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "🙌",

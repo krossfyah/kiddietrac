@@ -50,5 +50,7 @@ Today, you can mark a child present or gone home from here. Their family is noti
   outings** and **💬 Educator ↔ parent chat**.
 - **📊 Provider performance** — the day's numbers, such as moments per child.
 
+> **Note:** **📝 Daily forms submitted** lists the reusable forms due every day. A one-time form (marked **one-time**) shows only until the provider signs it, then it leaves the list.
+
 ??? A child shows as Absent but was there. | Mark them present from Daily Overview (today), or correct the times in Attendance for a past day.
 ??? Why is a section empty? | Nothing was recorded for it that day. The section says so, for example "No observations recorded on this day."

@@ -406,7 +406,9 @@
       return '<div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px solid #F1F5F9;">'
         + '<span style="color:' + col + ';font-size:14px;width:14px;text-align:center;">' + mark + '</span>'
         + '<span style="flex:1;min-width:0;font-size:13px;color:#0F172A;overflow:hidden;text-overflow:ellipsis;'
-        + 'white-space:nowrap;">' + esc(f.title) + '</span>'
+        + 'white-space:nowrap;">' + esc(f.title)
+        // A one-time form shows until it is signed, then leaves (formDayItem, 2026-11-27).
+        + '</span>' + (f.reusable === false ? '<span data-kttip="One-time form: once signed it leaves this list" style="flex:0 0 auto;font-size:10px;font-weight:800;color:#6D28D9;background:#F3F0FF;border-radius:999px;padding:1px 7px;white-space:nowrap;">one-time</span>' : '')
         + '<span style="font-size:11.5px;color:' + col + ';font-variant-numeric:tabular-nums;">' + note + '</span>'
         + '</div>';
     };
