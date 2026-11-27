@@ -4424,4 +4424,21 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     'Nothing here for you yet.': { fr: 'Rien ici pour vous pour l\'instant.', es: 'Todavía no hay nada aquí para usted.', hi: 'अभी यहाँ आपके लिए कुछ नहीं है।' },
     'Review to sign': { fr: 'Évaluation à signer', es: 'Evaluación para firmar', hi: 'हस्ताक्षर के लिए समीक्षा' },
 
+    // Marketing > Campaigns > Recipients & stats (2026-11-27)
+    'View the email': { fr: 'Voir le courriel', es: 'Ver el correo', hi: 'ईमेल देखें' },
+    'Bounced': { fr: 'Renvoyé', es: 'Rebotado', hi: 'लौट आया' },
+    'Held back': { fr: 'Retenu', es: 'Retenido', hi: 'रोका गया' },
+    'Clicked': { fr: 'Cliqué', es: 'Clic', hi: 'क्लिक किया' },
+    'Not tracked': { fr: 'Non suivi', es: 'Sin seguimiento', hi: 'ट्रैक नहीं किया जाता' },
+    'Not known': { fr: 'Inconnu', es: 'Desconocido', hi: 'पता नहीं' },
+    'Sent, no bounce': { fr: 'Envoyé, aucun renvoi', es: 'Enviado, sin rebote', hi: 'भेजा गया, वापस नहीं आया' },
+    'What these numbers can and cannot tell you': { fr: 'Ce que ces chiffres peuvent et ne peuvent pas vous dire', es: 'Lo que estas cifras pueden y no pueden decirle', hi: 'ये आँकड़े क्या बता सकते हैं और क्या नहीं' },
+    'View the email they got': { fr: 'Voir le courriel reçu', es: 'Ver el correo que recibió', hi: 'उन्हें मिला ईमेल देखें' },
+    'Copy email address': { fr: 'Copier l\'adresse courriel', es: 'Copiar la dirección de correo', hi: 'ईमेल पता कॉपी करें' },
+    'Recipients & stats': { fr: 'Destinataires et statistiques', es: 'Destinatarios y estadísticas', hi: 'प्राप्तकर्ता और आँकड़े' },
+    'RECIPIENTS & STATS': { fr: 'DESTINATAIRES ET STATISTIQUES', es: 'DESTINATARIOS Y ESTADÍSTICAS', hi: 'प्राप्तकर्ता और आँकड़े' },
+    'Who this campaign went to, and what happened.': { fr: 'À qui cette campagne a été envoyée et ce qui s\'est passé.', es: 'A quién se envió esta campaña y qué pasó.', hi: 'यह अभियान किसे भेजा गया और क्या हुआ।' },
+    'Nothing has been sent yet.': { fr: 'Rien n\'a encore été envoyé.', es: 'Todavía no se ha enviado nada.', hi: 'अभी तक कुछ नहीं भेजा गया है।' },
+    'No per-person email records for this campaign.': { fr: 'Aucun suivi par personne pour cette campagne.', es: 'No hay registros por persona para esta campaña.', hi: 'इस अभियान के लिए प्रति व्यक्ति ईमेल रिकॉर्ड नहीं हैं।' },
+
 });

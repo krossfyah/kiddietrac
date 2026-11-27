@@ -99,12 +99,16 @@ final class SendCampaignEmailsCommand extends Command
             $delivered = 0; $failed = 0; $i = 0;
             foreach ($batch as $r) {
                 if ($paced && $i++ > 0) { sleep(\App\Support\CampaignSender::GAP_SECONDS); }
+                /* PER-PERSON RECORD (2026-11-27, App\Support\CampaignSends): the message is kept so its email_logs row
+                   (open pixel token) can be tied to this campaign and person - Recipients & stats reads it. */
+                $cap = null; $sendErr = null; $oneSubject = null; $startedAt = now();
                 try {
                     /* {first_name} (2026-11-27): the frame was built once above; only the token is filled in here,
                        per recipient, with their own first name (escaped), so batching and pacing are unchanged. */
                     $oneHtml = \App\Support\CampaignMerge::html($bodyHtml, $r->first_name ?? null);
                     $oneSubject = \App\Support\CampaignMerge::text($subject, $r->first_name ?? null);
-                    $build = function ($m) use ($oneSubject, $r) {
+                    $build = function ($m) use ($oneSubject, $r, &$cap) {
+                        $cap = $m;
                         $name = trim(($r->first_name ?? '') . ' ' . ($r->last_name ?? ''));
                         $m->to($r->email, $name ?: $r->email)->subject($oneSubject);
                     };
@@ -116,8 +120,10 @@ final class SendCampaignEmailsCommand extends Command
                     $delivered++;
                 } catch (\Throwable $e) {
                     $failed++;
+                    $sendErr = $e;
                     $this->warn('  send failed to ' . $r->email . ': ' . $e->getMessage());
                 }
+                \App\Support\CampaignSends::record($c, $r, (string) ($oneSubject ?? $subject), $cap, $sendErr, $startedAt);
             }
             $done = $start + count($batch) >= count($recipients);
             $totDelivered = (int) ($c->email_delivery_count ?? 0) + $delivered;

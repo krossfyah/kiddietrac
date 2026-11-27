@@ -54,6 +54,9 @@
 
   // ── List view ──────────────────────────────────────────────────────
   function render(container) {
+    // #marketing-campaigns?stats=ID: one campaign's Recipients & stats, full window (2026-11-27).
+    var statsId = statsIdFromHash();
+    if (statsId) { renderStats(container, statsId); return; }
     Dom.clear(container);
     var wrap = Dom.el('div', { style: 'padding:24px;max-width:1800px;margin:0 auto;' });
     container.appendChild(wrap);
@@ -133,6 +136,12 @@
       Api.delete('/marketing/campaigns/' + c.id).then(function () { render(container); });
     });
     actionsBar.appendChild(viewBtn);
+    // Recipients & stats (2026-11-27): who it went to and what happened. Once something has gone out.
+    if (c.sent_at || c.status === 'sent' || c.status === 'sending') {
+      var statsBtn = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-stats kt-icon-tip', 'data-kttip': 'Recipients & stats', 'aria-label': 'Recipients & stats' }, '📊');
+      statsBtn.addEventListener('click', function (e) { e.stopPropagation(); openStats(c); });
+      actionsBar.appendChild(statsBtn);
+    }
     actionsBar.appendChild(editBtn);
     actionsBar.appendChild(delBtn);
     row.appendChild(actionsBar);
@@ -152,6 +161,204 @@
     var m = map[s] || { bg: '#F3F4F6', fg: '#6B7280', t: (s || '').toUpperCase() };
     var span = Dom.el('span', { style: 'padding:3px 10px;border-radius:999px;background:' + m.bg + ';color:' + m.fg + ';font-size:10px;font-weight:700;letter-spacing:0.5px;flex-shrink:0;' }, m.t);
     return span;
+  }
+
+  // ── Recipients & stats (2026-11-27, Anthony: "add a view to see who it was sent to and successfully
+  //    delivered, read, or error/bounce") ─────────────────────────────────────────────────────────────
+  // A full-window view of this screen (#marketing-campaigns?stats=ID), so the long list gets the house
+  // table: sortable headers, filter box, row count, CSV/Excel/PDF bar and the row ⋮. Only real data:
+  // where a status cannot be known (delivery receipts, clicks) the screen says so.
+  var STAT_DEFS = [
+    { k: 'sent',    t: 'Sent',      i: '📤', c: '#1F6080', tip: 'Our mail service accepted it and no bounce has come back. Mail services do not send delivery receipts.' },
+    { k: 'opened',  t: 'Opened',    i: '👀', c: '#16A34A', tip: 'The email\'s images loaded. Approximate: blocked images show as not opened.' },
+    { k: 'bounced', t: 'Bounced',   i: '↩️', c: '#DC2626', tip: 'Their mail server sent it back (checked every hour).' },
+    { k: 'failed',  t: 'Failed',    i: '⚠️', c: '#B45309', tip: 'It could not be handed over at all.' },
+    { k: 'held',    t: 'Held back', i: '⏸️', c: '#6B7280', tip: 'Not sent because of the email rules (not yet accepted their invite, email switched off, demo address).' },
+    { k: 'pending', t: 'Waiting',   i: '⏳', c: '#7C3AED', tip: 'Not sent yet: a paced sender sends a few at a time.' },
+    { k: 'clicked', t: 'Clicked',   i: '🖱️', c: '#94A3B8', tip: 'Link clicks are not tracked.' }
+  ];
+  var STATUS_LABEL = { sent: 'Sent, no bounce', opened: 'Opened', bounced: 'Bounced', failed: 'Failed', held: 'Held back', unknown: 'Not known' };
+  var STATUS_TONE = { sent: ['#E0F2FE', '#075985'], opened: ['#DCFCE7', '#166534'], bounced: ['#FEE2E2', '#991B1B'],
+    failed: ['#FEF3C7', '#92400E'], held: ['#F1F5F9', '#475569'], unknown: ['#F1F5F9', '#64748B'] };
+  function when(ts) { if (!ts) return '—'; try { return KT.fmtDateTime ? KT.fmtDateTime(ts) : fmtDate(ts); } catch (e) { return fmtDate(ts); } }
+  function statsIdFromHash() {
+    var q = (location.hash || '').split('?')[1] || '';
+    var m = q.match(/(?:^|&)stats=(\d+)/);
+    return m ? parseInt(m[1], 10) : null;
+  }
+  function openStats(c) { location.hash = 'marketing-campaigns?stats=' + c.id; }
+
+  function renderStats(container, id) {
+    Dom.clear(container);
+    container.setAttribute('data-kt-pretty', '1');
+    var wrap = Dom.el('div', { style: 'padding:24px;' });
+    container.appendChild(wrap);
+    var hero = Dom.el('div', { class: 'kt-hero', style: 'background:linear-gradient(135deg,#FF8A65 0%,#7C3AED 60%,#1F6080 100%);' });
+    hero.innerHTML = '<div class="kt-hero-greet">📊 RECIPIENTS &amp; STATS</div><h1>Loading…</h1><div class="kt-hero-sub">Who this campaign went to, and what happened.</div>';
+    wrap.appendChild(hero);
+    var bar = Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;margin:14px 0;flex-wrap:wrap;' });
+    var allBtn = Dom.el('button', { type: 'button', class: 'kt-btn kt-btn-secondary kt-btn-sm', 'data-kt-iconized': '1' }, '📣 All campaigns');
+    allBtn.addEventListener('click', function () { location.hash = 'marketing-campaigns'; });
+    bar.appendChild(allBtn);
+    var viewBtn = Dom.el('button', { type: 'button', class: 'kt-btn kt-btn-secondary kt-btn-sm', 'data-kt-iconized': '1' }, '👁️ View the email');
+    bar.appendChild(viewBtn);
+    wrap.appendChild(bar);
+    var body = Dom.el('div', {});
+    wrap.appendChild(body);
+    body.appendChild(Dom.el('div', { style: 'padding:30px;text-align:center;color:#64748B;' }, 'Loading…'));
+
+    Api.get('/marketing/campaigns/' + id + '/recipients').then(function (d) {
+      var c = d.campaign || {};
+      hero.querySelector('h1').textContent = c.title || 'Campaign';
+      var sub = [];
+      if (c.sent_at) sub.push('Sent ' + when(c.sent_at));
+      sub.push((c.channel || '').replace('_', ' '));
+      if (c.audience) sub.push((c.audience || '').replace('_', ' '));
+      if (c.email_from) sub.push('from ' + c.email_from);
+      hero.querySelector('.kt-hero-sub').textContent = sub.join(' · ');
+      viewBtn.addEventListener('click', function () { openView(c, container); });
+      Dom.clear(body);
+      drawStats(body, d, id);
+    }).catch(function (e) {
+      Dom.clear(body);
+      body.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, (e && e.message) || 'Could not load the recipients.'));
+    });
+  }
+
+  function drawStats(body, d, id) {
+    var t = d.tiles || {};
+    // Tiles
+    var tiles = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;' });
+    var totalTile = Dom.el('div', { class: 'kt-card', style: 'padding:12px 14px;border-radius:12px;' });
+    totalTile.innerHTML = '<div style="font-size:12px;color:#64748B;font-weight:700;">👥 Recipients</div><div style="font-size:24px;font-weight:800;color:#0F172A;">' + (t.total || 0) + '</div>';
+    tiles.appendChild(totalTile);
+    STAT_DEFS.forEach(function (s) {
+      if (!d.emailing && s.k !== 'clicked') return;
+      if (s.k === 'pending' && !t.pending) return;
+      var v = s.k === 'clicked' ? 'Not tracked' : String(t[s.k] || 0);
+      var el = Dom.el('div', { class: 'kt-card', 'data-kttip': s.tip, style: 'padding:12px 14px;border-radius:12px;border-left:4px solid ' + s.c + ';' });
+      el.innerHTML = '<div style="font-size:12px;color:#64748B;font-weight:700;">' + s.i + ' ' + esc(s.t) + '</div>'
+        + '<div style="font-size:' + (s.k === 'clicked' ? '14px;padding-top:6px' : '24px') + ';font-weight:800;color:' + s.c + ';">' + esc(v) + '</div>'
+        + (s.k === 'opened' && (t.sent || t.opened) ? '<div style="font-size:11px;color:#64748B;">' + Math.round((t.opened || 0) / ((t.sent || 0) + (t.opened || 0)) * 100) + '% of those sent</div>' : '');
+      tiles.appendChild(el);
+    });
+    if (t.unknown) {
+      var u = Dom.el('div', { class: 'kt-card', 'data-kttip': 'No email record was found for these people.', style: 'padding:12px 14px;border-radius:12px;border-left:4px solid #CBD5E1;' });
+      u.innerHTML = '<div style="font-size:12px;color:#64748B;font-weight:700;">❔ Not known</div><div style="font-size:24px;font-weight:800;color:#64748B;">' + t.unknown + '</div>';
+      tiles.appendChild(u);
+    }
+    body.appendChild(tiles);
+
+    // In-app notice + News
+    var extra = [];
+    if (d.bell && d.bell.sent) extra.push('🔔 In-app notice: ' + d.bell.sent + ' sent, ' + d.bell.read + ' read');
+    if (d.news) extra.push(d.news.for == null ? '📰 News post: posted before per-person tracking, so reads are not known'
+      : ('📰 News post: for ' + d.news.for + ' ' + (d.news.for === 1 ? 'person' : 'people') + ', opened by ' + d.news.read));
+    if (extra.length) {
+      var ex = Dom.el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;' });
+      extra.forEach(function (x) { ex.appendChild(Dom.el('div', { class: 'kt-card', style: 'padding:9px 14px;border-radius:10px;font-size:13px;color:#0F172A;font-weight:600;' }, x)); });
+      body.appendChild(ex);
+    }
+
+    // What can and cannot be known
+    var notes = d.notes || {};
+    var nb = Dom.el('details', { style: 'margin-bottom:14px;font-size:12.5px;color:#475569;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:10px;padding:8px 12px;' });
+    nb.innerHTML = '<summary style="cursor:pointer;font-weight:700;color:#334155;">ℹ️ What these numbers can and cannot tell you</summary>'
+      + '<ul style="margin:8px 0 2px 18px;padding:0;line-height:1.6;">'
+      + (notes.delivered ? '<li>' + esc(notes.delivered) + '</li>' : '')
+      + (notes.opened ? '<li>' + esc(notes.opened) + '</li>' : '')
+      + (notes.clicked ? '<li>' + esc(notes.clicked) + '</li>' : '')
+      + (d.backfilled ? '<li>This campaign went out before per-person records were kept. The list was rebuilt from its in-app notices and the email log; anyone with no matching log entry shows as "Not known".</li>' : '')
+      + '</ul>';
+    body.appendChild(nb);
+
+    if (!d.emailing) {
+      body.appendChild(Dom.el('div', { class: 'kt-card', style: 'padding:22px;color:#64748B;' }, 'This campaign was not emailed, so there is no email list. See the News and in-app notice counts above.'));
+      return;
+    }
+    var rows = d.rows || [];
+    if (!rows.length) {
+      body.appendChild(Dom.el('div', { class: 'kt-card', style: 'padding:22px;color:#64748B;' }, d.campaign && d.campaign.sent_at ? 'No per-person email records for this campaign.' : 'Nothing has been sent yet.'));
+      return;
+    }
+
+    // Filter chips
+    var counts = {}; rows.forEach(function (r) { counts[r.status] = (counts[r.status] || 0) + 1; });
+    var chips = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;' });
+    var current = 'all';
+    var chipDefs = [{ k: 'all', t: 'All', n: rows.length }].concat(['opened', 'sent', 'bounced', 'failed', 'held', 'unknown']
+      .filter(function (k) { return counts[k]; }).map(function (k) { return { k: k, t: STATUS_LABEL[k], n: counts[k] }; }));
+    var chipEls = {};
+    chipDefs.forEach(function (cd) {
+      var b = Dom.el('button', { type: 'button', class: 'kt-chip', 'data-k': cd.k,
+        style: 'border:1px solid #CBD5E1;border-radius:999px;padding:4px 12px;font-size:12.5px;font-weight:700;cursor:pointer;background:#fff;color:#334155;' }, cd.t + ' · ' + cd.n);
+      b.addEventListener('click', function () { current = cd.k; paint(); });
+      chipEls[cd.k] = b; chips.appendChild(b);
+    });
+    body.appendChild(chips);
+
+    var card = Dom.el('div', { class: 'kt-card' });
+    var table = Dom.el('table', { 'data-kt-export-title': 'Campaign recipients - ' + ((d.campaign && d.campaign.title) || '') });
+    table.innerHTML = '<thead><tr><th>Name</th><th>Family</th><th>Email</th><th>Status</th><th>When</th><th>Details</th><th>Actions</th></tr></thead>';
+    var tb = Dom.el('tbody', {});
+    rows.forEach(function (r) {
+      var tone = STATUS_TONE[r.status] || STATUS_TONE.unknown;
+      var details = [];
+      if (r.reason) details.push(esc(r.reason));
+      if (r.opens) details.push('Opened ' + r.opens + (r.opens === 1 ? ' time' : ' times'));
+      if (r.bell) details.push('In-app notice ' + (r.bell === 'read' ? 'read' : 'not read yet'));
+      var tr = Dom.el('tr', { 'data-status': r.status });
+      tr.innerHTML = '<td>' + esc(r.name || '—') + '</td><td>' + esc(r.family || '—') + '</td><td>' + esc(r.email) + '</td>'
+        + '<td data-export="' + esc(STATUS_LABEL[r.status] || r.status) + '"><span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:' + tone[0] + ';color:' + tone[1] + ';">' + esc(STATUS_LABEL[r.status] || r.status) + '</span></td>'
+        + '<td>' + esc(when(r.at)) + '</td><td style="font-size:12.5px;color:#475569;">' + (details.join(' · ') || '—') + '</td>';
+      var act = Dom.el('td', { style: 'text-align:center;white-space:nowrap;' });
+      if (r.has_email) {
+        var v = Dom.el('button', { type: 'button', class: 'kt-btn kt-btn-secondary kt-btn-sm' }, '📧 View the email they got');
+        v.addEventListener('click', function (e) { e.stopPropagation(); viewSent(id, r); });
+        act.appendChild(v);
+      }
+      var cp = Dom.el('button', { type: 'button', class: 'kt-btn kt-btn-secondary kt-btn-sm' }, '📋 Copy email address');
+      cp.addEventListener('click', function (e) {
+        e.stopPropagation();
+        try { navigator.clipboard.writeText(r.email); if (KT.toast) KT.toast('📋', 'Copied', r.email, '#16A34A'); } catch (x) {}
+      });
+      act.appendChild(cp);
+      tr.appendChild(act);
+      tb.appendChild(tr);
+    });
+    table.appendChild(tb);
+    card.appendChild(table);
+    body.appendChild(card);
+
+    function paint() {
+      Object.keys(chipEls).forEach(function (k) {
+        var on = k === current;
+        chipEls[k].style.background = on ? '#1F6080' : '#fff';
+        chipEls[k].style.color = on ? '#fff' : '#334155';
+        chipEls[k].style.borderColor = on ? '#1F6080' : '#CBD5E1';
+      });
+      Array.prototype.forEach.call(tb.rows, function (tr) {
+        tr.style.display = (current === 'all' || tr.getAttribute('data-status') === current) ? '' : 'none';
+      });
+      try { if (KT.tableExport) KT.tableExport.sweep(); } catch (e) {}
+    }
+    paint();
+    if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
+  }
+
+  // The stored copy of the email that went to one person (open pixel removed server-side, so viewing it is not an open).
+  function viewSent(id, r) {
+    Api.get('/marketing/campaigns/' + id + '/recipients/' + r.id + '/email').then(function (m) {
+      var box = Dom.el('div', {});
+      box.appendChild(Dom.el('div', { style: 'font-size:13px;color:#475569;margin-bottom:8px;' },
+        'To ' + (m.to || r.email) + ' · ' + when(m.at) + ' · ' + (m.subject || '')));
+      var frame = Dom.el('iframe', { sandbox: '', style: 'width:100%;height:520px;border:1px solid #E2E8F0;border-radius:10px;background:#fff;' });
+      frame.srcdoc = m.html || '';
+      box.appendChild(frame);
+      KT.Shell.Modal.open({ title: '📧 The email ' + (r.name || r.email) + ' got', body: box, actions: [{ label: 'Close' }], large: true });
+    }).catch(function (e) {
+      if (KT.toast) KT.toast('⚠️', 'Not available', (e && e.message) || 'There is no stored copy of this email.', '#B45309');
+    });
   }
 
   // ── Composer ───────────────────────────────────────────────────────

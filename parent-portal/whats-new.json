@@ -2,6 +2,18 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "📊",
+            "title": "Campaigns: see who got it and what happened",
+            "body": "In Marketing › Campaigns, open a sent campaign's ⋮ and choose Recipients & stats. You see everyone it went to and whether each email was sent, opened, bounced (with the reason in plain words), failed or held back, plus News and in-app notice reads. Filter, search and export the list. Delivery receipts and link clicks are not available from mail services, and the screen says so rather than guessing.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "🔑",

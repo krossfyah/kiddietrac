@@ -53,6 +53,22 @@ In the campaigns list, open a row's **⋮** and choose **View**. A popup shows t
 families get it (with a sample first name), plus its status, audience, channel, subject, preview text,
 schedule and, once sent, the delivery counts. View never sends anything.
 
+## Recipients & stats
+
+Once a campaign has gone out, open its row's **⋮** and choose **Recipients & stats**. You see who it went
+to and what happened to each person: **Sent** (our mail service accepted it and nothing came back),
+**Opened**, **Bounced** (their mail server sent it back, with the reason in plain words), **Failed**,
+**Held back** (not sent because of the email rules, for example someone who has not accepted their invite
+yet) and **Not known**. Filter by status, search, and export to CSV, Excel or PDF from the bar under the
+table. **View the email they got** shows the copy that went to that person.
+
+What it cannot tell you: mail services send no delivery receipts, so "Sent" is the closest there is to
+"delivered". Opens are counted when the email's images load, from our own server with no third-party
+tracker, so someone who blocks images shows as not opened. Link clicks are not tracked. A campaign that
+also posted to News shows how many of the people it was for have opened it there, and the in-app notice
+shows how many have read it. Campaigns sent before 27 November 2026 are rebuilt from the email log, so a
+few people may show as "Not known". Directors see only their own centres' campaigns.
+
 ## The footer
 
 Every campaign ends with a **"Powered by Kiddietrac"** footer. It also shows

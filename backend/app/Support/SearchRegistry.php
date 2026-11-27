@@ -283,6 +283,8 @@ final class SearchRegistry
      * NOT_SEARCHABLE, KNOWN_GAPS or here, or the check fails. Add a reason each.
      */
     public const PLUMBING = [
+        'announcement_recipients' => 'who a marketing campaign\'s News post is for (App\\Support\\CampaignNews); the post itself is the record',
+        'marketing_campaign_sends' => 'one row per person a campaign email went to, shown on Marketing > Campaigns > Recipients & stats; search the campaign',
         'hr_leave_rules' => 'entitlement rules of a leave type (KiddieTrac HR), edited and shown with that type',
         'hr_onboarding_templates' => 'onboarding checklist templates (KiddieTrac HR), edited on HR > Onboarding',
         'hr_onboarding_template_tasks' => 'the tasks of an onboarding checklist template, edited with it',

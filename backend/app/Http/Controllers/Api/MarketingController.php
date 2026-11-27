@@ -418,6 +418,124 @@ final class MarketingController extends Controller
         ]);
     }
 
+    // ── Recipients & stats (2026-11-27) ────────────────────────────────────
+
+    /** The campaign the caller may read (agency + director scope), or null. */
+    private function readableCampaign(Request $request, int $id): ?object
+    {
+        $agencyId = $this->getAgencyId($request);
+        if (! $agencyId) return null;
+        $row = DB::table('marketing_campaigns')->where('id', $id)->where('agency_id', $agencyId)->whereNull('deleted_at')->first();
+        if (! $row || ! \App\Support\CentreScope::canRead($this->campaignScope($request, (int) $agencyId), $row->centre_id, true)) return null;
+
+        return $row;
+    }
+
+    /**
+     * GET /marketing/campaigns/{id}/recipients — who a campaign went to and what happened, per person, from what was
+     * really recorded (App\Support\CampaignSends explains each status and what cannot be known). Read-only, except
+     * that a campaign emailed before per-person records existed is rebuilt once from its logs (CampaignSends::backfill).
+     * Same scope as the list: the active agency; a director only agency-wide campaigns and their own centres'.
+     */
+    public function recipients(Request $request, int $id): JsonResponse
+    {
+        $c = $this->readableCampaign($request, $id);
+        if (! $c) return response()->json(['message' => 'Not found'], 404);
+        $emailing = in_array($c->channel, ['email', 'both'], true);
+        $ready = \App\Support\CampaignSends::ready();
+        if ($ready && $emailing) \App\Support\CampaignSends::backfill($c);
+
+        $sends = $ready ? DB::table('marketing_campaign_sends')->where('campaign_id', $c->id)->orderBy('last_name')->orderBy('first_name')->get() : collect();
+        $logs = $sends->pluck('email_log_id')->filter()->all()
+            ? DB::table('email_logs')->whereIn('id', $sends->pluck('email_log_id')->filter()->all())
+                ->get(['id', 'status', 'error', 'bounced_at', 'opened_at', 'opens', 'created_at'])->keyBy('id')
+            : collect();
+
+        // In-app notices (the bell) written for each recipient once the email run finished, and whether they were read.
+        $bell = DB::table('notifications')->where('type', 'marketing')
+            ->whereRaw("JSON_EXTRACT(data, '$.campaign_id') = ?", [(int) $c->id])
+            ->get(['user_id', 'read_at'])->keyBy('user_id');
+
+        // Families the people belong to (a name families recognise beside the parent's own).
+        $uids = $sends->pluck('user_id')->filter()->unique()->values()->all();
+        $families = $uids ? DB::table('guardians as g')->join('families as f', 'f.id', '=', 'g.family_id')->whereIn('g.user_id', $uids)
+            ->whereNull('f.deleted_at')->get(['g.user_id', 'f.family_name'])->groupBy('user_id')
+            ->map(fn ($r) => $r->pluck('family_name')->filter()->unique()->implode(', ')) : collect();
+
+        $tiles = ['sent' => 0, 'opened' => 0, 'bounced' => 0, 'failed' => 0, 'held' => 0, 'unknown' => 0];
+        $rows = [];
+        foreach ($sends as $s) {
+            $log = $s->email_log_id ? $logs->get($s->email_log_id) : null;
+            [$status, $why, $at] = \App\Support\CampaignSends::status($s, $log);
+            $tiles[$status] = ($tiles[$status] ?? 0) + 1;
+            $b = $s->user_id ? $bell->get($s->user_id) : null;
+            $rows[] = [
+                'id' => (int) $s->id,
+                'name' => trim(($s->first_name ?? '') . ' ' . ($s->last_name ?? '')) ?: null,
+                'family' => $s->user_id ? ($families->get($s->user_id) ?: null) : null,
+                'email' => $s->email,
+                'status' => $status,
+                'reason' => $why,
+                'at' => $at,
+                'sent_at' => $s->sent_at,
+                'opens' => $log && $log->opens !== null ? (int) $log->opens : null,
+                'opened_at' => $log->opened_at ?? null,
+                'bell' => $b ? ($b->read_at ? 'read' : 'unread') : null,
+                'has_email' => (bool) $s->email_log_id,
+                'source' => $s->source,
+            ];
+        }
+        $total = count($rows);
+        $emailedTotal = (int) ($c->recipient_count ?? 0);
+        $pending = ($emailing && $c->sent_at && empty($c->email_sent_at)) ? max(0, $emailedTotal - $total) : 0;
+
+        // The News post, when the campaign posted one: who it is for and who has opened it in News.
+        $news = null;
+        $ann = DB::table('announcements')->where('ref_type', \App\Support\CampaignNews::REF)->where('ref_id', $c->id)->orderByDesc('id')->first(['id', 'sent_at']);
+        if ($ann) {
+            $for = \App\Support\CampaignNews::recipients((int) $ann->id);
+            $read = $for ? DB::table('announcement_user_state')->where('item_key', 'a:' . $ann->id)->whereIn('user_id', $for)->whereNotNull('read_at')->count() : 0;
+            $news = ['posted_at' => $ann->sent_at, 'for' => count($for), 'read' => $read];
+        } elseif (in_array($c->channel, ['in_portal', 'both'], true) && $c->sent_at) {
+            $news = ['posted_at' => $c->sent_at, 'for' => null, 'read' => null];   // posted before per-person lists existed
+        }
+
+        return response()->json([
+            'campaign' => ['id' => (int) $c->id, 'title' => $c->title, 'subject' => $c->subject, 'channel' => $c->channel,
+                'audience' => $c->audience, 'status' => $c->status, 'sent_at' => $c->sent_at, 'email_sent_at' => $c->email_sent_at,
+                'email_from' => $c->email_from, 'recipient_count' => $c->recipient_count],
+            'emailing' => $emailing,
+            'tiles' => $tiles + ['total' => $total, 'pending' => $pending, 'clicked' => null],
+            'bell' => ['sent' => $bell->count(), 'read' => $bell->filter(fn ($b) => ! empty($b->read_at))->count()],
+            'news' => $news,
+            'rows' => $rows,
+            'backfilled' => $sends->contains(fn ($s) => $s->source === 'backfill'),
+            'notes' => [
+                'delivered' => 'Mail services do not send delivery receipts, so "Sent" means our mail service accepted it and no bounce has come back. Bounces are checked every hour.',
+                'opened' => 'Opens are counted when the email\'s images load (our own server, no third party). Someone who blocks images shows as not opened, and some mail apps load images automatically.',
+                'clicked' => 'Link clicks are not tracked.',
+            ],
+        ]);
+    }
+
+    /** GET /marketing/campaigns/{id}/recipients/{sendId}/email — the email as it went to that person (stored copy). */
+    public function recipientEmail(Request $request, int $id, int $sendId): JsonResponse
+    {
+        $c = $this->readableCampaign($request, $id);
+        if (! $c || ! \App\Support\CampaignSends::ready()) return response()->json(['message' => 'Not found'], 404);
+        $s = DB::table('marketing_campaign_sends')->where('id', $sendId)->where('campaign_id', $c->id)->first();
+        $log = $s && $s->email_log_id ? DB::table('email_logs')->where('id', $s->email_log_id)->where(fn ($w) => $w->where('agency_id', $c->agency_id)->orWhereNull('agency_id'))->first(['id', 'subject', 'to_email', 'created_at', 'body_html', 'status']) : null;
+        if (! $log) return response()->json(['message' => 'There is no stored copy of this email.'], 404);
+
+        return response()->json(['subject' => $log->subject, 'to' => $log->to_email, 'at' => $log->created_at, 'status' => $log->status, 'html' => self::withoutPixel((string) $log->body_html)]);
+    }
+
+    /** Viewing a stored copy must not count as the recipient opening it: the open pixel is taken out. */
+    private static function withoutPixel(string $html): string
+    {
+        return (string) preg_replace('#<img[^>]*/api/v1/e/o/[^>]*>#i', '', $html);
+    }
+
     // ── Send from (white-label) ───────────────────────────────────────────
 
     /**

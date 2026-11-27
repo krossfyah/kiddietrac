@@ -37,6 +37,23 @@ Haga clic en **👁 Vista previa** para ver la campaña exactamente como la reci
 
 En la lista de campañas, abra el **⋮** de una fila y elija **View**. Una ventana muestra el correo exactamente como lo reciben las familias (con un nombre de ejemplo), además de su estado, audiencia, canal, asunto, texto de vista previa, programación y, una vez enviada, los totales de entrega. Ver nunca envía nada.
 
+## Destinatarios y estadísticas
+
+Cuando una campaña ya se envió, abra el **⋮** de su fila y elija **Destinatarios y estadísticas**. Verá a
+quién se envió y qué pasó con cada persona: **Enviado** (nuestro servicio de correo lo aceptó y no volvió
+nada), **Abierto**, **Rebotado** (el servidor del destinatario lo devolvió, con el motivo en palabras
+sencillas), **Falló**, **Retenido** (no se envió por las reglas de correo, por ejemplo alguien que aún no
+aceptó su invitación) y **Desconocido**. Filtre por estado, busque y exporte a CSV, Excel o PDF con la barra
+debajo de la tabla. **Ver el correo que recibió** muestra la copia que le llegó a esa persona.
+
+Lo que no puede saberse: los servicios de correo no envían confirmaciones de entrega, así que «Enviado» es
+lo más cercano a «entregado». Las aperturas se cuentan cuando cargan las imágenes del correo, desde nuestro
+propio servidor y sin rastreadores de terceros; quien bloquea las imágenes aparece como no abierto. Los
+clics en enlaces no se registran. Si la campaña también se publicó en Noticias, verá cuántos destinatarios
+la abrieron allí, y cuántos leyeron el aviso en la aplicación. Las campañas enviadas antes del 27 de
+noviembre de 2026 se reconstruyen a partir del registro de correos, por lo que algunas personas pueden
+aparecer como «Desconocido». Los directores solo ven las campañas de sus propios centros.
+
 ## El pie de página
 
 Cada campaña termina con un pie de página **«Powered by Kiddietrac»**. También muestra los enlaces a la **Política de privacidad** y los **Términos y condiciones** de su agencia: defínalos una sola vez en **Ajustes → Marca** (forman parte de la configuración de su agencia) y aparecen automáticamente en cada campaña.

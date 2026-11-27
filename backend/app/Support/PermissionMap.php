@@ -441,6 +441,8 @@ final class PermissionMap
         'GET api/v1/marketing/assets' => 'marketing.manage',
         'GET api/v1/marketing/campaigns' => 'marketing.manage',
         'GET api/v1/marketing/campaigns/{id}' => 'marketing.manage',
+        'GET api/v1/marketing/campaigns/{id}/recipients' => 'marketing.manage',
+        'GET api/v1/marketing/campaigns/{id}/recipients/{sendId}/email' => 'marketing.manage',
         'GET api/v1/marketing/drip' => 'marketing.manage',
         'GET api/v1/marketing/drip/stats' => 'marketing.manage',
         'GET api/v1/operations/allergy-alerts' => 'children.view',

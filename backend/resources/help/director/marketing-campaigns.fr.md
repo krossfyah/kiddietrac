@@ -37,6 +37,25 @@ Cliquez sur **👁 Aperçu** pour voir la campagne exactement comme les destinat
 
 Dans la liste des campagnes, ouvrez le **⋮** d’une ligne et choisissez **View**. Une fenêtre affiche le courriel exactement comme les familles le reçoivent (avec un prénom d’exemple), ainsi que son statut, ses destinataires, son canal, son objet, son texte d’aperçu, sa programmation et, une fois envoyée, les nombres d’envois. La vue n’envoie jamais rien.
 
+## Destinataires et statistiques
+
+Une fois la campagne envoyée, ouvrez le **⋮** de sa ligne et choisissez **Destinataires et statistiques**.
+Vous voyez à qui elle est allée et ce qui s'est passé pour chaque personne : **Envoyé** (notre service de
+courriel l'a accepté et rien n'est revenu), **Ouvert**, **Renvoyé** (le serveur du destinataire l'a refusé,
+avec la raison en termes simples), **Échec**, **Retenu** (non envoyé à cause des règles de courriel, par
+exemple une personne qui n'a pas encore accepté son invitation) et **Inconnu**. Filtrez par statut,
+cherchez et exportez en CSV, Excel ou PDF avec la barre sous le tableau. **Voir le courriel reçu** montre
+la copie envoyée à cette personne.
+
+Ce qu'on ne peut pas savoir : les services de courriel n'envoient pas d'accusé de livraison, donc
+« Envoyé » est ce qui se rapproche le plus de « livré ». Les ouvertures sont comptées quand les images du
+courriel se chargent, depuis notre propre serveur, sans traceur tiers; une personne qui bloque les images
+apparaît comme non ouverte. Les clics sur les liens ne sont pas suivis. Si la campagne a aussi été publiée
+dans les Nouvelles, vous voyez combien de destinataires l'y ont ouverte, et combien ont lu l'avis dans
+l'application. Les campagnes envoyées avant le 27 novembre 2026 sont reconstruites à partir du journal des
+courriels; quelques personnes peuvent apparaître comme « Inconnu ». Les directeurs ne voient que les
+campagnes de leurs propres centres.
+
 ## Le pied de page
 
 Chaque campagne se termine par un pied de page **« Propulsé par Kiddietrac »**. Il affiche aussi les liens vers la **Politique de confidentialité** et les **Conditions générales** de votre agence : définissez-les une seule fois sous **Paramètres → Image de marque** (ils font partie de la configuration de votre agence) et ils apparaissent automatiquement sur chaque campagne.
