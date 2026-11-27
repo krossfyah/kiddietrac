@@ -350,6 +350,29 @@ class HrScheduleController extends Controller
         $byRoom = [];
         foreach ($shifts as $s) $byRoom[(int) $s->room_id][] = $s;
         $gaps = $rooms ? HrAvailability::ratioGaps($centre, $rooms, $byRoom, $week) : [];
+        /* HR Phase 4 batch 8: rota drafts (not published, so staff and every count above ignore them) shown to the director
+           marked as drafts, the ratio check as it WOULD be once they are published, and the week against the labour budget. */
+        $draftRows = [];
+        $gapsDrafts = null;
+        $budget = null;
+        if (\App\Support\HrRota::ready()) {
+            $dl = \App\Support\HrRota::drafts($cid, $week->toDateString(), $end->toDateString());
+            $rates2 = $pay ? HrAvailability::rates(array_values(array_unique(array_map(fn ($x) => $x['user_id'], $dl)))) : [];
+            foreach ($dl as $dr) {
+                $dr['hours'] = HrAvailability::hours($dr['starts_at'], $dr['ends_at']);
+                if ($pay) {
+                    [$rate, $type] = $rates2[$dr['user_id']] ?? [null, 'hourly'];
+                    $dr['cost'] = $type === 'hourly' && $rate !== null ? round($dr['hours'] * $rate, 2) : null;
+                }
+                $draftRows[] = $dr;
+            }
+            if ($draftRows && $rooms) {
+                $byRoomD = [];
+                foreach (\App\Support\HrRota::asPlanned($cid, $week->toDateString(), $end->toDateString()) as $pl) $byRoomD[(int) $pl['room_id']][] = (object) ($pl + ['status' => 'scheduled']);
+                $gapsDrafts = HrAvailability::ratioGaps($centre, $rooms, $byRoomD, $week);
+            }
+            if ($pay) $budget = \App\Support\HrRota::projected($cid, $week->toDateString(), $end->toDateString());
+        }
         $swaps = DB::table('hr_shift_swaps')->where('agency_id', $aid)->where('centre_id', $cid)->whereIn('status', ['open', 'accepted'])->orderByDesc('id')->limit(100)->get();
         $tot['hours'] = round($tot['hours'], 2);
         $tot['cost'] = round($tot['cost'], 2);
@@ -359,7 +382,8 @@ class HrScheduleController extends Controller
             'centre_id' => $cid, 'week' => $week->toDateString(), 'week_end' => $end->toDateString(), 'can_see_pay' => $pay,
             'shifts' => $rows, 'totals' => $tot, 'by_person' => array_values($byPerson), 'ratio_gaps' => $gaps,
             'swaps' => $this->swapRows($aid, $swaps), 'me' => (int) $request->user()->id,
-            'rooms' => collect($rooms)->map(fn ($r) => ['id' => (int) $r->id, 'name' => $r->name])->all()]);
+            'rooms' => collect($rooms)->map(fn ($r) => ['id' => (int) $r->id, 'name' => $r->name])->all(),
+            'drafts' => $draftRows, 'ratio_gaps_with_drafts' => $gapsDrafts, 'budget' => $budget]);
     }
 
     private function bell(array $userIds, int $aid, string $title, string $body): void

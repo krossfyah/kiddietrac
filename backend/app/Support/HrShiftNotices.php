@@ -390,6 +390,9 @@ final class HrShiftNotices
         $title = self::title($lines);
         $body = implode("\n", array_map(fn ($l) => $l['label'] . ': ' . $l['when'] . ($l['room'] !== '' ? ' (' . $l['room'] . ')' : '') . ($l['was'] !== '' ? ' - was ' . $l['was'] : ''), array_slice($lines, 0, 4)))
             . (count($lines) > 4 ? "\n+" . (count($lines) - 4) . ' more' : '');
+        // HR Phase 4 batch 8: when the agency asks staff to accept published shifts, say so in the same notice (App\Support\HrRota).
+        $ask = class_exists(HrRota::class) ? rescue(fn () => HrRota::toAcceptCount($agencyId, $uid), 0, false) : 0;
+        if ($ask) $body .= "\n" . 'Please accept ' . ($ask === 1 ? 'your new shift' : 'your ' . $ask . ' new shifts') . ' in My HR (Shifts to accept).';
         try {
             Notify::write(['user_id' => $uid, 'agency_id' => $agencyId, 'type' => 'shift', 'title' => $title, 'body' => $body,
                 'data' => json_encode(['link' => '#my-hr', 'kind' => 'own', 'count' => count($lines)]), 'created_at' => now()]);
@@ -401,7 +404,7 @@ final class HrShiftNotices
             if (Suppression::isUser($uid) || AgencyOutsiders::isOutsider($uid) || TestAgency::skips($agencyId, 'shift notice email', ['user' => $uid])) return;
             $u = DB::table('users')->where('id', $uid)->whereNull('deleted_at')->first(['id', 'first_name', 'email']);
             if (! $u || ! filter_var((string) $u->email, FILTER_VALIDATE_EMAIL)) return;
-            $html = EmailTemplate::wrap($agencyId, self::emailBody($lines, (string) $u->first_name), [
+            $html = EmailTemplate::wrap($agencyId, self::emailBody($lines, (string) $u->first_name, $ask), [
                 'eyebrow' => 'YOUR SCHEDULE', 'title' => $title,
                 'preheader' => count($lines) === 1 ? $lines[0]['label'] . ': ' . $lines[0]['when'] : count($lines) . ' changes to your shifts',
             ]);
@@ -414,7 +417,7 @@ final class HrShiftNotices
     }
 
     /** The email body (first name only; colours with dark-mode-safe tints, as the house emails do). */
-    public static function emailBody(array $lines, string $firstName): string
+    public static function emailBody(array $lines, string $firstName, int $toAccept = 0): string
     {
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $tone = ['added' => ['#DCFCE7', '#166534'], 'changed' => ['#E0F2FE', '#075985'], 'cancelled' => ['#FEE2E2', '#991B1B'], 'removed' => ['#FEE2E2', '#991B1B']];
@@ -432,6 +435,8 @@ final class HrShiftNotices
             . '<tr><td style="font-size:15px;line-height:1.6;color:#334155;padding:0 0 12px;">' . ($firstName !== '' ? 'Hi ' . $e($firstName) . ', y' : 'Y')
             . 'our schedule has ' . (count($lines) === 1 ? 'a change' : count($lines) . ' changes') . ':</td></tr>'
             . '<tr><td><table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">' . $rows . '</table></td></tr>'
+            . ($toAccept ? '<tr><td style="padding:14px 0 0;font-size:14px;line-height:1.6;color:#0F172A;"><strong>Please accept '
+                . ($toAccept === 1 ? 'your new shift' : 'your ' . $toAccept . ' new shifts') . '</strong> in My HR &gt; Shifts to accept, or say why you can\'t do one.</td></tr>' : '')
             . '<tr><td style="padding:16px 0 0;font-size:13px;line-height:1.6;color:#64748B;">See all your shifts in My HR. You can choose how you hear about shift changes in Settings &gt; Notifications &gt; My shifts.</td></tr></table>';
     }
 }

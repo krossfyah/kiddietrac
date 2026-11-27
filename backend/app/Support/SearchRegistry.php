@@ -205,6 +205,12 @@ final class SearchRegistry
         'hr_risk_assessments' => 'centre risk assessments (HR): Human Resources > Health & safety > Risk assessments; few per centre, never a record people look up',
         'hr_chemicals' => 'the WHMIS chemical inventory per centre (HR): Health & safety > Chemicals and My HR; the safety data sheets are private files',
         'hr_safety_duties' => 'named health & safety duties (first aider, fire warden) (HR): Health & safety > H&S duties and My HR; search the staff member',
+        // KiddieTrac HR Phase 4, batch 8 (2026-11-27): rota drafts, presets, budgets, acceptance, clock-in fixes.
+        'hr_shift_drafts' => 'rota changes not published yet (HR): shown only on the director\'s Schedule grid and Rota plan, marked Draft; never searched',
+        'hr_shift_presets' => 'named shift presets with a colour (configuration): Rota & shifts > Shift tools, never a record people look up',
+        'hr_labour_budgets' => 'a centre\'s weekly labour budget (configuration, pay viewers only): Rota & shifts > Shift tools; never searched',
+        'hr_shift_acceptances' => 'whether staff accepted a published shift (HR): shown on the Schedule grid and My HR > Shifts to accept; never searched',
+        'hr_punch_corrections' => 'staff requests to fix a clock-in (HR): Clock-ins & timesheets > Clock-in fixes and My HR; search the staff member',
         'hr_course_role_rules' => 'configuration: "this course goes to everyone in this role" on a course, shown in its Assigned popup',
         'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',

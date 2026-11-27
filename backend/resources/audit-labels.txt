@@ -1413,3 +1413,17 @@ post hr/safety/tasks/{id}/evidence | Added evidence to a health & safety task
 post hr/safety/tasks/{id}/close | Closed a health & safety task with evidence
 post hr/safety/tasks/{id}/reopen | Reopened a health & safety task
 post hr/safety/tasks/{id}/cancel | Cancelled a health & safety task
+patch hr/rota/drafts/{id} | Changed a draft shift on the rota
+delete hr/rota/drafts/{id} | Discarded a draft change to the rota
+post hr/rota/discard-all | Discarded the rota drafts of a centre
+post hr/rota/publish | Published the rota
+post hr/rota/copy | Copied shifts on the rota
+put hr/rota/settings | Changed the rota publish settings
+post hr/rota/presets | Added a shift preset
+put hr/rota/presets/{id} | Changed a shift preset
+post hr/rota/presets/{id}/archive | Archived or restored a shift preset
+put hr/rota/budgets/{centreId} | Changed a centre's weekly labour budget
+post hr/me/shifts/{shiftId}/respond | Accepted or declined a published shift
+post hr/punch-fixes | Asked for a clock-in to be fixed
+post hr/punch-fixes/{id}/withdraw | Withdrew a clock-in fix request
+post hr/punch-fixes/{id}/decide | Approved or declined a clock-in fix request

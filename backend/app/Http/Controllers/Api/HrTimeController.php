@@ -253,7 +253,8 @@ class HrTimeController extends Controller
         $bank = HrTime::bankType($aid);
 
         return response()->json(['settings' => ['overtime' => $s['overtime'], 'timesheet' => $s['timesheet']], 'can_manage' => $this->hrIsAdmin($request),
-            'bank' => $bank ? ['id' => (int) $bank->id, 'name' => $bank->name, 'archived' => (bool) $bank->archived_at] : null, 'rounding' => HrTime::ROUNDING]);
+            'bank' => $bank ? ['id' => (int) $bank->id, 'name' => $bank->name, 'archived' => (bool) $bank->archived_at] : null, 'rounding' => HrTime::ROUNDING,
+            'break_after' => HrTime::BREAK_AFTER, 'break_minutes' => HrTime::BREAK_MINUTES]);
     }
 
     /** PUT /hr/time/settings — agency admins. */
@@ -270,12 +271,21 @@ class HrTimeController extends Controller
             'timesheet.clip_in' => 'required|boolean',
             'timesheet.clip_out' => 'required|boolean',
             'timesheet.export_rule' => 'required|in:' . implode(',', HrTime::EXPORT_RULES),
+            // HR Phase 4 batch 8: automatic unpaid break (kept as it was when an older screen leaves these out).
+            'timesheet.break_on' => 'sometimes|boolean',
+            'timesheet.break_after_min' => 'sometimes|integer|in:' . implode(',', HrTime::BREAK_AFTER),
+            'timesheet.break_minutes' => 'sometimes|integer|in:' . implode(',', HrTime::BREAK_MINUTES),
         ], ['overtime.rate.min' => 'The overtime rate is at least 1 (straight time).', 'overtime.rate.max' => 'The overtime rate is at most 3.']);
         abort_unless($d['overtime']['allow_pay'] || $d['overtime']['allow_bank'], 422, 'Allow paying overtime, banking it, or both.');
         $before = HrTime::settings($aid);
+        $bt = $before['timesheet'];
         $s = HrTime::saveSettings($aid, ['overtime' => ['rate' => round((float) $d['overtime']['rate'], 2)] + array_map('boolval', array_intersect_key($d['overtime'], array_flip(['staff_can_log', 'allow_pay', 'allow_bank']))),
             'timesheet' => ['rounding' => (int) $d['timesheet']['rounding'], 'clip_in' => (bool) $d['timesheet']['clip_in'], 'clip_out' => (bool) $d['timesheet']['clip_out'],
-                'export_rule' => $d['timesheet']['export_rule']]]);
+                'export_rule' => $d['timesheet']['export_rule'],
+                'break_on' => (bool) ($d['timesheet']['break_on'] ?? $bt['break_on']),
+                'break_after_min' => (int) ($d['timesheet']['break_after_min'] ?? $bt['break_after_min']),
+                'break_minutes' => (int) ($d['timesheet']['break_minutes'] ?? $bt['break_minutes'])]]);
+        HrTime::forgetRules();
         $this->hrNote($aid, 'hr.time_settings_saved', 'agency', $aid, ['before' => ['overtime' => $before['overtime'], 'timesheet' => $before['timesheet']],
             'after' => ['overtime' => $s['overtime'], 'timesheet' => $s['timesheet']]]);
 

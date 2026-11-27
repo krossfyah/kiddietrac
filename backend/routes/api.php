@@ -2875,6 +2875,27 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // and their centres' chemicals + safety data sheets. Under hr/ so the HR add-on MAP covers them.
     Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get(    '/hr/me/safety',                               [\App\Http\Controllers\Api\HrSafetyController::class, 'mine']);
+        // HR Phase 4, batch 8 (2026-11-27): rota draft -> publish, copy tools, shift presets, labour budget, shift acceptance (App\Support\HrRota),
+        // and staff clock-in fix requests (HrPunchFixController). Any staff role; the controllers decide (managers: own centres / agency; nobody approves their own).
+        Route::get(    '/hr/rota/week',                                 [\App\Http\Controllers\Api\HrRotaController::class, 'week']);
+        Route::patch(  '/hr/rota/drafts/{id}',                          [\App\Http\Controllers\Api\HrRotaController::class, 'updateDraft'])->whereNumber('id');
+        Route::delete( '/hr/rota/drafts/{id}',                          [\App\Http\Controllers\Api\HrRotaController::class, 'discard'])->whereNumber('id');
+        Route::post(   '/hr/rota/discard-all',                          [\App\Http\Controllers\Api\HrRotaController::class, 'discardAll']);
+        Route::post(   '/hr/rota/publish',                              [\App\Http\Controllers\Api\HrRotaController::class, 'publish'])->middleware('throttle:30,1,hrrotapub');
+        Route::post(   '/hr/rota/copy',                                 [\App\Http\Controllers\Api\HrRotaController::class, 'copy'])->middleware('throttle:30,1,hrrotacopy');
+        Route::get(    '/hr/rota/settings',                             [\App\Http\Controllers\Api\HrRotaController::class, 'settings']);
+        Route::put(    '/hr/rota/settings',                             [\App\Http\Controllers\Api\HrRotaController::class, 'saveSettings']);
+        Route::post(   '/hr/rota/presets',                              [\App\Http\Controllers\Api\HrRotaController::class, 'createPreset']);
+        Route::put(    '/hr/rota/presets/{id}',                         [\App\Http\Controllers\Api\HrRotaController::class, 'updatePreset'])->whereNumber('id');
+        Route::post(   '/hr/rota/presets/{id}/archive',                 [\App\Http\Controllers\Api\HrRotaController::class, 'archivePreset'])->whereNumber('id');
+        Route::put(    '/hr/rota/budgets/{centreId}',                   [\App\Http\Controllers\Api\HrRotaController::class, 'saveBudget'])->whereNumber('centreId');
+        Route::get(    '/hr/me/shifts-to-accept',                       [\App\Http\Controllers\Api\HrRotaController::class, 'mine']);
+        Route::post(   '/hr/me/shifts/{shiftId}/respond',               [\App\Http\Controllers\Api\HrRotaController::class, 'respond'])->whereNumber('shiftId');
+        Route::get(    '/hr/me/punch-fixes',                            [\App\Http\Controllers\Api\HrPunchFixController::class, 'mine']);
+        Route::post(   '/hr/punch-fixes',                               [\App\Http\Controllers\Api\HrPunchFixController::class, 'store'])->middleware('throttle:30,1,hrpunchfix');
+        Route::post(   '/hr/punch-fixes/{id}/withdraw',                 [\App\Http\Controllers\Api\HrPunchFixController::class, 'withdraw'])->whereNumber('id');
+        Route::get(    '/hr/punch-fixes',                               [\App\Http\Controllers\Api\HrPunchFixController::class, 'index']);
+        Route::post(   '/hr/punch-fixes/{id}/decide',                   [\App\Http\Controllers\Api\HrPunchFixController::class, 'decide'])->whereNumber('id');
         Route::get(    '/hr/safety/risk',                             [\App\Http\Controllers\Api\HrSafetyController::class, 'riskIndex']);
         Route::post(   '/hr/safety/risk',                             [\App\Http\Controllers\Api\HrSafetyController::class, 'riskCreate']);
         Route::get(    '/hr/safety/risk/{id}',                        [\App\Http\Controllers\Api\HrSafetyController::class, 'riskShow'])->whereNumber('id');

@@ -98,6 +98,7 @@ final class SchedulingController extends Controller
                 'ends_hm' => Carbon::parse($s->ends_at)->format('H:i'),
                 'role' => $s->role,
                 'status' => $s->status,
+                'preset_id' => $s->preset_id ?? null,   // HR Phase 4 batch 8: the shift preset's colour on the grid
             ];
         }
 
@@ -237,6 +238,7 @@ final class SchedulingController extends Controller
                 'ends_hm' => Carbon::parse($s->ends_at)->format('H:i'),
                 'role' => $s->role,
                 'status' => $s->status,
+                'preset_id' => $s->preset_id ?? null,   // HR Phase 4 batch 8
                 // Which centre this shift belongs to -- the all-staff grid groups by it.
                 'centre_id' => $r->centre_id ?? null,
                 'centre_name' => $r ? ($centreRows[$r->centre_id]->name ?? null) : null,
@@ -274,6 +276,7 @@ final class SchedulingController extends Controller
             'starts_at' => ['required', 'date'],
             'ends_at' => ['required', 'date', 'after:starts_at'],
             'role' => ['nullable', 'in:lead,support,floater,volunteer'],
+            'preset_id' => ['nullable', 'integer'],   // HR Phase 4 batch 8: a named shift preset (its colour)
         ]);
 
         $room = DB::table('rooms')->where('id', $data['room_id'])->first();
@@ -288,7 +291,18 @@ final class SchedulingController extends Controller
             return response()->json(['message' => 'That person is not staff at this centre.'], 422);
         }
 
-        $shiftId = DB::table('shifts')->insertGetId([
+        /* KiddieTrac HR Phase 4 batch 8 (App\Support\HrRota): with the agency's publish step on, a new shift is a DRAFT
+           (hr_shift_drafts) - invisible to staff, clock-in, ratios, payroll and shift notices until it is published. */
+        $presetId = \App\Support\HrRota::presetOk(\App\Support\HrRota::agencyOfCentre((int) $room->centre_id), (int) $room->centre_id, $data['preset_id'] ?? null);
+        $draftId = \App\Support\HrRota::holdNew((int) $room->centre_id, ['preset_id' => $presetId] + $data);
+        if ($draftId !== null) {
+            \App\Support\Audit::write(['user_id' => $request->user()->id, 'action' => 'shift.drafted', 'entity_type' => 'hr_shift_draft', 'entity_id' => $draftId,
+                'payload' => json_encode($data), 'created_at' => now()]);
+
+            return response()->json(['success' => true, 'draft' => true, 'draft_id' => $draftId, 'message' => 'Saved as a draft. Staff see it once you publish.'], 201);
+        }
+
+        $ins = [
             'user_id' => $data['user_id'],
             'room_id' => $data['room_id'],
             'starts_at' => $data['starts_at'],
@@ -296,7 +310,9 @@ final class SchedulingController extends Controller
             'role' => $data['role'] ?? 'support',
             'status' => 'scheduled',
             'created_at' => now(),
-        ]);
+        ];
+        if ($presetId) $ins['preset_id'] = $presetId;
+        $shiftId = DB::table('shifts')->insertGetId($ins);
         // KiddieTrac HR: the person hears about it once their batch of changes goes quiet (App\Support\HrShiftNotices).
         \App\Support\HrShiftNotices::added((int) $room->centre_id, [['id' => $shiftId, 'user_id' => (int) $data['user_id'], 'room_id' => (int) $data['room_id'],
             'starts_at' => $data['starts_at'], 'ends_at' => $data['ends_at'], 'role' => $data['role'] ?? 'support', 'status' => 'scheduled']], 'edit');
@@ -701,6 +717,15 @@ final class SchedulingController extends Controller
             ->get(['user_id', 'starts_at']) as $row) {
             $existing[$row->user_id . '|' . Carbon::parse($row->starts_at)->toDateString()] = true;
         }
+        // KiddieTrac HR Phase 4 batch 8: with the publish step on the fill is written as drafts, and draft days count as rostered.
+        $draftMode = \App\Support\HrRota::draftModeForCentre($centreId);
+        if ($draftMode) {
+            foreach (DB::table('hr_shift_drafts')->where('centre_id', $centreId)->where('kind', 'add')->whereIn('user_id', $userIds)
+                ->where('starts_at', '>=', $start->toDateTimeString())->where('starts_at', '<=', $end->copy()->endOfDay()->toDateTimeString())
+                ->get(['user_id', 'starts_at']) as $row) {
+                $existing[$row->user_id . '|' . Carbon::parse($row->starts_at)->toDateString()] = true;
+            }
+        }
 
         $open  = substr((string) $centre->open_time, 0, 8);
         $close = substr((string) $centre->close_time, 0, 8);
@@ -736,7 +761,14 @@ final class SchedulingController extends Controller
             }
         }
 
-        if ($rows) {
+        if ($rows && $draftMode) {
+            $aidForDrafts = \App\Support\HrRota::agencyOfCentre($centreId);
+            foreach (array_chunk($rows, 200) as $chunk) {
+                DB::table('hr_shift_drafts')->insert(array_map(fn ($r) => ['agency_id' => $aidForDrafts, 'centre_id' => $centreId, 'kind' => 'add',
+                    'user_id' => $r['user_id'], 'room_id' => $r['room_id'], 'starts_at' => $r['starts_at'], 'ends_at' => $r['ends_at'], 'role' => $r['role'],
+                    'created_by_id' => $request->user()->id, 'updated_by_id' => $request->user()->id, 'created_at' => $now, 'updated_at' => $now], $chunk));
+            }
+        } elseif ($rows) {
             foreach (array_chunk($rows, 200) as $chunk) {
                 DB::table('shifts')->insert($chunk);
             }
@@ -770,6 +802,7 @@ final class SchedulingController extends Controller
 
         return response()->json([
             'success' => true,
+            'drafted' => $draftMode && $rows,   // HR Phase 4 batch 8: written as drafts (publish to send)
             'created' => count($rows),
             'hours' => ['open' => $open, 'close' => $close],
             'open_days' => $openDays,
@@ -788,7 +821,8 @@ final class SchedulingController extends Controller
                 ? (count($rows) . ' shift' . (count($rows) === 1 ? '' : 's') . ' added from ' . $open . '-' . $close . '.'
                    . ($skipClosed ? ' ' . $skipClosed . ' closure day' . ($skipClosed === 1 ? '' : 's') . ' left clear.' : '')
                    . ($skipExisting ? ' ' . $skipExisting . ' day' . ($skipExisting === 1 ? '' : 's') . ' already rostered.' : '')
-                   . ($skipUnavail ? ' ' . $skipUnavail . ' day' . ($skipUnavail === 1 ? '' : 's') . ' left clear (leave or unavailable).' : ''))
+                   . ($skipUnavail ? ' ' . $skipUnavail . ' day' . ($skipUnavail === 1 ? '' : 's') . ' left clear (leave or unavailable).' : '')
+                   . ($draftMode ? ' Saved as drafts: staff see them once you publish.' : ''))
                 : 'Nothing to add - every open day in that range is already rostered or closed.',
         ]);
     }
@@ -805,6 +839,7 @@ final class SchedulingController extends Controller
             'status' => ['nullable', 'in:scheduled,active,completed,cancelled'],
             'user_id' => ['nullable', 'integer'],
             'room_id' => ['nullable', 'integer'],
+            'preset_id' => ['nullable', 'integer'],   // HR Phase 4 batch 8
         ]);
 
         $shift = DB::table('shifts')->where('id', $id)->first();
@@ -832,7 +867,16 @@ final class SchedulingController extends Controller
         }
 
         $update = array_filter($data, fn($v) => $v !== null);
+        if (array_key_exists('preset_id', $update)) {
+            $update['preset_id'] = \App\Support\HrRota::presetOk(\App\Support\HrRota::agencyOfCentre($destCentre), $destCentre, $update['preset_id']);
+            if ($update['preset_id'] === null) unset($update['preset_id']);
+        }
         if (!empty($update)) {
+            // KiddieTrac HR Phase 4 batch 8: with the publish step on, the change waits as "changed since publish" (App\Support\HrRota).
+            $held = \App\Support\HrRota::holdChange($shift, $destCentre, $update);
+            if ($held !== null) {
+                return response()->json(['success' => true, 'draft' => true, 'draft_id' => $held, 'message' => 'Saved. Staff see the change once you publish.']);
+            }
             DB::table('shifts')->where('id', $id)->update($update);
             // KiddieTrac HR: changed / cancelled / handed to someone else (App\Support\HrShiftNotices).
             \App\Support\HrShiftNotices::changed($destCentre, $shift, $update, 'edit');
@@ -851,6 +895,11 @@ final class SchedulingController extends Controller
         $room = DB::table('rooms')->where('id', $shift->room_id)->first();
         if (! $this->hasCentreAccess($request->user()->id, $room->centre_id)) {
             return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // KiddieTrac HR Phase 4 batch 8: with the publish step on, it is marked "to be removed" until published (App\Support\HrRota).
+        if (($held = \App\Support\HrRota::holdCancel($shift, (int) $room->centre_id)) !== null) {
+            return response()->json(['success' => true, 'draft' => true, 'draft_id' => $held, 'message' => 'Marked to be removed. It goes when you publish.']);
         }
 
         DB::table('shifts')->where('id', $id)->delete();

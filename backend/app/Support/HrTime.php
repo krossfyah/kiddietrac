@@ -37,8 +37,12 @@ final class HrTime
 {
     public const DEFAULTS = [
         'overtime' => ['rate' => 1.0, 'staff_can_log' => true, 'allow_pay' => true, 'allow_bank' => true],
-        'timesheet' => ['rounding' => 0, 'clip_in' => false, 'clip_out' => false, 'export_rule' => 'warn'],
+        'timesheet' => ['rounding' => 0, 'clip_in' => false, 'clip_out' => false, 'export_rule' => 'warn',
+            // HR Phase 4 batch 8: automatic unpaid break, OFF by default (break_on false = numbers exactly as before).
+            'break_on' => false, 'break_after_min' => 360, 'break_minutes' => 30],
     ];
+    public const BREAK_AFTER = [240, 300, 330, 360, 390, 420, 480, 600];
+    public const BREAK_MINUTES = [15, 20, 30, 45, 60];
     public const ROUNDING = [0, 5, 6, 10, 15];
     public const EXPORT_RULES = ['warn', 'block'];
     public const STATUSES = ['submitted' => 'Waiting for approval', 'approved' => 'Approved', 'paid' => 'Paid', 'declined' => 'Declined', 'withdrawn' => 'Withdrawn'];
@@ -78,6 +82,9 @@ final class HrTime
         $t['clip_in'] = (bool) $t['clip_in'];
         $t['clip_out'] = (bool) $t['clip_out'];
         $t['export_rule'] = in_array($t['export_rule'], self::EXPORT_RULES, true) ? $t['export_rule'] : 'warn';
+        $t['break_on'] = (bool) $t['break_on'];
+        $t['break_after_min'] = in_array((int) $t['break_after_min'], self::BREAK_AFTER, true) ? (int) $t['break_after_min'] : 360;
+        $t['break_minutes'] = in_array((int) $t['break_minutes'], self::BREAK_MINUTES, true) ? (int) $t['break_minutes'] : 30;
         unset($o, $t);
         $out['bank_type_id'] = isset($raw['bank_type_id']) ? (int) $raw['bank_type_id'] : null;
 
@@ -103,7 +110,21 @@ final class HrTime
     {
         $t = $s['timesheet'];
 
-        return $t['rounding'] > 0 || $t['clip_in'] || $t['clip_out'];
+        return $t['rounding'] > 0 || $t['clip_in'] || $t['clip_out'] || ! empty($t['break_on']);
+    }
+
+    /**
+     * AUTOMATIC UNPAID BREAK (HR Phase 4 batch 8, 2026-11-27). When the agency switches it on: one clock-in (one punch)
+     * longer than break_after_min paid minutes has break_minutes taken off as an unpaid break. Applied in measure(), the
+     * one place a punch becomes paid minutes, so the timesheet, the payroll summary / run / export, payslips and payee
+     * invoices all take off exactly the same break. Someone who clocks out for their break and back in has two shorter
+     * punches, so nothing is taken twice. Off = this returns the minutes unchanged.
+     */
+    public static function afterBreak(int $paid, array $t): int
+    {
+        if (empty($t['break_on']) || (int) ($t['break_minutes'] ?? 0) <= 0) return $paid;
+
+        return $paid > (int) $t['break_after_min'] ? max(0, $paid - (int) $t['break_minutes']) : $paid;
     }
 
     // ── Overtime ──────────────────────────────────────────────────────────────────────
@@ -305,7 +326,7 @@ final class HrTime
         }
         $pin = self::roundTo($pin, (int) $t['rounding']);
         $pout = self::roundTo($pout, (int) $t['rounding']);
-        $paid = self::rulesOn(['timesheet' => $t]) ? intdiv(max(0, $pout->getTimestamp() - $pin->getTimestamp()), 60) : $raw;
+        $paid = self::rulesOn(['timesheet' => $t]) ? self::afterBreak(intdiv(max(0, $pout->getTimestamp() - $pin->getTimestamp()), 60), $t) : $raw;
 
         return ['raw' => $raw, 'paid' => $paid, 'shift' => $best, 'in' => $in, 'out' => $out, 'pin' => $pin, 'pout' => $pout];
     }
@@ -334,7 +355,7 @@ final class HrTime
     /** @var array<int,bool> agency => a rounding / clip rule is on (per process) */
     private static array $rulesMemo = [];
 
-    /** Does this agency have the HR add-on AND a rounding or clip-to-shift rule switched on? */
+    /** Does this agency have the HR add-on AND a rounding, clip-to-shift or automatic-break rule switched on? */
     public static function rulesActive(?int $agencyId): bool
     {
         if (! $agencyId) return false;
@@ -511,12 +532,17 @@ final class HrTime
         $leave = self::leaveDays($agencyId, $ids, $from, $to);
         $ot = DB::table('hr_overtime_requests')->where('agency_id', $agencyId)->whereIn('user_id', $ids ?: [0])->whereIn('status', ['approved', 'paid'])
             ->whereBetween('work_date', [$from, $to])->selectRaw('user_id, SUM(minutes) m')->groupBy('user_id')->pluck('m', 'user_id')->all();
+        // HR Phase 4 batch 8: contracted hours for the period = the employee file's hours a week x days / 7 (null = not set).
+        $hpw = rescue(fn () => DB::table('hr_employee_files')->where('agency_id', $agencyId)->whereIn('user_id', $ids ?: [0])->whereNotNull('hours_per_week')
+            ->pluck('hours_per_week', 'user_id')->all(), [], false);
+        $days = (int) round((strtotime($to) - strtotime($from)) / 86400) + 1;
         $rows = [];
         $detail = [];
         foreach ($ids as $uid) {
             $mine = $shifts[$uid] ?? collect();
             $r = ['user_id' => $uid, 'name' => $names[$uid] ?? '', 'scheduled_min' => 0, 'worked_min' => 0, 'paid_min' => 0, 'shifts' => 0, 'punches' => 0,
-                'open' => 0, 'no_show' => 0, 'unscheduled' => 0, 'overtime_min' => (int) ($ot[$uid] ?? 0)];
+                'open' => 0, 'no_show' => 0, 'unscheduled' => 0, 'overtime_min' => (int) ($ot[$uid] ?? 0),
+                'contracted_min' => isset($hpw[$uid]) ? (int) round(((float) $hpw[$uid]) * 60 * $days / 7) : null];
             $used = [];
             foreach ($mine as $sh) {
                 $ss = Carbon::parse($sh->starts_at, $tz);
@@ -557,7 +583,7 @@ final class HrTime
         $sum = fn ($k) => array_sum(array_column($rows, $k));
 
         return ['rows' => $rows, 'detail' => $detail, 'tz' => $tz, 'rules' => $t, 'rules_on' => self::rulesOn($s),
-            'totals' => ['scheduled_min' => $sum('scheduled_min'), 'worked_min' => $sum('worked_min'), 'paid_min' => $sum('paid_min'),
+            'totals' => ['scheduled_min' => $sum('scheduled_min'), 'worked_min' => $sum('worked_min'), 'paid_min' => $sum('paid_min'), 'contracted_min' => $sum('contracted_min'),
                 'open' => $sum('open'), 'no_show' => $sum('no_show'), 'unscheduled' => $sum('unscheduled'), 'people' => count($rows)]];
     }
 
