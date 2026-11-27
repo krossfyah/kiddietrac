@@ -38,8 +38,8 @@
       tabs: [{ k: 'dashboard', label: 'Dashboard' }] },
     { id: 'people', hash: 'hr-people', icon: '👥', label: 'People', sub: 'Employee files, pay and role history, each person\'s documents, the staff directory, the org chart and leavers.',
       tabs: [{ k: 'people', label: 'People' }, { k: 'directory', label: 'Directory' }, { k: 'orgchart', label: 'Org chart' }, { k: 'leavers', label: 'Leavers' }] },
-    { id: 'timeoff', hash: 'time-off', alt: 'hr-time-off', icon: '🌴', label: 'Time off', sub: 'Time off requests, leave balances and leave types.',
-      tabs: [{ k: 'requests', label: 'Requests', screen: 'time-off' }, { k: 'balances', label: 'Balances' }, { k: 'types', label: 'Leave types', admin: true }] },
+    { id: 'timeoff', hash: 'time-off', alt: 'hr-time-off', icon: '🌴', label: 'Time off', sub: 'Time off requests, leave balances, leave types, and closures taken from leave.',
+      tabs: [{ k: 'requests', label: 'Requests', screen: 'time-off' }, { k: 'balances', label: 'Balances' }, { k: 'types', label: 'Leave types', admin: true }, { k: 'leavemaths', label: 'Closures & checks' }] },   // HR4B9
     { id: 'absence', hash: 'hr-absence', icon: '🤒', label: 'Absence & lateness', sub: 'Absence report, lateness against the rota, and absence scores.',
       tabs: [{ k: 'absence', label: 'Absence & lateness' }] },
     { id: 'rota', hash: 'schedule', alt: 'hr-rota', icon: '🗒️', label: 'Rota & shifts', sub: 'Who is working and where, the rota plan, availability, swaps and open shifts.',

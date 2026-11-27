@@ -1284,6 +1284,11 @@ put hr/people/{id}/sin | Saved a staff member's SIN
 delete hr/people/{id}/sin | Removed a staff member's SIN
 post hr/people/{id}/sin/reveal | Revealed a staff member's SIN
 post hr/adjustments | Adjusted a leave balance
+post hr/shutdowns/decide | Chose whether a centre closure is taken from staff leave
+post hr/shutdowns/{id}/reverse | Reversed a closure taken from staff leave
+post hr/leave-rechecks/scan | Checked booked time off against the closures
+post hr/leave-rechecks/{id}/resolve | Reviewed a time-off amount after a closure change
+put hr/leave-maths/settings | Changed the part-time pro-rata setting
 put hr/hiring/settings | Changed the hiring settings
 put hr/hiring/google-jobs | Switched listing jobs in Google Jobs on or off
 post hr/jobs | Added a job post

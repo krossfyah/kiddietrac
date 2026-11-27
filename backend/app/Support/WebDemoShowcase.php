@@ -800,6 +800,7 @@ final class WebDemoShowcase
         $this->hrPeopleStory($agencyId, $byName->all(), $elena, $olivia);   // HR Phase 4, batch 6
         $this->hrHsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia);   // HR Phase 4, batch 7
         $this->hrRota8Story($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 8
+        $this->hrLeaveMathsStory($agencyId, $byName->all(), $centreOf->all(), $now);   // HR Phase 4, batch 9
     }
 
     /**
@@ -1050,6 +1051,41 @@ final class WebDemoShowcase
             if ($ev) $row += ['evidence_path' => $file('evidence', 'first-aid-kit', 'First aid kit restocked'), 'evidence_name' => 'First aid kit restocked.pdf',
                 'evidence_mime' => 'application/pdf', 'evidence_note' => 'Restocked and checked against the list on the lid.', 'evidence_by' => $byName[$who], 'evidence_at' => $this->at(-1, 16)];
             $this->add('tasks', $row);
+        }
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 4, BATCH 9 DEMO (2026-11-27, Starlight only): leave maths. A "Winter break" closure (holiday) at
+     * Ethan's centre that starts on the day of his approved vacation, so Time off > Closures & checks shows one booking to
+     * review ("amount may be wrong") and one closure not decided yet (take it from leave or not). Lucas and Sofia get
+     * hours a week on their files (20 and 24) so the part-time pro-rata preview has numbers; the setting stays off. All
+     * rows in this builder's ledger (rebuilt each run); the file hours are only filled while empty.
+     */
+    private function hrLeaveMathsStory(int $agencyId, array $byName, array $centreOf, string $now): void
+    {
+        if (! \App\Support\HrLeaveMaths::ready() || ! isset($byName['Ethan'], $centreOf[$byName['Ethan']])) return;
+        foreach ([['Lucas', 20], ['Sofia', 24]] as [$n, $h]) {
+            if (isset($byName[$n])) DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('user_id', $byName[$n])->whereNull('hours_per_week')->update(['hours_per_week' => $h]);
+        }
+        $centre = (int) $centreOf[$byName['Ethan']];
+        $req = DB::table('time_off_requests')->where('agency_id', $agencyId)->where('user_id', $byName['Ethan'])->where('status', 'approved')
+            ->whereDate('start_at', '>', $this->today->toDateString())->orderBy('start_at')->first();
+        if (! $req) return;
+        $a = substr((string) $req->start_at, 0, 10);
+        $b = \Carbon\Carbon::parse($a)->addDays(3)->toDateString();
+        $cid = $this->add('centre_closures', ['centre_id' => $centre, 'closure_date' => $a, 'end_date' => $b, 'closure_type' => 'holiday', 'reason' => 'Winter break',
+            'affects_billing' => 0, 'created_by_id' => null, 'created_at' => $now, 'updated_at' => $now]);
+        \App\Support\HrLeave::forgetClosed();
+        $cause = 'Closure added: ' . \App\Support\HrLeaveMaths::rangeLabel($a, $b) . ' at ' . (string) DB::table('centres')->where('id', $centre)->value('name');
+        foreach (DB::table('time_off_requests')->where('agency_id', $agencyId)->whereIn('status', ['approved', 'pending'])->whereDate('start_at', '<=', $b)->whereDate('end_at', '>=', $a)->get() as $r) {
+            $t = \App\Support\HrLeave::typeForRequest($r);
+            $booked = $t ? \App\Support\HrLeaveMaths::bookedAmount($r, $t) : null;
+            if ($booked === null) continue;
+            $fresh = \App\Support\HrLeaveMaths::freshAmount($r, $t);
+            if (abs($fresh - $booked) < 0.005) continue;
+            $this->add('hr_leave_rechecks', ['agency_id' => $agencyId, 'time_off_request_id' => (int) $r->id, 'shutdown_id' => null, 'user_id' => (int) $r->user_id,
+                'leave_type_id' => (int) $t->id, 'booked' => $booked, 'fresh' => $fresh, 'unit' => $t->unit, 'cause' => $cause, 'closure_id' => $cid, 'status' => 'open',
+                'created_at' => $now, 'updated_at' => $now]);
         }
     }
 

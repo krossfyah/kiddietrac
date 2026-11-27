@@ -2724,6 +2724,18 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/hr/attendance/settings',            [\App\Http\Controllers\Api\HrController::class, 'attendanceSettings']);
         Route::put   ('/hr/attendance/settings',            [\App\Http\Controllers\Api\HrController::class, 'saveAttendanceSettings']);
         Route::get   ('/hr/time-off/{id}/clash',            [\App\Http\Controllers\Api\HrController::class, 'requestClash'])->whereNumber('id');
+        // HR Phase 4, batch 9 (2026-11-27, App\Support\HrLeaveMaths): closures taken from leave (admins decide, never automatic), booked leave to
+        // re-check after a closure change (never your own), part-time pro-rata for new grants. Manager group; the controller narrows to admins.
+        Route::get   ('/hr/shutdowns',                    [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'shutdowns']);
+        Route::get   ('/hr/shutdowns/preview',            [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'preview']);
+        Route::post  ('/hr/shutdowns/decide',             [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'decide'])->middleware('throttle:30,1,hrshutdown');
+        Route::post  ('/hr/shutdowns/{id}/reverse',       [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'reverse'])->whereNumber('id');
+        Route::get   ('/hr/leave-rechecks',               [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'rechecks']);
+        Route::post  ('/hr/leave-rechecks/scan',          [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'scan'])->middleware('throttle:6,1,hrrecheck');
+        Route::post  ('/hr/leave-rechecks/{id}/resolve',  [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'resolve'])->whereNumber('id');
+        Route::get   ('/hr/leave-maths/settings',         [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'settings']);
+        Route::put   ('/hr/leave-maths/settings',         [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'saveSettings']);
+        Route::get   ('/hr/leave-maths/pro-rata-preview', [\App\Http\Controllers\Api\HrLeaveMathsController::class, 'proRataPreview']);
         // HR Phase 4, batch 2 (2026-11-27, App\Support\HrTime): overtime decisions, overtime + timesheet rules, timesheet approve + lock.
         Route::get   ('/hr/overtime',                       [\App\Http\Controllers\Api\HrTimeController::class, 'index']);
         Route::post  ('/hr/overtime/{id}/decide',           [\App\Http\Controllers\Api\HrTimeController::class, 'decide'])->whereNumber('id');

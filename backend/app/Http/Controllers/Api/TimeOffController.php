@@ -37,6 +37,7 @@ final class TimeOffController extends Controller
     private function withLeave($rows, bool $staffView = false): void
     {
         $on = [];
+        $pendAll = [];
         foreach ($rows as $r) {
             $aid = (int) $r->agency_id;
             if (! isset($on[$aid])) {
@@ -61,6 +62,14 @@ final class TimeOffController extends Controller
             $r->leave_balance = $bal;
             // What is left once this request counts: pending = not deducted yet; approved = already deducted.
             $r->leave_balance_after = $r->status === 'pending' ? round($bal - $amount, 2) : $bal;
+            /* HR4B9 (2026-11-27): what is left after EVERY pending request of this type for this person (this one included),
+               so an approver sees the balance the way it will end up, not one request at a time. */
+            if ($r->status === 'pending') {
+                $pk = (int) $r->user_id . ':' . (int) $t->id;
+                $pendAll[$pk] ??= \App\Support\HrLeave::pending($aid, (int) $r->user_id, $t);
+                $r->leave_pending_all = $pendAll[$pk];
+                $r->leave_balance_projected = round($bal - $pendAll[$pk], 2);
+            }
         }
     }
 
@@ -155,6 +164,21 @@ final class TimeOffController extends Controller
                 } catch (\Throwable $e) {
                     report($e);
                 }
+            }
+            /* HR4B9 (2026-11-27): a closure changed after this was booked, so its amount may be wrong. Nothing was changed;
+               the approver reviews it (Time off > Closures & checks, or from the row). */
+            try {
+                if (\App\Support\HrLeaveMaths::ready() && $rows->count()) {
+                    $flags = DB::table('hr_leave_rechecks')->where('agency_id', $agencyId)->where('status', 'open')
+                        ->whereIn('time_off_request_id', $rows->pluck('id')->all())->get(['id', 'time_off_request_id', 'booked', 'fresh', 'unit', 'cause'])->keyBy('time_off_request_id');
+                    foreach ($rows as $r) {
+                        if ($f = $flags[$r->id] ?? null) {
+                            $r->leave_recheck = ['id' => (int) $f->id, 'booked' => (float) $f->booked, 'fresh' => (float) $f->fresh, 'unit' => $f->unit, 'cause' => $f->cause];
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                report($e);
             }
         }
         return response()->json(['data' => $rows]);

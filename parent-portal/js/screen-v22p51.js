@@ -118,7 +118,17 @@
     if (r.leave_balance == null) return '';
     var u = r.leave_unit, st = (r.status || 'pending').toLowerCase();
     return (r.leave_amount != null ? hrAmt(r.leave_amount, u) + ' · ' : '')
-      + (st === 'pending' ? 'balance ' + hrAmt(r.leave_balance, u) + ', ' + hrAmt(r.leave_balance_after, u) + ' after this' : 'balance now ' + hrAmt(r.leave_balance, u));
+      + (st === 'pending' ? 'balance ' + hrAmt(r.leave_balance, u) + ', ' + hrAmt(r.leave_balance_after, u) + ' after this' : 'balance now ' + hrAmt(r.leave_balance, u))
+      + (st === 'pending' && hrMore(r) ? ', ' + hrAmt(r.leave_balance_projected, u) + ' after all pending' : '');
+  }
+  /* HR4B9 (2026-11-27): other requests of the same type are waiting too, so the balance after ALL of them is shown;
+     and a closure changed after this was booked (leave_recheck): the amount may be wrong, nothing was changed. */
+  function hrMore(r) { return r.leave_pending_all != null && r.leave_amount != null && (+r.leave_pending_all - +r.leave_amount) > 0.005; }
+  var TOR_ROWS = {};
+  function hrRecheckText(r) { var c = r.leave_recheck; return c ? '⚠️ Amount may be wrong: counts ' + hrAmt(c.fresh, c.unit) + ' now, booked ' + hrAmt(c.booked, c.unit) + '. Review it.' : ''; }
+  function hrRecheckHtml(r, isApprover) {
+    if (!isApprover || !r.leave_recheck || torOwn(r)) return '';
+    return '<div style="font-size:11.5px;font-weight:700;color:#B45309;">' + escapeHtml(hrRecheckText(r)) + ' <a href="#time-off?tab=leavemaths" style="color:#0E7490;">Review</a></div>';
   }
   var TOR_META = {
     vacation:    { icon: '🌴', label: 'Vacation' },
@@ -219,6 +229,16 @@
     try { o = await Api.get('/admin/time-off/' + id + '/closure-options'); } catch (e) {}
     if (HR_ME) { try { cl = await Api.get('/hr/time-off/' + id + '/clash'); } catch (e) {} }   // HR Phase 4: leave clashes
     var clash = clashHtml(cl, true);
+    /* HR4B9: the balance after this and after every pending request, and a booked amount a closure change made wrong. */
+    var rr = TOR_ROWS[id] || {}, hrBox = '';
+    if (rr.leave_balance != null) hrBox += '<div style="background:#F0F9FF;border:1px solid #BAE6FD;color:#0C4A6E;border-radius:10px;padding:9px 12px;font-size:13px;line-height:1.5;margin:0 0 10px;"><b data-no-i18n>' + torEsc(rr.leave_type_name || '') + '</b>: '
+      + torEsc(hrAmt(rr.leave_balance, rr.leave_unit)) + ' now, ' + torEsc(hrAmt(rr.leave_balance_after, rr.leave_unit)) + ' after this'
+      + (hrMore(rr) ? ', <b' + (rr.leave_balance_projected < 0 ? ' style="color:#B91C1C;"' : '') + '>' + torEsc(hrAmt(rr.leave_balance_projected, rr.leave_unit)) + ' after all pending requests</b>' : '') + '</div>';
+    if (rr.leave_recheck) hrBox += '<div data-recheck style="background:#FFFBEB;border:1px solid #FCD34D;color:#78350F;border-radius:10px;padding:9px 12px;font-size:13px;line-height:1.45;margin:0 0 10px;">'
+      + '<div style="font-weight:800;margin-bottom:4px;">The amount may be wrong</div><div data-no-i18n style="margin-bottom:6px;">' + torEsc(rr.leave_recheck.cause || 'A closure changed after this was booked.') + '</div>'
+      + '<label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="radio" name="tor-rc" value="correct" checked> Use ' + torEsc(hrAmt(rr.leave_recheck.fresh, rr.leave_recheck.unit)) + ' (counts now)</label>'
+      + '<label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="radio" name="tor-rc" value="keep"> Keep ' + torEsc(hrAmt(rr.leave_recheck.booked, rr.leave_recheck.unit)) + ' (as booked)</label></div>';
+    if (hrBox && (hrMore(rr) || rr.leave_recheck || (o && o.centre_id) || clash)) clash = hrBox + clash;   // a plain one-click approve stays one click
     var M = window.KT && KT.Shell && KT.Shell.Modal;
     if ((!o || !o.centre_id) && !clash || !M) {
       await Api.patch('/admin/time-off/' + id, { status: 'approved' });
@@ -255,7 +275,9 @@
             if (note) payload.decision_notes = note;
             if (!hasCentre) payload.close = 'auto';
             if (payload.close === 'centre') payload.close_centre_id = o.centre_id;
-            return Api.patch('/admin/time-off/' + id, payload).then(function (r) {
+            var rcPick = box.querySelector('input[name="tor-rc"]:checked');   // HR4B9: settle the amount first
+            var first = rcPick && rr.leave_recheck ? Api.post('/hr/leave-rechecks/' + rr.leave_recheck.id + '/resolve', { outcome: rcPick.value }) : Promise.resolve();
+            return first.then(function () { return Api.patch('/admin/time-off/' + id, payload); }).then(function (r) {
               if (window.KT && KT.toast) KT.toast('✅', 'Approved', r && r.closure_created ? (o.centre_name || 'Centre') + ' marked closed; parents emailed.' : '', '#16A34A');
               torReload();
             }).catch(function (e) { box.querySelector('[data-out]').textContent = (e && e.data && e.data.message) || (e && e.message) || 'Could not approve.'; return false; });
@@ -301,7 +323,9 @@
     head.appendChild(el('span', { style: 'flex:0 0 auto;font-size:11.5px;font-weight:800;text-transform:capitalize;padding:4px 11px;border-radius:20px;background:' + sc.bg + ';color:' + sc.fg + ';' }, status));
     card.appendChild(head);
     card.appendChild(el('div', { style: 'font-size:13.5px;font-weight:600;color:#334155;margin-top:11px;padding-top:11px;border-top:1px solid #F1F5F9;' }, '📅 ' + torWhen(r)));
-    if (hrLine(r)) card.appendChild(el('div', { style: 'font-size:12.5px;font-weight:700;color:' + ((r.leave_balance_after < 0) ? '#B91C1C' : '#0E7490') + ';margin-top:6px;' }, hrLine(r)));
+    TOR_ROWS[r.id] = r;   // HR4B9
+    if (hrLine(r)) card.appendChild(el('div', { style: 'font-size:12.5px;font-weight:700;color:' + ((r.leave_balance_after < 0 || (hrMore(r) && r.leave_balance_projected < 0)) ? '#B91C1C' : '#0E7490') + ';margin-top:6px;' }, hrLine(r)));
+    if (isApprover && r.leave_recheck && !torOwn(r)) { var rcd = el('div', { style: 'margin-top:6px;' }); rcd.innerHTML = hrRecheckHtml(r, true); card.appendChild(rcd); }
     if (isApprover && torClash(r)) card.appendChild(el('div', { style: 'font-size:12.5px;font-weight:700;color:#B45309;margin-top:6px;' }, torClash(r)));
     if (r.reason) card.appendChild(el('div', { style: 'font-size:12.5px;color:#64748B;margin-top:6px;line-height:1.45;' }, r.reason));
     // Mobile renders cards, not the table, so the decision has to be added here too.
@@ -440,12 +464,13 @@
     tbl.innerHTML = '<thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Who</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Type</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Dates</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Decided by</th><th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Status</th><th></th></tr></thead><tbody></tbody>';
     const tb = tbl.querySelector('tbody');
     rows.forEach(r => {
+      TOR_ROWS[r.id] = r;   // HR4B9
       const tr = document.createElement('tr');
       tr.setAttribute('data-tor-row', r.id);
       const status = (r.status || 'pending').toLowerCase();
       const color = status === 'approved' ? '#047857' : status === 'denied' ? '#B91C1C' : '#D97706';
       tr.innerHTML = `<td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.user_name || 'You')}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${r.leave_type_name ? '<span data-no-i18n>' + escapeHtml(r.leave_type_name) + '</span>' : '<span style="text-transform:capitalize;">' + escapeHtml(r.request_type) + '</span>'}${hrLine(r) ? '<div style="font-size:11.5px;font-weight:700;color:' + ((r.leave_balance_after < 0) ? '#B91C1C' : '#0E7490') + ';">' + escapeHtml(hrLine(r)) + '</div>' : ''}${isApprover && torClash(r) ? '<div style="font-size:11.5px;font-weight:700;color:#B45309;">' + escapeHtml(torClash(r)) + '</div>' : ''}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${r.leave_type_name ? '<span data-no-i18n>' + escapeHtml(r.leave_type_name) + '</span>' : '<span style="text-transform:capitalize;">' + escapeHtml(r.request_type) + '</span>'}${hrLine(r) ? '<div style="font-size:11.5px;font-weight:700;color:' + ((r.leave_balance_after < 0 || (hrMore(r) && r.leave_balance_projected < 0)) ? '#B91C1C' : '#0E7490') + ';">' + escapeHtml(hrLine(r)) + '</div>' : ''}${hrRecheckHtml(r, isApprover)/* HR4B9 */}${isApprover && torClash(r) ? '<div style="font-size:11.5px;font-weight:700;color:#B45309;">' + escapeHtml(torClash(r)) + '</div>' : ''}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(torWhen(r))}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;font-size:12.5px;color:#475569;">${decidedCell(r)}</td>
         <td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;"><span style="color:${color};font-weight:600;text-transform:capitalize;">${status}</span>${torReview(r) ? REVIEW_PILL : ''}${r.closed_for_dates && status === 'approved' ? '<div style="font-size:11.5px;color:#92400E;font-weight:700;">🔒 Centre closed</div>' : ''}</td>

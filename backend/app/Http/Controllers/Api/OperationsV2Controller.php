@@ -75,8 +75,23 @@ final class OperationsV2Controller extends Controller
         // announceClosure covers families and centre staff; agency admins and directors
         // who hold no role AT the centre were never told a closure had been added.
         $this->announceClosureChange((int) $id, (int) $data['centre_id'], 'added');
+        // HR4B9: booked leave over these dates may now be counted wrong - flag it for review (never re-deducted).
+        $this->hrRecheck((int) $data['centre_id'], [[$data['closure_date'], $data['end_date'] ?? $data['closure_date']]], (int) $id, 'Closure added', $request);
 
         return response()->json(['id' => $id], 201);
+    }
+
+    /** HR4B9 (2026-11-27, App\Support\HrLeaveMaths): re-check booked leave after a closure change. Flags only; never fails the save. */
+    private function hrRecheck(int $centreId, array $ranges, int $closureId, string $verb, Request $request): void
+    {
+        try {
+            $c = DB::table('centre_closures')->where('id', $closureId)->first();
+            $r = $c ?: (object) ['closure_date' => $ranges[0][0], 'end_date' => $ranges[0][1]];
+            $cause = $verb . ': ' . \App\Support\HrLeaveMaths::rangeLabel(...\App\Support\HrLeaveMaths::closureRange($r)) . ' at ' . (string) DB::table('centres')->where('id', $centreId)->value('name');
+            \App\Support\HrLeaveMaths::closureChanged($centreId, $ranges, $closureId, $cause, (int) optional($request->user())->id);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     /**
@@ -202,6 +217,9 @@ final class OperationsV2Controller extends Controller
 
         $data['updated_at'] = now();
         DB::table('centre_closures')->where('id', $id)->update($data);
+        // HR4B9: booked leave over these dates may now be counted wrong - flag it for review (never re-deducted).
+        $__new = DB::table('centre_closures')->where('id', $id)->first();
+        $this->hrRecheck((int) $row->centre_id, [[$row->closure_date, $row->end_date ?: $row->closure_date], [$__new->closure_date, $__new->end_date ?: $__new->closure_date]], (int) $id, 'Closure changed', $request);
 
         // Announced as a change, not as a new closure: telling somebody a centre is
         // closing when they already knew, and the only news is the date moved, is how
@@ -221,6 +239,8 @@ final class OperationsV2Controller extends Controller
         $this->announceClosureChange($id, (int) $row->centre_id, 'removed');
 
         DB::table('centre_closures')->where('id', $id)->delete();
+        // HR4B9: booked leave over these dates may now be counted wrong - flag it for review (never re-deducted).
+        $this->hrRecheck((int) $row->centre_id, [[$row->closure_date, $row->end_date ?: $row->closure_date]], (int) $id, 'Closure removed', $request);
         return response()->json(['status' => 'removed']);
     }
 
@@ -1105,6 +1125,10 @@ final class OperationsV2Controller extends Controller
                 }
                 // Admins and directors who hold no role AT the centre are told either way.
                 $this->announceClosureChange($row['id'], $row['centre_id'], 'added');
+            }
+            // HR4B9: booked leave over these dates may now be counted wrong - flag it for review (never re-deducted).
+            foreach ($created as $row) {
+                $this->hrRecheck((int) $row['centre_id'], [[$start, $end]], (int) $row['id'], 'Closure added', $request);
             }
         }
 

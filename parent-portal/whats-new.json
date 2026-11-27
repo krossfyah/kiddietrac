@@ -4,6 +4,43 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "🏖️",
+            "title": "Closures taken from leave",
+            "body": "HR add-on: choose per closure whether a winter shutdown or other closure comes off staff vacation, after a preview of who loses how much. When a closure moves, booked time off that would now count differently is flagged for review, never changed by itself. Approvals show the balance after all pending requests, and part-time staff can get pro-rated new grants. Time off > Closures & checks.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Fermetures déduites des congés",
+            "body_fr": "Module RH : choisissez pour chaque fermeture si une fermeture d’hiver ou autre est déduite des vacances du personnel, après un aperçu de qui perd combien. Quand une fermeture change, les congés réservés qui compteraient autrement sont signalés pour vérification, jamais modifiés tout seuls. Les approbations montrent le solde après toutes les demandes en attente, et le personnel à temps partiel peut recevoir de nouveaux octrois au prorata. Congés > Fermetures et vérifications.",
+            "title_es": "Cierres descontados de los permisos",
+            "body_es": "Complemento de RR. HH.: elige para cada cierre si un cierre de invierno u otro se descuenta de las vacaciones del personal, tras ver quién pierde cuánto. Cuando un cierre cambia, los permisos reservados que ahora contarían distinto se marcan para revisar, nunca se cambian solos. Las aprobaciones muestran el saldo después de todas las solicitudes pendientes, y el personal a tiempo parcial puede recibir nuevas asignaciones prorrateadas. Permisos > Cierres y comprobaciones.",
+            "title_hi": "छुट्टी से घटाई गई बंदी",
+            "body_hi": "HR ऐड-ऑन: हर बंदी के लिए चुनें कि सर्दियों की बंदी या दूसरी बंदी कर्मचारियों की छुट्टी से घटे या नहीं, पहले यह देखकर कि किसका कितना घटेगा। बंदी बदलने पर जो बुक की गई छुट्टी अब अलग गिनी जाएगी, वह समीक्षा के लिए चिह्नित होती है, अपने आप नहीं बदलती। स्वीकृति में सभी लंबित अनुरोधों के बाद का शेष दिखता है, और अंशकालिक कर्मचारियों को नए अनुदान आनुपातिक मिल सकते हैं। Time off > Closures & checks।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "📻",
+            "title": "Walkie-talkie for staff",
+            "body": "Hold the button and talk live to a colleague, a room's educators, your centre's staff or its leaders. The Android app listens all the time and plays talks out loud; in a browser you hear them while a KiddieTrac tab is open. Busy reply, Do not disturb, an emergency channel that always plays, and a history you can play back. Find it in Operations (or your menu).",
+            "roles": [
+                "agency_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Talkie-walkie pour le personnel",
+            "body_fr": "Maintenez le bouton et parlez en direct à un collègue, aux éducatrices d'une salle, au personnel de votre centre ou à ses responsables. L'application Android écoute en permanence et joue les messages à voix haute ; dans un navigateur, vous les entendez tant qu'un onglet KiddieTrac est ouvert. Réponse « occupé », Ne pas déranger, un canal d'urgence qui joue toujours et un historique à réécouter. Dans Opérations (ou votre menu).",
+            "title_es": "Walkie-talkie para el personal",
+            "body_es": "Mantenga pulsado el botón y hable en vivo con un compañero, las educadoras de una sala, el personal de su centro o sus responsables. La app de Android escucha siempre y reproduce en voz alta; en un navegador las oye mientras una pestaña de KiddieTrac esté abierta. Respuesta de ocupado, No molestar, un canal de emergencia que siempre suena y un historial para volver a escuchar. En Operaciones (o su menú).",
+            "title_hi": "स्टाफ़ के लिए वॉकी-टॉकी",
+            "body_hi": "बटन दबाए रखें और किसी सहकर्मी, किसी कमरे के शिक्षकों, अपने केंद्र के स्टाफ़ या उसके लीडरों से सीधे बात करें। Android ऐप हर समय सुनता है और बातें ज़ोर से चलाता है; ब्राउज़र में आप तब सुनते हैं जब KiddieTrac का टैब खुला हो। व्यस्त जवाब, Do not disturb, हमेशा बजने वाला आपातकाल चैनल और दोबारा सुनने के लिए इतिहास। Operations (या आपके मेनू) में मिलेगा।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "🗒️",
             "title": "Publish the rota when it's ready",
             "body": "HR add-on: build the rota as a draft and publish it in one go. Each person gets one notice and can be asked to accept their shifts. Copy last week, a person's week or a day, use shift presets with colours, and see the week against a labour budget. Switch it on in Rota & shifts > Shift tools.",

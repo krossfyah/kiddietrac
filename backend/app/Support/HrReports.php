@@ -425,7 +425,7 @@ final class HrReports
                         $d = substr((string) $e->entry_date, 0, 10);
                         if ($d < $b) $end += (float) $e->amount;
                         if ($d < $a || $d >= $b) continue;
-                        if (in_array($e->kind, ['taken', 'returned'], true)) $taken -= (float) $e->amount;
+                        if (in_array($e->kind, ['taken', 'returned', 'shutdown'], true)) $taken -= (float) $e->amount;   // HR4B9: a closure deduction is leave taken
                         elseif (in_array($e->kind, ['grant', 'accrual', 'overtime'], true)) $earned += (float) $e->amount;
                         else $other += (float) $e->amount;
                     }

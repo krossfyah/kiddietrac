@@ -143,6 +143,8 @@ class HolidaySyncCommand extends Command
                             'updated_at' => now(),
                         ]);
                         $created++;
+                        // HR4B9: leave already booked over this day now counts one day less - flag it for review, never re-deduct.
+                        try { \App\Support\HrLeaveMaths::closureChanged((int) $centre->id, [[$date, $date]], null, 'Statutory holiday added: ' . $name . ' (' . $date . ') at ' . $centre->name); } catch (Throwable $e2) { report($e2); }
                     } catch (Throwable $e) {
                         $this->error(sprintf('  %s %s: %s', $centre->name, $date, $e->getMessage()));
                     }
@@ -165,6 +167,7 @@ class HolidaySyncCommand extends Command
                         }
                         DB::table('centre_closures')->where('id', $e->id)->delete();
                         $pruned++;
+                        try { \App\Support\HrLeaveMaths::closureChanged((int) $centre->id, [[$d, $d]], (int) $e->id, 'Statutory holiday removed: ' . $e->reason . ' (' . $d . ') at ' . $centre->name); } catch (Throwable $e2) { report($e2); }
                     }
                 }
             }

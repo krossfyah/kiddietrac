@@ -129,6 +129,7 @@
     if (window.KTHrPeople && window.KTHrPeople.has(S.tab)) return window.KTHrPeople.draw(S.tab, b);   // HR Phase 4 batch 6 (screen-hr-people.js)
     if (window.KTHrHs && window.KTHrHs.has(S.tab)) return window.KTHrHs.draw(S.tab, b);               // HR Phase 4 batch 7 (screen-hr-hs.js)
     if (window.KTHrRota && window.KTHrRota.has(S.tab)) return window.KTHrRota.draw(S.tab, b);         // HR Phase 4 batch 8 (screen-hr-rota.js)
+    if (window.KTHrLeave && window.KTHrLeave.has(S.tab)) return window.KTHrLeave.draw(S.tab, b);       // HR4B9 closures & checks (screen-hr-leave.js)
     if (window.KTHrTalent) return window.KTHrTalent.draw(S.tab, b);
   }
 
@@ -238,7 +239,7 @@
   }
   function closeModal() { try { var r = document.getElementById('modalRoot'); var x = r && r.querySelector('.modal-close'); if (x) x.click(); } catch (e) {} }
 
-  var KIND = { grant: 'Granted', accrual: 'Earned', carry_forfeit: 'Did not carry over', expiry: 'Expired', adjustment: 'Adjusted', taken: 'Taken', returned: 'Given back', overtime: 'Overtime banked' };
+  var KIND = { grant: 'Granted', accrual: 'Earned', carry_forfeit: 'Did not carry over', expiry: 'Expired', adjustment: 'Adjusted', taken: 'Taken', returned: 'Given back', overtime: 'Overtime banked', shutdown: 'Centre closed' };   // HR4B9 shutdown
   function ledgerHtml(rows) {
     if (!rows.length) return '<span class="hr-sub">No changes yet.</span>';
     return rows.map(function (r) {
@@ -337,7 +338,7 @@
       + (d.people || []).map(function (p) {
         return '<tr><td><b data-no-i18n>' + esc(p.name) + '</b></td>' + types.map(function (t) {
           var c = (p.balances || {})[t.id] || { balance: 0, pending: 0 };
-          return '<td style="white-space:nowrap;' + (c.balance < 0 ? 'color:#B91C1C;font-weight:700;' : '') + '">' + esc(amt(c.balance, t.unit)) + (c.pending ? '<div class="hr-sub">' + esc(amt(c.pending, t.unit)) + ' pending</div>' : '') + '</td>';
+          return '<td style="white-space:nowrap;' + (c.balance < 0 ? 'color:#B91C1C;font-weight:700;' : '') + '">' + esc(amt(c.balance, t.unit)) + (c.pending ? '<div class="hr-sub">' + esc(amt(c.pending, t.unit)) + ' pending, ' + esc(amt(c.balance - c.pending, t.unit)) + ' after</div>' : '')   /* HR4B9 */ + '</td>';
         }).join('') + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-act="adjust" data-id="' + p.id + '">Adjust balance</button><button type="button" data-act="view" data-id="' + p.id + '">View HR profile</button></td></tr>';
       }).join('') + '</tbody></table></div>';
     b.querySelectorAll('[data-act]').forEach(function (x) {

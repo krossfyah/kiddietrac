@@ -323,6 +323,40 @@ final class HrLeave
     /** @var array<string,array> */
     private static array $closedMemo = [];
 
+    /** Forget the closed days worked out so far in this process (HR4B9: a closure was just added, moved or removed). */
+    public static function forgetClosed(): void
+    {
+        self::$closedMemo = [];
+    }
+
+    /**
+     * The centres whose calendar decides a person's days off (closedDays): the request's centre, else the employee file's
+     * primary centre, else every open centre they work at, else (agency-level staff) every open centre. HR4B9 shutdowns
+     * use the same list, so a deduction and a leave request agree on who a closure shuts.
+     *
+     * @return int[]
+     */
+    public static function centresFor(int $agencyId, int $userId, ?int $centreId): array
+    {
+        $open = Live::centreIds($agencyId);
+        $centres = $centreId && in_array($centreId, $open, true) ? [$centreId] : [];
+        if (! $centres && $userId) {
+            $f = self::file($agencyId, $userId);
+            if ($f && $f->primary_centre_id && in_array((int) $f->primary_centre_id, $open, true)) {
+                $centres = [(int) $f->primary_centre_id];
+            }
+        }
+        if (! $centres && $userId) {
+            $centres = DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)->whereIn('role', self::STAFF_ROLES)
+                ->whereIn('centre_id', $open ?: [0])->pluck('centre_id')->map(fn ($c) => (int) $c)->unique()->values()->all();
+        }
+        if (! $centres) {
+            $centres = $open;
+        }
+
+        return $centres;
+    }
+
     /**
      * The days in a range this person's centre is shut for a holiday or closure, from the agency's own centre calendar
      * (centre_closures, where Settings > Closures and the statutory-holiday generator write). The centre is the request's,
@@ -340,21 +374,7 @@ final class HrLeave
         if (isset(self::$closedMemo[$key])) {
             return self::$closedMemo[$key];
         }
-        $open = Live::centreIds($agencyId);
-        $centres = $centreId && in_array($centreId, $open, true) ? [$centreId] : [];
-        if (! $centres && $userId) {
-            $f = self::file($agencyId, $userId);
-            if ($f && $f->primary_centre_id && in_array((int) $f->primary_centre_id, $open, true)) {
-                $centres = [(int) $f->primary_centre_id];
-            }
-        }
-        if (! $centres && $userId) {
-            $centres = DB::table('role_assignments')->where('user_id', $userId)->where('active', 1)->whereIn('role', self::STAFF_ROLES)
-                ->whereIn('centre_id', $open ?: [0])->pluck('centre_id')->map(fn ($c) => (int) $c)->unique()->values()->all();
-        }
-        if (! $centres) {
-            $centres = $open;
-        }
+        $centres = self::centresFor($agencyId, $userId, $centreId);
         if (! $centres) {
             return self::$closedMemo[$key] = [];
         }
@@ -434,7 +454,7 @@ final class HrLeave
      * Make the ledger agree with a request: approved = minus its amount, anything else = nothing. Writes only the
      * difference (a "taken" or a "returned" row), so it can be called after every change and never double-counts.
      */
-    public static function syncRequest(object $row, ?int $actorId = null): void
+    public static function syncRequest(object $row, ?int $actorId = null, ?string $reason = null): void
     {
         if (! self::on((int) $row->agency_id)) {
             return;
@@ -456,7 +476,7 @@ final class HrLeave
                 'agency_id' => (int) $row->agency_id, 'user_id' => (int) $row->user_id, 'leave_type_id' => (int) $tid,
                 'entry_date' => $today, 'amount' => $diff, 'kind' => $diff < 0 ? 'taken' : 'returned',
                 'time_off_request_id' => (int) $row->id,
-                'reason' => ($diff < 0 ? 'Time off approved' : ($row->status === 'cancelled' ? 'Time off withdrawn' : 'Time off no longer approved')),
+                'reason' => $reason ?? ($diff < 0 ? 'Time off approved' : ($row->status === 'cancelled' ? 'Time off withdrawn' : 'Time off no longer approved')),
                 'created_by_id' => $actorId, 'created_at' => now(),
             ]);
         }
@@ -553,7 +573,7 @@ final class HrLeave
                 $exp = Carbon::parse($ys)->addMonthsNoOverflow((int) $t->carry_expiry_months)->toDateString();
                 if ($today >= $exp) {
                     $used = -(float) DB::table('hr_leave_ledger')->where('user_id', $u->id)->where('leave_type_id', $t->id)
-                        ->where('entry_date', '>=', $ys)->where('entry_date', '<', $exp)->whereIn('kind', ['taken', 'returned'])->sum('amount');
+                        ->where('entry_date', '>=', $ys)->where('entry_date', '<', $exp)->whereIn('kind', ['taken', 'returned', 'shutdown'])->sum('amount');
                     $left = max(0.0, $carried - max(0.0, $used));
                     $left = min($left, max(0.0, self::balance((int) $u->id, (int) $t->id)));
                     $put($exp, -$left, 'expiry', 'expire:' . $ys, 'Carried-over balance expired');
@@ -566,12 +586,21 @@ final class HrLeave
         $years = self::serviceYears($hire, $ys);
         $ent = self::entitlement($t, $etype, $years);
         $label = 'Leave year from ' . Carbon::parse($ys)->format('M j, Y');
+        // HR4B9: part-time pro-rata, for grants not in the ledger yet (null = setting off / full-time: unchanged).
+        $pr = in_array($t->accrual, ['lump', 'pay_period'], true) && $ent ? HrLeaveMaths::proRata($agencyId, $file, $t) : null;
         if ($t->accrual === 'lump' && $ent) {
             [$amt, $pro] = self::grantAmount($t, $etype, $hire, $ys);
+            if ($amt && $pr) {
+                $step = ($t->unit ?? 'days') === 'hours' ? 0.25 : 0.5;
+                $amt = round(($amt * $pr[0]) / $step) * $step;
+            }
             if ($amt) {
-                $put(max($ys, $hire ?: $ys), $amt, 'grant', 'grant:' . $ys, $label . ($pro ? ' (prorated from the start date)' : ''));
+                $put(max($ys, $hire ?: $ys), $amt, 'grant', 'grant:' . $ys, $label . ($pro ? ' (prorated from the start date)' : '') . ($pr ? ' (' . $pr[1] . ')' : ''));
             }
         } elseif ($t->accrual === 'pay_period' && $ent && in_array((int) $t->periods_per_year, self::PERIODS, true)) {
+            if ($pr) {
+                $ent *= $pr[0];
+            }
             $N = (int) $t->periods_per_year;
             for ($k = 0; $k < $N; $k++) {
                 $p = self::periodStart($ys, $N, $k);
