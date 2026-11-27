@@ -977,7 +977,7 @@
           <label style="font-size:13px;color:#374151;">To <input id="pr-to" type="date" style="display:block;margin-top:4px;padding:8px;border:1px solid #E5E7EB;border-radius:4px;"></label>
           <button id="pr-run" style="background:#1F6080;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">Run</button>
           <button id="pr-csv" style="background:#059669;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">⤓ CSV</button>
-          <button id="pr-manual" style="background:#7C3AED;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">＋ Generate payroll</button>
+          <button id="pr-manual" style="display:none;background:#7C3AED;color:#fff;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;">＋ Generate payroll</button>
         </div>
         <div id="pr-quick" style="display:flex;gap:6px;flex-wrap:wrap;margin:-8px 0 16px;"></div>
         <div id="pr-result"></div>
@@ -1039,7 +1039,13 @@
       quickHost.appendChild(quickBtn('Last month', iso(new Date(n.getFullYear(), n.getMonth() - 1, 1)), iso(new Date(n.getFullYear(), n.getMonth(), 0))));
     };
     paintQuick(null);
-    Api.get('/admin/payroll/periods').then(r => paintQuick(r && r.quick)).catch(() => {});
+    /* "+ Generate payroll" shows only for people the payroll route lets in (2026-11-27): the server answers from the
+       route's own permission (RouteAccess), so a director never meets a button that can only say "Forbidden". */
+    Api.get('/admin/payroll/periods').then(r => {
+      paintQuick(r && r.quick);
+      const mb = document.getElementById('pr-manual');
+      if (mb) mb.style.display = (r && r.can && r.can.generate) ? '' : 'none';
+    }).catch(() => {});
     let startView = 'hours';
     try { if (sessionStorage.getItem('kt_payroll_view') === 'periods') startView = 'periods'; } catch (e) {}
     if (startView === 'periods') setTimeout(() => setMode('periods'), 0);

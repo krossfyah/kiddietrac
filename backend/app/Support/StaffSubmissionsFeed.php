@@ -258,7 +258,7 @@ final class StaffSubmissionsFeed
                 $q = $who(DB::table('hr_injuries as ij')->whereColumn('ij.reported_by_id', 'ij.user_id'), 'ij.user_id');
                 $byPerson($q, 'ij.agency_id', 'ij.user_id');
                 foreach ($q->orderByDesc('ij.created_at')->limit(12)->get(array_merge($sel, ['ij.id', 'ij.user_id', 'ij.kind', 'ij.created_at'])) as $r) {
-                    $push('hr_injury', "\u{1FA79}", $first($r) . ($r->kind === 'near_miss' ? ' reported a near miss' : ' reported a workplace injury'), $r->created_at, '#hr?tab=injuries&injury=' . $r->id, $r->photo_url);
+                    $push('hr_injury', "\u{1FA79}", $first($r) . ($r->kind === 'near_miss' ? ' reported a near miss' : ' reported a workplace injury'), $r->created_at, '#hr-safety?tab=injuries&injury=' . $r->id, $r->photo_url);
                 }
             }
             // A shift giveaway / swap a colleague has accepted, waiting for a director (HR Phase 3, item 10).

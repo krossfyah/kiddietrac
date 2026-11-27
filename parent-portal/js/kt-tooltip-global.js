@@ -88,6 +88,8 @@
     ownBubble(t);    // no component ::after bubble beside ours
     anchor = t;
     var b = el();
+    // In the reader's language at once (kt-i18n, with the element's data-i18n-ctx), not on the next sweep.
+    try { if (window.KT && KT.i18n && KT.i18n.t) { var cx = t.closest && t.closest('[data-i18n-ctx]'); txt = KT.i18n.t(txt, cx ? cx.getAttribute('data-i18n-ctx') : ''); } } catch (e) {}
     b.textContent = txt;
     // Measure off-screen, then place above (flip below if it wouldn't fit).
     b.style.opacity = '0';

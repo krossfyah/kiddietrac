@@ -259,28 +259,73 @@ final class ComplianceController extends Controller
     // =========================================================
     // Cert renewals (extends background_checks for cert types)
     // =========================================================
+    /**
+     * GET /compliance/expiry-calendar - the Renewals calendar (2026-11-27 rewrite).
+     *
+     * Background checks AND staff certificates (CPR, first aid...) that expire within ?within_days (default 180), or
+     * already have. Only the newest record of each type per person counts: a renewed certificate retires the old one.
+     *
+     * Scope (P0, kiddietrac-data-leakage-rule): the active agency; a centre director only the staff placed at their
+     * own centres (CentreScope); everyone else 403. Only staff still with us (Live::staffIds): a deactivated,
+     * suspended or departed person, or one whose only centre closed, is not on a current renewals list.
+     */
     public function expiryCalendar(Request $request): JsonResponse
     {
         $agencyId = $this->resolveAgencyId($request);
-        $days = (int) $request->query('within_days', 180);
-        $cutoff = Carbon::now()->addDays($days);
-        // background_checks is the unified source (no certifications table on this DB).
-        $certs = collect();
-        $bgcs = DB::table('background_checks as bc')
-            ->join('users as u', 'u.id', '=', 'bc.user_id')
-            ->where('bc.agency_id', $agencyId)
-            ->where('bc.expires_at', '<=', $cutoff)
-            ->select('bc.id', DB::raw("'background_check' as source"), 'bc.check_type as type', 'bc.expires_at',
-                DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name"), 'u.email as user_email')
-            ->get();
-        $all = $bgcs->sortBy('expires_at')->values();
-        $all->transform(function ($r) {
-            $exp = Carbon::parse($r->expires_at);
-            $r->days_until = (int) $exp->diffInDays(Carbon::now(), false) * ($exp->isPast() ? -1 : 1);
-            $r->bucket = $exp->isPast() ? 'expired' : ($r->days_until <= 30 ? 'soon' : ($r->days_until <= 90 ? 'upcoming' : 'future'));
-            return $r;
-        });
-        return response()->json(['data' => $all, 'within_days' => $days]);
+        if (! array_intersect(\App\Support\AgencyRole::names($request), ['platform_admin', 'agency_admin', 'centre_director'])) {
+            return response()->json(['message' => 'Only directors and agency admins can see the renewals calendar.'], 403);
+        }
+        $people = \App\Support\Live::staffIds($agencyId, \App\Support\CentreScope::ids($request, $agencyId));
+        $days = max(1, min(730, (int) $request->query('within_days', 180)));
+        $today = \App\Support\AgencyTime::todayDate($agencyId)->startOfDay();
+        $cutoff = $today->copy()->addDays($days)->toDateString();
+        if (! $people) {
+            return response()->json(['data' => [], 'within_days' => $days]);
+        }
+
+        $rows = [];
+        // Newest record per (person, type) only - an older one that a renewal replaced is not "due".
+        $latest = function ($list, string $source) use (&$rows, $agencyId) {
+            $best = [];
+            foreach ($list as $r) {
+                $k = $r->user_id . '|' . strtolower((string) $r->type);
+                $exp = $r->expires_at ? substr((string) $r->expires_at, 0, 10) : '9999-12-31';
+                if (! isset($best[$k]) || $exp > $best[$k][0] || ($exp === $best[$k][0] && $r->id > $best[$k][1]->id)) {
+                    $best[$k] = [$exp, $r];
+                }
+            }
+            foreach ($best as [$exp, $r]) {
+                $r->source = $source;
+                $r->type_label = \App\Support\Jurisdictions::label($agencyId, $source === 'certificate' ? 'certifications' : 'background_checks', (string) $r->type);
+                $rows[] = $r;
+            }
+        };
+        $latest(DB::table('background_checks as bc')->join('users as u', 'u.id', '=', 'bc.user_id')
+            ->where('bc.agency_id', $agencyId)->whereIn('bc.user_id', $people)
+            ->get(['bc.id', 'bc.user_id', 'bc.check_type as type', 'bc.expires_at',
+                DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name")]), 'background_check');
+        $latest(DB::table('staff_certifications as sc')->join('users as u', 'u.id', '=', 'sc.user_id')
+            ->where('sc.active', 1)->whereIn('sc.user_id', $people)
+            ->where(fn ($w) => $w->whereNull('sc.agency_id')->orWhere('sc.agency_id', $agencyId))
+            ->get(['sc.id', 'sc.user_id', 'sc.cert_type as type', 'sc.expires_at',
+                DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name")]), 'certificate');
+
+        $out = [];
+        foreach ($rows as $r) {
+            if (! $r->expires_at || substr((string) $r->expires_at, 0, 10) > $cutoff) {
+                continue;   // never expires, or not yet inside the window
+            }
+            $d = (int) $today->diffInDays(Carbon::parse(substr((string) $r->expires_at, 0, 10))->startOfDay(), false);
+            $out[] = [
+                'id' => (int) $r->id, 'source' => $r->source, 'type' => (string) $r->type, 'type_label' => $r->type_label,
+                'user_id' => (int) $r->user_id, 'user_name' => trim((string) $r->user_name),
+                'expires_at' => substr((string) $r->expires_at, 0, 10), 'days_until' => $d,
+                'bucket' => $d < 0 ? 'expired' : ($d <= 30 ? 'soon' : ($d <= 90 ? 'upcoming' : 'future')),
+            ];
+        }
+        usort($out, fn ($a, $b) => [$a['expires_at'], $a['user_name']] <=> [$b['expires_at'], $b['user_name']]);
+
+        return response()->json(['data' => $out, 'within_days' => $days]);
     }
 
     private function resolveAgencyId(Request $request): int

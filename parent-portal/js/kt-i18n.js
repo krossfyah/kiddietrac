@@ -54,13 +54,31 @@
     return DICT[words] || CI[String(words).toLowerCase()] || null;
   }
 
+  /* CONTEXT KEYS (2026-11-27). One short English label can mean different things: "Check in" on an HR goal is a
+     progress check, not a clock-in; "Complete" on a button is "finish", not the adjective; "Start" on a button is
+     "begin", not "the start". Mark the element (or any ancestor) with data-i18n-ctx="<ctx>" and write the entry as
+     '<ctx>::<English>' in kt-i18n-base.js. The context entry wins for that element only; everywhere else the shared
+     entry is untouched. A context with no entry for the language falls back to the shared one. In code:
+     KT.i18n.t('Start', 'hr-onboarding'); on a popup button: { label: 'Start', ctx: 'hr-onboarding' }. */
+  function lookupIn(words, ctx, loc) {
+    if (ctx) {
+      var c = lookup(ctx + '::' + words);
+      if (c && c[loc]) return c;
+    }
+    return lookup(words);
+  }
+  function ctxOf(el) {
+    var c = el && el.closest ? el.closest('[data-i18n-ctx]') : null;
+    return c ? c.getAttribute('data-i18n-ctx') : '';
+  }
+
   /* TRANSLATION PACKS (2026-11-05, Anthony: "update help and guides and portal with translations to all
      language types that we support - full sweep"). The ~12,000 strings that sweep added live in one file per
      language, js/kt-i18n-pack-<lang>.js = KT_I18N_PACK('<lang>', { English: translation, ... }), fetched only
      while that language is on, so an English session downloads nothing extra. A pack fills gaps only: an
      entry written in DICT above always wins. New UI text can still go straight into DICT. */
   var PACK_V = '20261126brc';
-  var BASE_V = '20261127pgh1';   // + Help reader: On this page, More on this page (2026-11-27). Was 20261127rsnd1: + Campaigns: Resend to bounced (2026-11-27). Was 20261127hr4b10: + HR Phase 4 batch 10: quick requests, My HR to-do, starter paths, help filters (2026-11-27). Was 20261127hrdash: + HR dashboard insights (2026-11-27). Was 20261127hr4b9: + HR Phase 4 batch 9: closures taken from leave, leave to review, pro-rata (2026-11-27). Was 20261127hr4b8: + HR Phase 4 batch 8: rota publish, shift tools, clock-in fixes (2026-11-27). Was 20261127gjobs: + HR settings Google Jobs (2026-11-27). Was 20261127orgpdf2:   // + HR org chart labels (2026-11-27). Was 20261127orgpdf: + HR org chart diagram + print (2026-11-27). Was 20261127formsre: + Forms reusable column + one-time tag (2026-11-27). Was 20261127hr4b7: + HR Phase 4 batch 7: health & safety (2026-11-27). Was 20261127hr4b6: + HR Phase 4 batch 6: quizzes, directory, kudos, approvers (2026-11-27). Was 20261127fam5: + Campaigns: Recipients & stats (2026-11-27). Was 20261127hrnav: + HR nav restructure: Human Resources entries, tabs, My HR tiles (2026-11-27). Was 20261127fam2: + Marketing > Campaigns: {first_name} field, ⋮ View popup (2026-11-27). Was 20261127hr4b5: + HR Phase 4 batch 5: HR dashboard + reports (2026-11-27). Was 20261127hr4b4: + HR Phase 4 batch 4: document vault, sick notes, pay history, leaving pack (2026-11-27). Was 20261127hr4b3b: + HR Phase 4 batch 3: open shifts + shift notices (2026-11-27). Was 20261127hr4b2: + HR Phase 4 batch 2: overtime + time in lieu, timesheet approve and lock (2026-11-27). Was 20261127hr4b1: + HR Phase 4 batch 1: lateness, absence score, leave clashes (2026-11-27). Was 20261126hr3ot: + HR overtime with scheduled shifts (2026-11-26). Was 20261126hr3i12: + HR item 12 letter templates (2026-11-26). Was 20261126hr3i11: + HR item 11 clock-in rules (2026-11-26). Was 20261126hr3i10b: + HR item 10 rota (2026-11-26). Was 20261126hr3i10: + HR item 10 rota (2026-11-26). Was 20261126hr3c9: + Fire plan notices (2026-11-28). Was 20261126esc1:   // + Escalated daily records: who gets them (2026-11-26). Was 20261126hr3b: + Fire plan (2026-11-28). Was 20261129hr3a: + HR Phase 3 staff injuries (2026-11-26). Was 20261128noshow1:   // + sales meeting no-shows (mark no-show/held, ask for a new time) (2026-11-26)
+  var BASE_V = '20261127hrfix';   // + HR screens sweep, context keys (2026-11-27). Was 20261127pgh1:   // + Help reader: On this page, More on this page (2026-11-27). Was 20261127rsnd1: + Campaigns: Resend to bounced (2026-11-27). Was 20261127hr4b10: + HR Phase 4 batch 10: quick requests, My HR to-do, starter paths, help filters (2026-11-27). Was 20261127hrdash: + HR dashboard insights (2026-11-27). Was 20261127hr4b9: + HR Phase 4 batch 9: closures taken from leave, leave to review, pro-rata (2026-11-27). Was 20261127hr4b8: + HR Phase 4 batch 8: rota publish, shift tools, clock-in fixes (2026-11-27). Was 20261127gjobs: + HR settings Google Jobs (2026-11-27). Was 20261127orgpdf2:   // + HR org chart labels (2026-11-27). Was 20261127orgpdf: + HR org chart diagram + print (2026-11-27). Was 20261127formsre: + Forms reusable column + one-time tag (2026-11-27). Was 20261127hr4b7: + HR Phase 4 batch 7: health & safety (2026-11-27). Was 20261127hr4b6: + HR Phase 4 batch 6: quizzes, directory, kudos, approvers (2026-11-27). Was 20261127fam5: + Campaigns: Recipients & stats (2026-11-27). Was 20261127hrnav: + HR nav restructure: Human Resources entries, tabs, My HR tiles (2026-11-27). Was 20261127fam2: + Marketing > Campaigns: {first_name} field, ⋮ View popup (2026-11-27). Was 20261127hr4b5: + HR Phase 4 batch 5: HR dashboard + reports (2026-11-27). Was 20261127hr4b4: + HR Phase 4 batch 4: document vault, sick notes, pay history, leaving pack (2026-11-27). Was 20261127hr4b3b: + HR Phase 4 batch 3: open shifts + shift notices (2026-11-27). Was 20261127hr4b2: + HR Phase 4 batch 2: overtime + time in lieu, timesheet approve and lock (2026-11-27). Was 20261127hr4b1: + HR Phase 4 batch 1: lateness, absence score, leave clashes (2026-11-27). Was 20261126hr3ot: + HR overtime with scheduled shifts (2026-11-26). Was 20261126hr3i12: + HR item 12 letter templates (2026-11-26). Was 20261126hr3i11: + HR item 11 clock-in rules (2026-11-26). Was 20261126hr3i10b: + HR item 10 rota (2026-11-26). Was 20261126hr3i10: + HR item 10 rota (2026-11-26). Was 20261126hr3c9: + Fire plan notices (2026-11-28). Was 20261126esc1:   // + Escalated daily records: who gets them (2026-11-26). Was 20261126hr3b: + Fire plan (2026-11-28). Was 20261129hr3a: + HR Phase 3 staff injuries (2026-11-26). Was 20261128noshow1:   // + sales meeting no-shows (mark no-show/held, ask for a new time) (2026-11-26)
   var packAsked = {};
   var baseState = 0, afterBase = [];   // 0 not asked, 1 on its way, 2 in
   window.KT_I18N_BASE = function (map) {
@@ -120,6 +138,12 @@
 
   // Number-glued templates. § marks a number run; numbers are reinserted positionally.
   var PATTERNS = {
+    // Renewals calendar + HR quick panel (2026-11-27)
+    '§ days ago': { fr: 'il y a § jours', es: 'hace § días', hi: '§ दिन पहले' },
+    '§ day ago': { fr: 'il y a § jour', es: 'hace § día', hi: '§ दिन पहले' },
+    '§ days left': { fr: '§ jours restants', es: 'quedan § días', hi: '§ दिन बाकी' },
+    '§ day left': { fr: '§ jour restant', es: 'queda § día', hi: '§ दिन बाकी' },
+    'Show all §': { fr: 'Tout afficher (§)', es: 'Mostrar todo (§)', hi: 'सभी § दिखाएँ' },
     // 2026-11-03 educator figures say what they count
     '§ in · § picked up · § not in yet': { fr: '§ présents · § partis · § pas encore arrivés', es: '§ dentro · § recogidos · § aún sin llegar', hi: '§ अंदर · § ले जाए गए · § अभी नहीं आए' },
     '§ in · § picked up · § not in': { fr: '§ présents · § partis · § absents', es: '§ dentro · § recogidos · § no vinieron', hi: '§ अंदर · § ले जाए गए · § नहीं आए' },
@@ -322,15 +346,15 @@
   }
 
   // Every strategy, in order. null when nothing knows the string.
-  function translateAny(text, loc) {
-    var out = translate(text, loc);
+  function translateAny(text, loc, ctx) {
+    var out = translate(text, loc, ctx);
     if (out === null) out = translatePattern(text, loc);
     if (out === null) out = translateNamed(text, loc);
     if (out === null) out = translateComposite(text, loc);
     return out;
   }
 
-  function translate(text, loc) {
+  function translate(text, loc, ctx) {
     var raw = String(text);
     var trimmed = raw.trim();
     if (!trimmed) return null;
@@ -341,7 +365,7 @@
     //    ("happy 😊", "Mood: —") wins before we start stripping symbols, otherwise the
     //    stripped symbol would be re-added on top and we'd get "feliz 😊 😊".
     var norm = trimmed.replace(/\s+/g, ' ');
-    var whole = lookup(trimmed) || (norm !== trimmed ? lookup(norm) : null);
+    var whole = lookupIn(trimmed, ctx, loc) || (norm !== trimmed ? lookupIn(norm, ctx, loc) : null);
     if (whole && whole[loc]) return lead + whole[loc] + tail;
 
     // 2) Otherwise strip a LEADING symbol run (emoji: "📢 Announcements") and a TRAILING
@@ -354,8 +378,8 @@
     var tm = /^([\s\S]*[\p{L}\p{N}])([^\p{L}\p{N}]*)$/u.exec(core);
     if (tm) { core = tm[1]; suffix = tm[2]; }
 
-    var hit = lookup(core);
-    if (!hit) { var cn = core.replace(/\s+/g, ' '); if (cn !== core) hit = lookup(cn); }
+    var hit = lookupIn(core, ctx, loc);
+    if (!hit) { var cn = core.replace(/\s+/g, ' '); if (cn !== core) hit = lookupIn(cn, ctx, loc); }
     if (!hit || !hit[loc]) return null;
 
     return lead + prefix + hit[loc] + suffix + tail;
@@ -378,7 +402,7 @@
     var n, hits = [];
     while ((n = it.nextNode())) hits.push(n);
     for (var i = 0; i < hits.length; i++) {
-      var out = translateAny(hits[i].nodeValue, loc);
+      var out = translateAny(hits[i].nodeValue, loc, ctxOf(hits[i].parentNode));
       done.add(hits[i]);                    // mark either way: never reconsider this node
       if (out !== null && out !== hits[i].nodeValue) hits[i].nodeValue = out;
     }
@@ -392,7 +416,7 @@
       ['placeholder', 'title', 'aria-label'].forEach(function (a) {
         var v = el.getAttribute(a);
         if (!v) return;
-        var t = translateAny(v, loc);
+        var t = translateAny(v, loc, ctxOf(el));
         if (t !== null && t !== v) el.setAttribute(a, t);
       });
     }
@@ -540,7 +564,7 @@
     apply: apply,
     locale: locale,
     locales: LOCALES,
-    t: function (s) { var out = translateAny(s, locale()); return out === null ? s : out; },
+    t: function (s, ctx) { var out = translateAny(s, locale(), ctx || ''); return out === null ? s : out; },
     packVersion: PACK_V,
     dict: DICT
   };

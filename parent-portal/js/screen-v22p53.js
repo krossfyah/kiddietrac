@@ -1820,22 +1820,43 @@
     return ({ min_days: 'Min. days', pct: '%', min_obs: 'Min. observations', prior: 'Prior observations', min_prior_days: 'Min. prior days', hours: 'Hours' })[p] || p;
   }
 
-  // ============================ Cert expiry calendar ============================
+  // ============================ Renewals calendar ============================
+  /* 2026-11-27: background checks AND staff certificates (CPR, first aid...), named the way people read them, scoped
+     by the server (a director sees their own centres' staff only; people who have left are not listed). A failed load
+     says so with Try again - it never sits on "Loading…". */
   async function renderExpiryCalendar(main) {
     main.innerHTML = '<div style="padding:24px;">Loading…</div>';
-    const r = await Api.get('/compliance/expiry-calendar?within_days=180');
+    let r;
+    try {
+      r = await Api.get('/compliance/expiry-calendar?within_days=180');
+    } catch (e) {
+      main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
+        <h2 style="margin:0 0 6px;color:#1F6080;">Renewals calendar</h2>
+        <div role="alert" style="margin-top:14px;padding:16px;border:1px solid #FECACA;background:#FEF2F2;border-radius:10px;color:#7F1D1D;font-size:14px;">
+          <strong>The renewals calendar didn’t load.</strong>
+          <div style="margin-top:4px;color:#991B1B;font-size:13px;">${esc((e && e.message) || 'Check your connection, then try again.')}</div>
+          <button type="button" id="rn-retry" class="kt-btn" style="margin-top:12px;">Try again</button>
+        </div></div>`;
+      const b = main.querySelector('#rn-retry');
+      if (b) b.onclick = () => renderExpiryCalendar(main);
+      return;
+    }
     const groups = { expired: [], soon: [], upcoming: [], future: [] };
-    (r.data || []).forEach(row => groups[row.bucket].push(row));
+    ((r && r.data) || []).forEach(row => { (groups[row.bucket] || groups.future).push(row); });
+    const SOURCE = { certificate: 'Certificate', background_check: 'Background check' };
+    const th = 'text-align:left;padding:9px 12px;border-bottom:2px solid #E5E7EB;font-size:11px;color:#6B7280;';
+    const td = 'padding:9px 12px;border-bottom:1px solid #F3F4F6;font-size:13px;';
     main.innerHTML = `<div style="padding:24px;max-width:1800px;margin:0 auto;">
-      <h2 style="margin:0 0 6px;color:#1F6080;">Renewal calendar</h2>
-      <p style="color:#6B7280;font-size:14px;">Certifications + background checks. Combines all sources into a single timeline.</p>
+      <h2 style="margin:0 0 6px;color:#1F6080;">Renewals calendar</h2>
+      <p style="color:#6B7280;font-size:14px;margin:0;">Background checks and staff certificates (CPR, first aid and more) that expire in the next 6 months, or already have.</p>
       ${['expired', 'soon', 'upcoming', 'future'].map(b => {
         const titles = { expired: '⛔ Expired', soon: '⚠ Next 30 days', upcoming: 'Next 90 days', future: 'Later' };
         const colors = { expired: '#FEE2E2', soon: '#FEF3C7', upcoming: '#EFF6FF', future: '#F9FAFB' };
-        return `<h3 style="margin-top:22px;font-size:15px;">${titles[b]} (${groups[b].length})</h3>
-          ${groups[b].length ? `<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:9px 12px;border-bottom:2px solid #E5E7EB;font-size:11px;color:#6B7280;">Name / certification</th><th style="text-align:left;padding:9px 12px;border-bottom:2px solid #E5E7EB;font-size:11px;color:#6B7280;">Expires</th></tr></thead><tbody>${groups[b].map(r => `<tr style="background:${colors[b]};">
-            <td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;font-size:13px;width:60%;"><strong>${esc(r.user_name)}</strong> · ${esc(r.type)} <span style="color:#6B7280;font-size:11px;">(${esc(r.source)})</span></td>
-            <td style="padding:9px 12px;border-bottom:1px solid #F3F4F6;font-size:13px;">${fmtDate(r.expires_at)} <span style="color:#6B7280;font-size:11px;">(${Math.abs(r.days_until)}d ${r.days_until < 0 ? 'ago' : 'left'})</span></td>
+        return `<h3 style="margin-top:22px;font-size:15px;"><span>${titles[b]}</span> <span>(${groups[b].length})</span></h3>
+          ${groups[b].length ? `<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="${th}">Staff member</th><th style="${th}">What</th><th style="${th}">Expires</th></tr></thead><tbody>${groups[b].map(row => `<tr style="background:${colors[b]};">
+            <td style="${td}"><strong>${esc(row.user_name)}</strong></td>
+            <td style="${td}">${esc(row.type_label || row.type)} <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#fff;border:1px solid #CBD5E1;color:#475569;font-size:11px;font-weight:700;">${SOURCE[row.source] || ''}</span></td>
+            <td style="${td}white-space:nowrap;">${fmtDate(row.expires_at)} <span style="color:#6B7280;font-size:11px;">${row.days_until < 0 ? `${Math.abs(row.days_until)} day${row.days_until === -1 ? '' : 's'} ago` : (row.days_until === 0 ? 'Today' : `${row.days_until} day${row.days_until === 1 ? '' : 's'} left`)}</span></td>
           </tr>`).join('')}</tbody></table>` : '<div style="color:#64748B;padding:8px;font-size:13px;">None.</div>'}`;
       }).join('')}
     </div>`;

@@ -407,6 +407,8 @@ final class PayrollController extends Controller
             'data' => $rows->values(),
             'years' => $years,
             'quick' => $this->quickPeriods($agencyId, $quickDocs),
+            // What this person may do from the screen, from the routes' own permissions (RouteAccess, 2026-11-27).
+            'can' => ['generate' => \App\Support\RouteAccess::allows($request, 'POST', 'api/v1/admin/payroll/manual')],
             'totals' => [
                 'gross' => round((float) $rows->sum('gross'), 2),
                 'deductions' => round((float) $rows->sum('deductions'), 2),

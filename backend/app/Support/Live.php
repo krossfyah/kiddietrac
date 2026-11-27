@@ -108,6 +108,48 @@ final class Live
         return $centreId ? self::centres(DB::table('centres'))->where('id', $centreId)->exists() : false;
     }
 
+    /** Roles that make someone STAFF of an agency (a guardian row is never staff). */
+    public const STAFF_ROLES = ['agency_admin', 'auditor', 'centre_director', 'educator', 'home_visitor', 'cook', 'staff'];
+
+    /**
+     * STAFF STILL WITH US (2026-11-27, Renewals calendar listed deactivated staff and other centres' staff).
+     *
+     * The people who work for this agency TODAY: an active staff role row in it (agency-level, or placed at one of
+     * its OPEN centres), an account that is not deleted, deactivated or suspended, not a service account, and no HR
+     * file saying they have left. "Live" for a person is stored in several flags (users.deleted_at/status,
+     * role_assignments.active, the centre's own state, hr_employee_files.status) - any reader that trusts one leaks.
+     *
+     * $centreIds = a centre-scoped caller's centres (CentreScope::ids): only people placed at THOSE centres; an
+     * agency-level row (an agency admin) does not count, so a director never sees the rest of the agency. null =
+     * agency-wide. Fails closed: [] means nobody.
+     *
+     * @param  int[]|null $centreIds
+     * @return int[]
+     */
+    public static function staffIds(int $agencyId, ?array $centreIds = null): array
+    {
+        $open = self::centreIds($agencyId);
+        if ($centreIds !== null) {
+            $open = array_values(array_intersect($open, array_map('intval', $centreIds)));
+            if (! $open) {
+                return [];
+            }
+        }
+        $q = DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+            ->where('ra.active', 1)->whereIn('ra.role', self::STAFF_ROLES)->whereNull('u.deleted_at')
+            ->where(function ($w) use ($agencyId, $open, $centreIds) {
+                $w->whereIn('ra.centre_id', $open ?: [0]);
+                if ($centreIds === null) {
+                    $w->orWhere(fn ($x) => $x->whereNull('ra.centre_id')->where('ra.agency_id', $agencyId));
+                }
+            })
+            ->whereNotExists(fn ($x) => $x->from('hr_employee_files as hef')->whereColumn('hef.user_id', 'u.id')
+                ->where('hef.agency_id', $agencyId)->where('hef.status', 'terminated'));
+        Audience::excludeService(Audience::excludeOff($q, 'u'), 'u');
+
+        return $q->distinct()->pluck('u.id')->map(fn ($v) => (int) $v)->values()->all();
+    }
+
     /** Keep only the open centres out of a list of ids (order kept). */
     public static function onlyOpenCentres(array $ids): array
     {

@@ -30,6 +30,15 @@ final class LeakGuard
     /** A marker. 10 hex chars after the agency, unguessable and never a real word. */
     public const MARKER_RE = '/KTCANARY-(\d+)-[0-9a-f]{10}/';
 
+    /**
+     * THE CENTRE-SCOPE MARKER (2026-11-27). The Renewals calendar showed a centre director every centre's background
+     * checks; the probe never saw it because it only looked for ANOTHER AGENCY's marker. Each canary agency now has a
+     * second, sibling canary centre whose staff member carries KTCANARYC-<agency>-<hex> (same hex as the agency
+     * marker). A centre-scoped person (director) of that agency must never receive it: it is a person at a centre
+     * that is not theirs. An agency admin seeing it is fine (and is the positive control).
+     */
+    public const CENTRE_MARKER_RE = '/KTCANARYC-(\d+)-[0-9a-f]{10}/';
+
     public const EMAIL_DOMAIN = 'leakguard.invalid';
 
     public const TICKET_SUBJECT = 'Leak guard: cross-agency data found (P0)';
@@ -58,6 +67,12 @@ final class LeakGuard
     public static function marker(int $agencyId): ?string
     {
         return DB::table('leak_canaries')->where('agency_id', $agencyId)->value('marker');
+    }
+
+    /** KTCANARYC-<agency>-<hex>: the sibling centre's marker (see CENTRE_MARKER_RE). */
+    public static function centreMarker(string $marker): string
+    {
+        return preg_replace('/^KTCANARY-/', 'KTCANARYC-', $marker);
     }
 
     /**

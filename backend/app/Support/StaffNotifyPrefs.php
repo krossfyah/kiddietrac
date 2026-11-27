@@ -69,6 +69,9 @@ final class StaffNotifyPrefs
         // Fire plans (2026-11-28, App\Support\FirePlans + fire-plans:remind): your plan approved or sent back, and the yearly review.
         'staff_fire_plans' => ['Fire plans', 'When a fire plan you wrote is approved or sent back for changes, and when a fire plan you wrote or oversee is due for its yearly review.',
             ['fire_plan'], ['push', 'email'], ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'platform_admin']],
+        // KiddieTrac HR (2026-11-27, HrInjuries::notifyReported): a staff injury or near miss was reported at your centres.
+        'staff_injuries' => ['Staff injuries', 'When a staff member reports a workplace injury or a near miss at your centres (KiddieTrac HR). Health details are never in the notice.',
+            ['hr_injury'], ['push', 'email'], self::MGMT],
         // Feed only (StaffSubmissionsFeed, 2026-11-26): no bell type of its own; the switch hides these items from the bell.
         'staff_submissions' => ['Staff submissions', 'In the bell: drills, hazards, medication doses, field trips, report cards sent for approval, shared notes, signed forms, policies acknowledged, certificates uploaded and HR tasks your team completes.',
             [], ['push'], self::MGMT],

@@ -230,6 +230,41 @@ final class KtLeakCanary extends Command
                 'agency_id' => $agencyId, 'user_id' => $educator, 'job_title' => 'Canary ' . $marker, 'employment_type' => 'full_time',
                 'status' => 'active', 'primary_centre_id' => $centre, 'updated_by_id' => $admin, 'created_at' => $now, 'updated_at' => $now,
             ]));
+
+            /* STAFF RECORDS + THE SIBLING CENTRE (2026-11-27, the Renewals calendar leak). A background check and a
+               certificate for the canary educator (cross-agency coverage of the staff-record screens), and a second
+               canary centre with one educator whose name carries the CENTRE marker (LeakGuard::centreMarker) and who has
+               the same two records. The canary director is placed at the first centre only, so anything of the sibling
+               reaching them is a centre-scope leak (kt:leak-probe). */
+            $sib = $get('centre_sibling', 'centres', fn () => \App\Support\CentreCap::allows($agencyId) ? DB::table('centres')->insertGetId([
+                'agency_id' => $agencyId, 'name' => 'Leak Guard canary - sibling centre (internal) ' . $marker,
+                'slug' => 'leakguard-canary-sib-' . $agencyId . '-' . Str::lower(Str::random(6)), 'status' => 'active',
+                'city' => 'Canary', 'created_at' => $now, 'updated_at' => $now,
+            ]) : throw new \RuntimeException("agency {$agencyId} is at its licence centre cap (CentreCap) - the sibling canary centre needs room for one more"));
+            $sibEdu = $get('user:sibling_educator', 'users', fn () => DB::table('users')->insertGetId([
+                'email' => 'canary-sibling-educator-a' . $agencyId . '@' . LeakGuard::EMAIL_DOMAIN,
+                'password' => Hash::make(bin2hex(random_bytes(32))),
+                'first_name' => 'Canary', 'last_name' => 'Sibling educator ' . LeakGuard::centreMarker($marker),
+                'status' => 'active', 'onboarded_at' => $now, 'password_changed_at' => $now, 'must_change_password' => 0,
+                'two_factor_enabled' => 1, 'last_agency_id' => $agencyId, 'sms_opt_in' => 0, 'voice_opt_out' => 1,
+                'created_at' => $now, 'updated_at' => $now,
+            ]));
+            $role('sibling_educator', $sibEdu, 'educator', $sib);
+            // Always 170 days out (re-dated on every run): inside the 180-day Renewals window, far outside every
+            // expiry-alert step (60 days at most), so no reminder job ever picks a canary up.
+            $exp = \App\Support\AgencyTime::todayDate($agencyId)->addDays(170)->toDateString();
+            foreach (['' => $educator, '_sibling' => $sibEdu] as $k => $uid) {
+                $bc = $get('background_check' . $k, 'background_checks', fn () => DB::table('background_checks')->insertGetId([
+                    'agency_id' => $agencyId, 'user_id' => $uid, 'check_type' => 'other', 'reference' => 'Canary',
+                    'issued_at' => '2026-01-15', 'expires_at' => $exp, 'notes' => 'Leak guard canary', 'created_at' => $now, 'updated_at' => $now,
+                ]));
+                $sc = $get('staff_certification' . $k, 'staff_certifications', fn () => DB::table('staff_certifications')->insertGetId([
+                    'user_id' => $uid, 'agency_id' => $agencyId, 'cert_type' => 'CPR', 'title' => 'Canary CPR', 'certifier' => 'Leak guard canary',
+                    'issued_at' => '2026-01-15', 'expires_at' => $exp, 'active' => 1, 'added_by' => $admin, 'created_at' => $now, 'updated_at' => $now,
+                ]));
+                DB::table('background_checks')->where('id', $bc)->update(['expires_at' => $exp]);
+                DB::table('staff_certifications')->where('id', $sc)->update(['expires_at' => $exp]);
+            }
             return $made;
         });
     }

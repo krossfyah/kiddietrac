@@ -40,6 +40,69 @@ final class HrInjuries
     public const CLOSED_TYPES = ['stat_holiday', 'holiday', 'emergency', 'other'];
     public const WSIB_URL = 'https://www.wsib.ca/en/businesses/claims/report-injury-or-illness';
 
+    /**
+     * TELL THE CENTRE'S MANAGERS (2026-11-27: a staff member's own injury report reached nobody).
+     *
+     * Recipients: CentreScope::managers = the agency's admins + the directors placed at the record's centre (admins only
+     * when it has none). Outsiders (super admin, integration, reseller grants) and leavers never; nor the person who
+     * filed it or the injured person. One bell row each (type hr_injury = StaffNotifyPrefs topic staff_injuries, held
+     * back by Notify::write when switched off; it rings the phone) and one email each, asked of the same topic.
+     * WHO, NEVER WHAT: a first name, the centre and the date - no health detail, in the bell, the push or the email.
+     * The agency's admin bell lists it from StaffSubmissionsFeed. Test agencies send nothing (TestAgency::blocks).
+     *
+     * @return int[] the managers told
+     */
+    public static function notifyReported(int $agencyId, int $injuryId): array
+    {
+        $r = DB::table('hr_injuries')->where('id', $injuryId)->where('agency_id', $agencyId)->first(['id', 'centre_id', 'user_id', 'reported_by_id', 'kind', 'occurred_at']);
+        if (! $r) return [];
+        $skip = [(int) $r->user_id, (int) $r->reported_by_id];
+        $to = CentreScope::managers($agencyId, $r->centre_id ? [(int) $r->centre_id] : [])->pluck('u.id')
+            ->map(fn ($v) => (int) $v)->unique()->reject(fn ($v) => in_array($v, $skip, true))->values()->all();
+        if (! $to) return [];
+
+        $p = DB::table('users')->where('id', $r->user_id)->first(['first_name', 'preferred_name']);
+        $first = trim((string) ($p->preferred_name ?? '')) ?: (trim((string) ($p->first_name ?? '')) ?: 'A team member');
+        $centre = $r->centre_id ? (string) (DB::table('centres')->where('id', $r->centre_id)->value('name') ?? '') : '';
+        $near = $r->kind === 'near_miss';
+        $self = (int) $r->user_id === (int) $r->reported_by_id;
+        $when = Carbon::parse((string) $r->occurred_at)->format('M j');
+        $what = $near ? 'a near miss' : 'a workplace injury';
+        $title = mb_substr($self ? "\u{1FA79} {$first} reported {$what}" : "\u{1FA79} " . ucfirst($what) . " was recorded for {$first}", 0, 180);
+        $line = ($centre !== '' ? $centre . ', ' : '') . $when . '. Open Human Resources > Health & safety > Staff injuries to read it.';
+        $hash = 'hr-safety?tab=injuries&injury=' . (int) $r->id;
+
+        $rows = [];
+        foreach ($to as $uid) {
+            $rows[] = ['agency_id' => $agencyId, 'user_id' => $uid, 'type' => 'hr_injury', 'title' => $title, 'body' => mb_substr($line, 0, 900),
+                'data' => json_encode(['hash' => $hash, 'injury_id' => (int) $r->id]), 'created_at' => now()];
+        }
+        Notify::write($rows);
+
+        if (! TestAgency::blocks($agencyId)) {
+            $e = fn ($s) => htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8');
+            $url = rtrim((string) (config('app.portal_url') ?: 'https://app.kiddietrac.com'), '/') . '/dashboard.html#' . $hash;
+            $body = '<p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#334155">' . $e($self ? $first . ' reported ' . $what : ucfirst($what) . ' was recorded for ' . $first)
+                . ($centre !== '' ? ' at ' . $e($centre) : '') . ' (' . $e($when) . ').</p>'
+                . '<p style="margin:0 0 16px;font-size:14px;line-height:1.55;color:#334155">For their privacy, this email does not include any details. Sign in to read the record.</p>'
+                . '<p style="margin:0"><a href="' . $e($url) . '" style="display:inline-block;background:#1F6080;color:#ffffff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:8px">Open staff injuries</a></p>';
+            foreach ($to as $uid) {
+                if (TestAgency::blocks($agencyId, $uid) || ! StaffNotifyPrefs::wants($uid, 'staff_injuries', 'email', $agencyId)) continue;
+                $u = DB::table('users')->where('id', $uid)->whereNull('deleted_at')->first(['email', 'first_name']);
+                if (! $u || ! filter_var((string) $u->email, FILTER_VALIDATE_EMAIL) || ChatAudience::isServiceEmail((string) $u->email)) continue;
+                $hi = trim((string) $u->first_name) !== '' ? '<p style="margin:0 0 10px;font-size:15px;color:#334155">Hi ' . $e($u->first_name) . ',</p>' : '';
+                $html = \App\Services\EmailTemplate::wrap($agencyId, $hi . $body, ['eyebrow' => 'HEALTH & SAFETY', 'title' => $near ? 'Near miss reported' : 'Staff injury reported', 'subtitle' => $centre]);
+                try {
+                    \App\Services\AgencyMailer::forAgency($agencyId)->html($html, fn ($m) => $m->to((string) $u->email)->subject($near ? 'A near miss was reported' : 'A staff injury was reported'));
+                } catch (\Throwable $ex) {
+                    \Illuminate\Support\Facades\Log::warning('staff injury email failed', ['user' => $uid, 'error' => $ex->getMessage()]);
+                }
+            }
+        }
+
+        return $to;
+    }
+
     /** WSIB applies (Ontario agencies). */
     public static function isOntario(int $agencyId): bool
     {

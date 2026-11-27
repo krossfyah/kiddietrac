@@ -311,7 +311,7 @@
       + ((r.payout && (r.payout.lines || []).length) ? check('pay_out', true, 'Book the leave payout: the paid-out balances go to zero') : '')
       + ((r.reports || []).length ? '<div style="margin-top:10px;">' + field('New manager for ' + r.reports.map(function (x) { return x.name; }).join(', '), select('new_manager_id', opts((r.managers || []).reduce(function (o, m) { o[m.id] = m.name; return o; }, {}), '', 'Nobody for now')), true) + '</div>' : '')
       + ERR);
-    modal({ title: 'Complete leaving: ' + (per.name || ''), body: box, actions: [{ label: 'Back', handler: function () { later(function () { openLeaving(per.id, done); }); } }, { label: 'Complete', primary: true, busyLabel: 'Saving…', handler: function () {
+    modal({ title: 'Complete leaving: ' + (per.name || ''), body: box, actions: [{ label: 'Back', handler: function () { later(function () { openLeaving(per.id, done); }); } }, { label: 'Complete', ctx: 'hr-leaving', primary: true, busyLabel: 'Saving…', handler: function () {
       return Api.post('/hr/leavings/' + lid + '/complete', { pay_out: !!val(box, 'pay_out'), new_manager_id: val(box, 'new_manager_id') ? +val(box, 'new_manager_id') : null })
         .then(function () { saved('Leaving completed.'); if (done) done(); later(function () { openLeaving(per.id, done); }); }, function (e) { msg(box, errMsg(e)); return false; });
     } }] });

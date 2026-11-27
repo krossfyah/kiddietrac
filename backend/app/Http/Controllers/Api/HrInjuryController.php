@@ -130,6 +130,8 @@ class HrInjuryController extends Controller
         $id = (int) DB::table('hr_injuries')->insertGetId($this->fields($d, $aid) + ['agency_id' => $aid, 'centre_id' => $centre, 'user_id' => $uid,
             'reported_by_id' => $me, 'status' => 'open', 'created_at' => now(), 'updated_at' => now()]);
         $this->hrNote($aid, 'hr.injury_reported', 'hr_injury', $id, ['user_id' => $uid, 'kind' => $d['kind'] ?? 'injury']);   // never the health details
+        // The centre's managers are told (bell + email, who not what). A failed notice never loses the report.
+        try { HrInjuries::notifyReported($aid, $id); } catch (\Throwable $e) { report($e); }
 
         return response()->json(['id' => $id], 201);
     }

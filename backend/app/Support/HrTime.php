@@ -477,7 +477,7 @@ final class HrTime
         foreach (array_filter($utcTimes) as $ts) {
             $d = Carbon::parse((string) $ts, 'UTC')->setTimezone($tz)->toDateString();
             if ($l = self::lockOn($centreId, $d)) {
-                return 'These hours are in a timesheet that was approved and locked for payroll (' . self::periodText($l) . '). An agency admin can unlock it in HR > Timesheets first.';
+                return 'These hours are in a timesheet that was approved and locked for payroll (' . self::periodText($l) . '). An agency admin can unlock it first in Human Resources › Clock-ins & timesheets › Approve & lock.';
             }
         }
 

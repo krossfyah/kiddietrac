@@ -4131,6 +4131,8 @@
           const isPrimary = a.style === 'btn-primary' || a.primary;
           const btn = Dom.el('button', {
             class: 'btn ' + (a.style || (isPrimary ? 'btn-primary' : 'btn-secondary')),
+            // Translation context (kt-i18n CONTEXT KEYS, 2026-11-27): "Start" here may mean "begin", not "the start".
+            ...(a.ctx ? { 'data-i18n-ctx': a.ctx } : {}),
             onClick: async () => {
               if (cb) {
                 btn.disabled = true;

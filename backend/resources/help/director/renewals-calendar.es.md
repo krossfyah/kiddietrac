@@ -6,61 +6,73 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # Calendario de renovaciones
 
-El **Calendario de renovaciones** reúne en una sola línea de tiempo todas las verificaciones de antecedentes del personal que vencen en los próximos seis meses, para que pida las renovaciones antes de que algo venza. Es una lista de solo lectura: la consulta para ver lo que viene y luego renueva el registro en su propia pantalla. Ábralo desde **Cumplimiento > Calendario de renovaciones**.
+El **Calendario de renovaciones** reúne en una sola línea de tiempo todas las verificaciones de antecedentes y todos los certificados del personal (RCP, primeros auxilios y los demás que lleva) que vencen en los próximos seis meses, para que pida las renovaciones antes de que algo venza. Es una lista de solo lectura: la consulta para ver lo que viene y luego renueva el registro en su propia pantalla. Ábralo desde **Cumplimiento > Calendario de renovaciones**.
 
 [[open: #renewals | Abrir el Calendario de renovaciones]]
 
 ## Leer el calendario
 
 1. Abra **Cumplimiento > Calendario de renovaciones**.
-2. Empiece por **⛔ Expired**. Ya vencieron y requieren acción hoy.
-3. Siga con **⚠ Next 30 days**. Son las renovaciones que debe pedir ahora.
-4. Revise **Next 90 days** y **Later** (hasta seis meses) para planificar.
-5. En cada fila, lea la columna **Name / certification**: la persona, el tipo de verificación y, entre paréntesis, el registro de donde viene.
-6. Lea la columna **Expires**: la fecha y cuántos días faltan o hace cuántos días venció.
+2. Empiece por **⛔ Vencido**. Estos elementos ya vencieron y requieren acción hoy.
+3. Pase a **⚠ Próximos 30 días**. Son las renovaciones que debe pedir ahora.
+4. Revise **Próximos 90 días** y **Más adelante** (hasta seis meses) para planificar.
+5. En cada fila, lea **Miembro del personal** (la persona) y **Qué** (la verificación o el certificado por su nombre, por ejemplo *Verificación para trabajar con personas vulnerables* o *Primeros auxilios estándar*). La pequeña etiqueta al lado indica si es una **Verificación de antecedentes** o un **Certificado**.
+6. Lea la columna **Caduca**: la fecha y cuántos días quedan o hace cuántos días venció.
 
-Cada encabezado de sección muestra cuántos elementos tiene, por ejemplo **⚠ Next 30 days (3)**. Una sección vacía dice **None.**
+Cada encabezado de sección muestra cuántos elementos tiene, por ejemplo **⚠ Próximos 30 días (3)**. Una sección vacía dice **Ninguno.**
 
-> 💡 Revise el calendario al comienzo de cada mes. Lo que esté en **⚠ Next 30 days** es su lista de pendientes del mes.
+Cuando un certificado o una verificación se renovó, solo cuenta el más reciente: el registro anterior no queda en la lista como vencido.
+
+> 💡 Revise el calendario al inicio de cada mes. Todo lo que esté en **⚠ Próximos 30 días** es su lista de pendientes del mes.
 
 ## Renovar algo de la lista
 
-El calendario no cambia registros. Para renovar una verificación:
+El calendario no cambia ningún registro. Renueve el elemento donde está.
 
-1. Anote la persona y el tipo de verificación del calendario.
-2. Abra **Recursos humanos > Documentos y cartas > Verificación de antecedentes** (o **Verificación de antecedentes** en el menú si el complemento de RR. HH. no está activo).
-3. Busque la verificación de la persona y elija **✏️ Edit**.
-4. Escriba la nueva fecha de vencimiento y la referencia, y pulse **Guardar cambios**.
-5. Pulse **Ver** y suba el nuevo documento.
-6. Vuelva al **Calendario de renovaciones**. El elemento pasó a una sección posterior o salió de la lista.
+**Una verificación de antecedentes:**
 
-[[show: #background-checks @ + Add check | Muéstreme las verificaciones de antecedentes]]
+1. Abra **Recursos humanos > Documentos y cartas > Verificación de antecedentes** (o **Verificación de antecedentes** en el menú si el complemento de RR. HH. está desactivado).
+2. Busque la verificación de la persona y elija **✏️ Editar**.
+3. Escriba la nueva fecha de **vencimiento** y la referencia, y pulse **Guardar cambios**.
+4. Pulse **Ver** y suba el nuevo documento.
 
-## Qué aparece hoy en el calendario
+[[show: #background-checks @ + Add check | Mostrarme Verificación de antecedentes]]
 
-El calendario lee las **verificaciones de antecedentes** (sector vulnerable, antecedentes penales, conductor y los demás tipos que usted registra). Muestra las vencidas o las que vencen en 180 días.
+**Un certificado (RCP, primeros auxilios y otros):**
 
-> ℹ️ Los certificados de RCP, primeros auxilios y otros no están en este calendario. Use **Operaciones > Certifications**, donde los contadores **Expired** y **Vence en 30 días** dan la misma información para los certificados.
+1. Abra **Operaciones > Certifications**.
+2. Agregue el nuevo certificado de la persona con sus fechas de emisión y vencimiento, y suba el documento.
+
+Vuelva al **Calendario de renovaciones**. El elemento pasó a una sección posterior o salió de la lista.
+
+## Qué aparece en el calendario
+
+- **Verificaciones de antecedentes**: sector vulnerable, antecedentes penales, conductor y los demás tipos de verificación que lleva.
+- **Certificados del personal**: RCP, primeros auxilios, manipulación de alimentos y los demás tipos de certificado de su provincia o estado.
+
+Lista los elementos vencidos o que vencen dentro de 180 días. Un certificado o una verificación sin fecha de vencimiento nunca aparece.
+
+Solo aparecen las personas que trabajan para usted hoy. Alguien cuya cuenta se desactivó o suspendió, cuyo expediente de RR. HH. indica que se fue, o cuyo único centro cerró, no aparece en el calendario.
 
 ## Quién puede verlo
 
 | Rol | Qué ve |
 |---|---|
-| Administrador de la agencia | Las verificaciones de toda la agencia. |
-| Director de centro | El calendario en su menú Cumplimiento; renueva las verificaciones del personal de sus propios centros en **Verificación de antecedentes**. |
-| Personal | No esta pantalla. Recibe un aviso en la campana antes de que venza su propia verificación. |
+| Administrador de agencia | Las verificaciones y los certificados de toda la agencia. |
+| Director de centro | Solo el personal asignado a sus propios centros. El personal de los demás centros de la agencia y los administradores de la agencia no aparecen. |
+| Personal | Esta pantalla no. Recibe un recordatorio sobre su propia verificación o certificado antes de que venza. |
 
-## Preguntas frecuentes y qué hacer si algo falla
+## Preguntas frecuentes y cuando algo sale mal
 
-??? La página se queda en "Loading…". | No se pudo cargar la lista. Actualice la página; si se repite, repórtelo desde **Ayuda** con la hora en que pasó.
-??? Todas las secciones dicen None. | Ninguna verificación vence en los próximos seis meses, o aún no hay ninguna registrada. Agréguelas en **Verificación de antecedentes**.
-??? Falta un certificado de RCP que vence pronto. | Los certificados no están en este calendario. Búsquelo en **Certifications**.
-??? Renové una verificación y sigue en Expired. | No se cambió la fecha de vencimiento. Edite la verificación y escriba la nueva fecha.
-??? ¿Alguien recibe un correo? | El calendario no envía nada. El personal recibe un aviso en la campana por las verificaciones que vencen en 60 días, como máximo una vez por semana por verificación.
+??? La página dice "The renewals calendar didn’t load." | No se pudo cargar la lista, a menudo porque se perdió la conexión. Pulse **Reintentar**. Si sigue pasando, repórtelo desde **Ayuda** con la hora en que ocurrió.
+??? Todas las secciones dicen Ninguno. | Nada vence en los próximos seis meses, o todavía no hay verificaciones ni certificados con fecha de vencimiento. Agréguelos en **Verificación de antecedentes** o **Certifications**.
+??? Falta una persona que esperaba ver. | Puede que no esté asignada a uno de sus centros (un director solo ve sus propios centros), que su cuenta esté desactivada o que su expediente de RR. HH. indique que se fue. Un registro sin fecha de vencimiento tampoco aparece.
+??? Renové un certificado pero el anterior sigue como vencido. | El nuevo debe tener el mismo tipo de certificado y una fecha de vencimiento posterior. Revise el tipo y la fecha en **Certifications**.
+??? ¿Alguien recibe un correo? | El calendario no envía nada. El personal y los responsables reciben recordatorios cuando las verificaciones y los certificados se acercan al vencimiento, según los ajustes de recordatorios de su agencia.
 
 ## Pantallas relacionadas
 
-[[open: #background-checks | Verificación de antecedentes]] [[open: #certifications | Certificaciones]]
+[[open: #background-checks | Verificación de antecedentes]] [[open: #certifications | Certifications]]
 
-- [Vencimiento de verificaciones de antecedentes](background-checks)
-- [Capacitación, certificados y verificaciones del personal](staff-training-and-checks)
+- [Vencimiento de las verificaciones de antecedentes](background-checks)
+- [Formación, certificados y verificaciones del personal](staff-training-and-checks)

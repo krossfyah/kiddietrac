@@ -24,6 +24,24 @@ final class EnsureRole
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
+        if (self::passes($request, $roles)) {
+            return $next($request);
+        }
+
+        return response()->json([
+            'message' => 'Forbidden. Required role: '.implode(' or ', $roles),
+            'your_roles' => \App\Support\AgencyRole::names($request),
+        ], 403);
+    }
+
+    /**
+     * THE ROLE RULE ITSELF, for the middleware and for App\Support\RouteAccess (a screen asking "may this person
+     * call that route?" so it can hide a button - one rule, never a copy in the front end).
+     *
+     * @param  string[] $roles
+     */
+    public static function passes(Request $request, array $roles): bool
+    {
         // Roles held in the agency this request is acting in (X-Active-Agency-Id), not anywhere (2026-10-31).
         $userRoles = \App\Support\AgencyRole::names($request);
 
@@ -31,18 +49,9 @@ final class EnsureRole
         // It passes any role check, no matter what is listed in the
         // middleware string. Use it sparingly — it bypasses agency scoping.
         if (in_array('platform_admin', $userRoles, true)) {
-            return $next($request);
+            return true;
         }
 
-        foreach ($roles as $required) {
-            if (in_array($required, $userRoles, true)) {
-                return $next($request);
-            }
-        }
-
-        return response()->json([
-            'message' => 'Forbidden. Required role: '.implode(' or ', $roles),
-            'your_roles' => $userRoles,
-        ], 403);
+        return (bool) array_intersect($roles, $userRoles);
     }
 }

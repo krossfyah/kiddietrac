@@ -426,9 +426,9 @@
   function tsActionCell(r, i) {
     var btns = [];
     /* KiddieTrac HR (2026-11-27): a shift inside a timesheet that was approved and locked for payroll is not edited here;
-       an agency admin unlocks it in HR > Timesheets first (the server refuses the edit too). */
+       an agency admin unlocks it in Human Resources › Clock-ins & timesheets › Approve & lock first (the server refuses the edit too). */
     if (r.id && r.locked) {
-      btns.push('<span class="kt-icon-tip" data-kttip="Approved and locked for payroll (HR > Timesheets)" aria-label="Locked" style="display:inline-block;padding:0 6px;">🔒</span>');
+      btns.push('<span class="kt-icon-tip" data-kttip="Approved and locked for payroll (Human Resources › Clock-ins &amp; timesheets › Approve &amp; lock)" aria-label="Locked" style="display:inline-block;padding:0 6px;">🔒</span>');
     } else if (r.id) {
       btns.push('<button data-ts-edit="' + i + '" class="kt-act-icon kt-act-edit kt-icon-tip" '
         + 'data-kttip="Edit hours" aria-label="Edit hours">✏️</button>');

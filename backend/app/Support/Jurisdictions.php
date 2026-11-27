@@ -467,6 +467,34 @@ final class Jurisdictions
         return array_keys($c);
     }
 
+    /**
+     * THE NAME PEOPLE READ for a background-check or certificate code (2026-11-27, the Renewals calendar showed
+     * "vulnerable_sector (background_check)"). The agency's own jurisdiction first, then any jurisdiction that uses
+     * the code, then the code made readable. $kind = 'background_checks' | 'certifications'.
+     */
+    public static function label(?int $agencyId, string $kind, ?string $code): string
+    {
+        $code = trim((string) $code);
+        if ($code === '') {
+            return '';
+        }
+        foreach (array_merge([self::forAgency($agencyId)], array_values(self::all())) as $p) {
+            foreach ((array) ($p[$kind] ?? []) as $row) {
+                if (strcasecmp((string) ($row['code'] ?? ''), $code) === 0 && ! empty($row['label'])) {
+                    return (string) $row['label'];
+                }
+            }
+        }
+        $known = ['vulnerable_sector' => 'Vulnerable sector check', 'Vulnerable_Sector_Check' => 'Vulnerable sector check',
+            'VSC' => 'Vulnerable sector check', 'CPR' => 'CPR', 'RECE' => 'RECE', 'WHMIS' => 'WHMIS'];
+        if (isset($known[$code])) {
+            return $known[$code];
+        }
+        $s = str_replace('_', ' ', $code);
+
+        return ctype_upper(str_replace(' ', '', $s)) ? $s : ucfirst(strtolower($s));
+    }
+
     /** The minimum months a retention setting may be set to, or null when the jurisdiction sets none known. */
     public static function retentionFloor(?int $agencyId, string $key): ?int
     {

@@ -87,11 +87,27 @@ final class KtLeakProbe extends Command
 
     private const ROLES = ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'guardian', 'staff_parent', 'integration'];
 
+    /**
+     * CENTRE SCOPE (2026-11-27): roles that must never receive their OWN agency's sibling-centre marker
+     * (LeakGuard::CENTRE_MARKER_RE), because CentreScope limits them to their own centres. The director is the role
+     * the scope rule is written for; the agency admin is the positive control (sees it, counted in coverage).
+     */
+    private const CENTRE_SCOPED = ['centre_director'];
+
+    /**
+     * Routes where a director legitimately sees a colleague at another centre of their agency, with the reason.
+     * Keep this short and justified: every entry is a place the centre-scope check does not look.
+     */
+    public const CENTRE_SCOPE_OK = [
+    ];
+
     private $kernel;
     private int $calls = 0;
     private float $callSecs = 0.0;
     private array $slow = [];
     private array $statusCounts = [];
+    /** "agency N agency_admin" => routes where the sibling centre's marker was visible (positive control). */
+    private array $centreSeen = [];
 
     public function handle(): int
     {
@@ -232,6 +248,19 @@ final class KtLeakProbe extends Command
                                 }
                             }
                         }
+                        // The sibling centre's marker: another agency's is a cross-agency leak; this agency's, reaching
+                        // a centre-scoped person, is a centre-scope leak (the Renewals calendar shape, 2026-11-27).
+                        if (preg_match_all(LeakGuard::CENTRE_MARKER_RE, $body, $cm)) {
+                            foreach (array_unique($cm[1]) as $ag) {
+                                if ((int) $ag !== $A) {
+                                    $findings["{$uri}|{$role}|{$how}|c{$ag}"] = "{$who}: GET /{$uri} [{$how}] -> agency {$ag} canary text (sibling centre) (HTTP {$status})";
+                                } elseif (in_array($role, self::CENTRE_SCOPED, true) && ! $this->centreScopeOk($uri)) {
+                                    $findings["{$uri}|{$role}|{$how}|centre"] = "{$who}: GET /{$uri} [{$how}] -> another centre's staff record of their own agency (centre scope, HTTP {$status})";
+                                } elseif ($role === 'agency_admin' && ($how === 'own' || $how === 'own-ids')) {
+                                    $this->centreSeen[$who][$uri] = true;
+                                }
+                            }
+                        }
                         if ($how !== 'spoof-query' && preg_match_all('/"(' . implode('|', array_keys(self::ID_KEYS)) . ')"\s*:\s*"?(\d+)"?/', $body, $im, PREG_SET_ORDER)) {
                             foreach ($im as $hit) {
                                 $kind = self::ID_KEYS[$hit[1]];
@@ -266,6 +295,7 @@ final class KtLeakProbe extends Command
             'get_routes' => $totalGet, 'probed' => count($routes) - count($unmapped), 'id_routes_mapped' => $mapped,
             'id_routes_unmapped' => count($unmapped), 'skipped' => array_map('count', $skipped),
             'roles' => count(self::ROLES), 'own_visible' => array_map('count', $ownSeen), 'statuses' => $this->statusCounts,
+            'centre_scope_visible' => array_map('count', $this->centreSeen),
             'avg_ms' => $this->calls ? round($this->callSecs / $this->calls * 1000, 1) : null,
             'stopped_early' => $stopped,
         ];
@@ -448,6 +478,16 @@ final class KtLeakProbe extends Command
             $path = preg_replace('/\{' . $p . '\??\}/', (string) $val, $path, 1);
         }
         return $path;
+    }
+
+    private function centreScopeOk(string $uri): bool
+    {
+        foreach (self::CENTRE_SCOPE_OK as $re => $why) {
+            if (preg_match($re, $uri)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A refused id-swap often echoes the id it was asked for ({"child_id": 123, "error": ...}); that is not a leak. */

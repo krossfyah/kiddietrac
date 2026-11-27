@@ -4,6 +4,62 @@
         {
             "type": "improved",
             "date": "2026-11-27",
+            "icon": "♻️",
+            "title": "Renewals calendar adds certificates",
+            "body": "The Renewals calendar now lists CPR, first aid and other staff certificates beside background checks, by their proper names. Directors see their own centres' staff, and people who have left are no longer listed.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Le calendrier des renouvellements ajoute les certificats",
+            "body_fr": "Le calendrier des renouvellements liste maintenant les certificats de RCR, de premiers soins et les autres certificats du personnel à côté des vérifications d’antécédents, sous leur vrai nom. Les directeurs voient le personnel de leurs propres centres, et les personnes parties n’y figurent plus.",
+            "title_es": "El calendario de renovaciones suma certificados",
+            "body_es": "El calendario de renovaciones ahora muestra los certificados de RCP, primeros auxilios y otros del personal junto a las verificaciones de antecedentes, con su nombre correcto. Los directores ven al personal de sus propios centros y ya no aparecen las personas que se fueron.",
+            "title_hi": "नवीनीकरण कैलेंडर में प्रमाणपत्र भी",
+            "body_hi": "नवीनीकरण कैलेंडर अब पृष्ठभूमि जाँच के साथ CPR, फ़र्स्ट एड और दूसरे स्टाफ़ प्रमाणपत्र भी उनके सही नामों से दिखाता है। निदेशक अपने केंद्रों का स्टाफ़ देखते हैं, और जो लोग जा चुके हैं वे अब नहीं दिखते।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🩹",
+            "title": "Staff injury reports reach managers",
+            "body": "When a staff member reports a workplace injury or a near miss, the centre's director and agency admins now get a bell notice and an email. It names who and where, never health details. Switch it off under Settings > Notifications > Staff injuries.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Les blessures du personnel sont signalées aux gestionnaires",
+            "body_fr": "Quand un membre du personnel signale une blessure au travail ou un incident évité de justesse, le directeur du centre et les administrateurs de l’agence reçoivent maintenant un avis et un courriel. Il indique qui et où, jamais les détails de santé. Désactivez-le dans Paramètres > Notifications > Blessures du personnel.",
+            "title_es": "Las lesiones del personal llegan a los responsables",
+            "body_es": "Cuando un miembro del personal informa una lesión laboral o un casi accidente, el director del centro y los administradores de la agencia reciben ahora un aviso y un correo. Indica quién y dónde, nunca datos de salud. Desactívelo en Configuración > Notificaciones > Lesiones del personal.",
+            "title_hi": "स्टाफ़ की चोट की रिपोर्ट प्रबंधकों तक",
+            "body_hi": "जब कोई स्टाफ़ सदस्य कार्यस्थल पर चोट या बाल-बाल बची घटना की रिपोर्ट करता है, तो केंद्र निदेशक और एजेंसी एडमिन को अब बेल सूचना और ईमेल मिलता है। इसमें बताया जाता है कौन और कहाँ, स्वास्थ्य विवरण कभी नहीं। इसे सेटिंग्स > सूचनाएँ > कर्मचारियों की चोटें में बंद करें।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🌐",
+            "title": "HR screens in your language",
+            "body": "About a thousand labels on the HR, payroll and tax screens now show in French, Spanish and Hindi, and buttons like Check in on a goal, Start and Complete now read as actions.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Les écrans RH dans votre langue",
+            "body_fr": "Environ mille libellés des écrans RH, paie et fiscalité s’affichent maintenant en français, en espagnol et en hindi, et des boutons comme Faire le point sur un objectif, Commencer et Terminer se lisent comme des actions.",
+            "title_es": "Pantallas de RR. HH. en su idioma",
+            "body_es": "Cerca de mil etiquetas de las pantallas de RR. HH., nómina e impuestos se muestran ahora en francés, español e hindi, y botones como Registrar avance en un objetivo, Comenzar y Completar se leen como acciones.",
+            "title_hi": "HR स्क्रीन आपकी भाषा में",
+            "body_hi": "HR, पेरोल और टैक्स स्क्रीन के लगभग एक हज़ार लेबल अब फ़्रेंच, स्पैनिश और हिंदी में दिखते हैं, और लक्ष्य पर प्रगति दर्ज करें, शुरू करें और पूरा करें जैसे बटन अब कार्रवाई की तरह पढ़े जाते हैं।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
             "icon": "💬",
             "title": "Step-by-step messaging and settings guides",
             "body": "The ? on messaging, announcements, email, texts and phone, forms and documents, notifications, My settings and Help & guides now opens a step-by-step guide with the exact buttons to press and answers to common questions, for every role.",

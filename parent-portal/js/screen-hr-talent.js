@@ -421,7 +421,7 @@
       + field('Start date', input('start_date', today(), 'date')) + '</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
     var us = box.querySelector('[data-f="user_id"]');
     us.addEventListener('change', function () { var p = (OB.people || []).filter(function (x) { return String(x.id) === us.value; })[0]; if (p && p.start_date) box.querySelector('[data-f="start_date"]').value = p.start_date; });
-    modal({ title: 'Start onboarding', body: box, actions: [{ label: 'Cancel' }, { label: 'Start', primary: true, busyLabel: 'Starting…', handler: function () {
+    modal({ title: 'Start onboarding', body: box, actions: [{ label: 'Cancel' }, { label: 'Start', ctx: 'hr-onboarding', primary: true, busyLabel: 'Starting…', handler: function () {
       return Api.post('/hr/onboarding', { user_id: +val(box, 'user_id') || 0, template_id: val(box, 'template_id') ? +val(box, 'template_id') : null, start_date: val(box, 'start_date') })
         .then(function () { saved('Onboarding started. They see it under My HR.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
     } }] });
@@ -712,7 +712,7 @@
       return '<div class="hrt-task"><div class="t"><b data-no-i18n>' + esc(g.title) + '</b> ' + goalPill(g.status) + ' ' + bar(g.progress, g.status === 'at_risk')
         + '<div class="hr-sub">' + (g.due_date ? 'Due ' + esc(day(g.due_date)) : 'No due date') + (last ? ' · Last check-in ' + esc(tsDay(last.at)) + (last.by ? ' by <span data-no-i18n>' + esc(last.by) + '</span>' : '') : '') + '</div>'
         + (last ? '<div class="hr-sub" style="margin-top:2px;" data-no-i18n>“' + esc(last.note) + '”</div>' : '')
-        + '<div class="hrt-acts"><button type="button" class="hr-b" data-check="' + g.id + '" data-st="' + g.status + '" data-pr="' + g.progress + '">Check in</button>'
+        + '<div class="hrt-acts"><button type="button" class="hr-b" data-i18n-ctx="hr-goal" data-check="' + g.id + '" data-st="' + g.status + '" data-pr="' + g.progress + '">Check in</button>'
         + '<button type="button" class="hr-b" data-gedit="' + g.id + '">Edit</button></div></div></div>';
     }).join('');
   }

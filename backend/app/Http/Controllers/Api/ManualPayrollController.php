@@ -366,7 +366,7 @@ final class ManualPayrollController extends Controller
             }
             $open = \App\Support\HrTime::uncovered($agencyId, $runCentres, $from, $to);
             if ($open) {
-                return response()->json(['message' => 'Approve and lock the timesheets for this period first (HR > Timesheets): ' . implode(', ', $open) . '.'], 422);
+                return response()->json(['message' => 'Approve and lock the timesheets for this period first (Human Resources › Clock-ins & timesheets › Approve & lock): ' . implode(', ', $open) . '.'], 422);
             }
         }
         $allowed = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)
