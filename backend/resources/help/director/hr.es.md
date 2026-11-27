@@ -1,65 +1,90 @@
 ---
-title: RR. HH.: expedientes, saldos y ausencias
-category: Staff Management
-order: 60
-roles: agency_admin, platform_admin, centre_director
+title: RR. HH.: personas, expedientes de empleados y saldos de permisos
 ---
-# RR. HH.: expedientes, saldos y ausencias
+# RR. HH.: personas, expedientes de empleados y saldos de permisos
 
-El menú **Recursos humanos** es parte del complemento KiddieTrac HR.
+**Recursos humanos > Personas** es la lista de todo su equipo, con el expediente de RR. HH. de cada persona: cargo, tipo de empleo, centro, fecha de inicio, responsable y estado. **Recursos humanos > Tiempo libre > Saldos** muestra cuántos días de permiso le quedan a cada uno. Ambos forman parte del complemento KiddieTrac HR. Ábralos cuando alguien se incorpora, cambia de puesto, necesita un responsable o le pregunta cuántos días le quedan.
 
-Cada parte tiene su propia entrada en **Recursos humanos**: **Panel de RR. HH.**, **Personas** (con **Bajas**), **Tiempo libre** (Solicitudes, Saldos, Tipos de permiso), **Ausencias y retrasos**, **Turnos y horarios** (el horario, Plan de turnos, Turnos abiertos), **Fichajes y hojas de horas** (Hojas de horas, Aprobar y bloquear, Horas extra), **Nómina** (con Gastos y kilometraje), **Contratación e incorporación**, **Desempeño y formación**, **Premios para educadores**, **Salud y seguridad**, **Documentos y cartas** (con Verificaciones de antecedentes), **Informes de RR. HH.**, **Ajustes de RR. HH.** (administradores) y **Mis RR. HH.**. Sin el complemento de RR. HH., Tiempo libre, Turnos y horarios, Fichajes y hojas de horas, Nómina, Premios para educadores y Verificaciones de antecedentes siguen funcionando; el resto se oculta. Los enlaces antiguos a la pantalla única de RR. HH. abren la entrada correcta.
+[[open: #hr-people | Abrir Personas]]
 
-Los administradores de la agencia ven toda la agencia. Los directores de centro ven al personal de sus propios centros.
+## Encontrar a alguien
 
-## Personas
+1. Abra **Recursos humanos > Personas**. La pestaña **Personas** muestra el nombre, **Cargo**, **Empleo**, **Centro**, **Fecha de inicio**, **Responsable** y **Estado**.
+2. Con el primer filtro, muestre a **Todos** o solo un estado (por ejemplo activo, de permiso o con baja).
+3. Si tiene más de un centro, elija uno en **Todos los centros** para ver solo a quienes lo tienen como centro principal.
+4. El recuento junto a los filtros («8 de 12 personas») indica cuántas coinciden.
 
-Todo tu equipo, con puesto, tipo de empleo, centro, fecha de inicio, responsable y estado. Usa el menú **⋮** de una fila:
+> 💡 Las otras pestañas de esta pantalla son **Directorio**, **Organigrama** y **Bajas**. Vea [[hr-people-recognition]] y [[hr-documents-leaving]].
 
-- **Ver perfil de RR. HH.** reúne el expediente, los saldos de permisos, los permisos recientes, certificaciones, políticas, horas de DP, contacto de emergencia y tarifa de pago.
-- **Editar expediente** cambia el puesto, el tipo de empleo, el estado, las fechas, el responsable y el centro principal. Poner el tipo **contrato** también marca a la persona como **Contratista** en la pantalla Personal (se usa para los anuncios «Todos los contratistas»), y cambiar de tipo quita esa marca.
-- **Ajustar saldo** suma o resta permisos, con un motivo. Nadie puede ajustar su propio saldo.
+## Abrir un perfil de RR. HH.
 
-## Saldos
+1. En la fila de una persona, pulse **⋮ > Ver perfil de RR. HH.**.
+2. Lea las tarjetas: **Empleo**, **Saldos de permisos**, **Permisos recientes**, **Certificaciones**, **Políticas y formación**, **Contacto de emergencia**, y **Pago** cuando usted puede ver la paga.
+3. Pulse **Historial del saldo** bajo **Saldos de permisos** para ver cada asignación, acumulación, solicitud aprobada y ajuste detrás de cada saldo.
+4. Use los enlaces de las tarjetas (**Open Time off requests**, **Open Certifications**, **Open Policies**, **Abrir Nómina**, **Open user record**) para ir a esa pantalla.
+5. Desplácese hacia abajo para ver los documentos de la persona, el historial de pago y de puesto, las evaluaciones y objetivos, y la salida, cuando se usan esas partes de RR. HH.
+6. Pulse **Cerrar**, o **Editar expediente** / **Ajustar saldo** abajo.
 
-Cada persona en cada tipo de permiso. Un saldo es la suma de su historial: asignaciones, acumulaciones, permisos aprobados y ajustes. Las entradas nunca se editan. Para deshacer un ajuste, añade el ajuste contrario.
+## Editar el expediente de un empleado
 
-## Informe de ausencias
+1. En la fila, pulse **⋮ > Editar expediente**. Se abre la ventana **Editar expediente del empleado**.
+2. Escriba el **Cargo** (por ejemplo maestra principal).
+3. Elija el **Tipo de empleo**: tiempo completo, medio tiempo, eventual, estudiante o contrato.
+4. Indique el **Estado**, la **Fecha de inicio**, el **Centro principal** y el **Responsable**.
+5. Si la persona se fue, elija el estado de baja y complete **Fecha de fin** y **Motivo de salida**.
+6. Pulse **Guardar**. Un aviso verde **Guardado** confirma el cambio.
 
-Permisos aprobados por persona, tipo, mes o centro. **Solo ausencias cortas repetidas** muestra a quienes alcanzan la regla de tu agencia. **Exportar a Excel** descarga el informe. La columna **Puntuación de ausencias** y la vista **Retrasos** se explican en *RR. HH.: retrasos, puntuación de ausencias y coincidencias de permisos*.
+> ℹ️ Elegir **contrato** también marca a la persona como contratista en la pantalla Personal (se usa para los anuncios «Todos los contratistas»). Cambiar el tipo quita esa marca.
 
-## Quién falta
+> ⚠️ Un expediente de baja necesita una fecha de fin; si no, la ventana muestra «Add the end date.» Los saldos dejan de crecer para el personal dado de baja. Para una salida completa (pago final, registro de empleo, lista de tareas), use **Bajas**: vea [[hr-documents-leaving]].
 
-El panel lateral **Hoy en el centro** muestra quién falta hoy y más adelante esta semana.
+## Ajustar un saldo de permiso
 
-## Solicitudes de permiso
+1. En la pestaña **Personas** o **Saldos**, pulse **⋮ > Ajustar saldo**. Se abre la ventana **Ajustar saldo de permiso**.
+2. Elija el **Tipo de permiso**. La lista muestra el saldo actual.
+3. En **Cambiar**, elija **Sumar al saldo** o **Restar del saldo**.
+4. Escriba el **Importe** (en cuartos, por ejemplo 0.5).
+5. Escriba el **Motivo (obligatorio)** para que quien lea el historial lo entienda.
+6. Pulse **Guardar ajuste**. El aviso muestra el nuevo saldo.
 
-Cada solicitud muestra su tipo, cuánto usa y el saldo. Aprobar resta del saldo; denegar o cancelar lo devuelve. Un permiso sin aprobación ya está restado y aparece **Por revisar**: en **Tiempo libre**, pulsa **Revisado**.
+> ⚠️ Los ajustes nunca se editan ni se borran. Para deshacer uno, agregue el ajuste contrario con un motivo.
 
-## Horas extra y hojas de horas
+## Leer la pestaña Saldos
 
-**Recursos humanos > Fichajes y hojas de horas > Horas extra** aprueba las horas adicionales como pago o las guarda como tiempo compensatorio. **Recursos humanos > Fichajes y hojas de horas > Aprobar y bloquear** compara las horas programadas y trabajadas, y aprueba y bloquea un periodo antes de la nómina. Consulta **RR. HH.: horas extra, tiempo compensatorio y hojas de horas**.
+1. Abra **Recursos humanos > Tiempo libre > Saldos**.
+2. Cada fila es una persona; cada columna es un tipo de permiso, con su color.
+3. Una celda muestra el saldo. Cuando hay solicitudes pendientes, también muestra «X pendiente, Y después», lo que quedará cuando se aprueben.
+4. Un saldo bajo cero aparece en rojo.
+5. Pulse **⋮ > Ver perfil de RR. HH.** para ver el historial, o **⋮ > Ajustar saldo** para corregirlo.
 
-## Turnos abiertos
+[[show: #time-off?tab=balances @ Balances | Mostrarme la pestaña Saldos]]
 
-**Recursos humanos > Turnos y horarios > Turnos abiertos** publica turnos sin nadie (también desde una falta de ratio); el personal que puede cubrirlos los pide en Mis RR. HH. y tú confirmas quién toma cada uno. El personal recibe un aviso por cada lote de cambios en sus turnos. Ver **RR. HH.: turnos abiertos y avisos de turno**.
+Un saldo es la suma de su historial: asignaciones, acumulaciones, permisos aprobados y ajustes. Aprobar una solicitud la descuenta; rechazarla o retirarla la devuelve.
 
-## Su primera semana
+## Quién puede hacer qué
 
-El **panel de RR. HH.** se abre con una breve ruta de inicio para su rol. Los administradores de agencia tienen **Su primera semana en RR. HH.** (tipos de permiso, expedientes de RR. HH., aprobadores, reglas de asistencia y horas extra, documentos de la empresa, invitaciones, la guía de RR. HH.). Los directores de centro tienen **Su primera semana como director** (los expedientes de su equipo, solicitudes de tiempo libre pendientes, el horario de la próxima semana, aprobar las hojas de horas de un periodo de pago, sus propios pendientes de Mis RR. HH.). Cada paso se marca solo al completarse, con **Ir** para abrir la pantalla y **?** para explicarlo. **Ocultar** la pliega; **Mostrar** la vuelve a abrir.
+| Rol | Personas y saldos |
+|---|---|
+| Administrador de la agencia | Toda la agencia. Puede editar expedientes, ajustar saldos, y ver y cambiar la tarjeta del número de seguro social (cifrado; cada vez que se muestra queda en el registro de auditoría). |
+| Director de centro | El personal de sus propios centros. Puede editar sus expedientes y ajustar sus saldos. Ve la paga solo cuando la nómina está activada en la agencia. Nunca ve el número de seguro social. |
+| Educadoras y visitadoras a domicilio | No ven esta pantalla. Ven su propio saldo en **Mis RR. HH.** y en **Tiempo libre**. |
 
-## Ayuda en cada pestaña
+Nadie puede ajustar su propio saldo, ni siquiera un administrador de la agencia.
 
-Cada pestaña de Recursos humanos tiene un **?** al final de su fila de pestañas. Abre la guía de esa pestaña junto a la pantalla, para leer y hacer clic a la vez. Un botón **Muéstrame** en la guía le lleva al lugar que describe. En **Ayuda y guías**, cada tema puede mostrar **Guías**, **Videos** o **Preguntas frecuentes**.
+## Preguntas frecuentes y cuando algo sale mal
 
-## Solicitudes rápidas y pendientes del personal
+??? Aparece «Not your own balance» al pulsar Ajustar saldo. | Nadie ajusta sus propios permisos. Pida a otro director o a un administrador de la agencia que lo haga.
+??? La pestaña Saldos dice «No leave types yet». | Un administrador de la agencia debe agregar primero los tipos de permiso en **Recursos humanos > Tiempo libre > Tipos de permiso**. Vea [[hr-leave-types]].
+??? Falta alguien en Personas. | La lista muestra las cuentas activas del personal de su agencia (los directores solo ven sus centros). No aparecen las cuentas desactivadas ni las personas ajenas a la agencia. Revise la cuenta en la pantalla Personal.
+??? Un saldo parece incorrecto. | Abra **⋮ > Ver perfil de RR. HH.** y pulse **Historial del saldo**. Cada cambio aparece con su motivo. Si una regla de derecho estaba mal, corríjala y agregue un ajuste por la diferencia.
+??? ¿Cómo le asigno un responsable a alguien? | **⋮ > Editar expediente**, elija el **Responsable** y pulse **Guardar**. El responsable se usa en el organigrama, las evaluaciones y las aprobaciones.
+??? ¿Se avisa a la persona cuando edito su expediente o su saldo? | No se envía ningún correo. Verá el nuevo saldo en **Mis RR. HH.** y en su formulario de permiso.
 
-El personal tiene una sola lista de **Pendientes** en **Mis RR. HH.** con todo lo que le espera en RR. HH., y un **＋** en su teléfono para tiempo libre, días de enfermedad, horas extra, reembolsos, peligros y lesiones. Vea **Mis RR. HH.**
+## Pantallas relacionadas
 
-## Preguntas
+[[open: #time-off | Solicitudes de tiempo libre]] [[open: #hr-absence | Ausencias y retrasos]] [[open: #hr | Panel de RR. HH.]]
 
-??? ¿Dónde configuro los tipos de permiso? | **Recursos humanos > Tiempo libre > Tipos de permiso** (administradores de agencia).
-??? ¿Dónde veo quién no ha iniciado sesión todavía? | **Recursos humanos > Informes de RR. HH. > Sin iniciar sesión**. Los administradores pueden pulsar **Reenviar** allí.
-??? ¿Dónde apruebo las hojas de horas de un periodo de pago? | **Recursos humanos > Fichajes y hojas de horas > Aprobar y bloquear**.
-??? ¿Cómo asigno un responsable a alguien? | **Recursos humanos > Personal**, luego ⋮ **Editar expediente** y elija el **Responsable**.
-??? ¿Puedo ocultar la ruta de inicio? | Sí. Pulse **Ocultar** en la tarjeta. Queda plegada en el panel de RR. HH.; pulse **Mostrar** para volver a abrirla.
+- [[hr-leave-types]] — tipos de permiso y reglas de derecho
+- [[hr-documents-leaving]] — documentos, historial de pago y salidas
+- [[hr-people-recognition]] — directorio, organigrama y aprobadores
+- [[time-off]] — pedir y aprobar tiempo libre

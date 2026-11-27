@@ -1,66 +1,94 @@
 ---
-title: HR: team files, balances and absences
+title: HR: people, employee files and leave balances
 category: Staff Management
 order: 60
 roles: agency_admin, platform_admin, centre_director
-screens: hr-people, time-off?tab=balances, ~time-off?tab=types, ~hr-settings
+screens: hr-people, time-off?tab=balances
 ---
-# HR: team files, balances and absences
+# HR: people, employee files and leave balances
 
-The **Human Resources** menu is part of the KiddieTrac HR add-on.
+**Human Resources > People** is the list of everyone on your team, with each person's HR file: job title, employment type, centre, start date, manager and status. **Human Resources > Time off > Balances** shows how much leave each person has left. Both are part of the KiddieTrac HR add-on. Open them when someone joins, changes job, needs a manager set, or asks how many days they have left.
 
-Each part has its own entry under **Human Resources**: **HR dashboard**, **People** (with **Leavers**), **Time off** (Requests, Balances, Leave types), **Absence & lateness**, **Rota & shifts** (the Schedule, Rota plan, Open shifts), **Clock-ins & timesheets** (Timesheets, Approve & lock, Overtime), **Payroll** (with Claims & mileage), **Hiring & onboarding**, **Performance & learning**, **Educator awards**, **Health & safety**, **Documents & letters** (with Background checks), **HR reports**, **HR settings** (admins) and **My HR**. Without the HR add-on, Time off, Rota & shifts, Clock-ins & timesheets, Payroll, Educator awards and Background checks still work; the rest are hidden. Old links to the single HR screen open the right entry.
+[[open: #hr-people | Open People]]
 
-Agency admins see the whole agency. Centre directors see the staff of their own centres.
+## Finding someone
 
-## People
+1. Open **Human Resources > People**. The **People** tab lists name, **Job title**, **Employment**, **Centre**, **Start date**, **Manager** and **Status**.
+2. Use the first filter to show **Everyone** or only one status (for example active, on leave or terminated).
+3. If you have more than one centre, pick a centre in **All centres** to see only the people whose primary centre it is.
+4. The count beside the filters ("8 of 12 people") tells you how many match.
 
-Everyone on your team, with job title, employment type, centre, start date, manager and status. Use the **⋮** menu on a row:
+> 💡 The other tabs on this screen are **Directory**, **Org chart** and **Leavers**. See [[hr-people-recognition]] and [[hr-documents-leaving]].
 
-- **View HR profile** puts the employee file, leave balances, recent time off, certifications, policies, PD hours, emergency contact and pay rate in one place, with links to each screen.
-- **Edit file** changes the job title, employment type (full-time, part-time, casual, student, contract), status (active, on leave, terminated), start date, end date and reason, manager and primary centre. Setting the type to **contract** also marks the person as a **Contractor** on the Staff screen (used for "All contractors" announcements), and changing it away clears that.
-- **Adjust balance** adds or takes off leave, with a reason. Nobody can adjust their own balance.
+## Opening an HR profile
 
-## Balances
+1. On a person's row, press **⋮ > View HR profile**.
+2. Read the cards: **Employment**, **Leave balances**, **Recent time off**, **Certifications**, **Policies & training**, **Emergency contact**, and **Pay** when you are allowed to see pay.
+3. Press **Balance history** under **Leave balances** to see every grant, accrual, approved request and adjustment behind each balance.
+4. Use the links in the cards (**Open Time off requests**, **Open Certifications**, **Open Policies**, **Open Payroll**, **Open user record**) to jump to that screen.
+5. Scroll down for the person's documents, pay and role history, reviews and goals, and leaving, when those parts of HR are in use.
+6. Press **Close**, or **Edit file** / **Adjust balance** at the bottom.
 
-Every person against every leave type. A balance is the sum of its history: grants, accruals, approved time off and adjustments. Pending requests are shown beside it. Entries are never edited. To undo an adjustment, add the opposite one.
+## Editing an employee file
 
-## Absence report
+1. On the row, press **⋮ > Edit file**. The **Edit employee file** window opens.
+2. Fill in **Job title** (for example Lead Teacher).
+3. Choose the **Employment type**: full-time, part-time, casual, student or contract.
+4. Set the **Status**, the **Start date**, the **Primary centre** and the **Manager**.
+5. If the person has left, choose the terminated status and fill in **End date** and **End reason**.
+6. Press **Save**. A green **Saved** toast says "Employee file updated."
 
-Approved time off by person, leave type, month or centre, for any date range. **Only repeated short absences** shows people who reached your agency's count (for example 3 absences of 2 days or less in 6 months). **Export to Excel** downloads the report. The **Absence score** column and the **Lateness** view are explained in *HR: lateness, absence score and leave clashes*.
+> ℹ️ Choosing **contract** also marks the person as a contractor on the Staff screen (used for "All contractors" announcements). Changing the type away from contract clears it.
 
-## Who's off
+> ⚠️ A terminated file needs an end date, or the window shows "Add the end date." Leave balances stop growing for terminated staff. To process a full leaving (final pay, record of employment, checklist), use **Leavers** instead: see [[hr-documents-leaving]].
 
-The **Today at the centre** side panel lists who is off today and later this week.
+## Adjusting a leave balance
 
-## Time-off requests
+1. On the **People** or **Balances** tab, press **⋮ > Adjust balance**. The **Adjust leave balance** window opens.
+2. Pick the **Leave type**. The list shows the balance now.
+3. Under **Change**, choose **Add to the balance** or **Take off the balance**.
+4. Type the **Amount** (quarter steps are allowed, for example 0.5).
+5. Write the **Reason (required)** so anyone reading the history understands it.
+6. Press **Save adjustment**. The toast shows the new balance.
 
-Each request now shows its leave type, how much it uses and the balance. Approving takes it off the balance; denying or cancelling gives it back. Leave that needs no approval is already taken off and shows as **To review**: open it under **Time off** and press **Reviewed**.
+> ⚠️ Adjustments are never edited or deleted. To undo one, add the opposite adjustment with a reason.
 
-## Overtime and timesheets
+## Reading the Balances tab
 
-**Human Resources > Clock-ins & timesheets > Overtime** approves extra hours as pay or banks them as time in lieu. **Human Resources > Clock-ins & timesheets > Approve & lock** compares scheduled and worked hours and approves and locks a period before payroll. See **HR: overtime, time in lieu and timesheets**.
+1. Open **Human Resources > Time off > Balances**.
+2. Each row is a person; each column is a leave type, with its colour.
+3. A cell shows the balance. When requests are waiting, it also shows "X pending, Y after", which is what will be left once they are approved.
+4. A balance below zero is shown in red.
+5. Press **⋮ > View HR profile** to see the history, or **⋮ > Adjust balance** to correct it.
 
-## Open shifts
+[[show: #time-off?tab=balances @ Balances | Show me the Balances tab]]
 
-**Human Resources > Rota & shifts > Open shifts** posts shifts nobody is on yet (also straight from a ratio shortfall); staff who can work them ask in My HR and you confirm who takes each one. Staff get one notice per batch of changes to their shifts. See **HR: open shifts and shift notices**.
+A balance is the sum of its history: grants, accruals, approved time off and adjustments. Approving a request takes it off; denying or withdrawing it gives it back.
 
-## Your first week
+## Who can do what
 
-The **HR dashboard** opens with a short starter path for your role. Agency admins get **Your first week in HR** (leave types, HR files, approvers, attendance and overtime rules, company documents, invites, the HR guide). Centre directors get **Your first week as a director** (your team's files, time-off requests waiting, next week's rota, approving a pay period's timesheets, your own My HR to-do). Each step ticks itself when it is done, has **Go** to open the screen and **?** to explain it. **Hide** folds it away; **Show** brings it back.
+| Role | People and balances |
+|---|---|
+| Agency admin | Everyone in the agency. Can edit files, adjust balances, and see and change the SIN/SSN card (stored encrypted; every reveal is in the audit log). |
+| Centre director | Staff of their own centres. Can edit their files and adjust their balances. Sees pay only when payroll is on for the agency. Never sees the SIN/SSN. |
+| Educators and home visitors | Do not see this screen. They see their own balance in **My HR** and on **Time off**. |
 
-## Help on every tab
+Nobody can adjust their own balance, not even an agency admin.
 
-Every Human Resources tab has a **?** at the end of its tab row. It opens the guide for that tab beside the screen, so you can read and click at the same time. A **Show me** button in the guide takes you to the place it describes. In **Help & guides**, each topic can show **Guides**, **Videos** or **FAQs**.
+## FAQs and when something goes wrong
 
-## Staff quick requests and to-do
+??? "Not your own balance" appears when I press Adjust balance. | Nobody adjusts their own leave. Ask another director or an agency admin to do it.
+??? The Balances tab says "No leave types yet". | An agency admin has to add leave types first under **Human Resources > Time off > Leave types**. See [[hr-leave-types]].
+??? Someone is missing from People. | People lists active staff accounts of your agency (directors see only their own centres). Deactivated accounts and people from outside the agency (such as platform staff) are not listed. Check their account on the Staff screen.
+??? A balance looks wrong. | Open **⋮ > View HR profile** and press **Balance history**. Every change is listed with its reason. If an entitlement rule was wrong, fix the rule, then add an adjustment for the difference.
+??? How do I give someone a manager? | **⋮ > Edit file**, choose the **Manager**, press **Save**. The manager is used by the org chart, reviews and approvals.
+??? Is the person told when I edit their file or adjust their balance? | No email is sent. They see the new balance in **My HR** and on their time-off form.
 
-Staff have one **To do** list on **My HR** with everything waiting for them in HR, and a **＋** on their phone for time off, sick days, overtime, claims, hazards and injuries. See **My HR**.
+## Related screens
 
-## Questions
+[[open: #time-off | Time off requests]] [[open: #hr-absence | Absence & lateness]] [[open: #hr | HR dashboard]]
 
-??? Where do I set up leave types? | **Human Resources > Time off > Leave types** (agency admins).
-??? Where do I see who has not signed in yet? | **Human Resources > HR reports > Not signed in yet**. Admins can press **Resend** there.
-??? Where do I approve a pay period's timesheets? | **Human Resources > Clock-ins & timesheets > Approve & lock**.
-??? How do I give someone a manager? | **Human Resources > People**, then ⋮ **Edit file** and choose the **Manager**.
-??? Can I hide the starter path? | Yes. Press **Hide** on the card. It stays folded on the HR dashboard; press **Show** to bring it back.
+- [[hr-leave-types]] — leave types and entitlement rules
+- [[hr-documents-leaving]] — documents, pay history and leaving
+- [[hr-people-recognition]] — directory, org chart and approvers
+- [[time-off]] — requesting and approving time off

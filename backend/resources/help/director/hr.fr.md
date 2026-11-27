@@ -1,65 +1,90 @@
 ---
-title: RH : dossiers, soldes et absences
-category: Staff Management
-order: 60
-roles: agency_admin, platform_admin, centre_director
+title: RH : personnes, dossiers des employés et soldes de congés
 ---
-# RH : dossiers, soldes et absences
+# RH : personnes, dossiers des employés et soldes de congés
 
-Le menu **Ressources humaines** fait partie du module complémentaire KiddieTrac RH.
+**Ressources humaines > Personnes** est la liste de toute votre équipe, avec le dossier RH de chaque personne : poste, type d'emploi, centre, date de début, gestionnaire et statut. **Ressources humaines > Congés > Soldes** montre combien de congés il reste à chacun. Les deux font partie du module complémentaire KiddieTrac RH. Ouvrez-les quand quelqu'un arrive, change de poste, doit avoir un gestionnaire, ou vous demande combien de jours il lui reste.
 
-Chaque partie a sa propre entrée sous **Ressources humaines** : **Tableau de bord RH**, **Personnes** (avec **Départs**), **Congés** (Demandes, Soldes, Types de congé), **Absences et retards**, **Horaires et quarts** (l'horaire, Plan des horaires, Quarts à pourvoir), **Pointages et feuilles de temps** (Feuilles de temps, Approuver et verrouiller, Heures supplémentaires), **Paie** (avec Notes de frais et kilométrage), **Embauche et intégration**, **Performance et formation**, **Récompenses des éducateurs**, **Santé et sécurité**, **Documents et lettres** (avec Vérifications des antécédents), **Rapports RH**, **Paramètres RH** (administrateurs) et **Mes RH**. Sans le module RH, Congés, Horaires et quarts, Pointages et feuilles de temps, Paie, Récompenses des éducateurs et Vérifications des antécédents fonctionnent toujours ; le reste est masqué. Les anciens liens vers l'écran RH unique ouvrent la bonne entrée.
+[[open: #hr-people | Ouvrir Personnes]]
 
-Les administrateurs d'agence voient toute l'agence. Les directeurs de centre voient le personnel de leurs propres centres.
+## Trouver quelqu'un
 
-## Personnes
+1. Ouvrez **Ressources humaines > Personnes**. L'onglet **Personnes** affiche le nom, le **Poste**, l'**Emploi**, le **Centre**, la **Date de début**, le **Gestionnaire** et le **Statut**.
+2. Avec le premier filtre, affichez **Tout le monde** ou un seul statut (par exemple actif, en congé ou fin d'emploi).
+3. Si vous avez plus d'un centre, choisissez un centre dans **Tous les centres** pour ne voir que les personnes dont c'est le centre principal.
+4. Le compte à côté des filtres (« 8 sur 12 personnes ») indique combien de personnes correspondent.
 
-Toute votre équipe, avec le poste, le type d'emploi, le centre, la date de début, le gestionnaire et le statut. Utilisez le menu **⋮** d'une ligne :
+> 💡 Les autres onglets de cet écran sont **Annuaire**, **Organigramme** et **Départs**. Voir [[hr-people-recognition]] et [[hr-documents-leaving]].
 
-- **Voir le profil RH** réunit le dossier, les soldes de congés, les congés récents, les certifications, les politiques, les heures de PP, le contact d'urgence et le taux de rémunération.
-- **Modifier le dossier** change le poste, le type d'emploi, le statut, les dates, le gestionnaire et le centre principal. Choisir le type **contrat** marque aussi la personne comme **Entrepreneur** sur l’écran Personnel (utilisé pour les annonces « Tous les entrepreneurs »), et changer de type retire cette marque.
-- **Ajuster le solde** ajoute ou retire des congés, avec un motif. Personne ne peut ajuster son propre solde.
+## Ouvrir un profil RH
 
-## Soldes
+1. Sur la ligne d'une personne, appuyez sur **⋮ > Voir le profil RH**.
+2. Lisez les cartes : **Emploi**, **Soldes de congés**, **Congés récents**, **Certifications**, **Politiques et formation**, **Contact d'urgence**, et **Paie** si vous avez le droit de voir la paie.
+3. Appuyez sur **Historique du solde** sous **Soldes de congés** pour voir chaque octroi, cumul, demande approuvée et ajustement derrière chaque solde.
+4. Utilisez les liens des cartes (**Open Time off requests**, **Open Certifications**, **Open Policies**, **Ouvrir Paie**, **Open user record**) pour aller à cet écran.
+5. Faites défiler pour voir les documents de la personne, l'historique de paie et de poste, les évaluations et objectifs, et le départ, quand ces parties des RH sont utilisées.
+6. Appuyez sur **Fermer**, ou sur **Modifier le dossier** / **Ajuster le solde** en bas.
 
-Chaque personne pour chaque type de congé. Un solde est la somme de son historique : octrois, cumuls, congés approuvés et ajustements. Les entrées ne sont jamais modifiées. Pour annuler un ajustement, ajoutez l'ajustement inverse.
+## Modifier le dossier d'un employé
 
-## Rapport d'absences
+1. Sur la ligne, appuyez sur **⋮ > Modifier le dossier**. La fenêtre **Modifier le dossier de l'employé** s'ouvre.
+2. Inscrivez le **Poste** (par exemple éducatrice responsable).
+3. Choisissez le **Type d'emploi** : temps plein, temps partiel, occasionnel, étudiant ou contractuel.
+4. Indiquez le **Statut**, la **Date de début**, le **Centre principal** et le **Gestionnaire**.
+5. Si la personne est partie, choisissez le statut de fin d'emploi et remplissez **Date de fin** et **Motif de départ**.
+6. Appuyez sur **Enregistrer**. Un message vert **Enregistré** confirme la mise à jour.
 
-Les congés approuvés par personne, type, mois ou centre. **Seulement les absences courtes répétées** affiche les personnes qui atteignent le seuil de votre agence. **Exporter vers Excel** télécharge le rapport. La colonne **Score d'absence** et la vue **Retards** sont expliquées dans *RH : retards, score d'absence et chevauchements de congés*.
+> ℹ️ Choisir **contractuel** marque aussi la personne comme travailleur autonome à l'écran Personnel (utilisé pour les annonces « Tous les contractuels »). Changer le type retire cette marque.
 
-## Qui est absent
+> ⚠️ Un dossier de fin d'emploi exige une date de fin, sinon la fenêtre affiche « Add the end date. » Les soldes cessent de grossir pour le personnel parti. Pour un départ complet (dernière paie, relevé d'emploi, liste de vérification), utilisez plutôt **Départs** : voir [[hr-documents-leaving]].
 
-Le panneau latéral **Aujourd'hui au centre** indique qui est absent aujourd'hui et plus tard cette semaine.
+## Ajuster un solde de congé
 
-## Demandes de congé
+1. Dans l'onglet **Personnes** ou **Soldes**, appuyez sur **⋮ > Ajuster le solde**. La fenêtre **Ajuster le solde de congé** s'ouvre.
+2. Choisissez le **Type de congé**. La liste affiche le solde actuel.
+3. Sous **Modifier**, choisissez **Ajouter au solde** ou **Retirer du solde**.
+4. Inscrivez le **Montant** (par quarts, par exemple 0,5).
+5. Écrivez le **Motif (obligatoire)** pour que toute personne qui lit l'historique comprenne.
+6. Appuyez sur **Enregistrer l'ajustement**. Le message affiche le nouveau solde.
 
-Chaque demande affiche son type, la quantité utilisée et le solde. L'approbation retire du solde; un refus ou une annulation le rend. Un congé sans approbation est déjà retiré et s'affiche **À examiner** : sous **Congés**, appuyez sur **Examiné**.
+> ⚠️ Un ajustement n'est jamais modifié ni supprimé. Pour l'annuler, ajoutez l'ajustement inverse avec un motif.
 
-## Heures supplémentaires et feuilles de temps
+## Lire l'onglet Soldes
 
-**Ressources humaines > Pointages et feuilles de temps > Heures supplémentaires** approuve les heures en plus en paie ou les met en banque comme congé compensatoire. **Ressources humaines > Pointages et feuilles de temps > Approuver et verrouiller** compare les heures prévues et travaillées, et approuve et verrouille une période avant la paie. Voir **RH : heures supplémentaires, congés compensatoires et feuilles de temps**.
+1. Ouvrez **Ressources humaines > Congés > Soldes**.
+2. Chaque ligne est une personne; chaque colonne est un type de congé, avec sa couleur.
+3. Une case affiche le solde. Quand des demandes attendent, elle affiche aussi « X en attente, Y après », soit ce qui restera une fois qu'elles seront approuvées.
+4. Un solde sous zéro est affiché en rouge.
+5. Appuyez sur **⋮ > Voir le profil RH** pour voir l'historique, ou sur **⋮ > Ajuster le solde** pour le corriger.
 
-## Quarts à pourvoir
+[[show: #time-off?tab=balances @ Balances | Me montrer l'onglet Soldes]]
 
-**Ressources humaines > Horaires et quarts > Quarts à pourvoir** publie des quarts sans personne (aussi depuis un manque de ratio) ; le personnel qui peut les faire les demande dans Mes RH et vous confirmez qui prend chacun. Le personnel reçoit un avis par lot de changements à ses quarts. Voir **RH : quarts à pourvoir et avis de quart**.
+Un solde est la somme de son historique : octrois, cumuls, congés approuvés et ajustements. Approuver une demande la retire du solde; la refuser ou la retirer la redonne.
 
-## Votre première semaine
+## Qui peut faire quoi
 
-Le **tableau de bord RH** s'ouvre sur un court parcours de démarrage pour votre rôle. Les administrateurs d'agence ont **Votre première semaine en RH** (types de congés, dossiers RH, approbateurs, règles d'assiduité et d'heures supplémentaires, documents de l'entreprise, invitations, guide RH). Les directeurs de centre ont **Votre première semaine comme directeur** (dossiers de l'équipe, demandes de congé en attente, horaire de la semaine prochaine, approbation des feuilles de temps d'une période de paie, vos propres tâches Mes RH). Chaque étape se coche seule une fois faite, avec **Aller** pour ouvrir l'écran et **?** pour l'expliquer. **Masquer** la replie ; **Afficher** la fait revenir.
+| Rôle | Personnes et soldes |
+|---|---|
+| Administrateur de l'agence | Toute l'agence. Peut modifier les dossiers, ajuster les soldes, et voir et modifier la carte NAS (chiffrée; chaque affichage est consigné au journal d'audit). |
+| Directeur de centre | Le personnel de ses propres centres. Peut modifier leurs dossiers et ajuster leurs soldes. Voit la paie seulement quand la paie est activée pour l'agence. Ne voit jamais le NAS. |
+| Éducatrices et visiteuses à domicile | Ne voient pas cet écran. Elles voient leur propre solde dans **Mes RH** et dans **Congés**. |
 
-## De l'aide sur chaque onglet
+Personne ne peut ajuster son propre solde, pas même un administrateur de l'agence.
 
-Chaque onglet des Ressources humaines a un **?** au bout de sa rangée d'onglets. Il ouvre le guide de cet onglet à côté de l'écran, pour lire et cliquer en même temps. Un bouton **Montrez-moi** dans le guide vous emmène à l'endroit décrit. Dans **Aide et guides**, chaque sujet peut afficher **Guides**, **Vidéos** ou **FAQ**.
+## FAQ et quand quelque chose ne va pas
 
-## Demandes rapides et tâches du personnel
+??? « Not your own balance » s'affiche quand j'appuie sur Ajuster le solde. | Personne n'ajuste ses propres congés. Demandez à une autre direction ou à un administrateur de l'agence de le faire.
+??? L'onglet Soldes indique « No leave types yet ». | Un administrateur de l'agence doit d'abord ajouter des types de congé sous **Ressources humaines > Congés > Types de congé**. Voir [[hr-leave-types]].
+??? Quelqu'un manque dans Personnes. | La liste montre les comptes actifs du personnel de votre agence (les directions ne voient que leurs centres). Les comptes désactivés et les personnes externes à l'agence n'y sont pas. Vérifiez le compte à l'écran Personnel.
+??? Un solde semble faux. | Ouvrez **⋮ > Voir le profil RH** et appuyez sur **Historique du solde**. Chaque changement y figure avec son motif. Si une règle d'admissibilité était fausse, corrigez la règle, puis ajoutez un ajustement pour la différence.
+??? Comment donner un gestionnaire à quelqu'un? | **⋮ > Modifier le dossier**, choisissez le **Gestionnaire**, appuyez sur **Enregistrer**. Le gestionnaire sert à l'organigramme, aux évaluations et aux approbations.
+??? La personne est-elle avisée quand je modifie son dossier ou son solde? | Aucun courriel n'est envoyé. Elle voit le nouveau solde dans **Mes RH** et sur son formulaire de congé.
 
-Le personnel a une seule liste **À faire** dans **Mes RH** avec tout ce qui l'attend en RH, et un **＋** sur son téléphone pour les congés, les jours de maladie, les heures supplémentaires, les remboursements, les dangers et les blessures. Voir **Mes RH**.
+## Écrans liés
 
-## Questions
+[[open: #time-off | Demandes de congé]] [[open: #hr-absence | Absences et retards]] [[open: #hr | Tableau de bord RH]]
 
-??? Où configurer les types de congés ? | **Ressources humaines > Congés > Types de congés** (administrateurs d'agence).
-??? Où voir qui ne s'est pas encore connecté ? | **Ressources humaines > Rapports RH > Pas encore connectés**. Les administrateurs peuvent y appuyer sur **Renvoyer**.
-??? Où approuver les feuilles de temps d'une période de paie ? | **Ressources humaines > Pointages et feuilles de temps > Approuver et verrouiller**.
-??? Comment donner un gestionnaire à quelqu'un ? | **Ressources humaines > Personnel**, puis ⋮ **Modifier le dossier** et choisissez le **Gestionnaire**.
-??? Puis-je masquer le parcours de démarrage ? | Oui. Appuyez sur **Masquer** sur la carte. Elle reste repliée sur le tableau de bord RH ; **Afficher** la fait revenir.
+- [[hr-leave-types]] — types de congé et règles d'admissibilité
+- [[hr-documents-leaving]] — documents, historique de paie et départs
+- [[hr-people-recognition]] — annuaire, organigramme et approbateurs
+- [[time-off]] — demander et approuver un congé
