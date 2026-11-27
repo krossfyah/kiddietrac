@@ -2,6 +2,24 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "📣",
+            "title": "Campaigns now reach parents who have not accepted their invite",
+            "body": "A family campaign now goes to every parent of a family still with you, including those who have not accepted their app invite yet (they were held back before). Families that have left and closed accounts are no longer on the list, and each address gets one copy. Recipients & stats counts only emails that really went out.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Les campagnes joignent maintenant les parents qui n'ont pas accepté leur invitation",
+            "body_fr": "Une campagne pour les familles est maintenant envoyée à chaque parent d'une famille encore inscrite, y compris ceux qui n'ont pas encore accepté leur invitation à l'application (ils étaient retenus avant). Les familles parties et les comptes fermés ne sont plus sur la liste, et chaque adresse reçoit un seul exemplaire. Destinataires et statistiques ne compte que les courriels vraiment envoyés.",
+            "title_es": "Las campañas ahora llegan a los padres que no aceptaron su invitación",
+            "body_es": "Una campaña para familias ahora llega a cada padre o madre de una familia que sigue con usted, incluidos los que aún no aceptaron su invitación a la aplicación (antes se retenían). Las familias que se fueron y las cuentas cerradas ya no están en la lista, y cada dirección recibe una sola copia. Destinatarios y estadísticas solo cuenta los correos que realmente salieron.",
+            "title_hi": "अभियान अब उन माता-पिता तक भी पहुँचते हैं जिन्होंने आमंत्रण स्वीकार नहीं किया",
+            "body_hi": "परिवारों के लिए अभियान अब आपके साथ जुड़े हर परिवार के हर माता-पिता को जाता है, उन्हें भी जिन्होंने अभी तक ऐप का आमंत्रण स्वीकार नहीं किया है (पहले उन्हें रोक दिया जाता था)। जा चुके परिवार और बंद खाते अब सूची में नहीं हैं, और हर पते को एक ही प्रति मिलती है। प्राप्तकर्ता और आँकड़े अब केवल वही ईमेल गिनता है जो सच में भेजे गए।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "📊",

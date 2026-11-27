@@ -72,6 +72,8 @@ final class DripDispatchCommand extends Command
                     $dripSubject = \App\Support\CampaignMerge::text($c->subject, $first);
                     $dripBuild = function ($m) use ($s, $dripSubject) {
                         $m->to($s['email'])->subject($dripSubject);
+                        // A family campaign: reaches a parent still waiting on their invite (2026-11-27, MailScope::campaign).
+                        \App\Support\MailScope::campaign($m);
                     };
                     if ($dripSender) {
                         \App\Support\RsvpSender::html($dripSender, (int) $c->agency_id, $bodyHtml, $dripBuild);

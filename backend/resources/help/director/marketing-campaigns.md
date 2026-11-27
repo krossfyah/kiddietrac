@@ -53,13 +53,20 @@ In the campaigns list, open a row's **⋮** and choose **View**. A popup shows t
 families get it (with a sample first name), plus its status, audience, channel, subject, preview text,
 schedule and, once sent, the delivery counts. View never sends anything.
 
+## Who receives a campaign
+
+A family campaign goes to every parent or guardian of a family still with you, **including parents who
+have not accepted their app invite yet** (since 27 November 2026; before that they were held back). It does
+not go to families that have left, closed or suspended accounts, test agencies, or anyone with no email on
+file, and each address gets one copy.
+
 ## Recipients & stats
 
 Once a campaign has gone out, open its row's **⋮** and choose **Recipients & stats**. You see who it went
 to and what happened to each person: **Sent** (our mail service accepted it and nothing came back),
 **Opened**, **Bounced** (their mail server sent it back, with the reason in plain words), **Failed**,
-**Held back** (not sent because of the email rules, for example someone who has not accepted their invite
-yet) and **Not known**. Filter by status, search, and export to CSV, Excel or PDF from the bar under the
+**Held back** (not sent because of the email rules, for example a closed account or email switched off)
+and **Not known**. Filter by status, search, and export to CSV, Excel or PDF from the bar under the
 table. **View the email they got** shows the copy that went to that person.
 
 What it cannot tell you: mail services send no delivery receipts, so "Sent" is the closest there is to

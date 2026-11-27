@@ -37,13 +37,20 @@ Haga clic en **👁 Vista previa** para ver la campaña exactamente como la reci
 
 En la lista de campañas, abra el **⋮** de una fila y elija **View**. Una ventana muestra el correo exactamente como lo reciben las familias (con un nombre de ejemplo), además de su estado, audiencia, canal, asunto, texto de vista previa, programación y, una vez enviada, los totales de entrega. Ver nunca envía nada.
 
+## Quién recibe una campaña
+
+Una campaña para familias llega a cada padre, madre o tutor de una familia que sigue con usted, **incluidos
+los que aún no aceptaron su invitación a la aplicación** (desde el 27 de noviembre de 2026; antes se
+retenían). No llega a familias que se fueron, cuentas cerradas o suspendidas, agencias de prueba ni a quien
+no tenga correo registrado, y cada dirección recibe una sola copia.
+
 ## Destinatarios y estadísticas
 
 Cuando una campaña ya se envió, abra el **⋮** de su fila y elija **Destinatarios y estadísticas**. Verá a
 quién se envió y qué pasó con cada persona: **Enviado** (nuestro servicio de correo lo aceptó y no volvió
 nada), **Abierto**, **Rebotado** (el servidor del destinatario lo devolvió, con el motivo en palabras
-sencillas), **Falló**, **Retenido** (no se envió por las reglas de correo, por ejemplo alguien que aún no
-aceptó su invitación) y **Desconocido**. Filtre por estado, busque y exporte a CSV, Excel o PDF con la barra
+sencillas), **Falló**, **Retenido** (no se envió por las reglas de correo, por ejemplo una cuenta cerrada o
+el correo desactivado) y **Desconocido**. Filtre por estado, busque y exporte a CSV, Excel o PDF con la barra
 debajo de la tabla. **Ver el correo que recibió** muestra la copia que le llegó a esa persona.
 
 Lo que no puede saberse: los servicios de correo no envían confirmaciones de entrega, así que «Enviado» es

@@ -582,7 +582,7 @@ final class MarketingController extends Controller
     {
         $aud = $campaign->audience;
         $centreScope = $campaign->centre_id ? [(int) $campaign->centre_id]
-            : DB::table('centres')->where('agency_id', $agencyId)->whereNull('deleted_at')->pluck('id')->all();
+            : \App\Support\Live::centreIds($agencyId);   // open centres only, as the email sender uses
 
         if ($aud === 'staff') {
             return DB::table('role_assignments')
@@ -593,10 +593,16 @@ final class MarketingController extends Controller
                 })
                 ->distinct()->pluck('user_id')->all();
         }
-        // Families = users that are guardians of children in our centre scope
+        /* Families = guardians at our centres, of families still with us, whose account can still sign in (2026-11-27,
+           the same rule as SendCampaignEmailsCommand::resolveAudience). De-enrolled families were counted and listed
+           for News. A parent still waiting on their invite IS included: family campaigns reach them. */
         $base = DB::table('guardians as g')
             ->join('families as f', 'f.id', '=', 'g.family_id')
-            ->whereIn('f.centre_id', $centreScope);
+            ->join('users as u', 'u.id', '=', 'g.user_id')
+            ->whereIn('f.centre_id', $centreScope)
+            ->tap(fn ($q) => \App\Support\Live::families($q, 'f'))
+            ->whereNull('u.deleted_at')
+            ->where(fn ($w) => $w->whereNull('u.status')->orWhereNotIn('u.status', ['suspended', 'deactivated']));
         if ($aud === 'active_families') {
             $base->whereExists(function ($q) {
                 $q->select(DB::raw(1))->from('children as c')

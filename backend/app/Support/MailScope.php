@@ -64,6 +64,30 @@ class MailScope
         }
     }
 
+    /**
+     * AN AGENCY'S OWN CAMPAIGN TO ITS FAMILIES (2026-11-27). Anthony: "the campaigns users should all receive it
+     * whether or not they have accepted their invite". iLearn's "Get the KiddieTrac app" campaign - written for the
+     * very parents who have not signed in yet - was held back from all 12 of them by the not-onboarded gate.
+     * SuppressAgencyMail lets mail stamped here reach a guardian whose account is still invited / not_invited, the
+     * same narrow exception as billing(). Every other gate still applies (test agency, agency switch, closed or
+     * suspended account, demo address, allowlist, AgencyOutsiders).
+     *
+     * Its own header on purpose, NOT X-KT-Campaign: that one marks KiddieTrac's sales / subscriber mail, and
+     * AgencyOutsiders::mailDrops lets anything carrying it through to super admins. Only tenant mail counts (the
+     * listener also needs X-KT-Agency-Id). Set by SendCampaignEmailsCommand (family audiences) and DripDispatchCommand.
+     */
+    public static function campaign($message): void
+    {
+        try {
+            $h = $message->getHeaders();
+            if (! $h->has('X-KT-Family-Campaign')) {
+                $h->addTextHeader('X-KT-Family-Campaign', '1');
+            }
+        } catch (\Throwable $e) {
+            Log::warning('MailScope::campaign could not stamp: ' . $e->getMessage());
+        }
+    }
+
     /** Tenant mail where only the centre is in hand. */
     public static function centre($message, ?int $centreId): void
     {

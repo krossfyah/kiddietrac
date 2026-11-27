@@ -38,9 +38,10 @@ class CampaignSends
      * The house logger keys the email_logs row on the X-KT-Track token the pixel listener put on the message;
      * a message the mail rules held back has no token and its 'suppressed' row is found by address + subject.
      */
-    public static function record(object $c, object $r, string $subject, $message, ?\Throwable $error, Carbon $startedAt): void
+    public static function record(object $c, object $r, string $subject, $message, ?\Throwable $error, Carbon $startedAt): ?string
     {
-        if (! self::ready() || empty($r->email)) return;
+        // Returns the outcome it recorded ('sent', 'suppressed', 'failed', 'unknown'), or null when nothing was recorded.
+        if (! self::ready() || empty($r->email)) return null;
         try {
             $token = null;
             try {
@@ -82,9 +83,13 @@ class CampaignSends
                     'sent_at' => now(),
                 ]
             );
+
+            return $outcome;
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning('campaign send record', ['campaign' => $c->id ?? null, 'e' => $e->getMessage()]);
         }
+
+        return null;
     }
 
     /**
@@ -150,7 +155,9 @@ class CampaignSends
             '/DNS domain .* does not exist|InfoDomainNonexistent|5\.4\.310|host not found|domain not found/i' => 'The email domain does not exist (check the spelling after the @).',
             '/mailbox full|quota|over quota|5\.2\.2/i' => 'Their mailbox is full.',
             '/relay access denied|not permitted to relay|5\.7\.|blocked|spam|policy/i' => 'Their mail server refused it (blocked or a spam rule).',
-            '/not accepted their invite|not onboarded/i' => 'Not sent: they have not accepted their invite yet.',
+            /* Since 2026-11-27 an agency's family campaigns DO reach people who have not accepted their invite
+               (MailScope::campaign), so this hold-back can only be from before then - worded so, not as a rule. */
+            '/not accepted their invite|not onboarded/i' => 'Not sent at the time: they had not accepted their invite yet. Campaigns now reach them.',
             '/demo|non-existent address|\.invalid|\.test\b/i' => 'Not sent: a demo or made-up address.',
             '/test agency|suppressed agency|MAIL_SUPPRESS_AGENCIES/i' => 'Not sent: email is switched off for this agency (test agency or not live yet).',
             '/master switch/i' => 'Not sent: notifications and emails are switched off in Settings.',

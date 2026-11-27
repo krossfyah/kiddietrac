@@ -37,13 +37,20 @@ Cliquez sur **👁 Aperçu** pour voir la campagne exactement comme les destinat
 
 Dans la liste des campagnes, ouvrez le **⋮** d’une ligne et choisissez **View**. Une fenêtre affiche le courriel exactement comme les familles le reçoivent (avec un prénom d’exemple), ainsi que son statut, ses destinataires, son canal, son objet, son texte d’aperçu, sa programmation et, une fois envoyée, les nombres d’envois. La vue n’envoie jamais rien.
 
+## Qui reçoit une campagne
+
+Une campagne pour les familles est envoyée à chaque parent ou tuteur d'une famille encore inscrite chez vous,
+**y compris les parents qui n'ont pas encore accepté leur invitation à l'application** (depuis le 27 novembre
+2026; avant, ils étaient retenus). Elle n'est pas envoyée aux familles parties, aux comptes fermés ou suspendus,
+aux agences de test ni aux personnes sans courriel au dossier, et chaque adresse reçoit un seul exemplaire.
+
 ## Destinataires et statistiques
 
 Une fois la campagne envoyée, ouvrez le **⋮** de sa ligne et choisissez **Destinataires et statistiques**.
 Vous voyez à qui elle est allée et ce qui s'est passé pour chaque personne : **Envoyé** (notre service de
 courriel l'a accepté et rien n'est revenu), **Ouvert**, **Renvoyé** (le serveur du destinataire l'a refusé,
 avec la raison en termes simples), **Échec**, **Retenu** (non envoyé à cause des règles de courriel, par
-exemple une personne qui n'a pas encore accepté son invitation) et **Inconnu**. Filtrez par statut,
+exemple un compte fermé ou les courriels désactivés) et **Inconnu**. Filtrez par statut,
 cherchez et exportez en CSV, Excel ou PDF avec la barre sous le tableau. **Voir le courriel reçu** montre
 la copie envoyée à cette personne.
 

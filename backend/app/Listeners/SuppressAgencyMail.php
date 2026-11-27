@@ -407,6 +407,7 @@ class SuppressAgencyMail
         $isEngagement = false;
         $isFormPackage = false;
         $isBilling = false;
+        $isFamilyCampaign = false;
         try {
             $hdrs2 = $event->message->getHeaders();
             $isInvite = (bool) ($hdrs2 && $hdrs2->has('X-KT-Invite'));
@@ -448,6 +449,18 @@ class SuppressAgencyMail
             if ($isBilling && $hdrs2) {
                 $hdrs2->remove('X-KT-Billing');
             }
+            /* AN AGENCY'S CAMPAIGN TO ITS FAMILIES (2026-11-27). Agreed with Anthony, asked against the rule below:
+               "the campaigns users should all receive it whether or not they have accepted their invite". iLearn's
+               "Get the KiddieTrac app" campaign exists to reach the parents who have not signed in yet, and all 12 of
+               them were withheld here. NARROW ON PURPOSE, like billing: only mail stamped by MailScope::campaign (the
+               campaign and drip senders) AND carrying the sending agency (tenant mail) skips the not-onboarded gate
+               below. Every other gate still applies - test agency (above), closed / suspended accounts, demo
+               addresses, agency switches, allowlist, AgencyOutsiders - and every other kind of mail is still
+               withheld. The header is removed here, before AgencyOutsiders reads the message. */
+            $isFamilyCampaign = (bool) ($hdrs2 && $hdrs2->has('X-KT-Family-Campaign') && $hdrs2->has('X-KT-Agency-Id'));
+            if ($hdrs2 && $hdrs2->has('X-KT-Family-Campaign')) {
+                $hdrs2->remove('X-KT-Family-Campaign');
+            }
             /* Engagement mail = digests, summaries, chat round-ups: the
                "come and use the portal" family. Only THIS is withheld from
                someone who has not accepted their invite. Everything else is
@@ -474,13 +487,15 @@ class SuppressAgencyMail
            portal is 'active' before they do it and is not in scope here.
 
            If mail ever appears to need an exemption from this gate, fix the mail or
-           ask -- do not widen the gate. Superseded reasoning follows:
+           ask -- do not widen the gate. The exceptions so far were each asked of Anthony
+           and named above: form packages (09-17), billing mail (11-06) and an agency's
+           campaigns to its families (11-27). Superseded reasoning follows:
 
            This used to read `if (! $isInvite)`, i.e. cancel
            everything that was not an invite -- which cancelled password resets,
            NDA receipts and "your child arrived" notices for anyone still marked
            'invited'. It now cancels only what is explicitly engagement mail. */
-        if (! $isInvite && ! $isFormPackage && ! $isBilling) {
+        if (! $isInvite && ! $isFormPackage && ! $isBilling && ! $isFamilyCampaign) {
             try {
                 $pending = DB::table('users')
                     // Not-yet-onboarded states: 'invited' (invite sent, awaiting
