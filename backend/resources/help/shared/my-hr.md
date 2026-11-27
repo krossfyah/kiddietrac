@@ -45,3 +45,7 @@ Directors and admins also see **Cover while I'm away**: choose who gets your tim
 ## Health and safety
 
 Press **Report a hazard** to tell your director about something unsafe; you can add a photo straight from your phone camera. **My H&S duties** shows a duty you hold, such as first aider or fire warden, and whether the certificate it needs is still valid. **H&S tasks** lists safety jobs given to you: add a photo or file as evidence, then press **Close task**. **Safety data sheets** opens the sheet for each product kept at your centre. **Safe work procedures** lists the procedures to read and sign; you are asked again when one changes.
+
+## Shifts to accept and clock-in fixes
+
+If your centre asks staff to accept their shifts, each new shift waits in **Shifts to accept**. Press **Accept**, or **I can't do this shift** and say why: your director is told. The shift stays yours until they change it. In **Fix my clock-in**, press **Ask for a fix** next to a clock-in that is wrong, or **A clock-in is missing** if you forgot to clock in. Enter the right times and what went wrong. Your director checks it; you can withdraw it while it waits. A clock-in in a timesheet that is already locked for payroll cannot be changed.

@@ -45,3 +45,7 @@ Les directeurs et administrateurs voient aussi **Remplacement pendant mon absenc
 ## Santé et sécurité
 
 Appuyez sur **Signaler un danger** pour avertir votre directeur d'un problème de sécurité; vous pouvez ajouter une photo prise avec votre téléphone. **Mes rôles SST** montre un rôle que vous occupez, comme secouriste ou responsable d'évacuation, et si le certificat requis est encore valide. **Tâches SST** liste les travaux de sécurité qui vous sont confiés : ajoutez une photo ou un fichier comme preuve, puis appuyez sur **Fermer la tâche**. **Fiches de données de sécurité** ouvre la fiche de chaque produit gardé à votre centre. **Méthodes de travail sécuritaires** liste les méthodes à lire et à signer; on vous le redemande quand l'une change.
+
+## Quarts à accepter et corrections de pointage
+
+Si votre centre demande au personnel d'accepter ses quarts, chaque nouveau quart attend dans **Quarts à accepter**. Appuyez sur **Accepter**, ou sur **Je ne peux pas faire ce quart** en expliquant pourquoi : votre direction est avertie. Le quart reste à vous jusqu'à ce qu'elle le change. Dans **Corriger mon pointage**, appuyez sur **Demander une correction** à côté d'un pointage erroné, ou sur **Un pointage manque** si vous avez oublié de pointer. Indiquez les bonnes heures et ce qui n'allait pas. Votre direction vérifie; vous pouvez retirer la demande tant qu'elle attend. Un pointage d'une feuille de temps déjà verrouillée pour la paie ne peut pas être modifié.

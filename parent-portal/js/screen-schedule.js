@@ -141,6 +141,16 @@
       paint(container, '<div style="padding:24px;color:#DC2626;">Could not load: ' + esc(e.message) + '</div>');
       return;
     }
+    /* HR Phase 4 batch 8: drafts (publish step), presets, acceptance marks and the labour budget, laid over the
+       published rota by screen-hr-rota.js. Null without the HR add-on: the screen is exactly as before. */
+    let rota = null;
+    const R = window.KTHrRota;
+    if (R && R.on()) {
+      const days = activeView === 'month' && month ? month.days : week.days;
+      const keys = Object.keys(days || {}).sort();
+      if (keys.length) { rota = await R.overlay(activeCentreId, keys[0], keys[keys.length - 1]); R.merge(days, rota); }
+    }
+    rotaNow = rota;
 
     paint(container, `
       <div style="padding:24px;max-width:1800px;">
@@ -169,10 +179,12 @@
             <span style="width:1px;height:22px;background:#E2E8F0;margin:0 2px;"></span>
             <button id="kt-standing" title="Set the hours each person on this home's team works every week" style="${textBtnStyle(false)}">👥 Standing hours</button>
             <button id="kt-autofill" title="Fill the displayed week from the centre's opening hours. Closure days and days already rostered are left alone." style="${textBtnStyle(false)}">⚡ Autofill ${activeView === 'month' ? 'month' : 'week'}</button>
+            ${rota && activeView === 'week' ? `<button id="kt-copy" title="Copy last week, one person's week, or a day onto other days" style="${textBtnStyle(false)}" data-kt-iconized="1">📋 Copy</button>` : ''}
             <button id="kt-new-shift" style="${textBtnStyle(true)}">+ New Shift</button>
           </div>
         </div>
 
+        ${rota ? R.banner(rota) : ''}
         ${activeView === 'month' ? monthGrid(month) : `
         <div class="kt-sched-week" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;">
           ${Object.entries(week.days).map(([date, info]) => dayColumn(date, info)).join('')}
@@ -226,6 +238,11 @@
     });
     $('#kt-new-shift', container).addEventListener('click', () => openShiftModal(container, staff.staff || [], null));
     $('#kt-standing', container).addEventListener('click', () => openStandingModal(container));
+    if (rota) {
+      const ctx = { centreId: activeCentreId, weekStart: activeWeek, ov: rota, staff: staff.staff || [], reload: () => render(container) };
+      const cp = $('#kt-copy', container); if (cp) cp.addEventListener('click', () => R.openCopy(ctx));
+      const pb = container.querySelector('[data-rt="publish"]'); if (pb) pb.addEventListener('click', () => R.openPublish(ctx));
+    }
 
     $('#kt-autofill', container).addEventListener('click', (e) => {
       /* Fill what is on screen. In month view this used to hand over the WEEK, so a
@@ -518,9 +535,10 @@
 
       const shifts = info.shifts || [];
       const chips = shifts.slice(0, 3).map(sh => {
-        const colour = sh.role === 'lead' ? '#1F6080' : sh.role === 'support' ? '#8EC73C'
-          : sh.role === 'floater' ? '#F59E0B' : '#A78BFA';
-        return `<div class="kt-mini-shift" data-shift='${esc(JSON.stringify(sh)).replace(/&quot;/g, '"')}' title="${esc(sh.user_name + ' · ' + sh.starts_hm + '–' + sh.ends_hm + ' · ' + sh.role)}" style="background:${colour}1F;--kt-edge:${colour};border-radius:3px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(sh.starts_hm)} ${esc(sh.user_name)}</div>`;
+        const colour = sh._colour || (sh.role === 'lead' ? '#1F6080' : sh.role === 'support' ? '#8EC73C'
+          : sh.role === 'floater' ? '#F59E0B' : '#A78BFA');
+        const mk = window.KTHrRota && rotaNow ? window.KTHrRota.cardMarks(sh) : { cls: '' };
+        return `<div class="kt-mini-shift${mk.cls}" data-shift='${esc(JSON.stringify(sh)).replace(/&quot;/g, '"')}' title="${esc(sh.user_name + ' · ' + sh.starts_hm + '–' + sh.ends_hm + ' · ' + sh.role)}" style="background:${colour}1F;--kt-edge:${colour};border-radius:3px;padding:1px 4px;margin-bottom:2px;font-size:10px;line-height:1.35;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(sh.starts_hm)} ${esc(sh.user_name)}</div>`;
       }).join('');
 
       const more = shifts.length > 3
@@ -594,12 +612,13 @@
   }
 
   function shiftCard(s) {
-    const color = s.role === 'lead' ? '#1F6080' : s.role === 'support' ? '#8EC73C' : s.role === 'floater' ? '#F59E0B' : '#A78BFA';
+    const color = s._colour || (s.role === 'lead' ? '#1F6080' : s.role === 'support' ? '#8EC73C' : s.role === 'floater' ? '#F59E0B' : '#A78BFA');
+    const mk = window.KTHrRota && rotaNow ? window.KTHrRota.cardMarks(s) : { cls: '', tag: '' };
     return `
-      <div class="kt-shift-card" data-shift='${esc(JSON.stringify(s)).replace(/&quot;/g,'\"')}' style="background:${color}20;--kt-edge:${color};border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:11px;cursor:pointer;">
+      <div class="kt-shift-card${mk.cls}" data-shift='${esc(JSON.stringify(s)).replace(/&quot;/g,'\"')}' style="background:${color}20;--kt-edge:${color};border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:11px;cursor:pointer;">
         <div style="font-weight:600;">${esc(s.starts_hm)}–${esc(s.ends_hm)}</div>
         <div style="margin-top:2px;color:#374151;">${esc(s.user_name)}</div>
-        <div style="color:#6B7280;font-size:10px;">${esc(s.room_name)} · ${esc(s.role)}</div>
+        <div style="color:#6B7280;font-size:10px;">${esc(s.room_name)} · ${esc(s.role)}</div>${mk.tag ? '<div>' + mk.tag + '</div>' : ''}
       </div>
     `;
   }
@@ -627,6 +646,7 @@
             <select name="role" style="${selectStyle()}">
               ${['lead','support','floater','volunteer'].map(r => `<option value="${r}" ${existing&&existing.role===r?'selected':''}>${r}</option>`).join('')}
             </select>
+            ${window.KTHrRota && rotaNow ? window.KTHrRota.presetSelect(rotaNow, existing && existing.preset_id) : ''}
             <div id="kt-status" style="min-height:20px;font-size:14px;"></div>
             <div style="display:flex;justify-content:space-between;gap:8px;">
               <div>${isEdit ? '<button type="button" id="kt-delete" style="background:#FEE2E2;color:#991B1B;border:none;padding:10px 18px;border-radius:8px;font-weight:600;cursor:pointer;">Delete</button>' : ''}</div>
@@ -641,14 +661,23 @@
     `;
     const overlay = $('.kt-modal-overlay', mount);
     const close = () => mount.innerHTML = '';
+    if (window.KTHrRota && rotaNow) window.KTHrRota.wirePreset($('#kt-shift-form', mount));
+    /* A draft addition is edited / dropped as a draft; a shift set to be removed offers to keep it. */
+    const draft = existing && existing._draft, cancelled = existing && existing._cancel;
+    if (cancelled) { const db = $('#kt-delete', mount); if (db) { db.textContent = 'Keep this shift'; db.style.background = '#DCFCE7'; db.style.color = '#166534'; } }
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
     $('#kt-cancel', mount).addEventListener('click', close);
 
     if (isEdit) {
       $('#kt-delete', mount).addEventListener('click', async () => {
-        if (!await KT.confirm('Delete this shift?')) return;
+        if (cancelled) {
+          try { await api('DELETE', '/hr/rota/drafts/' + cancelled.id); close(); render(container); } catch (e) { alert('Could not change it: ' + e.message); }
+          return;
+        }
+        if (!await KT.confirm(draft ? 'Drop this draft shift?' : 'Delete this shift?')) return;
         try {
-          await api('DELETE', '/director/schedule/shift/' + existing.id);
+          const r = await api('DELETE', draft ? '/hr/rota/drafts/' + draft.id : '/director/schedule/shift/' + existing.id);
+          if (r && r.draft && window.KT && KT.toast) KT.toast('📝', 'Draft', r.message || '');
           close(); render(container);
         } catch (e) { alert('Could not delete: ' + e.message); }
       });
@@ -660,9 +689,13 @@
       new FormData(e.target).forEach((v, k) => data[k] = v);
       data.user_id = parseInt(data.user_id, 10);
       data.room_id = parseInt(data.room_id, 10);
+      if ('preset_id' in data) data.preset_id = data.preset_id ? parseInt(data.preset_id, 10) : null;
       try {
-        if (isEdit) await api('PATCH', '/director/schedule/shift/' + existing.id, data);
-        else await api('POST', '/director/schedule/shift', data);
+        let r;
+        if (draft) r = await api('PATCH', '/hr/rota/drafts/' + draft.id, data);
+        else if (isEdit) r = await api('PATCH', '/director/schedule/shift/' + existing.id, data);
+        else r = await api('POST', '/director/schedule/shift', data);
+        if (r && r.draft && window.KT && KT.toast) KT.toast('📝', 'Draft', r.message || '');
         $('#kt-status', mount).style.color = '#16A34A';
         $('#kt-status', mount).textContent = '✓ Saved';
         setTimeout(() => { close(); render(container); }, 600);
@@ -685,6 +718,7 @@
      pixels off them and centres in the row — rather than overriding that rule on one
      screen, which is how each page ends up its own size. */
   var CTL_H = 32;
+  var rotaNow = null; // the HR rota overlay for the screen on show (HR Phase 4 batch 8), or null
   function ctl(extra) {
     return 'height:' + CTL_H + 'px;box-sizing:border-box;border-radius:8px;font-size:13px;'
       + 'font-family:inherit;line-height:1;cursor:pointer;' + (extra || '');

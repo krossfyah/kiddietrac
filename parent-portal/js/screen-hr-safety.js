@@ -536,6 +536,18 @@
       + '<span class="hrt-stat' + (gaps.length ? ' warn' : '') + '">Ratio warnings <span class="n">' + gaps.length + '</span></span>'
       + '<span class="hrt-stat' + (conflicts.length ? ' warn' : '') + '">Availability conflicts <span class="n">' + conflicts.length + '</span></span></div>';
     if (pay && (t.salaried || t.no_rate)) h += '<div class="hr-sub" style="margin:-4px 0 8px;">' + (t.salaried ? '<span data-no-i18n>' + t.salaried + '</span> <span>salaried shifts are not costed.</span> ' : '') + (t.no_rate ? '<span data-no-i18n>' + t.no_rate + '</span> <span>shifts have no pay rate on the employee file.</span>' : '') + '</div>';
+    var dr = d.drafts || [], bud = d.budget;
+    if (pay && bud) { var wb = bud.budget; h += '<div class="hr-sub" style="margin:-4px 0 8px;">Labour budget: <b data-no-i18n>' + (wb != null ? esc(money(bud.cost)) + ' of ' + esc(money(wb)) + ' (' + Math.round(bud.cost / wb * 100) + '%)' : esc(money(bud.cost))) + '</b>' + (wb == null ? ' <span>projected, no weekly budget set (Shift tools).</span>' : ' <span>projected, drafts included.</span>') + '</div>'; }
+    if (dr.length) {
+      var dg = d.ratio_gaps_with_drafts;
+      h += '<div class="hrt-sec">Drafts, not published</div><div class="hr-note" style="background:#EEF2FF;border-color:#C7D2FE;color:#3730A3;">📝 <span>These are on the Schedule as drafts: staff, clock-in, ratio warnings above and payroll do not count them until they are published.</span>'
+        + (dg ? ' <span>Once published, ratio warnings would be</span> <b data-no-i18n>' + dg.length + '</b>.' : '') + '</div>'
+        + '<div class="kt-card"><table data-hrs="rotadrafts"><thead><tr><th>Person</th><th>Day</th><th>Time</th><th>Room</th><th>Draft</th><th style="text-align:right;">Hours</th>' + (pay ? '<th style="text-align:right;">Cost</th>' : '') + '</tr></thead><tbody>' + dr.map(function (x) {
+          return '<tr style="background:#F5F7FF;"><td><b data-no-i18n>' + esc(x.user_name) + '</b></td><td style="white-space:nowrap;" data-no-i18n>' + esc(wday(x.date)) + '</td><td style="white-space:nowrap;">' + span({ start: x.starts_hm, end: x.ends_hm }) + '</td>'
+            + '<td data-no-i18n>' + esc(x.room_name) + '</td><td>' + pill(x.kind === 'cancel' ? '#FEE2E2' : x.kind === 'change' ? '#FEF3C7' : '#E0E7FF', x.kind === 'cancel' ? '#991B1B' : x.kind === 'change' ? '#92400E' : '#3730A3', x.kind === 'cancel' ? 'To be removed' : x.kind === 'change' ? 'Changed' : 'New') + '</td>'
+            + '<td style="text-align:right;" data-no-i18n>' + esc(hrs(x.hours)) + '</td>' + (pay ? '<td style="text-align:right;" data-no-i18n>' + (x.cost != null ? esc(money(x.cost)) : '—') + '</td>' : '') + '</tr>';
+        }).join('') + '</tbody></table></div>';
+    }
     h += '<div class="hrt-sec">Shift changes</div><div class="kt-card">' + (sw.length ? '<table data-hrs="swaps"><thead><tr><th>From</th><th>Shift</th><th>To</th><th>Status</th><th></th></tr></thead><tbody>' + sw.map(function (w) {
       return '<tr><td><b data-no-i18n>' + esc(w.from) + '</b></td><td>' + swWhat(w) + '</td><td data-no-i18n>' + esc(w.accepted_by || w.to || '') + (!w.accepted_by && !w.to ? '<span class="hr-sub">Anyone at the centre</span>' : '')
         + (w.conflict ? '<div style="color:#B45309;font-size:12px;">⚠️ ' + esc(w.conflict) + '</div>' : '') + '</td><td>' + swPill(w.status) + '</td>'
@@ -1071,6 +1083,9 @@
         + field('Before payroll', select('export_rule', opts({ warn: 'Warn when a period is not approved', block: 'Only pay approved, locked periods' }, t.export_rule || 'warn')))
         + '<div style="grid-column:1/-1;display:grid;gap:6px;">' + check('clip_in', t.clip_in, 'Count from the shift start when someone clocks in early')
         + check('clip_out', t.clip_out, 'Count to the shift end when someone clocks out late (log the extra as overtime)') + '</div></div>'
+        + '<div class="hrt-sec">Unpaid break</div><div class="hr-g"><div style="grid-column:1/-1;">' + check('break_on', t.break_on, 'Take an unpaid break off long clock-ins automatically') + '</div>'
+        + field('When a clock-in is longer than', select('break_after_min', opts((r.break_after || [240, 300, 330, 360, 390, 420, 480, 600]).reduce(function (m, n) { m[n] = (n / 60) + ' hours'; return m; }, {}), String(t.break_after_min || 360))))
+        + field('Take off', select('break_minutes', opts((r.break_minutes || [15, 20, 30, 45, 60]).reduce(function (m, n) { m[n] = n + ' minutes'; return m; }, {}), String(t.break_minutes || 30)))) + '</div>'
         + '<div class="hr-sub" style="margin-top:8px;">All timesheet rules are off by default, so hours are exactly what the clock recorded. Rules change the paid hours on the timesheet and in the payroll run, never the clock-in record itself.'
         + (r.bank ? ' Banked overtime goes to the <b data-no-i18n>' + esc(r.bank.name) + '</b> leave type' + (r.bank.archived ? ' (archived: restore it in Leave types to bank again)' : '') + '.' : ' The Overtime bank leave type is made the first time overtime is banked.') + '</div>'
         + (admin ? '' : '<div class="hr-note" style="margin-top:8px;">Only an agency admin can change these.</div>')
@@ -1080,7 +1095,8 @@
       var acts = [{ label: admin ? 'Cancel' : 'Close' }];
       if (admin) acts.push({ label: 'Save rules', primary: true, busyLabel: 'Saving…', handler: function () {
         var b = { overtime: { rate: Number(val(box, 'rate')) || 1, staff_can_log: !!val(box, 'staff_can_log'), allow_pay: !!val(box, 'allow_pay'), allow_bank: !!val(box, 'allow_bank') },
-          timesheet: { rounding: +val(box, 'rounding') || 0, clip_in: !!val(box, 'clip_in'), clip_out: !!val(box, 'clip_out'), export_rule: val(box, 'export_rule') || 'warn' } };
+          timesheet: { rounding: +val(box, 'rounding') || 0, clip_in: !!val(box, 'clip_in'), clip_out: !!val(box, 'clip_out'), export_rule: val(box, 'export_rule') || 'warn',
+            break_on: !!val(box, 'break_on'), break_after_min: +val(box, 'break_after_min') || 360, break_minutes: +val(box, 'break_minutes') || 30 } };
         if (!b.overtime.allow_pay && !b.overtime.allow_bank) { msg(box, 'Allow paying overtime, banking it, or both.'); return false; }
         return Api.put('/hr/time/settings', b).then(function () { saved('Rules saved.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
       } });
@@ -1133,12 +1149,13 @@
     if (r.rounding) rulesTxt.push('rounded to ' + r.rounding + ' min');
     if (r.clip_in) rulesTxt.push('counted from the shift start');
     if (r.clip_out) rulesTxt.push('counted to the shift end');
+    if (r.break_on) rulesTxt.push(r.break_minutes + ' min unpaid break after ' + (r.break_after_min / 60) + ' h');
     var h = '<div class="hr-note">Scheduled shifts against clock-ins for one centre and period. Paid hours are what payroll uses' + (rulesTxt.length ? ' (your rules: ' + esc(rulesTxt.join(', ')) + ')' : ' (no rounding or shift rules: exactly the clock)') + '. Approve a period once it has ended: that locks it, and clock-ins on those days can no longer be changed until an agency admin unlocks it.</div>'
       + '<div class="hr-bar">' + (d.centres.length > 1 ? '<select class="hr-i" data-ts="centre" style="max-width:220px;">' + d.centres.map(function (c) { return '<option value="' + c.id + '"' + (c.id === d.centre_id ? ' selected' : '') + ' data-no-i18n>' + esc(c.name) + '</option>'; }).join('') + '</select>' : '<b data-no-i18n>' + esc(d.centres[0].name) + '</b>')
       + '<input class="hr-i" type="date" data-ts="from" value="' + esc(d.from) + '"><span class="hr-sub">to</span><input class="hr-i" type="date" data-ts="to" value="' + esc(d.to) + '">'
       + tsPeriods(d.today).map(function (p, i) { return '<button type="button" class="hr-b" data-tsp="' + i + '">' + esc(p[0]) + '</button>'; }).join('')
       + '<span style="flex:1"></span><button type="button" class="hr-b" data-ts="settings">Rules</button></div>'
-      + '<div class="hrt-chips"><span class="hrt-stat">People <span class="n">' + (tot.people || 0) + '</span></span><span class="hrt-stat">Scheduled <span class="n" data-no-i18n>' + esc(hh(tot.scheduled_min)) + '</span></span>'
+      + '<div class="hrt-chips"><span class="hrt-stat">People <span class="n">' + (tot.people || 0) + '</span></span><span class="hrt-stat">Scheduled <span class="n" data-no-i18n>' + esc(hh(tot.scheduled_min)) + '</span></span>' + (tot.contracted_min != null ? '<span class="hrt-stat">Contracted <span class="n" data-no-i18n>' + esc(hh(tot.contracted_min)) + '</span></span>' : '')
       + '<span class="hrt-stat">Worked <span class="n" data-no-i18n>' + esc(hh(tot.worked_min)) + '</span></span><span class="hrt-stat">Paid <span class="n" data-no-i18n>' + esc(hh(tot.paid_min)) + '</span></span>'
       + '<span class="hrt-stat' + (tot.open ? ' warn' : '') + '">No clock-out <span class="n">' + (tot.open || 0) + '</span></span><span class="hrt-stat' + (tot.no_show ? ' warn' : '') + '">Shift with no clock-in <span class="n">' + (tot.no_show || 0) + '</span></span>'
       + '<span class="hrt-stat">Hours with no shift <span class="n">' + (tot.unscheduled || 0) + '</span></span></div>';
@@ -1148,13 +1165,13 @@
     } else {
       h += '<div class="hr-bar"><button type="button" class="hr-b p" data-ts="approve"' + (d.can_approve ? '' : ' disabled') + '>Approve and lock this period</button>' + (why ? '<span class="hr-sub">' + esc(why) + '</span>' : '') + '</div>';
     }
-    h += '<div class="kt-card">' + (rows.length ? '<table data-hrs="timesheets"><thead><tr><th>Person</th><th style="text-align:right;">Scheduled</th><th style="text-align:right;">Worked</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Paid vs scheduled</th><th>Flags</th><th style="text-align:right;">Approved overtime</th><th></th></tr></thead><tbody>'
+    h += '<div class="kt-card">' + (rows.length ? '<table data-hrs="timesheets"><thead><tr><th>Person</th><th style="text-align:right;" title="From the hours per week on the employee file, for the days in this period">Contracted</th><th style="text-align:right;">Scheduled</th><th style="text-align:right;">Worked</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Paid vs scheduled</th><th>Flags</th><th style="text-align:right;">Approved overtime</th><th></th></tr></thead><tbody>'
       + rows.map(function (p) {
         var fl = [];
         if (p.open) fl.push(pill('#FEE2E2', '#991B1B', p.open + ' no clock-out'));
         if (p.no_show) fl.push(pill('#FEF3C7', '#92400E', p.no_show + ' shift with no clock-in'));
         if (p.unscheduled) fl.push(pill('#E0F2FE', '#075985', p.unscheduled + ' with no shift'));
-        return '<tr><td><b data-no-i18n>' + esc(p.name) + '</b></td><td style="text-align:right;" data-no-i18n>' + esc(hh(p.scheduled_min)) + '</td><td style="text-align:right;" data-no-i18n>' + esc(hh(p.worked_min)) + '</td>'
+        return '<tr><td><b data-no-i18n>' + esc(p.name) + '</b></td><td style="text-align:right;" data-no-i18n>' + (p.contracted_min != null ? esc(hh(p.contracted_min)) : '<span class="hr-sub">—</span>') + '</td><td style="text-align:right;" data-no-i18n>' + esc(hh(p.scheduled_min)) + '</td><td style="text-align:right;" data-no-i18n>' + esc(hh(p.worked_min)) + '</td>'
           + '<td style="text-align:right;" data-no-i18n><b>' + esc(hh(p.paid_min)) + '</b></td><td style="text-align:right;' + (Math.abs(p.variance_min) >= 30 ? 'color:#B45309;font-weight:700;' : '') + '" data-no-i18n>' + esc(signedH(p.variance_min)) + '</td>'
           + '<td>' + (fl.join(' ') || '<span class="hr-sub">—</span>') + '</td><td style="text-align:right;" data-no-i18n>' + (p.overtime_min ? esc(hh(p.overtime_min)) : '<span class="hr-sub">—</span>') + '</td>'
           + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-ts="person" data-id="' + p.user_id + '">View clock-ins</button></td></tr>';

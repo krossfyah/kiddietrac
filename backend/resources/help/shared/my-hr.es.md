@@ -45,3 +45,7 @@ Los directores y administradores también ven **Suplencia mientras no estoy**: e
 ## Salud y seguridad
 
 Pulsa **Informar de un peligro** para avisar a tu director de algo inseguro; puedes añadir una foto con la cámara del teléfono. **Mis funciones de SST** muestra una función que tienes, como socorrista o responsable de evacuación, y si el certificado que necesita sigue vigente. **Tareas de SST** lista los trabajos de seguridad que te asignaron: añade una foto o un archivo como evidencia y pulsa **Cerrar la tarea**. **Hojas de datos de seguridad** abre la hoja de cada producto que hay en tu centro. **Procedimientos de trabajo seguro** lista los procedimientos que debes leer y firmar; se te pide de nuevo cuando uno cambia.
+
+## Turnos por aceptar y correcciones de fichaje
+
+Si tu centro pide al personal aceptar sus turnos, cada turno nuevo espera en **Turnos por aceptar**. Pulsa **Aceptar**, o **No puedo hacer este turno** y explica por qué: se avisa a tu director. El turno sigue siendo tuyo hasta que lo cambie. En **Corregir mi fichaje**, pulsa **Pedir una corrección** junto a un fichaje erróneo, o **Falta un fichaje** si olvidaste fichar. Escribe las horas correctas y qué salió mal. Tu director lo revisa; puedes retirarla mientras espera. Un fichaje de una hoja de horas ya bloqueada para la nómina no se puede cambiar.

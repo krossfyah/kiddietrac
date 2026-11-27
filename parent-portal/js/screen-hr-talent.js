@@ -1013,6 +1013,7 @@
     if (window.KTHrFile) window.KTHrFile.mine(b);       // Phase 4 batch 4: my documents + company documents (screen-hr-file.js)
     if (window.KTHrPeople) window.KTHrPeople.mine(b);   // Phase 4 batch 6: cover while away, team directory, kudos (screen-hr-people.js)
     if (window.KTHrHs) window.KTHrHs.mine(b);           // Phase 4 batch 7: my H&S duties, H&S tasks, safety data sheets, safe work procedures (screen-hr-hs.js)
+    if (window.KTHrRota) window.KTHrRota.mine(b);       // Phase 4 batch 8: shifts to accept, fix my clock-in (screen-hr-rota.js)
     wireTiles(b);
   }
 
@@ -1022,6 +1023,9 @@
   var MY_TILES = [
     ['🌴', 'My time off', '#time-off', null],
     ['🗓️', 'My shifts & open shifts', null, /open shifts you can pick up|my shifts/i],
+    // HR Phase 4 batch 8 (2026-11-27): accept published shifts, ask for a clock-in fix (screen-hr-rota.js).
+    ['✅', 'Shifts to accept', null, /^shifts to accept/i],
+    ['🕒', 'Fix my clock-in', null, /^fix my clock-in/i],
     ['📂', 'My documents', null, /^my documents/i],
     ['🧾', 'Claims', null, /claims/i],
     ['⏱️', 'Overtime', null, /^overtime/i],

@@ -43,9 +43,9 @@
     { id: 'absence', hash: 'hr-absence', icon: '🤒', label: 'Absence & lateness', sub: 'Absence report, lateness against the rota, and absence scores.',
       tabs: [{ k: 'absence', label: 'Absence & lateness' }] },
     { id: 'rota', hash: 'schedule', alt: 'hr-rota', icon: '🗒️', label: 'Rota & shifts', sub: 'Who is working and where, the rota plan, availability, swaps and open shifts.',
-      tabs: [{ k: 'schedule', label: 'Schedule', screen: 'schedule' }, { k: 'rota', label: 'Rota plan' }, { k: 'openshifts', label: 'Open shifts' }] },
+      tabs: [{ k: 'schedule', label: 'Schedule', screen: 'schedule' }, { k: 'rota', label: 'Rota plan' }, { k: 'openshifts', label: 'Open shifts' }, { k: 'rotatools', label: 'Shift tools' }] },
     { id: 'time', hash: 'timesheets', alt: 'hr-timesheets', icon: '🕘', label: 'Clock-ins & timesheets', sub: 'Hours worked, approving and locking each pay period, and overtime.',
-      tabs: [{ k: 'sheets', label: 'Timesheets', screen: 'timesheets' }, { k: 'lock', draw: 'timesheets', label: 'Approve & lock' }, { k: 'overtime', label: 'Overtime' }] },
+      tabs: [{ k: 'sheets', label: 'Timesheets', screen: 'timesheets' }, { k: 'lock', draw: 'timesheets', label: 'Approve & lock' }, { k: 'punchfix', label: 'Clock-in fixes' }, { k: 'overtime', label: 'Overtime' }] },
     { id: 'payroll', hash: 'payroll', alt: 'hr-payroll', icon: '💼', label: 'Payroll', sub: 'Pay runs and hours, and expense and mileage claims.',
       tabs: [{ k: 'payroll', label: 'Payroll', screen: 'payroll' }, { k: 'claims', label: 'Claims & mileage' }] },
     { id: 'hiring', hash: 'hr-hiring', icon: '🧲', label: 'Hiring & onboarding', sub: 'Job posts, applicants and onboarding checklists.',
@@ -77,7 +77,7 @@
     performance: ['performance', 'performance'], courses: ['performance', 'courses'], injuries: ['safety', 'injuries'],
     claims: ['payroll', 'claims'], overtime: ['time', 'overtime'], timesheets: ['time', 'lock'], rota: ['rota', 'rota'],
     openshifts: ['rota', 'openshifts'], letters: ['documents', 'letters'], docs: ['documents', 'docs'], settings: ['settings'],
-    directory: ['people', 'directory'], orgchart: ['people', 'orgchart'], kudos: ['awards', 'kudos'], approvers: ['settings', 'approvers'] };
+    directory: ['people', 'directory'], rotatools: ['rota', 'rotatools'], punchfix: ['time', 'punchfix'], orgchart: ['people', 'orgchart'], kudos: ['awards', 'kudos'], approvers: ['settings', 'approvers'] };
 
   function user() { try { return (KT.Auth && KT.Auth.user && KT.Auth.user()) || JSON.parse(sessionStorage.getItem('kt_user') || '{}') || {}; } catch (e) { return {}; } }
   // Every hash the plan leaves out, locked (Upgrade) ones included: a locked screen does not open either.
@@ -153,7 +153,11 @@
     queued = false;
     if (!ACTIVE || baseOf(location.hash) !== ACTIVE.hash) return;
     var main = document.getElementById('appMain'); if (!main) return;
+    /* On a narrow screen kt-tab-band wraps an overflowing row as div.kt-tbwrap [‹][row][›]. Move the wrapper, never
+       the row out of it: that left the arrows behind as a row of their own under the tabs (390px check, 2026-11-27). */
     var el = ACTIVE.el, hero = main.querySelector('.kt-hero');
+    var pw = el.parentNode;
+    if (pw && pw.classList && pw.classList.contains('kt-tbwrap')) el = pw;
     if (hero && hero.parentNode) {
       if (el.parentNode === hero.parentNode && el.previousElementSibling === hero) return;
       hero.parentNode.insertBefore(el, hero.nextSibling);

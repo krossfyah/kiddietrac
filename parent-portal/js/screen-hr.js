@@ -128,6 +128,7 @@
     if (window.KTHrReports && window.KTHrReports.has(S.tab)) return window.KTHrReports.draw(S.tab, b);
     if (window.KTHrPeople && window.KTHrPeople.has(S.tab)) return window.KTHrPeople.draw(S.tab, b);   // HR Phase 4 batch 6 (screen-hr-people.js)
     if (window.KTHrHs && window.KTHrHs.has(S.tab)) return window.KTHrHs.draw(S.tab, b);               // HR Phase 4 batch 7 (screen-hr-hs.js)
+    if (window.KTHrRota && window.KTHrRota.has(S.tab)) return window.KTHrRota.draw(S.tab, b);         // HR Phase 4 batch 8 (screen-hr-rota.js)
     if (window.KTHrTalent) return window.KTHrTalent.draw(S.tab, b);
   }
 

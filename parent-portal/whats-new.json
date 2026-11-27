@@ -4,6 +4,44 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "🗒️",
+            "title": "Publish the rota when it's ready",
+            "body": "HR add-on: build the rota as a draft and publish it in one go. Each person gets one notice and can be asked to accept their shifts. Copy last week, a person's week or a day, use shift presets with colours, and see the week against a labour budget. Switch it on in Rota & shifts > Shift tools.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Publiez l’horaire quand il est prêt",
+            "body_fr": "Module RH : préparez l’horaire en brouillon et publiez-le d’un coup. Chaque personne reçoit un seul avis et peut devoir accepter ses quarts. Copiez la semaine dernière, la semaine d’une personne ou un jour, utilisez des quarts prédéfinis en couleur et comparez la semaine à un budget de main-d’œuvre. À activer dans Horaire et quarts > Outils de quarts.",
+            "title_es": "Publica el horario cuando esté listo",
+            "body_es": "Complemento de RR. HH.: prepara el horario como borrador y publícalo de una vez. Cada persona recibe un solo aviso y se le puede pedir que acepte sus turnos. Copia la semana pasada, la semana de una persona o un día, usa turnos predefinidos con colores y compara la semana con un presupuesto de personal. Actívalo en Horario y turnos > Herramientas de turnos.",
+            "title_hi": "तैयार होने पर रोटा प्रकाशित करें",
+            "body_hi": "HR ऐड-ऑन: रोटा ड्राफ़्ट में बनाएँ और एक बार में प्रकाशित करें। हर व्यक्ति को एक सूचना मिलती है और उनसे शिफ़्ट स्वीकार करवाई जा सकती है। पिछला सप्ताह, किसी व्यक्ति का सप्ताह या एक दिन कॉपी करें, रंग वाली तय शिफ़्ट इस्तेमाल करें, और सप्ताह को श्रम बजट से मिलाएँ। Rota & shifts > Shift tools में चालू करें।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🕒",
+            "title": "Ask to fix a clock-in",
+            "body": "HR add-on: in My HR > Fix my clock-in, staff ask for a wrong or missing clock-in to be fixed and their director approves it. Admins can also take an unpaid break off long clock-ins automatically (Timesheets > Rules, off by default), and timesheets now show contracted hours.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Demander une correction de pointage",
+            "body_fr": "Module RH : dans Mes RH > Corriger mon pointage, le personnel demande de corriger un pointage erroné ou manquant, et sa direction l’approuve. Les administrateurs peuvent aussi retirer automatiquement une pause non payée des longs pointages (Feuilles de temps > Règles, désactivé par défaut), et les feuilles de temps montrent les heures contractuelles.",
+            "title_es": "Pedir corregir un fichaje",
+            "body_es": "Complemento de RR. HH.: en Mis RR. HH. > Corregir mi fichaje, el personal pide corregir un fichaje erróneo o que falta, y su director lo aprueba. Los administradores también pueden restar automáticamente un descanso no pagado de los fichajes largos (Hojas de horas > Reglas, desactivado por defecto), y las hojas de horas muestran las horas contratadas.",
+            "title_hi": "क्लॉक-इन सुधार माँगें",
+            "body_hi": "HR ऐड-ऑन: My HR > Fix my clock-in में स्टाफ़ गलत या छूटे क्लॉक-इन का सुधार माँगता है और उनके निदेशक उसे स्वीकृत करते हैं। एडमिन लंबे क्लॉक-इन से अपने-आप बिना वेतन ब्रेक भी घटा सकते हैं (Timesheets > Rules, शुरू में बंद), और टाइमशीट अब अनुबंधित घंटे दिखाती है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "🔎",
             "title": "Your jobs in Google Jobs",
             "body": "Human Resources › HR settings has a new Google Jobs switch. Turn it on and the open jobs on your jobs page can show up in Google Jobs with your agency's name and logo. It is off until you turn it on.",

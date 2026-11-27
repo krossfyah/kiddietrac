@@ -799,6 +799,7 @@ final class WebDemoShowcase
         $this->hrReportsStory($agencyId, $byName->all());   // HR Phase 4, batch 5
         $this->hrPeopleStory($agencyId, $byName->all(), $elena, $olivia);   // HR Phase 4, batch 6
         $this->hrHsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia);   // HR Phase 4, batch 7
+        $this->hrRota8Story($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 8
     }
 
     /**
@@ -1049,6 +1050,59 @@ final class WebDemoShowcase
             if ($ev) $row += ['evidence_path' => $file('evidence', 'first-aid-kit', 'First aid kit restocked'), 'evidence_name' => 'First aid kit restocked.pdf',
                 'evidence_mime' => 'application/pdf', 'evidence_note' => 'Restocked and checked against the list on the lid.', 'evidence_by' => $byName[$who], 'evidence_at' => $this->at(-1, 16)];
             $this->add('tasks', $row);
+        }
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 4, BATCH 8 DEMO (2026-11-27, Starlight only): the rota publish step. The publish step and "staff
+     * must accept" switched on (only while the agency has never chosen: Anthony can switch them off and a rerun keeps
+     * that); three shift presets (Early, Middle, Late); a weekly labour budget at the rota centre; next week Ava has a new
+     * draft late shift and Noah's Monday is moved to 11:00 but not published; Lucas has not accepted next week's shifts
+     * yet and Ethan accepted his; Sofia asked for a clock-in fix (the tablet was off). Rows in this builder's ledger.
+     */
+    private function hrRota8Story(int $agencyId, array $byName, array $centreOf, int $elena, string $now): void
+    {
+        if (! \App\Support\HrRota::ready()) return;
+        $centre = null;
+        foreach (['Lucas', 'Sofia', 'Noah', 'Ethan', 'Ava'] as $n) if (isset($byName[$n], $centreOf[$byName[$n]])) { $centre = (int) $centreOf[$byName[$n]]; break; }
+        if (! $centre) return;
+        $raw = json_decode((string) DB::table('agencies')->where('id', $agencyId)->value('settings'), true) ?: [];
+        if (! isset($raw['hr_rota'])) \App\Support\HrRota::saveSettings($agencyId, ['draft_mode' => true, 'require_accept' => true]);
+        $p = [];
+        foreach ([['Early', '07:00:00', '15:00:00', 'lead', '#0E7490'], ['Middle', '08:00:00', '16:00:00', 'support', '#16A34A'], ['Late', '10:00:00', '18:00:00', 'support', '#D97706']] as $i => [$nm, $s, $e, $r, $c]) {
+            $p[$nm] = $this->add('hr_shift_presets', ['agency_id' => $agencyId, 'centre_id' => null, 'name' => $nm, 'start_time' => $s, 'end_time' => $e, 'role' => $r,
+                'colour' => $c, 'sort' => $i, 'created_by_id' => $elena ?: null, 'created_at' => $now, 'updated_at' => $now]);
+        }
+        if (! DB::table('hr_labour_budgets')->where('centre_id', $centre)->exists()) {
+            $this->add('hr_labour_budgets', ['agency_id' => $agencyId, 'centre_id' => $centre, 'weekly_amount' => 4200, 'updated_by_id' => $elena ?: null, 'created_at' => $now, 'updated_at' => $now]);
+        }
+        $rooms = DB::table('rooms')->where('centre_id', $centre)->pluck('id')->map(fn ($v) => (int) $v)->all();
+        if (! $rooms) return;
+        $mon = $this->today->copy()->startOfWeek(\Carbon\Carbon::MONDAY)->addWeek();
+        $shiftOf = fn (string $n, int $o) => isset($byName[$n]) ? DB::table('shifts')->where('user_id', $byName[$n])->whereIn('room_id', $rooms)
+            ->where('starts_at', 'like', $mon->copy()->addDays($o)->toDateString() . '%')->first() : null;
+        if (isset($byName['Ava'])) {
+            $thu = $mon->copy()->addDays(3)->toDateString();
+            $this->add('hr_shift_drafts', ['agency_id' => $agencyId, 'centre_id' => $centre, 'kind' => 'add', 'shift_id' => null, 'user_id' => $byName['Ava'], 'room_id' => $rooms[0],
+                'starts_at' => $thu . ' 18:00:00', 'ends_at' => $thu . ' 20:00:00', 'role' => 'support', 'preset_id' => null, 'created_by_id' => $elena ?: null, 'created_at' => $now, 'updated_at' => $now]);
+        }
+        if ($s = $shiftOf('Noah', 0)) {
+            $d = substr((string) $s->starts_at, 0, 10);
+            $this->add('hr_shift_drafts', ['agency_id' => $agencyId, 'centre_id' => $centre, 'kind' => 'change', 'shift_id' => (int) $s->id, 'user_id' => (int) $s->user_id, 'room_id' => (int) $s->room_id,
+                'starts_at' => $d . ' 11:00:00', 'ends_at' => $d . ' 19:00:00', 'role' => $s->role, 'preset_id' => null, 'created_by_id' => $elena ?: null, 'created_at' => $now, 'updated_at' => $now]);
+        }
+        foreach ([['Lucas', 0, 'pending'], ['Lucas', 1, 'pending'], ['Ethan', 0, 'accepted']] as [$n, $o, $st]) {
+            if (! ($s = $shiftOf($n, $o))) continue;
+            $this->add('hr_shift_acceptances', ['agency_id' => $agencyId, 'centre_id' => $centre, 'shift_id' => (int) $s->id, 'user_id' => (int) $s->user_id, 'status' => $st,
+                'note' => null, 'responded_at' => $st === 'pending' ? null : $now, 'created_at' => $now, 'updated_at' => $now]);
+        }
+        if (isset($byName['Sofia'])) {
+            $pu = DB::table('time_punches')->where('user_id', $byName['Sofia'])->whereNotNull('punched_out_at')->orderByDesc('punched_in_at')->first();
+            if ($pu) {
+                $this->add('hr_punch_corrections', ['agency_id' => $agencyId, 'centre_id' => (int) $pu->centre_id, 'user_id' => $byName['Sofia'], 'punch_id' => (int) $pu->id, 'kind' => 'fix',
+                    'was_in' => $pu->punched_in_at, 'was_out' => $pu->punched_out_at, 'want_in' => \Carbon\Carbon::parse($pu->punched_in_at, 'UTC')->subMinutes(20)->format('Y-m-d H:i:s'),
+                    'want_out' => $pu->punched_out_at, 'reason' => 'The tablet was off when I arrived, so I clocked in once it started.', 'status' => 'pending', 'created_at' => $now, 'updated_at' => $now]);
+            }
         }
     }
 
