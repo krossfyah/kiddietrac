@@ -4,6 +4,61 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "💼",
+            "title": "Payroll engine: pay runs and payslips",
+            "body": "HR can now run payroll with every Canadian deduction: CPP, EI, QPIP and income tax from the CRA tables. Start a pay run in Payroll › Pay runs (hours come from the clock), send it for review, approve and finalize: each person gets a payslip in the app and an email with no amounts. Remittances shows what to send the CRA and when. It is off until an agency admin switches it on in HR settings and accepts the notice to check with your accountant first.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Moteur de paie : cycles et talons de paie",
+            "body_fr": "Les RH peuvent maintenant faire la paie avec toutes les retenues canadiennes : RPC, AE, RQAP et impôt selon les tables de l'ARC. Lancez un cycle dans Paie › Cycles de paie (les heures viennent de la pointeuse), envoyez-le pour révision, approuvez et finalisez : chacun reçoit son talon dans l'application et un courriel sans montant. Versements montre quoi verser à l'ARC et quand. Il reste désactivé tant qu'un administrateur ne l'active pas dans Paramètres RH en acceptant l'avis de vérifier d'abord avec votre comptable.",
+            "title_es": "Motor de nómina: nóminas y recibos",
+            "body_es": "RR. HH. ya puede hacer la nómina con todas las deducciones canadienses: CPP, EI, QPIP e impuesto según las tablas de la CRA. Inicie una nómina en Nómina › Nóminas (las horas vienen del reloj), envíela a revisión, apruébela y finalícela: cada persona recibe su recibo en la aplicación y un correo sin importes. Remesas muestra qué enviar a la CRA y cuándo. Está apagado hasta que un administrador lo encienda en Ajustes de RR. HH. y acepte el aviso de consultar antes con su contador.",
+            "title_hi": "पेरोल इंजन: पे रन और पेस्लिप",
+            "body_hi": "HR अब सभी कनाडाई कटौतियों के साथ पेरोल चला सकता है: CRA तालिकाओं से CPP, EI, QPIP और आयकर। पेरोल › पे रन में पे रन शुरू करें (घंटे घड़ी से आते हैं), समीक्षा के लिए भेजें, मंज़ूर करें और अंतिम करें: हर व्यक्ति को ऐप में पेस्लिप और बिना रकम वाला ईमेल मिलता है। रेमिटेंस दिखाता है कि CRA को क्या और कब भेजना है। यह तब तक बंद रहता है जब तक कोई एजेंसी एडमिन HR सेटिंग्स में इसे चालू न करे और पहले अकाउंटेंट से जाँच की सूचना स्वीकार न करे।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🔓",
+            "title": "Open payslips without the password",
+            "body": "Admins, and directors for their own centres' staff, can now open a payslip in the portal without typing its password. The password still protects every payslip you download and every payslip emailed to the staff member. Each view is in the audit log.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Ouvrir les talons sans mot de passe",
+            "body_fr": "Les administrateurs, et les directeurs pour le personnel de leurs centres, peuvent maintenant ouvrir un talon de paie dans le portail sans taper son mot de passe. Le mot de passe protège toujours chaque talon téléchargé et chaque talon envoyé par courriel à l'employé. Chaque consultation est inscrite au journal d'audit.",
+            "title_es": "Abrir recibos sin la contraseña",
+            "body_es": "Los administradores, y los directores para el personal de sus centros, ya pueden abrir un recibo de pago en el portal sin escribir su contraseña. La contraseña sigue protegiendo cada recibo que se descarga y cada recibo enviado por correo al empleado. Cada consulta queda en el registro de auditoría.",
+            "title_hi": "बिना पासवर्ड के पेस्लिप खोलें",
+            "body_hi": "एडमिन, और अपने सेंटरों के स्टाफ़ के लिए डायरेक्टर, अब पोर्टल में पेस्लिप बिना पासवर्ड डाले खोल सकते हैं। डाउनलोड की गई हर पेस्लिप और स्टाफ़ को ईमेल की गई हर पेस्लिप पर पासवर्ड अब भी लगा रहता है। हर बार देखना ऑडिट लॉग में दर्ज होता है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "💵",
+            "title": "My payslips and tax forms",
+            "body": "Where your agency runs payroll in KiddieTrac, My HR now has Tax forms, where you fill in and sign your TD1, and My payslips, with every deduction and your year to date. The email that tells you a payslip is ready never shows the amounts.",
+            "roles": [
+                "educator",
+                "home_visitor",
+                "centre_director",
+                "agency_admin"
+            ],
+            "title_fr": "Mes talons de paie et formulaires fiscaux",
+            "body_fr": "Si votre agence fait la paie dans KiddieTrac, Mes RH contient maintenant Formulaires fiscaux, où vous remplissez et signez votre TD1, et Mes talons de paie, avec chaque retenue et votre cumul de l'année. Le courriel qui annonce un talon prêt n'affiche jamais les montants.",
+            "title_es": "Mis recibos y formularios fiscales",
+            "body_es": "Si su agencia hace la nómina en KiddieTrac, Mis RR. HH. ahora tiene Formularios fiscales, donde llena y firma su TD1, y Mis recibos de pago, con cada deducción y su acumulado del año. El correo que avisa que un recibo está listo nunca muestra los importes.",
+            "title_hi": "मेरी पेस्लिप और टैक्स फ़ॉर्म",
+            "body_hi": "जहाँ आपकी एजेंसी KiddieTrac में पेरोल चलाती है, वहाँ मेरा HR में अब टैक्स फ़ॉर्म है, जहाँ आप अपना TD1 भरते और साइन करते हैं, और मेरी पेस्लिप, हर कटौती और साल-भर के जोड़ के साथ। पेस्लिप तैयार होने का ईमेल कभी रकम नहीं दिखाता।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "↻",
             "title": "Campaigns: resend to people whose email bounced",
             "body": "In Marketing › Campaigns › Recipients & stats you now see how many emails bounced and how many of those people have a corrected address. Fix the email on their record, then press ↻ Resend to bounced: it lists each person with the address that bounced, their current email and whether they are ready. Only corrected addresses can be ticked, you confirm how many, and the campaign goes to their new address once. The list then shows them as sent.",
