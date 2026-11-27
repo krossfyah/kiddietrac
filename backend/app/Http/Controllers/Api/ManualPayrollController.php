@@ -189,6 +189,21 @@ final class ManualPayrollController extends Controller
             report($e);
         }
 
+        /* KIDDIETRAC HR CLAIMS (2026-11-26, HR item 9). Approved expense / mileage claims wait here like reward
+           bonuses: offered as lines (claim_id) on the person's payslip, marked paid by commit(). Never breaks a run. */
+        try {
+            $hrClaims = \App\Support\HrClaims::forPayroll($agencyId, collect($userIds)->map(fn ($v) => (int) $v)->all());
+            if ($hrClaims) {
+                $staff = $staff->map(function ($s) use ($hrClaims) {
+                    $s['claims'] = $hrClaims[$s['user_id']] ?? [];
+
+                    return $s;
+                })->values();
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+
         /* ONTARIO WORKFORCE FUNDING (2026-10-13). Where it is switched on, each person
            carries their WEG / WCF / wage-floor rates and the hours x rate lines to put on
            the payslip — every pay cheque, never a lump sum. Never allowed to break a run. */
@@ -268,6 +283,8 @@ final class ManualPayrollController extends Controller
             'rows.*.lines.*.rate' => 'nullable|numeric|min:0|max:100',
             // An educator reward bonus this line pays (educator_rewards.id).
             'rows.*.lines.*.reward_award_id' => 'nullable|integer',
+            // An HR expense / mileage claim this line pays (hr_claims.id, HR item 9).
+            'rows.*.lines.*.claim_id' => 'nullable|integer',
             'rows.*.hours_detail' => 'nullable|array|max:200',
             'rows.*.staff_group' => 'nullable|string|max:16',
             'rows.*.centre_id' => 'nullable|integer',
@@ -423,6 +440,12 @@ final class ManualPayrollController extends Controller
                     DB::table('educator_rewards')->whereIn('id', $rewardIds)->where('agency_id', $agencyId)
                         ->where('user_id', $uid)->where('status', 'pending_payroll')
                         ->update(['status' => 'paid', 'payroll_document_id' => $id, 'paid_at' => now(), 'updated_at' => now()]);
+                }
+
+                // The HR expense / mileage claims this payslip pays (hr_claims.id): the same once-only rule as rewards.
+                $claimIds = array_values(array_filter(array_map(fn ($l) => (int) ($l['claim_id'] ?? 0), $row['lines'] ?? [])));
+                if (! $isContractor && $claimIds) {
+                    \App\Support\HrClaims::markPaid($agencyId, (int) $uid, $claimIds, (int) $id);
                 }
 
                 $created[] = [

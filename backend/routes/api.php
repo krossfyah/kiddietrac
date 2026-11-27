@@ -2655,6 +2655,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/hr/absence',                        [\App\Http\Controllers\Api\HrController::class, 'absence']);
         Route::get   ('/hr/off-now',                        [\App\Http\Controllers\Api\HrController::class, 'offNow']);
         Route::get   ('/exports/hr-absence',                [\App\Http\Controllers\Api\HrController::class, 'exportAbsence']);
+        // KiddieTrac HR Phase 3, item 9 (2026-11-26): claims, the director / admin side (own centres / the agency; nobody decides their own).
+        Route::get   ('/hr/claims',                         [\App\Http\Controllers\Api\HrClaimController::class, 'index']);
+        Route::get   ('/hr/claims/report',                  [\App\Http\Controllers\Api\HrClaimController::class, 'report']);
+        Route::post  ('/hr/claims/{id}/decide',             [\App\Http\Controllers\Api\HrClaimController::class, 'decide'])->whereNumber('id');
+        Route::put   ('/hr/claims/settings',                [\App\Http\Controllers\Api\HrClaimController::class, 'saveSettings']);
     });
 
     // ---- KiddieTrac HR phase 2 (2026-11-28): hiring, onboarding, performance, courses. All under hr/ (the HR add-on). ----
@@ -2671,6 +2676,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::put   ('/hr/injuries/{id}/form7',            [\App\Http\Controllers\Api\HrInjuryController::class, 'form7'])->whereNumber('id');
         Route::put   ('/hr/injuries/{id}/return-to-work',   [\App\Http\Controllers\Api\HrInjuryController::class, 'returnToWork'])->whereNumber('id');
         Route::post  ('/hr/injuries/{id}/checkins',         [\App\Http\Controllers\Api\HrInjuryController::class, 'checkin'])->whereNumber('id');
+        // KiddieTrac HR Phase 3, item 9 (2026-11-26): expense and mileage claims, the claimant's side (App\Support\HrClaims). The receipt is the claimant's or a manager's (controller).
+        Route::get   ('/hr/me/claims',                      [\App\Http\Controllers\Api\HrClaimController::class, 'mine']);
+        Route::post  ('/hr/claims',                         [\App\Http\Controllers\Api\HrClaimController::class, 'store'])->middleware('throttle:30,1,hrclaims');
+        Route::post  ('/hr/claims/{id}/withdraw',           [\App\Http\Controllers\Api\HrClaimController::class, 'withdraw'])->whereNumber('id');
+        Route::get   ('/hr/claims/{id}/receipt',            [\App\Http\Controllers\Api\HrClaimController::class, 'receipt'])->whereNumber('id');
         Route::get(    '/hr/onboarding/{id}',                         [\App\Http\Controllers\Api\HrOnboardingController::class, 'show'])->whereNumber('id');
         Route::post(   '/hr/onboarding-tasks/{id}/done',              [\App\Http\Controllers\Api\HrOnboardingController::class, 'done'])->whereNumber('id');
         Route::post(   '/hr/onboarding-tasks/{id}/upload',            [\App\Http\Controllers\Api\HrOnboardingController::class, 'upload'])->whereNumber('id')->middleware('throttle:30,1,hronbup');
@@ -2774,9 +2784,6 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // Immunization + drill notices per role (2026-11-09, App\Support\StaffTopicNotify): admins only, checked in the controller.
         Route::get ('/admin/topic-notifications', [\App\Http\Controllers\Api\StaffNotifyController::class, 'topicsShow']);
         Route::post('/admin/topic-notifications', [\App\Http\Controllers\Api\StaffNotifyController::class, 'topicsSave'])->middleware('throttle:30,1,r-topic-notifications');
-        // Escalated daily records: who gets them (2026-11-26, App\Support\RecordEscalation): admins only, checked in the controller.
-        Route::get ('/admin/record-escalation', [\App\Http\Controllers\Api\StaffNotifyController::class, 'escalationShow']);
-        Route::post('/admin/record-escalation', [\App\Http\Controllers\Api\StaffNotifyController::class, 'escalationSave'])->middleware('throttle:30,1,r-record-escalation');
         // Settings -> Notifications -> Staff certifications (2026-11-03): expiry alert steps, who is told, email.
         Route::get ('/admin/cert-alerts', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'show']);
         Route::post('/admin/cert-alerts', [\App\Http\Controllers\Api\CertAlertSettingsController::class, 'save'])->middleware('throttle:30,1,r-cert-alerts');
@@ -2849,14 +2856,6 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/drills/notify-settings', [\App\Http\Controllers\Api\DrillController::class, 'notifySettingsSave']);
         Route::post  ('/drills/maps',      [\App\Http\Controllers\Api\DrillController::class, 'uploadMap']);
         Route::delete('/drills/maps/{id}', [\App\Http\Controllers\Api\DrillController::class, 'removeMap'])->whereNumber('id');
-        // Fire plan (2026-11-28): the drawn plan + decision tree, versioned; directors/admins review (FirePlanController).
-        Route::get   ('/drills/fire-plans',                   [\App\Http\Controllers\Api\FirePlanController::class, 'index']);
-        Route::post  ('/drills/fire-plans',                   [\App\Http\Controllers\Api\FirePlanController::class, 'store']);
-        Route::post  ('/drills/fire-plans/template',          [\App\Http\Controllers\Api\FirePlanController::class, 'template']);
-        Route::get   ('/drills/fire-plans/{id}',              [\App\Http\Controllers\Api\FirePlanController::class, 'show'])->whereNumber('id');
-        Route::post  ('/drills/fire-plans/{id}/review',       [\App\Http\Controllers\Api\FirePlanController::class, 'review'])->whereNumber('id');
-        Route::delete('/drills/fire-plans/{id}',              [\App\Http\Controllers\Api\FirePlanController::class, 'destroy'])->whereNumber('id');
-        Route::get   ('/drills/fire-plans/{id}/file/{kind}',  [\App\Http\Controllers\Api\FirePlanController::class, 'file'])->whereNumber('id')->where('kind', 'png|underlay');
     });
     /* HAZARD REGISTER (2026-10-13, Ontario s.24.3): anyone on staff reports; directors/admins
        manage and notify parents — checked per centre in HazardController. Its own group since

@@ -124,6 +124,8 @@
         /* Educator reward bonuses waiting for a pay run (2026-10-20): added as lines when
            the person is ticked, and marked paid when this payslip is created. */
         rewards: s.rewards || [],
+        /* HR expense / mileage claims approved and not yet paid (2026-11-26): added as lines when ticked. */
+        claims: s.claims || [],
         lines: [], notes: '', picked: false
       };
     });
@@ -161,6 +163,10 @@
       if (r.rewards && r.rewards.length && !r.rewardsSeeded) {
         r.rewardsSeeded = true;
         r.rewards.forEach(function (b) { r.lines.push({ label: b.label, amount: b.amount, reward_award_id: b.reward_award_id }); });
+      }
+      if (r.claims && r.claims.length && !r.claimsSeeded) {
+        r.claimsSeeded = true;
+        r.claims.forEach(function (c) { r.lines.push({ label: c.label, amount: c.amount, claim_id: c.claim_id }); });
       }
       if (!r.funding || r.fundingSeeded) return;
       r.fundingSeeded = true;
@@ -210,6 +216,8 @@
           + '<div style="font-size:11.5px;color:' + C.muted + ';">' + esc(r.sub || '') + '</div>' + fundingChip(r)
           + ((r.rewards || []).length ? '<div style="font-size:11px;color:#B45309;margin-top:2px;">⭐ Rewards bonus '
               + money(r.rewards.reduce(function (a, b) { return a + (Number(b.amount) || 0); }, 0)) + ' to include</div>' : '')
+          + ((r.claims || []).length ? '<div style="font-size:11px;color:#0F766E;margin-top:2px;">🧾 Reimbursements '
+              + money(r.claims.reduce(function (a, b) { return a + (Number(b.amount) || 0); }, 0)) + ' to include</div>' : '')
           + '</td>';
 
         if (r.kind === 'staff') {

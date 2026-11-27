@@ -773,6 +773,7 @@ final class WebDemoShowcase
         }
         $this->hrTalentStory($agencyId, $byName->all(), $centreOf->all(), $maya, $elena, $olivia, $now);
         $this->hrSafetyStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);
+        $this->hrClaimsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);   // HR Phase 3, item 9
     }
 
     /**
@@ -810,6 +811,58 @@ final class WebDemoShowcase
             foreach ($checks as [$on, $note]) {
                 $this->add('hr_injury_checkins', ['agency_id' => $agencyId, 'injury_id' => $id, 'on_date' => $d($on), 'note' => $note, 'by_id' => $elena, 'created_at' => $now, 'updated_at' => $now]);
             }
+        }
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 3, ITEM 9 DEMO (2026-11-26, Starlight only): expense and mileage claims in every state, so
+     * HR > Claims, My HR, the claims report and the payroll run all have something to show. A $0.70/km rate is set
+     * only when the agency has none. Receipts are small generated images at FIXED paths (rewritten, never piled up);
+     * the rows are in this builder's ledger, so a rerun replaces them. Nothing is sent.
+     */
+    private function hrClaimsStory(int $agencyId, array $byName, array $centreOf, int $elena, int $olivia, string $now): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_claims')) return;
+        $s = \App\Support\HrClaims::settings($agencyId);
+        if (! $s['km_rate']) \App\Support\HrClaims::saveSettings($agencyId, ['km_rate' => 0.7, 'categories' => $s['categories'], 'receipt_required' => true]);
+        $rate = \App\Support\HrClaims::settings($agencyId)['km_rate'];
+        $d = fn (int $days) => $this->today->copy()->addDays($days)->toDateString();
+        $receipt = function (string $key, string $shop, string $total) use ($agencyId): ?string {
+            if (! function_exists('imagecreatetruecolor')) return null;
+            $im = imagecreatetruecolor(360, 520);
+            imagefill($im, 0, 0, imagecolorallocate($im, 255, 255, 255));
+            $ink = imagecolorallocate($im, 30, 41, 59);
+            imagestring($im, 5, 24, 30, $shop, $ink);
+            imagestring($im, 3, 24, 70, 'RECEIPT (DEMO)', $ink);
+            imagestring($im, 3, 24, 110, 'Items ........................', $ink);
+            imagestring($im, 5, 24, 440, 'TOTAL  $' . $total, $ink);
+            ob_start(); imagepng($im); $png = (string) ob_get_clean(); imagedestroy($im);
+            $path = 'hr-claims/' . $agencyId . '/demo/receipt-' . $key . '.png';
+            \Illuminate\Support\Facades\Storage::disk('local')->put($path, $png);
+            return $path;
+        };
+        // [who, kind, days ago, category, description, amount, tax, km, from, to, status, decided by, decision days ago, comment]
+        $rows = [
+            ['Maya', 'expense', -1, 'Classroom supplies', 'Paint, glue sticks and card stock for the winter art week', 38.50, 3.18, null, null, null, 'submitted', null, null, null],
+            ['Sofia', 'mileage', -2, null, 'Picked up the field trip snacks', 0, 0, 18.4, 'Starlight Learning Center', 'Costco, Mission Valley', 'submitted', null, null, null],
+            ['Lucas', 'expense', -6, 'Field trips and outings', 'Parking at the aquarium trip', 24.00, 0, null, null, null, 'approved', 'elena', -5, null],
+            ['Marcus', 'mileage', -4, null, 'Drove the spare cots to the second centre', 0, 0, 9.2, 'Starlight Learning Center', 'Starlight North', 'approved', 'olivia', -3, null],
+            ['Noah', 'expense', -10, 'Food and snacks', 'Lunch on the training day', 15.75, 1.30, null, null, null, 'declined', 'elena', -9, 'Lunch on a training day is not covered. Thanks for checking!'],
+            ['Ava', 'expense', -24, 'Training and courses', 'Infant CPR refresher course', 120.00, 0, null, null, null, 'paid', 'elena', -22, null],
+        ];
+        foreach ($rows as [$who, $kind, $ago, $cat, $desc, $amt, $tax, $km, $from, $to, $status, $by, $byAgo, $comment]) {
+            $uid = $byName[$who] ?? null;
+            if (! $uid) continue;
+            if ($kind === 'mileage') { $amt = round($km * $rate, 2); $tax = 0; }
+            $total = round($amt + $tax, 2);
+            $path = $kind === 'expense' ? $receipt(strtolower($who), strtoupper($cat === 'Training and courses' ? 'Red Cross Training' : ($cat === 'Classroom supplies' ? 'Craft Depot' : 'Harbor Parking')), number_format($total, 2)) : null;
+            $byId = $by === 'elena' ? $elena : ($by === 'olivia' ? ($olivia ?: $elena) : null);
+            $this->add('hr_claims', ['agency_id' => $agencyId, 'centre_id' => isset($centreOf[$uid]) ? (int) $centreOf[$uid] : null, 'user_id' => $uid, 'kind' => $kind,
+                'claim_date' => $d($ago), 'category' => $kind === 'mileage' ? 'Mileage' : $cat, 'description' => $desc, 'amount' => $amt, 'tax' => $tax, 'total' => $total,
+                'km' => $km, 'km_rate' => $kind === 'mileage' ? $rate : null, 'from_place' => $from, 'to_place' => $to,
+                'receipt_path' => $path, 'receipt_name' => $path ? 'receipt.png' : null, 'receipt_mime' => $path ? 'image/png' : null,
+                'status' => $status, 'decided_by_id' => $byId, 'decided_at' => $byId ? $this->at($byAgo, 10, 0) : null, 'decision_comment' => $comment,
+                'paid_at' => $status === 'paid' ? $this->at(-14, 9, 0) : null, 'created_at' => $this->at($ago, 17, 30), 'updated_at' => $now]);
         }
     }
 

@@ -140,16 +140,6 @@ final class StaffSubmissionsFeed
             }
         });
 
-        // 🗺️ Fire plans sent for review (2026-11-28, the Drill log's Fire plan tab): "Maya submitted a fire plan — Sunflower".
-        $run('fire_plans', function () use ($byCentre, $who, $sel, $push, $first, $at) {
-            if (! \Illuminate\Support\Facades\Schema::hasTable('fire_plans')) return;
-            $q = $who(DB::table('fire_plans as fp')->whereNull('fp.deleted_at')->whereNotNull('fp.submitted_at'), 'fp.submitted_by');
-            $byCentre($q, 'fp.centre_id');
-            foreach ($q->orderByDesc('fp.submitted_at')->limit(12)->get(array_merge($sel, ['fp.id', 'fp.centre_id', 'fp.submitted_at'])) as $r) {
-                $push('fire_plan', "\u{1F5FA}\u{FE0F}", $first($r) . ' submitted a fire plan' . $at($r->centre_id), $r->submitted_at, '#drills?tab=fireplan&plan=' . $r->id, $r->photo_url);
-            }
-        });
-
         // 🚧 Hazards reported.
         $run('hazards', function () use ($byCentre, $who, $sel, $push, $first, $at) {
             $q = $who(DB::table('centre_hazards as h'), 'h.created_by');
@@ -259,6 +249,14 @@ final class StaffSubmissionsFeed
                 $byPerson($q, 'ij.agency_id', 'ij.user_id');
                 foreach ($q->orderByDesc('ij.created_at')->limit(12)->get(array_merge($sel, ['ij.id', 'ij.user_id', 'ij.kind', 'ij.created_at'])) as $r) {
                     $push('hr_injury', "\u{1FA79}", $first($r) . ($r->kind === 'near_miss' ? ' reported a near miss' : ' reported a workplace injury'), $r->created_at, '#hr?tab=injuries&injury=' . $r->id, $r->photo_url);
+                }
+            }
+            // An expense / mileage claim waiting for approval (HR Phase 3, item 9). The amount, never the receipt.
+            if (\Illuminate\Support\Facades\Schema::hasTable('hr_claims')) {
+                $q = $who(DB::table('hr_claims as cl')->where('cl.status', 'submitted'), 'cl.user_id');
+                $byPerson($q, 'cl.agency_id', 'cl.user_id');
+                foreach ($q->orderByDesc('cl.created_at')->limit(12)->get(array_merge($sel, ['cl.id', 'cl.user_id', 'cl.kind', 'cl.total', 'cl.created_at'])) as $r) {
+                    $push('hr_claim', "\u{1F9FE}", $first($r) . ($r->kind === 'mileage' ? ' filed a mileage claim: $' : ' filed an expense claim: $') . number_format((float) $r->total, 2), $r->created_at, '#hr?tab=claims&claim=' . $r->id, $r->photo_url);
                 }
             }
         });

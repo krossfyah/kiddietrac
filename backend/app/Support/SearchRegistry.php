@@ -176,6 +176,7 @@ final class SearchRegistry
         'hr_course_assignments' => 'who has a course and when they finished it; shown on HR > Courses, the HR profile and My HR',
         'hr_injuries' => 'staff injury records (HR): health details sealed; never searched, listed with health, or exported; reveal is audited',
         'hr_injury_checkins' => 'return-to-work check-ins on a staff injury: sealed notes, shown inside the record only',
+        'hr_claims' => 'staff expense / mileage claims (HR): private to the claimant, their centre\'s directors and the agency admins; shown in HR > Claims and My HR, receipts never public',
         'hr_course_role_rules' => 'configuration: "this course goes to everyone in this role" on a course, shown in its Assigned popup',
         'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',
@@ -210,8 +211,6 @@ final class SearchRegistry
         'privacy_acknowledgments' => 'a record that a parent read the privacy notice; counted on Data retention, never surfaced in a global box',
         // 2026-11-10 (ticket #244: tables added 2026-11-09/10 without a classification)
         'drill_maps' => 'each centre or educator map kept with the Drill log, opened from Drill log; never a record people look up from the global box',
-        // 2026-11-28 (Fire plan tab of the Drill log)
-        'fire_plans' => 'each centre or room\'s drawn fire plan and decision tree, versioned, opened from Drill log > Fire plan; never a record people look up from the global box',
         'drill_staff_dates' => 'each educator\'s fire drill renewal and expiry dates and schedule, shown on the Drill log Educators tab; never surfaced in a global box',
         'pickup_alarms' => 'a parent\'s own pickup countdown and alarm for their child, private to that parent; never surfaced in a global box',
         'privacy_request_events' => 'the timeline of a privacy request, shown inside that request on Privacy requests; never surfaced in a global box',

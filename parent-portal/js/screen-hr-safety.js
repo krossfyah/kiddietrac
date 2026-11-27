@@ -6,6 +6,8 @@
    Health details (what happened, body part, injury, first aid, medical care, modified duties, check-in notes) are
    never in a list: a record shows them only after "Show health details", which the server audits every time.
    Lazy: loaded before screen-hr.js and screen-hr-talent.js (their "d" dependency), never on its own.
+   Item 9 (2026-11-26): HR > Claims and My HR "Expense and mileage claims" (expense with receipt photo, or mileage at the
+   agency's km rate); approved claims are paid on the next manual payslip as a reimbursement line.
    ═══════════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -241,10 +243,239 @@
     });
   }
 
+  /* ═══ HR Phase 3, item 9 (2026-11-26): expense and mileage claims ═══════════════════════════════════
+     HR > Claims (directors: own centres; admins: the agency) approves or declines; approved claims go on the
+     person's next manual payslip as a reimbursement line (Payroll > Run payroll), never paid from here.
+     My HR > "Expense and mileage claims": file one (receipt photo from the phone camera), see own statuses. */
+  function rateTxt(r) { return '$' + Number(r).toFixed(3).replace(/0$/, ''); }
+  function money(n) { var v = Number(n) || 0; return '$' + v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  var CL_ST = { submitted: ['#FEF3C7', '#92400E', 'Waiting for approval'], approved: ['#CCFBF1', '#115E59', 'Approved: in the next pay'],
+    paid: ['#DCFCE7', '#166534', 'Paid'], declined: ['#FEE2E2', '#991B1B', 'Declined'], withdrawn: ['#F1F5F9', '#475569', 'Withdrawn'] };
+  function claimPill(s) { var p = CL_ST[s] || CL_ST.submitted; return pill(p[0], p[1], p[2]); }
+  function claimWhat(c) {
+    if (c.kind === 'mileage') return '<b>Mileage</b> · <span data-no-i18n>' + esc(String(c.km)) + ' km</span><div class="hr-sub" data-no-i18n>' + esc((c.from_place || '') + ' → ' + (c.to_place || '')) + '</div>';
+    return '<b data-no-i18n>' + esc(c.category || 'Expense') + '</b>' + (c.description ? '<div class="hr-sub" data-no-i18n>' + esc(c.description) + '</div>' : '');
+  }
+  async function fileBlob(path, name, view) {
+    try {
+      if (!KT.fetchFileBlob) throw new Error('');
+      var b = await KT.fetchFileBlob((KT.API_BASE || '/api/v1') + path), u = URL.createObjectURL(b);
+      if (view) window.open(u, '_blank', 'noopener');
+      else { var a = document.createElement('a'); a.href = u; a.download = name || 'receipt'; document.body.appendChild(a); a.click(); a.remove(); }
+      setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+    } catch (e) { toast('⚠️', 'Could not open the receipt', errMsg(e), '#DC2626'); }
+  }
+
+  /* Filter chips + section titles for the claims screens: the same look as screen-hr-talent.js (whose CSS only loads with
+     its own tabs). NOT aria-pressed (the portal turns those into switches); state = .on + aria-current. */
+  function chipCss() {
+    if (document.getElementById('kt-hrs-css')) return;
+    var st = document.createElement('style'); st.id = 'kt-hrs-css';
+    st.textContent = '.hrt-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 10px;}'
+      + '#appMain .hrt-chips button.hrt-chip{display:inline-flex;align-items:center;gap:5px;height:30px;min-height:30px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;'
+      + 'background:#fff;font-size:12.5px;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer;color:#334155;box-shadow:none;flex:0 0 auto;}'
+      + '#appMain .hrt-chips button.hrt-chip .n{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#F1F5F9;color:#475569;font-size:11px;}'
+      + '#appMain .hrt-chips button.hrt-chip.on{background:#0E7490;border-color:#0E7490;color:#fff;}'
+      + '#appMain .hrt-chips button.hrt-chip.on .n{background:rgba(255,255,255,.22);color:#fff;}'
+      + '.hrt-sec{font-weight:800;font-size:14px;margin:16px 0 8px;color:#0F172A;}'
+      + 'html.kt-dark #appMain .hrt-chips button.hrt-chip{background:#0F172A;border-color:#334155;color:#E2E8F0;}'
+      + 'html.kt-dark #appMain .hrt-chips button.hrt-chip.on{background:#0E7490;border-color:#0E7490;color:#fff;}html.kt-dark #appMain .hrt-chips button.hrt-chip .n{background:#1E293B;color:#CBD5E1;}html.kt-dark .hrt-sec{color:#F1F5F9;}';
+    document.head.appendChild(st);
+  }
+
+  var CS = { st: 'submitted' };
+  async function drawClaims(host) {
+    chipCss();
+    var d;
+    try { d = await Api.get('/hr/claims?status=' + encodeURIComponent(CS.st)); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
+    if (!host.isConnected) return;
+    var rows = d.claims || [], n = d.counts || {}, all = 0;
+    Object.keys(n).forEach(function (k) { all += n[k]; });
+    var chips = [['submitted', 'To approve'], ['approved', 'Approved'], ['paid', 'Paid'], ['declined', 'Declined'], ['all', 'All']];
+    var h = '<div class="hr-note">Expense and mileage claims from your team. Approve or decline each one; an approved claim is added to the person\'s next payslip as a reimbursement when the payroll run is made (Payroll &gt; Run payroll).'
+      + (d.settings && d.settings.km_rate ? ' Mileage rate: <b data-no-i18n>' + esc(rateTxt(d.settings.km_rate)) + '/km</b>.' : ' No mileage rate is set yet' + (d.is_admin ? ': set one in Claim settings.' : '.')) + '</div>'
+      + '<div class="hrt-chips">' + chips.map(function (c) {
+        var on = CS.st === c[0], k = c[0] === 'all' ? all : (n[c[0]] || 0);
+        return '<button type="button" class="hrt-chip' + (on ? ' on' : '') + '" data-cst="' + c[0] + '"' + (on ? ' aria-current="true"' : '') + '>' + esc(c[1]) + ' <span class="n">' + k + '</span></button>';
+      }).join('') + '<span style="flex:1"></span><button type="button" class="hr-b" data-cl="report">Claims report</button>'
+      + (d.is_admin ? '<button type="button" class="hr-b" data-cl="settings">Claim settings</button>' : '') + '</div>'
+      + '<div class="kt-card">' + (rows.length ? '<table data-hrs="claims"><thead><tr><th>Person</th><th>Date</th><th>Claim</th><th style="text-align:right;">Amount</th><th>Status</th><th></th></tr></thead><tbody>'
+        + rows.map(function (c) {
+          return '<tr><td><b data-no-i18n>' + esc(c.person) + '</b>' + (c.centre ? '<div class="hr-sub" data-no-i18n>' + esc(c.centre) + '</div>' : '') + '</td>'
+            + '<td style="white-space:nowrap;">' + esc(day(c.claim_date)) + '</td><td>' + claimWhat(c) + '</td>'
+            + '<td style="text-align:right;white-space:nowrap;" data-no-i18n><b>' + esc(money(c.total)) + '</b></td><td>' + claimPill(c.status) + '</td>'
+            + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-cl="open" data-id="' + c.id + '">View claim</button></td></tr>';
+        }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">No claims here.</div>') + '</div>';
+    host.innerHTML = h;
+    var reload = function () { if (host.isConnected) drawClaims(host); };
+    host.querySelectorAll('[data-cst]').forEach(function (b) { b.addEventListener('click', function () { CS.st = b.getAttribute('data-cst'); drawClaims(host); }); });
+    host.querySelectorAll('[data-cl]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-cl');
+        if (a === 'open') { var c = rows.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (c) openClaim(c, c.user_id !== d.me, reload); }
+        else if (a === 'report') openClaimReport(d.today);
+        else if (a === 'settings') openClaimSettings(d.settings || {}, reload);
+      });
+    });
+    var m = /[?&]claim=(\d+)/.exec(location.hash || '');
+    if (m) {
+      var c = rows.filter(function (x) { return x.id === +m[1]; })[0];
+      if (c) openClaim(c, c.user_id !== d.me, reload);
+      else if (CS.st !== 'all') { CS.st = 'all'; drawClaims(host); }
+    }
+  }
+
+  function openClaim(c, manage, done) {
+    var kv = function (k, v) { return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #F1F5F9;font-size:13.5px;"><span style="color:#64748B;">' + esc(k) + '</span><b data-no-i18n style="text-align:right;">' + (v == null || v === '' ? '<span class="hr-sub">—</span>' : v) + '</b></div>'; };
+    var h = '<div>' + kv('Person', esc(c.person)) + kv('Date', esc(day(c.claim_date))) + kv('Type', c.kind === 'mileage' ? 'Mileage' : 'Expense');
+    if (c.kind === 'mileage') h += kv('From', esc(c.from_place || '')) + kv('To', esc(c.to_place || '')) + kv('Distance', esc(String(c.km)) + ' km') + kv('Rate', c.km_rate != null ? esc(rateTxt(c.km_rate) + '/km') : '');
+    else h += kv('Category', esc(c.category || '')) + kv('Amount before tax', esc(money(c.amount))) + kv('Tax', esc(money(c.tax)));
+    h += kv('Description', esc(c.description || '')) + kv('Total', '<span style="font-size:15px;">' + esc(money(c.total)) + '</span>') + kv('Status', claimPill(c.status));
+    if (c.decided_by) h += kv(c.status === 'declined' ? 'Declined by' : 'Approved by', esc(c.decided_by) + (c.decided_at ? ' · ' + esc(day(c.decided_at)) : ''));
+    if (c.decision_comment) h += kv('Comment', esc(c.decision_comment));
+    if (c.status === 'paid') h += kv('Paid', esc(day(c.paid_at)) + (c.payslip ? ' · ' + esc(c.payslip) : ''));
+    h += '</div>';
+    if (c.has_receipt) h += '<div class="hr-bar" style="margin:12px 0 0;"><button type="button" class="hr-b" data-rc="view">🧾 View receipt</button><button type="button" class="hr-b" data-rc="dl">Download</button></div>';
+    else if (c.kind === 'expense') h += '<div class="hr-sub" style="margin-top:10px;">No receipt was added.</div>';
+    var box = el(h);
+    box.querySelectorAll('[data-rc]').forEach(function (b) { b.addEventListener('click', function () { fileBlob('/hr/claims/' + c.id + '/receipt' + (b.getAttribute('data-rc') === 'view' ? '?inline=1' : ''), c.receipt_name, b.getAttribute('data-rc') === 'view'); }); });
+    var acts = [{ label: 'Close' }];
+    var decide = function (dec, comment) {
+      return Api.post('/hr/claims/' + c.id + '/decide', { decision: dec, comment: comment || null }).then(function () { saved(dec === 'approve' ? 'Claim approved.' : 'Claim declined.'); done(); }, function (e) { toast('⚠️', 'Could not save it', errMsg(e), '#DC2626'); return false; });
+    };
+    if (manage) {
+      if (c.status === 'submitted' || (c.status === 'approved' && !c.payroll_document_id)) acts.push({ label: 'Decline', handler: function () { closeModal(); setTimeout(function () { openDecline(c, decide); }, 60); return false; } });
+      if (c.status === 'submitted' || c.status === 'declined') acts.push({ label: 'Approve', primary: true, busyLabel: 'Saving…', handler: function () { return decide('approve'); } });
+    } else if (c.status === 'submitted') {
+      acts.push({ label: 'Withdraw claim', handler: function () {
+        return Api.post('/hr/claims/' + c.id + '/withdraw', {}).then(function () { saved('Claim withdrawn.'); done(); }, function (e) { toast('⚠️', 'Could not withdraw it', errMsg(e), '#DC2626'); return false; });
+      } });
+    }
+    modal({ title: (c.kind === 'mileage' ? 'Mileage claim: ' : 'Expense claim: ') + c.person, body: box, actions: acts });
+  }
+
+  function openDecline(c, decide) {
+    var box = el('<div>' + field('Why is it declined? (the person sees this)', area('comment', '', 3), true) + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div></div>');
+    modal({ title: 'Decline claim: ' + c.person, body: box, actions: [{ label: 'Cancel' }, { label: 'Decline claim', primary: true, busyLabel: 'Saving…', handler: function () {
+      var t = val(box, 'comment'); if (!t) { msg(box, 'Say why the claim is declined.'); return false; }
+      return decide('decline', t);
+    } }] });
+  }
+
+  function openClaimReport(todayStr) {
+    var t = todayStr || today();
+    var box = el('<div><div class="hr-g">' + field('From', input('from', t.slice(0, 4) + '-01-01', 'date')) + field('To', input('to', t, 'date')) + '</div><div data-rep style="margin-top:10px;" class="hr-sub">Loading…</div></div>');
+    var tbl = function (title, rows, key) {
+      if (!rows.length) return '';
+      return '<div class="hrt-sec">' + esc(title) + '</div><div class="kt-card"><table data-hrs="claims-report"><thead><tr><th>' + (key === 'month' ? 'Month' : title === 'By person' ? 'Person' : 'Category') + '</th><th style="text-align:right;">Claims</th><th style="text-align:right;">Approved</th><th style="text-align:right;">Paid</th></tr></thead><tbody>'
+        + rows.map(function (r) {
+          var nm = key === 'month' ? (function (m) { var p = /^(\d{4})-(\d{2})/.exec(m || ''); return p ? MON[+p[2] - 1] + ' ' + p[1] : m; })(r.month) : r.name;
+          return '<tr><td data-no-i18n>' + esc(nm) + '</td><td style="text-align:right;">' + r.count + '</td><td style="text-align:right;" data-no-i18n>' + esc(money(r.total)) + '</td><td style="text-align:right;" data-no-i18n>' + esc(money(r.paid)) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    };
+    var load = function () {
+      var rep = box.querySelector('[data-rep]');
+      Api.get('/hr/claims/report?from=' + encodeURIComponent(val(box, 'from') || '') + '&to=' + encodeURIComponent(val(box, 'to') || '')).then(function (r) {
+        rep.className = '';
+        rep.innerHTML = '<div class="hr-sub">Approved and paid claims: <b data-no-i18n>' + r.total.count + ' · ' + esc(money(r.total.total)) + '</b>' + (r.total.km ? ' · <span data-no-i18n>' + esc(String(r.total.km)) + ' km</span>' : '') + '</div>'
+          + (r.total.count ? tbl('By person', r.by_person, 'name') + tbl('By category', r.by_category, 'name') + tbl('By month', r.by_month, 'month') : '<div class="hr-sub" style="padding:10px 0;">No approved claims in these dates.</div>');
+      }, function (e) { rep.textContent = errMsg(e); });
+    };
+    box.querySelectorAll('[data-f]').forEach(function (i) { i.addEventListener('change', load); });
+    modal({ title: 'Claims report', body: box, actions: [{ label: 'Close' }] });
+    load();
+  }
+
+  function openClaimSettings(s, done) {
+    var box = el('<div class="hr-g">' + field('Mileage rate ($ per km)', input('km_rate', s.km_rate == null ? '' : s.km_rate, 'number'))
+      + '<div style="grid-column:1/-1;" class="hr-sub">Leave it empty to turn mileage claims off. Use the rate your agency pays; KiddieTrac does not fill in a government rate.</div>'
+      + '<div style="grid-column:1/-1;">' + check('receipt_required', s.receipt_required !== false, 'A receipt photo is required for every expense claim') + '</div>'
+      + field('Categories staff choose from (one per line)', area('categories', (s.categories || []).join('\n'), 7), true)
+      + '</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    var r = box.querySelector('[data-f="km_rate"]'); if (r) { r.step = '0.001'; r.min = '0'; }
+    modal({ title: 'Claim settings', body: box, actions: [{ label: 'Cancel' }, { label: 'Save settings', primary: true, busyLabel: 'Saving…', handler: function () {
+      var cats = String(box.querySelector('[data-f="categories"]').value || '').split(/\n+/).map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!cats.length) { msg(box, 'Add at least one category.'); return false; }
+      return Api.put('/hr/claims/settings', { km_rate: val(box, 'km_rate'), receipt_required: !!val(box, 'receipt_required'), categories: cats })
+        .then(function () { saved('Claim settings saved.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
+  function openNewClaim(d, done) {
+    var s = d.settings || {}, cats = {};
+    (s.categories || []).forEach(function (c) { cats[c] = c; });
+    var box = el('<div class="hr-g">' + field('Type', select('kind', opts({ expense: 'Expense (with a receipt)', mileage: 'Mileage' }, 'expense')))
+      + field('Date', input('claim_date', d.today || today(), 'date'))
+      + '<div data-k="expense" style="display:contents;">' + field('Category', select('category', opts(cats, '', 'Choose a category')))
+        + field('Amount before tax', input('amount', '', 'number')) + field('Tax', input('tax', '', 'number'))
+        + field('Receipt photo' + (s.receipt_required !== false ? '' : ' (optional)'), '<input class="hr-i" data-f="receipt" type="file" accept="image/*,application/pdf" style="width:100%;">', true) + '</div>'
+      + '<div data-k="mileage" style="display:none;">' + field('From', input('from_place', '')) + field('To', input('to_place', '')) + field('Distance (km)', input('km', '', 'number'))
+        + '<div style="grid-column:1/-1;" class="hr-sub" data-mi></div></div>'
+      + field('What it was for', area('description', '', 2), true)
+      + '</div><div class="hr-sub" style="margin-top:8px;">🔒 Your claim and receipt are seen only by you, your director and your agency admin. Approved claims are paid on your next payslip.</div>'
+      + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    ['amount', 'tax', 'km'].forEach(function (k) { var i = box.querySelector('[data-f="' + k + '"]'); if (i) { i.step = k === 'km' ? '0.1' : '0.01'; i.min = '0'; i.inputMode = 'decimal'; } });
+    var mi = box.querySelector('[data-mi]');
+    var sync = function () {
+      var k = val(box, 'kind');
+      box.querySelector('[data-k="expense"]').style.display = k === 'expense' ? 'contents' : 'none';
+      box.querySelector('[data-k="mileage"]').style.display = k === 'mileage' ? 'contents' : 'none';
+      if (k === 'mileage') {
+        var km = Number(val(box, 'km')) || 0;
+        mi.innerHTML = s.km_rate ? 'Rate <b data-no-i18n>' + esc(rateTxt(s.km_rate)) + '/km</b>' + (km ? ' · <b data-no-i18n>' + esc(money(km * s.km_rate)) + '</b>' : '')
+          : '<span style="color:#B91C1C;">Your agency has not set a mileage rate yet. Ask your agency admin.</span>';
+      }
+    };
+    box.querySelector('[data-f="kind"]').addEventListener('change', sync);
+    box.querySelector('[data-f="km"]').addEventListener('input', sync);
+    sync();
+    modal({ title: 'New expense or mileage claim', body: box, actions: [{ label: 'Cancel' }, { label: 'Send claim', primary: true, busyLabel: 'Sending…', handler: function () {
+      var k = val(box, 'kind'), fd = new FormData();
+      fd.append('kind', k); fd.append('claim_date', val(box, 'claim_date') || '');
+      if (val(box, 'description')) fd.append('description', val(box, 'description'));
+      if (k === 'expense') {
+        if (!val(box, 'category')) { msg(box, 'Choose a category.'); return false; }
+        if (!(Number(val(box, 'amount')) > 0)) { msg(box, 'Enter the amount.'); return false; }
+        var f = box.querySelector('[data-f="receipt"]').files[0];
+        if (!f && s.receipt_required !== false) { msg(box, 'Add a photo of the receipt.'); return false; }
+        fd.append('category', val(box, 'category')); fd.append('amount', val(box, 'amount')); fd.append('tax', val(box, 'tax') || '0');
+        if (f) fd.append('receipt', f);
+      } else {
+        if (!s.km_rate) { msg(box, 'Your agency has not set a mileage rate yet.'); return false; }
+        if (!val(box, 'from_place') || !val(box, 'to_place')) { msg(box, 'Enter where you drove from and to.'); return false; }
+        if (!(Number(val(box, 'km')) > 0)) { msg(box, 'Enter the distance.'); return false; }
+        fd.append('from_place', val(box, 'from_place')); fd.append('to_place', val(box, 'to_place')); fd.append('km', val(box, 'km'));
+      }
+      return Api.postForm('/hr/claims', fd).then(function () { saved('Claim sent.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
+  async function mineClaims(host) {
+    chipCss();
+    var wrap = document.createElement('div'); wrap.setAttribute('data-hrs-claims', '1'); host.appendChild(wrap);
+    var d;
+    try { d = await Api.get('/hr/me/claims'); } catch (e) { wrap.innerHTML = ''; return; }
+    if (!wrap.isConnected) return;
+    var rows = d.claims || [];
+    wrap.innerHTML = '<div class="hrt-sec">Expense and mileage claims</div><div class="hr-bar"><button type="button" class="hr-b p" data-mcl="new">New claim</button></div>'
+      + '<div class="kt-card">' + (rows.length ? '<table data-hrs="myclaims"><thead><tr><th>Date</th><th>Claim</th><th style="text-align:right;">Amount</th><th>Status</th><th></th></tr></thead><tbody>' + rows.map(function (c) {
+        return '<tr><td style="white-space:nowrap;">' + esc(day(c.claim_date)) + '</td><td>' + claimWhat(c) + '</td><td style="text-align:right;white-space:nowrap;" data-no-i18n><b>' + esc(money(c.total)) + '</b></td>'
+          + '<td>' + claimPill(c.status) + (c.status === 'declined' && c.decision_comment ? '<div class="hr-sub" data-no-i18n>' + esc(c.decision_comment) + '</div>' : '') + '</td>'
+          + '<td style="text-align:center;"><button type="button" data-mcl="open" data-id="' + c.id + '">View claim</button></td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">You have not filed a claim.</div>') + '</div>';
+    var reload = function () { if (wrap.isConnected) { wrap.remove(); mineClaims(host); } };
+    wrap.querySelectorAll('[data-mcl]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.getAttribute('data-mcl') === 'new') openNewClaim(d, reload);
+        else { var c = rows.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (c) openClaim(c, false, reload); }
+      });
+    });
+  }
+
   window.KTHrSafety = {
-    tabs: [['injuries', 'Injuries']],
-    has: function (tab) { return tab === 'injuries'; },
-    draw: function (tab, host) { if (tab === 'injuries') return drawInjuries(host); },
-    mine: mine
+    tabs: [['injuries', 'Injuries'], ['claims', 'Claims']],
+    has: function (tab) { return tab === 'injuries' || tab === 'claims'; },
+    draw: function (tab, host) { if (tab === 'injuries') return drawInjuries(host); if (tab === 'claims') return drawClaims(host); },
+    mine: function (host) { mine(host); mineClaims(host); }
   };
 })(window);

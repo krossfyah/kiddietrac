@@ -1,6 +1,32 @@
 {
-    "updated": "2026-11-26",
+    "updated": "2026-11-27",
     "entries": [
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🧾",
+            "title": "Expense and mileage claims",
+            "body": "Staff can now claim money back from My HR: snap a photo of the receipt, or enter the km driven at your agency's mileage rate. Directors and admins approve or decline in HR > Claims, and approved claims are added to the person's next payslip as a reimbursement. A report totals claims by person, category and month.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🩹",
+            "title": "Injury report countdown for every agency",
+            "body": "Staff injury records now count down the 3 business days to report an injury to your workers' compensation board in every province and state, skipping weekends and your closures. Ontario still shows WSIB Form 7.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
         {
             "type": "new",
             "date": "2026-11-26",

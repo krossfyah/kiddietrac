@@ -508,6 +508,8 @@ class PayrollDocumentController extends Controller
                 'component' => isset($l['component']) ? (string) $l['component'] : null,
                 // An educator reward bonus paid on this payslip (educator_rewards.id).
                 'reward' => ! empty($l['reward_award_id']),
+                // An HR expense / mileage reimbursement paid on this payslip (hr_claims.id, HR item 9).
+                'reimbursement' => ! empty($l['claim_id']),
             ];
         }
 
@@ -666,11 +668,11 @@ class PayrollDocumentController extends Controller
         /* An educator reward bonus prints too (2026-10-20): it is money on this payslip, and
            folded into "Agreed amount" nobody could tell a bonus had been paid. Other lines
            still print only with workforce funding, as before. */
-        $hasReward = (bool) array_filter($payLines, fn ($l) => ! empty($l['reward']));
+        $hasReward = (bool) array_filter($payLines, fn ($l) => ! empty($l['reward']) || ! empty($l['reimbursement']));   // + HR reimbursements (2026-11-26)
         if (! $hasFunding && ! $hasReward) {
             $payLines = [];
         } elseif (! $hasFunding) {
-            $payLines = array_values(array_filter($payLines, fn ($l) => ! empty($l['reward'])));
+            $payLines = array_values(array_filter($payLines, fn ($l) => ! empty($l['reward']) || ! empty($l['reimbursement'])));
         }
         $linesSum = round(array_sum(array_column($payLines, 'amount')), 2);
         $firstAmount = $payLines ? round((float) $doc->gross - $linesSum, 2) : (float) $doc->gross;

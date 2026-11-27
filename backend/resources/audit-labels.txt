@@ -442,10 +442,6 @@ post drills/reminders | Sent emergency drill reminders
 delete drills/{id} | Deleted an emergency drill record
 post drills/maps | Uploaded a centre map to the drill log
 delete drills/maps/{id} | Removed a centre map from the drill log
-post drills/fire-plans | Saved or submitted a fire plan (drawing and decision tree)
-post drills/fire-plans/template | Changed the fire plan steps every new plan starts from
-post drills/fire-plans/{id}/review | Reviewed a fire plan (approved it or asked for changes)
-delete drills/fire-plans/{id} | Deleted a fire plan draft
 post email/accounts | Connected an email account
 patch email/accounts/{id} | Updated a connected email account
 delete email/accounts/{id} | Removed a connected email account
@@ -1190,7 +1186,6 @@ post demo/companion | Opened the parent's phone beside a website demo staff phon
 post admin/moment-notify-settings | Changed instant moment notifications to families
 post admin/staff-notify-settings | Changed required app notifications for staff
 post admin/topic-notifications | Changed who hears about immunizations and drills
-post admin/record-escalation | Changed who gets escalated daily records
 post admin/notify-readiness/instructions | Sent notification setup instructions to staff
 post educator-points/thanks/note | Drafted the letter for a thank-you award
 post me/content-reports | Reported a message
@@ -1338,3 +1333,7 @@ put hr/injuries/{id} | Updated a staff injury record
 put hr/injuries/{id}/form7 | Recorded a staff injury report to the compensation board
 put hr/injuries/{id}/return-to-work | Saved a return-to-work plan
 post hr/injuries/{id}/checkins | Added a return-to-work check-in
+post hr/claims | Filed an expense or mileage claim
+post hr/claims/{id}/withdraw | Withdrew an expense or mileage claim
+post hr/claims/{id}/decide | Approved or declined an expense or mileage claim
+put hr/claims/settings | Changed the expense and mileage claim settings
