@@ -1006,6 +1006,9 @@ final class TimeOffController extends Controller
 
         // ── PARENTS — only when the doors are actually shut ─────────────────
         if ($closedCentreId) {
+            // Families read the home as they know it: "Amna's home child care", not the provider's full name (FamilyFacingName, 2026-11-27).
+            $staffCentreName = $centreName;
+            $centreName = \App\Support\FamilyFacingName::place((int) $closedCentreId, (string) $centreName) ?: $centreName;
             // Open families with a child still here — never a family that has left.
             $parents = DB::table('users')->whereIn('id', $this->closureParentIds($closedCentreId))->pluck('email')->all();
 
@@ -1036,6 +1039,8 @@ final class TimeOffController extends Controller
                 'preheader' => 'Your child’s place is unaffected — but you will need care for '.$when.'.',
             ]);
         }
+
+        if (isset($staffCentreName)) { $centreName = $staffCentreName; }   // staff keep the centre's own name
 
         // ── EDUCATORS — the rota, not the doors ─────────────────────────────
         // (Not on a closure added afterwards: they were told about the leave already.)

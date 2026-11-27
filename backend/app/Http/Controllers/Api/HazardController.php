@@ -333,14 +333,16 @@ final class HazardController extends Controller
 
         $tz = AgencyTime::tz($agencyId);
         $centre = DB::table('centres')->where('id', $cid)->first(['name', 'phone', 'email']);
+        // Parents read the home as a family sees it ("Amna's home child care", FamilyFacingName 2026-11-27); the staff copy keeps the centre name.
+        $famName = \App\Support\FamilyFacingName::place((int) $cid, (string) $centre->name);
         $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $idt = Carbon::parse($row->identified_at, 'UTC')->setTimezone($tz);
         $contact = trim(($centre->phone ? 'call ' . $e($centre->phone) : '') . ($centre->phone && $centre->email ? ' or ' : '') . ($centre->email ? 'email <a href="mailto:' . $e($centre->email) . '" style="color:#1F6FB2">' . $e($centre->email) . '</a>' : ''));
         $contactP = '<p style="margin:16px 0 0;font-size:14px;color:#334155;line-height:1.6">If you have any questions, please speak with the centre' . ($contact ? ' — ' . $contact : '') . '.</p>';
 
         if ($kind === 'notice') {
-            $subject = 'Safety notice from ' . $centre->name . ': ' . $row->title;
-            $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#334155">We want to let you know about a hazard at <b>' . $e($centre->name) . '</b> and the steps we have taken to keep the children safe.</p>'
+            $subject = 'Safety notice from ' . \App\Support\FamilyFacingName::org((int) $cid, (int) $agencyId, (string) $centre->name) . ': ' . $row->title;
+            $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#334155">We want to let you know about a hazard at <b>' . $e($famName) . '</b> and the steps we have taken to keep the children safe.</p>'
                 . EmailTemplate::calloutBox('<strong>What:</strong> ' . $e($row->title)
                     . ($row->location ? '<br><strong>Where:</strong> ' . $e($row->location) : '')
                     . '<br><strong>Identified:</strong> ' . $e($idt->format('l, F j, Y g:i A'))
@@ -348,23 +350,23 @@ final class HazardController extends Controller
                 . ($row->description ? '<p style="margin:14px 0 4px;font-size:13.5px;font-weight:700;color:#334155">About the hazard</p><p style="margin:0;font-size:14px;color:#334155;line-height:1.6">' . nl2br($e($row->description)) . '</p>' : '')
                 . '<p style="margin:14px 0 4px;font-size:13.5px;font-weight:700;color:#334155">Steps we have taken</p><p style="margin:0;font-size:14px;color:#334155;line-height:1.6">' . nl2br($e($row->steps_taken)) . '</p>'
                 . $contactP;
-            $html = EmailTemplate::wrap($agencyId, $body, ['eyebrow' => 'SAFETY NOTICE', 'title' => $row->title, 'subtitle' => $centre->name,
-                'preheader' => 'A hazard at ' . $centre->name . ' and the steps taken.']);
-            $bellTitle = 'Safety notice — ' . $centre->name;
+            $html = EmailTemplate::wrap($agencyId, $body, ['eyebrow' => 'SAFETY NOTICE', 'title' => $row->title, 'subtitle' => $famName,
+                'preheader' => 'A hazard at ' . $famName . ' and the steps taken.']);
+            $bellTitle = 'Safety notice — ' . $famName;
             $bellBody = $row->title . ($row->location ? ' (' . $row->location . ')' : '') . '. Steps taken: ' . $row->steps_taken;
         } else {
-            $subject = 'Resolved at ' . $centre->name . ': ' . $row->title;
+            $subject = 'Resolved at ' . $famName . ': ' . $row->title;
             $rt = $row->resolved_at ? Carbon::parse($row->resolved_at, 'UTC')->setTimezone($tz) : Carbon::now($tz);
-            $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#334155">An update on the hazard at <b>' . $e($centre->name) . '</b>' . ($row->notified_at ? ' we told you about on ' . $e(Carbon::parse($row->notified_at, 'UTC')->setTimezone($tz)->format('F j')) : '') . ': it has been resolved.</p>'
+            $body = '<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#334155">An update on the hazard at <b>' . $e($famName) . '</b>' . ($row->notified_at ? ' we told you about on ' . $e(Carbon::parse($row->notified_at, 'UTC')->setTimezone($tz)->format('F j')) : '') . ': it has been resolved.</p>'
                 . EmailTemplate::calloutBox('<strong>What:</strong> ' . $e($row->title)
                     . ($row->location ? '<br><strong>Where:</strong> ' . $e($row->location) : '')
                     . '<br><strong>Resolved:</strong> ' . $e($rt->format('l, F j, Y')), 'success')
                 . ($row->resolution_note ? '<p style="margin:14px 0 4px;font-size:13.5px;font-weight:700;color:#334155">What was done</p><p style="margin:0;font-size:14px;color:#334155;line-height:1.6">' . nl2br($e($row->resolution_note)) . '</p>'
                     : ($row->steps_taken ? '<p style="margin:14px 0 4px;font-size:13.5px;font-weight:700;color:#334155">What was done</p><p style="margin:0;font-size:14px;color:#334155;line-height:1.6">' . nl2br($e($row->steps_taken)) . '</p>' : ''))
                 . $contactP;
-            $html = EmailTemplate::wrap($agencyId, $body, ['eyebrow' => 'SAFETY UPDATE', 'title' => 'Resolved: ' . $row->title, 'subtitle' => $centre->name,
-                'preheader' => 'The hazard at ' . $centre->name . ' has been resolved.']);
-            $bellTitle = 'Hazard resolved — ' . $centre->name;
+            $html = EmailTemplate::wrap($agencyId, $body, ['eyebrow' => 'SAFETY UPDATE', 'title' => 'Resolved: ' . $row->title, 'subtitle' => $famName,
+                'preheader' => 'The hazard at ' . $famName . ' has been resolved.']);
+            $bellTitle = 'Hazard resolved — ' . $famName;
             $bellBody = $row->title . ($row->location ? ' (' . $row->location . ')' : '') . ' has been resolved.' . ($row->resolution_note ? ' ' . $row->resolution_note : '');
         }
 

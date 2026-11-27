@@ -881,11 +881,14 @@ class IncidentController extends Controller
 
         /* Written for a parent: what happened to their child and that they were
            cared for, before any of the record-keeping. */
+        /* To the family the educator is a first name only (2026-11-27, staff names to families). */
+        $recorderFirst = $recorder ? (trim((string) strtok(trim((string) ($recorder->first_name ?? '')), ' ')) ?: $recorderName) : $recorderName;
+        $parentFacts = str_replace("• Recorded by: {$recorderName}\n", "• Recorded by: {$recorderFirst}\n", $facts);
         $parentBody = $this->parentOpening((string) $incident->incident_type, $incident->severity) . "\n\n"
-              . "In {$recorderName}'s words:\n" . (trim((string) $incident->description) ?: '(no description recorded)') . "\n\n"
+              . "In {$recorderFirst}'s words:\n" . (trim((string) $incident->description) ?: '(no description recorded)') . "\n\n"
               . "What we did:\n" . (trim((string) $incident->action_taken) ?: '(none recorded)') . "\n\n"
               . ($incident->first_aid_administered ? "First aid was given at the time.\n\n" : '')
-              . $facts . "\n"
+              . $parentFacts . "\n"
               . $this->parentClosing();
 
         /* Written for a colleague who has to do something about it. */

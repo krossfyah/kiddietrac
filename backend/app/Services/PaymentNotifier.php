@@ -101,7 +101,8 @@ class PaymentNotifier
             'user' => $user,
             'agency_id' => $agencyId,
             'agency' => $agency,
-            'agency_name' => trim((string) ($agency->name ?? '')) ?: 'Your childcare centre',
+            // Families see the agency without Inc / Ltd (FamilyFacingName, 2026-11-27).
+            'agency_name' => \App\Support\FamilyFacingName::clean((string) ($agency->name ?? '')) ?: 'Your childcare centre',
             'invoice' => $invoice,
             'centre_id' => $centreId,
         ];

@@ -770,7 +770,7 @@ final class AnnouncementController extends Controller
         $data['send_sms'] = (bool) ($d['sms'] ?? $a->send_sms);
         $data['send_push'] = (bool) ($d['push'] ?? $a->send_push);
         $data['send_voice'] = false;   // never rings again
-        $data['notif_title'] = '📢 Announcement (sent again) · ' . $this->scopeName($a->scope_type, (int) $a->scope_id);
+        $data['notif_title'] = '📢 Announcement (sent again) · ' . $this->noticeName($a->scope_type, (int) $a->scope_id, $a->audience ?? 'parents');
         // It shows as new for them again: back in the 📣 count and the sign-in popup.
         DB::table('announcement_user_state')->where('item_key', 'a:' . $id)->whereIn('user_id', $ids)->update(['read_at' => null, 'updated_at' => now()]);
         $this->voiceResult = null;
@@ -1145,7 +1145,10 @@ final class AnnouncementController extends Controller
 
         // Notification framing (requested): "Announcement · <Centre/Room name>"
         // as the title, then the announcement itself as the body.
-        $scopeName = $this->scopeName($data['scope_type'], (int) $data['scope_id']);
+        /* Families read who it is from as FamilyFacingName has it (2026-11-27): the bell, push, reminder and call
+           named a provider-named home by the provider's full name ("📢 Announcement · Amna Ahsan"). A staff-only
+           announcement keeps the centre's own name. */
+        $scopeName = $this->noticeName($data['scope_type'], (int) $data['scope_id'], $data['audience'] ?? 'parents');
         $notifTitle = $data['notif_title'] ?? ('📢 Announcement · ' . $scopeName);
         $pushLink = $data['link'] ?? '#announcements';
 
@@ -1328,6 +1331,18 @@ final class AnnouncementController extends Controller
         }
 
         return $delivered;
+    }
+
+    /* The scope's name in a notice: family wording (a provider-named home is the agency, no Inc) when families
+       get it, the centre's own name for a staff-only announcement. */
+    private function noticeName(string $type, int $id, ?string $audience): string
+    {
+        $staffName = $this->scopeName($type, $id);
+        if (! in_array($audience ?: 'parents', ['parents', 'all'], true)) {
+            return $staffName;
+        }
+
+        return \App\Support\AnnouncementMail::fromLabel($type, $id) ?: $staffName;
     }
 
     // Human name of the target scope, for the notification title

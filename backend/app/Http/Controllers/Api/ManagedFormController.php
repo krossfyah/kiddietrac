@@ -3504,7 +3504,8 @@ class ManagedFormController extends Controller
                     'user_id' => (int) $u->id,
                     'type' => 'document_shared',
                     'title' => 'New counter-signed document',
-                    'body' => mb_substr($title . ' was shared with you by ' . $byName . '. Open it under Documents.', 0, 240),
+                    // First name only in the bell (2026-11-27): the signer is often a parent.
+                    'body' => mb_substr($title . ' was shared with you by ' . (trim((string) strtok(trim((string) ($me->first_name ?? '')), ' ')) ?: $byName) . '. Open it under Documents.', 0, 240),
                     'data' => json_encode(['link' => '#my-documents', 'signoff_id' => (int) $row->id]),
                 ]);
 

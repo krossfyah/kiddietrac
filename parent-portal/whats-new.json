@@ -2,6 +2,22 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🏡",
+            "title": "Notices name your child care the way you know it",
+            "body": "Notifications, texts and emails now say who they are from in a friendly way: your agency's name, or \"Amna's home child care\" for a home child care, instead of the provider's full name. Staff are named by first name only.",
+            "roles": [
+                "guardian"
+            ],
+            "title_fr": "Les avis nomment votre service de garde comme vous le connaissez",
+            "body_fr": "Les notifications, textos et courriels indiquent maintenant leur expéditeur de façon plus conviviale : le nom de votre agence, ou « la garderie en milieu familial d'Amna » pour une garde à domicile, au lieu du nom complet de la responsable. Le personnel est désigné par son prénom seulement.",
+            "title_es": "Los avisos nombran su cuidado infantil como usted lo conoce",
+            "body_es": "Las notificaciones, los mensajes de texto y los correos ahora indican quién los envía de forma más cercana: el nombre de su agencia, o \"el cuidado infantil en casa de Amna\" para un hogar de cuidado, en lugar del nombre completo de la proveedora. El personal aparece solo con su nombre de pila.",
+            "title_hi": "सूचनाएँ अब आपकी चाइल्ड केयर का वही नाम बताती हैं जो आप जानते हैं",
+            "body_hi": "सूचनाएँ, टेक्स्ट और ईमेल अब बताते हैं कि वे किसकी ओर से हैं: आपकी एजेंसी का नाम, या होम चाइल्ड केयर के लिए \"अमना की होम चाइल्ड केयर\", प्रदाता के पूरे नाम के बजाय। स्टाफ़ का केवल पहला नाम दिखाया जाता है।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "🗂️",

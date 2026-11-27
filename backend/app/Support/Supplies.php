@@ -98,7 +98,10 @@ class Supplies
             $names = $group->map(fn ($k) => self::childName($k))->values()->all();
             $who = count($names) > 1 ? implode(' and ', [implode(', ', array_slice($names, 0, -1)), end($names)]) : $names[0];
             try {
-                $annId = self::announce((int) $familyId, $agencyId, $who, $items, $note, $neededBy, $sender, (string) $first->centre_name);
+                // The bell/push title names the home as a family sees it: "Amna's home child care", never the
+                // provider's full name (FamilyFacingName, 2026-11-27).
+                $annId = self::announce((int) $familyId, $agencyId, $who, $items, $note, $neededBy, $sender,
+                    \App\Support\FamilyFacingName::place((int) $first->centre_id ?: null, (string) $first->centre_name));
                 DB::table('supply_requests')->whereIn('id', array_values($rows))->update(['announcement_id' => $annId]);
                 self::tasks((int) $familyId, $agencyId, (int) $first->centre_id, $annId, $who, $items, $note, $neededBy, $sender);
             } catch (Throwable $e) {

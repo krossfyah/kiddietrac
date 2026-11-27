@@ -243,7 +243,8 @@ final class WaitlistController extends Controller
         if (! $email) return response()->json(['message' => 'This family has no email on file.'], 422);
 
         $agencyId = (int) DB::table('centres')->where('id', $family->centre_id)->value('agency_id');
-        $centreName = DB::table('centres')->where('id', $family->centre_id)->value('name');
+        // To the family: a provider-named home reads "Amna's home child care" (FamilyFacingName, 2026-11-27).
+        $centreName = $family->centre_id ? \App\Support\FamilyFacingName::place((int) $family->centre_id, '') : null;
         $childName = trim(($child->first_name ?? '') . ' ' . ($child->last_name ?? '')) ?: 'your child';
         $note = trim((string) ($data['note'] ?? ''));
 

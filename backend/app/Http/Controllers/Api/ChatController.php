@@ -1096,6 +1096,13 @@ final class ChatController extends Controller
                 if (! empty($recipients)) {
                     $sender = DB::table('users')->where('id', $senderId)->first(['first_name', 'last_name']);
                     $senderName = $sender ? trim(($sender->first_name ?? '').' '.($sender->last_name ?? '')) : 'Someone';
+                    /* Staff writing to a family (2026-11-27): the family's push and bell name the educator by first
+                       name only, and the home as a family sees it (FamilyFacingName), never "Amna Ahsan". Staff
+                       reading a family's message keep full names and the centre's name. */
+                    $toFamily = ! \App\Support\ChatAudience::isFamilySide($conv, (int) $senderId);
+                    if ($toFamily && $sender) {
+                        $senderName = trim((string) strtok(trim((string) ($sender->first_name ?? '')), ' ')) ?: $senderName;
+                    }
                     $preview = $body !== ''
                         ? mb_substr($body, 0, 120)
                         : (! empty($attachments) ? '📎 sent an image' : 'New message');
@@ -1170,6 +1177,9 @@ final class ChatController extends Controller
                             ->first(['ch.first_name as child_name', 'ce.name as centre_name']);
                         $ctxChild = $ctx->child_name ?? null;
                         $ctxCentre = $ctx->centre_name ?? null;
+                        if ($toFamily && $ctxCentre) {
+                            $ctxCentre = \App\Support\FamilyFacingName::place((int) $conv->centre_id ?: null, (string) $ctxCentre);
+                        }
                     } catch (\Throwable $ce) {
                     }
                     $ctxSuffix = trim(
@@ -1577,12 +1587,16 @@ final class ChatController extends Controller
            Best-effort throughout: a phone that cannot be reached must never cost the
            message, which is already delivered by this point. */
         $pushTitle = $subject ?: ('Message from '.(trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: 'your centre'));
+        // Parents' copy: the sender's first name only (2026-11-27, staff names to families).
+        $parentPushTitle = $subject ?: ('Message from '.(trim((string) strtok(trim((string) ($user->first_name ?? '')), ' ')) ?: 'your centre'));
         $pushBody = mb_substr($body, 0, 180);
+        $staffPushTitle = $pushTitle;
 
         foreach ([['#messages', array_unique($pushParents)], ['#chat', array_unique($pushStaff)]] as [$link, $ids]) {
             if (! $ids) {
                 continue;
             }
+            $pushTitle = $link === '#messages' ? $parentPushTitle : $staffPushTitle;
             try {
                 $fcm = app(\App\Services\FcmService::class);
                 foreach ($ids as $uid) {

@@ -99,7 +99,8 @@ final class PersonalAnnouncements
     public static function forInvoice(object $inv, string $kind, bool $dry, array &$out): void
     {
         $agencyId = (int) ($inv->agency_id ?? 0);
-        $agency = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: 'your centre');
+        // Families see the agency without Inc / Ltd (FamilyFacingName, 2026-11-27).
+        $agency = FamilyFacingName::agency($agencyId) ?: 'your centre';
         $refType = $kind === 'native' ? 'invoice' : 'external_invoice';
         $split = $kind === 'native' && ! empty($inv->split_snapshot);
         try { $people = InvoiceReminders::guardians($inv, $kind); } catch (Throwable $e) { $people = []; }
