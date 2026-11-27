@@ -1,41 +1,88 @@
 ---
 title: RR. HH.: documentos, historial de pago y salidas
-category: Staff Management
-order: 67
-roles: agency_admin, platform_admin, centre_director
 ---
 # RR. HH.: documentos, historial de pago y salidas
 
-Guarde en un solo lugar los papeles de cada persona, sus cambios de pago y de puesto y todo lo relacionado con una salida. Forma parte del módulo de RR. HH. de KiddieTrac.
+Guarde en un solo lugar el manual y los formularios de la empresa, los papeles de cada persona, sus cambios de pago y de puesto, y todo lo relacionado con una salida. Forma parte del complemento de RR. HH. de KiddieTrac: los documentos de la empresa están en **Recursos humanos > Documentos y cartas**, y los documentos, el historial y el paquete de salida de cada persona están en su perfil de RR. HH., en **Recursos humanos > Personas**.
 
-## Documentos en el expediente de una persona
+[[open: #hr-documents | Abrir Documentos y cartas]]
 
-Abra **Recursos humanos > Personas**, abra a la persona y busque **Documentos**. Pulse **Subir archivos** para añadir uno o varios a la vez. Asigne un tipo a cada uno (identificación, contrato, certificado, permiso de trabajo, etc.) y, si quiere, una fecha de vencimiento y una fecha de seguimiento. Usted y el responsable de la persona reciben un recordatorio 30 y 7 días antes del vencimiento y el mismo día.
+## Compartir un documento de la empresa
 
-Elija quién puede verlo: **Compartido con la persona** (lo ve en Mis RR. HH.) o **Solo responsables**. Los archivos son privados: se abren con un enlace de corta duración y nunca están en una dirección pública. **Vista previa** muestra el archivo sin descargarlo.
+1. Abra **Recursos humanos > Documentos y cartas**. Primero se abre la pestaña **Documentos de la empresa**.
+2. Pulse **Nueva carpeta**, escriba el **Nombre de la carpeta**, elija **Quién puede verlo** (**Solo administradores de la agencia**, **Todo el personal** o **Personas elegidas**) y pulse **Guardar**.
+3. En la carpeta, pulse **Subir**.
+4. Elija los archivos, el **Tipo** y, si quiere, una fecha **Vence el (opcional)** o **Seguimiento el (opcional)**.
+5. Marque **Pedir al personal que lo lea y lo acepte** si todos deben confirmar que lo leyeron.
+6. Pulse **Subir**. El documento aparece en la carpeta con las columnas **Abierto** y **Aceptado**.
 
-## Documentos de la empresa
+[[show: #hr-documents @ Company documents > New folder | Muéstreme]]
 
-La pestaña **Documentos** guarda el manual, las políticas y los formularios que todos necesitan, en carpetas. Una carpeta nueva solo la ven los administradores de la agencia hasta que abra **Configuración de la carpeta** y elija **Todo el personal** o **Personas elegidas**. Marque **Pedir al personal que lo lea y lo acepte** y el documento espera en Mis RR. HH. de cada persona hasta que lo acepte. Las columnas **Abierto** y **Aceptado** muestran quién lo ha hecho, y una fecha de seguimiento le envía un recordatorio 7 días antes y el mismo día.
+El menú **⋮** de un documento ofrece **Vista previa**, **Descargar**, **Quién lo ha leído**, **Editar detalles** y **Quitar**. Una carpeta nueva solo la ven los administradores de la agencia hasta que cambie su **Configuración de la carpeta**. Un documento que se debe aceptar espera en **Mis RR. HH.** de cada persona hasta que pulse **Leer y aceptar**.
 
-## Justificantes médicos y notas de ausencia
+## Agregar documentos al expediente de una persona
 
-El personal puede añadir una nota o una foto (directamente con la cámara del teléfono) al pedir tiempo libre, o más tarde desde la solicitud, e indicar qué días cubre. Los justificantes médicos solo los ven la persona, su director y los administradores de la agencia. No se muestran al responsable del expediente.
+1. Abra **Recursos humanos > Personas**.
+2. Abra el menú **⋮** de la persona y pulse **Ver perfil de RR. HH.**
+3. En la tarjeta **Documentos**, pulse **Documentos** y luego **Subir archivos**.
+4. Elija hasta 20 archivos (15 MB cada uno), un **Tipo** (identificación, contrato, certificado, permiso de trabajo, etc.) y **Quién puede verlo**: **Compartido con la persona** (lo ve en Mis RR. HH.) o **Solo responsables**.
+5. Agregue una fecha **Vence el (opcional)** y una **Seguimiento el (opcional)** si quiere recordatorios, y pulse **Subir**.
 
-## Historial de pago y puesto
+Usted y el responsable de la persona reciben un recordatorio 30 y 7 días antes de que venza un documento, y el mismo día. Los archivos son privados: se abren con un enlace de corta duración y nunca están en una dirección pública.
 
-**Historial de pago y puesto** muestra cada cambio de tarifa, tipo de pago, puesto, tipo de empleo y horas a la semana, con quién lo hizo, cuándo y por qué. Pulse **Programar un cambio** para fijar un aumento o un puesto nuevo que se aplica solo en la fecha elegida. Un cambio con fecha de hoy o anterior se aplica enseguida. Las cifras de pago solo se muestran a quienes pueden ver el pago. Nadie puede cambiar su propio pago.
+> ℹ️ Las notas médicas y las notas que el personal adjunta a una solicitud de tiempo libre solo las ven la persona, su director y los administradores de la agencia, nunca el responsable de su expediente.
 
-Cuando cambian los datos bancarios o de transferencia de alguien, recibe un correo que dice qué cambió (como mucho los 3 últimos dígitos de una cuenta) y le pide que le avise si no fue él.
+## Programar un aumento o un cambio de puesto
 
-## Cuando alguien se va
+1. En el perfil de RR. HH. de la persona, busque la tarjeta **Historial de pago y puesto** y pulse **Historial**. Allí está cada cambio de tarifa, tipo de pago, cargo, tipo de empleo y horas por semana, con quién lo hizo, cuándo y por qué.
+2. Pulse **Programar un cambio**.
+3. Elija **Entra en vigor el** y llene lo que cambia: **Cargo**, **Empleo**, **Horas a la semana**, **Tarifa de pago**, tipo de pago.
+4. Escriba **Por qué (se guarda con el cambio)** y pulse **Guardar el cambio**.
 
-Abra a la persona y pulse **Iniciar la salida** para abrir el **Paquete de salida**. Indique el último día trabajado, la fecha del aviso y el motivo (el código del ROE). Complete la lista: llaves, dispositivos, uniforme, último pago, pago de vacaciones, carta de salida (Recursos humanos > Documentos y cartas > Cartas) y ROE. El cierre de la cuenta se sigue haciendo con **Dar de baja desde su ficha de usuario**; la lista se marca sola cuando está hecho.
+Un cambio con fecha de hoy o anterior se aplica de inmediato; uno posterior se aplica solo en esa fecha. Las cifras de pago solo se muestran a quien puede ver el pago. Nadie puede cambiar su propio pago.
 
-El **Pago de vacaciones** calcula lo que se debe según los saldos restantes y la tarifa. La **Hoja del ROE** reúne las horas e ingresos asegurables por periodo de pago, a partir de las nóminas (o de los fichajes si no hay), para imprimir o descargar en CSV. KiddieTrac no presenta nada a Service Canada: introduzca las cifras en ROE Web o entrégueselas a su proveedor de nóminas.
+## Cuando alguien se va (administradores de la agencia)
 
-**Completar la salida** registra el pago en los saldos. Si fue un error, **Deshacer la salida** reabre la cuenta y revierte el pago. Si la persona vuelve más tarde, **Volver a contratar** crea un expediente nuevo desde su nueva fecha de inicio, con saldos en cero salvo que lo desmarque.
+1. En el perfil de RR. HH. de la persona, pulse **Iniciar la salida** en la tarjeta **Salida**. Se abre el **Paquete de salida**.
+2. Escriba el **Último día trabajado**, **Aviso dado el** y **Motivo (código ROE)**.
+3. Recorra la **Lista de comprobación**: llaves, dispositivos, uniforme, último pago, carta de salida y ROE. El cierre de su acceso se marca solo cuando lo da de baja desde su registro de usuario.
+4. Revise el **Pago de vacaciones**: cada saldo pagable se calcula con su tarifa de pago. Cambie cualquier monto si hace falta.
+5. Pulse **Hoja del ROE** para ver las horas y los ingresos asegurables por periodo de pago, y luego **Imprimir** o **Descargar CSV**.
+6. Pulse **Completar la salida**, elija un nuevo responsable para quienes dependían de la persona y confirme.
 
-La pestaña **Bajas** muestra a todos los que se han ido. Se quitan de las listas de aprobadores y responsables. **Descargar todos sus datos** da un ZIP con su expediente, documentos, vacaciones, horas y registros de RR. HH. (sin número de seguro social ni números bancarios) para una solicitud de acceso.
+Completar la salida registra el pago en sus saldos y deja su expediente de RR. HH. como Terminado en el último día. Su cuenta no se cierra: dele de baja desde su registro de usuario. KiddieTrac no presenta nada a Service Canada: ingrese las cifras del ROE en ROE Web o entrégueselas a su proveedor de nómina.
 
-El pago de permisos solo cuenta los tipos marcados **Se paga cuando alguien se va** en **Recursos humanos > Tiempo libre > Tipos de permiso** (por defecto su tipo de vacaciones y la bolsa de horas extra). Los demás saldos aparecen como **No se paga** y no cambian. Vea **RR. HH.: panel, informes, período de prueba e información que falta**.
+### Deshacer una salida o volver a contratar
+
+1. Abra **Personas > Bajas** y pulse **Paquete de salida** en la persona.
+2. Pulse **Deshacer la salida**, escriba por qué y pulse otra vez **Deshacer la salida**: su cuenta se reabre y el pago se revierte.
+3. O, si la persona vuelve más adelante, pulse **Volver a contratar**, escriba la **Nueva fecha de inicio** y pulse **Volver a contratar**. Sus saldos de tiempo libre empiezan en cero, salvo que desmarque esa opción.
+
+[[show: #hr-people?tab=leavers @ Leavers > Leaving pack | Muéstreme]]
+
+La pestaña **Bajas** lista a todos los que se han ido. **Descargar todos sus datos** da un ZIP con su expediente, documentos, tiempo libre, horas y registros de RR. HH. (sin su SIN ni números bancarios) para una solicitud de acceso.
+
+## Quién puede hacer qué
+
+| Rol | Puede |
+|---|---|
+| Administrador de la agencia | Carpetas y documentos de la empresa, documentos e historial de cada persona, salidas, deshacer, volver a contratar, descargas de datos. |
+| Director de centro | Documentos e historial de pago y puesto del personal de sus centros (el pago solo si puede verlo); consulta el paquete de salida y la hoja del ROE. |
+| Personal | Ve en **Mis RR. HH.** los documentos compartidos con él y los de la empresa. |
+
+## Preguntas frecuentes y problemas
+
+??? El personal no ve un documento de la empresa. | Revise la Configuración de la carpeta: una carpeta nueva es solo para administradores de la agencia hasta que elija Todo el personal o Personas elegidas.
+??? Un saldo dice "Not paid out". | Solo se calculan los tipos de tiempo libre marcados como pagados al salir en Tiempo libre > Tipos de permiso (por defecto, vacaciones y la bolsa de horas extra). Los demás quedan igual.
+??? Veo Paquete de salida pero no Iniciar la salida. | Iniciar y completar una salida es solo para administradores de la agencia.
+??? Cambiaron los datos bancarios de alguien y recibió un correo. | KiddieTrac le escribe a la persona cada vez que cambian sus datos bancarios o de transferencia, mostrando como máximo los últimos 3 dígitos, para que le avise si no fue ella.
+??? ¿Puedo quitar la carpeta? | Sí, desde Configuración de la carpeta, cuando esté vacía.
+
+## Pantallas relacionadas
+
+[[open: #hr-people | Personas]]
+[[open: #hr-documents?tab=letters | Cartas]]
+[[open: #time-off | Tiempo libre]]
+
+- [RR. HH.: plantillas de cartas y firma electrónica](hr-letters)
+- [RR. HH.: panel, informes, periodo de prueba e información faltante](hr-reports)

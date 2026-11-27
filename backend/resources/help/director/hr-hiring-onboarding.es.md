@@ -1,41 +1,88 @@
 ---
-title: RR. HH.: contratación, incorporación, evaluaciones y cursos
-category: Staff Management
-order: 61
-roles: agency_admin, platform_admin, centre_director
+title: RR. HH.: contratación e incorporación
 ---
-# RR. HH.: contratación, incorporación, evaluaciones y cursos
+# RR. HH.: contratación e incorporación
 
-Son dos entradas en **Recursos humanos**: **Contratación e incorporación** (Contratación, Incorporación) y **Desempeño y formación** (Evaluaciones y objetivos, Cursos). Ellas forman parte del complemento KiddieTrac RR. HH. Los administradores de agencia ven toda la agencia. Los directores de centro ven sus propios centros. Nadie gestiona sus propios registros.
+**Contratación e incorporación** es donde publica ofertas de empleo, sigue a cada candidato hasta la contratación y le da a cada persona nueva una lista de tareas para sus primeras semanas. Forma parte del complemento de RR. HH. de KiddieTrac, en **Recursos humanos** del menú. Tiene dos pestañas: **Contratación** e **Incorporación**.
 
-## Contratación
+[[open: #hr-hiring | Abrir Contratación e incorporación]]
 
-- **Nueva oferta de empleo** añade un puesto: título, centro, tipo, un rango salarial opcional y una descripción. Los puestos abiertos aparecen en su propia página de empleos. Copie el enlace en la parte superior de la pestaña y compártalo donde quiera.
-- La página de empleos lleva el nombre y el logotipo de su agencia. Las personas postulan allí con su currículum y una carta de presentación opcional.
-- Los candidatos pasan por **Nuevo**, **Preselección**, **Entrevista** y **Oferta** hasta **Contratado**, **Rechazado** o **En archivo**. Seleccione varias filas para moverlas juntas.
-- En el menú **⋮**: **Programar entrevista** la añade a su calendario y envía una invitación al candidato. **Guardar en archivo** y **Rechazar** envían una carta amable, y puede ver cada correo antes de enviarlo.
-- **Contratar** crea la cuenta de KiddieTrac de la persona y le envía un enlace para crear su contraseña. También llena su expediente de empleado e inicia su lista de incorporación. Los directores de centro contratan educadores y visitadores domiciliarios en sus propios centros; los administradores de agencia contratan en cualquier lugar.
-- **Añadir un comentario** deja una nota sobre un candidato para su equipo. El candidato nunca la ve.
-- Los puestos para toda la agencia (sin centro) los gestionan los administradores de agencia. Los directores de centro pueden verlos, ver sus candidatos y comentar, pero no cambiarlos.
-- **Ajustes de contratación** define cuánto tiempo se guardan los candidatos en archivo (después se eliminan automáticamente), cuándo se eliminan los candidatos rechazados (a los 90 días salvo que elija otra cosa, o Nunca), a quién llegan las respuestas y el texto al inicio de su página de empleos. El currículum, las cartas y el historial de un candidato eliminado se van con él.
-- **Google Jobs** (Recursos humanos › Ajustes de RR. HH., administradores de la agencia) está desactivado hasta que lo actives. Cuando está activado, cada empleo abierto de tu página de empleos lleva lo que Google necesita para mostrarlo en Google Jobs: el título, la descripción, el tipo, el sueldo si lo indicaste, el nombre y el logotipo de tu agencia y la ciudad, nunca una dirección. Los empleos cerrados o cubiertos desaparecen solos. Mientras esté desactivado, se pide a los buscadores que no incluyan tu página de empleos.
+## Publicar una oferta de empleo
 
-## Incorporación
+1. Abra **Recursos humanos > Contratación e incorporación**. Primero se abre la pestaña **Contratación**.
+2. Pulse **Nueva oferta de empleo**.
+3. Escriba el título, elija el centro (o todos los centros), el tipo de empleo, un rango de pago opcional y una descripción.
+4. Pulse **Post the job**. Un aviso verde confirma que la oferta se publicó en su página de empleos y aparece en la lista como **Abierto**.
+5. Pulse **Copiar enlace** en la nota de arriba y comparta su página de empleos donde quiera: su sitio web, redes sociales o una bolsa de trabajo.
 
-- Una plantilla es una lista de tareas: subir un documento, tener un certificado registrado, firmar una política, terminar un curso u otra cosa. Cada tarea vence cierto número de días después de la fecha de inicio.
-- Las tareas de certificado, política y curso se marcan solas cuando se cumplen. Una tarea de documento se cumple al subir el archivo.
-- **Iniciar incorporación** asigna una lista a una persona. La ve en **Mis RR. HH.** y su perfil de RR. HH. muestra el avance. Recibe recordatorios antes de que venza una tarea, y su responsable cuando está atrasada.
+[[show: #hr-hiring @ Hiring > New job post | Muéstreme]]
 
-## Desempeño
+La página de empleos lleva el nombre y el logotipo de su agencia. Las personas postulan allí con su currículum y, si quieren, una carta de presentación, y la solicitud llega a **Candidatos** en esta pestaña. Para dejar de recibir solicitudes, abra el menú **⋮** de la oferta y pulse **Cerrar**; **Reopen** la vuelve a abrir.
 
-- **Iniciar evaluación** (prueba, anual o personalizada) indica la persona y un evaluador, que debe ser otra persona.
-- La persona escribe su autoevaluación y el evaluador la suya, con la plantilla de su agencia: secciones, escala de calificación y comentarios. Los administradores editan las plantillas en esta pestaña.
-- La persona lee la evaluación del responsable cuando se envía. Después ambos firman escribiendo su nombre.
-- Los objetivos tienen seguimientos y un estado (en curso, en riesgo, cumplido). Las **notas de reuniones individuales** son privadas: ustedes dos, los administradores de su agencia y la dirección de su centro.
-- Con el paquete de IA, **Sugerir objetivos** y **Redactar mis comentarios** ofrecen un punto de partida basado en los registros de la persona. Léalo y edítelo siempre.
+## Revisar a los candidatos
 
-## Cursos
+1. En **Candidatos**, pulse una etapa para filtrar: **Activo**, **Nuevo**, **Preselección**, **Entrevista**, **Oferta**, **Contratado**, **Rechazado**, **En archivo** o **Todos**. Si hay varias ofertas, elija una en **Todos los puestos**.
+2. Abra el menú **⋮** de un candidato y pulse **Ver solicitud** para leer sus datos, abrir el currículum con **Ver currículum** o **Descargar currículum** y ver **Historial y comentarios**.
+3. Pulse **Añadir un comentario** para dejar una nota a su equipo. El candidato nunca la ve.
+4. Pulse **Mover a una etapa** para cambiar la etapa. No se envía ningún correo. Marque varias filas para moverlas juntas.
+5. Pulse **Programar entrevista**, elija la **Fecha**, la **Hora**, la duración, la modalidad y el lugar (o un enlace de videollamada) y pulse **Send the invitation**. Se agrega a su calendario y el candidato recibe un correo.
+6. Pulse **Guardar en archivo** o **Rechazar** para enviar una carta amable. Use **Ver el correo** para leerla antes de enviarla.
 
-- Los administradores añaden un curso: un enlace, un enlace de video, un archivo subido o uno de los videos de capacitación de KiddieTrac. Un curso puede contar para las horas de desarrollo profesional.
-- **Asignar** lo da a personas, o a todo el personal de un rol, con fecha de vencimiento. Un curso dado a un rol también llega a quien se una a ese rol más tarde, con vencimiento el mismo número de días después de recibirlo. **Ver quién lo tiene** muestra el avance, envía recordatorios y descarga certificados, y **Detener para nuevas personas** termina la regla. A quien quite de un curso no se le vuelve a asignar.
-- Al terminar, la persona escribe su nombre para confirmarlo y recibe un certificado a nombre de su agencia. Si el curso cuenta, se le suman sus horas de desarrollo profesional.
+> ℹ️ Los candidatos guardados en archivo y los rechazados se eliminan automáticamente después del plazo fijado en **Ajustes de contratación**, con su currículum, cartas e historial.
+
+## Contratar a alguien
+
+1. Abra el menú **⋮** del candidato y pulse **Contratar**.
+2. Elija el **Rol**, el **Centro**, la **Fecha de inicio**, el **Cargo**, el **Empleo** y el **Responsable**.
+3. Elija una lista de incorporación (o **None for now**).
+4. Revise el correo de su cuenta y deje marcada la opción que le envía el enlace para crear su contraseña.
+5. Pulse **Hire and create the account**.
+
+KiddieTrac crea su cuenta (igual que al agregarla en la pantalla Usuarios), le envía el enlace de la contraseña, llena su expediente de empleado e inicia su lista de incorporación.
+
+## Preparar listas de incorporación (administradores de la agencia)
+
+1. Abra la pestaña **Incorporación**.
+2. En **Plantillas de lista**, pulse **Nueva plantilla de lista**.
+3. Póngale un nombre y elija para quién es (un rol, o **Cualquiera**).
+4. En **Tareas**, agregue cada tarea: qué hacer, su tipo (subir un documento, un certificado en archivo, una política para firmar, un curso para terminar o algo que se marca a mano) y cuántos días después de la fecha de inicio vence.
+5. Pulse **Save template**.
+
+Las tareas de certificado, política y curso se marcan solas cuando se cumplen. Una tarea de documento queda hecha al subir el archivo. **Archivar** retira una plantilla; **Restaurar** la recupera.
+
+## Iniciar y seguir una lista
+
+1. En la pestaña **Incorporación**, pulse **Iniciar incorporación**.
+2. Elija la **Persona**, la lista y la **Fecha de inicio**, y pulse **Inicio**. La persona la ve en **Mis RR. HH.**
+3. Para seguir el avance, abra el menú **⋮** de la fila y pulse **Abrir lista**. Puede **Marcar como hecho**, reabrir una tarea o **Añadir una tarea**.
+4. Si ya no hace falta, pulse **Cancelar lista**.
+
+La persona recibe recordatorios antes de cada vencimiento, y su responsable recibe un aviso cuando una tarea está atrasada.
+
+## Quién puede hacer qué
+
+| Rol | Puede |
+|---|---|
+| Administrador de la agencia | Todo: cada centro, ofertas para toda la agencia, **Ajustes de contratación**, plantillas de lista, contratar en cualquier rol. |
+| Director de centro | Ofertas y candidatos de sus propios centros; contrata educadores y visitadores a domicilio en su centro; inicia y sigue listas. Las ofertas de toda la agencia son de **Solo lectura**: puede leerlas y comentarlas. |
+| Educador, visitador a domicilio | No ve esta pantalla. Ve su propia lista en **Mis RR. HH.** |
+
+Nadie gestiona su propio expediente.
+
+## Preguntas frecuentes y problemas
+
+??? No veo Contratar en un candidato. | Solo aparece para candidatos en una etapa activa y para quien puede contratar. Un director de centro no puede contratar en una oferta de toda la agencia: lo hace un administrador de la agencia.
+??? La oferta dice "Solo lectura". | Es una oferta de toda la agencia. La cambian los administradores de la agencia; los directores de centro pueden leerla y comentarla.
+??? ¿Cambiar de etapa envía un correo al candidato? | No. Solo Programar entrevista, Guardar en archivo y Rechazar escriben al candidato, y puede ver cada correo antes.
+??? ¿A dónde van las respuestas de los candidatos? | A la dirección indicada en Ajustes de contratación como dirección de respuesta.
+??? ¿Pueden aparecer nuestras ofertas en Google? | Sí. Un administrador de la agencia activa Google Jobs en Recursos humanos > Ajustes de RR. HH. Solo se muestra la ciudad, nunca la dirección.
+??? No aparece Ajustes de contratación. | Es solo para administradores de la agencia.
+
+## Pantallas relacionadas
+
+[[open: #hr-performance | Desempeño y formación]]
+[[open: #hr-people | Personas]]
+[[open: #my-hr | Mis RR. HH.]]
+
+- [RR. HH.: evaluaciones, objetivos y cursos](hr-performance)
+- [Mis RR. HH.](my-hr)

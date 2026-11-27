@@ -7,33 +7,73 @@ screens: hr-safety
 ---
 # HR: staff injuries and near misses
 
-When someone on your team is hurt at work, or nearly is, record it here. This is part of the KiddieTrac HR add-on. It is separate from child incidents.
+When someone on your team is hurt at work, or nearly is, record it on the **Staff injuries** tab. It counts down the days left to report it to your workers' compensation board and keeps the return-to-work plan. It is part of the KiddieTrac HR add-on, under **Human Resources > Health & safety**, and it is separate from child incidents.
 
-## Reporting one
+[[open: #hr-safety | Open Health & safety]]
 
-- **Staff:** open **My HR** and choose **Report an injury or near miss**.
-- **Directors and admins:** open **Human Resources > Health & safety** (the **Staff injuries** tab), and choose **Report an injury or near miss** for someone on your team.
+## Reporting an injury for someone on your team
 
-Enter when and where it happened, any witnesses, what happened, the body part, the injury and any first aid given. Also say whether the person went to a doctor or hospital, and whether they needed time off work.
+1. Open **Human Resources > Health & safety**. The **Staff injuries** tab opens first.
+2. Press **Report an injury or near miss**.
+3. Choose **Who was hurt (or nearly)** and the **Type** (injury or near miss).
+4. Enter **When it happened**, **Reported to the employer on** (the countdown starts from this date), **Where** and any **Witnesses**.
+5. Describe **What happened**, the **Body part**, **The injury** and the **First aid given**.
+6. Answer **Went to a doctor or hospital?** and say whether they needed **Time off work after the day it happened**.
+7. Press **Send report**. A green **Report sent.** toast appears and the record shows in the list.
 
-## Who sees it
+[[show: #hr-safety @ Staff injuries > Report an injury or near miss | Show me]]
 
-- **The person who was hurt** sees their own record.
-- **Centre directors** see records for their own centres.
-- **Agency admins** see all of them.
+Staff report their own from **My HR > Report an injury or near miss**, with the same form.
 
-Nobody else sees these records.
+## Reading a record and its health details
 
-## Health details stay private
+1. Open the record's **⋮** menu and press **View record**.
+2. The list and the record show who, when, where and the status, never the health details.
+3. Press **Show health details** to read what happened, the injury, first aid, doctor or hospital and modified duties.
 
-The health details are kept encrypted: what happened, the body part, the injury, first aid, doctor or hospital, modified duties and check-in notes. They never show in the list and are never exported. To read them, open a record and choose **Show health details**. Each time they are shown is recorded in the audit log.
+> ⚠️ Health details are kept encrypted, never shown in a list and never exported. Each time someone presses **Show health details**, it is written to the audit log.
 
-## The injury report countdown
+## Filing the board report on time
 
-An injury that needed health care beyond first aid, or time off work, must be reported to your workers' compensation board within **3 business days** of you learning of it. In Ontario that is **WSIB Form 7**; elsewhere the record calls it the **injury report to your workers' compensation board**. The list counts the business days left in your agency's own time zone. It skips weekends and the days in your closures, such as stat holidays.
+An injury that needed health care beyond first aid, or cost time off work, must be reported to your workers' compensation board within **3 business days** of you learning of it. In Ontario that is **WSIB Form 7**; elsewhere the screen calls it the **Injury report to your workers' compensation board**. A red pill at the top shows how many are due soon, and the column counts the business days left in your agency's time zone, skipping weekends and closures such as stat holidays.
 
-File the report on the board's site (in Ontario, the WSIB site), then open the record, choose **Form 7** (or **Injury report**), and enter the date and the reference number.
+1. File the report on the board's own site (in Ontario, the link **WSIB: report an injury** at the top of the tab).
+2. Open the record and press **Form 7** (or **Injury report**).
+3. Enter **Filed on** and the **Reference / claim number**.
+4. Press **Save**. The countdown stops.
 
-## Return to work
+## Planning the return to work
 
-Choose **Return to work** to set modified duties and the dates they apply. Add a **Check-in** for each follow-up conversation. When the person is fully back, choose **Close record**.
+1. In the record, press **Return to work**.
+2. Write the **Modified duties** and the dates, **Modified duties from** and **Until**.
+3. Press **Save plan**.
+4. After each follow-up talk, press **Check-in**, write **How it is going**, and press **Add check-in**.
+5. When the person is fully back, press **Close record**. **Reopen** puts it back if needed.
+
+## Who can do what
+
+| Role | Sees and does |
+|---|---|
+| Agency admin | Every record in the agency; reports, files the board report, plans the return to work. |
+| Centre director | Records of people at their own centres, with the same actions. |
+| Educator, home visitor | Reports their own injury and sees only their own records, in **My HR**. |
+
+Nobody else sees these records, not even the person's file manager.
+
+## FAQs and when something goes wrong
+
+??? Is this the same as a child incident report? | No. Child incidents have their own screen. This tab is only for staff.
+??? Does a near miss need a board report? | Usually not: the countdown starts only for an injury that needed health care beyond first aid or time off work.
+??? Why does it say Form 7? | Your main centre is in Ontario, so the WSIB form name is used. Elsewhere it says injury report to your workers' compensation board.
+??? Does KiddieTrac send the report to the board? | No. You file it on the board's site, then record the date and reference number here.
+??? Where do staff report their own? | In My HR, under Injury reports. Their report shows up on this tab for their centre's directors and the agency admins.
+??? The Form 7 (or Injury report) button is missing. | It shows only on an injury, not on a near miss.
+
+## Related screens
+
+[[open: #hr-safety?tab=risk | Risk assessments]]
+[[open: #hr-people | People]]
+[[open: #my-hr | My HR]]
+
+- [HR: risk assessments, chemicals, safe work procedures, H&S duties and tasks](hr-health-safety)
+- [My HR](my-hr)

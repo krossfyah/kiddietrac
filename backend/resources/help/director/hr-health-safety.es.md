@@ -1,43 +1,92 @@
 ---
-title: RR. HH.: evaluaciones de riesgos, productos químicos, procedimientos seguros, funciones y tareas de SST
-category: Health & Safety
-order: 47
-roles: agency_admin, platform_admin, centre_director
+title: RR. HH.: evaluaciones de riesgos, productos químicos, procedimientos de trabajo seguro, funciones y tareas de SST
 ---
-# RR. HH.: evaluaciones de riesgos, productos químicos, procedimientos seguros, funciones y tareas de SST
+# RR. HH.: evaluaciones de riesgos, productos químicos, procedimientos de trabajo seguro, funciones y tareas de SST
 
-Forma parte del complemento de RR. HH. de KiddieTrac. Abre **Recursos humanos > Salud y seguridad**. Los administradores de la agencia ven todos los centros; los directores ven sus propios centros. Lesiones del personal, Peligros y Registro de simulacros están en la misma fila de pestañas.
+Estas pestañas reúnen sus documentos de salud y seguridad en el trabajo: evaluaciones de riesgos, productos peligrosos y sus hojas de datos de seguridad (WHMIS), procedimientos de trabajo seguro, quién tiene cada función de seguridad y tareas de seguridad que necesitan prueba. Forman parte del complemento de RR. HH. de KiddieTrac, en **Recursos humanos > Salud y seguridad**, junto a **Lesiones del personal**, **Peligros** y el **Registro de simulacros**. Los administradores de la agencia ven todos los centros; los directores de centro, los suyos.
 
-## Evaluaciones de riesgos
+[[open: #hr-safety?tab=risk | Abrir Evaluaciones de riesgos]]
 
-Pulsa **Nueva evaluación de riesgos**, elige el centro y empieza con una página en blanco o con un ejemplo: juego al aire libre, salidas, sala de siesta, cocina o juegos con agua. Los ejemplos son un punto de partida general para el cuidado infantil. No son consejos para tu centro y no dicen nada sobre lo que exige ninguna norma. Cada copia lleva la marca **Ejemplo: revísalo para tu centro** hasta que la cambies.
+## Escribir una evaluación de riesgos
 
-Para cada peligro, escribe quién podría resultar dañado, qué tan probable es y qué tan grave sería (de 1 a 5 cada uno), los controles que tienes y el riesgo que queda con esos controles. Riesgo = probabilidad × gravedad: 1-4 bajo, 5-9 medio, 10-16 alto, 20-25 muy alto. Añade un responsable y una fecha de revisión. El responsable y los directores del centro reciben un recordatorio 14 días antes, el mismo día y cada semana mientras esté atrasada.
+1. Abra **Recursos humanos > Salud y seguridad** y pulse la pestaña **Evaluaciones de riesgos**.
+2. Pulse **+ Nueva evaluación de riesgos**.
+3. Elija el **Centro** y, en **Empezar desde**, elija **Una evaluación en blanco** o un ejemplo (juego al aire libre, excursiones, sala de siesta, cocina, juegos con agua).
+4. Escriba la **Actividad o zona**, el **Responsable** y una fecha **Revisar antes del**.
+5. En cada línea, llene el **Peligro**, **Quién podría resultar dañado**, la **Probabilidad** y la **Gravedad** (de 1 a 5), los **Controles establecidos**, y luego la **Probabilidad residual** y la **Gravedad residual** con los controles aplicados.
+6. Pulse **Guardar**.
 
-Un director del centro o un administrador de la agencia la aprueba escribiendo su nombre. Quien hizo el último cambio no puede aprobarla. Si alguien la cambia después, vuelve a borrador. Pulsa ⋮ > **Imprimir** para una copia en papel.
+[[show: #hr-safety?tab=risk @ Risk assessments > New risk assessment | Muéstreme]]
 
-## Productos químicos (WHMIS)
+Riesgo = probabilidad × gravedad: 1 a 4 bajo, 5 a 9 medio, 10 a 16 alto, 20 a 25 muy alto. El responsable y la dirección del centro reciben un recordatorio 14 días antes de la fecha de revisión, ese mismo día y cada semana mientras esté atrasada.
 
-Pulsa **Añadir un producto** por cada producto de limpieza u otro producto peligroso que haya en el centro. Indica dónde se guarda, los pictogramas de peligro de su etiqueta u hoja de datos de seguridad (HDS) y adjunta la HDS en PDF o foto. Añade la fecha impresa en la HDS y una fecha de revisión.
+> ⚠️ Los ejemplos son un punto de partida general para el cuidado infantil, no un consejo ni una declaración de ninguna norma. Cada copia lleva **Ejemplo: revísalo para tu centro** hasta que la cambie.
 
-La lista marca los productos sin HDS, una HDS con fecha de más de 3 años (pide una actual al proveedor) y las revisiones pendientes o atrasadas. Los directores del centro reciben un recordatorio antes de cada revisión y una vez cuando una HDS supera los 3 años. Las HDS son privadas: el personal del centro las abre en **Mis RR. HH. > Hojas de datos de seguridad**. Cuando un producto sale del centro, pulsa ⋮ > **Ya no está en el centro**. Se conserva en el archivo.
+### Aprobarla
 
-## Procedimientos de trabajo seguro
+1. Abra el menú **⋮** de la evaluación y pulse **Aprobar**.
+2. Escriba su nombre completo en el campo de firma y pulse **Aprobar**.
 
-Son formas paso a paso de hacer un trabajo con seguridad, por ejemplo levantar a un niño, usar un producto de limpieza o cambiar un pañal. Están en tu biblioteca de políticas, en la categoría **Safe work procedure**. En esta pestaña, pulsa **Añadir procedimiento** y luego **Añadir texto** para escribirlo o subir el documento. El personal lo abre y firma que lo leyó, en **Mis RR. HH. > Procedimientos de trabajo seguro** o **Políticas por revisar**. Cuando publicas una nueva versión, todos firman de nuevo. La tabla muestra quién firmó.
+Quien hizo el último cambio no puede aprobarla: lo hace otra persona de la dirección del centro o un administrador de la agencia. Un cambio después de aprobarla la devuelve a borrador. **⋮ > Imprimir** da una copia en papel.
 
-## Funciones de SST
+## Registrar productos químicos y hojas de datos de seguridad (WHMIS)
 
-Pulsa **Asignar una función** para registrar quién es socorrista, responsable de RCP, responsable de evacuación, representante de salud y seguridad, miembro del comité, responsable de seguridad alimentaria u otra función, en un centro o en todos. Cuando la función necesita un certificado (Primeros auxilios para un socorrista, por ejemplo), KiddieTrac revisa cada vez las certificaciones de la persona: válido, por vencer, vencido o sin registro. La persona y los directores del centro reciben un recordatorio 30 días antes del vencimiento, al vencer y si no hay ninguno. Pulsa ⋮ > **Terminar la función** cuando alguien deja de hacerla; se conserva en el archivo.
+1. Pulse la pestaña **Productos químicos (WHMIS)** y luego **+ Añadir un producto**.
+2. Escriba el **Producto**, el **Proveedor / fabricante**, **Dónde se guarda** y la cantidad que tiene (opcional).
+3. Marque los pictogramas de peligro de su etiqueta u hoja de datos de seguridad.
+4. Adjunte la hoja de datos de seguridad (HDS) en PDF o foto, y escriba la **Fecha en la HDS** y una fecha **Revisar antes del**.
+5. Agregue notas (primeros auxilios, EPP, cómo se usa) y pulse **Guardar**.
 
-## Tareas de SST
+La lista marca los productos sin HDS, una HDS de más de 3 años y las revisiones que vencen o están atrasadas. **⋮ > Abrir la HDS** muestra el archivo. Cuando un producto ya no está, pulse **⋮ > Ya no está en el centro**; queda en archivo, y **De vuelta en el centro** lo regresa.
 
-Pulsa **Nueva tarea de SST** para dar un trabajo de seguridad a una persona, como arreglar una puerta u obtener una HDS actual, o ⋮ > **Crear tarea de SST** desde una evaluación o un producto. Por defecto, la tarea necesita evidencia antes de cerrarse: la persona añade una foto o un archivo en **Mis RR. HH. > Tareas de SST** (en un teléfono se abre la cámara). La tarea también aparece en su lista de tareas habitual, pero ahí no se puede marcar sin la evidencia. Recibes un aviso cuando se cierra. ⋮ > **Reabrir** la vuelve a abrir; ⋮ > **Cancelar la tarea** la quita de todas las listas.
+## Agregar un procedimiento de trabajo seguro
 
-## Peligros con foto
+1. Pulse la pestaña **Procedimientos de trabajo seguro**.
+2. Pulse **+ Añadir procedimiento** y póngale un título.
+3. Pulse **Add text** para escribir los pasos, o suba el documento.
+4. Publíquelo. El personal del centro firma que lo leyó en **Mis RR. HH.** o en **Políticas por revisar**.
 
-Cualquier miembro del personal puede informar de un peligro en **Peligros** o en **Mis RR. HH. > Informar de un peligro** y añadir una foto con la cámara del teléfono. Los directores y administradores ven **📷 Foto adjunta** y pulsan ⋮ > **Ver la foto**. Las fotos son archivos privados.
+Los procedimientos viven en su biblioteca de políticas, en la categoría "Safe work procedure". Una nueva versión pide a todos firmar otra vez, y la tabla muestra quién firmó.
 
-??? ¿Quién ve las hojas de datos de seguridad? | Los directores y administradores de ese centro y el personal que trabaja allí (en Mis RR. HH.). Los archivos nunca son públicos.
-??? ¿Puedo aprobar una evaluación que acabo de editar? | No. La aprueba otro director del centro o un administrador de la agencia.
-??? ¿Los ejemplos cumplen las normas de mi provincia? | Son solo ejemplos, no consejos ni una declaración de ninguna norma. Revisa cada línea para tu centro.
+## Nombrar quién tiene una función de seguridad
+
+1. Pulse la pestaña **Funciones de SST** y luego **+ Asignar una función**.
+2. Elija la **Función** (primeros auxilios, RCP, encargado de evacuación, representante de SST, miembro del comité, responsable de inocuidad de alimentos u otra) y la **Persona**.
+3. Elija el **Centro** (o **Todos los centros**) y el **Certificado que necesita la función** (o **No se necesita certificado**).
+4. Fije la fecha **De** y, si quiere, la fecha de fin, y pulse **Guardar**.
+
+La columna **Certificado** revisa en vivo las certificaciones de la persona: vigente, por vencer, vencido o faltante. La persona y la dirección del centro reciben un recordatorio 30 días antes del vencimiento, al vencer y si no hay ninguno en archivo. **⋮ > Terminar la función** cuando la persona deja de tenerla.
+
+## Dar a alguien una tarea de SST
+
+1. Pulse la pestaña **Tareas de SST** y luego **+ Nueva tarea de SST** (o **⋮ > Crear tarea de SST** en una evaluación de riesgos o un producto).
+2. Escriba la **Tarea** y los **Detalles**, elija a quién se asigna, la fecha en que **Vence** y la **Prioridad**.
+3. Pulse **Create**.
+
+Por defecto, la tarea necesita una prueba antes de cerrarse: la persona agrega una foto o un archivo en **Mis RR. HH. > Tareas de SST** (en un teléfono se abre la cámara). Usted recibe un aviso cuando se cierra. **⋮ > Abrir la evidencia** la muestra, **Reopen** devuelve una tarea cerrada y **Cancelar la tarea** la quita de todas las listas.
+
+## Quién puede hacer qué
+
+| Rol | Puede |
+|---|---|
+| Administrador de la agencia | Todo, en todos los centros. |
+| Director de centro | Todo en sus propios centros; aprueba una evaluación que otra persona editó por última vez. |
+| Personal | Lee las hojas de datos de seguridad de sus centros, firma procedimientos y cierra sus tareas de SST con prueba, en **Mis RR. HH.** |
+
+## Preguntas frecuentes y problemas
+
+??? ¿Quién ve las hojas de datos de seguridad? | La dirección y los administradores de ese centro, y el personal que trabaja allí (en Mis RR. HH.). Los archivos nunca son públicos.
+??? ¿Puedo aprobar una evaluación que acabo de editar? | No. La aprueba otra persona de la dirección del centro o un administrador de la agencia.
+??? El personal no puede marcar su tarea de SST. | Primero necesita una prueba: la persona agrega una foto o un archivo en Mis RR. HH. > Tareas de SST. No se puede marcar desde la lista de tareas común.
+??? ¿Los ejemplos cumplen las normas de mi provincia? | Son solo ejemplos. Revise cada línea para su propio centro.
+??? ¿Por qué una función muestra el certificado como faltante? | La persona no tiene ningún certificado de ese tipo en archivo, o está vencido. Agréguelo o renuévelo en Certificaciones.
+
+## Pantallas relacionadas
+
+[[open: #hr-safety | Lesiones del personal]]
+[[open: #hazards | Peligros]]
+[[open: #policies | Políticas]]
+[[open: #certifications | Certificaciones]]
+
+- [RR. HH.: lesiones del personal y casi accidentes](hr-injuries)
+- [Políticas, firmas y matriz de formación](policies)

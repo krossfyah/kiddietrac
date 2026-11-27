@@ -1,42 +1,92 @@
 ---
-title: HR: hiring, onboarding, reviews and courses
+title: HR: hiring and onboarding
 category: Staff Management
 order: 61
 roles: agency_admin, platform_admin, centre_director
-screens: hr-hiring, hr-hiring?tab=onboarding, ~hr-performance, ~hr-performance?tab=courses
+screens: hr-hiring, hr-hiring?tab=onboarding
 ---
-# HR: hiring, onboarding, reviews and courses
+# HR: hiring and onboarding
 
-These are two entries under **Human Resources**: **Hiring & onboarding** (Hiring, Onboarding) and **Performance & learning** (Reviews & goals, Courses). They are part of the KiddieTrac HR add-on. Agency admins see the whole agency. Centre directors see their own centres. Nobody manages their own records.
+**Hiring & onboarding** is where you post jobs, follow each applicant from first look to hired, and give every new person a checklist for their first weeks. It is part of the KiddieTrac HR add-on, under **Human Resources** in the menu. It has two tabs: **Hiring** and **Onboarding**.
 
-## Hiring
+[[open: #hr-hiring | Open Hiring & onboarding]]
 
-- **New job post** adds a job: title, centre, type, an optional pay range and a description. Open jobs appear on your own jobs page. Copy its link from the top of the tab and share it anywhere.
-- The jobs page carries your agency's name and logo. People apply there with their resume and an optional cover letter.
-- Applicants move through **New**, **Screening**, **Interview** and **Offer** to **Hired**, **Declined** or **On file**. Select several rows to move them together.
-- From the **⋮** menu: **Book an interview** books it on your calendar and emails the applicant an invitation. **Keep on file** and **Decline** send a kind letter, and you can preview every email before it goes.
-- **Hire** creates the person's KiddieTrac account and emails them a link to set their password. It also fills their employee file and starts their onboarding checklist. Centre directors hire educators and home visitors into their own centres; agency admins hire anyone, anywhere.
-- **Add a comment** leaves a note on an applicant for your team. The applicant never sees it.
-- Jobs for the whole agency (no centre) are run by the agency admins. Centre directors can see them and their applicants and add comments, but not change them.
-- **Hiring settings** sets how long applicants kept on file are kept (they are deleted automatically after that), when declined applicants are deleted (after 90 days unless you choose otherwise, or Never), who replies go to, and the words at the top of your jobs page. A deleted applicant's resume, letters and history go with them.
-- **Google Jobs** (Human Resources › HR settings, agency admins) is off unless you switch it on. When it is on, each open job on your jobs page carries what Google needs to list it in Google Jobs: the title, description, type, pay if you set it, your agency's name and logo, and the town, never a street address. Closed and filled jobs drop out by themselves. While it is off, search engines are asked not to list your jobs page.
+## Posting a job
 
-## Onboarding
+1. Open **Human Resources > Hiring & onboarding**. The **Hiring** tab opens first.
+2. Press **New job post**.
+3. Enter the title, choose the centre (or all centres), the employment type, an optional pay range and a description.
+4. Press **Post the job**. A green toast says "Job posted on your jobs page" and the job appears in the list as **Open**.
+5. Press **Copy link** in the note at the top of the tab and share your jobs page anywhere: your website, social media, a job board.
 
-- A checklist template is a list of tasks: upload a document, have a certificate on file, sign a policy, finish a course, or anything else. Each task is due a number of days after the start date.
-- Certificate, policy and course tasks tick themselves off when the real thing is done. Document tasks are done when the file is uploaded.
-- **Start onboarding** gives a person a checklist. They see it under **My HR**, and their HR profile shows their progress. Reminders go to them before a task is due, and to their manager once it is overdue.
+[[show: #hr-hiring @ Hiring > New job post | Show me]]
 
-## Performance
+The jobs page carries your agency's name and logo. People apply there with their resume and an optional cover letter, and their application lands in **Applicants** on this tab. To stop taking applications, open the job's **⋮** menu and press **Close**; **Reopen** puts it back.
 
-- **Start a review** (probation, annual or custom) names the person and a reviewer, who must be someone else.
-- The person writes a self review and the reviewer writes theirs on your agency's template: its sections, its rating scale and comments. Admins edit templates on this tab.
-- The person reads the manager review once it is submitted. Then you both sign by typing your names.
-- Goals have check-ins and a status (on track, at risk, done). **One-to-one notes** are private to the two of you, your agency admins and your centre's director.
-- With the AI Bundle, **Suggest goals** and **Draft my comments** offer a starting point based on the person's own records. Always read and edit it.
+## Working through applicants
 
-## Courses
+1. Under **Applicants**, press a stage chip to filter: **Active**, **New**, **Screening**, **Interview**, **Offer**, **Hired**, **Declined**, **On file** or **All**. With more than one job, pick one from **Every job**.
+2. Open an applicant's **⋮** menu and press **View application** to read their details, open the resume with **View resume** or **Download resume**, and see **History and comments**.
+3. Press **Add a comment** to leave a note for your team. The applicant never sees it.
+4. Press **Move to a stage** to change the stage. This sends no email. Tick several rows to move them together.
+5. Press **Book an interview**, choose the **Date**, **Time**, **Length (minutes)**, **How** and **Where** (or a **Video call link**), then press **Send the invitation**. It goes on your calendar and the applicant gets an email.
+6. Press **Keep on file** or **Decline** to send a kind letter. Use **Preview the email** to read it before it goes.
 
-- Admins add a course: a link, a video link, an uploaded file or one of KiddieTrac's training videos. A course can count toward PD hours.
-- **Assign** gives it to people, or to everyone in a role, with a due date. A course given to a role also goes to anyone who joins that role later, due the same number of days after they get it. **See who has it** shows progress, sends reminders and downloads certificates, and **Stop for new people** ends a role rule. Someone you remove from a course does not get it back.
-- When someone finishes a course they type their name to confirm it and get a certificate in your agency's name. If the course counts, its PD hours are added for them.
+> ℹ️ Applicants kept on file, and declined applicants, are deleted automatically after the time set in **Hiring settings**, with their resume, letters and history.
+
+## Hiring someone
+
+1. Open the applicant's **⋮** menu and press **Hire**.
+2. Choose the **Role**, **Centre**, **Start date**, **Job title**, **Employment** and **Manager**.
+3. Pick an **Onboarding checklist** (or **None for now**).
+4. Check **Email for their account**, and leave **Email them the link to set their password** ticked.
+5. Press **Hire and create the account**.
+
+KiddieTrac creates their account (the same as adding someone on the Users screen), emails the password link, fills their employee file and starts their onboarding checklist.
+
+## Setting up onboarding checklists (agency admins)
+
+1. Open the **Onboarding** tab.
+2. Under **Checklist templates**, press **New checklist template**.
+3. Give it a **Template name** and choose who it is **For** (a role, or **Anyone**).
+4. Under **Tasks**, add each task: what to do, its kind (upload a document, a certificate on file, a policy to sign, a course to finish, or something ticked off by hand) and how many days after the start date it is due.
+5. Press **Save template**.
+
+Certificate, policy and course tasks tick themselves when the real thing is done. Document tasks are done when the file is uploaded. **Archive** retires a template; **Restore** brings it back.
+
+## Starting and following a checklist
+
+1. On the **Onboarding** tab, press **Start onboarding**.
+2. Choose the **Person**, the **Checklist** and the **Start date**, then press **Start**. The person sees it under **My HR**.
+3. To follow progress, open the row's **⋮** menu and press **Open checklist**. You can **Mark done**, **Reopen** a task or **Add a task**.
+4. If it is no longer needed, press **Cancel checklist**.
+
+Reminders go to the person before a task is due, and to their manager once it is overdue.
+
+## Who can do what
+
+| Role | Can do |
+|---|---|
+| Agency admin | Everything: every centre, jobs for the whole agency, **Hiring settings**, checklist templates, hiring into any role. |
+| Centre director | Jobs and applicants of their own centres; hires educators and home visitors into their own centre; starts and follows checklists. Jobs for the whole agency are **View only**: they can read and comment. |
+| Educator, home visitor | Do not see this screen. They see their own checklist in **My HR**. |
+
+Nobody manages their own record.
+
+## FAQs and when something goes wrong
+
+??? I don't see Hire on an applicant. | Only applicants in an active stage show it, and only to someone allowed to hire. A centre director can't hire into a job for the whole agency: an agency admin does that.
+??? The job shows "View only". | It is a job for the whole agency. Agency admins change it; centre directors can read it and add comments.
+??? Does moving a stage email the applicant? | No. Only Book an interview, Keep on file and Decline write to the applicant, and you can preview each email.
+??? Where do replies from applicants go? | To the address set in Hiring settings under Replies to applicants go to.
+??? Can our jobs appear on Google? | Yes. An agency admin switches on Google Jobs in Human Resources > HR settings. Only the town is shown, never a street address.
+??? Hiring settings is missing. | It is for agency admins only.
+
+## Related screens
+
+[[open: #hr-performance | Performance & learning]]
+[[open: #hr-people | People]]
+[[open: #my-hr | My HR]]
+
+- [HR: reviews, goals and courses](hr-performance)
+- [My HR](my-hr)
