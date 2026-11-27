@@ -384,6 +384,11 @@
     });
   }
 
+  /* A frame's print() holds the page while Chrome's print preview is open, and the frame's afterprint never reaches
+     the freeze watchdog: an org chart left in preview for 20s was filed as a UI freeze (ticket #282, 2026-11-27).
+     Tell the watchdog a dialog was open, the same as kt-qr.js does for its poster. */
+  function noteDialog() { try { (w.__ktNoteBlockingDialog || function () {})(); } catch (e) {} }
+
   // The desktop: a hidden frame, printed on its own so the dashboard does not come out with it.
   function printInFrame(html) {
     var pf = d.createElement('iframe');
@@ -393,7 +398,7 @@
     return new Promise(function (res) {
       pf.addEventListener('load', function () {
         w.setTimeout(function () {
-          try { pf.contentWindow.focus(); pf.contentWindow.print(); } catch (e) {}
+          try { pf.contentWindow.focus(); pf.contentWindow.print(); } catch (e) {} noteDialog();
           // Removing it during print cancels the job in some browsers.
           w.setTimeout(function () { try { pf.remove(); } catch (e) {} }, 60000);
           res(true);
@@ -730,7 +735,7 @@
     function printDesktop() {
       var f = ov.querySelector('iframe');
       if (f) {
-        try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) {}
+        try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) {} noteDialog();
         return;
       }
       // An image, or pages drawn to canvas: print just the document.
@@ -753,7 +758,7 @@
         + sheets.map(function (src) { return '<img src="' + src + '">'; }).join(''));
       doc.close();
       var go = function () {
-        try { pf.contentWindow.focus(); pf.contentWindow.print(); } catch (e) {}
+        try { pf.contentWindow.focus(); pf.contentWindow.print(); } catch (e) {} noteDialog();
         w.setTimeout(function () { try { pf.remove(); } catch (e) {} }, 1000);
       };
       // Wait for the images to decode, or the sheet prints blank.
