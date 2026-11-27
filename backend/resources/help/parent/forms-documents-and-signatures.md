@@ -14,7 +14,7 @@ From time to time your centre will ask you to read something, fill in a form, or
 Look in the menu for:
 
 - **Forms to sign** — things the centre needs you to complete, sign or acknowledge
-- **Documents** — a personal file of things you've signed, sent in, or the centre has shared with you
+- **My documents** — a personal file of things you've signed, sent in, or the centre has shared with you
 
 If something needs your attention, you'll usually also get a **notification**, an email and a badge, so you don't have to go looking.
 
@@ -26,7 +26,7 @@ If something needs your attention, you'll usually also get a **notification**, a
 
 - **To sign** — what is waiting for you. When you're done, it says you're all caught up.
 - **Drafts** — forms you started and saved but haven't signed yet. Tap **Continue** to pick up where you left off.
-- **Submitted** — everything you've sent. **View my copy** opens it. Your signed copies are also kept in **Documents**.
+- **Submitted** — everything you've sent. **View my copy** opens it. Your signed copies are also kept in **My documents**.
 
 ## Filling in a form
 
@@ -36,7 +36,7 @@ If something needs your attention, you'll usually also get a **notification**, a
    - **📝 Fill & sign** — for a form with boxes to type into. Fill it in on screen and sign it in the same place. You can save your work and come back to it: it waits under **Drafts**.
    - **✍️ Sign** — for a notice you only need to read and sign. Draw your signature and tap **Submit signature**.
 
-Once submitted, a copy is saved to **Documents** and the centre is notified. You can reopen it any time to see what you agreed to and when.
+Once submitted, a copy is saved to **My documents** and the centre is notified. You can reopen it any time to see what you agreed to and when.
 
 > **Tip:** If your centre sent you forms before you had an account, the link in their email lets you fill in and sign without a password.
 
@@ -57,7 +57,7 @@ Your centre may ask you to send documents you already have — an immunization c
 - You don't need to sign in: the link works on its own for 21 days.
 - Each file can be up to 15 MB. A photo from your phone is usually fine.
 - The email names the person at your centre who asked, so you know it is genuine.
-- Everything you send is filed in your **Documents**, and you get a receipt when the last item arrives.
+- Everything you send is filed in **My documents**, and you get a receipt when the last item arrives.
 
 ## Signing and acknowledging
 
@@ -70,11 +70,15 @@ That timestamped acknowledgement is the centre's proof that you were informed �
 
 ## Your documents are private
 
-Anything in **Documents** belongs to you and your family. Other families can't see it, and it's tied to your account. If you ever see a document that isn't yours, screenshot it and email your director right away — that would be a bug we need to fix.
+Anything in **My documents** belongs to you and your family. Other families can't see it, and it's tied to your account. If you ever see a document that isn't yours, screenshot it and email your director right away — that would be a bug we need to fix.
 
-## Saving a copy
+## Opening, downloading and printing a document
 
-Open any document and use your device's share or save option to keep a PDF — handy for subsidy applications, tax time, or your own records.
+1. Open **My documents** from the menu.
+2. Find the document. The table shows **Document**, **Signed** (date and time) and **Counter-signed** (whether the centre signed it too, by whom and when).
+3. Press **👁 View** to read it inside KiddieTrac, **⬇ Download** to save a copy to your device, or **🖨 Print** to print it. On a phone, these buttons are in the **⋮** menu at the end of the row.
+
+A saved copy is handy for subsidy applications, tax time or your own records. If a form is still waiting for your signature, a red **⚠ Awaiting your signature** box at the top of My documents has a **Sign** button for it.
 
 ## Common questions
 

@@ -13,7 +13,7 @@ De temps à autre, votre centre vous demandera de lire un document, de remplir u
 Cherchez dans le menu :
 
 - **Formulaires à signer** — ce que le centre vous demande de remplir, de signer ou de confirmer
-- **Documents** — un dossier personnel des documents que vous avez signés, envoyés ou que le centre a partagés avec vous
+- **Mes documents** — un dossier personnel des documents que vous avez signés, envoyés ou que le centre a partagés avec vous
 
 Si quelque chose demande votre attention, vous recevrez habituellement aussi une **notification**, un courriel et un badge, de sorte que vous n’avez pas à chercher.
 
@@ -25,7 +25,7 @@ Si quelque chose demande votre attention, vous recevrez habituellement aussi une
 
 - **À signer** — ce qui vous attend. Quand tout est fait, un message indique que vous êtes à jour.
 - **Brouillons** — les formulaires que vous avez commencés et enregistrés, mais pas encore signés. Appuyez sur **Continuer** pour reprendre là où vous en étiez.
-- **Soumis** — tout ce que vous avez envoyé. **Voir ma copie** l’ouvre. Vos copies signées sont aussi conservées dans **Documents**.
+- **Soumis** — tout ce que vous avez envoyé. **Voir ma copie** l’ouvre. Vos copies signées sont aussi conservées dans **Mes documents**.
 
 ## Remplir un formulaire
 
@@ -35,7 +35,7 @@ Si quelque chose demande votre attention, vous recevrez habituellement aussi une
    - **📝 Remplir et signer** — pour un formulaire comportant des champs à remplir. Remplissez-le à l’écran et signez au même endroit. Vous pouvez enregistrer votre travail et y revenir : il attend sous **Brouillons**.
    - **✍️ Signer** — pour un avis que vous n’avez qu’à lire et à signer. Dessinez votre signature et appuyez sur **Soumettre la signature**.
 
-Une fois soumis, une copie est enregistrée dans **Documents** et le centre en est informé. Vous pouvez le rouvrir en tout temps pour voir ce que vous avez accepté et à quel moment.
+Une fois soumis, une copie est enregistrée dans **Mes documents** et le centre en est informé. Vous pouvez le rouvrir en tout temps pour voir ce que vous avez accepté et à quel moment.
 
 > **Astuce :** Si votre centre vous a envoyé des formulaires avant que vous ayez un compte, le lien dans son courriel vous permet de les remplir et de les signer sans mot de passe.
 
@@ -56,7 +56,7 @@ Votre centre peut vous demander de lui envoyer des documents que vous avez déj�
 - Vous n’avez pas besoin de vous connecter : le lien fonctionne seul pendant 21 jours.
 - Chaque fichier peut peser jusqu’à 15 Mo. Une photo prise avec votre téléphone convient habituellement.
 - Le courriel indique le nom de la personne de votre centre qui a fait la demande, afin que vous sachiez qu’il est authentique.
-- Tout ce que vous envoyez est classé dans vos **Documents**, et vous recevez un accusé de réception quand le dernier élément arrive.
+- Tout ce que vous envoyez est classé dans **Mes documents**, et vous recevez un accusé de réception quand le dernier élément arrive.
 
 ## Signer et confirmer
 
@@ -69,11 +69,15 @@ Cette confirmation horodatée est la preuve du centre que vous avez été inform
 
 ## Vos documents sont privés
 
-Tout ce qui se trouve dans **Documents** appartient à vous et à votre famille. Les autres familles ne peuvent pas le voir, et c’est lié à votre compte. Si jamais vous voyez un document qui n’est pas le vôtre, faites une capture d’écran et écrivez immédiatement à votre directeur par courriel — il s’agirait d’un bogue que nous devons corriger.
+Tout ce qui se trouve dans **Mes documents** appartient à vous et à votre famille. Les autres familles ne peuvent pas le voir, et c’est lié à votre compte. Si jamais vous voyez un document qui n’est pas le vôtre, faites une capture d’écran et écrivez immédiatement à votre directeur par courriel — il s’agirait d’un bogue que nous devons corriger.
 
-## Enregistrer une copie
+## Ouvrir, télécharger et imprimer un document
 
-Ouvrez n’importe quel document et utilisez l’option de partage ou d’enregistrement de votre appareil pour conserver un PDF — pratique pour les demandes de subvention, la période des impôts ou vos propres dossiers.
+1. Ouvrez **Mes documents** à partir du menu.
+2. Trouvez le document. Le tableau affiche **Document**, **Signé** (date et heure) et **Contresigné** (si le centre l’a signé aussi, par qui et quand).
+3. Appuyez sur **👁 Voir** pour le lire dans KiddieTrac, sur **⬇ Télécharger** pour en garder une copie sur votre appareil, ou sur **🖨 Imprimer** pour l’imprimer. Sur un téléphone, ces boutons sont dans le menu **⋮** au bout de la ligne.
+
+Une copie enregistrée est pratique pour les demandes de subvention, la période des impôts ou vos propres dossiers. Si un formulaire attend encore votre signature, un encadré rouge **⚠ Awaiting your signature** en haut de Mes documents offre un bouton **Signer**.
 
 ## Questions courantes
 

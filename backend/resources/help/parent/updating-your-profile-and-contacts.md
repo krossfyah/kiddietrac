@@ -12,25 +12,34 @@ Keeping your details current means the centre can always reach you, your forms p
 
 ## Quick steps
 
-1. Open your **profile** from the menu.
-2. Tap your photo to replace it, and edit your phone, email, address or language.
-3. Save.
-4. For your child's photo, allergies or immunizations, use the setup step you were shown
-   when you joined — or message your director.
+1. Open **My settings** from the menu (**Settings › My settings**).
+2. On the **Profile** tab, press **Change photo** to replace your picture.
+3. Correct your **First name**, **Last name**, **Phone**, **Date of birth** or **Email**.
+4. Press **Save profile**. **✓ Saved** shows under the button.
 5. For emergency contacts and pick-up people, open **Family & pick-ups** from the menu.
    You can add, edit and remove them yourself, and the centre is told every time.
+6. For your child's photo, allergies or immunizations, use the setup step you were shown
+   when you joined — or message your director.
 
 ## What you can update yourself
 
-In **Settings** you can usually update:
+**My settings** has these tabs for parents:
 
-- **Your profile photo** — tap it to take a new one or upload from your gallery
-- **Your phone and email**
-- **Your address**
-- **Preferred language**
-- **Notification and unlock preferences** (see Notifications, and Quick unlock)
+- **Profile** — your photo, name, phone, date of birth, email and an optional **Username (optional)**; your
+  **Language**; **Reminders**; and the **Family directory** card, where you choose what other families at your centre
+  may see (**Share my email**, **Share my phone**, **Share my address (city only)**, **Show my children's first names**,
+  then **Save preferences**).
+- **Notifications** — **🔔 Notify me about**, **📱 Texts & calls**, **📲 Push & alerts** and **🔊 Sounds & vibration**.
+- **Documents** — your signed forms and the documents your centre shared with you.
+- **Payments** — Autopay and your wallet.
+- **Calendar** — **Add to my calendar**, a private link for your phone's calendar.
+- **Photos** — each child's photo permission.
+- **Signature** — a saved signature and initials, used on a form only when you tap to apply them.
+- **Security** — password, two-factor, passkeys and signed-in devices.
+- **About** — the app version, for support.
 
-Changes save immediately and are visible to your centre.
+Profile changes save when you press **Save profile**; switches and drop-downs save as soon as you change them. Your
+centre sees the new details.
 
 In **Family & pick-ups** you can also keep your **emergency contacts and pick-up people** up to date (see below).
 

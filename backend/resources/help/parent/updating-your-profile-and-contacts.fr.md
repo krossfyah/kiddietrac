@@ -11,23 +11,34 @@ Garder vos renseignements à jour permet au centre de toujours vous joindre, à 
 
 ## Étapes rapides
 
-1. Ouvrez votre **profil** depuis le menu.
-2. Touchez votre photo pour la remplacer, puis modifiez votre téléphone, votre courriel, votre adresse ou votre langue.
-3. Enregistrez.
-4. Pour la photo de votre enfant, ses allergies ou ses vaccins, utilisez l’étape de configuration qui vous a été présentée à votre arrivée — ou écrivez à votre direction.
-5. Pour les contacts d’urgence et les personnes autorisées à venir chercher votre enfant, ouvrez **Famille et personnes autorisées** depuis le menu. Vous pouvez les ajouter, les modifier et les supprimer vous-même, et le centre en est informé chaque fois.
+1. Ouvrez **Mes paramètres** à partir du menu (**Paramètres › Mes paramètres**).
+2. Dans l’onglet **Profil**, appuyez sur **Change photo** pour remplacer votre photo.
+3. Corrigez **First name**, **Last name**, **Phone**, **Date of birth** ou **Email** (prénom, nom, téléphone, date de naissance, courriel).
+4. Appuyez sur **Save profile**. **✓ Saved** s’affiche sous le bouton.
+5. Pour les contacts d’urgence et les personnes autorisées à venir chercher votre enfant, ouvrez **Famille et personnes autorisées** depuis le menu.
+   Vous pouvez les ajouter, les modifier et les supprimer vous-même, et le centre en est informé chaque fois.
+6. Pour la photo de votre enfant, ses allergies ou ses vaccins, utilisez l’étape de configuration qui vous a été
+   présentée à votre arrivée — ou écrivez à votre direction.
 
 ## Ce que vous pouvez mettre à jour vous-même
 
-Dans **Paramètres**, vous pouvez habituellement mettre à jour :
+**Mes paramètres** a ces onglets pour les parents :
 
-- **Votre photo de profil** — touchez-la pour en prendre une nouvelle ou en téléverser une depuis votre galerie
-- **Votre téléphone et votre courriel**
-- **Votre adresse**
-- **Votre langue préférée**
-- **Vos préférences de notifications et de déverrouillage** (voir Notifications et Déverrouillage rapide)
+- **Profil** — votre photo, votre nom, votre téléphone, votre date de naissance, votre courriel et un
+  **Username (optional)**; votre **Langue**; les **Rappels**; et la carte **Family directory**, où vous choisissez ce
+  que les autres familles de votre service de garde peuvent voir (**Share my email**, **Share my phone**,
+  **Share my address (city only)**, **Show my children's first names**, puis **Save preferences**).
+- **Notifications** — **🔔 M’avertir pour**, **📱 Textos et appels**, **📲 Notifications push et alertes** et **🔊 Sons et vibration**.
+- **Documents** — vos formulaires signés et les documents que le centre a partagés avec vous.
+- **Payments** — le paiement automatique et votre portefeuille.
+- **Calendrier** — **Add to my calendar**, un lien privé pour le calendrier de votre téléphone.
+- **Photos** — la permission de photos de chaque enfant.
+- **Signature** — une signature et des initiales enregistrées, posées sur un formulaire seulement quand vous touchez pour les appliquer.
+- **Sécurité** — mot de passe, authentification à deux facteurs, clés d’accès et appareils connectés.
+- **À propos** — la version de l’appli, pour le soutien.
 
-Les modifications sont enregistrées immédiatement et sont visibles par votre centre.
+Les changements au profil s’enregistrent quand vous appuyez sur **Save profile**; les interrupteurs et les listes
+déroulantes s’enregistrent dès que vous les changez. Votre centre voit les nouveaux renseignements.
 
 Dans **Famille et personnes autorisées**, vous pouvez aussi tenir à jour vos **contacts d’urgence et les personnes autorisées à venir chercher votre enfant** (voir plus bas).
 

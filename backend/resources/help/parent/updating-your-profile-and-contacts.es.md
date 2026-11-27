@@ -11,23 +11,34 @@ Mantener sus datos al día permite que el centro siempre pueda localizarlo, que 
 
 ## Pasos rápidos
 
-1. Abra su **perfil** desde el menú.
-2. Toque su foto para reemplazarla y edite su teléfono, correo electrónico, dirección o idioma.
-3. Guarde.
-4. Para la foto, las alergias o las vacunas de su hijo, use el paso de configuración que se le mostró al unirse — o escriba a su director.
-5. Para los contactos de emergencia y las personas autorizadas a recoger, abra **Familia y recogidas** desde el menú. Puede añadirlos, editarlos y quitarlos usted mismo, y el centro recibe un aviso cada vez.
+1. Abra **Mis ajustes** desde el menú (**Ajustes › Mis ajustes**).
+2. En la pestaña **Perfil**, pulse **Change photo** para cambiar su foto.
+3. Corrija **First name**, **Last name**, **Phone**, **Date of birth** o **Email** (nombre, apellido, teléfono, fecha de nacimiento, correo).
+4. Pulse **Save profile**. Aparece **✓ Saved** debajo del botón.
+5. Para los contactos de emergencia y las personas autorizadas a recoger, abra **Familia y recogidas** desde el menú.
+   Puede añadirlos, editarlos y quitarlos usted mismo, y el centro recibe un aviso cada vez.
+6. Para la foto, las alergias o las vacunas de su hijo, use el paso de configuración que se le mostró al unirse — o
+   escriba a su director.
 
 ## Lo que puede actualizar usted mismo
 
-En **Ajustes** normalmente puede actualizar:
+**Mis ajustes** tiene estas pestañas para los padres:
 
-- **Su foto de perfil** — tóquela para tomar una nueva o subir una de su galería
-- **Su teléfono y correo electrónico**
-- **Su dirección**
-- **Idioma preferido**
-- **Preferencias de notificaciones y de desbloqueo** (vea Notificaciones y Desbloqueo rápido)
+- **Perfil** — su foto, nombre, teléfono, fecha de nacimiento, correo y un **Username (optional)**; su **Idioma**;
+  los **Recordatorios**; y la tarjeta **Family directory**, donde elige qué pueden ver otras familias de su centro
+  (**Share my email**, **Share my phone**, **Share my address (city only)**, **Show my children's first names**, y
+  luego **Save preferences**).
+- **Notificaciones** — **🔔 Avisarme sobre**, **📱 Mensajes y llamadas**, **📲 Notificaciones push y alertas** y **🔊 Sonidos y vibración**.
+- **Documentos** — sus formularios firmados y los documentos que el centro compartió con usted.
+- **Payments** — el pago automático y su billetera.
+- **Calendario** — **Add to my calendar**, un enlace privado para el calendario de su teléfono.
+- **Photos** — el permiso de fotos de cada niño.
+- **Firma** — una firma e iniciales guardadas, que se ponen en un formulario solo cuando usted toca para aplicarlas.
+- **Seguridad** — contraseña, autenticación de dos factores, llaves de acceso y dispositivos con sesión iniciada.
+- **Acerca de** — la versión de la app, para el soporte.
 
-Los cambios se guardan de inmediato y los ve su centro.
+Los cambios del perfil se guardan al pulsar **Save profile**; los interruptores y menús se guardan en cuanto los
+cambia. Su centro ve los datos nuevos.
 
 En **Familia y recogidas** también puede mantener al día sus **contactos de emergencia y las personas autorizadas a recoger** (vea abajo).
 

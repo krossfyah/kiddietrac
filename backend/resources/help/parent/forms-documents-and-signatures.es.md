@@ -13,7 +13,7 @@ De vez en cuando su centro le pedirá que lea algo, complete un formulario o fir
 Busque en el menú:
 
 - **Formularios por firmar**: lo que el centro necesita que complete, firme o confirme
-- **Documentos**: un archivo personal con lo que ha firmado, enviado o lo que el centro ha compartido con usted
+- **Mis documentos**: un archivo personal con lo que ha firmado, enviado o lo que el centro ha compartido con usted
 
 Si algo requiere su atención, normalmente también recibirá una **notificación**, un correo electrónico y una insignia, así que no tiene que ir a buscarlo.
 
@@ -25,7 +25,7 @@ Si algo requiere su atención, normalmente también recibirá una **notificació
 
 - **Por firmar**: lo que está esperando por usted. Cuando termina, indica que está al día.
 - **Borradores**: formularios que empezó y guardó, pero que aún no ha firmado. Pulse **Continuar** para retomar donde lo dejó.
-- **Enviados**: todo lo que ha enviado. **Ver mi copia** lo abre. Sus copias firmadas también se guardan en **Documentos**.
+- **Enviados**: todo lo que ha enviado. **Ver mi copia** lo abre. Sus copias firmadas también se guardan en **Mis documentos**.
 
 ## Completar un formulario
 
@@ -35,7 +35,7 @@ Si algo requiere su atención, normalmente también recibirá una **notificació
    - **📝 Completar y firmar**: para un formulario con campos para escribir. Complételo en pantalla y fírmelo en el mismo lugar. Puede guardar su trabajo y volver más tarde: queda en **Borradores**.
    - **✍️ Firmar**: para un aviso que solo necesita leer y firmar. Dibuje su firma y pulse **Enviar firma**.
 
-Una vez enviado, se guarda una copia en **Documentos** y se notifica al centro. Puede volver a abrirlo en cualquier momento para ver qué aceptó y cuándo.
+Una vez enviado, se guarda una copia en **Mis documentos** y se notifica al centro. Puede volver a abrirlo en cualquier momento para ver qué aceptó y cuándo.
 
 > **Consejo:** Si su centro le envió formularios antes de que tuviera una cuenta, el enlace de su correo electrónico le permite completarlos y firmarlos sin contraseña.
 
@@ -56,7 +56,7 @@ Su centro puede pedirle que envíe documentos que ya tiene: una cartilla de vacu
 - No necesita iniciar sesión: el enlace funciona por sí solo durante 21 días.
 - Cada archivo puede pesar hasta 15 MB. Normalmente basta con una foto del teléfono.
 - El correo indica el nombre de la persona de su centro que lo solicitó, para que sepa que es auténtico.
-- Todo lo que envíe se archiva en sus **Documentos**, y recibirá un acuse cuando llegue el último elemento.
+- Todo lo que envíe se archiva en **Mis documentos**, y recibirá un acuse cuando llegue el último elemento.
 
 ## Firmar y confirmar
 
@@ -69,11 +69,15 @@ Esa confirmación con marca de tiempo es la prueba del centro de que usted fue i
 
 ## Sus documentos son privados
 
-Todo lo que esté en **Documentos** pertenece a usted y a su familia. Otras familias no pueden verlo y está vinculado a su cuenta. Si alguna vez ve un documento que no es suyo, haga una captura de pantalla y escriba de inmediato a su director por correo electrónico: sería un error que debemos corregir.
+Todo lo que esté en **Mis documentos** pertenece a usted y a su familia. Otras familias no pueden verlo y está vinculado a su cuenta. Si alguna vez ve un documento que no es suyo, haga una captura de pantalla y escriba de inmediato a su director por correo electrónico: sería un error que debemos corregir.
 
-## Guardar una copia
+## Abrir, descargar e imprimir un documento
 
-Abra cualquier documento y use la opción de compartir o guardar de su dispositivo para conservar un PDF; es útil para solicitudes de subsidios, la época de impuestos o sus propios registros.
+1. Abra **Mis documentos** desde el menú.
+2. Busque el documento. La tabla muestra **Documento**, **Firmado** (fecha y hora) y **Contrafirmado** (si el centro también lo firmó, quién y cuándo).
+3. Pulse **👁 Ver** para leerlo dentro de KiddieTrac, **⬇ Descargar** para guardar una copia en su dispositivo, o **🖨 Imprimir** para imprimirlo. En un teléfono, estos botones están en el menú **⋮** al final de la fila.
+
+Una copia guardada es útil para solicitudes de subsidios, la época de impuestos o sus propios registros. Si un formulario aún espera su firma, un recuadro rojo **⚠ Awaiting your signature** arriba en Mis documentos tiene un botón **Firmar**.
 
 ## Preguntas frecuentes
 
