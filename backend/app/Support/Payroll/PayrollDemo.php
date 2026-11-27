@@ -8,7 +8,9 @@ use App\Support\AgencyTime;
 use App\Support\HrLeave;
 use App\Support\TestAgency;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * KIDDIETRAC PAYROLL ENGINE, PHASE 2 (2026-11-27): the Starlight (agency 26) demo payroll year, written by
@@ -126,17 +128,22 @@ final class PayrollDemo
             }
             $firstOwn = DB::table('time_punches')->where('user_id', $u->id)->where('punched_in_at', '>=', $start)->where(fn ($w) => $w->whereNull('notes')->orWhere('notes', '!=', 'Demo payroll year'))->min('punched_in_at');
             $until = $firstOwn ? Carbon::parse($firstOwn, 'UTC')->setTimezone($tz)->toDateString() : $today;
-            $part = in_array($u->first_name, ['Nina', 'Noah'], true);
             for ($d = Carbon::parse($start, $tz); $d->toDateString() < $until; $d->addDay()) {
                 if ($d->isWeekend() || (crc32($u->id . $d->toDateString()) % 17 === 0) || ($d->month === 12 && $d->day >= 24 && $d->day <= 26) || ($d->month === 1 && $d->day === 1)) {
                     continue;
                 }
-                $in = $d->copy()->setTime($part ? 9 : 7, $part ? 0 : 30 + (crc32('i' . $u->id . $d) % 3) * 5);
-                $out = $in->copy()->addMinutes(($part ? ($d->isFriday() ? 240 : 330) : 480) + (crc32('o' . $u->id . $d) % 4) * 5);
+                // Each person's own shift (PublicDemo::shiftPlan, Payroll P3): full time 8h, part time their weekly hours / 5.
+                $plan = \App\Support\PublicDemo::shiftPlan((int) $u->id);
+                $in = $d->copy()->setTime($plan['h'], $plan['m'] + (crc32('i' . $u->id . $d) % 3) * 5);
+                $out = $in->copy()->addMinutes($plan['minutes'] + (crc32('o' . $u->id . $d) % 4) * 5);
                 $add('time_punches', ['user_id' => $u->id, 'centre_id' => (int) $centreOf[$u->id], 'punched_in_at' => $in->copy()->utc()->toDateTimeString(),
                     'punched_out_at' => $out->copy()->utc()->toDateTimeString(), 'notes' => 'Demo payroll year', 'source' => 'web', 'created_at' => $now]);
             }
         }
+
+        // Demo realism (Payroll P3): the daily seeder's own clock-ins used to run 7:30 for ten hours, every day of the week.
+        // Before the runs are built from them: drop the ones on closed days, and give the rest the person's own shift.
+        self::realignSeeded($agencyId, $start);
 
         // The runs.
         $harper = $who['Harper'] ?? $olivia;
@@ -203,6 +210,78 @@ final class PayrollDemo
             PayRuns::$skipExtras = false;
         }
 
+        // Payroll P3 (2026-11-27): fictional SINs (start with 0 - never issued to a person) and the 2026 year-end slips as
+        // drafts (they can only be finalized from January 1).
+        if (Schema::hasTable('payroll_slips')) {
+            foreach (DB::table('payroll_run_lines as l')->join('payroll_runs as r', 'r.id', '=', 'l.run_id')->where('r.agency_id', $agencyId)
+                ->distinct()->pluck('l.user_id') as $uid) {
+                if (DB::table('hr_staff_sin')->where('agency_id', $agencyId)->where('user_id', $uid)->exists()) {
+                    continue;
+                }
+                $sin = self::fakeSin((int) $uid);
+                $add('hr_staff_sin', ['agency_id' => $agencyId, 'user_id' => $uid, 'sin_enc' => Crypt::encryptString($sin), 'sin_hint' => '••• ••• ' . substr($sin, -3),
+                    'updated_by_id' => $olivia ?: null, 'created_at' => $now, 'updated_at' => $now]);
+            }
+            YearEnd::saveSettings($agencyId, ['dental_code' => 3, 'contact_name' => 'Olivia Bennett', 'contact_phone' => '619 555 0142', 'contact_email' => 'payroll@starlightkids.example']);
+            DB::table('payroll_slips')->where('agency_id', $agencyId)->where('tax_year', $year)->delete();
+            DB::table('payroll_year_ends')->where('agency_id', $agencyId)->where('tax_year', $year)->delete();
+            YearEnd::generate($agencyId, $year, $olivia ?: (int) $harper);
+            $made['payroll_slips'] = DB::table('payroll_slips')->where('agency_id', $agencyId)->where('tax_year', $year)->pluck('id')->all();
+            $made['payroll_year_ends'] = DB::table('payroll_year_ends')->where('agency_id', $agencyId)->where('tax_year', $year)->pluck('id')->all();
+        }
+
         return $made;
+    }
+
+    /** A fictional, Luhn-valid SIN that starts with 0 (CRA never issues those), fixed per person. */
+    public static function fakeSin(int $uid): string
+    {
+        $d = '0' . str_pad((string) (crc32('kt-sin-' . $uid) % 10000000), 7, '0', STR_PAD_LEFT);
+        for ($c = 0; $c <= 9; $c++) {
+            $s = $d . $c;
+            $sum = 0;
+            for ($i = 0; $i < 9; $i++) {
+                $v = (int) $s[$i] * ($i % 2 ? 2 : 1);
+                $sum += $v > 9 ? $v - 9 : $v;
+            }
+            if ($sum % 10 === 0) {
+                return $s;
+            }
+        }
+
+        return $d . '0';
+    }
+
+    /**
+     * The daily seeder's clock-ins (source kiosk, no note, exactly ten hours, or still open from an earlier day): removed on
+     * days the centre is closed, otherwise moved to the person's own shift. Demo agencies only.
+     */
+    public static function realignSeeded(int $agencyId, string $from): int
+    {
+        if (! \App\Support\PublicDemo::isAgency($agencyId) || ! \App\Support\TestAgency::isAgency($agencyId)) {
+            return 0;
+        }
+        $tz = AgencyTime::tz($agencyId) ?: 'America/Los_Angeles';
+        $staff = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)->where('role', '!=', 'guardian')->distinct()->pluck('user_id')->all();
+        $todayStart = Carbon::parse(AgencyTime::today($agencyId), $tz)->startOfDay()->utc();
+        $rows = DB::table('time_punches')->whereIn('user_id', $staff ?: [0])->where('source', 'kiosk')->whereNull('notes')->where('punched_in_at', '>=', $from)
+            ->where(fn ($w) => $w->whereRaw('TIMESTAMPDIFF(MINUTE, punched_in_at, punched_out_at) = 600')->orWhere(fn ($o) => $o->whereNull('punched_out_at')->where('punched_in_at', '<', $todayStart)))
+            ->get(['id', 'user_id', 'centre_id', 'punched_in_at']);
+        $n = 0;
+        foreach ($rows as $p) {
+            $local = Carbon::parse($p->punched_in_at, 'UTC')->setTimezone($tz);
+            if (! \App\Support\PublicDemo::openOn($p->centre_id ? (int) $p->centre_id : null, $local)) {
+                DB::table('time_punches')->where('id', $p->id)->delete();
+                $n++;
+                continue;
+            }
+            $plan = \App\Support\PublicDemo::shiftPlan((int) $p->user_id);
+            $in = $local->copy()->setTime($plan['h'], $plan['m']);
+            DB::table('time_punches')->where('id', $p->id)->update(['punched_in_at' => $in->copy()->utc()->toDateTimeString(),
+                'punched_out_at' => $in->copy()->addMinutes($plan['minutes'])->utc()->toDateTimeString()]);
+            $n++;
+        }
+
+        return $n;
     }
 }

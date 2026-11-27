@@ -2,6 +2,26 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🧾",
+            "title": "T4, T4A and RL-1 slips",
+            "body": "With the payroll engine on, Payroll › Year end makes the year's tax slips from your finalized pay runs, checks them against your payslips and remittances, and gives you the CRA file to upload. Staff see their own slips in My HR › My tax slips.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Feuillets T4, T4A et RL-1",
+            "body_fr": "Avec le moteur de paie activé, Paie › Fin d'année prépare les feuillets fiscaux de l'année à partir de vos cycles de paie finalisés, les compare à vos talons de paie et à vos versements, et vous donne le fichier à téléverser à l'ARC. Le personnel voit ses feuillets dans Mes RH › Mes feuillets fiscaux.",
+            "title_es": "Comprobantes T4, T4A y RL-1",
+            "body_es": "Con el motor de nómina activado, Nómina › Cierre de año prepara los comprobantes fiscales del año a partir de sus nóminas finalizadas, los compara con sus recibos y remesas, y le da el archivo para subir a la CRA. El personal ve sus comprobantes en Mis RR. HH. › Mis comprobantes fiscales.",
+            "title_hi": "T4, T4A और RL-1 स्लिप",
+            "body_hi": "पेरोल इंजन चालू होने पर, पेरोल › वर्ष-अंत आपके फ़ाइनल पे रन से साल की टैक्स स्लिप बनाता है, उन्हें आपकी पेस्लिप और रेमिटेंस से मिलाता है, और CRA पर अपलोड करने के लिए फ़ाइल देता है। स्टाफ़ अपनी स्लिप मेरा HR › मेरी टैक्स स्लिप में देखते हैं।"
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "🧑‍💼",

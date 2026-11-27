@@ -319,7 +319,9 @@ class SeedDemoDaily extends Command
                     ->where('punched_in_at', '<', \App\Support\AgencyTime::dayRangeForCentre($centreId)[0])
                     /* Ten hours after it began (2026-10-31). "DATE() + 17.5 h" was 17:30 UTC - 10:30 am in California,
                        1:30 pm in Toronto - so a 7:30 shift was closed at a wall-clock time that depended on the zone. */
-                    ->update(['punched_out_at' => DB::raw("DATE_ADD(punched_in_at, INTERVAL 10 HOUR)")]);
+                    ->update(['punched_out_at' => DB::raw($this->pub
+                        ? 'DATE_ADD(punched_in_at, INTERVAL ' . (int) \App\Support\PublicDemo::shiftPlan((int) $s->id)['minutes'] . ' MINUTE)'
+                        : "DATE_ADD(punched_in_at, INTERVAL 10 HOUR)")]);
 
                 // time_punches — the table the clock actually writes. Seeding the
                 // legacy one left demo staff invisible everywhere that matters: no one
@@ -328,13 +330,17 @@ class SeedDemoDaily extends Command
                 // re-creating that every morning.
                 $open = DB::table('time_punches')->where('user_id', $s->id)->where('centre_id', $centreId)
                     ->whereNull('punched_out_at')->exists();
-                if ($open || ! $past(7, 30)) continue;
+                // Public demos (Payroll P3, 2026-11-27): only on the centre's open days, at the person's own shift start
+                // (PublicDemo::shiftPlan) - not 7:30 for ten hours every day of the week.
+                $plan = $this->pub ? \App\Support\PublicDemo::shiftPlan((int) $s->id) : ['h' => 7, 'm' => 30];
+                if ($this->pub && ! \App\Support\PublicDemo::openOn($centreId, $today)) continue;
+                if ($open || ! $past($plan['h'], $plan['m'])) continue;
                 // One shift a day: a shift already punched out today (auto sign-off, a person) is not reopened.
                 if (DB::table('time_punches')->where('user_id', $s->id)->where('centre_id', $centreId)
                     ->where('punched_in_at', '>=', \App\Support\AgencyTime::dayRangeForCentre($centreId)[0])->exists()) continue;
                 DB::table('time_punches')->insert([
                     'user_id' => $s->id, 'centre_id' => $centreId,
-                    'punched_in_at' => $seedAt(7, 30),
+                    'punched_in_at' => $seedAt($plan['h'], $plan['m']),
                     // NOT NULL enum(web|kiosk|mobile); a seeded shift stands in for
                     // somebody tapping in at the door.
                     'source' => 'kiosk',

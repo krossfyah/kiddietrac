@@ -298,10 +298,54 @@ final class PublicDemo
             ->where('role', '!=', 'guardian')->distinct()->pluck('user_id')
             ->filter(fn ($id) => self::isUser((int) $id))->values()->all();
         if (! $staff) return 0;
-        $q = DB::table('time_punches')->whereIn('user_id', $staff)->whereNull('punched_out_at')
-            ->where('punched_in_at', '<=', now()->subHours(self::SHIFT_HOURS));
-        if ($dry) return $q->count();
-        return $q->update(['punched_out_at' => DB::raw('DATE_ADD(punched_in_at, INTERVAL ' . (int) self::SHIFT_HOURS . ' HOUR)')]);
+        // Demo realism (Payroll P3, 2026-11-27): each person's own shift length (shiftPlan), not ten hours for everyone -
+        // ten-hour days every day made the demo pay runs ~$35k a fortnight.
+        $rows = DB::table('time_punches')->whereIn('user_id', $staff)->whereNull('punched_out_at')
+            ->where('punched_in_at', '<=', now()->subMinutes(180))->get(['id', 'user_id', 'punched_in_at']);
+        $n = 0;
+        foreach ($rows as $p) {
+            $mins = self::shiftPlan((int) $p->user_id)['minutes'];
+            if (\Carbon\Carbon::parse($p->punched_in_at, 'UTC')->addMinutes($mins)->gt(now())) continue;
+            $n++;
+            if (! $dry) {
+                DB::table('time_punches')->where('id', $p->id)->whereNull('punched_out_at')
+                    ->update(['punched_out_at' => DB::raw('DATE_ADD(punched_in_at, INTERVAL ' . (int) $mins . ' MINUTE)')]);
+            }
+        }
+        return $n;
+    }
+
+    /**
+     * DEMO SHIFTS (Payroll P3, 2026-11-27, "demo clock-ins run 10h every day"): the shift a demo staff member works, from
+     * their HR employee file - full time 7:30 for 8 hours, part time hours_per_week / 5 from 9:00, students 4 hours from
+     * 12:00, casual 6 hours from 9:30. Used by the daily seeder, endShifts() and the demo payroll year.
+     * @return array{h:int, m:int, minutes:int}
+     */
+    public static function shiftPlan(int $userId): array
+    {
+        static $memo = [];
+        if (isset($memo[$userId])) return $memo[$userId];
+        $f = null;
+        try {
+            $f = DB::table('hr_employee_files')->where('user_id', $userId)->orderByDesc('id')->first(['employment_type', 'hours_per_week']);
+        } catch (\Throwable $e) {
+        }
+        $t = (string) ($f->employment_type ?? 'full_time');
+        if ($t === 'part_time') {
+            $m = (int) round(((float) ($f->hours_per_week ?: 20)) / 5 * 60);
+            return $memo[$userId] = ['h' => 9, 'm' => 0, 'minutes' => max(180, min(480, $m))];
+        }
+        if ($t === 'student') return $memo[$userId] = ['h' => 12, 'm' => 0, 'minutes' => 240];
+        if ($t === 'casual') return $memo[$userId] = ['h' => 9, 'm' => 30, 'minutes' => 360];
+        return $memo[$userId] = ['h' => 7, 'm' => 30, 'minutes' => 480];
+    }
+
+    /** Is the centre open on this day (centre settings open_days, ISO 1-7; Monday to Friday when not set)? */
+    public static function openOn(?int $centreId, \Carbon\Carbon $day): bool
+    {
+        $s = $centreId ? (json_decode((string) DB::table('centres')->where('id', $centreId)->value('settings'), true) ?: []) : [];
+        $open = array_values(array_filter(array_map('intval', (array) ($s['open_days'] ?? [])), fn ($d) => $d >= 1 && $d <= 7)) ?: [1, 2, 3, 4, 5];
+        return in_array((int) $day->dayOfWeekIso, $open, true);
     }
 
     /** Make a designated account ready for a visitor: terms on file, no forced password change, no gates. */
