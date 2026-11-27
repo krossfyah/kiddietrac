@@ -543,12 +543,20 @@
        srcdoc in a sandboxed frame with no scripts - plain text as a <pre>, HTML as the page itself. */
     var textual = !plainImage && !office && !/pdf|^image\//i.test(mime)
       && (/^text\/(plain|html|csv|markdown)/i.test(mime) || /\.(txt|log|md|csv|html?)$/i.test(fname));
-    var usePdfJs = canvasPdf() && !plainImage && !office && !textual;
+    /* OFFICE VIEW OF A PROTECTED FILE (Payroll P2, 2026-11-27, Anthony: "password only applies when sending the payslip
+       to the staff member or downloading it to anyone's computer"). The caller shows an unprotected copy for reading in the
+       portal and passes opts.protectedDownload(): the function that saves the PASSWORD-PROTECTED file. Then the copy is
+       drawn with pdf.js (the browser's own PDF toolbar would save the unprotected copy), and every Download / Open
+       outside button calls that function instead of handing over the copy on screen. Printing stays as it is. */
+    var guarded = typeof opts.protectedDownload === 'function';
+    var usePdfJs = (canvasPdf() || guarded) && !plainImage && !office && !textual;
     /* DOWNLOAD IN THE PANEL (2026-10-09, Anthony: viewing a file "should be a popup and not a
        new window"). The panel is now where every file opens, so saving it starts here too.
        Not in the app: its WebView has nowhere to save, and the app's own net turns a
        download into this same panel. */
-    var dlBtn = native ? '' : '<a class="ktdv-dl" href="' + esc(url) + '" download="' + esc(fname) + '" data-kt-no-viewer="1" data-kt-download="1" target="_blank" rel="noopener" data-kt-iconized="1" '
+    var dlBtn = native ? '' : guarded ? '<button type="button" class="ktdv-dl ktdv-pdl" data-kt-iconized="1" data-kttip="Saves the password-protected copy" '
+      + 'style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;">⬇ Download</button>'
+      : '<a class="ktdv-dl" href="' + esc(url) + '" download="' + esc(fname) + '" data-kt-no-viewer="1" data-kt-download="1" target="_blank" rel="noopener" data-kt-iconized="1" '
       + 'style="background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:9px;padding:7px 12px;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap;text-decoration:none;">⬇ Download</a>';
     var officeIcon = /xls|ods|csv/i.test(fname + mime) ? '📊' : /ppt|odp/i.test(fname + mime) ? '📽️' : /zip/i.test(fname + mime) ? '🗜️' : '📝';
 
@@ -675,10 +683,10 @@
           var b2 = d.createElement('button');
           b2.type = 'button';
           b2.setAttribute('data-kt-iconized', '1');
-          b2.textContent = 'Open the document';
+          b2.textContent = guarded ? '⬇ Download (password-protected)' : 'Open the document';
           b2.style.cssText = 'background:#1F6080;color:#fff;border:0;border-radius:9px;'
             + 'padding:10px 18px;font-size:13.5px;font-weight:800;cursor:pointer;';
-          b2.addEventListener('click', function () { openExternally(url); });
+          b2.addEventListener('click', function () { if (guarded) { opts.protectedDownload(); } else { openExternally(url); } });
           box.appendChild(b2);
           pdfHost.appendChild(box);
         });
@@ -686,6 +694,9 @@
 
     ov.querySelector('.ktdv-close').addEventListener('click', close);
     var extBtn = ov.querySelector('.ktdv-ext');
+    var pdl = ov.querySelector('.ktdv-pdl');
+    if (pdl) { pdl.addEventListener('click', function (e) { e.preventDefault(); try { opts.protectedDownload(); } catch (x) {} }); }
+    if (guarded) { ov.addEventListener('contextmenu', function (e) { if (e.target && e.target.tagName === 'CANVAS') { e.preventDefault(); } }); }
     if (extBtn) { extBtn.addEventListener('click', function () { openExternally(url); }); }
     /* PRINT, WHERE "OPEN IN NEW TAB" USED TO BE.
 

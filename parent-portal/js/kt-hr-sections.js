@@ -47,7 +47,9 @@
     { id: 'time', hash: 'timesheets', alt: 'hr-timesheets', icon: '🕘', label: 'Clock-ins & timesheets', sub: 'Hours worked, approving and locking each pay period, and overtime.',
       tabs: [{ k: 'sheets', label: 'Timesheets', screen: 'timesheets' }, { k: 'lock', draw: 'timesheets', label: 'Approve & lock' }, { k: 'punchfix', label: 'Clock-in fixes' }, { k: 'overtime', label: 'Overtime' }] },
     { id: 'payroll', hash: 'payroll', alt: 'hr-payroll', icon: '💼', label: 'Payroll', sub: 'Pay runs and hours, and expense and mileage claims.',
-      tabs: [{ k: 'payroll', label: 'Payroll', screen: 'payroll' }, { k: 'claims', label: 'Claims & mileage' }] },
+      // Payroll Engine P2 (2026-11-27): pay: true = shown only while the agency's payroll engine is on (screen-hr-tax.js).
+      tabs: [{ k: 'payroll', label: 'Payroll', screen: 'payroll' }, { k: 'payruns', label: 'Pay runs', pay: true }, { k: 'remit', label: 'Remittances', pay: true },
+        { k: 'ytd', label: 'Opening balances', pay: true, admin: true }, { k: 'claims', label: 'Claims & mileage' }] },
     { id: 'hiring', hash: 'hr-hiring', icon: '🧲', label: 'Hiring & onboarding', sub: 'Job posts, applicants and onboarding checklists.',
       tabs: [{ k: 'hiring', label: 'Hiring' }, { k: 'onboarding', label: 'Onboarding' }] },
     { id: 'performance', hash: 'hr-performance', icon: '🎯', label: 'Performance & learning', sub: 'Reviews, goals, one-to-ones and courses.',
@@ -117,8 +119,25 @@
   function baseOf(h) { return String(h || '').replace(/^#/, '').split('?')[0]; }
   function tabParam() { var m = /[?&]tab=([a-z]+)/.exec(location.hash || ''); return m ? m[1] : ''; }
 
+  /* PAYROLL ENGINE TABS (P2, 2026-11-27): asked once per page load; HR settings' Save tells this through setPay(). When the
+     answer arrives as "on" while a Payroll page is open, it is drawn again so its tab row has the new tabs. */
+  var PAY = null, payAsked = false;
+  function payOn() {
+    if (PAY === null && !payAsked && KT.Api && KT.Api.get) {
+      payAsked = true;
+      KT.Api.get('/hr/payroll/engine').then(function (r) { setPay(!!(r && r.enabled)); }, function () { PAY = false; });
+    }
+    return PAY === true;
+  }
+  function setPay(v) {
+    var was = PAY === true; PAY = !!v;
+    if (was === PAY) return;
+    var b = baseOf(location.hash);
+    if ((b === 'payroll' || b === 'hr-payroll') && KT.Shell && KT.Shell.navigate) { try { KT.Shell.navigate(location.hash.slice(1)); } catch (e) {} }
+  }
   function tabOk(t, role) {
     if (t.admin && !isAdmin(role)) return false;
+    if (t.pay && !payOn()) return false;
     if (t.hr && !hrOn()) return false;   // a pre-HR screen that joins this row only with HR
     // Every screen named here is registered for admins and directors alike (screen files load on demand).
     return t.screen ? !off(t.screen) : hrOn();
@@ -288,5 +307,5 @@
   }
 
   window.KTHrSections = { list: SECTIONS, byId: BY_ID, band: band, tabsOf: tabsOf, hrefOf: hrefOf, home: home, redirectFor: redirectFor, isAdmin: isAdmin,
-    help: HELP, helpFor: helpFor, helpRow: helpRow };
+    help: HELP, helpFor: helpFor, helpRow: helpRow, setPay: setPay };
 })(window);

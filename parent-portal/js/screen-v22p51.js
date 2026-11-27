@@ -1203,11 +1203,16 @@
         const label = b.textContent;
         b.disabled = true; b.textContent = 'Opening…';
         try {
-          const r = await fetch(`${(KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'}/payroll-documents/${b.getAttribute('data-pd-view')}/pdf`,
-            { headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token')), Accept: 'application/pdf' } });
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          const blob = await r.blob();
-          if (window.KT && KT.openFile) { KT.openFile(blob, { title: 'Payroll document', filename: 'payroll-document.pdf', label: 'Payroll' }); }
+          const pid = b.getAttribute('data-pd-view');
+          const office = window.KTPayslipView ? await window.KTPayslipView.blob(pid) : null;   // office view: no password, Download = protected
+          let blob = office;
+          if (!blob) {
+            const r = await fetch(`${(KT.API_BASE) || 'https://api.kiddietrac.com/api/v1'}/payroll-documents/${pid}/pdf`,
+              { headers: { Authorization: 'Bearer ' + (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token')), Accept: 'application/pdf' } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            blob = await r.blob();
+          }
+          if (window.KT && KT.openFile) { KT.openFile(blob, { title: 'Payroll document', filename: 'payroll-document.pdf', label: 'Payroll', protectedDownload: office ? () => window.KTPayslipView.save(pid) : undefined }); }
           else { const url = URL.createObjectURL(blob); window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 60000); }
         } catch (e) {
           if (KT.Dom && KT.Dom.toast) KT.Dom.toast('Could not open that document', 'error');
@@ -3022,6 +3027,31 @@
     return await r.blob();
   }
 
+  /* OFFICE VIEW (Payroll P2, 2026-11-27, Anthony: "admins/directors view payslips without the password - password only
+     applies when sending the payslip to the staff member or downloading it to anyone's computer"). /view answers an
+     unprotected copy, for reading in the portal only (no-store, audited payslip.viewed), to the people who may see this
+     person's pay; anyone else gets null here and the protected /pdf, exactly as before. Every Download from the viewer
+     goes through payslipSave(), i.e. the protected /pdf. */
+  async function payslipViewBlob(id) {
+    try {
+      const tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token');
+      const base = (window.KT && window.KT.API_BASE) || 'https://api.kiddietrac.com/api/v1';
+      const r = await fetch(`${base}/provider/payroll-documents/${id}/view`, { headers: { Authorization: 'Bearer ' + tok, Accept: 'application/pdf' }, cache: 'no-store' });
+      return r.ok ? await r.blob() : null;
+    } catch (e) { return null; }
+  }
+  async function payslipSave(id) {
+    try {
+      const url = URL.createObjectURL(await payslipBlob(id));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'payslip-' + id + '.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (e) { say('That payslip could not be downloaded. Please try again.'); }
+  }
+  window.KTPayslipView = { blob: payslipViewBlob, save: payslipSave };
+
   function say(m) { return (window.KT && KT.toast) ? KT.toast(m, 'info') : alert(m); }
 
   /* THE DOCUMENTS FOR ONE PERSON, KEYED BY THE BUTTON THAT OPENS THEM.
@@ -3150,9 +3180,10 @@
     const id = b.getAttribute('data-doc');
     try {
       if (act === 'pdf' || act === 'print') {
-        const slip = await payslipBlob(id);
+        const office = await payslipViewBlob(id);
+        const slip = office || await payslipBlob(id);
         if (window.KT && KT.openFile) {
-          const h = KT.openFile(slip, { title: 'Payslip', filename: 'payslip-' + id + '.pdf', label: 'Payslip' });
+          const h = KT.openFile(slip, { title: 'Payslip', filename: 'payslip-' + id + '.pdf', label: 'Payslip', protectedDownload: office ? () => payslipSave(id) : undefined });
           // Print = the viewer's Print, once the pages are drawn (2026-11-06; it was a click at 700ms, before pdf.js had drawn).
           if (act === 'print') { Promise.resolve(h).then((v) => { if (v && v.print) v.print(); }); }
           return;
@@ -3165,15 +3196,7 @@
         return;
       }
 
-      if (act === 'save') {
-        const url = URL.createObjectURL(await payslipBlob(id));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'payslip-' + id + '.pdf';
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
-        return;
-      }
+      if (act === 'save') { await payslipSave(id); return; }
 
       if (act === 'email') {
         /* RESEND PAYSLIP (2026-10-31, Anthony: "resend the payslip from payroll / pay period using the kebab").

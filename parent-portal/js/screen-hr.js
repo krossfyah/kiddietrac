@@ -138,6 +138,7 @@
     if (window.KTHrHs && window.KTHrHs.has(S.tab)) return window.KTHrHs.draw(S.tab, b);               // HR Phase 4 batch 7 (screen-hr-hs.js)
     if (window.KTHrRota && window.KTHrRota.has(S.tab)) return window.KTHrRota.draw(S.tab, b);         // HR Phase 4 batch 8 (screen-hr-rota.js)
     if (window.KTHrLeave && window.KTHrLeave.has(S.tab)) return window.KTHrLeave.draw(S.tab, b);       // HR4B9 closures & checks (screen-hr-leave.js)
+    if (window.KTHrTax && window.KTHrTax.has && window.KTHrTax.has(S.tab)) return window.KTHrTax.draw(S.tab, b);   // Payroll P2: pay runs, remittances, opening balances (screen-hr-tax.js)
     if (window.KTHrTalent) return window.KTHrTalent.draw(S.tab, b);
   }
 
@@ -741,9 +742,10 @@
       + '<div><label class="hr-l">Of this many days or less</label><input class="hr-i" type="number" min="0.5" max="10" step="0.5" id="hs-md" style="width:100%;" value="' + esc(sa.max_days || 2) + '"></div>'
       + '<div><label class="hr-l">Within (months)</label><input class="hr-i" type="number" min="1" max="24" id="hs-mo" style="width:100%;" value="' + esc(sa.months || 6) + '"></div>'
       + '</div><div class="hr-bar" style="margin:14px 0 0;"><button type="button" class="hr-b p" id="hs-save">Save settings</button><span id="hs-msg" style="font-size:13px;color:#B91C1C;"></span></div></div>'
-      + '<div id="hs-att"></div><div id="hs-gj"></div>';
+      + '<div id="hs-att"></div><div id="hs-pay"></div><div id="hs-gj"></div>';
     drawAttendanceSettings(b.querySelector('#hs-att'));   // HR Phase 4
     drawGoogleJobs(b.querySelector('#hs-gj'));   // seo1127
+    if (window.KTHrTax && window.KTHrTax.settings) window.KTHrTax.settings(b.querySelector('#hs-pay'));   // Payroll P2: the engine switch + employer details
     var ly = b.querySelector('#hs-ly'), fx = b.querySelector('#hs-fx');
     var syncLy = function () { fx.style.display = ly.value === 'fixed' ? '' : 'none'; };
     ly.addEventListener('change', syncLy); syncLy();
