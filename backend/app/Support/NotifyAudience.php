@@ -78,6 +78,7 @@ final class NotifyAudience
         'cold_reach' => 'staff',   // sales outreach replies (ColdReach) (2026-11-24, ticket #260)
         'task_assigned' => 'staff',   // tasks assigned to staff (mapped 2026-11-26)
         'hr' => 'staff',   // KiddieTrac HR phase 2: onboarding, courses, reviews, applicants (2026-11-28)
+        'shift' => 'staff',   // KiddieTrac HR phase 4: your shifts added / changed / cancelled, open shifts (2026-11-27)
         // family: their own children and account
         'checkin' => 'family', 'checkin_reminder' => 'family', 'pickup_alarm' => 'family', 'moment' => 'family', 'photo' => 'family',
         'observation' => 'family', 'walk_started' => 'family', 'walk_ended' => 'family',
@@ -123,6 +124,7 @@ final class NotifyAudience
         'staff_schedule' => 'staff', 'staff_tips' => 'staff', 'staff_cold_reach' => 'staff', 'staff_tickets' => 'staff',
         'staff_records' => 'staff',   // escalated daily records copies (RecordEscalation, 2026-11-26)
         'staff_fire_plans' => 'staff',   // fire plan approved / sent back / yearly review due (FirePlans, 2026-11-28)
+        'staff_shifts' => 'staff',   // HrShiftNotices + HrOpenShifts: my shifts (2026-11-27)
         'staff_submissions' => 'staff',   // StaffSubmissionsFeed: what the team submitted, in the admin bell (2026-11-26)
     ];
 

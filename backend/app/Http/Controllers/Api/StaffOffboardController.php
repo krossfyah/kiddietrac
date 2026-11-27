@@ -246,7 +246,11 @@ final class StaffOffboardController extends Controller
             foreach ($this->futureShifts($userId) as $sh) {
                 try {
                     if ($reassignTo) {
+                        $was = DB::table('shifts')->where('id', $sh['id'])->first();
                         DB::table('shifts')->where('id', $sh['id'])->update(['user_id' => $reassignTo]);
+                        // KiddieTrac HR: the person taking them over gets ONE notice for the lot (App\Support\HrShiftNotices).
+                        if ($was) \App\Support\HrShiftNotices::queue((int) DB::table('rooms')->where('id', $was->room_id)->value('centre_id'),
+                            [[(int) $reassignTo, (int) $was->id, null, \App\Support\HrShiftNotices::snap($was)]], 'offboard');
                     } else {
                         /* Cancelled, not deleted — a rota that silently loses a shift
                            leaves a room short with no record of why. */

@@ -194,13 +194,16 @@ final class ExportsController extends Controller
         $agencyId = $this->resolveAgencyId($request);
         $from = Carbon::parse($request->query('from', \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString()))->startOfDay();
         $to = Carbon::parse($request->query('to', \App\Support\AgencyTime::todayDate()->endOfMonth()->toDateString()))->endOfDay();
-        $rows = DB::table('time_punches as tp')
+        $base = DB::table('time_punches as tp')
             ->join('users as u', 'u.id', '=', 'tp.user_id')
             ->leftJoin('centres as c', 'c.id', '=', 'tp.centre_id')
             ->where('c.agency_id', $agencyId)
             ->when(($sc = $this->scope($request, $agencyId)) !== null, fn ($q) => $q->whereIn('c.id', $sc ?: [0]))
             ->whereNotNull('tp.punched_out_at')
-            ->whereBetween('tp.punched_in_at', [$from, $to])
+            ->whereBetween('tp.punched_in_at', [$from, $to]);
+        // KiddieTrac HR timesheet rules: the same paid minutes as the payroll run (App\Support\HrTime::paidMap); null = none on.
+        $paid = \App\Support\HrTime::paidSumsFor($base, 'tp', ['tp.user_id', 'c.id']);
+        $rows = (clone $base)
             ->select('tp.user_id',
                 DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name"),
                 'u.email', 'c.id as centre_id', 'c.name as centre_name',
@@ -209,11 +212,14 @@ final class ExportsController extends Controller
             ->groupBy('tp.user_id', 'u.first_name', 'u.last_name', 'u.email', 'c.id', 'c.name')
             ->orderBy('u.last_name')
             ->get()
-            ->map(fn ($r) => [
+            ->map(function ($r) use ($paid) {
+                if ($paid !== null) $r->total_minutes = (int) ($paid[$r->user_id . '|' . $r->centre_id] ?? 0);
+                return [
                 'name' => $r->user_name, 'email' => $r->email,
                 'centre' => $r->centre_name, 'punches' => $r->punch_count,
                 'minutes' => $r->total_minutes, 'hours' => round($r->total_minutes / 60, 2),
-            ]);
+            ];
+            });
         return $this->xlsx->download($agencyId, 'Payroll', 'payroll-' . $from->format('Y-m-d') . '-' . $to->format('Y-m-d') . '.xlsx',
             [
                 ['header' => 'Staff', 'key' => 'name', 'width' => 26],

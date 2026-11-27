@@ -297,6 +297,9 @@ final class SchedulingController extends Controller
             'status' => 'scheduled',
             'created_at' => now(),
         ]);
+        // KiddieTrac HR: the person hears about it once their batch of changes goes quiet (App\Support\HrShiftNotices).
+        \App\Support\HrShiftNotices::added((int) $room->centre_id, [['id' => $shiftId, 'user_id' => (int) $data['user_id'], 'room_id' => (int) $data['room_id'],
+            'starts_at' => $data['starts_at'], 'ends_at' => $data['ends_at'], 'role' => $data['role'] ?? 'support', 'status' => 'scheduled']], 'edit');
 
         \App\Support\Audit::write([
             'user_id' => $request->user()->id,
@@ -737,6 +740,8 @@ final class SchedulingController extends Controller
             foreach (array_chunk($rows, 200) as $chunk) {
                 DB::table('shifts')->insert($chunk);
             }
+            // KiddieTrac HR: ONE notice per person for the whole fill, not one per shift (App\Support\HrShiftNotices).
+            \App\Support\HrShiftNotices::added($centreId, $rows, 'autofill');
         }
 
         \App\Support\Audit::write([
@@ -829,6 +834,8 @@ final class SchedulingController extends Controller
         $update = array_filter($data, fn($v) => $v !== null);
         if (!empty($update)) {
             DB::table('shifts')->where('id', $id)->update($update);
+            // KiddieTrac HR: changed / cancelled / handed to someone else (App\Support\HrShiftNotices).
+            \App\Support\HrShiftNotices::changed($destCentre, $shift, $update, 'edit');
         }
 
         return response()->json(['success' => true]);
@@ -847,6 +854,7 @@ final class SchedulingController extends Controller
         }
 
         DB::table('shifts')->where('id', $id)->delete();
+        \App\Support\HrShiftNotices::removed((int) $room->centre_id, [$shift], 'edit');   // KiddieTrac HR shift notices
 
         return response()->json(['success' => true]);
     }
@@ -1233,12 +1241,38 @@ final class SchedulingController extends Controller
             report($e);
         }
 
+        /* KiddieTrac HR timesheet rules (rounding / clip to shift, 2026-11-27): when the agency has one on, each punch also
+           carries the PAID minutes the payroll run and exports use (App\Support\HrTime::paidMap), and the sheet totals them.
+           No rule on = this response exactly as before (no extra keys). */
+        $__paidTotal = null;
+        try {
+            $__paid = \App\Support\HrTime::paidMap($entries);
+            if ($__paid !== null) {
+                $rows = $rows->map(function ($r) use ($__paid) {
+                    $r = (array) $r;
+                    if (! empty($r['id']) && empty($r['open'])) {
+                        $m = max(0, (int) ($__paid[(int) $r['id']] ?? $r['worked_min']) - (int) ($r['break_min'] ?? 0));
+                        $r['paid_min'] = $m;
+                        $r['paid_hours'] = round($m / 60, 2);
+                    } else {
+                        $r['paid_min'] = 0;
+                        $r['paid_hours'] = 0;
+                    }
+                    return $r;
+                })->values();
+                $__paidTotal = round($rows->sum('paid_min') / 60, 2);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return response()->json([
             'centre_id' => $centreId,
             'from' => $from,
             'to' => $to,
             'rows' => $rows,
             'total_hours' => round($rows->sum('worked_min') / 60, 2),
+        ] + ($__paidTotal !== null ? ['rules_on' => true, 'total_paid_hours' => $__paidTotal] : []) + [
             'staff_count' => $rows->pluck('staff_email')->unique()->count(),
             // Stated outright so a payroll figure is never mistaken for break-adjusted.
             'breaks_tracked' => false,

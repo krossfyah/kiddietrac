@@ -792,6 +792,7 @@ final class WebDemoShowcase
         $this->hrClockStory($agencyId, $byName->all(), $centreOf->all());   // HR Phase 3, item 11
         $this->hrAttendanceStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 1
         $this->hrTimeStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);   // HR Phase 4, batch 2
+        $this->hrOpenShiftsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 3
         $this->hrLettersStory($agencyId, $olivia);   // HR Phase 3, item 12
     }
 
@@ -1040,6 +1041,35 @@ final class WebDemoShowcase
      * conflict), Noah can't work next Wednesday, Lucas giving away next Tuesday (open) and Ethan / Noah swapping next
      * Thursday and Friday (accepted, waiting for approval). Rooms the five cannot cover show as ratio warnings.
      */
+    /**
+     * KIDDIETRAC HR PHASE 4 BATCH 3 DEMO (2026-11-27, Starlight only): the open-shift board. Next Tuesday's late
+     * afternoon in the rota room is posted as an open shift with Lucas's request waiting for a director (he finishes at
+     * 3 PM that day, so he is free), and next Friday's late shift asks for First Aid and has no requests yet. Inserted
+     * directly into this builder's ledger: nothing sends, a rerun gives the same rows.
+     */
+    private function hrOpenShiftsStory(int $agencyId, array $byName, array $centreOf, int $elena, string $now): void
+    {
+        if (! \App\Support\HrOpenShifts::ready()) return;
+        $centre = null;
+        foreach (['Lucas', 'Sofia', 'Noah', 'Ethan', 'Ava'] as $n) if (isset($byName[$n], $centreOf[$byName[$n]])) { $centre = (int) $centreOf[$byName[$n]]; break; }
+        if (! $centre) return;
+        $room = (int) DB::table('rooms')->where('centre_id', $centre)->orderBy('id')->value('id');
+        if (! $room) return;
+        $mon = $this->today->copy()->startOfWeek(\Carbon\Carbon::MONDAY)->addWeek();
+        $tue = $mon->copy()->addDay()->toDateString();
+        $fri = $mon->copy()->addDays(4)->toDateString();
+        $o1 = $this->add('hr_open_shifts', ['agency_id' => $agencyId, 'centre_id' => $centre, 'room_id' => $room, 'shift_date' => $tue, 'start_time' => '15:00:00',
+            'end_time' => '18:00:00', 'role' => 'support', 'cert_type' => null, 'note' => 'Late cover while Ava is at her ECE course', 'status' => 'open',
+            'created_by_id' => $elena ?: null, 'created_at' => $now, 'updated_at' => $now]);
+        $this->add('hr_open_shifts', ['agency_id' => $agencyId, 'centre_id' => $centre, 'room_id' => $room, 'shift_date' => $fri, 'start_time' => '15:00:00',
+            'end_time' => '18:00:00', 'role' => 'support', 'cert_type' => 'First_Aid', 'note' => 'Pizza and movie night for the school-age group', 'status' => 'open',
+            'created_by_id' => $elena ?: null, 'created_at' => $now, 'updated_at' => $now]);
+        if ($o1 && isset($byName['Lucas'])) {
+            $this->add('hr_open_shift_claims', ['agency_id' => $agencyId, 'open_shift_id' => $o1, 'user_id' => $byName['Lucas'], 'status' => 'pending',
+                'note' => 'Happy to stay on after my shift', 'created_at' => $now, 'updated_at' => $now]);
+        }
+    }
+
     private function hrRotaStory(int $agencyId, array $byName, array $centreOf, int $elena, string $now): void
     {
         if (! \Illuminate\Support\Facades\Schema::hasTable('hr_shift_swaps')) return;

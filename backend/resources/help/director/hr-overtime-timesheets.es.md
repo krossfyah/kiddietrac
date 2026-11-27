@@ -28,7 +28,7 @@ Nadie aprueba sus propias horas extra. También puedes **Registrar horas extra d
 
 **Reglas de horas extra y hojas de horas** (administradores) fija la tasa (1 = tiempo normal, 1,5 = tiempo y medio), si el personal registra sus propias horas, y si se pueden pagar, guardar o ambas.
 
-Las reglas de hojas de horas empiezan **desactivadas**: las horas son exactamente las del reloj. Puedes redondear los fichajes (5, 6, 10 o 15 minutos), contar desde el inicio o hasta el final del turno, y elegir avisar o pagar solo periodos aprobados. Las reglas cambian las horas pagadas, nunca el fichaje.
+Las reglas de hojas de horas empiezan **desactivadas**: las horas son exactamente las del reloj. Puedes redondear los fichajes (5, 6, 10 o 15 minutos), contar desde el inicio o hasta el final del turno, y elegir avisar o pagar solo periodos aprobados. Las reglas cambian las horas pagadas en todas partes: RR. HH. > Hojas de horas, la pantalla Hojas de horas, la nómina, los resúmenes e informes de nómina, la exportación de nómina, las horas de los recibos y las facturas de contratistas. Nunca el fichaje.
 
 ## Hojas de horas (directores y administradores)
 

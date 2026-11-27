@@ -307,6 +307,78 @@ final class HrTime
         return $out;
     }
 
+    /** @var array<int,bool> agency => a rounding / clip rule is on (per process) */
+    private static array $rulesMemo = [];
+
+    /** Does this agency have the HR add-on AND a rounding or clip-to-shift rule switched on? */
+    public static function rulesActive(?int $agencyId): bool
+    {
+        if (! $agencyId) return false;
+
+        return self::$rulesMemo[$agencyId] ??= self::on($agencyId) && self::rulesOn(self::settings($agencyId));
+    }
+
+    public static function forgetRules(): void
+    {
+        self::$rulesMemo = [];
+    }
+
+    /**
+     * THE ONE PAID-HOURS RULE FOR EVERY OUTPUT (2026-11-27). Staff > Timesheets, the payroll summary / period / report /
+     * CSV, the payroll export, payslip hours (Payroll::units) and payee-invoice hours all ask this, as the manual payroll
+     * run does (paidMinutes): the same punches give the same paid minutes everywhere.
+     *
+     * Returns null when NO agency these punches belong to (by their centre) has a rule on - the caller then keeps its own
+     * figures exactly as they were (byte-identical output). Otherwise [punch id => minutes] for every closed punch: the
+     * rules applied for an agency that has them, the raw clock minutes for one that does not.
+     * Punches need id, user_id, centre_id, punched_in_at, punched_out_at.
+     */
+    public static function paidMap($punches): ?array
+    {
+        $closed = collect($punches)->filter(fn ($p) => ! empty($p->punched_out_at));
+        if ($closed->isEmpty()) return null;
+        $centreAgency = DB::table('centres')->whereIn('id', $closed->pluck('centre_id')->filter()->unique()->values()->all() ?: [0])->pluck('agency_id', 'id')->all();
+        $byAgency = $closed->groupBy(fn ($p) => (int) ($centreAgency[(int) $p->centre_id] ?? 0));
+        if (! $byAgency->keys()->contains(fn ($a) => self::rulesActive((int) $a))) return null;
+        $out = [];
+        foreach ($byAgency as $aid => $rows) {
+            if (self::rulesActive((int) $aid)) {
+                $from = Carbon::parse((string) $rows->min('punched_in_at'))->toDateString();
+                $to = Carbon::parse((string) $rows->max('punched_in_at'))->toDateString();
+                $out += self::paidMinutes((int) $aid, $rows, $from, $to);
+            } else {
+                foreach ($rows as $p) {
+                    $out[(int) $p->id] = intdiv(max(0, Carbon::parse($p->punched_out_at)->getTimestamp() - Carbon::parse($p->punched_in_at)->getTimestamp()), 60);
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * paidMap() for an aggregate query: $base = the time_punches query (alias $alias) BEFORE its select / groupBy. null =
+     * no rule applies (keep the SQL sums); otherwise [key => paid minutes], key = the $keyCols values joined by "|".
+     */
+    public static function paidSumsFor($base, string $alias, array $keyCols = []): ?array
+    {
+        $sel = [$alias . '.id', $alias . '.user_id', $alias . '.centre_id', $alias . '.punched_in_at', $alias . '.punched_out_at'];
+        foreach (array_values($keyCols) as $i => $c) $sel[] = $c . ' as __k' . $i;
+        $rows = (clone $base)->select($sel)->get();
+        $map = self::paidMap($rows);
+        if ($map === null) return null;
+        $out = [];
+        foreach ($rows as $r) {
+            if (! isset($map[(int) $r->id])) continue;
+            $k = [];
+            foreach (array_keys(array_values($keyCols)) as $i) $k[] = (string) $r->{'__k' . $i};
+            $key = implode('|', $k);
+            $out[$key] = ($out[$key] ?? 0) + $map[(int) $r->id];
+        }
+
+        return $out;
+    }
+
     /** Approved leave days per person, [user_id => [Y-m-d => true]], for from..to. */
     private static function leaveDays(int $agencyId, array $userIds, string $from, string $to): array
     {

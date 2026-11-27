@@ -161,6 +161,7 @@ final class NotificationSounds
         'ClockReminderCommand' => 'staff', 'HeadcountRemindCommand' => 'headcount', 'TimeOffReminders' => 'staff',
         'BioReminders' => 'staff', 'EducatorRewardsController' => 'staff', 'PortalTipsCommand' => 'staff',
         'DashboardExtrasController' => 'staff', 'RecordRemindCommand' => 'staff',
+        'HrShiftNotices' => 'staff', 'HrOpenShifts' => 'staff',   // KiddieTrac HR shift notices + open shifts (2026-11-27)
     ];
 
     private static array $cache = [];

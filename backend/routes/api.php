@@ -2638,6 +2638,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post('/hr/overtime',                 [\App\Http\Controllers\Api\HrTimeController::class, 'store'])->middleware('throttle:30,1,hrovertime');
         Route::post('/hr/overtime/{id}/withdraw',   [\App\Http\Controllers\Api\HrTimeController::class, 'withdraw'])->whereNumber('id');
     });
+    // HR Phase 4, batch 3 (2026-11-27): the open-shift board + shift-notice settings (App\Support\HrOpenShifts, HrShiftNotices). Any staff
+    // role reaches the controller; it decides: staff = open shifts at their own centres + their own requests, directors = own centres, admins = agency.
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/hr/me/open-shifts',                [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'mine']);
+        Route::post('/hr/open-shifts/{id}/claim',        [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'claim'])->whereNumber('id')->middleware('throttle:30,1,hropenclaim');
+        Route::post('/hr/open-shifts/{id}/withdraw',     [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'withdraw'])->whereNumber('id');
+        Route::get ('/hr/open-shifts',                   [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'index']);
+        Route::post('/hr/open-shifts',                   [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'store'])->middleware('throttle:30,1,hropenpost');
+        Route::post('/hr/open-shifts/{id}/cancel',       [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'cancel'])->whereNumber('id');
+        Route::post('/hr/open-shifts/{id}/confirm',      [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'confirm'])->whereNumber('id');
+        Route::post('/hr/open-shift-claims/{id}/decline', [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'decline'])->whereNumber('id');
+        Route::get ('/hr/shift-notices/settings',        [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'noticeSettings']);
+        Route::put ('/hr/shift-notices/settings',        [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'saveNoticeSettings']);
+    });
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/hr/setup',                          [\App\Http\Controllers\Api\HrController::class, 'setup']);
         Route::put   ('/hr/settings',                       [\App\Http\Controllers\Api\HrController::class, 'saveSettings']);

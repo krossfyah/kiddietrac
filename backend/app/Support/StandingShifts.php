@@ -102,8 +102,11 @@ final class StandingShifts
 
         $removed = 0;
         if ($replace) {
-            $removed = DB::table('shifts')->where('user_id', $userId)->whereIn('room_id', $rooms)
-                ->where('status', 'scheduled')->whereBetween('starts_at', [$fromS, $toS])->delete();
+            $gone = DB::table('shifts')->where('user_id', $userId)->whereIn('room_id', $rooms)
+                ->where('status', 'scheduled')->whereBetween('starts_at', [$fromS, $toS])->get();
+            $removed = $gone->isEmpty() ? 0 : DB::table('shifts')->whereIn('id', $gone->pluck('id')->all())->delete();
+            // KiddieTrac HR: queued, netted against the rewrite below, ONE notice for the batch (App\Support\HrShiftNotices).
+            if ($removed) HrShiftNotices::removed((int) $centre->id, $gone->all(), 'standing');
         }
         if (! $pattern) {
             return ['created' => 0, 'removed' => $removed];
@@ -135,6 +138,7 @@ final class StandingShifts
         foreach (array_chunk($rows, 200) as $chunk) {
             DB::table('shifts')->insert($chunk);
         }
+        HrShiftNotices::added((int) $centre->id, $rows, 'standing');
 
         return ['created' => count($rows), 'removed' => $removed];
     }

@@ -28,7 +28,7 @@ Personne n'approuve ses propres heures. Vous pouvez aussi **Déclarer des heures
 
 **Règles des heures supplémentaires et des feuilles de temps** (administrateurs) fixe le taux (1 = taux normal, 1,5 = temps et demi), si le personnel déclare lui-même ses heures, et si elles peuvent être payées, mises en banque ou les deux.
 
-Les règles des feuilles de temps sont toutes **désactivées** au départ : les heures sont exactement celles du pointage. Vous pouvez arrondir les pointages (5, 6, 10 ou 15 minutes), compter à partir du début du quart ou jusqu'à la fin du quart, et choisir d'avertir ou de ne payer que les périodes approuvées. Les règles changent les heures payées, jamais le pointage lui-même.
+Les règles des feuilles de temps sont toutes **désactivées** au départ : les heures sont exactement celles du pointage. Vous pouvez arrondir les pointages (5, 6, 10 ou 15 minutes), compter à partir du début du quart ou jusqu'à la fin du quart, et choisir d'avertir ou de ne payer que les périodes approuvées. Les règles changent les heures payées partout où elles s'affichent : RH > Feuilles de temps, l'écran Feuilles de temps, la paie, les résumés et rapports de paie, l'export de paie, les heures des bulletins et les factures des contractuels. Jamais le pointage lui-même.
 
 ## Feuilles de temps (directeurs et administrateurs)
 

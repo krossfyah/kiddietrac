@@ -248,7 +248,7 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
           <div>
             <h2 style="font-size:24px;margin:0;">📊 Timesheets</h2>
-            <p style="color:#6B7280;font-size:14px;margin:4px 0 0;">${data.total_hours} hours across ${data.staff_count} staff · ${esc(data.from)} → ${esc(data.to)}</p>
+            <p style="color:#6B7280;font-size:14px;margin:4px 0 0;">${data.total_hours} hours across ${data.staff_count} staff · ${esc(data.from)} → ${esc(data.to)}</p>${data.rules_on ? `<p style="color:#0F766E;font-size:13px;margin:2px 0 0;">${data.total_paid_hours} hours paid after your agency's timesheet rules (rounding / clip to shift), the hours payroll uses.</p>` : ''}
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <select id="kt-ts-centre" style="padding:10px;border:1px solid #D1D5DB;border-radius:8px;font-size:14px;background:white;">
@@ -352,7 +352,7 @@
         <td style="${td()}white-space:nowrap;">${esc(r.clock_in_label || r.clock_in)}</td>
         <td style="${td()}white-space:nowrap;">${esc(r.clock_out_label || r.clock_out)}</td>
         <td style="${td()}">${r.break_min} min</td>
-        <td style="${td()}"><strong>${r.worked_hours}h</strong></td>
+        <td style="${td()}"><strong>${r.worked_hours}h</strong>${data.rules_on && r.id && !r.open ? `<div style="font-size:12px;color:#64748B;white-space:nowrap;">Paid ${r.paid_hours}h</div>` : ''}</td>
         ${tsActionCell(r, i)}
       </tr>`;
     }
@@ -649,9 +649,9 @@
   }
 
   function downloadCsv(data) {
-    const headers = ['Date','Staff','Staff ID','Email','Clock In','Clock Out','Break (min)','Worked (hrs)','Notes'];
+    const headers = ['Date','Staff','Staff ID','Email','Clock In','Clock Out','Break (min)','Worked (hrs)'].concat(data.rules_on ? ['Paid (hrs)'] : []).concat(['Notes']);
     const rows = [headers.join(',')].concat((data.rows || []).map(r =>
-      [r.date, r.staff_name, r.staff_ref || '', r.staff_email, r.clock_in, r.clock_out, r.break_min, r.worked_hours, (r.notes||'').replace(/,/g,';')].map(v => `"${v||''}"`).join(',')
+      [r.date, r.staff_name, r.staff_ref || '', r.staff_email, r.clock_in, r.clock_out, r.break_min, r.worked_hours].concat(data.rules_on ? [r.paid_hours] : []).concat([(r.notes||'').replace(/,/g,';')]).map(v => `"${v||''}"`).join(',')
     ));
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

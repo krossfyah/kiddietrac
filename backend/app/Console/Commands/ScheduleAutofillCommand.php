@@ -200,6 +200,9 @@ class ScheduleAutofillCommand extends Command
         foreach (array_chunk($rows, 200) as $chunk) {
             DB::table('shifts')->insert($chunk);
         }
+        /* KiddieTrac HR shift notices: queued only when the agency chose to hear about the nightly fill (it adds a day at a
+           time, so it would otherwise tell people every night); one notice per person per batch (App\Support\HrShiftNotices). */
+        \App\Support\HrShiftNotices::added((int) $centre->id, $rows, 'nightly');
 
         /* Move the horizon even when nothing was written -- a week that was entirely
            closures is still a week this job has considered, and re-considering it

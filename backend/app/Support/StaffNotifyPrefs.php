@@ -58,6 +58,9 @@ final class StaffNotifyPrefs
             ['portal_tip'], ['push'], ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'platform_admin']],
         'staff_cold_reach' => ['Outreach replies', 'Replies to sales outreach emails.',
             ['cold_reach'], ['push'], ['sales_rep', 'platform_admin']],
+        // KiddieTrac HR Phase 4 (2026-11-27, App\Support\HrShiftNotices / HrOpenShifts): your own shifts. On until you switch it off.
+        'staff_shifts' => ['My shifts', 'When your shifts are added, changed or cancelled (one notice per batch of changes), open shifts you can pick up, and the answer when you ask for one (KiddieTrac HR).',
+            ['shift'], ['push', 'email'], ['agency_admin', 'centre_director', 'educator', 'home_visitor', 'platform_admin']],
         'staff_hr' => ['Team HR reminders', 'Your team\'s overdue onboarding tasks and courses, reviews to write or sign, and new job applicants (KiddieTrac HR). Your own HR reminders always reach you.',
             ['hr'], ['push'], self::MGMT],
         // Escalated daily records (2026-11-26, App\Support\RecordEscalation): the copy managers get. The educator's own reminder always reaches them.

@@ -87,11 +87,15 @@ class Payroll
         }
         $startUtc = Carbon::parse($start . ' 00:00:00', self::TZ)->utc();
         $endUtc = Carbon::parse($end . ' 23:59:59', self::TZ)->utc();
-        $mins = (int) DB::table('time_punches')
+        $base = DB::table('time_punches')
             ->where('user_id', $userId)
             ->whereNotNull('punched_out_at')
-            ->whereBetween('punched_in_at', [$startUtc, $endUtc])
+            ->whereBetween('punched_in_at', [$startUtc, $endUtc]);
+        $mins = (int) (clone $base)
             ->sum(DB::raw('TIMESTAMPDIFF(MINUTE, punched_in_at, punched_out_at)'));
+        // KiddieTrac HR timesheet rules (rounding / clip to shift): the same paid minutes as the payroll run; null = none on.
+        $paid = \App\Support\HrTime::paidSumsFor($base, 'time_punches');
+        if ($paid !== null) $mins = (int) ($paid[''] ?? 0);
 
         return round($mins / 60, 2);
     }

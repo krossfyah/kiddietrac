@@ -34,7 +34,7 @@ The timesheet rules are all **off** to start, so hours are exactly what the cloc
 - **Count from the shift start** when someone clocks in early, and **count to the shift end** when someone clocks out late.
 - **Before payroll:** warn when a period is not approved, or only pay approved, locked periods.
 
-Rules change the paid hours on the timesheet and in the payroll run. They never change the clock-in record itself.
+Rules change the paid hours everywhere they show: HR > Timesheets, the Timesheets screen (a Paid figure beside the hours), the payroll run, payroll summaries and reports, the payroll export, payslip hours and contractor invoices. They never change the clock-in record itself.
 
 ## Timesheets (directors and admins)
 

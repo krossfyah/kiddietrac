@@ -4,6 +4,64 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "🙋",
+            "title": "Open shifts to pick up",
+            "body": "Directors post shifts nobody is on yet in HR > Open shifts, straight from a ratio shortfall if they like. Staff who are free and hold any certificate it needs ask for one in My HR, and a director confirms who takes it.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Quarts à pourvoir",
+            "body_fr": "Les directeurs publient des quarts sans personne dans RH > Quarts à pourvoir, même depuis un manque de ratio. Le personnel libre qui détient le certificat demandé en demande un dans Mes RH, et un directeur confirme qui le prend.",
+            "title_es": "Turnos abiertos para tomar",
+            "body_es": "Los directores publican turnos sin nadie en RR. HH. > Turnos abiertos, incluso desde una falta de ratio. El personal libre que tiene el certificado pedido solicita uno en Mis RR. HH., y un director confirma quién lo toma.",
+            "title_hi": "लेने के लिए खुली शिफ़्ट",
+            "body_hi": "निदेशक HR > खुली शिफ़्ट में ऐसी शिफ़्ट पोस्ट करते हैं जिन पर अभी कोई नहीं है, चाहें तो सीधे अनुपात की कमी से। जो स्टाफ़ खाली है और ज़रूरी प्रमाणपत्र रखता है, वह मेरा HR में एक माँगता है, और निदेशक पुष्टि करते हैं कि कौन लेगा।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🔔",
+            "title": "Shift change notices",
+            "body": "When your upcoming shifts are added, changed or cancelled you get one notice (bell, phone and email) listing every change, not one per shift. Switch it off in Settings > Notifications > My shifts.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Avis de changement de quart",
+            "body_fr": "Quand vos quarts à venir sont ajoutés, modifiés ou annulés, vous recevez un seul avis (cloche, téléphone et courriel) avec tous les changements, pas un par quart. Désactivez-le dans Paramètres > Notifications > Mes quarts.",
+            "title_es": "Avisos de cambios de turno",
+            "body_es": "Cuando se agregan, cambian o cancelan tus próximos turnos recibes un solo aviso (campana, teléfono y correo) con todos los cambios, no uno por turno. Desactívalo en Configuración > Notificaciones > Mis turnos.",
+            "title_hi": "शिफ़्ट बदलाव की सूचनाएँ",
+            "body_hi": "जब आपकी आने वाली शिफ़्ट जोड़ी, बदली या रद्द की जाती है, तो आपको सभी बदलावों वाली एक सूचना (घंटी, फ़ोन और ईमेल) मिलती है, हर शिफ़्ट पर एक नहीं। इसे सेटिंग्स > सूचनाएँ > मेरी शिफ़्ट में बंद करें।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🧮",
+            "title": "Timesheet rules everywhere",
+            "body": "When your agency rounds clock-ins or counts from the shift start, the same paid hours now show on the Timesheets screen, payroll summaries and reports, the payroll export, payslip hours and contractor invoices. With the rules off nothing changes.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Règles des feuilles de temps partout",
+            "body_fr": "Quand votre agence arrondit les pointages ou compte à partir du début du quart, les mêmes heures payées s'affichent maintenant sur l'écran Feuilles de temps, les résumés et rapports de paie, l'export de paie, les heures des bulletins et les factures des contractuels. Règles désactivées, rien ne change.",
+            "title_es": "Reglas de hojas de horas en todas partes",
+            "body_es": "Cuando tu agencia redondea los fichajes o cuenta desde el inicio del turno, las mismas horas pagadas aparecen ahora en la pantalla Hojas de horas, los resúmenes e informes de nómina, la exportación de nómina, las horas de los recibos y las facturas de contratistas. Con las reglas desactivadas no cambia nada.",
+            "title_hi": "टाइमशीट नियम हर जगह",
+            "body_hi": "जब आपकी एजेंसी क्लॉक-इन को गोल करती है या शिफ़्ट की शुरुआत से गिनती है, तो वही भुगतान वाले घंटे अब टाइमशीट स्क्रीन, पेरोल सारांश और रिपोर्ट, पेरोल एक्सपोर्ट, वेतन पर्ची के घंटों और ठेकेदार इनवॉइस में दिखते हैं। नियम बंद होने पर कुछ नहीं बदलता।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "⏱️",
             "title": "Overtime and time in lieu",
             "body": "Log extra hours in My HR > Overtime and time in lieu. Your director approves them as pay on your next payslip or banks them as time in lieu in your Overtime bank, which you book like any time off.",

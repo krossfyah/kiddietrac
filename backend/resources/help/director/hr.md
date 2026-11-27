@@ -35,3 +35,7 @@ Each request now shows its leave type, how much it uses and the balance. Approvi
 ## Overtime and timesheets
 
 **HR > Overtime** approves extra hours as pay or banks them as time in lieu. **HR > Timesheets** compares scheduled and worked hours and approves and locks a period before payroll. See **HR: overtime, time in lieu and timesheets**.
+
+## Open shifts
+
+**HR > Open shifts** posts shifts nobody is on yet (also straight from a ratio shortfall); staff who can work them ask in My HR and you confirm who takes each one. Staff get one notice per batch of changes to their shifts. See **HR: open shifts and shift notices**.

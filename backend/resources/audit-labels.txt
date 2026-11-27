@@ -1356,6 +1356,13 @@ post hr/overtime/{id}/decide | Approved overtime as pay or time in lieu, or decl
 put hr/time/settings | Changed the overtime and timesheet rules
 post hr/timesheets/approve | Approved and locked a centre's timesheet for a period
 post hr/timesheets/locks/{id}/unlock | Unlocked an approved timesheet
+post hr/open-shifts | Posted open shifts for staff to ask for
+post hr/open-shifts/{id}/cancel | Took an open shift off the board
+post hr/open-shifts/{id}/confirm | Confirmed who takes an open shift (it went on the rota)
+post hr/open-shift-claims/{id}/decline | Declined a request for an open shift
+post hr/open-shifts/{id}/claim | Asked for an open shift
+post hr/open-shifts/{id}/withdraw | Withdrew a request for an open shift
+put hr/shift-notices/settings | Changed the shift notice settings
 put hr/clock/centres/{id}/fence | Set or removed a centre's clock-in area (geofence)
 put hr/letters/templates/{id} | Edited an HR letter template
 post hr/letters/templates/{id}/review | Marked an HR letter template reviewed by the agency's lawyer (or cleared it)

@@ -17,6 +17,8 @@
    Phase 4 batch 2 (2026-11-27): HR > Overtime (approve as pay or bank as time in lieu), HR > Timesheets (scheduled vs
    actual, paid hours after the agency's rules, missing-punch flags, approve + lock; admins unlock) and My HR "Overtime and
    time in lieu" (log extra hours, the Overtime bank balance).
+   Phase 4 batch 3 (2026-11-27): HR > Open shifts (post shifts nobody is on yet, ratio shortfalls, confirm who takes one,
+   shift-notice settings) and My HR "Open shifts you can pick up". Rota ratio warnings can be posted as open shifts.
    ═══════════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -539,9 +541,10 @@
         + (w.conflict ? '<div style="color:#B45309;font-size:12px;">⚠️ ' + esc(w.conflict) + '</div>' : '') + '</td><td>' + swPill(w.status) + '</td>'
         + '<td style="text-align:center;"><button type="button" data-ro="swap" data-id="' + w.id + '">View change</button></td></tr>';
     }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">No shift giveaways or swaps waiting.</div>') + '</div>';
-    h += '<div class="hrt-sec">Ratio warnings</div><div class="kt-card">' + (gaps.length ? '<table data-hrs="gaps"><thead><tr><th>Day</th><th>Room</th><th>Time</th><th>Children expected</th><th>Educators planned</th><th>Needed</th></tr></thead><tbody>' + gaps.map(function (g) {
+    h += '<div class="hrt-sec">Ratio warnings</div><div class="kt-card">' + (gaps.length ? '<table data-hrs="gaps"><thead><tr><th>Day</th><th>Room</th><th>Time</th><th>Children expected</th><th>Educators planned</th><th>Needed</th><th></th></tr></thead><tbody>' + gaps.map(function (g, gi) {
       return '<tr style="background:#FFFBEB;"><td style="white-space:nowrap;" data-no-i18n>' + esc(wday(g.date)) + '</td><td data-no-i18n>' + esc(g.room) + '</td><td style="white-space:nowrap;">' + span({ start: g.from, end: g.to }) + '</td>'
-        + '<td data-no-i18n>' + g.children + '</td><td data-no-i18n>' + g.planned + '</td><td data-no-i18n><b style="color:#B45309;">' + g.required + '</b></td></tr>';
+        + '<td data-no-i18n>' + g.children + '</td><td data-no-i18n>' + g.planned + '</td><td data-no-i18n><b style="color:#B45309;">' + g.required + '</b></td>'
+        + '<td style="text-align:center;">' + (g.date >= (d.today || today()) ? '<button type="button" data-ro="post" data-i="' + gi + '">Post an open shift</button>' : '') + '</td></tr>';
     }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">Every room has enough educators planned for the children expected.</div>') + '</div>';
     h += '<div class="hrt-sec">Shifts</div><div class="kt-card">' + (sh.length ? '<table data-hrs="shifts"><thead><tr><th>Person</th><th>Day</th><th>Time</th><th>Room</th><th style="text-align:right;">Hours</th>' + (pay ? '<th style="text-align:right;">Cost</th>' : '') + '<th>Availability</th></tr></thead><tbody>' + sh.map(function (s) {
       return '<tr' + (s.conflict ? ' style="background:#FFFBEB;"' : '') + '><td><b data-no-i18n>' + esc(s.person) + '</b></td><td style="white-space:nowrap;" data-no-i18n>' + esc(wday(s.date)) + '</td><td style="white-space:nowrap;">' + span(s) + '</td>'
@@ -562,6 +565,10 @@
         else if (a === 'next') { RS.week = addDays(d.week, 7); go(); }
         else if (a === 'now') { RS.week = null; go(); }
         else if (a === 'swap') { var w = sw.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (w) openSwapDecision(w, d.me, go); }
+        else if (a === 'post') {   // Phase 4 batch 3: an open shift for this ratio shortfall (HR > Open shifts)
+          var g = gaps[+b.getAttribute('data-i')];
+          if (g) Api.get('/hr/open-shifts?centre_id=' + d.centre_id + '&week=' + d.week).then(function (bd) { openPostOpen(bd, { room_id: g.room_id, date: g.date, start: g.from, end: g.to }, go); }, function (e) { toast('⚠️', 'Could not open it', errMsg(e), '#DC2626'); });
+        }
       });
     });
     drawClockWatch(host);   // item 11: clock-ins away from the centre, overtime, the admin's clock-in rules
@@ -1214,13 +1221,194 @@
     } }] });
   }
 
+  /* ── Phase 4 batch 3 (2026-11-27): HR > Open shifts (post, confirm who takes it) and My HR "Open shifts you can pick up".
+     The board is ratio-aware: an open shift that covers a ratio shortfall in its room says so, and the week's shortfalls
+     can be posted straight from the list. Shift notices (one per person per batch of rota changes) are set here too. */
+  var OPS = { centre: null, week: null };
+  var OP_ST = { open: ['#FEF3C7', '#92400E', 'Open'], filled: ['#DCFCE7', '#166534', 'Filled'], cancelled: ['#F1F5F9', '#475569', 'Taken off'] };
+  var CL_PILL = { pending: ['#E0F2FE', '#075985', 'Waiting'], approved: ['#DCFCE7', '#166534', 'Confirmed'], declined: ['#FEE2E2', '#991B1B', 'Not this time'], withdrawn: ['#F1F5F9', '#475569', 'Withdrawn'] };
+  function opPill(s) { var p = OP_ST[s] || OP_ST.open; return pill(p[0], p[1], p[2]); }
+  function clPill(s) { var p = CL_PILL[s] || CL_PILL.pending; return pill(p[0], p[1], p[2]); }
+  function roleTxt(r) { return { lead: 'Lead', support: 'Support', floater: 'Floater' }[r] || ''; }
+
+  async function drawOpenShifts(host) {
+    chipCss();
+    var q = [];
+    if (OPS.centre) q.push('centre_id=' + OPS.centre);
+    if (OPS.week) q.push('week=' + OPS.week);
+    var d;
+    try { d = await Api.get('/hr/open-shifts' + (q.length ? '?' + q.join('&') : '')); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
+    if (!host.isConnected) return;
+    OPS.centre = d.centre_id; OPS.week = d.week;
+    var rows = d.open_shifts || [], gaps = d.ratio_gaps || [];
+    var waiting = rows.filter(function (r) { return r.status === 'open' && (r.claims || []).some(function (c) { return c.status === 'pending'; }); }).length;
+    var h = '<div class="hr-note"><span>Shifts nobody is on yet. Staff of the centre who are free, not already working then and hold any certificate you ask for see them in My HR and ask for one; a director or admin confirms who takes it and it goes on the rota. Nobody confirms their own.</span></div>'
+      + '<div class="hrt-chips">'
+      + ((d.centres || []).length > 1 ? '<select class="hr-i" data-op="centre" style="height:30px;max-width:220px;">' + d.centres.map(function (c) { return '<option value="' + c.id + '"' + (c.id === d.centre_id ? ' selected' : '') + ' data-no-i18n>' + esc(c.name) + '</option>'; }).join('') + '</select>' : '')
+      + '<button type="button" class="hr-b" data-op="prev" aria-label="Previous week">‹</button><b data-no-i18n style="font-size:13px;white-space:nowrap;">' + esc(wday(d.week) + ' – ' + wday(d.week_end)) + '</b>'
+      + '<button type="button" class="hr-b" data-op="next" aria-label="Next week">›</button><button type="button" class="hr-b" data-op="now">This week</button>'
+      + '<span style="flex:1"></span>'
+      + '<span class="hrt-stat' + (waiting ? ' warn' : '') + '">Waiting for you <span class="n">' + waiting + '</span></span>'
+      + '<span class="hrt-stat' + (gaps.length ? ' warn' : '') + '">Ratio shortfalls <span class="n">' + gaps.length + '</span></span>'
+      + '<button type="button" class="hr-b p" data-op="post" data-kt-iconized="1">Post an open shift</button>'
+      + '<button type="button" class="hr-b" data-op="notices">Shift notices</button></div>';
+    h += '<div class="hrt-sec">Open shifts</div><div class="kt-card">' + (rows.length ? '<table data-hrs="openshifts"><thead><tr><th>Day</th><th>Time</th><th>Room</th><th>Needs</th><th>Asked</th><th>Status</th><th></th></tr></thead><tbody>' + rows.map(function (r) {
+      var pend = (r.claims || []).filter(function (c) { return c.status === 'pending'; }).length;
+      return '<tr' + (r.status === 'open' && pend ? ' style="background:#F0F9FF;"' : '') + '><td style="white-space:nowrap;" data-no-i18n><b>' + esc(wday(r.date)) + '</b></td><td style="white-space:nowrap;">' + span(r) + '</td>'
+        + '<td><span data-no-i18n>' + esc(r.room) + '</span>' + (r.covers ? '<div style="color:#B45309;font-size:12px;">⚠️ <span>Covers a ratio shortfall</span></div>' : '') + '</td>'
+        + '<td>' + esc(roleTxt(r.role)) + (r.cert ? '<div class="hr-sub" data-no-i18n>' + esc(r.cert) + '</div>' : '') + '</td>'
+        + '<td>' + (r.status === 'filled' ? '<span data-no-i18n>' + esc(r.filled_by || '') + '</span>' : (pend ? '<b data-no-i18n>' + pend + '</b> <span>waiting</span>' : '<span class="hr-sub">Nobody yet</span>') + (r.status === 'open' && r.eligible != null ? '<div class="hr-sub"><span data-no-i18n>' + r.eligible + '</span> <span>can take it</span></div>' : '')) + '</td>'
+        + '<td>' + opPill(r.status) + '</td><td style="text-align:center;"><button type="button" data-op="open" data-id="' + r.id + '">View open shift</button></td></tr>';
+    }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">No open shifts this week.' + (d.next_open ? ' <button type="button" class="hr-b" data-op="next-open" data-kt-iconized="1" style="margin-left:6px;">Next one: <span data-no-i18n>' + esc(wday(d.next_open)) + '</span> ›</button>' : '') + '</div>') + '</div>';
+    h += '<div class="hrt-sec">Ratio shortfalls this week</div><div class="kt-card">' + (gaps.length ? '<table data-hrs="opgaps"><thead><tr><th>Day</th><th>Room</th><th>Time</th><th>Children expected</th><th>Educators planned</th><th>Needed</th><th></th></tr></thead><tbody>' + gaps.map(function (g, i) {
+      return '<tr style="background:#FFFBEB;"><td style="white-space:nowrap;" data-no-i18n>' + esc(wday(g.date)) + '</td><td data-no-i18n>' + esc(g.room) + '</td><td style="white-space:nowrap;">' + span({ start: g.from, end: g.to }) + '</td>'
+        + '<td data-no-i18n>' + g.children + '</td><td data-no-i18n>' + g.planned + '</td><td data-no-i18n><b style="color:#B45309;">' + g.required + '</b>' + (g.posted ? '<div class="hr-sub">Open shift posted</div>' : '') + '</td>'
+        + '<td style="text-align:center;"><button type="button" data-op="gap" data-i="' + i + '">Post an open shift</button></td></tr>';
+    }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">Every room has enough educators planned for the children expected.</div>') + '</div>';
+    host.innerHTML = h;
+    var go = function () { if (host.isConnected) drawOpenShifts(host); };
+    host.querySelectorAll('[data-op]').forEach(function (b) {
+      var a = b.getAttribute('data-op');
+      if (a === 'centre') { b.addEventListener('change', function () { OPS.centre = +b.value; go(); }); return; }
+      b.addEventListener('click', function () {
+        if (a === 'next-open') { OPS.week = d.next_open; go(); }
+        else if (a === 'prev') { OPS.week = addDays(d.week, -7); go(); }
+        else if (a === 'next') { OPS.week = addDays(d.week, 7); go(); }
+        else if (a === 'now') { OPS.week = null; go(); }
+        else if (a === 'post') openPostOpen(d, {}, go);
+        else if (a === 'gap') { var g = gaps[+b.getAttribute('data-i')]; if (g) openPostOpen(d, { room_id: g.room_id, date: g.date, start: g.from, end: g.to }, go); }
+        else if (a === 'notices') openNoticeSettings(d, go);
+        else if (a === 'open') { var r = rows.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (r) openOpenShift(r, go); }
+      });
+    });
+    var m = /[?&]open=(\d+)/.exec(location.hash || '');
+    if (m) { var r0 = rows.filter(function (x) { return x.id === +m[1]; })[0]; if (r0) openOpenShift(r0, go); }
+  }
+
+  function openPostOpen(d, pre, done) {
+    var rooms = {}; (d.rooms || []).forEach(function (r) { rooms[r.id] = r.name; });
+    var certs = d.certs || {};
+    var date0 = pre.date || (addDays(d.today, 1) > d.week ? addDays(d.today, 1) : d.week);
+    var box = el('<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+      + field('Room', select('room_id', opts(rooms, pre.room_id || ((d.rooms || [])[0] || {}).id))) + field('Role', select('role', opts(d.roles || {}, 'support')))
+      + field('Day', input('date', date0, 'date')) + field('Repeat on the next days (optional)', select('repeat', opts({ 0: 'Just this day', 1: '+1 day', 2: '+2 days', 3: '+3 days', 4: '+4 days', 6: '+6 days', 13: '+13 days' }, '0')))
+      + field('From', input('start', pre.start || d.open_time || '07:00', 'time')) + field('To', input('end', pre.end || d.close_time || '15:00', 'time'))
+      + field('Must hold (optional)', select('cert_type', opts(certs, '', 'No certificate needed')), true)
+      + field('Note for staff (optional)', input('note', ''), true) + '</div>'
+      + '<div class="hr-sub" style="margin-top:8px;">Everyone at the centre who can take it is told once (bell, phone). Days the centre is closed are your call: check the calendar first.</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    modal({ title: 'Post an open shift', body: box, actions: [{ label: 'Cancel' }, { label: 'Post it', primary: true, busyLabel: 'Posting…', handler: function () {
+      var dt = val(box, 'date'), n = +(val(box, 'repeat') || 0), s = (val(box, 'start') || '').slice(0, 5), e = (val(box, 'end') || '').slice(0, 5);
+      if (!dt) { msg(box, 'Choose the day.'); return false; }
+      if (!s || !e || s >= e) { msg(box, 'The shift ends after it starts.'); return false; }
+      var dates = []; for (var i = 0; i <= n; i++) dates.push(addDays(dt, i));
+      return Api.post('/hr/open-shifts', { centre_id: d.centre_id, room_id: +val(box, 'room_id'), dates: dates, start: s, end: e, role: val(box, 'role'), cert_type: val(box, 'cert_type'), note: val(box, 'note') })
+        .then(function (r) { saved(dates.length === 1 ? 'Open shift posted.' : dates.length + ' open shifts posted.'); done(); }, function (er) { msg(box, errMsg(er)); return false; });
+    } }] });
+  }
+
+  function openOpenShift(r, done) {
+    var kv = function (k, v) { return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #F1F5F9;font-size:13.5px;"><span style="color:#64748B;">' + esc(k) + '</span><b style="text-align:right;">' + v + '</b></div>'; };
+    var h = kv('Day', '<span data-no-i18n>' + esc(wday(r.date)) + '</span>') + kv('Time', span(r)) + kv('Room', '<span data-no-i18n>' + esc(r.room) + '</span>')
+      + kv('Role', esc(roleTxt(r.role))) + (r.cert ? kv('Must hold', '<span data-no-i18n>' + esc(r.cert) + '</span>') : '') + kv('Status', opPill(r.status));
+    if (r.note) h += kv('Note', '<span data-no-i18n>' + esc(r.note) + '</span>');
+    if (r.covers) h += '<div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:#FFFBEB;color:#92400E;font-size:13px;">⚠️ <span>Covers a ratio shortfall:</span> <span data-no-i18n>' + esc(r.covers.planned + ' / ' + r.covers.required) + '</span> <span>educators planned for the children expected.</span></div>';
+    var cl = r.claims || [];
+    h += '<div style="margin:14px 0 6px;font-weight:800;font-size:13px;">Who asked</div>';
+    h += cl.length ? '<div class="hrt-task-list">' + cl.map(function (c) {
+      var can = r.status === 'open' && c.status === 'pending' && !c.mine;
+      return '<div style="display:flex;gap:8px;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #F1F5F9;"><div><b data-no-i18n>' + esc(c.person) + '</b> ' + clPill(c.status)
+        + (c.note ? '<div class="hr-sub" data-no-i18n>' + esc(c.note) + '</div>' : '') + (c.problem ? '<div style="color:#B45309;font-size:12px;">⚠️ ' + esc(c.problem) + '</div>' : '') + (c.mine && c.status === 'pending' ? '<div class="hr-sub">Your own request: another director or an admin confirms it.</div>' : '') + '</div>'
+        + (can ? '<div style="display:flex;gap:6px;flex:0 0 auto;"><button type="button" class="hr-b" style="height:28px;" data-cl-no="' + c.id + '">Decline</button>' + (c.problem ? '' : '<button type="button" class="hr-b p" style="height:28px;" data-cl-yes="' + c.id + '">Confirm</button>') + '</div>' : '') + '</div>';
+    }).join('') + '</div>' : '<div class="hr-sub">Nobody has asked yet.</div>';
+    h += '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>';
+    var box = el(h);
+    box.querySelectorAll('[data-cl-yes]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        Api.post('/hr/open-shifts/' + r.id + '/confirm', { claim_id: +b.getAttribute('data-cl-yes') }).then(function () { saved('Confirmed. The shift is on the rota.'); closeModal(); done(); }, function (e) { b.disabled = false; msg(box, errMsg(e)); });
+      });
+    });
+    box.querySelectorAll('[data-cl-no]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        b.disabled = true;
+        Api.post('/hr/open-shift-claims/' + b.getAttribute('data-cl-no') + '/decline', {}).then(function () { saved('Request declined.'); closeModal(); done(); }, function (e) { b.disabled = false; msg(box, errMsg(e)); });
+      });
+    });
+    var acts = [{ label: 'Close' }];
+    if (r.status === 'open') acts.push({ label: 'Take it off the board', handler: function () {
+      return Api.post('/hr/open-shifts/' + r.id + '/cancel', {}).then(function () { saved('Taken off the board.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } });
+    modal({ title: 'Open shift: ' + wday(r.date), body: box, actions: acts });
+  }
+
+  function openNoticeSettings(d, done) {
+    var s = d.notice_settings || {}, edit = !!d.can_manage;
+    var q = {}; (d.quiet_choices || [5]).forEach(function (n) { q[n] = n + ' minutes'; });
+    var box = el('<div class="hr-sub" style="margin-bottom:10px;">Staff hear when their shifts are added, changed or cancelled: one notice (bell, phone and email) per person for each batch of changes, sent once the rota has been quiet for a few minutes. Each person can switch it off in Settings &gt; Notifications &gt; My shifts.</div>'
+      + '<div style="display:grid;gap:10px;">' + check('enabled', s.enabled, 'Send shift notices') + check('email', s.email, 'Also by email')
+      + check('nightly_fill', s.nightly_fill, 'Include shifts the nightly rota fill adds (it adds a day at a time)')
+      + field('Wait for the rota to be quiet for', select('quiet_minutes', opts(q, String(s.quiet_minutes || 5)))) + '</div>'
+      + (edit ? '' : '<div class="hr-sub" style="margin-top:8px;">Only an agency admin can change these.</div>') + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    if (!edit) box.querySelectorAll('[data-f]').forEach(function (i) { i.disabled = true; });
+    var acts = [{ label: edit ? 'Cancel' : 'Close' }];
+    if (edit) acts.push({ label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
+      return Api.put('/hr/shift-notices/settings', { enabled: !!val(box, 'enabled'), email: !!val(box, 'email'), nightly_fill: !!val(box, 'nightly_fill'), quiet_minutes: +val(box, 'quiet_minutes') })
+        .then(function () { saved('Shift notice settings saved.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } });
+    modal({ title: 'Shift notices', body: box, actions: acts });
+  }
+
+  async function mineOpen(host) {
+    chipCss();
+    var wrap = document.createElement('div'); wrap.setAttribute('data-hrs-open', '1'); host.appendChild(wrap);
+    var d;
+    try { d = await Api.get('/hr/me/open-shifts'); } catch (e) { wrap.innerHTML = ''; return; }
+    if (!wrap.isConnected) return;
+    var rows = d.open_shifts || [], hist = d.history || [];
+    if (!rows.length && !hist.length) { wrap.innerHTML = ''; return; }
+    var reload = function () { if (wrap.isConnected) { wrap.remove(); mineOpen(host); } };
+    var h = '<div class="hrt-sec">Open shifts you can pick up</div><div class="kt-card">' + (rows.length ? '<table data-hrs="myopen"><thead><tr><th>Day</th><th>Time</th><th>Where</th><th>Status</th><th></th></tr></thead><tbody>' + rows.map(function (r) {
+      var st = r.my_claim ? clPill(r.my_claim.status) : (r.problem ? '<span style="color:#B45309;font-size:12px;">' + esc(r.problem) + '</span>' : pill('#FEF3C7', '#92400E', 'Open'));
+      return '<tr><td style="white-space:nowrap;" data-no-i18n><b>' + esc(wday(r.date)) + '</b></td><td style="white-space:nowrap;">' + span(r) + '</td><td><span data-no-i18n>' + esc(r.room) + '</span>'
+        + '<div class="hr-sub" data-no-i18n>' + esc(r.centre) + '</div></td><td>' + st + '</td><td style="text-align:center;"><button type="button" data-mop="open" data-id="' + r.id + '">View open shift</button></td></tr>';
+    }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">No open shifts right now.</div>') + '</div>';
+    if (hist.length) h += '<div class="hr-sub" style="margin-top:6px;">' + hist.map(function (x) { return '<span data-no-i18n>' + esc(wday(x.date)) + '</span> ' + span(x) + ': ' + clPill(x.claim_status); }).join(' · ') + '</div>';
+    wrap.innerHTML = h;
+    wrap.querySelectorAll('[data-mop]').forEach(function (b) {
+      b.addEventListener('click', function () { var r = rows.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (r) openMyOpen(r, reload); });
+    });
+  }
+
+  function openMyOpen(r, done) {
+    var kv = function (k, v) { return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #F1F5F9;font-size:13.5px;"><span style="color:#64748B;">' + esc(k) + '</span><b style="text-align:right;">' + v + '</b></div>'; };
+    var c = r.my_claim;
+    var h = kv('Day', '<span data-no-i18n>' + esc(wday(r.date)) + '</span>') + kv('Time', span(r)) + kv('Where', '<span data-no-i18n>' + esc(r.room + ', ' + r.centre) + '</span>')
+      + kv('Role', esc(roleTxt(r.role))) + (r.cert ? kv('Must hold', '<span data-no-i18n>' + esc(r.cert) + '</span>') : '') + (r.note ? kv('Note', '<span data-no-i18n>' + esc(r.note) + '</span>') : '')
+      + (c ? kv('Your request', clPill(c.status)) : '');
+    if (r.problem && !c) h += '<div style="margin-top:10px;padding:8px 10px;border-radius:8px;background:#FFFBEB;color:#92400E;font-size:13px;">' + esc(r.problem) + '.</div>';
+    if (!c && !r.problem) h += '<div style="margin-top:10px;">' + field('Note for your director (optional)', input('note', ''), true) + '</div><div class="hr-sub" style="margin-top:6px;">A director confirms who takes it. You are told either way.</div>';
+    h += '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>';
+    var box = el(h);
+    var acts = [{ label: 'Close' }];
+    if (!c && !r.problem) acts.push({ label: 'Ask for this shift', primary: true, busyLabel: 'Sending…', handler: function () {
+      return Api.post('/hr/open-shifts/' + r.id + '/claim', { note: val(box, 'note') }).then(function () { saved('Asked. A director confirms who takes it.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } });
+    if (c && c.status === 'pending') acts.push({ label: 'Withdraw my request', handler: function () {
+      return Api.post('/hr/open-shifts/' + r.id + '/withdraw', {}).then(function () { saved('Request withdrawn.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } });
+    if (c && c.status === 'withdrawn' && !r.problem) acts.push({ label: 'Ask again', primary: true, handler: function () {
+      return Api.post('/hr/open-shifts/' + r.id + '/claim', {}).then(function () { saved('Asked. A director confirms who takes it.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } });
+    modal({ title: 'Open shift: ' + wday(r.date), body: box, actions: acts });
+  }
+
   window.KTHrSafety = {
-    tabs: [['injuries', 'Injuries'], ['claims', 'Claims'], ['overtime', 'Overtime'], ['timesheets', 'Timesheets'], ['rota', 'Rota'], ['letters', 'Letters']],
-    has: function (tab) { return ['injuries', 'claims', 'overtime', 'timesheets', 'rota', 'letters'].indexOf(tab) >= 0; },
+    tabs: [['injuries', 'Injuries'], ['claims', 'Claims'], ['overtime', 'Overtime'], ['timesheets', 'Timesheets'], ['rota', 'Rota'], ['openshifts', 'Open shifts'], ['letters', 'Letters']],
+    has: function (tab) { return ['injuries', 'claims', 'overtime', 'timesheets', 'rota', 'openshifts', 'letters'].indexOf(tab) >= 0; },
     draw: function (tab, host) {
       if (tab === 'injuries') return drawInjuries(host); if (tab === 'claims') return drawClaims(host); if (tab === 'rota') return drawRota(host); if (tab === 'letters') return drawLetters(host);
-      if (tab === 'overtime') return drawOvertime(host); if (tab === 'timesheets') return drawTimesheets(host);
+      if (tab === 'overtime') return drawOvertime(host); if (tab === 'timesheets') return drawTimesheets(host); if (tab === 'openshifts') return drawOpenShifts(host);
     },
-    mine: function (host) { mine(host); mineClaims(host); mineOvertime(host); mineRota(host); }
+    mine: function (host) { mine(host); mineClaims(host); mineOvertime(host); mineRota(host); mineOpen(host); }
   };
 })(window);

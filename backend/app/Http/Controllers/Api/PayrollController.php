@@ -23,14 +23,15 @@ final class PayrollController extends Controller
         $from = Carbon::parse($request->query('from', \App\Support\AgencyTime::todayDate()->startOfMonth()->toDateString()))->startOfDay();
         $to = Carbon::parse($request->query('to', \App\Support\AgencyTime::todayDate()->endOfMonth()->toDateString()))->endOfDay();
 
-        $rows = DB::table('time_punches as tp')
+        $base = DB::table('time_punches as tp')
             ->join('users as u', 'u.id', '=', 'tp.user_id')
             ->leftJoin('centres as c', 'c.id', '=', 'tp.centre_id')
             ->where('c.agency_id', $agencyId)
             // The caller's centres: a centre director's payroll is their own staff's (2026-10-05).
             ->whereIn('c.id', \App\Support\Visibility::centreIds((int) $agencyId, $request->user()) ?: [0])
             ->whereNotNull('tp.punched_out_at')
-            ->whereBetween('tp.punched_in_at', [$from, $to])
+            ->whereBetween('tp.punched_in_at', [$from, $to]);
+        $rows = (clone $base)
             ->select(
                 'tp.user_id', DB::raw("CONCAT(u.first_name, ' ', u.last_name) as user_name"), 'u.email as user_email',
                 'c.id as centre_id', 'c.name as centre_name',
@@ -41,8 +42,12 @@ final class PayrollController extends Controller
             ->orderBy('u.first_name')
             ->get();
 
-        $rows->transform(function ($r) {
+        /* KiddieTrac HR timesheet rules (rounding / clip to shift): the same paid minutes as HR > Timesheets and the payroll
+           run (App\Support\HrTime::paidMap). null = no rule on: the figures above, unchanged. */
+        $paid = \App\Support\HrTime::paidSumsFor($base, 'tp', ['tp.user_id', 'c.id']);
+        $rows->transform(function ($r) use ($paid) {
             $mins = (int) $r->total_minutes;
+            if ($paid !== null) $mins = (int) ($paid[$r->user_id . '|' . $r->centre_id] ?? 0);
             $r->total_hours = round($mins / 60, 2);
             $r->total_minutes = $mins;
             return $r;
@@ -476,15 +481,18 @@ final class PayrollController extends Controller
         $clock = [];
         if ($ids) {
             $from = Carbon::parse($start)->startOfDay(); $to = Carbon::parse($end)->endOfDay();
-            foreach (DB::table('time_punches as tp')->join('centres as c', 'c.id', '=', 'tp.centre_id')
+            $base = DB::table('time_punches as tp')->join('centres as c', 'c.id', '=', 'tp.centre_id')
                 ->where('c.agency_id', $agencyId)
                 ->whereIn('c.id', \App\Support\Visibility::centreIds($agencyId, $request->user()) ?: [0])
                 ->whereIn('tp.user_id', $ids)->whereNotNull('tp.punched_out_at')
-                ->whereBetween('tp.punched_in_at', [$from, $to])
+                ->whereBetween('tp.punched_in_at', [$from, $to]);
+            $paid = \App\Support\HrTime::paidSumsFor($base, 'tp', ['tp.user_id']);   // HR timesheet rules (null = none on)
+            foreach ((clone $base)
                 ->groupBy('tp.user_id')
                 ->selectRaw('tp.user_id, SUM(TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at)) mins, COUNT(*) punches')
                 ->get() as $r) {
-                $clock[(int) $r->user_id] = ['hours' => round(((int) $r->mins) / 60, 2), 'punches' => (int) $r->punches];
+                $m = $paid !== null ? (int) ($paid[(string) $r->user_id] ?? 0) : (int) $r->mins;
+                $clock[(int) $r->user_id] = ['hours' => round($m / 60, 2), 'punches' => (int) $r->punches];
             }
         }
 
@@ -586,13 +594,16 @@ final class PayrollController extends Controller
         foreach ($docs->filter(fn ($d) => $d->user_id && $d->period_start && $d->period_end)->groupBy(fn ($d) => $d->period_start . '|' . $d->period_end) as $k => $grp) {
             [$ps, $pe] = explode('|', $k);
             $ids = $grp->pluck('user_id')->map(fn ($v) => (int) $v)->unique()->values()->all();
-            foreach (DB::table('time_punches as tp')->join('centres as c', 'c.id', '=', 'tp.centre_id')
+            $base = DB::table('time_punches as tp')->join('centres as c', 'c.id', '=', 'tp.centre_id')
                 ->where('c.agency_id', $agencyId)->whereIn('c.id', $mine)->whereIn('tp.user_id', $ids)
                 ->whereNotNull('tp.punched_out_at')
-                ->whereBetween('tp.punched_in_at', [Carbon::parse($ps)->startOfDay(), Carbon::parse($pe)->endOfDay()])
+                ->whereBetween('tp.punched_in_at', [Carbon::parse($ps)->startOfDay(), Carbon::parse($pe)->endOfDay()]);
+            $paid = \App\Support\HrTime::paidSumsFor($base, 'tp', ['tp.user_id']);   // HR timesheet rules (null = none on)
+            foreach ((clone $base)
                 ->groupBy('tp.user_id')->selectRaw('tp.user_id, SUM(TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at)) mins')
                 ->get() as $r) {
-                $clock[$k . '|' . (int) $r->user_id] = round(((int) $r->mins) / 60, 2);
+                $m = $paid !== null ? (int) ($paid[(string) $r->user_id] ?? 0) : (int) $r->mins;
+                $clock[$k . '|' . (int) $r->user_id] = round($m / 60, 2);
             }
         }
 

@@ -46,6 +46,7 @@ class MinuteBatchCommand extends Command
         'two' => [   // everyTwoMinutes
             'kt:personal-announcements' => 5,
             'kt:payslip-notices' => 10,
+            'hr:shift-notices' => 5,   // KiddieTrac HR: one notice per person per quiet batch of shift changes (2026-11-27)
         ],
         'five' => [   // everyFiveMinutes
             'headcounts:remind' => 10,

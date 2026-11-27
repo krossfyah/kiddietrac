@@ -237,7 +237,7 @@ final class StaffSubmissionsFeed
         });
 
         // KiddieTrac HR: onboarding tasks the person did, courses completed, self reviews submitted (their HR file opens).
-        $run('hr', function () use ($byPerson, $who, $sel, $push, $first) {
+        $run('hr', function () use ($byPerson, $byCentre, $who, $sel, $push, $first) {
             $q = $who(DB::table('hr_onboarding_tasks as t')->whereNotNull('t.done_at')->whereColumn('t.done_by_id', 't.user_id'), 't.user_id');
             $byPerson($q, 't.agency_id', 't.user_id');
             foreach ($q->orderByDesc('t.done_at')->limit(12)->get(array_merge($sel, ['t.id', 't.user_id', 't.title', 't.done_at'])) as $r) {
@@ -275,6 +275,15 @@ final class StaffSubmissionsFeed
                 $byPerson($q, 'cl.agency_id', 'cl.user_id');
                 foreach ($q->orderByDesc('cl.created_at')->limit(12)->get(array_merge($sel, ['cl.id', 'cl.user_id', 'cl.kind', 'cl.total', 'cl.created_at'])) as $r) {
                     $push('hr_claim', "\u{1F9FE}", $first($r) . ($r->kind === 'mileage' ? ' filed a mileage claim: $' : ' filed an expense claim: $') . number_format((float) $r->total, 2), $r->created_at, '#hr?tab=claims&claim=' . $r->id, $r->photo_url);
+                }
+            }
+            // Someone asked for an open shift at one of the viewer's centres, waiting for a director (HR Phase 4, batch 3).
+            if (\Illuminate\Support\Facades\Schema::hasTable('hr_open_shift_claims')) {
+                $q = $who(DB::table('hr_open_shift_claims as oc')->join('hr_open_shifts as os', 'os.id', '=', 'oc.open_shift_id')
+                    ->where('oc.status', 'pending')->where('os.status', 'open'), 'oc.user_id');
+                $byCentre($q, 'os.centre_id');
+                foreach ($q->orderByDesc('oc.created_at')->limit(12)->get(array_merge($sel, ['oc.id', 'oc.open_shift_id', 'os.shift_date', 'os.start_time', 'oc.created_at'])) as $r) {
+                    $push('hr_open_shift', "\u{1F4C5}", $first($r) . ' asked for an open shift: ' . date('D M j', strtotime((string) $r->shift_date)) . ', ' . date('g:i A', strtotime((string) $r->start_time)) . ' (waiting for your approval)', $r->created_at, '#hr?tab=openshifts&open=' . $r->open_shift_id, $r->photo_url);
                 }
             }
         });

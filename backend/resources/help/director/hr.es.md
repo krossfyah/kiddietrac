@@ -35,3 +35,7 @@ Cada solicitud muestra su tipo, cuánto usa y el saldo. Aprobar resta del saldo;
 ## Horas extra y hojas de horas
 
 **RR. HH. > Horas extra** aprueba las horas adicionales como pago o las guarda como tiempo compensatorio. **RR. HH. > Hojas de horas** compara las horas programadas y trabajadas, y aprueba y bloquea un periodo antes de la nómina. Consulta **RR. HH.: horas extra, tiempo compensatorio y hojas de horas**.
+
+## Turnos abiertos
+
+**RR. HH. > Turnos abiertos** publica turnos sin nadie (también desde una falta de ratio); el personal que puede cubrirlos los pide en Mis RR. HH. y tú confirmas quién toma cada uno. El personal recibe un aviso por cada lote de cambios en sus turnos. Ver **RR. HH.: turnos abiertos y avisos de turno**.

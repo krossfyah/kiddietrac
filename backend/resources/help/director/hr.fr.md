@@ -35,3 +35,7 @@ Chaque demande affiche son type, la quantité utilisée et le solde. L'approbati
 ## Heures supplémentaires et feuilles de temps
 
 **RH > Heures supplémentaires** approuve les heures en plus en paie ou les met en banque comme congé compensatoire. **RH > Feuilles de temps** compare les heures prévues et travaillées, et approuve et verrouille une période avant la paie. Voir **RH : heures supplémentaires, congés compensatoires et feuilles de temps**.
+
+## Quarts à pourvoir
+
+**RH > Quarts à pourvoir** publie des quarts sans personne (aussi depuis un manque de ratio) ; le personnel qui peut les faire les demande dans Mes RH et vous confirmez qui prend chacun. Le personnel reçoit un avis par lot de changements à ses quarts. Voir **RH : quarts à pourvoir et avis de quart**.
