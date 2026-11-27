@@ -180,6 +180,7 @@ final class SearchRegistry
         'hr_availability' => 'a staff member\'s weekly work availability (HR): configuration read by the rota and autofill, shown in My HR only',
         'hr_unavailability' => 'dates a staff member can\'t work (HR): read by the rota and autofill, shown in My HR and as a conflict on HR > Rota',
         'hr_shift_swaps' => 'shift giveaways and swaps waiting for a colleague or a director (HR): shown in My HR and HR > Rota, never a record people look up',
+        'hr_overtime_notices' => 'which overtime warnings already went out this week (HR): a send ledger, never shown or searched',
         'hr_course_role_rules' => 'configuration: "this course goes to everyone in this role" on a course, shown in its Assigned popup',
         'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',

@@ -132,6 +132,21 @@
     return armPill(el);
   }
 
+  /* HR add-on geofence (2026-11-26, App\Support\HrClock): at a fenced centre the server answers 428 location_required.
+     Ask with its consent text, read the location ONCE and send it with this clock-in only. Not now / blocked / no GPS =
+     geo_declined (the agency rule then allows it flagged, or refuses with a plain reason). Never stored or watched. */
+  KT.geoForClockIn = function (body) {
+    var ask = KT.confirm ? KT.confirm({ title: 'Share your location to clock in', description: (body && body.consent) || '', okLabel: 'Share location', tone: 'info' }) : Promise.resolve(true);
+    return Promise.resolve(ask).then(function (ok) {
+      if (!ok || !navigator.geolocation) return { geo_declined: true };
+      return new Promise(function (res) {
+        navigator.geolocation.getCurrentPosition(function (p) {
+          res({ geo_lat: p.coords.latitude, geo_lng: p.coords.longitude, geo_accuracy: Math.round(p.coords.accuracy || 0) });
+        }, function () { res({ geo_declined: true }); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+      });
+    });
+  };
+
   /* intent in|out (2026-11-05): the server answers a press that no longer matches the real
      state with that state, instead of flipping it. `extra` carries confirm_children. */
   function punchPost(intent, extra, path) {
@@ -152,6 +167,9 @@
            politely to nobody. Reject with the server's own wording so the caller can say
            it out loud and put the pill back. */
         if (! r.ok) {
+          if (d && d.location_required && KT.geoForClockIn && !(extra && (extra.geo_lat != null || extra.geo_declined))) {
+            return KT.geoForClockIn(d).then(function (g) { return punchPost(intent, Object.assign({}, extra || {}, g), path); });
+          }
           var err = new Error((d && d.message) || 'Could not clock in.');
           err.kt_refusal = true;
           err.kt_body = d || {};

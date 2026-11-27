@@ -775,6 +775,7 @@ final class WebDemoShowcase
         $this->hrSafetyStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);
         $this->hrClaimsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);   // HR Phase 3, item 9
         $this->hrRotaStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 3, item 10
+        $this->hrClockStory($agencyId, $byName->all(), $centreOf->all());   // HR Phase 3, item 11
     }
 
     /**
@@ -864,6 +865,28 @@ final class WebDemoShowcase
                 'receipt_path' => $path, 'receipt_name' => $path ? 'receipt.png' : null, 'receipt_mime' => $path ? 'image/png' : null,
                 'status' => $status, 'decided_by_id' => $byId, 'decided_at' => $byId ? $this->at($byAgo, 10, 0) : null, 'decision_comment' => $comment,
                 'paid_at' => $status === 'paid' ? $this->at(-14, 9, 0) : null, 'created_at' => $this->at($ago, 17, 30), 'updated_at' => $now]);
+        }
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 3 DEMO, ITEM 11 (2026-11-26, Starlight only): clock-in rules. The agency flags (never blocks)
+     * clock-ins away from the centre, the San Diego centre has a 150 m area, and this week's latest clock-in of Noah
+     * (away, 1.2 km) and of Lucas (no location shared) show on HR > Rota. Only set when not already set.
+     */
+    private function hrClockStory(int $agencyId, array $byName, array $centreOf): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasColumn('time_punches', 'geo_status')) return;
+        $s = json_decode((string) DB::table('agencies')->where('id', $agencyId)->value('settings'), true);
+        if (! is_array($s['hr_clock'] ?? null)) \App\Support\HrClock::saveSettings($agencyId, ['geofence' => 'flag', 'overtime_on' => true, 'overtime_hours' => 44, 'warn_at_hours' => 40, 'skip_contractors' => true]);
+        $centre = isset($byName['Noah'], $centreOf[$byName['Noah']]) ? (int) $centreOf[$byName['Noah']] : null;
+        if (! $centre) return;
+        $c = DB::table('centres')->where('id', $centre)->first();
+        if (! \App\Support\HrClock::fence($c)) \App\Support\HrClock::saveFence($centre, ['radius_m' => 150, 'lat' => $c->latitude !== null ? null : 32.7157, 'lng' => $c->latitude !== null ? null : -117.1611]);
+        $from = \App\Support\AgencyTime::boundaryUtc($agencyId, 'week')->format('Y-m-d H:i:s');
+        foreach ([['Noah', 'outside', 1240], ['Lucas', 'no_location', null]] as [$who, $st, $m]) {
+            if (! isset($byName[$who])) continue;
+            $id = DB::table('time_punches')->where('user_id', $byName[$who])->where('punched_in_at', '>=', $from)->orderByDesc('punched_in_at')->value('id');
+            if ($id) DB::table('time_punches')->where('id', $id)->whereNull('geo_status')->update(['geo_status' => $st, 'geo_distance_m' => $m]);
         }
     }
 

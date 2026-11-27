@@ -10,6 +10,8 @@
    agency's km rate); approved claims are paid on the next manual payslip as a reimbursement line.
    Item 10 (2026-11-26): HR > Rota (the planned week: cost for pay viewers, ratio warnings, availability conflicts, shift
    changes to approve) and My HR "My shifts and availability" (weekly availability, can't-work dates, give away / swap).
+   Item 11 (2026-11-26): HR > Rota also lists this week's clock-ins away from the centre and people near or into
+   overtime; admins set the clock-in rules (geofence off / flag / block, overtime hours) and each centre's area on a map.
    ═══════════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -551,6 +553,7 @@
         else if (a === 'swap') { var w = sw.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (w) openSwapDecision(w, d.me, go); }
       });
     });
+    drawClockWatch(host);   // item 11: clock-ins away from the centre, overtime, the admin's clock-in rules
     var m = /[?&]swap=(\d+)/.exec(location.hash || '');
     if (m) { var w = sw.filter(function (x) { return x.id === +m[1]; })[0]; if (w) openSwapDecision(w, d.me, go); }
   }
@@ -678,6 +681,139 @@
       if (b.kind === 'swap' && (!b.to_user_id || !b.swap_shift_id)) { msg(box, 'Choose a colleague and one of their shifts.'); return false; }
       return Api.post('/hr/swaps', b).then(function () { saved('Offered. You keep the shift until a director approves the change.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
     } }] });
+  }
+
+  /* ── Item 11 (2026-11-26): clock-in rules on HR > Rota: clock-ins away from the centre, near / into overtime, and the
+     admin's rule (geofence off / flag / block, overtime threshold) with each centre's area picked on a map. ───────── */
+  var GEO_MODE = { off: 'Off: never ask for a location', flag: 'Allow, and flag clock-ins away from the centre', block: 'Block clock-ins away from the centre' };
+  async function drawClockWatch(host) {
+    var box = document.createElement('div'); box.setAttribute('data-hrs-clock', '1'); host.appendChild(box);
+    var w;
+    try { w = await Api.get('/hr/clock/watch'); } catch (e) { box.remove(); return; }
+    if (!box.isConnected) return;
+    var s = w.settings || {}, away = w.away || [], ot = w.overtime || [];
+    var h = '<div class="hrt-sec" style="display:flex;align-items:center;gap:8px;"><span>Clock-ins this week</span><span style="flex:1"></span>'
+      + (w.is_admin ? '<button type="button" class="hr-b" data-ck="rules">Clock-in rules</button>' : '') + '</div>'
+      + '<div class="hr-sub" style="margin:-4px 0 8px;"><span>Location check:</span> <b>' + esc(s.geofence === 'block' ? 'Block away from the centre' : (s.geofence === 'flag' ? 'Flag away from the centre' : 'Off')) + '</b> · '
+      + (s.overtime_on ? '<span>Overtime warning at</span> <b data-no-i18n>' + esc(String(s.warn_at_hours)) + ' h</b> <span>(overtime after</span> <b data-no-i18n>' + esc(String(s.overtime_hours)) + ' h</b>)' : '<span>Overtime warning off</span>') + '</div>'
+      + '<div class="kt-card" style="margin-bottom:10px;">' + (ot.length ? '<table data-hrs="overtime"><thead><tr><th>Person</th><th style="text-align:right;">Worked this week</th><th>Overtime</th></tr></thead><tbody>' + ot.map(function (o) {
+        return '<tr' + (o.over ? ' style="background:#FEF2F2;"' : ' style="background:#FFFBEB;"') + '><td data-no-i18n><b>' + esc(o.person) + '</b></td><td style="text-align:right;" data-no-i18n>' + esc(hrs(o.hours)) + '</td><td>'
+          + (o.over ? pill('#FEE2E2', '#991B1B', 'Into overtime') : pill('#FEF3C7', '#92400E', 'Close to overtime')) + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">Nobody is close to overtime this week.</div>') + '</div>'
+      + '<div class="kt-card">' + (away.length ? '<table data-hrs="away"><thead><tr><th>Person</th><th>Clocked in</th><th>Centre</th><th>Location</th></tr></thead><tbody>' + away.map(function (a) {
+        return '<tr><td data-no-i18n><b>' + esc(a.person) + '</b></td><td data-no-i18n style="white-space:nowrap;">' + esc(when(a.at)) + '</td><td data-no-i18n>' + esc(a.centre) + '</td><td>'
+          + (a.status === 'outside' ? pill('#FEF3C7', '#92400E', 'Away from the centre') + ' <span class="hr-sub" data-no-i18n>' + esc(a.distance || '') + '</span>' : pill('#F1F5F9', '#475569', 'No location shared')) + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">No clock-ins away from the centre this week.</div>') + '</div>';
+    box.innerHTML = h;
+    var r = box.querySelector('[data-ck="rules"]');
+    if (r) r.addEventListener('click', function () { openClockRules(function () { box.remove(); drawClockWatch(host); }); });
+  }
+
+  async function openClockRules(done) {
+    var d;
+    try { d = await Api.get('/hr/clock/settings'); } catch (e) { toast('⚠️', 'Could not open it', errMsg(e), '#DC2626'); return; }
+    var s = d.settings || {};
+    var cs = (d.centres || []).map(function (c) {
+      var f = c.fence;
+      return '<tr><td data-no-i18n><b>' + esc(c.name) + '</b>' + (c.address ? '<div class="hr-sub">' + esc(c.address) + '</div>' : '') + '</td><td>'
+        + (f ? '<span data-no-i18n>' + esc(String(f.radius_m)) + ' m</span> <span class="hr-sub">' + (f.from_address ? 'around the address' : 'around a spot on the map') + '</span>' : '<span class="hr-sub">No area: not checked</span>')
+        + '</td><td style="text-align:center;"><button type="button" class="hr-b" data-fc="' + c.id + '">Set area</button></td></tr>';
+    }).join('');
+    var box = el('<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+      + field('Location check at clock-in', select('geofence', opts(GEO_MODE, s.geofence || 'off')), true)
+      + '<div class="hr-sub" style="grid-column:1/-1;margin-top:-4px;">Only at centres with an area below, and only when someone clocks in. People see this first: <i>' + esc(d.consent || '') + '</i></div>'
+      + field('', check('overtime_on', s.overtime_on !== false, 'Warn about overtime (the person and their director)'), true)
+      + field('Warn at (hours this week)', input('warn_at_hours', s.warn_at_hours, 'number')) + field('Overtime after (hours this week)', input('overtime_hours', s.overtime_hours, 'number'))
+      + field('', check('skip_contractors', s.skip_contractors !== false, 'Leave out contractors'), true)
+      + '</div><div class="hrt-sec">Clock-in area for each centre or home</div><div class="kt-card"><table data-hrs="fences"><thead><tr><th>Centre</th><th>Area</th><th></th></tr></thead><tbody>' + cs + '</tbody></table></div>'
+      + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    box.querySelectorAll('[data-fc]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var c = (d.centres || []).filter(function (x) { return x.id === +b.getAttribute('data-fc'); })[0];
+        if (c) { closeModal(); setTimeout(function () { openFence(c, function () { openClockRules(done); }); }, 60); }
+      });
+    });
+    modal({ title: 'Clock-in rules', body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
+      var b = { geofence: val(box, 'geofence'), overtime_on: !!val(box, 'overtime_on'), warn_at_hours: Number(val(box, 'warn_at_hours')), overtime_hours: Number(val(box, 'overtime_hours')), skip_contractors: !!val(box, 'skip_contractors') };
+      if (!(b.overtime_hours > 0) || !(b.warn_at_hours > 0)) { msg(box, 'Enter the hours.'); return false; }
+      if (b.warn_at_hours > b.overtime_hours) { msg(box, 'The warning comes at or before overtime.'); return false; }
+      return Api.put('/hr/clock/settings', b).then(function () { saved('Clock-in rules saved.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
+  var _leaf = null;
+  function leaflet() {
+    if (_leaf) return _leaf;
+    _leaf = new Promise(function (res, rej) {
+      if (window.L) { res(window.L); return; }
+      if (!document.querySelector('link[data-kt-leaflet]')) { var l = document.createElement('link'); l.rel = 'stylesheet'; l.href = '/js/vendor/leaflet-1.9.4/leaflet.css'; l.setAttribute('data-kt-leaflet', '1'); document.head.appendChild(l); }
+      var s = document.createElement('script'); s.src = '/js/vendor/leaflet-1.9.4/leaflet.js';
+      s.onload = function () { res(window.L); }; s.onerror = function () { _leaf = null; rej(new Error('map')); };
+      document.head.appendChild(s);
+    });
+    return _leaf;
+  }
+
+  function openFence(c, done) {
+    var picked = c.lat != null && c.lng != null ? { lat: +c.lat, lng: +c.lng } : null;
+    var box = el('<div class="hr-sub" style="margin-bottom:8px;">Clock-ins inside the circle count as at the centre. Click the map to put the centre point where the building is, or use the address.</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px;">' + field('Radius (metres)', input('radius_m', c.radius_m || 150, 'number'))
+      + '<button type="button" class="hr-b" data-fz="addr">Use the address</button><button type="button" class="hr-b" data-fz="here">Use where I am now</button></div>'
+      + '<div style="display:flex;gap:6px;margin-bottom:8px;"><input class="hr-i" data-f="q" placeholder="Search for an address" style="flex:1;min-width:0;"><button type="button" class="hr-b" data-fz="find">Find</button></div>'
+      + '<div data-map style="height:300px;border-radius:10px;overflow:hidden;border:1px solid #E5E7EB;"></div><div class="hr-sub" data-pt style="margin-top:6px;"></div>'
+      + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    var map = null, mk = null, circ = null, L = null;
+    var pt = function () {
+      var t = box.querySelector('[data-pt]');
+      t.textContent = picked ? 'Centre point: ' + picked.lat.toFixed(5) + ', ' + picked.lng.toFixed(5) : (c.latitude != null ? 'Using the centre\'s address.' : 'No point yet. Click the map.');
+    };
+    var draw = function () {
+      if (!map) return;
+      var p = picked || (c.latitude != null ? { lat: c.latitude, lng: c.longitude } : null);
+      if (mk) { map.removeLayer(mk); mk = null; } if (circ) { map.removeLayer(circ); circ = null; }
+      if (!p) return;
+      mk = L.marker([p.lat, p.lng]).addTo(map);
+      circ = L.circle([p.lat, p.lng], { radius: Math.max(25, +(val(box, 'radius_m') || 150)), color: '#0E7490', weight: 2, fillOpacity: 0.12 }).addTo(map);
+      pt();
+    };
+    pt();
+    box.querySelector('[data-f="radius_m"]').addEventListener('input', draw);
+    box.querySelectorAll('[data-fz]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-fz');
+        if (a === 'addr') { if (c.latitude == null) { msg(box, 'This centre has no map location from its address. Click the map instead.'); return; } picked = null; draw(); if (map) map.setView([c.latitude, c.longitude], 17); }
+        else if (a === 'here' && navigator.geolocation) navigator.geolocation.getCurrentPosition(function (p) { picked = { lat: p.coords.latitude, lng: p.coords.longitude }; draw(); if (map) map.setView([picked.lat, picked.lng], 17); }, function () { msg(box, 'Your device did not share a location.'); }, { enableHighAccuracy: true, timeout: 15000 });
+        else if (a === 'find') {
+          var q = val(box, 'q'); if (!q) return;
+          fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) {
+            if (j && j[0] && map) map.setView([+j[0].lat, +j[0].lon], 17); else msg(box, 'Could not find that address.');
+          }, function () { msg(box, 'Could not find that address.'); });
+        }
+      });
+    });
+    modal({ title: 'Clock-in area: ' + c.name, body: box, actions: [{ label: 'Cancel', handler: function () { setTimeout(done, 60); } },
+      { label: 'Remove area', handler: function () { return Api.put('/hr/clock/centres/' + c.id + '/fence', { radius_m: null }).then(function () { saved('Area removed. Clock-ins here are not checked.'); setTimeout(done, 60); }, function (e) { msg(box, errMsg(e)); return false; }); } },
+      { label: 'Save area', primary: true, busyLabel: 'Saving…', handler: function () {
+        var r = Math.round(+(val(box, 'radius_m') || 0));
+        if (!(r >= 25 && r <= 5000)) { msg(box, 'Choose a radius from 25 to 5000 metres.'); return false; }
+        if (!picked && c.latitude == null) { msg(box, 'Click the map to put the centre point.'); return false; }
+        return Api.put('/hr/clock/centres/' + c.id + '/fence', { radius_m: r, lat: picked ? picked.lat : null, lng: picked ? picked.lng : null }).then(function () { saved('Clock-in area saved.'); setTimeout(done, 60); }, function (e) { msg(box, errMsg(e)); return false; });
+      } }] });
+    leaflet().then(function (Lf) {
+      L = Lf;
+      var host = box.querySelector('[data-map]');
+      if (!host || !host.isConnected) return;
+      var p = picked || (c.latitude != null ? { lat: c.latitude, lng: c.longitude } : { lat: 43.65, lng: -79.38 });
+      map = L.map(host, { scrollWheelZoom: false }).setView([p.lat, p.lng], picked || c.latitude != null ? 17 : 11);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
+      map.on('click', function (e) { picked = { lat: e.latlng.lat, lng: e.latlng.lng }; draw(); });
+      if (!picked && c.latitude == null && c.address) {   // no point yet: open on the centre's address, not a default city
+        var look = function (q, z) { return fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } }).then(function (r) { return r.json(); }).then(function (j) { if (j && j[0] && map) { map.setView([+j[0].lat, +j[0].lon], z); return true; } return false; }, function () { return false; }); };
+        look(c.address, 17).then(function (ok) { var city = c.address.split(',').pop().trim(); if (!ok && city && city !== c.address) look(city, 12); });
+      }
+      draw();
+      setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 150);
+    }, function () { box.querySelector('[data-map]').innerHTML = '<div class="hr-sub" style="padding:12px;">The map could not load. Use the address or where you are now.</div>'; });
   }
 
   window.KTHrSafety = {

@@ -4,6 +4,20 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "📍",
+            "title": "Clock-in location and overtime",
+            "body": "Admins can draw a clock-in area around each centre or home and choose to flag or block clock-ins away from it; the location is asked only at clock-in and never stored. People near or into weekly overtime, and their director, now get a heads-up.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "🔁",
             "title": "Availability and shift swaps",
             "body": "Staff set the days and hours they can work, mark dates they cannot, and give away or swap shifts in My HR; a director approves each change. Autofill leaves out leave and unavailable days, and HR > Rota shows the planned week with ratio warnings and, for people who can see pay, its cost.",

@@ -634,6 +634,13 @@ final class CareController extends Controller
             ], 422);
         }
 
+        /* HR add-on geofence (2026-11-26, App\Support\HrClock): clocking IN at a fenced centre asks for the location once
+           (consent first); the agency rule allows it flagged or refuses it. Clocking out is never blocked. */
+        $geo = $isClockingIn ? \App\Support\HrClock::check($request, (int) $centreId) : null;
+        if ($geo && isset($geo['refuse'])) {
+            return response()->json($geo['refuse'], $geo['status']);
+        }
+
         $open = DB::table('time_punches')
             ->where('user_id', $userId)
             ->whereNull('punched_out_at')
@@ -690,6 +697,9 @@ final class CareController extends Controller
             'source' => $request->input('source') ?: 'web',
             'created_at' => now(),
         ]);
+        if ($geo && ! empty($geo['row'])) {
+            DB::table('time_punches')->where('id', $id)->update($geo['row']);   // the answer only, never the location
+        }
         $this->notifyClockEvent($request->user(), (int) $centreId, 'in');
         $this->auditClock($request, $userId, 'in', (int) $centreId, null);
         return response()->json(['action' => 'in', 'id' => $id, 'message' => 'Clocked in']);

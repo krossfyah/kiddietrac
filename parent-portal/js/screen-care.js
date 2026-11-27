@@ -248,6 +248,11 @@
         refresh();
       }).catch(async function (e) {
         var b = (e && e.data) || {};
+        // HR add-on geofence: share the location once for this clock-in (KT.geoForClockIn, kt-clockbar.js).
+        if (b.location_required && KT.geoForClockIn && body.geo_lat == null && !body.geo_declined) {
+          var g = await KT.geoForClockIn(b);
+          return send(path, Object.assign({}, body, g));
+        }
         if (b.reason === 'children_still_signed_in' && b.can_override) {
           var names = (b.children || []).map(function (c) { return c.label; }).join('\n');
           var ok = await KT.confirm({ title: (b.children || []).length + ' still signed in', description: (b.message || '') + (names ? '\n\n' + names : '') + (b.what_to_do ? '\n\n' + b.what_to_do : ''), okLabel: 'Go ahead anyway', tone: 'danger' });

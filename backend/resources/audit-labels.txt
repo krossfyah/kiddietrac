@@ -1349,3 +1349,5 @@ post hr/swaps | Offered a shift as a giveaway or swap
 post hr/swaps/{id}/accept | Accepted a colleague's shift giveaway or swap
 post hr/swaps/{id}/cancel | Cancelled or let go of a shift giveaway or swap
 post hr/swaps/{id}/decide | Approved or declined a shift giveaway or swap
+put hr/clock/settings | Changed the clock-in location rule or the overtime warning
+put hr/clock/centres/{id}/fence | Set or removed a centre's clock-in area (geofence)

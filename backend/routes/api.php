@@ -2663,6 +2663,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         // KiddieTrac HR Phase 3, item 10 (2026-11-26): the planning view (cost only for pay viewers, ratio gaps, availability conflicts) + approving swaps.
         Route::get   ('/hr/schedule/plan',                  [\App\Http\Controllers\Api\HrScheduleController::class, 'plan']);
         Route::post  ('/hr/swaps/{id}/decide',              [\App\Http\Controllers\Api\HrScheduleController::class, 'decide'])->whereNumber('id');
+        // KiddieTrac HR Phase 3, item 11 (2026-11-26): clock-in rules (geofence per centre, overtime warning). Admins change them; directors read the watch list.
+        Route::get   ('/hr/clock/settings',                 [\App\Http\Controllers\Api\HrClockController::class, 'show']);
+        Route::put   ('/hr/clock/settings',                 [\App\Http\Controllers\Api\HrClockController::class, 'save']);
+        Route::put   ('/hr/clock/centres/{id}/fence',       [\App\Http\Controllers\Api\HrClockController::class, 'saveFence'])->whereNumber('id');
+        Route::get   ('/hr/clock/watch',                    [\App\Http\Controllers\Api\HrClockController::class, 'watch']);
     });
 
     // ---- KiddieTrac HR phase 2 (2026-11-28): hiring, onboarding, performance, courses. All under hr/ (the HR add-on). ----
