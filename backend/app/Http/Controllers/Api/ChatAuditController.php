@@ -65,6 +65,12 @@ final class ChatAuditController extends Controller
         $untilUtc = $until !== '' ? \Illuminate\Support\Carbon::parse($until . ' 23:59:59', $tz)->utc() : null;
         $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $q) . '%';
 
+        /* SEARCH INSIDE ENCRYPTED MESSAGES (2026-11-27, App\Support\ChatPrivacy). Message text is sealed at rest, so
+           SQL cannot LIKE it any more. The newest messages of THIS agency only (the same scope as the list) are
+           read, decrypted by the connection, and matched here; the hits join the name/title matches below. */
+        $famBodyHits = ($q !== '' && ($kind === '' || $kind === 'family')) ? \App\Support\ChatPrivacy::familyConversationsMatching($agencyId, $q) : [];
+        $stBodyHits  = ($q !== '' && ($kind === '' || $kind === 'staff')) ? \App\Support\ChatPrivacy::staffThreadsMatching($agencyId, $q) : [];
+
         $rows = [];
 
         if ($kind === '' || $kind === 'family') {
@@ -78,12 +84,10 @@ final class ChatAuditController extends Controller
             if ($sinceUtc) $fam->where('c.last_message_at', '>=', $sinceUtc);
             if ($untilUtc) $fam->where('c.created_at', '<=', $untilUtc);
             if ($q !== '') {
-                $fam->where(function ($w) use ($like) {
+                $fam->where(function ($w) use ($like, $famBodyHits) {
                     $w->where('c.subject', 'like', $like)->orWhere('f.family_name', 'like', $like)->orWhere('ce.name', 'like', $like)
                       ->orWhere('ch.first_name', 'like', $like)->orWhere('ch.last_name', 'like', $like)
-                      ->orWhereExists(function ($s) use ($like) {
-                          $s->from('messages as m')->whereColumn('m.conversation_id', 'c.id')->where('m.body', 'like', $like);
-                      })
+                      ->orWhereIn('c.id', $famBodyHits ?: [0])
                       ->orWhereExists(function ($s) use ($like) {
                           $s->from('messages as m')->join('users as u', 'u.id', '=', 'm.sender_id')->whereColumn('m.conversation_id', 'c.id')
                             ->where(function ($x) use ($like) { $x->where('u.first_name', 'like', $like)->orWhere('u.last_name', 'like', $like)->orWhere('u.email', 'like', $like); });
@@ -101,11 +105,9 @@ final class ChatAuditController extends Controller
             if ($sinceUtc) $st->where('t.last_message_at', '>=', $sinceUtc);
             if ($untilUtc) $st->where('t.created_at', '<=', $untilUtc);
             if ($q !== '') {
-                $st->where(function ($w) use ($like) {
+                $st->where(function ($w) use ($like, $stBodyHits) {
                     $w->where('t.title', 'like', $like)
-                      ->orWhereExists(function ($s) use ($like) {
-                          $s->from('staff_messages as m')->whereColumn('m.thread_id', 't.id')->where('m.body', 'like', $like);
-                      })
+                      ->orWhereIn('t.id', $stBodyHits ?: [0])
                       ->orWhereExists(function ($s) use ($like) {
                           $s->from('staff_thread_participants as p')->join('users as u', 'u.id', '=', 'p.user_id')->whereColumn('p.thread_id', 't.id')
                             ->where(function ($x) use ($like) { $x->where('u.first_name', 'like', $like)->orWhere('u.last_name', 'like', $like)->orWhere('u.email', 'like', $like); });

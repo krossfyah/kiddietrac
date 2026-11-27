@@ -18,13 +18,13 @@ Varios mensajes sin leer del mismo hilo se agrupan en un solo correo. Así, si l
 
 ## Qué muestra el correo
 
-Cada mensaje sin leer aparece como una tarjeta con:
-- Nombre del remitente
-- Marca de tiempo (relativa — «hace 12 minutos»)
-- Cuerpo truncado (primeros 320 caracteres)
-- Número de archivos adjuntos, si los hay
+Cada mensaje no leído aparece con:
+- Quién lo envió (el personal por su nombre de pila)
+- Cuándo se envió (en tiempo relativo: «hace 12 minutos»)
+- En qué conversación está (el nombre del niño, la oficina o el nombre de la conversación del equipo)
+- El número de archivos adjuntos, si hay
 
-Un botón destacado con la etiqueta **«Abrir conversación»** al final enlaza directamente a `#chat` en el portal.
+**El texto del mensaje no aparece en el correo.** Desde noviembre de 2026 los mensajes se guardan cifrados y quedan detrás del inicio de sesión de KiddieTrac; una bandeja de entrada no. Los nombres de los archivos adjuntos tampoco se incluyen. Un botón **«Abrir conversación»** al final abre la conversación, donde se puede leer el mensaje.
 
 ## Por qué deja de recibir recordatorios
 

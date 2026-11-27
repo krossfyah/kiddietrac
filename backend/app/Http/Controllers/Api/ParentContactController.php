@@ -201,7 +201,9 @@ final class ParentContactController extends Controller
             if ($bell) {
                 try {
                     \App\Support\Notify::write(['user_id' => (int) $g->id, 'type' => 'staff_message', 'title' => '💬 ' . $senderName . $about,
-                        'body' => mb_substr($body, 0, 300), 'data' => json_encode(['link' => '#messages']), 'created_at' => now()]);
+                        'body' => mb_substr($body, 0, 300), 'created_at' => now(),
+                        // Private (App\Support\ChatPrivacy, 2026-11-27): sealed at rest, and a push names who, never what.
+                        'data' => \App\Support\ChatPrivacy::flag(json_encode(['link' => '#messages']), \App\Support\ChatPrivacy::first((string) ($sender->first_name ?? '')))]);
                 } catch (\Throwable $ex) {}
             }
         }
@@ -211,7 +213,7 @@ final class ParentContactController extends Controller
             \App\Support\Audit::write(['user_id' => (int) $sender->id, 'agency_id' => $agencyId, 'action' => 'child.parent_message_sent',
                 'entity_type' => $child ? 'child' : 'family', 'entity_id' => (int) ($child->id ?? $family->id),
                 'payload' => json_encode(['summary' => $senderName . ' messaged ' . ($family->family_name ?? 'a family') . $about . ' (' . implode('+', $channels) . '): ' . $sentN . ' sent of ' . count($results),
-                    'results' => $results, 'body' => mb_substr($body, 0, 500)]), 'ip_address' => substr($ip, 0, 45), 'created_at' => now()]);
+                    'results' => $results, 'chars' => mb_strlen($body)]), 'ip_address' => substr($ip, 0, 45), 'created_at' => now()]);
         } catch (\Throwable $ex) {}
 
         return $results;

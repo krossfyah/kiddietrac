@@ -77,7 +77,8 @@ final class MessageController extends Controller
                     'channel' => $c->channel ?? null,   // 'office' = the centre office thread (replies go back to it)
                     'last_message_at' => $c->last_message_at,
                     'last_message_display' => $c->last_message_at ? Carbon::parse($c->last_message_at)->diffForHumans() : null,
-                    'last_message_preview' => $lastMsg ? \Illuminate\Support\Str::limit($lastMsg->body, 80) : null,
+                    // A deleted message is not previewed (2026-11-27 chat leak sweep): the thread hides it, so must the list.
+                    'last_message_preview' => $lastMsg ? (! empty($lastMsg->deleted_at) ? 'Message deleted' : \Illuminate\Support\Str::limit($lastMsg->body, 80)) : null,
                     'unread_count' => (int) ($unreadCounts[$c->id] ?? 0),
                 ];
             })->all(),
@@ -315,18 +316,22 @@ final class MessageController extends Controller
                 // an educator with thirty families nothing they can act on.
                 'title' => ($emergency ? '🚨 EMERGENCY · ' : '💬 ') . $who,
                 'body' => $preview,
-                'data' => json_encode(['link' => '#chat', 'url' => '/dashboard.html#chat?c=' . $convoId, 'conversation_id' => $convoId,
-                    'emergency' => $emergency ? 1 : 0, 'message_id' => (int) $msgId]),
+                // Private (App\Support\ChatPrivacy, 2026-11-27): the preview is sealed at rest and never pushed.
+                'data' => \App\Support\ChatPrivacy::flag(json_encode(['link' => '#chat', 'url' => '/dashboard.html#chat?c=' . $convoId, 'conversation_id' => $convoId,
+                    'emergency' => $emergency ? 1 : 0, 'message_id' => (int) $msgId]), \App\Support\ChatPrivacy::first((string) ($user->first_name ?? ''))),
                 'created_at' => now(),
             ]);
             try {
                 /* Normal unless flagged (App\Support\EmergencyMessage). This was urgent for
                    every message, so the centre's phones rang insistently for each one. */
+                /* Who, never what (ChatPrivacy): "New message from Sarah" / "Tap to open and read it." */
+                $pWho = \App\Support\ChatPrivacy::first((string) ($user->first_name ?? ''));
                 if ($emergency) {
-                    app(\App\Services\FcmService::class)->sendToUser((int) $sid, \App\Support\EmergencyMessage::title($who),
-                        $preview, '#chat?c=' . $convoId, true, true, true, \App\Support\EmergencyMessage::pushExtra());
+                    app(\App\Services\FcmService::class)->sendToUser((int) $sid, \App\Support\ChatPrivacy::title((int) $sid, $pWho, true),
+                        \App\Support\ChatPrivacy::body((int) $sid, true), '#chat?c=' . $convoId, true, true, true, \App\Support\EmergencyMessage::pushExtra());
                 } else {
-                    app(\App\Services\FcmService::class)->sendToUser((int) $sid, '💬 ' . $who, $preview, '#chat?c=' . $convoId, false);
+                    app(\App\Services\FcmService::class)->sendToUser((int) $sid, \App\Support\ChatPrivacy::title((int) $sid, $pWho),
+                        \App\Support\ChatPrivacy::body((int) $sid), '#chat?c=' . $convoId, false);
                 }
             } catch (\Throwable $e) {}
         }
@@ -649,6 +654,8 @@ final class MessageController extends Controller
         $fanOut = function () use ($convo, $data, $user, $emergency, $msgId) {
         if ($convo->family_id) {
             $preview = mb_substr($data['body'], 0, 120);
+            // Who, never what, on a parent's lock screen (ChatPrivacy, 2026-11-27): the educator's first name.
+            $gWho = \App\Support\ChatPrivacy::first((string) ($user->first_name ?? ''));
             $guardianIds = [];
             foreach (DB::table('guardians')->where('family_id', $convo->family_id)->pluck('user_id') as $gid) {
                 if ((int) $gid === (int) $user->id) continue;
@@ -658,17 +665,17 @@ final class MessageController extends Controller
                     'user_id' => $gid, 'type' => 'message',
                     'title' => $emergency ? '🚨 EMERGENCY from your centre' : 'New message from your centre',
                     'body' => $preview,
-                    'data' => json_encode(['link' => '#messages', 'url' => '/dashboard.html#messages', 'conversation_id' => $convo->id,
-                        'emergency' => $emergency ? 1 : 0, 'message_id' => (int) $msgId]),
+                    'data' => \App\Support\ChatPrivacy::flag(json_encode(['link' => '#messages', 'url' => '/dashboard.html#messages', 'conversation_id' => $convo->id,
+                        'emergency' => $emergency ? 1 : 0, 'message_id' => (int) $msgId]), $gWho),
                     'created_at' => now(),
                 ]);
                 /* false: web push for these guardians is sent as a batch below. Normal unless
                    flagged (App\Support\EmergencyMessage) — this used to ring every time. */
                 try {
                     if ($emergency) {
-                        app(\App\Services\FcmService::class)->sendToUser((int) $gid, '🚨 EMERGENCY from your centre', $preview, '#messages', true, true, false, \App\Support\EmergencyMessage::pushExtra());
+                        app(\App\Services\FcmService::class)->sendToUser((int) $gid, \App\Support\ChatPrivacy::title((int) $gid, $gWho, true), \App\Support\ChatPrivacy::body((int) $gid, true), '#messages', true, true, false, \App\Support\EmergencyMessage::pushExtra());
                     } else {
-                        app(\App\Services\FcmService::class)->sendToUser((int) $gid, 'New message from your centre 💬', $preview, '#messages', false, false, false);
+                        app(\App\Services\FcmService::class)->sendToUser((int) $gid, \App\Support\ChatPrivacy::title((int) $gid, $gWho), \App\Support\ChatPrivacy::body((int) $gid), '#messages', false, false, false);
                     }
                 } catch (\Throwable $e) {}
             }
@@ -680,15 +687,16 @@ final class MessageController extends Controller
             // Separate try so an FCM fault cannot suppress it, and vice versa.
             if ($guardianIds) {
                 try {
-                    $wp = [
-                        'title' => $emergency ? '🚨 EMERGENCY from your centre' : '💬 New message from your centre',
-                        'body'  => $preview,
+                    $wp0 = [
                         'icon'  => '/icon-192.png',
                         'url'   => '/dashboard.html#messages',
                         'tag'   => 'msg-' . $convo->id,
                     ];
-                    app(\App\Services\WebPushService::class)->sendToUsers($guardianIds,
-                        $emergency ? \App\Support\EmergencyMessage::web($wp) : $wp);
+                    \App\Support\ChatPrivacy::webByLanguage($guardianIds, $gWho, $emergency, function ($ids, $t, $b) use ($wp0, $emergency) {
+                        $wp = ['title' => $t, 'body' => $b] + $wp0;
+                        app(\App\Services\WebPushService::class)->sendToUsers($ids,
+                            $emergency ? \App\Support\EmergencyMessage::web($wp) : $wp);
+                    });
                 } catch (\Throwable $we) {
                     \Illuminate\Support\Facades\Log::warning('Web push from messages failed', [
                         'conversation' => $convo->id, 'error' => $we->getMessage(),
@@ -726,6 +734,10 @@ final class MessageController extends Controller
         // post into any other family's conversation at their centre (2026-11-05 leak sweep).
         if ($convo->centre_id) {
             if (\App\Support\MessagingRules::officeHiddenFrom((int) $user->id, $convo)) return false;
+            /* THE AGENCY'S MESSAGE CENTRE RULES APPLY HERE TOO (2026-11-27 chat leak sweep). An educator whose rules
+               hide a family's conversation got 403 from /provider/chats/{id} but read the whole thread from
+               /provider/conversations/{id}. Hidden means hidden on every door. */
+            if (\App\Support\MessagingRules::conversationState((int) $user->id, $convo) === 'hidden') return false;
             return DB::table('role_assignments')
                 ->where('user_id', $user->id)
                 ->where('active', true)

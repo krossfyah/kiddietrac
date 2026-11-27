@@ -18,13 +18,13 @@ Multiple unread messages in the same thread are bundled into one email. So if th
 
 ## What the email shows
 
-Each unread message renders as a card with:
-- Sender's name
-- Time stamp (relative — "12 minutes ago")
-- Truncated body (first 320 characters)
-- Attachment count if any
+Each unread message is listed with:
+- Who sent it (staff by first name)
+- When it was sent (relative — "12 minutes ago")
+- Which conversation it is in (the child's first name, the office, or the Team chat conversation's name)
+- An attachment count, if any
 
-A bright button labelled **"Open conversation"** at the bottom deep-links straight to `#chat` in the portal.
+**The message text is not in the email.** Since November 2026 messages are stored encrypted and stay behind KiddieTrac's sign-in; an inbox is not. Attachment names are left out too. A button labelled **"Open conversation"** at the bottom opens the conversation, where the message can be read.
 
 ## Why you stop getting reminders
 

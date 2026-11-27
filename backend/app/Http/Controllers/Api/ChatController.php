@@ -636,7 +636,7 @@ final class ChatController extends Controller
             ->orderBy('conversation_id')
             ->orderByDesc('created_at')
             ->get(['id', 'conversation_id', 'sender_id', 'body', 'created_at',
-                   'delivered_at', 'read_at', 'family_read_at', 'is_system'])
+                   'delivered_at', 'read_at', 'family_read_at', 'is_system', 'deleted_at'])
             ->groupBy('conversation_id')
             ->map(fn ($msgs) => $msgs->first())
             ->all();
@@ -753,7 +753,9 @@ final class ChatController extends Controller
                 'subject' => $c->subject,
                 'last_message_at' => $c->last_message_at,
                 'unread_count' => (int) ($unread[$c->id] ?? 0),
-                'preview' => $last ? mb_substr($last->body, 0, 120) : null,
+                /* A DELETED MESSAGE STAYS DELETED IN THE LIST TOO (2026-11-27 chat leak sweep): the thread hid its
+                   text but this preview still showed it to everyone in the conversation. */
+                'preview' => $last ? (! empty($last->deleted_at) ? 'Message deleted' : mb_substr($last->body, 0, 120)) : null,
                 'last_sender_id' => $last->sender_id ?? null,
                 /* Who said it. Null when the sender is a guardian of this family —
                    the row is already labelled with the family name, so repeating it
@@ -1117,9 +1119,13 @@ final class ChatController extends Controller
                     if ($emergency) {
                         \App\Support\EmergencyMessage::audit((int) $senderId, $agencyId ?: null, 'conversation', $conversationId, (int) $msgId, $recipients);
                     }
+                    /* WHO, NEVER WHAT (2026-11-27, App\Support\ChatPrivacy): the lock screen says "New message from
+                       Sarah" and "Tap to open and read it.", in the reader's language. The bell row below keeps the
+                       preview (sealed at rest). An emergency still rings, and still says it is urgent. */
+                    $pushWho = \App\Support\ChatPrivacy::first($senderName);
                     $webPayload = [
                         'title' => $pushTitle,
-                        'body'  => $preview,
+                        'body'  => '',
                         'icon'  => '/icon-192.png',
                         /* THE CONVERSATION ID, so the tap lands in the THREAD.
                            This said just '#chat', which opens the conversation LIST — so
@@ -1131,8 +1137,11 @@ final class ChatController extends Controller
                         'url'   => '/dashboard.html#chat?c=' . $conversationId,
                         'tag'   => 'chat-' . $conversationId,
                     ];
-                    app(\App\Services\WebPushService::class)->sendToUsers($recipients,
-                        $emergency ? \App\Support\EmergencyMessage::web($webPayload) : $webPayload);
+                    \App\Support\ChatPrivacy::webByLanguage($recipients, $pushWho, $emergency, function ($ids, $t, $b) use ($webPayload, $emergency) {
+                        $wp = array_merge($webPayload, ['title' => $t, 'body' => $b]);
+                        app(\App\Services\WebPushService::class)->sendToUsers($ids,
+                            $emergency ? \App\Support\EmergencyMessage::web($wp) : $wp);
+                    });
 
                     // v23: ALSO push to native FCM device tokens (the Capacitor
                     // Android/iOS app). The WebPushService call above only reaches
@@ -1150,10 +1159,12 @@ final class ChatController extends Controller
                                screen. Now only an EMERGENCY does — for staff AND parents — with
                                the ring limit for the app; anything else is an ordinary push.
                                false: web push was already sent above. */
+                            $pt = \App\Support\ChatPrivacy::title((int) $rid, $pushWho, $emergency);
+                            $pb = \App\Support\ChatPrivacy::body((int) $rid, $emergency);
                             if ($emergency) {
-                                $fcm->sendToUser((int) $rid, $pushTitle, $preview, '#chat?c=' . $conversationId, true, true, false, \App\Support\EmergencyMessage::pushExtra());
+                                $fcm->sendToUser((int) $rid, $pt, $pb, '#chat?c=' . $conversationId, true, true, false, \App\Support\EmergencyMessage::pushExtra());
                             } else {
-                                $fcm->sendToUser((int) $rid, $pushTitle, $preview, '#chat?c=' . $conversationId, false, false, false);
+                                $fcm->sendToUser((int) $rid, $pt, $pb, '#chat?c=' . $conversationId, false, false, false);
                             }
                         }
                     } catch (\Throwable $fe) {
@@ -1195,7 +1206,7 @@ final class ChatController extends Controller
                             'type' => 'chat',
                             'title' => ($emergency ? '🚨 EMERGENCY · ' : '💬 ') . $senderName . $ctxSuffix,
                             'body' => $preview,
-                            'data' => json_encode([
+                            'data' => \App\Support\ChatPrivacy::flag(json_encode([
                                 // The inbox renderer navigates to data.url; it carried the
                                 // conversation_id beside it but never used it.
                                 'url' => '/dashboard.html#chat?c=' . $conversationId,
@@ -1203,7 +1214,7 @@ final class ChatController extends Controller
                                 // kt-urgent-alert.js raises the ringing takeover for these.
                                 'emergency' => $emergency ? 1 : 0,
                                 'message_id' => (int) $msgId,
-                            ]),
+                            ]), $pushWho),
                             'created_at' => $nowTs,
                         ];
                     }
@@ -1529,8 +1540,9 @@ final class ChatController extends Controller
                         'type' => 'message',
                         'title' => 'Message from your centre',
                         'body' => mb_substr($body, 0, 200),
-                        // A thread now, not a shared conversation.
-                        'data' => json_encode(['link' => '#messages', 'thread_id' => $threadId]),
+                        // A thread now, not a shared conversation. Private: sealed, never on a lock screen (ChatPrivacy).
+                        'data' => \App\Support\ChatPrivacy::flag(json_encode(['link' => '#messages', 'thread_id' => $threadId]),
+                            \App\Support\ChatPrivacy::first((string) ($user->first_name ?? ''))),
                         'created_at' => now(),
                     ]);
                     $familyCount++;
@@ -1566,7 +1578,8 @@ final class ChatController extends Controller
                         'type' => 'message',
                         'title' => $subject ?: 'Message from '.trim(($user->first_name ?? '').' '.($user->last_name ?? '')),
                         'body' => mb_substr($body, 0, 200),
-                        'data' => json_encode(['link' => '#chat', 'thread_id' => $threadId]),   // #team-chat opened no screen (2026-10-22)
+                        'data' => \App\Support\ChatPrivacy::flag(json_encode(['link' => '#chat', 'thread_id' => $threadId]),   // #team-chat opened no screen (2026-10-22)
+                            \App\Support\ChatPrivacy::first((string) ($user->first_name ?? ''))),
                         'created_at' => now(),
                     ]);
                     $pushStaff[] = (int) $uid;
@@ -1589,7 +1602,8 @@ final class ChatController extends Controller
         $pushTitle = $subject ?: ('Message from '.(trim(($user->first_name ?? '').' '.($user->last_name ?? '')) ?: 'your centre'));
         // Parents' copy: the sender's first name only (2026-11-27, staff names to families).
         $parentPushTitle = $subject ?: ('Message from '.(trim((string) strtok(trim((string) ($user->first_name ?? '')), ' ')) ?: 'your centre'));
-        $pushBody = mb_substr($body, 0, 180);
+        // Who, never what (ChatPrivacy, 2026-11-27): the broadcast's text stays inside the app.
+        $bWho = \App\Support\ChatPrivacy::first((string) ($user->first_name ?? ''));
         $staffPushTitle = $pushTitle;
 
         foreach ([['#messages', array_unique($pushParents)], ['#chat', array_unique($pushStaff)]] as [$link, $ids]) {
@@ -1600,19 +1614,21 @@ final class ChatController extends Controller
             try {
                 $fcm = app(\App\Services\FcmService::class);
                 foreach ($ids as $uid) {
-                    $fcm->sendToUser((int) $uid, $pushTitle, $pushBody, $link, true);
+                    $fcm->sendToUser((int) $uid, \App\Support\ChatPrivacy::title((int) $uid, $bWho), \App\Support\ChatPrivacy::body((int) $uid), $link, true);
                 }
             } catch (\Throwable $e) {
                 Log::warning('Broadcast FCM push failed', ['error' => $e->getMessage()]);
             }
             try {
-                app(\App\Services\WebPushService::class)->sendToUsers(array_values($ids), [
-                    'title' => $pushTitle,
-                    'body' => $pushBody,
-                    'icon' => '/icon-192.png',
-                    'url' => '/dashboard.html'.$link,
-                    'tag' => 'kt-message',
-                ]);
+                \App\Support\ChatPrivacy::webByLanguage(array_values($ids), $bWho, false, function ($wids, $t, $b) use ($link) {
+                    app(\App\Services\WebPushService::class)->sendToUsers($wids, [
+                        'title' => $t,
+                        'body' => $b,
+                        'icon' => '/icon-192.png',
+                        'url' => '/dashboard.html'.$link,
+                        'tag' => 'kt-message',
+                    ]);
+                });
             } catch (\Throwable $e) {
                 Log::warning('Broadcast web push failed', ['error' => $e->getMessage()]);
             }

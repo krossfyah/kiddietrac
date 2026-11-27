@@ -70,7 +70,8 @@ final class MissedMessagesCommand extends Command
             }
 
             $agencyId = DB::table('centres')->where('id', $convo->centre_id)->value('agency_id');
-            $preview = $m->body ? e(mb_substr($m->body, 0, 400)) : '📎 An attachment';
+            // Who and when, never what (2026-11-27, App\Support\ChatPrivacy): the text stays behind the app's sign-in.
+            $preview = 'For your privacy, messages are not shown in email. Open KiddieTrac to read it.';
             $subject = 'New KiddieTrac message from ' . $senderName;
             $html = $this->body($senderName, $preview);
 
@@ -103,7 +104,7 @@ final class MissedMessagesCommand extends Command
         return '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#0D1B2A;">'
             . '<div style="background:#081C41;color:#fff;padding:20px 24px;border-radius:14px 14px 0 0;font-weight:800;font-size:18px;">KiddieTrac · New message</div>'
             . '<div style="border:1px solid #E5E7EB;border-top:none;border-radius:0 0 14px 14px;padding:22px 24px;">'
-            . '<p style="margin:0 0 12px;font-size:15px;">You have an unread message from <b>' . e($senderName) . '</b>:</p>'
+            . '<p style="margin:0 0 12px;font-size:15px;">You have an unread message from <b>' . e($senderName) . '</b>.</p>'
             . '<blockquote style="margin:0 0 18px;padding:12px 16px;background:#F1F5F9;--kt-edge:#0E7C90;border-radius:8px;font-size:15px;line-height:1.5;">' . $preview . '</blockquote>'
             . '<a href="' . $portal . '" style="display:inline-block;background:#0E7C90;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-weight:700;font-size:15px;">Open KiddieTrac</a>'
             . '<p style="margin:18px 0 0;font-size:12px;color:#94A3B8;">You’re receiving this because a message went unread. Open the app to reply.</p>'

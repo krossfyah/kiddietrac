@@ -18,13 +18,13 @@ Plusieurs messages non lus dans le même fil sont regroupés en un seul courriel
 
 ## Ce que montre le courriel
 
-Chaque message non lu est présenté sous forme de carte contenant :
-- le nom de l’expéditeur
-- l’heure (relative — « il y a 12 minutes »)
-- le corps du message, tronqué (320 premiers caractères)
-- le nombre de pièces jointes, s’il y en a
+Chaque message non lu est indiqué avec :
+- Qui l’a envoyé (le personnel par son prénom)
+- Quand il a été envoyé (en temps relatif — « il y a 12 minutes »)
+- La conversation où il se trouve (le prénom de l’enfant, le bureau ou le nom de la conversation d’équipe)
+- Le nombre de pièces jointes, s’il y en a
 
-Un bouton bien visible intitulé **« Ouvrir la conversation »** au bas du courriel mène directement à `#chat` dans le portail.
+**Le texte du message n’est pas dans le courriel.** Depuis novembre 2026, les messages sont enregistrés chiffrés et restent derrière la connexion à KiddieTrac, ce qui n’est pas le cas d’une boîte de réception. Les noms des pièces jointes sont aussi omis. Un bouton **« Ouvrir la conversation »** en bas ouvre la conversation, où le message peut être lu.
 
 ## Pourquoi vous cessez de recevoir des rappels
 

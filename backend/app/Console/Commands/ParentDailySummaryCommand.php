@@ -394,9 +394,9 @@ class ParentDailySummaryCommand extends Command
                         ])->values()->all(),
                         'photo_captions' => $photos->pluck('caption')->filter()->values()->all(),
                         'photo_count' => $photos->count(),
+                        // Who wrote, not what (2026-11-27, App\Support\ChatPrivacy): message text stays inside the app.
                         'messages_with_centre' => $messages->map(fn ($m) => [
                             'from' => $m->sender,
-                            'said' => $m->body,
                         ])->values()->all(),
                         'centre_announcements' => $announcements->pluck('title')->values()->all(),
                         'awards' => $awards->map(fn ($a) => trim(($a->badge ? $a->badge . ' ' : '') . $a->title))->values()->all(),
@@ -1141,14 +1141,16 @@ class ParentDailySummaryCommand extends Command
         }
 
         // Messages
+        /* Who wrote and when - never the words (2026-11-27, Anthony; App\Support\ChatPrivacy). An inbox is outside the
+           app's sign-in, so the summary lists the day's messages and the app shows them. */
         if (count($day['messages'])) {
             $body .= $this->section('💬 Messages today');
             foreach ($day['messages'] as $m) {
                 $body .= '<div style="background:#F8FAFC;--kt-edge:#159FB4;border-radius:8px;padding:9px 11px;margin-bottom:7px;">'
-                    . '<div style="font-size:11.5px;color:#64748B;font-weight:700;">' . e($m->sender) . ' · ' . $t($m->created_at) . '</div>'
-                    . '<div style="font-size:13.5px;color:#0F172A;line-height:1.45;margin-top:2px;">' . e((string) $m->body) . '</div>'
+                    . '<div style="font-size:12.5px;color:#334155;font-weight:700;">' . e($m->sender) . ' <span style="color:#64748B;font-weight:400;">· ' . $t($m->created_at) . '</span></div>'
                     . '</div>';
             }
+            $body .= '<div style="font-size:12px;color:#64748B;margin:0 0 8px;">For your privacy, messages are not shown in email. Open the app to read them.</div>';
         }
 
         // Announcements

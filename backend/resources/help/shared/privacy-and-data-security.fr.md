@@ -29,6 +29,14 @@ Pour le **personnel** : nom, courriel, rôle, certifications (RECE, premiers soi
 - Le **directeur** voit tout pour son centre
 - Les **autres centres** ne voient jamais vos données — chaque centre est isolé
 
+## Messages
+
+Les messages entre les familles et le service de garde, le clavardage d’équipe, les traductions de messages et les notifications de l’application qui reprennent un message sont **enregistrés chiffrés** sur nos serveurs (AES-256), avec une clé conservée à part de la base de données. Une copie de la base de données ou une sauvegarde seule ne montre que du texte brouillé, pas ce que quelqu’un a écrit. Dans KiddieTrac, ils s’affichent normalement pour les personnes de la conversation, et la recherche fonctionne toujours.
+
+Les notifications sur le téléphone et les courriels indiquent **qui** a envoyé un message, pas **ce qu’il dit** — ouvrez l’application pour le lire. Les messages 🚨 d’urgence sonnent toujours fort et indiquent toujours qu’ils sont urgents.
+
+Il s’agit d’un chiffrement au repos, pas d’un chiffrement de bout en bout : les serveurs de KiddieTrac déchiffrent les messages pour les montrer aux personnes autorisées à les lire (et, pour les administrateurs de votre agence, dans l’audit des conversations).
+
 ## Photos
 
 Les photos partagées par les éducateurs sont visibles par les parents/tuteurs des enfants, tous les éducateurs du centre et le directeur. Elles ne sont publiées publiquement nulle part. Vous pouvez demander à la direction du centre de retirer certaines photos en tout temps.

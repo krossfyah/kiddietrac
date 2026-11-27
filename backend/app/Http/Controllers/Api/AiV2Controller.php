@@ -76,6 +76,9 @@ final class AiV2Controller extends Controller
         // a cached translation leaked any message's content by id to any caller.
         $msg = DB::table('messages')->where('id', $data['message_id'])->first();
         abort_unless($msg, 404);
+        /* A DELETED MESSAGE IS GONE FOR TRANSLATION TOO (2026-11-27 chat leak sweep): the thread shows "deleted",
+           but asking for its translation handed back what it had said. */
+        abort_if(! empty($msg->deleted_at), 404);
         $conv = DB::table('conversations')->where('id', $msg->conversation_id)->first();
         abort_unless($conv, 404);
         $u = $request->user();

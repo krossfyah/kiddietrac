@@ -334,36 +334,46 @@ final class EmailMissedMessagesCommand extends Command
     private function renderEmail(object $recipient, object $conv, array $msgs, $senders, ?object $agency): string
     {
         $rcptFirst = $recipient->first_name ?: 'there';
+        /* WHO, WHEN AND WHERE - NEVER WHAT (2026-11-27, Anthony; App\Support\ChatPrivacy). This email quoted up to
+           320 characters of each message and named its attachments. An inbox is outside the app's sign-in, so it now
+           says who wrote, when, and which conversation (the child's first name, or the office), with the button. */
+        $convIds = array_values(array_unique(array_filter(array_map(fn ($m) => (int) ($m->conversation_id ?? 0), $msgs))));
+        $where = [];
+        if ($convIds) {
+            foreach (DB::table('conversations as c')->leftJoin('children as ch', 'ch.id', '=', 'c.child_id')->whereIn('c.id', $convIds)
+                ->get(['c.id', 'c.centre_id', 'c.child_id', 'c.channel', 'ch.first_name']) as $cv) {
+                $where[(int) $cv->id] = trim((string) $cv->first_name) !== '' ? 'about ' . trim((string) strtok(trim((string) $cv->first_name), ' '))
+                    : (\App\Support\MessagingRules::isOffice($cv) ? 'to the office' : '');
+            }
+        }
         $items = '';
         foreach ($msgs as $m) {
             $sender = $senders[$m->sender_id] ?? null;
             $name = $sender ? $this->senderName($sender) : 'Someone';
             $when = Carbon::parse($m->created_at)->diffForHumans();
-            $body = trim((string) $m->body);
-            $attachmentsNote = '';
+            $about = $where[(int) ($m->conversation_id ?? 0)] ?? '';
+            $kindNote = '';
             if (!empty($m->attachments)) {
                 $att = json_decode((string) $m->attachments, true);
                 if (is_array($att) && !empty($att)) {
-                    $attachmentsNote = '<div style="font-size:12px;color:#6B7280;margin-top:6px;">📎 ' . count($att) . ' attachment' . (count($att) === 1 ? '' : 's') . '</div>';
+                    $kindNote = ' · 📎 ' . count($att) . ' attachment' . (count($att) === 1 ? '' : 's');
                 }
             }
-            $preview = $body !== '' ? htmlspecialchars(mb_strimwidth($body, 0, 320, '…'))
-                                    : ($attachmentsNote ? '<em style="color:#6B7280;">(image)</em>' : '<em style="color:#6B7280;">(no text)</em>');
-            $preview = self::replyLineHtml('family', (int) $m->conversation_id, $m->reply_to_id ?? null) . $preview;
             $items .= '<table cellpadding="0" cellspacing="0" border="0" width="100%" role="presentation" style="background:#F8FAFC;border-radius:12px;--kt-edge:#1F6080;margin-bottom:10px;">'
-                . '<tr><td style="padding:14px 16px;">'
-                . '<div style="font-size:12px;font-weight:700;color:#1F6080;">' . htmlspecialchars($name)
-                . ' <span style="color:#9CA3AF;font-weight:400;font-size:11px;margin-left:8px;">· ' . htmlspecialchars($when) . '</span></div>'
-                . '<div style="font-size:14px;color:#111827;margin-top:6px;line-height:1.5;">' . $preview . '</div>'
-                . $attachmentsNote
+                . '<tr><td style="padding:12px 16px;">'
+                . '<div style="font-size:13px;font-weight:700;color:#1F6080;">' . htmlspecialchars($name)
+                . ($about !== '' ? ' <span style="color:#475569;font-weight:600;">' . htmlspecialchars($about) . '</span>' : '')
+                . ' <span style="color:#9CA3AF;font-weight:400;font-size:11px;margin-left:6px;">· ' . htmlspecialchars($when) . htmlspecialchars($kindNote) . '</span></div>'
                 . '</td></tr></table>';
         }
+        $items .= '<p style="margin:4px 0 14px;font-size:12.5px;color:#64748B;line-height:1.5;">For your privacy, messages are not shown in email. Open the conversation to read them.</p>';
+        $openLink = 'https://app.kiddietrac.com/dashboard.html#chat' . (count($convIds) === 1 ? '?c=' . $convIds[0] : '');
 
         $body  = '<p style="margin:0 0 14px;font-size:14px;color:#0F172A;">Hi ' . htmlspecialchars($rcptFirst) . ', you have ';
         $body .= count($msgs) === 1 ? '<strong>a new message</strong>' : '<strong>' . count($msgs) . ' new messages</strong>';
         $body .= ' in ' . htmlspecialchars($agency ? $agency->name : 'Kiddietrac') . '.</p>';
         $body .= $items;
-        $body .= EmailTemplate::button('Open conversation', 'https://app.kiddietrac.com/dashboard.html#chat', $agency && $agency->brand_primary_color ? $agency->brand_primary_color : '#1F6080');
+        $body .= EmailTemplate::button('Open conversation', $openLink, $agency && $agency->brand_primary_color ? $agency->brand_primary_color : '#1F6080');
 
         return EmailTemplate::wrap($agency ? (int) $agency->id : null, $body, [
             'eyebrow'   => 'CHAT · UNREAD',
@@ -502,14 +512,20 @@ final class EmailMissedMessagesCommand extends Command
                 $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 // Each line names its sender — a digest spanning threads is unreadable
                 // without it, unlike the old one-thread-per-email version.
-                $lines = $missed->take(8)->map(fn ($m) =>
-                    '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;'
-                    .'padding:10px 12px;margin-bottom:8px;font-size:14px;line-height:1.55;'
-                    .'color:#1E293B;white-space:pre-wrap;">'
-                    .'<div style="font-size:12px;font-weight:700;color:#1F6080;margin-bottom:4px;">'
-                    .$e($names[$m->sender_id] ?? 'A colleague').'</div>'
-                    .self::replyLineHtml('staff', (int) $m->thread_id, $m->reply_to_id ?? null)
-                    .$e($m->body).'</div>')->implode('');
+                /* Who, when and which conversation - never what (2026-11-27, App\Support\ChatPrivacy): the text
+                   stays behind the app's sign-in. A named group shows its name; a direct message says so. */
+                $tTitles = DB::table('staff_threads')->whereIn('id', $missed->pluck('thread_id')->unique()->all())
+                    ->get(['id', 'title', 'is_group'])->keyBy('id');
+                $lines = $missed->take(8)->map(function ($m) use ($e, $names, $tTitles) {
+                    $t = $tTitles[$m->thread_id] ?? null;
+                    $in = $t && trim((string) $t->title) !== '' ? 'in ' . trim((string) $t->title) : ($t && $t->is_group ? 'in a group conversation' : 'direct message');
+                    return '<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:9px;'
+                        .'padding:10px 12px;margin-bottom:8px;font-size:13px;line-height:1.5;color:#1E293B;">'
+                        .'<span style="font-weight:700;color:#1F6080;">'.$e($names[$m->sender_id] ?? 'A colleague').'</span>'
+                        .' <span style="color:#475569;">'.$e($in).'</span>'
+                        .' <span style="color:#9CA3AF;font-size:11px;">· '.$e(\Illuminate\Support\Carbon::parse($m->created_at)->diffForHumans()).'</span></div>';
+                })->implode('')
+                    .'<div style="font-size:12.5px;color:#64748B;line-height:1.5;margin:2px 0 0;">For your privacy, messages are not shown in email.</div>';
 
                 /* "Team chat" means nothing to a parent. Broadcast now delivers to
                    parents through the same private threads, so the label follows who is

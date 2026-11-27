@@ -262,10 +262,14 @@ final class Notify
                 continue;   // a test agency spends no AI (2026-11-24)
             }
             $loc = MessageTranslator::forUser((int) $k['user_id']);
-            if ($loc && (isset($k['title']) || isset($k['body']))) {
-                [$t, $b] = MessageTranslator::many([(string) ($k['title'] ?? ''), (string) ($k['body'] ?? '')], $loc, 5);
+            /* A row that copies somebody's chat message (ChatPrivacy::FLAG): its title is translated, its body is
+               left as the person wrote it - it is their words, the chat screen translates on request, and the text
+               then never lands in the translation cache. 2026-11-27. */
+            $private = ChatPrivacy::isFlagged($k['data'] ?? null);
+            if ($loc && (isset($k['title']) || (isset($k['body']) && ! $private))) {
+                [$t, $b] = MessageTranslator::many([(string) ($k['title'] ?? ''), $private ? '' : (string) ($k['body'] ?? '')], $loc, 5);
                 if (isset($k['title'])) { $k['title'] = $t; }
-                if (isset($k['body'])) { $k['body'] = $b; }
+                if (isset($k['body']) && ! $private) { $k['body'] = $b; }
             }
         }
         unset($k);
@@ -278,6 +282,11 @@ final class Notify
                A sweep has to skip the file implementing the thing it is sweeping for. */
             $push = [];
             foreach ($keep as &$k) {
+                /* CHAT TEXT IS SEALED AT REST (2026-11-27, ChatPrivacy): the bell still shows it - the connection
+                   decrypts on the way out - but a copy of the table does not. Its push never carries it. */
+                if (isset($k['body']) && is_string($k['body']) && ChatPrivacy::isFlagged($k['data'] ?? null)) {
+                    $k['body'] = Sensitive::seal($k['body'], 'text');
+                }
                 if (! empty($k['__push'])) {
                     // A test agency's row stays in the bell but never rings a phone (2026-11-24).
                     if (! TestAgency::isAgency($k['agency_id'] ?? null) || ! empty($k['__platform'])) {
@@ -338,6 +347,12 @@ final class Notify
                 }
                 $title = trim((string) ($first['title'] ?? '')) ?: 'KiddieTrac';
                 $body = trim((string) ($first['body'] ?? ''));
+                // Somebody's message: the lock screen names who wrote, never what (ChatPrivacy, 2026-11-27).
+                if (! empty($data[ChatPrivacy::FLAG]) || Sensitive::isSealed($body)) {
+                    $emerg = ! empty($data['emergency']);
+                    $title = ChatPrivacy::title((int) $uid, (string) ($data['kt_push_who'] ?? ''), $emerg);
+                    $body = ChatPrivacy::body((int) $uid, $emerg);
+                }
                 if (count($rows) > 1) {
                     $title .= ' (+' . (count($rows) - 1) . ' more)';
                 }

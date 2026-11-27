@@ -357,10 +357,13 @@ final class DashboardExtrasController extends Controller
             'user_id' => $data['user_id'], 'type' => 'message',
             'title' => 'Message from ' . $senderName,
             'body' => $data['message'],
-            'data' => json_encode(['link' => $link]),
+            // Private (App\Support\ChatPrivacy, 2026-11-27): sealed at rest; the phone is told who, never what.
+            'data' => \App\Support\ChatPrivacy::flag(json_encode(['link' => $link]), \App\Support\ChatPrivacy::first((string) ($sn->first_name ?? ''))),
             'created_at' => now(),
         ]);
-        try { app(\App\Services\FcmService::class)->sendToUser((int) $data['user_id'], 'Message from ' . $senderName, $data['message'], $link); } catch (\Throwable $e) {}
+        try { app(\App\Services\FcmService::class)->sendToUser((int) $data['user_id'],
+            \App\Support\ChatPrivacy::title((int) $data['user_id'], \App\Support\ChatPrivacy::first((string) ($sn->first_name ?? ''))),
+            \App\Support\ChatPrivacy::body((int) $data['user_id']), $link); } catch (\Throwable $e) {}
 
         return response()->json(['success' => true]);
     }

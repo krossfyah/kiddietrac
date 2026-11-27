@@ -1104,6 +1104,9 @@ final class TeamChatController extends Controller
             $replySuffix = $replyLine !== '' ? "\n↩ " . $replyLine : '';
             $preview .= $replySuffix;
             $pushTitle = $emergency ? \App\Support\EmergencyMessage::title($meName) : '💬 ' . $meName;
+            /* WHO, NEVER WHAT on a lock screen (2026-11-27, App\Support\ChatPrivacy): "New message from Marcus" /
+               "Tap to open and read it." The bell row keeps the preview, sealed at rest. */
+            $pushWho = \App\Support\ChatPrivacy::first((string) ($me->first_name ?? '')) ?: \App\Support\ChatPrivacy::first($meName);
             if ($emergency) {
                 \App\Support\EmergencyMessage::audit($uid, $this->agencyOfUser($uid), 'staff_thread', $thread, (int) $id,
                     $others->map(fn ($v) => (int) $v)->all());
@@ -1114,8 +1117,8 @@ final class TeamChatController extends Controller
                    below was written, but nothing ever told the phone about it. */
                 try {
                     $wp = [
-                        'title' => $pushTitle,
-                        'body'  => $preview,
+                        'title' => \App\Support\ChatPrivacy::title((int) $oid, $pushWho, $emergency),
+                        'body'  => \App\Support\ChatPrivacy::body((int) $oid, $emergency),
                         'icon'  => '/icon-192.png',
                         /* THE THREAD, in Messenger. This pointed at '#team-messages',
                            which is a HIDDEN screen — the colleague UI lives in Messenger —
@@ -1141,7 +1144,8 @@ final class TeamChatController extends Controller
                            a deep link that NAMES the thread, not a hidden screen. */
                         /* Normal unless flagged (App\Support\EmergencyMessage) — this rang
                            insistently for every colleague message. false: web push sent above. */
-                        ->sendToUser((int) $oid, $pushTitle, $preview, '#chat?c=staff:' . $thread,
+                        ->sendToUser((int) $oid, \App\Support\ChatPrivacy::title((int) $oid, $pushWho, $emergency),
+                            \App\Support\ChatPrivacy::body((int) $oid, $emergency), '#chat?c=staff:' . $thread,
                             $emergency, $emergency, false, $emergency ? \App\Support\EmergencyMessage::pushExtra() : []);
                 } catch (\Throwable $fe) {
                     \Illuminate\Support\Facades\Log::warning('Team-chat FCM push failed',
@@ -1159,12 +1163,12 @@ final class TeamChatController extends Controller
                     /* 'url' was MISSING here. The inbox renderer navigates to data.url, so
                        this row carried a thread_id nothing read, and clicking it in the
                        bell did nothing at all. */
-                    'data'    => json_encode([
+                    'data'    => \App\Support\ChatPrivacy::flag(json_encode([
                         'url' => '/dashboard.html#chat?c=staff:' . $thread,
                         'thread_id' => $thread,
                         'emergency' => $emergency ? 1 : 0,
                         'message_id' => (int) $id,
-                    ]),
+                    ]), $pushWho),
                     'created_at' => $now,
                 ]);
             }

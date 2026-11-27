@@ -79,6 +79,37 @@ final class Sensitive
         'hr_injury_checkins' => [
             'note' => 'text',
         ],
+        /* CHAT MESSAGES (2026-11-27, Anthony: encrypt message text at rest, keep search working - App\Support\ChatPrivacy).
+           Family conversations, colleague / parent threads, their saved translations, the private "message parents"
+           log, a reported message's quoted excerpt and parent issue threads. Attachments hold file names: sealed too.
+           Bell rows that copy a message are sealed per row (Notify, ChatPrivacy::FLAG) - notifications.body as a
+           whole is searched with LIKE by other features. Search inside messages: ChatPrivacy::matches(). */
+        'messages' => [
+            'body'            => 'text',
+            'translated_body' => 'text',
+            'attachments'     => 'json',
+        ],
+        'staff_messages' => [
+            'body'        => 'text',
+            'attachments' => 'text',
+        ],
+        'message_translations' => [
+            'translated_text' => 'text',
+        ],
+        'staff_parent_messages' => [
+            'body' => 'text',
+        ],
+        'content_reports' => [
+            'excerpt' => 'text',
+        ],
+        'parent_issue_messages' => [
+            'body' => 'text',
+        ],
+        // The outgoing-translation cache (looked up by hash only): what an email or notice said, in another language.
+        'outgoing_translations' => [
+            'source'     => 'text',
+            'translated' => 'text',
+        ],
     ];
 
     private const UNREADABLE = '⚠ This information could not be decrypted (KT_DATA_KEY). Ask the office to check the record.';
