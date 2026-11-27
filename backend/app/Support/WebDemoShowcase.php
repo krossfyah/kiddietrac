@@ -73,6 +73,15 @@ final class WebDemoShowcase
         return $this->today->copy()->addDays($days)->setTime($h, $m)->utc()->format('Y-m-d H:i:s');
     }
 
+    /**
+     * AGENCY WALL-CLOCK time, not UTC (2026-11-26). shifts.starts_at/ends_at hold the agency's local time (SchedulingController
+     * reads them back with no conversion), so a demo shift written with at() showed 7:30-15:30 as 15:30-23:30.
+     */
+    private function wall(int $days, int $h, int $m = 0): string
+    {
+        return $this->today->copy()->addDays($days)->setTime($h, $m)->format('Y-m-d H:i:s');
+    }
+
     /** The last $n weekdays before today, oldest first, as day offsets (negative). */
     private function pastWeekdays(int $n): array
     {
@@ -209,7 +218,7 @@ final class WebDemoShowcase
             for ($d = -14; $d <= 14; $d++) {
                 $day = $this->today->copy()->addDays($d);
                 if ($day->isWeekend() || $d === $off) continue;
-                $this->add('shifts', ['user_id' => $maya, 'room_id' => $roomId, 'starts_at' => $this->at($d, 7, 30), 'ends_at' => $this->at($d, 15, 30),
+                $this->add('shifts', ['user_id' => $maya, 'room_id' => $roomId, 'starts_at' => $this->wall($d, 7, 30), 'ends_at' => $this->wall($d, 15, 30),
                     'role' => 'lead', 'status' => $d < 0 ? 'completed' : 'scheduled', 'created_at' => $now]);
             }
             $offDate = $this->today->copy()->addDays($off);

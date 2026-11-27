@@ -1526,12 +1526,26 @@ final class SchedulingController extends Controller
         $start = $request->query('start');
         $end = $request->query('end');
         abort_unless($start && $end, 400);
-        $agencyId = (int) ($request->header('X-Active-Agency-Id')
-            ?: \Illuminate\Support\Facades\DB::table('role_assignments')
-                ->where('user_id', $request->user()->id)->where('active', 1)->value('agency_id'));
+        /* SCOPED LIKE THE TIME-OFF LIST (2026-11-26, HR Phase 3 follow-up). This read trusted the raw X-Active-Agency-Id
+           header (any director could name another agency) and was bounded by the agency only, so a director saw every
+           centre's approved leave. Now: the verified active agency (resolveAgencyId, fails closed), and for directors the
+           same rule as TimeOffController::listAgency - the request's centre, or a centre the requester works at. */
+        $agencyId = (int) ($this->resolveAgencyId($request) ?: 0);
+        if ($agencyId <= 0) return response()->json(['data' => []]);
+        $scope = \App\Support\CentreScope::ids($request, $agencyId);
         $rows = \Illuminate\Support\Facades\DB::table('time_off_requests as tor')
             ->join('users as u', 'u.id', '=', 'tor.user_id')
             ->where('tor.agency_id', $agencyId)
+            ->when($scope !== null, function ($w) use ($scope) {
+                $w->where(function ($s) use ($scope) {
+                    $s->whereIn('tor.centre_id', $scope ?: [0])
+                      ->orWhere(fn ($n) => $n->whereNull('tor.centre_id')->whereExists(fn ($e) => $e->from('role_assignments as sra')
+                          ->whereColumn('sra.user_id', 'tor.user_id')->where('sra.active', 1)
+                          ->whereIn('sra.role', \App\Support\Visibility::STAFF_ROLES)->whereIn('sra.centre_id', $scope ?: [0])->select(DB::raw(1))))
+                      ->orWhere(fn ($n) => $n->whereNull('tor.centre_id')->whereExists(fn ($e) => $e->from('educator_rooms as er')->join('rooms as rm', 'rm.id', '=', 'er.room_id')
+                          ->whereColumn('er.user_id', 'tor.user_id')->whereIn('rm.centre_id', $scope ?: [0])->select(DB::raw(1))));
+                });
+            })
             ->where('tor.status', 'approved')
             ->where('tor.start_at', '<=', $end)
             ->where('tor.end_at', '>=', $start)
