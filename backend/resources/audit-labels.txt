@@ -584,6 +584,7 @@ post marketing/campaigns | Created an email campaign
 patch marketing/campaigns/{id} | Updated an email campaign
 delete marketing/campaigns/{id} | Deleted an email campaign
 post marketing/campaigns/{id}/send | Sent an email campaign
+post marketing/campaigns/{id}/resend-bounced | Resent a campaign to people whose email bounced
 post marketing/drip | Created an email drip sequence
 post marketing/images | Uploaded a marketing image
 post me/account-deletion | Asked to delete their account

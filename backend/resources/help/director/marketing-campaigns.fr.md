@@ -63,6 +63,19 @@ l'application. Les campagnes envoyées avant le 27 novembre 2026 sont reconstrui
 courriels; quelques personnes peuvent apparaître comme « Inconnu ». Les directeurs ne voient que les
 campagnes de leurs propres centres.
 
+## Renvoyer aux adresses en échec
+
+Quand des courriels ont échoué, **Destinataires et statistiques** indique combien ont échoué et combien de
+ces personnes ont maintenant une adresse corrigée. Corrigez d'abord le courriel dans la fiche de la personne,
+puis appuyez sur **↻ Renvoyer aux adresses en échec** (au-dessus du filtre d'état, ou dans le **⋮** de la
+campagne). La liste montre le nom de chaque personne, l'adresse en échec, son courriel actuel et ce qui est
+possible : **Adresse corrigée — prête à renvoyer**, **Même adresse — corrigez-la d'abord** (avec un bouton
+pour ouvrir sa fiche), **Aucun courriel au dossier** ou **Compte désactivé**. Seules les personnes prêtes
+peuvent être cochées, et elles le sont toutes au départ. On vous demande de confirmer le nombre avant tout
+envoi. La campagne part à l'adresse actuelle, jamais deux fois à une adresse qui l'a déjà reçue, 80 au plus
+à la fois, et les règles de courriel habituelles s'appliquent. Une fois envoyée, la personne apparaît comme
+envoyée, avec l'adresse en échec dans les détails, et le journal d'audit nomme chaque adresse.
+
 ## Le pied de page
 
 Chaque campagne se termine par un pied de page **« Propulsé par Kiddietrac »**. Il affiche aussi les liens vers la **Politique de confidentialité** et les **Conditions générales** de votre agence : définissez-les une seule fois sous **Paramètres → Image de marque** (ils font partie de la configuration de votre agence) et ils apparaissent automatiquement sur chaque campagne.

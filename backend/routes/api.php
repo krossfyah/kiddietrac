@@ -1280,6 +1280,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // Recipients & stats (2026-11-27): who it went to and what happened, read-only.
             Route::get   ('/marketing/campaigns/{id}/recipients', [\App\Http\Controllers\Api\MarketingController::class, 'recipients'])->whereNumber('id')->middleware('throttle:60,1,r-campaign-recipients');
             Route::get   ('/marketing/campaigns/{id}/recipients/{sendId}/email', [\App\Http\Controllers\Api\MarketingController::class, 'recipientEmail'])->whereNumber('id')->whereNumber('sendId')->middleware('throttle:60,1,r-campaign-recipient-email');
+            // Resend to bounced (2026-11-27): the bounced list with each person's current email, and the resend itself.
+            Route::get   ('/marketing/campaigns/{id}/bounced', [\App\Http\Controllers\Api\MarketingController::class, 'bounced'])->whereNumber('id')->middleware('throttle:60,1,r-campaign-bounced');
+            Route::post  ('/marketing/campaigns/{id}/resend-bounced', [\App\Http\Controllers\Api\MarketingController::class, 'resendBounced'])->whereNumber('id')->middleware('throttle:6,1,w-campaign-resend');
             Route::get   ('/marketing/senders',             [\App\Http\Controllers\Api\MarketingController::class, 'senders']);
             Route::post  ('/marketing/images',              [\App\Http\Controllers\Api\MarketingController::class, 'uploadImage']);
             // Agency-wide accounting view of externally-synced (iLearn) invoices —

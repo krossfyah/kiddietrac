@@ -38,7 +38,7 @@ class CampaignSends
      * The house logger keys the email_logs row on the X-KT-Track token the pixel listener put on the message;
      * a message the mail rules held back has no token and its 'suppressed' row is found by address + subject.
      */
-    public static function record(object $c, object $r, string $subject, $message, ?\Throwable $error, Carbon $startedAt): ?string
+    public static function record(object $c, object $r, string $subject, $message, ?\Throwable $error, Carbon $startedAt, string $source = 'send'): ?string
     {
         // Returns the outcome it recorded ('sent', 'suppressed', 'failed', 'unknown'), or null when nothing was recorded.
         if (! self::ready() || empty($r->email)) return null;
@@ -55,7 +55,9 @@ class CampaignSends
                 $log = DB::table('email_logs')->where('tracking_token', $token)->orderByDesc('id')->first(['id', 'status', 'error']);
             }
             if (! $log) {
-                $log = DB::table('email_logs')->where('to_email', $r->email)->where('subject', $subject)
+                /* SuppressAgencyMail logs a held-back message as "[SUPPRESSED] <subject>" with its own token, so the
+                   plain subject alone never matched it and every held-back person was recorded as "Not known". */
+                $log = DB::table('email_logs')->where('to_email', $r->email)->whereIn('subject', [$subject, '[SUPPRESSED] ' . $subject])
                     ->where('created_at', '>=', $startedAt->copy()->subMinute())->orderByDesc('id')->first(['id', 'status', 'error']);
             }
             if ($error) {
@@ -79,7 +81,7 @@ class CampaignSends
                     'error' => $why !== null ? mb_substr((string) $why, 0, 500) : null,
                     'tracking_token' => $token,
                     'email_log_id' => $log->id ?? null,
-                    'source' => 'send',
+                    'source' => $source === 'resend' ? 'resend' : 'send',   // 'resend': CampaignResend (portal or console)
                     'sent_at' => now(),
                 ]
             );

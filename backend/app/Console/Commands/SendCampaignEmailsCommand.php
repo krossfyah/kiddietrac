@@ -63,7 +63,7 @@ final class SendCampaignEmailsCommand extends Command
             $agency = DB::table('agencies')->where('id', $c->agency_id)->first();
             if (!$agency) { $this->warn("Campaign #{$c->id}: agency {$c->agency_id} missing, skipping"); continue; }
 
-            $everyone = $this->resolveAudience($c);
+            $everyone = self::audience($c);
             // A stable order, so a paced send resumes at the right person (email_progress).
             usort($everyone, function ($x, $y) { return ((int) $x->id) <=> ((int) $y->id); });
             /* Who is EMAILED (2026-11-27): one email per address, and nobody without one. Two accounts on one address
@@ -106,7 +106,7 @@ final class SendCampaignEmailsCommand extends Command
             $delivered = 0; $failed = 0; $i = 0;
             foreach ($batch as $r) {
                 if ($paced && $i++ > 0) { sleep(\App\Support\CampaignSender::GAP_SECONDS); }
-                $out = $this->sendOne($c, $agency, $r, $sender, $mailer, $bodyHtml, $subject);
+                $out = self::deliverOne($c, $agency, $r, $sender, $mailer, $bodyHtml, $subject, 'send', fn ($l) => $this->warn($l));
                 if ($out === 'failed') { $failed++; } elseif ($out === 'sent') { $delivered++; }
             }
             $done = $start + count($batch) >= count($recipients);
@@ -155,13 +155,15 @@ final class SendCampaignEmailsCommand extends Command
     }
 
     /** In-app notice per person (v22p48), so the inbox shows the campaign even if the email lands in spam. */
-    private static function writeBell(object $c, array $people, $now): void
+    public static function writeBell(object $c, array $people, $now): void
     {
         $notifRows = [];
         $bodyPreview = \App\Support\CampaignMerge::excerpt(strip_tags($c->body_html ?? ''), 200);
         foreach ($people as $r) {
             $notifRows[] = [
                 'user_id' => (int) $r->id,
+                // The campaign's agency on every bell row, so a test agency's row never pushes (console runs have no session).
+                'agency_id' => (int) ($c->agency_id ?? 0) ?: null,
                 'type' => 'marketing',
                 'title' => \App\Support\CampaignMerge::text($c->title, $r->first_name ?? null),
                 'body' => \App\Support\CampaignMerge::text($bodyPreview, $r->first_name ?? null),
@@ -179,7 +181,7 @@ final class SendCampaignEmailsCommand extends Command
     }
 
     /** One email per address (first account by id wins), and only people with an address. Order is kept. */
-    private static function mailable(array $people): array
+    public static function mailable(array $people): array
     {
         $seen = [];
         $out = [];
@@ -197,7 +199,7 @@ final class SendCampaignEmailsCommand extends Command
      * ('sent', 'suppressed', 'failed' or 'unknown'). "Sent" means our mail service accepted it - a message the mail
      * rules held back used to be counted as delivered because handing it to the mailer did not throw.
      */
-    private function sendOne(object $c, object $agency, object $r, $sender, $mailer, string $bodyHtml, string $subject): string
+    public static function deliverOne(object $c, object $agency, object $r, $sender, $mailer, string $bodyHtml, string $subject, string $source = 'send', ?callable $warn = null): string
     {
         /* PER-PERSON RECORD (2026-11-27, App\Support\CampaignSends): the message is kept so its email_logs row
            (open pixel token) can be tied to this campaign and person - Recipients & stats reads it. */
@@ -224,9 +226,9 @@ final class SendCampaignEmailsCommand extends Command
             }
         } catch (\Throwable $e) {
             $sendErr = $e;
-            $this->warn('  send failed to ' . $r->email . ': ' . $e->getMessage());
+            if ($warn) $warn('  send failed to ' . $r->email . ': ' . $e->getMessage());
         }
-        $out = \App\Support\CampaignSends::record($c, $r, (string) ($oneSubject ?? $subject), $cap, $sendErr, $startedAt);
+        $out = \App\Support\CampaignSends::record($c, $r, (string) ($oneSubject ?? $subject), $cap, $sendErr, $startedAt, $source);
 
         // No per-person record available (table missing): fall back to whether the mailer threw.
         return $out ?? ($sendErr ? 'failed' : 'sent');
@@ -235,110 +237,25 @@ final class SendCampaignEmailsCommand extends Command
     /**
      * RESEND TO THE PEOPLE A CAMPAIGN NEVER REACHED (2026-11-27). `--id=N --resend-to=a@x,b@y`.
      *
-     * For an already-emailed campaign only, and only to the addresses named - never the whole audience again. Fails
-     * closed: every address must be in the campaign's audience today (a typo or an outsider stops the whole run), and
-     * anyone the campaign already reached (a 'sent' record or a 'sent' email log for it) is skipped. At most 80
-     * addresses. Same builder, same sender, same per-person record and open tracking as the first send; the in-app
-     * notice is written only for people who do not have one for this campaign yet. --dry-run lists, sends nothing.
+     * The rules live in App\Support\CampaignResend::send, shared with the portal's "Resend to bounced" (one rule):
+     * an already-emailed campaign only, only the addresses named, every one in the audience today (else nothing is
+     * sent), never anyone it already reached, at most 80. --dry-run lists, sends nothing.
      */
     private function resend(string $list, bool $dry): int
     {
         $id = (int) $this->option('id');
-        $c = $id ? DB::table('marketing_campaigns')->where('id', $id)->whereNull('deleted_at')
-            ->whereIn('channel', ['email', 'both'])->whereNotNull('email_sent_at')->first() : null;
-        if (! $c) {
+        $c = $id ? DB::table('marketing_campaigns')->where('id', $id)->first() : null;
+        if (! $c || ! \App\Support\CampaignResend::resendable($c)) {
             $this->error('--resend-to needs --id of a campaign that has already been emailed.');
             return self::FAILURE;
         }
-        $agency = DB::table('agencies')->where('id', $c->agency_id)->first();
-        if (! $agency) { $this->error('Agency missing.'); return self::FAILURE; }
-
-        $want = [];
-        foreach (preg_split('/[\s,;]+/', $list) as $e) {
-            $e = mb_strtolower(trim($e));
-            if ($e === '') continue;
-            if (! filter_var($e, FILTER_VALIDATE_EMAIL)) { $this->error("Not an email address: $e"); return self::FAILURE; }
-            $want[$e] = true;
-        }
-        $want = array_keys($want);
-        if (! $want) { $this->error('No addresses given.'); return self::FAILURE; }
-        if (count($want) > 80) { $this->error('More than 80 addresses: refused.'); return self::FAILURE; }
-
-        $everyone = $this->resolveAudience($c);
-        usort($everyone, fn ($x, $y) => ((int) $x->id) <=> ((int) $y->id));
-        $byAddr = [];
-        foreach (self::mailable($everyone) as $r) $byAddr[mb_strtolower(trim((string) $r->email))] = $r;
-        $outside = array_values(array_diff($want, array_keys($byAddr)));
-        if ($outside) {
-            $this->error('Not in this campaign\'s audience, nothing sent: ' . implode(', ', $outside));
+        $res = \App\Support\CampaignResend::send($c, preg_split('/[\s,;]+/', $list) ?: [], [
+            'dry' => $dry, 'via' => 'command', 'say' => fn ($l) => $this->line($l),
+        ]);
+        if (! $res['ok']) {
+            $this->error($res['error']);
             return self::FAILURE;
         }
-
-        ['subject' => $subject, 'html' => $bodyHtml] = self::build($c, $agency);
-        $already = \App\Support\CampaignSends::ready()
-            ? DB::table('marketing_campaign_sends')->where('campaign_id', $c->id)->where('outcome', 'sent')->pluck('email')
-                ->map(fn ($e) => mb_strtolower(trim((string) $e)))->all() : [];
-        $todo = [];
-        foreach ($want as $e) {
-            $r = $byAddr[$e];
-            $logged = DB::table('email_logs')->whereRaw('LOWER(TRIM(to_email)) = ?', [$e])
-                ->where('created_at', '>=', Carbon::parse($c->sent_at)->subMinutes(10))
-                ->whereIn('status', ['sent', 'bounced'])
-                ->where('subject', \App\Support\CampaignMerge::text($subject, $r->first_name ?? null))->exists();
-            if (in_array($e, $already, true) || $logged) {
-                $this->line("  skip $e: already received this campaign");
-                continue;
-            }
-            $todo[] = $r;
-        }
-        $this->info("Campaign #{$c->id}: " . count($todo) . ' to send (dry=' . ($dry ? 'yes' : 'no') . ')');
-        if ($dry || ! $todo) {
-            foreach ($todo as $r) $this->line('  would send to ' . $r->email . ' (user ' . $r->id . ')');
-            return self::SUCCESS;
-        }
-
-        $sender = \App\Support\CampaignSender::forCampaign($c, $agency);
-        $paced = $sender && \App\Support\RsvpSender::isGmail($sender);
-        $mailer = $sender ? null : AgencyMailer::forAgency((int) $agency->id);
-        $tally = ['sent' => 0, 'suppressed' => 0, 'failed' => 0, 'unknown' => 0];
-        $reached = [];
-        foreach ($todo as $i => $r) {
-            if ($i > 0) sleep($paced ? \App\Support\CampaignSender::GAP_SECONDS : 1);
-            $out = $this->sendOne($c, $agency, $r, $sender, $mailer, $bodyHtml, $subject);
-            $tally[$out] = ($tally[$out] ?? 0) + 1;
-            $this->line("  {$r->email}: $out");
-            if ($out === 'sent') $reached[] = $r;
-        }
-
-        // In-app notice only for people who have none for this campaign (the first run wrote one for everyone it listed).
-        $hasBell = DB::table('notifications')->where('type', 'marketing')
-            ->whereRaw("JSON_EXTRACT(data, '$.campaign_id') = ?", [(int) $c->id])->pluck('user_id')->map(fn ($v) => (int) $v)->all();
-        $needBell = array_values(array_filter($reached, fn ($r) => ! in_array((int) $r->id, $hasBell, true)));
-        if ($needBell) self::writeBell($c, $needBell, now());
-
-        /* The counts, from what really happened: every person this campaign reached by email, from the per-person
-           records (they cover the first run and this one). Failures add on. */
-        $sentTotal = \App\Support\CampaignSends::ready()
-            ? DB::table('marketing_campaign_sends')->where('campaign_id', $c->id)->where('outcome', 'sent')->count()
-            : (int) $c->email_delivery_count + $tally['sent'];
-        $upd = [
-            'email_delivery_count' => $sentTotal,
-            'email_failure_count' => (int) ($c->email_failure_count ?? 0) + $tally['failed'],
-            'updated_at' => now(),
-        ];
-        if ($c->channel === 'email') $upd['delivery_count'] = $sentTotal;   // 'both': delivery_count is the News count
-        DB::table('marketing_campaigns')->where('id', $c->id)->update($upd);
-
-        \App\Support\Audit::write([
-            'user_id' => null,
-            'agency_id' => (int) ($c->agency_id ?? 0) ?: null,
-            'action' => 'campaign.email_resent',
-            'entity_type' => 'marketing_campaign',
-            'entity_id' => (int) $c->id,
-            'payload' => json_encode(['asked' => count($want), 'tried' => count($todo)] + $tally),
-            'created_at' => now(),
-        ]);
-        $this->info("Campaign #{$c->id} resend: " . json_encode($tally) . "; campaign now counts $sentTotal emailed");
 
         return self::SUCCESS;
     }
@@ -374,7 +291,7 @@ final class SendCampaignEmailsCommand extends Command
      * Mirror of MarketingController::resolveAudience but joins users to pluck
      * actual email addresses for delivery.
      */
-    private function resolveAudience(object $c): array
+    public static function audience(object $c): array
     {
         $centreScope = $c->centre_id ? [(int) $c->centre_id]
             : \App\Support\Live::centreIds((int) $c->agency_id);

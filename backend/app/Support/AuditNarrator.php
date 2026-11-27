@@ -249,6 +249,7 @@ final class AuditNarrator
         'call.placed' => 'Placed a phone call',
         'call.recording_played' => 'Played a call recording',
         'campaign.email_sent' => 'Sent a campaign email',
+        'campaign.email_resent' => 'Resent a campaign to people whose email bounced',
         'care.attendance_reminder' => 'Sent an attendance reminder',
         'centre.address_corrected' => 'Corrected a centre’s address',
         'centre.archived' => 'Archived a centre',

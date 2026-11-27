@@ -4,6 +4,18 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "↻",
+            "title": "Campaigns: resend to people whose email bounced",
+            "body": "In Marketing › Campaigns › Recipients & stats you now see how many emails bounced and how many of those people have a corrected address. Fix the email on their record, then press ↻ Resend to bounced: it lists each person with the address that bounced, their current email and whether they are ready. Only corrected addresses can be ticked, you confirm how many, and the campaign goes to their new address once. The list then shows them as sent.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "➕",
             "title": "Quick requests and one HR to-do",
             "body": "Tap the new + at the top of your phone to ask for time off, call in sick, log overtime, send a claim or report a hazard or injury. My HR now has one To do list with everything waiting for you in HR.",

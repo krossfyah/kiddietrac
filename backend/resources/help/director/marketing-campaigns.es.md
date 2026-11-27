@@ -61,6 +61,19 @@ la abrieron allí, y cuántos leyeron el aviso en la aplicación. Las campañas 
 noviembre de 2026 se reconstruyen a partir del registro de correos, por lo que algunas personas pueden
 aparecer como «Desconocido». Los directores solo ven las campañas de sus propios centros.
 
+## Reenviar a los rebotados
+
+Cuando algunos correos rebotaron, **Destinatarios y estadísticas** muestra cuántos rebotaron y cuántas de
+esas personas tienen ahora una dirección corregida. Primero corrija el correo en la ficha de la persona y
+luego pulse **↻ Reenviar a los rebotados** (encima del filtro de estado, o en el **⋮** de la campaña). La
+lista muestra el nombre de cada persona, la dirección que rebotó, su correo actual y lo que se puede hacer:
+**Dirección corregida — lista para reenviar**, **Misma dirección — corríjala primero** (con un botón para
+abrir su ficha), **No hay correo registrado** o **Cuenta desactivada**. Solo se pueden marcar las personas
+listas, y todas empiezan marcadas. Se le pide confirmar cuántas antes de enviar nada. La campaña va a su
+dirección actual, nunca dos veces a una dirección que ya la recibió, como máximo 80 a la vez, y se aplican
+las reglas de correo habituales. Una vez enviada, la persona aparece como enviada, con la dirección que
+rebotó en los detalles, y el registro de auditoría nombra cada dirección.
+
 ## El pie de página
 
 Cada campaña termina con un pie de página **«Powered by Kiddietrac»**. También muestra los enlaces a la **Política de privacidad** y los **Términos y condiciones** de su agencia: defínalos una sola vez en **Ajustes → Marca** (forman parte de la configuración de su agencia) y aparecen automáticamente en cada campaña.

@@ -4898,5 +4898,23 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     'No questions and answers in this topic yet.': { fr: 'Pas encore de questions-réponses dans ce sujet.', es: 'Todavía no hay preguntas y respuestas en este tema.', hi: 'इस विषय में अभी कोई प्रश्न-उत्तर नहीं।' },
     'Tap a question to see the answer and where to click.': { fr: 'Touchez une question pour voir la réponse et où cliquer.', es: 'Toque una pregunta para ver la respuesta y dónde hacer clic.', hi: 'उत्तर और कहाँ क्लिक करना है देखने के लिए किसी प्रश्न पर टैप करें।' },
     'The questions could not be loaded just now. Please try again.': { fr: 'Les questions n\'ont pas pu être chargées. Veuillez réessayer.', es: 'No se pudieron cargar las preguntas. Inténtelo de nuevo.', hi: 'प्रश्न अभी लोड नहीं हो सके। कृपया फिर से कोशिश करें।' },
-    'This guide could not be opened just now. Try Help & guides from the menu.': { fr: 'Ce guide n\'a pas pu être ouvert. Essayez Aide et guides dans le menu.', es: 'No se pudo abrir esta guía. Pruebe Ayuda y guías en el menú.', hi: 'यह गाइड अभी नहीं खुल सकी। मेनू से सहायता और गाइड आज़माएँ।' }
+    'This guide could not be opened just now. Try Help & guides from the menu.': { fr: 'Ce guide n\'a pas pu être ouvert. Essayez Aide et guides dans le menu.', es: 'No se pudo abrir esta guía. Pruebe Ayuda y guías en el menú.', hi: 'यह गाइड अभी नहीं खुल सकी। मेनू से सहायता और गाइड आज़माएँ।' },
+
+    // Marketing > Campaigns > Resend to bounced (2026-11-27)
+    'Resend to bounced': { fr: 'Renvoyer aux adresses en échec', es: 'Reenviar a los rebotados', hi: 'लौटे ईमेल वालों को फिर भेजें' },
+    '↻ Resend to bounced': { fr: '↻ Renvoyer aux adresses en échec', es: '↻ Reenviar a los rebotados', hi: '↻ लौटे ईमेल वालों को फिर भेजें' },
+    '↻ Resend': { fr: '↻ Renvoyer', es: '↻ Reenviar', hi: '↻ फिर भेजें' },
+    'Address corrected — ready to resend': { fr: 'Adresse corrigée — prête à renvoyer', es: 'Dirección corregida — lista para reenviar', hi: 'पता ठीक किया गया — फिर भेजने को तैयार' },
+    'Same address — fix it first': { fr: 'Même adresse — corrigez-la d\'abord', es: 'Misma dirección — corríjala primero', hi: 'वही पता — पहले इसे ठीक करें' },
+    'The new address bounced too — fix it first': { fr: 'La nouvelle adresse a aussi échoué — corrigez-la d\'abord', es: 'La nueva dirección también rebotó — corríjala primero', hi: 'नया पता भी लौट आया — पहले इसे ठीक करें' },
+    'No email on file': { fr: 'Aucun courriel au dossier', es: 'No hay correo registrado', hi: 'कोई ईमेल दर्ज नहीं' },
+    'Account deactivated': { fr: 'Compte désactivé', es: 'Cuenta desactivada', hi: 'खाता निष्क्रिय' },
+    'Already received it at the new address': { fr: 'Déjà reçu à la nouvelle adresse', es: 'Ya lo recibió en la nueva dirección', hi: 'नए पते पर पहले ही मिल चुका है' },
+    'No longer in this campaign\'s audience': { fr: 'Ne fait plus partie du public de cette campagne', es: 'Ya no está en el público de esta campaña', hi: 'अब इस अभियान के दर्शकों में नहीं' },
+    '✏️ Open their record': { fr: '✏️ Ouvrir sa fiche', es: '✏️ Abrir su ficha', hi: '✏️ उनका रिकॉर्ड खोलें' },
+    'Bounced at': { fr: 'Échec à', es: 'Rebotó en', hi: 'यहाँ लौटा' },
+    'Current email': { fr: 'Courriel actuel', es: 'Correo actual', hi: 'वर्तमान ईमेल' },
+    'Campaign resent': { fr: 'Campagne renvoyée', es: 'Campaña reenviada', hi: 'अभियान फिर भेजा गया' },
+    'Resend finished': { fr: 'Renvoi terminé', es: 'Reenvío terminado', hi: 'फिर भेजना पूरा हुआ' },
+    'Nobody ticked': { fr: 'Personne n\'est coché', es: 'Nadie marcado', hi: 'कोई चुना नहीं गया' }
 });

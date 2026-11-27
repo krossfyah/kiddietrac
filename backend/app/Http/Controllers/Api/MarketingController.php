@@ -462,9 +462,19 @@ final class MarketingController extends Controller
             ->whereNull('f.deleted_at')->get(['g.user_id', 'f.family_name'])->groupBy('user_id')
             ->map(fn ($r) => $r->pluck('family_name')->filter()->unique()->implode(', ')) : collect();
 
+        /* A bounced row followed by a resend to that person's corrected address (App\Support\CampaignResend) is one
+           person, not two: the bounced line is folded into the resend line, which names the address that bounced. */
+        $folded = \App\Support\CampaignResend::resentTo($sends, $logs);
+        $resentFrom = [];
+        foreach ($folded as $bouncedId => $r) {
+            $old = $sends->firstWhere('id', $bouncedId);
+            if ($old) $resentFrom[(int) $r->id] = $old->email;
+        }
+
         $tiles = ['sent' => 0, 'opened' => 0, 'bounced' => 0, 'failed' => 0, 'held' => 0, 'unknown' => 0];
         $rows = [];
         foreach ($sends as $s) {
+            if (isset($folded[(int) $s->id])) continue;
             $log = $s->email_log_id ? $logs->get($s->email_log_id) : null;
             [$status, $why, $at] = \App\Support\CampaignSends::status($s, $log);
             $tiles[$status] = ($tiles[$status] ?? 0) + 1;
@@ -483,7 +493,16 @@ final class MarketingController extends Controller
                 'bell' => $b ? ($b->read_at ? 'read' : 'unread') : null,
                 'has_email' => (bool) $s->email_log_id,
                 'source' => $s->source,
+                'resent_from' => $resentFrom[(int) $s->id] ?? null,
             ];
+        }
+        /* Resend to bounced (2026-11-27): how many bounced, how many of those now have a corrected address, and
+           whether this caller may resend (the same rule as sending the campaign). */
+        $resend = null;
+        if ($emailing && $tiles['bounced'] > 0) {
+            $cands = \App\Support\CampaignResend::candidates($c);
+            $resend = ['bounced' => $tiles['bounced'], 'corrected' => count(array_filter($cands, fn ($x) => $x['state'] === 'ready')),
+                'can' => $this->canResend($request, $c)];
         }
         $total = count($rows);
         $emailedTotal = (int) ($c->recipient_count ?? 0);
@@ -510,11 +529,99 @@ final class MarketingController extends Controller
             'news' => $news,
             'rows' => $rows,
             'backfilled' => $sends->contains(fn ($s) => $s->source === 'backfill'),
+            'resend' => $resend,
             'notes' => [
                 'delivered' => 'Mail services do not send delivery receipts, so "Sent" means our mail service accepted it and no bounce has come back. Bounces are checked every hour.',
                 'opened' => 'Opens are counted when the email\'s images load (our own server, no third party). Someone who blocks images shows as not opened, and some mail apps load images automatically.',
                 'clicked' => 'Link clicks are not tracked.',
             ],
+        ]);
+    }
+
+    /** May this caller resend the campaign? The rule for sending it: agency admins agency-wide, directors their centres. */
+    private function canResend(Request $request, object $c): bool
+    {
+        return \App\Support\CentreScope::canWrite($this->campaignScope($request, (int) $c->agency_id), $c->centre_id);
+    }
+
+    /**
+     * GET /marketing/campaigns/{id}/bounced — every bounced recipient still on the list, the address it bounced at,
+     * their CURRENT account email and what can be done (App\Support\CampaignResend::candidates). Read-only.
+     */
+    public function bounced(Request $request, int $id): JsonResponse
+    {
+        $c = $this->readableCampaign($request, $id);
+        if (! $c) return response()->json(['message' => 'Not found'], 404);
+        if (! in_array($c->channel, ['email', 'both'], true)) return response()->json(['rows' => [], 'can' => false, 'resendable' => false]);
+
+        return response()->json([
+            'campaign' => ['id' => (int) $c->id, 'title' => $c->title],
+            'rows' => \App\Support\CampaignResend::candidates($c),
+            'can' => $this->canResend($request, $c),
+            'resendable' => \App\Support\CampaignResend::resendable($c),
+            'max' => \App\Support\CampaignResend::MAX,
+        ]);
+    }
+
+    /**
+     * POST /marketing/campaigns/{id}/resend-bounced {send_ids:[...], count:N} — send the campaign again to the
+     * chosen bounced people, at their CURRENT (corrected) address. Fails closed: the recipients are never typed or
+     * defaulted, only bounced rows that are "ready" right now; one row that is not stops the whole send; count must
+     * equal what the confirm dialog stated. CampaignResend::send applies the rest (audience, never twice, 80 cap,
+     * mail gate) and reports what really happened from the email log.
+     */
+    public function resendBounced(Request $request, int $id): JsonResponse
+    {
+        $c = $this->readableCampaign($request, $id);
+        if (! $c) return response()->json(['message' => 'Not found'], 404);
+        if (! $this->canResend($request, $c)) return response()->json(['message' => 'You can only resend campaigns for a centre you direct.'], 403);
+        if (! \App\Support\CampaignResend::resendable($c)) return response()->json(['message' => 'Only a campaign that has already been emailed can be resent.'], 422);
+        $data = $request->validate([
+            'send_ids' => 'required|array|min:1|max:' . \App\Support\CampaignResend::MAX,
+            'send_ids.*' => 'required|integer|distinct',
+            'count' => 'required|integer|min:1',
+        ]);
+        $ids = array_map('intval', $data['send_ids']);
+        if ((int) $data['count'] !== count($ids)) {
+            return response()->json(['message' => 'The number of people changed. Please open the list again and check it.'], 422);
+        }
+
+        $lock = \Illuminate\Support\Facades\Cache::lock('campaign-resend-' . (int) $c->id, 900);
+        if (! $lock->get()) return response()->json(['message' => 'A resend of this campaign is already running. Please wait a moment.'], 409);
+        try {
+            $ready = [];
+            foreach (\App\Support\CampaignResend::candidates($c) as $row) $ready[$row['send_id']] = $row;
+            $bad = array_values(array_filter($ids, fn ($i) => ! isset($ready[$i]) || $ready[$i]['state'] !== 'ready'));
+            if ($bad) {
+                return response()->json(['message' => 'Some of the people you ticked can no longer be resent to (their address or account changed, or they already got it). Nothing was sent. Please open the list again.'], 422);
+            }
+            $emails = [];
+            $replaces = [];
+            foreach ($ids as $i) {
+                $emails[] = $ready[$i]['current_email'];
+                $replaces[$ready[$i]['current_email']] = $ready[$i]['bounced_email'];
+            }
+            @set_time_limit(300);
+            ignore_user_abort(true);
+            $res = \App\Support\CampaignResend::send($c, $emails, [
+                'web' => true, 'via' => 'portal', 'actor' => (int) $request->user()->id, 'replaces' => $replaces,
+            ]);
+        } finally {
+            $lock->release();
+        }
+        if (! $res['ok']) return response()->json(['message' => $res['error']], 422);
+
+        $t = $res['tally'];
+        $notSent = [];
+        foreach ($res['results'] as $r) {
+            if ($r['outcome'] !== 'sent') $notSent[] = ['email' => $r['email'], 'outcome' => $r['outcome']];
+        }
+
+        return response()->json([
+            'ok' => true,
+            'sent' => $t['sent'], 'held' => $t['suppressed'], 'failed' => $t['failed'], 'unknown' => $t['unknown'],
+            'skipped' => count($res['skipped']), 'left' => count($res['left']),
+            'not_sent' => $notSent,
         ]);
     }
 

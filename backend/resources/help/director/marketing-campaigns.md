@@ -76,6 +76,19 @@ also posted to News shows how many of the people it was for have opened it there
 shows how many have read it. Campaigns sent before 27 November 2026 are rebuilt from the email log, so a
 few people may show as "Not known". Directors see only their own centres' campaigns.
 
+## Resend to bounced
+
+When some emails bounced, **Recipients & stats** shows how many bounced and how many of those people now
+have a corrected address. Correct the person's email on their record first, then press **↻ Resend to
+bounced** (above the status filter, or in the campaign's **⋮**). The list shows each person's name, the
+address it bounced at, their current email and what can be done: **Address corrected — ready to resend**,
+**Same address — fix it first** (with a button to open their record), **No email on file** or **Account
+deactivated**. Only ready people can be ticked, and they are all ticked to start with. You are asked to
+confirm how many before anything goes out. The campaign goes to their current address, never twice to an
+address that already got it, at most 80 at a time, and the usual email rules still apply. Once it is sent
+the person shows as sent, with the address that bounced in the details, and the audit log names every
+address it went to.
+
 ## The footer
 
 Every campaign ends with a **"Powered by Kiddietrac"** footer. It also shows

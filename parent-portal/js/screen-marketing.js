@@ -142,6 +142,12 @@
       statsBtn.addEventListener('click', function (e) { e.stopPropagation(); openStats(c); });
       actionsBar.appendChild(statsBtn);
     }
+    // Resend to bounced (2026-11-27): once the email has gone out. The popup lists who bounced and who is fixed.
+    if (c.email_sent_at && (c.channel === 'email' || c.channel === 'both')) {
+      var resendBtn = Dom.el('button', { type: 'button', class: 'kt-act-icon kt-act-resend kt-icon-tip', 'data-kttip': 'Resend to bounced', 'aria-label': 'Resend to bounced' }, '↻');
+      resendBtn.addEventListener('click', function (e) { e.stopPropagation(); openResend(c.id, function () { render(container); }); });
+      actionsBar.appendChild(resendBtn);
+    }
     actionsBar.appendChild(editBtn);
     actionsBar.appendChild(delBtn);
     row.appendChild(actionsBar);
@@ -218,14 +224,14 @@
       hero.querySelector('.kt-hero-sub').textContent = sub.join(' · ');
       viewBtn.addEventListener('click', function () { openView(c, container); });
       Dom.clear(body);
-      drawStats(body, d, id);
+      drawStats(body, d, id, function () { if (statsIdFromHash() === id) renderStats(container, id); });
     }).catch(function (e) {
       Dom.clear(body);
       body.appendChild(Dom.el('div', { style: 'padding:24px;color:#DC2626;' }, (e && e.message) || 'Could not load the recipients.'));
     });
   }
 
-  function drawStats(body, d, id) {
+  function drawStats(body, d, id, reload) {
     var t = d.tiles || {};
     // Tiles
     var tiles = Dom.el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px;' });
@@ -254,6 +260,9 @@
     if (d.bell && d.bell.sent) extra.push('🔔 In-app notice: ' + d.bell.sent + ' sent, ' + d.bell.read + ' read');
     if (d.news) extra.push(d.news.for == null ? '📰 News post: posted before per-person tracking, so reads are not known'
       : ('📰 News post: for ' + d.news.for + ' ' + (d.news.for === 1 ? 'person' : 'people') + ', opened by ' + d.news.read));
+    if (d.resend && d.resend.bounced) {
+      extra.push('↩️ ' + d.resend.bounced + ' bounced · ' + d.resend.corrected + ' now corrected');
+    }
     if (extra.length) {
       var ex = Dom.el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;' });
       extra.forEach(function (x) { ex.appendChild(Dom.el('div', { class: 'kt-card', style: 'padding:9px 14px;border-radius:10px;font-size:13px;color:#0F172A;font-weight:600;' }, x)); });
@@ -282,6 +291,18 @@
       return;
     }
 
+    // Resend to bounced (2026-11-27), above the status filter, when there are bounces and you may send this campaign.
+    if (d.resend && d.resend.bounced && d.resend.can) {
+      var rb = Dom.el('div', { style: 'display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;' });
+      var rbBtn = Dom.el('button', { type: 'button', class: 'kt-btn kt-btn-primary kt-btn-sm', 'data-kt-iconized': '1' }, '↻ Resend to bounced');
+      rbBtn.addEventListener('click', function () { openResend(id, reload); });
+      rb.appendChild(rbBtn);
+      rb.appendChild(Dom.el('span', { style: 'font-size:12.5px;color:#475569;' },
+        d.resend.corrected ? (d.resend.corrected + ' of the ' + d.resend.bounced + ' bounced ' + (d.resend.bounced === 1 ? 'person' : 'people') + ' now ' + (d.resend.corrected === 1 ? 'has' : 'have') + ' a corrected address.')
+          : 'Correct a bounced person\'s email on their record, then resend it to them here.'));
+      body.appendChild(rb);
+    }
+
     // Filter chips
     var counts = {}; rows.forEach(function (r) { counts[r.status] = (counts[r.status] || 0) + 1; });
     var chips = Dom.el('div', { style: 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;' });
@@ -305,6 +326,7 @@
       var tone = STATUS_TONE[r.status] || STATUS_TONE.unknown;
       var details = [];
       if (r.reason) details.push(esc(r.reason));
+      if (r.resent_from) details.push('Resent after it bounced at ' + esc(r.resent_from));
       if (r.opens) details.push('Opened ' + r.opens + (r.opens === 1 ? ' time' : ' times'));
       if (r.bell) details.push('In-app notice ' + (r.bell === 'read' ? 'read' : 'not read yet'));
       var tr = Dom.el('tr', { 'data-status': r.status });
@@ -344,6 +366,112 @@
     }
     paint();
     if (window.KT && typeof KT.sweepRowActions === 'function') setTimeout(KT.sweepRowActions, 0);
+  }
+
+  // ── Resend to bounced (2026-11-27, Anthony: "resend a campaign to people whose email bounced once their address
+  //    has been corrected") ───────────────────────────────────────────────────────────────────────────────────────
+  // Lists every bounced person: the address it bounced at, their CURRENT account email and what can be done. Only
+  // "ready" rows (a corrected address that has not bounced) can be ticked, all ticked by default. The server takes
+  // only the ticked rows' ids, works out the current address itself, and refuses the lot if any row is not ready.
+  var RESEND_TONE = { ready: ['#DCFCE7', '#166534'], same: ['#FEF3C7', '#92400E'], new_bounced: ['#FEF3C7', '#92400E'],
+    no_email: ['#F1F5F9', '#475569'], deactivated: ['#F1F5F9', '#475569'], already: ['#E0F2FE', '#075985'], outside: ['#F1F5F9', '#475569'] };
+  function openResend(id, onDone) {
+    Api.get('/marketing/campaigns/' + id + '/bounced').then(function (d) {
+      var rows = (d && d.rows) || [];
+      var box = Dom.el('div', {});
+      if (!rows.length) {
+        box.appendChild(Dom.el('div', { style: 'padding:14px 4px;color:#475569;font-size:14px;' },
+          'Nobody on this campaign has a bounced email right now, so there is nothing to resend.'));
+        KT.Shell.Modal.open({ title: '↻ Resend to bounced', body: box, actions: [{ label: 'Close' }] });
+        return;
+      }
+      var ready = rows.filter(function (r) { return r.state === 'ready'; });
+      box.appendChild(Dom.el('div', { style: 'font-size:13px;color:#475569;margin-bottom:10px;line-height:1.5;' },
+        'These people\'s email bounced. Once their address is corrected on their record, the campaign can go to the new address. '
+        + 'It is never sent twice to an address that already got it, and the usual email rules still apply.'));
+      var count = Dom.el('div', { style: 'font-size:13px;font-weight:700;color:#0F172A;margin-bottom:8px;' });
+      box.appendChild(count);
+      var table = Dom.el('table', { class: 'kt-table', 'data-kt-no-filter': '1', 'data-kt-no-bulk': '1', 'data-kt-no-kebab': '1', style: 'width:100%;border-collapse:collapse;font-size:13px;' });
+      table.innerHTML = '<thead><tr><th style="width:34px;text-align:center;"><input type="checkbox" data-all aria-label="Tick all ready"></th><th style="text-align:left;">Name</th><th style="text-align:left;">Bounced at</th><th style="text-align:left;">Current email</th><th style="text-align:left;">State</th></tr></thead>';
+      var tb = Dom.el('tbody', {});
+      var boxes = [];
+      rows.forEach(function (r) {
+        var tone = RESEND_TONE[r.state] || RESEND_TONE.outside;
+        var tr = Dom.el('tr', { style: 'border-top:1px solid #E2E8F0;' });
+        var cb = Dom.el('td', { style: 'text-align:center;padding:7px 4px;' });
+        if (r.state === 'ready') {
+          var inp = Dom.el('input', { type: 'checkbox', 'aria-label': 'Resend to ' + (r.name || r.current_email) });
+          inp.checked = true;
+          inp.setAttribute('data-send', String(r.send_id));
+          inp.addEventListener('change', paintCount);
+          boxes.push(inp);
+          cb.appendChild(inp);
+        }
+        tr.appendChild(cb);
+        tr.appendChild(Dom.el('td', { style: 'padding:7px 6px;font-weight:600;color:#0F172A;' }, r.name || '—'));
+        var bt = Dom.el('td', { style: 'padding:7px 6px;color:#475569;' });
+        bt.appendChild(Dom.el('div', {}, r.bounced_email));
+        if (r.reason) bt.appendChild(Dom.el('div', { style: 'font-size:11.5px;color:#64748B;' }, r.reason));
+        tr.appendChild(bt);
+        tr.appendChild(Dom.el('td', { style: 'padding:7px 6px;color:#0F172A;' }, r.current_email || '—'));
+        var st = Dom.el('td', { style: 'padding:7px 6px;' });
+        st.appendChild(Dom.el('span', { style: 'display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;background:' + tone[0] + ';color:' + tone[1] + ';' }, r.label));
+        if ((r.state === 'same' || r.state === 'new_bounced' || r.state === 'no_email') && r.user_id && KT.openUserRecord) {
+          var fix = Dom.el('button', { type: 'button', class: 'kt-btn kt-btn-secondary kt-btn-sm', style: 'margin-left:6px;' }, '✏️ Open their record');
+          fix.addEventListener('click', function () {
+            try { if (modal && modal.close) modal.close(); } catch (e) {}
+            try { KT.openUserRecord(r.user_id); } catch (e) {}
+          });
+          st.appendChild(fix);
+        }
+        tr.appendChild(st);
+        tb.appendChild(tr);
+      });
+      table.appendChild(tb);
+      var wrapT = Dom.el('div', { style: 'overflow-x:auto;' });
+      wrapT.appendChild(table);
+      box.appendChild(wrapT);
+      var all = table.querySelector('[data-all]');
+      if (!ready.length) { all.disabled = true; }
+      all.checked = ready.length > 0;
+      all.addEventListener('change', function () { boxes.forEach(function (b) { b.checked = all.checked; }); paintCount(); });
+      function ticked() { return boxes.filter(function (b) { return b.checked; }).map(function (b) { return Number(b.getAttribute('data-send')); }); }
+      function paintCount() {
+        var n = ticked().length;
+        count.textContent = ready.length
+          ? (n + ' of ' + ready.length + ' ready ' + (ready.length === 1 ? 'person' : 'people') + ' ticked')
+          : 'Nobody is ready yet: correct their email on their record first.';
+        all.checked = ready.length > 0 && n === ready.length;
+      }
+      paintCount();
+      if (!d.can) box.appendChild(Dom.el('div', { style: 'margin-top:10px;font-size:12.5px;color:#92400E;' }, 'You can see this list, but only someone who can send this campaign can resend it.'));
+
+      var actions = [{ label: 'Close' }];
+      if (d.can && ready.length) {
+        actions.push({ label: '↻ Resend', primary: true, busyLabel: 'Sending…', handler: async function () {
+          var ids = ticked();
+          if (!ids.length) { if (KT.toast) KT.toast('⚠️', 'Nobody ticked', 'Tick at least one person to resend to.', '#B45309'); return false; }
+          var ok = await KT.confirm({ title: 'Resend this campaign to ' + ids.length + (ids.length === 1 ? ' person' : ' people') + '?',
+            description: 'It goes to their corrected email address, once each. This cannot be undone.', okLabel: 'Resend to ' + ids.length });
+          if (!ok) return false;
+          var r = await Api.post('/marketing/campaigns/' + id + '/resend-bounced', { send_ids: ids, count: ids.length });
+          var parts = [];
+          if (r.sent) parts.push(r.sent + ' sent');
+          if (r.held) parts.push(r.held + ' held back by the email rules');
+          if (r.failed) parts.push(r.failed + ' failed');
+          if (r.unknown) parts.push(r.unknown + ' not confirmed');
+          if (r.skipped) parts.push(r.skipped + ' already had it');
+          if (r.left) parts.push(r.left + ' still to send: press Resend again (this sender sends a few at a time)');
+          var good = r.sent > 0 && !r.held && !r.failed && !r.unknown;
+          if (KT.toast) KT.toast(good ? '✅' : '⚠️', good ? 'Campaign resent' : 'Resend finished', parts.join(' · ') || 'Nothing was sent.', good ? '#16A34A' : '#B45309');
+          if (onDone) setTimeout(onDone, 0);
+          return true;
+        } });
+      }
+      var modal = KT.Shell.Modal.open({ title: '↻ Resend to bounced', body: box, actions: actions, large: true });
+    }).catch(function (e) {
+      if (KT.toast) KT.toast('⚠️', 'Not available', (e && e.message) || 'Could not load the bounced recipients.', '#B45309');
+    });
   }
 
   // The stored copy of the email that went to one person (open pixel removed server-side, so viewing it is not an open).
