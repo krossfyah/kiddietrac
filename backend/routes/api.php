@@ -4309,3 +4309,25 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'role:agency_admin,platform_adm
     Route::post('workforce-funding/receipts/{id}/void', [App\Http\Controllers\Api\WorkforceFundingController::class, 'voidReceipt'])->whereNumber('id');
     Route::get ('workforce-funding/year-end', [App\Http\Controllers\Api\WorkforceFundingController::class, 'yearEnd']);
 });
+/* 📻 WALKIE-TALKIE (2026-11-27, App\Support\Walkie): live push-to-talk between an agency's own staff. Staff roles only;
+   the controller re-checks the ACTIVE agency's staff list (no outsiders, parents or leavers) on every call. The phone
+   listener's two calls authenticate with their own device secret (X-KT-Walkie), not a sign-in token. */
+Route::prefix('v1')->middleware(['auth:sanctum', 'role:educator,home_visitor,centre_director,agency_admin'])->group(function () {
+    Route::get ('walkie/me',                 [App\Http\Controllers\Api\WalkieController::class, 'me']);
+    Route::post('walkie/talk',               [App\Http\Controllers\Api\WalkieController::class, 'start'])->middleware('throttle:60,1,walkiestart');
+    Route::post('walkie/talk/{id}/chunk',    [App\Http\Controllers\Api\WalkieController::class, 'chunk'])->whereNumber('id')->middleware('throttle:600,1,walkiechunk');
+    Route::post('walkie/talk/{id}/end',      [App\Http\Controllers\Api\WalkieController::class, 'end'])->whereNumber('id');
+    Route::get ('walkie/inbox',              [App\Http\Controllers\Api\WalkieController::class, 'inbox'])->middleware('throttle:240,1,walkieinbox');
+    Route::post('walkie/tx/{id}/heard',      [App\Http\Controllers\Api\WalkieController::class, 'heard'])->whereNumber('id');
+    Route::get ('walkie/history',            [App\Http\Controllers\Api\WalkieController::class, 'history']);
+    Route::get ('walkie/tx/{id}/audio',      [App\Http\Controllers\Api\WalkieController::class, 'audio'])->whereNumber('id')->middleware('throttle:60,1,walkieaudio');
+    Route::put ('walkie/prefs',              [App\Http\Controllers\Api\WalkieController::class, 'prefs']);
+    Route::put ('walkie/settings',           [App\Http\Controllers\Api\WalkieController::class, 'settings']);
+    Route::post('walkie/device',             [App\Http\Controllers\Api\WalkieController::class, 'device'])->middleware('throttle:20,1,walkiedev');
+    Route::post('walkie/device/remove',      [App\Http\Controllers\Api\WalkieController::class, 'deviceRemove']);
+});
+Route::prefix('v1')->group(function () {
+    Route::get ('walkie/device/wake',        [App\Http\Controllers\Api\WalkieController::class, 'wake'])->middleware('throttle:120,1,walkiewake');
+    Route::post('walkie/device/heard',       [App\Http\Controllers\Api\WalkieController::class, 'wakeHeard'])->middleware('throttle:120,1,walkiewake');
+});
+

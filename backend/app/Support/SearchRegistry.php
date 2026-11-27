@@ -199,6 +199,13 @@ final class SearchRegistry
         'hr_course_questions' => 'a course\'s quiz questions (configuration): edited in the course, never a record people look up',
         'hr_course_attempts' => 'quiz tries on a course (HR): shown with the course assignment; search the staff member',
         'hr_directory_shares' => 'what a staff member chose to show in the staff directory (a preference): never searched',
+        // 📻 Walkie-talkie (2026-11-27, App\Support\Walkie): sealed audio + delivery bookkeeping. Played from the Walkie-talkie screen's history.
+        'walkie_transmissions' => 'walkie-talkie talks (sealed audio, who/when/how long): Walkie-talkie > History; audio is never searched',
+        'walkie_chunks' => 'walkie-talkie audio while it is being spoken (sealed, deleted when the talk ends): never searched',
+        'walkie_recipients' => 'who a walkie-talkie talk went to and whether they heard it: shown in the talk\'s history row; never searched',
+        'walkie_floor' => 'which channel someone is talking on right now (machine state): never searched',
+        'walkie_prefs' => 'a person\'s walkie-talkie Do not disturb (a preference): never searched',
+        'walkie_devices' => 'phones listening for the walkie-talkie (hashed device secret): never searched',
         'hr_kudos' => 'peer recognition messages (HR): shown on the team feed under Educator awards > Recognition and My HR; never searched',
         'hr_approver_grants' => 'who else approves time off for named people, and cover while a director is away (HR): HR settings > Approvers; never searched',
         // KiddieTrac HR Phase 4, batch 7 (2026-11-27): health & safety. Centre records, found on their own screens.

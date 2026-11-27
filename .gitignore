@@ -79,3 +79,6 @@ parent-portal/js/app.bundle.js
 backend/public/walk-maps/
 backend/storage/app/geoip/
 parent-portal/training-media/
+
+# walkie-talkie live pieces (ciphertext, deleted within minutes) and doorbells: runtime files, never code
+parent-portal/wt/

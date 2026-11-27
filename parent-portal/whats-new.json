@@ -4,6 +4,25 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "📻",
+            "title": "Walkie-talkie for staff",
+            "body": "Hold the button and talk live to a colleague, a room's educators, your centre's staff or its leaders. The Android app listens all the time and plays talks out loud; in a browser you hear them while a KiddieTrac tab is open. Busy reply, Do not disturb, an emergency channel that always plays, and a history you can play back. Find it in Operations (or your menu).",
+            "roles": [
+                "agency_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Talkie-walkie pour le personnel",
+            "body_fr": "Maintenez le bouton et parlez en direct à un collègue, aux éducatrices d'une salle, au personnel de votre centre ou à ses responsables. L'application Android écoute en permanence et joue les messages à voix haute ; dans un navigateur, vous les entendez tant qu'un onglet KiddieTrac est ouvert. Réponse « occupé », Ne pas déranger, un canal d'urgence qui joue toujours et un historique à réécouter. Dans Opérations (ou votre menu).",
+            "title_es": "Walkie-talkie para el personal",
+            "body_es": "Mantenga pulsado el botón y hable en vivo con un compañero, las educadoras de una sala, el personal de su centro o sus responsables. La app de Android escucha siempre y reproduce en voz alta; en un navegador las oye mientras una pestaña de KiddieTrac esté abierta. Respuesta de ocupado, No molestar, un canal de emergencia que siempre suena y un historial para volver a escuchar. En Operaciones (o su menú).",
+            "title_hi": "स्टाफ़ के लिए वॉकी-टॉकी",
+            "body_hi": "बटन दबाए रखें और किसी सहकर्मी, किसी कमरे के शिक्षकों, अपने केंद्र के स्टाफ़ या उसके लीडरों से सीधे बात करें। Android ऐप हर समय सुनता है और बातें ज़ोर से चलाता है; ब्राउज़र में आप तब सुनते हैं जब KiddieTrac का टैब खुला हो। व्यस्त जवाब, Do not disturb, हमेशा बजने वाला आपातकाल चैनल और दोबारा सुनने के लिए इतिहास। Operations (या आपके मेनू) में मिलेगा।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "🏖️",
             "title": "Closures taken from leave",
             "body": "HR add-on: choose per closure whether a winter shutdown or other closure comes off staff vacation, after a preview of who loses how much. When a closure moves, booked time off that would now count differently is flagged for review, never changed by itself. Approvals show the balance after all pending requests, and part-time staff can get pro-rated new grants. Time off > Closures & checks.",

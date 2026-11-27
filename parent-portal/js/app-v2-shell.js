@@ -436,6 +436,7 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'walkie',         label: 'Walkie-talkie',          icon: '📻' },   // live push-to-talk between staff (2026-11-27, kt-walkie.js)
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'email',          label: 'Email Client',     icon: '✉️' },
@@ -673,6 +674,7 @@
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
 
           { hash: 'chat',           label: 'Message Centre',         icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'walkie',         label: 'Walkie-talkie',          icon: '📻' },   // live push-to-talk between staff (2026-11-27, kt-walkie.js)
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
           // 2026-11-25: their OWN mailbox (Anthony) - never the agency's; linking emails to people stays with admins.
@@ -812,6 +814,7 @@
           { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)
           { hash: 'curriculum',    label: 'Curriculum library', icon: '🌱' },   // Ontario units (2026-11-03)
           { hash: 'chat',          label: 'Message Centre',      icon: '💬', badgeKey: 'chat_unread' },
+          { hash: 'walkie',        label: 'Walkie-talkie',       icon: '📻' },   // 2026-11-27
           { hash: 'phone',          label: 'Phone',                  icon: '📞' },   // shown only with html.kt-can-dial (app-v2.css)
           { hash: 'files',          label: 'Files',          icon: '📎' },
           { hash: 'incidents',     label: 'Incidents',     icon: '⚠️' },
@@ -862,6 +865,7 @@
           { hash: 'new-home-visit', label: 'New visit report', icon: '📝' },
           { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)
           { hash: 'home-visits',    label: 'My reports',       icon: '📋' },
+          { hash: 'walkie',         label: 'Walkie-talkie',    icon: '📻' },   // 2026-11-27
           { hash: 'my-tasks',       label: 'My tasks',         icon: '✅' },
           /* Forms sent from the Forms Manager land here — the same fill-and-sign the
              emailed link opens, and a form leaves the list the moment it is signed.

@@ -540,6 +540,14 @@ route voice/ivr
 route voice/phone
 route voice/telnyx
 route voice/voicemail
+route walkie/device
+route walkie/history
+route walkie/inbox
+route walkie/me
+route walkie/prefs
+route walkie/settings
+route walkie/talk
+route walkie/tx
 route widgets/me
 route zumrails/webhook
 
@@ -680,6 +688,7 @@ screen tickets
 screen today
 screen training
 screen usage-spend
+screen walkie
 screen wallet
 screen withdraw
 screen withdrawals
@@ -760,6 +769,7 @@ job kt:temp-guardians-expire
 job kt:text-check
 job kt:thank-you-awards
 job kt:ticket-sla
+job kt:walkie-sweep
 job mail:ingest-bounces
 job mail:reconcile-logs
 job parents:pickup-alarms

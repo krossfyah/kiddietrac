@@ -33,6 +33,16 @@ class FcmService
 
     public function configured(): bool { return $this->sa() !== null; }
 
+    /** 📻 Walkie-talkie (2026-11-27, App\Support\WalkiePush): the FCM v1 send URL and a bearer, so its wake-ups go out in parallel. */
+    public function walkieTarget(): ?array
+    {
+        $token = $this->accessToken();
+        $sa = $this->sa();
+        $project = config('services.fcm.project_id') ?: env('FCM_PROJECT_ID') ?: ($sa['project_id'] ?? null);
+
+        return $token && $project ? ["https://fcm.googleapis.com/v1/projects/{$project}/messages:send", $token] : null;
+    }
+
     private function accessToken(): ?string
     {
         $sa = $this->sa();

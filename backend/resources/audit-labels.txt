@@ -1433,3 +1433,14 @@ post hr/me/shifts/{shiftId}/respond | Accepted or declined a published shift
 post hr/punch-fixes | Asked for a clock-in to be fixed
 post hr/punch-fixes/{id}/withdraw | Withdrew a clock-in fix request
 post hr/punch-fixes/{id}/decide | Approved or declined a clock-in fix request
+# 📻 Walkie-talkie (2026-11-27)
+post walkie/talk | Talked on the walkie-talkie
+post walkie/talk/{id}/chunk | Sent walkie-talkie audio
+post walkie/talk/{id}/end | Finished a walkie-talkie talk
+post walkie/tx/{id}/heard | Played or answered a walkie-talkie talk
+put walkie/prefs | Changed walkie-talkie Do not disturb
+put walkie/settings | Changed the agency's walkie-talkie settings
+post walkie/device | Turned on walkie-talkie listening on a phone
+post walkie/device/remove | Turned off walkie-talkie listening on a phone
+post walkie/device/heard | Played or answered a walkie-talkie talk on a phone
+

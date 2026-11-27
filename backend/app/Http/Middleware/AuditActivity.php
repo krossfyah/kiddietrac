@@ -39,6 +39,9 @@ class AuditActivity
         // quick-notes (2026-11-26): QuickNotesController writes its own named entry (which fields changed). The raw
         // request line would copy a PRIVATE note's words into the agency's audit log, readable by its admins.
         'quick-notes',
+        // walkie/ (2026-11-27): the walkie-talkie posts its audio here several times a second; WalkieController writes its own
+        // entries (who talked to whom, when, how long) and the request body (the audio) must never reach the audit log.
+        'walkie/',
         // diag/net: the browser's once-a-session connection-speed summary (NetQuality).
         'diag/net',
         // diag/search-words: a screen's on-screen words for the global search (SearchKeywords) - never stored in audit.
