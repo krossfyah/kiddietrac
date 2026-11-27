@@ -7,60 +7,39 @@ screens: sms-settings
 ---
 # Carrier settings — Twilio and Telnyx
 
-**Settings → Carrier settings.** The accounts your agency texts and telephones through.
-Two carriers are supported and two channels run over them — SMS, and voice announcement
-calls — which is why the screen is no longer named after either one of them.
+**Settings → Carrier settings** holds the accounts your agency texts and telephones through. Two carriers are supported (Twilio and Telnyx) and two channels run over them: text messages, and voice announcement calls. Open it once when you set up texting, and again when a text or call did not arrive.
 
 [[open: #sms-settings | Open Carrier settings]]
 
-Every agency sets up its own carrier here. One agency's numbers, keys, balance and
-choices are never visible to another, and only an **agency admin of that agency** can
-save them.
+Every agency sets up its own carrier here. One agency's numbers, keys, balance and choices are never visible to another, and only an **agency admin of that agency** can save them. The screen has two tabs, **Text messages** and **Voice calls**, and remembers the one you were on.
 
-## Setting it up, start to finish
+## Setting up texting, start to finish
 
-- [ ] Enter the carrier's credentials and the number you send from, then **Save**.
-- [ ] Press **Test connection** — it checks the credentials and sends nothing.
-- [ ] Choose the carrier under **Which carrier sends**.
-- [ ] Tick the **kinds of texts this agency sends** (below).
-- [ ] For Telnyx, paste the **webhook public key** so replies and delivery reports are trusted.
-- [ ] Send yourself a real test text, then place a test call on the **Voice calls** tab.
-- [ ] Check **Settings → Email settings**: notifications must be on for the agency.
+1. Open **Carrier settings** on the **Text messages** tab.
+2. Under **Set up carrier**, choose the **Twilio** or **Telnyx** page.
+3. For Twilio, enter the **Account SID** (starts with AC) and the **Auth token**, or better an **API key SID** and **API key secret**. For Telnyx, enter the **API key** (starts with KEY).
+4. Enter **Send from**: the number in full international form (for example +1 and ten digits).
+5. For Telnyx, paste the **Webhook public key** (Mission Control → Keys & Credentials → **Public Key**), so replies and delivery reports are trusted.
+6. Copy the **Replies and STOP webhook** (Twilio) or **Inbound message webhook** (Telnyx) into the carrier's portal.
+7. Press **Save**. Save stores both carriers at once, whichever page is open.
+8. Press **Test Twilio** or **Test Telnyx**. It checks the credentials with the carrier, costs nothing and sends nothing. The result stays in the test log below.
 
-## Two switches, not one
-
-Nothing sends until both are on, and they are in different places. An admin who does not
-know that spends a long time wondering why a broadcast reported "sent" and nobody's phone
-moved.
-
-1. **A carrier is configured and selected here.**
-2. **Notifications are on for the agency**, under **Settings → Email settings**. That is a
-   cross-channel master switch: with it off, nothing sends or rings even with a carrier
-   fully set up. The screen says so in red when it is off.
+> ℹ️ Credentials are **write-only**. Once saved, the screen only says whether a secret is stored. To change one, type the new value; to keep it, leave the box empty. Take the field names literally: a Telnyx API key is not a Twilio Account SID, and an identifier starting `OQ…` is not an Account SID either.
 
 ## Choosing which carrier sends
 
-The **Which carrier sends** card sits above the carrier tabs, because it is a decision
-about the pair and belongs to neither of them. Pick Twilio or Telnyx; the one currently
-sending is marked on its own tab.
+1. Find the **Which carrier sends** card above the carrier pages. **Both can be set up at once. Only the one chosen here sends.**
+2. Pick **Twilio** or **Telnyx**. The page of the carrier now sending is marked **sending**.
+3. Tick **If that carrier refuses, try the other one.** if both are set up. The other carrier is only used when the first refuses a message, and a message already accepted is never sent twice.
+4. Turn on **Send text messages for this agency**.
+5. Press **Save**.
 
 [[show: #sms-settings @ Which carrier sends | Show me the carrier choice]]
 
-Both pages are saved together. Filling in Telnyx cannot quietly discard a number typed on
-the Twilio page — but you can carefully configure Telnyx and forget to switch to it, so
-check the tab marking before you assume.
+## Choosing the kinds of texts this agency sends
 
-## Text messages and Voice calls tabs
-
-The screen has two tabs, **Text messages** and **Voice calls**. It remembers the one you
-were on, so saving or testing on the voice tab no longer throws you back to texts.
-
-[[show: #sms-settings @ Voice calls | Show me the Voice calls tab]]
-
-## Kinds of texts this agency sends
-
-On the **Text messages** tab, **Kinds of texts this agency sends** lists every reason
-KiddieTrac might text somebody:
+1. On the **Text messages** tab, find **Kinds of texts this agency sends**.
+2. Tick the kinds you want:
 
 | Kind | What it is |
 |---|---|
@@ -70,20 +49,28 @@ KiddieTrac might text somebody:
 | Text broadcasts | Messages sent to a group, a room or everyone from SMS broadcast |
 | Replies from staff | A staff reply to a text somebody sent to the agency number |
 
-Untick a kind and nothing of that kind is texted by this agency, whatever anybody has
-chosen for themselves. Each person can then switch off kinds they do not want — see
-[Texts and phone calls](texts-and-phone-calls). An agency switch always wins over a
-personal one: a person cannot turn back on something the agency has turned off.
+3. Press **Save**.
+
+Untick a kind and nothing of that kind is texted by this agency, whatever anybody has chosen for themselves. Only people who agreed to texts receive any of these, and each person can switch kinds off in their own profile — see [Texts and phone calls](texts-and-phone-calls). Consent confirmations and STOP replies always go.
 
 ![Kinds of texts this agency sends, on the Text messages tab](https://api.kiddietrac.com/help-img/carrier-kinds-of-texts.png)
 
-## Reasons that may place calls
+## Sending a real test text or call
 
-On the **Voice calls** tab, **Reasons that may place calls** decides which reasons an
-announcement call may be sent for: *Closure, Evacuation, Lockdown, Illness at the centre,
-Other emergency* and *Not an emergency*. The five emergencies are on by default; *Not an
-emergency* is off, so a routine notice is never read down the phone unless you decide it
-should be.
+1. Under **Send a real test**, type a number you control.
+2. Tick **I control this number, or its owner is expecting this.**
+3. Press **💬 Send text** or **📞 Place call**.
+
+> ⚠️ This really sends. It is billed by your carrier, says it is a test, names your agency and carries STOP. Limited to agency admins and to five an hour per agency.
+
+## Setting up voice announcement calls
+
+1. Open the **Voice calls** tab. Voice uses the Telnyx API key from the Text messages tab.
+2. Enter the **Call Control connection id** (Mission Control → Voice → **Call Control** → your application) and **Call from**, the number parents will see. **Caller name** is optional.
+3. Pick a voice from **Choose a voice…** and set the **Language** (for example `en-US`, `en-GB`, `fr-CA`). Neural voices sound far more natural and are billed at a slightly higher rate.
+4. Under **Reasons that may place calls**, tick the reasons an announcement call may be sent for: *Closure, Evacuation, Lockdown, Illness at the centre, Other emergency* and *Not an emergency*. The five emergencies start on; *Not an emergency* starts off.
+5. Turn on **Place announcement calls for this agency**. It is off until you turn it on.
+6. Press **Save**.
 
 [[show: #sms-settings @ Voice calls > Reasons that may place calls | Show me the call reasons]]
 
@@ -91,79 +78,52 @@ should be.
 
 The SMS broadcast screen only offers the reasons ticked here.
 
-## Choosing a voice
-
-Pick a voice from **Choose a voice…** and set the **Language** (for example `en-US`,
-`en-GB`, `fr-CA`). Neural voices sound far more natural and are billed at a slightly
-higher rate. The test call below plays the voice currently picked, **saved or not**, so
-you can audition voices before committing to one.
-
 ## Testing a call
 
-- **Test message** — what the test call reads out, up to 600 characters.
-- **Number to call** — leave it blank to ring the number on your own profile. Typing
-  another number asks you to tick **I control this number**; the call announces which
-  agency is calling.
-- **Call my own number** places it.
+1. On the **Voice calls** tab, type the **Test message** (up to 600 characters).
+2. Leave **Number to call** blank to ring the number on your own profile, or type another number and tick **I control this number**.
+3. Press **Call my own number**. The test plays the voice currently picked, saved or not, so you can audition voices.
+4. Watch the **Test log**: it shows each test as it moves (dialled, answered, completed, no answer) and, when one was refused, why.
 
-The test works **while voice calls are switched off**, so you can hear it before
-switching the channel on. Tests count towards **five an hour** per agency.
+The test works **while voice calls are switched off**, and counts towards **five an hour** per agency.
 
 [[show: #sms-settings @ Voice calls > Call my own number | Show me the test call button]]
 
 ![The test call: your own message, an optional number, and the test log below](https://api.kiddietrac.com/help-img/carrier-voice-test.png)
 
-Below the button, the **Test log** shows each test as it moves — dialled, answered,
-completed, no answer — and, when a test was refused, **why** (for example, the number is
-on a suppressed account, or said *don't phone me*).
+## Watching the balance (Telnyx)
 
-## Balance and usage (Telnyx)
-
-With Telnyx selected, a usage card shows your **balance**, texts and calls over the last
-30 days, what they cost, and roughly how long the balance will last at that rate. It turns
-red when the balance is running low. Counts come from KiddieTrac's own log of what it
-sent, priced at Telnyx's current rates, so the card is right even when Telnyx's own
-reports are running a few hours behind.
+With Telnyx set up, the **Telnyx balance & usage** card shows your **Balance**, **Texts (30 days)** and **Calls (30 days)**, what they cost, and roughly how long the balance will last. It turns red when the balance is low. Press **Refresh** for the latest figures. Top up, or turn on auto-recharge in Telnyx, so an emergency call-out cannot stop part-way.
 
 [[show: #sms-settings @ Balance | Show me the balance card]]
 
-## The webhook warning
+## Two switches, not one
 
-Telnyx signs every message it sends back to us — replies, STOPs, delivery reports, call
-progress. If the **webhook public key** is blank, or the last call from Telnyx was
-refused because its signature did not match, a red warning appears at the top of the
-page. Until it is fixed, replies and STOPs from families are not recorded. Copy the
-public key from the Telnyx portal (**Account settings → Keys & Credentials → Public key**) and save it here.
+Nothing sends until both are on, and they are in different places:
 
-## Secrets
+- **A carrier is configured and selected here.**
+- **Notifications are on for the agency**, under **Settings → Email settings** (**📬 Mail & notifications**). With it off, nothing sends or rings even with a carrier fully set up. This screen says so in red when it is off.
 
-Credentials are **write-only**. Once saved, the screen tells you whether a secret is
-stored — it never shows it back. To change one, type the new value; to leave it alone,
-leave the box empty.
+## Who can do what
 
-Take the field names literally. A Telnyx API key is not a Twilio Account SID, and an
-identifier starting `OQ…` is not an Account SID either.
+| Role | Access |
+|---|---|
+| Agency admin | Everything on this screen, for their agency, including real tests |
+| Platform admin | The same; the screen is titled **Phone & carriers** and adds a **☎️ Toll-free line** tab for KiddieTrac's own line |
+| Centre director, staff | No access. Directors send texts and calls from **SMS broadcast** |
 
-## Testing a text
-
-- **Test connection** checks the credentials with the carrier. It costs nothing and sends
-  nothing. The result is kept on the screen, so "did this ever work" is answerable
-  tomorrow.
-- **Send a real test** sends a **real** text, or places a **real** call, to a number you
-  type. It is billed, it names your agency and carries STOP, and it is limited to agency
-  admins and to five an hour per agency. Nobody else is contacted.
-
-## Version stamp
-
-A build date is printed under the page title. A stale cached copy of the app is otherwise
-indistinguishable from a bug, so when something looks wrong, read that line first.
-
-## Questions
+## FAQs and when something goes wrong
 
 ??? A broadcast said "sent" but nobody got it. | Check the two switches first: a carrier selected here, and notifications on under Settings → Email settings. Then check the kind of text is ticked, and that the people had agreed to receive texts.
-??? My test call says "not placed". | Read the Test log line under the button — it says why. The most common reasons are a number that belongs to a suppressed or archived account, or a person who chose "Don't phone me at all".
+??? A red warning says the webhook public key is blank. | Telnyx signs every message it sends back (replies, STOPs, delivery reports). Until the key is saved, replies and STOPs from families are not recorded. Paste the **Public Key** and press **Save**.
+??? My test call says "Not placed". | Read the Test log line — it says why. Most often the number belongs to a suppressed or archived account, or the person chose "Don't phone me at all".
+??? "Tick "I control this number" first." | Tick the box under the number before pressing the button.
 ??? Can another agency see our balance or keys? | No. Each agency has its own carrier settings, and only that agency's admins can open or change them.
 ??? Why is a reason missing from the SMS broadcast screen? | It is unticked under Reasons that may place calls. Tick it here and save.
+??? Something looks wrong on this screen. | Read the **Screen build** line under the title first: an old cached copy of the app looks just like a bug. Reload the page to get the latest.
 
-See also: [SMS broadcast](sms-broadcast), [Announcement calls](voice-announcements),
-[Texts and phone calls](texts-and-phone-calls), [Email and digests](email-and-digests).
+## Related screens
+
+[[open: #sms | SMS broadcast]] [[open: #email-settings | Email settings]]
+
+See also: [SMS broadcast](sms-broadcast), [Announcement calls](voice-announcements), [Texts and phone calls](texts-and-phone-calls), [Email settings](email-settings).

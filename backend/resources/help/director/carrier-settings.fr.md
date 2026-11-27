@@ -1,123 +1,125 @@
 ---
 title: Paramètres des opérateurs — Twilio et Telnyx
-category: Settings
-order: 41
-roles: agency_admin, platform_admin
 ---
 # Paramètres des opérateurs — Twilio et Telnyx
 
-**Paramètres → Paramètres des opérateurs.** Les comptes par lesquels votre agence envoie des textos et passe des appels téléphoniques. Deux opérateurs sont pris en charge et deux canaux passent par eux — les SMS et les appels d’annonce vocaux — c’est pourquoi l’écran ne porte plus le nom de l’un ou de l’autre.
+**Paramètres → Paramètres des opérateurs** contient les comptes par lesquels votre agence envoie des textos et fait des appels. Deux opérateurs sont pris en charge (Twilio et Telnyx) et deux canaux passent par eux : les textos et les appels vocaux d'annonce. Ouvrez cet écran une fois pour configurer les textos, puis de nouveau quand un texto ou un appel n'est pas arrivé.
 
 [[open: #sms-settings | Ouvrir les paramètres des opérateurs]]
 
-Chaque agence configure son propre opérateur ici. Les numéros, les clés, le solde et les choix d’une agence ne sont jamais visibles pour une autre, et seul un **administrateur de cette agence** peut les enregistrer.
+Chaque agence configure ici son propre opérateur. Les numéros, les clés, le solde et les choix d'une agence ne sont jamais visibles par une autre, et seul un **administrateur de cette agence** peut les enregistrer. L'écran a deux onglets, **Messages texte** et **Appels vocaux**, et se souvient de celui où vous étiez.
 
-## La configuration, du début à la fin
+## Configurer les textos, du début à la fin
 
-- [ ] Saisissez les identifiants de l’opérateur et le numéro d’envoi, puis **Enregistrer**.
-- [ ] Appuyez sur **Tester la connexion** — cela vérifie les identifiants et n’envoie rien.
-- [ ] Choisissez l’opérateur sous **Opérateur d’envoi**.
-- [ ] Cochez les **types de textos envoyés par cette agence** (ci-dessous).
-- [ ] Pour Telnyx, collez la **clé publique du webhook** afin que les réponses et les rapports de livraison soient considérés comme fiables.
-- [ ] Envoyez-vous un vrai texto de test, puis passez un appel de test dans l’onglet **Appels vocaux**.
-- [ ] Vérifiez **Paramètres → Paramètres de messagerie** : les notifications doivent être activées pour l’agence.
+1. Ouvrez **Paramètres des opérateurs** sur l'onglet **Messages texte**.
+2. Sous **Configurer le fournisseur**, choisissez la page **Twilio** ou **Telnyx**.
+3. Pour Twilio, entrez le **SID du compte** (commence par AC) et le **Jeton d’authentification**, ou mieux un **API key SID** et un **API key secret**. Pour Telnyx, entrez la **Clé d’API** (commence par KEY).
+4. Entrez **Envoyer depuis** : le numéro au format international complet (par exemple +1 et dix chiffres).
+5. Pour Telnyx, collez la **Clé publique du webhook** (Mission Control → Keys & Credentials → **Public Key**), pour que les réponses et les rapports de livraison soient reconnus.
+6. Copiez le **Replies and STOP webhook** (Twilio) ou l'**Inbound message webhook** (Telnyx) dans le portail de l'opérateur.
+7. Appuyez sur **Enregistrer**. L'enregistrement conserve les deux opérateurs en même temps, peu importe la page ouverte.
+8. Appuyez sur **Test Twilio** ou **Test Telnyx**. Le test vérifie les identifiants auprès de l'opérateur, ne coûte rien et n'envoie rien. Le résultat reste dans le journal des tests plus bas.
 
-## Deux commutateurs, pas un seul
+> ℹ️ Les identifiants sont en **écriture seule**. Une fois enregistrés, l'écran indique seulement si un secret est conservé. Pour en changer un, tapez la nouvelle valeur; pour le garder, laissez la case vide. Prenez les noms des champs à la lettre : une clé d'API Telnyx n'est pas un SID de compte Twilio, et un identifiant qui commence par `OQ…` n'en est pas un non plus.
 
-Rien ne part tant que les deux ne sont pas activés, et ils se trouvent à des endroits différents. Un administrateur qui l’ignore passe beaucoup de temps à se demander pourquoi une diffusion indiquait « envoyé » sans qu’aucun téléphone ne bouge.
+## Choisir l'opérateur qui envoie
 
-1. **Un opérateur est configuré et sélectionné ici.**
-2. **Les notifications sont activées pour l’agence**, sous **Paramètres → Paramètres de messagerie**. C’est un commutateur général multicanal : s’il est désactivé, rien ne part ni ne sonne, même avec un opérateur entièrement configuré. L’écran l’indique en rouge lorsqu’il est désactivé.
+1. Repérez la carte **Fournisseur qui envoie**, au-dessus des pages des opérateurs. **Both can be set up at once. Only the one chosen here sends.**
+2. Choisissez **Twilio** ou **Telnyx**. La page de l'opérateur qui envoie est marquée **sending**.
+3. Cochez **If that carrier refuses, try the other one.** si les deux sont configurés. L'autre opérateur sert seulement quand le premier refuse un message, et un message déjà accepté n'est jamais envoyé deux fois.
+4. Activez **Send text messages for this agency**.
+5. Appuyez sur **Enregistrer**.
 
-## Choisir l’opérateur d’envoi
+[[show: #sms-settings @ Which carrier sends | Me montrer le choix de l'opérateur]]
 
-La carte **Opérateur d’envoi** se trouve au-dessus des onglets des opérateurs, car c’est une décision qui concerne la paire et n’appartient à aucun des deux. Choisissez Twilio ou Telnyx; celui qui envoie actuellement est marqué sur son propre onglet.
+## Choisir les types de textos envoyés par l'agence
 
-[[show: #sms-settings @ Which carrier sends | Montrez-moi le choix de l’opérateur]]
+1. Dans l'onglet **Messages texte**, repérez **Types de textos envoyés par cette agence**.
+2. Cochez les types voulus :
 
-Les deux pages sont enregistrées ensemble. Remplir Telnyx ne peut pas écarter discrètement un numéro saisi sur la page Twilio — mais vous pouvez configurer Telnyx avec soin et oublier de passer à celui-ci, alors vérifiez le marquage de l’onglet avant de présumer.
-
-## Onglets Messages texte et Appels vocaux
-
-L’écran comporte deux onglets, **Messages texte** et **Appels vocaux**. Il mémorise celui où vous étiez, de sorte qu’enregistrer ou tester dans l’onglet vocal ne vous renvoie plus aux textos.
-
-[[show: #sms-settings @ Voice calls | Montrez-moi l’onglet Appels vocaux]]
-
-## Types de textos envoyés par cette agence
-
-Dans l’onglet **Messages texte**, **Types de textos envoyés par cette agence** liste chaque raison pour laquelle KiddieTrac peut envoyer un texto à quelqu’un :
-
-| Type | Ce que c’est |
+| Type | Ce que c'est |
 |---|---|
-| Arrivées et départs | Lorsqu’un enfant arrive ou part, et par qui |
-| Rappels d’arrivée | Un enfant n’a pas été enregistré à l’arrivée, ou son départ n’a jamais été enregistré |
-| Annonces | Les annonces, lorsqu’elles sont aussi envoyées par texto |
-| Diffusions par texto | Les messages envoyés à un groupe, à une salle ou à tout le monde depuis la diffusion SMS |
-| Réponses du personnel | Une réponse du personnel à un texto envoyé au numéro de l’agence |
+| Arrivée et départ | Quand un enfant arrive ou part, et avec qui |
+| Rappels d'arrivée | Un enfant n'a pas été inscrit à l'arrivée, ou jamais au départ |
+| Annonces | Les annonces, quand elles sont aussi envoyées par texto |
+| Diffusions par texto | Les messages envoyés à un groupe, une salle ou tout le monde à partir de SMS broadcast |
+| Réponses du personnel | La réponse d'un membre du personnel à un texto envoyé au numéro de l'agence |
 
-Décochez un type et plus rien de ce type n’est envoyé par texto par cette agence, quel que soit le choix de chacun. Chaque personne peut ensuite désactiver les types qu’elle ne veut pas — voir [Textos et appels téléphoniques](texts-and-phone-calls). Le réglage de l’agence l’emporte toujours sur le réglage personnel : une personne ne peut pas réactiver ce que l’agence a désactivé.
+3. Appuyez sur **Enregistrer**.
 
-![Types de textos envoyés par cette agence, dans l’onglet Messages texte](https://api.kiddietrac.com/help-img/carrier-kinds-of-texts.png)
+Décochez un type et l'agence n'envoie plus aucun texto de ce type, peu importe ce que chacun a choisi. Seules les personnes qui ont accepté les textos en reçoivent, et chacune peut couper des types dans son profil — voir [Textos et appels](texts-and-phone-calls). Les confirmations de consentement et les réponses STOP partent toujours.
 
-## Motifs pouvant déclencher des appels
+![Types de textos envoyés par cette agence, dans l'onglet Messages texte](https://api.kiddietrac.com/help-img/carrier-kinds-of-texts.png)
 
-Dans l’onglet **Appels vocaux**, **Motifs pouvant déclencher des appels** détermine pour quels motifs un appel d’annonce peut être envoyé : *Fermeture, Évacuation, Confinement, Maladie au centre, Autre urgence* et *Pas une urgence*. Les cinq urgences sont activées par défaut; *Pas une urgence* est désactivé, de sorte qu’un avis courant n’est jamais lu au téléphone à moins que vous ne décidiez qu’il le soit.
+## Envoyer un vrai texto ou appel de test
 
-[[show: #sms-settings @ Voice calls > Reasons that may place calls | Montrez-moi les motifs d’appel]]
+1. Sous **Envoyer un vrai test**, tapez un numéro que vous contrôlez.
+2. Cochez **I control this number, or its owner is expecting this.**
+3. Appuyez sur **💬 Send text** ou **📞 Place call**.
 
-![Motifs pouvant déclencher des appels — les cinq urgences sont activées, « Pas une urgence » est désactivé](https://api.kiddietrac.com/help-img/carrier-voice-reasons.png)
+> ⚠️ Ce test envoie vraiment. Il est facturé par votre opérateur, dit qu'il s'agit d'un test, nomme votre agence et comprend STOP. Réservé aux administrateurs d'agence, cinq par heure par agence.
 
-L’écran de diffusion SMS n’offre que les motifs cochés ici.
+## Configurer les appels vocaux d'annonce
 
-## Choisir une voix
+1. Ouvrez l'onglet **Appels vocaux**. La voix utilise la clé d'API Telnyx de l'onglet Messages texte.
+2. Entrez le **Call Control connection id** (Mission Control → Voice → **Call Control** → votre application) et **Appeler depuis**, le numéro que verront les parents. **Caller name** est facultatif.
+3. Choisissez une voix dans **Choisir une voix…** et réglez la **Langue** (par exemple `en-US`, `en-GB`, `fr-CA`). Les voix neuronales sont beaucoup plus naturelles et facturées un peu plus cher.
+4. Sous **Motifs pouvant déclencher des appels**, cochez les motifs pour lesquels un appel d'annonce peut partir : *Fermeture, Évacuation, Confinement, Maladie au centre, Autre urgence* et *Pas une urgence*. Les cinq urgences sont activées au départ; *Pas une urgence* ne l'est pas.
+5. Activez **Place announcement calls for this agency**. C'est désactivé tant que vous ne l'activez pas.
+6. Appuyez sur **Enregistrer**.
 
-Choisissez une voix dans **Choisir une voix…** et définissez la **Langue** (par exemple `en-US`, `en-GB`, `fr-CA`). Les voix neuronales sonnent beaucoup plus naturelles et sont facturées à un tarif légèrement supérieur. L’appel de test ci-dessous joue la voix actuellement choisie, **enregistrée ou non**, ce qui vous permet d’écouter des voix avant de vous engager.
+[[show: #sms-settings @ Voice calls > Reasons that may place calls | Me montrer les motifs d'appel]]
+
+![Motifs pouvant déclencher des appels — les cinq urgences sont activées, « Pas une urgence » ne l'est pas](https://api.kiddietrac.com/help-img/carrier-voice-reasons.png)
+
+L'écran SMS broadcast offre seulement les motifs cochés ici.
 
 ## Tester un appel
 
-- **Message de test** — ce que l’appel de test énonce, jusqu’à 600 caractères.
-- **Numéro à appeler** — laissez-le vide pour appeler le numéro de votre propre profil. Saisir un autre numéro vous demande de cocher **Je contrôle ce numéro**; l’appel annonce quelle agence appelle.
-- **Appeler mon propre numéro** lance l’appel.
+1. Dans l'onglet **Appels vocaux**, tapez le **Message de test** (jusqu'à 600 caractères).
+2. Laissez **Numéro à appeler** vide pour faire sonner le numéro de votre profil, ou tapez un autre numéro et cochez **I control this number**.
+3. Appuyez sur **Appeler mon numéro**. Le test joue la voix choisie, enregistrée ou non, pour vous permettre d'essayer des voix.
+4. Suivez le **Journal des tests** : chaque test y avance (composé, répondu, terminé, sans réponse) et, quand un test est refusé, la raison est indiquée.
 
-Le test fonctionne **même lorsque les appels vocaux sont désactivés**, ce qui vous permet de l’entendre avant d’activer le canal. Les tests comptent pour **cinq par heure** et par agence.
+Le test fonctionne **même quand les appels vocaux sont désactivés**, et compte dans la limite de **cinq par heure** par agence.
 
-[[show: #sms-settings @ Voice calls > Call my own number | Montrez-moi le bouton d’appel de test]]
+[[show: #sms-settings @ Voice calls > Call my own number | Me montrer le bouton d'appel de test]]
 
-![L’appel de test : votre propre message, un numéro facultatif et le journal des tests en dessous](https://api.kiddietrac.com/help-img/carrier-voice-test.png)
+![L'appel de test : votre message, un numéro facultatif et le journal des tests en dessous](https://api.kiddietrac.com/help-img/carrier-voice-test.png)
 
-Sous le bouton, le **Journal des tests** montre chaque test au fil de son déroulement — composé, répondu, terminé, sans réponse — et, lorsqu’un test a été refusé, **pourquoi** (par exemple, le numéro appartient à un compte supprimé, ou a indiqué *ne m’appelez pas*).
+## Surveiller le solde (Telnyx)
 
-## Solde et utilisation (Telnyx)
+Quand Telnyx est configuré, la carte **Telnyx balance & usage** montre votre **Balance**, les **Texts (30 days)** et **Calls (30 days)**, leur coût et à peu près combien de temps le solde durera. Elle devient rouge quand le solde baisse. Appuyez sur **Actualiser** pour les derniers chiffres. Rechargez le compte, ou activez la recharge automatique dans Telnyx, pour qu'une série d'appels d'urgence ne s'arrête pas en cours de route.
 
-Lorsque Telnyx est sélectionné, une carte d’utilisation affiche votre **solde**, les textos et appels des 30 derniers jours, leur coût, et la durée approximative pendant laquelle le solde durera à ce rythme. Elle devient rouge lorsque le solde est bas. Les chiffres proviennent du propre journal de KiddieTrac de ce qui a été envoyé, au tarif courant de Telnyx, de sorte que la carte est juste même lorsque les rapports de Telnyx accusent quelques heures de retard.
+[[show: #sms-settings @ Balance | Me montrer la carte du solde]]
 
-[[show: #sms-settings @ Balance | Montrez-moi la carte du solde]]
+## Deux interrupteurs, pas un seul
 
-## L’avertissement du webhook
+Rien ne part tant que les deux ne sont pas activés, et ils sont à deux endroits différents :
 
-Telnyx signe chaque message qu’il nous renvoie — réponses, STOP, rapports de livraison, progression des appels. Si la **clé publique du webhook** est vide, ou si le dernier appel de Telnyx a été refusé parce que sa signature ne correspondait pas, un avertissement rouge s’affiche en haut de la page. Tant que ce n’est pas corrigé, les réponses et les STOP des familles ne sont pas enregistrés. Copiez la clé publique depuis le portail Telnyx (**Account settings → Keys & Credentials → Public key**) et enregistrez-la ici.
+- **Un opérateur configuré et choisi ici.**
+- **Les notifications activées pour l'agence**, dans **Paramètres → Email settings** (**📬 Mail & notifications**). Si elles sont coupées, rien ne part ni ne sonne, même avec un opérateur bien configuré. Cet écran l'indique en rouge.
 
-## Secrets
+## Qui peut faire quoi
 
-Les identifiants sont en **écriture seule**. Une fois enregistré, l’écran vous indique si un secret est stocké — il ne l’affiche jamais. Pour en changer un, saisissez la nouvelle valeur; pour le laisser tel quel, laissez la case vide.
+| Rôle | Accès |
+|---|---|
+| Administrateur d'agence | Tout cet écran, pour son agence, y compris les vrais tests |
+| Administrateur de plateforme | La même chose; l'écran s'intitule **Phone & carriers** et ajoute un onglet **☎️ Toll-free line** pour la ligne de KiddieTrac |
+| Directeur de centre, personnel | Aucun accès. Les directeurs envoient textos et appels à partir de **SMS broadcast** |
 
-Prenez les noms de champs au pied de la lettre. Une clé d’API Telnyx n’est pas un Account SID Twilio, et un identifiant commençant par `OQ…` n’est pas non plus un Account SID.
+## Questions fréquentes et problèmes
 
-## Tester un texto
+??? Une diffusion a indiqué « envoyé », mais personne ne l'a reçue. | Vérifiez d'abord les deux interrupteurs : un opérateur choisi ici, et les notifications activées dans Paramètres → Email settings. Vérifiez ensuite que le type de texto est coché et que les personnes ont accepté de recevoir des textos.
+??? Un avertissement rouge dit que la clé publique du webhook est vide. | Telnyx signe chaque message qu'il renvoie (réponses, STOP, rapports de livraison). Tant que la clé n'est pas enregistrée, les réponses et les STOP des familles ne sont pas consignés. Collez la **Public Key** et appuyez sur **Enregistrer**.
+??? Mon appel de test indique « Not placed ». | Lisez la ligne du journal des tests — elle donne la raison. Le plus souvent, le numéro appartient à un compte suspendu ou archivé, ou la personne a choisi « Ne m'appelez jamais ».
+??? « Tick "I control this number" first. » | Cochez la case sous le numéro avant d'appuyer sur le bouton.
+??? Une autre agence peut-elle voir notre solde ou nos clés? | Non. Chaque agence a ses propres paramètres d'opérateur, et seuls ses administrateurs peuvent les ouvrir ou les modifier.
+??? Pourquoi un motif manque-t-il dans l'écran SMS broadcast? | Il est décoché sous Motifs pouvant déclencher des appels. Cochez-le ici et enregistrez.
+??? Quelque chose semble anormal à l'écran. | Lisez d'abord la ligne **Screen build** sous le titre : une vieille copie de l'application en cache ressemble beaucoup à un bogue. Rechargez la page pour obtenir la dernière version.
 
-- **Tester la connexion** vérifie les identifiants auprès de l’opérateur. Cela ne coûte rien et n’envoie rien. Le résultat reste affiché à l’écran, de sorte qu’on peut répondre demain à « est-ce que ça a déjà fonctionné ».
-- **Envoyer un vrai test** envoie un **vrai** texto, ou passe un **vrai** appel, à un numéro que vous saisissez. C’est facturé, cela nomme votre agence et comporte STOP, et c’est réservé aux administrateurs d’agence et limité à cinq par heure et par agence. Personne d’autre n’est contacté.
+## Écrans connexes
 
-## Estampille de version
+[[open: #sms | Diffusion SMS]] [[open: #email-settings | Paramètres de courriel]]
 
-Une date de compilation est imprimée sous le titre de la page. Une copie périmée de l’application en cache est autrement impossible à distinguer d’un bogue; donc, quand quelque chose semble anormal, lisez d’abord cette ligne.
-
-## Questions
-
-??? Une diffusion indiquait « envoyé » mais personne ne l’a reçue. | Vérifiez d’abord les deux commutateurs : un opérateur sélectionné ici, et les notifications activées sous Paramètres → Paramètres de messagerie. Vérifiez ensuite que le type de texto est coché, et que les personnes avaient accepté de recevoir des textos.
-??? Mon appel de test indique « non effectué ». | Lisez la ligne du Journal des tests sous le bouton — elle en donne la raison. Les causes les plus courantes sont un numéro appartenant à un compte supprimé ou archivé, ou une personne ayant choisi « Ne pas m’appeler du tout ».
-??? Une autre agence peut-elle voir notre solde ou nos clés? | Non. Chaque agence a ses propres paramètres d’opérateur, et seuls les administrateurs de cette agence peuvent les ouvrir ou les modifier.
-??? Pourquoi un motif manque-t-il à l’écran de diffusion SMS? | Il est décoché sous Motifs pouvant déclencher des appels. Cochez-le ici et enregistrez.
-
-Voir aussi : [Diffusion SMS](sms-broadcast), [Appels d’annonce](voice-announcements),
-[Textos et appels téléphoniques](texts-and-phone-calls), [Courriels et résumés](email-and-digests).
+Voir aussi : [Diffusion SMS](sms-broadcast), [Appels d'annonce](voice-announcements), [Textos et appels](texts-and-phone-calls), [Paramètres de courriel](email-settings).

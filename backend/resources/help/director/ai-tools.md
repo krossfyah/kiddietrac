@@ -2,7 +2,6 @@
 title: AI tools (recap / churn risk / doc extraction)
 category: AI
 order: 50
-screens: ~digest-status
 ---
 # AI tools
 

@@ -36,13 +36,13 @@ Each person must:
   [Texts and phone calls](texts-and-phone-calls));
 - not have switched **Text broadcasts** off in their own choices.
 
-Anyone who does not qualify is skipped, and the result shows **total / sent / skipped**.
+Anyone who does not qualify is skipped. Before you send, the line under the audience says how many can be reached, for example "12 of 15 can be texted", and how many have no mobile number or have not agreed. Ask the others to opt in from the **Text alerts** tab.
 A broadcast that reaches nobody says so plainly rather than reporting success.
 
 ## Sending
 
-1. Sidebar → **SMS broadcast**.
-2. Pick an audience:
+1. Open **SMS broadcast** on the **Send a message** tab.
+2. Choose an **Audience**:
    - **By role** — guardian / educator / centre director / agency admin
    - **By centre** (or provider, whichever your agency calls them) — everyone with a
      role at the one you choose
@@ -74,7 +74,7 @@ is also a staff member. KiddieTrac handles that per **phone**, within your agenc
 
 A reply to a broadcast is not lost in a carrier log. It arrives in **Message Centre** as a chat
 from that person (marked as an SMS thread), the right staff are told, and a reply you type
-in that thread goes back out to their phone as a text.
+in that thread goes back out to their phone as a text. Replies are also listed on the **Replies** tab.
 
 - **STOP** (also UNSUBSCRIBE, CANCEL, END, QUIT) stops all texts to that phone from your agency.
 - **START** turns them back on.
@@ -89,7 +89,7 @@ days cost.
 
 ## The record
 
-**Sent & received** at the bottom of the screen lists recent texts in both directions,
+The **Sent & received** tab lists recent texts in both directions,
 with times in your agency's timezone, the delivery status, and — when one failed — the
 carrier's reason. Every message is also written to the audit log.
 

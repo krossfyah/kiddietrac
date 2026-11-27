@@ -3,7 +3,7 @@ title: Email settings and digests
 category: Settings
 order: 65
 roles: agency_admin, platform_admin
-screens: ~email, email-settings, notification-settings, ~mail-settings
+screens: email-settings, notification-settings
 ---
 # Email settings and digests
 

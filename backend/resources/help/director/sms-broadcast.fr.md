@@ -35,13 +35,13 @@ Chaque personne doit :
   [Textos et appels téléphoniques](texts-and-phone-calls));
 - ne pas avoir désactivé les **Diffusions par texto** dans ses propres choix.
 
-Les personnes qui ne remplissent pas ces conditions sont ignorées, et le résultat affiche **total / envoyés / ignorés**.
+Les personnes qui ne remplissent pas ces conditions sont ignorées. Avant l’envoi, la ligne sous les destinataires indique combien de personnes peuvent être jointes, par exemple « 12 of 15 can be texted », et combien n’ont pas de cellulaire ou n’ont pas donné leur accord. Invitez les autres à s’inscrire à partir de l’onglet **Alertes par texto**.
 Une diffusion qui ne joint personne le dit clairement plutôt que d’annoncer un succès.
 
 ## Envoi
 
-1. Barre latérale → **Diffusion SMS**.
-2. Choisissez un public :
+1. Ouvrez **Diffusion SMS** sur l’onglet **Envoyer un message**.
+2. Choisissez les **Destinataires** :
    - **Par rôle** — tuteur / éducateur / directeur de centre / administrateur d’agence
    - **Par centre** (ou prestataire, selon le terme de votre agence) — toutes les personnes ayant un
      rôle dans celui que vous choisissez
@@ -73,7 +73,7 @@ est aussi membre du personnel. KiddieTrac gère cela par **téléphone**, au sei
 
 Une réponse à une diffusion ne se perd pas dans un journal d’opérateur. Elle arrive dans le **Centre de messages** comme une discussion
 de cette personne (marquée comme fil SMS), le personnel concerné est avisé, et une réponse que vous écrivez
-dans ce fil repart vers son téléphone sous forme de texto.
+dans ce fil repart vers son téléphone sous forme de texto. Les réponses sont aussi listées dans l’onglet **Réponses**.
 
 - **STOP** (aussi UNSUBSCRIBE, CANCEL, END, QUIT) arrête tous les textos de votre agence vers ce téléphone.
 - **START** les réactive.
@@ -88,7 +88,7 @@ derniers jours.
 
 ## L’historique
 
-**Envoyés et reçus**, au bas de l’écran, liste les textos récents dans les deux sens,
+L’onglet **Envoyés et reçus** liste les textos récents dans les deux sens,
 avec l’heure dans le fuseau horaire de votre agence, l’état de livraison et — en cas d’échec — la
 raison fournie par l’opérateur. Chaque message est aussi consigné dans le journal d’audit.
 

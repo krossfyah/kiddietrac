@@ -35,13 +35,13 @@ Cada persona debe:
   [Mensajes de texto y llamadas telefónicas](texts-and-phone-calls));
 - no haber desactivado las **Difusiones por texto** en sus propias opciones.
 
-Quien no cumple los requisitos se omite, y el resultado muestra **total / enviados / omitidos**.
+Quien no cumple los requisitos se omite. Antes de enviar, la línea bajo la audiencia dice a cuántos se puede llegar, por ejemplo "12 of 15 can be texted", y cuántos no tienen celular o no han dado su consentimiento. Pida a los demás que se suscriban desde la pestaña **Alertas por SMS**.
 Una difusión que no llega a nadie lo dice con claridad en lugar de informar de un éxito.
 
 ## Envío
 
-1. Barra lateral → **Difusión por SMS**.
-2. Elija un público:
+1. Abra **Difusión por SMS** en la pestaña **Enviar un mensaje**.
+2. Elija la **Audiencia**:
    - **Por rol** — tutor / educador / director de centro / administrador de la agencia
    - **Por centro** (o proveedor, como lo llame su agencia) — todas las personas con un
      rol en el que elija
@@ -73,7 +73,7 @@ también es miembro del personal. KiddieTrac lo gestiona por **teléfono**, dent
 
 Una respuesta a una difusión no se pierde en un registro del operador. Llega al **Centro de mensajes** como un chat
 de esa persona (marcado como hilo de SMS), se avisa al personal correspondiente, y una respuesta que escriba
-en ese hilo sale hacia su teléfono como mensaje de texto.
+en ese hilo sale hacia su teléfono como mensaje de texto. Las respuestas también aparecen en la pestaña **Respuestas**.
 
 - **STOP** (también UNSUBSCRIBE, CANCEL, END, QUIT) detiene todos los mensajes de su agencia a ese teléfono.
 - **START** los reactiva.
@@ -88,7 +88,7 @@ días.
 
 ## El registro
 
-**Enviados y recibidos**, en la parte inferior de la pantalla, enumera los mensajes recientes en ambas direcciones,
+La pestaña **Enviados y recibidos** enumera los mensajes recientes en ambas direcciones,
 con la hora en la zona horaria de su agencia, el estado de entrega y, cuando uno falló, el
 motivo indicado por el operador. Cada mensaje también queda registrado en el registro de auditoría.
 
