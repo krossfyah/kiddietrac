@@ -43,7 +43,7 @@ El correo solo dice que hay un archivo esperando. El archivo nunca se adjunta; p
 
 ## Desactivar los correos (administradores de la agencia)
 
-1. Barra lateral → **Ajustes** → **Notificaciones**.
+1. Barra lateral → **Ajustes** → **Notificaciones de la agencia**.
 2. Abra la pestaña **📎 Archivos compartidos**.
 3. Active o desactive **Enviar correo a los padres sobre archivos nuevos** o **Enviar correo al personal cuando una familia envía un archivo**.
 4. Pulse **Guardar**.

@@ -78,6 +78,24 @@ La ligne de résultat indique combien de personnes sont appelées et combien ont
 ??? Pourquoi est-ce que je ne vois pas Appel vocal? | Il est réservé aux directeurs de centre et aux administrateurs de l’agence, soit les mêmes personnes qui peuvent passer des appels depuis la diffusion SMS.
 ??? Pourquoi Appel vocal est-il grisé? | Les appels sont désactivés pour votre agence, ou aucun motif d’appel n’est autorisé. Un administrateur de l’agence définit les deux dans Paramètres → Paramètres des opérateurs → Appels vocaux.
 
+## Demander de faire quelque chose avant une date
+
+1. Dans la nouvelle annonce, ouvrez **⏰ Asking for something? Due date & reminders (optional)**.
+2. Réglez **À faire avant le** à la date voulue.
+3. Sous **Leur rappeler (up to 2)**, choisissez **3 days before**, **1 day before**, **Morning of** ou **Custom…**.
+4. Sous **Qui reçoit le rappel**, choisissez seulement les personnes qui n’ont pas encore touché **✓ Done**, ou **Everyone again**.
+5. Appuyez sur **Envoyer**. Les destinataires voient **⏰ Please do this by …** et un bouton **✓ Mark as done**.
+
+Pour faire le suivi, ouvrez le **⋮** de la ligne et appuyez sur **👁 Voir les détails** : **Who’s done?** liste chaque
+personne ou famille et combien ont terminé sur le total.
+
+## Gérer la liste
+
+Chaque ligne a un menu **⋮** : **👁 Voir les détails**, **🔁 Renvoyer** (annonces que vous gérez), **✓ Marquer comme
+lu** / **● Marquer comme non lu** et **🗄 Archiver** (votre propre liste seulement), et **🗑 Supprimer** quand vous
+pouvez la retirer — supprimer la retire aussi des Nouvelles de chaque famille. **🗄 Archivés** en haut montre ce que
+vous avez archivé; **↩ Unarchive** la ramène. Tapez dans **🔍 Filter…** pour trouver une annonce par ses mots.
+
 ## Comment les destinataires la reçoivent
 
 - **Dans l’application** : une notification, plus l’annonce dans leur fil (**Nouvelles** pour les parents

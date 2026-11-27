@@ -74,6 +74,16 @@ la carte en direct dans **Walk Watch** pour suivre le trajet.
 Au retour, la promenade apparaît dans la journée de votre enfant avec le parcours, la durée de la sortie et la distance parcourue, et la même carte est incluse dans votre
 courriel de résumé quotidien.
 
+## Utiliser la boîte de réception
+
+1. Ouvrez **Notifications** à partir du menu (ou touchez la 🔔).
+2. Utilisez **Tous**, **Non lu** ou **Lu** en haut pour filtrer la liste.
+3. Appuyez sur **✓ Tout marquer comme lu** pour tout marquer comme lu d’un coup.
+4. Pour faire le ménage, appuyez sur **☑️ Sélectionner**, cochez ce que vous voulez et appuyez sur **Supprimer**.
+5. Appuyez sur **🔊 Sons** pour choisir la sonnerie et la vibration de chaque type de notification.
+
+Plusieurs avis du même type sont regroupés sous **＋ … earlier like this**; touchez-le pour tous les voir.
+
 ## Marquer comme non lu
 
 Vous avez ouvert une notification par erreur? Utilisez le menu **⋮** de la ligne et choisissez **Marquer comme non lu**

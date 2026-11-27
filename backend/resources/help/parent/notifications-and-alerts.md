@@ -76,6 +76,16 @@ When they get back, the walk appears in your child's day with the route, how lon
 were out and how far they went, and the same map is included in your daily summary
 email.
 
+## Using the inbox
+
+1. Open **Notifications** from the menu (or tap the 🔔).
+2. Use **All**, **Unread** or **Read** at the top to narrow the list.
+3. Press **✓ Read all** to mark everything read at once.
+4. To clear old items, press **☑️ Select**, tick the ones you want, and press **Delete**.
+5. Press **🔊 Sounds** to choose the tone and vibration for each kind of notification.
+
+Several notices of the same kind fold together under **＋ … earlier like this**; tap it to see them all.
+
 ## Marking something unread
 
 Opened a notification by accident? Use the **⋮** menu on the row and choose **Mark

@@ -2,7 +2,7 @@
 title: Announcements
 category: Communications
 order: 35
-screens: announcements, ~rsvp
+screens: announcements
 ---
 # Announcements
 
@@ -78,6 +78,24 @@ The result line reports how many are being called and how many were skipped.
 
 ??? Why can't I see Voice call? | It is for centre directors and agency admins only, the same people who can place calls from SMS broadcast.
 ??? Why is Voice call greyed out? | Calls are switched off for your agency, or no call reasons are allowed. An agency admin sets both in Settings → Carrier settings → Voice calls.
+
+## Asking people to do something by a date
+
+1. In the new announcement, open **⏰ Asking for something? Due date & reminders (optional)**.
+2. Set **Due by** to the date it is needed.
+3. Under **Remind them (up to 2)**, pick **3 days before**, **1 day before**, **Morning of** or **Custom…**.
+4. Under **Who gets the reminder**, choose only the people who have not tapped **✓ Done** yet, or **Everyone again**.
+5. Press **Send**. Recipients see **⏰ Please do this by …** and a **✓ Mark as done** button.
+
+To follow up, open the row's **⋮** and press **👁 View details**: **Who’s done?** lists each person or family and how
+many of the total are done.
+
+## Managing the list
+
+Every row has a **⋮** menu: **👁 View details**, **🔁 Send again** (announcements you manage), **✓ Mark read** /
+**● Mark unread** and **🗄 Archive** (your own list only), and **🗑 Delete** where you may remove it — deleting also
+takes it out of every family's News. **🗄 Archived** at the top shows what you archived; **↩ Unarchive** brings it
+back. Type in **🔍 Filter…** to find an announcement by its words.
 
 ## How recipients get it
 

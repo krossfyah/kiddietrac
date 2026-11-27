@@ -43,7 +43,7 @@ Le courriel indique seulement qu’un fichier est en attente. Le fichier n’est
 
 ## Désactiver les courriels (administrateurs de l’agence)
 
-1. Menu latéral → **Paramètres** → **Notifications**.
+1. Menu latéral → **Paramètres** → **Notifications de l’agence**.
 2. Ouvrez l’onglet **📎 Fichiers partagés**.
 3. Activez ou désactivez **Envoyer un courriel aux parents pour les nouveaux fichiers** ou **Envoyer un courriel au personnel lorsqu’une famille envoie un fichier**.
 4. Appuyez sur **Enregistrer**.

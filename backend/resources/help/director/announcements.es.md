@@ -78,6 +78,24 @@ La línea de resultado indica a cuántas personas se está llamando y a cuántas
 ??? ¿Por qué no veo Llamada de voz? | Es solo para directores de centro y administradores de la agencia, las mismas personas que pueden hacer llamadas desde el envío masivo de SMS.
 ??? ¿Por qué Llamada de voz aparece atenuada? | Las llamadas están desactivadas para su agencia, o no se permite ningún motivo de llamada. Un administrador de la agencia define ambos en Ajustes → Ajustes de operadores → Llamadas de voz.
 
+## Pedir que hagan algo antes de una fecha
+
+1. En el anuncio nuevo, abra **⏰ Asking for something? Due date & reminders (optional)**.
+2. Ponga en **Fecha límite** la fecha en que se necesita.
+3. En **Recordarles (up to 2)**, elija **3 days before**, **1 day before**, **Morning of** o **Custom…**.
+4. En **Quién recibe el recordatorio**, elija solo a quienes todavía no tocaron **✓ Done**, o **Everyone again**.
+5. Presione **Enviar**. Los destinatarios ven **⏰ Please do this by …** y un botón **✓ Mark as done**.
+
+Para dar seguimiento, abra el **⋮** de la fila y presione **👁 Ver detalles**: **Who’s done?** lista cada persona o
+familia y cuántos del total terminaron.
+
+## Administrar la lista
+
+Cada fila tiene un menú **⋮**: **👁 Ver detalles**, **🔁 Enviar de nuevo** (anuncios que usted administra), **✓ Marcar
+como leído** / **● Marcar como no leído** y **🗄 Archivar** (solo su propia lista), y **🗑 Eliminar** cuando puede
+quitarlo — eliminarlo también lo quita de las Noticias de cada familia. **🗄 Archivadas** arriba muestra lo que
+archivó; **↩ Unarchive** lo devuelve. Escriba en **🔍 Filter…** para encontrar un anuncio por sus palabras.
+
 ## Cómo lo reciben los destinatarios
 
 - **En la app**: una notificación, más el anuncio en su feed (**Noticias** para padres

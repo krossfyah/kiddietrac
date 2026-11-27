@@ -74,6 +74,16 @@ el mapa en vivo en **Walk Watch** para que pueda seguir el recorrido.
 Cuando regresan, el paseo aparece en el día de su hijo con la ruta, cuánto tiempo estuvieron fuera y qué distancia recorrieron, y el mismo mapa se incluye en su
 correo electrónico de resumen diario.
 
+## Usar la bandeja de entrada
+
+1. Abra **Notificaciones** desde el menú (o toque la 🔔).
+2. Use **Todos**, **No leído** o **Leído** arriba para filtrar la lista.
+3. Presione **✓ Marcar todo como leído** para marcar todo de una vez.
+4. Para limpiar, presione **☑️ Seleccionar**, marque los que quiera y presione **Eliminar**.
+5. Presione **🔊 Sonidos** para elegir el tono y la vibración de cada tipo de notificación.
+
+Varios avisos del mismo tipo se agrupan en **＋ … earlier like this**; tóquelo para verlos todos.
+
 ## Marcar algo como no leído
 
 ¿Abrió una notificación sin querer? Use el menú **⋮** de la fila y elija **Marcar como no leído**:

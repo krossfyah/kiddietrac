@@ -2,7 +2,7 @@
 title: Messaging parents
 category: Daily Workflows
 order: 4
-screens: chat, ~announcements
+screens: chat
 ---
 
 # Messaging parents

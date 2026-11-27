@@ -44,7 +44,7 @@ The email only says a file is waiting. The file is never attached; it stays in K
 
 ## Turning the emails off (agency admins)
 
-1. Sidebar → **Settings** → **Notifications**.
+1. Sidebar → **Settings** → **Agency notifications**.
 2. Open the **📎 Shared files** tab.
 3. Switch **Email parents about new files** or **Email staff when a family sends a file** on or off.
 4. Press **Save**.
