@@ -68,6 +68,7 @@ final class StaffPayoutMethodController extends Controller
         if ($request->boolean('clear')) {
             DB::table('staff_payout_methods')->where('user_id', $userId)->delete();
             $this->note($userId, $agencyId, 'staff.payout_method_cleared', ['by' => 'self']);
+            $this->tellOwner($userId, (int) ($existing->agency_id ?? $agencyId), ['Your pay details were removed'], null);
 
             return response()->json(['ok' => true, 'payout_method' => null]);
         }
@@ -146,6 +147,14 @@ final class StaffPayoutMethodController extends Controller
             ])),
             'by' => 'self',
         ]);
+
+        // KiddieTrac HR (2026-11-27): the owner hears about every change, at their own address only.
+        $what = [];
+        if (! $existing || $existing->method !== $data['method']) $what[] = 'How you are paid: ' . ($data['method'] === 'interac' ? 'e-Transfer' : 'direct deposit');
+        if (isset($row['account_number_enc'])) $what[] = 'Bank account';
+        if (isset($row['interac_email_enc'])) $what[] = 'e-Transfer address (' . $row['interac_email_hint'] . ')';
+        if (! empty($data['legal_name']) && (string) ($existing->legal_name ?? '') !== (string) $data['legal_name']) $what[] = 'Name on the account';
+        if ($what) $this->tellOwner($userId, (int) ($row['agency_id'] ?? 0), $what, isset($bank['account_number']) ? substr($bank['account_number'], -3) : null);
 
         return response()->json(['ok' => true, 'payout_method' => $this->publicShape($fresh)]);
     }
@@ -285,6 +294,40 @@ final class StaffPayoutMethodController extends Controller
     }
 
     /** n•••@example.com — enough to recognise, not enough to use. */
+    /**
+     * "YOUR PAY DETAILS CHANGED - TELL US IF THIS WASN'T YOU" (KiddieTrac HR Phase 4, 2026-11-27). A changed payout
+     * destination is the classic payroll fraud, so the owner is told every time, at THEIR OWN address only (never a
+     * manager, never a CC). It names what changed, never the numbers: at most the account's last 3 digits.
+     * Test agencies send nothing (TestAgency::blocks); a failure never blocks the save.
+     */
+    private function tellOwner(int $userId, int $agencyId, array $what, ?string $last3): void
+    {
+        try {
+            $u = DB::table('users')->where('id', $userId)->first(['first_name', 'email']);
+            if (! $u || ! filter_var((string) $u->email, FILTER_VALIDATE_EMAIL) || $agencyId < 1) return;
+            if (\App\Support\TestAgency::blocks($agencyId, $userId)) return;
+            $e = fn ($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+            $agency = (string) DB::table('agencies')->where('id', $agencyId)->value('name');
+            $now = \App\Support\AgencyTime::now($agencyId);
+            $when = $now->format('l, F j, Y') . ' at ' . $now->format('g:i A');
+            $items = '';
+            foreach ($what as $w) {
+                $items .= '<li style="margin:0 0 4px;">' . $e($w) . ($w === 'Bank account' && $last3 ? ' (ending in ' . $e($last3) . ')' : '') . '</li>';
+            }
+            $body = '<p style="margin:0 0 12px;font-size:15px;">Hi ' . $e($u->first_name ?: 'there') . ',</p>'
+                . '<p style="margin:0 0 10px;font-size:15px;">The details ' . $e($agency) . ' uses to pay you were changed in KiddieTrac on ' . $e($when) . ':</p>'
+                . '<ul style="margin:0 0 14px;padding-left:20px;font-size:15px;">' . $items . '</ul>'
+                . '<p style="margin:0 0 12px;font-size:15px;">If you made this change, there is nothing else to do.</p>'
+                . '<p style="margin:0;font-size:15px;"><b>If this wasn’t you</b>, tell your office straight away so your next pay is held, and change your KiddieTrac password.</p>';
+            $html = \App\Services\EmailTemplate::wrap($agencyId, $body, ['eyebrow' => 'ACCOUNT SECURITY', 'title' => 'Your pay details were changed',
+                'subtitle' => $agency, 'preheader' => 'Tell us if this wasn’t you.']);
+            \App\Services\AgencyMailer::forAgency($agencyId)->html($html, fn ($m) => $m->to((string) $u->email)->subject('Your pay details were changed - tell us if this wasn’t you'));
+            $this->note($userId, $agencyId, 'staff.payout_change_emailed', ['items' => count($what)]);
+        } catch (\Throwable $ex) {
+            report($ex);
+        }
+    }
+
     private function maskEmail(string $email): string
     {
         $at = strpos($email, '@');

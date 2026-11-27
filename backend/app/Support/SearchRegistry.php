@@ -186,6 +186,13 @@ final class SearchRegistry
         'hr_shift_changes' => 'a send queue of shift changes waiting to be told to the person (HR shift notices): never shown or searched',
         'hr_open_shifts' => 'open shifts staff can ask for (HR): shown in HR > Open shifts and My HR, never a record people look up',
         'hr_open_shift_claims' => 'who asked for an open shift (HR): shown with the open shift in HR > Open shifts and in My HR',
+        // KiddieTrac HR Phase 4, batch 4 (2026-11-27): the document vault, pay + role history, leaving. Private: search the staff member.
+        'hr_doc_folders' => 'company HR document folders: shown in HR > Documents and My HR, never a record people look up',
+        'hr_documents' => 'HR documents and sick notes (private files): on the person\'s HR file and My HR; search the staff member',
+        'hr_document_receipts' => 'who opened / accepted a company HR document: shown with the document in HR > Documents',
+        'hr_document_alerts' => 'a log of document reminders already sent (HR): never shown or searched',
+        'hr_pay_changes' => 'pay + role history with effective dates (pay = pay viewers only): on the person\'s HR file; search the staff member',
+        'hr_leavings' => 'leaving records (checklist, ROE prep, payout): HR > Leavers and the person\'s HR file; search the staff member',
         'hr_letter_templates' => 'the agency\'s HR letter templates (configuration): edited in HR > Letters, never a record people look up',
         'hr_letters' => 'which HR letters were sent to whom (HR): the letter itself is the Managed Forms record; listed in HR > Letters only',
         'hr_course_role_rules' => 'configuration: "this course goes to everyone in this role" on a course, shown in its Assigned popup',

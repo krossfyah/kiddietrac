@@ -1004,6 +1004,7 @@
     b.querySelectorAll('[data-mr]').forEach(function (x) { x.addEventListener('click', function () { openReview(+x.getAttribute('data-mr'), reload); }); });
     var mg = b.querySelector('[data-mg]'); if (mg) mg.addEventListener('click', function () { openGoalsAndNotes(d.me, true, reload); });
     if (window.KTHrSafety) window.KTHrSafety.mine(b);   // Phase 3: the person's own injury reports (screen-hr-safety.js)
+    if (window.KTHrFile) window.KTHrFile.mine(b);       // Phase 4 batch 4: my documents + company documents (screen-hr-file.js)
   }
 
   window.KTHrTalent = {

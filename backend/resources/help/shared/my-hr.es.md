@@ -25,3 +25,11 @@ Abra una evaluación para escribir su autoevaluación: una calificación y un co
 Sus objetivos muestran su estado y avance. Pulse **Registrar avance** para contar cómo va un objetivo. Las notas de reuniones individuales son privadas: usted, su responsable, los administradores de su agencia y la dirección de su centro.
 
 Recibe un recordatorio antes de que venza una tarea o un curso y cuando una evaluación le espera.
+
+## Mis documentos
+
+Sus documentos están en **Mis documentos**: los papeles que su responsable compartió con usted y los documentos de la empresa como el manual. Pulse ⋮ para ver una **Vista previa** o **Descargar**. Si un documento lo pide, léalo y pulse **Lo he leído y lo acepto**.
+
+Al pedir tiempo libre puede añadir una nota o una foto, por ejemplo un justificante médico hecho con la cámara del teléfono, e indicar qué días cubre. También puede añadirla después desde la solicitud con **📎 Añadir una nota o foto**. Los justificantes médicos solo los ven usted, su director y los administradores de la agencia.
+
+Si cambian sus datos bancarios o de transferencia para el pago, recibe un correo. Si no fue usted, avise a su director enseguida.

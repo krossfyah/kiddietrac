@@ -81,6 +81,7 @@
     var t = [['people', 'People'], ['balances', 'Balances'], ['absence', 'Absence report']];
     if (window.KTHrTalent) t = t.concat(window.KTHrTalent.tabs);   // Phase 2 (2026-11-28)
     if (window.KTHrSafety) t = t.concat(window.KTHrSafety.tabs);   // Phase 3: injuries (screen-hr-safety.js)
+    if (window.KTHrFile) t = t.concat(window.KTHrFile.tabs);       // Phase 4 batch 4: company documents, leavers (screen-hr-file.js)
     if (S.admin) t.push(['types', 'Leave types'], ['settings', 'Settings']);
     return t;
   }
@@ -127,6 +128,7 @@
     if (S.tab === 'types') return drawTypes(main);
     if (S.tab === 'settings') return drawSettings(main);
     if (window.KTHrSafety && window.KTHrSafety.has(S.tab)) return window.KTHrSafety.draw(S.tab, b);
+    if (window.KTHrFile && window.KTHrFile.has(S.tab)) return window.KTHrFile.draw(S.tab, b);
     if (window.KTHrTalent) return window.KTHrTalent.draw(S.tab, b);
   }
 
@@ -210,7 +212,8 @@
           + '<button type="button" class="hr-b" data-sin="set">' + (p.sin.on_file ? 'Change' : 'Add') + '</button>'
           + (p.sin.on_file ? '<button type="button" class="hr-b" data-sin="clear">Remove</button>' : '') + '</div>'
           + '<div class="hr-sub" style="margin-top:6px;">Stored encrypted. Only agency admins can see or change it, and every reveal is recorded in the audit log.</div></div>' : '')
-      + '</div>' + (window.KTHrTalent ? '<div data-hrtalent style="margin-top:10px;"></div>' : '');
+      + '</div>' + (window.KTHrFile ? '<div data-hrfile style="margin-top:10px;"></div>' : '')
+      + (window.KTHrTalent ? '<div data-hrtalent style="margin-top:10px;"></div>' : '');
     var close = null;
     var M = KT.Shell.Modal;
     M.open({ title: 'HR profile', body: box, large: true, actions: [
@@ -220,6 +223,7 @@
     ] });
     box.querySelectorAll('[data-go]').forEach(function (g) { g.addEventListener('click', function () { closeModal(); location.hash = '#' + g.getAttribute('data-go'); }); });
     var tl = box.querySelector('[data-hrtalent]'); if (tl && window.KTHrTalent) window.KTHrTalent.profile(tl, id);
+    var hf = box.querySelector('[data-hrfile]'); if (hf && window.KTHrFile) window.KTHrFile.profile(hf, id, p);   // documents, pay + role history, leaving
     var ub = box.querySelector('[data-user]'); if (ub) ub.addEventListener('click', function () { closeModal(); try { KT.openUserRecord(id); } catch (e) {} });
     var lb = box.querySelector('[data-led]');
     if (lb) lb.addEventListener('click', function () {

@@ -291,6 +291,7 @@
     var sc = torStatusColors(status);
     var meta = torMeta(r.request_type);
     var card = el('div', { style: 'background:#fff;border:1px solid #EDF1F6;border-radius:15px;padding:14px;margin-bottom:11px;box-shadow:0 2px 8px -3px rgba(15,23,42,.12);' });
+    card.setAttribute('data-tor-row', r.id);
     var head = el('div', { style: 'display:flex;align-items:center;gap:11px;' });
     head.appendChild(el('span', { style: 'flex:0 0 auto;width:40px;height:40px;border-radius:50%;background:#F1F5F9;display:flex;align-items:center;justify-content:center;font-size:20px;' }, meta.icon));
     var mid = el('div', { style: 'flex:1;min-width:0;' });
@@ -347,10 +348,84 @@
     }
     return card;
   }
+  /* SICK NOTES ON TIME OFF (KiddieTrac HR Phase 4 batch 4, 2026-11-27). A photo (phone camera) or a file, and the dates it
+     covers. Private: the person, their centre director and agency admins only (HrFileController); opened from a short-lived
+     signed link in the house document viewer, never emailed. HR agencies only (HR_ME). */
+  function torNoteErr(e) { var d = e && e.data; if (d && d.errors) { var k = Object.keys(d.errors)[0]; if (k) return d.errors[k][0]; } return (d && d.message) || 'Please try again.'; }
+  function torNoteFields() {
+    return '<div style="margin-top:10px;font-size:13px;color:#374151;font-weight:600;">Note or photo (optional)</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:5px;align-items:center;">'
+      + '<label class="kt-btn kt-btn-secondary kt-btn-sm" style="cursor:pointer;">📷 Take a photo<input type="file" accept="image/*" capture="environment" data-tor-pick style="display:none;"></label>'
+      + '<label class="kt-btn kt-btn-secondary kt-btn-sm" style="cursor:pointer;">📎 Choose a file<input type="file" accept="image/*,application/pdf" data-tor-pick style="display:none;"></label>'
+      + '<span data-tor-note-file style="font-size:12.5px;color:#475569;"></span></div>'
+      + '<div data-tor-dates style="display:none;gap:10px;margin-top:8px;">'
+      + '<label style="flex:1;display:block;font-size:12.5px;color:#374151;font-weight:600;">Note covers from<input data-tor-cf type="date" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:9px;margin-top:4px;font-size:15px;box-sizing:border-box;"></label>'
+      + '<label style="flex:1;display:block;font-size:12.5px;color:#374151;font-weight:600;">to<input data-tor-ct type="date" style="width:100%;padding:9px;border:1px solid #E5E7EB;border-radius:9px;margin-top:4px;font-size:15px;box-sizing:border-box;"></label></div>'
+      + '<div style="font-size:11.5px;color:#64748B;margin-top:4px;">🔒 Seen only by you, your director and your agency admin.</div>';
+  }
+  function torNoteWire(box) {
+    box.querySelectorAll('[data-tor-pick]').forEach(function (inp) {
+      inp.addEventListener('change', function () {
+        var f = inp.files && inp.files[0]; if (!f) return;
+        var out = box.querySelector('[data-tor-note-file]'); out._file = f; out.textContent = f.name;
+        box.querySelector('[data-tor-dates]').style.display = 'flex';
+      });
+    });
+  }
+  function torNoteUpload(id, file, from, to) {
+    var fd = new FormData(); fd.append('file', file);
+    if (from) fd.append('covers_from', String(from).slice(0, 10));
+    if (to) fd.append('covers_to', String(to).slice(0, 10));
+    return Api.postForm('/hr/time-off/' + id + '/note', fd);
+  }
+  async function torNoteOpen(id) {
+    try {
+      var r = await Api.get('/hr/documents/' + id + '/open');
+      if (KT.viewDocument && r.previewable) KT.viewDocument(r.url, { title: r.title, filename: r.name, mime: r.mime, label: 'Note' });
+      else { var a = document.createElement('a'); a.href = r.url; a.setAttribute('download', r.name || 'note'); a.setAttribute('data-kt-download', '1'); document.body.appendChild(a); a.click(); a.remove(); }
+    } catch (e) { if (KT.toast) KT.toast('⚠️', 'Could not open the note', torNoteErr(e), '#DC2626'); }
+  }
+  function torNoteAdd(r) {
+    var M = window.KT && KT.Shell && KT.Shell.Modal; if (!M) return;
+    var box = document.createElement('div');
+    box.innerHTML = torNoteFields() + '<div data-out style="font-size:13px;color:#B91C1C;margin-top:6px;"></div>';
+    torNoteWire(box);
+    box.querySelector('[data-tor-cf]').value = String(r.start_at || '').slice(0, 10);
+    box.querySelector('[data-tor-ct]').value = String(r.end_at || r.start_at || '').slice(0, 10);
+    M.open({ title: 'Add a note or photo', body: box, actions: [{ label: 'Cancel' }, { label: 'Attach', primary: true, busyLabel: 'Attaching…', handler: function () {
+      var f = box.querySelector('[data-tor-note-file]')._file;
+      if (!f) { box.querySelector('[data-out]').textContent = 'Take a photo or choose a file.'; return false; }
+      return torNoteUpload(r.id, f, box.querySelector('[data-tor-cf]').value, box.querySelector('[data-tor-ct]').value)
+        .then(function () { if (KT.toast) KT.toast('✅', 'Saved', 'Note attached.', '#16A34A'); torReload(); }, function (e) { box.querySelector('[data-out]').textContent = torNoteErr(e); return false; });
+    } }] });
+  }
+  function torNotes(host, rows, isApprover) {
+    if (!HR_ME || !rows.length) return;
+    Api.get('/hr/time-off/notes?ids=' + rows.map(function (r) { return r.id; }).join(',')).then(function (res) {
+      var notes = (res && res.notes) || {};
+      rows.forEach(function (r) {
+        var at = host.querySelector('[data-tor-row="' + r.id + '"]'); if (!at) return;
+        var cell = at.tagName === 'TR' ? at.children[1] : at;
+        var list = notes[r.id] || [], wrap = document.createElement('div');
+        wrap.style.cssText = 'margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;';
+        list.forEach(function (d) {
+          var b = document.createElement('button'); b.type = 'button'; b.className = 'kt-btn kt-btn-secondary kt-btn-sm'; b.setAttribute('data-kt-iconized', '1');
+          b.textContent = '📎 ' + (d.doc_type === 'sick_note' ? 'Sick note' : 'Note');
+          b.onclick = function () { torNoteOpen(d.id); }; wrap.appendChild(b);
+        });
+        var st = (r.status || 'pending').toLowerCase();
+        if ((!isApprover || torOwn(r)) && list.length < 5 && st !== 'denied' && st !== 'cancelled') {
+          var a = document.createElement('button'); a.type = 'button'; a.className = 'kt-btn kt-btn-secondary kt-btn-sm'; a.setAttribute('data-kt-iconized', '1');
+          a.textContent = list.length ? '+ Another note' : '📎 Add a note or photo'; a.onclick = function () { torNoteAdd(r); }; wrap.appendChild(a);
+        }
+        if (wrap.children.length) cell.appendChild(wrap);
+      });
+    }, function () {});
+  }
   function renderTorList(host, rows, isApprover) {
     if (!rows.length) { host.innerHTML = '<div style="color:#64748B;padding:16px;background:#fff;border:1px solid #EDF1F6;border-radius:14px;text-align:center;font-size:13.5px;">No requests yet.</div>'; return; }
     host.innerHTML = '';
-    if (isMobile()) { rows.forEach(function (r) { host.appendChild(torCard(r, isApprover)); }); return; }
+    if (isMobile()) { rows.forEach(function (r) { host.appendChild(torCard(r, isApprover)); }); torNotes(host, rows, isApprover); return; }
     /* The table gets a card, like every other data table in the portal
        (`<div class="kt-card"><table>` -- #late-pickups does exactly this).
        It used to sit bare on the page background, which also made this screen
@@ -366,6 +441,7 @@
     const tb = tbl.querySelector('tbody');
     rows.forEach(r => {
       const tr = document.createElement('tr');
+      tr.setAttribute('data-tor-row', r.id);
       const status = (r.status || 'pending').toLowerCase();
       const color = status === 'approved' ? '#047857' : status === 'denied' ? '#B91C1C' : '#D97706';
       tr.innerHTML = `<td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.user_name || 'You')}</td>
@@ -383,6 +459,7 @@
     });
     card.appendChild(tbl);
     host.appendChild(card);
+    torNotes(host, rows, isApprover);
     host.querySelectorAll('button[data-withdraw]').forEach(b => {
       b.onclick = function () {
         var row = rows.filter(function (x) { return String(x.id) === b.dataset.withdraw; })[0];
@@ -514,6 +591,11 @@
       clashEl.id = 'tor-clash';
       clashEl.style.cssText = 'margin-top:10px;';
       m.querySelector('#tor-reason').closest('label').before(clashEl);
+      // HR Phase 4 batch 4 (2026-11-27): a sick note or photo, taken with the phone camera or chosen from files.
+      var noteEl = document.createElement('div');
+      noteEl.innerHTML = torNoteFields();
+      m.querySelector('#tor-err').before(noteEl);
+      torNoteWire(noteEl);
     }
     function syncClash() {
       if (!clashEl) return;
@@ -582,6 +664,11 @@
       var sent;
       try { sent = await Api.post('/time-off', payload); }
       catch (e) { errEl.textContent = (e && e.data && e.data.message) || (e && e.message) || 'Could not send the request. Please try again.'; return; }
+      var nf = m.querySelector('[data-tor-note-file]');
+      if (sent && sent.id && nf && nf._file) {
+        try { await torNoteUpload(sent.id, nf._file, m.querySelector('[data-tor-cf]').value || payload.start_at, m.querySelector('[data-tor-ct]').value || payload.end_at || payload.start_at); }
+        catch (e) { if (KT.toast) KT.toast('⚠️', 'Request sent, note not attached', torNoteErr(e) + ' Add it from Your requests.', '#D97706'); }
+      }
       m.remove();
       try { if (sent && sent.warning && KT.toast) KT.toast('⚠️', 'Sent, below zero', sent.warning, '#D97706'); else if (sent && sent.status === 'approved' && KT.toast) KT.toast('✅', 'Recorded', 'No approval needed. It is taken off your balance, and your manager will review it.', '#16A34A'); } catch (e) {}
       torReload();

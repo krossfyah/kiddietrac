@@ -25,3 +25,11 @@ Open a review to write your self review: a rating and a comment for each section
 Your goals show their status and progress. Press **Check in** to say how a goal is going. One-to-one notes are private to you, your manager, your agency admins and your centre's director.
 
 You get a reminder before a task or a course is due and when a review is waiting for you.
+
+## My documents
+
+Your documents are in **My documents**: papers your manager shared with you, and company documents such as the handbook. Press ⋮ to **Preview** or **Download** one. If a document asks you to, read it and press **I have read and accept it**.
+
+When you ask for time off you can add a note or a photo, for example a sick note taken with your phone camera, and say which days it covers. You can also add one later from the request with **📎 Add a note or photo**. Sick notes are seen only by you, your director and your agency admins.
+
+If your bank or e-Transfer details for pay are changed, you get an email. If it wasn't you, tell your director straight away.

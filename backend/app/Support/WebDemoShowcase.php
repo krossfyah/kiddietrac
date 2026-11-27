@@ -793,6 +793,7 @@ final class WebDemoShowcase
         $this->hrAttendanceStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 1
         $this->hrTimeStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);   // HR Phase 4, batch 2
         $this->hrOpenShiftsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 3
+        $this->hrFileStory($agencyId, $byName->all(), $elena, $olivia, $now);   // HR Phase 4, batch 4
         $this->hrLettersStory($agencyId, $olivia);   // HR Phase 3, item 12
     }
 
@@ -1041,6 +1042,81 @@ final class WebDemoShowcase
      * conflict), Noah can't work next Wednesday, Lucas giving away next Tuesday (open) and Ethan / Noah swapping next
      * Thursday and Friday (accepted, waiting for approval). Rooms the five cannot cover show as ratio warnings.
      */
+    /**
+     * HR Phase 4, batch 4 (2026-11-27): the document vault, pay + role history and a leaving in progress. Demo files are
+     * tiny generated PDFs under the protected hr-documents/<agency>/ folder, written once by name (so reruns add nothing);
+     * the rows go through add() like every other story row.
+     */
+    private function hrFileStory(int $agencyId, array $byName, int $elena, int $olivia, string $now): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_documents')) return;
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        $pdf = function (string $slug, string $title) use ($disk, $agencyId): string {
+            $rel = \App\Support\HrDocs::FOLDER . '/' . $agencyId . '/demo-' . $slug . '.pdf';
+            if (! $disk->exists($rel)) {
+                $t = preg_replace('/[()\\\\]/', '', $title);
+                $stream = "BT /F1 18 Tf 72 720 Td ($t) Tj ET\nBT /F1 11 Tf 72 690 Td (Starlight demo document - not a real record.) Tj ET";
+                $objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+                    "<< /Length " . strlen($stream) . " >>\nstream\n$stream\nendstream", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+                $out = "%PDF-1.4\n"; $off = [];
+                foreach ($objs as $i => $o) { $off[] = strlen($out); $out .= ($i + 1) . " 0 obj\n$o\nendobj\n"; }
+                $x = strlen($out);
+                $out .= "xref\n0 " . (count($objs) + 1) . "\n0000000000 65535 f \n" . implode('', array_map(fn ($o) => sprintf("%010d 00000 n \n", $o), $off))
+                    . "trailer\n<< /Size " . (count($objs) + 1) . " /Root 1 0 R >>\nstartxref\n$x\n%%EOF\n";
+                $disk->put($rel, $out);
+            }
+
+            return '/storage/' . $rel;
+        };
+        $by = $olivia ?: $elena;
+        $doc = function (array $row) use ($agencyId, $by, $now, $pdf) {
+            $slug = strtolower(preg_replace('/[^A-Za-z0-9]+/', '-', $row['title']));
+            return $this->add('hr_documents', $row + ['agency_id' => $agencyId, 'file_path' => $pdf($slug, $row['title']), 'file_name' => $row['title'] . '.pdf',
+                'file_mime' => 'application/pdf', 'file_size' => 900, 'uploaded_by_id' => $by, 'created_at' => $now, 'updated_at' => $now]);
+        };
+        $d = fn (int $days) => $this->today->copy()->addDays($days)->toDateString();
+        // Company documents: the handbook for everyone (read + accept), payroll forms for admins only.
+        $hb = $this->add('hr_doc_folders', ['agency_id' => $agencyId, 'name' => 'Staff handbook', 'visibility' => 'everyone', 'created_by_id' => $by, 'created_at' => $now, 'updated_at' => $now]);
+        $pf = $this->add('hr_doc_folders', ['agency_id' => $agencyId, 'name' => 'Payroll forms', 'visibility' => 'admins', 'created_by_id' => $by, 'created_at' => $now, 'updated_at' => $now]);
+        $h1 = $doc(['folder_id' => $hb, 'doc_type' => 'handbook', 'title' => 'Starlight staff handbook 2026', 'requires_accept' => 1, 'follow_up_on' => $d(7), 'follow_up_note' => 'Annual handbook review with the directors']);
+        $doc(['folder_id' => $hb, 'doc_type' => 'policy', 'title' => 'Sleep room and safe sleep procedure', 'requires_accept' => 1]);
+        $doc(['folder_id' => $pf, 'doc_type' => 'tax', 'title' => 'TD1 personal tax credits form (blank)']);
+        foreach (['Sofia' => [true, true], 'Lucas' => [true, false], 'Marcus' => [true, true]] as $who => [$read, $acc]) {
+            if (empty($byName[$who])) continue;
+            $this->add('hr_document_receipts', ['document_id' => $h1, 'user_id' => $byName[$who], 'read_at' => $read ? $this->at(-4, 10, 5) : null, 'accepted_at' => $acc ? $this->at(-4, 10, 9) : null]);
+        }
+        // On people's files.
+        if (! empty($byName['Marcus'])) {
+            $doc(['user_id' => $byName['Marcus'], 'doc_type' => 'id', 'title' => 'Driver licence (for field trips)', 'visibility' => 'employee', 'expires_on' => $d(20)]);
+            $doc(['user_id' => $byName['Marcus'], 'doc_type' => 'contract', 'title' => 'Employment contract', 'visibility' => 'managers']);
+        }
+        if (! empty($byName['Sofia'])) $doc(['user_id' => $byName['Sofia'], 'doc_type' => 'certificate', 'title' => 'Standard First Aid and CPR C', 'visibility' => 'employee', 'expires_on' => $d(6)]);
+        if (! empty($byName['Lucas'])) {
+            $req = DB::table('time_off_requests')->where('agency_id', $agencyId)->where('user_id', $byName['Lucas'])->where('request_type', 'sick')->orderByDesc('start_at')->first();
+            if ($req) $doc(['user_id' => $byName['Lucas'], 'doc_type' => 'sick_note', 'title' => 'Sick note', 'visibility' => 'employee', 'time_off_request_id' => $req->id,
+                'covers_from' => substr((string) $req->start_at, 0, 10), 'covers_to' => substr((string) $req->end_at, 0, 10)]);
+        }
+        // Pay + role history: an applied raise for Sofia (to the rate she has now), a promotion for Marcus that applies itself in 10 days.
+        if (! empty($byName['Sofia'])) {
+            $rate = DB::table('users')->where('id', $byName['Sofia'])->value('pay_rate');
+            if ($rate !== null) $this->add('hr_pay_changes', ['agency_id' => $agencyId, 'user_id' => $byName['Sofia'], 'effective_on' => $d(-60),
+                'changes' => json_encode(['pay_rate' => (float) $rate]), 'before' => json_encode(['pay_rate' => round((float) $rate - 1.25, 2)]), 'reason' => 'Annual review: meets expectations',
+                'status' => 'applied', 'source' => 'change', 'created_by_id' => $by, 'applied_at' => $this->at(-60, 0, 35), 'created_at' => $now, 'updated_at' => $now]);
+        }
+        if (! empty($byName['Marcus'])) $this->add('hr_pay_changes', ['agency_id' => $agencyId, 'user_id' => $byName['Marcus'], 'effective_on' => $d(10),
+            'changes' => json_encode(['job_title' => 'Room Lead', 'hours_per_week' => 40]), 'reason' => 'Promotion to Room Lead for the toddler room',
+            'status' => 'scheduled', 'source' => 'change', 'created_by_id' => $by, 'created_at' => $now, 'updated_at' => $now]);
+        // A leaving in progress (Ethan moves away in three weeks): checklist part done, nothing completed.
+        if (! empty($byName['Ethan'])) {
+            $hire = DB::table('users')->where('id', $byName['Ethan'])->value('hire_date');
+            $this->add('hr_leavings', ['agency_id' => $agencyId, 'user_id' => $byName['Ethan'], 'status' => 'open', 'last_day' => $d(21), 'notice_on' => $d(-7),
+                'reason_code' => 'E', 'reason_note' => 'Moving out of state', 'employment_start' => $hire ? substr((string) $hire, 0, 10) : null,
+                'checklist' => json_encode(['exit_talk' => ['done' => true, 'by' => 'Olivia', 'at' => $this->at(-6, 15, 0)], 'letter' => ['done' => true, 'by' => 'Olivia', 'at' => $this->at(-6, 15, 20)]]),
+                'started_by_id' => $by, 'created_at' => $now, 'updated_at' => $now]);
+        }
+    }
+
     /**
      * KIDDIETRAC HR PHASE 4 BATCH 3 DEMO (2026-11-27, Starlight only): the open-shift board. Next Tuesday's late
      * afternoon in the rota room is posted as an open shift with Lucas's request waiting for a director (he finishes at

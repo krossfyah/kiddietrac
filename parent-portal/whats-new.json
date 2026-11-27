@@ -2,6 +2,44 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🗂️",
+            "title": "HR documents, pay history and leaving",
+            "body": "Keep each person's papers in their HR file with expiry reminders, share handbooks and policies in folders staff can read and accept, and see every pay and role change with who made it and why, including raises that apply themselves on the day. When someone leaves, a leaving pack holds the checklist, the leave payout and a Record of Employment sheet to copy into ROE Web.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Documents RH, historique de la paie et départs",
+            "body_fr": "Gardez les papiers de chaque personne dans son dossier RH avec des rappels d’expiration, partagez manuels et politiques dans des dossiers que le personnel peut lire et accepter, et voyez chaque changement de paie et de poste avec qui l’a fait et pourquoi, y compris les augmentations qui s’appliquent toutes seules le jour venu. Quand quelqu’un part, un dossier de départ réunit la liste de vérification, le paiement des congés et une fiche du relevé d’emploi à recopier dans RE Web.",
+            "title_es": "Documentos de RR. HH., historial de pago y salidas",
+            "body_es": "Guarde los papeles de cada persona en su expediente con recordatorios de vencimiento, comparta manuales y políticas en carpetas que el personal puede leer y aceptar, y vea cada cambio de pago y puesto con quién lo hizo y por qué, incluidos los aumentos que se aplican solos el día indicado. Cuando alguien se va, un paquete de salida reúne la lista de tareas, el pago de vacaciones y una hoja del ROE para copiar en ROE Web.",
+            "title_hi": "HR दस्तावेज़, वेतन इतिहास और नौकरी छोड़ना",
+            "body_hi": "हर व्यक्ति के कागज़ात उनकी HR फ़ाइल में समाप्ति रिमाइंडर के साथ रखें, हैंडबुक और नीतियाँ ऐसे फ़ोल्डरों में साझा करें जिन्हें कर्मचारी पढ़कर स्वीकार कर सकें, और हर वेतन व पद बदलाव देखें कि किसने और क्यों किया, उन वेतन वृद्धियों सहित जो तय दिन अपने आप लागू होती हैं। जब कोई नौकरी छोड़ता है, तो छोड़ने का पैक चेकलिस्ट, छुट्टी का भुगतान और ROE Web में भरने के लिए Record of Employment शीट एक साथ रखता है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "📎",
+            "title": "Sick notes and your documents",
+            "body": "When you ask for time off you can now add a note or a photo straight from your phone camera, and say which days it covers. Your shared documents and the staff handbook are in My HR under My documents.",
+            "roles": [
+                "educator",
+                "home_visitor",
+                "centre_director",
+                "agency_admin",
+                "platform_admin"
+            ],
+            "title_fr": "Billets médicaux et vos documents",
+            "body_fr": "Quand vous demandez un congé, vous pouvez maintenant ajouter une note ou une photo prise directement avec l’appareil photo du téléphone, et indiquer les jours couverts. Vos documents partagés et le manuel du personnel sont dans Mes RH, sous Mes documents.",
+            "title_es": "Justificantes médicos y sus documentos",
+            "body_es": "Al pedir tiempo libre ahora puede añadir una nota o una foto directamente con la cámara del teléfono e indicar qué días cubre. Sus documentos compartidos y el manual del personal están en Mis RR. HH., en Mis documentos.",
+            "title_hi": "बीमारी के नोट और आपके दस्तावेज़",
+            "body_hi": "छुट्टी माँगते समय अब आप सीधे फ़ोन के कैमरे से नोट या फ़ोटो जोड़ सकते हैं और बता सकते हैं कि यह किन दिनों के लिए है। आपके साझा दस्तावेज़ और स्टाफ़ हैंडबुक My HR में मेरे दस्तावेज़ के अंतर्गत हैं।"
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "🧺",

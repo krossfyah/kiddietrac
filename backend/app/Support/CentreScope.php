@@ -106,6 +106,10 @@ final class CentreScope
         // Never an outsider (super admin / integration / reseller grant), even with an agency role (AgencyOutsiders, 2026-11-26).
         return AgencyOutsiders::exclude(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id'))
             ->where('ra.active', true)->whereNull('u.deleted_at')
+            // KiddieTrac HR (2026-11-27): someone whose HR file says they have left is off every approver list, even
+            // while their account stays open for the last few days.
+            ->whereNotExists(fn ($x) => $x->from('hr_employee_files as hef')->whereColumn('hef.user_id', 'u.id')
+                ->where('hef.agency_id', $agencyId)->where('hef.status', 'terminated'))
             ->where(function ($q) use ($agencyId, $centreIds) {
                 $q->where(fn ($w) => $w->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId));
                 if ($centreIds) {

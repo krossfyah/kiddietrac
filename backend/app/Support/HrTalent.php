@@ -75,8 +75,10 @@ final class HrTalent
         $staff = HrLeave::staffIds($agencyId);
         $ids = DB::table('role_assignments')->whereIn('user_id', $staff ?: [0])->where('active', 1)
             ->whereIn('role', ['agency_admin', 'centre_director'])->distinct()->pluck('user_id')->map(fn ($v) => (int) $v)->all();
+        // A leaver (HR file Terminated) is never offered as anyone's manager or approver (HR Phase 4, 2026-11-27).
+        $gone = DB::table('hr_employee_files')->where('agency_id', $agencyId)->where('status', 'terminated')->pluck('user_id')->map(fn ($v) => (int) $v)->all();
 
-        return array_values(array_diff($ids, AgencySignatories::outsiderIds()));
+        return array_values(array_diff($ids, AgencySignatories::outsiderIds(), $gone));
     }
 
     /** Who hears about this person's overdue HR tasks: their file manager, else their centres' directors, else the agency admins. */

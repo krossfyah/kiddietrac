@@ -423,7 +423,7 @@ final class HrController extends Controller
                 'roles' => $roleRows->pluck('role')->unique()->values(),
                 'centres' => $roleRows->pluck('centre_id')->filter(fn ($c) => $c && isset($centres[$c]))->unique()->map(fn ($c) => ['id' => (int) $c, 'name' => $centres[$c]])->values()],
             'file' => ['job_title' => $f->job_title ?? null, 'employment_type' => $f->employment_type ?? null, 'status' => $f->status ?? 'active',
-                'end_date' => $f->end_date ?? null, 'end_reason' => $f->end_reason ?? null, 'manager_user_id' => $f->manager_user_id ?? null,
+                'hours_per_week' => isset($f->hours_per_week) ? (float) $f->hours_per_week : null, 'end_date' => $f->end_date ?? null, 'end_reason' => $f->end_reason ?? null, 'manager_user_id' => $f->manager_user_id ?? null,
                 'manager_name' => $mgr ? $this->name($mgr) : null, 'primary_centre_id' => $f->primary_centre_id ?? null,
                 'primary_centre_name' => ($f && $f->primary_centre_id) ? ($centres[$f->primary_centre_id] ?? null) : null,
                 'updated_at' => $f->updated_at ?? null],
@@ -458,7 +458,7 @@ final class HrController extends Controller
     /** Admins and directors of the agency who can be someone's manager. */
     private function managerChoices(Request $request, int $aid, int $forUser): array
     {
-        $ids = HrLeave::staffIds($aid);
+        $ids = \App\Support\HrTalent::managerIds($aid);   // never a leaver (HR Phase 4) or an outsider
         return DB::table('users as u')->join('role_assignments as ra', 'ra.user_id', '=', 'u.id')
             ->whereIn('u.id', $ids ?: [0])->where('u.id', '!=', $forUser)->where('ra.active', 1)->whereIn('ra.role', ['agency_admin', 'centre_director'])
             ->distinct()->orderBy('u.first_name')->get(['u.id', 'u.first_name', 'u.last_name'])
@@ -497,7 +497,9 @@ final class HrController extends Controller
             'end_reason' => $d['end_reason'] ?? null, 'manager_user_id' => $d['manager_user_id'] ?? null,
             'primary_centre_id' => $d['primary_centre_id'] ?? null, 'updated_by_id' => $request->user()->id, 'updated_at' => now()];
         $typeBefore = DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $id)->value('employment_type');
-        DB::transaction(function () use ($aid, $id, $row, $d, $typeBefore) {
+        $was = (array) (DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $id)->first(['job_title', 'employment_type']) ?? []);
+        DB::transaction(function () use ($aid, $id, $row, $d, $typeBefore, $was, $request) {
+            \App\Support\HrPay::recordEdit($aid, $id, $was, $row, (int) $request->user()->id);   // pay + role history (HR Phase 4)
             HrLeave::syncContractorFlag($id, $typeBefore, $row['employment_type']);   // the contractor box follows "contract"
             $exists = DB::table('hr_employee_files')->where('agency_id', $aid)->where('user_id', $id)->exists();
             if ($exists) {

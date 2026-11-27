@@ -76,6 +76,9 @@ class ProtectedMedia
            record (empty so far, open the moment one was added). Both only go out in API JSON. */
         'contact-cards',
         'user-documents',
+        /* KiddieTrac HR document vault (2026-11-27, App\Support\HrDocs): IDs, contracts, sick notes. Only ever handed out
+           signed, from HrFileController::open to someone allowed to see that document. */
+        'hr-documents',
     ];
 
     /** Long enough for a working day, short enough that a leaked link dies. */

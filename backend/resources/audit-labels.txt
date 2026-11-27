@@ -1368,3 +1368,18 @@ put hr/letters/templates/{id} | Edited an HR letter template
 post hr/letters/templates/{id}/review | Marked an HR letter template reviewed by the agency's lawyer (or cleared it)
 post hr/letters/preview | Previewed an HR letter before sending it
 post hr/letters/send | Sent an HR letter for e-signature
+post hr/documents/{id}/accept | Accepted a company HR document
+post hr/time-off/{id}/note | Attached a note or photo to a time-off request
+post hr/people/{id}/documents | Uploaded documents to an employee's HR file
+put hr/documents/{id} | Updated an HR document
+post hr/documents/{id}/archive | Removed an HR document
+post hr/doc-folders | Created a company document folder
+put hr/doc-folders/{id} | Updated a company document folder
+post hr/doc-folders/{id}/archive | Removed a company document folder
+post hr/doc-folders/{id}/documents | Uploaded company HR documents
+post hr/people/{id}/changes | Made or scheduled a pay or role change
+post hr/pay-changes/{id}/cancel | Cancelled a scheduled pay or role change
+post hr/people/{id}/leaving | Saved an employee's leaving details
+post hr/leavings/{id}/complete | Completed an employee's leaving
+post hr/leavings/{id}/undo | Undid an employee's leaving
+post hr/people/{id}/rehire | Rehired a returning employee

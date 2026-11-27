@@ -2652,6 +2652,36 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/hr/shift-notices/settings',        [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'noticeSettings']);
         Route::put ('/hr/shift-notices/settings',        [\App\Http\Controllers\Api\HrOpenShiftsController::class, 'saveNoticeSettings']);
     });
+    // HR Phase 4, batch 4 (2026-11-27): document vault + time-off notes, pay + role history, the leaving pack, "download all their data"
+    // (App\Support\HrDocs, HrPay, HrLeaving). Any staff role reaches HrFileController; it decides (own / file manager / directors' centres / admins).
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/hr/me/documents',                  [\App\Http\Controllers\Api\HrFileController::class, 'mine']);
+        Route::get ('/hr/documents/{id}/open',           [\App\Http\Controllers\Api\HrFileController::class, 'open'])->whereNumber('id')->middleware('throttle:120,1,hrdocopen');
+        Route::post('/hr/documents/{id}/accept',         [\App\Http\Controllers\Api\HrFileController::class, 'accept'])->whereNumber('id');
+        Route::post('/hr/time-off/{id}/note',            [\App\Http\Controllers\Api\HrFileController::class, 'attachNote'])->whereNumber('id')->middleware('throttle:30,1,hrtonote');
+        Route::get ('/hr/time-off/notes',                [\App\Http\Controllers\Api\HrFileController::class, 'notes']);
+        Route::get ('/hr/doc-folders',                   [\App\Http\Controllers\Api\HrFileController::class, 'folders']);
+        Route::get ('/hr/people/{id}/documents',         [\App\Http\Controllers\Api\HrFileController::class, 'personDocs'])->whereNumber('id');
+        Route::post('/hr/people/{id}/documents',         [\App\Http\Controllers\Api\HrFileController::class, 'upload'])->whereNumber('id')->middleware('throttle:30,1,hrdocup');
+        Route::put ('/hr/documents/{id}',                [\App\Http\Controllers\Api\HrFileController::class, 'update'])->whereNumber('id');
+        Route::post('/hr/documents/{id}/archive',        [\App\Http\Controllers\Api\HrFileController::class, 'archive'])->whereNumber('id');
+        Route::get ('/hr/documents/{id}/receipts',       [\App\Http\Controllers\Api\HrFileController::class, 'receipts'])->whereNumber('id');
+        Route::post('/hr/doc-folders',                   [\App\Http\Controllers\Api\HrFileController::class, 'createFolder']);
+        Route::put ('/hr/doc-folders/{id}',              [\App\Http\Controllers\Api\HrFileController::class, 'updateFolder'])->whereNumber('id');
+        Route::post('/hr/doc-folders/{id}/archive',      [\App\Http\Controllers\Api\HrFileController::class, 'archiveFolder'])->whereNumber('id');
+        Route::post('/hr/doc-folders/{id}/documents',    [\App\Http\Controllers\Api\HrFileController::class, 'uploadCompany'])->whereNumber('id')->middleware('throttle:30,1,hrdocup');
+        Route::get ('/hr/people/{id}/history',           [\App\Http\Controllers\Api\HrFileController::class, 'history'])->whereNumber('id');
+        Route::post('/hr/people/{id}/changes',           [\App\Http\Controllers\Api\HrFileController::class, 'change'])->whereNumber('id');
+        Route::post('/hr/pay-changes/{id}/cancel',       [\App\Http\Controllers\Api\HrFileController::class, 'cancelChange'])->whereNumber('id');
+        Route::get ('/hr/leavers',                       [\App\Http\Controllers\Api\HrFileController::class, 'leavers']);
+        Route::get ('/hr/people/{id}/leaving',           [\App\Http\Controllers\Api\HrFileController::class, 'leaving'])->whereNumber('id');
+        Route::post('/hr/people/{id}/leaving',           [\App\Http\Controllers\Api\HrFileController::class, 'saveLeaving'])->whereNumber('id');
+        Route::post('/hr/leavings/{id}/complete',        [\App\Http\Controllers\Api\HrFileController::class, 'complete'])->whereNumber('id');
+        Route::post('/hr/leavings/{id}/undo',            [\App\Http\Controllers\Api\HrFileController::class, 'undo'])->whereNumber('id');
+        Route::post('/hr/people/{id}/rehire',            [\App\Http\Controllers\Api\HrFileController::class, 'rehire'])->whereNumber('id');
+        Route::get ('/hr/people/{id}/roe',               [\App\Http\Controllers\Api\HrFileController::class, 'roe'])->whereNumber('id');
+        Route::get ('/hr/people/{id}/export',            [\App\Http\Controllers\Api\HrFileController::class, 'export'])->whereNumber('id')->middleware('throttle:10,1,hrexport');
+    });
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/hr/setup',                          [\App\Http\Controllers\Api\HrController::class, 'setup']);
         Route::put   ('/hr/settings',                       [\App\Http\Controllers\Api\HrController::class, 'saveSettings']);
