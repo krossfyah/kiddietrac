@@ -1711,7 +1711,6 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
             // else in the portal could set it.
             Route::patch('/staff/{user}/contractor', [StaffController::class, 'setContractor']);
             Route::get('/staff/schedule', [StaffController::class, 'schedule']);
-            Route::post('/staff/shifts', [StaffController::class, 'createShift']);
 
             Route::get('/compliance/overview', [CentreController::class, 'compliance']);
             Route::get('/compliance/export', [CentreController::class, 'complianceExport']);

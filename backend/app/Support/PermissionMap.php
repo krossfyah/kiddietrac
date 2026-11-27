@@ -855,7 +855,6 @@ final class PermissionMap
         'POST api/v1/director/schedule/autofill' => 'staff.schedule',
         'POST api/v1/director/schedule/shift' => 'staff.schedule',
         'POST api/v1/director/staff/invite' => 'staff.edit',
-        'POST api/v1/director/staff/shifts' => 'staff.edit',
         'POST api/v1/director/staff/{user}/certifications' => 'staff.edit',
         'POST api/v1/director/waitlist' => 'waitlist.manage',
         'POST api/v1/director/waitlist/{child}/decline' => 'waitlist.manage',

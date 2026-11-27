@@ -311,46 +311,6 @@ final class StaffController extends Controller
         return response()->json(['shifts' => $shifts]);
     }
 
-    public function createShift(Request $request): JsonResponse
-    {
-        $centreId = $this->resolveCentreId($request->user());
-
-        if (! $centreId) {
-            return response()->json(['message' => 'No centre access'], 403);
-        }
-
-        $data = $request->validate([
-            'user_id' => ['required', 'integer'],
-            'room_id' => ['nullable', 'integer'],
-            'starts_at' => ['required', 'date'],
-            'ends_at' => ['required', 'date', 'after:starts_at'],
-            'notes' => ['nullable', 'string'],
-        ]);
-        /* Staff of this centre or its agency (home visitors are agency-wide), in a room of this
-           centre (2026-11-05 leak sweep): both ids were written unchecked, so a shift could be
-           booked for anyone into any centre's room. */
-        $centreAgency = DB::table('centres')->where('id', $centreId)->value('agency_id');
-        $isStaff = DB::table('role_assignments')->where('user_id', $data['user_id'])->where('active', true)
-            ->whereIn('role', \App\Support\Visibility::STAFF_ROLES)
-            ->where(fn ($w) => $w->where('centre_id', $centreId)->orWhere('agency_id', $centreAgency))->exists();
-        if (! $isStaff) {
-            return response()->json(['message' => 'That person is not staff at your centre.'], 422);
-        }
-        if (! empty($data['room_id']) && ! DB::table('rooms')->where('id', $data['room_id'])->where('centre_id', $centreId)->exists()) {
-            return response()->json(['message' => 'That room is not at your centre.'], 422);
-        }
-
-        $id = DB::table('shifts')->insertGetId([
-            ...$data,
-            'centre_id' => $centreId,
-            'status' => 'scheduled',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        return response()->json(['shift_id' => $id], 201);
-    }
-
     public function clockIn(Request $request): JsonResponse
     {
         $user = $request->user();

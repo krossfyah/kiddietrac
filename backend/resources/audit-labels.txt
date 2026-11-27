@@ -420,7 +420,6 @@ post director/schedule/shift | Added a shift to the staff schedule
 patch director/schedule/shift/{id} | Changed a scheduled shift
 delete director/schedule/shift/{id} | Removed a scheduled shift
 post director/staff/invite | Invited a staff member
-post director/staff/shifts | Added a staff shift
 post director/staff/{user}/certifications | Added a certificate for a staff member
 patch director/staff/{user}/contractor | Changed a staff member's contractor status
 post director/waitlist | Added a child to the waitlist
