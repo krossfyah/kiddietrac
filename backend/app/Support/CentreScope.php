@@ -103,7 +103,8 @@ final class CentreScope
             $centreIds = DB::table('centres')->where('agency_id', $agencyId)->whereIn('id', $centreIds)
                 ->pluck('id')->map(fn ($v) => (int) $v)->all();
         }
-        return DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id')
+        // Never an outsider (super admin / integration / reseller grant), even with an agency role (AgencyOutsiders, 2026-11-26).
+        return AgencyOutsiders::exclude(DB::table('role_assignments as ra')->join('users as u', 'u.id', '=', 'ra.user_id'))
             ->where('ra.active', true)->whereNull('u.deleted_at')
             ->where(function ($q) use ($agencyId, $centreIds) {
                 $q->where(fn ($w) => $w->where('ra.role', 'agency_admin')->where('ra.agency_id', $agencyId));

@@ -61,6 +61,7 @@ final class MailOversight
                 }
             });
 
+        \App\Support\AgencyOutsiders::exclude($q);   // never a super admin / integration / reseller grant (2026-11-26)
         $emails = $q->distinct()->pluck('u.email')->all();
 
         /* A person switched off should not keep receiving copies of everything.

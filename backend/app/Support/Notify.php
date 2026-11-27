@@ -59,7 +59,7 @@ final class Notify
         'checkin' => 'checkin', 'checkin_reminder' => 'checkin', 'pickup_alarm' => 'checkin', 'attendance' => 'checkin', 'transfer' => 'checkin',
         'clock' => 'staff', 'clock_reminder' => 'staff', 'break_overrun' => 'staff', 'time_off' => 'staff', 'time_off_reminder' => 'staff',
         'schedule' => 'staff', 'award' => 'staff', 'educator_reward' => 'staff', 'bio_reminder' => 'staff',
-        'portal_tip' => 'staff', 'staff_notify_setup' => 'staff', 'records_reminder' => 'staff', 'records_escalated' => 'staff', 'compliance' => 'staff',
+        'portal_tip' => 'staff', 'staff_notify_setup' => 'staff', 'records_reminder' => 'staff', 'records_escalated' => 'staff', 'task_assigned' => 'staff', 'compliance' => 'staff',
         'report_card_request' => 'staff', 'report_card_reminder' => 'staff', 'report_card' => 'forms',
         'headcount_due' => 'headcount', 'headcount_strike' => 'headcount',
         'announcement' => 'announcement', 'closure' => 'announcement', 'menu' => 'announcement',
@@ -243,6 +243,11 @@ final class Notify
             }
             if (TicketAlerts::allowsUser((int) $r['user_id'])) {
                 $r['__platform'] = true;   // a platform ticket alert: its push goes out even from a test agency
+            }
+            /* An agency's day-to-day notice never reaches a KiddieTrac super admin, integration account or reseller
+               grant who holds an agency role only for access (AgencyOutsiders, 2026-11-26): no bell row, no push. */
+            if (! AgencyOutsiders::keepsRow($r, is_array($dd) ? $dd : (is_string($dd) && $dd !== '' ? (json_decode($dd, true) ?: []) : []))) {
+                continue;
             }
             $keep[] = $r;
         }

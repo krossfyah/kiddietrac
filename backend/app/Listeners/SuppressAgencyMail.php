@@ -662,6 +662,32 @@ class SuppressAgencyMail
             }
         } catch (\Throwable $e) { /* never break the mail layer over a header */ }
 
+        /* AN AGENCY'S MAIL GOES TO ITS OWN PEOPLE (2026-11-26, Anthony: "leave super admins out of all agency
+           day-to-day notices"). A KiddieTrac super admin, integration account or reseller grant holding an agency role
+           for access is taken off To/Cc/Bcc of anything the agency sends, unless it is platform, person-to-person, their
+           own account, privacy breach, something they asked for, or a safety notice for an agency with nobody of its own
+           (App\Support\AgencyOutsiders::mailDrops). A message left with nobody is cancelled and logged. */
+        if ($sendingAgencyId) {
+            $outs = \App\Support\AgencyOutsiders::mailDrops($event->message, $recipients, $sendingAgencyId,
+                ['invite' => $isInvite ?? false, 'account_notice' => $isAccountNotice ?? false]);
+            if ($outs) {
+                if (count($outs) >= count($recipients)) {
+                    $this->cancel($event, $outs, 'Not one of the agency\'s own people (KiddieTrac super admin, integration account or reseller access) - never sent.');
+                    return false;
+                }
+                try {
+                    $m = $event->message;
+                    $keepA = fn ($list) => array_values(array_filter($list ?: [], fn ($a) => ! in_array(mb_strtolower(trim($a->getAddress())), $outs, true)));
+                    $to = $keepA($m->getTo()); $cc = $keepA($m->getCc()); $bcc = $keepA($m->getBcc());
+                    if ($to) { $m->to(...$to); } elseif ($cc || $bcc) { $m->to(...($cc ?: $bcc)); }
+                    $m->cc(...$cc);
+                    $m->bcc(...$bcc);
+                } catch (\Throwable $e) {
+                }
+                $recipients = array_values(array_diff($recipients, $outs));
+            }
+        }
+
         /* THE SENDER'S OWN SWITCH, BEFORE ANY QUESTION ABOUT THE RECIPIENT.
 
            The gate below asks "does this recipient hold an account in a switched-off

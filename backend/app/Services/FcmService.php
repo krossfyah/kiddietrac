@@ -301,6 +301,11 @@ class FcmService
         if (\App\Support\StaffNotifyPrefs::justMuted($userId, $title)) {
             return ['sent' => 0, 'failed' => 0, 'suppressed' => true];
         }
+        // An agency's day-to-day notice never rings an outsider's phone (super admin / integration / reseller, AgencyOutsiders).
+        if (\App\Support\AgencyOutsiders::blocksPush($userId, $title)) {
+            \App\Support\PushAudit::record('fcm', [$userId], $title, $body, 'outsider');
+            return ['sent' => 0, 'failed' => 0, 'suppressed' => true];
+        }
         self::$pushedAt[$userId] = time();
         // Working in a test agency: no push to anyone (2026-11-24, App\Support\TestAgency).
         if (\App\Support\TestAgency::isSession() && ! \App\Support\TicketAlerts::allowsUser($userId)) {   // ticket alerts to platform admins excepted

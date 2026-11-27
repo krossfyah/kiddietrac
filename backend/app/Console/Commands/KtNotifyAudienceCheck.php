@@ -75,6 +75,11 @@ class KtNotifyAudienceCheck extends Command
             $bad['Staff-only notifications sent to non-staff in the last 24h'][] = $l->type . ': ' . $l->c . ' to ' . $l->u . ' account(s)';
         }
 
+        // 3b. no agency day-to-day notice reached an outsider (super admin / integration / reseller) - AgencyOutsiders
+        foreach (\App\Support\AgencyOutsiders::leaks24h() as $type => $n) {
+            $bad['Agency notices that reached a super admin / integration / reseller in the last 24h (AgencyOutsiders)'][] = $type . ': ' . $n;
+        }
+
         // 4. the settings screen narrows every list
         $root = rtrim($this->option('root') ?: base_path('../parent-portal'), '/');
         $js = @file_get_contents($root . '/js/screen-settings.js');
@@ -102,7 +107,7 @@ class KtNotifyAudienceCheck extends Command
             return self::FAILURE;
         }
         if (! $this->option('quiet-ok')) {
-            $this->info('Every notification kind has an audience; no staff-only notification reached a non-staff account in the last 24h.');
+            $this->info('Every notification kind has an audience; no staff-only notification reached a non-staff account, and no agency notice reached a super admin, integration account or reseller, in the last 24h.');
         }
 
         return self::SUCCESS;
