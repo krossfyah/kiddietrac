@@ -1,98 +1,84 @@
 ---
 title: Feuilles de temps et correction des heures
-category: Staff Management
-order: 31
 ---
 # Feuilles de temps et correction des heures
 
-**Personnel → Feuilles de temps.** Chaque quart travaillé dans vos centres sur une période, par personne,
-avec le total en haut. C’est la feuille à partir de laquelle la paie est établie — les mêmes pointages que
-**Paie** lit pour calculer ce qui est dû à quelqu’un — de sorte qu’une heure erronée ici devient un
-montant erroné sur un bulletin de paie.
+L'écran **Feuilles de temps** liste chaque quart travaillé dans vos centres pendant une période : la date, la personne, le pointage d'arrivée, le pointage de départ, la pause et les heures, avec le total d'heures et le nombre d'employés en haut. Les directions et les administrateurs de l'agence s'en servent pour vérifier les heures avant la paie et pour corriger un quart mal pointé ou pas pointé du tout. La **Paie** lit ces mêmes pointages : une heure erronée ici devient un montant erroné sur le talon de paie.
 
-## Choisir ce que vous regardez
+[[open: #timesheets | Ouvrir les feuilles de temps]]
 
-Trois commandes, qui s’appliquent toutes dès que vous les modifiez :
+## Choisir les heures à afficher
 
-- **Centre** — un seul prestataire, ou *Tous les centres*, c’est-à-dire tous les centres que vous pouvez voir
-  plutôt que tous les centres de l’agence.
-- **Du** et **Au** — la période. Saisissez-les dans l’ordre que vous voulez; les dates sont inversées
-  pour vous si vous les remplissez de droite à gauche. L’écran s’ouvre sur les 30 derniers jours.
-- **🔄** relit la période, **⬇️** la télécharge en CSV pour votre fournisseur de paie.
+1. Ouvrez **Ressources humaines > Pointages et feuilles de temps**. L'onglet **Feuilles de temps** s'ouvre en premier.
+2. Choisissez un centre dans la liste, ou laissez **Tous les centres** (tous ceux que vous voyez).
+3. Inscrivez le premier et le dernier jour dans les deux cases de date. L'écran s'ouvre sur les 30 derniers jours, et chaque changement s'applique tout de suite.
+4. Tapez un nom ou une date dans **Search staff or date…** pour réduire la liste.
+5. Appuyez sur 🔄 (**Recharger**) pour relire la période, ou sur ⬇️ (**Télécharger le CSV**) pour l'enregistrer pour votre fournisseur de paie.
+
+> 💡 Vous avez rempli les dates à l'envers? L'écran les inverse pour vous.
 
 ## Lire une ligne
 
-Chaque ligne est un quart : la date, qui l’a travaillé, l’arrivée, le départ, la pause et les heures.
+- **Un quart ouvert** n'a pas de pointage de départ et affiche **0h**. Personne n'a pointé la sortie. Il n'est pas compté dans le total : faites le suivi et fermez-le (voir plus bas).
+- **No hours logged** désigne une personne prévue à votre centre qui n'a rien pointé pendant la période.
+- **Payé**, sous les heures, n'apparaît que si votre agence a des règles de feuilles de temps (arrondi, calcul selon le quart, pause non payée). La ligne du haut indique alors les heures payées après les règles : ce sont celles que la paie utilise.
+- Un 🔒 à la place des boutons veut dire que le quart fait partie d'une feuille de temps approuvée et verrouillée pour la paie.
 
-- **Un quart ouvert** affiche un tiret long pour le départ et **0 h**. Personne n’a pointé son
-  départ. Il n’est volontairement *pas* totalisé — un quart inachevé est à relancer, pas à
-  payer — et il n’est volontairement pas masqué non plus.
-- **« Aucune heure enregistrée »** désigne une personne affectée à votre centre qui n’a rien pointé durant
-  la période. Une ligne à zéro est une question qui mérite d’être posée; une ligne absente est invisible.
-- **Pause** indique 0 min pour tout le monde. La pointeuse actuelle n’enregistre pas les pauses, et les
-  heures sont présentées sans ajustement plutôt que comme si une pause avait été déduite.
+## Corriger les heures d'un quart
 
-## Corriger un quart
+1. Trouvez le quart et appuyez sur ✏️ (**Modifier les heures**) au bout de la ligne. Sur un téléphone, les boutons sont au bas de la carte.
+2. Changez **Pointer l'arrivée** ou **Pointer le départ**. Les heures suivent l'horloge du centre, pas celle de votre appareil; la fenêtre indique le fuseau horaire.
+3. Pour fermer un quart sans pointage de sortie, remplissez **Pointer le départ**. Laissez-le vide pour garder le quart ouvert.
+4. Expliquez pourquoi dans **Reason (optional)**. Le motif est inscrit sur le quart, pour que la prochaine personne comprenne le changement.
+5. Appuyez sur **Enregistrer les modifications**. Un message **Heures corrigées** s'affiche et la ligne se met à jour.
 
-Chaque ligne comporte le menu standard **⋮** à son extrémité droite. Sur un téléphone, il se trouve au
-bas de la carte de la ligne.
+L'écran refuse le changement, et dit pourquoi, si le départ n'est pas après l'arrivée ou si le quart dépasse 24 heures.
 
-### Modifier les heures
+## Ajouter un quart jamais pointé
 
-Ouvre le quart avec son heure d’arrivée et son heure de départ prêtes à modifier, et une zone pour le motif.
+1. Sur la ligne de la personne (ou sa ligne **No hours logged**), appuyez sur ➕ (**Ajouter un quart**).
+2. Choisissez le **Centre** où le quart est classé. C'est lui qui décide quelle paie le règle : vérifiez-le pour quelqu'un qui travaille à plusieurs endroits.
+3. Inscrivez **Pointer l'arrivée** et **Pointer le départ**.
+4. Écrivez le **Motif**. Il est obligatoire pour un quart saisi à la main.
+5. Appuyez sur **Ajouter un quart**. Un message **Quart ajouté** s'affiche.
 
-- Les heures sont celles de l’**horloge du centre**, pas de votre appareil. La boîte de dialogue le précise. Un administrateur
-  qui travaille depuis un autre fuseau horaire saisit l’heure à laquelle la personne a réellement travaillé.
-- Laissez le départ vide pour laisser un quart ouvert; remplissez-le pour fermer un quart
-  qui n’a jamais été pointé à la sortie.
-- Le motif est facultatif ici et mérite d’être écrit quand même — il est inscrit sur le quart
-  lui-même, de sorte que la prochaine personne qui lit la ligne peut voir pourquoi elle a changé.
+Un quart qui chevauche un quart existant de la personne est refusé, car les heures compteraient deux fois.
 
-La modification est refusée, avec la raison à l’écran, si le départ n’est pas postérieur à
-l’arrivée ou si le quart dépasse 24 heures. Un quart aussi long correspond presque toujours à une
-mauvaise date à l’une des extrémités, et le payer en silence est pire que le refuser.
+## Supprimer un quart qui n'a pas eu lieu
 
-### Ajouter un quart
+1. Appuyez sur 🗑️ (**Supprimer le quart**) sur la ligne : un double pointage, ou un pointage sous le mauvais nom.
+2. Expliquez pourquoi le quart est supprimé.
+3. Appuyez sur **Supprimer le quart**. Un message **Quart supprimé** s'affiche.
 
-Pour le quart qui n’a jamais été pointé : une tablette éteinte, un oubli, quelqu’un qui remplace
-à la dernière minute. Disponible sur chaque ligne, car un quart fractionné est un second pointage pour
-quelqu’un qui en a déjà un, et c’est la **seule** action offerte sur une ligne « Aucune heure enregistrée ».
+> ⚠️ Une suppression ne peut pas être annulée. Le journal d'audit garde tout le quart (heures et notes) et le nom de la personne qui l'a supprimé.
 
-- **Centre** indique où le quart est classé, et donc quelle paie le règle. Cela
-  compte pour toute personne affectée à plusieurs sites; ce n’est pas deviné à votre place.
-- Un **motif est obligatoire**. Un quart saisi à la main est une déclaration d’heures pour lesquelles quelqu’un
-  sera payé, et la note du quart indique qui l’a saisi et pourquoi.
-- Un chevauchement avec un quart existant est refusé — il compterait les heures en double.
+## Qui peut faire quoi
 
-### Supprimer le quart
+| Rôle | Ce qu'il peut faire |
+|---|---|
+| Administrateur de l'agence | Voir et corriger les feuilles de temps de tous les centres. |
+| Direction de centre | Voir et corriger les quarts travaillés dans ses propres centres (le centre du pointage, pas le centre d'attache de la personne). |
+| Éducatrice, éducateur, visiteur à domicile | N'ont pas accès à cet écran. Avec le module RH, ils demandent une correction dans **Mes RH > Corriger mon pointage**. |
 
-Pour un quart qui n’a pas eu lieu : un double pointage, une arrivée pointée sur la tablette de quelqu’un d’autre, une
-entrée saisie au mauvais nom. La modification répond à « ces heures sont erronées »; ceci répond à
-« ceci n’est pas réel ».
+Chaque correction, quart saisi à la main et suppression laisse une trace dans **Administration > Journal d'audit**.
 
-Un motif est demandé et l’action est irréversible. Le journal d’audit conserve tout le quart supprimé —
-les heures qu’il contenait et ses notes — car, une fois supprimé, il n’y a plus rien d’autre à lire.
+## Questions fréquentes et problèmes
 
-## Qui peut le faire
+??? Il y a un 🔒 à la place des boutons de modification. | Le quart fait partie d'une période approuvée et verrouillée dans **Pointages et feuilles de temps > Approuver et verrouiller**. Un administrateur de l'agence doit d'abord la déverrouiller, en donnant un motif.
+??? La liste affiche « No timesheets in this date range. » | Personne n'a pointé à ce centre pendant ces dates. Vérifiez le centre et les deux dates, ou choisissez **Tous les centres**.
+??? Quelqu'un a oublié de pointer son arrivée. Où corriger? | Ici : appuyez sur ➕ **Ajouter un quart** sur sa ligne, avec un motif.
+??? J'obtiens « The clock-out has to be after the clock-in. » | Le départ est avant l'arrivée. Pour un quart qui dépasse minuit, mettez la date du lendemain au départ.
+??? Le personnel peut-il modifier ses propres heures? | Non. Son horloge ne fait que pointer l'arrivée et le départ. Un quart resté ouvert la nuit est fermé ici par la direction, ou la personne demande une correction dans Mes RH.
+??? La personne est-elle avertie quand je change ses heures? | Aucun avis n'est envoyé depuis cet écran. Le changement est indiqué sur le quart et inscrit au journal d'audit. (Une correction demandée dans Mes RH l'avertit de la décision.)
+??? Pourquoi le chiffre Payé diffère-t-il des heures? | Les règles de feuilles de temps de votre agence (arrondi, calcul à partir du début ou jusqu'à la fin du quart, pause non payée) s'appliquent seulement aux heures payées. Le pointage lui-même ne change jamais.
 
-Un directeur ou un administrateur d’agence, pour le centre où le quart a été **travaillé**. C’est le centre
-inscrit sur le pointage lui-même, et non celui où la fiche du membre du personnel est classée en premier — donc pour une personne affectée à plusieurs sites, le directeur du site où elle a
-réellement travaillé est celui qui peut corriger.
+## Écrans liés
 
-## Ce qui est enregistré
+[[open: #timesheets?tab=lock | Approuver et verrouiller]]
+[[open: #timesheets?tab=punchfix | Corrections de pointage]]
+[[open: #payroll | Paie]]
 
-Chaque correction, saisie et suppression écrit une ligne d’audit indiquant la personne, les heures
-avant et après, et qui a fait le changement. Vous les trouverez dans
-**Administration → Journal d’audit** sous *Heures du personnel corrigées*, *Quart du personnel saisi à la main*
-et *Quart du personnel supprimé*. Le quart porte aussi une courte note, de sorte que la ligne de la
-feuille de temps indique qu’elle a été corrigée sans que personne ait à aller vérifier.
-
-## Bon à savoir
-
-- Corriger un pointage ici est la même correction que celle de la fiche utilisateur de la personne, écrite au même endroit — il y a une seule histoire pour un quart, pas deux.
-- Un éducateur ne peut pas modifier ses propres heures. Sa pointeuse ne fait que basculer, c’est pourquoi un quart
-  laissé ouvert pendant la nuit ne peut être corrigé que d’ici.
-- Si quelqu’un vous dit qu’il a oublié de pointer son arrivée, c’est l’écran où le corriger.
-
-Voir aussi : [Pointeuse du personnel](time-clock), [Exécutions de paie, heures et bulletins](payroll-documents),
-[Exportation CSV prête pour la paie](payroll-csv), [Déconnexion automatique](auto-sign-off).
+- [[hr-overtime-timesheets]]
+- [[hr-rota-publish]]
+- [Paie, heures et talons de paie](payroll-documents)
+- [Exportation CSV pour la paie](payroll-csv)

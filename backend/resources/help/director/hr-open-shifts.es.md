@@ -1,44 +1,98 @@
 ---
 title: RR. HH.: turnos abiertos y avisos de turno
-category: Staff Management
-order: 66
-roles: agency_admin, platform_admin, centre_director, educator, home_visitor
 ---
 # RR. HH.: turnos abiertos y avisos de turno
 
-Publica un turno que aún no tiene a nadie y deja que el personal que puede cubrirlo lo pida. El personal también recibe un aviso cuando cambian sus propios turnos. Es parte del complemento de RR. HH. de KiddieTrac.
+El tablero de **Turnos abiertos**, en **Recursos humanos > Turnos y horarios**, es parte del módulo de RR. HH. de KiddieTrac. Publique un turno que nadie tiene todavía: el personal que puede cubrirlo lo pide en Mis RR. HH., y un director confirma quién se lo queda. El tablero también lista las faltas de ratio de la semana y guarda la configuración de los avisos que recibe el personal cuando cambian sus propios turnos.
+
+[[open: #schedule?tab=openshifts | Abrir el tablero de turnos abiertos]]
 
 ## Publicar un turno abierto (directores y administradores)
 
-Abre **Recursos humanos > Turnos y horarios > Turnos abiertos** y elige **Publicar un turno abierto**. Elige la sala, el día (y hasta 13 días más seguidos), las horas, el rol y, si hace falta, un certificado obligatorio, como primeros auxilios.
+1. Abra **Recursos humanos > Turnos y horarios** y elija **Turnos abiertos**.
+2. Use **‹**, **›** o **Esta semana** para elegir la semana.
+3. Pulse **Publicar un turno abierto**.
+4. Elija la **Sala** y el **Rol**.
+5. Elija el **Día**. Para publicar las mismas horas en los días siguientes, elija **Repetir los días siguientes (opcional)** (hasta **+13 days**).
+6. Indique **De** y **Para**.
+7. Si la persona debe tener un certificado (por ejemplo Primeros auxilios), elíjalo en **Debe tener (opcional)**.
+8. Agregue una **Nota para el personal (opcional)** y pulse **Publicar**. Aparece **Turno abierto publicado.**
 
-El tablero también muestra las **faltas de ratio** de la semana: momentos en que una sala tiene menos educadores previstos de los que sus niños necesitan. Cada una tiene **Publicar un turno abierto** en su menú ⋮, con la sala, el día y las horas ya puestos. También puedes hacerlo desde **Recursos humanos > Turnos y horarios > Plan de turnos**. Un turno que cubre una falta queda marcado.
+Todas las personas del centro que pueden tomar el turno reciben un solo aviso (campana y teléfono), sin importar cuántos días publique.
 
-Todas las personas del centro que pueden tomar el turno reciben un solo aviso (campana y teléfono), sin importar cuántos días publiques.
+> ⚠️ Los días cerrados quedan a su criterio: revise el calendario antes de publicar.
 
-## Quién puede tomarlo
+## Cubrir una falta de ratio
 
-Una persona ve un turno abierto y puede pedirlo cuando:
+1. En el tablero, mire **Faltas de ratio esta semana**: momentos en que una sala tiene menos **Educadores planificados** de los que necesitan sus **Niños esperados**.
+2. Pulse **Publicar un turno abierto** en esa fila. La sala, el día y las horas ya vienen llenos.
+3. Revise el rol y pulse **Publicar**.
+
+Un turno abierto que cubre una falta se marca **Cubre una falta de ratio**. El mismo botón está en cada alerta de **Turnos y horarios > Plan de turnos**.
+
+## Confirmar quién lo toma
+
+1. Las solicitudes aparecen en la columna "Asked" del tablero y en su campana de actividad.
+2. Pulse **Ver turno abierto** en la fila.
+3. En **Quién lo pidió**, pulse **Confirmar** junto a un nombre. Verá **Confirmado. El turno está en el horario.**
+4. O pulse **Rechazar** junto a un nombre para avisarle a esa persona.
+
+A los demás que lo pidieron se les avisa que lo tomó un compañero. Para cancelar el turno, pulse **Quitarlo del tablero**: se avisa a todos los que lo pidieron.
+
+> ℹ️ Nadie confirma su propia solicitud. El tablero dice "Your own request: another director or an admin confirms it."
+
+## Quién puede tomar un turno abierto
+
+Una persona lo ve, y puede pedirlo, cuando:
 
 - trabaja en ese centro;
-- está libre: sin permiso aprobado, sin fecha en que no puede trabajar y dentro de su disponibilidad semanal;
-- no está ya en un turno a esa hora, en ningún centro;
-- tiene el certificado pedido, vigente ese día.
+- está libre: sin tiempo libre aprobado, sin fecha no disponible, y dentro de su disponibilidad semanal;
+- no tiene otro turno a esa hora, en ningún centro;
+- tiene el certificado que se pide, vigente ese día.
 
-Si no puede, Mis RR. HH. explica por qué.
+Si no puede tomarlo, Mis RR. HH. le dice por qué.
 
 ## Pedir un turno abierto (personal)
 
-Abre **Mis RR. HH.**, sección **Turnos abiertos que puede tomar**. Abre uno con **Ver turno abierto** y elige **Pedir este turno**. Puedes añadir una nota y **Retirar mi solicitud** mientras espera.
+1. Abra **Mis RR. HH.** y busque **Turnos abiertos que puede tomar**.
+2. Pulse **Ver turno abierto**.
+3. Agregue una **Nota para su director (opcional)** y pulse **Pedir este turno**. Verá "Asked. A director confirms who takes it."
+4. ¿Cambió de idea? Ábralo otra vez y pulse **Retirar mi solicitud**.
 
-## Confirmar (directores y administradores)
+Se le avisa en ambos casos.
 
-Las solicitudes aparecen **en espera** en el tablero y en tu campana de actividad. Abre el turno y elige **Confirmar** junto a un nombre: el turno pasa al horario de esa persona y a los demás se les avisa que fue para un compañero. **Rechazar** avisa a esa persona. **Quitarlo del tablero** cancela el turno abierto y avisa a quienes lo pidieron.
+## Configurar los avisos de turno (administradores de la agencia)
 
-Nadie confirma su propia solicitud: lo hace otro director o un administrador.
+Cuando se agregan, cambian o cancelan los próximos turnos de alguien, esa persona recibe **un solo** aviso (campana, teléfono y correo) con todos los cambios, cuando el horario lleva unos minutos sin cambios. Una semana armada de una vez, el llenado automático y el horario fijo envían un aviso por persona, no uno por turno. Un cambio deshecho antes del envío no se manda, y nunca se le avisa de un cambio que hizo usted.
 
-## Avisos de turno
+1. En el tablero, pulse **Avisos de turno**.
+2. Marque o desmarque **Enviar avisos de turno** y **También por correo**.
+3. Elija **Esperar a que el horario esté tranquilo durante** (unos minutos).
+4. Elija si se incluyen los turnos que agrega el llenado nocturno (agrega un día a la vez).
+5. Pulse **Guardar**. Aparece **Configuración de avisos de turno guardada.**
 
-Cuando se agregan, cambian o cancelan los próximos turnos de alguien, recibe **un solo** aviso (campana, teléfono y correo) con todos los cambios, enviado cuando el horario lleva unos minutos sin cambios. Armar el horario de una semana, el llenado automático y las horas fijas envían un aviso por persona, no uno por turno. Un cambio deshecho antes del envío no se envía, y nunca se te avisa de un cambio que hiciste tú.
+Cada persona puede apagar estos avisos para sí misma en **Ajustes > Notificaciones** (el tema "Mis turnos").
 
-**Avisos de turno** en el tablero (administradores) los activa o desactiva, apaga el correo, elige cuánto esperar y decide si el llenado nocturno (un día a la vez) envía avisos. Cada persona puede desactivarlos en **Configuración > Notificaciones > Mis turnos**.
+## Quién puede hacer qué
+
+| Rol | Puede |
+|---|---|
+| Administrador de la agencia | Publicar, confirmar, rechazar y cancelar en todos los centros; cambiar la configuración de avisos de turno. |
+| Director de centro | Publicar, confirmar, rechazar y cancelar en sus propios centros. |
+| Educador, visitador domiciliario | Ver y pedir, en Mis RR. HH., los turnos abiertos que puede tomar. |
+
+## Preguntas frecuentes y problemas
+
+??? Un empleado dice que no ve el turno abierto. | No es elegible: otro turno a esa hora, tiempo libre o fecha no disponible, fuera de su disponibilidad, un certificado que falta o venció, o no está asignado a ese centro. Mis RR. HH. le dice cuál.
+??? ¿Puedo publicar un turno para toda una semana? | Sí: elija el primer día y **Repetir los días siguientes**. Se avisa al personal una sola vez.
+??? Aparece "The shift ends after it starts." | La hora **Para** es anterior a **De**. Corrija las horas.
+??? No hay botón Confirmar. | Es su propia solicitud, o la persona ya no es elegible (el motivo aparece junto a su nombre).
+
+## Pantallas relacionadas
+
+[[open: #schedule | Horario]]
+[[open: #schedule?tab=rota | Plan de turnos]]
+[[open: #my-hr | Mis RR. HH.]]
+
+- [[hr-rota]]
+- [[hr-rota-publish]]

@@ -1,98 +1,84 @@
 ---
 title: Hojas de horas y corrección de horas
-category: Staff Management
-order: 31
 ---
 # Hojas de horas y corrección de horas
 
-**Personal → Hojas de horas.** Cada turno trabajado en sus centros en un rango de fechas, por persona,
-con el total arriba. Es la hoja a partir de la cual se elabora la nómina — los mismos fichajes que
-**Nómina** lee para calcular lo que se le debe a alguien — así que una hora equivocada aquí se convierte en una
-cifra equivocada en una nómina.
+La pantalla **Hojas de horas** muestra cada turno trabajado en sus centros durante un periodo: la fecha, quién lo trabajó, la entrada, la salida, el descanso y las horas, con el total de horas y el número de empleados arriba. Los directores y administradores de la agencia la usan para revisar las horas antes de la nómina y para corregir un turno mal fichado o sin fichar. La **Nómina** lee estos mismos fichajes, así que una hora equivocada aquí se convierte en un monto equivocado en el recibo de pago.
 
-## Elegir lo que está viendo
+[[open: #timesheets | Abrir Hojas de horas]]
 
-Tres controles, todos se aplican en el momento en que los cambia:
+## Elegir qué horas ver
 
-- **Centro** — un solo proveedor, o *Todos los centros*, es decir, todos los centros que usted puede ver
-  y no todos los centros de la agencia.
-- **De** y **Para** — el período. Escríbalas en cualquier orden; las fechas se intercambian
-  si las rellena de derecha a izquierda. Se abre con los últimos 30 días.
-- **🔄** vuelve a leer el rango, **⬇️** lo descarga como CSV para su proveedor de nómina.
+1. Abra **Recursos humanos > Fichajes y hojas de horas**. La pestaña **Hojas de horas** se abre primero.
+2. Elija un centro en la lista, o deje **Todos los centros** (todos los que usted puede ver).
+3. Escriba el primer y el último día en las dos casillas de fecha. La pantalla abre con los últimos 30 días, y cada cambio se aplica de inmediato.
+4. Escriba un nombre o una fecha en **Search staff or date…** para acotar la lista.
+5. Pulse 🔄 (**Recargar**) para volver a leer el periodo, o ⬇️ (**Descargar CSV**) para guardarlo para su proveedor de nómina.
+
+> 💡 ¿Llenó las fechas al revés? La pantalla las invierte por usted.
 
 ## Leer una fila
 
-Cada fila es un turno: la fecha, quién lo trabajó, entrada, salida, descanso y horas.
+- **Un turno abierto** no tiene salida y muestra **0h**. Nadie fichó la salida. No se suma al total: haga el seguimiento y ciérrelo (vea abajo).
+- **No hours logged** es una persona programada en su centro que no fichó nada en el periodo.
+- **Pagado**, debajo de las horas, aparece solo si su agencia tiene reglas de hojas de horas (redondeo, contar según el turno, descanso no pagado). La línea de arriba indica entonces las horas pagadas después de las reglas: son las que usa la nómina.
+- Un 🔒 en lugar de los botones significa que el turno está dentro de una hoja de horas aprobada y bloqueada para la nómina.
 
-- **Un turno abierto** muestra una raya en la salida y **0 h**. Nadie fichó la
-  salida. Deliberadamente *no* se suma — un turno sin terminar es algo que hay que perseguir, no
-  algo que pagar — y deliberadamente tampoco se oculta.
-- **«Sin horas registradas»** es una persona asignada a su centro que no fichó nada en el
-  período. Una fila en cero es una pregunta que vale la pena hacer; una fila ausente es invisible.
-- **Descanso** muestra 0 min para todos. El reloj actual no registra descansos, y las
-  horas se indican sin ajustar en lugar de presentarse como si se hubiera descontado un descanso.
+## Corregir las horas de un turno
 
-## Corregir un turno
+1. Busque el turno y pulse ✏️ (**Editar horas**) al final de la fila. En un teléfono, los botones están al pie de la tarjeta.
+2. Cambie **Fichar entrada** o **Fichar salida**. Las horas son las del reloj del centro, no las de su dispositivo; la ventana indica la zona horaria.
+3. Para cerrar un turno sin salida, llene **Fichar salida**. Déjelo vacío para mantener el turno abierto.
+4. Escriba el motivo en **Reason (optional)**. Queda anotado en el turno, para que la siguiente persona sepa por qué cambió.
+5. Pulse **Guardar cambios**. Aparece el aviso **Horas corregidas** y la fila se actualiza.
 
-Cada fila lleva el menú estándar **⋮** en su extremo derecho. En un teléfono está al
-pie de la tarjeta de la fila.
+La pantalla rechaza el cambio, y explica por qué, si la salida no es posterior a la entrada o si el turno pasa de 24 horas.
 
-### Editar horas
+## Añadir un turno que nunca se fichó
 
-Abre el turno con su entrada y su salida listas para cambiar, y un cuadro para el motivo.
+1. En la fila de la persona (o en su fila **No hours logged**), pulse ➕ (**Añadir un turno**).
+2. Elija el **Centro** donde se archiva el turno. Decide qué nómina lo paga, así que revíselo para quien trabaja en varios lugares.
+3. Escriba **Fichar entrada** y **Fichar salida**.
+4. Escriba el **Motivo**. Es obligatorio para un turno ingresado a mano.
+5. Pulse **Añadir turno**. Aparece el aviso **Turno agregado**.
 
-- Las horas son las del **reloj del centro**, no las de su dispositivo. El cuadro lo indica. Un administrador
-  que trabaja desde otra zona horaria escribe la hora a la que la persona realmente trabajó.
-- Deje la salida vacía para dejar un turno abierto; rellénela para cerrar uno
-  cuya salida nunca se fichó.
-- El motivo es opcional aquí y conviene escribirlo de todos modos — queda registrado en el propio turno,
-  para que la siguiente persona que lea la fila vea por qué cambió.
+Un turno que se cruza con otro que la persona ya tiene se rechaza, porque las horas contarían dos veces.
 
-El cambio se rechaza, con el motivo en pantalla, si la salida no es posterior a
-la entrada o si el turno supera las 24 horas. Un turno tan largo casi siempre es una
-fecha equivocada en un extremo, y pagarlo en silencio es peor que rechazarlo.
+## Quitar un turno que no ocurrió
 
-### Añadir un turno
+1. Pulse 🗑️ (**Quitar turno**) en la fila: un fichaje doble, o un fichaje con el nombre equivocado.
+2. Explique por qué se quita el turno.
+3. Pulse **Quitar turno**. Aparece el aviso **Turno quitado**.
 
-Para el turno que nunca se fichó: una tableta apagada, un olvido, alguien que cubre
-a última hora. Está disponible en todas las filas, porque un turno partido es un segundo fichaje para
-alguien que ya tiene uno, y es lo **único** que se ofrece en una fila «Sin horas registradas».
+> ⚠️ Quitar un turno no se puede deshacer. El registro de auditoría guarda el turno completo (horas y notas) y quién lo quitó.
 
-- **Centro** indica dónde se archiva el turno y, por tanto, qué nómina lo paga. Importa
-  para quien está destinado a varias sedes; no se adivina por usted.
-- Se exige un **motivo**. Un turno introducido a mano es una afirmación sobre horas que se le pagarán
-  a alguien, y la nota del turno indica quién lo introdujo y por qué.
-- Se rechaza si se solapa con un turno existente — contaría las horas dos veces.
+## Quién puede hacer qué
 
-### Eliminar turno
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador de la agencia | Ver y corregir las hojas de horas de todos los centros. |
+| Director de centro | Ver y corregir los turnos trabajados en sus propios centros (el centro del fichaje, no el centro principal de la persona). |
+| Educador, visitador domiciliario | No ven esta pantalla. Con el módulo de RR. HH., piden una corrección en **Mis RR. HH. > Corregir mi fichaje**. |
 
-Para un turno que nunca ocurrió: un fichaje doble, una entrada fichada en la tableta de otra persona, un
-registro escrito con el nombre equivocado. Editar responde a «estas horas están mal»; esto responde a
-«esto no es real».
+Cada corrección, turno ingresado a mano y turno quitado queda en **Administración > Registro de auditoría**.
 
-Pide un motivo y no se puede deshacer. El registro de auditoría conserva el turno eliminado completo —
-las horas que contenía y sus notas — porque, una vez eliminado, no queda nada más que leer.
+## Preguntas frecuentes y problemas
 
-## Quién puede hacerlo
+??? Hay un 🔒 donde deberían estar los botones. | El turno está dentro de un periodo aprobado y bloqueado en **Fichajes y hojas de horas > Aprobar y bloquear**. Un administrador de la agencia debe desbloquearlo primero, con un motivo.
+??? La lista dice "No timesheets in this date range." | Nadie fichó en ese centro en esas fechas. Revise el centro y ambas fechas, o elija **Todos los centros**.
+??? Alguien olvidó fichar la entrada. ¿Dónde lo corrijo? | Aquí: pulse ➕ **Añadir un turno** en su fila, con un motivo.
+??? Aparece "The clock-out has to be after the clock-in." | La salida es anterior a la entrada. Para un turno que pasa la medianoche, ponga la fecha del día siguiente en la salida.
+??? ¿El personal puede cambiar sus propias horas? | No. Su reloj solo ficha entrada y salida. Un turno que quedó abierto durante la noche lo cierra aquí un director, o la persona pide una corrección en Mis RR. HH.
+??? ¿Se avisa a la persona cuando cambio sus horas? | Esta pantalla no envía avisos. El cambio se muestra en el turno y queda en el registro de auditoría. (Una corrección pedida en Mis RR. HH. sí le avisa de la decisión.)
+??? ¿Por qué Pagado no coincide con las horas? | Las reglas de hojas de horas de su agencia (redondeo, contar desde el inicio o hasta el final del turno, descanso no pagado) se aplican solo a las horas pagadas. El fichaje en sí nunca cambia.
 
-Un director o administrador de agencia, para el centro donde se **trabajó** el turno. Es el centro
-registrado en el propio fichaje, no donde la ficha del miembro del personal esté archivada en primer lugar — así que, para una persona destinada a varias sedes, el director de la sede en la que
-realmente trabajó es quien puede corregirlo.
+## Pantallas relacionadas
 
-## Qué se registra
+[[open: #timesheets?tab=lock | Aprobar y bloquear]]
+[[open: #timesheets?tab=punchfix | Correcciones de fichaje]]
+[[open: #payroll | Nómina]]
 
-Cada corrección, entrada y eliminación escribe una fila de auditoría con el nombre de la persona, las horas
-antes y después, y quién hizo el cambio. Las encontrará en
-**Administración → Registro de auditoría** como *Horas del personal corregidas*, *Turno del personal introducido a mano*
-y *Turno del personal eliminado*. El propio turno también lleva una nota breve, de modo que la fila de la
-hoja de horas indica que se corrigió sin que nadie tenga que ir a comprobarlo.
-
-## Conviene saber
-
-- Corregir un fichaje aquí es la misma corrección que la del propio registro de usuario de la persona, y escribe en el mismo lugar — hay una sola historia de un turno, no dos.
-- Un educador no puede editar sus propias horas. Su reloj solo alterna, por eso un turno
-  dejado abierto durante la noche solo puede corregirse desde aquí.
-- Si alguien le dice que olvidó fichar la entrada, esta es la pantalla donde arreglarlo.
-
-Vea también: [Reloj de fichaje del personal](time-clock), [Ejecuciones de nómina, horas y recibos](payroll-documents),
-[Exportación CSV lista para nómina](payroll-csv), [Cierre automático](auto-sign-off).
+- [[hr-overtime-timesheets]]
+- [[hr-rota-publish]]
+- [Nómina, horas y recibos de pago](payroll-documents)
+- [Exportación CSV para nómina](payroll-csv)

@@ -1,37 +1,77 @@
 ---
-title: RR. HH.: disponibilidad, cambios de turno y plan del horario
-category: Staff Management
-order: 66
-roles: agency_admin, platform_admin, centre_director, educator, home_visitor
+title: RR. HH.: disponibilidad, intercambios de turnos y plan de turnos
 ---
-# RR. HH.: disponibilidad, cambios de turno y plan del horario
+# RR. HH.: disponibilidad, intercambios de turnos y plan de turnos
 
-El personal indica cuándo puede trabajar, cede o intercambia turnos, y la dirección ve la semana planificada con su costo y las alertas de proporción. Esto forma parte del módulo de RR. HH. de KiddieTrac y funciona con la pantalla Horario existente.
+**Recursos humanos > Turnos y horarios** es donde los directores arman los turnos de la semana (**Horario**) y los revisan (**Plan de turnos**): costo, alertas de proporción, conflictos de disponibilidad y las cesiones e intercambios que esperan aprobación. El personal, en Mis RR. HH., indica cuándo puede trabajar y cede o intercambia turnos. La disponibilidad, los intercambios y el plan de turnos son parte del módulo de RR. HH. de KiddieTrac; el Horario funciona sin él.
 
-## Su disponibilidad (personal)
+[[open: #schedule | Abrir Turnos y horarios]]
 
-Abra **Mis RR. HH.** y busque **Mis turnos y disponibilidad**.
+## Agregar turnos al horario
 
-- **Disponibilidad semanal**: marque los días en que puede trabajar y el horario de cada día. Si no marca ningún día, se le puede asignar a cualquier hora en que el centro esté abierto.
-- **No puedo trabajar una fecha**: agregue una fecha o un rango de fechas, para todo el día o parte de él, con un motivo opcional.
+1. Abra **Recursos humanos > Turnos y horarios**. La pestaña **Horario** se abre primero.
+2. Use **‹**, **›** y **Hoy** para elegir la semana, o cambie a la vista de mes.
+3. Pulse **+ Nuevo turno**, elija la persona, el día, las horas y la sala, y pulse **Crear**.
+4. Para llenar toda la semana según el horario de apertura del centro, pulse **⚡ Autofill week**, revise la lista y pulse **Rellenar horario**.
+5. Para fijar las horas que cada persona trabaja cada semana, pulse **👥 Horario fijo**.
 
-El llenado automático y el horario fijo omiten los días en que tiene un permiso aprobado, las fechas en que no puede trabajar y las horas fuera de su disponibilidad semanal.
+Haga clic en un turno para cambiarlo (**Actualizar**) o quitarlo (**Eliminar**). El llenado automático y el horario fijo omiten el tiempo libre aprobado, las fechas no disponibles y las horas fuera de la disponibilidad semanal.
+
+## Revisar la semana en el plan de turnos
+
+1. Elija la pestaña **Plan de turnos**.
+2. Elija el centro (si tiene más de uno) y la semana con **‹**, **›** o **Esta semana**.
+3. Lea los totales: **Horas**, **Costo** (si puede ver pagos), **Alertas de proporción** y **Conflictos de disponibilidad**.
+4. En **Alertas de proporción**, vea cada momento en que una sala tiene menos **Educadores planificados** de los **Necesarios** para los **Niños esperados**. Pulse **Publicar un turno abierto** en una fila para cubrir el hueco.
+5. En **Turnos** y **Por persona**, revise cada turno; un turno que choca con el tiempo libre o la disponibilidad de la persona aparece resaltado.
+
+Los niños esperados salen de su sala y su patrón de asistencia; un niño sin patrón se espera de lunes a viernes. El costo es horas por la tarifa por hora de cada persona; el personal asalariado y quienes no tienen tarifa no se cotizan. Más abajo, **Entradas de esta semana** lista los fichajes hechos lejos del centro y las personas cerca de horas extra o ya en ellas (vea [[hr-clock]]).
+
+## Aprobar una cesión o un intercambio
+
+1. En el **Plan de turnos**, busque **Cambios de turno**.
+2. Pulse **Ver el cambio** en una fila que un compañero ya aceptó.
+3. Agregue un comentario si quiere y pulse **Aprobar** o **Rechazar**.
+
+Al aprobar verá "Shift change approved. The rota is updated." y los turnos pasan a las nuevas personas. Nadie aprueba un cambio del que forma parte.
+
+## Indicar su disponibilidad (personal)
+
+1. Abra **Mis RR. HH.** y busque **Mis turnos y disponibilidad**.
+2. Pulse **Disponibilidad semanal**, marque los días que puede trabajar y las horas de cada uno, y pulse **Guardar**. Si no marca ningún día, pueden programarle a cualquier hora en que el centro esté abierto.
+3. Para una fecha en que no puede trabajar, pulse **No puedo trabajar una fecha**, elija la fecha o el rango (o **Solo parte del día**), agregue un motivo si quiere, y pulse **Guardar**.
 
 ## Ceder o intercambiar un turno (personal)
 
-1. En **Mis turnos y disponibilidad**, elija **Ceder o intercambiar** en uno de sus próximos turnos.
-2. Cédalo a cualquier persona de su centro o a un compañero en particular, o intercámbielo por un turno de un compañero.
-3. Su compañero lo acepta. Después, una dirección o un administrador de la agencia lo aprueba.
+1. En **Mis turnos y disponibilidad**, pulse **Ceder o intercambiar** en un turno próximo.
+2. En **¿Qué desea hacer?**, elija **Ceder este turno** o **Intercambiarlo por un turno de un compañero**.
+3. Elija **Cualquiera del centro** o un **Compañero** (y **Su turno** para un intercambio).
+4. Pulse **Ofrecerlo**.
 
-Usted conserva el turno hasta que se aprueba. Sus compañeros reciben un aviso cuando ofrece un turno. Puede cancelar su oferta hasta que se apruebe. Un compañero que la aceptó puede dejarla.
+Usted conserva el turno hasta que un director lo apruebe. Los compañeros ven **Tomar el turno** o **Aceptar intercambio**; una vez aceptado, decide un director. Puede **Cancelar oferta** hasta entonces, y un compañero que aceptó puede **Dejarlo**.
 
-## El plan del horario (dirección y administración)
+## Quién puede hacer qué
 
-Abra **Recursos humanos > Turnos y horarios > Plan de turnos** y elija la semana. La dirección ve sus propios centros. La administración ve toda la agencia.
+| Rol | Puede |
+|---|---|
+| Administrador de la agencia | Todos los centros: horario, plan de turnos, aprobar cambios, ver el costo. |
+| Director de centro | Sus propios centros; ve el costo solo si puede ver pagos. |
+| Educador, visitador domiciliario | Su disponibilidad, fechas no disponibles, cesiones e intercambios en Mis RR. HH. |
 
-- **Cambios de turno**: cesiones e intercambios. Apruebe o rechace los que un compañero ya aceptó. Nadie aprueba un cambio en el que participa. Al aprobar un cambio, los turnos pasan a las nuevas personas en el horario.
-- **Alertas de proporción**: las horas en que una sala tiene menos educadores planificados de los que exigen las reglas de proporción para los niños esperados ese día. Se espera a los niños según su sala y su patrón de asistencia. A un niño sin patrón se le espera de lunes a viernes.
-- **Turnos**: cada turno planificado con sus horas. Se resalta el turno que choca con un permiso o con la disponibilidad de la persona.
-- **Costo**: las horas por la tarifa por hora de cada persona, por turno, por persona y por semana. Solo ve el costo si puede ver la nómina, es decir, si es dirección o administración y la función de nómina está activada. No se calcula el costo del personal asalariado ni de las personas sin tarifa de pago.
+## Preguntas frecuentes y problemas
 
-Los turnos se siguen agregando y editando en la pantalla **Horario**.
+??? No aparece el costo en el plan de turnos. | El costo solo se muestra a quien puede ver pagos (directores y administradores, con la función de nómina activa).
+??? El llenado automático omitió a alguien. | Tenía tiempo libre aprobado, una fecha no disponible, o la hora quedaba fuera de su disponibilidad semanal.
+??? No hay botón Aprobar en un cambio. | El compañero aún no lo acepta, o usted forma parte del cambio.
+??? "No shifts planned this week." | Primero agregue turnos en la pestaña **Horario**.
+??? ¿Se avisa a la persona de los cambios de horario? | Sí: un aviso de turno por persona por cada grupo de cambios (vea [[hr-open-shifts]]).
+
+## Pantallas relacionadas
+
+[[open: #schedule?tab=openshifts | Turnos abiertos]]
+[[open: #schedule?tab=rotatools | Herramientas de turnos]]
+[[open: #my-hr | Mis RR. HH.]]
+
+- [[hr-rota-publish]]
+- [[hr-open-shifts]]
+- [[hr-clock]]

@@ -1,50 +1,88 @@
 ---
-title: RH : publier l’horaire, copier des quarts, quarts prédéfinis, budget de main-d’œuvre, corrections de pointage
-category: Staff
-order: 48
-roles: agency_admin, platform_admin, centre_director
+title: RH : publier l'horaire, copier des quarts, quarts prédéfinis, budget de main-d'œuvre, corrections de pointage
 ---
-# RH : publier l’horaire, copier des quarts, quarts prédéfinis, budget de main-d’œuvre, corrections de pointage
+# RH : publier l'horaire, copier des quarts, quarts prédéfinis, budget de main-d'œuvre, corrections de pointage
 
-Fait partie du module RH de KiddieTrac. Les outils d’horaire sont dans **Ressources humaines > Horaire et quarts**. Les corrections de pointage et la règle de pause sont dans **Ressources humaines > Pointages et feuilles de temps**.
+Des outils d'horaire du module RH de KiddieTrac. **Ressources humaines > Horaires et quarts > Outils de quarts** regroupe l'étape de publication, les quarts prédéfinis et le budget hebdomadaire de main-d'œuvre; l'onglet **Horaire** gagne **📋 Copy** et une barre de publication. **Ressources humaines > Pointages et feuilles de temps > Corrections de pointage** sert à approuver les demandes de correction de pointage du personnel.
 
-## Préparer l’horaire en brouillon, puis le publier
+[[open: #schedule?tab=rotatools | Ouvrir Outils de quarts]]
 
-Un administrateur d’agence l’active dans **Horaire et quarts > Outils de quarts > Étape de publication**. C’est désactivé par défaut, et l’horaire fonctionne alors exactement comme avant.
+## Activer l'étape de publication (administrateurs de l'agence)
 
-Une fois activé, les nouveaux quarts, les modifications et les retraits sur l’**Horaire** attendent en brouillon. La grille les marque **Brouillon**, **Modifié · non publié** ou **À retirer**. Le personnel, le pointage, les alertes de ratio et la paie ne voient que les quarts publiés. Chaque quart déjà à l’horaire compte comme publié.
+1. Ouvrez **Ressources humaines > Horaires et quarts** et choisissez **Outils de quarts**.
+2. Sous **Étape de publication**, cochez la case pour bâtir l'horaire en brouillon et le publier quand il est prêt.
+3. Si le personnel doit confirmer chaque quart, cochez aussi la case « Staff must accept each shift ».
+4. Appuyez sur **Enregistrer**. Un message **Rota settings saved.** s'affiche.
 
-Appuyez sur **Publier** dans la barre jaune quand l’horaire est prêt. Chaque personne reçoit un seul avis pour ses propres quarts. Un brouillon qui ne convient plus (la personne est partie, ou il chevauche maintenant un autre quart) reste en brouillon et est listé. **Supprimer tous les brouillons** jette les brouillons et laisse l’horaire publié tel quel. L’onglet **Plan d’horaire** liste les brouillons et montre les alertes de ratio telles qu’elles seraient une fois publiés.
+L'étape est désactivée par défaut, et l'horaire fonctionne alors comme avant. Activée, les nouveaux quarts, les changements et les retraits dans l'**Horaire** attendent en brouillon, marqués **Brouillon**, **Modifié · non publié** ou **À retirer**. Le personnel, le pointage, les alertes de ratio et la paie ne voient que les quarts publiés. Tous les quarts déjà à l'horaire comptent comme publiés.
 
-Le remplissage de nuit et les heures habituelles publient toujours directement.
+## Publier l'horaire
 
-## Le personnel accepte ses quarts
+1. Bâtissez ou modifiez la semaine dans l'onglet **Horaire** comme d'habitude (**+ Nouveau quart**, **⚡ Autofill week**).
+2. Lisez la barre au-dessus de la grille : « 📝 N changes not published yet ».
+3. Appuyez sur **Publish N** dans cette barre.
+4. Vérifiez le nombre de quarts nouveaux, modifiés et à retirer, puis appuyez sur **Publier**. Un message **Horaire publié** s'affiche.
 
-Avec l’étape de publication activée, un administrateur peut aussi cocher **Le personnel doit accepter chaque quart**. Chaque nouveau quart attend alors dans **Mes RH > Quarts à accepter** de la personne. Si elle appuie sur **Je ne peux pas faire ce quart** et explique pourquoi, la direction du centre est avertie. **Outils de quarts > En attente d’acceptation du personnel** liste chaque quart pas encore accepté.
+Chaque personne reçoit un seul avis pour tous ses changements. Un brouillon qui ne convient plus (la personne est partie, ou il chevauche maintenant un autre quart) reste en brouillon et est listé. Pour jeter tous les brouillons, appuyez sur **Supprimer tous les brouillons** dans la même fenêtre et confirmez : les quarts publiés restent tels quels. L'onglet **Plan des horaires** liste les brouillons et les alertes de ratio telles qu'elles seraient une fois publiées.
+
+> ℹ️ Le remplissage de nuit et les heures habituelles publient encore tout de suite.
 
 ## Copier des quarts
 
-Appuyez sur **📋 Copier** dans l’Horaire. Vous pouvez copier la semaine dernière dans cette semaine, la semaine d’une personne, ou un jour sur d’autres jours de la semaine. Les jours où le centre est fermé ou non ouvert sont laissés de côté, tout comme les congés approuvés, les indisponibilités, les quarts qui se chevauchent et les heures déjà passées. Chaque élément laissé de côté est listé.
+1. Dans l'onglet **Horaire**, en vue semaine, appuyez sur **📋 Copy**.
+2. Sous **Quoi copier**, choisissez **La semaine dernière dans cette semaine (tout le monde)**, **La semaine d'une personne** ou **Un jour sur d'autres jours**.
+3. Pour une personne, choisissez-la et la semaine à copier; pour un jour, choisissez **Copier ce jour** et cochez les jours sous **Vers**.
+4. Appuyez sur **Copier**.
 
-## Quarts prédéfinis
+Les jours de fermeture, les congés approuvés, les dates d'indisponibilité, les quarts qui se chevauchent et les heures déjà passées sont laissés de côté, et le résultat les liste. Avec l'étape de publication, les copies restent en brouillon jusqu'à la publication.
 
-**Outils de quarts > Quarts prédéfinis** contient des quarts nommés comme Tôt 7 h – 15 h, chacun avec une couleur. Choisissez-en un dans le formulaire de quart pour remplir les heures et le rôle. Le quart s’affiche ensuite de cette couleur dans l’Horaire. Archiver un quart prédéfini garde la couleur des quarts déjà créés.
+## Créer des quarts prédéfinis
 
-## Budget hebdomadaire de main-d’œuvre
+1. Dans **Outils de quarts**, appuyez sur **+ Nouveau quart prédéfini**.
+2. Donnez-lui un nom (par exemple « Tôt 7 h – 15 h »), les heures, le rôle, le centre (ou **Tous les centres**) et une **Couleur**.
+3. Appuyez sur **Enregistrer**.
 
-Seules les personnes qui voient la paie voient ceci. Un administrateur fixe un budget hebdomadaire par centre dans **Outils de quarts**. L’Horaire et le Plan d’horaire montrent alors la semaine prévue (quarts publiés et brouillons) × le taux horaire de chaque personne, comparée à ce budget. Le personnel salarié et les personnes sans taux sont comptés mais pas chiffrés.
+Dans le formulaire de quart, choisissez-le dans **Quart prédéfini** pour remplir les heures et le rôle; le quart s'affiche alors dans cette couleur. **Archiver** le cache (les quarts déjà créés gardent leur couleur); **Restaurer** le ramène.
 
-## Corrections de pointage
+## Fixer un budget hebdomadaire de main-d'œuvre (administrateurs de l'agence)
 
-Le personnel demande dans **Mes RH > Corriger mon pointage** quand un pointage est erroné ou manquant. Les demandes arrivent dans **Pointages et feuilles de temps > Corrections de pointage**. En approuver une modifie le pointage, le marque comme corrigé, et les heures suivent sur la feuille de temps et dans la paie. Personne n’approuve une correction de ses propres pointages. Un jour d’une feuille de temps approuvée et verrouillée ne peut pas être modifié avant qu’un administrateur d’agence la déverrouille.
+1. Dans **Outils de quarts**, trouvez **Budget hebdomadaire de main-d'œuvre**. Seules les personnes qui voient la paie voient ce tableau; une direction qui voit la paie voit les chiffres, mais pas le bouton.
+2. Appuyez sur **Fixer le budget** sur la ligne d'un centre.
+3. Inscrivez le montant hebdomadaire et appuyez sur **Enregistrer**. Laissez vide pour retirer le budget.
 
-## Pause non payée automatique
+L'**Horaire** affiche alors « 💵 Planned … projected … », et le tableau montre **Prévu cette semaine**, **Coût prévu** et **Du budget**. Le personnel salarié et les personnes sans taux horaire sont comptés, mais pas chiffrés.
 
-Dans **Feuilles de temps > Règles**, un administrateur peut retirer automatiquement une pause non payée des longs pointages, par exemple 30 minutes de tout pointage de plus de 6 heures. C’est désactivé par défaut. Une fois activé, la feuille de temps, la paie, les talons de paie et les exportations utilisent les mêmes heures payées. Le pointage lui-même ne change jamais.
+## Approuver les corrections de pointage
 
-## Heures contractuelles
+1. Ouvrez **Ressources humaines > Pointages et feuilles de temps** et choisissez **Corrections de pointage**.
+2. **En attente** liste les demandes, avec ce qui est **Enregistré**, ce qui est **Demandé** et **Pourquoi**.
+3. Appuyez sur **Approuver**, ajoutez une note au besoin et appuyez sur **Approuver et corriger**. Ou appuyez sur **Refuser**, expliquez pourquoi et appuyez sur **Refuser**.
 
-La feuille de temps a une colonne **Contractuel** à côté de Prévu, Travaillé et Payé. Ce sont les heures par semaine du dossier RH de la personne, pour les jours de la période.
+L'approbation change le pointage (marqué comme corrigé) et les heures suivent dans la feuille de temps et la paie. La personne est avisée dans les deux cas. **Décidé** montre les demandes passées.
 
-??? Les brouillons changent-ils ce que voit le personnel? | Non. Tant que vous ne publiez pas, le personnel, le pointage, les alertes de ratio, la paie et les avis de quarts ne voient que l’horaire publié.
-??? Puis-je désactiver l’étape de publication? | Oui, quand aucun brouillon n’attend. Publiez-les ou supprimez-les d’abord.
+## Qui peut faire quoi
+
+| Rôle | Peut |
+|---|---|
+| Administrateur de l'agence | Activer l'étape de publication et l'acceptation, fixer les budgets, tout ce qui suit. |
+| Direction de centre | Publier, copier, créer des quarts prédéfinis et approuver les corrections dans ses centres. Voit les budgets seulement si elle voit la paie. |
+| Éducatrice, éducateur, visiteur à domicile | Accepter ses quarts dans **Mes RH > Quarts à accepter**, demander une correction dans **Mes RH > Corriger mon pointage**. |
+
+## Questions fréquentes et problèmes
+
+??? Les brouillons changent-ils ce que voit le personnel? | Non. Jusqu'à la publication, le personnel, le pointage, les alertes de ratio, la paie et les avis de quart ne voient que l'horaire publié.
+??? Puis-je désactiver l'étape de publication? | Oui, quand aucun brouillon n'attend. Publiez-les ou supprimez-les d'abord.
+??? Il n'y a pas de bouton Approuver sur une correction. | C'est votre propre demande : une autre direction ou un administrateur de l'agence la décide.
+??? Une correction est refusée avec « Locked timesheet ». | Le jour fait partie d'une période de paie approuvée et verrouillée. Un administrateur de l'agence la déverrouille d'abord dans **Approuver et verrouiller**.
+??? Un membre du personnel a appuyé sur « I can't do this shift ». | Les directions du centre sont avisées. **Outils de quarts > En attente d'acceptation du personnel** l'affiche comme **Impossible**, avec sa raison.
+??? Je ne vois pas le bouton 📋 Copy. | Il s'affiche seulement en vue semaine, pour les agences qui ont le module RH.
+
+## Écrans liés
+
+[[open: #schedule | Horaire]]
+[[open: #schedule?tab=rota | Plan des horaires]]
+[[open: #timesheets?tab=lock | Approuver et verrouiller]]
+
+- [[hr-rota]]
+- [[hr-open-shifts]]
+- [[hr-overtime-timesheets]]
