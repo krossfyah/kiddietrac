@@ -7,60 +7,84 @@ screens: refunds
 ---
 # Refunding a payment
 
-A refund is the one money movement with nobody on the other side confirming it. An invoice is agreed with the family; a payment arrives because somebody chose to send it. A refund is authorised by one person inside the agency and then simply happens — so it is signed for, and every one is recorded.
+**Finance → Refunds** gives money back to a family, in full or in part, against a payment they made. A refund is the one money movement with nobody on the other side confirming it, so every refund is signed for by the person who approves it and recorded with the date, the time and where it came from.
+
+[[open: #refunds | Open Refunds]]
 
 ![The Refunds screen: choose the payment, or enter the invoice number](https://api.kiddietrac.com/help-img/refunds.png)
 
-## Who can do it
+## Finding the payment to refund
 
-**Agency admins and centre directors only.** An educator who opens the screen is refused, with a message saying why.
+You can find the money two ways: from the list, or by invoice number.
 
-## Two ways in
+1. Open **Finance → Refunds**.
+2. Open the **Choose the payment to refund** list. It shows everything on the agency that still has money to refund: the family, the refundable amount, the invoice or payment number, the date, and anything already refunded.
+3. Pick the payment. Its details open below.
 
-**From the account ledger** — open the person's ledger and press **↩ Refund**. You see only their invoices, which is the safer route when you already know whose money it is.
+Or, when you are working from a number rather than a name:
 
-**From the Refunds screen** — for when you are working from a number rather than a name.
+1. Type the number into **Or enter the invoice number to refund:** — the number printed on the invoice the family was sent. Part of a number works.
+2. Press **Find invoice** (or press Enter).
+3. If one invoice matches, it opens straight away. If several match, each is listed with the family named, what was billed and what was received; press **Refund** beside the right one.
 
-- The **dropdown** lists everything on the agency with money that can still be refunded, showing the family, the refundable amount and the invoice number. Pick the person.
-- Or type the **invoice number** — the one printed on the invoice the family was sent, like `iL-INV-1779383993378`. Partial numbers work.
+> ⚠️ One number can belong to several invoices (for example, numbers made from a date can be shared by many families). Every match is listed and you choose. Nothing is picked for you.
 
-> **One number can belong to several invoices.** `PINVO-05082026` is shared by eleven different families. When that happens every match is listed with the family named, and you choose. Nothing is picked for you.
+Agency admins can also start from a family's account: open it in **Finance → Account ledgers** and press **↩ Refund**. You see only that family's payments, which is the safer route when you already know whose money it is.
 
-## Partial or full
+## Issuing the refund
 
-The amount defaults to everything still refundable and the cap is stated on screen. Type any smaller amount for a partial refund. Refunding more than remains is refused, and the message tells you exactly what is left:
+At the top you see three figures: **Payment amount**, **Already refunded** and **Refundable**. Below them, **Refund history** lists earlier refunds on this payment with their status.
 
-> Cannot refund $1,512.00; only $567.00 of this payment is left to refund.
+1. Under **Issue new refund**, type the **Amount**. Any amount up to the refundable figure works, so a partial refund is just a smaller number.
+2. Choose a **Reason**: **Customer requested**, **Duplicate charge**, **Overpayment**, **Goodwill** or **Vacation credit**.
+3. Add any **Notes** (the family sees the reason and notes in their notice).
+4. Type your full name in **Your name**.
+5. Sign in the **Signature** box ("Sign here to approve"). Press **Clear signature** to start again.
+6. Press **Issue refund**.
 
-Already-refunded money is netted off. An invoice that received $1,680 and has had $420 returned shows **$1,260 refundable**.
+A green box confirms the refund and its status. The figures refresh a few seconds later.
 
-## Approving it
+Already-refunded money is netted off: a payment of $1,680 that has had $420 returned shows **$1,260** refundable. Refunding more than remains is refused, with the exact amount left.
 
-Choose a reason, add any note, then **type your name and sign in the box**. Both are required — the signature is stored with the refund along with the date, the time and the address it came from.
+## What happens to the money
 
-That record is what turns *"somebody refunded $735"* into *"this named person approved this refund at this minute and put their name to it"*.
+It depends on how the family paid.
 
-## What happens next
+- **Card paid through Helcim or Stripe**: the money goes back to the card automatically. With Helcim, a same-day full refund is first tried as a **void**, so it disappears from the card statement instead of showing a charge and a credit. The family is told "Refund sent" and that it should reach their account in a few days.
+- **Any other payment** (e-Transfer, cash, cheque, bank): the refund is recorded and the balance re-opens on the account, but no money moves by itself. The family is told their centre will arrange the payment. A box says **No money has been sent yet**; where Interac sending is set up, press **Send $… by Interac now**, or press **I'll arrange it myself**.
 
-What happens depends on how the money was paid.
+For an invoice that came from an external billing system, the balance is re-opened on the family's ledger rather than written back to the invoice, because that system overwrites its invoices on every sync.
 
-**A card payment taken through Helcim goes back to the card automatically.** You do not need to take any further step:
+## Refunding money with no payment record
 
-- **Same day, full amount**: KiddieTrac first tries to **void** the charge, so it disappears from the family's card statement instead of showing as a charge and a credit.
-- **Otherwise**, or if the void is refused: the amount is **refunded** through Helcim. Only a refund can be partial.
-
-If Helcim refuses, its reason is shown and nothing is recorded. If Helcim is no longer set up for your agency, the refund is refused with a message explaining that the money cannot be returned automatically. See [Payment providers](payment-providers).
-
-**For any other payment, the money does not move on its own.** The refund is recorded, the balance re-opens on the account, and the family is told their centre will arrange payment. Where Interac is available, you are offered the transfer as a separate, deliberate step.
-
-For a KiddieTrac invoice the balance is written back to the invoice itself. For an invoice that came from an external billing system it is not — that system overwrites those fields on every sync, so a refund written there would quietly disappear at the next poll. The ledger re-opens the balance instead, which nothing overwrites.
-
-## Money with no payment record
-
-Where a payment arrived through an integration, KiddieTrac may hold the invoice but no receipt. Those invoices are still refundable: the receipt is written the moment the refund is approved, so there is something for the refund to reverse. You do not have to do anything — it happens as part of approving.
+Money that arrived through an integration may sit on an invoice with no receipt in KiddieTrac. A blue note says so. You can still refund it: the screen shows **Received**, **Refundable** and the **Invoice**, and the receipt is written the moment you approve, so the refund has something to reverse. Fill in the same fields and press **Issue refund**; the button then reads **Refund recorded**.
 
 ## Refund first, then void
 
-An invoice with money paid against it cannot be voided. To cancel one, refund the money here first, then void the invoice in **Accounting**. See [Accounting](accounting).
+An invoice with money paid against it cannot be voided. To cancel one, refund the money here first, then void the invoice in **Finance → Accounting**.
+
+## Who can do what
+
+| Role | Can do |
+|---|---|
+| Agency admin | Refund any payment in the agency, from this screen or from Account ledgers. |
+| Centre director | Refund payments for families they can see, from this screen. |
+| Platform admin | The same as an agency admin, for the agency they are viewing. |
+| Educator | Cannot open Refunds. The server answers "Only an agency admin or a centre director can approve a refund." |
+
+## FAQs and when something goes wrong
+
+??? The list says "Nothing on this agency has money that can be refunded". | No payment has money left to refund: nothing has been paid yet, or it has all been refunded. Check the invoice number with Find invoice to be sure.
+??? "No invoice found with the number …" | Check the number on the invoice the family received, or choose the family from the list above.
+??? "Cannot refund $…; only $… of this payment is left to refund." | Part of the payment was refunded already. Enter the amount shown or less.
+??? "Type your full name to approve this refund." or "Please sign in the box to approve this refund." | Both your name and your signature are required. Fill in the missing one and press Issue refund again.
+??? "This payment was taken through Helcim (or Stripe), but … is no longer set up for this agency" | The money cannot go back to the card automatically, so nothing was recorded. An agency admin can reconnect the provider in Settings → Payment providers, or arrange the refund another way.
+??? The card provider refused the refund. | Its reason is shown in red and nothing is recorded. Read the reason (for example, the card was closed) and try again or arrange the payment another way.
+??? Does the family hear about it? | Yes. Each guardian gets a notice in the app and an email: "Refund sent" when money went back to the card, "Refund approved" when the centre will arrange the payment.
+??? Where can I see refunds later? | Pick the same payment again: Refund history lists every refund with its date, amount, reason and status. Agency admins also see it on the family's account in Account ledgers.
+
+## Related screens
+
+[[open: #external-billing | Accounting]] [[open: #billing-schedule | Billing schedule]]
 
 See also: [Accounting](accounting) · [Account ledgers](account-ledgers) · [Payment providers](payment-providers)

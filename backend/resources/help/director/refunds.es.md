@@ -6,60 +6,84 @@ roles: agency_admin, centre_director, platform_admin
 ---
 # Reembolsar un pago
 
-Un reembolso es el único movimiento de dinero que nadie al otro lado confirma. Una factura se acuerda con la familia; un pago llega porque alguien decidió enviarlo. Un reembolso lo autoriza una sola persona dentro de la agencia y simplemente ocurre; por eso se firma, y cada uno queda registrado.
+**Finanzas → Reembolsos** devuelve dinero a una familia, total o parcialmente, sobre un pago que hizo. Un reembolso es el único movimiento de dinero que nadie del otro lado confirma, así que cada reembolso lo firma la persona que lo aprueba y queda registrado con la fecha, la hora y desde dónde se hizo.
+
+[[open: #refunds | Abrir Reembolsos]]
 
 ![La pantalla Reembolsos: elija el pago o ingrese el número de factura](https://api.kiddietrac.com/help-img/refunds.png)
 
-## Quién puede hacerlo
+## Encontrar el pago a reembolsar
 
-**Solo los administradores de agencia y los directores de centro.** Un educador que abre la pantalla es rechazado, con un mensaje que explica el motivo.
+Puede encontrar el dinero de dos formas: desde la lista o por número de factura.
 
-## Dos formas de llegar
+1. Abra **Finanzas → Reembolsos**.
+2. Abra la lista **Elija el pago a reembolsar**. Muestra todo lo que en la agencia todavía tiene dinero reembolsable: la familia, el monto reembolsable, el número de factura o de pago, la fecha y lo que ya se reembolsó.
+3. Elija el pago. Su detalle se abre debajo.
 
-**Desde el libro mayor de la cuenta**: abra el libro mayor de la persona y pulse **↩ Reembolso**. Solo verá sus facturas, que es la vía más segura cuando ya sabe de quién es el dinero.
+O, cuando trabaja con un número y no con un nombre:
 
-**Desde la pantalla Reembolsos**: para cuando trabaja a partir de un número en lugar de un nombre.
+1. Escriba el número en **Or enter the invoice number to refund:**, es decir, el número impreso en la factura que se envió a la familia. Sirve una parte del número.
+2. Pulse **Buscar factura** (o Enter).
+3. Si coincide una sola factura, se abre de inmediato. Si coinciden varias, cada una aparece con el nombre de la familia, lo facturado y lo recibido; pulse **Reembolso** junto a la correcta.
 
-- La **lista desplegable** muestra todo lo de la agencia que tiene dinero aún reembolsable, con la familia, el importe reembolsable y el número de factura. Elija a la persona.
-- O escriba el **número de factura**: el impreso en la factura que se envió a la familia, como `iL-INV-1779383993378`. Los números parciales funcionan.
+> ⚠️ Un mismo número puede pertenecer a varias facturas (por ejemplo, los números formados con una fecha pueden compartirlos muchas familias). Todas las coincidencias se muestran y usted elige. No se elige nada por usted.
 
-> **Un mismo número puede pertenecer a varias facturas.** `PINVO-05082026` lo comparten once familias distintas. Cuando ocurre, se listan todas las coincidencias con el nombre de la familia y usted elige. No se elige nada por usted.
+Los administradores de agencia también pueden empezar desde la cuenta de una familia: ábrala en **Finanzas → Libros de cuentas** y pulse **↩ Refund**. Así solo ve los pagos de esa familia, que es la vía más segura cuando ya sabe de quién es el dinero.
 
-## Parcial o total
+## Emitir el reembolso
 
-El importe por defecto es todo lo que aún se puede reembolsar, y el tope se indica en pantalla. Escriba cualquier importe menor para un reembolso parcial. Reembolsar más de lo que queda se rechaza, y el mensaje le dice exactamente cuánto queda:
+Arriba verá tres cifras: **Importe del pago**, **Already refunded** y **Reembolsable**. Debajo, **Historial de reembolsos** lista los reembolsos anteriores de este pago con su estado.
 
-> No se pueden reembolsar $1,512.00; solo quedan $567.00 de este pago por reembolsar.
+1. En **Emitir nuevo reembolso**, escriba el **Importe**. Sirve cualquier monto hasta la cifra reembolsable, así que un reembolso parcial es simplemente un número menor.
+2. Elija un **Motivo**: **Solicitado por el cliente**, **Cargo duplicado**, **Pago en exceso**, **Cortesía** o **Crédito por vacaciones**.
+3. Agregue **Notas** si hace falta (la familia ve el motivo y las notas en su aviso).
+4. Escriba su nombre completo en **Su nombre**.
+5. Firme en el recuadro **Firma** («Firme aquí para aprobar»). Pulse **Borrar firma** para empezar de nuevo.
+6. Pulse **Emitir reembolso**.
 
-El dinero ya reembolsado se descuenta. Una factura que recibió $1,680 y a la que se han devuelto $420 muestra **$1,260 reembolsables**.
+Un recuadro verde confirma el reembolso y su estado. Las cifras se actualizan unos segundos después.
 
-## Aprobarlo
+El dinero ya reembolsado se descuenta: un pago de $1,680 del que se devolvieron $420 muestra **$1,260** reembolsables. Reembolsar más de lo que queda se rechaza, indicando el monto exacto restante.
 
-Elija un motivo, añada una nota si lo desea y luego **escriba su nombre y firme en el recuadro**. Ambos son obligatorios: la firma se guarda con el reembolso junto con la fecha, la hora y la dirección desde la que se hizo.
+## Qué pasa con el dinero
 
-Ese registro convierte *«alguien reembolsó $735»* en *«esta persona identificada aprobó este reembolso en este minuto y puso su nombre»*.
+Depende de cómo pagó la familia.
 
-## Qué ocurre después
+- **Tarjeta pagada por Helcim o Stripe**: el dinero vuelve automáticamente a la tarjeta. Con Helcim, un reembolso total el mismo día se intenta primero como **anulación**, para que desaparezca del estado de cuenta en lugar de aparecer como un cargo y un abono. A la familia se le avisa «Refund sent» y que debería llegar a su cuenta en unos días.
+- **Cualquier otro pago** (e-Transfer, efectivo, cheque, banco): el reembolso se registra y el saldo se reabre en la cuenta, pero el dinero no se mueve solo. A la familia se le avisa que su centro coordinará el pago. Un recuadro dice **Aún no se ha enviado dinero**; si el envío por Interac está configurado, pulse **Send $… by Interac now**, o pulse **Lo gestionaré yo mismo**.
 
-Depende de cómo se pagó el dinero.
+En una factura que vino de un sistema de facturación externo, el saldo se reabre en el libro de la familia en lugar de escribirse en la factura, porque ese sistema sobrescribe sus facturas en cada sincronización.
 
-**Un pago con tarjeta realizado mediante Helcim vuelve a la tarjeta automáticamente.** No necesita dar ningún paso más:
+## Reembolsar dinero sin registro de pago
 
-- **El mismo día, importe completo**: KiddieTrac intenta primero **anular** el cargo, de modo que desaparezca del estado de cuenta de la tarjeta de la familia en lugar de aparecer como un cargo y un crédito.
-- **En caso contrario**, o si la anulación es rechazada: el importe se **reembolsa** a través de Helcim. Solo un reembolso puede ser parcial.
+El dinero que llegó por una integración puede estar en una factura sin recibo en KiddieTrac. Una nota azul lo indica. Igual puede reembolsarlo: la pantalla muestra **Recibido**, **Reembolsable** y la **Factura**, y el recibo se crea en el momento en que usted aprueba, para que el reembolso tenga algo que revertir. Complete los mismos campos y pulse **Emitir reembolso**; luego el botón dice **Reembolso registrado**.
 
-Si Helcim lo rechaza, se muestra su motivo y no se registra nada. Si Helcim ya no está configurado para su agencia, el reembolso se rechaza con un mensaje que explica que el dinero no puede devolverse automáticamente. Consulte [Proveedores de pago](payment-providers).
+## Primero reembolsar, luego anular
 
-**Con cualquier otro pago, el dinero no se mueve por sí solo.** El reembolso se registra, el saldo se vuelve a abrir en la cuenta y se avisa a la familia de que su centro gestionará el pago. Donde Interac está disponible, se le ofrece la transferencia como un paso aparte y deliberado.
+Una factura con dinero pagado no se puede anular. Para cancelarla, primero reembolse el dinero aquí y luego anule la factura en **Finanzas → Contabilidad**.
 
-En una factura de KiddieTrac, el saldo se escribe de vuelta en la propia factura. En una factura que viene de un sistema de facturación externo no se hace: ese sistema sobrescribe esos campos en cada sincronización, así que un reembolso escrito ahí desaparecería sin avisar en la siguiente consulta. En su lugar, el libro mayor vuelve a abrir el saldo, que nada sobrescribe.
+## Quién puede hacer qué
 
-## Dinero sin registro de pago
+| Rol | Puede |
+|---|---|
+| Administrador de agencia | Reembolsar cualquier pago de la agencia, desde esta pantalla o desde Libros de cuentas. |
+| Director de centro | Reembolsar pagos de las familias que puede ver, desde esta pantalla. |
+| Administrador de plataforma | Lo mismo que un administrador de agencia, para la agencia que está viendo. |
+| Educador | No puede abrir Reembolsos. El servidor responde «Only an agency admin or a centre director can approve a refund.» |
 
-Cuando un pago llegó por una integración, KiddieTrac puede tener la factura pero no el recibo. Esas facturas siguen siendo reembolsables: el recibo se escribe en el momento en que se aprueba el reembolso, para que este tenga algo que revertir. No tiene que hacer nada; ocurre como parte de la aprobación.
+## Preguntas frecuentes y cuando algo sale mal
 
-## Primero reembolsar, después anular
+??? La lista dice «Nada en esta agencia tiene fondos que puedan reembolsarse». | Ningún pago tiene dinero pendiente de reembolso: todavía no se ha pagado nada, o ya se reembolsó todo. Revise el número de factura con Buscar factura para estar seguro.
+??? «No invoice found with the number …» | Revise el número en la factura que recibió la familia, o elija a la familia en la lista de arriba.
+??? «Cannot refund $…; only $… of this payment is left to refund.» | Parte del pago ya se reembolsó. Ingrese el monto indicado o menos.
+??? «Type your full name to approve this refund.» o «Please sign in the box to approve this refund.» | Se requieren su nombre y su firma. Complete el que falte y vuelva a pulsar Emitir reembolso.
+??? «This payment was taken through Helcim (or Stripe), but … is no longer set up for this agency» | El dinero no puede volver a la tarjeta automáticamente, así que no se registró nada. Un administrador de agencia puede volver a conectar el proveedor en Ajustes → Proveedores de pago, o coordinar el reembolso de otra forma.
+??? El proveedor de tarjetas rechazó el reembolso. | Su motivo aparece en rojo y no se registra nada. Lea el motivo (por ejemplo, la tarjeta se cerró) e intente de nuevo o coordine el pago de otra forma.
+??? ¿Se avisa a la familia? | Sí. Cada tutor recibe un aviso en la app y un correo: «Refund sent» cuando el dinero volvió a la tarjeta, «Refund approved» cuando el centro coordinará el pago.
+??? ¿Dónde veo los reembolsos más tarde? | Elija de nuevo el mismo pago: Historial de reembolsos lista cada reembolso con su fecha, monto, motivo y estado. Los administradores de agencia también lo ven en la cuenta de la familia en Libros de cuentas.
 
-Una factura con dinero pagado no se puede anular. Para cancelarla, primero reembolse el dinero aquí y luego anule la factura en **Contabilidad**. Consulte [Contabilidad](accounting).
+## Pantallas relacionadas
 
-Véase también: [Contabilidad](accounting) · [Libros mayores de cuenta](account-ledgers) · [Proveedores de pago](payment-providers)
+[[open: #external-billing | Contabilidad]] [[open: #billing-schedule | Calendario de facturación]]
+
+Vea también: [Contabilidad](accounting) · [Libros de cuentas](account-ledgers) · [Proveedores de pago](payment-providers)

@@ -7,45 +7,94 @@ screens: donations
 ---
 # Donations and fundraising
 
-Run fundraising campaigns with a page you can share, record every gift, and send donors a receipt.
+**Finance → Donations** runs fundraising campaigns with a giving page you can share, records every gift, and issues receipts to donors. Donations are completely separate from invoices and family accounts. The screen has three tabs: **Gifts**, **Campaigns** and **Receipts & settings**.
 
 [[open: #donations | Open Donations]]
 
-## Before you start
+## Switching donations on
 
-- [ ] Go to **Finance → Donations → Receipts & settings** and switch on **Take donations**.
-- [ ] If your agency is a **registered charity**, enter your CRA registration number (it looks like 123456789 RR 0001), your legal name and address as registered, the place receipts are issued, and the authorised signatory. You can add a signature too.
-- [ ] Write **How donors complete a pledge**, for example your e-Transfer address and who cheques are payable to. Supporters see it on the giving page and in their thank-you email.
-- [ ] Optionally, add an email address to be told about each new pledge. Your agency admins are always notified in the portal.
+1. Open **Finance → Donations** and go to the **Receipts & settings** tab.
+2. Tick **Take donations (show campaigns and giving pages)**.
+3. If your agency is a registered charity, fill in the **CRA charity registration number** (it looks like 123456789 RR 0001), **Legal name (as registered)**, **Charity address (as registered)**, **Place receipts are issued**, **Authorised signatory** and **Signatory title**. Not a charity? Leave the number blank.
+4. Optionally, add a **Signature on receipts**: press **Add**, sign, then **Use signature**.
+5. Write **How donors complete a pledge (shown on the page and in the thank-you email)**, for example your e-Transfer address and who cheques are payable to.
+6. Optionally, fill in **Email new pledges to (optional)**. Your agency admins are always told in the portal.
+7. Press **Save settings**. A toast says **Donation settings saved**.
 
-## Campaigns and the giving page
+When your charity details are complete you see **✓ Ready to issue official receipts.** If something is missing, the screen lists it after "Official receipts need:".
 
-On **Campaigns**, press **+ New campaign**. Give it a title, a description, and optionally a goal, dates and suggested amounts. Press **🔗 Copy link** to share the giving page in an announcement, newsletter or social post.
+[[show: #donations @ Receipts & settings | Show me Receipts & settings]]
 
-Supporters choose an amount, enter their details and **pledge**. They get a thank-you email with your instructions for completing the gift. The page shows progress toward your goal if you leave **Show the amount raised** on.
+## Creating a campaign and sharing its giving page
 
-> **Note:** The giving page takes pledges; supporters pay the way your instructions say (e-Transfer, cheque, cash). Online card payment on the page isn't available yet.
+1. Go to the **Campaigns** tab and press **+ New campaign**.
+2. Enter the **Title *** and a description that tells supporters what it is for.
+3. Optionally, set a **Goal (optional)**, **Suggested amounts**, the **Starts** and **Ends** dates, and a **Thank-you message (sent with each pledge)**.
+4. Choose the **Status**: **Active — taking pledges**, **Draft — page hidden** or **Closed**.
+5. Leave **Show the amount raised on the page** on if you want the page to show progress toward your goal.
+6. Press **Save**. The toast says **Campaign saved**.
+7. Press **🔗 Copy link** on the campaign and paste the link into an announcement, newsletter or social post. **Open page** shows the giving page as supporters see it.
 
-## Recording gifts
+Supporters choose an amount, enter their details and pledge. They get a thank-you email with your instructions for completing the gift.
 
-- **A pledge arrives**: on **Gifts**, find it and press **Mark received**. Add the date and a reference (cheque number or e-Transfer ID).
-- **A gift that didn't come through the page**: press **+ Record a gift** and enter it. For an official tax receipt, enter the donor's full name and mailing address.
-- If the donor received something in return (for example a gala dinner), enter its value as the **advantage**. The receipt shows the eligible amount.
+> ℹ️ The giving page takes pledges; supporters pay the way your instructions say (e-Transfer, cheque, cash). Online card payment on the page isn't available yet.
 
-## Receipts
+## Marking a pledge as received
 
-Press **Issue receipt** on a received gift.
+1. Go to the **Gifts** tab. Filter with **All campaigns** and **Any status** if the list is long.
+2. Find the pledge and press **Mark received**.
+3. Check the **Date received** and add the **Reference (cheque #, e-Transfer ID)**.
+4. Press **Save**. The toast says **Gift saved** and the totals at the top (**Received**, **Pledged, not yet received**, **Gifts**, **Receipts issued**) update.
 
-- An **official receipt for income tax purposes** is issued when your charity details are complete and the donor's full name and address are on the gift. It has a serial number (for example 2026-0001) and all the details the Canada Revenue Agency requires.
-- Otherwise KiddieTrac issues an **acknowledgement**: a thank-you that says clearly it is not a tax receipt. The screen tells you what's missing before you issue it.
+## Recording a gift that didn't come through the page
 
-Use **PDF** to download it and **Email** to send it to the donor with the PDF attached.
+1. On **Gifts**, press **+ Record a gift**.
+2. Enter the donor's **First name *** and other details. For an official tax receipt, enter the full name and mailing address (**Street address**, **City**, **Province / state**, **Postal code**).
+3. Choose the **Campaign** (or **— General donation —**), and enter the **Amount *** and **Method**.
+4. If the donor got something back (for example a gala dinner), enter its value in **Value of anything given back (advantage)**. The receipt shows the eligible amount.
+5. Tick **Keep this donor anonymous in public totals and lists** if they asked.
+6. Press **Save**.
 
-**Receipts can't be edited.** If something was wrong, press **Void**, give the reason, and issue a replacement: it gets a new serial number and says which receipt it replaces. Correct the gift first if the mistake was in the gift itself.
+## Issuing, sending and voiding a receipt
 
-## Year-end
+1. On a received gift, press **Issue receipt** (or **Issue acknowledgement** when an official receipt isn't possible).
+2. Read the confirmation and confirm. The receipt gets the next serial number (for example 2026-0001).
+3. Press **PDF** to download it, or **Email** then **Send email** to send it to the donor with the PDF attached.
 
-Choose the year on **Gifts** and press **Export CSV** for every gift, its eligible amount and its receipt number, ready for your bookkeeper.
+An **official receipt for income tax purposes** is issued when your charity details are complete and the donor's full name and address are on the gift. Otherwise the donor gets an **acknowledgement**: a thank-you that says clearly it is not a tax receipt. The confirmation tells you what is missing before you issue it.
 
+Receipts can't be edited. If something was wrong:
+
+1. Press **Void** on the receipt.
+2. Type the reason in **Reason (kept with the voided receipt)** and press **Void receipt**.
+3. Choose **Issue replacement** (a new serial number that says which receipt it replaces) or **Just void it**. Correct the gift first if the mistake was in the gift itself.
+
+## Year-end export
+
+1. On **Gifts**, choose the year.
+2. Press **⬇ Export CSV**. You get every gift, its eligible amount and its receipt number, ready for your bookkeeper.
+
+## Who can do what
+
+| Role | Can do |
+|---|---|
+| Agency admin | Everything: settings, campaigns, gifts and receipts. |
+| Platform admin | The same, for the agency they are viewing. |
+| Centre director | Does not see Donations. Fundraising and tax receipts are run by the agency. |
+| Families and supporters | Pledge from the giving page; they never see this screen. |
+
+## FAQs and when something goes wrong
+
+??? The Gifts tab says "Donations are switched off for this agency." | Go to Receipts & settings, tick Take donations, and press Save settings.
+??? The Gifts list is empty. | It says "No gifts yet." Share a campaign's giving page, or press + Record a gift for one you received.
+??? Issue receipt gives an acknowledgement, not an official receipt. | The confirmation says why ("This gift can't get an official receipt because …"). Usually the donor's address is missing or your charity details are incomplete. Edit the gift or the settings first.
+??? Copy link did nothing. | Your browser blocked copying. The link is shown in a box: select it and copy it yourself.
 ??? Can a family donate as well as pay fees? | Yes. Donations are completely separate from invoices and accounts.
 ??? We're not a registered charity. Can we still fundraise? | Yes. Leave the registration number blank; donors get an acknowledgement instead of a tax receipt.
+??? Who gets emailed? | The supporter gets a thank-you email when they pledge, and the receipt email when you press Email. The address in "Email new pledges to" is told about each pledge.
+
+## Related screens
+
+[[open: #expenses | Expenses]] [[open: #grants | Grants]]
+
+See also: [Payment providers](payment-providers)

@@ -1,13 +1,13 @@
 ---
-title: Payment providers (Helcim, Zum Rails, Stripe)
+title: Payment providers (Helcim, Zum Rails, Stripe, Interac, gift cards)
 category: Billing
 order: 12
 roles: agency_admin, platform_admin
 screens: payment-providers
 ---
-# Payment providers
+# Payment providers (Helcim, Zum Rails, Stripe, Interac, gift cards)
 
-**Settings → Payment providers.** This is where you connect the payment accounts your agency is paid through: **Zum Rails**, **Stripe** and **Helcim**.
+**Settings → Payment providers** is where you connect the payment accounts your agency is paid through: **Helcim**, **Zum Rails** and **Stripe** for cards and bank payments, **Interac e-Transfer** instructions for families, and the **🎁 Gift cards** services used for educator rewards.
 
 [[open: #payment-providers | Open Payment providers]]
 
@@ -15,61 +15,100 @@ Each agency banks its own money, so each agency enters its own keys. Nothing fal
 
 ## Reading the screen
 
-There is one tab per provider. The dot beside each name shows whether it is ready: green means a working credential is stored, and grey means **Not configured yet**. The same status is repeated at the bottom of each tab as **● Ready** or **○ Not configured yet**.
+There is one tab per provider. The dot beside each name shows whether it is ready: green means a working credential is stored, grey means **Not configured yet**. The same status is repeated at the bottom right of each tab as **● Ready** or **○ Not configured yet**.
 
-Every tab has the same two controls at the top:
+Every card and bank provider tab has the same two controls at the top:
 
 - **Enabled**: when this is off, no payment can be taken or sent through the provider, whatever is stored below.
 - **Mode**: **Sandbox** or **Production**. Stay on sandbox until you have tested a real payment from start to finish.
 
-**Secrets are never shown again once saved.** A stored key appears only as its last four characters, for example **••••a1b2**. Leaving a secret box empty when you save keeps the key that is already stored, so you can change a URL without re-entering every key.
+> ℹ️ Secrets are never shown again once saved. A stored key appears only as its last four characters (for example ••••a1b2). Leaving a secret box empty when you save keeps the key already stored, so you can change a URL without re-entering every key.
 
-## Helcim (credit and debit cards)
+## Connecting Helcim (credit and debit cards)
+
+Helcim takes credit and debit cards, and handles refunds and voids. Families enter the card inside Helcim's own window, so a card number never reaches KiddieTrac.
 
 [[show: #payment-providers @ Helcim | Show me the Helcim tab]]
 
-Helcim takes **credit and debit cards**, and handles **refunds and voids**. Families enter the card inside Helcim's own window, so a card number never reaches KiddieTrac.
+1. In Helcim, go to **All Tools → Integrations → API Access** and create an API token with the **Payment API** permissions enabled.
+2. In KiddieTrac, open the **🍁 Helcim** tab.
+3. Paste the token into **API token**.
+4. Optionally, fill in **Terminal ID (optional)**.
+5. Enter the **Currency (CAD or USD)**.
+6. Tick **Enabled** and set **Mode** to match the token you pasted.
+7. Press **Save Helcim**. You see **✓ Saved** and the dot turns green.
+8. Press **Test connection**.
 
-- [ ] In Helcim, go to **All Tools → Integrations → API Access** and create an API token with the **Payment API** permissions enabled.
-- [ ] Paste it into **API token**.
-- [ ] Optionally, fill in **Terminal ID (optional)**.
-- [ ] Enter the **Currency (CAD or USD)**.
-- [ ] Tick **Enabled**, set **Mode**, and click **Save Helcim**.
-- [ ] Click **Test connection**.
+The test asks Helcim whether it accepts the stored token. You see **✓ Helcim accepted this token** followed by "LIVE, real cards will be charged" or "labelled as sandbox", and the currency. If the token is wrong or lacks permissions, the reason is shown in red.
 
-**Test connection** asks Helcim whether it accepts the stored token. You will see **✓ Helcim accepted this token** followed by either **LIVE, real cards will be charged** or **labelled as sandbox**, and the currency. If the token is wrong or lacks permissions, the reason is shown in red.
+> ⚠️ Helcim has no separate sandbox address. A test token and a live token both reach the same Helcim service, and **the token decides whether real money moves**. The **Mode** setting only labels what staff and families see.
 
-[[show: #payment-providers @ Helcim > Test connection | Show me Test connection]]
+> 💡 Always press **Test connection** after saving. A wrong token still saves and still shows a green dot; the test is the only way to know it works before a family tries to pay.
 
-> **Important:** Helcim has no separate sandbox address. A test token and a live token both reach the same Helcim service, and **the token decides whether real money moves**. The Mode setting only labels what staff and families see, so set it to match the kind of token you pasted.
+A Helcim payment is recorded only once KiddieTrac has verified Helcim's result, for the amount Helcim reports as settled. Refunds go back to the card automatically: a same-day, full refund is first tried as a **void** (it disappears from the statement); otherwise it is refunded through Helcim. Only a refund can be partial.
 
-> **Tip:** Always use **Test connection** after saving. A token that is wrong, or missing permissions, still saves and still shows a green dot. The test is the only way to confirm it works before a family tries to pay.
+## Connecting Stripe (cards, saved cards, Apple Pay and Google Pay)
 
-### How a Helcim payment is recorded
+1. In your Stripe dashboard, open **Developers → API keys**.
+2. In KiddieTrac, open the **💳 Stripe** tab.
+3. Paste the **Publishable key** and the **Secret key**. Leave **Webhook signing secret** empty: KiddieTrac fills it in when it connects.
+4. Tick **Enabled**, choose the **Mode**, and press **Save Stripe**.
+5. Under **Payment updates from Stripe**, check the line reads **● Connected**. If it reads **○ Not connected yet**, press **Connect** (or **Reconnect**).
+6. To offer Apple Pay and Google Pay on invoices, press **Turn on Apple Pay & Google Pay**. You see **✓ Apple Pay and Google Pay are on for** followed by your portal's addresses.
 
-A payment is recorded **only once KiddieTrac has verified Helcim's result**. The amount recorded is the amount Helcim reports as settled, not the amount that was asked for. The invoice balance and status then follow what has actually been paid. An invoice that is already void or refunded is left as it is for a person to look at, even if a payment arrives against it.
+"Connected" means a payment a parent finishes after closing the app is still recorded. While it is not connected, a payment is recorded only while the parent waits on the screen.
 
-### Refunding a Helcim payment
+## Connecting Zum Rails (bank payments and cards)
 
-Refund it from **Refunds** or from the family's account ledger, in the same way as any other payment. The money goes back to the card automatically:
+1. In your Zum portal, open **Settings → Webhook & API**.
+2. In KiddieTrac, open the **🏦 Zum Rails** tab.
+3. Fill in **API base URL**, **Zum wallet ID**, **API username**, **API password**, **Webhook secret** and **Refund endpoint path**.
+4. Tick **Enabled**, choose the **Mode**, and press **Save Zum Rails**.
+5. Copy the **Callback URL for their portal** shown under the boxes and paste it into Zum, with the same webhook secret.
 
-- **Same day, full amount**: KiddieTrac first tries to **void** the charge, so it disappears from the cardholder's statement instead of showing as a charge and a credit.
-- **Otherwise**, or if the void is refused: it is **refunded** through Helcim. Only a refund can be partial.
+> ⚠️ Zum payments are confirmed only when Zum calls that address, so a wrong URL fails quietly when the payment settles.
 
-If Helcim is no longer set up for your agency, the refund is refused with a message explaining why, and no refund is recorded. See [Refunding a payment](refunds).
+## Offering Interac e-Transfer
 
-## Zum Rails (bank payments and cards)
+There is nothing to connect: families send money from their own bank to your e-Transfer email, and you record the payment when it lands.
 
-Zum Rails handles **bank payments (EFT) and card payments** from families, and refunds. Your credentials come from your Zum portal, under **Settings → Webhook & API**. The tab asks for the **API base URL**, **Zum wallet ID**, **API username**, **API password**, **Webhook secret** and **Refund endpoint path**.
+1. Open the **Interac e-Transfer** tab.
+2. Tick **Accept Interac e-Transfer**. Families then get a "Pay by Interac e-Transfer" button on Billing, and invoices list it under How to pay.
+3. Enter the **e-Transfer email (where families send money)** and, if you like, the **Recipient name (as their bank will show it)**.
+4. Under **Autodeposit**, say whether Autodeposit is on. If it is not, fill in the **Security question** and **Answer**.
+5. Optionally, write **Your instructions for families (optional)** and tick **Families can ask for an e-Transfer request**.
+6. Press **👁 Preview what families see** to check the sheet a family will get.
+7. Press **Save Interac e-Transfer**.
 
-Under the boxes, the tab shows a **Callback URL for their portal**. Paste it into Zum together with the same webhook secret you entered here. Payments are confirmed only when Zum calls that address, so a wrong URL fails quietly when the payment settles.
+## Connecting a gift card service
 
-## Stripe
+The **🎁 Gift cards** tab holds your agency's own **Giftbit** and **Tango Card** accounts, used to buy gift cards for educator rewards. Cards are paid from your own account there.
 
-Stripe takes **card payments and saved payment methods**. Your keys come from your Stripe dashboard, under **Developers → API keys**: the **Publishable key**, **Secret key** and **Webhook signing secret**.
+1. Open the **🎁 Gift cards** tab.
+2. For Giftbit: choose the **Environment**, paste the **API token**, and tick **Use Giftbit for educator rewards**. For Tango Card: fill in **Platform name**, **API key**, **Customer identifier** and **Account identifier**, and tick **Use Tango Card for educator rewards**.
+3. Press **Save**.
+4. Press **Test connection** to check the account answers.
 
-## Who can use this
+## Who can do what
 
-**Agency admins** and **platform admins** only. Centre directors cannot open this screen, because these keys move the agency's money and belong with whoever owns the bank account.
+| Role | Can do |
+|---|---|
+| Agency admin | Everything on this screen for their own agency. |
+| Platform admin | The same, for the agency they are viewing. |
+| Centre director | Does not see this screen: these keys move the agency's money and belong with whoever owns the bank account. |
 
-See also: [Payment surcharges](payment-surcharges) · [Refunding a payment](refunds) · [Billing setup & settings](billing-setup)
+## FAQs and when something goes wrong
+
+??? The card and bank tabs are missing; only Interac and Gift cards show. | Card payments are part of your plan's payments feature. Without it a grey note explains why (for example "Payment accounts are not available.") and only the Interac e-Transfer and gift card tabs work. Ask your KiddieTrac contact about adding payments.
+??? The dot is green but families can't pay. | Green only means a value is stored. Check **Enabled** is ticked, press **Test connection** (Helcim), check **Payment updates from Stripe** says Connected (Stripe), or check the callback URL in your Zum portal.
+??? I see "Could not save" in red. | The message after it says why (for example a missing value). Fix it and press Save again. Nothing was changed.
+??? "Add the e-Transfer email families send money to." | You ticked Accept Interac e-Transfer without an email address. Add the address, then save.
+??? "Add the security question and its answer, or choose Autodeposit." | You chose "No Autodeposit". Families need a question and answer to accept the transfer, so fill both in.
+??? Apple Pay shows a warning after I press the button. | The warning names the address and what Stripe said. Check Stripe is in the right mode and press the button again; Google Pay needs nothing more.
+??? Do families get told when I change providers? | No. Nothing is sent to families from this screen. They simply see the payment options that are switched on.
+
+## Related screens
+
+[[open: #payment-run | Payment run]] [[open: #refunds | Refunds]] [[open: #billing-settings | Billing settings]] [[open: #educator-rewards | Educator rewards]]
+
+See also: [Payment surcharges](payment-surcharges) · [Refunding a payment](refunds) · [Billing setup & settings](billing-setup) · [Payment run](autopay)
