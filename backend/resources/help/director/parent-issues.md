@@ -33,8 +33,8 @@ Tap the notification to open that report straight away.
 Four counts across the top: **Open**, **In progress**, **Resolved** and **Closed**. Under them:
 
 - **Status** — starts on **Open & in progress**. Choose one status, or **All**.
-- **Category** — narrow to one kind of report.
-- **Centre** — shown when you have more than one.
+- **All categories** — narrow to one kind of report.
+- **All centres** — shown when you have more than one.
 - **↻ Refresh**.
 
 Each row shows the category and reason, who reported it, the family, the child, when, who it's assigned to and how many messages it has.

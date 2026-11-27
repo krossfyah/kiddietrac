@@ -32,8 +32,8 @@ Touchez la notification pour ouvrir aussitôt ce signalement.
 Quatre compteurs en haut : **Ouvert**, **En cours**, **Résolu** et **Fermé**. Dessous :
 
 - **Statut** — commence à **Ouverts et en cours**. Choisissez un seul statut, ou **Tous**.
-- **Catégorie** — pour cibler un seul type de signalement.
-- **Centre** — affiché si vous en avez plus d’un.
+- **Toutes les catégories** — pour cibler un seul type de signalement.
+- **Tous les centres** — affiché si vous en avez plus d’un.
 - **↻ Actualiser**.
 
 Chaque ligne indique la catégorie et le motif, la personne qui a signalé, la famille, l’enfant, la date, la personne à qui le dossier est attribué et le nombre de messages.

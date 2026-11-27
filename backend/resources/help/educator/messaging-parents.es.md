@@ -24,12 +24,15 @@ Cada niño tiene un hilo de conversación entre sus padres y la sala. Úselo par
 
 ## Cómo enviar un mensaje
 
-1. Desde la vista de la sala, toque **Conversaciones**
-2. Elija el hilo de un padre o madre (aparecen el nombre del niño y el del padre o madre)
-3. Escriba su mensaje
-4. Toque **Enviar**
+1. Abra el **Centro de mensajes** desde el menú.
+2. Elija la conversación del padre en la lista. Escriba en **🔍 Search messages…** para encontrar un nombre o algo que se dijo.
+3. Para empezar una nueva, pulse **+ New chat** y elija al padre.
+4. Escriba en **Type a message…**. Use **📎** para adjuntar una foto o un video, o el micrófono para **Record a voice note** (nota de voz).
+5. Pulse **Enviar**.
 
-Los padres ven el mensaje en su aplicación y, si tienen activadas las notificaciones en su teléfono, reciben una notificación push. Un mensaje normal genera una notificación normal.
+Debajo de su mensaje ve **Sent — not read yet** hasta que el padre lo abre, y luego **Seen** y la hora. Los padres ven
+el mensaje en su app y, si tienen las notificaciones activadas, reciben una notificación push. Un mensaje normal es una
+notificación normal.
 
 ## 🚨 Mensajes de emergencia
 
@@ -54,7 +57,7 @@ En el expediente de un niño, use **💬 Enviar mensaje a los padres**, o **Mens
 Conviene saber:
 
 - Los mensajes salen **del número de SMS y del correo de su agencia, nunca de su propio** número o dirección.
-- Un padre que no ha aceptado recibir mensajes de texto muestra *«No ha aceptado mensajes de texto: use el correo»*. Aun así puede enviarle un **correo**.
+- Un padre que no ha aceptado recibir mensajes de texto muestra **Cannot be texted**. Aun así puede enviarle un **correo** (**Can be emailed**).
 - **Las respuestas llegan a la agencia**, no a usted.
 - **Cada mensaje queda en el expediente del niño** (y en el registro de auditoría), y el padre o madre también lo ve en su aplicación.
 
@@ -97,6 +100,11 @@ Conviene saber:
 
 ## Notas de privacidad
 
-- Todo lo que envíe queda registrado y es visible para su director
-- El padre o madre ve su nombre en cada mensaje
+- Todo lo que envía queda registrado y su director puede verlo
+- El padre ve su nombre en cada mensaje
 - Sea profesional: estos mensajes pueden revisarse en el futuro
+
+> 🔒 El texto de los mensajes se guarda cifrado. Dentro de KiddieTrac todo se lee como siempre, y **🔍 Search
+> messages…** sigue encontrando palabras en sus conversaciones. Una notificación en la pantalla bloqueada solo dice
+> «Nuevo mensaje de *nombre*» — nunca lo que se escribió — y los correos de mensajes no leídos indican quién escribió y
+> cuándo, sin el texto ni los nombres de los adjuntos.

@@ -24,12 +24,14 @@ La pestaña Mensajes es su forma de comunicarse con la sala de su hijo. Cada ni�
 
 ## Cómo enviar un mensaje
 
-1. Pulse la pestaña **Mensajes**
-2. Elija la conversación (si tiene varios hijos, elija el que corresponda)
-3. Escriba su mensaje en el cuadro de la parte inferior
-4. Pulse **Enviar**
+1. Abra el **Centro de mensajes** desde el menú.
+2. Elija la conversación (si tiene más de un hijo, elija la correcta).
+3. Escriba su mensaje en **Type a message…** abajo. Use **📎** para enviar una foto, o el micrófono para **Record a voice note** (nota de voz).
+4. Pulse **Enviar**.
 
-El educador ve el mensaje en la vista de su tableta.
+Su mensaje muestra **Sent — not read yet** hasta que un educador lo abre, y luego **Seen** y la hora. Cuando el
+educador responde, recibe una notificación en su teléfono (si tiene las notificaciones activadas) y un número en el
+Centro de mensajes.
 
 ## 🚨 Mensajes de emergencia
 
@@ -79,12 +81,10 @@ Si algo no va bien (su hijo vuelve a casa con hambre con frecuencia, o no le gus
 
 ## Privacidad
 
-- Los mensajes son visibles para: usted, su cotutor (si ambos están invitados), los educadores de la sala y el director del centro
-- No son visibles para otros padres ni para nadie fuera de su centro
+- Los mensajes los ven: usted, el otro tutor (si ambos fueron invitados), los educadores de la sala y el director del centro
+- No los ven otros padres ni nadie fuera de su centro
 - No comparta sus datos de acceso: su nombre aparece en cada mensaje que envía
 
-## Próximamente
-
-- Notificaciones push cuando un educador responda
-- Confirmaciones de lectura (podrá ver si han leído su mensaje)
-- Mensajes grupales para los anuncios de todo el centro
+> 🔒 El texto de los mensajes se guarda cifrado. En la app usted lee y busca sus mensajes como siempre. Una
+> notificación en la pantalla bloqueada solo dice «Nuevo mensaje de *nombre*» — nunca lo que se escribió — y un correo
+> sobre un mensaje no leído dice quién escribió y cuándo, sin el mensaje. Abra KiddieTrac para leerlo.

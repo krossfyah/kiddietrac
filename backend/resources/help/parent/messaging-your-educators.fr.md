@@ -24,12 +24,14 @@ L’onglet Messages est votre moyen de communiquer avec la salle de votre enfant
 
 ## Comment envoyer un message
 
-1. Appuyez sur l’onglet **Messages**
-2. Choisissez la conversation (si vous avez plusieurs enfants, choisissez le bon)
-3. Écrivez votre message dans la zone au bas de l’écran
-4. Appuyez sur **Envoyer**
+1. Ouvrez le **Centre de messages** à partir du menu.
+2. Choisissez la conversation (si vous avez plus d’un enfant, choisissez la bonne).
+3. Écrivez votre message dans **Type a message…** en bas. Utilisez **📎** pour envoyer une photo, ou le micro pour **Record a voice note** (message vocal).
+4. Appuyez sur **Envoyer**.
 
-L’éducateur voit le message sur sa tablette.
+Votre message affiche **Sent — not read yet** jusqu’à ce qu’une éducatrice l’ouvre, puis **Seen** et l’heure. Quand
+l’éducatrice répond, vous recevez une notification sur votre téléphone (si les notifications sont activées) et une
+pastille sur le Centre de messages.
 
 ## 🚨 Messages d’urgence
 
@@ -79,12 +81,10 @@ Si quelque chose ne va pas (votre enfant revient régulièrement affamé, ou vou
 
 ## Confidentialité
 
-- Les messages sont visibles par : vous, votre cotuteur (si les deux sont invités), les éducateurs de la salle et le directeur du centre
-- Ils ne sont pas visibles par les autres parents ni par quiconque à l’extérieur de votre centre
+- Les messages sont visibles par : vous, l’autre parent ou tuteur (si vous êtes tous deux invités), les éducatrices du groupe et la direction du centre
+- Ils ne sont pas visibles par les autres parents ni par personne à l’extérieur de votre service de garde
 - Ne partagez pas vos identifiants — votre nom figure sur chaque message que vous envoyez
 
-## À venir
-
-- Notifications push quand un éducateur répond
-- Accusés de lecture (vous pourrez voir s’il a lu votre message)
-- Messages de groupe pour les annonces à l’échelle du centre
+> 🔒 Le texte des messages est conservé chiffré. Dans l’appli, vous lisez et cherchez vos messages normalement. Une
+> notification sur l’écran verrouillé indique seulement « Nouveau message de *nom* » — jamais ce qui a été écrit — et
+> un courriel sur un message non lu dit qui a écrit et quand, sans le message lui-même. Ouvrez KiddieTrac pour le lire.

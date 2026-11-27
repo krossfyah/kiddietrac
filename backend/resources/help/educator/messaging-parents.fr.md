@@ -24,12 +24,15 @@ Chaque enfant a un fil de conversation entre son ou ses parents et la salle. Ser
 
 ## Comment envoyer un message
 
-1. Depuis la vue de la salle, touchez **Conversations**
-2. Choisissez le fil d’un parent (le nom de l’enfant et celui du parent s’affichent)
-3. Rédigez votre message
-4. Touchez **Envoyer**
+1. Ouvrez le **Centre de messages** à partir du menu.
+2. Choisissez la conversation du parent dans la liste. Tapez dans **🔍 Search messages…** pour trouver un nom ou quelque chose qui a été dit.
+3. Pour en commencer une nouvelle, appuyez sur **+ New chat** et choisissez le parent.
+4. Écrivez dans **Type a message…**. Utilisez **📎** pour joindre une photo ou une vidéo, ou le micro pour **Record a voice note** (message vocal).
+5. Appuyez sur **Envoyer**.
 
-Les parents voient le message dans leur application et, si les notifications sont activées sur leur téléphone, reçoivent une notification push. Un message ordinaire donne une notification ordinaire.
+Sous votre message, vous voyez **Sent — not read yet** jusqu’à ce que le parent l’ouvre, puis **Seen** et l’heure. Les
+parents voient le message dans leur appli et, si les notifications sont activées, reçoivent une notification push. Un
+message ordinaire donne une notification ordinaire.
 
 ## 🚨 Messages d’urgence
 
@@ -54,7 +57,7 @@ Dans le dossier d’un enfant, utilisez **💬 Écrire aux parents**, ou **Texto
 Bon à savoir :
 
 - Les messages sont envoyés depuis **le numéro de texto et le courriel de votre agence, jamais depuis votre propre** numéro ou adresse.
-- Un parent qui n’a pas accepté de recevoir des textos affiche *« N’a pas accepté les textos — écrivez-lui par courriel »*. Vous pouvez quand même lui écrire par **courriel**.
+- Un parent qui n’a pas accepté de recevoir des textos affiche **Cannot be texted**. Vous pouvez quand même lui écrire par **courriel** (**Can be emailed**).
 - **Les réponses vont à l’agence**, pas à vous.
 - **Chaque message est conservé au dossier de l’enfant** (et dans le journal d’audit), et le parent le voit aussi dans son application.
 
@@ -97,6 +100,11 @@ Bon à savoir :
 
 ## Confidentialité
 
-- Tout ce que vous envoyez est consigné et visible par votre directeur
+- Tout ce que vous envoyez est consigné et visible par votre direction
 - Le parent voit votre nom sur chaque message
-- Restez professionnel : ces messages peuvent être consultés plus tard
+- Restez professionnelle — ces messages peuvent être relus plus tard
+
+> 🔒 Le texte des messages est conservé chiffré. Dans KiddieTrac, tout se lit normalement, et **🔍 Search messages…**
+> trouve encore les mots de vos conversations. Une notification sur l’écran verrouillé indique seulement « Nouveau
+> message de *nom* » — jamais ce qui a été écrit — et les courriels de messages non lus indiquent qui a écrit et quand,
+> sans le texte ni le nom des pièces jointes.

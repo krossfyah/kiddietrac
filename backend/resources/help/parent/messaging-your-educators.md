@@ -25,12 +25,13 @@ The Messages tab is your way to communicate with your child's room. Each child h
 
 ## How to send a message
 
-1. Tap the **Messages** tab
-2. Pick the conversation (if you have multiple children, pick the relevant one)
-3. Type your message in the box at the bottom
-4. Tap **Send**
+1. Open **Message Centre** from the menu.
+2. Pick the conversation (if you have more than one child, pick the right one).
+3. Type your message in **Type a message…** at the bottom. Use **📎** to send a photo, or the microphone to **Record a voice note**.
+4. Press **Send**.
 
-The educator sees the message in their tablet view.
+Your message shows **Sent — not read yet** until an educator opens it, then **Seen** and the time. When the educator
+replies, you get a notification on your phone (if notifications are on) and a badge on Message Centre.
 
 ## 🚨 Emergency messages
 
@@ -84,8 +85,6 @@ If something is wrong (your child is regularly coming home hungry, or you don't 
 - They're not visible to other parents or to anyone outside your centre
 - Don't share login info — your name is on every message you send
 
-## Coming soon
-
-- Push notifications when an educator replies
-- Read receipts (you can see if they've read your message)
-- Group messages from centre-wide announcements
+> 🔒 Message text is stored encrypted. In the app you read and search your messages as normal. A notification on your
+> lock screen only says "New message from *name*" — never what was written — and an email about an unread message
+> says who wrote and when, without the message itself. Open KiddieTrac to read it.

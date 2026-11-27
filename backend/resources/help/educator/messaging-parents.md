@@ -2,7 +2,7 @@
 title: Messaging parents
 category: Daily Workflows
 order: 4
-screens: ~parent-feedback, ~parent-issues, chat, ~announcements
+screens: chat, ~announcements
 ---
 
 # Messaging parents
@@ -25,12 +25,15 @@ Each child has a conversation thread between their parent(s) and the room. Use i
 
 ## How to send a message
 
-1. From the room view, tap **Conversations**
-2. Pick a parent's thread (the child's name and parent's name appear)
-3. Type your message
-4. Tap **Send**
+1. Open **Message Centre** from the menu.
+2. Pick the parent's conversation from the list. Type in **🔍 Search messages…** to find a name or something that was said.
+3. To start a new one, press **+ New chat** and choose the parent.
+4. Type in **Type a message…**. Use **📎** to attach a photo or video, or the microphone to **Record a voice note**.
+5. Press **Send**.
 
-Parents see the message in their app and (if they have notifications on their phone enabled) get a push notification. An ordinary message is one ordinary notification.
+Under your message you see **Sent — not read yet** until the parent opens it, then **Seen** and the time. Parents see
+the message in their app and, if notifications are on, get a push notification. An ordinary message is one ordinary
+notification.
 
 ## 🚨 Emergency messages
 
@@ -56,7 +59,7 @@ On a child's record, use **💬 Message parents**, or **Text** / **Email** besid
 Good to know:
 
 - Messages go from **your agency's SMS number and email, never your own** number or address.
-- A parent who hasn't agreed to receive texts shows *"Has not agreed to texts — email instead"*. You can still **email** them.
+- A parent who hasn't agreed to receive texts shows **Cannot be texted**. You can still **email** them (**Can be emailed**).
 - **Replies go to the agency**, not to you.
 - **Every message is kept on the child's record** (and in the audit log), and the parent also sees it in their app.
 
@@ -102,3 +105,7 @@ Good to know:
 - Everything you send is logged and visible to your director
 - The parent sees your name on every message
 - Be professional — these messages can be reviewed in the future
+
+> 🔒 Message text is stored encrypted. Inside KiddieTrac everything reads as normal, and **🔍 Search messages…** still
+> finds words in your conversations. A push on a lock screen only says "New message from *name*" — never what was
+> written — and the unread-message emails list who wrote and when, with no message text or attachment names.

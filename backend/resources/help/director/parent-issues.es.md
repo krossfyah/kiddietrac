@@ -32,8 +32,8 @@ Toque la notificación para abrir ese informe de inmediato.
 Cuatro contadores en la parte superior: **Abierto**, **En curso**, **Resuelto** y **Cerrado**. Debajo:
 
 - **Estado** — empieza en **Abiertos y en curso**. Elija un solo estado, o **Todos**.
-- **Categoría** — para acotar a un tipo de informe.
-- **Centro** — se muestra cuando tiene más de uno.
+- **Todas las categorías** — para acotar a un tipo de informe.
+- **Todos los centros** — se muestra cuando tiene más de uno.
 - **↻ Actualizar**.
 
 Cada fila muestra la categoría y el motivo, quién lo informó, la familia, el niño, cuándo, a quién está asignado y cuántos mensajes tiene.
