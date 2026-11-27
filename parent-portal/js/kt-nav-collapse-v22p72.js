@@ -32,6 +32,7 @@
   function enhance() {
     var nav = document.getElementById('navLinks');
     if (!nav) return;
+    watch(nav);   // a rebuilt sidebar can be a NEW #navLinks: follow it, so the control is pinned there too
     var sections = nav.querySelectorAll('.sidebar-section');
     if (!sections.length) return;
 
@@ -70,8 +71,19 @@
     injectStyles();
   }
 
+  /* THE CONTROL STAYS ON TOP (2026-11-27, Anthony: "the collapse all button on the side bar has shifted and not on
+     top like it once was"). It is drawn once, at the front of #navLinks - but other hands add whole groups to the
+     list later and put them at the front too (agency-switcher's Platform + Sales block lands after its own fetch, and
+     again whenever it re-checks), so the button ended up under them. Whether it was on top depended on which
+     finished first. This script owns the control, so it keeps it first: every change to the list (this runs from
+     the list's own observer) moves it back to the front if anything got in ahead of it. One move, then it settles. */
+  function pinFirst(nav, bar) {
+    if (bar.parentNode !== nav || nav.firstElementChild !== bar) nav.insertBefore(bar, nav.firstChild);
+  }
+
   function injectExpandAllControl(nav, sections) {
-    if (document.getElementById('kt-nav-allctl')) return;
+    var have = document.getElementById('kt-nav-allctl');
+    if (have) { pinFirst(nav, have); return; }
     var bar = document.createElement('div');
     bar.id = 'kt-nav-allctl';
     bar.className = 'kt-nav-allctl';
@@ -93,7 +105,7 @@
       btn.textContent = allCollapsed ? '⇕ Expand all' : '⇕ Collapse all';
     });
     bar.appendChild(btn);
-    nav.insertBefore(bar, nav.firstChild);
+    pinFirst(nav, bar);
   }
 
   function injectStyles() {
@@ -116,13 +128,15 @@
   }
 
   // Run after nav builds, and re-run if nav is rebuilt
-  function init() {
-    enhance();
-    var nav = document.getElementById('navLinks');
-    if (nav && !nav._ktCollapseObserved) {
+  function watch(nav) {
+    if (nav && !nav._ktCollapseObserved && window.MutationObserver) {
       nav._ktCollapseObserved = true;
       new MutationObserver(function () { enhance(); }).observe(nav, { childList: true });
     }
+  }
+  function init() {
+    enhance();
+    watch(document.getElementById('navLinks'));
   }
 
   if (document.readyState === 'loading') {

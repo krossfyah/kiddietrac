@@ -186,7 +186,11 @@
       '<a href="#marketing-site" class="nav-link" data-hash="marketing-site">' +
         '<span class="nav-icon">🌍</span><span class="nav-label">Website</span>' +
       '</a>';
-    navLinks.insertBefore(section, navLinks.firstChild);
+    /* First GROUP, not first child (2026-11-27): the list's own furniture in front of the groups (the "Collapse all"
+       control) stays on top - this block arrives after its fetch and used to land above it. */
+    var firstGroup = null;
+    for (var c = navLinks.firstElementChild; c; c = c.nextElementSibling) { if (c.classList.contains('sidebar-section')) { firstGroup = c; break; } }
+    navLinks.insertBefore(section, firstGroup || navLinks.firstChild);
 
     // Dedicated Sales section (platform sales CRM) — the full set of shortcuts,
     // mirroring the sales_rep nav. Sits directly under the Platform section.
