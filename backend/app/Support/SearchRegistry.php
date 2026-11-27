@@ -201,6 +201,10 @@ final class SearchRegistry
         'hr_directory_shares' => 'what a staff member chose to show in the staff directory (a preference): never searched',
         'hr_kudos' => 'peer recognition messages (HR): shown on the team feed under Educator awards > Recognition and My HR; never searched',
         'hr_approver_grants' => 'who else approves time off for named people, and cover while a director is away (HR): HR settings > Approvers; never searched',
+        // KiddieTrac HR Phase 4, batch 7 (2026-11-27): health & safety. Centre records, found on their own screens.
+        'hr_risk_assessments' => 'centre risk assessments (HR): Human Resources > Health & safety > Risk assessments; few per centre, never a record people look up',
+        'hr_chemicals' => 'the WHMIS chemical inventory per centre (HR): Health & safety > Chemicals and My HR; the safety data sheets are private files',
+        'hr_safety_duties' => 'named health & safety duties (first aider, fire warden) (HR): Health & safety > H&S duties and My HR; search the staff member',
         'hr_course_role_rules' => 'configuration: "this course goes to everyone in this role" on a course, shown in its Assigned popup',
         'quick_notes' => 'quick notes: private ones are only ever their owner\'s, shared ones are found with the Notes screen\'s own search and on the record they are linked to; never in the global box',
         'attendance_reply_links' => 'hashes of the one-day Mark absent / Running late links in arrival emails (AttendanceReply); secrets, never searched or shown as a record',

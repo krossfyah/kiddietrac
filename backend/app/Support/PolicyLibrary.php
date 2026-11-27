@@ -27,7 +27,9 @@ final class PolicyLibrary
 {
     public const STAFF_ROLES = ['educator', 'home_visitor', 'centre_director'];
 
-    public const CATEGORIES = ['Program', 'Health & safety', 'Emergencies', 'Families', 'Staffing', 'Operations', 'Other'];
+    // 'Safe work procedure' (HR Phase 4 batch 7, 2026-11-27): shown in Human Resources > Health & safety > Safe work
+    // procedures and My HR; read + e-signed like every policy, again whenever a new version is published.
+    public const CATEGORIES = ['Program', 'Health & safety', 'Safe work procedure', 'Emergencies', 'Families', 'Staffing', 'Operations', 'Other'];
 
     /** O. Reg. 137/15 (as amended by O. Reg. 197/26). required=false → recommended practice. */
     public static function ontarioCatalogue(): array

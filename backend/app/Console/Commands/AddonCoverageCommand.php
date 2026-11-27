@@ -64,6 +64,7 @@ final class AddonCoverageCommand extends Command
         'hr:overtime-warn' => ['hr', 'app/Console/Commands/HrOvertimeWarnCommand.php'],
         'hr:shift-notices' => ['hr', 'app/Console/Commands/HrShiftNoticesCommand.php'],
         'hr:file-tasks' => ['hr', 'app/Console/Commands/HrFileTasksCommand.php'],
+        'hr:safety-remind' => ['hr', 'app/Console/Commands/HrSafetyRemindCommand.php'],
         'timeoff:remind-approvers' => ['timesheets', 'app/Console/Commands/TimeOffRemindApprovers.php'],
         'forms:remind-countersign' => ['forms', 'app/Console/Commands/CountersignRemindCommand.php'],
         'kt:payslip-notices' => ['payroll', 'app/Support/PayslipNotices.php'],

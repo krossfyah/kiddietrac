@@ -42,5 +42,9 @@ Choose **Mark resolved** and say what was done. Then **Tell parents it is resolv
 
 Every report, change, notice and resolution is in the audit log.
 
+## Photos
+
+Whoever reports a hazard can add a photo straight from their phone camera, and add or replace it later. Reports with a photo show **📷 Photo attached**; press ⋮ > **See photo**. Photos are private files, seen only by people who can see the hazard. With the HR add-on, Hazards is also a tab in **Human Resources > Health & safety**, and you can give someone an H&S task to fix it.
+
 ??? Who is told when an educator reports a hazard? | The centre's directors and the agency admins, by in-app notice and email.
 ??? Do parents get a text? | No. Parent notices are in-app and email only.

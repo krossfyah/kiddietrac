@@ -1011,6 +1011,7 @@
     if (window.KTHrSafety) window.KTHrSafety.mine(b);   // Phase 3: the person's own injury reports (screen-hr-safety.js)
     if (window.KTHrFile) window.KTHrFile.mine(b);       // Phase 4 batch 4: my documents + company documents (screen-hr-file.js)
     if (window.KTHrPeople) window.KTHrPeople.mine(b);   // Phase 4 batch 6: cover while away, team directory, kudos (screen-hr-people.js)
+    if (window.KTHrHs) window.KTHrHs.mine(b);           // Phase 4 batch 7: my H&S duties, H&S tasks, safety data sheets, safe work procedures (screen-hr-hs.js)
     wireTiles(b);
   }
 
@@ -1026,7 +1027,13 @@
     ['🎓', 'Courses', null, /^your courses/i],
     ['⭐', 'Reviews', null, /^your reviews/i],
     ['📇', 'Team directory', null, /^team directory/i],
-    ['🙌', 'Kudos', null, /^kudos/i]
+    ['🙌', 'Kudos', null, /^kudos/i],
+    // HR Phase 4 batch 7 (2026-11-27): health & safety. Report a hazard = the hazards screen (photo from the camera there).
+    ['🚧', 'Report a hazard', '#hazards', null],
+    ['📋', 'Safe work procedures', null, /^safe work procedures/i],
+    ['🧯', 'My H&S duties', null, /^my h&s duties/i],
+    ['🧰', 'H&S tasks', null, /^my h&s tasks/i],
+    ['🧪', 'Safety data sheets', null, /^safety data sheets/i]
   ];
   function myTiles(d) {
     var todo = [];

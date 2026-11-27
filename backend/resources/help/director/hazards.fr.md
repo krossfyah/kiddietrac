@@ -42,5 +42,9 @@ Choisissez **Marquer comme résolu** et indiquez ce qui a été fait. Ensuite, *
 
 Chaque signalement, modification, avis et résolution figure dans le journal d’audit.
 
+## Photos
+
+La personne qui signale un danger peut ajouter une photo prise avec son téléphone, puis l'ajouter ou la remplacer plus tard. Les signalements avec photo affichent **📷 Photo jointe**; appuyez sur ⋮ > **Voir la photo**. Les photos sont des fichiers privés, vus seulement par les personnes qui voient le danger. Avec le module RH, Dangers est aussi un onglet de **Ressources humaines > Santé et sécurité**, et vous pouvez confier une tâche SST pour le régler.
+
 ??? Qui est informé lorsqu’un éducateur signale un danger? | Les directeurs du centre et les administrateurs d’agence, par avis dans l’application et par courriel.
 ??? Les parents reçoivent-ils un message texte? | Non. Les avis aux parents se font uniquement dans l’application et par courriel.

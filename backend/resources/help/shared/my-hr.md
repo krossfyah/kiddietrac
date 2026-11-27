@@ -41,3 +41,7 @@ Press **Team directory** to see your colleagues and the org chart. Your email an
 Some courses end with a quiz: press **Take the quiz** and pass it to finish the course and get your certificate. You see how many you got right. If you run out of tries, ask your manager for another try.
 
 Directors and admins also see **Cover while I'm away**: choose who gets your time-off approvals and emails while you are away. It ends by itself after the last day.
+
+## Health and safety
+
+Press **Report a hazard** to tell your director about something unsafe; you can add a photo straight from your phone camera. **My H&S duties** shows a duty you hold, such as first aider or fire warden, and whether the certificate it needs is still valid. **H&S tasks** lists safety jobs given to you: add a photo or file as evidence, then press **Close task**. **Safety data sheets** opens the sheet for each product kept at your centre. **Safe work procedures** lists the procedures to read and sign; you are asked again when one changes.

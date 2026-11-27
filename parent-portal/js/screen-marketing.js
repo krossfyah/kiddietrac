@@ -173,7 +173,7 @@
     { k: 'opened',  t: 'Opened',    i: '👀', c: '#16A34A', tip: 'The email\'s images loaded. Approximate: blocked images show as not opened.' },
     { k: 'bounced', t: 'Bounced',   i: '↩️', c: '#DC2626', tip: 'Their mail server sent it back (checked every hour).' },
     { k: 'failed',  t: 'Failed',    i: '⚠️', c: '#B45309', tip: 'It could not be handed over at all.' },
-    { k: 'held',    t: 'Held back', i: '⏸️', c: '#6B7280', tip: 'Not sent because of the email rules (not yet accepted their invite, email switched off, demo address).' },
+    { k: 'held',    t: 'Held back', i: '⏸️', c: '#6B7280', tip: 'Not sent because another email rule stopped it: they turned these emails off, a demo or made-up address, email switched off for their centre, room or agency, or a suspended account. Campaigns do reach parents who have not accepted their invite yet.' },
     { k: 'pending', t: 'Waiting',   i: '⏳', c: '#7C3AED', tip: 'Not sent yet: a paced sender sends a few at a time.' },
     { k: 'clicked', t: 'Clicked',   i: '🖱️', c: '#94A3B8', tip: 'Link clicks are not tracked.' }
   ];

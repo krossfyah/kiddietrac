@@ -41,3 +41,7 @@ Pulsa **Directorio del equipo** para ver a tus compañeros y el organigrama. Tu 
 Algunos cursos terminan con un cuestionario: pulsa **Hacer el cuestionario** y apruébalo para terminar el curso y recibir tu certificado. Ves cuántas acertaste. Si te quedas sin intentos, pide otro a tu responsable.
 
 Los directores y administradores también ven **Suplencia mientras no estoy**: elige quién recibe tus aprobaciones y correos de ausencias mientras no estás. Termina sola después del último día.
+
+## Salud y seguridad
+
+Pulsa **Informar de un peligro** para avisar a tu director de algo inseguro; puedes añadir una foto con la cámara del teléfono. **Mis funciones de SST** muestra una función que tienes, como socorrista o responsable de evacuación, y si el certificado que necesita sigue vigente. **Tareas de SST** lista los trabajos de seguridad que te asignaron: añade una foto o un archivo como evidencia y pulsa **Cerrar la tarea**. **Hojas de datos de seguridad** abre la hoja de cada producto que hay en tu centro. **Procedimientos de trabajo seguro** lista los procedimientos que debes leer y firmar; se te pide de nuevo cuando uno cambia.

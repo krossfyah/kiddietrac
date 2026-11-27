@@ -160,6 +160,7 @@ class TaskController extends Controller
         }
 
         $data = $request->validate(['status' => 'required|in:open,in_progress,done']);
+        $this->assertEvidence($row, $data['status']);
         DB::table('tasks')->where('id', $id)->update([
             'status'       => $data['status'],
             'completed_at' => $data['status'] === 'done' ? now() : null,
@@ -400,6 +401,7 @@ class TaskController extends Controller
             if (array_key_exists($f, $data)) $update[$f] = $data[$f];
         }
         if (array_key_exists('status', $data)) {
+            $this->assertEvidence($row, $data['status']);
             $update['status'] = $data['status'];
             $update['completed_at'] = $data['status'] === 'done' ? now() : null;
         }
@@ -430,6 +432,16 @@ class TaskController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /* HEALTH & SAFETY TASKS (HR Phase 4 batch 7, 2026-11-27): a task with evidence_required (category 'hs', made in
+       Human Resources > Health & safety > H&S tasks) is closed only once its evidence file is on it - here as well as
+       in HrSafetyController::taskClose, so no screen can tick it off without. */
+    private function assertEvidence($row, string $status): void
+    {
+        if ($status === 'done' && ! empty($row->evidence_required) && empty($row->evidence_path)) {
+            abort(422, 'This health & safety task needs evidence first: add a photo or file in My HR > H&S tasks.');
+        }
+    }
+
     private function assertSameScope(Request $request, $row): void
     {
         if ($this->hasRole($request, ['platform_admin'])) return;
@@ -454,6 +466,9 @@ class TaskController extends Controller
             'centre_name'     => $r->centre_name ?? null,
             'assigned_by'     => isset($r->assigned_by) ? (int) $r->assigned_by : null,
             'is_private'      => ! empty($r->is_private),   // My day panel: "Assigned by me" (2026-11-25)
+            'category'        => $r->category ?? null,      // 'hs' = a health & safety task (HR Phase 4 batch 7)
+            'evidence_required' => ! empty($r->evidence_required),
+            'has_evidence'    => ! empty($r->evidence_path),
             'assigned_by_name'=> $this->name((object) ['first_name' => $r->ab_first ?? null, 'last_name' => $r->ab_last ?? null, 'email' => $r->ab_email ?? null]),
             'created_at'      => $r->created_at,
             // Stored in UTC; the table's "Created" date is the agency's (AgencyTime).

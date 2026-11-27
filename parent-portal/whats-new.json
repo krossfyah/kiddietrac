@@ -2,6 +2,80 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🦺",
+            "title": "Risk assessments for each centre",
+            "body": "Human Resources > Health & safety > Risk assessments: list each hazard, who could be harmed, likelihood × severity, your controls and the risk that is left. Start from an example (outdoor play, field trips, sleep room, kitchen, water play), set an owner and a review date, and have another director or an admin sign it off. Reminders come before each review.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Évaluations des risques pour chaque centre",
+            "body_fr": "Ressources humaines > Santé et sécurité > Évaluations des risques : notez chaque danger, qui pourrait être blessé, probabilité × gravité, vos mesures et le risque qui reste. Partez d'un exemple (jeux extérieurs, sorties, salle de sieste, cuisine, jeux d'eau), choisissez un responsable et une date de révision, et faites-la approuver par un autre directeur ou un administrateur. Des rappels arrivent avant chaque révision.",
+            "title_es": "Evaluaciones de riesgos para cada centro",
+            "body_es": "Recursos humanos > Salud y seguridad > Evaluaciones de riesgos: anota cada peligro, quién podría resultar dañado, probabilidad × gravedad, tus controles y el riesgo que queda. Empieza con un ejemplo (juego al aire libre, salidas, sala de siesta, cocina, juegos con agua), elige un responsable y una fecha de revisión, y que otro director o un administrador la apruebe. Llegan recordatorios antes de cada revisión.",
+            "title_hi": "हर केंद्र के लिए जोखिम आकलन",
+            "body_hi": "Human Resources > Health & safety > Risk assessments: हर ख़तरा, किसे नुकसान हो सकता है, संभावना × गंभीरता, आपके नियंत्रण और बचा जोखिम लिखें। किसी उदाहरण से शुरू करें (बाहर खेल, फ़ील्ड ट्रिप, सोने का कमरा, रसोई, पानी का खेल), ज़िम्मेदार व्यक्ति और समीक्षा तारीख़ चुनें, और किसी दूसरे डायरेक्टर या एडमिन से स्वीकृति लें। हर समीक्षा से पहले याद दिलाया जाता है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🧪",
+            "title": "Chemical inventory with safety data sheets (WHMIS)",
+            "body": "Human Resources > Health & safety > Chemicals (WHMIS): every hazardous product at each centre, where it is stored, its hazard pictograms and its safety data sheet (kept private). Sheets older than 3 years and reviews that are due are flagged, and you get reminders. Staff open the sheets for their centre in My HR.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Inventaire des produits chimiques et fiches de données de sécurité (SIMDUT)",
+            "body_fr": "Ressources humaines > Santé et sécurité > Produits chimiques (SIMDUT) : chaque produit dangereux de chaque centre, où il est rangé, ses pictogrammes de danger et sa fiche de données de sécurité (privée). Les fiches de plus de 3 ans et les révisions dues sont signalées, avec des rappels. Le personnel ouvre les fiches de son centre dans Mes RH.",
+            "title_es": "Inventario de productos químicos con hojas de datos de seguridad (WHMIS)",
+            "body_es": "Recursos humanos > Salud y seguridad > Productos químicos (WHMIS): cada producto peligroso de cada centro, dónde se guarda, sus pictogramas de peligro y su hoja de datos de seguridad (privada). Se marcan las hojas de más de 3 años y las revisiones pendientes, con recordatorios. El personal abre las hojas de su centro en Mis RR. HH.",
+            "title_hi": "सुरक्षा डेटा शीट के साथ रसायन सूची (WHMIS)",
+            "body_hi": "Human Resources > Health & safety > Chemicals (WHMIS): हर केंद्र का हर ख़तरनाक उत्पाद, वह कहाँ रखा है, उसके ख़तरे के चिह्न और उसकी सुरक्षा डेटा शीट (निजी)। 3 साल से पुरानी शीट और बाकी समीक्षाएँ चिह्नित होती हैं, और याद दिलाया जाता है। स्टाफ़ अपने केंद्र की शीट My HR में खोलता है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🧯",
+            "title": "First aiders, fire wardens and H&S tasks with evidence",
+            "body": "Human Resources > Health & safety: name who is your first aider, fire warden or H&S rep at each centre, and see at a glance if the certificate the duty needs is valid, expiring or missing. Give safety jobs as H&S tasks that can only be closed with a photo or file as evidence. Safe work procedures live in the same section: staff read and sign each one.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Secouristes, responsables d'évacuation et tâches SST avec preuve",
+            "body_fr": "Ressources humaines > Santé et sécurité : indiquez qui est secouriste, responsable d'évacuation ou représentant SST dans chaque centre, et voyez d'un coup d'œil si le certificat requis est valide, bientôt expiré ou manquant. Confiez des travaux de sécurité comme tâches SST qui ne se ferment qu'avec une photo ou un fichier en preuve. Les méthodes de travail sécuritaires sont dans la même section : le personnel lit et signe chacune.",
+            "title_es": "Socorristas, responsables de evacuación y tareas de SST con evidencia",
+            "body_es": "Recursos humanos > Salud y seguridad: indica quién es socorrista, responsable de evacuación o representante de SST en cada centro y ve enseguida si el certificado que necesita la función es válido, está por vencer o falta. Asigna trabajos de seguridad como tareas de SST que solo se cierran con una foto o un archivo como evidencia. Los procedimientos de trabajo seguro están en la misma sección: el personal lee y firma cada uno.",
+            "title_hi": "प्राथमिक उपचारकर्ता, फ़ायर वार्डन और सबूत के साथ स्वास्थ्य व सुरक्षा कार्य",
+            "body_hi": "Human Resources > Health & safety: हर केंद्र में कौन प्राथमिक उपचारकर्ता, फ़ायर वार्डन या स्वास्थ्य व सुरक्षा प्रतिनिधि है, यह दर्ज करें और तुरंत देखें कि ज़रूरी प्रमाणपत्र मान्य है, समाप्त होने वाला है या नहीं है। सुरक्षा के काम ऐसे कार्य के रूप में दें जो फ़ोटो या फ़ाइल के सबूत से ही बंद हों। सुरक्षित कार्य प्रक्रियाएँ भी यहीं हैं: स्टाफ़ हर एक को पढ़कर हस्ताक्षर करता है।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🚧",
+            "title": "Report a hazard with a photo",
+            "body": "When you report a hazard you can now add a photo straight from your phone camera. Staff with the HR add-on also find Report a hazard, their H&S duties and tasks, the safety data sheets for their centre and safe work procedures to sign in My HR.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Signaler un danger avec une photo",
+            "body_fr": "En signalant un danger, vous pouvez maintenant ajouter une photo prise avec votre téléphone. Avec le module RH, le personnel trouve aussi dans Mes RH : Signaler un danger, ses rôles et tâches SST, les fiches de données de sécurité de son centre et les méthodes de travail à signer.",
+            "title_es": "Informa de un peligro con una foto",
+            "body_es": "Al informar de un peligro ahora puedes añadir una foto con la cámara del teléfono. Con el complemento de RR. HH., el personal también encuentra en Mis RR. HH.: Informar de un peligro, sus funciones y tareas de SST, las hojas de datos de seguridad de su centro y los procedimientos de trabajo seguro por firmar.",
+            "title_hi": "फ़ोटो के साथ ख़तरे की सूचना दें",
+            "body_hi": "ख़तरे की सूचना देते समय अब आप सीधे फ़ोन कैमरे से फ़ोटो जोड़ सकते हैं। HR ऐड-ऑन वाले स्टाफ़ को My HR में Report a hazard, अपनी स्वास्थ्य व सुरक्षा भूमिकाएँ और कार्य, अपने केंद्र की सुरक्षा डेटा शीट और हस्ताक्षर करने वाली सुरक्षित कार्य प्रक्रियाएँ भी मिलती हैं।"
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "🎨",

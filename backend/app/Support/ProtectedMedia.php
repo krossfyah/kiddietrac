@@ -79,6 +79,9 @@ class ProtectedMedia
         /* KiddieTrac HR document vault (2026-11-27, App\Support\HrDocs): IDs, contracts, sick notes. Only ever handed out
            signed, from HrFileController::open to someone allowed to see that document. */
         'hr-documents',
+        /* Health & safety files (2026-11-27, App\Support\HrSafety): hazard photos, safety data sheets, H&S task evidence.
+           Only ever handed out signed by an endpoint that checked the caller may see the record. */
+        'safety-files',
     ];
 
     /** Long enough for a working day, short enough that a leaked link dies. */

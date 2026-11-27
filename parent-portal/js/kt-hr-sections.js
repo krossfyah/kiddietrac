@@ -11,7 +11,8 @@
      Clock-ins & …       #timesheets        Timesheets · Approve & lock · Overtime
      Payroll             #payroll           Payroll · Claims & mileage
      Educator awards     #educator-rewards  Awards & points · Award settings (#educator-award-settings)
-     Health & safety     #hr-safety         Staff injuries · Drill log (#drills)
+     Health & safety     #hr-safety         Staff injuries · Risk assessments · Chemicals (WHMIS) · Safe work procedures ·
+                                            H&S duties · H&S tasks · Hazards (#hazards) · Drill log (#drills)
      Documents & letters #hr-documents      Company documents · Letters · Background checks (#background-checks)
 
    The rest (#hr dashboard, #hr-people, #hr-absence, #hr-hiring, #hr-performance, #hr-reports, #hr-settings)
@@ -53,8 +54,13 @@
       tabs: [{ k: 'performance', label: 'Reviews & goals' }, { k: 'courses', label: 'Courses' }] },
     { id: 'awards', hash: 'educator-rewards', icon: '⭐', label: 'Educator awards', sub: '',
       tabs: [{ k: 'rewards', label: 'Awards & points', screen: 'educator-rewards' }, { k: 'kudos', label: 'Recognition' }, { k: 'awardsettings', label: 'Award settings', screen: 'educator-award-settings' }] },
-    { id: 'safety', hash: 'hr-safety', icon: '🦺', label: 'Health & safety', sub: 'Staff injury reports and drills.',
-      tabs: [{ k: 'injuries', label: 'Staff injuries' }, { k: 'drills', label: 'Drill log', screen: 'drills' }] },
+    // HR Phase 4 batch 7 (2026-11-27): risk, WHMIS, procedures, duties, H&S tasks (screen-hr-hs.js). Hazards keep their own
+    // screen (#hazards, every staff role) and join the tab row only when HR is on (hr: true), so without HR #hazards and
+    // #drills look exactly as before.
+    { id: 'safety', hash: 'hr-safety', icon: '🦺', label: 'Health & safety', sub: 'Staff injuries, risk assessments, chemicals and safety data sheets, safe work procedures, first aiders and fire wardens, H&S tasks, hazards and drills.',
+      tabs: [{ k: 'injuries', label: 'Staff injuries' }, { k: 'risk', label: 'Risk assessments' }, { k: 'chemicals', label: 'Chemicals (WHMIS)' },
+        { k: 'procedures', label: 'Safe work procedures' }, { k: 'duties', label: 'H&S duties' }, { k: 'hstasks', label: 'H&S tasks' },
+        { k: 'hazards', label: 'Hazards', screen: 'hazards', hr: true }, { k: 'drills', label: 'Drill log', screen: 'drills' }] },
     { id: 'documents', hash: 'hr-documents', icon: '📂', label: 'Documents & letters', sub: 'Company documents, HR letters and background checks.',
       tabs: [{ k: 'docs', label: 'Company documents' }, { k: 'letters', label: 'Letters' }, { k: 'checks', label: 'Background checks', screen: 'background-checks' }] },
     { id: 'reports', hash: 'hr-reports', icon: '📑', label: 'HR reports', sub: 'Headcount, turnover, leave, overtime, lateness, probation and more.',
@@ -83,6 +89,7 @@
 
   function tabOk(t, role) {
     if (t.admin && !isAdmin(role)) return false;
+    if (t.hr && !hrOn()) return false;   // a pre-HR screen that joins this row only with HR
     // Every screen named here is registered for admins and directors alike (screen files load on demand).
     return t.screen ? !off(t.screen) : hrOn();
   }

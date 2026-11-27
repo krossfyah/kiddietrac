@@ -797,6 +797,7 @@ final class WebDemoShowcase
         $this->hrLettersStory($agencyId, $olivia);   // HR Phase 3, item 12
         $this->hrReportsStory($agencyId, $byName->all());   // HR Phase 4, batch 5
         $this->hrPeopleStory($agencyId, $byName->all(), $elena, $olivia);   // HR Phase 4, batch 6
+        $this->hrHsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia);   // HR Phase 4, batch 7
     }
 
     /**
@@ -966,6 +967,87 @@ final class WebDemoShowcase
             $this->add('hr_approver_grants', ['agency_id' => $agencyId, 'kind' => 'cover', 'approver_user_id' => $harper ?: $olivia, 'covering_for_user_id' => $elena,
                 'starts_on' => $this->today->copy()->addDays(21)->toDateString(), 'ends_on' => $this->today->copy()->addDays(25)->toDateString(),
                 'note' => 'Elena at the ECE conference', 'created_by_id' => $elena, 'created_at' => now(), 'updated_at' => now()]);
+        }
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 4, BATCH 7 DEMO (2026-11-27, Starlight only): health & safety. Risk assessments from the
+     * examples (outdoor play signed off by Elena, the kitchen still an untouched example due for review in 10 days, the
+     * sleep room at the second centre overdue); a chemical inventory (one SDS on file, one over 3 years old, one missing);
+     * Maya first aider, Lucas fire warden, Sofia first aider with her First Aid expiring in 20 days; two H&S tasks (the gate
+     * latch open, the first aid kit restock done with evidence). Rows in this builder's ledger; demo files written once.
+     */
+    private function hrHsStory(int $agencyId, array $byName, array $centreOf, int $elena, int $olivia): void
+    {
+        if (! \App\Support\HrSafety::ready()) return;
+        $centres = \App\Support\Live::centreIds($agencyId);
+        sort($centres);
+        if (! $centres) return;
+        [$c1, $c2] = [$centres[0], $centres[1] ?? $centres[0]];
+        $disk = \Illuminate\Support\Facades\Storage::disk('public');
+        $file = function (string $kind, string $slug, string $title) use ($disk, $agencyId): string {
+            $rel = \App\Support\HrSafety::FOLDER . '/' . $agencyId . '/' . $kind . '/demo-' . $slug . '.pdf';
+            if (! $disk->exists($rel)) {
+                $t = preg_replace('/[()\\\\]/', '', $title);
+                $stream = "BT /F1 18 Tf 72 720 Td ($t) Tj ET\nBT /F1 11 Tf 72 690 Td (Starlight demo file - not a real document.) Tj ET";
+                $objs = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+                    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+                    "<< /Length " . strlen($stream) . " >>\nstream\n$stream\nendstream", "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+                $out = "%PDF-1.4\n"; $off = [];
+                foreach ($objs as $i => $o) { $off[] = strlen($out); $out .= ($i + 1) . " 0 obj\n$o\nendobj\n"; }
+                $x = strlen($out);
+                $out .= "xref\n0 " . (count($objs) + 1) . "\n0000000000 65535 f \n" . implode('', array_map(fn ($o) => sprintf("%010d 00000 n \n", $o), $off))
+                    . "trailer\n<< /Size " . (count($objs) + 1) . " /Root 1 0 R >>\nstartxref\n$x\n%%EOF\n";
+                $disk->put($rel, $out);
+            }
+
+            return '/storage/' . $rel;
+        };
+        $d = fn (int $days) => $this->today->copy()->addDays($days)->toDateString();
+        $by = $olivia ?: $elena;
+        $risk = function (string $key, int $centre, int $review, bool $signed, bool $example) use ($agencyId, $elena, $olivia, $by, $byName) {
+            $t = \App\Support\HrSafety::TEMPLATES[$key];
+            $this->add('hr_risk_assessments', ['agency_id' => $agencyId, 'centre_id' => $centre, 'title' => $t['title'], 'area' => $t['area'], 'template_key' => $key,
+                'is_example' => $example, 'items' => json_encode(\App\Support\HrSafety::templateItems($key)), 'owner_user_id' => $byName['Maya'] ?? $elena ?: null,
+                'review_on' => $this->today->copy()->addDays($review)->toDateString(), 'status' => $signed ? 'signed' : 'draft', 'prepared_by' => $by ?: null,
+                'signed_by' => $signed && $elena && $elena !== $by ? $elena : null, 'signed_at' => $signed ? $this->at(-12, 15, 10) : null,
+                'signed_name' => $signed ? 'Elena Ruiz' : null, 'created_by' => $by ?: null, 'created_at' => $this->at(-20, 9), 'updated_at' => $this->at(-12, 15)]);
+        };
+        $risk('outdoor_play', $c1, 150, true, false);
+        $risk('kitchen', $c1, 10, false, true);
+        $risk('sleep_room', $c2, -3, true, false);
+        $chem = function (int $centre, string $product, string $supplier, string $where, array $classes, ?int $sdsDaysAgo, bool $withFile, int $review) use ($agencyId, $by, $file, $d) {
+            $row = ['agency_id' => $agencyId, 'centre_id' => $centre, 'product' => $product, 'supplier' => $supplier, 'location' => $where, 'hazard_classes' => json_encode($classes),
+                'sds_date' => $sdsDaysAgo !== null ? $d(-$sdsDaysAgo) : null, 'sds_review_on' => $d($review), 'created_by' => $by ?: null, 'updated_by' => $by ?: null,
+                'created_at' => $this->at(-30, 10), 'updated_at' => $this->at(-30, 10)];
+            if ($withFile) $row += ['sds_path' => $file('sds', \Illuminate\Support\Str::slug($product), 'Safety data sheet: ' . $product), 'sds_name' => $product . ' SDS.pdf', 'sds_mime' => 'application/pdf', 'sds_size' => 900];
+            $this->add('hr_chemicals', $row);
+        };
+        $chem($c1, 'Surface disinfectant cleaner', 'CleanCo Supply', 'Kitchen, locked cupboard', ['exclamation'], 400, true, 200);
+        $chem($c1, 'Household bleach (6%)', 'CleanCo Supply', 'Laundry room, top shelf', ['corrosion', 'exclamation'], 1500, true, 14);
+        $chem($c1, 'Dishwasher detergent', 'KitchenPro', 'Under the kitchen sink, child lock', ['corrosion'], null, false, 90);
+        $chem($c2, 'Hand sanitizer (70% alcohol)', 'SafeHands', 'Entry and each room, out of reach', ['flame', 'exclamation'], 300, true, 120);
+        $duty = function (string $who, string $duty, ?string $cert, int $centre) use ($agencyId, $byName, $by, $d) {
+            if (! isset($byName[$who])) return;
+            $this->add('hr_safety_duties', ['agency_id' => $agencyId, 'centre_id' => $centre, 'user_id' => $byName[$who], 'duty' => $duty, 'cert_type' => $cert,
+                'starts_on' => $d(-120), 'created_by' => $by ?: null, 'created_at' => $this->at(-120, 9), 'updated_at' => $this->at(-120, 9)]);
+        };
+        $duty('Maya', 'first_aider', 'First_Aid', $centreOf[$byName['Maya'] ?? 0] ?? $c1);
+        $duty('Lucas', 'fire_warden', null, $centreOf[$byName['Lucas'] ?? 0] ?? $c1);
+        $duty('Sofia', 'first_aider', 'First_Aid', $centreOf[$byName['Sofia'] ?? 0] ?? $c2);
+        if (isset($byName['Sofia'])) {
+            $this->add('staff_certifications', ['user_id' => $byName['Sofia'], 'agency_id' => $agencyId, 'cert_type' => 'First_Aid', 'certifier' => 'Red Cross',
+                'issued_at' => $d(-1075), 'expires_at' => $d(20), 'active' => 1, 'created_at' => $this->at(-200, 9), 'updated_at' => $this->at(-200, 9)]);
+        }
+        foreach ([['Noah', 'Fix the loose gate latch on the yard gate', 'The latch does not catch every time. Replace or adjust it, then add a photo.', 3, 'open', false],
+                ['Maya', 'Restock the first aid kit in the Sprouts room', 'Gloves, plasters and the cold pack were used up this week.', -2, 'done', true]] as [$who, $title, $desc, $due, $status, $ev]) {
+            if (! isset($byName[$who])) continue;
+            $row = ['agency_id' => $agencyId, 'centre_id' => $centreOf[$byName[$who]] ?? $c1, 'assigned_to' => $byName[$who], 'assigned_by' => $elena ?: $by, 'is_private' => 0,
+                'title' => $title, 'description' => $desc, 'priority' => 'normal', 'due_date' => $d($due), 'status' => $status, 'category' => 'hs', 'evidence_required' => 1,
+                'completed_at' => $status === 'done' ? $this->at(-1, 16) : null, 'created_at' => $this->at(-4, 9), 'updated_at' => $this->at(-1, 16)];
+            if ($ev) $row += ['evidence_path' => $file('evidence', 'first-aid-kit', 'First aid kit restocked'), 'evidence_name' => 'First aid kit restocked.pdf',
+                'evidence_mime' => 'application/pdf', 'evidence_note' => 'Restocked and checked against the list on the lid.', 'evidence_by' => $byName[$who], 'evidence_at' => $this->at(-1, 16)];
+            $this->add('tasks', $row);
         }
     }
 

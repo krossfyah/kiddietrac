@@ -136,7 +136,9 @@ final class HazardController extends Controller
                 'identified_local' => $fmt($r->identified_at), 'resolved_local' => $fmt($r->resolved_at),
                 'notified_local' => $fmt($r->notified_at), 'notified_by_name' => $names[(int) $r->notified_by] ?? '', 'notified_families' => $r->notified_families !== null ? (int) $r->notified_families : null,
                 'resolution_notified_local' => $fmt($r->resolution_notified_at), 'resolution_notified_by_name' => $names[(int) $r->resolution_notified_by] ?? '',
-                'reported_by_name' => $names[(int) $r->created_by] ?? '', 'can_manage' => $manage[(int) $r->centre_id] ?? false];
+                'reported_by_name' => $names[(int) $r->created_by] ?? '', 'can_manage' => $manage[(int) $r->centre_id] ?? false,
+                // HR Phase 4 batch 7 (2026-11-27): a photo taken on the phone when reporting (private file, GET /hazards/{id}/photo).
+                'has_photo' => ! empty($r->photo_path ?? null)];
         });
 
         return response()->json(['timezone' => $tz, 'status' => $status, 'severities' => self::SEVERITIES,
@@ -159,6 +161,7 @@ final class HazardController extends Controller
             'severity' => ['nullable', 'in:' . implode(',', array_keys(self::SEVERITIES))],
             'steps_taken' => ['nullable', 'string', 'max:4000'],
             'notify_parents' => ['nullable', 'boolean'],
+            'photo' => ['nullable', ...\App\Support\HrSafety::PHOTO_RULE],
         ];
     }
 
@@ -189,6 +192,7 @@ final class HazardController extends Controller
             'notify_parents' => $manager && ! empty($d['notify_parents']), 'created_by' => $uid, 'updated_by' => $uid,
             'created_at' => now(), 'updated_at' => now(),
         ]);
+        if ($request->hasFile('photo')) $this->savePhoto($agencyId, $id, $request);
         $this->audit($request, $agencyId, 'hazard.reported', $id, 'Hazard reported at ' . $centres[$cid] . ': ' . trim($d['title']));
 
         // Tell the people who manage it — the centre's directors AND the agency admins. Not the reporter.
@@ -214,6 +218,35 @@ final class HazardController extends Controller
         }
 
         return response()->json(['ok' => true, 'id' => $id]);
+    }
+
+    /** Store the hazard's photo (private: ProtectedMedia folder safety-files, HrSafety::put). */
+    private function savePhoto(int $agencyId, int $id, Request $request): void
+    {
+        $f = \App\Support\HrSafety::put($agencyId, $request->file('photo'), 'hazard');
+        DB::table('centre_hazards')->where('id', $id)->update(['photo_path' => $f['path'], 'photo_name' => $f['name'], 'photo_mime' => $f['mime'], 'updated_at' => now()]);
+    }
+
+    /** POST /hazards/{id}/photo (multipart photo) — the person who reported it, or a director/admin of the centre. */
+    public function photo(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $row = $this->find($request, $agencyId, $id);
+        abort_unless((int) $row->created_by === (int) $request->user()->id || $this->canManage($request, $agencyId, (int) $row->centre_id), 403, 'Only the person who reported it or a director can change the photo.');
+        $request->validate(['photo' => ['required', ...\App\Support\HrSafety::PHOTO_RULE]]);
+        $this->savePhoto($agencyId, $id, $request);
+        $this->audit($request, $agencyId, 'hazard.photo_added', $id, 'Photo added to hazard: ' . $row->title);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** GET /hazards/{id}/photo — a signed link, for anyone who can see the hazard. */
+    public function photoFile(Request $request, int $id): JsonResponse
+    {
+        $agencyId = $this->agencyId($request);
+        $row = $this->find($request, $agencyId, $id);
+
+        return response()->json(\App\Support\HrSafety::fileOut($row->photo_path ?? null, $row->photo_name ?? null, $row->photo_mime ?? null) + ['title' => $row->title]);
     }
 
     /** PATCH /hazards/{id} — directors/admins. */

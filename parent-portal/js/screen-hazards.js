@@ -73,6 +73,9 @@
       + '</div>'
       + '<div class="hz-g" style="margin-top:10px;"><div><label class="hz-l">What is it</label><textarea class="hz-i" data-f="description" maxlength="4000" rows="2" placeholder="What you saw" style="width:100%;">' + esc(h.description || '') + '</textarea></div>'
       + '<div><label class="hz-l">Steps taken</label><textarea class="hz-i" data-f="steps_taken" maxlength="4000" rows="2" placeholder="What was done to keep children safe" style="width:100%;">' + esc(h.steps_taken || '') + '</textarea></div></div>'
+      // HR Phase 4 batch 7 (2026-11-27): a photo, straight from the phone camera (private file).
+      + '<div style="margin-top:10px;"><label class="hz-l">' + (h.has_photo ? 'Replace the photo (optional)' : 'Photo (optional)') + '</label>'
+      + '<input class="hz-i" data-photo type="file" accept="image/*" capture="environment" style="width:100%;height:auto;padding:5px;"><div class="hz-sub">On a phone this opens the camera.</div></div>'
       + (manager ? '<label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-top:8px;cursor:pointer;"><input type="checkbox" data-f="notify_parents"' + (h.notify_parents ? ' checked' : '') + '> Not routine — parents need to be told (Ontario s.24.3)</label>' : '')
       + '<div class="hz-msg" style="font-size:13px;margin-top:6px;"></div>';
   }
@@ -84,6 +87,27 @@
     });
     if (o.centre_id) o.centre_id = +o.centre_id;
     return o;
+  }
+  /* The chosen photo, if any. A new report with a photo goes as one multipart post; an edit adds it after saving. */
+  function photoOf(root) { var p = root.querySelector('[data-photo]'); return p && p.files && p.files[0] ? p.files[0] : null; }
+  function asForm(o, file) {
+    var fd = new FormData();
+    Object.keys(o).forEach(function (k) { if (o[k] == null) return; fd.append(k, o[k] === true ? '1' : o[k] === false ? '0' : String(o[k])); });
+    fd.append('photo', file);
+    return fd;
+  }
+  function saveHazard(x, o, file) {
+    if (!x) return file ? Api.postForm('/hazards', asForm(o, file)) : Api.post('/hazards', o);
+    return Api.patch('/hazards/' + x.id, o).then(function (r) {
+      if (!file) return r;
+      var fd = new FormData(); fd.append('photo', file);
+      return Api.postForm('/hazards/' + x.id + '/photo', fd);
+    });
+  }
+  function openPhoto(x) {
+    Api.get('/hazards/' + x.id + '/photo').then(function (r) {
+      if (KT.viewDocument) KT.viewDocument(r.url, { title: x.title, filename: r.name, mime: r.mime, label: 'Hazard photo' }); else window.open(r.url, '_blank', 'noopener');
+    }, function (e) { toast('⚠️', 'Could not open the photo', errMsg(e), '#DC2626'); });
   }
 
   /* #hazards?id=N opens that hazard (2026-11-26: the admin bell's "Maya reported a hazard" item links here). Once per
@@ -115,16 +139,18 @@
         + ((d.hazards || []).length ? (d.hazards || []).map(function (x) {
             return '<div class="hz-item"><div class="hz-row" style="justify-content:space-between;"><div style="font-weight:700;font-size:13.5px;min-width:0;">' + esc(x.title) + '</div>' + sevPill(x.severity, d.severities) + '</div>'
               + '<div class="hz-sub">' + esc([x.location, x.centre_name, when(x.identified_local)].filter(Boolean).join(' · ')) + '</div>'
-              + (x.steps_taken ? '<div style="font-size:12.5px;color:#334155;margin-top:4px;"><b>Steps taken:</b> ' + esc(x.steps_taken) + '</div>' : '') + '</div>';
+              + (x.steps_taken ? '<div style="font-size:12.5px;color:#334155;margin-top:4px;"><b>Steps taken:</b> ' + esc(x.steps_taken) + '</div>' : '')
+              + (x.has_photo ? '<button type="button" class="hz-b" data-photo-of="' + x.id + '" data-kt-iconized="1" style="margin-top:6px;height:28px;">📷 Photo</button>' : '') + '</div>';
           }).join('') : '<div style="color:#64748B;font-size:13px;">Nothing open. Thank you for keeping an eye out.</div>')
         + '</div></div>';
       main.innerHTML = h;
+      main.querySelectorAll('[data-photo-of]').forEach(function (b) { b.addEventListener('click', function () { var x = (d.hazards || []).filter(function (y) { return String(y.id) === b.getAttribute('data-photo-of'); })[0]; if (x) openPhoto(x); }); });
       main.querySelector('#hz-send').addEventListener('click', async function () {
         var b = this, f = main.querySelector('#hz-form'); if (!f) return;
         var msg = f.querySelector('.hz-msg'), body = readForm(f);
         if (!body.title) { msg.style.color = '#B91C1C'; msg.textContent = 'Say what the hazard is.'; return; }
         b.disabled = true; msg.style.color = '#64748B'; msg.textContent = 'Sending…';
-        try { await Api.post('/hazards', body); toast('🚧', 'Hazard reported', 'Your director has been told.', '#16A34A'); render(main); }
+        try { await saveHazard(null, body, photoOf(f)); toast('🚧', 'Hazard reported', 'Your director has been told.', '#16A34A'); render(main); }
         catch (e) { b.disabled = false; msg.style.color = '#B91C1C'; msg.textContent = errMsg(e); }
       });
       return;
@@ -143,7 +169,7 @@
             var parents = x.notified_local ? 'Notified ' + esc(when(x.notified_local)) + (x.notified_families != null ? ' · ' + x.notified_families + ' famil' + (x.notified_families === 1 ? 'y' : 'ies') : '')
                 + (x.resolution_notified_local ? '<br>Resolution sent ' + esc(when(x.resolution_notified_local)) : '')
               : (x.notify_parents ? '<span style="color:#B45309;font-weight:700;">Not yet told</span>' : '<span class="hz-sub">Not sent</span>');
-            var acts = '';
+            var acts = x.has_photo ? '<button type="button" data-act="photo" data-id="' + x.id + '">See photo</button>' : '';
             if (x.can_manage) {
               acts += '<button type="button" data-act="edit" data-id="' + x.id + '">Edit</button>';
               acts += '<button type="button" data-act="notify" data-id="' + x.id + '">' + (x.notified_local ? 'Notify parents again' : 'Notify parents') + '</button>';
@@ -155,7 +181,7 @@
             }
             return '<tr><td style="white-space:nowrap;">' + esc(when(x.identified_local)) + '</td>'
               + '<td><b>' + esc(x.title) + '</b>' + (x.location ? '<div class="hz-sub">' + esc(x.location) + '</div>' : '') + (x.description ? '<div class="hz-sub">' + esc(x.description) + '</div>' : '')
-              + (x.reported_by_name ? '<div class="hz-sub">Reported by ' + esc(x.reported_by_name) + '</div>' : '') + '</td>'
+              + (x.reported_by_name ? '<div class="hz-sub">Reported by ' + esc(x.reported_by_name) + '</div>' : '') + (x.has_photo ? '<div class="hz-sub">📷 Photo attached</div>' : '') + '</td>'
               + '<td>' + esc(x.centre_name) + '</td><td>' + sevPill(x.severity, d.severities) + '</td>'
               + '<td>' + (x.steps_taken ? esc(x.steps_taken) : '<span style="color:#B91C1C;font-size:12.5px;">Not recorded yet</span>') + (x.resolution_note ? '<div class="hz-sub">Resolved: ' + esc(x.resolution_note) + '</div>' : '') + '</td>'
               + '<td style="font-size:12.5px;">' + parents + '</td>'
@@ -175,6 +201,7 @@
         var x = byId[b.getAttribute('data-id')]; if (!x) return;
         var a = b.getAttribute('data-act');
         if (a === 'edit') openForm(main, d, x);
+        else if (a === 'photo') openPhoto(x);
         else if (a === 'notify') notify(main, x, 'notice');
         else if (a === 'resnotice') notify(main, x, 'resolution');
         else if (a === 'resolve') resolve(main, x);
@@ -188,7 +215,7 @@
     KT.Shell.Modal.open({ title: x ? 'Edit hazard' : 'Report a hazard', body: body, actions: [{ label: 'Cancel' }, { label: x ? 'Save' : 'Report hazard', style: 'btn-primary', busyLabel: 'Saving…', handler: function () {
       var msg = body.querySelector('.hz-msg'), o = readForm(body);
       if (!o.title) { msg.style.color = '#B91C1C'; msg.textContent = 'Say what the hazard is.'; return false; }
-      return (x ? Api.patch('/hazards/' + x.id, o) : Api.post('/hazards', o)).then(function () {
+      return saveHazard(x, o, photoOf(body)).then(function () {
         toast('🚧', x ? 'Hazard saved' : 'Hazard recorded', o.notify_parents && !(x && x.notified_local) ? 'Use Notify parents when the steps taken are recorded.' : '', '#16A34A'); render(main);
       }, function (e) { msg.style.color = '#B91C1C'; msg.textContent = errMsg(e); return false; });
     } }] });

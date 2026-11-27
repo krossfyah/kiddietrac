@@ -132,6 +132,11 @@
     var d;
     try { d = await Api().get('/policies' + (qs.length ? '?' + qs.join('&') : '')); }
     catch (e) { pane.innerHTML = '<div class="kt-card" style="color:#B91C1C;">' + esc((e && e.message) || 'Could not load policies.') + '</div>'; return; }
+    /* HR Phase 4 batch 7 (2026-11-27): drawn inside Human Resources > Health & safety > Safe work procedures with
+       pane.__plOpts = { category, noun }: only that category, new entries start in it, no Ontario checklist. */
+    var po = pane.__plOpts || null;
+    if (po && po.category) d = Object.assign({}, d, { policies: d.policies.filter(function (p) { return p.category === po.category; }), can_seed: false, seed_missing: 0 });
+    var noun = (po && po.noun) || 'policy';
     adm.data = d;
     var reqd = d.policies.filter(function (p) { return p.required; });
     var noText = reqd.filter(function (p) { return p.status === 'no_text'; }).length;
@@ -145,7 +150,7 @@
       + '<label class="pl-sub" style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" id="pl-arch"' + (adm.archived ? ' checked' : '') + '> Archived</label>'
       + '<span style="flex:1"></span>'
       + (d.can_seed && d.seed_missing ? '<button class="pl-b" id="pl-seed" title="Adds the policies Ontario licensing asks for, as titles only — you add your own text">🍁 Add the Ontario checklist (' + d.seed_missing + ')</button>' : '')
-      + '<button class="pl-b p" id="pl-add">+ Add policy</button></div>';
+      + '<button class="pl-b p" id="pl-add">+ Add ' + noun + '</button></div>';
 
     h += '<div class="pl-row pl-stats" style="margin-bottom:12px;gap:10px;">'
       + '<div class="pl-card" style="margin:0;flex:1;min-width:150px;"><div class="pl-sub">Required policies</div><div style="font-size:20px;font-weight:800;">' + reqd.length + '</div>' + (noText ? '<div class="pl-sub" style="color:#B45309;">' + noText + ' without text yet</div>' : '') + '</div>'
@@ -153,8 +158,8 @@
       + '<div class="pl-card" style="margin:0;flex:1;min-width:150px;"><div class="pl-sub">Reviews overdue</div><div style="font-size:20px;font-weight:800;color:' + (overdue ? '#B91C1C' : '#0F172A') + ';">' + overdue + '</div></div></div>';
 
     if (!d.policies.length) {
-      h += '<div class="kt-card" style="color:#475569;font-size:13.5px;line-height:1.6;">' + (adm.archived ? 'No archived policies.' : 'No policies yet. '
-        + (d.can_seed ? 'Press <b>Add the Ontario checklist</b> to list the policies Ontario licensing asks for, then upload or write each one.' : 'Press <b>Add policy</b> to add your first one.')) + '</div>';
+      h += '<div class="kt-card" style="color:#475569;font-size:13.5px;line-height:1.6;">' + (adm.archived ? 'Nothing archived.' : (po && po.category ? 'None yet. ' : 'No policies yet. ')
+        + (d.can_seed ? 'Press <b>Add the Ontario checklist</b> to list the policies Ontario licensing asks for, then upload or write each one.' : 'Press <b>Add ' + noun + '</b> to add your first one, then <b>Add text</b> to write it or upload the document.')) + '</div>';
     } else {
       h += '<div class="kt-card"><table data-kt-no-bulk><thead><tr><th>Policy</th><th>Version</th><th>Status</th><th>Signed</th><th></th></tr></thead><tbody>'
         + d.policies.map(function (p) {
@@ -183,7 +188,7 @@
             + '<td style="text-align:center;white-space:nowrap;">' + btns + '</td></tr>';
         }).join('') + '</tbody></table></div>';
     }
-    if (d.is_admin) {
+    if (d.is_admin && !(po && po.category)) {
       h += '<div class="kt-card" style="margin-top:12px;"><label style="display:flex;gap:8px;align-items:center;font-size:13.5px;cursor:pointer;"><input type="checkbox" id="pl-rem"' + (d.reminders ? ' checked' : '') + '> '
         + 'Weekly reminders (Mondays): staff with policies to sign, and a summary for directors and admins with reviews due in the next 30 days</label></div>';
     }
@@ -192,7 +197,7 @@
     var byId = {}; d.policies.forEach(function (p) { byId[p.id] = p; });
     var fc = pane.querySelector('#pl-fc'); if (fc) fc.addEventListener('change', function () { adm.centre = this.value; paintLibrary(pane); });
     var ar = pane.querySelector('#pl-arch'); if (ar) ar.addEventListener('change', function () { adm.archived = this.checked; paintLibrary(pane); });
-    var add = pane.querySelector('#pl-add'); if (add) add.addEventListener('click', function () { editPolicy(null, d, function () { paintLibrary(pane); }); });
+    var add = pane.querySelector('#pl-add'); if (add) add.addEventListener('click', function () { editPolicy(null, d, function () { paintLibrary(pane); }, po && po.category); });
     var seed = pane.querySelector('#pl-seed');
     if (seed) seed.addEventListener('click', async function () {
       var ok = KT.confirm ? await KT.confirm({ title: 'Add the Ontario checklist?', description: 'Adds ' + d.seed_missing + ' policies that Ontario licensing (O. Reg. 137/15, as amended) asks for — titles and a one-line purpose only, marked required or recommended. You then upload or write your own text for each. Nothing already in your library is changed.', okLabel: 'Add them' }) : true;
@@ -225,14 +230,14 @@
     });
   }
 
-  function editPolicy(p, d, done) {
+  function editPolicy(p, d, done, defCat) {
     var isNew = !p;
     var centreOpts = (d.is_admin ? '<option value="">Agency-wide (every centre)</option>' : '')
       + d.centres.map(function (c) { return '<option value="' + c.id + '"' + (p && String(p.centre_id) === String(c.id) ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('');
     var body = '<label class="pl-l">Title</label><input class="pl-i" id="pe-t" maxlength="190" style="width:100%;" value="' + esc(p ? p.title : '') + '">'
       + '<label class="pl-l">Purpose (one line)</label><input class="pl-i" id="pe-p" maxlength="500" style="width:100%;" value="' + esc(p ? p.purpose || '' : '') + '">'
       + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0 10px;">'
-      + '<div><label class="pl-l">Category</label><select class="pl-i" id="pe-c" style="width:100%;"><option value=""></option>' + (d.categories || []).map(function (c) { return '<option' + (p && p.category === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></div>'
+      + '<div><label class="pl-l">Category</label><select class="pl-i" id="pe-c" style="width:100%;"><option value=""></option>' + (d.categories || []).map(function (c) { return '<option' + ((p ? p.category : defCat) === c ? ' selected' : '') + '>' + esc(c) + '</option>'; }).join('') + '</select></div>'
       + '<div><label class="pl-l">Applies to</label><select class="pl-i" id="pe-ce" style="width:100%;">' + centreOpts + '</select></div>'
       + '<div><label class="pl-l">Review every (months)</label><input class="pl-i" id="pe-f" type="number" min="1" max="60" style="width:100%;" value="' + (p ? p.review_frequency_months : 12) + '"></div>'
       + '<div><label class="pl-l">Owner</label><select class="pl-i" id="pe-o" style="width:100%;"><option value="">—</option>' + (d.owners || []).map(function (o) { return '<option value="' + o.id + '"' + (p && String(p.owner_user_id) === String(o.id) ? ' selected' : '') + '>' + esc(o.name) + '</option>'; }).join('') + '</select></div>'
@@ -240,7 +245,7 @@
       + '</div>'
       + '<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:13.5px;cursor:pointer;"><input type="checkbox" id="pe-r"' + (p && p.required ? ' checked' : '') + '> Required (counts in the training matrix)</label>'
       + (isNew ? '<div class="pl-sub" style="margin-top:10px;">After saving, use <b>Add text</b> to upload the document or write it.</div>' : '');
-    var h = modal({ title: isNew ? 'Add a policy' : 'Edit policy details', body: body, actions: [
+    var h = modal({ title: isNew ? (defCat ? 'Add: ' + defCat : 'Add a policy') : 'Edit policy details', body: body, actions: [
       { label: 'Cancel' },
       { label: isNew ? 'Add policy' : 'Save', primary: true, handler: async function () {
         var t = q(h, '#pe-t').value.trim();
@@ -464,22 +469,32 @@
   }
 
   /* ═════════════════════════ staff: #my-policies ═════════════════════════ */
-  async function renderMine(main) {
+  /* opts (HR Phase 4 batch 7, 2026-11-27): { category, embedded } - My HR > Safe work procedures shows only that
+     category, without the banner, with the same read + e-sign flow. */
+  async function renderMine(main, opts) {
     css();
+    opts = (opts && opts.category) ? opts : null;
     main.innerHTML = '<div class="pl-wrap" style="color:#64748B;">Loading…</div>';
     var d;
     try { d = await Api().get('/my-policies'); }
     catch (e) { main.innerHTML = '<div class="pl-wrap" style="color:#B91C1C;">' + esc((e && e.message) || 'Could not load your policies.') + '</div>'; return; }
-    var h = '<div class="pl-wrap"><div class="kt-hero" style="background:linear-gradient(135deg,#0B2545 0%,#13315C 55%,#1F6FB2 100%);">'
+    if (opts) {
+      var inCat = function (r) { return r.category === opts.category; };
+      d = Object.assign({}, d, { outstanding: (d.outstanding || []).filter(inCat), signed: (d.signed || []).filter(inCat) });
+    }
+    var again = function () { renderMine(main, opts); };
+    var h = opts ? '<div class="pl-wrap" style="padding:0;">' : '<div class="pl-wrap"><div class="kt-hero" style="background:linear-gradient(135deg,#0B2545 0%,#13315C 55%,#1F6FB2 100%);">'
       + '<div class="kt-hero-greet">📘 POLICIES</div><h1>Policies to review</h1>'
       + '<div class="kt-hero-sub">Read each policy, then sign that you have read and understand it. You are asked again whenever a policy changes.</div></div>';
+    if (opts) h = '<div class="pl-wrap" style="padding:0;">';
     if (!d.is_staff) {
       h += '<div class="pl-card pl-sub" style="margin-top:14px;">Policy sign-offs are for staff working with children.</div></div>';
       main.innerHTML = h; return;
     }
-    h += '<div style="margin-top:14px;">';
+    h += '<div style="margin-top:' + (opts ? 0 : 14) + 'px;">';
     if (!d.outstanding.length) {
-      h += '<div class="pl-card" style="display:flex;gap:10px;align-items:center;"><div style="font-size:24px;">✅</div><div><div style="font-weight:800;">You are all caught up</div><div class="pl-sub">Every policy that applies to you is signed.</div></div></div>';
+      h += opts ? '<div class="pl-card" style="display:flex;gap:10px;align-items:center;"><div style="font-size:20px;">✅</div><div class="pl-sub">' + (d.signed.length ? 'Every safe work procedure that applies to you is signed.' : 'No safe work procedures for you yet.') + '</div></div>'
+        : '<div class="pl-card" style="display:flex;gap:10px;align-items:center;"><div style="font-size:24px;">✅</div><div><div style="font-weight:800;">You are all caught up</div><div class="pl-sub">Every policy that applies to you is signed.</div></div></div>';
     } else {
       h += '<div style="font-weight:800;font-size:15px;margin:0 0 8px;">To sign (' + d.outstanding.length + ')</div>';
       d.outstanding.forEach(function (r) {
@@ -539,10 +554,10 @@
         try {
           await Api().post('/my-policies/' + card.getAttribute('data-v') + '/acknowledge', { typed_name: name.value.trim(), agree: true });
           toast('✍️', 'Signed', '', '#16A34A');
-          renderMine(main);
+          again();
         } catch (e) {
           b.disabled = false; msg.style.color = '#B91C1C'; msg.textContent = (e && e.message) || 'Could not sign.';
-          if (e && e.status === 409) setTimeout(function () { renderMine(main); }, 1500);
+          if (e && e.status === 409) setTimeout(again, 1500);
         }
       });
     });
@@ -584,6 +599,7 @@
     ['educator', 'home_visitor', 'centre_director', 'agency_admin', 'platform_admin'].forEach(function (r) { KT.Shell.registerScreen(r + ':my-policies', renderMine); });
   }
   reg();
-  KT.policies = { openVersion: openVersion, prompt: prompt };
+  KT.policies = { openVersion: openVersion, prompt: prompt, renderMine: renderMine,
+    drawLibrary: function (pane, opts) { css(); pane.__plOpts = opts || null; return paintLibrary(pane); } };
   setTimeout(prompt, 4000);
 })(window);

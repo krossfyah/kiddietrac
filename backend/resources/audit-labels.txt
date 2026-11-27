@@ -1397,3 +1397,19 @@ put hr/recognition/settings | Changed the recognition settings
 post hr/approvers | Added a time-off approver or cover
 post hr/approvers/{id}/end | Ended a time-off approver permission or cover
 post hr/me/cover | Named cover for their time-off approvals while away
+post hazards/{id}/photo | Added a photo to a hazard report
+post hr/safety/risk | Added a risk assessment
+put hr/safety/risk/{id} | Changed a risk assessment
+post hr/safety/risk/{id}/sign | Signed off a risk assessment
+post hr/safety/risk/{id}/archive | Archived or restored a risk assessment
+post hr/safety/chemicals | Added a product to the chemical inventory (WHMIS)
+post hr/safety/chemicals/{id} | Changed a product in the chemical inventory (WHMIS)
+post hr/safety/chemicals/{id}/archive | Archived or restored a product in the chemical inventory
+post hr/safety/duties | Named a health & safety duty
+put hr/safety/duties/{id} | Changed a health & safety duty
+post hr/safety/duties/{id}/end | Ended a health & safety duty
+post hr/safety/tasks | Added a health & safety task
+post hr/safety/tasks/{id}/evidence | Added evidence to a health & safety task
+post hr/safety/tasks/{id}/close | Closed a health & safety task with evidence
+post hr/safety/tasks/{id}/reopen | Reopened a health & safety task
+post hr/safety/tasks/{id}/cancel | Cancelled a health & safety task

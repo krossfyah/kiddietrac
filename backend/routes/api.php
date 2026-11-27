@@ -2868,6 +2868,35 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post(   '/hr/me/cover',                                [\App\Http\Controllers\Api\HrApproversController::class, 'setMine']);
     });
 
+    // ---- KiddieTrac HR Phase 4, batch 7 (2026-11-27): Human Resources > Health & safety (App\Support\HrSafety). Every staff role;
+    // HrSafetyController decides: managers (admins agency-wide, directors own centres) manage; staff see their own duties/tasks
+    // and their centres' chemicals + safety data sheets. Under hr/ so the HR add-on MAP covers them.
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get(    '/hr/me/safety',                               [\App\Http\Controllers\Api\HrSafetyController::class, 'mine']);
+        Route::get(    '/hr/safety/risk',                             [\App\Http\Controllers\Api\HrSafetyController::class, 'riskIndex']);
+        Route::post(   '/hr/safety/risk',                             [\App\Http\Controllers\Api\HrSafetyController::class, 'riskCreate']);
+        Route::get(    '/hr/safety/risk/{id}',                        [\App\Http\Controllers\Api\HrSafetyController::class, 'riskShow'])->whereNumber('id');
+        Route::put(    '/hr/safety/risk/{id}',                        [\App\Http\Controllers\Api\HrSafetyController::class, 'riskUpdate'])->whereNumber('id');
+        Route::post(   '/hr/safety/risk/{id}/sign',                   [\App\Http\Controllers\Api\HrSafetyController::class, 'riskSign'])->whereNumber('id');
+        Route::post(   '/hr/safety/risk/{id}/archive',                [\App\Http\Controllers\Api\HrSafetyController::class, 'riskArchive'])->whereNumber('id');
+        Route::get(    '/hr/safety/chemicals',                        [\App\Http\Controllers\Api\HrSafetyController::class, 'chemIndex']);
+        Route::post(   '/hr/safety/chemicals',                        [\App\Http\Controllers\Api\HrSafetyController::class, 'chemCreate'])->middleware('throttle:60,1,hrchem');
+        Route::post(   '/hr/safety/chemicals/{id}',                   [\App\Http\Controllers\Api\HrSafetyController::class, 'chemUpdate'])->whereNumber('id')->middleware('throttle:60,1,hrchem');
+        Route::post(   '/hr/safety/chemicals/{id}/archive',           [\App\Http\Controllers\Api\HrSafetyController::class, 'chemArchive'])->whereNumber('id');
+        Route::get(    '/hr/safety/chemicals/{id}/sds',               [\App\Http\Controllers\Api\HrSafetyController::class, 'chemSds'])->whereNumber('id');
+        Route::get(    '/hr/safety/duties',                           [\App\Http\Controllers\Api\HrSafetyController::class, 'dutyIndex']);
+        Route::post(   '/hr/safety/duties',                           [\App\Http\Controllers\Api\HrSafetyController::class, 'dutyCreate']);
+        Route::put(    '/hr/safety/duties/{id}',                      [\App\Http\Controllers\Api\HrSafetyController::class, 'dutyUpdate'])->whereNumber('id');
+        Route::post(   '/hr/safety/duties/{id}/end',                  [\App\Http\Controllers\Api\HrSafetyController::class, 'dutyEnd'])->whereNumber('id');
+        Route::get(    '/hr/safety/tasks',                            [\App\Http\Controllers\Api\HrSafetyController::class, 'taskIndex']);
+        Route::post(   '/hr/safety/tasks',                            [\App\Http\Controllers\Api\HrSafetyController::class, 'taskCreate']);
+        Route::post(   '/hr/safety/tasks/{id}/evidence',              [\App\Http\Controllers\Api\HrSafetyController::class, 'taskEvidence'])->whereNumber('id')->middleware('throttle:30,1,hrhsev');
+        Route::get(    '/hr/safety/tasks/{id}/evidence',              [\App\Http\Controllers\Api\HrSafetyController::class, 'taskEvidenceFile'])->whereNumber('id');
+        Route::post(   '/hr/safety/tasks/{id}/close',                 [\App\Http\Controllers\Api\HrSafetyController::class, 'taskClose'])->whereNumber('id');
+        Route::post(   '/hr/safety/tasks/{id}/reopen',                [\App\Http\Controllers\Api\HrSafetyController::class, 'taskReopen'])->whereNumber('id');
+        Route::post(   '/hr/safety/tasks/{id}/cancel',                [\App\Http\Controllers\Api\HrSafetyController::class, 'taskCancel'])->whereNumber('id');
+    });
+
     // ---- Staff pay / payslips (educators = hourly, home visitors = per visit) ----
     Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get('/me/payslips',              [\App\Http\Controllers\Api\PayController::class, 'myPayslips']);
@@ -2998,6 +3027,9 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post  ('/hazards/{id}/reopen',     [\App\Http\Controllers\Api\HazardController::class, 'reopen'])->whereNumber('id');
         Route::get   ('/hazards/{id}/audience',   [\App\Http\Controllers\Api\HazardController::class, 'audienceCount'])->whereNumber('id');
         Route::post  ('/hazards/{id}/notify',     [\App\Http\Controllers\Api\HazardController::class, 'notify'])->whereNumber('id');
+        // HR Phase 4 batch 7 (2026-11-27): a photo from the phone camera (private file). Every staff role; the controller checks.
+        Route::post  ('/hazards/{id}/photo',      [\App\Http\Controllers\Api\HazardController::class, 'photo'])->whereNumber('id')->middleware('throttle:30,1,hazphoto');
+        Route::get   ('/hazards/{id}/photo',      [\App\Http\Controllers\Api\HazardController::class, 'photoFile'])->whereNumber('id');
     });
     /* DAILY RECORDS REMINDERS (2026-10-15): Settings > Room Controls > Daily records. Admins edit,
        directors read (their centres' reminders) - enforced in RecordReminderController. */

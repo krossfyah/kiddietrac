@@ -41,3 +41,7 @@ Appuyez sur **Annuaire de l'équipe** pour voir vos collègues et l'organigramme
 Certains cours se terminent par un quiz : appuyez sur **Faire le quiz** et réussissez-le pour terminer le cours et obtenir votre certificat. Vous voyez combien de réponses sont justes. Sans essai restant, demandez-en un autre à votre gestionnaire.
 
 Les directeurs et administrateurs voient aussi **Remplacement pendant mon absence** : choisissez qui reçoit vos approbations et courriels de congés pendant votre absence. Cela prend fin seul après le dernier jour.
+
+## Santé et sécurité
+
+Appuyez sur **Signaler un danger** pour avertir votre directeur d'un problème de sécurité; vous pouvez ajouter une photo prise avec votre téléphone. **Mes rôles SST** montre un rôle que vous occupez, comme secouriste ou responsable d'évacuation, et si le certificat requis est encore valide. **Tâches SST** liste les travaux de sécurité qui vous sont confiés : ajoutez une photo ou un fichier comme preuve, puis appuyez sur **Fermer la tâche**. **Fiches de données de sécurité** ouvre la fiche de chaque produit gardé à votre centre. **Méthodes de travail sécuritaires** liste les méthodes à lire et à signer; on vous le redemande quand l'une change.

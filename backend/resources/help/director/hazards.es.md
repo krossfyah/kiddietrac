@@ -42,5 +42,9 @@ Elija **Marcar como resuelto** e indique qué se hizo. Después, **Informar a lo
 
 Cada informe, cambio, aviso y resolución queda en el registro de auditoría.
 
+## Fotos
+
+Quien informa de un peligro puede añadir una foto con la cámara del teléfono, y añadirla o cambiarla después. Los informes con foto muestran **📷 Foto adjunta**; pulsa ⋮ > **Ver la foto**. Las fotos son archivos privados, vistos solo por quien puede ver el peligro. Con el complemento de RR. HH., Peligros también es una pestaña de **Recursos humanos > Salud y seguridad**, y puedes asignar una tarea de SST para resolverlo.
+
 ??? ¿Quién recibe aviso cuando un educador informa de un riesgo? | Los directores del centro y los administradores de la agencia, por aviso en la aplicación y por correo electrónico.
 ??? ¿Los padres reciben un mensaje de texto? | No. Los avisos a los padres son solo en la aplicación y por correo electrónico.

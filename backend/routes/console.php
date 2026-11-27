@@ -339,6 +339,8 @@ Schedule::command('hr:talent-remind')->dailyAt('07:40')->timezone('America/Toron
 Schedule::command('hr:overtime-warn')->hourlyAt(25)->withoutOverlapping(30)->onOneServer();
 // KiddieTrac HR Phase 4, batch 4 (2026-11-27): dated pay/role changes apply on their day; document expiry + follow-up reminders (from 07:00 agency time, test agencies send nothing).
 Schedule::command('hr:file-tasks')->hourlyAt(35)->withoutOverlapping(30)->onOneServer();
+// KiddieTrac HR Phase 4, batch 7 (2026-11-27): risk assessment + safety data sheet reviews, H&S duty certificates (bell + phone, once per step; test agencies send nothing).
+Schedule::command('hr:safety-remind')->dailyAt('07:45')->timezone('America/Toronto')->withoutOverlapping(20)->onOneServer();
 // KiddieTrac HR (2026-11-28): courses assigned to a role reach people who join it later (the screens do it at once; this
 // catches imports and provisioning). Quiet unless a rule exists. Not every minute: every 15.
 Schedule::command('hr:role-courses')->everyFifteenMinutes()->withoutOverlapping(10)->onOneServer();

@@ -646,8 +646,8 @@ final class PolicyController extends Controller
         }, PolicyLibrary::outstandingFor($agencyId, $uid));
         $signed = DB::table('policy_acknowledgements as a')->join('policy_versions as v', 'v.id', '=', 'a.policy_version_id')->join('policies as p', 'p.id', '=', 'a.policy_id')
             ->where('a.user_id', $uid)->where('p.agency_id', $agencyId)->where('p.archived', false)->whereColumn('p.current_version_id', 'a.policy_version_id')
-            ->orderBy('p.title')->get(['p.id', 'p.title', 'v.id as version_id', 'v.version', 'a.acknowledged_at', 'a.typed_name'])
-            ->map(fn ($r) => ['policy_id' => (int) $r->id, 'title' => $r->title, 'version_id' => (int) $r->version_id, 'version' => (int) $r->version,
+            ->orderBy('p.title')->get(['p.id', 'p.title', 'p.category', 'v.id as version_id', 'v.version', 'a.acknowledged_at', 'a.typed_name'])
+            ->map(fn ($r) => ['policy_id' => (int) $r->id, 'title' => $r->title, 'category' => $r->category, 'version_id' => (int) $r->version_id, 'version' => (int) $r->version,
                 'signed_at' => $this->fmt($r->acknowledged_at, $tz), 'typed_name' => $r->typed_name])->values();
         $u = DB::table('users')->where('id', $uid)->first(['first_name', 'last_name']);
 
