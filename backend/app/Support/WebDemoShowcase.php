@@ -776,6 +776,7 @@ final class WebDemoShowcase
         $this->hrClaimsStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);   // HR Phase 3, item 9
         $this->hrRotaStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 3, item 10
         $this->hrClockStory($agencyId, $byName->all(), $centreOf->all());   // HR Phase 3, item 11
+        $this->hrLettersStory($agencyId, $olivia);   // HR Phase 3, item 12
     }
 
     /**
@@ -866,6 +867,19 @@ final class WebDemoShowcase
                 'status' => $status, 'decided_by_id' => $byId, 'decided_at' => $byId ? $this->at($byAgo, 10, 0) : null, 'decision_comment' => $comment,
                 'paid_at' => $status === 'paid' ? $this->at(-14, 9, 0) : null, 'created_at' => $this->at($ago, 17, 30), 'updated_at' => $now]);
         }
+    }
+
+    /**
+     * KIDDIETRAC HR PHASE 3 DEMO, ITEM 12 (2026-11-26, Starlight only): HR letter templates. The five defaults; the offer
+     * letter and the warning letter marked "Reviewed by our lawyer" (by Olivia, ten days ago) so the demo can send them,
+     * the other three still showing the draft note. Only changes untouched defaults.
+     */
+    private function hrLettersStory(int $agencyId, int $olivia): void
+    {
+        if (! \Illuminate\Support\Facades\Schema::hasTable('hr_letter_templates') || ! $olivia) return;
+        \App\Support\HrLetters::templates($agencyId);
+        DB::table('hr_letter_templates')->where('agency_id', $agencyId)->whereIn('kind', ['offer', 'warning'])->where('is_default', 1)->whereNull('reviewed_on')
+            ->update(['reviewed_on' => $this->today->copy()->subDays(10)->toDateString(), 'reviewed_by_id' => $olivia, 'updated_at' => now()]);
     }
 
     /**

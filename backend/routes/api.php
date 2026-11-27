@@ -2668,6 +2668,12 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::put   ('/hr/clock/settings',                 [\App\Http\Controllers\Api\HrClockController::class, 'save']);
         Route::put   ('/hr/clock/centres/{id}/fence',       [\App\Http\Controllers\Api\HrClockController::class, 'saveFence'])->whereNumber('id');
         Route::get   ('/hr/clock/watch',                    [\App\Http\Controllers\Api\HrClockController::class, 'watch']);
+        // KiddieTrac HR Phase 3, item 12 (2026-11-26): HR letter templates, sent for e-signature through Managed Forms (admins edit and mark reviewed).
+        Route::get   ('/hr/letters',                        [\App\Http\Controllers\Api\HrLetterController::class, 'index']);
+        Route::put   ('/hr/letters/templates/{id}',         [\App\Http\Controllers\Api\HrLetterController::class, 'update'])->whereNumber('id');
+        Route::post  ('/hr/letters/templates/{id}/review',  [\App\Http\Controllers\Api\HrLetterController::class, 'review'])->whereNumber('id');
+        Route::post  ('/hr/letters/preview',                [\App\Http\Controllers\Api\HrLetterController::class, 'preview'])->middleware('throttle:60,1,hrletterprev');
+        Route::post  ('/hr/letters/send',                   [\App\Http\Controllers\Api\HrLetterController::class, 'send'])->middleware('throttle:20,1,hrlettersend');
     });
 
     // ---- KiddieTrac HR phase 2 (2026-11-28): hiring, onboarding, performance, courses. All under hr/ (the HR add-on). ----

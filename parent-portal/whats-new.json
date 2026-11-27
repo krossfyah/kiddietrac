@@ -4,6 +4,18 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "✍️",
+            "title": "HR letters for e-signature",
+            "body": "HR now has offer letter, contract, contractor, warning and termination templates. They fill in from the employee file and are sent for e-signature, once an agency admin marks each one reviewed by your lawyer.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "📍",
             "title": "Clock-in location and overtime",
             "body": "Admins can draw a clock-in area around each centre or home and choose to flag or block clock-ins away from it; the location is asked only at clock-in and never stored. People near or into weekly overtime, and their director, now get a heads-up.",

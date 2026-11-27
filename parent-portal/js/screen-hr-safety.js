@@ -12,6 +12,8 @@
    changes to approve) and My HR "My shifts and availability" (weekly availability, can't-work dates, give away / swap).
    Item 11 (2026-11-26): HR > Rota also lists this week's clock-ins away from the centre and people near or into
    overtime; admins set the clock-in rules (geofence off / flag / block, overtime hours) and each centre's area on a map.
+   Item 12 (2026-11-26): HR > Letters: offer / contract / contractor / warning / termination templates (admins edit and tick
+   "Reviewed by our lawyer"; the draft note shows in the editor only), sent for e-signature in My forms.
    ═══════════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -284,6 +286,12 @@
       + '.hrt-sec{font-weight:800;font-size:14px;margin:16px 0 8px;color:#0F172A;}'
       + 'html.kt-dark #appMain .hrt-chips button.hrt-chip{background:#0F172A;border-color:#334155;color:#E2E8F0;}'
       + 'html.kt-dark #appMain .hrt-chips button.hrt-chip.on{background:#0E7490;border-color:#0E7490;color:#fff;}html.kt-dark #appMain .hrt-chips button.hrt-chip .n{background:#1E293B;color:#CBD5E1;}html.kt-dark .hrt-sec{color:#F1F5F9;}';
+    // Item 12: fill-in field chips in the letter editor (a popup, outside #appMain) and the letter preview's paragraphs.
+    st.textContent += '#modalRoot .hrt-chips button.hrt-chip{display:inline-flex;align-items:center;height:28px;min-height:28px;padding:0 10px;border-radius:999px;border:1px solid #E2E8F0;'
+      + 'background:#F8FAFC;font-size:12px;font-weight:700;line-height:1;white-space:nowrap;cursor:pointer;color:#334155;box-shadow:none;flex:0 0 auto;}'
+      + '#modalRoot .hrt-chips button.hrt-chip:hover{border-color:#0E7490;color:#0E7490;}'
+      + 'html.kt-dark #modalRoot .hrt-chips button.hrt-chip{background:#0F172A;border-color:#334155;color:#E2E8F0;}'
+      + '#modalRoot [data-prev] p{margin:0 0 10px;}';
     st.textContent += '#appMain .hrt-chips .hrt-stat{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;border:1px solid #E2E8F0;background:#F8FAFC;font-size:12.5px;font-weight:700;line-height:1;white-space:nowrap;color:#334155;}'
       + '#appMain .hrt-chips .hrt-stat .n{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 6px;border-radius:999px;background:#fff;color:#0F172A;font-size:11.5px;}'
       + '#appMain .hrt-chips .hrt-stat.warn{background:#FFFBEB;border-color:#FDE68A;color:#92400E;}'
@@ -816,10 +824,110 @@
     }, function () { box.querySelector('[data-map]').innerHTML = '<div class="hr-sub" style="padding:12px;">The map could not load. Use the address or where you are now.</div>'; });
   }
 
+  /* ── Item 12 (2026-11-26): HR > Letters. Templates (admins edit + tick "Reviewed by our lawyer"), send for e-signature. ── */
+  var DRAFT_NOTE = 'Draft – have an employment lawyer review before use';
+  function reviewPill(t) { return t.reviewed_on ? pill('#DCFCE7', '#166534', 'Reviewed by our lawyer') : pill('#FEF3C7', '#92400E', 'Needs lawyer review'); }
+  async function drawLetters(host) {
+    chipCss();
+    var d;
+    try { d = await Api.get('/hr/letters'); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
+    if (!host.isConnected) return;
+    var ts = d.templates || [], sent = d.sent || [];
+    var h = '<div class="hr-note"><span>Offer letters, contracts, warnings and terminations, filled in from the employee file and sent for e-signature in My forms. A template can be sent only after an agency admin marks it reviewed by your employment lawyer.</span></div>'
+      + '<div class="hr-bar"><button type="button" class="hr-b p" data-lt="send">Send a letter</button></div>'
+      + '<div class="hrt-sec">Templates</div><div class="kt-card"><table data-hrs="letter-templates"><thead><tr><th>Letter</th><th>Status</th><th></th></tr></thead><tbody>' + ts.map(function (t) {
+        return '<tr><td><b data-no-i18n>' + esc(t.title) + '</b>' + (t.is_default ? '<div class="hr-sub">Starting text, not yet edited</div>' : '') + '</td><td>' + reviewPill(t)
+          + (t.reviewed_on ? ' <span class="hr-sub" data-no-i18n>' + esc(day(t.reviewed_on)) + '</span>' : '') + '</td>'
+          + '<td style="text-align:center;"><button type="button" data-lt="edit" data-id="' + t.id + '">' + (d.is_admin ? 'Edit template' : 'View template') + '</button></td></tr>';
+      }).join('') + '</tbody></table></div>'
+      + '<div class="hrt-sec">Sent letters</div><div class="kt-card">' + (sent.length ? '<table data-hrs="letters-sent"><thead><tr><th>Letter</th><th>Person</th><th>Signs for the agency</th><th>Sent</th><th>Signed</th></tr></thead><tbody>' + sent.map(function (l) {
+        return '<tr><td data-no-i18n><b>' + esc(l.title) + '</b></td><td data-no-i18n>' + esc(l.person) + '</td><td data-no-i18n>' + esc(l.signatory) + '</td><td data-no-i18n style="white-space:nowrap;">' + esc(day(l.sent_at)) + '</td><td>'
+          + (l.signed_at ? pill('#DCFCE7', '#166534', 'Signed') + ' <span class="hr-sub" data-no-i18n>' + esc(day(l.signed_at)) + '</span>' : pill('#E0F2FE', '#075985', 'Waiting to sign')) + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:14px;" class="hr-sub">No letters sent yet.</div>') + '</div>';
+    host.innerHTML = h;
+    var reload = function () { if (host.isConnected) drawLetters(host); };
+    host.querySelectorAll('[data-lt]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-lt');
+        if (a === 'send') openSendLetter(d, reload);
+        else { var t = ts.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (t) openTemplate(t, d, reload); }
+      });
+    });
+  }
+
+  function openTemplate(t, d, done) {
+    var admin = !!d.is_admin;
+    var fields = d.fields || {};
+    var box = el((t.reviewed_on ? '' : '<div data-draft style="margin:0 0 10px;padding:9px 12px;border-radius:8px;background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;font-weight:700;font-size:13px;">⚠️ ' + esc(DRAFT_NOTE) + '</div>')
+      + field('Title', admin ? input('title', t.title) : '<div data-no-i18n><b>' + esc(t.title) + '</b></div>', true)
+      + '<div style="margin-top:10px;">' + field('Letter text', admin ? '<textarea class="hr-i" data-f="body" rows="16" style="width:100%;min-height:340px;font-family:inherit;" data-no-i18n>' + esc(t.body) + '</textarea>'
+        : '<div data-no-i18n style="white-space:pre-wrap;border:1px solid #E2E8F0;border-radius:8px;padding:10px;max-height:340px;overflow:auto;">' + esc(t.body) + '</div>', true) + '</div>'
+      + (admin ? '<div class="hr-sub" style="margin:8px 0 4px;">Fill-in fields (click to add at the cursor):</div><div class="hrt-chips">' + Object.keys(fields).map(function (k) {
+        return '<button type="button" class="hrt-chip" data-mf="' + esc(k) + '" data-kttip="' + esc(fields[k]) + '"><span data-no-i18n>{{' + esc(k) + '}}</span></button>';
+      }).join('') + '</div>' : '')
+      + '<div style="margin-top:12px;padding:10px 12px;border:1px solid #E2E8F0;border-radius:10px;">'
+      + (admin ? '<label style="display:flex;gap:8px;align-items:center;font-size:13.5px;font-weight:700;flex-wrap:wrap;"><input type="checkbox" class="kt-nosw" data-f="rev"' + (t.reviewed_on ? ' checked' : '') + '> <span>Reviewed by our lawyer on</span> '
+        + '<input class="hr-i" type="date" data-f="rev_on" value="' + esc(t.reviewed_on || today()) + '" style="width:170px;"></label><div class="hr-sub" style="margin-top:6px;">Changing the text clears this, so the new wording is reviewed before it is sent.</div>'
+        : reviewPill(t) + (t.reviewed_on ? ' <span class="hr-sub" data-no-i18n>' + esc(day(t.reviewed_on)) + (t.reviewed_by ? ' · ' + esc(t.reviewed_by) : '') + '</span>' : ' <span class="hr-sub">Only an agency admin can mark it reviewed.</span>'))
+      + '</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    var ta = box.querySelector('[data-f="body"]');
+    box.querySelectorAll('[data-mf]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!ta) return;
+        var tag = '{{' + b.getAttribute('data-mf') + '}}', s = ta.selectionStart || 0, e2 = ta.selectionEnd || 0;
+        ta.value = ta.value.slice(0, s) + tag + ta.value.slice(e2); ta.focus(); ta.selectionStart = ta.selectionEnd = s + tag.length;
+      });
+    });
+    var acts = [{ label: admin ? 'Cancel' : 'Close' }];
+    if (admin) acts.push({ label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
+      var title = val(box, 'title'), body = ta ? ta.value.trim() : '';
+      if (!title || !body) { msg(box, 'Give the letter a title and some text.'); return false; }
+      var changed = title !== t.title || body !== String(t.body).trim();
+      var rev = !!val(box, 'rev'), revOn = val(box, 'rev_on');
+      if (rev && !revOn) { msg(box, 'Enter the date your lawyer reviewed it.'); return false; }
+      return Api.put('/hr/letters/templates/' + t.id, { title: title, body: body }).then(function () {
+        var want = rev ? revOn : null;
+        // Ticked while changing the text: the admin is confirming the NEW wording was reviewed.
+        if (changed || want !== (t.reviewed_on || null)) return Api.post('/hr/letters/templates/' + t.id + '/review', { reviewed_on: want });
+      }).then(function () { saved('Template saved.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } });
+    modal({ title: t.title, body: box, actions: acts });
+  }
+
+  function openSendLetter(d, done) {
+    var tpls = {}; (d.templates || []).forEach(function (t) { tpls[t.id] = t.title + (t.reviewed_on ? '' : ' (needs lawyer review)'); });
+    var ppl = {}; (d.people || []).forEach(function (p) { ppl[p.id] = p.name; });
+    var sig = {}; (d.signatories || []).forEach(function (p) { sig[p.id] = p.name + ' (' + (p.roles || []).join(', ') + ')'; });
+    var box = el('<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' + field('Letter', select('template_id', opts(tpls, '', 'Choose a letter')), true)
+      + field('Person', select('user_id', opts(ppl, '', 'Choose a person'))) + field('Signs for the agency', select('signatory_id', opts(sig, '', 'Choose who signs')))
+      + field('Effective date', input('effective_date', '', 'date')) + '<div></div>'
+      + field('Details (for {{details}}: the reason, the duties, the terms)', area('details', '', 4), true) + '</div>'
+      + '<div class="hr-bar" style="margin:10px 0 0;"><button type="button" class="hr-b" data-lp="1">Preview</button></div>'
+      + '<div data-prev style="display:none;margin-top:10px;border:1px solid #E2E8F0;border-radius:10px;padding:14px 16px;max-height:360px;overflow:auto;background:#fff;color:#111827;font-size:13px;line-height:1.55;"></div>'
+      + '<div class="hr-sub" style="margin-top:8px;">The person signs it in My forms. A director or admin countersigns it there.</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    var body = function () { return { template_id: +val(box, 'template_id') || null, user_id: +val(box, 'user_id') || null, signatory_id: +val(box, 'signatory_id') || null, effective_date: val(box, 'effective_date'), details: val(box, 'details') }; };
+    var ready = function (b) { if (!b.template_id || !b.user_id || !b.signatory_id) { msg(box, 'Choose the letter, the person and who signs.'); return false; } msg(box, ''); return true; };
+    box.querySelector('[data-lp]').addEventListener('click', function () {
+      var b = body(); if (!ready(b)) return;
+      Api.post('/hr/letters/preview', b).then(function (p) {
+        var pv = box.querySelector('[data-prev]'); pv.style.display = '';
+        var soft = (p.missing || []).filter(function (m) { return (p.blocking || []).indexOf(m) < 0; });
+        pv.innerHTML = (p.blocking && p.blocking.length ? '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:#FEE2E2;color:#991B1B;font-size:12.5px;font-weight:700;"><span>Fill these in before sending (employee file or the boxes above):</span> <span data-no-i18n>' + esc(p.blocking.join(', ')) + '</span></div>' : '')
+          + (soft.length ? '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:#FFFBEB;color:#92400E;font-size:12.5px;"><span>Empty, left out of the letter:</span> <span data-no-i18n>' + esc(soft.join(', ')) + '</span></div>' : '')
+          + (p.reviewed ? '' : '<div style="margin-bottom:10px;padding:8px 10px;border-radius:8px;background:#FEF3C7;color:#92400E;font-size:12.5px;font-weight:700;">' + esc(DRAFT_NOTE) + '</div>')
+          + '<div data-no-i18n><b>' + esc(p.title) + '</b><br><br>' + p.html + '<br><b>' + esc(p.signatory) + '</b>' + (p.signatory_title ? ', ' + esc(p.signatory_title) : '') + '</div>';
+      }, function (e) { msg(box, errMsg(e)); });
+    });
+    modal({ title: 'Send a letter for signature', body: box, actions: [{ label: 'Cancel' }, { label: 'Send for signature', primary: true, busyLabel: 'Sending…', handler: function () {
+      var b = body(); if (!ready(b)) return false;
+      return Api.post('/hr/letters/send', b).then(function () { saved('Sent. It is waiting in their My forms.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
   window.KTHrSafety = {
-    tabs: [['injuries', 'Injuries'], ['claims', 'Claims'], ['rota', 'Rota']],
-    has: function (tab) { return tab === 'injuries' || tab === 'claims' || tab === 'rota'; },
-    draw: function (tab, host) { if (tab === 'injuries') return drawInjuries(host); if (tab === 'claims') return drawClaims(host); if (tab === 'rota') return drawRota(host); },
+    tabs: [['injuries', 'Injuries'], ['claims', 'Claims'], ['rota', 'Rota'], ['letters', 'Letters']],
+    has: function (tab) { return tab === 'injuries' || tab === 'claims' || tab === 'rota' || tab === 'letters'; },
+    draw: function (tab, host) { if (tab === 'injuries') return drawInjuries(host); if (tab === 'claims') return drawClaims(host); if (tab === 'rota') return drawRota(host); if (tab === 'letters') return drawLetters(host); },
     mine: function (host) { mine(host); mineClaims(host); mineRota(host); }
   };
 })(window);
