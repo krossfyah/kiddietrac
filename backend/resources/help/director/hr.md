@@ -13,7 +13,7 @@ roles: agency_admin, platform_admin, centre_director
 Everyone on your team, with job title, employment type, centre, start date, manager and status. Use the **⋮** menu on a row:
 
 - **View HR profile** puts the employee file, leave balances, recent time off, certifications, policies, PD hours, emergency contact and pay rate in one place, with links to each screen.
-- **Edit file** changes the job title, employment type (full-time, part-time, casual, student, contract), status (active, on leave, terminated), start date, end date and reason, manager and primary centre.
+- **Edit file** changes the job title, employment type (full-time, part-time, casual, student, contract), status (active, on leave, terminated), start date, end date and reason, manager and primary centre. Setting the type to **contract** also marks the person as a **Contractor** on the Staff screen (used for "All contractors" announcements), and changing it away clears that.
 - **Adjust balance** adds or takes off leave, with a reason. Nobody can adjust their own balance.
 
 ## Balances

@@ -43,7 +43,7 @@ Cuando envía a un solo centro, el personal asignado a otro centro queda fuera. 
 sobre un centro no es noticia en otro. El personal asignado a la agencia en su conjunto, sin
 un centro propio, lo recibe de todos modos.
 
-> **Nota:** Nadie es contratista hasta que usted lo indique. No existe un rol de contratista. En la pantalla **Personal**, active **Contratista** para cada persona a la que deba llegar el público «Todos los contratistas».
+> **Nota:** Nadie es contratista hasta que usted lo indique. No existe un rol de contratista. En la pantalla **Personal**, active **Contratista** para cada persona a la que deba llegar el público «Todos los contratistas». Con el complemento de RR. HH., los dos van a la par: poner el tipo de empleo **Contrato** en el expediente de RR. HH. de una persona activa **Contratista**, y cambiarlo a otro tipo lo desactiva. Activar **Contratista** aquí pone su tipo de RR. HH. en Contrato; desactivarlo deja un tipo Contrato en «sin definir».
 
 [[show: #staff @ Contractor | Mostrarme la columna Contratista]]
 

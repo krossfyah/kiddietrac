@@ -43,7 +43,7 @@ When you send to one centre, staff attached to a different centre are left out. 
 about one centre is not news at another. Staff attached to the agency as a whole, with no
 centre of their own, still receive it.
 
-> **Note:** Nobody is a contractor until you say so. There is no contractor role. On the **Staff** screen, switch on **Contractor** for each person the "All contractors" audience should reach.
+> **Note:** Nobody is a contractor until you say so. There is no contractor role. On the **Staff** screen, switch on **Contractor** for each person the "All contractors" audience should reach. With the HR add-on, the two stay in step: setting a person's employment type to **Contract** in their HR file switches **Contractor** on, and changing it to another type switches it off. Switching **Contractor** on here sets their HR type to Contract; switching it off clears a Contract type to "not set".
 
 [[show: #staff @ Contractor | Show me the Contractor column]]
 

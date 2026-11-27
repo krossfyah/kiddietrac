@@ -6,11 +6,37 @@ roles: agency_admin, platform_admin
 ---
 # Su plan y complementos
 
-El plan de su agencia (Starter, Growth o Agency) y sus complementos deciden qué funciones
-pueden usar su equipo y las familias. Un cambio se aplica la próxima vez que se abre la
-aplicación — nadie necesita cerrar sesión.
+La licencia de su agencia contiene su plan (Starter, Growth o Agency) y sus complementos.
+Juntos deciden qué funciones pueden usar su equipo y las familias. Cuando la licencia cambia,
+las pantallas abiertas lo toman sin que nadie cierre sesión: quien está viendo una función
+bloqueada la ve abrirse en unos momentos, y los demás al pasar a otra pantalla.
 
 [[open: #licence | Ver mi plan]]
+
+## Dónde ver su plan
+
+- **🏢 My agency** (mi agencia) en la barra lateral: la tarjeta de su agencia muestra el plan de su
+  licencia, por ejemplo **Agency plan** o **Growth plan (trial)**, y su estado de facturación.
+  **No plan yet** significa que la agencia no tiene licencia.
+- **Manage** (gestionar) en esa tarjeta: **Plan & add-ons** indica que su plan, sus complementos y
+  su fecha de renovación están en su licencia. Pulse **View my licence →** para verlos. Aquí no se
+  puede cambiar el plan.
+- Para añadir una función, use **Ask about adding it** (vea más abajo). KiddieTrac cambia la
+  licencia por usted.
+
+## Su estado de facturación
+
+Su estado de facturación sigue a su licencia. No se puede escribir a mano.
+
+| Su licencia | Estado de facturación |
+|---|---|
+| Un plan pagado o de cortesía | **Active** (activo) |
+| Un plan de prueba | **Trial** (prueba) |
+| Pasada su fecha de fin, en el periodo de gracia | **Active**, mientras se emite la factura de renovación |
+| Ningún plan vigente | **Suspended** (suspendido) |
+
+Si KiddieTrac suspende una agencia a mano, sigue suspendida aunque cambie la licencia, hasta
+que KiddieTrac la reactive.
 
 ## Funciones que no están en su plan
 

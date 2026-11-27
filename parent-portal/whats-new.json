@@ -2,6 +2,59 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🔔",
+            "title": "Bell: one list, plus what your team submits",
+            "body": "Your bell is now one list by time: your own safety alerts sit among agency activity, not pinned on top. It also lists what staff submit, such as forms, drills, hazards, medication, report cards and HR tasks, for your own centres only, with no phone ring; switch them off under Notify me about > Staff submissions.",
+            "title_fr": "Cloche : une seule liste, plus ce que votre équipe soumet",
+            "body_fr": "Votre cloche est maintenant une seule liste par heure : vos propres alertes de sécurité se placent parmi l'activité de l'agence, sans être épinglées en haut. Elle liste aussi ce que le personnel soumet, comme les formulaires, exercices, dangers, médicaments, bulletins et tâches RH, pour vos propres centres seulement, sans faire sonner le téléphone ; désactivez-les dans Me prévenir de > Soumissions du personnel.",
+            "title_es": "Campana: una sola lista, más lo que envía su equipo",
+            "body_es": "Su campana ahora es una sola lista por hora: sus propias alertas de seguridad quedan entre la actividad de la agencia, no fijadas arriba. También lista lo que envía el personal, como formularios, simulacros, peligros, medicamentos, boletas y tareas de RR. HH., solo de sus propios centros y sin hacer sonar el teléfono; desactívelos en Avisarme sobre > Envíos del personal.",
+            "title_hi": "घंटी: एक ही सूची, साथ में आपकी टीम की जमा की गई चीज़ें",
+            "body_hi": "आपकी घंटी अब समय के अनुसार एक ही सूची है: आपकी अपनी सुरक्षा अलर्ट एजेंसी की गतिविधि के बीच रहती हैं, ऊपर पिन नहीं होतीं। इसमें स्टाफ़ की जमा की गई चीज़ें भी दिखती हैं, जैसे फ़ॉर्म, ड्रिल, खतरे, दवा, रिपोर्ट कार्ड और HR काम, केवल आपके अपने सेंटरों की, फ़ोन बजाए बिना; इन्हें मुझे इनके बारे में बताएँ > स्टाफ़ द्वारा जमा में बंद करें।",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🎨",
+            "title": "Your sign-in page wears your brand",
+            "body": "With your own branding, the sign-in page on a computer has a light sign-in panel with your logo and colours beside a panel that glows in your brand. The loading screen after sign-in shows only your logo.",
+            "title_fr": "Votre page de connexion porte votre marque",
+            "body_fr": "Avec votre propre image de marque, la page de connexion sur un ordinateur a un panneau clair avec votre logo et vos couleurs, à côté d'un panneau qui brille de votre marque. L'écran de chargement après la connexion ne montre que votre logo.",
+            "title_es": "Su página de inicio de sesión lleva su marca",
+            "body_es": "Con su propia marca, la página de inicio de sesión en una computadora tiene un panel claro con su logotipo y sus colores junto a un panel que brilla con su marca. La pantalla de carga después de iniciar sesión muestra solo su logotipo.",
+            "title_hi": "आपका साइन-इन पेज आपके ब्रांड में",
+            "body_hi": "आपकी अपनी ब्रांडिंग के साथ, कंप्यूटर पर साइन-इन पेज में आपके लोगो और रंगों वाला एक हल्का पैनल होता है, और उसके बगल में आपके ब्रांड में चमकता पैनल। साइन-इन के बाद लोडिंग स्क्रीन केवल आपका लोगो दिखाती है।",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🔑",
+            "title": "Your plan comes from your licence",
+            "body": "My agency now shows the plan and add-ons on your licence, and a licence change reaches open screens without anyone signing out. Billing status follows the licence too: paid or complimentary is active, a trial is trial, and no plan is suspended.",
+            "title_fr": "Votre forfait vient de votre licence",
+            "body_fr": "Mon agence montre maintenant le forfait et les modules de votre licence, et un changement de licence atteint les écrans ouverts sans que personne ne se déconnecte. Le statut de facturation suit aussi la licence : payé ou gratuit = actif, essai = essai, aucun forfait = suspendu.",
+            "title_es": "Su plan viene de su licencia",
+            "body_es": "Mi agencia ahora muestra el plan y los complementos de su licencia, y un cambio de licencia llega a las pantallas abiertas sin que nadie cierre sesión. El estado de facturación también sigue a la licencia: pagado o de cortesía = activo, prueba = prueba, sin plan = suspendido.",
+            "title_hi": "आपका प्लान आपके लाइसेंस से",
+            "body_hi": "मेरी एजेंसी अब आपके लाइसेंस का प्लान और ऐड-ऑन दिखाती है, और लाइसेंस का बदलाव बिना किसी के साइन आउट किए खुली स्क्रीनों तक पहुँचता है। बिलिंग स्थिति भी लाइसेंस के अनुसार चलती है: भुगतान वाला या मुफ़्त = सक्रिय, ट्रायल = ट्रायल, कोई प्लान नहीं = निलंबित।",
+            "roles": [
+                "agency_admin",
+                "platform_admin"
+            ]
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "✍️",
@@ -84,16 +137,20 @@
         {
             "type": "new",
             "date": "2026-11-26",
-            "icon": "🗺️",
-            "title": "Draw your fire plan",
-            "body": "Drill log has a new Fire plan tab: draw your exits, routes and meeting spot, fill in who does what, and send it to your director for review. Attach it to each fire drill and print a sheet to post by the door.",
+            "icon": "🚩",
+            "title": "Choose who gets escalated daily records",
+            "body": "Settings › Notifications › Escalated daily records now sets who is copied when an educator's daily records reminder is escalated: agency admins, the directors of that centre, auditors or named staff, by email, the bell or a phone notification. By default it is your agency admins and the centre's directors, by email. KiddieTrac super admins and integration accounts are never copied, and each person can still switch it off for themselves.",
             "roles": [
                 "agency_admin",
                 "platform_admin",
-                "centre_director",
-                "educator",
-                "home_visitor"
-            ]
+                "centre_director"
+            ],
+            "title_fr": "Choisissez qui reçoit les registres quotidiens escaladés",
+            "body_fr": "Paramètres › Notifications › Registres quotidiens escaladés définit maintenant qui est en copie lorsque le rappel des registres quotidiens d’un éducateur est escaladé : les administrateurs de l’agence, les directeurs de ce centre, les auditeurs ou des membres nommés du personnel, par courriel, par la cloche ou par une notification sur le téléphone. Par défaut : les administrateurs de l’agence et les directeurs du centre, par courriel. Les super-administrateurs de KiddieTrac et les comptes d’intégration ne sont jamais en copie, et chaque personne peut toujours le désactiver pour elle-même.",
+            "title_es": "Elija quién recibe los registros diarios escalados",
+            "body_es": "Configuración › Notificaciones › Registros diarios escalados ahora define quién recibe copia cuando se escala el recordatorio de registros diarios de un educador: los administradores de la agencia, los directores de ese centro, los auditores o personal elegido por nombre, por correo, la campana o una notificación en el teléfono. De forma predeterminada: los administradores de la agencia y los directores del centro, por correo. Los superadministradores de KiddieTrac y las cuentas de integración nunca reciben copia, y cada persona puede desactivarlo para sí misma.",
+            "title_hi": "चुनें कि एस्केलेट किए गए दैनिक रिकॉर्ड किसे मिलें",
+            "body_hi": "सेटिंग्स › सूचनाएँ › एस्केलेट किए गए दैनिक रिकॉर्ड अब तय करता है कि किसी शिक्षक का दैनिक रिकॉर्ड रिमाइंडर एस्केलेट होने पर कॉपी किसे मिले: एजेंसी एडमिन, उस केंद्र के निदेशक, ऑडिटर या नाम से चुना गया स्टाफ़, ईमेल, घंटी या फ़ोन सूचना से। डिफ़ॉल्ट रूप से आपकी एजेंसी के एडमिन और केंद्र के निदेशक, ईमेल से। KiddieTrac सुपर एडमिन और इंटीग्रेशन खातों को कभी कॉपी नहीं मिलती, और हर व्यक्ति इसे अपने लिए बंद कर सकता है।"
         },
         {
             "type": "new",
@@ -132,6 +189,18 @@
         {
             "type": "improved",
             "date": "2026-11-26",
+            "icon": "✨",
+            "title": "Popups line up, and Edit agency shows every add-on",
+            "body": "Fields in edit and create popups now share one height, one right edge and one line, with labels above their boxes, on computers and phones. In All agencies, Edit > Plan now shows the agency licence: the plan, every add-on with its part number and price, the renewal date, and a Manage in Licences link.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
             "icon": "🗂️",
             "title": "Human Resources in the sidebar",
             "body": "HR, My HR, Time off requests, Timesheets, Payroll and Background checks now sit together, in that order, under Human Resources in the menu.",
@@ -159,6 +228,18 @@
             "icon": "🎓",
             "title": "Role courses reach new staff",
             "body": "A course assigned to a role now also goes to anyone who joins that role later, with the same number of days to finish it.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ]
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-26",
+            "icon": "🎨",
+            "title": "Your colours reach the side panel and phone bar",
+            "body": "For branded portals, the right-hand panel and the bottom bar on phones now use your brand soft tint.",
             "roles": [
                 "agency_admin",
                 "platform_admin",

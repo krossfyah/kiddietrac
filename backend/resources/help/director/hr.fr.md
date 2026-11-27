@@ -13,7 +13,7 @@ roles: agency_admin, platform_admin, centre_director
 Toute votre équipe, avec le poste, le type d'emploi, le centre, la date de début, le gestionnaire et le statut. Utilisez le menu **⋮** d'une ligne :
 
 - **Voir le profil RH** réunit le dossier, les soldes de congés, les congés récents, les certifications, les politiques, les heures de PP, le contact d'urgence et le taux de rémunération.
-- **Modifier le dossier** change le poste, le type d'emploi, le statut, les dates, le gestionnaire et le centre principal.
+- **Modifier le dossier** change le poste, le type d'emploi, le statut, les dates, le gestionnaire et le centre principal. Choisir le type **contrat** marque aussi la personne comme **Entrepreneur** sur l’écran Personnel (utilisé pour les annonces « Tous les entrepreneurs »), et changer de type retire cette marque.
 - **Ajuster le solde** ajoute ou retire des congés, avec un motif. Personne ne peut ajuster son propre solde.
 
 ## Soldes

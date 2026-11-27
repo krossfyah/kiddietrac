@@ -31,6 +31,37 @@ y no a una sola agencia:
   área de ventas. Vea [Repositorio de archivos](files-repository).
 - **Ajustes → Alertas de seguridad**: vea [Alertas de seguridad y supervisión](security-alerts).
 
+## Licencias y estado de facturación
+
+El plan y los complementos de una agencia están en su licencia, en **Platform → Licences**.
+
+- Cada agencia es un grupo. Haga clic en su encabezado (o pulse Intro o Espacio) para abrir o
+  cerrar sus líneas de plan y complementos. Cerrado, el encabezado muestra los complementos como
+  etiquetas junto al plazo, el número de líneas y el total. **Expand all** y **Collapse all**
+  actúan sobre toda la lista, y su elección para cada agencia se recuerda en esta computadora.
+- Un grupo se abre solo cuando la lista está filtrada a esa agencia, cuando la agencia está en su
+  periodo de gracia o no tiene plan vigente, o cuando su licencia termina en 30 días sin
+  renovación automática.
+- El **⋮** del encabezado de una agencia tiene **Convert to paid** (pruebas), **Renew all**,
+  **Term & renewal**, **＋ Add add-on** (o **＋ Add plan**), **Included centres** y, al final,
+  **Cancel licence**. El **⋮** de cada línea tiene **Edit** (precio, cantidad, nota) y, para los
+  complementos, **Remove add-on**.
+- **Todas las agencias → Editar → Plan** muestra **Plan & add-ons** de solo lectura: el plan,
+  cada complemento con su número de pieza y su precio, y la fecha de renovación.
+  **Manage in Licences →** abre Licences filtrado a esa agencia. Cambie la licencia allí, no en la
+  ventana Editar.
+- Un cambio de licencia o de funciones llega a las pestañas abiertas de la agencia sin que nadie
+  cierre sesión.
+
+**El estado de facturación sigue a la licencia.** Un plan pagado o de cortesía deja la agencia
+**active**, una prueba la deja en **trial**, el periodo de gracia la mantiene **active** (se
+siguen emitiendo facturas de renovación) y no tener plan vigente la deja **suspended**. El estado
+es de solo lectura en **My agency → Manage** y **Features**. **Suspend** mantiene la agencia
+suspendida con cualquier cambio de licencia hasta que pulse **Resume**. **Pin the status** en
+**Manage** mantiene una agencia en **trial** o **active** diga lo que diga su licencia (se usa
+para agencias de demostración); fijar el estado nunca inicia la facturación, y una suspensión
+siempre gana.
+
 ## Qué no pueden hacer los admins de la plataforma (todavía)
 
 - Modificar los datos de un inquilino sin cambiar antes a esa agencia. El contexto de la agencia activa sigue limitando la mayoría de las operaciones de escritura.

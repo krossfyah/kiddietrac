@@ -6,11 +6,35 @@ roles: agency_admin, platform_admin
 ---
 # Your plan and add-ons
 
-Your agency's plan (Starter, Growth or Agency) and any add-ons decide which features
-your team and families can use. A change takes effect the next time the app opens — no
-one needs to sign out.
+Your agency's licence holds your plan (Starter, Growth or Agency) and any add-ons. Together
+they decide which features your team and families can use. When the licence changes, open
+screens pick it up without anyone signing out: someone looking at a locked feature sees it
+open within moments, and everyone else at their next move to another screen.
 
 [[open: #licence | See my plan]]
+
+## Where to see your plan
+
+- **🏢 My agency** in the sidebar: your agency's card shows the plan on your licence, such as
+  **Agency plan** or **Growth plan (trial)**, and your billing status. **No plan yet** means the
+  agency has no licence.
+- **Manage** on that card: **Plan & add-ons** shows that your plan, add-ons and renewal date are
+  on your licence. Press **View my licence →** to see them. You cannot change the plan here.
+- To add a feature, use **Ask about adding it** (see below). KiddieTrac changes the licence for you.
+
+## Your billing status
+
+Your billing status follows your licence. You cannot type over it.
+
+| Your licence | Billing status |
+|---|---|
+| A paid or complimentary plan | **Active** |
+| A trial plan | **Trial** |
+| Past its end date, in its grace period | **Active**, while the renewal invoice is raised |
+| No live plan | **Suspended** |
+
+If KiddieTrac suspends an agency by hand, it stays suspended through any licence change until
+KiddieTrac resumes it.
 
 ## Features that are not in your plan
 

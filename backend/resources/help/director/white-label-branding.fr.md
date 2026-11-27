@@ -80,6 +80,25 @@ vous voulez votre propre marque partout.
 
 > **Astuce :** Votre propre icône et votre propre nom d’application dans les magasins d’applications viennent avec une version marque blanche de l’application. Demandez à KiddieTrac.
 
+### Ce qui prend aussi votre image
+
+Avec la licence activée, vos couleurs remplacent aussi celles de KiddieTrac :
+
+- **Les boutons** prennent votre couleur principale, y compris les boutons Ajouter, les en-têtes des fenêtres et les boutons en dégradé. KiddieTrac fonce la teinte au besoin pour que le texte blanc reste facile à lire.
+- Une **teinte douce** de votre marque se place derrière la barre latérale, son élément sélectionné, les onglets, les lignes de tableau surlignées, le panneau de droite et la barre du bas sur les téléphones. Voir **Teinte douce** ci-dessous.
+- **La page de connexion** à votre propre adresse web porte votre marque. Sur un ordinateur, elle a la même disposition que celle de KiddieTrac : un panneau clair avec le formulaire de connexion, votre logo, les titres et les liens dans votre couleur et le bouton **Log in** à vos couleurs, à côté d'un panneau qui brille de vos couleurs. Sur un téléphone, et dans votre propre application, toute la page repose sur votre couleur, avec votre logo sur une plaque blanche.
+- **L'écran de chargement** après la connexion ne montre que votre logo, avec un indicateur de chargement dans votre couleur. Les rayons et la courbe de KiddieTrac ne l'entourent pas.
+
+### Teinte douce
+
+La carte **Soft tint** (teinte douce) se trouve dans l'onglet **🏷️ Marque blanche et logo** quand votre agence a la licence. C'est la couleur très claire derrière la barre latérale, les onglets et les lignes surlignées.
+
+1. Laissez la case vide pour le mode **automatique** : une nuance douce de votre couleur de marque. La case affiche la couleur automatique en exemple.
+2. Pour choisir la vôtre, prenez une couleur ou tapez-en une comme **#F4F1FD**. La pastille à côté montre le résultat.
+3. Appuyez sur **Save tint** (enregistrer la teinte). Le portail se redessine avec la nouvelle teinte.
+
+Appuyez sur **Use automatic** (automatique), puis sur **Save tint**, pour revenir à la nuance automatique. Les portails KiddieTrac ordinaires gardent le bleu clair de KiddieTrac.
+
 ### L’aperçu
 
 À côté des réglages du logo, **Où votre logo apparaît** montre un aperçu en direct de la **barre
@@ -151,5 +170,6 @@ vraies factures, l’**aperçu** des formulaires, et les formulaires et annonces
 
 ??? J’ai téléversé notre logo, mais le portail affiche toujours KiddieTrac. | Votre logo ne remplace KiddieTrac dans le portail et l’application que si votre agence a la licence marque blanche. Sans elle, le logo est utilisé sur les factures, les courriels et les formulaires.
 ??? Puis-je modifier moi-même la licence marque blanche? | Non. Elle fait partie de votre forfait; seul un administrateur de la plateforme peut la modifier.
+??? Puis-je changer la couleur claire derrière la barre latérale et les onglets? | Oui, avec la licence marque blanche. Utilisez Soft tint (teinte douce) dans l’onglet Marque blanche et logo, ou laissez le mode automatique pour une nuance douce de votre couleur de marque.
 
 Voir aussi : [Style et numérotation des factures](invoice-numbering-and-style) · [Configuration de la facturation](billing-setup) · [Identifiants de référence](reference-ids)

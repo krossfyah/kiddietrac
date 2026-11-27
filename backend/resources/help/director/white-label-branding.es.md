@@ -76,6 +76,25 @@ marca en todas partes.
 
 > **Consejo:** Su propio icono y nombre de aplicación en las tiendas llegan con una versión de marca blanca de la aplicación. Consulte a KiddieTrac.
 
+### Qué más lleva su marca
+
+Con la licencia activada, sus colores también sustituyen a los de KiddieTrac:
+
+- **Los botones** usan su color principal, incluidos los botones Añadir, los encabezados de las ventanas y los botones con degradado. KiddieTrac oscurece el tono cuando hace falta para que el texto blanco se lea bien.
+- Un **tono suave** de su marca queda detrás de la barra lateral, su elemento resaltado, las pestañas, las filas resaltadas de las tablas, el panel derecho y la barra inferior en los teléfonos. Vea **Tono suave** más abajo.
+- **La página de inicio de sesión** en su propia dirección web lleva su marca. En una computadora tiene el mismo diseño que la de KiddieTrac: un panel claro con el formulario, su logotipo, los títulos y enlaces en su color y el botón **Log in** con su marca, junto a un panel que brilla con los colores de su marca. En un teléfono, y en su propia aplicación, toda la página va sobre su color, con su logotipo sobre una placa blanca.
+- **La pantalla de carga** después de iniciar sesión muestra solo su logotipo, con un indicador de carga en su color. Los rayos y la curva de KiddieTrac no aparecen a su alrededor.
+
+### Tono suave
+
+La tarjeta **Soft tint** (tono suave) está en la pestaña **🏷️ Marca blanca y logotipo** cuando su agencia tiene la licencia. Es el color muy claro detrás de la barra lateral, las pestañas y las filas resaltadas.
+
+1. Deje la casilla vacía para el modo **automático**: un tono suave del color de su marca. La casilla muestra el color automático como ejemplo.
+2. Para elegir el suyo, escoja un color o escriba uno como **#F4F1FD**. La muestra de al lado enseña el resultado.
+3. Pulse **Save tint** (guardar tono). El portal se vuelve a dibujar con el nuevo tono.
+
+Pulse **Use automatic** (automático) y luego **Save tint** para volver al tono automático. Los portales normales de KiddieTrac conservan el azul claro de KiddieTrac.
+
 ### La vista previa
 
 Junto a los ajustes del logotipo, **Dónde aparece su logotipo** muestra una vista previa en vivo
@@ -144,5 +163,6 @@ dirección de su agencia si el envío de correos está configurado).
 
 ??? Subí nuestro logotipo, pero el portal sigue mostrando KiddieTrac. | Su logotipo solo sustituye a KiddieTrac en el portal y la aplicación si su agencia tiene la licencia de marca blanca. Sin ella, el logotipo se usa en facturas, correos y formularios.
 ??? ¿Puedo cambiar yo mismo la licencia de marca blanca? | No. Forma parte de su plan, así que solo un administrador de la plataforma puede cambiarla.
+??? ¿Puedo cambiar el color claro detrás de la barra lateral y las pestañas? | Sí, con la licencia de marca blanca. Use Soft tint (tono suave) en la pestaña Marca blanca y logotipo, o déjelo en automático para un tono suave del color de su marca.
 
 Vea también: [Estilo y numeración de facturas](invoice-numbering-and-style) · [Configuración de facturación](billing-setup) · [Identificadores de referencia](reference-ids)

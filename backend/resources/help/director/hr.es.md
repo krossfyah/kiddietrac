@@ -13,7 +13,7 @@ roles: agency_admin, platform_admin, centre_director
 Todo tu equipo, con puesto, tipo de empleo, centro, fecha de inicio, responsable y estado. Usa el menú **⋮** de una fila:
 
 - **Ver perfil de RR. HH.** reúne el expediente, los saldos de permisos, los permisos recientes, certificaciones, políticas, horas de DP, contacto de emergencia y tarifa de pago.
-- **Editar expediente** cambia el puesto, el tipo de empleo, el estado, las fechas, el responsable y el centro principal.
+- **Editar expediente** cambia el puesto, el tipo de empleo, el estado, las fechas, el responsable y el centro principal. Poner el tipo **contrato** también marca a la persona como **Contratista** en la pantalla Personal (se usa para los anuncios «Todos los contratistas»), y cambiar de tipo quita esa marca.
 - **Ajustar saldo** suma o resta permisos, con un motivo. Nadie puede ajustar su propio saldo.
 
 ## Saldos

@@ -59,6 +59,25 @@ The licence is something your agency buys, so only a **platform admin** can swit
 
 > **Tip:** Your own app icon and app name in the app stores come with a white-label app build. Ask KiddieTrac.
 
+### What else wears your brand
+
+With the licence on, your colours replace KiddieTrac's too:
+
+- **Buttons** use your primary colour, including the Add buttons, popup headers and gradient buttons. KiddieTrac darkens the shade where needed so white text stays easy to read.
+- A **soft tint** of your brand sits behind the sidebar, its highlighted item, the tabs, highlighted table rows, the right-hand panel and the bottom bar on phones. See **Soft tint** below.
+- **The sign-in page** at your own web address carries your brand. On a computer it has the same layout as KiddieTrac's: a light panel with the sign-in form, your logo, headings and links in your colour and the **Log in** button in your brand, beside a panel that glows in your brand colours. On a phone, and in your own app, the whole page sits on your brand colour with your logo on a white plate.
+- **The loading screen** after sign-in shows only your logo, with a spinner in your colour. KiddieTrac's rays and swoosh are not shown around it.
+
+### Soft tint
+
+The **Soft tint** card is on the **🏷️ White-label & logo** tab when your agency has the licence. It is the very light colour behind the sidebar, tabs and highlighted rows.
+
+1. Leave the box empty for **automatic**: a soft shade of your brand colour. The box shows the automatic colour as its placeholder.
+2. To choose your own, pick a colour or type one like **#F4F1FD**. The swatch beside it shows the result.
+3. Press **Save tint**. The portal redraws in the new tint.
+
+Press **Use automatic**, then **Save tint**, to go back to the automatic shade. Plain KiddieTrac portals keep KiddieTrac's own light blue.
+
 ### Previewing it
 
 Beside the logo settings, **Where your logo appears** shows a live preview of the **top bar** and the **app loading and unlock screen**. It changes as you change the logo, before you save. A line above the preview tells you what families and staff will see:
@@ -110,5 +129,6 @@ The invoice *From* block pulls your **agency name, address, phone, and support e
 
 ??? I uploaded our logo but the portal still shows KiddieTrac. | Your logo only replaces KiddieTrac in the portal and app when your agency has the white-label licence. Without it, the logo is used on invoices, emails and forms.
 ??? Can I change the white-label licence myself? | No. It is part of your plan, so only a platform admin can switch it.
+??? Can I change the light colour behind the sidebar and tabs? | Yes, with the white-label licence. Use Soft tint on the White-label & logo tab, or leave it on automatic for a soft shade of your brand colour.
 
 See also: [Invoice style and numbering](invoice-numbering-and-style) · [Billing setup & settings](billing-setup) · [Reference IDs](reference-ids)

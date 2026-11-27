@@ -31,6 +31,37 @@ toute la plateforme plutôt qu’une seule agence :
   côté ventes. Voir [Dépôt de fichiers](files-repository).
 - **Paramètres → Alertes de sécurité** : voir [Alertes de sécurité et surveillance](security-alerts).
 
+## Licences et statut de facturation
+
+Le forfait et les modules d'une agence se trouvent sur sa licence, dans **Platform → Licences**.
+
+- Chaque agence forme un groupe. Cliquez sur son en-tête (ou appuyez sur Entrée ou Espace) pour
+  ouvrir ou fermer ses lignes de forfait et de modules. Fermé, l'en-tête affiche les modules en
+  pastilles à côté de la durée, du nombre de lignes et du total. **Expand all** et **Collapse all**
+  agissent sur toute la liste, et votre choix pour chaque agence est gardé sur cet ordinateur.
+- Un groupe s'ouvre de lui-même seulement quand la liste est filtrée sur cette agence, quand
+  l'agence est dans son délai de grâce ou n'a aucun forfait en cours, ou quand sa licence se
+  termine dans les 30 jours sans renouvellement automatique.
+- Le **⋮** de l'en-tête d'une agence contient **Convert to paid** (essais), **Renew all**,
+  **Term & renewal**, **＋ Add add-on** (ou **＋ Add plan**), **Included centres** et, en dernier,
+  **Cancel licence**. Le **⋮** de chaque ligne contient **Edit** (prix, quantité, note) et, pour
+  les modules, **Remove add-on**.
+- **Toutes les agences → Modifier → Plan** affiche **Plan & add-ons** en lecture seule : le
+  forfait, chaque module avec son numéro de pièce et son prix, et la date de renouvellement.
+  **Manage in Licences →** ouvre Licences filtré sur cette agence. Modifiez la licence là, pas dans
+  la fenêtre Modifier.
+- Un changement de licence ou de fonction atteint les onglets ouverts de l'agence sans que
+  personne ne se déconnecte.
+
+**Le statut de facturation suit la licence.** Un forfait payé ou gratuit rend l'agence
+**active**, un essai la met en **trial**, le délai de grâce la garde **active** (les factures de
+renouvellement continuent d'être émises), et l'absence de forfait en cours la rend **suspended**.
+Le statut est en lecture seule dans **My agency → Manage** et **Features**. **Suspend** garde
+l'agence suspendue malgré tout changement de licence jusqu'à ce que vous appuyiez sur **Resume**.
+**Pin the status** dans **Manage** garde une agence en **trial** ou **active** quoi que dise sa
+licence (utilisé pour les agences de démonstration) ; un statut épinglé ne lance jamais la
+facturation, et une suspension l'emporte toujours.
+
 ## Ce que les admins de la plateforme ne peuvent pas faire (pour l’instant)
 
 - Modifier les données d’un locataire sans d’abord passer à cette agence. Le contexte de l’agence active limite encore la plupart des opérations d’écriture.

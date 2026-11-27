@@ -43,7 +43,7 @@ Lorsque vous envoyez à un seul centre, le personnel rattaché à un autre centr
 concernant un centre n’est pas une nouvelle pour un autre. Le personnel rattaché à l’agence dans son ensemble, sans
 centre propre, la reçoit quand même.
 
-> **Remarque :** Personne n’est entrepreneur tant que vous ne l’avez pas indiqué. Il n’existe pas de rôle d’entrepreneur. Sur l’écran **Personnel**, activez **Entrepreneur** pour chaque personne que le public « Tous les entrepreneurs » doit joindre.
+> **Remarque :** Personne n’est entrepreneur tant que vous ne l’avez pas indiqué. Il n’existe pas de rôle d’entrepreneur. Sur l’écran **Personnel**, activez **Entrepreneur** pour chaque personne que le public « Tous les entrepreneurs » doit joindre. Avec le module RH, les deux restent alignés : choisir le type d’emploi **Contrat** dans le dossier RH d’une personne active **Entrepreneur**, et passer à un autre type le désactive. Activer **Entrepreneur** ici met son type RH à Contrat ; le désactiver remet un type Contrat à « non défini ».
 
 [[show: #staff @ Contractor | Montrez-moi la colonne Entrepreneur]]
 
