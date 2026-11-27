@@ -1394,6 +1394,13 @@ delete hr/payroll/runs/{id} | Discarded a pay run that was not finalized
 post hr/payroll/ytd-openings/import | Imported opening year-to-date payroll balances
 put hr/payroll/ytd-openings/{userId} | Entered or changed a staff member's opening year-to-date payroll balance
 delete hr/payroll/ytd-openings/{id} | Removed a staff member's opening year-to-date payroll balance
+put hr/payroll/year-end/settings | Changed the payroll year-end settings (dental benefits code for box 45, filing contact)
+post hr/payroll/year-end/generate | Generated (or regenerated) the draft T4 / T4A / RL-1 tax slips for a year
+post hr/payroll/year-end/finalize | Finalized the year's tax slips (only allowed when they reconcile with the payslips and remittances)
+put hr/payroll/year-end/slips/{id} | Changed the typed boxes on a draft tax slip (union dues, donations, pension adjustment, dental code)
+post hr/payroll/year-end/slips/{id}/amend | Started an amended tax slip
+post hr/payroll/year-end/slips/{id}/cancel | Started cancelling a tax slip
+post hr/payroll/year-end/slips/{id}/withdraw | Withdrew a pending amended or cancelled tax slip
 post hr/letters/send | Sent an HR letter for e-signature
 post hr/documents/{id}/accept | Accepted a company HR document
 post hr/time-off/{id}/note | Attached a note or photo to a time-off request

@@ -389,6 +389,13 @@
         subText: lb.budget ? 'budget ' + fmtMoney0(lb.budget) : 'no budget', viz: lb.budget ? ring(Math.min(1, lb.cost / lb.budget), fmtMoney0(lb.cost) + ' planned against a ' + fmtMoney0(lb.budget) + ' weekly budget (' + lb.pct + '%)' + (lb.no_rate ? '; ' + lb.no_rate + ' shifts have no pay rate' : ''), lb.pct + '%') : '',
         go: function () { goHash('#schedule?tab=rotatools'); } });
     }
+    // Payroll Engine P3 (2026-11-27): T4 / T4A / RL-1 deadline (Nov 1 - Mar 31, payroll engine on).
+    if (can.pay && T.year_end) {
+      var ye = T.year_end, yd = ye.days_left, ySt = ye.status === 'final' ? (ye.pending ? 'finalized · ' + ye.pending + ' change(s) waiting' : 'finalized') : (ye.status === 'draft' ? 'draft slips' : 'not started');
+      tiles.push({ icon: '🧾', label: ye.year + ' tax slips due', value: yd < 0 ? 0 : yd, unit: yd === 1 ? ' day' : ' days',
+        sub: esc('Feb ' + String(ye.deadline).slice(8) + ', ' + (ye.year + 1) + ' · ' + ySt) + (yd < 0 && ye.status !== 'final' ? ' <span class="hrd-d b">' + esc((-yd) + ' days late') + '</span>' : ''),
+        subText: 'T4 / T4A / RL-1 ' + ySt, go: function () { goHash('#hr-payroll?tab=yearend'); } });
+    }
 
     // ── charts ──
     var cards = [];

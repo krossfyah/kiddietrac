@@ -2681,6 +2681,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/hr/payroll/payslips/{id}', [\App\Http\Controllers\Api\PayrollRunController::class, 'payslip'])->whereNumber('id');
         Route::get   ('/hr/me/payslips', [\App\Http\Controllers\Api\PayrollRunController::class, 'myPayslips']);
         Route::get   ('/hr/me/payslips/{id}', [\App\Http\Controllers\Api\PayrollRunController::class, 'myPayslip'])->whereNumber('id');
+        // Payroll Engine P3 (2026-11-27): Canadian year end - T4 / T4A / RL-1, summaries, CRA XML, amendments (PayrollYearEndController).
+        Route::get   ('/hr/payroll/year-end', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'overview']);
+        Route::put   ('/hr/payroll/year-end/settings', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'saveSettings']);
+        Route::post  ('/hr/payroll/year-end/generate', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'generate'])->middleware('throttle:20,1,yegen');
+        Route::post  ('/hr/payroll/year-end/finalize', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'finalize'])->middleware('throttle:10,1,yefin');
+        Route::put   ('/hr/payroll/year-end/slips/{id}', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'saveSlip'])->whereNumber('id');
+        Route::post  ('/hr/payroll/year-end/slips/{id}/amend', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'amend'])->whereNumber('id');
+        Route::post  ('/hr/payroll/year-end/slips/{id}/cancel', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'cancel'])->whereNumber('id');
+        Route::post  ('/hr/payroll/year-end/slips/{id}/withdraw', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'withdraw'])->whereNumber('id');
+        Route::get   ('/hr/payroll/year-end/slips/{id}/pdf', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'slipPdf'])->whereNumber('id');
+        Route::get   ('/hr/payroll/year-end/summary', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'summaryPdf']);
+        Route::get   ('/hr/payroll/year-end/xml', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'xml'])->middleware('throttle:20,1,yexml');
+        Route::get   ('/hr/me/tax-slips', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'mine']);
+        Route::get   ('/hr/me/tax-slips/{id}/pdf', [\App\Http\Controllers\Api\PayrollYearEndController::class, 'minePdf'])->whereNumber('id');
     });
 
     // ---- KiddieTrac HR add-on (2026-11-27, feature `hr`: EnforcePlanFeatures::MAP owns hr/ and exports/hr-absence) ----

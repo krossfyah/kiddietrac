@@ -49,7 +49,7 @@
     { id: 'payroll', hash: 'payroll', alt: 'hr-payroll', icon: '💼', label: 'Payroll', sub: 'Pay runs and hours, and expense and mileage claims.',
       // Payroll Engine P2 (2026-11-27): pay: true = shown only while the agency's payroll engine is on (screen-hr-tax.js).
       tabs: [{ k: 'payroll', label: 'Payroll', screen: 'payroll' }, { k: 'payruns', label: 'Pay runs', pay: true }, { k: 'remit', label: 'Remittances', pay: true },
-        { k: 'ytd', label: 'Opening balances', pay: true, admin: true }, { k: 'claims', label: 'Claims & mileage' }] },
+        { k: 'ytd', label: 'Opening balances', pay: true, admin: true }, { k: 'yearend', label: 'Year end', pay: true }, { k: 'claims', label: 'Claims & mileage' }] },
     { id: 'hiring', hash: 'hr-hiring', icon: '🧲', label: 'Hiring & onboarding', sub: 'Job posts, applicants and onboarding checklists.',
       tabs: [{ k: 'hiring', label: 'Hiring' }, { k: 'onboarding', label: 'Onboarding' }] },
     { id: 'performance', hash: 'hr-performance', icon: '🎯', label: 'Performance & learning', sub: 'Reviews, goals, one-to-ones and courses.',

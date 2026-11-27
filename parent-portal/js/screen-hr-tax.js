@@ -609,15 +609,218 @@
     g.appendChild(t);
   }
 
+  /* ═══ PAYROLL ENGINE, PHASE 3 (2026-11-27): Canadian year end ════════════════════════════════════════════════════════
+     Payroll > "Year end" (agency admins; directors read their centres' slips): the deadline, the reconciliation (slips vs
+     payslips vs PD7A remittances - finalize is refused until it passes), the T4 / T4A / RL-1 slips with ⋮ View / Edit typed
+     boxes / Amend / Cancel, the summaries and the CRA XML file (validated against CRA's schema before it is handed out).
+     My HR > "My tax slips": the person's own final slips. Server: App\Http\Controllers\Api\PayrollYearEndController. */
+  var KIND_LABEL = { T4: 'T4', T4A: 'T4A', RL1: 'RL-1' };
+  var SLIP_ST = { draft: ['#F1F5F9', '#475569', 'Draft'], final: ['#ECFDF5', '#047857', 'Final'], replaced: ['#F1F5F9', '#64748B', 'Replaced'], cancelled: ['#FEE2E2', '#991B1B', 'Cancelled'] };
+  function slipPill(s) {
+    var p = SLIP_ST[s.status] || SLIP_ST.draft, t = p[2];
+    if (s.report_type === 'A') t = s.status === 'draft' ? 'Amendment (pending)' : (s.status === 'final' ? 'Amended' : t);
+    if (s.report_type === 'C') t = s.status === 'draft' ? 'Cancellation (pending)' : 'Cancelled';
+    return pill(s.report_type === 'C' ? '#FEE2E2' : p[0], s.report_type === 'C' ? '#991B1B' : p[1], t);
+  }
+  function mainAmt(s) { var b = s.boxes || {}; return s.kind === 'T4A' ? b['048'] : (s.kind === 'RL1' ? b.A : b['14']); }
+  function taxAmt(s) { var b = s.boxes || {}; return s.kind === 'T4A' ? b['022'] : (s.kind === 'RL1' ? b.E : b['22']); }
+  function blobGet(path) {
+    var base = KT.API_BASE || 'https://api.kiddietrac.com/api/v1';
+    var tok = sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token') || '';
+    var aid = ''; try { aid = sessionStorage.getItem('kt_active_agency_id') || localStorage.getItem('kt_active_agency_id') || ''; } catch (e) {}
+    var h = { Authorization: 'Bearer ' + tok }; if (aid) h['X-Active-Agency-Id'] = aid;
+    return fetch(base + path, { headers: h, cache: 'no-store' }).then(function (r) {
+      if (!r.ok) return r.json().then(function (j) { var e = new Error('HTTP ' + r.status); e.data = j; throw e; }, function () { throw new Error('HTTP ' + r.status); });
+      return r.blob();
+    });
+  }
+  function openPdf(path, title, file) {
+    blobGet(path).then(function (b) { KT.openFile(b, { title: title, filename: file + '.pdf', label: title }); }, function (e) { toast('⚠️', 'Could not open it', errMsg(e), '#DC2626'); });
+  }
+  function saveBlob(path, file) {
+    return blobGet(path).then(function (b) { var u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = file; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 30000); });
+  }
+
+  async function drawYearEnd(host, year) {
+    css2();
+    host.innerHTML = '<div class="hr-sub" style="padding:12px 2px;">Loading…</div>';
+    var r;
+    try { r = await Api.get('/hr/payroll/year-end' + (year ? '?year=' + year : '')); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
+    if (!host.isConnected) return;
+    if (!r.enabled) return offNote(host, true);
+    var y = r.year, rec = r.reconciliation || null, again = function () { drawYearEnd(host, y); };
+    var pending = (r.slips || []).some(function (s) { return s.status === 'draft'; });
+    var finals = (r.slips || []).some(function (s) { return s.status !== 'draft'; });
+    var dl = r.days_left;
+    var due = '<b>' + esc(day(r.deadline)) + '</b> · ' + (dl > 0 ? esc(dl + (dl === 1 ? ' day left' : ' days left')) : (dl === 0 ? 'due today' : '<span style="color:#B91C1C;">' + esc((-dl) + ' days late') + '</span>'));
+    var h = '<div class="kt-card" style="padding:12px 14px;" data-kt-nogrid>'
+      + '<div class="hr-bar" style="margin:0 0 6px;"><b style="font-size:14px;">Year end ' + esc(y) + '</b><span style="flex:1"></span>'
+      + '<button type="button" class="hr-b" data-y="' + (y - 1) + '" data-kt-iconized="1">‹ ' + (y - 1) + '</button> <button type="button" class="hr-b" data-y="' + (y + 1) + '" data-kt-iconized="1">' + (y + 1) + ' ›</button> '
+      + (r.admin ? '<button type="button" class="hr-b" data-ye="settings" data-kt-iconized="1">Year-end settings</button> '
+        + (!finals ? '<button type="button" class="hr-b" data-ye="gen" data-kt-iconized="1">' + ((r.slips || []).length ? 'Generate again' : 'Generate slips') + '</button> ' : '')
+        + (pending ? '<button type="button" class="hr-b p" data-ye="fin" data-kt-iconized="1"' + (rec && rec.ok ? '' : ' disabled') + '>Finalize slips</button> ' : '')
+        + '<button type="button" class="hr-b" data-ye="files" data-kt-iconized="1">Summaries & CRA file</button>' : '') + '</div>'
+      + (r.outside_canada ? '<div class="hr-note" style="margin:0 0 8px;">KiddieTrac payroll is Canadian: it works out CRA and Revenu Québec deductions and makes Canadian slips (T4, T4A, RL-1). This agency\'s centres are outside Canada, so each person\'s tax setup names the Canadian province they are paid in. US payroll (W-2, 1099) comes later.</div>' : '')
+      + kv('Filing deadline', due) + kv('Status', r.status === 'final' ? (pending ? 'Finalized · amendments waiting' : 'Finalized' + (r.finalized_at ? ' ' + esc(day(r.finalized_at)) : '')) : ((r.slips || []).length ? 'Draft slips' + (r.generated_at ? ' · generated ' + esc(day(r.generated_at)) : '') : 'Not started'));
+    if (rec) {
+      var rows = (rec.lines || []).map(function (l) {
+        return '<tr>' + td(l.label) + td(money(l.slips), true) + td('<span data-no-i18n>' + money(l.against) + '</span><div class="hr-sub">' + esc(l.against_label) + '</div>', true, true)
+          + td(l.ok ? '<span style="color:#047857;font-weight:800;">✓</span>' : '<b style="color:#B91C1C;">' + money(l.diff) + '</b>', true, true) + '</tr>';
+      });
+      h += '<div class="hrt-sec" style="margin-top:12px;">Reconciliation</div>'
+        + '<div class="hr-sub" style="margin-bottom:6px;">The slips have to equal the payslips, the remittance (PD7A) report, and the opening balances and other-payroll payslips counted once. Finalize is refused until every line matches and nothing is blocking.</div>'
+        + table(['Check', { t: 'On the slips', r: 1 }, { t: 'Compared with', r: 1 }, { t: 'Difference', r: 1 }], rows, ' data-ye-rec')
+        + (rec.blockers || []).map(function (b) { return '<div class="hrx-e" style="margin-top:4px;">⛔ ' + esc(b) + '</div>'; }).join('')
+        + (rec.warnings || []).map(function (w) { return '<div class="hrx-w" style="margin-top:4px;">' + esc(w) + '</div>'; }).join('')
+        + (rec.ok ? '<div style="color:#047857;font-weight:700;margin-top:6px;">✓ Everything reconciles.</div>' : '');
+    }
+    var sl = (r.slips || []).map(function (s) {
+      var w = (s.warnings || []).map(function (m) { return '<div class="hrx-w">' + esc(m) + '</div>'; }).join('');
+      return '<tr>' + td('<b data-no-i18n>' + esc(s.name) + '</b>' + (s.sin ? '<div class="hr-sub" data-no-i18n>SIN ' + esc(s.sin) + '</div>' : '<div class="hr-sub">No SIN on file</div>') + (s.reason ? '<div class="hr-sub">' + esc(s.reason) + '</div>' : '') + w, false, true)
+        + td(KIND_LABEL[s.kind] + (s.version > 1 ? ' v' + s.version : '')) + td(s.jurisdiction || '—') + td(money(mainAmt(s)), true) + td(money(taxAmt(s)), true)
+        + td(slipPill(s), false, true) + td(kebabBtn('s' + s.id), true, true) + '</tr>';
+    });
+    h += '<div class="hrt-sec" style="margin-top:12px;">Slips</div>'
+      + (sl.length ? table(['Person', 'Slip', 'Province', { t: 'Income', r: 1 }, { t: 'Tax deducted', r: 1 }, 'Status', ''], sl, ' data-ye-slips')
+        : '<div class="hr-sub" style="padding:6px 0;">' + (r.admin ? 'No slips for ' + esc(y) + ' yet. Generate them from the finalized pay runs (they can be generated again until they are finalized).' : 'No slips for ' + esc(y) + ' for your centres yet.') + '</div>');
+    if (r.admin && r.summaries) {
+      var T = r.summaries.T4 || {}, L = T.lines || {};
+      h += '<div class="hrx-tot"><div><span>T4 slips</span><b>' + esc(T.slips || 0) + '</b></div><div><span>Box 14 total</span><b>' + money(L['14']) + '</b></div>'
+        + '<div><span>Deductions (line 80)</span><b>' + money(L['80']) + '</b></div><div><span>Remitted (line 82)</span><b>' + money(L['82']) + '</b></div>'
+        + ((r.summaries.T4A || {}).slips ? '<div><span>T4A slips</span><b>' + esc(r.summaries.T4A.slips) + '</b></div>' : '') + ((r.summaries.RL1 || {}).slips ? '<div><span>RL-1 slips</span><b>' + esc(r.summaries.RL1.slips) + '</b></div>' : '') + '</div>';
+      var ex = (r.xml && r.xml.exports) || [];
+      if (ex.length) {
+        h += '<div class="hrt-sec" style="margin-top:10px;">CRA files handed out</div>' + table(['File', 'Slips', 'Schema', 'By', 'When'], ex.map(function (e) {
+          return '<tr>' + td('<b data-no-i18n>' + esc(e.ref) + '</b> · ' + esc(e.kind + (e.report_type === 'A' ? ' amended' : ' original')), false, true) + td(String(e.slips)) + td(e.schema) + td(e.by || '') + td(day(e.at)) + '</tr>';
+        }));
+      }
+    }
+    h += '<div class="hr-sub" style="margin-top:10px;">Slips come only from finalized pay runs, opening balances and other-payroll payslips that carry deductions. KiddieTrac never files for you: download the CRA file and upload it to CRA Internet File Transfer, and file RL-1s with Revenu Québec. Check the slips with your accountant before filing.</div></div>';
+    host.innerHTML = h;
+    host.querySelectorAll('[data-y]').forEach(function (b) { b.addEventListener('click', function () { drawYearEnd(host, +b.getAttribute('data-y')); }); });
+    var on = function (k, fn) { var b = host.querySelector('[data-ye="' + k + '"]'); if (b) b.addEventListener('click', function (e) { fn(b, e); }); };
+    on('settings', function () { yeSettings(r, again); });
+    on('gen', function (b) {
+      b.disabled = true;
+      Api.post('/hr/payroll/year-end/generate', { year: y }).then(function (x) {
+        var m = x.made || {}; toast('✅', 'Slips generated', (m.T4 || 0) + ' T4 · ' + (m.T4A || 0) + ' T4A · ' + (m.RL1 || 0) + ' RL-1', '#16A34A'); again();
+      }, function (e) { b.disabled = false; toast('⚠️', 'Not generated', errMsg(e), '#DC2626'); });
+    });
+    on('fin', function (b) {
+      var go = function () {
+        b.disabled = true;
+        Api.post('/hr/payroll/year-end/finalize', { year: y }).then(function (x) { toast('✅', 'Slips finalized', (x.final || 0) + ' slip(s) · staff see theirs in My HR', '#16A34A'); again(); },
+          function (e) { b.disabled = false; toast('⚠️', 'Not finalized', errMsg(e), '#DC2626'); again(); });
+      };
+      if (KT.confirm) KT.confirm({ title: 'Finalize the ' + y + ' slips?', description: 'Each person sees their slips in My HR. A finalized slip is never changed: corrections are amended or cancelled slips.', okLabel: 'Finalize' }).then(function (ok) { if (ok) go(); });
+      else go();
+    });
+    on('files', function (b) {
+      menu(b, [['T4 Summary (PDF)', function () { openPdf('/hr/payroll/year-end/summary?year=' + y + '&kind=T4', 'T4 Summary ' + y, 't4-summary-' + y); }],
+        (r.summaries && r.summaries.T4A && r.summaries.T4A.slips) ? ['T4A Summary (PDF)', function () { openPdf('/hr/payroll/year-end/summary?year=' + y + '&kind=T4A', 'T4A Summary ' + y, 't4a-summary-' + y); }] : null,
+        (r.summaries && r.summaries.RL1 && r.summaries.RL1.slips) ? ['RL-1 Summary information (PDF)', function () { openPdf('/hr/payroll/year-end/summary?year=' + y + '&kind=RL1', 'RL-1 Summary ' + y, 'rl1-summary-' + y); }] : null,
+        ['CRA file: T4 originals (XML)', function () { xmlGet(y, 'T4', 'O', again); }],
+        ['CRA file: T4 amendments (XML)', function () { xmlGet(y, 'T4', 'A', again); }],
+        (r.summaries && r.summaries.T4A && r.summaries.T4A.slips) ? ['CRA file: T4A originals (XML)', function () { xmlGet(y, 'T4A', 'O', again); }] : null,
+        ['Print the reconciliation', function () { var tb = host.querySelector('[data-ye-rec]'); if (KT.printDoc) KT.printDoc({ html: '<h2>Year end ' + esc(y) + ': reconciliation</h2>' + (tb ? tb.outerHTML : '') }, { title: 'Reconciliation ' + y }); }]]);
+    });
+    host.querySelectorAll('[data-keb]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = +String(b.getAttribute('data-keb')).slice(1), s = (r.slips || []).filter(function (x) { return x.id === id; })[0]; if (!s) return;
+        var own = s.user_id === r.me;
+        menu(b, [['View slip', function () { openPdf('/hr/payroll/year-end/slips/' + s.id + '/pdf', KIND_LABEL[s.kind] + ' ' + s.tax_year + ' · ' + s.name, String(s.kind).toLowerCase() + '-' + s.tax_year); }],
+          r.admin && !own && s.status === 'draft' && s.report_type !== 'C' ? ['Edit typed boxes', function () { yeEditSlip(r, s, again); }] : null,
+          r.admin && !own && s.status === 'final' ? ['Amend this slip', function () { yeReason(s, 'amend', again); }] : null,
+          r.admin && !own && s.status === 'final' ? ['Cancel this slip', function () { yeReason(s, 'cancel', again); }] : null,
+          r.admin && s.status === 'draft' && s.replaces_slip_id ? ['Withdraw the ' + (s.report_type === 'C' ? 'cancellation' : 'amendment'), function () {
+            Api.post('/hr/payroll/year-end/slips/' + s.id + '/withdraw', {}).then(function () { toast('✅', 'Withdrawn', '', '#16A34A'); again(); }, function (e) { toast('⚠️', 'Not withdrawn', errMsg(e), '#DC2626'); });
+          }] : null]);
+      });
+    });
+  }
+  function xmlGet(y, kind, type, after) {
+    var f = kind.toLowerCase() + '-' + y + (type === 'A' ? '-amended' : '') + '.xml';
+    saveBlob('/hr/payroll/year-end/xml?year=' + y + '&kind=' + kind + '&type=' + type, f).then(function () {
+      toast('✅', 'CRA file downloaded', 'It passed the CRA schema check. Upload it in CRA Internet File Transfer.', '#16A34A'); if (after) after();
+    }, function (e) { toast('⚠️', 'No file', errMsg(e), '#DC2626'); });
+  }
+  function yeSettings(r, after) {
+    var s = r.settings || {};
+    var box = el('<div style="' + GRID + '">'
+      + field('Box 45: dental benefits your agency offers (applies to every T4; a slip can override it)', '<select class="hr-i" data-f="dental_code" style="width:100%;">' + opts(r.dental || {}, s.dental_code, 'Choose…') + '</select>', true)
+      + field('Filing contact name', '<input class="hr-i" data-f="contact_name" maxlength="35" value="' + esc(s.contact_name || '') + '" style="width:100%;">')
+      + field('Filing contact phone', '<input class="hr-i" data-f="contact_phone" maxlength="30" inputmode="tel" value="' + esc(s.contact_phone || '') + '" style="width:100%;">')
+      + field('Filing contact email', '<input class="hr-i" data-f="contact_email" type="email" maxlength="60" value="' + esc(s.contact_email || '') + '" style="width:100%;">')
+      + '</div><div class="hr-sub" style="margin-top:8px;">The contact goes on the T4 Summary and the CRA file (the person CRA calls with questions). The CRA payroll account number is in HR settings › Payroll engine' + (r.rp_number ? ' (' + esc(r.rp_number) + ')' : ': not set yet') + '.</div>' + ERR);
+    modal({ title: '🧾 Year-end settings', body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
+      var o = { dental_code: val(box, 'dental_code') ? +val(box, 'dental_code') : null, contact_name: val(box, 'contact_name'), contact_phone: val(box, 'contact_phone'), contact_email: val(box, 'contact_email') };
+      return Api.put('/hr/payroll/year-end/settings', o).then(function () { toast('✅', 'Saved', '', '#16A34A'); after(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+  function yeEditSlip(r, s, after) {
+    var m = s.manual || {}, f;
+    if (s.kind === 'T4') {
+      f = field('Box 44 · Union dues', num('44', m['44'])) + field('Box 46 · Charitable donations', num('46', m['46'])) + field('Box 20 · RPP contributions', num('20', m['20']))
+        + field('Box 52 · Pension adjustment', num('52', m['52'])) + field('Box 50 · RPP or DPSP registration number', '<input class="hr-i" data-f="50" maxlength="7" inputmode="numeric" value="' + esc(m['50'] || '') + '" style="width:100%;">')
+        + field('Box 45 · Dental benefits (blank = agency default)', '<select class="hr-i" data-f="45" style="width:100%;">' + opts(r.dental || {}, m['45'], 'Agency default') + '</select>', true)
+        + field('Box 29 · Employment code (rarely used)', '<select class="hr-i" data-f="29" style="width:100%;">' + opts({ 11: '11 Placement or employment agency', 12: '12 Taxi or passenger vehicle driver', 13: '13 Barber or hairdresser', 14: '14 Salary deferral withdrawal', 15: '15 Seasonal agricultural worker', 16: '16 Detached employee (social security agreement)', 17: '17 Fishing' }, m['29'], 'None') + '</select>', true);
+    } else if (s.kind === 'T4A') {
+      f = field('Recipient business number (if they gave one)', '<input class="hr-i" data-f="rcpnt_bn" maxlength="15" placeholder="123456789RT0001" value="' + esc(m.rcpnt_bn || '') + '" style="width:100%;">', true);
+    } else {
+      f = '<div class="hr-sub">The RL-1 boxes all come from the payroll. Nothing to type here.</div>';
+    }
+    var box = el('<div style="' + GRID + '">' + f + '</div><div class="hr-sub" style="margin-top:8px;">Only boxes KiddieTrac payroll has no record of. Amounts from the pay runs are never typed.</div>' + ERR);
+    modal({ title: '✏️ ' + KIND_LABEL[s.kind] + ' ' + s.tax_year + ' · ' + s.name, body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Saving…', handler: function () {
+      var o = {}; ['44', '46', '20', '52', '50', '45', '29', 'rcpnt_bn'].forEach(function (k) { var v = val(box, k); if (v != null) o[k] = /^(44|46|20|52)$/.test(k) ? Number(v) : (/^(45|29)$/.test(k) ? +v : v); });
+      return Api.put('/hr/payroll/year-end/slips/' + s.id, o).then(function () { toast('✅', 'Saved', '', '#16A34A'); after(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+  function yeReason(s, what, after) {
+    var amend = what === 'amend';
+    var box = el('<div>' + field(amend ? 'What is being corrected' : 'Why it is cancelled', '<textarea class="hr-i" data-f="reason" rows="3" maxlength="500" style="width:100%;min-height:72px;"></textarea>', true) + '</div>'
+      + '<div class="hr-sub" style="margin-top:8px;">' + (amend ? 'The amended slip is worked out again from the payroll as it is now (and keeps the typed boxes). It is finalized with the year\'s next reconciliation, then filed as an amended CRA file.'
+        : 'A cancelled slip reports nothing (for a slip issued to the wrong person, or one that was not needed). It is finalized with the next reconciliation and filed as an amended CRA file.') + '</div>' + ERR);
+    modal({ title: (amend ? '📝 Amend ' : '🗑️ Cancel ') + KIND_LABEL[s.kind] + ' ' + s.tax_year + ' · ' + s.name, body: box, actions: [{ label: 'Close' }, { label: amend ? 'Start the amendment' : 'Start the cancellation', primary: true, busyLabel: 'Working…', handler: function () {
+      var why = val(box, 'reason'); if (!why) { msg(box, 'Say why.'); return false; }
+      return Api.post('/hr/payroll/year-end/slips/' + s.id + '/' + what, { reason: why }).then(function () { toast('✅', amend ? 'Amendment started' : 'Cancellation started', 'Finalize it from the Year end tab.', '#16A34A'); after(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
+  // ── My HR > My tax slips ────────────────────────────────────────────────────────────────────────────────────────
+  async function myTaxSlips(host) {
+    var r;
+    try { r = await Api.get('/hr/me/tax-slips'); } catch (e) { return; }
+    if (!r || !r.enabled || !host.isConnected || !(r.slips || []).length) return;
+    css2();
+    var wrap = document.createElement('div'); wrap.setAttribute('data-hrx-taxslips', '1');
+    // Right under My documents when it is there (My HR › Documents), else at the end.
+    var docs = host.querySelector('[data-hrf-mine]');
+    if (docs && docs.parentNode) docs.parentNode.insertBefore(wrap, docs.nextSibling); else host.appendChild(wrap);
+    var rows = r.slips.map(function (s) {
+      var st = s.report_type === 'C' ? 'Cancelled' : (!s.in_force ? 'Replaced by a newer slip' : (s.report_type === 'A' ? 'Amended' : ''));
+      return '<tr data-open="' + s.id + '">' + td('<b>' + esc(KIND_LABEL[s.kind] + ' ' + s.tax_year) + '</b>' + (s.jurisdiction && s.kind !== 'RL1' ? ' · ' + esc(s.jurisdiction) : ''), false, true)
+        + td(st ? st : 'In force') + td(s.finalized_at ? day(s.finalized_at) : '') + '</tr>';
+    });
+    wrap.innerHTML = '<div class="hrt-sec">My tax slips</div><div class="kt-card" style="padding:10px 14px;" data-kt-nogrid>'
+      + table(['Slip', 'Status', 'Issued'], rows) + '<div class="hr-sub" style="margin-top:6px;">Your employer files these with the CRA (and Revenu Québec for an RL-1). Open one to see or save it for your tax return.</div></div>';
+    wrap.querySelectorAll('tr[data-open]').forEach(function (tr) {
+      tr.addEventListener('click', function () {
+        var s = r.slips.filter(function (x) { return String(x.id) === tr.getAttribute('data-open'); })[0]; if (!s) return;
+        openPdf('/hr/me/tax-slips/' + s.id + '/pdf', 'My ' + KIND_LABEL[s.kind] + ' ' + s.tax_year, String(s.kind).toLowerCase() + '-' + s.tax_year);
+      });
+    });
+  }
+
   var PAY_ON = null;
-  var P2_TABS = { payruns: drawRuns, remit: drawRemit, ytd: drawYtd };
+  var P2_TABS = { payruns: drawRuns, remit: drawRemit, ytd: drawYtd, yearend: function (host) { return drawYearEnd(host); } };
   function has(k) { return !!P2_TABS[k]; }
   function draw(k, host) { var m = /[?&]run=(\d+)/.exec(location.hash || ''); return k === 'payruns' ? drawRuns(host, m ? +m[1] : null) : P2_TABS[k](host); }
 
-  /* My HR: tax forms (P1) and my payslips (P2), each with its tile once it has something to show. */
+  /* My HR: tax forms (P1), my payslips (P2) and my tax slips (P3), each with its tile once it has something to show. */
   function mineAll(host) {
     mine(host).then(function () { if (host.querySelector('[data-hrx-mine]')) tile(host, '🏛️', 'Tax forms', /^tax forms/i); });
     myPayslips(host).then(function () { if (host.querySelector('[data-hrx-slips]')) tile(host, '💵', 'My payslips', /^my payslips/i); });
+    myTaxSlips(host).then(function () { if (host.querySelector('[data-hrx-taxslips]')) tile(host, '🧾', 'My tax slips', /^my tax slips/i); });
   }
   window.KTHrTax = { mine: mineAll, profile: profile, has: has, draw: draw, settings: settings, openSlip: openSlip };
 })(window);

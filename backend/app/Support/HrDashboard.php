@@ -426,6 +426,7 @@ final class HrDashboard
                 'onboarding' => $onb,
                 'courses' => $course,
                 'labour' => $labour,
+                'year_end' => $pay ? self::yearEndTile($aid, $today) : null,
             ],
             'charts' => [
                 'headcount' => array_map(fn ($m, $v) => ['month' => $m['key'], 'label' => $m['label'], 'value' => $v], $months, $hcSeries),
@@ -442,5 +443,33 @@ final class HrDashboard
             ],
             'ms' => (int) round((microtime(true) - $t0) * 1000),
         ];
+    }
+
+    /**
+     * Payroll Engine P3 (2026-11-27): the T4 / T4A / RL-1 deadline (last day of February) from November 1 to March 31,
+     * for pay viewers of agencies with the payroll engine on. Status: none | draft | final.
+     */
+    private static function yearEndTile(int $aid, string $today): ?array
+    {
+        try {
+            if (! \App\Support\Payroll\PayrollTax::engineOn($aid) || ! \Illuminate\Support\Facades\Schema::hasTable('payroll_year_ends')) {
+                return null;
+            }
+            $m = (int) substr($today, 5, 2);
+            if ($m >= 4 && $m <= 10) {
+                return null;
+            }
+            $y = $m <= 3 ? (int) substr($today, 0, 4) - 1 : (int) substr($today, 0, 4);
+            $dl = \App\Support\Payroll\YearEnd::deadline($y);
+            $st = DB::table('payroll_year_ends')->where('agency_id', $aid)->where('tax_year', $y)->value('status') ?: 'none';
+            $pending = DB::table('payroll_slips')->where('agency_id', $aid)->where('tax_year', $y)->where('status', 'draft')->count();
+
+            return ['year' => $y, 'deadline' => $dl, 'days_left' => (int) \Carbon\Carbon::parse($today)->diffInDays(\Carbon\Carbon::parse($dl), false),
+                'status' => $st, 'pending' => $pending];
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
     }
 }

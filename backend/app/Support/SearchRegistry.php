@@ -201,6 +201,10 @@ final class SearchRegistry
         'payroll_runs' => 'pay runs (payroll): listed in Human Resources > Payroll > Pay runs for people who can see pay; never searched',
         'payroll_run_lines' => 'one person\'s pay inside a pay run (payroll): shown in the run and as the payslip; never searched',
         'payroll_ytd_openings' => 'opening year-to-date payroll balances for mid-year starts (payroll): agency admins only, Payroll > Opening balances; never searched',
+        // KiddieTrac Payroll Engine P3 (2026-11-27): Canadian year end.
+        'payroll_slips' => 'T4 / T4A / RL-1 tax slips (payroll year end): Payroll > Year end for admins / directors, My HR > My tax slips for the person; never searched',
+        'payroll_year_ends' => 'one row per agency and tax year: year-end status and the last reconciliation (configuration); never searched',
+        'payroll_xml_exports' => 'log of CRA XML files handed out (who, when, which slips, SHA-256 - the file itself is never kept); never searched',
         // KiddieTrac HR Phase 4, batch 6 (2026-11-27): quizzes, directory shares, recognition, approver grants.
         'hr_course_questions' => 'a course\'s quiz questions (configuration): edited in the course, never a record people look up',
         'hr_course_attempts' => 'quiz tries on a course (HR): shown with the course assignment; search the staff member',
