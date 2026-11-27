@@ -12,6 +12,16 @@ Forma parte del complemento de RR. HH. de KiddieTrac. Los administradores de la 
 
 Abra **Recursos humanos > Panel de RR. HH.**.
 
+### Indicadores y gráficos
+
+La parte superior del panel muestra sus cifras de RR. HH. de un vistazo. Elija **Este mes**, **Este trimestre** o **Este año** y (administradores de la agencia, o directores con varios centros) un centro. Cada tarjeta compara el periodo hasta hoy con el mismo punto del periodo anterior (por ejemplo, del 1 al 27 de noviembre frente al 1 al 27 de octubre): ▲ y ▼ muestran el cambio, en verde cuando es una buena noticia y en rojo cuando no lo es.
+
+- **Tarjetas**: plantilla y equivalentes a tiempo completo (horas semanales del expediente ÷ su semana a tiempo completo), incorporaciones, bajas, rotación, ausentes hoy y esta semana, tasa de ausencias (días de permiso aprobados ÷ personas × días laborables), fichajes tardíos, todo lo pendiente de decisión (permisos, correcciones de fichaje, hojas de horas por aprobar, horas extra, gastos, turnos solicitados), horas extra, turnos abiertos y turnos aún no aceptados, certificados por renovar, revisiones de periodo de prueba pendientes, incorporaciones en curso, formación completada y, para quienes pueden ver la nómina, el coste laboral de la semana frente al presupuesto.
+- **Gráficos**: plantilla en 12 meses, incorporaciones y bajas por mes (pase el cursor por un mes para ver su rotación), ausencias por motivo, tendencia de horas extra, saldos y uso de permisos, personal por centro, funciones y tipos de empleo, antigüedad, certificados (válidos, por vencer, vencidos) y quién está ausente los próximos 14 días.
+- Pase el cursor por una barra para ver sus cifras o pulse **Tabla** en cualquier gráfico para ver los números. Haga clic en una tarjeta, un mes o un día para abrir la pantalla o el informe correspondiente con esas fechas ya elegidas. Al hacer clic en un centro en **Personal por centro**, todo el panel se filtra a ese centro.
+- Los gráficos se dibujan al desplazarse hasta ellos. Si su dispositivo está configurado para reducir el movimiento, aparecen directamente.
+- Las cifras llevan como mucho uno o dos minutos de retraso. Los fichajes antiguos o corregidos se comparan con su turno la primera vez que abre el panel; la tarjeta de fichajes tardíos indica cuándo algunos aún se están comprobando.
+
 - **Lista de configuración de RR. HH.**: cinco pasos con una barra de progreso: añadir los tipos de permiso, fijar cuánto permiso corresponde a cada persona, completar el expediente de cada persona, dar a cada uno un responsable que apruebe sus solicitudes y lograr que el personal inicie sesión. **Configurar** lleva directamente a cada paso.
 - **Fin del período de prueba**: las personas cuyo período de prueba termina en los próximos 30 días, o terminó sin confirmarse. Con el menú ⋮ puede **marcar el período de prueba como superado**, **ampliarlo** hasta una fecha nueva o abrir el expediente.
 - **Pendiente**: cuántas personas tienen información que falta y cuántas nunca han iniciado sesión.

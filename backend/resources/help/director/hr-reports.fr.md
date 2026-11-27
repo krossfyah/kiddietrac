@@ -12,6 +12,16 @@ Fait partie du module RH de KiddieTrac. Les administrateurs d'agence voient tout
 
 Ouvrez **Ressources humaines > Tableau de bord RH**.
 
+### Indicateurs et graphiques
+
+Le haut du tableau de bord montre vos chiffres RH d'un coup d'œil. Choisissez **Ce mois-ci**, **Ce trimestre** ou **Cette année** et (administrateurs d'agence, ou directeurs de plusieurs centres) un centre. Chaque tuile compare la période jusqu'à aujourd'hui avec le même moment de la période précédente (par exemple du 1er au 27 novembre contre du 1er au 27 octobre) : ▲ et ▼ indiquent l'écart, en vert quand c'est une bonne nouvelle et en rouge sinon.
+
+- **Tuiles** : effectif et ETP (heures par semaine du dossier RH ÷ votre semaine à temps plein), arrivées, départs, rotation, absents aujourd'hui et cette semaine, taux d'absence (jours de congé approuvés ÷ personnes × jours de semaine), pointages en retard, tout ce qui attend une décision (congés, corrections de pointage, feuilles de temps à approuver, heures sup., remboursements, prises de quart), heures sup., quarts à pourvoir et quarts pas encore acceptés, certificats à renouveler, fins de période d'essai à examiner, intégrations en cours, formation terminée et, pour les personnes qui voient la paie, le coût de main-d'œuvre de la semaine par rapport au budget.
+- **Graphiques** : effectif sur 12 mois, arrivées et départs par mois (survolez un mois pour sa rotation), absences par motif, évolution des heures sup., soldes et utilisation des congés, personnel par centre, rôles et types d'emploi, ancienneté, certificats (valides, bientôt expirés, expirés) et absents sur les 14 prochains jours.
+- Survolez une barre pour ses chiffres, ou appuyez sur **Tableau** sur n'importe quel graphique pour voir les nombres. Cliquez sur une tuile, un mois ou un jour pour ouvrir l'écran ou le rapport correspondant avec ces dates déjà choisies. Cliquer sur un centre dans **Personnel par centre** filtre tout le tableau de bord sur ce centre.
+- Les graphiques se dessinent quand vous les faites défiler. Si votre appareil est réglé pour réduire les animations, ils s'affichent directement.
+- Les chiffres ont au plus une minute ou deux de retard. Les pointages anciens ou corrigés sont comparés à leur quart la première fois que vous ouvrez le tableau de bord; la tuile des pointages en retard indique quand certains sont encore en cours de vérification.
+
 - **Liste de mise en place RH** : cinq étapes avec une barre de progression : ajouter vos types de congé, fixer les droits à congé, compléter le dossier RH de chacun, donner à chacun un gestionnaire qui approuve ses demandes, et faire en sorte que votre personnel se connecte. **Configurer** mène directement à l'étape.
 - **Fin de période d'essai** : les personnes dont la période d'essai se termine dans les 30 prochains jours, ou s'est terminée sans être confirmée. Le menu ⋮ permet de **marquer la période d'essai réussie**, de la **prolonger** jusqu'à une nouvelle date ou d'ouvrir le dossier RH.
 - **À faire** : le nombre de personnes à qui il manque des informations, et de celles qui ne se sont jamais connectées.

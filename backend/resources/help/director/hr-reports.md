@@ -12,6 +12,16 @@ Part of the KiddieTrac HR add-on. Agency admins see the whole agency; directors 
 
 Open **Human Resources > HR dashboard**.
 
+### Stats and charts
+
+The top of the dashboard shows your HR figures at a glance. Choose **This month**, **This quarter** or **This year**, and (agency admins, or directors with several centres) a centre. Each tile compares the period so far with the same point of the period before (for example, November 1 to 27 against October 1 to 27): ▲ and ▼ show the change, green when it is good news and red when it is not.
+
+- **Tiles**: headcount and FTE (weekly hours on the HR file ÷ your full-time week), starters, leavers, turnover, who is off today and this week, the absence rate (days of approved leave ÷ people × weekdays), late clock-ins, everything waiting for a decision (time off, clock-in fixes, timesheets to approve, overtime, claims, shift pick-ups), overtime hours, open shifts and shifts not accepted yet, certificates to renew, probation reviews due, onboarding in progress, training completed and, for people who can see pay, this week's labour cost against the budget.
+- **Charts**: headcount over 12 months, starters and leavers by month (hover a month for its turnover), absence by reason, the overtime trend, leave balances and use, staff by centre, roles and employment types, length of service, certificates (valid, expiring, expired) and who is off over the next 14 days.
+- Hover a mark for its figures, or press **Table** on any chart to see the numbers. Click a tile, a month or a day to open the matching screen or report with those dates already chosen. Clicking a centre in **Staff by centre** filters the whole dashboard to it.
+- Charts draw in as you scroll to them. If your device is set to reduce motion, they appear straight away.
+- The figures are a minute or two behind at most. Old or corrected clock-ins are compared with their shifts the first time you open the dashboard; the late clock-ins tile says when some are still being checked.
+
 - **HR setup checklist**: five steps with a progress bar: add your leave types, set how much leave people get, complete everyone's HR file, give everyone a manager who approves their requests, and have your staff sign in. Press **Set up** beside a step to go straight to it.
 - **Probation ending**: people whose probation ends in the next 30 days, or ended without being confirmed. Use the ⋮ menu to **Mark probation passed**, **Extend probation** to a new date, or open their HR file.
 - **To do**: how many people have missing information, and how many have never signed in.

@@ -2694,6 +2694,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/hr/setup',                          [\App\Http\Controllers\Api\HrController::class, 'setup']);
         // HR Phase 4, batch 5 (2026-11-27): Dashboard (setup checklist, probation, missing info, sign-ins), the Reports pack, probation (App\Support\HrReports).
         Route::get   ('/hr/dashboard',                      [\App\Http\Controllers\Api\HrReportsController::class, 'dashboard']);
+        // HR dashboard insights (2026-11-27): animated tiles + charts, one aggregate (App\Support\HrDashboard), cached 90 s.
+        Route::get   ('/hr/dashboard/stats',                [\App\Http\Controllers\Api\HrDashboardController::class, 'stats'])->middleware('throttle:60,1,hrdashstats');
         Route::get   ('/hr/reports/{kind}',                 [\App\Http\Controllers\Api\HrReportsController::class, 'report'])->where('kind', '[a-z]+')->middleware('throttle:60,1,hrreports');
         Route::get   ('/hr/people/{id}/holdings',           [\App\Http\Controllers\Api\HrReportsController::class, 'holdings'])->whereNumber('id');
         Route::post  ('/hr/people/{id}/probation',          [\App\Http\Controllers\Api\HrReportsController::class, 'probation'])->whereNumber('id');

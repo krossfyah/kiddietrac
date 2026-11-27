@@ -2,6 +2,24 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "📊",
+            "title": "HR dashboard charts",
+            "body": "Human Resources > HR dashboard now opens with live stats and animated charts: headcount, starters and leavers, turnover, absence, lateness, overtime, approvals waiting, certificates, training and who is off in the next two weeks. Pick this month, quarter or year and a centre, and click any tile or chart to open the matching screen.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Graphiques du tableau de bord RH",
+            "body_fr": "Ressources humaines > Tableau de bord RH s'ouvre désormais avec des indicateurs en direct et des graphiques animés : effectif, arrivées et départs, rotation, absences, retards, heures sup., approbations en attente, certificats, formation et absents des deux prochaines semaines. Choisissez ce mois-ci, ce trimestre ou cette année et un centre, puis cliquez sur une tuile ou un graphique pour ouvrir l'écran correspondant.",
+            "title_es": "Gráficos en el panel de RR. HH.",
+            "body_es": "Recursos humanos > Panel de RR. HH. ahora abre con indicadores en vivo y gráficos animados: plantilla, incorporaciones y bajas, rotación, ausencias, retrasos, horas extra, aprobaciones pendientes, certificados, formación y quién estará ausente las próximas dos semanas. Elija este mes, trimestre o año y un centro, y haga clic en cualquier tarjeta o gráfico para abrir la pantalla correspondiente.",
+            "title_hi": "HR डैशबोर्ड चार्ट",
+            "body_hi": "मानव संसाधन > HR डैशबोर्ड अब लाइव आँकड़ों और एनिमेटेड चार्ट के साथ खुलता है: कर्मचारी संख्या, नए और जाने वाले, टर्नओवर, अनुपस्थिति, देरी, ओवरटाइम, प्रतीक्षित मंज़ूरियाँ, प्रमाणपत्र, प्रशिक्षण और अगले दो सप्ताह में कौन छुट्टी पर है। इस महीने, तिमाही या साल और एक केंद्र चुनें, और मिलती-जुलती स्क्रीन खोलने के लिए किसी भी टाइल या चार्ट पर क्लिक करें।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "📻",
