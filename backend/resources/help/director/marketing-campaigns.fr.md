@@ -1,87 +1,86 @@
 ---
-roles: agency_admin, platform_admin
-title: Campagnes de marketing
-category: Communications
-order: 36
+title: Campagnes marketing
 ---
-# Campagnes de marketing
+# Campagnes marketing
 
-Rédigez des infolettres enrichies, des invitations à des portes ouvertes et des promotions, puis envoyez-les aux familles de votre choix. Barre latérale → **Marketing → Campagnes** (ce groupe s’appelait auparavant Croissance).
+**Marketing › Campaigns** est l'endroit où vous rédigez infolettres, invitations aux portes ouvertes et promotions, et
+les envoyez aux familles (ou au personnel) de votre choix — par courriel, comme publication Nouvelles dans le portail,
+ou les deux. Une fois envoyée, vous voyez qui l'a reçue, qui l'a ouverte et quels courriels sont revenus, et vous
+pouvez la renvoyer aux personnes dont l'adresse a été corrigée.
 
-![Cliquez sur + Nouvelle campagne dans l’écran Campagnes](https://api.kiddietrac.com/help-img/campaigns.png)
+[[open: #marketing-campaigns | Ouvrir les campagnes]]
 
-## Rédaction
+![Cliquez sur + New campaign à l'écran Campagnes](https://api.kiddietrac.com/help-img/campaigns.png)
 
-1. Cliquez sur **+ Nouvelle campagne**.
-2. Remplissez :
-   - **Titre de la campagne** (interne) et **Objet du courriel**.
-   - **Destinataires** — toutes les familles / actuellement inscrites / liste d’attente / prospects / personnel.
-   - **Canal** — dans le portail (une publication dans Nouvelles), par courriel, ou les deux (le courriel et une publication dans Nouvelles).
-   - **Image d’en-tête** (facultatif) — téléversez une bannière affichée en haut du message.
-   - **Corps** — utilisez l’éditeur de texte enrichi (polices, couleurs, titres, listes, liens, images).
-   - **Horaire** (facultatif) — laissez vide pour envoyer manuellement.
+## Rédiger une campagne
 
-## Saluer chaque famille par son prénom
+1. Appuyez sur **+ New campaign**.
+2. Entrez un **Campaign title** (seule votre équipe le voit) et le **Subject (email)** que les familles verront dans leur boîte de réception.
+3. Choisissez l'**Audience** : **All families**, **Currently enrolled**, **Waitlist**, **Prospects (no active child)** ou **Staff only**.
+4. Choisissez le **Channel** : dans le portail (publication Nouvelles), par courriel, ou les deux.
+5. Si elle part par courriel, vérifiez **Send from** — l'expéditeur par défaut de l'agence, ou une boîte Gmail / Google Workspace connectée si votre agence en a une.
+6. Ajoutez une **Hero image (optional)** — l'image en haut du message.
+7. Rédigez le texte dans l'éditeur (titres, listes, couleurs, liens, images). Pour saluer chaque famille par son prénom, tapez **{first_name}** ou appuyez sur **👤 First name** : « Bonjour {first_name}, » arrive comme « Bonjour Sarah, ». S'il n'y a pas un lecteur unique ou pas de prénom au dossier, on lit « there ».
+8. Appuyez sur **Save draft**.
 
-Tapez **{first_name}** n’importe où dans le corps ou l’objet du courriel, ou appuyez sur **👤 First name** dans la barre d’outils de l’éditeur. Le courriel de chaque famille utilise alors son propre prénom : « Hi {first_name}, » arrive sous la forme « Hi Sarah, ». Là où il n’y a pas un seul lecteur (la publication dans Nouvelles que voient toutes les familles) ou aucun prénom au dossier, le texte affiche « there » (« Hi there, »). L’aperçu et la vue affichent un prénom d’exemple.
+> 💡 Le logo, le nom, le courriel de soutien et l'adresse de votre agence s'affichent en haut automatiquement si votre forfait comprend l'image de marque personnalisée. Le pied de page montre vos liens **Privacy policy** et **Terms & conditions** tirés des paramètres d'image de marque de l'agence.
 
-## En-tête en marque blanche
+## Prévisualiser et envoyer
 
-La marque blanche **fait partie de votre forfait** : ce n’est pas un choix propre à chaque campagne. Lorsque votre agence a un forfait qui inclut la marque blanche, le **logo et les coordonnées de votre agence** (nom, courriel de soutien, adresse d’affaires) apparaissent automatiquement en haut de chaque campagne, tirés de **Paramètres → Image de marque**. Le rédacteur affiche une bannière qui indique si elle est active. Les agences sans ce module reçoivent un en-tête standard épuré. (La marque blanche est offerte à partir du forfait Growth; elle est activée lorsque l’agence est inscrite à ce forfait.)
+1. Appuyez sur **👁 Preview** pour voir la campagne exactement comme les familles la recevront, avec un prénom d'exemple. Prévisualisez toujours avant d'envoyer.
+2. Pour envoyer plus tard, remplissez **Schedule** avec une date et une heure. Laissez vide pour envoyer vous-même.
+3. Appuyez sur **Send now** et confirmez. Les publications Nouvelles paraissent tout de suite; les courriels partent quelques-uns à la fois.
 
-## Aperçu avant l’envoi
+Une campagne envoyée ne se modifie plus. Pour la consulter sans rien changer, ouvrez le **⋮** de sa ligne et choisissez **View** — View n'envoie jamais rien.
 
-Cliquez sur **👁 Aperçu** pour voir la campagne exactement comme les destinataires la recevront : l’en-tête en marque blanche, votre image d’en-tête et le corps, ainsi que le pied de page. Faites toujours un aperçu avant d’envoyer.
+### Qui reçoit une campagne
 
-## Consulter une campagne
+Chaque parent ou tuteur d'une famille encore inscrite chez vous, **y compris les parents qui n'ont pas encore accepté
+leur invitation à l'application**. Elle ne va pas aux familles parties ou suspendues, aux comptes fermés ni aux
+personnes sans courriel au dossier, et chaque adresse reçoit une seule copie.
 
-Dans la liste des campagnes, ouvrez le **⋮** d’une ligne et choisissez **View**. Une fenêtre affiche le courriel exactement comme les familles le reçoivent (avec un prénom d’exemple), ainsi que son statut, ses destinataires, son canal, son objet, son texte d’aperçu, sa programmation et, une fois envoyée, les nombres d’envois. La vue n’envoie jamais rien.
+## Voir qui l'a reçue : Recipients & stats
 
-## Qui reçoit une campagne
+1. Ouvrez le **⋮** de la campagne envoyée et choisissez **Recipients & stats**. Une page plein écran s'ouvre : « Who this campaign went to, and what happened. »
+2. Lisez les tuiles, puis le tableau : **Family**, **Email**, **Status**, **Details**, **Actions**.
+3. Filtrez par statut avec les pastilles : **Sent** (notre service de courriel l'a acceptée et rien n'est revenu), **Opened**, **Bounced** (le serveur du destinataire l'a renvoyée, avec la raison en mots simples), **Failed** (elle n'a pas pu être remise), **Held back** (une autre règle de courriel l'a bloquée, par exemple la personne a désactivé ces courriels ou le compte est fermé), **Waiting** (pas encore envoyée) et **Not known**.
+4. Cherchez une personne, ou exportez la liste en CSV, Excel ou PDF à partir de la barre sous le tableau.
+5. Appuyez sur **View the email they got** sur une ligne pour voir la copie exacte reçue par cette personne, ou sur **Copy email address**.
+6. Appuyez sur **All campaigns** pour revenir.
 
-Une campagne pour les familles est envoyée à chaque parent ou tuteur d'une famille encore inscrite chez vous,
-**y compris les parents qui n'ont pas encore accepté leur invitation à l'application** (depuis le 27 novembre
-2026; avant, ils étaient retenus). Elle n'est pas envoyée aux familles parties, aux comptes fermés ou suspendus,
-aux agences de test ni aux personnes sans courriel au dossier, et chaque adresse reçoit un seul exemplaire.
+> ℹ️ Ce que la page ne peut pas dire : les services de courriel n'envoient pas d'accusé de livraison, donc « Sent » est ce qui se rapproche le plus de « livré ». Une ouverture compte quand les images du courriel se chargent : une personne qui bloque les images paraît non ouverte. Les clics sur les liens ne sont pas suivis. Si la campagne a aussi été publiée dans Nouvelles, vous voyez combien ont ouvert la publication et lu l'avis dans l'application.
 
-## Destinataires et statistiques
+## Renvoyer aux personnes dont le courriel est revenu
 
-Une fois la campagne envoyée, ouvrez le **⋮** de sa ligne et choisissez **Destinataires et statistiques**.
-Vous voyez à qui elle est allée et ce qui s'est passé pour chaque personne : **Envoyé** (notre service de
-courriel l'a accepté et rien n'est revenu), **Ouvert**, **Renvoyé** (le serveur du destinataire l'a refusé,
-avec la raison en termes simples), **Échec**, **Retenu** (non envoyé à cause des règles de courriel, par
-exemple un compte fermé ou les courriels désactivés) et **Inconnu**. Filtrez par statut,
-cherchez et exportez en CSV, Excel ou PDF avec la barre sous le tableau. **Voir le courriel reçu** montre
-la copie envoyée à cette personne.
+1. Corrigez d'abord le courriel de la personne dans son dossier (**Open their record** dans la liste vous y mène).
+2. Appuyez sur **↻ Resend to bounced** — au-dessus du filtre de statut, ou dans le **⋮** de la campagne.
+3. Chaque personne est listée avec **Bounced at**, **Current email** et un **State** : **Address corrected — ready to resend**, **Same address — fix it first**, **No email on file** ou **Account deactivated**.
+4. Seules les personnes prêtes peuvent être cochées; elles le sont au départ (**Tick all ready** les recoche).
+5. Appuyez sur **↻ Resend** et confirmez le nombre. La campagne part à l'adresse corrigée, une fois chacune. C'est irréversible.
+6. Un message **Campaign resent** apparaît et la personne passe à envoyé, avec l'adresse refusée dans **Details**. S'il y en avait beaucoup, appuyez sur **Resend again** — l'envoi se fait par lots de 80 au plus.
 
-Ce qu'on ne peut pas savoir : les services de courriel n'envoient pas d'accusé de livraison, donc
-« Envoyé » est ce qui se rapproche le plus de « livré ». Les ouvertures sont comptées quand les images du
-courriel se chargent, depuis notre propre serveur, sans traceur tiers; une personne qui bloque les images
-apparaît comme non ouverte. Les clics sur les liens ne sont pas suivis. Si la campagne a aussi été publiée
-dans les Nouvelles, vous voyez combien de destinataires l'y ont ouverte, et combien ont lu l'avis dans
-l'application. Les campagnes envoyées avant le 27 novembre 2026 sont reconstruites à partir du journal des
-courriels; quelques personnes peuvent apparaître comme « Inconnu ». Les directeurs ne voient que les
-campagnes de leurs propres centres.
+Elle n'est jamais envoyée deux fois à une adresse qui l'a déjà reçue, et les règles habituelles de courriel s'appliquent. Le journal d'audit nomme chaque adresse visée.
 
-## Renvoyer aux adresses en échec
+## Qui peut faire quoi
 
-Quand des courriels ont échoué, **Destinataires et statistiques** indique combien ont échoué et combien de
-ces personnes ont maintenant une adresse corrigée. Corrigez d'abord le courriel dans la fiche de la personne,
-puis appuyez sur **↻ Renvoyer aux adresses en échec** (au-dessus du filtre d'état, ou dans le **⋮** de la
-campagne). La liste montre le nom de chaque personne, l'adresse en échec, son courriel actuel et ce qui est
-possible : **Adresse corrigée — prête à renvoyer**, **Même adresse — corrigez-la d'abord** (avec un bouton
-pour ouvrir sa fiche), **Aucun courriel au dossier** ou **Compte désactivé**. Seules les personnes prêtes
-peuvent être cochées, et elles le sont toutes au départ. On vous demande de confirmer le nombre avant tout
-envoi. La campagne part à l'adresse actuelle, jamais deux fois à une adresse qui l'a déjà reçue, 80 au plus
-à la fois, et les règles de courriel habituelles s'appliquent. Une fois envoyée, la personne apparaît comme
-envoyée, avec l'adresse en échec dans les détails, et le journal d'audit nomme chaque adresse.
+| Rôle | Peut |
+|---|---|
+| Administrateur d'agence | Rédiger, envoyer, voir les statistiques et renvoyer pour tous les centres. |
+| Directeur de centre | La même chose pour son ou ses centres; il ne voit que les campagnes de ses centres. |
+| Administrateur de plateforme | L'agence choisie dans le sélecteur d'agence. |
 
-## Le pied de page
+Une personne qui peut voir une campagne sans pouvoir l'envoyer lit : « You can see this list, but only someone who can send this campaign can resend it. »
 
-Chaque campagne se termine par un pied de page **« Propulsé par Kiddietrac »**. Il affiche aussi les liens vers la **Politique de confidentialité** et les **Conditions générales** de votre agence : définissez-les une seule fois sous **Paramètres → Image de marque** (ils font partie de la configuration de votre agence) et ils apparaissent automatiquement sur chaque campagne.
+## Questions fréquentes et problèmes
 
-## Envoi
+??? Recipients & stats n'est pas dans le menu ⋮. | Il apparaît dès que quelque chose a été envoyé. Les brouillons et les campagnes planifiées n'ont pas encore de destinataires.
+??? Resend to bounced dit que personne n'est prêt. | « Nobody is ready yet: correct their email on their record first. » Corrigez l'adresse, puis rouvrez.
+??? Certaines personnes affichent « Not known ». | Les campagnes envoyées avant le 27 novembre 2026 ont été reconstituées à partir du journal des courriels; quelques personnes peuvent ne pas avoir de dossier.
+??? Un parent dit ne jamais l'avoir reçue. | Regardez sa ligne : **Held back** donne la règle qui l'a bloquée; **Bounced** donne la raison. Si c'est **Sent**, demandez-lui de vérifier ses pourriels.
+??? Puis-je supprimer une campagne? | Oui, avec **⋮ > Delete** (« Delete this campaign? This cannot be undone. »). Les courriels déjà envoyés ne sont pas rappelés.
 
-Utilisez **Envoyer maintenant** (ou planifiez l’envoi). Les campagnes dans le portail sont publiées immédiatement dans les fils des familles; les campagnes par courriel sont mises en file d’attente pour livraison. Les campagnes envoyées sont en lecture seule.
+## Écrans connexes
 
-> Qui peut l’utiliser : **Directeur de centre** (son centre), **Administrateur d’agence** (toute l’agence).
+[[open: #tours | Visites]] [[open: #audit-logs | Journal d'audit]]
+
+Voir aussi [[drip-campaigns]] et [[email-templates]].

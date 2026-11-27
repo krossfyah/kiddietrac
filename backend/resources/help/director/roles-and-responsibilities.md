@@ -2,7 +2,7 @@
 title: Roles & responsibilities
 category: Getting Started
 order: 5
-screens: ~home-visit-reports, ~hcc-forms, ~marketing-campaigns, ~menu, ~payroll, ~my-hr, ~children, ~forms, ~forms-manager, ~admin-users, ~contacts, ~admin-centres, ~email, ~play-spark, ~safe-arrival, ~immunizations, ~notifications, ~curriculum, ~edocuments
+screens: ~payroll, ~my-hr, ~children, ~forms, ~forms-manager, ~admin-users, ~contacts, ~admin-centres, ~email, ~safe-arrival, ~immunizations, ~notifications, ~edocuments
 ---
 # Roles & responsibilities
 

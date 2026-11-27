@@ -1,39 +1,63 @@
 ---
-title: Creador de informes personalizados
-category: Administration
-order: 72
+title: Informes — generar, descargar y programar
 ---
-# Informes personalizados
+# Informes — generar, descargar y programar
 
-Cree un informe guardado con las columnas, los filtros y el orden que elija. Ejecútelo cuando quiera. Compártalo con su agencia.
+**Administration › Reports** reúne los informes listos para sus centros y su agencia: asistencia y horas, facturas y
+saldos, asistencia y cuotas mensuales, registro de asistencia, capacidad y vacantes, y más. Elija un informe, ponga las
+fechas y el centro, y genérelo en PDF o en hoja de cálculo, o haga que se envíe por correo automáticamente cada día,
+semana o mes.
 
-## Crear un informe
+[[open: #reports | Abrir Informes]]
 
-1. Barra lateral → **Informes**.
-2. Toque **+ Nuevo informe**.
-3. Escriba un nombre y elija una fuente de datos:
-   - Usuarios · Familias · Niños · Facturas · Pagos
-   - Observaciones · Verificaciones de antecedentes · Fichajes · Reservas de visitas
-4. Opcionalmente, indique las columnas (todas por defecto), los filtros, la columna de orden y la dirección.
-5. Marque **Compartir con mi agencia** si otros administradores deben verlo.
-6. Marque **Añadir a favoritos** para acceder rápido desde el panel de Favoritos.
-7. Guarde.
+## Generar un informe
 
-## Ejecutar un informe
+1. Abra **Administration › Reports**.
+2. Elija la pestaña: **Centre reports** o **Agency reports**.
+3. Ponga el rango de fechas arriba (**Last 7 days**, **Last 30 days**, **This month to date**, **Last calendar month**, o sus propias fechas **From** y **To**).
+4. Elija el **Centre** (o **All centres**).
+5. Pulse **Run report** en la tarjeta del informe. Aparece «Generating report…» y luego se descarga el archivo.
 
-- Abra la lista de informes. Hay dos paneles arriba: **⭐ Favoritos** y **🕘 Ejecutados recientemente**.
-- Toque **Ejecutar** en cualquier informe guardado.
-- Se abre una ventana con las filas coincidentes y un XLSX descargable.
+Algunos informes hacen una pregunta más antes:
 
-## Editar un informe
+- **Invoices & balances**: marque los valores de **Status** que quiere incluir (por ejemplo **Overdue**, **Voided**), elija el **Period** (**The date range on the screen**, **Specific dates** o **Every invoice, all dates**) y el **Balance** (**Any balance**, **Only invoices with money still owing** u **Only invoices settled in full**), y pulse **Run report**.
+- **Monthly attendance & fees**, **Monthly attendance & fees by family**, **Record of Attendance** y **Capacity & vacancies**: elija el mes (y la familia, en la hoja por familia).
 
-Abra el informe desde la tabla Todos los informes guardados → modifique cualquier campo. Los cambios se guardan en la siguiente ejecución.
+> 💡 Los estados tienen los mismos colores en el PDF que en pantalla (por ejemplo pagado, pagado en parte, ausencia registrada).
 
-## Compartir
+## Enviar un informe por correo automáticamente
 
-Los informes que marque como «Compartir» aparecen en la lista de informes de otros administradores en «Compartidos». Útil para informes mensuales para la junta que el equipo gestiona en conjunto.
+1. Abra la pestaña **Scheduled reports** y pulse **Schedule a report**.
+2. Elija el **Report** y el **Format**: **PDF**, **Excel** o ambos.
+3. Elija el período que cubre (por ejemplo **Last 7 days** o **Last calendar month**).
+4. Fije la **Frequency** —**Daily**, **Weekly** (elija el **Day of week**) o **Monthly** (elija el **Day of month**)— y la hora de envío.
+5. Escriba **Send to (email)**.
+6. Pulse **Save schedule**. Aparece el aviso **Schedule created** y la programación figura en la lista como **Active**, con su fecha **Last sent**.
 
-## Cuándo usarlos en lugar de las exportaciones XLSX rápidas
+Para cambiarla, abra las acciones de su fila, elija editar y luego **Save changes**. **Send now** la envía al momento,
+el interruptor la pausa (**Schedule paused**) y **Delete** la elimina.
 
-- **Botones XLSX integrados** (Usuarios / Familias / Registro de auditoría / etc.) — volcados puntuales rápidos con las columnas predeterminadas.
-- **Informes personalizados** — cuando quiere la misma vista filtrada de forma repetida (p. ej., «Niños que cumplen 4 años este mes y que no han recibido el refuerzo de la triple vírica»).
+## Quién puede hacer qué
+
+| Rol | Puede |
+|---|---|
+| Administrador de agencia | Generar todos los informes de todos los centros y programar envíos. |
+| Director de centro | Generar informes de su(s) centro(s). |
+| Educador | Asistencia y horas de la(s) sala(s) que tiene asignadas. |
+| Administrador de plataforma | La agencia elegida en el selector de agencias. |
+
+Los correos programados van solo a la dirección que escriba. Asegúrese de que esa persona puede ver ese informe.
+
+## Preguntas frecuentes y problemas
+
+??? «Pick at least one status, or the report has nothing to show.» | En las preguntas de Invoices & balances, marque al menos un estado.
+??? «The start date is after the end date.» | Invierta las fechas o elija un rango listo.
+??? Un educador ve «No rooms are assigned to you yet.» | Asígnelo a una sala en su registro de personal; sus informes siguen a sus salas.
+??? No llegó un informe programado. | Revise la dirección de la programación y pulse **Send now**. Si ve «Could not send», abra un ticket desde Ayuda.
+??? Quiero mis propias columnas y filtros. | Las exportaciones de cada lista (Familias, Niños, Facturas…) dan una hoja de cálculo de lo que ve en pantalla.
+
+## Pantallas relacionadas
+
+[[open: #forecast | Pronóstico de inscripciones]] [[open: #retention | Retención por cohorte]] [[open: #audit-logs | Registro de auditoría]]
+
+Vea también [[enrolment-forecast]] y [[cohort-retention]].

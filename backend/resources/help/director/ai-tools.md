@@ -2,7 +2,7 @@
 title: AI tools (recap / churn risk / doc extraction)
 category: AI
 order: 50
-screens: ~play-spark, ai-churn, ai-docs, ~digest-status
+screens: ~digest-status
 ---
 # AI tools
 
