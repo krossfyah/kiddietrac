@@ -365,13 +365,14 @@
     var L = lockedMap(user);
     return (sections || []).map(function (sec) {
       if (!sec || !Array.isArray(sec.items)) { return sec; }
-      var any = sec.items.some(function (it) { return it && (it.alt || it.onlyIfOff || it.hrFold); });
+      var any = sec.items.some(function (it) { return it && (it.alt || it.onlyIfOff || it.onlyIfNo || it.hrFold); });
       if (!any) { return sec; }
       var kept = [];
       sec.items.forEach(function (it) {
         if (!it) { return; }
         var h = String(it.hash);
         if (it.onlyIfOff && !rawOff[it.onlyIfOff]) { return; }
+        if (it.onlyIfNo && !rawOff[it.onlyIfNo] && !L[it.onlyIfNo]) { return; }   // shown only while that screen is off or locked
         if (it.alt && rawOff[h] && !rawOff[it.alt]) { kept.push(Object.assign({}, it, { hash: it.alt })); return; }
         if (it.hrFold && L[h]) { return; }
         kept.push(it);
@@ -473,8 +474,9 @@
           { hash: 'tasks',              label: 'Tasks',              icon: '☑️' },
           { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'substitutes',        label: 'Substitutes',        icon: '🙋' },
-          // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
-          { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
+          // Drill log lives in Human Resources > Health & safety (2026-11-27, Anthony: "move drill log to health & safety"). It stays
+          // here only while Health & safety is unavailable (no HR add-on / switched off) so those agencies keep it.
+          { hash: 'drills',             label: 'Drill log',          icon: '🚒', onlyIfNo: 'hr-safety' },
         ]},
         /* HUMAN RESOURCES (2026-11-27, Anthony: "create new subsections under Human resources to help jump right to the sections").
            Each entry is its own screen with only its own tabs (kt-hr-sections.js). Time off, Rota & shifts (the Schedule, moved from
@@ -711,8 +713,9 @@
           { hash: 'notes', label: 'Notes', icon: '📃' },   // Quick notes (2026-11-26, kt-quick-notes.js)
           { hash: 'time-clock',        label: 'Time clock',         icon: '⏱' },
           { hash: 'substitutes',       label: 'Substitutes',        icon: '🙋' },
-          // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
-          { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
+          // Drill log lives in Human Resources > Health & safety (2026-11-27, Anthony: "move drill log to health & safety"). It stays
+          // here only while Health & safety is unavailable (no HR add-on / switched off) so those agencies keep it.
+          { hash: 'drills',             label: 'Drill log',          icon: '🚒', onlyIfNo: 'hr-safety' },
         ]},
         /* HUMAN RESOURCES (2026-11-27, Anthony: "create new subsections under Human resources to help jump right to the sections").
            Each entry is its own screen with only its own tabs (kt-hr-sections.js). Time off, Rota & shifts (the Schedule, moved from
