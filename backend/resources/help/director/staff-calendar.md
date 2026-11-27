@@ -2,7 +2,7 @@
 title: The agency calendar
 category: Daily Operations
 order: 20
-screens: staff-calendar, ~calendar-settings
+screens: staff-calendar
 ---
 # The agency calendar
 

@@ -2,7 +2,6 @@
 title: Child portfolios
 category: Daily Operations
 order: 32
-screens: ~observations, ~awards
 ---
 # Child portfolios
 
