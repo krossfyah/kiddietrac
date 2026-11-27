@@ -1,42 +1,81 @@
 ---
-title: Calendrier des fermetures et jours fériés
-category: Daily Operations
-order: 40
+title: Calendrier des fermetures et congés
 ---
-# Fermetures
+# Calendrier des fermetures et congés
 
-Jours fériés, journées pédagogiques, fermetures d’urgence. Suspendez la facturation pendant les fermetures (ou non) et avisez automatiquement les familles.
+**Fermetures** énumère les jours où un centre est fermé : jours fériés, journées pédagogiques, urgences et rénovations. En ajouter une avise les familles et le personnel du centre, peut suspendre la facturation de ces jours, et affiche la fermeture dans le calendrier de l’agence, l’horaire du personnel et l’écran Aujourd’hui des familles.
 
-## Ajouter une fermeture (administrateur / directeur)
+**Où le trouver :** barre latérale → **Administration** → **Fermetures** (pour les directeurs de centre, la même entrée dans leur menu). La bannière indique **🗓 Fermetures et congés**.
 
-1. Barre latérale → **Fermetures** — ou **+ Ajouter → Fermeture** dans le calendrier de l’agence, qui vous amène ici avec le jour sur lequel vous avez cliqué déjà rempli.
-2. Touchez **+ Nouvelle fermeture**.
-3. Choisissez le centre et la date de début (et la date de fin pour plusieurs jours).
-4. Choisissez le type : Jour férié / Journée pédagogique / Urgence / Rénovation / Autre.
-5. Ajoutez un motif (p. ex. « Jour de la Famille »).
-6. Cochez **Suspendre la facturation** si la facturation ne doit pas s’exécuter ces jours-là (activé par défaut).
-7. Enregistrez.
+[[open: #closures | Ouvrir Fermetures]]
 
-## Ce qui se passe automatiquement
+## Ajouter une fermeture
 
-- Toutes les familles de ce centre reçoivent un avis dans l’application et par courriel.
-- La fermeture s’affiche dans l’horaire du personnel et à l’écran Aujourd’hui des parents.
-- Si la facturation est suspendue, la tâche quotidienne des frais de garde ignore ces dates lors de la production des factures.
+1. Appuyez sur **+ Nouvelle fermeture** dans la bannière. La boîte **Nouvelle fermeture** s’ouvre.
+2. Choisissez le **Centre**.
+3. Choisissez le **Type** : **Congé**, **Journée pédagogique**, **Urgence**, **Rénovation** ou **Autre**.
+4. Indiquez **Date (start)**. Pour plus d’une journée, indiquez aussi **End date (optional, for multi-day)**.
+5. Tapez un **Motif** que les familles liront, par exemple « Jour de la Famille ».
+6. Laissez **Suspendre la facturation ces jours-là** coché si les familles ne doivent pas être facturées pour les jours fermés. Décochez-le si elles paient comme d’habitude.
+7. Appuyez sur **Enregistrer**. La fermeture apparaît en haut de la liste, avec votre nom et l’heure sous **Added**.
 
-## Ce que les gens voient en ouvrant l’application
+> 💡 Vous pouvez aussi partir du calendrier de l’agence : appuyez sur **+ Add**, puis **🚫 Closure**. La boîte Nouvelle fermeture s’ouvre ici avec la journée que vous regardiez déjà remplie.
 
-Le jour d’une fermeture, ou jusqu’à deux semaines avant, un avis s’affiche une fois par jour lorsque quelqu’un ouvre l’application. Il est formulé selon la personne qui le lit :
+## Fermer plusieurs centres pour un même congé
 
-- **Le prestataire dont c’est le centre :** *« Vous êtes fermé aujourd’hui pour … Aucun enfant n’est attendu, il n’y a donc aucune présence à prendre. »* (ou *« Votre fermeture approche »*).
-- **Les autres membres du personnel de ce centre :** *« [Centre] est fermé aujourd’hui… Aucun enfant n’est attendu. »*
-- **Les familles :** *« Nous sommes fermés aujourd’hui… Profitez de la journée. »* (ou un rappel des dates).
+L’écran Fermetures ferme un centre à la fois. Pour un congé qui ferme plusieurs prestataires en même temps :
 
-## Supprimer
+1. Ouvrez le calendrier de l’agence.
+2. Appuyez sur **+ Add**, puis **🎉 Holiday**.
+3. Dans **🎉 Add a holiday**, cochez les personnes en congé et indiquez les dates. La boîte nomme les centres qui fermeront.
+4. Enregistrez. Une fermeture est ajoutée pour chaque centre, avec les mêmes avis qu’une fermeture simple.
 
-Ouvrez la ligne de la fermeture et touchez **Supprimer**. Les avis déjà envoyés ne sont pas retirés.
+## Modifier une fermeture
 
-## Fermetures courantes à ajouter d’avance pour l’Ontario
+1. Sur la rangée de la fermeture, ouvrez le menu **⋮** (ou appuyez sur l’icône ✏️) et choisissez **Modifier**.
+2. La boîte **Modifier la fermeture** s’ouvre déjà remplie. Le **Centre** est grisé : déplacer une fermeture vers un autre centre, c’est en ajouter une nouvelle.
+3. Changez le type, les dates, le motif ou la facturation et appuyez sur **Enregistrer**.
 
-Jour de l’An · Jour de la Famille · Vendredi saint · Lundi de Pâques · Fête de la Reine · Fête du Canada · Congé civique · Fête du Travail · Action de grâce · Jour du Souvenir · Veille de Noël · Noël · Lendemain de Noël · Veille du jour de l’An.
+Corriger une mauvaise date ainsi vaut mieux que supprimer et rajouter, ce qui annoncerait la fermeture deux fois à chaque famille.
 
-Ajoutez aussi les journées pédagogiques et les journées de formation du personnel de votre centre.
+## Supprimer une fermeture
+
+1. Sur la rangée, ouvrez le menu **⋮** (ou appuyez sur 🗑️) et choisissez **Supprimer**.
+2. Confirmez **Remove this closure?**. La rangée disparaît.
+
+## Qui est avisé, et quand
+
+- **Quand vous ajoutez une fermeture :** si les rappels de fermeture de votre agence sont activés et réglés pour annoncer tout de suite, chaque famille et chaque membre du personnel de ce centre reçoit un avis dans la cloche et un courriel. Les administrateurs d’agence et les directeurs reçoivent toujours un avis dans la cloche.
+- **Quand vous la modifiez ou la supprimez :** les administrateurs d’agence et les directeurs reçoivent un avis dans la cloche qui dit ce qui a changé et qui l’a changé. Les familles ne reçoivent pas de nouveau courriel, et les avis déjà envoyés ne sont pas retirés.
+- **Avant la journée :** des courriels de rappel partent avant la fermeture; voyez [Courriels de rappel de fermeture](closure-reminders).
+- **Dans l’appli :** un jour de fermeture, ou jusqu’à deux semaines avant, un avis s’affiche une fois par jour à l’ouverture de l’appli, formulé pour la personne : le prestataire dont c’est le centre (« Vous êtes fermé aujourd’hui… »), les autres membres du personnel de ce centre, ou les familles (« Nous sommes fermés aujourd’hui… Bonne journée. »).
+
+## Les fermetures en un coup d’œil
+
+Au-dessus de la liste, des tuiles montrent la **Prochaine fermeture** avec un compte à rebours, les jours-centre fermés dans les **90 prochains jours**, les jours **Closed in** de l’année, les jours avec **Facturation suspendue** et les **Centres touchés**. Les graphiques montrent **Up next**, **Closed days by month**, **What closes us** et **Days closed per centre**. Seuls les jours de semaine comptent : le samedi d’une longue fin de semaine n’est pas une journée de garde perdue. Quand les fermetures couvrent plus d’une année, des boutons d’année en haut changent l’année.
+
+## Qui peut faire quoi
+
+| Rôle | Ce qu’il peut faire |
+|---|---|
+| Administrateur d’agence | Ajouter, modifier et supprimer des fermetures dans tous les centres de l’agence. |
+| Directeur de centre | La même chose, pour ses propres centres seulement. |
+| Administrateur de plateforme | La même chose, dans l’agence où il est passé. |
+| Éducatrice et parent | Ne peuvent pas ouvrir cet écran. Ils voient les fermetures dans leur calendrier et leur écran Aujourd’hui. |
+
+## Questions fréquentes et dépannage
+
+??? J’ai appuyé sur Enregistrer et j’ai vu « Pick a start date ». | **Date (start)** est vide. Choisissez le premier jour de fermeture.
+??? La liste indique « No closures scheduled. » | Aucune fermeture n’a encore été ajoutée pour vos centres. Appuyez sur **+ Nouvelle fermeture**.
+??? Les familles n’ont pas reçu de courriel quand j’ai ajouté une fermeture. | Les réglages des rappels de fermeture de votre agence décident si les familles sont avisées tout de suite. Un administrateur d’agence peut les vérifier; voyez [Courriels de rappel de fermeture](closure-reminders).
+??? Que veut dire la colonne Billing? | **Paused** veut dire que les familles ne sont pas facturées pour ces jours. **No change** veut dire que la facturation se fait comme d’habitude.
+??? Une fermeture change-t-elle les congés du personnel? | Les congés réservés sur les dates fermées sont signalés pour révision. Ils ne sont jamais déduits de nouveau automatiquement; voyez [RH : fermetures prises sur les congés](hr-closures-leave).
+??? Quels congés un centre de l’Ontario devrait-il ajouter? | Jour de l’An, Jour de la Famille, Vendredi saint, lundi de Pâques, fête de la Reine, fête du Canada, Congé civique, fête du Travail, Action de grâce, jour du Souvenir (si vous fermez), veille de Noël, Noël, lendemain de Noël et veille du Jour de l’An, plus vos journées pédagogiques et de formation.
+
+## Liens utiles
+
+- [[open: #closures | Ouvrir Fermetures]]
+- [[open: #staff-calendar | Ouvrir le calendrier de l’agence]]
+- [Courriels de rappel de fermeture](closure-reminders)
+- [Le calendrier de l’agence](staff-calendar)
+- [RH : fermetures prises sur les congés, congés à revoir, prorata à temps partiel](hr-closures-leave)
