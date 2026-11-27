@@ -2,6 +2,29 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "💬",
+            "title": "Step-by-step messaging and settings guides",
+            "body": "The ? on messaging, announcements, email, texts and phone, forms and documents, notifications, My settings and Help & guides now opens a step-by-step guide with the exact buttons to press and answers to common questions, for every role.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ],
+            "title_fr": "Des guides étape par étape pour les messages et les paramètres",
+            "body_fr": "Le ? des écrans de messages, d’annonces, de courriel, de textos et de téléphone, de formulaires et de documents, de notifications, de Mes paramètres et d’Aide et guides ouvre maintenant un guide étape par étape, avec les boutons exacts sur lesquels appuyer et les réponses aux questions fréquentes, pour chaque rôle.",
+            "title_es": "Guías paso a paso de mensajes y ajustes",
+            "body_es": "El ? de las pantallas de mensajes, anuncios, correo, textos y teléfono, formularios y documentos, notificaciones, Mis ajustes y Ayuda y guías abre ahora una guía paso a paso, con los botones exactos que debe pulsar y respuestas a preguntas frecuentes, para cada rol.",
+            "title_hi": "संदेश और सेटिंग्स की चरण-दर-चरण गाइड",
+            "body_hi": "अब संदेश, घोषणाएँ, ईमेल, टेक्स्ट और फ़ोन, फ़ॉर्म और दस्तावेज़, सूचनाएँ, मेरी सेटिंग्स और सहायता और गाइड स्क्रीन का ? हर भूमिका के लिए चरण-दर-चरण गाइड खोलता है, कौन-से बटन दबाने हैं और आम सवालों के जवाब के साथ।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "🧾",
