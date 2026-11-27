@@ -2,6 +2,7 @@
 title: Files from your provider
 category: Daily Use
 order: 6
+screens: files
 ---
 
 # Files from your provider

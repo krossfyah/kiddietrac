@@ -2,6 +2,7 @@
 title: Checking children in and out
 category: Daily Workflows
 order: 0
+screens: ~late-pickups
 ---
 
 # Checking children in and out

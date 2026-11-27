@@ -3,6 +3,7 @@ title: Expenses (suppliers, purchase orders and bills)
 category: Billing
 order: 85
 roles: agency_admin, platform_admin
+screens: expenses
 ---
 # Expenses
 

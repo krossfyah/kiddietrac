@@ -2,6 +2,7 @@
 title: Bulk invoice generation
 category: Billing
 order: 70
+screens: bulk-invoices
 ---
 # Bulk invoice generation
 

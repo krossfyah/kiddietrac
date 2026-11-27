@@ -3,6 +3,7 @@ title: HR: publish the rota, copy shifts, shift presets, labour budget, clock-in
 category: Staff
 order: 48
 roles: agency_admin, platform_admin, centre_director
+screens: ~schedule, schedule?tab=rotatools, timesheets?tab=punchfix
 ---
 # HR: publish the rota, copy shifts, shift presets, labour budget, clock-in fixes
 

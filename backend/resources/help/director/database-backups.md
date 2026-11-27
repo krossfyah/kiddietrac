@@ -3,6 +3,7 @@ title: Database backups
 category: Settings
 order: 45
 roles: agency_admin, platform_admin
+screens: backups
 ---
 # Database backups
 

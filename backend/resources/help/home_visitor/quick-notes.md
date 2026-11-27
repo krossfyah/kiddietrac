@@ -2,6 +2,7 @@
 title: Quick notes
 category: Your Account
 order: 24
+screens: notes
 ---
 # Quick notes
 

@@ -2,6 +2,7 @@
 title: Closure / holiday calendar
 category: Daily Operations
 order: 40
+screens: closures
 ---
 # Closures
 

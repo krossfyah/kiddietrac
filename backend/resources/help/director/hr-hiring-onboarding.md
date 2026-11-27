@@ -3,6 +3,7 @@ title: HR: hiring, onboarding, reviews and courses
 category: Staff Management
 order: 61
 roles: agency_admin, platform_admin, centre_director
+screens: hr-hiring, hr-hiring?tab=onboarding, ~hr-performance, ~hr-performance?tab=courses
 ---
 # HR: hiring, onboarding, reviews and courses
 

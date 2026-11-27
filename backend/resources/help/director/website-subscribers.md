@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Website subscribers
 category: Marketing
 order: 30
+screens: ~marketing-site
 ---
 # Website subscribers
 

@@ -2,6 +2,7 @@
 title: Parent issues
 category: Communications
 order: 12
+screens: parent-issues
 ---
 # Parent issues
 

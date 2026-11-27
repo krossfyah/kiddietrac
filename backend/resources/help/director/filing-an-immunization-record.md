@@ -3,6 +3,7 @@ title: Filing an immunization record
 category: Compliance
 order: 33
 roles: agency_admin, centre_director, platform_admin
+screens: immunizations
 ---
 # Filing an immunization record
 

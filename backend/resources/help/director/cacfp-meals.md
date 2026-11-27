@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: CACFP meal tracking
 category: Compliance
 order: 70
+screens: ~menu, cacfp
 ---
 # CACFP meal tracking
 

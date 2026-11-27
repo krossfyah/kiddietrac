@@ -3,6 +3,7 @@ title: My HR
 category: Staff Management
 order: 62
 roles: educator, home_visitor, centre_director, agency_admin
+screens: my-hr
 ---
 # My HR
 

@@ -1001,6 +1001,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/help/dashboard', [HelpController::class, 'dashboard']);
         // HR Phase 4 batch 10: every question and answer the role may read (Help > topic > FAQs). Must precede /help/{slug}.
         Route::get('/help/faqs', [HelpController::class, 'faqs']);
+        // Page help (2026-11-27): screen key => articles for the "?" on every screen. Must precede /help/{slug}.
+        Route::get('/help/page-map', [HelpController::class, 'pageMap']);
         Route::get('/help/analytics', [HelpController::class, 'analytics']);
         Route::post('/help/featured', [HelpController::class, 'pinFeatured']);
         Route::delete('/help/featured/{slug}', [HelpController::class, 'unpinFeatured']);

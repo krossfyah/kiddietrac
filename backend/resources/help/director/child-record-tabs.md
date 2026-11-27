@@ -2,6 +2,7 @@
 title: The child record (tabs)
 category: Children
 order: 15
+screens: ~medications, ~allergy-alerts, admin-children, ~children
 ---
 # The child record
 

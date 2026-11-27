@@ -2,6 +2,7 @@
 title: Voice messages in chat
 category: Communications
 order: 35
+screens: ~chat
 ---
 # Voice messages
 

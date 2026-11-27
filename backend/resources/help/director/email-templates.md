@@ -3,6 +3,7 @@ title: Email templates — changing the wording
 category: Settings
 order: 42
 roles: agency_admin, platform_admin
+screens: email-templates
 ---
 # Email templates — changing the wording
 

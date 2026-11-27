@@ -3,6 +3,7 @@ title: Account ledgers
 category: Billing
 order: 40
 roles: agency_admin, platform_admin
+screens: account-ledgers
 ---
 # Account ledgers
 

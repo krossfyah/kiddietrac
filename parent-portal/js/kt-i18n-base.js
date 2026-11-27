@@ -4834,6 +4834,9 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     'Hazard reports are not available here.': { fr: 'Les signalements de danger ne sont pas disponibles ici.', es: 'Los reportes de peligro no están disponibles aquí.', hi: 'ख़तरे की रिपोर्ट यहाँ उपलब्ध नहीं है।' },
     'Injury reports are not available here.': { fr: 'Les déclarations de blessure ne sont pas disponibles ici.', es: 'Los reportes de lesiones no están disponibles aquí.', hi: 'चोट की रिपोर्ट यहाँ उपलब्ध नहीं है।' },
     'Help for this page': { fr: 'Aide pour cette page', es: 'Ayuda para esta página', hi: 'इस पेज के लिए मदद' },
+    // The help reader (kt-contextual-help.js, 2026-11-27)
+    'More on this page': { fr: 'Aussi sur cette page', es: 'Más sobre esta página', hi: 'इस पेज पर और मदद' },
+    'On this page': { fr: 'Sur cette page', es: 'En esta página', hi: 'इस पेज पर' },
     'Help for My HR': { fr: 'Aide pour Mes RH', es: 'Ayuda para Mis RR. HH.', hi: 'My HR के लिए मदद' },
     'How to do this': { fr: 'Comment faire', es: 'Cómo hacerlo', hi: 'यह कैसे करें' },
     'Onboarding step': { fr: 'Étape d\'intégration', es: 'Paso de incorporación', hi: 'ऑनबोर्डिंग चरण' },

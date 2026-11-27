@@ -2,6 +2,7 @@
 title: Reporting a hazard
 category: Home visits
 order: 6
+screens: hazards
 ---
 
 # Reporting a hazard

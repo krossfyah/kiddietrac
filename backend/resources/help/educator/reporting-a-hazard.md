@@ -2,6 +2,7 @@
 title: Reporting a hazard
 category: Safety
 order: 2
+screens: hazards
 ---
 
 # Reporting a hazard

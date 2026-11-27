@@ -90,6 +90,46 @@ final class HelpService
     }
 
     /**
+     * PAGE HELP (2026-11-27): screen key => the articles that explain it, for this role, best first.
+     *
+     * The "?" on every screen (parent-portal/js/kt-page-help.js) opens the first; the drawer lists the rest. Keys are
+     * the hash without "#" ("payroll", "payroll?tab=claims"). Order: a dedicated article before a "~" fallback, the
+     * role's own library before the shared one, an article naming fewer screens (more specific) before a broad one,
+     * then front-matter order and slug. kt:page-help-check reads this same function, so the guard and the "?" agree.
+     *
+     * @return array<string, list<array{slug:string,title:string,fallback:bool,audience:string}>>
+     */
+    public function pageMapForRole(string $role): array
+    {
+        $cands = [];
+        foreach ($this->listForRole($role) as $a) {
+            $sc = $a['screens'] ?? [];
+            foreach ($sc as $s) {
+                $fb = str_starts_with($s, '~');
+                $key = ltrim($s, '~ ');
+                if ($key === '') continue;
+                $cands[$key][] = [
+                    'sort' => [$fb ? 1 : 0, $a['audience'] === 'shared' ? 1 : 0, count($sc), (int) $a['order'], $a['slug']],
+                    'item' => ['slug' => $a['slug'], 'title' => $a['title'], 'fallback' => $fb, 'audience' => $a['audience']],
+                ];
+            }
+        }
+        $map = [];
+        foreach ($cands as $key => $list) {
+            usort($list, fn ($x, $y) => $x['sort'] <=> $y['sort']);
+            $seen = [];
+            foreach ($list as $c) {
+                if (isset($seen[$c['item']['slug']])) continue;
+                $seen[$c['item']['slug']] = true;
+                $map[$key][] = $c['item'];
+            }
+        }
+        ksort($map);
+
+        return $map;
+    }
+
+    /**
      * Returns all articles grouped by category, suitable for sidebar nav.
      */
     public function categorizedForRole(string $role): array
@@ -273,6 +313,8 @@ final class HelpService
 
             $raw = file_get_contents($file);
             if ($raw === false) continue;
+            // A guide saved with Windows line endings had its front matter ignored (no roles, no screens): 2026-11-27.
+            $raw = str_replace("\r\n", "\n", $raw);
 
             $parsed = $this->parseFrontMatter($raw);
             $slug = Str::slug(pathinfo($file, PATHINFO_FILENAME));
@@ -303,6 +345,11 @@ final class HelpService
                 // front-matter restricts the article to those roles.
                 'roles' => isset($parsed['meta']['roles'])
                     ? array_filter(array_map('trim', explode(',', (string) $parsed['meta']['roles'])))
+                    : [],
+                // Page help (2026-11-27): the screens this article explains, from the ENGLISH front matter like roles:
+                // "screens: payroll, payroll?tab=claims, ~hr-settings" ("~" = a fallback until a dedicated guide exists).
+                'screens' => isset($parsed['meta']['screens'])
+                    ? array_values(array_filter(array_map('trim', explode(',', (string) $parsed['meta']['screens']))))
                     : [],
             ];
         }

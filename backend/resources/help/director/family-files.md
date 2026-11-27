@@ -2,6 +2,7 @@
 title: Files shared with families
 category: Communications
 order: 40
+screens: files
 ---
 # Files shared with families
 

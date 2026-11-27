@@ -2,6 +2,7 @@
 title: Assigning educators to rooms
 category: Staff Management
 order: 30
+screens: ~substitutes, room-rotations
 ---
 # Assigning educators to rooms
 

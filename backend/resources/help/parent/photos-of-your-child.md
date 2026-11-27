@@ -2,6 +2,7 @@
 title: Photos of your child
 category: Daily Use
 order: 2
+screens: photos
 ---
 
 # Photos of your child

@@ -2,6 +2,7 @@
 title: Lesson plans and curriculum
 category: Daily Workflows
 order: 5
+screens: ~play-spark, curriculum
 ---
 
 # Lesson plans and curriculum

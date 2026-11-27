@@ -3,6 +3,7 @@ title: Centres or Rooms — naming your facilities
 category: Settings
 order: 42
 roles: agency_admin, platform_admin
+screens: ~admin-centres
 ---
 
 # Centres or Rooms

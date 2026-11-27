@@ -4,6 +4,52 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "❓",
+            "title": "Help for every page",
+            "body": "Every screen now has a ? in the top-right corner of its banner. Tap it to read the guide for that page, with numbered steps, the exact buttons to press and answers to common questions, without leaving the screen.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ],
+            "title_fr": "De l’aide sur chaque page",
+            "body_fr": "Chaque écran a maintenant un ? dans le coin supérieur droit de sa bannière. Touchez-le pour lire le guide de cette page : des étapes numérotées, les boutons exacts sur lesquels appuyer et les réponses aux questions fréquentes, sans quitter l’écran.",
+            "title_es": "Ayuda en cada página",
+            "body_es": "Cada pantalla tiene ahora un ? en la esquina superior derecha de su banner. Tóquelo para leer la guía de esa página, con pasos numerados, los botones exactos que debe pulsar y respuestas a preguntas frecuentes, sin salir de la pantalla.",
+            "title_hi": "हर पेज पर मदद",
+            "body_hi": "अब हर स्क्रीन के बैनर के ऊपरी दाएँ कोने में एक ? है। उस पेज की गाइड पढ़ने के लिए इसे टैप करें: क्रमांकित चरण, कौन-से बटन दबाने हैं, और आम सवालों के जवाब, स्क्रीन छोड़े बिना।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "📖",
+            "title": "Easier-to-read help guides",
+            "body": "Help guides are bigger and clearer: steps are numbered cards, button names stand out, tips and cautions are highlighted, questions open with a tap, and long guides have quick links to each section. On a phone the guide fills the screen.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor",
+                "guardian",
+                "sales_rep",
+                "reseller_admin"
+            ],
+            "title_fr": "Des guides d’aide plus faciles à lire",
+            "body_fr": "Les guides d’aide sont plus grands et plus clairs : les étapes sont numérotées, les noms des boutons ressortent, les conseils et mises en garde sont mis en évidence, les questions s’ouvrent d’un toucher et les longs guides ont des liens vers chaque section. Sur un téléphone, le guide occupe tout l’écran.",
+            "title_es": "Guías de ayuda más fáciles de leer",
+            "body_es": "Las guías de ayuda son más grandes y claras: los pasos son tarjetas numeradas, los nombres de los botones resaltan, los consejos y advertencias se destacan, las preguntas se abren con un toque y las guías largas tienen enlaces a cada sección. En el teléfono, la guía ocupa toda la pantalla.",
+            "title_hi": "पढ़ने में आसान मदद गाइड",
+            "body_hi": "मदद गाइड अब बड़ी और साफ़ हैं: चरण क्रमांकित कार्ड हैं, बटनों के नाम अलग दिखते हैं, सुझाव और सावधानियाँ हाइलाइट हैं, सवाल एक टैप में खुलते हैं, और लंबी गाइड में हर हिस्से के लिए लिंक हैं। फ़ोन पर गाइड पूरी स्क्रीन पर खुलती है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "💼",
             "title": "Payroll engine: pay runs and payslips",
             "body": "HR can now run payroll with every Canadian deduction: CPP, EI, QPIP and income tax from the CRA tables. Start a pay run in Payroll › Pay runs (hours come from the clock), send it for review, approve and finalize: each person gets a payslip in the app and an email with no amounts. Remittances shows what to send the CRA and when. It is off until an agency admin switches it on in HR settings and accepts the notice to check with your accountant first.",

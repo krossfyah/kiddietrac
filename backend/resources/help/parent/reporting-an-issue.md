@@ -2,6 +2,7 @@
 title: Reporting an issue to the centre
 category: Daily Use
 order: 7
+screens: report-issue
 ---
 # Reporting an issue to the centre
 

@@ -2,6 +2,7 @@
 title: SMS broadcast
 category: Communications
 order: 40
+screens: sms
 ---
 # SMS broadcast
 

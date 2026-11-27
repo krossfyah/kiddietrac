@@ -2,6 +2,7 @@
 title: Drill log
 category: Health & Safety
 order: 45
+screens: drills
 ---
 # Drill log
 

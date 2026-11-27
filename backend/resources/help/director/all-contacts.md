@@ -3,6 +3,7 @@ title: All contacts
 category: Daily Operations
 order: 20
 roles: agency_admin, centre_director, platform_admin
+screens: contacts
 ---
 # All contacts
 

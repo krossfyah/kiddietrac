@@ -2,6 +2,7 @@
 title: Adding a new child
 category: Enrolment
 order: 1
+screens: ~admin-children
 ---
 
 # Adding a new child

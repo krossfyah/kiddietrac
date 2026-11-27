@@ -3,6 +3,7 @@ title: Single sign-on (Google & Microsoft)
 category: Settings
 order: 40
 roles: agency_admin, platform_admin
+screens: social-settings
 ---
 
 # Single sign-on (Google & Microsoft)

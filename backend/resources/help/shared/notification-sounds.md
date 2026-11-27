@@ -2,6 +2,7 @@
 title: Notification sounds and vibration
 category: Your Account
 order: 30
+screens: ~notifications
 ---
 # Notification sounds and vibration
 

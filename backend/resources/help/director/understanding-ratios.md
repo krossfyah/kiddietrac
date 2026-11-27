@@ -2,6 +2,7 @@
 title: Understanding ratios
 category: Daily Operations
 order: 1
+screens: room-ratios
 ---
 
 # Understanding educator-to-child ratios

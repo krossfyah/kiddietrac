@@ -2,6 +2,7 @@
 title: Wellness pre-arrival screening
 category: Daily Operations
 order: 27
+screens: wellness-digest
 ---
 # Wellness screening
 

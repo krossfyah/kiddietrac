@@ -3,6 +3,7 @@ title: Carrier settings — Twilio and Telnyx
 category: Settings
 order: 41
 roles: agency_admin, platform_admin
+screens: sms-settings
 ---
 # Carrier settings — Twilio and Telnyx
 

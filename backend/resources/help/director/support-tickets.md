@@ -3,6 +3,7 @@ title: Support tickets
 category: Administration
 order: 69
 roles: agency_admin, platform_admin
+screens: tickets
 ---
 # Support tickets
 

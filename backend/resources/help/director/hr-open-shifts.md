@@ -3,6 +3,7 @@ title: HR: open shifts and shift notices
 category: Staff Management
 order: 66
 roles: agency_admin, platform_admin, centre_director, educator, home_visitor
+screens: schedule?tab=openshifts
 ---
 # HR: open shifts and shift notices
 

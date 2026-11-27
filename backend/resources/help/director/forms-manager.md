@@ -3,6 +3,7 @@ title: Forms Manager and form packages
 category: Administration
 order: 66
 roles: agency_admin, platform_admin
+screens: forms-manager
 ---
 # Forms Manager and form packages
 

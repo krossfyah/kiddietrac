@@ -3,6 +3,7 @@ title: Payroll runs, hours and payslips
 category: Staff Management
 order: 30
 roles: agency_admin, platform_admin
+screens: payroll
 ---
 # Payroll runs, hours and payslips
 

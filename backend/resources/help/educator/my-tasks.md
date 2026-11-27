@@ -2,6 +2,7 @@
 title: My tasks
 category: Daily Workflows
 order: 6
+screens: my-tasks
 ---
 
 # My tasks

@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin, centre_director
 title: Educator points and rewards (with Giftbit and Tango Card gift cards)
 category: Staff Management
 order: 20
+screens: educator-rewards, educator-award-settings
 ---
 # Educator points and rewards
 

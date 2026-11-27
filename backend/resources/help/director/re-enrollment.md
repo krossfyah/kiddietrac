@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Re-enrolment campaigns
 category: Enrolment
 order: 60
+screens: reenrollment
 ---
 # Re-enrolment campaigns
 

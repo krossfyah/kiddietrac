@@ -2,6 +2,7 @@
 title: Adding a family
 category: Enrolment
 order: 0
+screens: ~synced-waitlist, admin-families
 ---
 # Adding a family
 

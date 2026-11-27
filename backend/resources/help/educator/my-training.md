@@ -3,6 +3,7 @@ title: My training and checks
 category: Your Account
 order: 22
 roles: educator, home_visitor, centre_director
+screens: my-training, my-certificates
 ---
 # My training and checks
 

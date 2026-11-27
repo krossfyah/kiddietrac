@@ -3,6 +3,7 @@ title: Donations and fundraising
 category: Billing
 order: 20
 roles: agency_admin, platform_admin
+screens: donations
 ---
 # Donations and fundraising
 

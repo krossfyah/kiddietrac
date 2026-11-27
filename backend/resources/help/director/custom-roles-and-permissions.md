@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Custom roles and permissions
 category: Administration
 order: 20
+screens: admin-roles
 ---
 # Custom roles and permissions
 

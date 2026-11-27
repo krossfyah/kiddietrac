@@ -2,6 +2,7 @@
 title: Hazards and telling parents
 category: Health & Safety
 order: 46
+screens: hazards
 ---
 # Hazards and telling parents
 

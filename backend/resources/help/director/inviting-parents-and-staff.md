@@ -2,6 +2,7 @@
 title: Inviting parents and staff
 category: Enrolment
 order: 2
+screens: invitation-codes, admin-users
 ---
 
 # Inviting parents and staff

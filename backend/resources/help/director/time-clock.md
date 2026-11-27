@@ -2,6 +2,7 @@
 title: Staff time clock
 category: Daily Operations
 order: 76
+screens: time-clock, ~clock-settings
 ---
 # Staff time clock
 

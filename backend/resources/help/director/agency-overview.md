@@ -3,6 +3,7 @@ title: Agency overview
 category: Getting Started
 order: 3
 roles: agency_admin, platform_admin
+screens: dashboard
 ---
 # Agency overview
 

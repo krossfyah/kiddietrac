@@ -642,13 +642,18 @@
       }
 
       // Markdown body (with ## headings → anchors for TOC)
+      /* The reading style the help drawer uses (kt-contextual-help.js KT.helpReader, 2026-11-27): steps as cards,
+         button names as chips, callouts, FAQ rows. The article's own leading "# Title" goes - it is the H1 above. */
+      if (window.KT && KT.helpReader) { try { KT.helpReader.css(); } catch (e) {} }
+      const reader = Dom.el('div', { class: 'kt-help-read' });
       const wrapper = Dom.el('div', { class: 'kt-help-markdown' });
-      wrapper.innerHTML = renderMarkdown(article.body);
+      reader.appendChild(wrapper);
+      wrapper.innerHTML = renderMarkdown(String(article.body || '').replace(/^\s*#\s+[^\n]*\n+/, ''));
       // Add IDs to h2/h3 for TOC anchors
       wrapper.querySelectorAll('h2, h3').forEach((h, i) => {
         h.id = 'h-' + slugify(h.textContent) + '-' + i;
       });
-      content.appendChild(wrapper);
+      content.appendChild(reader);
       try { wireInteractive(wrapper, article.slug); } catch (e) {}
 
       // Feedback widget
@@ -950,8 +955,24 @@
     };
   }
 
+  /* SOFT WRAPS (2026-11-27, the help reader): a line that starts no block of its own continues the line above, as
+     in any markdown. Before, every source line break printed as <br> and a wrapped step broke its list. */
+  function unwrapMarkdown(md) {
+    var BLOCK = /^\s*(?:[-*+] |\d+\. |#|&gt;|>|\||\?\?\? |!\[|\[\[|<|```)/;
+    var out = [];
+    String(md || '').replace(/\r\n/g, '\n').split('\n').forEach(function (line) {
+      var prev = out.length ? out[out.length - 1] : '';
+      if (line.trim() && prev.trim() && !BLOCK.test(line) && !/^\s*(?:#|\||\?\?\? |```)/.test(prev) && !/ {2}$/.test(prev)) {
+        out[out.length - 1] = prev.replace(/\s+$/, '') + ' ' + line.trim();
+      } else {
+        out.push(line);
+      }
+    });
+    return out.join('\n');
+  }
+
   function renderMarkdown(md) {
-    let html = md;
+    let html = unwrapMarkdown(md);
     html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     html = html.replace(/(\|.+\|\n\|[-:| ]+\|\n(?:\|.+\|\n?)+)/g, (match) => {
@@ -988,6 +1009,14 @@
     html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
     html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
     html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+    html = html.replace(/<\/blockquote>\n<blockquote>/g, '<br>');
+    /* CALLOUTS BY EMOJI (2026-11-27, the help reader): "> 💡 ..." tip, "> ℹ️ ..." note, "> ⚠️ ..." caution - the same in
+       every language, so a translator never has to keep a keyword. Caution/Warning words work like Important. */
+    html = html.replace(/<blockquote>(💡|ℹ️?|⚠️?)\s*/g, function (m, ic) {
+      var kind = ic === '💡' ? 'tip' : (ic.charAt(0) === 'ℹ' ? 'note' : 'important');
+      return '<blockquote class="kt-help-callout kt-help-callout-' + kind + '"><span class="kt-help-callout-ic" aria-hidden="true">' + ic + '</span> ';
+    });
+    html = html.replace(/<blockquote>\*\*(Caution|Warning|Attention|Avertissement|Precaución|Advertencia|\u091a\u0947\u0924\u093e\u0935\u0928\u0940|\u0938\u093e\u0935\u0927\u093e\u0928)(\s*):\*\*/g, '<blockquote class="kt-help-callout kt-help-callout-important"><strong>⚠️ $1$2:</strong>');
     // Translated articles name the callout in their own language (2026-11-05 i18n sweep).
     var CALLOUT_WORDS = { Tip: 'Tip', Note: 'Note', Important: 'Important', Astuce: 'Tip', Remarque: 'Note',
       Consejo: 'Tip', Nota: 'Note', Importante: 'Important', '\u0938\u0941\u091d\u093e\u0935': 'Tip',

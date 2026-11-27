@@ -3,6 +3,7 @@ title: Reviewing, counter-signing and sending back forms
 category: Administration
 order: 68
 roles: agency_admin, platform_admin
+screens: edocuments, signed-docs
 ---
 # Reviewing, counter-signing and sending back forms
 

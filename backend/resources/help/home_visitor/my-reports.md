@@ -2,6 +2,7 @@
 title: Viewing your reports
 category: Home visits
 order: 3
+screens: home-visits
 ---
 
 # Viewing your reports

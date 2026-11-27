@@ -3,6 +3,7 @@ title: HR: letter templates and e-signature
 category: Staff Management
 order: 68
 roles: agency_admin, platform_admin, centre_director
+screens: hr-documents?tab=letters
 ---
 # HR: letter templates and e-signature
 

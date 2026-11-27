@@ -2,6 +2,7 @@
 title: Follow-ups and staying on top of leads
 category: Follow-ups
 order: 1
+screens: ~sales-calendar
 ---
 
 # Follow-ups and staying on top of leads

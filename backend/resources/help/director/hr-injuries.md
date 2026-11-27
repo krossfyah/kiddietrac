@@ -3,6 +3,7 @@ title: HR: staff injuries and near misses
 category: Staff Management
 order: 64
 roles: agency_admin, platform_admin, centre_director, educator, home_visitor
+screens: hr-safety
 ---
 # HR: staff injuries and near misses
 

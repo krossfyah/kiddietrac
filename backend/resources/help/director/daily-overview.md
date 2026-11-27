@@ -2,6 +2,7 @@
 title: Daily Overview: one provider, one day
 category: Daily Operations
 order: 12
+screens: provider-day
 ---
 # Daily Overview: one provider, one day
 

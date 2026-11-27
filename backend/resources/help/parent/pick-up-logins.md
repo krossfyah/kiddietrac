@@ -2,6 +2,7 @@
 title: Pick-up logins for grandparents, nannies and other helpers
 category: Your Account
 order: 4
+screens: family-contacts
 ---
 # Pick-up logins for grandparents, nannies and other helpers
 

@@ -2,6 +2,7 @@
 title: Clocking in and out
 category: Getting Started
 order: 2
+screens: time-clock
 ---
 
 # Clocking in and out

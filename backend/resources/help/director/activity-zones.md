@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Activity zones tracking
 category: Daily Operations
 order: 50
+screens: zones
 ---
 # Activity zones
 

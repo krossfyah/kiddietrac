@@ -2,6 +2,7 @@
 title: Incident reports
 category: Compliance
 order: 20
+screens: incidents
 ---
 
 # Incident reports

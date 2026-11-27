@@ -2,6 +2,7 @@
 title: Sharing files with families
 category: Daily Workflows
 order: 5
+screens: files
 ---
 
 # Sharing files with families

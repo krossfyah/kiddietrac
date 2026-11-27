@@ -2,6 +2,7 @@
 title: When a lead misses a meeting (no-shows)
 category: Follow-ups
 order: 3
+screens: ~sales-bookings
 ---
 
 # When a lead misses a meeting (no-shows)

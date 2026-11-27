@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Custom forms builder
 category: Daily Operations
 order: 68
+screens: admin-forms
 ---
 # Custom forms
 

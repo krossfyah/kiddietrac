@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Marketing campaigns
 category: Communications
 order: 36
+screens: marketing-campaigns
 ---
 # Marketing campaigns
 

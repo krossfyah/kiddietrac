@@ -3,6 +3,7 @@ title: Staff training, checks and deadlines
 category: Staff
 order: 34
 roles: agency_admin, platform_admin, centre_director
+screens: certifications, ~renewals, my-training, my-certificates
 ---
 # Staff training, checks and deadlines
 

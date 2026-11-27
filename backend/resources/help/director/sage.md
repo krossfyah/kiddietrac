@@ -3,6 +3,7 @@ title: Sage (Sage Accounting and Sage 50)
 category: Billing
 order: 80
 roles: agency_admin, platform_admin
+screens: sage
 ---
 # Sage
 

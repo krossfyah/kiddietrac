@@ -3,6 +3,7 @@ title: HR: team files, balances and absences
 category: Staff Management
 order: 60
 roles: agency_admin, platform_admin, centre_director
+screens: hr-people, time-off?tab=balances, ~time-off?tab=types, ~hr-settings
 ---
 # HR: team files, balances and absences
 

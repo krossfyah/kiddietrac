@@ -2,6 +2,7 @@
 title: Tour bookings
 category: Daily Operations
 order: 78
+screens: tours
 ---
 # Tour bookings
 

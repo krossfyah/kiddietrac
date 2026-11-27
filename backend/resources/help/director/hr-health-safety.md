@@ -3,6 +3,7 @@ title: HR: risk assessments, chemicals, safe work procedures, H&S duties and tas
 category: Health & Safety
 order: 47
 roles: agency_admin, platform_admin, centre_director
+screens: hr-safety?tab=risk, hr-safety?tab=chemicals, hr-safety?tab=procedures, hr-safety?tab=duties, hr-safety?tab=hstasks
 ---
 # HR: risk assessments, chemicals, safe work procedures, H&S duties and tasks
 

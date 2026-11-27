@@ -2,6 +2,7 @@
 title: Vacation hold credits
 category: Billing
 order: 84
+screens: vacation-holds
 ---
 # Vacation holds
 

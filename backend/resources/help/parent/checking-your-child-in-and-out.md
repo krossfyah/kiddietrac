@@ -2,6 +2,7 @@
 title: Checking your child in and out
 category: Daily Use
 order: 3
+screens: checkin
 ---
 
 # Checking your child in and out

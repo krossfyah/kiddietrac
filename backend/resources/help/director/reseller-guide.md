@@ -3,6 +3,7 @@ title: Reseller guide
 category: Administration
 order: 5
 roles: reseller_admin
+screens: reseller, reseller-onboard, reseller-billing, reseller-support, reseller-brand, reseller-agencies, resellers
 ---
 # Reseller guide
 

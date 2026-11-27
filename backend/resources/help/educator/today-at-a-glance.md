@@ -2,6 +2,7 @@
 title: Today at a glance — your day brief
 category: Getting Started
 order: 3
+screens: home, today
 ---
 
 # Today at a glance — your day brief

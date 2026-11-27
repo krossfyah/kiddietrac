@@ -2,6 +2,7 @@
 title: Sharing photos
 category: Daily Workflows
 order: 2
+screens: ~photo-permissions
 ---
 
 # Sharing photos

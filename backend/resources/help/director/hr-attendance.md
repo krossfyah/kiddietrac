@@ -3,6 +3,7 @@ title: HR: lateness, absence score and leave clashes
 category: Staff Management
 order: 68
 roles: agency_admin, platform_admin, centre_director
+screens: hr-absence, ~hr-settings
 ---
 # HR: lateness, absence score and leave clashes
 

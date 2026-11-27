@@ -2,6 +2,7 @@
 title: Your daily view
 category: Getting Started
 order: 1
+screens: home, today
 ---
 
 # Your daily view

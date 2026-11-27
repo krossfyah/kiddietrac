@@ -47,6 +47,17 @@ final class HelpController extends Controller
     }
 
     /**
+     * GET /api/v1/help/page-map — screen key => the help articles for it, for this role (the "?" on every screen,
+     * kt-page-help.js, 2026-11-27). Built from each article's `screens:` front matter (HelpService::pageMapForRole).
+     */
+    public function pageMap(Request $request): JsonResponse
+    {
+        $role = $this->resolveRole($request->user(), $request);
+
+        return response()->json(['role' => $role, 'map' => (object) $this->help->pageMapForRole($role)]);
+    }
+
+    /**
      * GET /api/v1/help/{slug}
      */
     public function show(Request $request, string $slug): JsonResponse

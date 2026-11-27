@@ -3,6 +3,7 @@ title: QuickBooks Online sync
 category: Billing
 order: 78
 roles: agency_admin, platform_admin
+screens: quickbooks
 ---
 # QuickBooks Online sync
 

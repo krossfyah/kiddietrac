@@ -2,6 +2,7 @@
 title: Policies, sign-offs and the training matrix
 category: Health & Safety
 order: 46
+screens: policies, my-policies, ~hr-safety?tab=procedures
 ---
 # Policies, sign-offs and the training matrix
 

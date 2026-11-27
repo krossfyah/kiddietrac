@@ -2,6 +2,7 @@
 title: Assigning tasks to your team
 category: Staff Management
 order: 30
+screens: tasks
 ---
 
 # Assigning tasks to your team

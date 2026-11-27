@@ -3,6 +3,7 @@ title: Choosing your learning framework
 category: Settings
 order: 8
 roles: agency_admin, platform_admin
+screens: hdlh-gaps, learning-framework
 ---
 # Choosing your learning framework
 

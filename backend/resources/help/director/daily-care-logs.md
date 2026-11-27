@@ -2,6 +2,7 @@
 title: Daily care logs (diapers, naps, meals, bottles)
 category: Daily Operations
 order: 30
+screens: care-log
 ---
 # Daily care logs
 

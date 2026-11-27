@@ -3,6 +3,7 @@ title: Refunding a payment
 category: Billing
 order: 78
 roles: agency_admin, centre_director, platform_admin
+screens: refunds
 ---
 # Refunding a payment
 

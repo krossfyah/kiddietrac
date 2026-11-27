@@ -3,6 +3,7 @@ title: Audit log viewer
 category: Administration
 order: 58
 roles: agency_admin, platform_admin
+screens: audit-logs
 ---
 # Audit log
 

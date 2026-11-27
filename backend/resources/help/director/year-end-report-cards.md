@@ -2,6 +2,7 @@
 title: AI year-end report cards
 category: Reporting
 order: 76
+screens: report-cards
 ---
 # Report cards
 

@@ -2,6 +2,7 @@
 title: Messaging your educators
 category: Daily Use
 order: 1
+screens: messages
 ---
 
 # Messaging your educators

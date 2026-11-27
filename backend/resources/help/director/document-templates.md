@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Document templates
 category: Settings
 order: 40
+screens: document-templates
 ---
 # Document templates
 

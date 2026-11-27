@@ -3,6 +3,7 @@ title: HR: documents, pay history and leaving
 category: Staff Management
 order: 67
 roles: agency_admin, platform_admin, centre_director
+screens: hr-people?tab=leavers, hr-documents
 ---
 # HR: documents, pay history and leaving
 

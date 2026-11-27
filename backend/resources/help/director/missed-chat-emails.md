@@ -2,6 +2,7 @@
 title: Missed-message email notifications
 category: Settings
 order: 80
+screens: ~email
 ---
 # Missed-message email notifications
 

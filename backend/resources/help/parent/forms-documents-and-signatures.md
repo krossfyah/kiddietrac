@@ -2,6 +2,7 @@
 title: Forms, documents and signatures
 category: Your Account
 order: 1
+screens: my-forms, my-documents
 ---
 
 # Forms, documents and signatures

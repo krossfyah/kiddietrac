@@ -2,6 +2,7 @@
 title: Getting started with the Sales workspace
 category: Getting Started
 order: 1
+screens: home, ~sales, ~sales-customers, ~sales-expenses, ~sales-campaigns, ~sales-email, ~prospect-ndas
 ---
 
 # Getting started with the Sales workspace

@@ -2,6 +2,7 @@
 title: Compliance dashboard
 category: Administration
 order: 56
+screens: compliance, ~inspection
 ---
 # Compliance dashboard
 

@@ -2,6 +2,7 @@
 title: Updating your profile and contacts
 category: Your Account
 order: 3
+screens: settings
 ---
 
 # Updating your profile and contacts

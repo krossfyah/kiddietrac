@@ -3,6 +3,7 @@ title: Safe Arrival — every scheduled child, accounted for
 category: Operations
 order: 5
 roles: agency_admin, centre_director, platform_admin
+screens: safe-arrival
 ---
 # Safe Arrival — every scheduled child, accounted for
 

@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Provider map
 category: Administration
 order: 25
+screens: provider-map
 ---
 # Provider map
 

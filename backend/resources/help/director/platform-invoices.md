@@ -3,6 +3,7 @@ title: Platform invoices (billing agencies)
 category: Billing
 order: 90
 roles: agency_admin, platform_admin
+screens: sales-invoices, ~admin-mrr
 ---
 # Platform invoices
 

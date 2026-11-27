@@ -2,6 +2,7 @@
 title: Immunization report
 category: Reporting
 order: 25
+screens: ~immunizations
 ---
 # Immunization report
 

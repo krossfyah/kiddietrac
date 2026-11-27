@@ -3,6 +3,7 @@ title: Subsidies — CWELCC and provincial fee subsidy
 category: Billing
 order: 12
 roles: agency_admin, centre_director, platform_admin
+screens: cwelcc, ~grants
 ---
 # Subsidies — CWELCC and provincial fee subsidy
 

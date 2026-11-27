@@ -3,6 +3,7 @@ title: Accounting (all invoices in one list)
 category: Billing
 order: 38
 roles: agency_admin, centre_director, platform_admin
+screens: external-billing
 ---
 # Accounting
 

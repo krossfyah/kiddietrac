@@ -2,6 +2,7 @@
 title: Paying invoices and autopay
 category: Billing
 order: 2
+screens: billing
 ---
 
 # Paying invoices and autopay

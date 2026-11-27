@@ -2,6 +2,7 @@
 title: Background-check expiry
 category: Compliance
 order: 35
+screens: background-checks
 ---
 # Background-check tracking
 

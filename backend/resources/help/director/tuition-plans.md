@@ -3,6 +3,7 @@ title: Tuition & fee plans
 category: Billing
 order: 20
 roles: agency_admin, platform_admin
+screens: tuition-plans
 ---
 # Tuition & fee plans
 

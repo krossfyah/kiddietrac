@@ -2,6 +2,7 @@
 title: Website chat
 category: Leads & pipeline
 order: 6
+screens: sales-webchat
 ---
 # Website chat
 

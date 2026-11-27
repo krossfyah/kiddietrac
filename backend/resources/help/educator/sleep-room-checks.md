@@ -2,6 +2,7 @@
 title: Sleep room and sleep checks
 category: Safety
 order: 3
+screens: sleep-room
 ---
 
 # Sleep room and sleep checks

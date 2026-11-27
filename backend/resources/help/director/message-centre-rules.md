@@ -3,6 +3,7 @@ title: Message Centre — who educators can message
 category: Settings
 order: 47
 roles: agency_admin, platform_admin, centre_director
+screens: chat
 ---
 # Message Centre — who educators can message
 

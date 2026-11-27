@@ -2,6 +2,7 @@
 title: Fire plan
 category: Health & Safety
 order: 46
+screens: ~drills
 ---
 # Fire plan
 

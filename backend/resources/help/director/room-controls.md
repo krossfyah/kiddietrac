@@ -2,6 +2,7 @@
 title: Room Controls
 category: Staff Management
 order: 29
+screens: educator-rooms
 ---
 # Room Controls
 

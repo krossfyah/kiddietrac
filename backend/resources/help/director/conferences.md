@@ -2,6 +2,7 @@
 title: Parent-teacher conferences
 category: Communications
 order: 55
+screens: conferences
 ---
 # Conferences
 

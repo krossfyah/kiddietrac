@@ -2,6 +2,7 @@
 title: Adding and managing leads
 category: Leads & pipeline
 order: 1
+screens: sales-leads
 ---
 
 # Adding and managing leads

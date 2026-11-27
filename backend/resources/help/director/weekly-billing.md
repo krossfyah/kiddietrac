@@ -2,6 +2,7 @@
 title: Weekly / biweekly billing schedule
 category: Billing
 order: 80
+screens: billing-schedule
 ---
 # Billing schedule
 

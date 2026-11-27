@@ -609,6 +609,8 @@ Schedule::command('kt:notify-audience-check --quiet-ok')->dailyAt('05:50')->time
 // Every staff child list holds the children that person looks after; enrolment counts agree (2026-11-09).
 Schedule::command('kt:child-scope-check --quiet-ok')->dailyAt('05:55')->timezone('America/Toronto')->withoutOverlapping(20)->onOneServer();
 // Each role sees only its own screens: admin routes guarded, deny list, one tile badge (2026-11-06 role sweep).
+// Every screen's "?" opens a help article in all four languages, for every role's nav (2026-11-27, KtPageHelpCheck).
+Schedule::command('kt:page-help-check --quiet-ok')->dailyAt('05:47')->timezone('America/Toronto')->withoutOverlapping(10)->onOneServer();
 Schedule::command('kt:screen-guard-check --quiet-ok')->dailyAt('05:45')->timezone('America/Toronto')->withoutOverlapping(15)->onOneServer();
 /* LEAK GUARD (2026-11-27, Anthony: "leaks should have a guard to constantly check for cross leaks"). kt:leak-probe calls
    every GET API route in-process as canary people of test agencies 6 and 18 and fails on the other agency's canary

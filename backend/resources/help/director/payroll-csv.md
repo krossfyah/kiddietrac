@@ -2,6 +2,7 @@
 title: Payroll-ready CSV export
 category: Staff Management
 order: 32
+screens: ~payroll
 ---
 # Payroll export
 

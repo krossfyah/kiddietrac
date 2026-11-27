@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: White-label branding & invoices
 category: Settings
 order: 40
+screens: admin-branding
 ---
 # Branding and white-label
 

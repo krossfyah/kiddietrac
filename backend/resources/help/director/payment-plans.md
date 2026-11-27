@@ -3,6 +3,7 @@ title: Payment schedules
 category: Billing
 order: 79
 roles: agency_admin, centre_director, platform_admin
+screens: payment-plans
 ---
 # Payment schedules
 

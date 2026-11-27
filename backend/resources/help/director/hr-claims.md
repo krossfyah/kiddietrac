@@ -3,6 +3,7 @@ title: HR: expense and mileage claims
 category: Staff Management
 order: 65
 roles: agency_admin, platform_admin, centre_director, educator, home_visitor
+screens: payroll?tab=claims
 ---
 # HR: expense and mileage claims
 

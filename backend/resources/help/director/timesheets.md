@@ -2,6 +2,7 @@
 title: Timesheets and correcting hours
 category: Staff Management
 order: 31
+screens: timesheets
 ---
 # Timesheets and correcting hours
 

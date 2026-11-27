@@ -2,6 +2,7 @@
 title: Recording observations
 category: Daily Workflows
 order: 3
+screens: observations
 ---
 
 # Recording observations

@@ -3,6 +3,7 @@ roles: educator, home_visitor, centre_director
 title: My points and rewards
 category: Getting Started
 order: 30
+screens: my-points
 ---
 # My points and rewards
 

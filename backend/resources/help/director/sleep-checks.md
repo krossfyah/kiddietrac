@@ -2,6 +2,7 @@
 title: Sleep checks, policy and the inspector report
 category: Compliance
 order: 40
+screens: sleep-room
 ---
 
 # Sleep checks, policy and the inspector report

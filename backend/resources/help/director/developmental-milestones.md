@@ -2,6 +2,7 @@
 title: Developmental milestones tracker
 category: Daily Operations
 order: 34
+screens: ~observations
 ---
 # Developmental milestones
 

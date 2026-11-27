@@ -2,6 +2,7 @@
 title: Quick notes
 category: Daily Operations
 order: 47
+screens: notes
 ---
 # Quick notes
 

@@ -2,6 +2,7 @@
 title: Notifications and alerts
 category: Getting Started
 order: 3
+screens: notifications
 ---
 
 # Notifications and alerts

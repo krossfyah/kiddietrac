@@ -3,6 +3,7 @@ title: Household residents (home daycares)
 category: Staff
 order: 35
 roles: agency_admin, platform_admin, centre_director, educator
+screens: household
 ---
 # Household residents (home daycares)
 

@@ -3,6 +3,7 @@ title: HR: directory, org chart, kudos, quizzes and who approves time off
 category: Staff Management
 order: 69
 roles: agency_admin, platform_admin, centre_director
+screens: hr-people?tab=directory, hr-people?tab=orgchart, educator-rewards?tab=kudos, hr-settings?tab=approvers, ~hr-performance?tab=courses
 ---
 # HR: directory, org chart, kudos, quizzes and who approves time off
 

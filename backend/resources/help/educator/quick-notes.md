@@ -2,6 +2,7 @@
 title: Quick notes
 category: My Work
 order: 36
+screens: notes
 ---
 # Quick notes
 

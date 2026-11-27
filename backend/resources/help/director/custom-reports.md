@@ -2,6 +2,7 @@
 title: Custom report builder
 category: Administration
 order: 72
+screens: ~forecast, reports, ~retention, ~engagement, ~nps
 ---
 # Custom reports
 

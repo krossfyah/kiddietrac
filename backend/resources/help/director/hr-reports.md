@@ -3,6 +3,7 @@ title: HR: dashboard, reports, probation and missing information
 category: Staff Management
 order: 68
 roles: agency_admin, platform_admin, centre_director
+screens: hr, hr-reports
 ---
 # HR: dashboard, reports, probation and missing information
 

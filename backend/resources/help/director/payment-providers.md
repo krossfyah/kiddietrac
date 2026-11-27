@@ -3,6 +3,7 @@ title: Payment providers (Helcim, Zum Rails, Stripe)
 category: Billing
 order: 12
 roles: agency_admin, platform_admin
+screens: payment-providers
 ---
 # Payment providers
 

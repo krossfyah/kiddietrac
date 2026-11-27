@@ -2,6 +2,7 @@
 title: De-enrolling a family, step by step
 category: Enrolment
 order: 40
+screens: withdrawals
 ---
 # De-enrolling a family
 

@@ -3,6 +3,7 @@ title: Xero
 category: Billing
 order: 79
 roles: agency_admin, platform_admin
+screens: xero
 ---
 # Xero
 

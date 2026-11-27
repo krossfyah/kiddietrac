@@ -2,6 +2,7 @@
 title: Sending in an immunization record
 category: Daily Use
 order: 6
+screens: immunizations
 ---
 # Sending in an immunization record
 

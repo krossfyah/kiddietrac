@@ -2,6 +2,7 @@
 title: Quick notes
 category: Getting Started
 order: 24
+screens: notes
 ---
 # Quick notes
 

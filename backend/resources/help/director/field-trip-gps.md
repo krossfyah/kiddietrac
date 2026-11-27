@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin, centre_director
 title: Walk Watch — live GPS walks & outings
 category: Daily Operations
 order: 45
+screens: field-trips, trip-gps
 ---
 # Walk Watch
 

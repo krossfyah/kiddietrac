@@ -2,6 +2,7 @@
 title: Time-off requests
 category: Staff Management
 order: 30
+screens: time-off
 ---
 # Time-off requests
 

@@ -3,6 +3,7 @@ title: HR: setting up leave types
 category: Staff Management
 order: 61
 roles: agency_admin, platform_admin
+screens: time-off?tab=types
 ---
 # HR: setting up leave types
 

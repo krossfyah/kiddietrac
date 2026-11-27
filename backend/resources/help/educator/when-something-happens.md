@@ -2,6 +2,7 @@
 title: When something happens
 category: Safety
 order: 1
+screens: incidents
 ---
 
 # When something happens — incidents

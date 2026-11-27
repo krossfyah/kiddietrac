@@ -2,6 +2,7 @@
 title: Privacy and data security
 category: Your Account
 order: 2
+screens: ~photo-permissions
 ---
 
 # Privacy and data security

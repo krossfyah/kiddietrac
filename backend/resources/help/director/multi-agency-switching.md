@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Managing more than one agency
 category: Administration
 order: 30
+screens: agencies
 ---
 # Managing more than one agency
 

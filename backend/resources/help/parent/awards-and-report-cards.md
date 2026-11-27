@@ -2,6 +2,7 @@
 title: Awards, certificates and report cards
 category: Daily Use
 order: 5
+screens: report-cards
 ---
 
 # Awards, certificates and report cards

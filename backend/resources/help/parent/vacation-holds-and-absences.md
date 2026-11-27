@@ -2,6 +2,7 @@
 title: Vacation holds and absences
 category: Daily Use
 order: 4
+screens: attendance-pattern
 ---
 
 # Vacation holds and absences

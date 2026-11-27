@@ -3,6 +3,7 @@ title: Ontario workforce funding (WEG and CWELCC)
 category: Payroll
 order: 40
 roles: agency_admin, platform_admin
+screens: workforce-funding
 ---
 # Ontario workforce funding (WEG and CWELCC)
 

@@ -3,6 +3,7 @@ title: HR: overtime, time in lieu and timesheets
 category: Staff Management
 order: 66
 roles: agency_admin, platform_admin, centre_director, educator, home_visitor
+screens: timesheets?tab=lock, timesheets?tab=overtime
 ---
 # HR: overtime, time in lieu and timesheets
 

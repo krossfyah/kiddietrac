@@ -2,6 +2,7 @@
 title: Quick logging events
 category: Daily Workflows
 order: 1
+screens: care-log
 ---
 
 # Quick logging events

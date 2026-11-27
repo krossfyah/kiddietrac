@@ -2,6 +2,7 @@
 title: Auto-pay (saved card)
 category: Billing
 order: 76
+screens: payment-run
 ---
 # Auto-pay
 

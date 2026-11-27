@@ -3,6 +3,7 @@ title: HR: closures taken from leave, leave to review, part-time pro-rata
 category: Staff
 order: 49
 roles: agency_admin, platform_admin, centre_director
+screens: time-off?tab=leavemaths
 ---
 # HR: closures taken from leave, leave to review, part-time pro-rata
 

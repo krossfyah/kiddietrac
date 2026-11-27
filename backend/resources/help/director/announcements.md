@@ -2,6 +2,7 @@
 title: Announcements
 category: Communications
 order: 35
+screens: announcements, ~rsvp
 ---
 # Announcements
 

@@ -2,6 +2,7 @@
 title: Understanding the dashboard
 category: Getting Started
 order: 2
+screens: dashboard, home, today
 ---
 
 # Understanding the dashboard

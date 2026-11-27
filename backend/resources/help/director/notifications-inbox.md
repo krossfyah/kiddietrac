@@ -2,6 +2,7 @@
 title: Notifications inbox
 category: Settings
 order: 67
+screens: notifications
 ---
 # Notifications inbox and the bell
 

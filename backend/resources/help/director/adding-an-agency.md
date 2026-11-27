@@ -3,6 +3,7 @@ roles: agency_admin, platform_admin
 title: Adding a new agency
 category: Administration
 order: 5
+screens: platform-agencies
 ---
 # Adding a new agency
 
