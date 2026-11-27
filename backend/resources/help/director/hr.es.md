@@ -43,3 +43,23 @@ Cada solicitud muestra su tipo, cuánto usa y el saldo. Aprobar resta del saldo;
 ## Turnos abiertos
 
 **Recursos humanos > Turnos y horarios > Turnos abiertos** publica turnos sin nadie (también desde una falta de ratio); el personal que puede cubrirlos los pide en Mis RR. HH. y tú confirmas quién toma cada uno. El personal recibe un aviso por cada lote de cambios en sus turnos. Ver **RR. HH.: turnos abiertos y avisos de turno**.
+
+## Su primera semana
+
+El **panel de RR. HH.** se abre con una breve ruta de inicio para su rol. Los administradores de agencia tienen **Su primera semana en RR. HH.** (tipos de permiso, expedientes de RR. HH., aprobadores, reglas de asistencia y horas extra, documentos de la empresa, invitaciones, la guía de RR. HH.). Los directores de centro tienen **Su primera semana como director** (los expedientes de su equipo, solicitudes de tiempo libre pendientes, el horario de la próxima semana, aprobar las hojas de horas de un periodo de pago, sus propios pendientes de Mis RR. HH.). Cada paso se marca solo al completarse, con **Ir** para abrir la pantalla y **?** para explicarlo. **Ocultar** la pliega; **Mostrar** la vuelve a abrir.
+
+## Ayuda en cada pestaña
+
+Cada pestaña de Recursos humanos tiene un **?** al final de su fila de pestañas. Abre la guía de esa pestaña junto a la pantalla, para leer y hacer clic a la vez. Un botón **Muéstrame** en la guía le lleva al lugar que describe. En **Ayuda y guías**, cada tema puede mostrar **Guías**, **Videos** o **Preguntas frecuentes**.
+
+## Solicitudes rápidas y pendientes del personal
+
+El personal tiene una sola lista de **Pendientes** en **Mis RR. HH.** con todo lo que le espera en RR. HH., y un **＋** en su teléfono para tiempo libre, días de enfermedad, horas extra, reembolsos, peligros y lesiones. Vea **Mis RR. HH.**
+
+## Preguntas
+
+??? ¿Dónde configuro los tipos de permiso? | **Recursos humanos > Tiempo libre > Tipos de permiso** (administradores de agencia).
+??? ¿Dónde veo quién no ha iniciado sesión todavía? | **Recursos humanos > Informes de RR. HH. > Sin iniciar sesión**. Los administradores pueden pulsar **Reenviar** allí.
+??? ¿Dónde apruebo las hojas de horas de un periodo de pago? | **Recursos humanos > Fichajes y hojas de horas > Aprobar y bloquear**.
+??? ¿Cómo asigno un responsable a alguien? | **Recursos humanos > Personal**, luego ⋮ **Editar expediente** y elija el **Responsable**.
+??? ¿Puedo ocultar la ruta de inicio? | Sí. Pulse **Ocultar** en la tarjeta. Queda plegada en el panel de RR. HH.; pulse **Mostrar** para volver a abrirla.

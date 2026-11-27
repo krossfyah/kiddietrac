@@ -43,3 +43,23 @@ Chaque demande affiche son type, la quantité utilisée et le solde. L'approbati
 ## Quarts à pourvoir
 
 **Ressources humaines > Horaires et quarts > Quarts à pourvoir** publie des quarts sans personne (aussi depuis un manque de ratio) ; le personnel qui peut les faire les demande dans Mes RH et vous confirmez qui prend chacun. Le personnel reçoit un avis par lot de changements à ses quarts. Voir **RH : quarts à pourvoir et avis de quart**.
+
+## Votre première semaine
+
+Le **tableau de bord RH** s'ouvre sur un court parcours de démarrage pour votre rôle. Les administrateurs d'agence ont **Votre première semaine en RH** (types de congés, dossiers RH, approbateurs, règles d'assiduité et d'heures supplémentaires, documents de l'entreprise, invitations, guide RH). Les directeurs de centre ont **Votre première semaine comme directeur** (dossiers de l'équipe, demandes de congé en attente, horaire de la semaine prochaine, approbation des feuilles de temps d'une période de paie, vos propres tâches Mes RH). Chaque étape se coche seule une fois faite, avec **Aller** pour ouvrir l'écran et **?** pour l'expliquer. **Masquer** la replie ; **Afficher** la fait revenir.
+
+## De l'aide sur chaque onglet
+
+Chaque onglet des Ressources humaines a un **?** au bout de sa rangée d'onglets. Il ouvre le guide de cet onglet à côté de l'écran, pour lire et cliquer en même temps. Un bouton **Montrez-moi** dans le guide vous emmène à l'endroit décrit. Dans **Aide et guides**, chaque sujet peut afficher **Guides**, **Vidéos** ou **FAQ**.
+
+## Demandes rapides et tâches du personnel
+
+Le personnel a une seule liste **À faire** dans **Mes RH** avec tout ce qui l'attend en RH, et un **＋** sur son téléphone pour les congés, les jours de maladie, les heures supplémentaires, les remboursements, les dangers et les blessures. Voir **Mes RH**.
+
+## Questions
+
+??? Où configurer les types de congés ? | **Ressources humaines > Congés > Types de congés** (administrateurs d'agence).
+??? Où voir qui ne s'est pas encore connecté ? | **Ressources humaines > Rapports RH > Pas encore connectés**. Les administrateurs peuvent y appuyer sur **Renvoyer**.
+??? Où approuver les feuilles de temps d'une période de paie ? | **Ressources humaines > Pointages et feuilles de temps > Approuver et verrouiller**.
+??? Comment donner un gestionnaire à quelqu'un ? | **Ressources humaines > Personnel**, puis ⋮ **Modifier le dossier** et choisissez le **Gestionnaire**.
+??? Puis-je masquer le parcours de démarrage ? | Oui. Appuyez sur **Masquer** sur la carte. Elle reste repliée sur le tableau de bord RH ; **Afficher** la fait revenir.

@@ -43,3 +43,23 @@ Each request now shows its leave type, how much it uses and the balance. Approvi
 ## Open shifts
 
 **Human Resources > Rota & shifts > Open shifts** posts shifts nobody is on yet (also straight from a ratio shortfall); staff who can work them ask in My HR and you confirm who takes each one. Staff get one notice per batch of changes to their shifts. See **HR: open shifts and shift notices**.
+
+## Your first week
+
+The **HR dashboard** opens with a short starter path for your role. Agency admins get **Your first week in HR** (leave types, HR files, approvers, attendance and overtime rules, company documents, invites, the HR guide). Centre directors get **Your first week as a director** (your team's files, time-off requests waiting, next week's rota, approving a pay period's timesheets, your own My HR to-do). Each step ticks itself when it is done, has **Go** to open the screen and **?** to explain it. **Hide** folds it away; **Show** brings it back.
+
+## Help on every tab
+
+Every Human Resources tab has a **?** at the end of its tab row. It opens the guide for that tab beside the screen, so you can read and click at the same time. A **Show me** button in the guide takes you to the place it describes. In **Help & guides**, each topic can show **Guides**, **Videos** or **FAQs**.
+
+## Staff quick requests and to-do
+
+Staff have one **To do** list on **My HR** with everything waiting for them in HR, and a **＋** on their phone for time off, sick days, overtime, claims, hazards and injuries. See **My HR**.
+
+## Questions
+
+??? Where do I set up leave types? | **Human Resources > Time off > Leave types** (agency admins).
+??? Where do I see who has not signed in yet? | **Human Resources > HR reports > Not signed in yet**. Admins can press **Resend** there.
+??? Where do I approve a pay period's timesheets? | **Human Resources > Clock-ins & timesheets > Approve & lock**.
+??? How do I give someone a manager? | **Human Resources > People**, then ⋮ **Edit file** and choose the **Manager**.
+??? Can I hide the starter path? | Yes. Press **Hide** on the card. It stays folded on the HR dashboard; press **Show** to bring it back.

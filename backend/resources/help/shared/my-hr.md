@@ -49,3 +49,27 @@ Press **Report a hazard** to tell your director about something unsafe; you can 
 ## Shifts to accept and clock-in fixes
 
 If your centre asks staff to accept their shifts, each new shift waits in **Shifts to accept**. Press **Accept**, or **I can't do this shift** and say why: your director is told. The shift stays yours until they change it. In **Fix my clock-in**, press **Ask for a fix** next to a clock-in that is wrong, or **A clock-in is missing** if you forgot to clock in. Enter the right times and what went wrong. Your director checks it; you can withdraw it while it waits. A clock-in in a timesheet that is already locked for payroll cannot be changed.
+
+## Quick requests (＋)
+
+On a phone, the **＋** at the top of the screen, beside the ⚙️, opens quick requests: **Request time off**, **Off sick** (with a sick note or a photo), **Log overtime**, **New claim**, **Report a hazard**, **Report an injury** and **My HR to-do**. Each one opens the usual form. On a computer, press **＋ New request** at the top of **My HR**.
+
+## Your to-do
+
+**To do** on **My HR** lists everything waiting for you in one place: onboarding steps, courses and quizzes, your part of a review or a review to sign, company documents to read or accept, letters and tax forms to sign, policies and safe work procedures, shifts to accept, a missing clock-out, H&S tasks and certificates that are running out. The oldest and overdue come first. Tap one to go straight to it.
+
+## Getting set up
+
+The **Getting set up in HR** card lists a few first steps for your role, such as your emergency contact, your policies and your certificates. Each one has **Go** to open the right screen and **?** to explain it. It ticks itself as you go. Press **Hide** to fold it away and **Show** to bring it back.
+
+## Help on every screen
+
+Press **?** on My HR, and on every Human Resources tab, to read the guide for that screen without leaving it. In **Help & guides**, each topic can show **Guides**, **Videos** or **FAQs**. FAQs show where to click.
+
+## Questions
+
+??? Where do I ask for time off? | **My HR > ＋ New request > Request time off**, or **Time off > Request time off**. On a phone, use the **＋** at the top.
+??? How do I send a sick note? | **＋ > Off sick**: the request opens with sick leave chosen. Add a photo or a file under the note, and pick the days it covers.
+??? Something is on my to-do that I already did. | Open it from **My HR > To do**. Most items tick themselves when the job is done (for example signing the policy). A document asks you to press **I have read and accept it**.
+??? I forgot to clock out yesterday. | **My HR > Fix my clock-in > Ask for a fix**. It shows on your to-do as **Clock-out missing** until you ask.
+??? Who can see my to-do? | Only you. Your director sees their own team lists, not your list.

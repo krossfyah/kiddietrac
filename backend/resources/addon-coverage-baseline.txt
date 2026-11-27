@@ -225,6 +225,7 @@ route help
 route help/analytics
 route help/ask
 route help/dashboard
+route help/faqs
 route help/featured
 route household
 route household-resident-checks

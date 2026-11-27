@@ -999,6 +999,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get('/help', [HelpController::class, 'index']);
         /* v22p69: must precede /help/{slug} */
         Route::get('/help/dashboard', [HelpController::class, 'dashboard']);
+        // HR Phase 4 batch 10: every question and answer the role may read (Help > topic > FAQs). Must precede /help/{slug}.
+        Route::get('/help/faqs', [HelpController::class, 'faqs']);
         Route::get('/help/analytics', [HelpController::class, 'analytics']);
         Route::post('/help/featured', [HelpController::class, 'pinFeatured']);
         Route::delete('/help/featured/{slug}', [HelpController::class, 'unpinFeatured']);
@@ -2652,6 +2654,11 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
     // Scoped inside HrController: admins = the agency, directors = their own centres' staff, everyone = their own balances.
     Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
         Route::get ('/hr/me',     [\App\Http\Controllers\Api\HrController::class, 'me']);
+        // HR Phase 4 batch 10 (2026-11-27, App\Support\HrTodo): the person's ONE My HR to-do (every pending item from every
+        // part of HR, read through each section's own endpoint) and their role's starter path; hide/show it is their own choice.
+        Route::get ('/hr/me/todo',    [\App\Http\Controllers\Api\HrTodoController::class, 'todo'])->middleware('throttle:60,1,hrtodo');
+        Route::get ('/hr/me/starter', [\App\Http\Controllers\Api\HrTodoController::class, 'starter'])->middleware('throttle:60,1,hrtodo');
+        Route::post('/hr/me/starter', [\App\Http\Controllers\Api\HrTodoController::class, 'hide'])->middleware('throttle:30,1,hrstarter');
         Route::get ('/hr/ledger', [\App\Http\Controllers\Api\HrController::class, 'ledger']);
         // HR Phase 4 (2026-11-27): the request form's leave-clash note (counts only, never names) (App\Support\HrAttendance).
         Route::get ('/hr/me/clash', [\App\Http\Controllers\Api\HrController::class, 'myClash'])->middleware('throttle:120,1,hrclash');

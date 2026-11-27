@@ -2,6 +2,66 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "➕",
+            "title": "Quick requests and one HR to-do",
+            "body": "Tap the new + at the top of your phone to ask for time off, call in sick, log overtime, send a claim or report a hazard or injury. My HR now has one To do list with everything waiting for you in HR.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Demandes rapides et une seule liste RH",
+            "body_fr": "Touchez le nouveau + en haut de votre téléphone pour demander un congé, vous déclarer malade, déclarer des heures supplémentaires, envoyer un remboursement ou signaler un danger ou une blessure. Mes RH a maintenant une seule liste À faire avec tout ce qui vous attend en RH.",
+            "title_es": "Solicitudes rápidas y una sola lista de RR. HH.",
+            "body_es": "Toque el nuevo + arriba en su teléfono para pedir tiempo libre, avisar que está enfermo, registrar horas extra, enviar un reembolso o reportar un peligro o una lesión. Mis RR. HH. ahora tiene una sola lista de Pendientes con todo lo que le espera en RR. HH.",
+            "title_hi": "त्वरित अनुरोध और एक HR सूची",
+            "body_hi": "छुट्टी माँगने, बीमारी बताने, ओवरटाइम दर्ज करने, दावा भेजने या ख़तरे या चोट की रिपोर्ट करने के लिए अपने फ़ोन के ऊपर नया + टैप करें। My HR में अब एक ही करने को सूची है जिसमें HR में आपकी प्रतीक्षा कर रही हर चीज़ है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "❓",
+            "title": "Help on every HR tab",
+            "body": "Every Human Resources tab now has a ? that opens its guide beside the screen. Each role also gets a short Getting set up checklist that ticks itself as you go.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "De l'aide sur chaque onglet RH",
+            "body_fr": "Chaque onglet des Ressources humaines a maintenant un ? qui ouvre son guide à côté de l'écran. Chaque rôle a aussi une courte liste Bien démarrer qui se coche au fur et à mesure.",
+            "title_es": "Ayuda en cada pestaña de RR. HH.",
+            "body_es": "Cada pestaña de Recursos humanos tiene ahora un ? que abre su guía junto a la pantalla. Cada rol tiene también una breve lista Para empezar que se marca sola a medida que avanza.",
+            "title_hi": "हर HR टैब पर मदद",
+            "body_hi": "मानव संसाधन के हर टैब पर अब एक ? है जो उसकी गाइड स्क्रीन के पास खोलता है। हर भूमिका को एक छोटी शुरुआत सूची भी मिलती है जो काम होते ही अपने आप टिक होती है।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "📘",
+            "title": "Guides, videos and FAQs",
+            "body": "In Help & guides, each topic now lets you show only guides, only videos or only questions and answers. The answers show exactly where to click.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Guides, vidéos et FAQ",
+            "body_fr": "Dans Aide et guides, chaque sujet permet maintenant d'afficher seulement les guides, les vidéos ou les questions-réponses. Les réponses montrent exactement où cliquer.",
+            "title_es": "Guías, videos y preguntas frecuentes",
+            "body_es": "En Ayuda y guías, cada tema permite ahora mostrar solo guías, solo videos o solo preguntas y respuestas. Las respuestas muestran exactamente dónde hacer clic.",
+            "title_hi": "गाइड, वीडियो और सामान्य प्रश्न",
+            "body_hi": "सहायता और गाइड में हर विषय अब केवल गाइड, केवल वीडियो या केवल प्रश्न-उत्तर दिखा सकता है। उत्तर ठीक-ठीक बताते हैं कि कहाँ क्लिक करना है।"
+        },
+        {
             "type": "improved",
             "date": "2026-11-27",
             "icon": "📊",

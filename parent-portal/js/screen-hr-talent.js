@@ -1016,6 +1016,16 @@
     if (window.KTHrRota) window.KTHrRota.mine(b);       // Phase 4 batch 8: shifts to accept, fix my clock-in (screen-hr-rota.js)
     if (window.KTHrTax) window.KTHrTax.mine(b);         // Payroll P1: my TD1 (screen-hr-tax.js; draws nothing until payroll is on)
     wireTiles(b);
+    // Phase 4 batch 10: quick requests, help, starter path, the to-do from every part of HR (kt-hr-quick.js); ?go=<section> jumps there.
+    var Q = KT.hrQuick;
+    if (Q) {
+      var qb = b.querySelector('[data-mh-quick]'); if (qb) qb.addEventListener('click', function () { Q.open(qb); });
+      var hh = b.querySelector('[data-mh-help]'); if (hh && Q.helpButton) hh.appendChild(Q.helpButton(['my-hr'], 'Help for My HR'));
+      var td = b.querySelector('[data-mh-todo]'); if (td) Q.todoCard(td, { title: false });
+      var sp = b.querySelector('[data-mh-starter]'); if (sp) Q.starterCard(sp, Q.role ? Q.role() : '');
+      var gm = /[?&]go=([a-z]+)/.exec(location.hash || '');
+      if (gm && Q.toSection) Q.toSection(gm[1]);
+    }
   }
 
   /* MY HR LANDING (HR nav restructure, 2026-11-27, Anthony): a tile for each part of My HR, then a short to-do
@@ -1051,9 +1061,12 @@
       if (r.status === 'open' || r.status === 'manager_done') todo.push(['Self review', r.title, r.due_date]);
       else if (r.status === 'signing') todo.push(['Review to sign', r.title, r.due_date]);
     });
-    var h = '<div class="mh-tiles" data-kt-noband>' + MY_TILES.map(function (t, i) {
+    // HR4B10 (2026-11-27): quick requests ＋ and the "?" above the tiles; the role's starter path; then the ONE to-do.
+    var h = '<div class="hr-bar" style="margin:12px 0 0;"><button type="button" class="hr-b p" data-mh-quick data-kt-iconized="1" aria-haspopup="menu">＋ New request</button><span style="flex:1"></span><span data-mh-help></span></div>';
+    h += '<div class="mh-tiles" data-kt-noband>' + MY_TILES.map(function (t, i) {
       return '<button type="button" class="mh-tile" data-kt-iconized="1" data-mhtile="' + i + '"><span class="mh-ti" aria-hidden="true">' + t[0] + '</span><span>' + esc(t[1]) + '</span></button>';
     }).join('') + '</div>';
+    if (KT.hrQuick && KT.hrQuick.todoCard) return h + '<div data-mh-starter style="margin-top:10px;"></div><div class="hrt-sec">To do</div><div data-mh-todo></div>';
     h += '<div class="hrt-sec">To do</div><div class="kt-card" style="padding:10px 14px;" data-kt-nogrid>' + (todo.length ? todo.slice(0, 8).map(function (t) {
       return '<div class="hr-kv"><span>' + esc(t[0]) + '</span><b data-no-i18n>' + esc(t[1]) + (t[2] ? ' · ' + esc(day(t[2])) : '') + '</b></div>';
     }).join('') + (todo.length > 8 ? '<div class="hr-sub" style="margin-top:4px;">and ' + (todo.length - 8) + ' more below</div>' : '') : '<span class="hr-sub">Nothing waiting for you.</span>') + '</div>';

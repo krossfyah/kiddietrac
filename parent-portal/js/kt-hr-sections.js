@@ -71,6 +71,36 @@
   var BY_ID = {};
   SECTIONS.forEach(function (s) { BY_ID[s.id] = s; });
 
+  /* THE "?" ON EVERY HR TAB (HR Phase 4 batch 10, 2026-11-27): tab key → the help article(s) that explain it, first
+     one the reader may open wins (a director cannot read an admin-only guide, so the next one is tried). */
+  var HELP = {
+    dashboard: ['hr-reports'], people: ['hr'], directory: ['hr-people-recognition'], orgchart: ['hr-people-recognition'], leavers: ['hr-documents-leaving'],
+    requests: ['time-off'], balances: ['hr'], types: ['hr-leave-types', 'hr'], leavemaths: ['hr-closures-leave'], absence: ['hr-attendance'],
+    schedule: ['hr-rota-publish', 'hr-rota'], rota: ['hr-rota'], openshifts: ['hr-open-shifts'], rotatools: ['hr-rota-publish'],
+    sheets: ['timesheets'], lock: ['hr-overtime-timesheets'], punchfix: ['hr-rota-publish'], overtime: ['hr-overtime-timesheets'],
+    payroll: ['payroll-documents', 'payroll-csv'], claims: ['hr-claims'], hiring: ['hr-hiring-onboarding'], onboarding: ['hr-hiring-onboarding'],
+    performance: ['hr-hiring-onboarding'], courses: ['hr-hiring-onboarding', 'hr-people-recognition'], rewards: ['educator-points-and-rewards'],
+    kudos: ['hr-people-recognition'], awardsettings: ['educator-points-and-rewards'], injuries: ['hr-injuries'], risk: ['hr-health-safety'],
+    chemicals: ['hr-health-safety'], procedures: ['hr-health-safety', 'policies'], duties: ['hr-health-safety'], hstasks: ['hr-health-safety'],
+    hazards: ['hazards'], drills: ['drill-log'], docs: ['hr-documents-leaving'], letters: ['hr-letters'], checks: ['background-checks'],
+    reports: ['hr-reports'], settings: ['hr-attendance', 'hr'], approvers: ['hr-people-recognition']
+  };
+  function helpFor(k) { return (HELP[k] || []).concat(['hr']); }
+  function helpEl(k) {
+    if (!(KT.hrQuick && KT.hrQuick.helpButton)) return null;
+    var b = KT.hrQuick.helpButton(helpFor(k), 'Help for this page');
+    b.style.marginLeft = 'auto';
+    return b;
+  }
+  /* A section with one tab has no tab row; an HR-only screen still gets a row holding just its "?". */
+  function helpRow(k) {
+    var b = helpEl(k); if (!b) return null;
+    css();
+    var el = document.createElement('div'); el.className = 'kt-hrsec'; el.setAttribute('data-kt-hrsec-help', k);
+    el.appendChild(b);
+    return el;
+  }
+
   // Old #hr?tab=<key> → [section id, new tab key].
   var OLD = { dashboard: ['dashboard'], people: ['people'], leavers: ['people', 'leavers'], balances: ['timeoff', 'balances'],
     types: ['timeoff', 'types'], absence: ['absence'], reports: ['reports'], hiring: ['hiring', 'hiring'], onboarding: ['hiring', 'onboarding'],
@@ -140,6 +170,7 @@
       });
       el.appendChild(b);
     });
+    var hb = helpEl(activeKey); if (hb) el.appendChild(hb);   // HR4B10: the "?" for the tab on screen
     return el;
   }
 
@@ -256,5 +287,6 @@
     return to.slice(1);
   }
 
-  window.KTHrSections = { list: SECTIONS, byId: BY_ID, band: band, tabsOf: tabsOf, hrefOf: hrefOf, home: home, redirectFor: redirectFor, isAdmin: isAdmin };
+  window.KTHrSections = { list: SECTIONS, byId: BY_ID, band: band, tabsOf: tabsOf, hrefOf: hrefOf, home: home, redirectFor: redirectFor, isAdmin: isAdmin,
+    help: HELP, helpFor: helpFor, helpRow: helpRow };
 })(window);

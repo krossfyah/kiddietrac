@@ -91,8 +91,16 @@
       + (sec.sub ? '<div class="kt-hero-sub">' + esc(sec.sub) + '</div>' : '') + '</div>'
       + '<div id="hr-tabs"></div><div id="hr-body"><div class="hr-sub" style="padding:12px 2px;">Loading…</div></div></div>';
     var bandEl = window.KTHrSections ? window.KTHrSections.band(sec, tab.k, role) : null;
+    // HR4B10: a one-tab section still gets its "?" (the tab row holds it otherwise).
+    if (!bandEl && window.KTHrSections && window.KTHrSections.helpRow) bandEl = window.KTHrSections.helpRow(tab.k);
     var th = main.querySelector('#hr-tabs');
     if (bandEl && th) th.appendChild(bandEl); else if (th) th.style.height = '10px';
+    // HR4B10: the role's starter path on the HR dashboard (kt-hr-quick.js), above the dashboard cards.
+    if (sec.id === 'dashboard' && KT.hrQuick && KT.hrQuick.starterCard) {
+      var stH = document.createElement('div'); stH.id = 'hr-starter';
+      var bodyEl = main.querySelector('#hr-body'); if (bodyEl) bodyEl.parentNode.insertBefore(stH, bodyEl);
+      KT.hrQuick.starterCard(stH, role === 'centre_director' ? 'centre_director' : 'agency_admin');
+    }
     try { S.people = await Api.get('/hr/people'); }
     catch (e) { var b0 = main.querySelector('#hr-body'); if (b0) b0.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
     if (!main.isConnected) return;

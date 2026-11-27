@@ -49,3 +49,27 @@ Appuyez sur **Signaler un danger** pour avertir votre directeur d'un problème d
 ## Quarts à accepter et corrections de pointage
 
 Si votre centre demande au personnel d'accepter ses quarts, chaque nouveau quart attend dans **Quarts à accepter**. Appuyez sur **Accepter**, ou sur **Je ne peux pas faire ce quart** en expliquant pourquoi : votre direction est avertie. Le quart reste à vous jusqu'à ce qu'elle le change. Dans **Corriger mon pointage**, appuyez sur **Demander une correction** à côté d'un pointage erroné, ou sur **Un pointage manque** si vous avez oublié de pointer. Indiquez les bonnes heures et ce qui n'allait pas. Votre direction vérifie; vous pouvez retirer la demande tant qu'elle attend. Un pointage d'une feuille de temps déjà verrouillée pour la paie ne peut pas être modifié.
+
+## Demandes rapides (＋)
+
+Sur un téléphone, le **＋** en haut de l'écran, à côté de ⚙️, ouvre les demandes rapides : **Demander un congé**, **Malade** (avec un certificat médical ou une photo), **Déclarer des heures supplémentaires**, **Nouvelle demande de remboursement**, **Signaler un danger**, **Déclarer une blessure** et **Mes tâches RH**. Chacune ouvre le formulaire habituel. Sur un ordinateur, appuyez sur **＋ Nouvelle demande** en haut de **Mes RH**.
+
+## Vos tâches
+
+**À faire** dans **Mes RH** regroupe tout ce qui vous attend : étapes d'intégration, formations et quiz, votre partie d'une évaluation ou une évaluation à signer, documents de l'entreprise à lire ou accepter, lettres et formulaires fiscaux à signer, politiques et procédures de travail sécuritaires, quarts à accepter, un pointage de sortie manquant, tâches SST et certificats qui expirent. Les plus anciens et les retards passent en premier. Touchez-en un pour y aller directement.
+
+## Bien démarrer
+
+La carte **Bien démarrer en RH** propose quelques premières étapes pour votre rôle, comme votre contact d'urgence, vos politiques et vos certificats. Chacune a **Aller** pour ouvrir le bon écran et **?** pour l'expliquer. Elle se coche au fur et à mesure. **Masquer** la replie, **Afficher** la fait revenir.
+
+## De l'aide sur chaque écran
+
+Appuyez sur **?** dans Mes RH, et sur chaque onglet des Ressources humaines, pour lire le guide de cet écran sans le quitter. Dans **Aide et guides**, chaque sujet peut afficher **Guides**, **Vidéos** ou **FAQ**. Les FAQ indiquent où cliquer.
+
+## Questions
+
+??? Où demander un congé ? | **Mes RH > ＋ Nouvelle demande > Demander un congé**, ou **Congés > Demander un congé**. Sur un téléphone, utilisez le **＋** en haut.
+??? Comment envoyer un certificat médical ? | **＋ > Malade** : la demande s'ouvre avec le congé de maladie choisi. Ajoutez une photo ou un fichier sous la note et choisissez les jours couverts.
+??? Une tâche que j'ai déjà faite est toujours affichée. | Ouvrez-la depuis **Mes RH > À faire**. La plupart se cochent seules une fois le travail fait (par exemple en signant la politique). Un document vous demande d'appuyer sur **J'ai lu et j'accepte**.
+??? J'ai oublié de pointer ma sortie hier. | **Mes RH > Corriger mon pointage > Demander une correction**. La tâche **Pointage de sortie manquant** reste affichée jusqu'à votre demande.
+??? Qui voit mes tâches ? | Vous seul. Votre directeur voit les listes de son équipe, pas la vôtre.

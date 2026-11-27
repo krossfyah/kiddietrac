@@ -37,6 +37,16 @@ final class HelpController extends Controller
     }
 
     /**
+     * GET /api/v1/help/faqs — every question and answer this role may read (HR Phase 4 batch 10, the FAQs filter).
+     */
+    public function faqs(Request $request): JsonResponse
+    {
+        $role = $this->resolveRole($request->user(), $request);
+
+        return response()->json(['faqs' => $this->help->faqsForRole($role)]);
+    }
+
+    /**
      * GET /api/v1/help/{slug}
      */
     public function show(Request $request, string $slug): JsonResponse

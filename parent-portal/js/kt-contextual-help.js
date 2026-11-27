@@ -50,7 +50,11 @@
     (root || document).querySelectorAll('[data-kt-help]').forEach(attach);
   }
 
+  /* `slug` may be a list (HR Phase 4 batch 10, 2026-11-27): the first article this reader may open is shown, so a
+     "?" can name an admin guide and fall back to one a director is served. */
   function openDrawer(slug) {
+    const slugs = [].concat(slug).filter(Boolean);
+    slug = slugs[0] || '';
     let drawer = document.getElementById('kt-help-drawer');
     if (drawer) drawer.remove();
 
@@ -75,14 +79,16 @@
     }
 
     const header = document.createElement('div');
-    header.style.cssText = 'padding: 18px 24px; background: linear-gradient(135deg, #1F6080, #2D7BA8); color: white; display: flex; justify-content: space-between; align-items: center;';
+    header.className = 'kt-dlg-head';   // the house popup band (navy to teal + teal line), HR4B10
+    header.style.cssText = 'padding: 14px 20px; background: linear-gradient(135deg,#1B3A63 0%,#265B7A 50%,#2F8C86 100%); box-shadow: inset 0 -3px 0 #7FD3CC; color: white; display: flex; justify-content: space-between; align-items: center;';
     const ttl = document.createElement('div');
     ttl.style.cssText = 'font-weight: 700; font-size: 14px; opacity: 0.9;';
     ttl.textContent = '📖  HELP';
     header.appendChild(ttl);
     const close = document.createElement('button');
-    close.innerHTML = '×';
-    close.style.cssText = 'background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 16px; font-size: 22px; cursor: pointer; line-height: 1;';
+    close.innerHTML = '✕';
+    close.setAttribute('aria-label', 'Close'); close.setAttribute('data-kt-iconized', '1');
+    close.style.cssText = 'background: rgba(255,255,255,0.14); border: none; color: white; width: 30px; height: 30px; border-radius: 15px; font-size: 15px; cursor: pointer; line-height: 1;';
     close.addEventListener('click', () => drawer.remove());
     header.appendChild(close);
     drawer.appendChild(header);
@@ -118,9 +124,15 @@
       document.addEventListener('pointerdown', bgDown, true);
     }, 50);
 
-    getApi().get('/help/' + slug)
+    const tryNext = (i) => getApi().get('/help/' + slugs[i]).catch((e) => {
+      if (i + 1 < slugs.length) return tryNext(i + 1);
+      throw e;
+    });
+    (slugs.length ? tryNext(0) : Promise.reject(new Error('none')))
       .then(res => {
         const a = res.article;
+        fullBtn.href = '#help/' + a.slug;
+        try { getApi().post('/help/' + a.slug + '/view').catch(() => {}); } catch (e) {}
         body.innerHTML = '';
         const cat = document.createElement('div');
         cat.style.cssText = 'font-size: 11px; font-weight: 700; letter-spacing: 0.5px; color: #8EC73C; text-transform: uppercase; margin-bottom: 8px;';
@@ -133,11 +145,18 @@
         const md = document.createElement('div');
         md.className = 'kt-help-markdown';
         md.style.cssText = 'font-size: 14px; line-height: 1.6;';
-        md.innerHTML = renderMd(a.body);
+        // The help screen's own renderer when it is loaded: Q&As, checklists and "Show me" buttons work here too.
+        const HM = window.KT && window.KT.helpMarkdown;
+        md.innerHTML = HM ? HM.render(a.body) : renderMd(a.body);
         body.appendChild(md);
+        if (HM) {
+          try { HM.wire(md, a.slug); } catch (e) {}
+          // A "Show me" / "Open" button takes you to the screen: the drawer gets out of the way.
+          md.querySelectorAll('.kt-help-go').forEach((b) => b.addEventListener('click', () => drawer.remove()));
+        }
       })
       .catch(e => {
-        body.innerHTML = '<p style="color:#c0392b;">Could not load article: ' + e.message + '</p>';
+        body.innerHTML = '<p style="color:#64748B;">This guide could not be opened just now. Try Help &amp; guides from the menu.</p>';
       });
   }
 

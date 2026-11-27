@@ -96,6 +96,7 @@ final class HelpService
     {
         $articles = $this->listForRole($role);
         $grouped = [];
+        $videos = $this->videoKeys();
 
         foreach ($articles as $article) {
             $grouped[$article['category']] ??= [];
@@ -103,10 +104,49 @@ final class HelpService
                 'slug' => $article['slug'],
                 'title' => $article['title'],
                 'order' => $article['order'] ?? 999,
+                // HR Phase 4 batch 10 (2026-11-27): the topic page filters Guides / Videos / FAQs.
+                'video' => isset($videos[$article['audience'] . '/' . $article['slug']]),
+                'faqs' => count(self::faqsIn((string) $article['body'])),
             ];
         }
 
         return $grouped;
+    }
+
+    /**
+     * Every question-and-answer (`??? Question | Answer` lines) in the articles this role may read, in the reader's
+     * language: [{slug, title, category, q, a}]. The answer stays markdown, so a click path in bold and a
+     * [[show: #hash @ Tab | Show me]] button render as they do inside the article.
+     */
+    public function faqsForRole(string $role): array
+    {
+        $out = [];
+        foreach ($this->listForRole($role) as $a) {
+            foreach (self::faqsIn((string) $a['body']) as [$q, $ans]) {
+                $out[] = ['slug' => $a['slug'], 'title' => $a['title'], 'category' => $a['category'], 'q' => $q, 'a' => $ans];
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return array<int,array{0:string,1:string}> */
+    private static function faqsIn(string $body): array
+    {
+        preg_match_all('/^\?\?\? (.+?) \| (.+)$/m', str_replace("\r\n", "\n", $body), $m, PREG_SET_ORDER);
+
+        return array_map(fn ($x) => [trim($x[1]), trim($x[2])], $m);
+    }
+
+    /** "audience/slug" of every published tutorial video. */
+    private function videoKeys(): array
+    {
+        try {
+            return \Illuminate\Support\Facades\DB::table('training_videos')->where('status', 'published')->get(['audience', 'slug'])
+                ->mapWithKeys(fn ($v) => [$v->audience . '/' . $v->slug => true])->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /**

@@ -49,3 +49,27 @@ Pulsa **Informar de un peligro** para avisar a tu director de algo inseguro; pue
 ## Turnos por aceptar y correcciones de fichaje
 
 Si tu centro pide al personal aceptar sus turnos, cada turno nuevo espera en **Turnos por aceptar**. Pulsa **Aceptar**, o **No puedo hacer este turno** y explica por qué: se avisa a tu director. El turno sigue siendo tuyo hasta que lo cambie. En **Corregir mi fichaje**, pulsa **Pedir una corrección** junto a un fichaje erróneo, o **Falta un fichaje** si olvidaste fichar. Escribe las horas correctas y qué salió mal. Tu director lo revisa; puedes retirarla mientras espera. Un fichaje de una hoja de horas ya bloqueada para la nómina no se puede cambiar.
+
+## Solicitudes rápidas (＋)
+
+En un teléfono, el **＋** en la parte superior de la pantalla, junto a ⚙️, abre las solicitudes rápidas: **Pedir tiempo libre**, **Enfermo** (con un justificante médico o una foto), **Registrar horas extra**, **Nuevo reembolso**, **Reportar un peligro**, **Reportar una lesión** y **Mis pendientes de RR. HH.** Cada una abre el formulario habitual. En una computadora, pulse **＋ Nueva solicitud** arriba en **Mis RR. HH.**
+
+## Sus pendientes
+
+**Pendientes** en **Mis RR. HH.** reúne todo lo que le espera: pasos de incorporación, cursos y cuestionarios, su parte de una evaluación o una evaluación por firmar, documentos de la empresa por leer o aceptar, cartas y formularios fiscales por firmar, políticas y procedimientos de trabajo seguro, turnos por aceptar, una salida sin marcar, tareas de SST y certificados por vencer. Primero lo más antiguo y lo atrasado. Toque uno para ir directamente.
+
+## Para empezar
+
+La tarjeta **Para empezar en RR. HH.** muestra unos primeros pasos para su rol, como su contacto de emergencia, sus políticas y sus certificados. Cada uno tiene **Ir** para abrir la pantalla correcta y **?** para explicarlo. Se marca solo a medida que avanza. **Ocultar** la pliega y **Mostrar** la vuelve a abrir.
+
+## Ayuda en cada pantalla
+
+Pulse **?** en Mis RR. HH. y en cada pestaña de Recursos humanos para leer la guía de esa pantalla sin salir de ella. En **Ayuda y guías**, cada tema puede mostrar **Guías**, **Videos** o **Preguntas frecuentes**. Las preguntas frecuentes indican dónde hacer clic.
+
+## Preguntas
+
+??? ¿Dónde pido tiempo libre? | **Mis RR. HH. > ＋ Nueva solicitud > Pedir tiempo libre**, o **Tiempo libre > Pedir tiempo libre**. En un teléfono, use el **＋** de arriba.
+??? ¿Cómo envío un justificante médico? | **＋ > Enfermo**: la solicitud se abre con la baja por enfermedad elegida. Añada una foto o un archivo en la nota y elija los días que cubre.
+??? Sigue en mis pendientes algo que ya hice. | Ábralo desde **Mis RR. HH. > Pendientes**. La mayoría se marcan solos al terminar (por ejemplo, al firmar la política). Un documento le pide pulsar **Lo he leído y lo acepto**.
+??? Ayer olvidé marcar la salida. | **Mis RR. HH. > Corregir mi marcaje > Pedir una corrección**. Aparece en sus pendientes como **Falta la salida** hasta que lo pida.
+??? ¿Quién ve mis pendientes? | Solo usted. Su director ve las listas de su equipo, no la suya.

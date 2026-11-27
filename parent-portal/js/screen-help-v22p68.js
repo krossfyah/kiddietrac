@@ -280,27 +280,80 @@
       return panel;
     }
 
-    function showCategory(cat) {
+    /* A TOPIC PAGE, FILTERED (HR Phase 4 batch 10, 2026-11-27): Guides (every article), Videos (the articles with a
+       narrated tutorial) and FAQs (every question and answer in the topic's articles, the answer with its click path
+       and Show me button). Filter chips use .on + aria-current, never aria-pressed (kt-consistency-polish). */
+    function showCategory(cat, kind) {
+      kind = kind || 'guides';
       Dom.clear(content); Dom.clear(toc);
       state.currentSlug = null; state.currentArticle = null; state.expandedCategory = cat;
       try { renderMobileSelect(); } catch (e) {}
+      kindsCss();
       var box = Dom.el('div', { class: 'kt-help-home' });
       var back = Dom.el('button', { class: 'kt-help-catback' }, '‹  All topics');
       back.addEventListener('click', function () { renderHomePanels(); });
       box.appendChild(back);
       box.appendChild(Dom.el('h2', { class: 'kt-help-home-h' }, catIcon(cat) + '  ' + cat));
       var arts = state.categorized[cat] || [];
-      box.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, arts.length + ' guide' + (arts.length === 1 ? '' : 's') + ' in this topic'));
-      var grid = Dom.el('div', { class: 'kt-help-grid' });
-      arts.forEach(function (a) {
-        var card = Dom.el('button', { class: 'kt-help-card' });
-        card.appendChild(Dom.el('div', { class: 'kt-help-card-ttl' }, a.title || a.slug));
-        card.addEventListener('click', function () { loadArticle(a.slug); });
-        grid.appendChild(card);
+      var vids = arts.filter(function (a) { return a.video; });
+      var nFaq = arts.reduce(function (n, a) { return n + (+a.faqs || 0); }, 0);
+      var chips = Dom.el('div', { class: 'kt-help-kinds', role: 'tablist', 'aria-label': 'Show' });
+      [['guides', '📘 Guides', arts.length], ['videos', '🎬 Videos', vids.length], ['faqs', '❓ FAQs', nFaq]].forEach(function (k) {
+        var b = Dom.el('button', { type: 'button', role: 'tab', class: 'kt-help-kind' + (k[0] === kind ? ' on' : ''), 'data-kt-iconized': '1' }, k[1], Dom.el('span', { 'data-no-i18n': '1' }, ' (' + k[2] + ')'));
+        if (k[0] === kind) { b.setAttribute('aria-current', 'true'); b.setAttribute('aria-selected', 'true'); } else { b.setAttribute('aria-selected', 'false'); }
+        b.addEventListener('click', function () { if (k[0] !== kind) showCategory(cat, k[0]); });
+        chips.appendChild(b);
       });
-      box.appendChild(grid);
+      box.appendChild(chips);
+      var list = kind === 'videos' ? vids : arts;
+      if (kind !== 'faqs') {
+        box.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, kind === 'videos'
+          ? (list.length ? list.length + ' guide' + (list.length === 1 ? '' : 's') + ' with a short video' : 'No videos in this topic yet.')
+          : arts.length + ' guide' + (arts.length === 1 ? '' : 's') + ' in this topic'));
+        var grid = Dom.el('div', { class: 'kt-help-grid' });
+        list.forEach(function (a) {
+          var card = Dom.el('button', { class: 'kt-help-card' });
+          if (kind === 'videos') card.appendChild(Dom.el('div', { class: 'kt-help-card-cat' }, '▶ Video'));   // kt-i18n: "Video"
+          card.appendChild(Dom.el('div', { class: 'kt-help-card-ttl' }, a.title || a.slug));
+          card.addEventListener('click', function () { loadArticle(a.slug); });
+          grid.appendChild(card);
+        });
+        box.appendChild(grid);
+      } else {
+        var holder = Dom.el('div', {}, Dom.el('p', { class: 'kt-help-home-sub' }, 'Loading…'));
+        box.appendChild(holder);
+        (state.faqs ? Promise.resolve(state.faqs) : Api.get('/help/faqs').then(function (r) { state.faqs = (r && r.faqs) || []; return state.faqs; }))
+          .then(function (all) {
+            if (!holder.isConnected) return;
+            var mine = all.filter(function (f) { return f.category === cat; });
+            Dom.clear(holder);
+            if (!mine.length) { holder.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, 'No questions and answers in this topic yet.')); return; }
+            holder.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, 'Tap a question to see the answer and where to click.'));
+            var md = Dom.el('div', { class: 'kt-help-markdown kt-help-faqs' });
+            md.innerHTML = mine.map(function (f, i) {
+              return renderMarkdown('??? ' + f.q + ' | ' + f.a).replace('</div></details>', '<div class="kt-help-faq-src">From <a href="#help/' + f.slug + '" data-faq-src="' + i + '"></a></div></div></details>');
+            }).join('');
+            md.querySelectorAll('[data-faq-src]').forEach(function (a) {
+              var f = mine[+a.getAttribute('data-faq-src')];
+              a.textContent = f.title;
+              a.addEventListener('click', function (ev) { ev.preventDefault(); loadArticle(f.slug); });
+            });
+            holder.appendChild(md);
+            try { wireInteractive(md, 'faqs-' + slugify(cat)); } catch (e) {}
+          }, function () { if (holder.isConnected) { Dom.clear(holder); holder.appendChild(Dom.el('p', { class: 'kt-help-home-sub' }, 'The questions could not be loaded just now. Please try again.')); } });
+      }
       content.appendChild(box);
       try { content.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+    }
+    function kindsCss() {
+      if (document.getElementById('kt-help-kinds-css')) return;
+      var st = document.createElement('style'); st.id = 'kt-help-kinds-css';
+      st.textContent = '.kt-help-kinds{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 10px;}'
+        + '.kt-help-kind{height:30px;padding:0 13px;border-radius:999px;border:1px solid #E2E8F0;background:#fff;font-size:12.5px;font-weight:700;cursor:pointer;color:#475569;font-family:inherit;}'
+        + '.kt-help-kind.on{background:#0E7490;border-color:#0E7490;color:#fff;}'
+        + '.kt-help-faq-src{margin-top:8px;font-size:12px;color:#64748B;}.kt-help-faq-src a{color:#0E7490;font-weight:700;}'
+        + 'html.kt-dark .kt-help-kind{background:#0F172A;border-color:#334155;color:#E2E8F0;}html.kt-dark .kt-help-kind.on{background:#0E7490;border-color:#0E7490;color:#fff;}';
+      document.head.appendChild(st);
     }
 
     /**
@@ -1462,6 +1515,8 @@
 
   window.KT = window.KT || {};
   window.KT.renderHelp = renderHelp;
+  // HR Phase 4 batch 10: the "?" help drawer (kt-contextual-help.js) renders articles the same way as this screen.
+  window.KT.helpMarkdown = { render: renderMarkdown, wire: wireInteractive };
   window.KT.showAskModal = showAskModal;
   Shell.registerScreen("guardian:help", renderHelp);
   Shell.registerScreen("home_visitor:help", renderHelp);

@@ -401,6 +401,19 @@
       g.style.setProperty('right', '12px', 'important');
     }
     dockDialFab(want);
+    dockHrq(want);
+  }
+
+  /* THE HR "＋" BESIDE THE GEAR (HR Phase 4 batch 10, 2026-11-27): kt-hr-quick.js adds #kt-hrq-fab (quick requests:
+     time off, sick, overtime, claim, hazard, injury) for staff roles. It docks on the gear's row, left of the gear and
+     of the 📞 when that is docked too - the bars keep their own five tabs. */
+  function hrqOn() { return !!document.getElementById('kt-hrq-fab'); }
+  function dockHrq(top) {
+    var f = document.getElementById('kt-hrq-fab');
+    if (!f) return;
+    var right = (dialFabOn() && document.body.classList.contains('kt-dp-docked') ? 108 : 60) + 'px';
+    if (f.style.getPropertyValue('top') !== top || f.style.getPropertyPriority('top') !== 'important') f.style.setProperty('top', top, 'important');
+    if (f.style.getPropertyValue('right') !== right) f.style.setProperty('right', right, 'important');
   }
 
   /* THE 📞 BESIDE THE GEAR (2026-11-06, Anthony: "the floating call ... fix those too"). kt-dialer.js drew the dial
@@ -428,7 +441,7 @@
        (2026-10-29). The eyebrow clears nothing. Its row is tighter (kt-phone-compact.css trims
        the logo's side padding), so the gap it needs is just the button and a breath. */
     var eyebrow = !!document.getElementById('kt-pc-navgreet');
-    var pad = ((document.getElementById('kt-eduqr') || dialFabOn()) ? (eyebrow ? 94 : 106) : (eyebrow ? 46 : 58)) + 'px';
+    var pad = (((document.getElementById('kt-eduqr') || dialFabOn()) ? (eyebrow ? 94 : 106) : (eyebrow ? 46 : 58)) + (hrqOn() ? 48 : 0)) + 'px';
     if (nu.style.paddingRight !== pad) nu.style.setProperty('padding-right', pad, 'important');
   }
 
@@ -480,6 +493,8 @@
   window.KT.showCheckinQr = function () { showCheckinQr(); };
   window.KT.mnavIsEducator = function () { return isEducatorView(); };
   window.KT.mnavIsPhone = function () { return isPhoneSized(); };
+  // HR quick "＋" (kt-hr-quick.js) calls this after adding or removing its header button.
+  window.KT.mnavPlace = function () { try { padGearClearance(); placeGear(); } catch (e) {} };
 
   // Fullscreen check-in QR for the educator's centre — parents scan it off the
   // educator's phone (or print it). The code is fetched fresh and rotates daily
