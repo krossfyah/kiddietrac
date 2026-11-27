@@ -132,8 +132,18 @@
   function setPay(v) {
     var was = PAY === true; PAY = !!v;
     if (was === PAY) return;
-    var b = baseOf(location.hash);
-    if ((b === 'payroll' || b === 'hr-payroll') && KT.Shell && KT.Shell.navigate) { try { KT.Shell.navigate(location.hash.slice(1)); } catch (e) {} }
+    /* The tab row on screen was built before the answer: a same-hash navigate does not redraw it (2026-11-27 browser
+       check), so rebuild the row in place, or draw the pay tab itself when the address already names one. */
+    if (!ACTIVE || !ACTIVE.sec || baseOf(location.hash) !== ACTIVE.hash) return;
+    var k = tabParam();
+    if (PAY && k && ACTIVE.sec.tabs.some(function (t) { return t.k === k && t.pay; })) {
+      var main = document.getElementById('appMain');
+      if (main) { drawHr(main, ACTIVE.sec, k, ACTIVE.role); }
+      return;
+    }
+    var nb = band(ACTIVE.sec, ACTIVE.k, ACTIVE.role), old = ACTIVE.el;
+    var host = old && old.parentNode && old.parentNode.classList && old.parentNode.classList.contains('kt-tbwrap') ? old.parentNode : old;
+    if (nb && host && host.parentNode) { host.parentNode.replaceChild(nb, host); ACTIVE.el = nb; }
   }
   function tabOk(t, role) {
     if (t.admin && !isAdmin(role)) return false;
@@ -259,7 +269,7 @@
         var t = k && hash === sec.hash ? tabsOf(sec, role).filter(function (x) { return x.k === k && !x.screen; })[0] : null;
         if (t) return drawHr(main, sec, t.k, role, ctx);
         var el = band(sec, hit.tab.k, role);
-        ACTIVE = el ? { hash: hash, el: el } : null;
+        ACTIVE = el ? { hash: hash, el: el, sec: sec, k: hit.tab.k, role: role } : null;
         if (el) { watch(); }
         var r = fn.apply(self, args);
         if (el) { Promise.resolve(r).then(place, place); place(); }
@@ -305,6 +315,9 @@
     if (rest) to += (to.indexOf('?') === -1 ? '?' : '&') + rest;
     return to.slice(1);
   }
+
+  // Ask about the payroll engine as the page loads, so the Payroll tab row is usually right first time.
+  try { if (sessionStorage.getItem('kt_token') || localStorage.getItem('kt_token')) setTimeout(payOn, 0); } catch (e) {}
 
   window.KTHrSections = { list: SECTIONS, byId: BY_ID, band: band, tabsOf: tabsOf, hrefOf: hrefOf, home: home, redirectFor: redirectFor, isAdmin: isAdmin,
     help: HELP, helpFor: helpFor, helpRow: helpRow, setPay: setPay };

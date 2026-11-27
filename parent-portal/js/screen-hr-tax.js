@@ -509,7 +509,7 @@
       + OPEN_F.map(function (f) { return field(f[1], num(f[0], o[f[0]] != null && (f[0] === 'gross' || +o[f[0]]) ? o[f[0]] : '')); }).join('')
       + field('Note (optional)', '<input class="hr-i" data-f="note" maxlength="300" value="' + esc(o.note || '') + '" style="width:100%;">', true) + '</div>' + ERR);
     modal({ title: '📒 Opening balance · ' + p.name, body: box, actions: [{ label: 'Cancel' }, { label: 'Save', primary: true, busyLabel: 'Working…', handler: function () {
-      var d = { as_of: val(box, 'as_of'), note: val(box, 'note') };
+      var d = { tax_year: r.year, as_of: val(box, 'as_of'), note: val(box, 'note') };
       OPEN_F.forEach(function (f) { d[f[0]] = numv(box, f[0]); });
       if (d.gross == null) { msg(box, 'Enter the gross pay.'); return false; }
       return Api.put('/hr/payroll/ytd-openings/' + p.user_id, d).then(function () { toast('✅', 'Saved', p.name, '#16A34A'); reload(); }, function (e) { msg(box, errMsg(e)); return false; });
