@@ -354,9 +354,36 @@
   // The screens this tab's plan leaves out (not the locked Upgrade ones), read fresh from kt_user each call - search uses it.
   window.KT.hiddenHashes = hiddenHashes;
 
+  /* HR NAV (2026-11-27): the Human Resources items carry three flags (see the group in navItemsForRole).
+       alt       - the plan leaves this pre-HR screen out but HR is on: show the item as its HR-only twin;
+       onlyIfOff - shown only while that hash is off (Background checks folds into Documents & letters);
+       hrFold    - dropped instead of drawn greyed when locked, so the add-on shows as ONE Upgrade item.
+     Used by the sidebar (hideSwitchedOff) and by the admin launcher (the exported navItemsForRole). */
+  function foldHr(sections, user) {
+    var raw = (user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [];
+    var rawOff = {}; raw.forEach(function (h) { rawOff[String(h)] = true; });
+    var L = lockedMap(user);
+    return (sections || []).map(function (sec) {
+      if (!sec || !Array.isArray(sec.items)) { return sec; }
+      var any = sec.items.some(function (it) { return it && (it.alt || it.onlyIfOff || it.hrFold); });
+      if (!any) { return sec; }
+      var kept = [];
+      sec.items.forEach(function (it) {
+        if (!it) { return; }
+        var h = String(it.hash);
+        if (it.onlyIfOff && !rawOff[it.onlyIfOff]) { return; }
+        if (it.alt && rawOff[h] && !rawOff[it.alt]) { kept.push(Object.assign({}, it, { hash: it.alt })); return; }
+        if (it.hrFold && L[h]) { return; }
+        kept.push(it);
+      });
+      return { label: sec.label, keepOrder: sec.keepOrder, items: kept };
+    });
+  }
+
   function hideSwitchedOff(sections, user) {
+    sections = foldHr(sections, user);
     var hidden = notLocked((user && Array.isArray(user.hidden_screens)) ? user.hidden_screens : [], user);
-    if (!hidden.length) { return sections; }
+    if (!hidden.length) { return (sections || []).filter(function (sec) { return sec && (!Array.isArray(sec.items) || sec.items.length); }); }
     var off = {};
     hidden.forEach(function (h) { off[String(h)] = true; });
 
@@ -403,7 +430,6 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
           { hash: 'safe-arrival',   label: 'Safe Arrival',    icon: '🛡️' },
-          { hash: 'educator-rewards', label: 'Educator rewards', icon: '⭐' },
           { hash: 'parent-issues',  label: 'Parent issues',   icon: '🗣️' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'care-log',       label: 'Daily log',        icon: '📝' },
@@ -416,7 +442,6 @@
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
           { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
-          { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
           { hash: 'headcounts',    label: 'Headcounts',       icon: '🔢' },
@@ -451,15 +476,29 @@
           // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
           { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
         ]},
-        // HUMAN RESOURCES (2026-11-26, Anthony): HR, My HR, time off, timesheets, payroll and background checks in one group. Each item keeps
-        // its own gate (HR + My HR need the hr add-on via hidden_screens; the others show without it); an empty group is dropped.
+        /* HUMAN RESOURCES (2026-11-27, Anthony: "create new subsections under Human resources to help jump right to the sections").
+           Each entry is its own screen with only its own tabs (kt-hr-sections.js). Time off, Rota & shifts (the Schedule, moved from
+           Operations), Clock-ins & timesheets, Payroll, Educator awards (moved from Operations; its settings are a tab) and Background
+           checks work without the hr add-on; the rest need it. alt = the HR-only twin used when the plan leaves the pre-HR screen
+           out; hrFold = dropped, not greyed, when locked (the HR dashboard is the one Upgrade item); onlyIfOff = shown only while
+           that hash is off (Background checks is a tab of Documents & letters when HR is on). See foldHr(). */
         { label: 'Human Resources', keepOrder: true, items: [
-          { hash: 'hr',                 label: 'HR',                 icon: '🧑‍💼' },
-          { hash: 'my-hr',              label: 'My HR',              icon: '🧭' },
-          { hash: 'time-off',           label: 'Time off requests',  icon: '🌴' },
-          { hash: 'timesheets',         label: 'Timesheets',         icon: '🕘' },   // moved from Operations (2026-11-26, Anthony)
-          { hash: 'payroll',            label: 'Payroll',            icon: '💼' },   // moved from Finance (2026-11-26, Anthony)
-          { hash: 'background-checks',  label: 'Background checks',  icon: '🪪' },
+          { hash: 'hr',                label: 'HR dashboard',           icon: '🧑‍💼' },
+          { hash: 'hr-people',         label: 'People',                 icon: '👥', hrFold: true },
+          { hash: 'time-off',          label: 'Time off',               icon: '🌴', alt: 'hr-time-off' },
+          { hash: 'hr-absence',        label: 'Absence & lateness',     icon: '🤒', hrFold: true },
+          { hash: 'schedule',          label: 'Rota & shifts',          icon: '🗒️', alt: 'hr-rota' },
+          { hash: 'timesheets',        label: 'Clock-ins & timesheets', icon: '🕘', alt: 'hr-timesheets' },
+          { hash: 'payroll',           label: 'Payroll',                icon: '💼', alt: 'hr-payroll' },
+          { hash: 'hr-hiring',         label: 'Hiring & onboarding',    icon: '🧲', hrFold: true },
+          { hash: 'hr-performance',    label: 'Performance & learning', icon: '🎯', hrFold: true },
+          { hash: 'educator-rewards',  label: 'Educator awards',        icon: '⭐' },
+          { hash: 'hr-safety',         label: 'Health & safety',        icon: '🦺', hrFold: true },
+          { hash: 'hr-documents',      label: 'Documents & letters',    icon: '📂', hrFold: true },
+          { hash: 'background-checks', label: 'Background checks',      icon: '🪪', onlyIfOff: 'hr-documents' },
+          { hash: 'hr-reports',        label: 'HR reports',             icon: '📑', hrFold: true },
+          { hash: 'hr-settings',       label: 'HR settings',            icon: '🛠️', hrFold: true },
+          { hash: 'my-hr',             label: 'My HR',                  icon: '🧭', hrFold: true },
         ]},
         // Home Visitors — own section (moved out of Compliance for clarity).
         { label: 'Home Visitors', items: [
@@ -559,8 +598,6 @@
           // The agency's licence is NOT here: it sits in the sidebar foot beside the build line
           // (2026-10-25, Anthony). See installBuildFoot().
           { hash: 'clock-settings' ,     label: 'Clock settings',          icon: '⏱️' },
-          // Automatic monthly thank-you awards (2026-11-02, Anthony: "the automatic awards should be a setting in the settings section").
-          { hash: 'educator-award-settings', label: 'Educator awards',  icon: '🏅' },
           // Scheduled reminders to the agency's own reviewers (2026-10-09).
           // The AGENCY's scheduled reminders, named so it is not mistaken for your own.
           { hash: 'notification-settings', label: 'Agency notifications',  icon: '📳' },
@@ -627,7 +664,6 @@
           { hash: 'notifications', label: 'Notifications', icon: '🔔', badgeKey: 'notif_unread' },
           { hash: 'contacts',       label: 'All contacts',    icon: '📇' },
           { hash: 'safe-arrival',   label: 'Safe Arrival',    icon: '🛡️' },
-          { hash: 'educator-rewards', label: 'Educator rewards', icon: '⭐' },
           { hash: 'parent-issues',  label: 'Parent issues',   icon: '🗣️' },
           { hash: 'staff-calendar', label: 'Calendar',        icon: '📅' },
           { hash: 'closures',       label: 'Closures',         icon: '🚫' },
@@ -643,7 +679,6 @@
           { hash: 'observations',   label: 'Observations',     icon: '\ud83d\udc40' },
           { hash: 'play-spark', label: 'Play Spark', icon: '🧩' },   // play ideas + weekly lesson plans, merged 2026-11-24 (AI tabs need the AI Bundle)
           { hash: 'awards',         label: 'Awards',           icon: '\ud83c\udfc6' },
-          { hash: 'schedule',       label: 'Schedule',         icon: '🗒️' },
           { hash: 'certifications', label: 'Certifications',   icon: '🎓' },
           { hash: 'audit-logs',     label: 'Audit log',        icon: '📜' },
           { hash: 'incidents',     label: 'Incidents',        icon: '⚠️' },
@@ -679,15 +714,28 @@
           // Fire drills and each educator's drill dates are a staff matter (2026-11-09, Anthony: "move drill log to staff section").
           { hash: 'drills',             label: 'Drill log',          icon: '🚒' },
         ]},
-        // HUMAN RESOURCES (2026-11-26, Anthony): HR, My HR, time off, timesheets, payroll and background checks in one group. Each item keeps
-        // its own gate (HR + My HR need the hr add-on via hidden_screens; the others show without it); an empty group is dropped.
+        /* HUMAN RESOURCES (2026-11-27, Anthony: "create new subsections under Human resources to help jump right to the sections").
+           Each entry is its own screen with only its own tabs (kt-hr-sections.js). Time off, Rota & shifts (the Schedule, moved from
+           Operations), Clock-ins & timesheets, Payroll, Educator awards (moved from Operations; its settings are a tab) and Background
+           checks work without the hr add-on; the rest need it. alt = the HR-only twin used when the plan leaves the pre-HR screen
+           out; hrFold = dropped, not greyed, when locked (the HR dashboard is the one Upgrade item); onlyIfOff = shown only while
+           that hash is off (Background checks is a tab of Documents & letters when HR is on). See foldHr(). */
         { label: 'Human Resources', keepOrder: true, items: [
-          { hash: 'hr',                label: 'HR',                 icon: '🧑‍💼' },
-          { hash: 'my-hr',             label: 'My HR',              icon: '🧭' },
-          { hash: 'time-off',          label: 'Time off requests',  icon: '🌴' },
-          { hash: 'timesheets',        label: 'Timesheets',         icon: '🕘' },   // moved from Operations (2026-11-26, Anthony)
-          { hash: 'payroll',           label: 'Payroll',            icon: '💼' },   // moved from Administration (2026-11-26, Anthony)
-          { hash: 'background-checks', label: 'Background checks',  icon: '🪪' },
+          { hash: 'hr',                label: 'HR dashboard',           icon: '🧑‍💼' },
+          { hash: 'hr-people',         label: 'People',                 icon: '👥', hrFold: true },
+          { hash: 'time-off',          label: 'Time off',               icon: '🌴', alt: 'hr-time-off' },
+          { hash: 'hr-absence',        label: 'Absence & lateness',     icon: '🤒', hrFold: true },
+          { hash: 'schedule',          label: 'Rota & shifts',          icon: '🗒️', alt: 'hr-rota' },
+          { hash: 'timesheets',        label: 'Clock-ins & timesheets', icon: '🕘', alt: 'hr-timesheets' },
+          { hash: 'payroll',           label: 'Payroll',                icon: '💼', alt: 'hr-payroll' },
+          { hash: 'hr-hiring',         label: 'Hiring & onboarding',    icon: '🧲', hrFold: true },
+          { hash: 'hr-performance',    label: 'Performance & learning', icon: '🎯', hrFold: true },
+          { hash: 'educator-rewards',  label: 'Educator awards',        icon: '⭐' },
+          { hash: 'hr-safety',         label: 'Health & safety',        icon: '🦺', hrFold: true },
+          { hash: 'hr-documents',      label: 'Documents & letters',    icon: '📂', hrFold: true },
+          { hash: 'background-checks', label: 'Background checks',      icon: '🪪', onlyIfOff: 'hr-documents' },
+          { hash: 'hr-reports',        label: 'HR reports',             icon: '📑', hrFold: true },
+          { hash: 'my-hr',             label: 'My HR',                  icon: '🧭', hrFold: true },
         ]},
         { label: 'Programs', items: [
           { hash: 'curriculum',        label: 'Curriculum library', icon: '🌱' },   // Ontario units (2026-11-03)
@@ -732,8 +780,6 @@
         { label: 'Settings', items: [
           { hash: 'settings', label: 'My settings', icon: '⚙️' },
           { hash: 'educator-rooms', label: 'Room Controls', icon: '🎛️' },
-          // Read only for a director: how the agency's automatic thank-you awards are set up (2026-11-02).
-          { hash: 'educator-award-settings', label: 'Educator awards', icon: '🏅' },
           /* No "My profile" here either: a director's name in the top bar opens
              #my-profile (kt-topbar openProfile). */
 
@@ -1253,6 +1299,8 @@
     'payroll-report': 'reports',
     'campaign-report': 'reports',
     'kt-reports': 'reports',
+    'educator-award-settings': 'educator-rewards',   // a tab of Educator awards (HR nav, 2026-11-27)
+    'background-checks': 'hr-documents',            // a tab of Documents & letters while HR is on
   };
   let inPageNavAt = 0;
   document.addEventListener('click', function (e) {
@@ -1395,7 +1443,9 @@
       /* 2026-10-28 sweep (Anthony: "hero banners in educator view - make sure they are all unique, check the parent view
          as well"): screens reached from home tiles, not the sidebar, that were all ✨. */
       'my-schedule': '📅', 'children': '🧒', 'menu': '🍽️', 'support': '🛟', 'scan': '📷', 'pickup-auth': '🔐',
-      'ledger': '📒', 'trends': '📈', 'conferences': '🪑', 'directory': '📇', 'payment-plans': '🏧', 'wellness': '🩺' };
+      'ledger': '📒', 'trends': '📈', 'conferences': '🪑', 'directory': '📇', 'payment-plans': '🏧', 'wellness': '🩺',
+      // HR nav (2026-11-27): tabs and HR-only twins of the Human Resources entries.
+      'educator-award-settings': '🏅', 'hr-time-off': '🌴', 'hr-rota': '🗒️', 'hr-timesheets': '🕘', 'hr-payroll': '💼' };
 
     /* And a NAME, where the hash is not one. The fallback below turns "my-hours"
        into "My Hours" — which is where the banner title came from, so renaming the
@@ -1486,7 +1536,19 @@
     'timesheets': 'Hours worked, ready for payroll.',
     'time-clock': 'Clock in and out.',
     'time-off': 'Leave requests awaiting a decision.',
-    'hr': 'Employee files, leave, hiring, onboarding, reviews and courses.',
+    'hr': 'Your HR setup, who is off, probation and what needs doing next.',
+    'hr-people': 'Employee files, pay and role history, each person\'s documents, and leavers.',
+    'hr-absence': 'Absence report, lateness against the rota, and absence scores.',
+    'hr-hiring': 'Job posts, applicants and onboarding checklists.',
+    'hr-performance': 'Reviews, goals, one-to-ones and courses.',
+    'hr-safety': 'Staff injury reports and drills.',
+    'hr-documents': 'Company documents, HR letters and background checks.',
+    'hr-reports': 'Headcount, turnover, leave, overtime, lateness, probation and more.',
+    'hr-settings': 'Leave year, short absences and attendance rules.',
+    'hr-time-off': 'Leave balances and leave types.',
+    'hr-rota': 'The rota plan, availability, swaps and open shifts.',
+    'hr-timesheets': 'Approving and locking each pay period, and overtime.',
+    'hr-payroll': 'Expense and mileage claims.',
     'my-hr': 'Your onboarding checklist, courses, reviews and goals.',
     'substitutes': 'Cover for absent staff.',
     'payroll': 'Pay runs and hours.',
@@ -4554,7 +4616,7 @@
        tiles from the role's REAL nav rather than a second hand-written copy of the
        menu. A copy would go stale the first time a screen was added, and could offer a
        role a screen it cannot open. */
-    navItemsForRole,
+    navItemsForRole: function (role) { return foldHr(navItemsForRole(role), (function () { try { return Auth.user(); } catch (e) { return null; } })()); },
     // Lift any action buttons out of the current screen's banner into the toolbar
     // beneath it. Screens that RE-RENDER themselves (e.g. a Refresh button that
     // rebuilds its own hero) must call this afterwards — the shell's automatic

@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director, educator, home_visitor
 ---
 # RH : vérification du lieu au pointage et alerte d'heures supplémentaires
 
-Deux règles de pointage facultatives, incluses dans le module RH de KiddieTrac. Un administrateur de l'agence les règle dans **RH > Horaire prévu > Règles de pointage**.
+Deux règles de pointage facultatives, incluses dans le module RH de KiddieTrac. Un administrateur de l'agence les règle dans **Ressources humaines > Horaires et quarts > Plan des horaires > Règles de pointage**.
 
 ## Vérification du lieu au pointage d'arrivée
 
@@ -24,4 +24,4 @@ Indiquez le nombre d'heures par semaine à partir duquel commencent les heures s
 
 ## Ce que voit la direction
 
-**RH > Horaire prévu** liste les pointages de la semaine faits loin du centre, et les personnes proches des heures supplémentaires ou qui les dépassent, pour vos propres centres.
+**Ressources humaines > Horaires et quarts > Plan des horaires** liste les pointages de la semaine faits loin du centre, et les personnes proches des heures supplémentaires ou qui les dépassent, pour vos propres centres.

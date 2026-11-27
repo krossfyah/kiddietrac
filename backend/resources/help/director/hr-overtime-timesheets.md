@@ -16,13 +16,13 @@ Your **Overtime bank** balance shows in the same section. Book time in lieu with
 
 ## Approving overtime (directors and admins)
 
-Open **HR > Overtime**. **To approve** lists what is waiting. Open one with **View overtime**:
+Open **Human Resources > Clock-ins & timesheets > Overtime**. **To approve** lists what is waiting. Open one with **View overtime**:
 
 - **Approve as pay:** it is offered as a line on the person's next payslip in **Payroll > Run payroll**. The line is priced from the hours, the overtime rate and the hourly rate you enter there.
 - **Bank as time in lieu:** the hours times the overtime rate go into their Overtime bank straight away.
 - **Decline:** give a reason; the person sees it.
 
-Nobody approves their own overtime. You can also **Log overtime for someone** you manage. Banked hours cannot be declined later: adjust the balance in **HR > Balances** instead.
+Nobody approves their own overtime. You can also **Log overtime for someone** you manage. Banked hours cannot be declined later: adjust the balance in **Human Resources > Time off > Balances** instead.
 
 ## The rules
 
@@ -34,11 +34,11 @@ The timesheet rules are all **off** to start, so hours are exactly what the cloc
 - **Count from the shift start** when someone clocks in early, and **count to the shift end** when someone clocks out late.
 - **Before payroll:** warn when a period is not approved, or only pay approved, locked periods.
 
-Rules change the paid hours everywhere they show: HR > Timesheets, the Timesheets screen (a Paid figure beside the hours), the payroll run, payroll summaries and reports, the payroll export, payslip hours and contractor invoices. They never change the clock-in record itself.
+Rules change the paid hours everywhere they show: Human Resources > Clock-ins & timesheets > Approve & lock, the Timesheets screen (a Paid figure beside the hours), the payroll run, payroll summaries and reports, the payroll export, payslip hours and contractor invoices. They never change the clock-in record itself.
 
 ## Timesheets (directors and admins)
 
-Open **HR > Timesheets**, choose the centre and the dates (or **Last week**, **Last 2 weeks**, **Last month**). Each person shows scheduled hours, worked hours, paid hours and the difference, with flags for a clock-in with **no clock-out**, a **shift with no clock-in** (and no approved leave), and **hours with no shift**. **View clock-ins** shows each day.
+Open **Human Resources > Clock-ins & timesheets > Approve & lock**, choose the centre and the dates (or **Last week**, **Last 2 weeks**, **Last month**). Each person shows scheduled hours, worked hours, paid hours and the difference, with flags for a clock-in with **no clock-out**, a **shift with no clock-in** (and no approved leave), and **hours with no shift**. **View clock-ins** shows each day.
 
 When the period has ended and every clock-in has a clock-out, press **Approve and lock this period**. After that, clock-ins on those days cannot be added, corrected or removed. If your own hours are on the timesheet, another director or an agency admin approves it.
 

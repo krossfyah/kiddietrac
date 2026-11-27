@@ -10,7 +10,7 @@ Fait partie du module RH de KiddieTrac. Les administrateurs d'agence voient tout
 
 ## Le tableau de bord
 
-Ouvrez **RH > Tableau de bord**.
+Ouvrez **Ressources humaines > Tableau de bord RH**.
 
 - **Liste de mise en place RH** : cinq étapes avec une barre de progression : ajouter vos types de congé, fixer les droits à congé, compléter le dossier RH de chacun, donner à chacun un gestionnaire qui approuve ses demandes, et faire en sorte que votre personnel se connecte. **Configurer** mène directement à l'étape.
 - **Fin de période d'essai** : les personnes dont la période d'essai se termine dans les 30 prochains jours, ou s'est terminée sans être confirmée. Le menu ⋮ permet de **marquer la période d'essai réussie**, de la **prolonger** jusqu'à une nouvelle date ou d'ouvrir le dossier RH.
@@ -26,7 +26,7 @@ Le rappel va au gestionnaire inscrit au dossier RH. S'il n'y en a pas, il va au 
 
 ## Rapports
 
-Ouvrez **RH > Rapports** et choisissez un rapport.
+Ouvrez **Ressources humaines > Rapports RH** et choisissez un rapport.
 
 - **Effectif** : le personnel actuel par centre et par type d'emploi.
 - **Arrivées et départs** : qui est arrivé et qui est parti entre deux dates, mois par mois. Le rapport donne le **roulement** (départs ÷ effectif moyen) et la **rétention** (les personnes présentes le premier jour qui le sont encore le dernier).
@@ -62,4 +62,4 @@ Le tableau des salaires minimums s'affiche sous le rapport, avec la date de la d
 
 ## Paiement des congés et types de congé
 
-Dans **RH > Types de congé**, le réglage **Payé au départ** décide quels soldes comptent dans la trousse de départ et le rapport de passif de congés. Par défaut, ce sont votre type vacances et la banque d'heures supplémentaires. Les jours de maladie et personnels ne sont pas comptés, sauf si vous choisissez **Oui** pour ce type.
+Dans **Ressources humaines > Congés > Types de congé**, le réglage **Payé au départ** décide quels soldes comptent dans la trousse de départ et le rapport de passif de congés. Par défaut, ce sont votre type vacances et la banque d'heures supplémentaires. Les jours de maladie et personnels ne sont pas comptés, sauf si vous choisissez **Oui** pour ce type.

@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RR. HH.: contratación, incorporación, evaluaciones y cursos
 
-Estas cuatro pestañas están en la pantalla **RR. HH.** (en **Personal**) y forman parte del complemento KiddieTrac RR. HH. Los administradores de agencia ven toda la agencia. Los directores de centro ven sus propios centros. Nadie gestiona sus propios registros.
+Son dos entradas en **Recursos humanos**: **Contratación e incorporación** (Contratación, Incorporación) y **Desempeño y formación** (Evaluaciones y objetivos, Cursos). Ellas forman parte del complemento KiddieTrac RR. HH. Los administradores de agencia ven toda la agencia. Los directores de centro ven sus propios centros. Nadie gestiona sus propios registros.
 
 ## Contratación
 

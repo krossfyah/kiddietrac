@@ -6,13 +6,13 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RR. HH.: retrasos, puntuación de ausencias y coincidencias de permisos
 
-Tres indicadores de asistencia del complemento de RR. HH. de KiddieTrac. Un administrador de la agencia fija las reglas en **RR. HH. > Configuración > Reglas de asistencia**; los directores ven los resultados de sus centros.
+Tres indicadores de asistencia del complemento de RR. HH. de KiddieTrac. Un administrador de la agencia fija las reglas en **Recursos humanos > Ajustes de RR. HH. > Reglas de asistencia**; los directores ven los resultados de sus centros.
 
 ## Retrasos
 
 El primer fichaje de cada turno programado en el **horario** se compara con el inicio del turno. Más allá del margen de cortesía (5 minutos salvo que tu agencia lo cambie) cuenta como retraso. La vuelta de un descanso y los días sin turno no se comparan.
 
-Abre **RR. HH. > Informe de ausencias > Retrasos** para ver, en cualquier periodo: fichajes comparados, retrasos, total y promedio de minutos, el mayor, el porcentaje a tiempo y un patrón (por ejemplo *Sobre todo los lunes*). El menú ⋮ de una fila muestra cada fichaje frente a su turno. **Exportar a Excel** descarga la lista.
+Abre **Recursos humanos > Ausencias y retrasos > Retrasos** para ver, en cualquier periodo: fichajes comparados, retrasos, total y promedio de minutos, el mayor, el porcentaje a tiempo y un patrón (por ejemplo *Sobre todo los lunes*). El menú ⋮ de una fila muestra cada fichaje frente a su turno. **Exportar a Excel** descarga la lista.
 
 Si tu agencia activa **Avisar a los directores del centro**, reciben un aviso cuando alguien ficha tarde.
 

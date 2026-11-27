@@ -10,7 +10,7 @@ Keep each person's papers, their pay and role changes and everything about someo
 
 ## Documents on a person's file
 
-Open **HR > People**, open the person, and find **Documents**. Press **Upload files** to add one or many files at once. Give each a type (ID, contract, certificate, work permit and so on), and if you like an expiry date and a follow-up date. You and the person's manager get a reminder 30 days and 7 days before a document expires and on the day.
+Open **Human Resources > People**, open the person, and find **Documents**. Press **Upload files** to add one or many files at once. Give each a type (ID, contract, certificate, work permit and so on), and if you like an expiry date and a follow-up date. You and the person's manager get a reminder 30 days and 7 days before a document expires and on the day.
 
 Choose who can see it: **Shared with them** (the person sees it in My HR) or **Managers only**. Files are private: they open from a short-lived link and never sit on a public address. **Preview** shows the file without downloading it.
 
@@ -30,7 +30,7 @@ When someone's bank or e-Transfer details change, they get an email saying what 
 
 ## When someone leaves
 
-Open the person and press **Start leaving** to open the **Leaving pack**. Enter the last day worked, the date notice was given and the reason (the Record of Employment code). Work through the checklist: keys, devices, uniform, final pay, leave payout, the leaving letter (HR > Letters) and the ROE. Closing their account is still done with **Off-board from their user record**; the checklist ticks itself once that is done.
+Open the person and press **Start leaving** to open the **Leaving pack**. Enter the last day worked, the date notice was given and the reason (the Record of Employment code). Work through the checklist: keys, devices, uniform, final pay, leave payout, the leaving letter (Human Resources > Documents & letters > Letters) and the ROE. Closing their account is still done with **Off-board from their user record**; the checklist ticks itself once that is done.
 
 The **Leave payout** works out what is owed from their remaining balances and pay rate. **ROE sheet** gathers the insurable hours and earnings by pay period, from payslips (or punches if there are none), to print or download as CSV. KiddieTrac does not file anything with Service Canada: enter the figures in ROE Web or give them to your payroll provider.
 
@@ -38,4 +38,4 @@ The **Leave payout** works out what is owed from their remaining balances and pa
 
 The **Leavers** tab lists everyone who has left. Leavers are taken off approver and manager lists. **Download all their data** gives a ZIP of their file, documents, leave, time and HR records (without their SIN or bank numbers) for an access request.
 
-The leave payout counts only the leave types marked **Paid out when someone leaves** in **HR > Leave types** (by default your vacation type and the Overtime bank). Other balances show as **Not paid out** and stay as they are. See **HR: dashboard, reports, probation and missing information**.
+The leave payout counts only the leave types marked **Paid out when someone leaves** in **Human Resources > Time off > Leave types** (by default your vacation type and the Overtime bank). Other balances show as **Not paid out** and stay as they are. See **HR: dashboard, reports, probation and missing information**.

@@ -207,7 +207,7 @@ final class ExportsController extends Controller
             ->select('tp.user_id',
                 DB::raw("CONCAT(u.first_name,' ',u.last_name) as user_name"),
                 'u.email', 'c.id as centre_id', 'c.name as centre_name',
-                DB::raw('SUM(TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at)) as total_minutes'),
+                DB::raw('SUM(GREATEST(0, TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at))) as total_minutes'),
                 DB::raw('COUNT(tp.id) as punch_count'))
             ->groupBy('tp.user_id', 'u.first_name', 'u.last_name', 'u.email', 'c.id', 'c.name')
             ->orderBy('u.last_name')

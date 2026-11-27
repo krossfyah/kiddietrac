@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RR. HH.: plantillas de cartas y firma electrónica
 
-Forma parte del complemento de RR. HH. de KiddieTrac. Abra **RR. HH. > Cartas**.
+Forma parte del complemento de RR. HH. de KiddieTrac. Abra **Recursos humanos > Documentos y cartas > Cartas**.
 
 ## Las cinco cartas
 

@@ -10,9 +10,9 @@ Publiez un quart sans personne et laissez le personnel qui peut le faire le dema
 
 ## Publier un quart à pourvoir (directeurs et administrateurs)
 
-Ouvrez **RH > Quarts à pourvoir** et choisissez **Publier un quart à pourvoir**. Choisissez la salle, le jour (et jusqu'à 13 jours de plus d'affilée), les heures, le rôle et, au besoin, un certificat exigé, comme les premiers soins.
+Ouvrez **Ressources humaines > Horaires et quarts > Quarts à pourvoir** et choisissez **Publier un quart à pourvoir**. Choisissez la salle, le jour (et jusqu'à 13 jours de plus d'affilée), les heures, le rôle et, au besoin, un certificat exigé, comme les premiers soins.
 
-Le tableau liste aussi les **manques de ratio** de la semaine : les moments où une salle a moins d'éducateurs prévus que ses enfants n'en demandent. Chacun a **Publier un quart à pourvoir** dans son menu ⋮, avec la salle, le jour et les heures déjà remplis. Vous pouvez faire de même depuis **RH > Horaire**. Un quart qui comble un manque est signalé.
+Le tableau liste aussi les **manques de ratio** de la semaine : les moments où une salle a moins d'éducateurs prévus que ses enfants n'en demandent. Chacun a **Publier un quart à pourvoir** dans son menu ⋮, avec la salle, le jour et les heures déjà remplis. Vous pouvez faire de même depuis **Ressources humaines > Horaires et quarts > Plan des horaires**. Un quart qui comble un manque est signalé.
 
 Toutes les personnes du centre qui peuvent prendre le quart sont avisées une seule fois (cloche et téléphone), quel que soit le nombre de jours publiés.
 

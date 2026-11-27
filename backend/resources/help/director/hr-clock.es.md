@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director, educator, home_visitor
 ---
 # RR. HH.: verificación de ubicación al marcar entrada y aviso de horas extra
 
-Dos reglas opcionales para marcar entrada, incluidas en el módulo de RR. HH. de KiddieTrac. Un administrador de la agencia las configura en **RR. HH. > Horario planificado > Reglas para marcar entrada**.
+Dos reglas opcionales para marcar entrada, incluidas en el módulo de RR. HH. de KiddieTrac. Un administrador de la agencia las configura en **Recursos humanos > Turnos y horarios > Plan de turnos > Reglas para marcar entrada**.
 
 ## Verificación de ubicación al marcar entrada
 
@@ -24,4 +24,4 @@ Indique cuántas horas por semana deben pasar para que empiecen las horas extra 
 
 ## Lo que ve la dirección
 
-**RR. HH. > Horario planificado** muestra las entradas de la semana marcadas lejos del centro, y las personas cerca de las horas extra o que ya las superan, para sus propios centros.
+**Recursos humanos > Turnos y horarios > Plan de turnos** muestra las entradas de la semana marcadas lejos del centro, y las personas cerca de las horas extra o que ya las superan, para sus propios centros.

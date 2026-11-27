@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director, educator, home_visitor
 ---
 # HR: clock-in location check and overtime warning
 
-Two optional clock-in rules, part of the KiddieTrac HR add-on. An agency admin sets them in **HR > Rota > Clock-in rules**.
+Two optional clock-in rules, part of the KiddieTrac HR add-on. An agency admin sets them in **Human Resources > Rota & shifts > Rota plan > Clock-in rules**.
 
 ## Location check at clock-in
 
@@ -24,4 +24,4 @@ Set the weekly hours when overtime starts (44 by default, the Ontario Employment
 
 ## What directors see
 
-**HR > Rota** lists this week's clock-ins away from the centre, and the people close to or into overtime, for your own centres.
+**Human Resources > Rota & shifts > Rota plan** lists this week's clock-ins away from the centre, and the people close to or into overtime, for your own centres.

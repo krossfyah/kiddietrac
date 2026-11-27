@@ -77,47 +77,41 @@
   var S = { tab: 'people', status: 'active', centre: '', admin: false, people: null, setup: null,
     abs: { from: '', to: '', group: 'person', centre: '', type: '', short_only: false, score_only: false, view: 'leave', late_only: false } };
 
-  function tabsFor() {
-    var t = [['people', 'People'], ['balances', 'Balances'], ['absence', 'Absence report']];
-    var rp = window.KTHrReports ? window.KTHrReports.tabs : [];   // Phase 4 batch 5: Dashboard (setup checklist, to-dos) first, Reports after the absence report (screen-hr-reports.js)
-    if (rp.length) { t.unshift(rp[0]); t.push(rp[1]); }
-    if (window.KTHrTalent) t = t.concat(window.KTHrTalent.tabs);   // Phase 2 (2026-11-28)
-    if (window.KTHrSafety) t = t.concat(window.KTHrSafety.tabs);   // Phase 3: injuries (screen-hr-safety.js)
-    if (window.KTHrFile) t = t.concat(window.KTHrFile.tabs);       // Phase 4 batch 4: company documents, leavers (screen-hr-file.js)
-    if (S.admin) t.push(['types', 'Leave types'], ['settings', 'Settings']);
-    return t;
-  }
-
-  async function render(main) {
+  /* HR NAV RESTRUCTURE (2026-11-27, Anthony): the one #hr screen with 18 tabs became the Human Resources entries
+     in kt-hr-sections.js (KTHrSections), each with only its own tabs. Every entry's HR tabs are drawn here:
+     renderSection(main, section, tabKey, role). #hr itself is the HR dashboard; an old #hr?tab=<key> link is sent
+     on to its new entry (person=, open=, view= and report= are kept). */
+  async function renderSection(main, sec, key, role) {
     css();
     main.setAttribute('data-kt-pretty', '1');
-    var m = /[?&]tab=([a-z]+)/.exec(location.hash || '');
-    if (m) S.tab = m[1];
+    var tab = sec.tabs.filter(function (t) { return t.k === key && !t.screen; })[0] || sec.tabs.filter(function (t) { return !t.screen; })[0];
+    S.tab = tab.draw || tab.k;
     if (/[?&]view=late\b/.test(location.hash || '')) S.abs.view = 'late';   // the lateness bell (HR Phase 4)
-    main.innerHTML = '<div class="kt-section"><div class="kt-hero"><div class="kt-hero-greet">🧑‍💼 YOUR TEAM</div><h1>HR</h1>'
-      + '<div class="kt-hero-sub">Employee files, leave, hiring, onboarding, reviews and courses for your team, with the rules your agency sets.</div></div>'
-      + '<div class="hr-tabs" role="tablist" id="hr-tabs"></div><div id="hr-body"><div class="hr-sub" style="padding:12px 2px;">Loading…</div></div></div>';
+    main.innerHTML = '<div class="kt-section"><div class="kt-hero"><div class="kt-hero-greet">' + sec.icon + ' HUMAN RESOURCES</div><h1>' + esc(sec.label) + '</h1>'
+      + (sec.sub ? '<div class="kt-hero-sub">' + esc(sec.sub) + '</div>' : '') + '</div>'
+      + '<div id="hr-tabs"></div><div id="hr-body"><div class="hr-sub" style="padding:12px 2px;">Loading…</div></div></div>';
+    var bandEl = window.KTHrSections ? window.KTHrSections.band(sec, tab.k, role) : null;
+    var th = main.querySelector('#hr-tabs');
+    if (bandEl && th) th.appendChild(bandEl); else if (th) th.style.height = '10px';
     try { S.people = await Api.get('/hr/people'); }
     catch (e) { var b0 = main.querySelector('#hr-body'); if (b0) b0.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
     if (!main.isConnected) return;
     S.admin = !!S.people.can_manage_setup;
-    if (!tabsFor().some(function (t) { return t[0] === S.tab; })) S.tab = 'people';
-    drawTabs(main);
+    if ((S.tab === 'types' || S.tab === 'settings') && !S.admin) { var b1 = body(main); if (b1) b1.innerHTML = '<div class="hr-note">Only your agency\'s admins can change this.</div>'; return; }
     drawTab(main);
-    // #hr?tab=people&person=ID: "Open HR file" from the user record (2026-11-26). Only someone on this list opens.
+    // ?person=ID: "Open HR file" from the user record (2026-11-26). Only someone on this list opens.
     var pm = /[?&]person=(\d+)/.exec(location.hash || '');
     if (pm && S.tab === 'people' && ((S.people && S.people.people) || []).some(function (p) { return p.id === +pm[1]; })) openProfile(main, +pm[1]);
   }
 
-  function drawTabs(main) {
-    var host = main.querySelector('#hr-tabs'); if (!host) return;
-    host.innerHTML = tabsFor().map(function (t) {
-      return '<button type="button" role="tab" class="hr-tab" data-hrtab="' + t[0] + '" aria-selected="' + (S.tab === t[0]) + '">' + esc(t[1]) + '</button>';
-    }).join('');
-    host.querySelectorAll('[data-hrtab]').forEach(function (b) {
-      b.addEventListener('click', function () { S.tab = b.getAttribute('data-hrtab'); drawTabs(main); drawTab(main); });
-    });
+  async function render(main, ctx) {
+    var KS = window.KTHrSections;
+    var role = (ctx && ctx.role) || 'agency_admin';
+    var to = KS ? KS.redirectFor(location.hash) : '';
+    if (to) { location.replace(location.pathname + location.search + '#' + to); return; }
+    return renderSection(main, KS ? KS.byId.dashboard : { icon: '🧑‍💼', label: 'HR dashboard', tabs: [{ k: 'dashboard' }] }, 'dashboard', role);
   }
+  window.KTHr = { renderSection: renderSection };
 
   function body(main) { return main.querySelector('#hr-body'); }
 
@@ -724,5 +718,5 @@
     });
   }
 
-  ['agency_admin', 'platform_admin', 'centre_director'].forEach(function (r) { KT.Shell.registerScreen(r + ':hr', render); });
+  ['agency_admin', 'platform_admin', 'centre_director'].forEach(function (r) { KT.Shell.registerScreen(r + ':hr', render); });   // the HR dashboard; the other entries are kt-hr-sections.js's
 })(window);

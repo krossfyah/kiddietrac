@@ -19,7 +19,7 @@ Sus solicitudes aparecen con su estado: **Esperando aprobación**, **Aprobada: e
 
 ## Aprobar solicitudes (directores y administradores)
 
-Abra **RR. HH.** y luego la pestaña **Reembolsos**. Los directores ven las solicitudes de las personas de sus propios centros; los administradores de la agencia ven toda la agencia. Nadie aprueba su propia solicitud.
+Abra **Recursos humanos > Nómina** y luego la pestaña **Gastos y kilometraje**. Los directores ven las solicitudes de las personas de sus propios centros; los administradores de la agencia ven toda la agencia. Nadie aprueba su propia solicitud.
 
 Abra una solicitud con **Ver solicitud**. Puede ver el recibo y luego elegir **Aprobar** o **Rechazar**. Un rechazo necesita un motivo, y la persona lo ve.
 

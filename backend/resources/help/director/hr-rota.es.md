@@ -27,7 +27,7 @@ Usted conserva el turno hasta que se aprueba. Sus compañeros reciben un aviso c
 
 ## El plan del horario (dirección y administración)
 
-Abra **RR. HH. > Horario planificado** y elija la semana. La dirección ve sus propios centros. La administración ve toda la agencia.
+Abra **Recursos humanos > Turnos y horarios > Plan de turnos** y elija la semana. La dirección ve sus propios centros. La administración ve toda la agencia.
 
 - **Cambios de turno**: cesiones e intercambios. Apruebe o rechace los que un compañero ya aceptó. Nadie aprueba un cambio en el que participa. Al aprobar un cambio, los turnos pasan a las nuevas personas en el horario.
 - **Alertas de proporción**: las horas en que una sala tiene menos educadores planificados de los que exigen las reglas de proporción para los niños esperados ese día. Se espera a los niños según su sala y su patrón de asistencia. A un niño sin patrón se le espera de lunes a viernes.

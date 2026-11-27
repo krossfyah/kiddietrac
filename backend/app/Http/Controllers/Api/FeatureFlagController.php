@@ -95,7 +95,8 @@ final class FeatureFlagController extends Controller
         /* KIDDIETRAC HR (2026-11-27): an add-on on every plan. Time off, scheduling, timesheets, certifications and
            payroll stay in the plans; this adds leave balances, the employee file and the absence report. */
         'hr'                => ['label' => 'KiddieTrac HR — leave, employee files, hiring, onboarding, reviews & courses', 'plan_min' => 'addon', 'group' => 'Staff',
-            'hashes' => ['hr', 'my-hr']],   // + My HR (phase 2, 2026-11-28)
+            'hashes' => ['hr', 'my-hr', 'hr-people', 'hr-absence', 'hr-hiring', 'hr-performance', 'hr-safety', 'hr-documents', 'hr-reports', 'hr-settings',
+                'hr-time-off', 'hr-rota', 'hr-timesheets', 'hr-payroll']],   // + My HR (phase 2); + the Human Resources entries and HR-only twins (nav restructure, 2026-11-27)
         'tasks'             => ['label' => 'Task assignment',              'plan_min' => 'free',       'group' => 'Staff',
             'hashes' => ['tasks', 'my-tasks']],
         'home_visits'       => ['label' => 'Home visits & inspection forms', 'plan_min' => 'starter',  'group' => 'Staff',

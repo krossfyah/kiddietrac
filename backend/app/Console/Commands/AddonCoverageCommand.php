@@ -251,7 +251,8 @@ final class AddonCoverageCommand extends Command
         $out = [];
         foreach (['js/app-v2-shell.js', 'js/agency-switcher.js', 'js/kt-mobilenav.js', 'js/screen-role-home.js'] as $f) {
             $src = @file_get_contents($root . '/' . $f) ?: '';
-            if (preg_match_all('/\bhash:\s*[\'"]([a-z0-9-]+)[\'"]/', $src, $m)) foreach ($m[1] as $h) $out[$h] = true;
+            // alt: = a nav item's HR-only twin (Human Resources entries, 2026-11-27): drawn in place of the item when its own screen is off.
+            if (preg_match_all('/\b(?:hash|alt):\s*[\'"]([a-z0-9-]+)[\'"]/', $src, $m)) foreach ($m[1] as $h) $out[$h] = true;
         }
         $dash = @file_get_contents($root . '/dashboard.src.html') ?: '';
         if (preg_match('/window\.__KT_LAZY=(\{.*?\});/s', $dash, $m)) {

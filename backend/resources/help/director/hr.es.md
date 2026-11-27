@@ -6,7 +6,11 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RR. HH.: expedientes, saldos y ausencias
 
-**RR. HH.** (en **Recursos humanos**) es parte del complemento KiddieTrac HR. Los administradores de la agencia ven toda la agencia. Los directores de centro ven al personal de sus propios centros.
+El menú **Recursos humanos** es parte del complemento KiddieTrac HR.
+
+Cada parte tiene su propia entrada en **Recursos humanos**: **Panel de RR. HH.**, **Personas** (con **Bajas**), **Tiempo libre** (Solicitudes, Saldos, Tipos de permiso), **Ausencias y retrasos**, **Turnos y horarios** (el horario, Plan de turnos, Turnos abiertos), **Fichajes y hojas de horas** (Hojas de horas, Aprobar y bloquear, Horas extra), **Nómina** (con Gastos y kilometraje), **Contratación e incorporación**, **Desempeño y formación**, **Premios para educadores**, **Salud y seguridad**, **Documentos y cartas** (con Verificaciones de antecedentes), **Informes de RR. HH.**, **Ajustes de RR. HH.** (administradores) y **Mis RR. HH.**. Sin el complemento de RR. HH., Tiempo libre, Turnos y horarios, Fichajes y hojas de horas, Nómina, Premios para educadores y Verificaciones de antecedentes siguen funcionando; el resto se oculta. Los enlaces antiguos a la pantalla única de RR. HH. abren la entrada correcta.
+
+Los administradores de la agencia ven toda la agencia. Los directores de centro ven al personal de sus propios centros.
 
 ## Personas
 
@@ -34,8 +38,8 @@ Cada solicitud muestra su tipo, cuánto usa y el saldo. Aprobar resta del saldo;
 
 ## Horas extra y hojas de horas
 
-**RR. HH. > Horas extra** aprueba las horas adicionales como pago o las guarda como tiempo compensatorio. **RR. HH. > Hojas de horas** compara las horas programadas y trabajadas, y aprueba y bloquea un periodo antes de la nómina. Consulta **RR. HH.: horas extra, tiempo compensatorio y hojas de horas**.
+**Recursos humanos > Fichajes y hojas de horas > Horas extra** aprueba las horas adicionales como pago o las guarda como tiempo compensatorio. **Recursos humanos > Fichajes y hojas de horas > Aprobar y bloquear** compara las horas programadas y trabajadas, y aprueba y bloquea un periodo antes de la nómina. Consulta **RR. HH.: horas extra, tiempo compensatorio y hojas de horas**.
 
 ## Turnos abiertos
 
-**RR. HH. > Turnos abiertos** publica turnos sin nadie (también desde una falta de ratio); el personal que puede cubrirlos los pide en Mis RR. HH. y tú confirmas quién toma cada uno. El personal recibe un aviso por cada lote de cambios en sus turnos. Ver **RR. HH.: turnos abiertos y avisos de turno**.
+**Recursos humanos > Turnos y horarios > Turnos abiertos** publica turnos sin nadie (también desde una falta de ratio); el personal que puede cubrirlos los pide en Mis RR. HH. y tú confirmas quién toma cada uno. El personal recibe un aviso por cada lote de cambios en sus turnos. Ver **RR. HH.: turnos abiertos y avisos de turno**.

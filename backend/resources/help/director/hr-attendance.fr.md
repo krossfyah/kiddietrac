@@ -6,13 +6,13 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RH : retards, score d'absence et chevauchements de congés
 
-Trois indicateurs de présence du module RH de KiddieTrac. Un administrateur d'agence fixe les règles dans **RH > Paramètres > Règles de présence** ; les directeurs voient les résultats de leurs centres.
+Trois indicateurs de présence du module RH de KiddieTrac. Un administrateur d'agence fixe les règles dans **Ressources humaines > Paramètres RH > Règles de présence** ; les directeurs voient les résultats de leurs centres.
 
 ## Retards
 
 Le premier pointage de chaque quart prévu à l'**horaire** est comparé au début du quart. Au-delà du délai de grâce (5 minutes sauf si votre agence le change), c'est un retard. Le retour d'une pause et les jours sans quart ne sont pas comparés.
 
-Ouvrez **RH > Rapport d'absences > Retards** pour voir, sur une période : les pointages comparés, les retards, le total et la moyenne des minutes, le plus long, le pourcentage à l'heure et une tendance (par exemple *Surtout le lundi*). Le menu ⋮ d'une ligne montre chaque pointage face à son quart. **Exporter vers Excel** télécharge la liste.
+Ouvrez **Ressources humaines > Absences et retards > Retards** pour voir, sur une période : les pointages comparés, les retards, le total et la moyenne des minutes, le plus long, le pourcentage à l'heure et une tendance (par exemple *Surtout le lundi*). Le menu ⋮ d'une ligne montre chaque pointage face à son quart. **Exporter vers Excel** télécharge la liste.
 
 Si votre agence active **Prévenir les directeurs du centre**, ils reçoivent un avis quand quelqu'un pointe en retard.
 

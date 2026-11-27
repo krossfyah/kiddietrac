@@ -367,7 +367,7 @@ final class WorkforceFunding
         foreach (DB::table('time_punches')->whereIn('user_id', $userIds)->whereIn('centre_id', $centres ?: [0])
             ->where('punched_in_at', '>=', $a)->where('punched_in_at', '<', $b)->whereNotNull('punched_out_at')
             ->get(['user_id', 'punched_in_at', 'punched_out_at']) as $p) {
-            $m = max(0, Carbon::parse($p->punched_in_at)->diffInMinutes(Carbon::parse($p->punched_out_at)));
+            $m = HrTime::punchMinutes($p->punched_in_at, $p->punched_out_at);   // whole minutes, as payroll (2026-11-27)
             $out[(int) $p->user_id] = ($out[(int) $p->user_id] ?? 0) + $m;
         }
 

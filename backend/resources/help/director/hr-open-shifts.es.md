@@ -10,9 +10,9 @@ Publica un turno que aún no tiene a nadie y deja que el personal que puede cubr
 
 ## Publicar un turno abierto (directores y administradores)
 
-Abre **RR. HH. > Turnos abiertos** y elige **Publicar un turno abierto**. Elige la sala, el día (y hasta 13 días más seguidos), las horas, el rol y, si hace falta, un certificado obligatorio, como primeros auxilios.
+Abre **Recursos humanos > Turnos y horarios > Turnos abiertos** y elige **Publicar un turno abierto**. Elige la sala, el día (y hasta 13 días más seguidos), las horas, el rol y, si hace falta, un certificado obligatorio, como primeros auxilios.
 
-El tablero también muestra las **faltas de ratio** de la semana: momentos en que una sala tiene menos educadores previstos de los que sus niños necesitan. Cada una tiene **Publicar un turno abierto** en su menú ⋮, con la sala, el día y las horas ya puestos. También puedes hacerlo desde **RR. HH. > Horario**. Un turno que cubre una falta queda marcado.
+El tablero también muestra las **faltas de ratio** de la semana: momentos en que una sala tiene menos educadores previstos de los que sus niños necesitan. Cada una tiene **Publicar un turno abierto** en su menú ⋮, con la sala, el día y las horas ya puestos. También puedes hacerlo desde **Recursos humanos > Turnos y horarios > Plan de turnos**. Un turno que cubre una falta queda marcado.
 
 Todas las personas del centro que pueden tomar el turno reciben un solo aviso (campana y teléfono), sin importar cuántos días publiques.
 

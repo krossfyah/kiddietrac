@@ -1204,6 +1204,8 @@
     });
   }
 
+  /* Hours must agree (2026-11-27): a row's whole minutes (the server's figure), so totals are rounded once, not added up from rounded rows. */
+  function payMins(r) { return r && r.total_minutes != null ? Math.round(+r.total_minutes || 0) : Math.round(parseFloat((r && r.total_hours) || 0) * 60); }
   async function runPayroll() {
     // Guard against the user navigating away mid-fetch: the from/to inputs and the
     // result host all live on this screen, and firing this after leaving it threw
@@ -1252,7 +1254,7 @@
       if (!rows.length) return '';
       let sub = 0;
       const body = rows.map(r => {
-        sub += parseFloat(r.total_hours || 0);
+        sub += payMins(r);   // minutes, rounded once below (hours must agree, 2026-11-27)
         const docs = r.documents || [];
         const paidNet = Number(r.paid_net || 0);
         return `<tr><td style="${td('left')}">${escapeHtml(r.user_name)}</td>`
@@ -1269,14 +1271,14 @@
       return `<div style="margin-bottom:22px;">
         <div style="display:flex;align-items:baseline;justify-content:space-between;margin:0 0 6px;">
           <h3 style="margin:0;font-size:15px;color:#1F6080;">${g.label}</h3>
-          <span style="font-size:12.5px;color:#64748B;">${rows.length} ${rows.length === 1 ? 'person' : 'people'} · <strong style="color:#0F172A;">${sub.toFixed(2)} h</strong></span>
+          <span style="font-size:12.5px;color:#64748B;">${rows.length} ${rows.length === 1 ? 'person' : 'people'} · <strong style="color:#0F172A;">${(sub / 60).toFixed(2)} h</strong></span>
         </div>
         <table style="width:100%;border-collapse:collapse;"><thead><tr>
           <th style="${th('left')}">Staff</th><th style="${th('left')}">Role</th><th style="${th('left')}">Centre</th>
           <th style="${th('right')}">Punches</th><th style="${th('right')}">Hours</th><th style="${th('right')}">Payslips</th>
         </tr></thead><tbody>${body}
         <tr><td colspan="4" style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">${escapeHtml(g.label.replace(/^\S+\s/, ''))} subtotal</td>
-        <td style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">${sub.toFixed(2)}</td>
+        <td style="padding:9px 8px;text-align:right;font-weight:700;border-top:2px solid #CBD5E1;">${(sub / 60).toFixed(2)}</td>
         <td style="border-top:2px solid #CBD5E1;"></td></tr>
         </tbody></table></div>`;
     };
@@ -1347,7 +1349,7 @@
       /* The overall hours figure survives the split. Contractors are excluded from it
          on purpose - they have no hours, and folding a zero into a total labelled
          "hours worked" would state something untrue about them. */
-      const allHours = (res.data || []).reduce((a, r) => a + parseFloat(r.total_hours || 0), 0);
+      const allHours = (res.data || []).reduce((a, r) => a + payMins(r), 0) / 60;
       const footer = pane === 'contractors' ? '' :
         `<div style="display:flex;justify-content:flex-end;gap:14px;align-items:baseline;border-top:2px solid #1F6080;padding:12px 8px 0;margin-top:6px;">
           <span style="font-size:13px;color:#64748B;">All staff, both groups</span>
@@ -1400,9 +1402,9 @@
       <th style="text-align:left;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Centre</th>
       <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Punches</th>
       <th style="text-align:right;padding:8px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#6B7280;">Hours</th></tr></thead><tbody>${res.data.map(r => {
-        tot += parseFloat(r.total_hours || 0);
+        tot += payMins(r);
         return `<tr><td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.user_name)}</td><td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;">${escapeHtml(r.centre_name || '')}</td><td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;">${r.punch_count}</td><td style="padding:10px 8px;border-bottom:1px solid #F3F4F6;text-align:right;font-weight:600;">${r.total_hours}</td></tr>`;
-      }).join('')}<tr><td colspan="3" style="padding:10px 8px;text-align:right;font-weight:700;border-top:2px solid #1F6080;">Total</td><td style="padding:10px 8px;text-align:right;font-weight:700;border-top:2px solid #1F6080;">${tot.toFixed(2)}</td></tr></tbody></table>`;
+      }).join('')}<tr><td colspan="3" style="padding:10px 8px;text-align:right;font-weight:700;border-top:2px solid #1F6080;">Total</td><td style="padding:10px 8px;text-align:right;font-weight:700;border-top:2px solid #1F6080;">${(tot / 60).toFixed(2)}</td></tr></tbody></table>`;
   }
 
   /* ============================ Pay periods (2026-10-31) ============================

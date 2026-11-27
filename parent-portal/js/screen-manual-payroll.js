@@ -284,7 +284,7 @@
         + esc(from) + ' to ' + esc(to) + '. Tick who is being paid, then enter what they are paid.</div>'
         + (ts && ts.unlocked && ts.unlocked.length ? '<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;margin-bottom:10px;">'
           + (ts.rule === 'block' ? 'Your agency pays from approved timesheets only. ' : '') + 'Timesheets not yet approved and locked for these dates: <span data-no-i18n>'
-          + esc(ts.unlocked.join(', ')) + '</span>. Approve them in <a href="#hr?tab=timesheets">HR &gt; Timesheets</a>.</div>' : '')
+          + esc(ts.unlocked.join(', ')) + '</span>. Approve them in <a href="#timesheets?tab=lock">Clock-ins &amp; timesheets &gt; Approve &amp; lock</a>.</div>' : '')
         + (ts && ts.rules_on ? '<div style="font-size:12px;color:#1F6080;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:6px 10px;margin-bottom:10px;">'
           + 'Hours follow your agency\'s timesheet rules (rounding or counting only the scheduled shift).</div>' : '')
         + (anyFunding ? '<div style="font-size:12px;color:#1F6080;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:6px 10px;margin-bottom:10px;">'

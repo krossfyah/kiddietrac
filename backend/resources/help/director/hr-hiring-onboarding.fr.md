@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RH : recrutement, intégration, évaluations et formations
 
-Ces quatre onglets se trouvent sur l'écran **RH** (sous **Personnel**) et font partie du module complémentaire KiddieTrac RH. Les administrateurs d'agence voient toute l'agence. Les directeurs de centre voient leurs propres centres. Personne ne gère ses propres dossiers.
+Ce sont deux entrées sous **Ressources humaines** : **Embauche et intégration** (Embauche, Intégration) et **Performance et formation** (Évaluations et objectifs, Formations). Elles font partie du module complémentaire KiddieTrac RH. Les administrateurs d'agence voient toute l'agence. Les directeurs de centre voient leurs propres centres. Personne ne gère ses propres dossiers.
 
 ## Recrutement
 

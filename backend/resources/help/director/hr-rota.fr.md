@@ -27,7 +27,7 @@ Vous gardez le quart jusqu'à l'approbation. Vos collègues reçoivent un avis q
 
 ## Le plan d'horaire (direction et administration)
 
-Ouvrez **RH > Horaire prévu** et choisissez la semaine. La direction voit ses propres centres. L'administration voit toute l'agence.
+Ouvrez **Ressources humaines > Horaires et quarts > Plan des horaires** et choisissez la semaine. La direction voit ses propres centres. L'administration voit toute l'agence.
 
 - **Changements de quarts** : cessions et échanges. Approuvez ou refusez ceux qu'un collègue a acceptés. Personne n'approuve un changement dont il fait partie. Une fois le changement approuvé, les quarts passent aux nouvelles personnes à l'horaire.
 - **Alertes de ratio** : les heures où une salle a moins d'éducatrices et d'éducateurs prévus que les règles de ratio n'en exigent pour les enfants attendus ce jour-là. Les enfants sont attendus selon leur salle et leur horaire de fréquentation. Un enfant sans horaire est attendu du lundi au vendredi.

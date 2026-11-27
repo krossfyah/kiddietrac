@@ -10,7 +10,7 @@ Guarde en un solo lugar los papeles de cada persona, sus cambios de pago y de pu
 
 ## Documentos en el expediente de una persona
 
-Abra **RR. HH. > Personal**, abra a la persona y busque **Documentos**. Pulse **Subir archivos** para añadir uno o varios a la vez. Asigne un tipo a cada uno (identificación, contrato, certificado, permiso de trabajo, etc.) y, si quiere, una fecha de vencimiento y una fecha de seguimiento. Usted y el responsable de la persona reciben un recordatorio 30 y 7 días antes del vencimiento y el mismo día.
+Abra **Recursos humanos > Personas**, abra a la persona y busque **Documentos**. Pulse **Subir archivos** para añadir uno o varios a la vez. Asigne un tipo a cada uno (identificación, contrato, certificado, permiso de trabajo, etc.) y, si quiere, una fecha de vencimiento y una fecha de seguimiento. Usted y el responsable de la persona reciben un recordatorio 30 y 7 días antes del vencimiento y el mismo día.
 
 Elija quién puede verlo: **Compartido con la persona** (lo ve en Mis RR. HH.) o **Solo responsables**. Los archivos son privados: se abren con un enlace de corta duración y nunca están en una dirección pública. **Vista previa** muestra el archivo sin descargarlo.
 
@@ -30,7 +30,7 @@ Cuando cambian los datos bancarios o de transferencia de alguien, recibe un corr
 
 ## Cuando alguien se va
 
-Abra a la persona y pulse **Iniciar la salida** para abrir el **Paquete de salida**. Indique el último día trabajado, la fecha del aviso y el motivo (el código del ROE). Complete la lista: llaves, dispositivos, uniforme, último pago, pago de vacaciones, carta de salida (RR. HH. > Cartas) y ROE. El cierre de la cuenta se sigue haciendo con **Dar de baja desde su ficha de usuario**; la lista se marca sola cuando está hecho.
+Abra a la persona y pulse **Iniciar la salida** para abrir el **Paquete de salida**. Indique el último día trabajado, la fecha del aviso y el motivo (el código del ROE). Complete la lista: llaves, dispositivos, uniforme, último pago, pago de vacaciones, carta de salida (Recursos humanos > Documentos y cartas > Cartas) y ROE. El cierre de la cuenta se sigue haciendo con **Dar de baja desde su ficha de usuario**; la lista se marca sola cuando está hecho.
 
 El **Pago de vacaciones** calcula lo que se debe según los saldos restantes y la tarifa. La **Hoja del ROE** reúne las horas e ingresos asegurables por periodo de pago, a partir de las nóminas (o de los fichajes si no hay), para imprimir o descargar en CSV. KiddieTrac no presenta nada a Service Canada: introduzca las cifras en ROE Web o entrégueselas a su proveedor de nóminas.
 
@@ -38,4 +38,4 @@ El **Pago de vacaciones** calcula lo que se debe según los saldos restantes y l
 
 La pestaña **Bajas** muestra a todos los que se han ido. Se quitan de las listas de aprobadores y responsables. **Descargar todos sus datos** da un ZIP con su expediente, documentos, vacaciones, horas y registros de RR. HH. (sin número de seguro social ni números bancarios) para una solicitud de acceso.
 
-El pago de permisos solo cuenta los tipos marcados **Se paga cuando alguien se va** en **RR. HH. > Tipos de permiso** (por defecto su tipo de vacaciones y la bolsa de horas extra). Los demás saldos aparecen como **No se paga** y no cambian. Vea **RR. HH.: panel, informes, período de prueba e información que falta**.
+El pago de permisos solo cuenta los tipos marcados **Se paga cuando alguien se va** en **Recursos humanos > Tiempo libre > Tipos de permiso** (por defecto su tipo de vacaciones y la bolsa de horas extra). Los demás saldos aparecen como **No se paga** y no cambian. Vea **RR. HH.: panel, informes, período de prueba e información que falta**.

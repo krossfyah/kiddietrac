@@ -10,7 +10,7 @@ Gardez au même endroit les papiers de chaque personne, ses changements de paie 
 
 ## Documents dans le dossier d’une personne
 
-Ouvrez **RH > Personnel**, ouvrez la personne et trouvez **Documents**. Appuyez sur **Téléverser des fichiers** pour en ajouter un ou plusieurs à la fois. Donnez un type à chacun (pièce d’identité, contrat, certificat, permis de travail, etc.) et, si vous voulez, une date d’expiration et une date de suivi. Vous et le gestionnaire de la personne recevez un rappel 30 jours et 7 jours avant l’expiration, puis le jour même.
+Ouvrez **Ressources humaines > Personnes**, ouvrez la personne et trouvez **Documents**. Appuyez sur **Téléverser des fichiers** pour en ajouter un ou plusieurs à la fois. Donnez un type à chacun (pièce d’identité, contrat, certificat, permis de travail, etc.) et, si vous voulez, une date d’expiration et une date de suivi. Vous et le gestionnaire de la personne recevez un rappel 30 jours et 7 jours avant l’expiration, puis le jour même.
 
 Choisissez qui peut le voir : **Partagé avec la personne** (elle le voit dans Mes RH) ou **Gestionnaires seulement**. Les fichiers sont privés : ils s’ouvrent par un lien de courte durée et ne sont jamais à une adresse publique. **Aperçu** affiche le fichier sans le télécharger.
 
@@ -30,7 +30,7 @@ Quand les coordonnées bancaires ou de virement Interac d’une personne changen
 
 ## Quand quelqu’un part
 
-Ouvrez la personne et appuyez sur **Commencer le départ** pour ouvrir le **Dossier de départ**. Indiquez le dernier jour travaillé, la date du préavis et le motif (le code du relevé d’emploi). Suivez la liste : clés, appareils, uniforme, dernière paie, paiement des congés, lettre de départ (RH > Lettres) et RE. La fermeture du compte se fait toujours avec **Retirer depuis sa fiche utilisateur**; la liste se coche toute seule une fois que c’est fait.
+Ouvrez la personne et appuyez sur **Commencer le départ** pour ouvrir le **Dossier de départ**. Indiquez le dernier jour travaillé, la date du préavis et le motif (le code du relevé d’emploi). Suivez la liste : clés, appareils, uniforme, dernière paie, paiement des congés, lettre de départ (Ressources humaines > Documents et lettres > Lettres) et RE. La fermeture du compte se fait toujours avec **Retirer depuis sa fiche utilisateur**; la liste se coche toute seule une fois que c’est fait.
 
 Le **Paiement des congés** calcule ce qui est dû d’après les soldes restants et le taux de paie. La **Fiche du RE** rassemble les heures et la rémunération assurables par période de paie, à partir des bulletins de paie (ou des pointages s’il n’y en a pas), à imprimer ou à télécharger en CSV. KiddieTrac ne transmet rien à Service Canada : saisissez les chiffres dans RE Web ou donnez-les à votre fournisseur de paie.
 
@@ -38,4 +38,4 @@ Le **Paiement des congés** calcule ce qui est dû d’après les soldes restant
 
 L’onglet **Départs** liste tous ceux qui sont partis. Ils sont retirés des listes d’approbateurs et de gestionnaires. **Télécharger toutes leurs données** donne un ZIP de leur dossier, documents, congés, temps et dossiers RH (sans NAS ni numéros bancaires) pour une demande d’accès.
 
-Le paiement des congés ne compte que les types de congé marqués **Payé au départ** dans **RH > Types de congé** (par défaut votre type vacances et la banque d'heures supplémentaires). Les autres soldes s'affichent comme **Non payé** et ne changent pas. Voir **RH : tableau de bord, rapports, période d'essai et informations manquantes**.
+Le paiement des congés ne compte que les types de congé marqués **Payé au départ** dans **Ressources humaines > Congés > Types de congé** (par défaut votre type vacances et la banque d'heures supplémentaires). Les autres soldes s'affichent comme **Non payé** et ne changent pas. Voir **RH : tableau de bord, rapports, période d'essai et informations manquantes**.

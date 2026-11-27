@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RH : modèles de lettres et signature électronique
 
-Fait partie du module RH de KiddieTrac. Ouvrez **RH > Lettres**.
+Fait partie du module RH de KiddieTrac. Ouvrez **Ressources humaines > Documents et lettres > Lettres**.
 
 ## Les cinq lettres
 

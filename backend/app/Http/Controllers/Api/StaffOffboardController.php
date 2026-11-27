@@ -620,9 +620,8 @@ final class StaffOffboardController extends Controller
             }
             $mins = 0;
             foreach ($q->get(['punched_in_at', 'punched_out_at']) as $tp) {
-                // abs(): Carbon 3 diffInMinutes is signed, which silently zeroed the
-                // timesheet totals once before.
-                $mins += abs(Carbon::parse($tp->punched_out_at)->diffInMinutes(Carbon::parse($tp->punched_in_at)));
+                // Whole minutes, as payroll (HrTime::punchMinutes, 2026-11-27).
+                $mins += \App\Support\HrTime::punchMinutes($tp->punched_in_at, $tp->punched_out_at);
             }
             return ['hours' => round($mins / 60, 1), 'since' => $since];
         } catch (\Throwable $e) {

@@ -92,7 +92,7 @@ class Payroll
             ->whereNotNull('punched_out_at')
             ->whereBetween('punched_in_at', [$startUtc, $endUtc]);
         $mins = (int) (clone $base)
-            ->sum(DB::raw('TIMESTAMPDIFF(MINUTE, punched_in_at, punched_out_at)'));
+            ->sum(DB::raw('GREATEST(0, TIMESTAMPDIFF(MINUTE, punched_in_at, punched_out_at))'));   // never negative (HrTime::punchMinutes, 2026-11-27)
         // KiddieTrac HR timesheet rules (rounding / clip to shift): the same paid minutes as the payroll run; null = none on.
         $paid = \App\Support\HrTime::paidSumsFor($base, 'time_punches');
         if ($paid !== null) $mins = (int) ($paid[''] ?? 0);

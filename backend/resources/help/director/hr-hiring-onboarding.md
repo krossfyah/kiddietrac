@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # HR: hiring, onboarding, reviews and courses
 
-These four tabs are on the **HR** screen (under **Staff**) and are part of the KiddieTrac HR add-on. Agency admins see the whole agency. Centre directors see their own centres. Nobody manages their own records.
+These are two entries under **Human Resources**: **Hiring & onboarding** (Hiring, Onboarding) and **Performance & learning** (Reviews & goals, Courses). They are part of the KiddieTrac HR add-on. Agency admins see the whole agency. Centre directors see their own centres. Nobody manages their own records.
 
 ## Hiring
 

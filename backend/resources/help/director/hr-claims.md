@@ -19,7 +19,7 @@ Your claims show with their status: **Waiting for approval**, **Approved: in the
 
 ## Approving claims (directors and admins)
 
-Open **HR**, then the **Claims** tab. Directors see the claims of the people at their own centres; agency admins see the whole agency. Nobody approves their own claim.
+Open **Human Resources > Payroll**, then the **Claims & mileage** tab. Directors see the claims of the people at their own centres; agency admins see the whole agency. Nobody approves their own claim.
 
 Open a claim with **View claim**. You can look at the receipt, then choose **Approve** or **Decline**. A decline needs a reason, and the person sees it.
 

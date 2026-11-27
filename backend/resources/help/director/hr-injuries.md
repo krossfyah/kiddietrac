@@ -11,7 +11,7 @@ When someone on your team is hurt at work, or nearly is, record it here. This is
 ## Reporting one
 
 - **Staff:** open **My HR** and choose **Report an injury or near miss**.
-- **Directors and admins:** open **HR**, then the **Injuries** tab, and choose **Report an injury or near miss** for someone on your team.
+- **Directors and admins:** open **Human Resources > Health & safety** (the **Staff injuries** tab), and choose **Report an injury or near miss** for someone on your team.
 
 Enter when and where it happened, any witnesses, what happened, the body part, the injury and any first aid given. Also say whether the person went to a doctor or hospital, and whether they needed time off work.
 

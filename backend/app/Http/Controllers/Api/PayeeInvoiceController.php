@@ -175,7 +175,7 @@ final class PayeeInvoiceController extends Controller
             ->where('punched_in_at', '>=', \App\Support\AgencyTime::spanRangeForCentre((int) ($centreIds[0] ?? 0), $from, $to)[0])
             ->where('punched_in_at', '<', \App\Support\AgencyTime::spanRangeForCentre((int) ($centreIds[0] ?? 0), $from, $to)[1]);
         foreach ((clone $base)->get(['punched_in_at', 'punched_out_at']) as $p) {
-            $minutes += Carbon::parse($p->punched_in_at)->diffInMinutes(Carbon::parse($p->punched_out_at));
+            $minutes += \App\Support\HrTime::punchMinutes($p->punched_in_at, $p->punched_out_at);   // whole minutes, as payroll (2026-11-27)
         }
         // KiddieTrac HR timesheet rules: the same paid minutes as the payroll run (App\Support\HrTime::paidMap); null = none on.
         $paid = \App\Support\HrTime::paidSumsFor($base, 'time_punches');

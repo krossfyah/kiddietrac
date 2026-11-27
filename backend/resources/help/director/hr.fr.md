@@ -6,7 +6,11 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # RH : dossiers, soldes et absences
 
-**RH** (sous **Ressources humaines**) fait partie du module complémentaire KiddieTrac RH. Les administrateurs d'agence voient toute l'agence. Les directeurs de centre voient le personnel de leurs propres centres.
+Le menu **Ressources humaines** fait partie du module complémentaire KiddieTrac RH.
+
+Chaque partie a sa propre entrée sous **Ressources humaines** : **Tableau de bord RH**, **Personnes** (avec **Départs**), **Congés** (Demandes, Soldes, Types de congé), **Absences et retards**, **Horaires et quarts** (l'horaire, Plan des horaires, Quarts à pourvoir), **Pointages et feuilles de temps** (Feuilles de temps, Approuver et verrouiller, Heures supplémentaires), **Paie** (avec Notes de frais et kilométrage), **Embauche et intégration**, **Performance et formation**, **Récompenses des éducateurs**, **Santé et sécurité**, **Documents et lettres** (avec Vérifications des antécédents), **Rapports RH**, **Paramètres RH** (administrateurs) et **Mes RH**. Sans le module RH, Congés, Horaires et quarts, Pointages et feuilles de temps, Paie, Récompenses des éducateurs et Vérifications des antécédents fonctionnent toujours ; le reste est masqué. Les anciens liens vers l'écran RH unique ouvrent la bonne entrée.
+
+Les administrateurs d'agence voient toute l'agence. Les directeurs de centre voient le personnel de leurs propres centres.
 
 ## Personnes
 
@@ -34,8 +38,8 @@ Chaque demande affiche son type, la quantité utilisée et le solde. L'approbati
 
 ## Heures supplémentaires et feuilles de temps
 
-**RH > Heures supplémentaires** approuve les heures en plus en paie ou les met en banque comme congé compensatoire. **RH > Feuilles de temps** compare les heures prévues et travaillées, et approuve et verrouille une période avant la paie. Voir **RH : heures supplémentaires, congés compensatoires et feuilles de temps**.
+**Ressources humaines > Pointages et feuilles de temps > Heures supplémentaires** approuve les heures en plus en paie ou les met en banque comme congé compensatoire. **Ressources humaines > Pointages et feuilles de temps > Approuver et verrouiller** compare les heures prévues et travaillées, et approuve et verrouille une période avant la paie. Voir **RH : heures supplémentaires, congés compensatoires et feuilles de temps**.
 
 ## Quarts à pourvoir
 
-**RH > Quarts à pourvoir** publie des quarts sans personne (aussi depuis un manque de ratio) ; le personnel qui peut les faire les demande dans Mes RH et vous confirmez qui prend chacun. Le personnel reçoit un avis par lot de changements à ses quarts. Voir **RH : quarts à pourvoir et avis de quart**.
+**Ressources humaines > Horaires et quarts > Quarts à pourvoir** publie des quarts sans personne (aussi depuis un manque de ratio) ; le personnel qui peut les faire les demande dans Mes RH et vous confirmez qui prend chacun. Le personnel reçoit un avis par lot de changements à ses quarts. Voir **RH : quarts à pourvoir et avis de quart**.

@@ -976,7 +976,7 @@
     if (!main.isConnected) return;
     var reload = function () { if (main.isConnected) renderMine(main); };
     var onb = (d.onboarding || []).filter(function (o) { return o.status === 'active'; })[0];
-    var h = '';
+    var h = myTiles(d);
     if (onb) {
       h += '<div class="hrt-sec">Your onboarding</div><div class="kt-card" style="padding:12px 14px;" data-kt-nogrid><div class="hr-bar">' + bar(onb.percent, onb.overdue) + '<span class="hr-sub">' + onb.done + ' of ' + onb.total + ' done' + (onb.overdue ? ' · ' + onb.overdue + ' overdue' : '') + '</span></div>'
         + '<div data-mytasks>' + taskList(onb.tasks, false, true) + '</div></div>';
@@ -1005,6 +1005,57 @@
     var mg = b.querySelector('[data-mg]'); if (mg) mg.addEventListener('click', function () { openGoalsAndNotes(d.me, true, reload); });
     if (window.KTHrSafety) window.KTHrSafety.mine(b);   // Phase 3: the person's own injury reports (screen-hr-safety.js)
     if (window.KTHrFile) window.KTHrFile.mine(b);       // Phase 4 batch 4: my documents + company documents (screen-hr-file.js)
+    wireTiles(b);
+  }
+
+  /* MY HR LANDING (HR nav restructure, 2026-11-27, Anthony): a tile for each part of My HR, then a short to-do
+     list, above the sections. A tile jumps to its section on this page (Time off is its own screen). The
+     sections come from three files and draw in their own time, so a tile finds its heading when tapped. */
+  var MY_TILES = [
+    ['🌴', 'My time off', '#time-off', null],
+    ['🗓️', 'My shifts & open shifts', null, /open shifts you can pick up|my shifts/i],
+    ['📂', 'My documents', null, /^my documents/i],
+    ['🧾', 'Claims', null, /claims/i],
+    ['⏱️', 'Overtime', null, /^overtime/i],
+    ['🎓', 'Courses', null, /^your courses/i],
+    ['⭐', 'Reviews', null, /^your reviews/i]
+  ];
+  function myTiles(d) {
+    var todo = [];
+    ((d.onboarding || []).filter(function (o) { return o.status === 'active'; })[0] || { tasks: [] }).tasks.forEach(function (t) {
+      if (!t.done) todo.push(['Onboarding', t.title, t.due_date]);
+    });
+    (d.courses || []).forEach(function (c) { if (!c.completed_at) todo.push(['Course', c.title, c.due_date]); });
+    (d.reviews || []).forEach(function (r) {
+      if (r.status === 'open' || r.status === 'manager_done') todo.push(['Self review', r.title, r.due_date]);
+      else if (r.status === 'signing') todo.push(['Review to sign', r.title, r.due_date]);
+    });
+    var h = '<div class="mh-tiles" data-kt-noband>' + MY_TILES.map(function (t, i) {
+      return '<button type="button" class="mh-tile" data-kt-iconized="1" data-mhtile="' + i + '"><span class="mh-ti" aria-hidden="true">' + t[0] + '</span><span>' + esc(t[1]) + '</span></button>';
+    }).join('') + '</div>';
+    h += '<div class="hrt-sec">To do</div><div class="kt-card" style="padding:10px 14px;" data-kt-nogrid>' + (todo.length ? todo.slice(0, 8).map(function (t) {
+      return '<div class="hr-kv"><span>' + esc(t[0]) + '</span><b data-no-i18n>' + esc(t[1]) + (t[2] ? ' · ' + esc(day(t[2])) : '') + '</b></div>';
+    }).join('') + (todo.length > 8 ? '<div class="hr-sub" style="margin-top:4px;">and ' + (todo.length - 8) + ' more below</div>' : '') : '<span class="hr-sub">Nothing waiting for you.</span>') + '</div>';
+    return h;
+  }
+  function wireTiles(b) {
+    if (!document.getElementById('kt-mh-css')) {
+      var s = document.createElement('style'); s.id = 'kt-mh-css';
+      s.textContent = '.mh-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin:12px 0 4px;}'
+        + '.mh-tile{display:flex;align-items:center;gap:9px;min-height:44px;padding:8px 12px;border:1px solid #E2E8F0;border-radius:12px;background:#fff;font-size:13px;font-weight:700;color:#0F172A;cursor:pointer;text-align:left;}'
+        + '.mh-tile:hover{border-color:#0E7490;}.mh-ti{font-size:20px;line-height:1;}'
+        + 'html.kt-dark .mh-tile{background:#0F172A;border-color:#334155;color:#E2E8F0;}';
+      document.head.appendChild(s);
+    }
+    b.querySelectorAll('[data-mhtile]').forEach(function (x) {
+      x.addEventListener('click', function () {
+        var t = MY_TILES[+x.getAttribute('data-mhtile')];
+        if (t[2]) { location.hash = t[2]; return; }
+        var hit = [].filter.call(b.querySelectorAll('.hrt-sec'), function (s) { return t[3].test((s.textContent || '').trim()); })[0];
+        if (hit) { try { hit.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { hit.scrollIntoView(); } }
+        else toast('ℹ️', t[1], 'Nothing here for you yet.');
+      });
+    });
   }
 
   window.KTHrTalent = {

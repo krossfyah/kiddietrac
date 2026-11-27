@@ -10,7 +10,7 @@ Part of the KiddieTrac HR add-on. Agency admins see the whole agency; directors 
 
 ## The Dashboard
 
-Open **HR > Dashboard**.
+Open **Human Resources > HR dashboard**.
 
 - **HR setup checklist**: five steps with a progress bar: add your leave types, set how much leave people get, complete everyone's HR file, give everyone a manager who approves their requests, and have your staff sign in. Press **Set up** beside a step to go straight to it.
 - **Probation ending**: people whose probation ends in the next 30 days, or ended without being confirmed. Use the ⋮ menu to **Mark probation passed**, **Extend probation** to a new date, or open their HR file.
@@ -26,7 +26,7 @@ The reminder goes to the manager on the person's HR file. If they have none, it 
 
 ## Reports
 
-Open **HR > Reports** and choose a report.
+Open **Human Resources > HR reports** and choose a report.
 
 - **Headcount**: current staff by centre and by employment type.
 - **Starters and leavers**: who joined and who left between two dates, month by month, with **turnover** (leavers ÷ the average headcount) and **retention** (the people here on the first day who are still here on the last).
@@ -62,4 +62,4 @@ The minimum wage table is shown under the report, with the date it was last chec
 
 ## Leave payout and leave types
 
-In **HR > Leave types**, **Paid out when someone leaves** decides which balances the leaving pack and the leave liability report count. By default, that is your vacation type and the Overtime bank. Sick and personal days are not counted unless you choose **Yes** for that type.
+In **Human Resources > Time off > Leave types**, **Paid out when someone leaves** decides which balances the leaving pack and the leave liability report count. By default, that is your vacation type and the Overtime bank. Sick and personal days are not counted unless you choose **Yes** for that type.

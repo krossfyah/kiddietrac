@@ -67,7 +67,7 @@
       + '<span>🏅 Automatic awards: <b style="color:' + (a.enabled ? '#15803D' : '#64748B') + ';">' + (a.enabled ? 'On' : 'Off') + '</b>'
       + (a.enabled ? ' · ' + (a.mode === 'auto' ? 'sent automatically' : 'prepared for review') + ' · ' + esc(a.schedule_label) : '')
       + (a.pending ? ' · <b>' + a.pending + '</b> waiting for review' : '') + '</span>'
-      + '<span aria-hidden="true">·</span><a href="#educator-award-settings" style="color:#0E7C90;font-weight:700;text-decoration:none;">' + (canEdit ? 'Change in Settings' : 'See in Settings') + '</a>'
+      + '<span aria-hidden="true">·</span><a href="#educator-award-settings" style="color:#0E7C90;font-weight:700;text-decoration:none;">' + (canEdit ? 'Change in Award settings' : 'See in Award settings') + '</a>'
       + '<span aria-hidden="true">·</span><a href="#educator-award-settings?tab=points" style="color:#0E7C90;font-weight:700;text-decoration:none;">⚙️ Point values &amp; rewards</a></div>';
   }
   function pill(st) {
@@ -258,10 +258,10 @@
       + '<div style="font-size:13px;color:#475569;"><b>' + rows.length + '</b> people · <b>' + num(totalPts) + '</b> points · <b>' + money(given) + '</b> awarded in ' + esc(monthLabel(d.month)) + '</div></div>';
     h += autoLine(d.auto, d.can_edit_settings);
     if (!d.settings.enabled) {
-      h += '<div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px;">Points are switched off, so educators don’t see them. Turn them on in <a href="#educator-award-settings?tab=points" style="color:#92400E;font-weight:800;">Settings → Educator awards</a>.</div>';
+      h += '<div style="background:#FEF3C7;border:1px solid #FDE68A;color:#92400E;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:13px;">Points are switched off, so educators don’t see them. Turn them on in <a href="#educator-award-settings?tab=points" style="color:#92400E;font-weight:800;">Award settings</a>.</div>';
     }
     if (!d.settings.rate_amount) {
-      h += '<div style="font-size:12.5px;color:#64748B;margin-bottom:8px;">Tip: set a points-to-dollars rate in <a href="#educator-award-settings?tab=points" style="color:#0E7C90;font-weight:700;">Settings → Educator awards</a> and the Award dialog suggests an amount.</div>';
+      h += '<div style="font-size:12.5px;color:#64748B;margin-bottom:8px;">Tip: set a points-to-dollars rate in <a href="#educator-award-settings?tab=points" style="color:#0E7C90;font-weight:700;">Award settings</a> and the Award dialog suggests an amount.</div>';
     }
     h += '<div class="kt-card"><table data-kt-rows-key="educator-rewards" style="width:100%;"><thead><tr><th>Educator</th><th style="text-align:right;">Points</th><th>What earned them</th><th>Awarded</th><th></th></tr></thead><tbody>'
       + (rows.length ? rows.map(function (r) {
@@ -614,7 +614,7 @@
           : 'Turn it on to thank your educators every month without having to remember. You choose when, who qualifies, and whether you review them first.') + '</div></div>'
       + (withToggle
           ? '<label style="display:inline-flex;gap:8px;align-items:center;font-weight:800;font-size:13px;"><input type="checkbox" id="ta-en"' + (s.enabled ? ' checked' : '') + (canEdit ? '' : ' disabled') + '> On</label>'
-          : '<a href="#educator-award-settings" class="kt-btn" style="text-decoration:none;white-space:nowrap;">⚙️ Change in Settings</a>')
+          : '<a href="#educator-award-settings" class="kt-btn" style="text-decoration:none;white-space:nowrap;">⚙️ Change in Award settings</a>')
       + '</div>';
   }
 

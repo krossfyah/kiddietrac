@@ -19,7 +19,7 @@ Vos demandes s'affichent avec leur statut : **En attente d'approbation**, **Appr
 
 ## Approuver les demandes (directeurs et administrateurs)
 
-Ouvrez **RH**, puis l'onglet **Remboursements**. Les directeurs voient les demandes des personnes de leurs propres centres; les administrateurs de l'agence voient toute l'agence. Personne n'approuve sa propre demande.
+Ouvrez **Ressources humaines > Paie**, puis l'onglet **Notes de frais et kilométrage**. Les directeurs voient les demandes des personnes de leurs propres centres; les administrateurs de l'agence voient toute l'agence. Personne n'approuve sa propre demande.
 
 Ouvrez une demande avec **Voir la demande**. Vous pouvez consulter le reçu, puis choisir **Approuver** ou **Refuser**. Un refus exige une raison, que la personne voit.
 

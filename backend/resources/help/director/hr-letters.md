@@ -6,7 +6,7 @@ roles: agency_admin, platform_admin, centre_director
 ---
 # HR: letter templates and e-signature
 
-Part of the KiddieTrac HR add-on. Open **HR > Letters**.
+Part of the KiddieTrac HR add-on. Open **Human Resources > Documents & letters > Letters**.
 
 ## The five letters
 

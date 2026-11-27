@@ -16,22 +16,22 @@ Le solde de votre **Banque d'heures** s'affiche dans la même section. Réservez
 
 ## Approuver les heures supplémentaires (directeurs et administrateurs)
 
-Ouvrez **RH > Heures supplémentaires**. **À approuver** liste ce qui attend. Ouvrez-en une avec **Voir les heures supplémentaires** :
+Ouvrez **Ressources humaines > Pointages et feuilles de temps > Heures supplémentaires**. **À approuver** liste ce qui attend. Ouvrez-en une avec **Voir les heures supplémentaires** :
 
 - **Approuver en paie :** une ligne est proposée sur le prochain bulletin de la personne dans **Paie > Lancer la paie**, calculée à partir des heures, du taux des heures supplémentaires et du taux horaire saisi.
 - **Mettre en banque :** les heures multipliées par le taux vont tout de suite dans sa Banque d'heures.
 - **Refuser :** indiquez la raison ; la personne la voit.
 
-Personne n'approuve ses propres heures. Vous pouvez aussi **Déclarer des heures supplémentaires pour quelqu'un** que vous gérez. Les heures mises en banque ne peuvent plus être refusées : ajustez le solde dans **RH > Soldes**.
+Personne n'approuve ses propres heures. Vous pouvez aussi **Déclarer des heures supplémentaires pour quelqu'un** que vous gérez. Les heures mises en banque ne peuvent plus être refusées : ajustez le solde dans **Ressources humaines > Congés > Soldes**.
 
 ## Les règles
 
 **Règles des heures supplémentaires et des feuilles de temps** (administrateurs) fixe le taux (1 = taux normal, 1,5 = temps et demi), si le personnel déclare lui-même ses heures, et si elles peuvent être payées, mises en banque ou les deux.
 
-Les règles des feuilles de temps sont toutes **désactivées** au départ : les heures sont exactement celles du pointage. Vous pouvez arrondir les pointages (5, 6, 10 ou 15 minutes), compter à partir du début du quart ou jusqu'à la fin du quart, et choisir d'avertir ou de ne payer que les périodes approuvées. Les règles changent les heures payées partout où elles s'affichent : RH > Feuilles de temps, l'écran Feuilles de temps, la paie, les résumés et rapports de paie, l'export de paie, les heures des bulletins et les factures des contractuels. Jamais le pointage lui-même.
+Les règles des feuilles de temps sont toutes **désactivées** au départ : les heures sont exactement celles du pointage. Vous pouvez arrondir les pointages (5, 6, 10 ou 15 minutes), compter à partir du début du quart ou jusqu'à la fin du quart, et choisir d'avertir ou de ne payer que les périodes approuvées. Les règles changent les heures payées partout où elles s'affichent : Ressources humaines > Pointages et feuilles de temps > Approuver et verrouiller, l'écran Feuilles de temps, la paie, les résumés et rapports de paie, l'export de paie, les heures des bulletins et les factures des contractuels. Jamais le pointage lui-même.
 
 ## Feuilles de temps (directeurs et administrateurs)
 
-Ouvrez **RH > Feuilles de temps**, choisissez le centre et les dates. Chaque personne affiche les heures prévues, travaillées et payées, l'écart, et des alertes : pointage sans sortie, quart sans pointage (sans congé approuvé) et heures sans quart.
+Ouvrez **Ressources humaines > Pointages et feuilles de temps > Approuver et verrouiller**, choisissez le centre et les dates. Chaque personne affiche les heures prévues, travaillées et payées, l'écart, et des alertes : pointage sans sortie, quart sans pointage (sans congé approuvé) et heures sans quart.
 
 Une fois la période terminée et chaque pointage fermé, appuyez sur **Approuver et verrouiller cette période**. Les pointages de ces jours ne peuvent plus être ajoutés, corrigés ou supprimés. Si vos propres heures y figurent, un autre directeur ou un administrateur l'approuve. Un administrateur peut **Déverrouiller** une période, avec une raison ; c'est inscrit au journal d'audit.

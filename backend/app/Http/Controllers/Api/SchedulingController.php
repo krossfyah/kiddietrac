@@ -1078,9 +1078,10 @@ final class SchedulingController extends Controller
             // silently omitted, so the hours are not presented as break-adjusted when
             // nothing was deducted.
             $breakMin = (int) ($e->total_break_min ?? 0);
-            // abs(): Carbon 3 diffInMinutes is signed, and $out->diffInMinutes($in)
-            // yields a NEGATIVE value here (in precedes out) → every row was 0h.
-            $minutes = $isOpen ? 0 : abs($out->diffInMinutes($in)) - $breakMin;
+            // Whole minutes, seconds dropped: the same figure the payroll summary and the payroll run use
+            // (HrTime::punchMinutes, 2026-11-27). Carbon 3 diffInMinutes kept the seconds, which payroll never
+            // counted.
+            $minutes = $isOpen ? 0 : \App\Support\HrTime::punchMinutes($e->punched_in_at, $e->punched_out_at) - $breakMin;
             return [
                 /* ADDRESSABLE ROWS (2026-09-16).
 

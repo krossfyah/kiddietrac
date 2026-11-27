@@ -11,7 +11,7 @@ Cuando alguien de su equipo se lesiona en el trabajo, o casi, regístrelo aquí.
 ## Cómo informar
 
 - **Personal:** abra **Mis RR. HH.** y elija **Informar una lesión o un casi accidente**.
-- **Directores y administradores:** abra **RR. HH.**, luego la pestaña **Lesiones**, y elija **Informar una lesión o un casi accidente** para alguien de su equipo.
+- **Directores y administradores:** abra **Recursos humanos > Salud y seguridad** (pestaña **Lesiones del personal**), y elija **Informar una lesión o un casi accidente** para alguien de su equipo.
 
 Indique cuándo y dónde ocurrió, los testigos, qué pasó, la parte del cuerpo, la lesión y los primeros auxilios. Indique también si la persona fue al médico o al hospital, y si necesitó faltar al trabajo.
 

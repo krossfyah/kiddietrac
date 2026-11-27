@@ -285,7 +285,7 @@ final class ProviderHistoryController extends Controller
             ->groupBy('u.id', 'u.first_name', 'u.last_name')
             ->selectRaw("u.id, TRIM(CONCAT(COALESCE(u.first_name,''),' ',COALESCE(u.last_name,''))) name,
                          COUNT(*) shifts,
-                         ROUND(SUM(TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at)) / 60, 1) hours,
+                         ROUND(SUM(GREATEST(0, TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at))) / 60, 1) hours,
                          MIN(tp.punched_in_at) first_shift, MAX(tp.punched_in_at) last_shift")
             ->orderByDesc('hours')->get()->map(fn ($r) => (array) $r)->all();
 

@@ -11,7 +11,7 @@ Quand un membre de votre équipe se blesse au travail, ou a failli se blesser, n
 ## Faire une déclaration
 
 - **Personnel :** ouvrez **Mes RH** et choisissez **Signaler une blessure ou un quasi-accident**.
-- **Directeurs et administrateurs :** ouvrez **RH**, puis l'onglet **Blessures**, et choisissez **Signaler une blessure ou un quasi-accident** pour une personne de votre équipe.
+- **Directeurs et administrateurs :** ouvrez **Ressources humaines > Santé et sécurité** (onglet **Blessures du personnel**), et choisissez **Signaler une blessure ou un quasi-accident** pour une personne de votre équipe.
 
 Indiquez quand et où c'est arrivé, les témoins, ce qui s'est passé, la partie du corps, la blessure et les premiers soins donnés. Indiquez aussi si la personne a vu un médecin ou est allée à l'hôpital, et si elle a dû s'absenter du travail.
 

@@ -120,7 +120,7 @@ final class ManualPayrollController extends Controller
             }
             $in = Carbon::parse($p->punched_in_at);
             $out = Carbon::parse($p->punched_out_at);
-            $mins = max(0, $in->diffInMinutes($out));
+            $mins = \App\Support\HrTime::punchMinutes($p->punched_in_at, $p->punched_out_at);   // whole minutes, as every payroll figure (2026-11-27)
             if (isset($paidMap[(int) $p->id])) {
                 $mins = (int) $paidMap[(int) $p->id];
             }

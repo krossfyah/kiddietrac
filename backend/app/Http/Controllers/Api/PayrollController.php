@@ -35,7 +35,7 @@ final class PayrollController extends Controller
             ->select(
                 'tp.user_id', DB::raw("CONCAT(u.first_name, ' ', u.last_name) as user_name"), 'u.email as user_email',
                 'c.id as centre_id', 'c.name as centre_name',
-                DB::raw('SUM(TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at)) as total_minutes'),
+                DB::raw('SUM(GREATEST(0, TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at))) as total_minutes'),
                 DB::raw('COUNT(tp.id) as punch_count')
             )
             ->groupBy('tp.user_id', 'u.first_name', 'u.last_name', 'u.email', 'c.id', 'c.name')
@@ -214,7 +214,8 @@ final class PayrollController extends Controller
             'contractors_total' => round((float) $contractors->sum('net'), 2),
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
-            'total_hours' => round($rows->sum('total_hours'), 2),
+            // Rounded once on the total minutes, not a sum of each row's rounded hours (HrTime::hours, 2026-11-27).
+            'total_hours' => \App\Support\HrTime::hours($rows->sum('total_minutes')),
         ]);
     }
 
@@ -489,7 +490,7 @@ final class PayrollController extends Controller
             $paid = \App\Support\HrTime::paidSumsFor($base, 'tp', ['tp.user_id']);   // HR timesheet rules (null = none on)
             foreach ((clone $base)
                 ->groupBy('tp.user_id')
-                ->selectRaw('tp.user_id, SUM(TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at)) mins, COUNT(*) punches')
+                ->selectRaw('tp.user_id, SUM(GREATEST(0, TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at))) mins, COUNT(*) punches')
                 ->get() as $r) {
                 $m = $paid !== null ? (int) ($paid[(string) $r->user_id] ?? 0) : (int) $r->mins;
                 $clock[(int) $r->user_id] = ['hours' => round($m / 60, 2), 'punches' => (int) $r->punches];
@@ -600,7 +601,7 @@ final class PayrollController extends Controller
                 ->whereBetween('tp.punched_in_at', [Carbon::parse($ps)->startOfDay(), Carbon::parse($pe)->endOfDay()]);
             $paid = \App\Support\HrTime::paidSumsFor($base, 'tp', ['tp.user_id']);   // HR timesheet rules (null = none on)
             foreach ((clone $base)
-                ->groupBy('tp.user_id')->selectRaw('tp.user_id, SUM(TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at)) mins')
+                ->groupBy('tp.user_id')->selectRaw('tp.user_id, SUM(GREATEST(0, TIMESTAMPDIFF(MINUTE, tp.punched_in_at, tp.punched_out_at))) mins')
                 ->get() as $r) {
                 $m = $paid !== null ? (int) ($paid[(string) $r->user_id] ?? 0) : (int) $r->mins;
                 $clock[$k . '|' . (int) $r->user_id] = round($m / 60, 2);

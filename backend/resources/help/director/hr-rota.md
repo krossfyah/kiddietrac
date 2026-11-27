@@ -27,7 +27,7 @@ You keep the shift until it is approved. Your colleagues get a notice when you o
 
 ## The rota plan (directors and admins)
 
-Open **HR > Rota** and choose the week. Directors see their own centres. Admins see the whole agency.
+Open **Human Resources > Rota & shifts > Rota plan** and choose the week. Directors see their own centres. Admins see the whole agency.
 
 - **Shift changes**: giveaways and swaps. Approve or decline the ones a colleague has accepted. Nobody approves a change they are part of. When you approve a change, the shifts move to the new people on the rota.
 - **Ratio warnings**: the hours when a room has fewer educators planned than the ratio rules need for the children expected that day. Children are expected from their room and their attendance pattern. A child with no pattern is expected Monday to Friday.

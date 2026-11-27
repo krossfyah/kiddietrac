@@ -10,7 +10,7 @@ Forma parte del complemento de RR. HH. de KiddieTrac. Los administradores de la 
 
 ## El panel
 
-Abra **RR. HH. > Panel**.
+Abra **Recursos humanos > Panel de RR. HH.**.
 
 - **Lista de configuración de RR. HH.**: cinco pasos con una barra de progreso: añadir los tipos de permiso, fijar cuánto permiso corresponde a cada persona, completar el expediente de cada persona, dar a cada uno un responsable que apruebe sus solicitudes y lograr que el personal inicie sesión. **Configurar** lleva directamente a cada paso.
 - **Fin del período de prueba**: las personas cuyo período de prueba termina en los próximos 30 días, o terminó sin confirmarse. Con el menú ⋮ puede **marcar el período de prueba como superado**, **ampliarlo** hasta una fecha nueva o abrir el expediente.
@@ -26,7 +26,7 @@ El aviso va al responsable que figura en el expediente. Si no hay ninguno, va al
 
 ## Informes
 
-Abra **RR. HH. > Informes** y elija uno.
+Abra **Recursos humanos > Informes de RR. HH.** y elija uno.
 
 - **Plantilla**: el personal actual por centro y por tipo de empleo.
 - **Altas y bajas**: quién entró y quién se fue entre dos fechas, mes a mes. Incluye la **rotación** (bajas ÷ plantilla media) y la **retención** (las personas que estaban el primer día y siguen el último).
@@ -62,4 +62,4 @@ La tabla de salarios mínimos aparece bajo el informe, con la fecha en que se re
 
 ## Pago de permisos y tipos de permiso
 
-En **RR. HH. > Tipos de permiso**, el ajuste **Se paga cuando alguien se va** decide qué saldos cuentan en el paquete de salida y en el informe de pasivo de permisos. Por defecto son su tipo de vacaciones y la bolsa de horas extra. Los días por enfermedad y personales no se cuentan, salvo que elija **Sí** para ese tipo.
+En **Recursos humanos > Tiempo libre > Tipos de permiso**, el ajuste **Se paga cuando alguien se va** decide qué saldos cuentan en el paquete de salida y en el informe de pasivo de permisos. Por defecto son su tipo de vacaciones y la bolsa de horas extra. Los días por enfermedad y personales no se cuentan, salvo que elija **Sí** para ese tipo.

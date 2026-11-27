@@ -10,9 +10,9 @@ Post a shift nobody is on yet and let the staff who can work it ask for it. Staf
 
 ## Posting an open shift (directors and admins)
 
-Open **HR > Open shifts** and choose **Post an open shift**. Pick the room, the day (and up to 13 more days in a row), the hours, the role and, if needed, a certificate the person must hold, such as First Aid.
+Open **Human Resources > Rota & shifts > Open shifts** and choose **Post an open shift**. Pick the room, the day (and up to 13 more days in a row), the hours, the role and, if needed, a certificate the person must hold, such as First Aid.
 
-The board also lists the week's **ratio shortfalls**: times when a room has fewer educators planned than its children need. Each one has **Post an open shift** in its ⋮ menu, with the room, day and hours filled in. You can do the same from the shortfalls on **HR > Rota**. An open shift that covers a shortfall is marked.
+The board also lists the week's **ratio shortfalls**: times when a room has fewer educators planned than its children need. Each one has **Post an open shift** in its ⋮ menu, with the room, day and hours filled in. You can do the same from the shortfalls on **Human Resources > Rota & shifts > Rota plan**. An open shift that covers a shortfall is marked.
 
 Everyone at the centre who can take the shift hears about it once (bell and phone), however many days you post.
 

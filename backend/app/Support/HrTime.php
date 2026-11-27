@@ -253,6 +253,30 @@ final class HrTime
     }
 
     /**
+     * HOURS MUST AGREE (2026-11-27, Anthony: Staff > Timesheets and the payroll summary disagreed - Test Agency
+     * 14438.69 h vs 14421.96 h). THE one way a punch becomes minutes, for every screen, report and export: whole
+     * minutes between clock-in and clock-out, seconds dropped - exactly what MySQL's TIMESTAMPDIFF(MINUTE, in, out)
+     * gives the payroll summary, the payroll run, payslips and the payroll export. Carbon 3's diffInMinutes() is a
+     * FLOAT that keeps the seconds, so the timesheet summed fractions of a minute that payroll never paid; and a punch
+     * whose clock-out is before its clock-in counts 0 (the SQL sums SUBTRACTED it: 6 such punches = 16.3 h on agency 6).
+     * Times are read as stored (UTC), as TIMESTAMPDIFF does, so a daylight-saving night never adds or loses an hour.
+     */
+    public static function punchMinutes($in, $out): int
+    {
+        if (empty($in) || empty($out)) return 0;
+        $a = $in instanceof \DateTimeInterface ? $in->getTimestamp() : Carbon::parse((string) $in, 'UTC')->getTimestamp();
+        $b = $out instanceof \DateTimeInterface ? $out->getTimestamp() : Carbon::parse((string) $out, 'UTC')->getTimestamp();
+
+        return intdiv(max(0, $b - $a), 60);
+    }
+
+    /** Minutes to hours for display: rounded ONCE, on the total (a total is never a sum of rounded parts). */
+    public static function hours($minutes): float
+    {
+        return round(((int) $minutes) / 60, 2);
+    }
+
+    /**
      * One punch, raw and after the rules. $shifts = that person's shifts at the centre (wall clock in $tz).
      * @return array{raw:int,paid:int,shift:?object,in:Carbon,out:?Carbon,pin:?Carbon,pout:?Carbon}
      */

@@ -2,6 +2,61 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🧑‍💼",
+            "title": "Human Resources, one entry per job",
+            "body": "The Human Resources menu now has its own entry for each part: HR dashboard, People, Time off, Absence & lateness, Rota & shifts, Clock-ins & timesheets, Payroll, Hiring & onboarding, Performance & learning, Educator awards, Health & safety, Documents & letters, HR reports and HR settings. Schedule moved here from Operations as Rota & shifts, and Educator awards moved in with its settings as a tab.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Ressources humaines, une entrée par tâche",
+            "body_fr": "Le menu Ressources humaines a maintenant une entrée pour chaque partie : tableau de bord RH, personnes, congés, absences et retards, horaires et quarts, pointages et feuilles de temps, paie, embauche et intégration, performance et formation, récompenses des éducateurs, santé et sécurité, documents et lettres, rapports RH et paramètres RH. L'horaire a quitté Opérations pour devenir Horaires et quarts, et les récompenses des éducateurs arrivent ici avec leurs paramètres en onglet.",
+            "title_es": "Recursos humanos, una entrada por tarea",
+            "body_es": "El menú Recursos humanos ahora tiene una entrada para cada parte: panel de RR. HH., personas, tiempo libre, ausencias y retrasos, turnos y horarios, fichajes y hojas de horas, nómina, contratación e incorporación, desempeño y formación, premios para educadores, salud y seguridad, documentos y cartas, informes y ajustes de RR. HH. El horario pasó de Operaciones a Turnos y horarios, y los premios para educadores llegan aquí con sus ajustes como pestaña.",
+            "title_hi": "मानव संसाधन, हर काम की अपनी एंट्री",
+            "body_hi": "मानव संसाधन मेनू में अब हर हिस्से की अपनी एंट्री है: HR डैशबोर्ड, लोग, छुट्टी, अनुपस्थिति और देरी, रोस्टर और शिफ्ट, क्लॉक-इन और टाइमशीट, पेरोल, भर्ती और ऑनबोर्डिंग, प्रदर्शन और सीखना, शिक्षक पुरस्कार, स्वास्थ्य और सुरक्षा, दस्तावेज़ और पत्र, HR रिपोर्ट और HR सेटिंग्स। शेड्यूल ऑपरेशंस से यहाँ रोस्टर और शिफ्ट के रूप में आ गया है, और शिक्षक पुरस्कार अपनी सेटिंग्स के टैब के साथ यहाँ आ गए हैं।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🧭",
+            "title": "My HR opens on tiles",
+            "body": "My HR now starts with a tile for each part (time off, shifts and open shifts, documents, claims, overtime, courses, reviews) and a short to-do list of what is waiting for you.",
+            "roles": [
+                "educator",
+                "home_visitor",
+                "centre_director",
+                "agency_admin"
+            ],
+            "title_fr": "Mes RH s'ouvre sur des tuiles",
+            "body_fr": "Mes RH commence maintenant par une tuile pour chaque partie (congés, quarts et quarts à pourvoir, documents, notes de frais, heures supplémentaires, formations, évaluations) et une courte liste de ce qui vous attend.",
+            "title_es": "Mis RR. HH. abre con mosaicos",
+            "body_es": "Mis RR. HH. ahora empieza con un mosaico para cada parte (tiempo libre, turnos y turnos abiertos, documentos, gastos, horas extra, cursos, evaluaciones) y una breve lista de lo que tiene pendiente.",
+            "title_hi": "My HR अब टाइल्स से खुलता है",
+            "body_hi": "My HR अब हर हिस्से की टाइल (छुट्टी, शिफ्ट और खुली शिफ़्ट, दस्तावेज़, दावे, ओवरटाइम, कोर्स, समीक्षाएँ) और आपके लिए बाकी कामों की छोटी सूची से शुरू होता है।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🕘",
+            "title": "Timesheet and payroll hours agree",
+            "body": "Timesheets, the payroll summary, the payroll run and exports now count hours the same way: whole minutes per clock-in, and a clock-out recorded before its clock-in counts as zero instead of being taken off the total.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Feuilles de temps et paie concordent",
+            "body_fr": "Les feuilles de temps, le sommaire de paie, la paie et les exportations comptent maintenant les heures de la même façon : des minutes entières par pointage, et une sortie enregistrée avant l'entrée compte pour zéro au lieu d'être retirée du total.",
+            "title_es": "Horas de fichajes y nómina coinciden",
+            "body_es": "Las hojas de horas, el resumen de nómina, la nómina y las exportaciones ahora cuentan las horas igual: minutos enteros por fichaje, y una salida registrada antes de la entrada cuenta como cero en lugar de restarse del total.",
+            "title_hi": "टाइमशीट और पेरोल के घंटे एक जैसे",
+            "body_hi": "टाइमशीट, पेरोल सारांश, पेरोल रन और एक्सपोर्ट अब घंटे एक ही तरह गिनते हैं: हर क्लॉक-इन के पूरे मिनट, और क्लॉक-इन से पहले दर्ज क्लॉक-आउट कुल से घटने के बजाय शून्य गिना जाता है।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "👤",
