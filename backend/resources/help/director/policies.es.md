@@ -5,26 +5,85 @@ order: 46
 ---
 # Políticas, firmas y matriz de formación
 
-Mantenga sus políticas y procedimientos en un solo lugar, vea quién ha leído y firmado la versión actual, y conserve el registro escrito que exige la licencia de Ontario (O. Reg. 137/15, s.6.1: el personal revisa cada política antes de trabajar con niños y cada vez que cambia; los registros se conservan 3 años). Abra **Cumplimiento → Políticas**.
+Guarde sus políticas y procedimientos en un solo lugar, vea quién leyó y firmó la versión vigente y lleve el registro escrito que pide la autoridad de licencias. En Ontario (O. Reg. 137/15 s.6.1), el personal revisa cada política antes de trabajar con niños y cada vez que cambia, y los registros se guardan 3 años. Los directores y administradores gestionan las políticas en **Cumplimiento > Políticas**; cada miembro del personal, directores incluidos, firma las suyas en **Cumplimiento > Políticas por revisar**.
 
-## Biblioteca
+[[open: #policies | Abrir Políticas]]
 
-Cada política muestra su **versión** actual, su estado de **revisión** (al día, vence en 30 días, vencida o aún sin texto) y cuántos de los miembros del personal a quienes se aplica han **firmado** la versión actual.
+La pantalla **Políticas** tiene tres pestañas: **📚 Library** (biblioteca), **🧮 Training matrix** (matriz de formación) y **⚠️ Contraventions** (infracciones).
 
-- **Añadir la lista de verificación de Ontario** (administradores de la agencia, agencias de Ontario) lista las políticas que exige la licencia de Ontario, marcadas como **Obligatorio** o **Recomendada**, solo con los títulos. KiddieTrac nunca redacta la política por usted: usted sube o escribe la suya.
-- **Añadir política** añade una propia. Elija **Toda la agencia** o un solo centro. Los directores añaden políticas para su propio centro.
-- **Añadir texto / Publicar nueva versión**: suba un documento PDF o Word, o escriba o pegue el texto. Se requiere un breve **resumen de lo que cambió**. Cada miembro del personal a quien se aplica recibe una notificación en la campana y un correo electrónico, y se le pide que firme la nueva versión.
-- **Marcar como revisado**: la revisó y nada cambió. La fecha de revisión avanza y las firmas existentes siguen vigentes. Úselo para la revisión anual del enunciado del programa (s.46) cuando nada ha cambiado.
-- **Registrar formación**: quién recibió formación sobre la política y cuándo. A partir del 1 de enero de 2027, Ontario espera formación sobre cada política obligatoria (s.58(1.1)).
-- **Registrar infracción**: qué ocurrió, en qué centro y la medida tomada.
-- **Archivar** retira una política de la lista actual. Nunca se elimina nada.
+## Agregar una política
 
-**Abrir** muestra todas las versiones (con **Ver**), el estado de cada miembro del personal, las revisiones, las formaciones y las infracciones.
+1. Abra **Cumplimiento > Políticas** en la pestaña **📚 Library**.
+2. Pulse **+ Añadir política**.
+3. Póngale un título y elija dónde aplica: **Agency-wide (every centre)** (toda la agencia) o un solo centro. Los directores agregan políticas para sus propios centros.
+4. Marque **Required (counts in the training matrix)** si el personal debe firmarla.
+5. Pulse **Save**. La política muestra **No text yet** (aún sin texto).
+6. Pulse **Agregar texto** en su fila y elija **Upload a document** (PDF o Word, hasta 20 MB) o **Write or paste text**.
+7. Escriba el resumen obligatorio que verá el personal y pulse **Publish**.
 
-## Matriz de formación
+Todas las personas a quienes aplica reciben una campana y un correo pidiéndoles que la lean y firmen.
 
-El personal en vertical, las políticas obligatorias en horizontal: ✓ firmada, ! firmó una versión anterior, ✕ sin firmar, 🎓 formado. Filtre por centro, incluya las políticas recomendadas y use **Exportar CSV** para su expediente de licencia.
+> 💡 Los administradores de agencias de Ontario pueden pulsar **🍁 Agregar la lista de verificación de Ontario** para listar las políticas que exige Ontario, marcadas **Required** o **Recommended**. Solo agrega títulos: KiddieTrac nunca escribe la política por usted.
 
-## Recordatorios
+## Cambiar una política
 
-Los lunes, el personal con políticas aún por firmar recibe un correo electrónico que las enumera, y los directores y administradores reciben un resumen de quién todavía debe firmar y de qué revisiones vencen en 30 días. Los administradores de la agencia pueden desactivarlo al final de la Biblioteca.
+1. Pulse **Publicar nueva versión** en la fila de la política.
+2. Suba o escriba el nuevo texto.
+3. Complete **What changed (required)** (qué cambió): el personal lo ve.
+4. Pulse **Publish**. El número de versión sube y se pide al personal que firme la nueva versión.
+
+Si revisó la política y nada cambió, pulse **Marcar como revisado**. La fecha de revisión avanza y las firmas existentes siguen válidas (útil para la revisión anual de la declaración del programa).
+
+## Dar seguimiento a las firmas
+
+1. Lea las tarjetas de arriba de la biblioteca: **Required policies**, **Sign-offs on current versions** y **Reviews overdue**.
+2. Lea la etiqueta de estado de cada fila (vigente, revisión pendiente, revisión atrasada, sin texto) y su número de firmas (**Signed**).
+3. Pulse **Open** en una política para ver cada versión (con **Ver**), el estado de cada persona (firmó, **Signed an older version**, **Not signed**), las revisiones, la formación y las infracciones.
+
+## Registrar formación o una infracción
+
+1. Pulse **Registrar capacitación** en la política.
+2. Marque a quiénes se capacitó, ponga la fecha y pulse **Record**.
+3. Ante un incumplimiento, pulse **Registrar infracción**, elija el centro, describa lo ocurrido y la **Action taken** (medida tomada) y pulse **Record**.
+
+Desde el 1 de enero de 2027, Ontario espera capacitación en cada política obligatoria (s.58(1.1)). Las infracciones se reúnen en la pestaña **⚠️ Contraventions**.
+
+## Consultar la matriz de formación
+
+1. Abra la pestaña **🧮 Training matrix**.
+2. Léala: el personal a un lado, las políticas obligatorias arriba. ✓ firmada, ! firmó una versión anterior, ✕ sin firmar, 🎓 capacitado.
+3. Filtre por centro o marque **Include recommended policies**.
+4. Pulse **⬇ Export CSV** para su expediente de licencia.
+
+## Firmar una política (todo el personal)
+
+1. Abra **Cumplimiento > Políticas por revisar**. Las pendientes están en **To sign**.
+2. Pulse **📖 Read policy** y léala. La tarjeta muestra luego **Opened ✓**.
+3. Marque **I have read and understand this policy, and I will follow it.**
+4. Escriba su nombre completo.
+5. Pulse **✍️ Sign**. La política pasa a **Signed**, con la fecha, la hora y desde dónde se firmó.
+
+## Quién puede hacer qué
+
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador de la agencia | Todas las políticas, de la agencia o por centro; la lista de Ontario; activar o no los recordatorios semanales. |
+| Director de centro | Políticas de sus propios centros; firmas, capacitación e infracciones allí; sus propias firmas. |
+| Educador, visitador domiciliario | Leer y firmar sus propias políticas en **Políticas por revisar**. |
+
+**Archivar** saca una política de la lista actual; marque **Archived** para verla y recuperarla con **Restaurar**. Nunca se borra nada.
+
+## Preguntas frecuentes y qué hacer si algo falla
+
+??? "A short summary is required — staff see it." | Cada nueva versión necesita un resumen de lo que cambió. Escriba una línea y publique otra vez.
+??? "That file is over 20 MB" | Guarde el documento más pequeño (por ejemplo en PDF) y súbalo de nuevo.
+??? El personal dice que no puede firmar. | Primero debe abrir la política (**📖 Read policy**), marcar la casilla y escribir su nombre.
+??? ¿Quién recibe recordatorios? | Los lunes, el personal con políticas por firmar recibe un solo correo, y los directores y administradores un resumen con las revisiones que vencen en 30 días. Un administrador de la agencia puede desactivarlo al final de la biblioteca.
+??? ¿Dónde están los procedimientos de trabajo seguro? | Son políticas de la categoría Safe work procedure, que aparecen en **Recursos humanos > Salud y seguridad > Procedimientos de trabajo seguro** cuando el complemento de RR. HH. está activo.
+
+## Pantallas relacionadas
+
+[[open: #policies?tab=matrix | Matriz de formación]] [[open: #hr-safety?tab=procedures | Procedimientos de trabajo seguro]]
+
+- [RR. HH.: evaluaciones de riesgo, productos químicos, procedimientos, funciones y tareas de SST](hr-health-safety)
+- [Capacitación, certificados y verificaciones del personal](staff-training-and-checks)
