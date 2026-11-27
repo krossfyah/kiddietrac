@@ -2634,6 +2634,20 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::post ('/admin/time-off/{id}/close',           [\App\Http\Controllers\Api\TimeOffController::class, 'closeForRequest'])->whereNumber('id');
     });
 
+    // ---- KiddieTrac Payroll Engine P1 (2026-11-27): tax setup + TD1 e-sign, inside the HR add-on (hr/ in the MAP) ----
+    // Every action also needs agencies.settings.payroll_engine.enabled (off for all agencies until P2's switch).
+    // PayrollTaxController decides who: tax setup + paper TD1 = agency admins (never their own); My tax forms = the person.
+    Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {
+        Route::get ('/hr/payroll/tables',                     [\App\Http\Controllers\Api\PayrollTaxController::class, 'tables']);
+        Route::get ('/hr/payroll/tax/people/{id}',            [\App\Http\Controllers\Api\PayrollTaxController::class, 'show'])->whereNumber('id');
+        Route::put ('/hr/payroll/tax/people/{id}',            [\App\Http\Controllers\Api\PayrollTaxController::class, 'save'])->whereNumber('id');
+        Route::post('/hr/payroll/tax/people/{id}/paper',      [\App\Http\Controllers\Api\PayrollTaxController::class, 'paper'])->whereNumber('id');
+        Route::post('/hr/payroll/tax/people/{id}/preview',    [\App\Http\Controllers\Api\PayrollTaxController::class, 'preview'])->whereNumber('id')->middleware('throttle:60,1,paytaxprev');
+        Route::post('/hr/payroll/tax/forms/{id}/withdraw',    [\App\Http\Controllers\Api\PayrollTaxController::class, 'withdraw'])->whereNumber('id');
+        Route::get ('/hr/me/tax-forms',                       [\App\Http\Controllers\Api\PayrollTaxController::class, 'mine']);
+        Route::post('/hr/me/tax-forms',                       [\App\Http\Controllers\Api\PayrollTaxController::class, 'submit'])->middleware('throttle:10,1,paytd1');
+    });
+
     // ---- KiddieTrac HR add-on (2026-11-27, feature `hr`: EnforcePlanFeatures::MAP owns hr/ and exports/hr-absence) ----
     // Scoped inside HrController: admins = the agency, directors = their own centres' staff, everyone = their own balances.
     Route::middleware('role:educator,home_visitor,centre_director,agency_admin,platform_admin')->group(function () {

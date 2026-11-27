@@ -1,0 +1,1232 @@
+{
+ "about": "Expected payroll deductions from the CRA Payroll Deductions Online Calculator (PDOC). Each case was entered by hand-equivalent automation into PDOC (Salary calculation, TD1 total claim amounts, year-to-date CPP/EI from records) and the per-pay amounts copied from the PDOC Results screen. payroll:calc-check recomputes every case with CaCalculator and fails on any variance over $0.05. PDOC does not calculate Quebec provincial income tax; the Quebec tax cases are Revenu Quebec's own worked examples (TP-1015.F-V 2026-01, Appendix 1 and 3).",
+ "source": "https://apps.cra-arc.gc.ca/ebci/rhpd/beta/entry (PDOC, screen version 2026-10-28)",
+ "pdoc_run_date": "2026-11-27",
+ "tolerance": 0.05,
+ "frequency_codes": {
+  "WEEKLY_52PP": 52,
+  "BI_WEEKLY": 26,
+  "SEMI_MONTHLY": 24,
+  "MONTHLY_12PP": 12
+ },
+ "pdoc_default_claims": {
+  "about": "When a case gives no fed/pv, PDOC's TD1 fields were left at the amounts PDOC prefills, and PDOC uses them as entered claim amounts (it does not apply the BPAF / BPAMB income phase-outs to a prefilled amount). These are those prefilled amounts as shown on PDOC's Results screen.",
+  "federal": 16452,
+  "provincial": {
+   "AB": 22769,
+   "BC": 13216,
+   "MB": 15780,
+   "NB": 13664,
+   "NL": 15000,
+   "NS": 11932,
+   "NT": 18198,
+   "NU": 19659,
+   "ON": 12989,
+   "PE": 15000,
+   "SK": 20381,
+   "YT": 16452
+  },
+  "provincial_before_july": {
+   "NL": 11188
+  }
+ },
+ "notes": [
+  "Inputs: salary = gross salary per pay; vac = vacation pay paid with the salary; bonus = bonus paid in the same pay (PDOC bonus method); fed/pv = TD1 total claim amounts (absent = PDOC default basic amount); pm = pensionable months; piYtd/cppYtd/cpp2Ytd/ieYtd/eiYtd = year-to-date before this pay; cpp/ei = 'exempt' when ticked exempt.",
+  "Cases dated 2026-03-13 use the January 1, 2026 tables (122nd edition); cases dated 2026-11-27 use the July 1, 2026 tables (123rd edition)."
+ ],
+ "cases": [
+  {
+   "input": {
+    "id": "AB-1",
+    "j": "AB",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 78.45,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1614.73
+   }
+  },
+  {
+   "input": {
+    "id": "AB-2",
+    "j": "AB",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 953.05,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8556.96
+   }
+  },
+  {
+   "input": {
+    "id": "AB-3",
+    "j": "AB",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 309.73,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3380.47
+   }
+  },
+  {
+   "input": {
+    "id": "AB-4",
+    "j": "AB",
+    "freq": "SEMI_MONTHLY",
+    "date": "2026-11-27",
+    "salary": 3000,
+    "pm": 12,
+    "cpp": "exempt",
+    "ei": "exempt"
+   },
+   "pdoc": {
+    "fed_tax": 351.77,
+    "prov_tax": 173.1,
+    "cpp": 0,
+    "cpp2": 0,
+    "ei": 0,
+    "net": 2475.13
+   }
+  },
+  {
+   "input": {
+    "id": "BC-1",
+    "j": "BC",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 83.45,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1609.73
+   }
+  },
+  {
+   "input": {
+    "id": "BC-2",
+    "j": "BC",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 973.1,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8536.91
+   }
+  },
+  {
+   "input": {
+    "id": "BC-3",
+    "j": "BC",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 282.34,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3407.86
+   }
+  },
+  {
+   "input": {
+    "id": "BC-4",
+    "j": "BC",
+    "freq": "WEEKLY_52PP",
+    "date": "2026-11-27",
+    "salary": 700,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 42.8,
+    "prov_tax": 16.07,
+    "cpp": 37.65,
+    "cpp2": 0,
+    "ei": 11.41,
+    "net": 592.07
+   }
+  },
+  {
+   "input": {
+    "id": "BC-H1",
+    "j": "BC",
+    "freq": "BI_WEEKLY",
+    "date": "2026-03-13",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 69.37,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1623.81
+   }
+  },
+  {
+   "input": {
+    "id": "MB-1",
+    "j": "MB",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 138.31,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1554.87
+   }
+  },
+  {
+   "input": {
+    "id": "MB-2",
+    "j": "MB",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 1506.04,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8003.97
+   }
+  },
+  {
+   "input": {
+    "id": "MB-3",
+    "j": "MB",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 468.65,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3221.55
+   }
+  },
+  {
+   "input": {
+    "id": "MB-4",
+    "j": "MB",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 25000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 5736.18,
+    "prov_tax": 3659.29,
+    "cpp": 1470.15,
+    "cpp2": 0,
+    "ei": 407.5,
+    "net": 13726.88
+   }
+  },
+  {
+   "input": {
+    "id": "NB-1",
+    "j": "NB",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 125.1,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1568.08
+   }
+  },
+  {
+   "input": {
+    "id": "NB-2",
+    "j": "NB",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 1461.98,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8048.03
+   }
+  },
+  {
+   "input": {
+    "id": "NB-3",
+    "j": "NB",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 466.53,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3223.67
+   }
+  },
+  {
+   "input": {
+    "id": "NL-1",
+    "j": "NL",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 126.58,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1566.6
+   }
+  },
+  {
+   "input": {
+    "id": "NL-2",
+    "j": "NL",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 1500.55,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8009.46
+   }
+  },
+  {
+   "input": {
+    "id": "NL-3",
+    "j": "NL",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 486.94,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3203.26
+   }
+  },
+  {
+   "input": {
+    "id": "NL-H1",
+    "j": "NL",
+    "freq": "BI_WEEKLY",
+    "date": "2026-03-13",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 139.34,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1553.84
+   }
+  },
+  {
+   "input": {
+    "id": "NS-1",
+    "j": "NS",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 171.47,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1521.71
+   }
+  },
+  {
+   "input": {
+    "id": "NS-2",
+    "j": "NS",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 1729.39,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 7780.62
+   }
+  },
+  {
+   "input": {
+    "id": "NS-3",
+    "j": "NS",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 570.43,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3119.77
+   }
+  },
+  {
+   "input": {
+    "id": "NS-4",
+    "j": "NS",
+    "freq": "WEEKLY_52PP",
+    "date": "2026-11-27",
+    "salary": 1200,
+    "vac": 96,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 130.2,
+    "prov_tax": 129.39,
+    "cpp": 73.11,
+    "cpp2": 0,
+    "ei": 21.12,
+    "net": 942.18
+   }
+  },
+  {
+   "input": {
+    "id": "NT-1",
+    "j": "NT",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 68.23,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1624.95
+   }
+  },
+  {
+   "input": {
+    "id": "NT-2",
+    "j": "NT",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 960.56,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8549.45
+   }
+  },
+  {
+   "input": {
+    "id": "NT-3",
+    "j": "NT",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 284.56,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3405.64
+   }
+  },
+  {
+   "input": {
+    "id": "NU-1",
+    "j": "NU",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 44.01,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1649.17
+   }
+  },
+  {
+   "input": {
+    "id": "NU-2",
+    "j": "NU",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 707.51,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8802.5
+   }
+  },
+  {
+   "input": {
+    "id": "NU-3",
+    "j": "NU",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 209.41,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3480.79
+   }
+  },
+  {
+   "input": {
+    "id": "ON-1",
+    "j": "ON",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 91.6,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1601.58
+   }
+  },
+  {
+   "input": {
+    "id": "ON-2",
+    "j": "ON",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 1212.47,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8297.54
+   }
+  },
+  {
+   "input": {
+    "id": "ON-3",
+    "j": "ON",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 333.03,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3357.17
+   }
+  },
+  {
+   "input": {
+    "id": "ON-4",
+    "j": "ON",
+    "freq": "WEEKLY_52PP",
+    "date": "2026-11-27",
+    "salary": 600,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 29.86,
+    "prov_tax": 21.36,
+    "cpp": 31.7,
+    "cpp2": 0,
+    "ei": 9.78,
+    "net": 507.3
+   }
+  },
+  {
+   "input": {
+    "id": "ON-5",
+    "j": "ON",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 17000,
+    "pm": 12,
+    "pv": 15000
+   },
+   "pdoc": {
+    "fed_tax": 3310.85,
+    "prov_tax": 2054.96,
+    "cpp": 994.15,
+    "cpp2": 0,
+    "ei": 277.1,
+    "net": 10362.94
+   }
+  },
+  {
+   "input": {
+    "id": "ON-B1",
+    "j": "ON",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "bonus": 5000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.09,
+    "prov_tax": 91.55,
+    "cpp": 408.49,
+    "cpp2": 0,
+    "ei": 114.1,
+    "net": 5238.21,
+    "bonus_fed_tax": 647.07,
+    "bonus_prov_tax": 337.49
+   }
+  },
+  {
+   "input": {
+    "id": "PE-1",
+    "j": "PE",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 148.4,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1544.78
+   }
+  },
+  {
+   "input": {
+    "id": "PE-2",
+    "j": "PE",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 1657.64,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 7852.37
+   }
+  },
+  {
+   "input": {
+    "id": "PE-3",
+    "j": "PE",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 532.57,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3157.63
+   }
+  },
+  {
+   "input": {
+    "id": "PE-4",
+    "j": "PE",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 20000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 4172.15,
+    "prov_tax": 3131.11,
+    "cpp": 1172.65,
+    "cpp2": 0,
+    "ei": 326,
+    "net": 11198.09
+   }
+  },
+  {
+   "input": {
+    "id": "PE-H2",
+    "j": "PE",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-03-13",
+    "salary": 10000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 1457.73,
+    "prov_tax": 1214.64,
+    "cpp": 577.65
+   }
+  },
+  {
+   "input": {
+    "id": "QC-1",
+    "j": "QC",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 135.3,
+    "cpp": 117.52,
+    "cpp2": 0,
+    "ei": 26,
+    "net": 1721.18
+   }
+  },
+  {
+   "input": {
+    "id": "QC-2",
+    "j": "QC",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 1715.44,
+    "cpp": 769.13,
+    "cpp2": 0,
+    "ei": 162.5,
+    "net": 9852.93
+   }
+  },
+  {
+   "input": {
+    "id": "QC-3",
+    "j": "QC",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4400.32,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 877.5
+   },
+   "pdoc": {
+    "fed_tax": 529.28,
+    "cpp": 78.98,
+    "cpp2": 76,
+    "ei": 18.2,
+    "net": 3797.54
+   }
+  },
+  {
+   "input": {
+    "id": "QC-B1",
+    "j": "QC",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "bonus": 5000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 135.19,
+    "cpp": 432.52,
+    "cpp2": 0,
+    "ei": 91,
+    "net": 5803.61,
+    "bonus_fed_tax": 537.68
+   }
+  },
+  {
+   "input": {
+    "id": "SK-1",
+    "j": "SK",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 112.62,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1580.56
+   }
+  },
+  {
+   "input": {
+    "id": "SK-2",
+    "j": "SK",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 1237.37,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8272.64
+   }
+  },
+  {
+   "input": {
+    "id": "SK-3",
+    "j": "SK",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 408.41,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3281.79
+   }
+  },
+  {
+   "input": {
+    "id": "SK-4",
+    "j": "SK",
+    "freq": "SEMI_MONTHLY",
+    "date": "2026-11-27",
+    "salary": 2500,
+    "pm": 12,
+    "fed": 22000,
+    "pv": 25000
+   },
+   "pdoc": {
+    "fed_tax": 190.07,
+    "prov_tax": 138.21,
+    "cpp": 140.07,
+    "cpp2": 0,
+    "ei": 40.75,
+    "net": 1990.9
+   }
+  },
+  {
+   "input": {
+    "id": "YT-1",
+    "j": "YT",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 2000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 163.23,
+    "prov_tax": 74.62,
+    "cpp": 110.99,
+    "cpp2": 0,
+    "ei": 32.6,
+    "net": 1618.56
+   }
+  },
+  {
+   "input": {
+    "id": "YT-2",
+    "j": "YT",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 12500,
+    "pm": 12,
+    "fed": 20000
+   },
+   "pdoc": {
+    "fed_tax": 2059.84,
+    "prov_tax": 916.6,
+    "cpp": 726.4,
+    "cpp2": 0,
+    "ei": 203.75,
+    "net": 8593.41
+   }
+  },
+  {
+   "input": {
+    "id": "YT-3",
+    "j": "YT",
+    "freq": "BI_WEEKLY",
+    "date": "2026-11-27",
+    "salary": 4500,
+    "pm": 12,
+    "piYtd": 72000,
+    "cppYtd": 4155.84,
+    "cpp2Ytd": 0,
+    "ieYtd": 67500,
+    "eiYtd": 1100.25
+   },
+   "pdoc": {
+    "fed_tax": 636.37,
+    "prov_tax": 282.87,
+    "cpp": 74.61,
+    "cpp2": 76,
+    "ei": 22.82,
+    "net": 3407.33
+   }
+  },
+  {
+   "input": {
+    "id": "YT-4",
+    "j": "YT",
+    "freq": "MONTHLY_12PP",
+    "date": "2026-11-27",
+    "salary": 19000,
+    "pm": 12
+   },
+   "pdoc": {
+    "fed_tax": 3885.05,
+    "prov_tax": 1688.13,
+    "cpp": 1113.15,
+    "cpp2": 0,
+    "ei": 309.7,
+    "net": 12003.97
+   }
+  }
+ ],
+ "quebec_tax_cases": {
+  "source": "Revenu Quebec TP-1015.F-V (2026-01), Formulas to Calculate Source Deductions and Contributions, https://www.revenuquebec.ca/documents/en/formulaires/tp/TP-1015.F-V%282026-01%29.pdf",
+  "cases": [
+   {
+    "id": "RQ-A1-p1-18",
+    "ref": "Appendix 1, first 18 pay periods",
+    "input": {
+     "P": 26,
+     "G": 4000,
+     "F": 200,
+     "C": 243.52,
+     "C2": 0,
+     "E": 21830,
+     "Q": 100,
+     "Q1": 150
+    },
+    "expected": {
+     "I": 96345.08,
+     "Y": 11557.37,
+     "A": 444.51
+    }
+   },
+   {
+    "id": "RQ-A1-p19",
+    "ref": "Appendix 1, 19th pay period",
+    "input": {
+     "P": 26,
+     "G": 4000,
+     "F": 200,
+     "C": 95.94,
+     "C2": 56,
+     "E": 21830,
+     "Q": 100,
+     "Q1": 150
+    },
+    "expected": {
+     "I": 95497.74,
+     "Y": 11396.37,
+     "A": 438.32
+    }
+   },
+   {
+    "id": "RQ-A1-p20",
+    "ref": "Appendix 1, 20th and 21st pay periods",
+    "input": {
+     "P": 26,
+     "G": 4000,
+     "F": 200,
+     "C": 0,
+     "C2": 160,
+     "E": 21830,
+     "Q": 100,
+     "Q1": 150
+    },
+    "expected": {
+     "I": 93189.98,
+     "Y": 10957.9,
+     "A": 421.46
+    }
+   },
+   {
+    "id": "RQ-A1-p22",
+    "ref": "Appendix 1, 22nd pay period",
+    "input": {
+     "P": 26,
+     "G": 4000,
+     "F": 200,
+     "C": 0,
+     "C2": 40,
+     "E": 21830,
+     "Q": 0,
+     "Q1": 0
+    },
+    "expected": {
+     "I": 96309.98,
+     "Y": 12525.7,
+     "A": 481.76
+    }
+   },
+   {
+    "id": "RQ-A1-last4",
+    "ref": "Appendix 1, last 4 pay periods",
+    "input": {
+     "P": 26,
+     "G": 4000,
+     "F": 200,
+     "C": 0,
+     "C2": 0,
+     "E": 21830,
+     "Q": 0,
+     "Q1": 0
+    },
+    "expected": {
+     "I": 97349.98,
+     "Y": 12723.3,
+     "A": 489.36
+    }
+   }
+  ],
+  "qpp_cases": [
+   {
+    "id": "RQ-A3-p19",
+    "ref": "Appendix 3, 19th pay period",
+    "input": {
+     "P": 26,
+     "S3": 4000,
+     "pm": 12,
+     "A5": 4383.36,
+     "A8": 0,
+     "S5": 72000
+    },
+    "expected": {
+     "C": 95.94,
+     "C2": 56
+    }
+   },
+   {
+    "id": "RQ-A3-p20",
+    "ref": "Appendix 3, 20th pay period",
+    "input": {
+     "P": 26,
+     "S3": 4000,
+     "pm": 12,
+     "A5": 4479.3,
+     "A8": 56,
+     "S5": 76000
+    },
+    "expected": {
+     "C": 0,
+     "C2": 160
+    }
+   }
+  ]
+ },
+ "known_differences": [
+  {
+   "case": {
+    "input": {
+     "id": "PE-H1",
+     "j": "PE",
+     "freq": "MONTHLY_12PP",
+     "date": "2026-03-13",
+     "salary": 20000,
+     "pm": 12
+    },
+    "pdoc": {
+     "fed_tax": 4172.15,
+     "prov_tax": 3068.72,
+     "cpp": 1172.65,
+     "cpp2": 0,
+     "ei": 326,
+     "net": 11260.48
+    }
+   },
+   "explanation": "Not checked pass/fail. For pay dates before July 1, 2026, PDOC still applies the Prince Edward Island fifth-bracket threshold and constant as first published in the 122nd edition. Probing PDOC on 2026-11-27 (monthly pay dated 2026-03-13 at $11,980 / $12,010 / $12,100 / $13,000 / $17,000 / $20,000) fits A = $142,250 and KP = $6,460 exactly. CRA's current Table 8.1 CSV for 2026 (marked *Updated May 2026) and the 123rd and 124th editions all give $142,520 and KP $6,464 (the 2025 threshold $140,000 indexed by 1.8%). KiddieTrac's table keeps the published, corrected figure; the effect is at most $0.34 a month on PE income over $142,250 for pays dated January-June 2026, which are all in the past. Below that income PDOC and KiddieTrac agree (case PE-H2)."
+  }
+ ]
+}

@@ -195,6 +195,8 @@ final class SearchRegistry
         'hr_leavings' => 'leaving records (checklist, ROE prep, payout): HR > Leavers and the person\'s HR file; search the staff member',
         'hr_letter_templates' => 'the agency\'s HR letter templates (configuration): edited in HR > Letters, never a record people look up',
         'hr_letters' => 'which HR letters were sent to whom (HR): the letter itself is the Managed Forms record; listed in HR > Letters only',
+        'payroll_tax_profiles' => 'each employee\'s payroll tax setup (province of employment, pay frequency, CPP / EI / QPIP exemptions): agency admins only, in the HR profile; never searched',
+        'payroll_tax_forms' => 'each employee\'s TD1 / TP-1015.3 claim amounts per tax year (the signed PDF is the Managed Forms record): the person and agency admins only; never searched',
         // KiddieTrac HR Phase 4, batch 6 (2026-11-27): quizzes, directory shares, recognition, approver grants.
         'hr_course_questions' => 'a course\'s quiz questions (configuration): edited in the course, never a record people look up',
         'hr_course_attempts' => 'quiz tries on a course (HR): shown with the course assignment; search the staff member',

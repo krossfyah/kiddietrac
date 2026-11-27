@@ -1014,6 +1014,7 @@
     if (window.KTHrPeople) window.KTHrPeople.mine(b);   // Phase 4 batch 6: cover while away, team directory, kudos (screen-hr-people.js)
     if (window.KTHrHs) window.KTHrHs.mine(b);           // Phase 4 batch 7: my H&S duties, H&S tasks, safety data sheets, safe work procedures (screen-hr-hs.js)
     if (window.KTHrRota) window.KTHrRota.mine(b);       // Phase 4 batch 8: shifts to accept, fix my clock-in (screen-hr-rota.js)
+    if (window.KTHrTax) window.KTHrTax.mine(b);         // Payroll P1: my TD1 (screen-hr-tax.js; draws nothing until payroll is on)
     wireTiles(b);
   }
 

@@ -1375,6 +1375,11 @@ put hr/clock/centres/{id}/fence | Set or removed a centre's clock-in area (geofe
 put hr/letters/templates/{id} | Edited an HR letter template
 post hr/letters/templates/{id}/review | Marked an HR letter template reviewed by the agency's lawyer (or cleared it)
 post hr/letters/preview | Previewed an HR letter before sending it
+put hr/payroll/tax/people/{id} | Changed an employee's payroll tax setup (province, pay frequency, CPP / EI / QPIP exemptions, vacation pay)
+post hr/payroll/tax/people/{id}/paper | Recorded a TD1 the employee signed on paper
+post hr/payroll/tax/people/{id}/preview | Previewed one pay's payroll deductions for an employee (nothing saved)
+post hr/payroll/tax/forms/{id}/withdraw | Withdrew a TD1 that was still waiting for its signature
+post hr/me/tax-forms | Filled in their own TD1 tax claim and sent it to My forms to e-sign
 post hr/letters/send | Sent an HR letter for e-signature
 post hr/documents/{id}/accept | Accepted a company HR document
 post hr/time-off/{id}/note | Attached a note or photo to a time-off request

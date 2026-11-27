@@ -214,7 +214,8 @@
           + (p.sin.on_file ? '<button type="button" class="hr-b" data-sin="clear">Remove</button>' : '') + '</div>'
           + '<div class="hr-sub" style="margin-top:6px;">Stored encrypted. Only agency admins can see or change it, and every reveal is recorded in the audit log.</div></div>' : '')
       + '</div>' + (window.KTHrFile ? '<div data-hrfile style="margin-top:10px;"></div>' : '')
-      + (window.KTHrTalent ? '<div data-hrtalent style="margin-top:10px;"></div>' : '');
+      + (window.KTHrTalent ? '<div data-hrtalent style="margin-top:10px;"></div>' : '')
+      + (window.KTHrTax ? '<div data-hrtax style="margin-top:10px;"></div>' : '');   // Payroll P1: tax setup card (screen-hr-tax.js; nothing until payroll is on)
     var close = null;
     var M = KT.Shell.Modal;
     M.open({ title: 'HR profile', body: box, large: true, actions: [
@@ -225,6 +226,7 @@
     box.querySelectorAll('[data-go]').forEach(function (g) { g.addEventListener('click', function () { closeModal(); location.hash = '#' + g.getAttribute('data-go'); }); });
     var tl = box.querySelector('[data-hrtalent]'); if (tl && window.KTHrTalent) window.KTHrTalent.profile(tl, id);
     var hf = box.querySelector('[data-hrfile]'); if (hf && window.KTHrFile) window.KTHrFile.profile(hf, id, p);   // documents, pay + role history, leaving
+    var hx = box.querySelector('[data-hrtax]'); if (hx && window.KTHrTax) window.KTHrTax.profile(hx, id);   // Payroll P1: tax setup + TD1s
     var ub = box.querySelector('[data-user]'); if (ub) ub.addEventListener('click', function () { closeModal(); try { KT.openUserRecord(id); } catch (e) {} });
     var lb = box.querySelector('[data-led]');
     if (lb) lb.addEventListener('click', function () {

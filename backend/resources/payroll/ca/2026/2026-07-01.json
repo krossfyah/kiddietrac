@@ -1,0 +1,591 @@
+{
+ "country": "CA",
+ "tax_year": 2026,
+ "effective": "2026-07-01",
+ "version": "CA-2026-07-01",
+ "edition": "T4127-JUL Payroll Deductions Formulas, 123rd Edition, effective July 1, 2026 (T4127(E) Rev. 26 (26/06)). Prorated July-December values for BC (lowest rate 6.14%, basic reduction $805), NL (basic amount $15,000) and PE (21% on income over $200,000); everything else is unchanged from the 122nd edition.",
+ "sources": [
+  "https://www.canada.ca/en/revenue-agency/services/forms-publications/payroll/payroll-deductions-t4127-payroll-deductions-formulas/t4127-jul-123rd-edition-effective-july-1-2026/t4127-jul-payroll-deductions-formulas.html",
+  "https://www.canada.ca/content/dam/cra-arc/formspubs/pub/t4127-jul/rates-income-thresholds-constants-26e.csv (Table 8.1)",
+  "https://www.canada.ca/content/dam/cra-arc/formspubs/pub/t4127-jul/other-rates-amounts-26e.csv (Table 8.2)",
+  "https://www.canada.ca/content/dam/cra-arc/formspubs/pub/t4127-jan/cpp-qpp-ttl-01-26e.csv, cpp-qpp-br-01-26e.csv, cpp-qpp-addntl-01-26e.csv, cpp-qpp-scnd-addntl-01-26e.csv (Tables 8.3-8.6)",
+  "https://www.canada.ca/content/dam/cra-arc/formspubs/pub/t4127-jan/ei-01-26e.csv (Table 8.7), qpip-01-26e.csv (Table 8.8)",
+  "https://www.revenuquebec.ca/documents/en/formulaires/tp/TP-1015.F-V%282026-01%29.pdf (Quebec income tax, QPP, QPIP: TP-1015.F-V 2026-01)"
+ ],
+ "fetched_on": "2026-11-27",
+ "federal": {
+  "brackets": [
+   {
+    "over": 0,
+    "rate": 0.14,
+    "k": 0
+   },
+   {
+    "over": 58523,
+    "rate": 0.205,
+    "k": 3804
+   },
+   {
+    "over": 117045,
+    "rate": 0.26,
+    "k": 10241
+   },
+   {
+    "over": 181440,
+    "rate": 0.29,
+    "k": 15685
+   },
+   {
+    "over": 258482,
+    "rate": 0.33,
+    "k": 26024
+   }
+  ],
+  "lowest_rate": 0.14,
+  "bpaf": {
+   "max": 16452,
+   "min": 14829,
+   "from": 181440,
+   "to": 258482
+  },
+  "cea": 1501,
+  "lcf": {
+   "rate": 0.15,
+   "max": 750
+  },
+  "quebec_abatement": 0.165,
+  "outside_canada_surtax": 0.48
+ },
+ "cpp": {
+  "ympe": 74600,
+  "yampe": 85000,
+  "exemption": 3500,
+  "rate": 0.0595,
+  "base_rate": 0.0495,
+  "first_additional_rate": 0.01,
+  "max": 4230.45,
+  "base_max": 3519.45,
+  "second_rate": 0.04,
+  "second_max": 416.0
+ },
+ "qpp": {
+  "ympe": 74600,
+  "yampe": 85000,
+  "exemption": 3500,
+  "rate": 0.063,
+  "base_rate": 0.053,
+  "first_additional_rate": 0.01,
+  "max": 4479.3,
+  "base_max": 3768.3,
+  "second_rate": 0.04,
+  "second_max": 416.0
+ },
+ "ei": {
+  "max_insurable": 68900,
+  "rate": 0.0163,
+  "max_premium": 1123.07,
+  "employer_factor": 1.4,
+  "qc_rate": 0.013,
+  "qc_max_premium": 895.7
+ },
+ "qpip": {
+  "max_insurable": 103000,
+  "employee_rate": 0.0043,
+  "employer_rate": 0.00602,
+  "employee_max": 442.9,
+  "employer_max": 620.06
+ },
+ "bonus": {
+  "flat_threshold": 5000,
+  "flat_rate": 0.15,
+  "flat_rate_qc": 0.1
+ },
+ "provinces": {
+  "AB": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.08,
+     "k": 0
+    },
+    {
+     "over": 61200,
+     "rate": 0.1,
+     "k": 1224
+    },
+    {
+     "over": 154259,
+     "rate": 0.12,
+     "k": 4309
+    },
+    {
+     "over": 185111,
+     "rate": 0.13,
+     "k": 6160
+    },
+    {
+     "over": 246813,
+     "rate": 0.14,
+     "k": 8628
+    },
+    {
+     "over": 370220,
+     "rate": 0.15,
+     "k": 12331
+    }
+   ],
+   "basic": 22769,
+   "k5p": {
+    "threshold": 4896.0,
+    "rate": 0.25
+   }
+  },
+  "BC": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.0614,
+     "k": 0
+    },
+    {
+     "over": 50363,
+     "rate": 0.077,
+     "k": 786
+    },
+    {
+     "over": 100728,
+     "rate": 0.105,
+     "k": 3606
+    },
+    {
+     "over": 115648,
+     "rate": 0.1229,
+     "k": 5676
+    },
+    {
+     "over": 140430,
+     "rate": 0.147,
+     "k": 9061
+    },
+    {
+     "over": 190405,
+     "rate": 0.168,
+     "k": 13059
+    },
+    {
+     "over": 265545,
+     "rate": 0.205,
+     "k": 22884
+    }
+   ],
+   "basic": 13216,
+   "reduction": {
+    "kind": "bc",
+    "s2": 805,
+    "from": 25570,
+    "to": 44952,
+    "rate": 0.0356
+   }
+  },
+  "MB": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.108,
+     "k": 0
+    },
+    {
+     "over": 47000,
+     "rate": 0.1275,
+     "k": 917
+    },
+    {
+     "over": 100000,
+     "rate": 0.174,
+     "k": 5567
+    }
+   ],
+   "basic": 15780,
+   "basic_formula": {
+    "kind": "phase_out",
+    "max": 15780,
+    "min": 0,
+    "from": 200000,
+    "to": 400000
+   },
+   "lcp": {
+    "rate": 0.15,
+    "max": 1800
+   }
+  },
+  "NB": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.094,
+     "k": 0
+    },
+    {
+     "over": 52333,
+     "rate": 0.14,
+     "k": 2407
+    },
+    {
+     "over": 104666,
+     "rate": 0.16,
+     "k": 4501
+    },
+    {
+     "over": 193861,
+     "rate": 0.195,
+     "k": 11286
+    }
+   ],
+   "basic": 13664,
+   "lcp": {
+    "rate": 0.2,
+    "max": 2000
+   }
+  },
+  "NL": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.087,
+     "k": 0
+    },
+    {
+     "over": 44678,
+     "rate": 0.145,
+     "k": 2591
+    },
+    {
+     "over": 89354,
+     "rate": 0.158,
+     "k": 3753
+    },
+    {
+     "over": 159528,
+     "rate": 0.178,
+     "k": 6943
+    },
+    {
+     "over": 223340,
+     "rate": 0.198,
+     "k": 11410
+    },
+    {
+     "over": 285319,
+     "rate": 0.208,
+     "k": 14263
+    },
+    {
+     "over": 570638,
+     "rate": 0.213,
+     "k": 17117
+    },
+    {
+     "over": 1141275,
+     "rate": 0.218,
+     "k": 22823
+    }
+   ],
+   "basic": 15000
+  },
+  "NS": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.0879,
+     "k": 0
+    },
+    {
+     "over": 30995,
+     "rate": 0.1495,
+     "k": 1909
+    },
+    {
+     "over": 61991,
+     "rate": 0.1667,
+     "k": 2976
+    },
+    {
+     "over": 97417,
+     "rate": 0.175,
+     "k": 3784
+    },
+    {
+     "over": 157124,
+     "rate": 0.21,
+     "k": 9283
+    }
+   ],
+   "basic": 11932,
+   "lcp": {
+    "rate": 0.2,
+    "max": 2000
+   }
+  },
+  "NT": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.059,
+     "k": 0
+    },
+    {
+     "over": 53003,
+     "rate": 0.086,
+     "k": 1431
+    },
+    {
+     "over": 106009,
+     "rate": 0.122,
+     "k": 5247
+    },
+    {
+     "over": 172346,
+     "rate": 0.1405,
+     "k": 8436
+    }
+   ],
+   "basic": 18198
+  },
+  "NU": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.04,
+     "k": 0
+    },
+    {
+     "over": 55801,
+     "rate": 0.07,
+     "k": 1674
+    },
+    {
+     "over": 111602,
+     "rate": 0.09,
+     "k": 3906
+    },
+    {
+     "over": 181439,
+     "rate": 0.115,
+     "k": 8442
+    }
+   ],
+   "basic": 19659
+  },
+  "ON": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.0505,
+     "k": 0
+    },
+    {
+     "over": 53891,
+     "rate": 0.0915,
+     "k": 2210
+    },
+    {
+     "over": 107785,
+     "rate": 0.1116,
+     "k": 4376
+    },
+    {
+     "over": 150000,
+     "rate": 0.1216,
+     "k": 5876
+    },
+    {
+     "over": 220000,
+     "rate": 0.1316,
+     "k": 8076
+    }
+   ],
+   "basic": 12989,
+   "surtax": [
+    {
+     "over": 5818,
+     "rate": 0.2
+    },
+    {
+     "over": 7446,
+     "rate": 0.36
+    }
+   ],
+   "health_premium": [
+    {
+     "over": 20000,
+     "base": 0,
+     "rate": 0.06,
+     "cap": 300
+    },
+    {
+     "over": 36000,
+     "base": 300,
+     "rate": 0.06,
+     "cap": 450
+    },
+    {
+     "over": 48000,
+     "base": 450,
+     "rate": 0.25,
+     "cap": 600
+    },
+    {
+     "over": 72000,
+     "base": 600,
+     "rate": 0.25,
+     "cap": 750
+    },
+    {
+     "over": 200000,
+     "base": 750,
+     "rate": 0.25,
+     "cap": 900
+    }
+   ],
+   "reduction": {
+    "kind": "on",
+    "s2": 300,
+    "y_per_dependant": 554
+   }
+  },
+  "PE": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.095,
+     "k": 0
+    },
+    {
+     "over": 33928,
+     "rate": 0.1347,
+     "k": 1347
+    },
+    {
+     "over": 65820,
+     "rate": 0.166,
+     "k": 3407
+    },
+    {
+     "over": 106890,
+     "rate": 0.1762,
+     "k": 4497
+    },
+    {
+     "over": 142520,
+     "rate": 0.19,
+     "k": 6464
+    },
+    {
+     "over": 200000,
+     "rate": 0.21,
+     "k": 10464
+    }
+   ],
+   "basic": 15000
+  },
+  "SK": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.105,
+     "k": 0
+    },
+    {
+     "over": 54532,
+     "rate": 0.125,
+     "k": 1091
+    },
+    {
+     "over": 155805,
+     "rate": 0.145,
+     "k": 4207
+    }
+   ],
+   "basic": 20381,
+   "lcp": {
+    "rate": 0.175,
+    "max": 875
+   }
+  },
+  "YT": {
+   "brackets": [
+    {
+     "over": 0,
+     "rate": 0.064,
+     "k": 0
+    },
+    {
+     "over": 58523,
+     "rate": 0.09,
+     "k": 1522
+    },
+    {
+     "over": 117045,
+     "rate": 0.109,
+     "k": 3745
+    },
+    {
+     "over": 181440,
+     "rate": 0.128,
+     "k": 7193
+    },
+    {
+     "over": 500000,
+     "rate": 0.15,
+     "k": 18193
+    }
+   ],
+   "basic": 16452,
+   "basic_formula": {
+    "kind": "federal"
+   },
+   "cea": 1501
+  }
+ },
+ "quebec": {
+  "edition": "TP-1015.F-V (2026-01) Formulas to Calculate Source Deductions and Contributions, Revenu Quebec",
+  "brackets": [
+   {
+    "over": 0,
+    "rate": 0.14,
+    "k": 0
+   },
+   {
+    "over": 54345,
+    "rate": 0.19,
+    "k": 2717
+   },
+   {
+    "over": 108680,
+    "rate": 0.24,
+    "k": 8151
+   },
+   {
+    "over": 132245,
+    "rate": 0.2575,
+    "k": 10465
+   }
+  ],
+  "basic": 18952,
+  "credit_rate": 0.14,
+  "workers_deduction": {
+   "rate": 0.06,
+   "max": 1450
+  },
+  "lump_sum": {
+   "threshold": 18952,
+   "flat_rate": 0.07
+  },
+  "labour_fund_credit_rate": 0.15,
+  "health_services_fund": {
+   "small_rate": 1.65,
+   "reduction_threshold": 7800000,
+   "note": "Employer contribution, report only (TP-1015.F-V section 5)."
+  }
+ }
+}
