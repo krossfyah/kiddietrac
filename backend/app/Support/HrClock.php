@@ -162,4 +162,29 @@ final class HrClock
 
         return array_map(fn ($m) => round($m / 60, 2), $out);
     }
+
+    /**
+     * Hours still SCHEDULED this agency week, from now on (Anthony 2026-11-26: overtime counts worked + scheduled).
+     * shifts hold agency wall-clock time; only the part of a shift after "now" counts, so an open punch (counted up to
+     * now by weekHours) and the rest of the same shift never overlap. Cancelled shifts do not count.
+     */
+    public static function scheduledLeft(int $agencyId, ?array $userIds = null): array
+    {
+        $tz = AgencyTime::tz($agencyId);
+        $now = Carbon::now($tz);
+        $weekEnd = $now->copy()->startOfWeek()->addWeek();
+        $centres = DB::table('centres')->where('agency_id', $agencyId)->pluck('id')->all();
+        $q = DB::table('shifts as s')->join('rooms as r', 'r.id', '=', 's.room_id')->whereIn('r.centre_id', $centres ?: [0])
+            ->whereNotIn('s.status', ['cancelled', 'canceled', 'declined'])
+            ->where('s.ends_at', '>', $now->format('Y-m-d H:i:s'))->where('s.starts_at', '<', $weekEnd->format('Y-m-d H:i:s'));
+        if ($userIds !== null) $q->whereIn('s.user_id', $userIds ?: [0]);
+        $out = [];
+        foreach ($q->get(['s.user_id', 's.starts_at', 's.ends_at']) as $s) {
+            $a = Carbon::parse($s->starts_at, $tz)->max($now);
+            $b = Carbon::parse($s->ends_at, $tz)->min($weekEnd);
+            if ($b->gt($a)) $out[(int) $s->user_id] = ($out[(int) $s->user_id] ?? 0) + $a->diffInMinutes($b);
+        }
+
+        return array_map(fn ($m) => round($m / 60, 2), $out);
+    }
 }

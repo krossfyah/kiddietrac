@@ -20,7 +20,7 @@ Le lieu n'est demandé que lorsqu'une personne pointe son arrivée dans un centr
 
 ## Alerte d'heures supplémentaires
 
-Indiquez le nombre d'heures par semaine à partir duquel commencent les heures supplémentaires (44 par défaut, le seuil des normes d'emploi de l'Ontario) et le moment de l'alerte (40 par défaut). Quand les heures travaillées cette semaine atteignent l'alerte, puis les heures supplémentaires, la personne et la direction de son centre reçoivent un avis. Chaque avis n'est envoyé qu'une fois par semaine. Les entrepreneurs sont exclus, sauf si vous désactivez cette option.
+Indiquez le nombre d'heures par semaine à partir duquel commencent les heures supplémentaires (44 par défaut, le seuil des normes d'emploi de l'Ontario) et le moment de l'alerte (40 par défaut). La semaine compte les heures déjà travaillées plus les quarts encore prévus. Quand ce total atteint l'alerte, puis les heures supplémentaires, la personne et la direction de son centre reçoivent un avis. Chaque avis n'est envoyé qu'une fois par semaine, et de nouveau seulement si un horaire modifié fait repasser le total sous le seuil puis au-dessus. Les entrepreneurs sont exclus, sauf si vous désactivez cette option.
 
 ## Ce que voit la direction
 

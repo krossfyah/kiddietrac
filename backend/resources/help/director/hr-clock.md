@@ -20,7 +20,7 @@ The location is asked only when someone clocks in at a centre that has an area. 
 
 ## Overtime warning
 
-Set the weekly hours when overtime starts (44 by default, the Ontario Employment Standards threshold) and when to warn (40 by default). When someone's worked hours this week reach the warning, and again when they reach overtime, they and their centre's directors get a notice. Each one goes once a week. Contractors are left out unless you turn that off.
+Set the weekly hours when overtime starts (44 by default, the Ontario Employment Standards threshold) and when to warn (40 by default). The week counts the hours worked so far plus the shifts still scheduled. When that total reaches the warning, and again when it reaches overtime, the person and their centre's directors get a notice. Each one goes once a week, and again only if a changed rota takes the total back under the line and then over it. Contractors are left out unless you turn that off.
 
 ## What directors see
 

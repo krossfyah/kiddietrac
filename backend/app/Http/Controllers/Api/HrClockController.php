@@ -95,11 +95,15 @@ class HrClockController extends Controller
         $from = AgencyTime::boundaryUtc($aid, 'week')->format('Y-m-d H:i:s');
         $flag = DB::table('time_punches')->whereIn('centre_id', $cids ?: [0])->whereIn('user_id', $people ?: [0])->where('punched_in_at', '>=', $from)
             ->whereIn('geo_status', ['outside', 'no_location'])->orderByDesc('punched_in_at')->limit(100)->get(['id', 'user_id', 'centre_id', 'punched_in_at', 'geo_status', 'geo_distance_m']);
-        $hours = HrClock::weekHours($aid, $people);
-        $contract = $s['skip_contractors'] ? HrClock::contractorIds($aid, array_keys($hours)) : [];
+        // Same projection as hr:overtime-warn: worked so far + still scheduled this week.
+        $worked = HrClock::weekHours($aid, $people);
+        $planned = HrClock::scheduledLeft($aid, $people);
+        $contract = $s['skip_contractors'] ? HrClock::contractorIds($aid, array_keys($worked + $planned)) : [];
         $ot = [];
-        foreach ($hours as $uid => $h) {
-            if ($h >= $s['warn_at_hours'] && ! in_array($uid, $contract, true)) $ot[$uid] = $h;
+        $parts = [];
+        foreach (array_keys($worked + $planned) as $uid) {
+            $h = round((float) ($worked[$uid] ?? 0) + (float) ($planned[$uid] ?? 0), 2);
+            if ($h >= $s['warn_at_hours'] && ! in_array($uid, $contract, true)) { $ot[$uid] = $h; $parts[$uid] = [(float) ($worked[$uid] ?? 0), (float) ($planned[$uid] ?? 0)]; }
         }
         arsort($ot);
         $names = $this->hrNames(array_merge($flag->pluck('user_id')->all(), array_keys($ot)));
@@ -110,6 +114,6 @@ class HrClockController extends Controller
             'away' => $flag->map(fn ($p) => ['id' => (int) $p->id, 'person' => $names[(int) $p->user_id] ?? '', 'centre' => $cn[(int) $p->centre_id] ?? '',
                 'at' => Carbon::parse($p->punched_in_at, 'UTC')->setTimezone($tz)->format('Y-m-d H:i'), 'status' => $p->geo_status,
                 'distance' => $p->geo_distance_m !== null ? HrClock::far((int) $p->geo_distance_m) : null])->all(),
-            'overtime' => collect($ot)->map(fn ($h, $uid) => ['user_id' => $uid, 'person' => $names[$uid] ?? '', 'hours' => $h, 'over' => $h >= $s['overtime_hours']])->values()->all()]);
+            'overtime' => collect($ot)->map(fn ($h, $uid) => ['user_id' => $uid, 'person' => $names[$uid] ?? '', 'hours' => $h, 'worked' => $parts[$uid][0], 'scheduled' => $parts[$uid][1], 'over' => $h >= $s['overtime_hours']])->values()->all()]);
     }
 }

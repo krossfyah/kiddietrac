@@ -57,24 +57,34 @@ final class HrOvertimeWarnCommand extends Command
         if (! $s['overtime_on']) return 0;
         $staff = HrLeave::staffIds($aid);
         if ($s['skip_contractors']) $staff = array_values(array_diff($staff, HrClock::contractorIds($aid, $staff)));
-        $hours = array_intersect_key(HrClock::weekHours($aid, $staff), array_flip($staff));
+        /* WORKED + STILL SCHEDULED (Anthony 2026-11-26). One warning per person per week per level; a level re-arms
+           only when the projection drops back below it (a shift removed), so rota edits never re-warn on their own. */
+        $worked = HrClock::weekHours($aid, $staff);
+        $planned = HrClock::scheduledLeft($aid, $staff);
         $week = Carbon::now(AgencyTime::tz($aid))->startOfWeek()->toDateString();
         $n = 0;
-        foreach ($hours as $uid => $h) {
+        foreach ($staff as $uid) {
+            $w = (float) ($worked[$uid] ?? 0);
+            $p = (float) ($planned[$uid] ?? 0);
+            $h = round($w + $p, 2);
             $level = $h >= $s['overtime_hours'] ? 'over' : ($h >= $s['warn_at_hours'] ? 'warn' : null);
+            $drop = $level === null ? ['warn', 'over'] : ($level === 'warn' ? ['over'] : []);
+            if ($drop && ! $dry) DB::table('hr_overtime_notices')->where('user_id', $uid)->where('week_start', $week)->whereIn('level', $drop)->delete();
             if (! $level) continue;
             if (DB::table('hr_overtime_notices')->where('user_id', $uid)->where('week_start', $week)->where('level', $level)->exists()) continue;
             $u = DB::table('users')->where('id', $uid)->first(['first_name', 'preferred_name']);
             $first = trim((string) ($u->preferred_name ?: $u->first_name ?? ''));
-            if ($dry) { $this->line("  $first ($uid): $h h, $level"); $n++; continue; }
+            if ($dry) { $this->line("  $first ($uid): $w h worked + $p h scheduled = $h h, $level"); $n++; continue; }
             $ins = DB::table('hr_overtime_notices')->insertOrIgnore(['agency_id' => $aid, 'user_id' => $uid, 'week_start' => $week, 'level' => $level, 'hours' => $h, 'created_at' => now()]);
             if (! $ins) continue;   // another run got there first
             if ($level === 'over') DB::table('hr_overtime_notices')->insertOrIgnore(['agency_id' => $aid, 'user_id' => $uid, 'week_start' => $week, 'level' => 'warn', 'hours' => $h, 'created_at' => now()]);
-            $hh = rtrim(rtrim(number_format($h, 1), '0'), '.');
-            $ot = rtrim(rtrim(number_format($s['overtime_hours'], 1), '0'), '.');
+            $fmt = fn ($x) => rtrim(rtrim(number_format((float) $x, 1), '0'), '.');
+            $hh = $fmt($h);
+            $ot = $fmt($s['overtime_hours']);
+            $what = $p > 0 ? $fmt($w) . ' hours worked and ' . $fmt($p) . ' more scheduled this week (' . $hh . ' in all)' : $hh . ' hours worked this week';
             $rows = [['user_id' => $uid, 'agency_id' => $aid, 'type' => 'hr',
-                'title' => $level === 'over' ? 'You are into overtime this week' : 'You are close to overtime this week',
-                'body' => 'You have worked ' . $hh . ' hours this week. Overtime starts after ' . $ot . ' hours. Check with your director before working more.',
+                'title' => $level === 'over' ? ($w >= $s['overtime_hours'] ? 'You are into overtime this week' : 'Your week goes into overtime') : 'You are close to overtime this week',
+                'body' => 'You have ' . $what . '. Overtime starts after ' . $ot . ' hours. Check with your director before working more.',
                 'data' => json_encode(['link' => '#my-hr', 'kind' => 'own']), 'created_at' => now()]];
             $centres = CentreScope::centresOfUser($uid, $aid);
             $mgrs = CentreScope::managers($aid, $centres)->where('ra.role', 'centre_director')->distinct()->pluck('u.id')->map(fn ($v) => (int) $v)->all();
@@ -83,8 +93,8 @@ final class HrOvertimeWarnCommand extends Command
             $plat = DB::table('role_assignments')->where('role', 'platform_admin')->where('active', 1)->pluck('user_id')->map(fn ($v) => (int) $v)->all();
             foreach (array_diff(array_unique($mgrs), [$uid], $plat) as $m) {
                 $rows[] = ['user_id' => $m, 'agency_id' => $aid, 'type' => 'hr',
-                    'title' => $first . ($level === 'over' ? ' is into overtime this week' : ' is close to overtime this week'),
-                    'body' => $first . ' has worked ' . $hh . ' hours this week. Overtime starts after ' . $ot . ' hours.',
+                    'title' => $first . ($level === 'over' ? ($w >= $s['overtime_hours'] ? ' is into overtime this week' : '\'s week goes into overtime') : ' is close to overtime this week'),
+                    'body' => $first . ' has ' . $what . '. Overtime starts after ' . $ot . ' hours.',
                     'data' => json_encode(['link' => '#hr?tab=rota', 'kind' => 'team']), 'created_at' => now()];
             }
             Notify::write($rows);

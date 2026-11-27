@@ -20,7 +20,7 @@ La ubicación solo se pide cuando alguien marca entrada en un centro que tiene u
 
 ## Aviso de horas extra
 
-Indique cuántas horas por semana deben pasar para que empiecen las horas extra (44 por defecto, el límite de las normas laborales de Ontario) y cuándo avisar (40 por defecto). Cuando las horas trabajadas de la semana llegan al aviso, y otra vez cuando llegan a las horas extra, la persona y la dirección de su centro reciben un aviso. Cada uno se envía una vez por semana. Los contratistas quedan fuera, salvo que desactive esa opción.
+Indique cuántas horas por semana deben pasar para que empiecen las horas extra (44 por defecto, el límite de las normas laborales de Ontario) y cuándo avisar (40 por defecto). La semana suma las horas ya trabajadas más los turnos que aún están programados. Cuando ese total llega al aviso, y otra vez cuando llega a las horas extra, la persona y la dirección de su centro reciben un aviso. Cada uno se envía una vez por semana, y de nuevo solo si un cambio en el horario baja el total por debajo del límite y luego lo vuelve a superar. Los contratistas quedan fuera, salvo que desactive esa opción.
 
 ## Lo que ve la dirección
 

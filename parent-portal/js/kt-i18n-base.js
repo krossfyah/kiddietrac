@@ -220,6 +220,10 @@ window.KT_I18N_BASE && window.KT_I18N_BASE({
     'Claims report': { fr: 'Rapport des remboursements', es: 'Informe de reembolsos', hi: 'दावों की रिपोर्ट' },
     // HR Phase 3, item 10 (2026-11-26): availability, shift swaps, HR > Rota
     'to': { fr: 'à', es: 'a', hi: 'से' },
+    // HR Phase 3, overtime counts scheduled shifts (2026-11-26)
+    'Worked': { fr: 'Travaillé', es: 'Trabajadas', hi: 'काम किया' },
+    'Still scheduled': { fr: 'Encore prévu', es: 'Aún programadas', hi: 'अभी तय' },
+    'Week total': { fr: 'Total de la semaine', es: 'Total de la semana', hi: 'सप्ताह का कुल' },
     // HR Phase 3, item 12 (2026-11-26): HR letter templates
     'Letters': { fr: 'Lettres', es: 'Cartas', hi: 'पत्र' },
     'Offer letters, contracts, warnings and terminations, filled in from the employee file and sent for e-signature in My forms. A template can be sent only after an agency admin marks it reviewed by your employment lawyer.': { fr: 'Lettres d’offre, contrats, avertissements et fins d’emploi, remplis à partir du dossier de l’employé et envoyés pour signature électronique dans Mes formulaires. Un modèle ne peut être envoyé qu’après qu’un administrateur de l’agence l’a marqué comme révisé par votre avocat en droit du travail.', es: 'Cartas de oferta, contratos, advertencias y despidos, completados con el expediente del empleado y enviados para firma electrónica en Mis formularios. Una plantilla solo se puede enviar después de que un administrador de la agencia la marque como revisada por su abogado laboral.', hi: 'ऑफ़र पत्र, अनुबंध, चेतावनी और सेवा-समाप्ति पत्र, कर्मचारी फ़ाइल से भरे जाते हैं और मेरे फ़ॉर्म में ई-हस्ताक्षर के लिए भेजे जाते हैं। कोई टेम्पलेट तभी भेजा जा सकता है जब एजेंसी एडमिन उसे आपके रोज़गार वकील द्वारा समीक्षित चिह्नित कर दे।' },
