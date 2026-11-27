@@ -317,24 +317,10 @@ final class FormsController extends Controller
         $primary = ($whiteLabel ? ($agency->brand_primary_color ?? null) : null) ?: '#1F6080';
         $orgName = $whiteLabel ? ($agency->name ?? 'KiddieTrac') : 'KiddieTrac';
         $logo = $whiteLabel ? ($agency->brand_logo_url ?? null) : null;
-        $link = 'https://app.kiddietrac.com/dashboard.html#forms';
-        $subject = $orgName . ' — please complete: ' . $form->title;
-
-        $safeTitle = htmlspecialchars($form->title, ENT_QUOTES);
-        $safeDesc = $form->description ? htmlspecialchars($form->description, ENT_QUOTES) : '';
-        $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">'
-            . '<div style="background:' . $primary . ';color:#fff;padding:22px 26px;">'
-            . ($logo ? '<img src="' . htmlspecialchars($logo, ENT_QUOTES) . '" alt="" style="max-height:40px;margin-bottom:10px;background:#fff;border-radius:6px;padding:3px 6px;"><br>' : ('<div style="font-weight:800;font-size:18px;margin-bottom:6px;">' . htmlspecialchars($orgName, ENT_QUOTES) . '</div>'))
-            . '<div style="font-size:20px;font-weight:800;">' . $safeTitle . '</div>'
-            . ($safeDesc ? '<div style="font-size:13px;opacity:.92;margin-top:4px;">' . $safeDesc . '</div>' : '')
-            . '</div>'
-            . '<div style="padding:24px 26px;color:#374151;font-size:15px;line-height:1.6;">'
-            . '<p>Hello,</p><p>Please take a moment to complete this form from ' . htmlspecialchars($orgName, ENT_QUOTES) . '.</p>'
-            . '<p style="text-align:center;margin:26px 0;"><a href="' . $link . '" style="background:' . $primary . ';color:#fff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:700;display:inline-block;">Open the form</a></p>'
-            . '<p style="font-size:13px;color:#6B7280;">Or sign in to your parent portal and open the Forms section.</p>'
-            . '</div>'
-            . '<div style="padding:14px 26px;text-align:center;font-size:11px;color:#9CA3AF;">' . ($whiteLabel ? htmlspecialchars($orgName, ENT_QUOTES) . ($agency->brand_support_email ? ' · ' . htmlspecialchars($agency->brand_support_email, ENT_QUOTES) : '') : 'Powered by KiddieTrac — The Smart Childcare Management Platform') . '</div>'
-            . '</div>';
+        /* House frame (2026-11-27 sweep): the agency's branded EmailTemplate wrapper, via FamilyNoticeMail. */
+        $built = \App\Support\FamilyNoticeMail::formRequest((int) $agencyId, (string) $form->title, $form->description ?: null);
+        $subject = $built['subject'];
+        $html = $built['html'];
 
         $svc = AgencyMailer::forAgency($agencyId);
         $mailer = $svc->mailer();

@@ -103,6 +103,11 @@ final class EmailOverrides
         'SmsConsentReceipt@send' => 'sms-consent-receipt',
         'NewFamilyNotice@forSyncedFamily' => 'new-family-notice',
         'AccountLedgerController@emailInvoice' => 'invoice-copy',
+        // Family emails moved into the house frame (2026-11-27 sweep).
+        'SupplyMail@build' => 'supplies-needed',
+        'AnnouncementMail@build' => 'announcement-notice',
+        'FamilyNoticeMail@formRequest' => 'form-request',
+        'FamilyNoticeMail@invoiceCopy' => 'invoice-copy-self',
         'AccountLedgerController@emailStatement' => 'account-statement',
         'CentreOffboardController@notifyClosure' => 'provider-closed',
         'ManagedFormController@emailFormPackage' => 'forms-to-sign',

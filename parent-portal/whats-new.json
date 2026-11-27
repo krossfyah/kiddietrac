@@ -2,6 +2,27 @@
     "updated": "2026-11-27",
     "entries": [
         {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🧺",
+            "title": "Supply requests arrive as a proper email",
+            "body": "When the centre asks for supplies, parents now get a clear, branded email: a hello by name, the list of what to bring for each child, the date it's needed, and a button to answer Will bring it, Dropped it off or Can't in the app. The evening-before reminder looks the same and lists only what's still to come. Announcements, form requests, unread-message alerts and invoice copies now use the same look, in light and dark mode.",
+            "roles": [
+                "guardian",
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Les demandes de fournitures arrivent dans un vrai courriel",
+            "body_fr": "Quand le centre demande des fournitures, les parents reçoivent maintenant un courriel clair et à l’image du centre : un bonjour personnalisé, la liste de ce qu’il faut apporter pour chaque enfant, la date prévue et un bouton pour répondre « Je l’apporterai », « Déposé » ou « Impossible » dans l’application. Le rappel de la veille a le même aspect et ne liste que ce qui reste à apporter. Les annonces, demandes de formulaires, alertes de messages non lus et copies de factures ont désormais le même style, en mode clair comme en mode sombre.",
+            "title_es": "Las solicitudes de artículos llegan en un correo como es debido",
+            "body_es": "Cuando el centro pide artículos, los padres ahora reciben un correo claro y con la imagen del centro: un saludo por su nombre, la lista de lo que hay que traer para cada niño, la fecha en que se necesita y un botón para responder Lo traeré, Ya lo dejé o No puedo en la app. El recordatorio de la noche anterior se ve igual y solo muestra lo que falta. Los anuncios, solicitudes de formularios, avisos de mensajes sin leer y copias de facturas ahora tienen el mismo estilo, en modo claro y oscuro.",
+            "title_hi": "सामान के अनुरोध अब ठीक से बने ईमेल में आते हैं",
+            "body_hi": "जब सेंटर सामान मांगता है, तो माता-पिता को अब एक साफ़, ब्रांडेड ईमेल मिलता है: नाम से अभिवादन, हर बच्चे के लिए क्या लाना है उसकी सूची, किस तारीख तक चाहिए, और ऐप में 'मैं लाऊँगा', 'छोड़ दिया' या 'नहीं ला सकते' जवाब देने के लिए एक बटन। एक शाम पहले आने वाला रिमाइंडर भी वैसा ही दिखता है और सिर्फ़ बाकी चीज़ें दिखाता है। घोषणाएँ, फ़ॉर्म अनुरोध, अनपढ़े संदेशों की सूचनाएँ और इनवॉइस की कॉपियाँ अब भी इसी रूप में आती हैं, लाइट और डार्क दोनों मोड में।"
+        },
+        {
             "type": "new",
             "date": "2026-11-27",
             "icon": "🙋",

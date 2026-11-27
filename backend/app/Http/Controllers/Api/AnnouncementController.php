@@ -1184,7 +1184,13 @@ final class AnnouncementController extends Controller
         }
 
         // Best-effort email — rich HTML, white-labelled via the agency's mailer.
-        if (! empty($data['send_email']) || $data['send_email'] === null) {
+        /* SUPPLY REQUESTS (2026-11-27): their email is a family letter in the house frame (App\Support\SupplyMail) -
+           greeting, the list as a card, needed-by, the button to answer - for the first notice, the reminder and a
+           resend alike. Everything else about the announcement (bell, push) is unchanged. */
+        $supplyMail = (! empty($data['send_email']) || $data['send_email'] === null) && \App\Support\SupplyMail::rows($announcementId)->count() > 0;
+        if ($supplyMail) {
+            \App\Support\SupplyMail::queue($announcementId, $userIds, $isReminder, $sender);
+        } elseif (! empty($data['send_email']) || $data['send_email'] === null) {
             // Deactivated and suspended accounts get nothing — this path never asked.
             $emails = DB::table('users')->whereIn('id', $userIds)->whereNotNull('email')
                 ->whereNull('deleted_at')
@@ -1196,25 +1202,22 @@ final class AnnouncementController extends Controller
                ("📢 Announcement · iLearn Home Child Care — …"), which reads as bulk
                promotion; it is now the announcement's own title and who it is from. The
                bell and the push keep the 📢 framing. */
-            $emailSubject = trim((($data['title'] ?? '') !== '' ? $data['title'] : 'Announcement') . ' — ' . $scopeName);
+            /* Families see who it is from as FamilyFacingName has it (a provider-named home is the agency, 2026-11-27);
+               a staff-only announcement keeps the centre's own name. */
+            $fromLabel = in_array($data['audience'] ?? 'parents', ['parents', 'all'], true)
+                ? (\App\Support\AnnouncementMail::fromLabel($data['scope_type'], (int) $data['scope_id']) ?: $scopeName) : $scopeName;
+            $emailSubject = trim((($data['title'] ?? '') !== '' ? $data['title'] : 'Announcement') . ' — ' . $fromLabel);
             // Replies reach the person who wrote it, not a no-reply mailbox.
             $replyTo = (! empty($sender->email) && filter_var($sender->email, FILTER_VALIDATE_EMAIL)) ? (string) $sender->email : null;
-            $replyName = $senderName ?: null;
-            $eyebrow = '<div style="font-size:12px;font-weight:700;color:#8EC73C;letter-spacing:.06em;text-transform:uppercase;margin:0 0 6px;">' . e($data['notif_title'] ?? ('📢 Announcement · ' . $scopeName)) . '</div>';
-            // Signature shows the full name of the sender AND which centre it is from.
-            $sig = $senderName
-                ? '<p style="color:#6B7280;margin-top:22px;line-height:1.5;">— <strong style="color:#374151;">' . e($senderName) . '</strong><br><span style="font-size:13px;">' . e($scopeName) . '</span></p>'
-                : '<p style="color:#6B7280;margin-top:22px;font-size:13px;">— ' . e($scopeName) . '</p>';
-            $html = '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;color:#111827;">'
-                . $eyebrow
-                . '<h2 style="color:#1F6080;margin:0 0 12px;">' . e($data['title']) . '</h2>'
-                . ($dueTxt ? '<div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:9px;padding:10px 14px;margin:0 0 14px;font-size:14.5px;color:#92400E;">⏰ Please do this by <strong>' . e($dueTxt) . '</strong></div>' : '')
-                . '<div style="font-size:15px;line-height:1.6;">' . $data['body'] . '</div>'
-                . ($tracks ? '<p style="margin:16px 0 0;font-size:13.5px;color:#475569;">Once it is done, open <strong>Announcements</strong> in the app and tap <strong>✓ Done</strong>, so we stop reminding you.</p>' : '')
-                . (! empty($data['pdf']) ? '<p style="margin:18px 0 4px;"><a href="' . e($data['pdf']['url']) . '" style="display:inline-block;background:#1F6080;color:#fff;text-decoration:none;font-weight:700;padding:10px 16px;border-radius:9px;">📄 Open the PDF: ' . e($data['pdf']['name']) . '</a></p>'
-                    . '<p style="margin:0;font-size:12px;color:#94A3B8;">The link works for 60 days.</p>' : '')
-                . $sig
-                . '</div>';
+            $replyName = trim((string) ($sender->first_name ?? '')) ?: null;   // first names only in email
+            /* THE HOUSE FRAME (2026-11-27, Anthony: "isn't in the typical format - pls full sweep"). This was a bare
+               <div> with no header, branding, footer or dark palette; it is now the house frame (App\Support\AnnouncementMail) like every other
+               family email, signed with the author's first name and who it is from. */
+            $html = \App\Support\AnnouncementMail::build($agencyId, [
+                'title' => $data['title'] ?? '', 'body' => (string) $data['body'], 'plain' => $plain, 'due' => $dueTxt,
+                'tracks' => $tracks, 'pdf' => $data['pdf'] ?? null, 'sender_first' => (string) (strtok(trim((string) ($sender->first_name ?? '')), ' ') ?: ''),
+                'from' => $fromLabel, 'reminder' => $isReminder, 'support_email' => $replyTo,
+            ]);
             // Queue each email on the background 'mail' queue instead of sending
             // inline. Sending is ~1.3–5.5s per email via sendmail; looping N
             // recipients synchronously made "Send" hang for many seconds. The

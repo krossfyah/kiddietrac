@@ -360,27 +360,13 @@ final class LedgerController extends Controller
         $num = (string) ($inv->number ?? ('#' . $inv->id));
         $first = trim((string) ($user->first_name ?? '')) ?: 'there';
         $balance = (float) ($inv->balance_due ?? 0);
-        $agency = DB::table('families')->where('families.id', $inv->family_id)
+        $agencyId = DB::table('families')->where('families.id', $inv->family_id)
             ->join('centres', 'centres.id', '=', 'families.centre_id')
-            ->leftJoin('agencies', 'agencies.id', '=', 'centres.agency_id')
-            ->value('agencies.name');
-
-        $due = $balance > 0.005
-            ? '<p style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:12px 16px;font-size:14px;margin:14px 0;">Balance due: <strong>$' . number_format($balance, 2) . '</strong></p>'
-            : '<p style="background:#ECFDF5;color:#047857;border-radius:8px;padding:12px 16px;font-size:14px;margin:14px 0;">This invoice is paid in full. Thank you! 🎉</p>';
-
-        $content = '<h1>🧾 Your invoice ' . e($num) . '</h1>'
-            . '<p>Hi ' . e($first) . ',</p>'
-            . '<p>As requested, a copy of your invoice from <strong>' . e($agency ?: 'your childcare provider') . '</strong> is attached to this email as a PDF.</p>'
-            . $due
-            . '<p style="color:#64748B;font-size:13px;">You requested this copy from your KiddieTrac account. If you didn\'t, you can safely ignore this message.</p>';
+            ->value('centres.agency_id');
 
         try {
-            $html = view('emails.layout', [
-                'slot' => $content,
-                'title' => 'Your invoice ' . $num,
-                'preheader' => 'A copy of your invoice ' . $num . ' is attached.',
-            ])->render();
+            /* House frame (2026-11-27 sweep): the agency's branded EmailTemplate wrapper, not the old KiddieTrac-only layout. */
+            $html = \App\Support\FamilyNoticeMail::invoiceCopy($agencyId ? (int) $agencyId : null, $num, $first, $balance)['html'];
 
             Mail::html($html, function ($m) use ($to, $num, $pdf) {
                 $m->from(config('mail.from.address', 'noreply@kiddietrac.com'), config('mail.from.name', 'KiddieTrac'));
