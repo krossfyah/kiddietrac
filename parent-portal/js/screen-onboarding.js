@@ -278,8 +278,9 @@
         provider_bio:  user.provider_bio || '',
         date_of_birth: String(user.date_of_birth || '').slice(0, 10),
         // Preferred language → users.locale. Seed only if it's one of the offered
-        // codes; the en-CA default won't match, so new users must pick one.
-        locale:        (['en', 'fr', 'es', 'hi'].indexOf(user.locale) !== -1 ? user.locale : ''),
+        // codes. Anthony 2026-11-27: anything else (the en-CA / en-US account default, or no
+        // value) starts on English, so a first sign-in defaults to English.
+        locale:        (function (l) { l = String(l || '').slice(0, 2).toLowerCase(); return ['fr', 'es', 'hi'].indexOf(l) !== -1 ? l : 'en'; })(user.locale),
       },
       isProvider: !!user.is_provider,
       role_extras: (user.profile_extras && user.profile_extras.role_extras) || {},
