@@ -2,7 +2,7 @@
 title: Getting started — your first day
 category: Getting Started
 order: 0
-screens: ~reports, ~my-forms, ~my-documents, ~household
+screens: ~reports, ~household
 ---
 
 # Getting started — your first day

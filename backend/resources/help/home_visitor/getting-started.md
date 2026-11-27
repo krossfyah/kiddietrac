@@ -2,7 +2,7 @@
 title: Getting started as a Home Visitor
 category: Home visits
 order: 1
-screens: home, ~play-spark, ~my-forms, ~my-documents, ~my-training, ~my-certificates, ~household, ~files
+screens: home, ~play-spark, ~my-training, ~my-certificates, ~household, ~files
 ---
 
 # Getting started as a Home Visitor

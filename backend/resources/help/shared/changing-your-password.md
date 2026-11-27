@@ -2,7 +2,6 @@
 title: Changing your password
 category: Your Account
 order: 1
-screens: ~settings
 ---
 
 # Changing your password

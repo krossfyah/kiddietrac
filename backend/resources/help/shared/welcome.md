@@ -2,7 +2,6 @@
 title: Welcome to Kiddietrac
 category: Getting Started
 order: 1
-screens: ~help
 ---
 
 # Welcome to Kiddietrac
