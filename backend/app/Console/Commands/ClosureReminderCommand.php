@@ -229,7 +229,7 @@ class ClosureReminderCommand extends Command
                     continue;
                 }
                 try {
-                    $this->send($agencyId, $u, $role, (string) $row->centre_name, $dates, $reason,
+                    $this->send($agencyId, $u, $role, $role === 'parent' ? \App\Support\FamilyFacingName::place($centreId, (string) $row->centre_name) : (string) $row->centre_name, $dates, $reason,
                         $away, (bool) $row->affects_billing,
                         \App\Support\MailOversight::firstOnly($bcc, $bccIndex++),
                         false, $meaning, $provider,
@@ -334,7 +334,8 @@ class ClosureReminderCommand extends Command
 
         $c = DB::table('centres')->where('id', $centreId)
             ->first(['supervisor_first_name', 'supervisor_last_name']);
-        $name = trim(($c->supervisor_first_name ?? '') . ' ' . ($c->supervisor_last_name ?? ''));
+        // First name only (2026-11-27): "Your child is with Amna", never the provider's surname in a family email.
+        $name = trim((string) ($c->supervisor_first_name ?? ''));
         if ($name !== '') {
             return $cache[$centreId] = $name;
         }
@@ -344,7 +345,7 @@ class ClosureReminderCommand extends Command
                 ->where('ra.active', true)->where('ra.centre_id', $centreId)
                 ->where('ra.role', 'educator')->whereNull('u.deleted_at'))
             ->distinct()->limit(3)->get(['u.first_name', 'u.last_name'])
-            ->map(fn ($u) => trim($u->first_name . ' ' . $u->last_name))
+            ->map(fn ($u) => trim((string) $u->first_name))
             ->filter()->values()->all();
 
         return $cache[$centreId] = count($eds) === 1 ? $eds[0] : '';
@@ -499,7 +500,7 @@ class ClosureReminderCommand extends Command
         $u = (object) ['email' => $to, 'first_name' => 'Anthony', 'last_name' => 'Hosein'];
 
         foreach ([['parent', 7], ['educator', 7], ['parent', 1]] as [$role, $away]) {
-            $this->send((int) $row->agency_id, $u, $role, (string) $row->centre_name, $dates,
+            $this->send((int) $row->agency_id, $u, $role, $role === 'parent' ? \App\Support\FamilyFacingName::place((int) ($row->centre_id ?? 0) ?: null, (string) $row->centre_name) : (string) $row->centre_name, $dates,
                 $reason, $away, (bool) $row->affects_billing, [], true);
             $this->line("  sent {$role} variant ({$away} day lead) to {$to}");
         }
@@ -545,7 +546,7 @@ class ClosureReminderCommand extends Command
         }
 
         foreach ([['parent'], ['educator']] as [$role]) {
-            $this->send($agencyId, $u, $role, (string) ($centre->name ?? $row->centre_name), $label,
+            $this->send($agencyId, $u, $role, $role === 'parent' && $centre ? \App\Support\FamilyFacingName::place((int) $centre->id, (string) $centre->name) : (string) ($centre->name ?? $row->centre_name), $label,
                 $h['name'], $holidayAway, false, [], true, $h['meaning'], $provider,
                 $h['observed'] ?? $h['date']);
             $this->line(sprintf('  sent %s HOLIDAY variant (%s, %s) to %s%s',

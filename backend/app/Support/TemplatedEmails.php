@@ -85,7 +85,7 @@ final class TemplatedEmails
             . self::p($T('outro') ?? 'You can see all your invoices and payments any time in your portal.')
             . self::button($T('button_label') ?? 'View your billing')
             . self::signoff($T('signoff') ?? ('Kind regards,<br>'
-                . '<strong style="color:#0B1A33;">' . e($d['agency_name']) . ' Team</strong>'));
+                . '<strong style="color:#0B1A33;">' . e(FamilyFacingName::clean((string) $d['agency_name'])) . ' Team</strong>'));
 
         $html = EmailTemplate::wrap($agencyId, $body, [
             'eyebrow' => 'PAYMENT RECEIPT',
@@ -121,9 +121,9 @@ final class TemplatedEmails
                 . 'Adding a different card in your portal is the quickest fix.'))
             . self::button($T('button_label') ?? 'Update your payment method')
             . self::p('<span style="font-size:13.5px;color:#64748B;">' . ($T('contact') ?? ('If you think this is a mistake, please contact '
-                . e($d['agency_name']) . ' — we would rather sort it out with you than have it sit unpaid.')) . '</span>')
+                . e(FamilyFacingName::clean((string) $d['agency_name'])) . ' — we would rather sort it out with you than have it sit unpaid.')) . '</span>')
             . self::signoff($T('signoff') ?? ('Kind regards,<br>'
-                . '<strong style="color:#0B1A33;">' . e($d['agency_name']) . ' Team</strong>'));
+                . '<strong style="color:#0B1A33;">' . e(FamilyFacingName::clean((string) $d['agency_name'])) . ' Team</strong>'));
 
         $html = EmailTemplate::wrap($agencyId, $body, [
             'eyebrow' => 'PAYMENT UNSUCCESSFUL',

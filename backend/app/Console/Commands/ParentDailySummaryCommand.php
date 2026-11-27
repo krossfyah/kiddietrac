@@ -74,6 +74,10 @@ class ParentDailySummaryCommand extends Command
 
         $sent = 0;
         foreach ($children as $child) {
+            // To the family: a home named after its provider reads "Amna's home child care", and "mention it to Amna"
+            // (FamilyFacingName, 2026-11-27). Never the provider's full name as the organisation.
+            $child->centre_who = \App\Support\FamilyFacingName::who((int) $child->centre_id ?: null, (string) $child->centre_name);
+            $child->centre_name = \App\Support\FamilyFacingName::place((int) $child->centre_id ?: null, (string) $child->centre_name);
             // A LIVE agency gets no summary while we are testing.
             if (\App\Support\Suppression::isAgency((int) $child->agency_id)) {
                 continue;
@@ -1191,7 +1195,7 @@ class ParentDailySummaryCommand extends Command
                 . '<div style="font-size:13.5px;color:#78350F;line-height:1.6;">'
                 . 'There is not much detail in today\'s update. Some days are simply busy — but if you would '
                 . 'like to hear more about how ' . $name . ' is getting on, do mention it to '
-                . e((string) $child->centre_name) . ' next time you are in. They would rather know.'
+                . e((string) ($child->centre_who ?? $child->centre_name)) . ' next time you are in. They would rather know.'
                 . '</div></td></tr></table>';
         }
 

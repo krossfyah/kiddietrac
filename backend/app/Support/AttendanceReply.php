@@ -210,7 +210,7 @@ final class AttendanceReply
             $row = SafeArrival::lateRow((int) $link->agency_id, (int) $link->child_id, 'arrival');
         } catch (\Throwable $e) {
         }
-        $centre = (string) DB::table('centres')->where('id', $row['centre_id'] ?? ($kid['centre_id'] ?? 0))->value('name');
+        $centre = FamilyFacingName::place((int) ($row['centre_id'] ?? ($kid['centre_id'] ?? 0)) ?: null, '');   // never a provider's full name
 
         return [
             'child' => $kid['first_name'] ?? '',

@@ -103,6 +103,8 @@ class CheckEventNotifier
                 ->first();
 
             if (! $child) return;
+            // To the family: a home named after its provider reads "Amna's home child care" (FamilyFacingName, 2026-11-27).
+            $child->centre_name = \App\Support\FamilyFacingName::place((int) DB::table('families')->where('id', $child->family_id)->value('centre_id') ?: null, (string) $child->centre_name);
             // Runs in the queue worker (no session): a test agency's check-in tells nobody (2026-11-25).
             if (\App\Support\TestAgency::skips((int) $child->agency_id, 'check-in event (family)', ['child' => $childId])) return;
 

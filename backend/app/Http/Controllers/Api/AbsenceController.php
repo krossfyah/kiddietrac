@@ -188,6 +188,9 @@ class AbsenceController extends Controller
     {
         try {
             $name = $child->preferred_name ?: $child->first_name;
+            // Family wording (FamilyFacingName, 2026-11-27): who they told = the agency for a provider-named home; where = "Amna's home child care".
+            $org = \App\Support\FamilyFacingName::org((int) $child->centre_id, (int) $child->agency_id, (string) $child->centre_name);
+            $place = \App\Support\FamilyFacingName::place((int) $child->centre_id, (string) $child->centre_name);
             $d = Carbon::parse($date, $tz);
             $when = $d->isToday() ? 'today' : ($d->isTomorrow() ? 'tomorrow' : 'on ' . $d->format('D j M'));
 
@@ -208,8 +211,8 @@ class AbsenceController extends Controller
                     : "🚫 {$name} has been marked absent {$when}";
 
                 $line = $isReporter
-                    ? "You told {$child->centre_name} that {$name} will not be in {$when}."
-                    : "{$child->centre_name} has recorded {$name} as absent {$when}. Reported by {$reporter}.";
+                    ? "You told {$org} that {$name} will not be in {$when}."
+                    : "{$org} has recorded {$name} as absent {$when}. Reported by {$reporter}.";
                 $line = trim($line
                     . ($reason ? ' Reason: ' . ucfirst($reason) . '.' : '')
                     . ($note ? ' Note: “' . $note . '”' : ''));
@@ -251,15 +254,15 @@ class AbsenceController extends Controller
                     . \App\Support\EmailOverrides::say((int) $child->agency_id, 'absence-reported',
                         $isReporter ? 'closing_reporter' : 'closing_other',
                         $isReporter
-                            ? 'Nothing further is needed. If plans change, cancel the absence in the app and ' . e($child->centre_name) . ' will be told.'
-                            : 'If this is not right, contact ' . e($child->centre_name) . ' so it can be corrected.',
-                        ['child_name' => $name, 'centre_name' => (string) $child->centre_name])
+                            ? 'Nothing further is needed. If plans change, cancel the absence in the app and ' . e($org) . ' will be told.'
+                            : 'If this is not right, contact ' . e($org) . ' so it can be corrected.',
+                        ['child_name' => $name, 'centre_name' => $place])
                     . '</p>';
 
                 $html = EmailTemplate::wrap((int) $child->agency_id, $body, [
                     'eyebrow' => 'ATTENDANCE',
                     'title' => $title,
-                    'subtitle' => $child->centre_name . ' · ' . $d->format('D, j M Y'),
+                    'subtitle' => $place . ' · ' . $d->format('D, j M Y'),
                     'preheader' => $line,
                 ]);
 

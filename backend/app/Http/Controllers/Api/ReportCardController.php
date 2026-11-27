@@ -486,7 +486,8 @@ final class ReportCardController extends Controller
     private function mailFields(object $row, object $child, int $agencyId, string $guardianFirst, Request $request, string $message, string $url): array
     {
         $centreId = (int) DB::table('families')->where('id', $child->family_id)->value('centre_id');
-        $provider = (string) (DB::table('agencies')->where('id', $agencyId)->value('name') ?: DB::table('centres')->where('id', $centreId)->value('name'));
+        $provider = \App\Support\FamilyFacingName::agency($agencyId ? (int) $agencyId : null)
+            ?: \App\Support\FamilyFacingName::org($centreId ? (int) $centreId : null, null, '');   // never a provider-named centre as the sender
         $tz = \App\Support\AgencyTime::tz($agencyId) ?: 'America/Toronto';
         return [
             'agency_id' => $agencyId, 'child_first' => (string) ($child->preferred_name ?? '') ?: (string) $child->first_name,

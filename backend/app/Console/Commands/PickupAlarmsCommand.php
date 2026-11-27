@@ -49,7 +49,7 @@ final class PickupAlarmsCommand extends Command
 
             $left = max(0, (int) ceil($now->diffInSeconds($pickupAt, false) / 60));
             $title = '⏰ Time to pick up ' . $plan['first_name'];
-            $body = 'Pickup at ' . $plan['pickup_label'] . ($left > 0 ? ', ' . PickupPlan::inWords($left) : ' — now') . ' · ' . $plan['centre_name'] . '.';
+            $body = 'Pickup at ' . $plan['pickup_label'] . ($left > 0 ? ', ' . PickupPlan::inWords($left) : ' — now') . ' · ' . \App\Support\FamilyFacingName::place((int) ($k->centre_id ?? 0) ?: null, (string) $plan['centre_name']) . '.';
             $this->line(($dry ? '[dry] ' : '') . "user {$s->user_id} child {$s->child_id}: {$title} / {$body}");
             if ($dry) continue;
             // Claim it first so two overlapping runs never ring twice.

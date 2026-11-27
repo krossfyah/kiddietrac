@@ -4,6 +4,25 @@
         {
             "type": "improved",
             "date": "2026-11-27",
+            "icon": "🏷️",
+            "title": "Family messages name your agency",
+            "body": "Emails, texts and calls to families now speak for your agency, for example \"The team at your agency was alerted\". A home named after its provider shows only the provider's first name, never their full name.",
+            "roles": [
+                "guardian",
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Les messages aux familles nomment votre agence",
+            "body_fr": "Les courriels, textos et appels aux familles parlent maintenant au nom de votre agence, par exemple « L'équipe de votre agence a été avisée ». Un milieu nommé d'après sa responsable n'affiche que son prénom, jamais son nom complet.",
+            "title_es": "Los mensajes a las familias nombran a su agencia",
+            "body_es": "Los correos, mensajes de texto y llamadas a las familias ahora hablan en nombre de su agencia, por ejemplo «Se avisó al equipo de su agencia». Un hogar con el nombre de su proveedora solo muestra su nombre de pila, nunca su nombre completo.",
+            "title_hi": "परिवारों को संदेशों में आपकी एजेंसी का नाम",
+            "body_hi": "परिवारों को भेजे गए ईमेल, टेक्स्ट और कॉल अब आपकी एजेंसी की ओर से बोलते हैं, जैसे \"आपकी एजेंसी की टीम को सूचित किया गया\"। प्रदाता के नाम वाले घर में केवल प्रदाता का पहला नाम दिखता है, कभी पूरा नाम नहीं।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
             "icon": "🔔",
             "title": "Bell: one list, plus what your team submits",
             "body": "Your bell is now one list by time: your own safety alerts sit among agency activity, not pinned on top. It also lists what staff submit, such as forms, drills, hazards, medication, report cards and HR tasks, for your own centres only, with no phone ring; switch them off under Notify me about > Staff submissions.",

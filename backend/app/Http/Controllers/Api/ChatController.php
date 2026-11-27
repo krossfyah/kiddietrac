@@ -120,7 +120,7 @@ final class ChatController extends Controller
         if (! $family || ! $family->centre_id || (int) $family->centre_id === (int) $conv->centre_id) { return null; }
 
         return ['conv' => $conv, 'family' => $family,
-            'centre_name' => (string) DB::table('centres')->where('id', $family->centre_id)->value('name')];
+            'centre_name' => \App\Support\FamilyFacingName::place((int) $family->centre_id, 'your new provider')];   // parent-facing notice
     }
 
     /** The family's thread with its CURRENT provider for the same child (found or started). */

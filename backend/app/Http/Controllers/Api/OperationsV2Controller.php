@@ -100,7 +100,8 @@ final class OperationsV2Controller extends Controller
         $agencyId = $centre->agency_id ?? null;
         $dates = \App\Support\Closures::dateLabel($row);
         $reason = \App\Support\Closures::reason($row);
-        $centreName = $centre->name ?? 'Your centre';
+        // Families are told too: a home named after its provider reads "Amna's home child care" (FamilyFacingName, 2026-11-27).
+        $centreName = \App\Support\FamilyFacingName::place($centre ? (int) $centre->id : null, (string) ($centre->name ?? 'Your centre'));
 
         // Families at the centre, and the staff assigned to it. Both need to know; only
         // one of them was ever told.

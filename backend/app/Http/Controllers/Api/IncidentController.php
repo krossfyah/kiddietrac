@@ -921,7 +921,8 @@ class IncidentController extends Controller
            came from somewhere else. */
         $agencyRow  = $agencyId ? DB::table('agencies')->where('id', $agencyId)->first() : null;
         $agencyName = trim((string) ($agencyRow->name ?? ''));
-        $fromName   = $agencyName !== '' ? $agencyName : (string) ($centre->name ?? 'your childcare centre');
+        $fromName   = \App\Support\FamilyFacingName::agency($agencyId ? (int) $agencyId : null)
+            ?: \App\Support\FamilyFacingName::org((int) ($centre->id ?? 0) ?: null, null, 'your childcare centre');
 
         /* Guardian first names, so the email can address the person it is about
            somebody's child rather than opening "Hi there". */

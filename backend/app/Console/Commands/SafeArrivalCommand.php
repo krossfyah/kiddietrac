@@ -404,6 +404,8 @@ class SafeArrivalCommand extends Command
     private function askParents(CheckEventNotifier $notifier, int $agencyId, array $row, string $tz, bool $dry): int
     {
         $name = $row['first_name'];
+        // To the family: a home named after its provider reads "Amna's home child care" (FamilyFacingName, 2026-11-27).
+        $row['centre_name'] = \App\Support\FamilyFacingName::place((int) $row['centre_id'] ?: null, (string) $row['centre_name']);
         $at = Carbon::parse($row['expected'], $tz)->format('g:i A');
         $title = "🛡️ Has {$name} arrived?";
         $body = "{$name} was expected at {$row['centre_name']} around {$at} and hasn't been signed in. "
@@ -581,6 +583,7 @@ class SafeArrivalCommand extends Command
     private function askParentsPickup(CheckEventNotifier $notifier, int $agencyId, array $row, string $what, bool $dry): int
     {
         $name = $row['first_name'];
+        $row['centre_name'] = \App\Support\FamilyFacingName::place((int) ($row['centre_id'] ?? 0) ?: null, (string) $row['centre_name']);   // family wording
         $title = "🛡️ Has {$name} been picked up?";
         $body = "Our records still show {$name} signed in at {$row['centre_name']}, past {$what}. "
             . "If {$name} is with you, please let the centre know so they can update the record. "

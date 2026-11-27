@@ -357,8 +357,9 @@ final class TempPickups
      */
     public static function signOff(object $p): string
     {
-        $centre = trim((string) DB::table('centres')->where('id', (int) ($p->centre_id ?? 0))->value('name'));
-        $agency = trim((string) DB::table('agencies')->where('id', (int) $p->agency_id)->value('name'));
+        // A home named after its provider is "Amna's home child care", never her full name (FamilyFacingName, 2026-11-27).
+        $centre = trim(FamilyFacingName::place((int) ($p->centre_id ?? 0) ?: null, ''));
+        $agency = FamilyFacingName::agency((int) $p->agency_id);
         if ($centre === '' && $agency === '') return '';
         if ($centre === '' || strcasecmp($centre, $agency) === 0) return ' - ' . ($centre ?: $agency);
 

@@ -104,14 +104,17 @@ class SafeArrivalAbsentMail
         $child = DB::table('children')->where('id', $c->child_id)->first(['id', 'first_name', 'preferred_name', 'family_id']);
         if (! $child) return 'child not found';
         $first = trim((string) ($child->preferred_name ?: $child->first_name));
-        $centre = DB::table('centres')->where('id', $c->centre_id)->value('name') ?: 'the centre';
+        // A home is named after its provider ("Amna Ahsan"): families see "Amna's home child care" and "the iLearn
+        // Home Childcare team", never the provider's full name as an organisation (FamilyFacingName, 2026-11-27).
+        $centre = FamilyFacingName::place((int) $c->centre_id);
+        $team = FamilyFacingName::team((int) $c->centre_id, $agencyId);
         $agency = DB::table('agencies')->where('id', $agencyId)->first(['name', 'contact_phone', 'contact_email']);
         $at = fn ($t) => $t ? Carbon::parse($t)->timezone($tz)->format('g:i A') : '';
 
         $tried = [];
         if ($c->parents_notified_at ?? null) $tried[] = ['at' => $at($c->parents_notified_at), 'what' => 'We sent you a check-in message'];
         if ($c->call_started_at ?? null) $tried[] = ['at' => $at($c->call_started_at), 'what' => 'We tried calling'];
-        if ($c->escalated_at ?? null) $tried[] = ['at' => $at($c->escalated_at), 'what' => 'The ' . $centre . ' team was alerted'];
+        if ($c->escalated_at ?? null) $tried[] = ['at' => $at($c->escalated_at), 'what' => ucfirst($team) . ' was alerted'];
         if (($c->up_alerted_at ?? null) && $c->up_alerted_at != $c->escalated_at) $tried[] = ['at' => $at($c->up_alerted_at), 'what' => 'The office was alerted'];
 
         $guardians = DB::table('guardians as g')->join('users as u', 'u.id', '=', 'g.user_id')
@@ -136,7 +139,7 @@ class SafeArrivalAbsentMail
             'date' => (string) $c->check_date, 'expected' => $c->expected_time ? Carbon::parse($c->check_date . ' ' . $c->expected_time, $tz)->format('g:i A') : '',
             'tried' => $tried, 'marked_at' => now($tz)->format('g:i A'), 'phone' => $phone, 'email' => (string) ($agency->contact_email ?? ''),
             // Signed by the agency: a home centre is often named after its provider, and staff last names never go in email.
-            'team' => preg_replace('/\s+(inc|ltd|llc|corp)\.?$/i', '', trim((string) ($agency->name ?? '')))];
+            'team' => FamilyFacingName::agency($agencyId)];
         $line = $first . ': marked absent (' . $when . '), family ' . count($to) . ' address(es), ' . count($bcc) . ' staff BCC';
         if ($dry) return '[dry] ' . $line;
 

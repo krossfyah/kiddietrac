@@ -132,11 +132,13 @@ final class ParentContactController extends Controller
     public static function reach(int $agencyId, object $family, object $centre, ?object $child, $sender, array $guardianIds, array $channels, string $body, bool $bell = true, string $ip = ''): array
     {
         $self = new self();
-        $senderName = trim($sender->first_name . ' ' . $sender->last_name) ?: 'Your educator';
+        // First name only, signed with the organisation, never a provider-named centre (FamilyFacingName, 2026-11-27).
+        $senderName = trim((string) ($sender->first_name ?? '')) ?: 'Your educator';
+        $orgName = \App\Support\FamilyFacingName::org((int) ($centre->id ?? 0) ?: null, $agencyId, (string) ($centre->name ?? ''));
         $childName = $child ? ($child->preferred_name ?: $child->first_name) : null;
         $about = $childName ? ' about ' . $childName : '';
         $agency = DB::table('agencies')->where('id', $agencyId)->first(['name', 'contact_email', 'brand_support_email']);
-        $agencyName = (string) ($agency->name ?? 'Your child care agency');
+        $agencyName = \App\Support\FamilyFacingName::clean((string) ($agency->name ?? '')) ?: 'Your child care agency';
         $wantSms = in_array('sms', $channels, true);
         $wantEmail = in_array('email', $channels, true);
         $guardians = $self->guardians((int) $family->id)->keyBy('id');
@@ -172,13 +174,13 @@ final class ParentContactController extends Controller
                         $html = EmailTemplate::wrap($agencyId,
                             '<p style="margin:0 0 12px;font-size:15px;color:#334155;line-height:1.6">Hi ' . $e($g->first_name ?: 'there') . ',</p>'
                             . '<div style="font-size:15px;color:#0F172A;line-height:1.65">' . nl2br($e($body)) . '</div>'
-                            . '<p style="margin:16px 0 0;font-size:14px;color:#334155;line-height:1.6">— ' . $e($senderName) . ', ' . $e($centre->name) . '</p>'
+                            . '<p style="margin:16px 0 0;font-size:14px;color:#334155;line-height:1.6">— ' . $e($senderName) . ', ' . $e($orgName) . '</p>'
                             . '<p style="margin:16px 0 0;font-size:12.5px;color:#64748B;line-height:1.55">To reply, use Message Centre in the KiddieTrac app, or reply to this email and it will reach '
                             . $e($agencyName) . '.</p>',
                             ['eyebrow' => $childName ? 'A MESSAGE ABOUT ' . mb_strtoupper($childName) : 'A MESSAGE FROM YOUR PROVIDER', 'title' => 'A message from ' . $senderName,
-                             'subtitle' => $centre->name, 'preheader' => mb_substr($body, 0, 120)]);
+                             'subtitle' => $orgName, 'preheader' => mb_substr($body, 0, 120)]);
                         $replyTo = collect([$agency->contact_email ?? null, $agency->brand_support_email ?? null])->first(fn ($a) => filter_var((string) $a, FILTER_VALIDATE_EMAIL));
-                        $subject = $senderName . ' — ' . ($childName ? 'a message about ' . $childName : 'a message from ' . $centre->name);
+                        $subject = $senderName . ' — ' . ($childName ? 'a message about ' . $childName : 'a message from ' . $orgName);
                         $beforeE = (int) DB::table('email_logs')->max('id');
                         AgencyMailer::forAgency($agencyId)->html($html, function ($m) use ($email, $gname, $subject, $replyTo) {
                             $m->to($email, $gname ?: null)->subject($subject);

@@ -35,7 +35,7 @@ final class YearEndPortfolioCommand extends Command
             ->where('ch.enrollment_status', 'enrolled')
             ->whereNull('ch.deleted_at')
             ->select('ch.id', 'ch.first_name', 'ch.last_name', 'ch.family_id',
-                'f.family_name', 'f.primary_email', 'c.agency_id', 'c.name as centre_name')
+                'f.family_name', 'f.primary_email', 'c.agency_id', 'c.id as centre_id', 'c.name as centre_name')
             ->get();
 
         $this->info("Found {$children->count()} enrolled children");
@@ -76,13 +76,13 @@ final class YearEndPortfolioCommand extends Command
                 $pdfBytes = $dompdf->output();
 
                 $body = EmailTemplate::wrap((int) $ch->agency_id, '
-                    <p>Happy holidays from ' . htmlspecialchars($ch->centre_name) . '!</p>
+                    <p>Happy holidays from ' . htmlspecialchars(\App\Support\FamilyFacingName::org((int) $ch->centre_id, (int) $ch->agency_id, (string) $ch->centre_name)) . '!</p>
                     <p>Attached is ' . htmlspecialchars($ch->first_name) . '\'s year-end portfolio for ' . $year . ' — every observation, milestone, and ' . $logs . ' care moment we shared this year.</p>
                     <p>Thank you for trusting us with your family. We look forward to ' . ($year + 1) . '!</p>
                 ', [
                     'eyebrow' => "YEAR-END PORTFOLIO",
                     'title' => $ch->first_name . "'s " . $year . " portfolio",
-                    'subtitle' => $ch->centre_name,
+                    'subtitle' => \App\Support\FamilyFacingName::place((int) $ch->centre_id, (string) $ch->centre_name),
                 ]);
 
                 AgencyMailer::forAgency((int) $ch->agency_id)->html($body, function ($m) use ($ch, $year, $pdfBytes) {

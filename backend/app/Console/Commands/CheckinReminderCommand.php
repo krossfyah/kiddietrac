@@ -70,6 +70,8 @@ class CheckinReminderCommand extends Command
         foreach ($children as $child) {
             if (\App\Support\TestAgency::skips((int) $child->agency_id, 'check-in reminder', ['child' => (int) $child->id])) continue;   // test agency: nothing to anyone (2026-11-25)
             $centreKey = (int) ($child->centre_id ?? 0);
+            // To the family: a home named after its provider reads "Amna's home child care" (FamilyFacingName, 2026-11-27).
+            $child->centre_name = \App\Support\FamilyFacingName::place($centreKey ?: null, (string) $child->centre_name);
             if ($centreKey) {
                 if (! array_key_exists($centreKey, $closedCentres)) {
                     $closedCentres[$centreKey] = \App\Support\Closures::isClosed($centreKey);

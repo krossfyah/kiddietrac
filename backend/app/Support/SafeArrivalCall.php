@@ -151,7 +151,9 @@ final class SafeArrivalCall
     /** What a test call says, with sample names, for the agency's draft wording. */
     public static function testVars(int $agencyId): array
     {
-        $centre = (string) (Live::centres(DB::table('centres'))->where('agency_id', $agencyId)->orderBy('name')->value('name') ?: 'your centre');
+        $cid = (int) (Live::centres(DB::table('centres'))->where('agency_id', $agencyId)->orderBy('name')->value('id') ?: 0);
+        // Who is calling, as a family hears it: a home named after its provider is announced as the agency (FamilyFacingName).
+        $centre = FamilyFacingName::org($cid ?: null, $agencyId, 'your centre');
 
         return ['child' => 'Test Child', 'child_full' => 'Test Child', 'centre' => $centre, 'room' => 'Test Room', 'time' => '9:00 AM'];
     }
@@ -166,7 +168,7 @@ final class SafeArrivalCall
         return [
             'child' => $name,
             'child_full' => $child ? trim($name . ' ' . $child->last_name) : $name,
-            'centre' => (string) DB::table('centres')->where('id', $check->centre_id)->value('name'),
+            'centre' => FamilyFacingName::org((int) $check->centre_id, (int) $check->agency_id),   // "a call from iLearn Home Childcare", never a provider's full name
             'room' => (string) DB::table('rooms')->where('id', $check->room_id)->value('name'),
             'time' => $check->expected_time ? Carbon::parse(substr((string) $check->expected_time, 0, 5), $tz)->format('g:i A') : 'the usual time',
         ];
