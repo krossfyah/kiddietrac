@@ -1,40 +1,72 @@
 ---
 title: Tableau de bord de conformité
-category: Administration
-order: 56
 ---
 # Tableau de bord de conformité
 
-Un seul écran avec les trois signaux « ce qui demande de l’attention » que tout directeur de centre et tout administrateur d’agence veut voir d’un coup d’œil. Ouvrez-le depuis **Administration → Conformité**.
+**Administration › Compliance** est une seule page qui répond à « qu'est-ce qui doit être réglé avant qu'un inspecteur
+le voie? » : les certificats du personnel échus ou sur le point de l'être, les responsables qui n'ont pas activé la
+connexion à deux facteurs et les centres pleins ou presque. Ouvrez-la au début de chaque semaine. La page ne fait que
+lire vos dossiers : corrigez les choses à l'écran où se trouve le dossier, puis revenez, et le total baisse.
 
-## Bandeau d’indicateurs
+[[open: #compliance | Ouvrir le tableau de bord de conformité]]
 
-Cinq tuiles en haut de l’écran :
+## Lire la page
 
-- **Certificats expirés** — certifications du personnel dont la date d’expiration est passée
-- **Expirent (30 j)** — certifications qui expirent dans les 30 prochains jours
-- **MFA non activé** — directeurs et administrateurs d’agence sans double authentification
-- **À/au-delà de la capacité** — centres à 100 % d’inscription ou plus
-- **Serré (95 %+)** — centres proches de la capacité
+1. Ouvrez **Administration › Compliance**. La bannière indique **What needs attention**.
+2. Regardez les cinq tuiles du haut : **Expired certs**, **Expiring (30d)**, **MFA not enrolled**, **At/over capacity** et **Tight (95%+)**. Le rouge veut dire d'agir tout de suite, l'ambre de le prévoir.
+3. Faites défiler jusqu'aux cartes sous les tuiles pour voir les noms derrière chaque chiffre.
 
-## Trois cartes
+## Renouveler les certificats du personnel
 
-### Certifications du personnel
+La carte **Staff certifications** liste chaque certificat (par exemple premiers soins, RCR ou inscription EPE) échu
+ou qui expire d'ici 30 jours, avec la personne, le type et « Expires … (in 4 days) » ou « (3 days ago) ».
 
-Liste chaque certification expirée ou qui expire d’ici 30 jours. Chaque ligne indique le membre du personnel, le type de certification (RECE / Premiers soins / RCR / etc.) et le délai relatif (p. ex. « expire dans 4 jours »).
+1. Notez qui figure sur la liste.
+2. Demandez le certificat renouvelé à la personne, ou ouvrez son dossier d'employé et téléversez-le avec sa nouvelle date d'expiration.
+3. Revenez à **Administration › Compliance**. Une fois la nouvelle date enregistrée, la personne disparaît de la liste.
 
-État vide : « ✅ Toutes les certifications sont à jour. »
+Quand personne n'est en retard, la carte affiche **✅ Every cert is current.**
 
-### MFA non activé
+## Faire activer la connexion à deux facteurs
 
-Liste les directeurs et administrateurs d’agence dont `two_factor_secret` n’est pas défini. Chaque ligne indique le nom, le courriel et l’horodatage de la dernière connexion. Invitez-les à aller à **Paramètres → Double authentification (MFA)** pour l’activer.
+La carte **MFA not enrolled** liste les directeurs de centre et administrateurs d'agence qui se connectent avec un mot
+de passe seulement, avec leur courriel et leur dernière connexion.
 
-État vide : « ✅ Tous les directeurs et administrateurs ont activé la MFA. »
+1. Envoyez un message à chaque personne pour lui demander d'activer la connexion à deux facteurs.
+2. La personne ouvre l'écran de deux facteurs, numérise le code avec une application d'authentification et tape le code à 6 chiffres pour confirmer.
+3. Actualisez le tableau de bord : elle quitte la liste. Quand tout le monde est inscrit, la carte affiche **✅ Every director + admin has MFA enrolled.**
 
-### Capacité du centre
+[[open: #mfa | Ouvrir la connexion à deux facteurs]]
 
-Pour chaque centre de l’agence : nombre d’inscrits / capacité autorisée, pourcentage et barre de progression en couleur (vert < 80 %, ambre 80-95 %, rouge ≥ 95 %).
+## Surveiller la capacité des centres
 
-## Portée de l’agence
+La carte **Centre capacity** montre, pour chaque centre, les enfants inscrits par rapport aux places du permis, en
+pourcentage et en barre : vert sous 80 %, ambre dès 80 %, rouge à 95 % ou plus.
 
-Limité par `getAgencyId()`. Les administrateurs de plateforme voient la tranche de l’agence qu’ils ont choisie avec le sélecteur d’agence.
+1. Repérez les centres en rouge.
+2. Avant d'y inscrire un autre enfant, vérifiez le permis et la liste d'attente.
+3. Si la capacité du permis est mauvaise, corrigez-la dans les paramètres du centre pour que la barre soit calculée sur le bon nombre.
+
+Si les règles de votre province prévoient des formations et vérifications du personnel, une autre carte montre qui n'a pas quel élément.
+
+## Qui peut faire quoi
+
+| Rôle | Voit |
+|---|---|
+| Administrateur d'agence | Tous les centres de l'agence active. |
+| Directeur de centre | Son ou ses centres seulement. |
+| Vérificateur | La même page, en lecture seule. |
+| Administrateur de plateforme | L'agence choisie dans le sélecteur d'agence. |
+
+## Questions fréquentes et problèmes
+
+??? Un certificat a été renouvelé, mais la personne est encore sur la liste. | Le nouveau certificat n'a pas encore été enregistré avec sa nouvelle date d'expiration. Téléversez-le avec la date dans le dossier de l'employé.
+??? La page affiche « Could not load ». | Actualisez la page. Si cela continue, ouvrez un billet à partir de l'Aide.
+??? La carte de capacité affiche « No centres in this agency. » | L'agence n'a pas encore de centre ouvert. Un administrateur d'agence en ajoute un à l'écran des centres.
+??? Cette page envoie-t-elle des courriels? | Non. Elle ne fait qu'afficher la liste; c'est vous qui décidez qui contacter.
+
+## Écrans connexes
+
+[[open: #inspection | Liste de vérification d'inspection]] [[open: #audit-logs | Journal d'audit]]
+
+Voir aussi [[audit-log]] et [[compliance-and-reporting]].

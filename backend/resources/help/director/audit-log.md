@@ -2,78 +2,81 @@
 title: Audit log viewer
 category: Administration
 order: 58
-roles: agency_admin, platform_admin
+roles: agency_admin, platform_admin, centre_director, auditor
 screens: audit-logs
 ---
-# Audit log
+# Audit log viewer
 
-Every meaningful action in the portal is recorded. Find the viewer under **Administration → Audit log**.
+The audit log is the record of who did what, and when, in your agency: sign-ins, changes to children, families, staff,
+invoices and settings, emails, texts, calls and chat. Use it to answer "who changed this?", to check what went out to a
+family, or to hand an inspector or auditor proof of what happened. Nothing here can be edited or deleted.
 
-## What gets recorded
+[[open: #audit-logs | Open the Audit log]]
 
-Examples (50+ action types as of v22p49):
+## Finding an action
 
-- `user.created` / `user.deleted` / `user.revived` / `user.role_changed`
-- `centre.created` / `centre.updated` / `centre.archived`
-- `agency.suspended` / `agency.resumed` / `agency.updated`
-- `invoice.created` / `invoice.late_fee_applied` / `payment.recorded`
-- `branding.updated`
-- `campaign.email_sent` / `digest.daily_sent` / `digest.weekly_sent`
-- `chat.email_notified` / `form.submitted`
+1. Open **Administration › Audit log**. The **📜 Audit log** tab opens first, newest entry at the top.
+2. Pick an **Action** (for example a sign-in or an invoice change) and, if you need to, an **Entity** (the kind of record: user, centre, invoice …). **All** shows everything.
+3. Type a name, email or word in **Search** — it looks through the action and its details.
+4. Set **From** and **To** to narrow the dates.
+5. Click a row to open the full detail of that entry: who did it, from which address, and exactly what changed.
+6. Press **Reset** to clear every filter.
 
-## Reading the order
+On a phone the filters fold behind **⚙️ Filters** (it shows how many are set) and each entry is a card.
 
-![The audit log, timestamped to the millisecond](https://api.kiddietrac.com/help-img/audit-log.png)
+> ℹ️ Every time on this screen is in your agency's time zone. Times carry milliseconds, so entries written in the same second still show in the order they really happened.
 
-**Timestamps carry milliseconds.** Whole seconds were not enough resolution to read this log: of the 300 most recent rows, 241 share their second with another row, and a single second in the middle of an integration sync holds 25 of them. At second precision those all read as one moment, so a correctly ordered list looked arbitrary.
+## Exporting for an inspector or auditor
 
-Rows are ordered newest first, and ties within the same instant are broken by the order they were written — so what you see is the order things actually happened, and now the timestamp shows it.
+1. Set the filters you want (dates, action, search).
+2. Press **⤓ CSV** beside **Reset**.
+3. Open the file in a spreadsheet. It holds up to 5,000 rows with the same filters and the same order as the screen.
 
-Every time on this screen is in **your agency's timezone**, never UTC and never your device's.
+## Reading chat conversations
 
-Rows written before September 2026 show `.000`. That is honest rather than tidy: their sub-second order was never recorded, and inventing one would be worse than admitting it.
+1. Open the **💬 Chat conversations** tab (agency admins only).
+2. Narrow with **Search**, **Active from** and **Active until**.
+3. Press **View transcript** on a conversation. Deleted messages show struck through with the time they were deleted; edited messages are flagged.
+4. Press **⬇️ Download transcript** to save it as a text file.
 
-## Filtering
+> ⚠️ Opening a transcript is itself recorded in the log, with your name and the conversation you opened.
 
-Five filters at the top:
+### Handling a reported message
 
-- **Action** — pick from the dropdown (auto-populated with action types seen in your agency)
-- **Entity** — limit to one entity type (user / centre / invoice / etc.)
-- **Search** — free text against the action name or JSON payload
-- **From / To** — date range bounds
+When someone reports a chat message, a **🚩 Reported messages** box appears on the chat tab and admins get a bell notice.
 
-Filters apply both to the on-screen rows and the CSV download.
+1. Read the report: who reported whom, the reason and their note.
+2. Press **Open conversation** to read it in context.
+3. Deal with it (talk to the person, remove access), then press **Mark handled**.
 
-## CSV export
+## Checking texts, calls, emails and payments
 
-Click the green **⤓ CSV** button beside Reset. Downloads up to 5,000 rows with When / Action / Entity / Actor / Email / IP / Payload columns. Honours every active filter.
+- **📱 Text messages** — every text sent or received, with its status and any error. Filter with **Search**, **From**, **To** and save with **⬇️ Export CSV**.
+- **📞 Voice calls** — every automated call (announcements, Safe Arrival checks) with how long it lasted and the outcome, including which key the person pressed.
+- **📧 Email log** and **⚠️ Email errors** — every email the agency sent and the ones that bounced or failed, with the reason in plain words.
+- **💳 Payment integrations** — what the payment provider sent and received.
 
-The export is ordered exactly as the screen is, ties included. It previously sorted on the timestamp alone, which left rows sharing a second in whatever order the database happened to return — in the one copy of the log that gets filed and handed to somebody. The **When** column is written as text so a spreadsheet cannot round the milliseconds away and quietly reorder it.
+[[show: #audit-logs @ 📧 Email log | Show me the Email log]]
 
-## Detail modal
+## Who can do what
 
-Click any row for a full detail view including pretty-printed JSON payload — useful for understanding *exactly* what changed.
+| Role | Sees |
+|---|---|
+| Agency admin | Every tab for the whole agency, including chats and email. |
+| Centre director | The audit, payment, text and call tabs, for their own centre(s) only. No chat or email tabs. |
+| Auditor | Read-only audit log for the agency, to review and export. |
+| Platform admin | Everything, plus **🌐 Platform-level** for events that belong to no agency (for example sign-in attempts for accounts that do not exist). |
 
-## Chat conversations tab
+## FAQs and when something goes wrong
 
-**Audit log → 💬 Chat conversations** (agency admins and platform admins). Every conversation in
-your agency, families with staff and staff with each other, newest activity first:
+??? I can't see the Chat conversations or Email log tab. | Those tabs are for agency admins. Centre directors and auditors do not get them.
+??? The list is empty. | Check the filters: a date range or Action left over from last time hides rows. Press **Reset**.
+??? Old entries show .000 after the seconds. | Entries from before September 2026 were saved without milliseconds. Their order within that second was never recorded.
+??? Can I delete or correct an entry? | No. The log is permanent on purpose, so it can be trusted as evidence.
+??? Does looking at the log notify anyone? | No, except that opening a chat transcript is recorded in the log itself.
 
-- **Type** filter (families ↔ staff, staff ↔ staff), **Search** across people, families, centres
-  and anything said, and **Active from / Started by** dates.
-- **View transcript** shows the whole conversation by day. Deleted messages are struck through in
-  red with when they were deleted, edited ones are flagged, and attachments are listed by name.
-  **⬇️ Download transcript** saves it as a text file.
-- **Opening a transcript is itself recorded** here as *Chat transcript viewed*, naming who opened
-  which conversation.
+## Related screens
 
-Centre directors do not see this tab.
+[[open: #compliance | Compliance dashboard]] [[open: #privacy-breaches | Privacy breaches]]
 
-## On a phone
-
-On a phone each entry is a card (time, then the action, then its detail), the tabs sit in one
-line you can swipe, and the filters fold behind a **⚙️ Filters** button that shows how many are set.
-
-## Scope
-
-Agency admins see actions by users in their agency (role-based scope OR guardian path). Platform admins see every row across the platform.
+See also [[compliance-dashboard]] and [[data-retention-compliance]].

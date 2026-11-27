@@ -1,72 +1,78 @@
 ---
-title: Visor del registro de auditoría
-category: Administration
-order: 58
-roles: agency_admin, platform_admin
+title: Registro de auditoría
 ---
 # Registro de auditoría
 
-Cada acción relevante del portal queda registrada. El visor está en **Administración → Registro de auditoría**.
+El registro de auditoría guarda quién hizo qué, y cuándo, en su agencia: inicios de sesión, cambios en niños, familias,
+personal, facturas y ajustes, correos, mensajes de texto, llamadas y chat. Úselo para saber «¿quién cambió esto?»,
+revisar lo que se envió a una familia o entregar pruebas a un inspector o auditor. Nada aquí se puede editar ni borrar.
 
-## Qué se registra
+[[open: #audit-logs | Abrir el registro de auditoría]]
 
-Ejemplos (más de 50 tipos de acción a la versión v22p49):
+## Encontrar una acción
 
-- `user.created` / `user.deleted` / `user.revived` / `user.role_changed`
-- `centre.created` / `centre.updated` / `centre.archived`
-- `agency.suspended` / `agency.resumed` / `agency.updated`
-- `invoice.created` / `invoice.late_fee_applied` / `payment.recorded`
-- `branding.updated`
-- `campaign.email_sent` / `digest.daily_sent` / `digest.weekly_sent`
-- `chat.email_notified` / `form.submitted`
+1. Abra **Administration › Audit log**. Primero se abre la pestaña **📜 Audit log**, con la entrada más reciente arriba.
+2. Elija una **Action** (por ejemplo, un inicio de sesión o un cambio en una factura) y, si hace falta, una **Entity** (el tipo de registro: usuario, centro, factura…). **All** muestra todo.
+3. Escriba un nombre, correo o palabra en **Search**: busca en la acción y en sus detalles.
+4. Use **From** y **To** para limitar las fechas.
+5. Haga clic en una fila para ver el detalle completo: quién lo hizo, desde qué dirección y qué cambió exactamente.
+6. Pulse **Reset** para borrar todos los filtros.
 
-## Cómo leer el orden
+En un teléfono los filtros se pliegan detrás de **⚙️ Filters** (indica cuántos hay activos) y cada entrada es una tarjeta.
 
-![El registro de auditoría, con marca de tiempo al milisegundo](https://api.kiddietrac.com/help-img/audit-log.png)
+> ℹ️ Todas las horas de esta pantalla están en la zona horaria de su agencia. Incluyen milisegundos, así que las entradas del mismo segundo se muestran en el orden real.
 
-**Las marcas de tiempo incluyen milisegundos.** Los segundos completos no ofrecían resolución suficiente para leer este registro: de las 300 filas más recientes, 241 comparten su segundo con otra fila, y un solo segundo en medio de una sincronización de integración contiene 25 de ellas. Con precisión de segundos, todas se leían como un único momento, así que una lista correctamente ordenada parecía arbitraria.
+## Exportar para un inspector o auditor
 
-Las filas se ordenan de la más reciente a la más antigua, y los empates dentro del mismo instante se resuelven según el orden en que se escribieron. Así, lo que ve es el orden en que realmente ocurrieron las cosas, y ahora la marca de tiempo lo demuestra.
+1. Ponga los filtros que necesite (fechas, acción, búsqueda).
+2. Pulse **⤓ CSV** junto a **Reset**.
+3. Abra el archivo en una hoja de cálculo. Tiene hasta 5000 filas, con los mismos filtros y el mismo orden que la pantalla.
 
-Todas las horas de esta pantalla están en **la zona horaria de su agencia**, nunca en UTC ni en la de su dispositivo.
+## Leer conversaciones de chat
 
-Las filas escritas antes de septiembre de 2026 muestran `.000`. Es honesto más que ordenado: nunca se registró su orden por debajo del segundo, e inventarlo sería peor que admitirlo.
+1. Abra la pestaña **💬 Chat conversations** (solo administradores de agencia).
+2. Limite con **Search**, **Active from** y **Active until**.
+3. Pulse **View transcript** en una conversación. Los mensajes borrados aparecen tachados con la hora en que se borraron; los editados aparecen marcados.
+4. Pulse **⬇️ Download transcript** para guardarla como archivo de texto.
 
-## Filtros
+> ⚠️ Abrir una transcripción queda registrado en el propio registro, con su nombre y la conversación que abrió.
 
-Cinco filtros en la parte superior:
+### Atender un mensaje denunciado
 
-- **Acción** — elija de la lista desplegable (se llena automáticamente con los tipos de acción vistos en su agencia)
-- **Entidad** — limita a un tipo de entidad (usuario / centro / factura, etc.)
-- **Buscar** — texto libre sobre el nombre de la acción o los datos JSON
-- **De / Para** — límites del rango de fechas
+Cuando alguien denuncia un mensaje, aparece un cuadro **🚩 Reported messages** en la pestaña de chat y los administradores reciben un aviso en la campana.
 
-Los filtros se aplican tanto a las filas en pantalla como a la descarga CSV.
+1. Lea la denuncia: quién denunció a quién, el motivo y su nota.
+2. Pulse **Open conversation** para leerla en contexto.
+3. Resuelva la situación (hable con la persona, quite un acceso) y pulse **Mark handled**.
 
-## Exportación CSV
+## Revisar textos, llamadas, correos y pagos
 
-Haga clic en el botón verde **⤓ CSV** junto a Restablecer. Descarga hasta 5000 filas con las columnas Cuándo / Acción / Entidad / Autor / Correo / IP / Datos. Respeta todos los filtros activos.
+- **📱 Text messages**: cada mensaje de texto enviado o recibido, con su estado y cualquier error. Filtre con **Search**, **From**, **To** y guarde con **⬇️ Export CSV**.
+- **📞 Voice calls**: cada llamada automática (anuncios, controles de Safe Arrival) con su duración y el resultado, incluida la tecla que pulsó la persona.
+- **📧 Email log** y **⚠️ Email errors**: cada correo que envió la agencia y los que rebotaron o fallaron, con el motivo en palabras sencillas.
+- **💳 Payment integrations**: lo que el proveedor de pagos envió y recibió.
 
-La exportación se ordena exactamente igual que la pantalla, empates incluidos. Antes se ordenaba solo por la marca de tiempo, lo que dejaba las filas que compartían un segundo en el orden en que la base de datos las devolviera, y esto en la única copia del registro que se archiva y se entrega a alguien. La columna **Cuándo** se escribe como texto para que una hoja de cálculo no pueda redondear los milisegundos y reordenarla sin avisar.
+[[show: #audit-logs @ 📧 Email log | Muéstreme el registro de correos]]
 
-## Ventana de detalle
+## Quién puede hacer qué
 
-Haga clic en cualquier fila para ver el detalle completo, incluidos los datos JSON con formato legible; útil para entender *exactamente* qué cambió.
+| Rol | Ve |
+|---|---|
+| Administrador de agencia | Todas las pestañas de toda la agencia, incluidos chat y correo. |
+| Director de centro | Las pestañas de auditoría, pagos, textos y llamadas, solo de su(s) centro(s). Sin chat ni correo. |
+| Auditor | El registro de auditoría de la agencia en solo lectura, para revisarlo y exportarlo. |
+| Administrador de plataforma | Todo, más **🌐 Platform-level** para eventos que no pertenecen a ninguna agencia (por ejemplo, intentos de inicio de sesión en cuentas que no existen). |
 
-## Pestaña Conversaciones de chat
+## Preguntas frecuentes y problemas
 
-**Registro de auditoría → 💬 Conversaciones de chat** (administradores de agencia y administradores de la plataforma). Todas las conversaciones de su agencia, entre familias y personal y entre miembros del personal, con la actividad más reciente primero:
+??? No veo la pestaña Chat conversations o Email log. | Esas pestañas son para administradores de agencia. Los directores de centro y los auditores no las tienen.
+??? La lista está vacía. | Revise los filtros: un rango de fechas o una acción de la última vez oculta filas. Pulse **Reset**.
+??? Las entradas antiguas muestran .000 después de los segundos. | Las entradas anteriores a septiembre de 2026 se guardaron sin milisegundos. Su orden dentro de ese segundo nunca se registró.
+??? ¿Puedo borrar o corregir una entrada? | No. El registro es permanente a propósito, para que sirva como prueba confiable.
+??? ¿Ver el registro avisa a alguien? | No, salvo que abrir una transcripción de chat queda anotado en el propio registro.
 
-- Filtro **Tipo** (familias ↔ personal, personal ↔ personal), **Buscar** entre personas, familias, centros y cualquier cosa dicha, y fechas **Activa desde / Iniciada por**.
-- **Ver transcripción** muestra toda la conversación por día. Los mensajes eliminados aparecen tachados en rojo con la hora en que se eliminaron, los editados se marcan y los archivos adjuntos se listan por nombre. **⬇️ Descargar transcripción** la guarda como archivo de texto.
-- **Abrir una transcripción queda registrado** aquí como *Transcripción de chat consultada*, con el nombre de quién abrió qué conversación.
+## Pantallas relacionadas
 
-Los directores de centro no ven esta pestaña.
+[[open: #compliance | Panel de cumplimiento]] [[open: #privacy-breaches | Violaciones de privacidad]]
 
-## En un teléfono
-
-En un teléfono cada entrada es una tarjeta (la hora, luego la acción y después su detalle), las pestañas van en una sola línea deslizable, y los filtros se pliegan tras un botón **⚙️ Filtros** que indica cuántos hay activos.
-
-## Alcance
-
-Los administradores de agencia ven las acciones de los usuarios de su agencia (alcance por rol O por vínculo de tutor). Los administradores de la plataforma ven todas las filas de la plataforma.
+Vea también [[compliance-dashboard]] y [[data-retention-compliance]].

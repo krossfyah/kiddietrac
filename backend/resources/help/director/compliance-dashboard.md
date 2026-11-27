@@ -2,40 +2,74 @@
 title: Compliance dashboard
 category: Administration
 order: 56
-screens: compliance, ~inspection
+screens: compliance
 ---
 # Compliance dashboard
 
-One screen with the three "what needs attention" signals every centre director and agency admin wants at a glance. Open from **Administration → Compliance**.
+**Administration › Compliance** is one page that answers "what needs attention before an inspector sees it?": staff
+certificates that have run out or are about to, leaders who have not turned on two-factor sign-in, and centres that
+are full or nearly full. Open it at the start of each week. The page only reads your records — fix things on the
+screen where the record lives, then come back and the count drops.
 
-## KPI strip
+[[open: #compliance | Open the Compliance dashboard]]
 
-Five tiles across the top:
+## Reading the page
 
-- **Expired certs** — staff certifications past their expiry
-- **Expiring (30d)** — certs expiring in the next 30 days
-- **MFA not enrolled** — directors + agency admins without two-factor enabled
-- **At/over capacity** — centres at or above 100% enrolment
-- **Tight (95%+)** — centres close to capacity
+1. Open **Administration › Compliance**. The banner reads **What needs attention**.
+2. Look at the five tiles across the top: **Expired certs**, **Expiring (30d)**, **MFA not enrolled**, **At/over capacity** and **Tight (95%+)**. Red means act now, amber means plan for it.
+3. Scroll to the cards under the tiles for the names behind each number.
 
-## Three cards
+## Renewing staff certificates
 
-### Staff certifications
+The **Staff certifications** card lists every certificate (for example First Aid, CPR or ECE registration) that has
+expired or expires within 30 days, with the person, the type and "Expires … (in 4 days)" or "(3 days ago)".
 
-Lists every cert that's expired or expiring within 30 days. Each row shows the staff member, cert type (RECE / First Aid / CPR / etc.), and relative time (e.g. "expires in 4 days").
+1. Note who is on the list.
+2. Ask the staff member for the renewed certificate, or open their staff record and upload it with its new expiry date.
+3. Come back to **Administration › Compliance**. Once the new expiry date is saved the person drops off the list.
 
-Empty state: "✅ Every cert is current."
+When nobody is due, the card says **✅ Every cert is current.**
 
-### MFA not enrolled
+## Getting leaders onto two-factor sign-in
 
-Lists directors + agency admins without `two_factor_secret` set. Each row shows name, email, and last-login timestamp. Direct them to **Settings → Two-factor (MFA)** to enrol.
+The **MFA not enrolled** card lists centre directors and agency admins who sign in with a password only, with their
+email and last sign-in date.
 
-Empty state: "✅ Every director + admin has MFA enrolled."
+1. Send each person a message asking them to turn on two-factor sign-in.
+2. They open the two-factor screen, scan the code with an authenticator app and type the 6-digit code to confirm.
+3. Refresh the dashboard: they leave the list. When everyone is enrolled it says **✅ Every director + admin has MFA enrolled.**
 
-### Centre capacity
+[[open: #mfa | Open two-factor sign-in]]
 
-For every centre in the agency: enrolled count / licensed capacity, percentage, and a colour-coded progress bar (green < 80%, amber 80-95%, red ≥ 95%).
+## Watching centre capacity
 
-## Agency scope
+The **Centre capacity** card shows each centre's enrolled children against its licensed seats, as a percentage and a
+bar: green under 80%, amber from 80%, red at 95% or more.
 
-Scoped by `getAgencyId()`. Platform admins see the slice for whichever agency they have set via the agency switcher.
+1. Find the centres in red.
+2. Before enrolling anyone else there, check the licence and the waitlist.
+3. If the licensed capacity is wrong, correct it on the centre's settings so the bar is measured against the right number.
+
+If your province's rules list staff training and checks, a further card shows who is missing which item.
+
+## Who can do what
+
+| Role | Sees |
+|---|---|
+| Agency admin | Every centre in the active agency. |
+| Centre director | Their own centre(s) only. |
+| Auditor | The same page, read-only. |
+| Platform admin | The agency chosen in the agency switcher. |
+
+## FAQs and when something goes wrong
+
+??? A certificate was renewed but the person is still listed. | The new certificate has not been saved with its new expiry date yet. Upload it with the date on the staff record.
+??? The page says "Could not load". | Refresh the page. If it keeps happening, raise a ticket from Help.
+??? The capacity card says "No centres in this agency." | The agency has no open centre yet. An agency admin adds one on the Centres screen.
+??? Does this page email anyone? | No. It only shows the list; you decide who to contact.
+
+## Related screens
+
+[[open: #inspection | Inspection checklist]] [[open: #audit-logs | Audit log]]
+
+See also [[audit-log]] and [[compliance-and-reporting]].
