@@ -2839,8 +2839,8 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get(    '/hr/courses/{id}/assignments',                [\App\Http\Controllers\Api\HrCoursesController::class, 'assignments'])->whereNumber('id');
         Route::post(   '/hr/courses/{id}/assign',                     [\App\Http\Controllers\Api\HrCoursesController::class, 'assign'])->whereNumber('id');
         Route::post(   '/hr/course-assignments/remind',               [\App\Http\Controllers\Api\HrCoursesController::class, 'remind'])->middleware('throttle:20,1,hrcourseremind');
-        Route::post(   '/hr/course-role-rules/{id}/stop',             [\App\Http\Controllers\Api\HrCoursesController::class, 'stopRule'])->whereNumber('id');
         Route::delete( '/hr/course-assignments/{id}',                 [\App\Http\Controllers\Api\HrCoursesController::class, 'unassign'])->whereNumber('id');
+        Route::post(   '/hr/course-role-rules/{id}/stop',             [\App\Http\Controllers\Api\HrCoursesController::class, 'stopRule'])->whereNumber('id');
     });
 
     // ---- Staff pay / payslips (educators = hourly, home visitors = per visit) ----
