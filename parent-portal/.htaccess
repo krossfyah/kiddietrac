@@ -128,3 +128,12 @@
 <IfModule mod_mime.c>
   AddType text/vtt .vtt
 </IfModule>
+
+# KT-NOINDEX (2026-11-27, seo1127): signed-in and single-use screens stay out of search results.
+# The sign-in page (index.html) and an agency's public jobs page (jobs.html?a=<slug>) stay findable.
+# Pages that already carry <meta name="robots" content="noindex"> (rsvp, fix-time, pickup-pass...) are unchanged.
+<FilesMatch "^(dashboard|dashboard\.src|kiosk|reset-password|set-password|enroll|signup)\.html$">
+  <IfModule mod_headers.c>
+    Header always set X-Robots-Tag "noindex, nofollow"
+  </IfModule>
+</FilesMatch>

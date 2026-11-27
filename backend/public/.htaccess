@@ -54,6 +54,12 @@
     RewriteRule ^ index.php [L]
 </IfModule>
 
+# KT-NOINDEX (2026-11-27, seo1127): the API host is never a search result (JSON, signed links,
+# no-login form and upload pages). A header, not a robots.txt Disallow, so crawlers can still read it.
+<IfModule mod_headers.c>
+    Header always set X-Robots-Tag "noindex, nofollow"
+</IfModule>
+
 # ─── Block sensitive files ────────────────────────────────────
 <FilesMatch "^(\.env|\.git|composer\.(json|lock))$">
     Require all denied
