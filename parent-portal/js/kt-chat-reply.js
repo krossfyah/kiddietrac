@@ -31,9 +31,9 @@
       + '.kt-rp-q span{display:block;opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}'
       + '.kt-rp-q.kt-rp-dark{background:rgba(255,255,255,.16);border-left-color:#7DD3FC}'
       + '.kt-rp-q.kt-rp-dark b{color:#BAE6FD}'
-      + '.kt-rp-btn{background:none;border:0;cursor:pointer;color:rgba(13,27,42,.45);font-size:14px;font-weight:700;line-height:1;padding:0 3px;margin-left:4px;min-height:0;min-width:0}'
-      + '@media (hover:hover){.kt-rp-btn{opacity:0;transition:opacity .12s}[data-mid]:hover .kt-rp-btn,.kt-rp-btn:focus-visible{opacity:1}}'
-      + '@media (hover:none){.kt-rp-btn{opacity:.55}}'
+      + '.kt-chr-btn{background:none!important;border:0!important;box-shadow:none!important;cursor:pointer;color:rgba(13,27,42,.32)!important;font-size:12px;font-weight:600;line-height:1;padding:0 2px;margin-left:4px;min-height:0;min-width:0;height:auto;border-radius:4px}.kt-chr-btn:hover{color:rgba(13,27,42,.6)!important}'
+      + '@media (hover:hover){.kt-chr-btn{opacity:0;transition:opacity .12s}[data-mid]:hover .kt-chr-btn,.kt-chr-btn:focus-visible{opacity:1}}'
+      + '@media (hover:none){.kt-chr-btn{opacity:.4}}'
       + '.kt-rp-strip{display:flex;align-items:center;gap:8px;padding:7px 10px 0;background:transparent}'
       + '.kt-rp-strip .kt-rp-q{margin:0;flex:1;min-width:0;cursor:default}'
       + '.kt-rp-strip .kt-rp-q span{max-width:none}'
@@ -59,7 +59,7 @@
   /* The ↩ control for one bubble. who = the author's first name, text = what the quote will show. */
   function btn(mid, who, text, attachments) {
     css();
-    return '<button type="button" class="kt-rp-btn" data-rp-mid="' + esc(mid) + '" data-rp-who="' + esc(String(who || '').split(' ')[0] || 'Message')
+    return '<button type="button" class="kt-chr-btn" data-rp-mid="' + esc(mid) + '" data-rp-who="' + esc(String(who || '').split(' ')[0] || 'Message')
       + '" data-rp-text="' + esc(snippetOf(text, attachments)) + '" title="Reply" aria-label="Reply to this message">↩</button>';
   }
 
@@ -118,7 +118,7 @@
 
     root.addEventListener('click', function (e) {
       var t = e.target && e.target.closest ? e.target : null; if (!t) return;
-      var b = t.closest('.kt-rp-btn');
+      var b = t.closest('.kt-chr-btn');
       if (b && root.contains(b)) { e.preventDefault(); set(root, b.getAttribute('data-rp-mid'), b.getAttribute('data-rp-who'), b.getAttribute('data-rp-text')); return; }
       var x = t.closest('.kt-rp-x');
       if (x && root.contains(x)) { e.preventDefault(); if (root.__ktRp) delete state[root.__ktRp.key]; paintStrip(root); return; }
@@ -132,7 +132,7 @@
     root.addEventListener('touchstart', function (e) {
       var t = e.touches && e.touches[0]; if (!t) return;
       var r = e.target.closest && e.target.closest('[data-mid]');
-      if (!r || !root.contains(r) || !r.querySelector('.kt-rp-btn') || e.target.closest('audio,a,button,input,textarea')) { row = null; return; }
+      if (!r || !root.contains(r) || !r.querySelector('.kt-chr-btn') || e.target.closest('audio,a,button,input,textarea')) { row = null; return; }
       row = r; sx = t.clientX; sy = t.clientY; dx = 0; horiz = null;
     }, { passive: true });
     root.addEventListener('touchmove', function (e) {
@@ -151,7 +151,7 @@
       r.style.transform = '';
       setTimeout(function () { r.removeAttribute('data-kt-rp-swipe'); }, 220);
       if (horiz && dx >= 56) {
-        var b = r.querySelector('.kt-rp-btn');
+        var b = r.querySelector('.kt-chr-btn');
         if (b) {
           try { if (navigator.vibrate) navigator.vibrate(12); } catch (x) {}
           set(root, b.getAttribute('data-rp-mid'), b.getAttribute('data-rp-who'), b.getAttribute('data-rp-text'));
