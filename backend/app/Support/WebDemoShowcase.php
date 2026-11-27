@@ -791,6 +791,7 @@ final class WebDemoShowcase
         $this->hrRotaStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 3, item 10
         $this->hrClockStory($agencyId, $byName->all(), $centreOf->all());   // HR Phase 3, item 11
         $this->hrAttendanceStory($agencyId, $byName->all(), $centreOf->all(), $elena, $now);   // HR Phase 4, batch 1
+        $this->hrTimeStory($agencyId, $byName->all(), $centreOf->all(), $elena, $olivia, $now);   // HR Phase 4, batch 2
         $this->hrLettersStory($agencyId, $olivia);   // HR Phase 3, item 12
     }
 
@@ -931,6 +932,53 @@ final class WebDemoShowcase
      *  - Rules: grace 5 minutes, absence score 50 over 12 months (sick days), clash warnings on, warn only. Only set when
      *    the agency has none yet. Elena has one lateness notice in her bell (inserted, so nothing rings).
      */
+    /**
+     * KIDDIETRAC HR PHASE 4 DEMO, BATCH 2 (2026-11-27, Starlight only): overtime and timesheets. Sofia's late-pickup
+     * cover waits for approval, Lucas's parents' evening was banked as time in lieu (his Overtime bank), Marcus's staff
+     * meeting was approved as pay (offered on his next manual payslip), Noah's was declined. The week before last is
+     * approved and locked at Noah's centre; last week is left to approve. Rows are this builder's own (replaced on re-run).
+     */
+    private function hrTimeStory(int $agencyId, array $byName, array $centreOf, int $elena, int $olivia, string $now): void
+    {
+        if (! \App\Support\HrTime::ready()) return;
+        $rate = (float) \App\Support\HrTime::settings($agencyId)['overtime']['rate'];
+        $d = fn (int $days) => $this->today->copy()->addDays($days)->toDateString();
+        // [who, days ago, minutes, reason, preference, status, outcome, decided by, comment]
+        $rows = [
+            ['Sofia', -1, 45, 'Stayed with a child until a late pickup', 'bank', 'submitted', null, null, null],
+            ['Lucas', -5, 150, 'Parents\' evening for the preschool room', 'bank', 'approved', 'bank', 'elena', null],
+            ['Marcus', -6, 120, 'Monthly staff meeting after closing', 'pay', 'approved', 'pay', 'olivia', null],
+            ['Noah', -9, 60, 'Tidied the storeroom after hours', null, 'declined', null, 'elena', 'Please check with me before staying late for tidying. Thanks, Noah!'],
+        ];
+        $bank = null;
+        foreach ($rows as [$who, $ago, $min, $reason, $pref, $status, $outcome, $by, $comment]) {
+            $uid = $byName[$who] ?? null;
+            if (! $uid) continue;
+            $byId = $by === 'elena' ? $elena : ($by === 'olivia' ? ($olivia ?: $elena) : null);
+            $hours = $outcome === 'bank' ? round($min / 60 * $rate, 2) : null;
+            $id = $this->add('hr_overtime_requests', ['agency_id' => $agencyId, 'centre_id' => isset($centreOf[$uid]) ? (int) $centreOf[$uid] : null, 'user_id' => $uid,
+                'work_date' => $d($ago), 'minutes' => $min, 'reason' => $reason, 'preference' => $pref, 'logged_by_id' => $uid, 'status' => $status, 'outcome' => $outcome,
+                'rate' => $status === 'approved' ? $rate : null, 'bank_hours' => $hours, 'decided_by_id' => $byId, 'decided_at' => $byId ? $this->at($ago + 1, 9, 30) : null,
+                'decision_comment' => $comment, 'created_at' => $this->at($ago, 18, 15), 'updated_at' => $now]);
+            if ($outcome === 'bank') {
+                $bank = $bank ?: \App\Support\HrTime::bankType($agencyId, true);
+                if ($bank) $this->add('hr_leave_ledger', ['agency_id' => $agencyId, 'user_id' => $uid, 'leave_type_id' => $bank->id, 'entry_date' => $d($ago + 1), 'amount' => $hours,
+                    'kind' => 'overtime', 'source_key' => 'ot:' . $id, 'reason' => 'Overtime ' . $this->today->copy()->addDays($ago)->format('M j') . ': ' . round($min / 60, 2) . ' h × ' . $rate . ' banked',
+                    'created_by_id' => $byId, 'created_at' => $now]);
+            }
+        }
+        $centre = isset($byName['Noah'], $centreOf[$byName['Noah']]) ? (int) $centreOf[$byName['Noah']] : null;
+        if (! $centre) return;
+        $mon = $this->today->copy()->startOfWeek(Carbon::MONDAY)->subWeeks(2);
+        [$from, $to] = [$mon->toDateString(), $mon->copy()->addDays(6)->toDateString()];
+        if (DB::table('hr_timesheet_locks')->where('centre_id', $centre)->where('status', 'locked')->where('period_start', '<=', $to)->where('period_end', '>=', $from)->exists()) return;
+        $summary = null;
+        try { $summary = json_encode(['totals' => \App\Support\HrTime::sheet($agencyId, $centre, $from, $to)['totals'] ?? null]); } catch (\Throwable $e) { report($e); }
+        $this->add('hr_timesheet_locks', ['agency_id' => $agencyId, 'centre_id' => $centre, 'period_start' => $from, 'period_end' => $to, 'status' => 'locked',
+            'approved_by_id' => $olivia ?: $elena, 'approved_at' => $this->at(-($this->today->dayOfWeekIso - 1) - 6, 10, 0), 'note' => 'Checked against the rota. Two late clock-outs corrected first.',
+            'summary' => $summary, 'created_at' => $now, 'updated_at' => $now]);
+    }
+
     private function hrAttendanceStory(int $agencyId, array $byName, array $centreOf, int $elena, string $now): void
     {
         if (! \Illuminate\Support\Facades\Schema::hasColumn('time_punches', 'late_minutes')) return;

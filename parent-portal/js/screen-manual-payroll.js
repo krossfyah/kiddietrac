@@ -126,6 +126,8 @@
         rewards: s.rewards || [],
         /* HR expense / mileage claims approved and not yet paid (2026-11-26): added as lines when ticked. */
         claims: s.claims || [],
+        /* HR overtime approved as pay (2026-11-27): added as lines when ticked, priced at hours x multiplier x the rate. */
+        overtime: s.overtime || [],
         lines: [], notes: '', picked: false
       };
     });
@@ -157,6 +159,16 @@
       return (r.lines || []).reduce(function (a, l) { return a + (Number(l.amount) || 0); }, 0);
     }
     var anyFunding = Object.keys(rows).some(function (k) { return rows[k].funding; });
+    /* Overtime lines are priced from the hourly rate typed for the person: hours x multiplier x rate. No rate yet = $0,
+       said on the line, never a guessed figure. */
+    function priceOvertime(r) {
+      (r.lines || []).forEach(function (l) {
+        if (!l.overtime_id) return;
+        l.rate = r.rate || null;
+        l.amount = r.rate ? Math.round(l.hours * (l.multiplier || 1) * r.rate * 100) / 100 : 0;
+      });
+    }
+    var ts = data.timesheets || null;
     /* Seed the funding lines once, from the server's rates and the clock's hours. They are
        ordinary lines after that (editable, removable) but keep their component. */
     function seedFunding(r) {
@@ -167,6 +179,11 @@
       if (r.claims && r.claims.length && !r.claimsSeeded) {
         r.claimsSeeded = true;
         r.claims.forEach(function (c) { r.lines.push({ label: c.label, amount: c.amount, claim_id: c.claim_id }); });
+      }
+      if (r.overtime && r.overtime.length && !r.overtimeSeeded) {
+        r.overtimeSeeded = true;
+        r.overtime.forEach(function (o) { r.lines.push({ label: o.label, amount: 0, overtime_id: o.overtime_id, hours: o.hours, multiplier: o.multiplier }); });
+        priceOvertime(r);
       }
       if (!r.funding || r.fundingSeeded) return;
       r.fundingSeeded = true;
@@ -218,6 +235,9 @@
               + money(r.rewards.reduce(function (a, b) { return a + (Number(b.amount) || 0); }, 0)) + ' to include</div>' : '')
           + ((r.claims || []).length ? '<div style="font-size:11px;color:#0F766E;margin-top:2px;">🧾 Reimbursements '
               + money(r.claims.reduce(function (a, b) { return a + (Number(b.amount) || 0); }, 0)) + ' to include</div>' : '')
+          + ((r.overtime || []).length ? '<div style="font-size:11px;color:#7C3AED;margin-top:2px;">⏱️ Overtime '
+              + r.overtime.reduce(function (a, b) { return a + (Number(b.hours) || 0); }, 0).toFixed(2) + ' h to include'
+              + (r.rate ? '' : ' (enter the rate to price it)') + '</div>' : '')
           + '</td>';
 
         if (r.kind === 'staff') {
@@ -262,6 +282,11 @@
       wrap.innerHTML =
         '<div style="font-size:13px;color:#334155;margin-bottom:10px;">Period '
         + esc(from) + ' to ' + esc(to) + '. Tick who is being paid, then enter what they are paid.</div>'
+        + (ts && ts.unlocked && ts.unlocked.length ? '<div style="font-size:12px;color:#92400E;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:6px 10px;margin-bottom:10px;">'
+          + (ts.rule === 'block' ? 'Your agency pays from approved timesheets only. ' : '') + 'Timesheets not yet approved and locked for these dates: <span data-no-i18n>'
+          + esc(ts.unlocked.join(', ')) + '</span>. Approve them in <a href="#hr?tab=timesheets">HR &gt; Timesheets</a>.</div>' : '')
+        + (ts && ts.rules_on ? '<div style="font-size:12px;color:#1F6080;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:6px 10px;margin-bottom:10px;">'
+          + 'Hours follow your agency\'s timesheet rules (rounding or counting only the scheduled shift).</div>' : '')
         + (anyFunding ? '<div style="font-size:12px;color:#1F6080;background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:6px 10px;margin-bottom:10px;">'
           + 'Ontario workforce funding is on: ticking someone adds WEG and workforce compensation as separate lines '
           + '(hours × rate) and includes them in the pay. Rates come from <a href="#workforce-funding">Workforce funding</a>.</div>' : '')
@@ -298,6 +323,7 @@
         el.addEventListener('change', function () {
           var r = rows[el.getAttribute('data-rate')];
           r.rate = el.value === '' ? null : parseFloat(el.value);
+          priceOvertime(r);
           if (r.hours && r.rate) { r.gross = Math.round((r.hours * r.rate + lineTotal(r)) * 100) / 100; }
           paint();
         });

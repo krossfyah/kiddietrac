@@ -2633,6 +2633,10 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get ('/hr/ledger', [\App\Http\Controllers\Api\HrController::class, 'ledger']);
         // HR Phase 4 (2026-11-27): the request form's leave-clash note (counts only, never names) (App\Support\HrAttendance).
         Route::get ('/hr/me/clash', [\App\Http\Controllers\Api\HrController::class, 'myClash'])->middleware('throttle:120,1,hrclash');
+        // HR Phase 4, batch 2 (2026-11-27, App\Support\HrTime): overtime, the person's side (own; a manager may log for someone they manage).
+        Route::get ('/hr/me/overtime',              [\App\Http\Controllers\Api\HrTimeController::class, 'mine']);
+        Route::post('/hr/overtime',                 [\App\Http\Controllers\Api\HrTimeController::class, 'store'])->middleware('throttle:30,1,hrovertime');
+        Route::post('/hr/overtime/{id}/withdraw',   [\App\Http\Controllers\Api\HrTimeController::class, 'withdraw'])->whereNumber('id');
     });
     Route::middleware('role:centre_director,agency_admin,platform_admin')->group(function () {
         Route::get   ('/hr/setup',                          [\App\Http\Controllers\Api\HrController::class, 'setup']);
@@ -2661,6 +2665,15 @@ Route::post('/public/tours', [\App\Http\Controllers\Api\CareController::class, '
         Route::get   ('/hr/attendance/settings',            [\App\Http\Controllers\Api\HrController::class, 'attendanceSettings']);
         Route::put   ('/hr/attendance/settings',            [\App\Http\Controllers\Api\HrController::class, 'saveAttendanceSettings']);
         Route::get   ('/hr/time-off/{id}/clash',            [\App\Http\Controllers\Api\HrController::class, 'requestClash'])->whereNumber('id');
+        // HR Phase 4, batch 2 (2026-11-27, App\Support\HrTime): overtime decisions, overtime + timesheet rules, timesheet approve + lock.
+        Route::get   ('/hr/overtime',                       [\App\Http\Controllers\Api\HrTimeController::class, 'index']);
+        Route::post  ('/hr/overtime/{id}/decide',           [\App\Http\Controllers\Api\HrTimeController::class, 'decide'])->whereNumber('id');
+        Route::get   ('/hr/time/settings',                  [\App\Http\Controllers\Api\HrTimeController::class, 'settings']);
+        Route::put   ('/hr/time/settings',                  [\App\Http\Controllers\Api\HrTimeController::class, 'saveSettings']);
+        Route::get   ('/hr/timesheets',                     [\App\Http\Controllers\Api\HrTimeController::class, 'timesheets']);
+        Route::get   ('/hr/timesheets/person',              [\App\Http\Controllers\Api\HrTimeController::class, 'person']);
+        Route::post  ('/hr/timesheets/approve',             [\App\Http\Controllers\Api\HrTimeController::class, 'approve'])->middleware('throttle:30,1,hrtsapprove');
+        Route::post  ('/hr/timesheets/locks/{id}/unlock',   [\App\Http\Controllers\Api\HrTimeController::class, 'unlock'])->whereNumber('id');
         Route::get   ('/exports/hr-absence',                [\App\Http\Controllers\Api\HrController::class, 'exportAbsence']);
         // KiddieTrac HR Phase 3, item 9 (2026-11-26): claims, the director / admin side (own centres / the agency; nobody decides their own).
         Route::get   ('/hr/claims',                         [\App\Http\Controllers\Api\HrClaimController::class, 'index']);

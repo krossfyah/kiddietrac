@@ -181,6 +181,8 @@ final class SearchRegistry
         'hr_unavailability' => 'dates a staff member can\'t work (HR): read by the rota and autofill, shown in My HR and as a conflict on HR > Rota',
         'hr_shift_swaps' => 'shift giveaways and swaps waiting for a colleague or a director (HR): shown in My HR and HR > Rota, never a record people look up',
         'hr_overtime_notices' => 'which overtime warnings already went out this week (HR): a send ledger, never shown or searched',
+        'hr_overtime_requests' => 'overtime a staff member logged (HR): private to them, their centre\'s directors and the agency admins; shown in HR > Overtime and My HR, never in a global box',
+        'hr_timesheet_locks' => 'which centre timesheets were approved and locked for a pay period (HR): shown in HR > Timesheets, never a record people look up',
         'hr_letter_templates' => 'the agency\'s HR letter templates (configuration): edited in HR > Letters, never a record people look up',
         'hr_letters' => 'which HR letters were sent to whom (HR): the letter itself is the Managed Forms record; listed in HR > Letters only',
         'hr_course_role_rules' => 'configuration: "this course goes to everyone in this role" on a course, shown in its Assigned popup',

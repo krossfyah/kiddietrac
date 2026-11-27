@@ -212,6 +212,10 @@ final class AutoTimeFix
                 return [false, 'That time is after the automatic time (' . $auto->format('g:i A') . '). Please choose a time at or before it.', null];
             }
             $utc = $when->copy()->utc()->format('Y-m-d H:i:s');
+            // KiddieTrac HR: a clock-out inside a timesheet already approved and locked for payroll is changed by the centre, not the link.
+            if ($link->kind !== 'child' && ($no = HrTime::editRefusal((int) DB::table('time_punches')->where('id', $link->record_id)->value('centre_id') ?: null, [(string) $rec->in_at]))) {
+                return [false, 'Those hours are already approved for payroll, so this link can no longer change them. Please ask your director.', null];
+            }
             $source = $link->kind === 'child' ? 'parent_email' : 'educator_email';
             $marker = ($link->kind === 'child' ? 'Pick-up time entered by parent from email' : 'Clock-out time entered by educator from email')
                 . ' (automatic time was ' . $auto->format('g:i A') . ')' . ($note !== '' ? ': ' . $note : '');

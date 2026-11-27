@@ -4,6 +4,64 @@
         {
             "type": "new",
             "date": "2026-11-27",
+            "icon": "⏱️",
+            "title": "Overtime and time in lieu",
+            "body": "Log extra hours in My HR > Overtime and time in lieu. Your director approves them as pay on your next payslip or banks them as time in lieu in your Overtime bank, which you book like any time off.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Heures supplémentaires et congés compensatoires",
+            "body_fr": "Déclarez vos heures en plus dans Mes RH > Heures supplémentaires et congés compensatoires. Votre directeur les approuve en paie sur votre prochain bulletin ou les met dans votre Banque d'heures, à réserver comme tout congé.",
+            "title_es": "Horas extra y tiempo compensatorio",
+            "body_es": "Registra tus horas adicionales en Mis RR. HH. > Horas extra y tiempo compensatorio. Tu director las aprueba como pago en tu próximo recibo o las guarda en tu Bolsa de horas, que reservas como cualquier permiso.",
+            "title_hi": "ओवरटाइम और बदले की छुट्टी",
+            "body_hi": "मेरा HR > ओवरटाइम और बदले की छुट्टी में अतिरिक्त घंटे दर्ज करें। आपके निदेशक उन्हें अगली वेतन पर्ची पर वेतन के रूप में मंज़ूर करते हैं या आपके ओवरटाइम बैंक में जमा करते हैं, जिसे आप किसी भी छुट्टी की तरह बुक करते हैं।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
+            "icon": "🔒",
+            "title": "Timesheet approval and lock",
+            "body": "HR > Timesheets shows scheduled against worked hours for a centre and pay period, with missing clock-in and clock-out flags. Approve a period once it ends to lock it for payroll; an agency admin can unlock it, with a reason.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director"
+            ],
+            "title_fr": "Approbation et verrouillage des feuilles de temps",
+            "body_fr": "RH > Feuilles de temps compare les heures prévues et travaillées d'un centre pour une période de paie, avec les pointages manquants. Approuvez une période terminée pour la verrouiller pour la paie ; un administrateur peut la déverrouiller, avec une raison.",
+            "title_es": "Aprobación y bloqueo de hojas de horas",
+            "body_es": "RR. HH. > Hojas de horas compara las horas programadas y trabajadas de un centro en un periodo de pago, con los fichajes que faltan. Aprueba un periodo terminado para bloquearlo para la nómina; un administrador puede desbloquearlo, con un motivo.",
+            "title_hi": "टाइमशीट मंज़ूरी और लॉक",
+            "body_hi": "HR > टाइमशीट किसी केंद्र और वेतन अवधि के निर्धारित और काम किए घंटों की तुलना दिखाता है, छूटे क्लॉक-इन और क्लॉक-आउट के संकेतों के साथ। अवधि खत्म होने पर उसे मंज़ूर करके पेरोल के लिए लॉक करें; एजेंसी एडमिन कारण के साथ उसे अनलॉक कर सकता है।"
+        },
+        {
+            "type": "improved",
+            "date": "2026-11-27",
+            "icon": "🗓️",
+            "title": "Time off dates and approvals",
+            "body": "Time-off dates now show the right day everywhere (some lists showed the day before). Nobody can approve or decline their own time off: another director or an agency admin decides it.",
+            "roles": [
+                "agency_admin",
+                "platform_admin",
+                "centre_director",
+                "educator",
+                "home_visitor"
+            ],
+            "title_fr": "Dates et approbations des congés",
+            "body_fr": "Les dates de congé affichent maintenant le bon jour partout (certaines listes montraient la veille). Personne ne peut approuver ou refuser son propre congé : un autre directeur ou un administrateur décide.",
+            "title_es": "Fechas y aprobaciones de permisos",
+            "body_es": "Las fechas de permisos ahora muestran el día correcto en todas partes (algunas listas mostraban el día anterior). Nadie puede aprobar ni rechazar su propio permiso: otro director o un administrador decide.",
+            "title_hi": "छुट्टी की तारीखें और मंज़ूरी",
+            "body_hi": "छुट्टी की तारीखें अब हर जगह सही दिन दिखाती हैं (कुछ सूचियाँ एक दिन पहले का दिन दिखाती थीं)। कोई भी अपनी छुट्टी खुद मंज़ूर या अस्वीकार नहीं कर सकता: कोई दूसरा निदेशक या एजेंसी एडमिन निर्णय लेता है।"
+        },
+        {
+            "type": "new",
+            "date": "2026-11-27",
             "icon": "⏰",
             "title": "Lateness against the schedule",
             "body": "HR > Absence report > Lateness compares each first clock-in with the scheduled shift start: how often, how many minutes and any pattern, such as mostly Mondays. Your agency sets the grace time and can tell directors when someone is late.",

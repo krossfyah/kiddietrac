@@ -234,7 +234,7 @@
   }
   function closeModal() { try { var r = document.getElementById('modalRoot'); var x = r && r.querySelector('.modal-close'); if (x) x.click(); } catch (e) {} }
 
-  var KIND = { grant: 'Granted', accrual: 'Earned', carry_forfeit: 'Did not carry over', expiry: 'Expired', adjustment: 'Adjusted', taken: 'Taken', returned: 'Given back' };
+  var KIND = { grant: 'Granted', accrual: 'Earned', carry_forfeit: 'Did not carry over', expiry: 'Expired', adjustment: 'Adjusted', taken: 'Taken', returned: 'Given back', overtime: 'Overtime banked' };
   function ledgerHtml(rows) {
     if (!rows.length) return '<span class="hr-sub">No changes yet.</span>';
     return rows.map(function (r) {

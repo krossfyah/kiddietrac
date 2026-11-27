@@ -14,6 +14,9 @@
    overtime; admins set the clock-in rules (geofence off / flag / block, overtime hours) and each centre's area on a map.
    Item 12 (2026-11-26): HR > Letters: offer / contract / contractor / warning / termination templates (admins edit and tick
    "Reviewed by our lawyer"; the draft note shows in the editor only), sent for e-signature in My forms.
+   Phase 4 batch 2 (2026-11-27): HR > Overtime (approve as pay or bank as time in lieu), HR > Timesheets (scheduled vs
+   actual, paid hours after the agency's rules, missing-punch flags, approve + lock; admins unlock) and My HR "Overtime and
+   time in lieu" (log extra hours, the Overtime bank balance).
    ═══════════════════════════════════════════════════════════════════════ */
 (function (window) {
   'use strict';
@@ -924,10 +927,300 @@
     } }] });
   }
 
+
+  /* ── HR Phase 4, batch 2 (2026-11-27): HR > Overtime, HR > Timesheets, My HR "Overtime and time in lieu" ─────────────
+     Overtime: a staff member logs extra hours (or a director / admin logs them for someone); somebody else approves them
+     as pay (a line on the next manual payslip) or banks them as time in lieu (the "Overtime bank" leave balance, booked
+     with the ordinary time-off form). Timesheets: scheduled against actual per person for a centre and period, the paid
+     hours after the agency's rules, missing-punch flags, approve + lock (an admin unlocks, with a reason). */
+  function hh(min) { var v = Math.round((+min || 0) / 60 * 100) / 100; return v + ' h'; }
+  function signedH(min) { var v = Math.round((+min || 0) / 60 * 100) / 100; return (v > 0 ? '+' : '') + v + ' h'; }
+  var OT_ST = { submitted: ['#FEF3C7', '#92400E', 'Waiting for approval'], approved: ['#CCFBF1', '#115E59', 'Approved'],
+    paid: ['#DCFCE7', '#166534', 'Paid'], declined: ['#FEE2E2', '#991B1B', 'Declined'], withdrawn: ['#F1F5F9', '#475569', 'Withdrawn'] };
+  function otPill(o) {
+    var p = OT_ST[o.status] || OT_ST.submitted, t = p[2];
+    if (o.status === 'approved') t = o.outcome === 'bank' ? 'Banked as time in lieu' : 'Approved: in the next pay';
+    return pill(p[0], p[1], t);
+  }
+  function otAsk(p) { return p === 'bank' ? 'Time in lieu' : p === 'pay' ? 'Pay' : 'Either'; }
+  function rateX(r) { return '× ' + String(Math.round((+r || 1) * 100) / 100); }
+
+  var OS = { st: 'submitted' };
+  async function drawOvertime(host) {
+    chipCss();
+    var d;
+    try { d = await Api.get('/hr/overtime?status=' + encodeURIComponent(OS.st)); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
+    if (!host.isConnected) return;
+    var rows = d.overtime || [], n = d.counts || {}, all = 0, s = d.settings || {};
+    Object.keys(n).forEach(function (k) { all += n[k]; });
+    var chips = [['submitted', 'To approve'], ['approved', 'Approved'], ['paid', 'Paid'], ['declined', 'Declined'], ['all', 'All']];
+    host.innerHTML = '<div class="hr-note">Extra hours your team worked. Approve each one as pay (added to the person\'s next payslip in Payroll &gt; Run payroll) or bank it as time in lieu (their Overtime bank, booked like any time off). Overtime rate: <b data-no-i18n>' + esc(rateX(s.rate)) + '</b>. Nobody approves their own.</div>'
+      + '<div class="hrt-chips">' + chips.map(function (c) {
+        var on = OS.st === c[0], k = c[0] === 'all' ? all : (n[c[0]] || 0);
+        return '<button type="button" class="hrt-chip' + (on ? ' on' : '') + '" data-ost="' + c[0] + '"' + (on ? ' aria-current="true"' : '') + '>' + esc(c[1]) + ' <span class="n">' + k + '</span></button>';
+      }).join('') + '<span style="flex:1"></span>' + ((d.people || []).length ? '<button type="button" class="hr-b p" data-ot="log">Log overtime for someone</button>' : '')
+      + '<button type="button" class="hr-b" data-ot="settings">Overtime and timesheet rules</button></div>'
+      + '<div class="kt-card">' + (rows.length ? '<table data-hrs="overtime"><thead><tr><th>Person</th><th>Date</th><th style="text-align:right;">Hours</th><th>What for</th><th>Asked for</th><th>Status</th><th></th></tr></thead><tbody>'
+        + rows.map(function (o) {
+          return '<tr><td><b data-no-i18n>' + esc(o.person) + '</b>' + (o.centre ? '<div class="hr-sub" data-no-i18n>' + esc(o.centre) + '</div>' : '') + '</td>'
+            + '<td style="white-space:nowrap;">' + esc(day(o.work_date)) + '</td><td style="text-align:right;white-space:nowrap;" data-no-i18n><b>' + esc(hh(o.minutes)) + '</b></td>'
+            + '<td data-no-i18n>' + esc(o.reason || '') + (o.logged_by ? '<div class="hr-sub">Logged by <span data-no-i18n>' + esc(o.logged_by) + '</span></div>' : '') + '</td>'
+            + '<td>' + esc(otAsk(o.preference)) + '</td><td>' + otPill(o) + '</td>'
+            + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-ot="open" data-id="' + o.id + '">View overtime</button></td></tr>';
+        }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">No overtime here.</div>') + '</div>';
+    var reload = function () { if (host.isConnected) drawOvertime(host); };
+    host.querySelectorAll('[data-ost]').forEach(function (b) { b.addEventListener('click', function () { OS.st = b.getAttribute('data-ost'); drawOvertime(host); }); });
+    host.querySelectorAll('[data-ot]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var a = b.getAttribute('data-ot');
+        if (a === 'open') { var o = rows.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (o) openOvertime(o, o.user_id !== d.me, s, reload); }
+        else if (a === 'log') openLogOvertime({ settings: s, today: d.today, people: d.people }, true, reload);
+        else if (a === 'settings') openTimeSettings(reload);
+      });
+    });
+    var m = /[?&]ot=(\d+)/.exec(location.hash || '');
+    if (m) {
+      var o = rows.filter(function (x) { return x.id === +m[1]; })[0];
+      if (o) openOvertime(o, o.user_id !== d.me, s, reload);
+      else if (OS.st !== 'all') { OS.st = 'all'; drawOvertime(host); }
+    }
+  }
+
+  function openOvertime(o, manage, s, done) {
+    var kv = function (k, v) { return '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #F1F5F9;font-size:13.5px;"><span style="color:#64748B;">' + esc(k) + '</span><b data-no-i18n style="text-align:right;">' + (v == null || v === '' ? '<span class="hr-sub">—</span>' : v) + '</b></div>'; };
+    var rate = (o.rate != null ? o.rate : s.rate) || 1;
+    var h = '<div>' + kv('Person', esc(o.person)) + kv('Date', esc(day(o.work_date))) + kv('Hours worked', esc(hh(o.minutes)))
+      + kv('What for', esc(o.reason || '')) + kv('Asked for', esc(otAsk(o.preference))) + (o.logged_by ? kv('Logged by', esc(o.logged_by)) : '') + kv('Status', otPill(o));
+    if (o.status === 'approved' || o.status === 'paid') h += kv('Rate', esc(rateX(o.rate)));
+    if (o.outcome === 'bank' && o.bank_hours != null) h += kv('Put in the Overtime bank', esc(String(o.bank_hours) + ' h'));
+    if (o.decided_by) h += kv(o.status === 'declined' ? 'Declined by' : 'Approved by', esc(o.decided_by) + (o.decided_at ? ' · ' + esc(day(o.decided_at)) : ''));
+    if (o.decision_comment) h += kv('Comment', esc(o.decision_comment));
+    if (o.status === 'paid') h += kv('Paid', esc(day(o.paid_at)) + (o.payslip ? ' · ' + esc(o.payslip) : ''));
+    h += '</div>';
+    var canDecide = manage && (o.status === 'submitted' || o.status === 'declined');
+    if (canDecide) {
+      var bankH = Math.round(o.minutes / 60 * rate * 100) / 100;
+      h += '<div class="hr-sub" style="margin-top:10px;">At your agency\'s rate (<span data-no-i18n>' + esc(rateX(rate)) + '</span>): paid as <b data-no-i18n>' + esc(hh(o.minutes)) + ' ' + esc(rateX(rate)) + '</b> on the next payslip, or <b data-no-i18n>' + esc(String(bankH)) + ' h</b> into their Overtime bank.</div>'
+        + '<div style="margin-top:10px;">' + field('Comment (optional, the person sees it)', area('comment', '', 2), true) + '</div><div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>';
+    }
+    var box = el(h);
+    var acts = [{ label: 'Close' }];
+    var decide = function (dec, outcome, comment) {
+      return Api.post('/hr/overtime/' + o.id + '/decide', { decision: dec, outcome: outcome || null, comment: comment || null })
+        .then(function () { saved(dec === 'decline' ? 'Overtime declined.' : outcome === 'bank' ? 'Banked as time in lieu.' : 'Approved: it is offered on the next payslip.'); done(); },
+          function (e) { if (box.querySelector('[data-msg]')) msg(box, errMsg(e)); else toast('⚠️', 'Could not save it', errMsg(e), '#DC2626'); return false; });
+    };
+    if (manage) {
+      if (o.status === 'submitted' || (o.status === 'approved' && o.outcome === 'pay' && !o.payroll_document_id)) acts.push({ label: 'Decline', handler: function () { closeModal(); setTimeout(function () { openOtDecline(o, decide); }, 60); return false; } });
+      if (canDecide && s.allow_bank !== false) acts.push({ label: 'Bank as time in lieu', primary: !s.allow_pay || o.preference === 'bank', busyLabel: 'Saving…', handler: function () { return decide('approve', 'bank', val(box, 'comment')); } });
+      if (canDecide && s.allow_pay !== false) acts.push({ label: 'Approve as pay', primary: o.preference !== 'bank' || s.allow_bank === false, busyLabel: 'Saving…', handler: function () { return decide('approve', 'pay', val(box, 'comment')); } });
+    } else if (o.status === 'submitted') {
+      acts.push({ label: 'Withdraw', handler: function () {
+        return Api.post('/hr/overtime/' + o.id + '/withdraw', {}).then(function () { saved('Overtime withdrawn.'); done(); }, function (e) { toast('⚠️', 'Could not withdraw it', errMsg(e), '#DC2626'); return false; });
+      } });
+    }
+    modal({ title: 'Overtime: ' + o.person, body: box, actions: acts });
+  }
+
+  function openOtDecline(o, decide) {
+    var box = el('<div>' + field('Why is it declined? (the person sees this)', area('comment', '', 3), true) + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div></div>');
+    modal({ title: 'Decline overtime: ' + o.person, body: box, actions: [{ label: 'Cancel' }, { label: 'Decline overtime', primary: true, busyLabel: 'Saving…', handler: function () {
+      var t = val(box, 'comment'); if (!t) { msg(box, 'Say why the overtime is declined.'); return false; }
+      return decide('decline', null, t);
+    } }] });
+  }
+
+  function openLogOvertime(d, forOthers, done) {
+    var s = d.settings || {}, ppl = {};
+    (d.people || []).forEach(function (p) { ppl[p.id] = p.name; });
+    var prefs = {};
+    if (s.allow_pay !== false && s.allow_bank !== false) prefs = { '': 'Either is fine', pay: 'Pay', bank: 'Time in lieu (bank it)' };
+    var box = el('<div class="hr-g">' + (forOthers ? field('Person', select('user_id', opts(ppl, '', 'Choose a person')), true) : '')
+      + field('Date worked', input('work_date', d.today || today(), 'date')) + field('Extra hours', input('hours', '', 'number'))
+      + (Object.keys(prefs).length ? field(forOthers ? 'They would like' : 'I would like', select('preference', opts(prefs, ''))) : '')
+      + field('What the extra hours were for', area('reason', '', 2), true)
+      + '</div><div class="hr-sub" style="margin-top:8px;">' + (forOthers ? 'Another director or an admin can approve it, or you can, since it is not your own.' : 'Your director or agency admin approves it.') + ' Rate: <span data-no-i18n>' + esc(rateX(s.rate)) + '</span>.</div>'
+      + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    var hi = box.querySelector('[data-f="hours"]'); if (hi) { hi.step = '0.25'; hi.min = '0.25'; hi.max = '16'; hi.inputMode = 'decimal'; }
+    var di = box.querySelector('[data-f="work_date"]'); if (di) di.max = d.today || today();
+    modal({ title: forOthers ? 'Log overtime for someone' : 'Log overtime', body: box, actions: [{ label: 'Cancel' }, { label: 'Send', primary: true, busyLabel: 'Sending…', handler: function () {
+      var b = { work_date: val(box, 'work_date'), hours: val(box, 'hours'), reason: val(box, 'reason'), preference: val(box, 'preference') || null };
+      if (forOthers) { b.user_id = +val(box, 'user_id') || null; if (!b.user_id) { msg(box, 'Choose a person.'); return false; } }
+      if (!(Number(b.hours) >= 0.25)) { msg(box, 'Enter the extra hours (at least 0.25).'); return false; }
+      if (!b.reason) { msg(box, 'Say what the extra hours were for.'); return false; }
+      return Api.post('/hr/overtime', b).then(function () { saved(forOthers ? 'Overtime logged.' : 'Sent for approval.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
+  function openTimeSettings(done) {
+    Api.get('/hr/time/settings').then(function (r) {
+      var s = r.settings || {}, o = s.overtime || {}, t = s.timesheet || {}, admin = !!r.can_manage;
+      var rnd = {}; (r.rounding || [0, 5, 6, 10, 15]).forEach(function (n) { rnd[n] = n ? 'To the nearest ' + n + ' minutes' : 'Off: exact clock times'; });
+      var box = el('<div class="hrt-sec" style="margin-top:0;">Overtime</div><div class="hr-g">'
+        + field('Overtime rate (1 = straight time, 1.5 = time and a half)', input('rate', o.rate, 'number'))
+        + '<div style="grid-column:1/-1;display:grid;gap:6px;">' + check('staff_can_log', o.staff_can_log, 'Staff can log their own overtime (otherwise a director logs it for them)')
+        + check('allow_pay', o.allow_pay, 'Overtime can be paid (a line on the next payslip)') + check('allow_bank', o.allow_bank, 'Overtime can be banked as time in lieu (the Overtime bank leave balance)') + '</div></div>'
+        + '<div class="hrt-sec">Timesheets</div><div class="hr-g">' + field('Round clock-in and clock-out', select('rounding', opts(rnd, String(t.rounding || 0))))
+        + field('Before payroll', select('export_rule', opts({ warn: 'Warn when a period is not approved', block: 'Only pay approved, locked periods' }, t.export_rule || 'warn')))
+        + '<div style="grid-column:1/-1;display:grid;gap:6px;">' + check('clip_in', t.clip_in, 'Count from the shift start when someone clocks in early')
+        + check('clip_out', t.clip_out, 'Count to the shift end when someone clocks out late (log the extra as overtime)') + '</div></div>'
+        + '<div class="hr-sub" style="margin-top:8px;">All timesheet rules are off by default, so hours are exactly what the clock recorded. Rules change the paid hours on the timesheet and in the payroll run, never the clock-in record itself.'
+        + (r.bank ? ' Banked overtime goes to the <b data-no-i18n>' + esc(r.bank.name) + '</b> leave type' + (r.bank.archived ? ' (archived: restore it in Leave types to bank again)' : '') + '.' : ' The Overtime bank leave type is made the first time overtime is banked.') + '</div>'
+        + (admin ? '' : '<div class="hr-note" style="margin-top:8px;">Only an agency admin can change these.</div>')
+        + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+      var ri = box.querySelector('[data-f="rate"]'); if (ri) { ri.step = '0.25'; ri.min = '1'; ri.max = '3'; }
+      if (!admin) box.querySelectorAll('[data-f]').forEach(function (i) { i.disabled = true; });
+      var acts = [{ label: admin ? 'Cancel' : 'Close' }];
+      if (admin) acts.push({ label: 'Save rules', primary: true, busyLabel: 'Saving…', handler: function () {
+        var b = { overtime: { rate: Number(val(box, 'rate')) || 1, staff_can_log: !!val(box, 'staff_can_log'), allow_pay: !!val(box, 'allow_pay'), allow_bank: !!val(box, 'allow_bank') },
+          timesheet: { rounding: +val(box, 'rounding') || 0, clip_in: !!val(box, 'clip_in'), clip_out: !!val(box, 'clip_out'), export_rule: val(box, 'export_rule') || 'warn' } };
+        if (!b.overtime.allow_pay && !b.overtime.allow_bank) { msg(box, 'Allow paying overtime, banking it, or both.'); return false; }
+        return Api.put('/hr/time/settings', b).then(function () { saved('Rules saved.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+      } });
+      modal({ title: 'Overtime and timesheet rules', body: box, actions: acts });
+    }, function (e) { toast('⚠️', 'Could not open the rules', errMsg(e), '#DC2626'); });
+  }
+
+  async function mineOvertime(host) {
+    chipCss();
+    var wrap = document.createElement('div'); wrap.setAttribute('data-hrs-ot', '1'); host.appendChild(wrap);
+    var d;
+    try { d = await Api.get('/hr/me/overtime'); } catch (e) { wrap.innerHTML = ''; return; }
+    if (!wrap.isConnected) return;
+    var rows = d.overtime || [];
+    wrap.innerHTML = '<div class="hrt-sec">Overtime and time in lieu</div><div class="hr-bar">' + (d.can_log ? '<button type="button" class="hr-b p" data-mot="new">Log overtime</button>' : '<span class="hr-sub">Your director logs overtime for you.</span>')
+      + (d.bank ? '<span class="hrt-chips" style="margin:0;"><span class="hrt-stat"><span data-no-i18n>' + esc(d.bank.name) + '</span> <span class="n" data-no-i18n>' + esc(String(d.bank.balance)) + ' h</span></span></span><a href="#time-off" class="hr-sub" style="font-weight:700;">Book time in lieu</a>' : '') + '</div>'
+      + '<div class="kt-card">' + (rows.length ? '<table data-hrs="myovertime"><thead><tr><th>Date</th><th style="text-align:right;">Hours</th><th>What for</th><th>Status</th><th></th></tr></thead><tbody>' + rows.map(function (o) {
+        return '<tr><td style="white-space:nowrap;">' + esc(day(o.work_date)) + '</td><td style="text-align:right;white-space:nowrap;" data-no-i18n><b>' + esc(hh(o.minutes)) + '</b></td><td data-no-i18n>' + esc(o.reason || '') + '</td>'
+          + '<td>' + otPill(o) + (o.status === 'declined' && o.decision_comment ? '<div class="hr-sub" data-no-i18n>' + esc(o.decision_comment) + '</div>' : '') + '</td>'
+          + '<td style="text-align:center;"><button type="button" data-mot="open" data-id="' + o.id + '">View overtime</button></td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">You have not logged any overtime.</div>') + '</div>';
+    var reload = function () { if (wrap.isConnected) { wrap.remove(); mineOvertime(host); } };
+    wrap.querySelectorAll('[data-mot]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (b.getAttribute('data-mot') === 'new') openLogOvertime({ settings: d.settings, today: d.today }, false, reload);
+        else { var o = rows.filter(function (x) { return x.id === +b.getAttribute('data-id'); })[0]; if (o) openOvertime(o, false, d.settings || {}, reload); }
+      });
+    });
+  }
+
+  /* HR > Timesheets: one centre, one period. */
+  var TS = { centre: null, from: null, to: null };
+  function tsPeriods(t) {
+    var mon = addDays(t, -((new Date(Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10))).getUTCDay() + 6) % 7));
+    var m0 = t.slice(0, 8) + '01', pm = addDays(m0, -1);
+    return [['Last week', addDays(mon, -7), addDays(mon, -1)], ['Last 2 weeks', addDays(mon, -14), addDays(mon, -1)],
+      ['Last month', pm.slice(0, 8) + '01', pm], ['This month so far', m0, addDays(t, -1) < m0 ? m0 : addDays(t, -1)]];
+  }
+  async function drawTimesheets(host) {
+    chipCss();
+    var q = '/hr/timesheets?' + (TS.centre ? 'centre_id=' + TS.centre + '&' : '') + (TS.from ? 'from=' + TS.from + '&to=' + TS.to : '');
+    var d;
+    try { d = await Api.get(q); } catch (e) { host.innerHTML = '<div class="hr-note">' + esc(errMsg(e)) + '</div>'; return; }
+    if (!host.isConnected) return;
+    if (!(d.centres || []).length) { host.innerHTML = '<div class="hr-note">No centres to show.</div>'; return; }
+    TS.centre = d.centre_id; TS.from = d.from; TS.to = d.to;
+    var rows = d.rows || [], tot = d.totals || {}, lock = (d.locks || [])[0];
+    var why = !d.ended ? 'You can approve this period once it has ended.' : lock ? '' : tot.open ? tot.open + ' clock-in' + (tot.open === 1 ? ' has' : 's have') + ' no clock-out. Add the clock-out first (Timesheets screen, the person\'s row).' : d.own_hours ? 'Your own hours are on this timesheet: another director or an agency admin approves it.' : '';
+    var r = d.rules || {}, rulesTxt = [];
+    if (r.rounding) rulesTxt.push('rounded to ' + r.rounding + ' min');
+    if (r.clip_in) rulesTxt.push('counted from the shift start');
+    if (r.clip_out) rulesTxt.push('counted to the shift end');
+    var h = '<div class="hr-note">Scheduled shifts against clock-ins for one centre and period. Paid hours are what payroll uses' + (rulesTxt.length ? ' (your rules: ' + esc(rulesTxt.join(', ')) + ')' : ' (no rounding or shift rules: exactly the clock)') + '. Approve a period once it has ended: that locks it, and clock-ins on those days can no longer be changed until an agency admin unlocks it.</div>'
+      + '<div class="hr-bar">' + (d.centres.length > 1 ? '<select class="hr-i" data-ts="centre" style="max-width:220px;">' + d.centres.map(function (c) { return '<option value="' + c.id + '"' + (c.id === d.centre_id ? ' selected' : '') + ' data-no-i18n>' + esc(c.name) + '</option>'; }).join('') + '</select>' : '<b data-no-i18n>' + esc(d.centres[0].name) + '</b>')
+      + '<input class="hr-i" type="date" data-ts="from" value="' + esc(d.from) + '"><span class="hr-sub">to</span><input class="hr-i" type="date" data-ts="to" value="' + esc(d.to) + '">'
+      + tsPeriods(d.today).map(function (p, i) { return '<button type="button" class="hr-b" data-tsp="' + i + '">' + esc(p[0]) + '</button>'; }).join('')
+      + '<span style="flex:1"></span><button type="button" class="hr-b" data-ts="settings">Rules</button></div>'
+      + '<div class="hrt-chips"><span class="hrt-stat">People <span class="n">' + (tot.people || 0) + '</span></span><span class="hrt-stat">Scheduled <span class="n" data-no-i18n>' + esc(hh(tot.scheduled_min)) + '</span></span>'
+      + '<span class="hrt-stat">Worked <span class="n" data-no-i18n>' + esc(hh(tot.worked_min)) + '</span></span><span class="hrt-stat">Paid <span class="n" data-no-i18n>' + esc(hh(tot.paid_min)) + '</span></span>'
+      + '<span class="hrt-stat' + (tot.open ? ' warn' : '') + '">No clock-out <span class="n">' + (tot.open || 0) + '</span></span><span class="hrt-stat' + (tot.no_show ? ' warn' : '') + '">Shift with no clock-in <span class="n">' + (tot.no_show || 0) + '</span></span>'
+      + '<span class="hrt-stat">Hours with no shift <span class="n">' + (tot.unscheduled || 0) + '</span></span></div>';
+    if (lock) {
+      h += '<div class="hr-note" style="background:#ECFDF5;border-color:#A7F3D0;color:#065F46;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">🔒 <span>Approved and locked: <b data-no-i18n>' + esc(day(lock.period_start)) + ' – ' + esc(day(lock.period_end)) + '</b>, by <span data-no-i18n>' + esc(lock.approved_by) + '</span> on <span data-no-i18n>' + esc(day(lock.approved_at)) + '</span>.</span>'
+        + (d.is_admin ? '<span style="flex:1"></span><button type="button" class="hr-b" data-ts="unlock" data-id="' + lock.id + '">Unlock</button>' : '') + '</div>';
+    } else {
+      h += '<div class="hr-bar"><button type="button" class="hr-b p" data-ts="approve"' + (d.can_approve ? '' : ' disabled') + '>Approve and lock this period</button>' + (why ? '<span class="hr-sub">' + esc(why) + '</span>' : '') + '</div>';
+    }
+    h += '<div class="kt-card">' + (rows.length ? '<table data-hrs="timesheets"><thead><tr><th>Person</th><th style="text-align:right;">Scheduled</th><th style="text-align:right;">Worked</th><th style="text-align:right;">Paid</th><th style="text-align:right;">Paid vs scheduled</th><th>Flags</th><th style="text-align:right;">Approved overtime</th><th></th></tr></thead><tbody>'
+      + rows.map(function (p) {
+        var fl = [];
+        if (p.open) fl.push(pill('#FEE2E2', '#991B1B', p.open + ' no clock-out'));
+        if (p.no_show) fl.push(pill('#FEF3C7', '#92400E', p.no_show + ' shift with no clock-in'));
+        if (p.unscheduled) fl.push(pill('#E0F2FE', '#075985', p.unscheduled + ' with no shift'));
+        return '<tr><td><b data-no-i18n>' + esc(p.name) + '</b></td><td style="text-align:right;" data-no-i18n>' + esc(hh(p.scheduled_min)) + '</td><td style="text-align:right;" data-no-i18n>' + esc(hh(p.worked_min)) + '</td>'
+          + '<td style="text-align:right;" data-no-i18n><b>' + esc(hh(p.paid_min)) + '</b></td><td style="text-align:right;' + (Math.abs(p.variance_min) >= 30 ? 'color:#B45309;font-weight:700;' : '') + '" data-no-i18n>' + esc(signedH(p.variance_min)) + '</td>'
+          + '<td>' + (fl.join(' ') || '<span class="hr-sub">—</span>') + '</td><td style="text-align:right;" data-no-i18n>' + (p.overtime_min ? esc(hh(p.overtime_min)) : '<span class="hr-sub">—</span>') + '</td>'
+          + '<td style="text-align:center;white-space:nowrap;"><button type="button" data-ts="person" data-id="' + p.user_id + '">View clock-ins</button></td></tr>';
+      }).join('') + '</tbody></table>' : '<div style="padding:16px;" class="hr-sub">No shifts or clock-ins at this centre in these dates.</div>') + '</div>';
+    var hist = d.history || [];
+    if (hist.length) {
+      h += '<div class="hrt-sec">Approved periods</div><div class="kt-card"><table data-hrs="ts-locks"><thead><tr><th>Period</th><th>Approved by</th><th>Status</th><th>Note</th></tr></thead><tbody>' + hist.map(function (l) {
+        return '<tr><td style="white-space:nowrap;" data-no-i18n>' + esc(day(l.period_start)) + ' – ' + esc(day(l.period_end)) + '</td><td><span data-no-i18n>' + esc(l.approved_by) + '</span><div class="hr-sub" data-no-i18n>' + esc(day(l.approved_at)) + '</div></td>'
+          + '<td>' + (l.status === 'locked' ? pill('#DCFCE7', '#166534', 'Locked') : pill('#F1F5F9', '#475569', 'Unlocked')) + (l.status !== 'locked' && l.unlocked_by ? '<div class="hr-sub"><span data-no-i18n>' + esc(l.unlocked_by) + '</span> · <span data-no-i18n>' + esc(day(l.unlocked_at)) + '</span></div>' : '') + '</td>'
+          + '<td data-no-i18n>' + esc(l.status !== 'locked' ? (l.unlock_reason || '') : (l.note || '')) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+    }
+    host.innerHTML = h;
+    var go = function () { if (host.isConnected) drawTimesheets(host); };
+    host.querySelectorAll('[data-tsp]').forEach(function (b) { b.addEventListener('click', function () { var p = tsPeriods(d.today)[+b.getAttribute('data-tsp')]; TS.from = p[1]; TS.to = p[2]; go(); }); });
+    host.querySelectorAll('[data-ts]').forEach(function (b) {
+      var a = b.getAttribute('data-ts');
+      if (a === 'centre') { b.addEventListener('change', function () { TS.centre = +b.value; go(); }); return; }
+      if (a === 'from' || a === 'to') { b.addEventListener('change', function () { if (b.value) { TS[a] = b.value; if (TS.from > TS.to) { var x = TS.from; TS.from = TS.to; TS.to = x; } go(); } }); return; }
+      b.addEventListener('click', function () {
+        if (a === 'settings') openTimeSettings(go);
+        else if (a === 'person') openTsPerson(d, +b.getAttribute('data-id'));
+        else if (a === 'approve') openTsApprove(d, go);
+        else if (a === 'unlock') openTsUnlock(+b.getAttribute('data-id'), go);
+      });
+    });
+  }
+
+  function openTsPerson(d, uid) {
+    Api.get('/hr/timesheets/person?centre_id=' + d.centre_id + '&user_id=' + uid + '&from=' + d.from + '&to=' + d.to).then(function (r) {
+      var p = r.person || {}, rules = r.rules_on;
+      var box = el('<div class="hr-sub" style="margin-bottom:8px;">Scheduled <b data-no-i18n>' + esc(hh(p.scheduled_min)) + '</b> · worked <b data-no-i18n>' + esc(hh(p.worked_min)) + '</b> · paid <b data-no-i18n>' + esc(hh(p.paid_min)) + '</b></div>'
+        + '<div>' + ((r.entries || []).length ? (r.entries || []).map(function (e) {
+          var tag = e.no_show ? pill('#FEF3C7', '#92400E', 'No clock-in') : e.open ? pill('#FEE2E2', '#991B1B', 'No clock-out') : !e.shift ? pill('#E0F2FE', '#075985', 'No shift') : '';
+          return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #F1F5F9;font-size:13px;"><div><b data-no-i18n>' + esc(wday(e.date)) + '</b>'
+            + (e.shift ? '<div class="hr-sub">Shift <span data-no-i18n>' + esc(e.shift) + (e.room ? ' · ' + esc(e.room) : '') + '</span></div>' : '')
+            + (e.no_show ? '' : '<div class="hr-sub">Clocked <span data-no-i18n>' + esc(e.in) + ' – ' + esc(e.out || '…') + '</span>' + (e.auto ? ' · automatic clock-out' : '') + (e.corrected ? ' · corrected' : '') + '</div>')
+            + (rules && !e.no_show && !e.open && (e.paid_in !== e.in || e.paid_out !== e.out) ? '<div class="hr-sub">Paid as <span data-no-i18n>' + esc(e.paid_in) + ' – ' + esc(e.paid_out) + '</span></div>' : '') + '</div>'
+            + '<div style="text-align:right;white-space:nowrap;">' + (e.no_show ? '' : '<b data-no-i18n>' + esc(hh(e.paid_min)) + '</b>' + (e.paid_min !== e.raw_min ? '<div class="hr-sub" data-no-i18n>' + esc(hh(e.raw_min)) + ' clocked</div>' : '')) + (tag ? '<div>' + tag + '</div>' : '') + '</div></div>';
+        }).join('') : '<div class="hr-sub">Nothing in these dates.</div>') + '</div>'
+        + (r.locked ? '<div class="hr-sub" style="margin-top:8px;">🔒 This period is approved and locked.</div>' : '<div class="hr-sub" style="margin-top:8px;">To correct a clock-in, use the Timesheets screen (Staff &gt; Timesheets), the person\'s row.</div>'));
+      modal({ title: 'Clock-ins: ' + (p.name || ''), body: box, actions: [{ label: 'Close' }] });
+    }, function (e) { toast('⚠️', 'Could not open it', errMsg(e), '#DC2626'); });
+  }
+
+  function openTsApprove(d, done) {
+    var c = (d.centres || []).filter(function (x) { return x.id === d.centre_id; })[0] || {};
+    var t = d.totals || {};
+    var box = el('<div class="hr-sub" style="margin-bottom:8px;">You are approving <b data-no-i18n>' + esc(c.name || '') + '</b>, <b data-no-i18n>' + esc(day(d.from)) + ' – ' + esc(day(d.to)) + '</b>: ' + (t.people || 0) + ' people, <b data-no-i18n>' + esc(hh(t.paid_min)) + '</b> paid.'
+      + (t.no_show ? ' ' + t.no_show + ' scheduled shift' + (t.no_show === 1 ? ' has' : 's have') + ' no clock-in (no approved leave either): check them first if they should be paid.' : '') + '</div>'
+      + '<div class="hr-sub" style="margin-bottom:8px;">Once locked, clock-ins on these days cannot be added, corrected or removed until an agency admin unlocks the period.</div>'
+      + field('Note (optional)', area('note', '', 2), true) + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div>');
+    modal({ title: 'Approve and lock timesheet', body: box, actions: [{ label: 'Cancel' }, { label: 'Approve and lock', primary: true, busyLabel: 'Saving…', handler: function () {
+      return Api.post('/hr/timesheets/approve', { centre_id: d.centre_id, from: d.from, to: d.to, note: val(box, 'note') }).then(function () { saved('Timesheet approved and locked.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
+  function openTsUnlock(id, done) {
+    var box = el('<div><div class="hr-sub" style="margin-bottom:8px;">Unlocking lets clock-ins in this period be changed again. It is recorded with your name and reason, and the period needs approving again before payroll.</div>'
+      + field('Why is it unlocked?', area('reason', '', 3), true) + '<div data-msg style="color:#B91C1C;font-size:13px;margin-top:6px;"></div></div>');
+    modal({ title: 'Unlock timesheet', body: box, actions: [{ label: 'Cancel' }, { label: 'Unlock', primary: true, busyLabel: 'Saving…', handler: function () {
+      var t = val(box, 'reason'); if (!t) { msg(box, 'Say why the timesheet is unlocked.'); return false; }
+      return Api.post('/hr/timesheets/locks/' + id + '/unlock', { reason: t }).then(function () { saved('Timesheet unlocked.'); done(); }, function (e) { msg(box, errMsg(e)); return false; });
+    } }] });
+  }
+
   window.KTHrSafety = {
-    tabs: [['injuries', 'Injuries'], ['claims', 'Claims'], ['rota', 'Rota'], ['letters', 'Letters']],
-    has: function (tab) { return tab === 'injuries' || tab === 'claims' || tab === 'rota' || tab === 'letters'; },
-    draw: function (tab, host) { if (tab === 'injuries') return drawInjuries(host); if (tab === 'claims') return drawClaims(host); if (tab === 'rota') return drawRota(host); if (tab === 'letters') return drawLetters(host); },
-    mine: function (host) { mine(host); mineClaims(host); mineRota(host); }
+    tabs: [['injuries', 'Injuries'], ['claims', 'Claims'], ['overtime', 'Overtime'], ['timesheets', 'Timesheets'], ['rota', 'Rota'], ['letters', 'Letters']],
+    has: function (tab) { return ['injuries', 'claims', 'overtime', 'timesheets', 'rota', 'letters'].indexOf(tab) >= 0; },
+    draw: function (tab, host) {
+      if (tab === 'injuries') return drawInjuries(host); if (tab === 'claims') return drawClaims(host); if (tab === 'rota') return drawRota(host); if (tab === 'letters') return drawLetters(host);
+      if (tab === 'overtime') return drawOvertime(host); if (tab === 'timesheets') return drawTimesheets(host);
+    },
+    mine: function (host) { mine(host); mineClaims(host); mineOvertime(host); mineRota(host); }
   };
 })(window);

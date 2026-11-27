@@ -31,3 +31,7 @@ Le panneau latéral **Aujourd'hui au centre** indique qui est absent aujourd'hui
 ## Demandes de congé
 
 Chaque demande affiche son type, la quantité utilisée et le solde. L'approbation retire du solde; un refus ou une annulation le rend. Un congé sans approbation est déjà retiré et s'affiche **À examiner** : sous **Congés**, appuyez sur **Examiné**.
+
+## Heures supplémentaires et feuilles de temps
+
+**RH > Heures supplémentaires** approuve les heures en plus en paie ou les met en banque comme congé compensatoire. **RH > Feuilles de temps** compare les heures prévues et travaillées, et approuve et verrouille une période avant la paie. Voir **RH : heures supplémentaires, congés compensatoires et feuilles de temps**.

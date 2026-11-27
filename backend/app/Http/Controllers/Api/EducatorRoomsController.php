@@ -223,6 +223,10 @@ class EducatorRoomsController extends Controller
         if ($out && $out->lte($in)) {
             return response()->json(['message' => 'The end of the shift must be after the start.'], 422);
         }
+        // KiddieTrac HR: a day inside a timesheet that was approved and locked for payroll takes no new shifts (App\Support\HrTime).
+        if ($no = \App\Support\HrTime::editRefusal($centreId, [$in->toDateTimeString()])) {
+            return response()->json(['message' => $no, 'locked' => true], 422);
+        }
         // A shift longer than a day is a typo — usually the wrong date on one end — and
         // silently paying it is worse than refusing it.
         if ($out && $in->diffInHours($out) > 24) {
@@ -300,6 +304,10 @@ class EducatorRoomsController extends Controller
         }
 
         $data = $request->validate(['reason' => ['required', 'string', 'max:200']]);
+        // KiddieTrac HR: hours inside an approved, locked timesheet stay as they were paid (App\Support\HrTime).
+        if ($no = \App\Support\HrTime::editRefusal($centreId, [$row->punched_in_at])) {
+            return response()->json(['message' => $no, 'locked' => true], 422);
+        }
 
         DB::table('time_punches')->where('id', $punch)->delete();
 
@@ -390,6 +398,10 @@ class EducatorRoomsController extends Controller
         $newOut = array_key_exists('punched_out_at', $data) ? $toUtc($data['punched_out_at']) : $row->punched_out_at;
 
         if (! $newIn) return response()->json(['message' => 'A clock-in time is required.'], 422);
+        // KiddieTrac HR: neither the day it was on nor the day it would move to may be in a locked timesheet (App\Support\HrTime).
+        if ($no = \App\Support\HrTime::editRefusal($centreId, [$row->punched_in_at, (string) $newIn])) {
+            return response()->json(['message' => $no, 'locked' => true], 422);
+        }
         if ($newOut && strtotime((string) $newOut) <= strtotime((string) $newIn)) {
             return response()->json(['message' => 'The clock-out time must be after the clock-in time.'], 422);
         }

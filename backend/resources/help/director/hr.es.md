@@ -31,3 +31,7 @@ El panel lateral **Hoy en el centro** muestra quién falta hoy y más adelante e
 ## Solicitudes de permiso
 
 Cada solicitud muestra su tipo, cuánto usa y el saldo. Aprobar resta del saldo; denegar o cancelar lo devuelve. Un permiso sin aprobación ya está restado y aparece **Por revisar**: en **Tiempo libre**, pulsa **Revisado**.
+
+## Horas extra y hojas de horas
+
+**RR. HH. > Horas extra** aprueba las horas adicionales como pago o las guarda como tiempo compensatorio. **RR. HH. > Hojas de horas** compara las horas programadas y trabajadas, y aprueba y bloquea un periodo antes de la nómina. Consulta **RR. HH.: horas extra, tiempo compensatorio y hojas de horas**.

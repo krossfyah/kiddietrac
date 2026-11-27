@@ -1213,6 +1213,25 @@ final class SchedulingController extends Controller
             $__ref = \App\Support\RefCode::users($rows->pluck('user_id')->filter()->all(), $__ag, 'S');
             $rows = $rows->map(function ($r) use ($__ref) { $r = (array) $r; $r['staff_ref'] = $__ref[(int) ($r['user_id'] ?? 0)] ?? null; return $r; })->values();
         }
+        /* KiddieTrac HR (2026-11-27, App\Support\HrTime): a punch on a day of an approved, locked timesheet says so, and
+           the row offers no edit or delete (the punch routes refuse them as well). */
+        try {
+            $__locks = \App\Support\HrTime::locksFor($centreIds, (string) $from, (string) $to)->groupBy('centre_id');
+            if ($__locks->count()) {
+                $rows = $rows->map(function ($r) use ($__locks) {
+                    $r = (array) $r;
+                    $r['locked'] = false;
+                    if (! empty($r['id']) && ! empty($r['date'])) {
+                        foreach ($__locks[(int) ($r['centre_id'] ?? 0)] ?? [] as $l) {
+                            if ($r['date'] >= substr((string) $l->period_start, 0, 10) && $r['date'] <= substr((string) $l->period_end, 0, 10)) { $r['locked'] = true; break; }
+                        }
+                    }
+                    return $r;
+                })->values();
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return response()->json([
             'centre_id' => $centreId,

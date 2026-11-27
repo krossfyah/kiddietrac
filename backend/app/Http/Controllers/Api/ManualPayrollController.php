@@ -94,7 +94,20 @@ final class ManualPayrollController extends Controller
             ->where('punched_in_at', '>=', $payFrom)
             ->where('punched_in_at', '<', $payTo)
             ->orderBy('punched_in_at')
-            ->get(['user_id', 'centre_id', 'punched_in_at', 'punched_out_at']);
+            ->get(['id', 'user_id', 'centre_id', 'punched_in_at', 'punched_out_at']);
+
+        /* KIDDIETRAC HR TIMESHEET RULES (2026-11-27, App\Support\HrTime). When the agency rounds clock times or clips them to
+           the shift, the hours here are the PAID minutes, the same the approved timesheet showed. All rules off (the
+           default) = this map stays empty and the clock is read exactly as before. */
+        $hrTime = \App\Support\HrTime::on($agencyId);
+        $paidMap = [];
+        if ($hrTime && \App\Support\HrTime::rulesOn(\App\Support\HrTime::settings($agencyId))) {
+            try {
+                $paidMap = \App\Support\HrTime::paidMinutes($agencyId, $punches, $from, $to);
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
 
         $worked = [];
         $detail = [];
@@ -108,6 +121,9 @@ final class ManualPayrollController extends Controller
             $in = Carbon::parse($p->punched_in_at);
             $out = Carbon::parse($p->punched_out_at);
             $mins = max(0, $in->diffInMinutes($out));
+            if (isset($paidMap[(int) $p->id])) {
+                $mins = (int) $paidMap[(int) $p->id];
+            }
             $worked[$uid] = ($worked[$uid] ?? 0) + $mins;
             $detail[$uid][] = [
                 'in' => $p->punched_in_at,
@@ -204,6 +220,24 @@ final class ManualPayrollController extends Controller
             report($e);
         }
 
+        /* KIDDIETRAC HR OVERTIME (2026-11-27, App\Support\HrTime). Overtime approved as PAY waits here like claims: offered
+           as lines (overtime_id) with its hours and the agency's multiplier; the screen prices them at the hourly rate typed
+           for the person, and commit() marks them paid. */
+        if ($hrTime) {
+            try {
+                $ot = \App\Support\HrTime::forPayroll($agencyId, collect($userIds)->map(fn ($v) => (int) $v)->all());
+                if ($ot) {
+                    $staff = $staff->map(function ($s) use ($ot) {
+                        $s['overtime'] = $ot[$s['user_id']] ?? [];
+
+                        return $s;
+                    })->values();
+                }
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
         /* ONTARIO WORKFORCE FUNDING (2026-10-13). Where it is switched on, each person
            carries their WEG / WCF / wage-floor rates and the hours x rate lines to put on
            the payslip — every pay cheque, never a lump sum. Never allowed to break a run. */
@@ -240,10 +274,24 @@ final class ManualPayrollController extends Controller
                 'last_net' => (float) $r->last_net,
             ]);
 
+        /* Which centres' timesheets for this period are not approved and locked yet (HR add-on): a warning, or a refusal
+           at commit() when the agency set the export rule to block. */
+        $timesheets = null;
+        if ($hrTime) {
+            try {
+                $set = \App\Support\HrTime::settings($agencyId)['timesheet'];
+                $open = \App\Support\HrTime::uncovered($agencyId, $centreIds->map(fn ($v) => (int) $v)->all(), $from, $to);
+                $timesheets = ['unlocked' => array_values($open), 'rule' => $set['export_rule'], 'rules_on' => (bool) $paidMap || \App\Support\HrTime::rulesOn(\App\Support\HrTime::settings($agencyId))];
+            } catch (Throwable $e) {
+                report($e);
+            }
+        }
+
         return response()->json([
             'period' => ['from' => $from, 'to' => $to],
             'staff' => $staff,
             'contractors' => $contractors,
+            'timesheets' => $timesheets,
             'centres' => DB::table('centres')->where('agency_id', $agencyId)->orderBy('name')->get(['id', 'name']),
         ]);
     }
@@ -285,6 +333,9 @@ final class ManualPayrollController extends Controller
             'rows.*.lines.*.reward_award_id' => 'nullable|integer',
             // An HR expense / mileage claim this line pays (hr_claims.id, HR item 9).
             'rows.*.lines.*.claim_id' => 'nullable|integer',
+            // HR overtime approved as pay that this line pays (hr_overtime_requests.id, HR Phase 4).
+            'rows.*.lines.*.overtime_id' => 'nullable|integer',
+            'rows.*.lines.*.multiplier' => 'nullable|numeric|min:1|max:3',
             'rows.*.hours_detail' => 'nullable|array|max:200',
             'rows.*.staff_group' => 'nullable|string|max:16',
             'rows.*.centre_id' => 'nullable|integer',
@@ -304,6 +355,18 @@ final class ManualPayrollController extends Controller
             }
             if ($scope !== null && ! \App\Support\CentreScope::canWrite($scope, $row['centre_id'] ?? null)) {
                 return response()->json(['message' => 'You can only pay staff at your own centres.'], 403);
+            }
+        }
+        /* KiddieTrac HR: an agency that requires approved timesheets before payroll (HrTime export_rule = block) is refused
+           while a centre in this run still has unlocked days with clock-ins. */
+        if (\App\Support\HrTime::on($agencyId) && \App\Support\HrTime::settings($agencyId)['timesheet']['export_rule'] === 'block') {
+            $runCentres = collect($data['rows'])->pluck('centre_id')->filter()->map(fn ($v) => (int) $v)->unique()->values()->all();
+            if (! $runCentres) {
+                $runCentres = $scope !== null ? $scope : $agencyCentres;
+            }
+            $open = \App\Support\HrTime::uncovered($agencyId, $runCentres, $from, $to);
+            if ($open) {
+                return response()->json(['message' => 'Approve and lock the timesheets for this period first (HR > Timesheets): ' . implode(', ', $open) . '.'], 422);
             }
         }
         $allowed = DB::table('role_assignments')->where('agency_id', $agencyId)->where('active', 1)
@@ -446,6 +509,11 @@ final class ManualPayrollController extends Controller
                 $claimIds = array_values(array_filter(array_map(fn ($l) => (int) ($l['claim_id'] ?? 0), $row['lines'] ?? [])));
                 if (! $isContractor && $claimIds) {
                     \App\Support\HrClaims::markPaid($agencyId, (int) $uid, $claimIds, (int) $id);
+                }
+                // The HR overtime this payslip pays (hr_overtime_requests.id): once only, this person's, approved as pay.
+                $otIds = array_values(array_filter(array_map(fn ($l) => (int) ($l['overtime_id'] ?? 0), $row['lines'] ?? [])));
+                if (! $isContractor && $otIds) {
+                    \App\Support\HrTime::markPaid($agencyId, (int) $uid, $otIds, (int) $id);
                 }
 
                 $created[] = [

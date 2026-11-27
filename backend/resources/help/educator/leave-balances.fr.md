@@ -22,3 +22,7 @@ Si d'autres personnes de votre centre sont déjà absentes ou ont demandé les m
 Une demande approuvée est retirée de votre solde. Si elle est refusée ou que vous la retirez, le temps revient.
 
 Si quelqu'un ajuste votre solde, vous recevez un avis avec le motif.
+
+## Congé compensatoire
+
+Les heures supplémentaires que votre directeur met en banque vont dans votre solde **Banque d'heures** (les heures multipliées par le taux de votre agence). Réservez-les comme tout congé. Déclarez vos heures dans **Mes RH > Heures supplémentaires et congés compensatoires**.

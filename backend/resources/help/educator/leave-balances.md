@@ -22,3 +22,7 @@ If others at your centre are already off or asking for the same days, the form t
 An approved request is taken off your balance. If it is denied, or you withdraw it, the time goes back.
 
 Each of your requests shows how much it uses and your balance. If someone adjusts your balance, you get a notice with the reason.
+
+## Time in lieu
+
+Overtime that your director banks as time in lieu goes into your **Overtime bank** balance (the hours times your agency's overtime rate). Book it like any time off. Log overtime in **My HR > Overtime and time in lieu**.

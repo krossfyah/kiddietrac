@@ -22,3 +22,7 @@ Si otras personas de tu centro ya están ausentes o han pedido los mismos días,
 Una solicitud aprobada se resta de tu saldo. Si se deniega o la retiras, el tiempo vuelve.
 
 Si alguien ajusta tu saldo, recibes un aviso con el motivo.
+
+## Tiempo compensatorio
+
+Las horas extra que tu director guarda como tiempo compensatorio van a tu saldo de **Bolsa de horas** (las horas por la tasa de tu agencia). Resérvalas como cualquier permiso. Registra horas extra en **Mis RR. HH. > Horas extra y tiempo compensatorio**.
