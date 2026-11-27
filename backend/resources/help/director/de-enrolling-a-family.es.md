@@ -15,7 +15,25 @@ Cuando una familia se va, darla de baja cierra su plaza correctamente: se retira
 - Si la familia solo hace una pausa (un verano fuera, una licencia parental), use **Suspender** en su lugar. Una suspensión es reversible; esto no.
 - Si se traslada a otro proveedor que usted gestiona, use **Pasar a otro proveedor**, para que los niños conserven su historial y su plaza.
 
-## Paso a paso
+## Revisar la solicitud de baja de un padre o madre
+
+Los padres pueden pedir ellos mismos terminar el cuidado de su hijo desde **🚸 Baja del servicio de cuidado** en su portal. Sus solicitudes le esperan en **Operaciones › Bajas**.
+
+[[open: #withdrawals | Abrir Bajas]]
+
+1. Abra **Operaciones › Bajas**. Cada tarjeta muestra al niño, la familia, quién lo pidió, el **📅 Requested last day** y el motivo. Las solicitudes nuevas dicen **Pendiente de revisión**.
+2. Revise **Effective date (when access is removed)**. Empieza en el último día que indicó el padre o la madre; cámbiela si acordaron otra fecha.
+3. Si quiere, escriba un mensaje en **Optional note to the parent…**.
+4. Presione **Aprobar** y confirme, o presione **Rechazar**.
+5. Un aviso lo confirma. La tarjeta ahora dice **Aprobado** (y luego **Completado** al llegar la fecha efectiva) o **Rechazado**.
+
+En la fecha efectiva el niño queda dado de baja y sale de las listas, y se avisa a los educadores de su sala (en la aplicación, por notificación y por correo). Si la familia no tiene otro niño matriculado, se cierran las cuentas de los padres; un padre que también trabaja para usted o tiene otra familia conserva la suya. Al padre o la madre que lo pidió se le avisa la decisión, con su nota.
+
+Solo un administrador de agencia, o el director del centro del niño, puede decidir una solicitud. «This request has already been decided.» significa que otra persona ya la atendió: actualice la pantalla.
+
+> 💡 Una baja termina el cuidado de un solo niño. Para cerrar todo el expediente de una familia, con el correo de despedida y la revisión del saldo, use **Dar de baja** más abajo.
+
+## Dar de baja a una familia: paso a paso
 
 1. Vaya a **Administración → Familias**.
 2. Busque la familia y abra las acciones de la fila (el **⋮** al final de la fila).

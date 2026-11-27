@@ -6,43 +6,64 @@ order: 60
 ---
 # Campagnes de réinscription
 
-Confirmez les inscriptions de la prochaine session grâce à une action parent en un seul geste.
+**Campagnes de réinscription** demande à chaque famille inscrite si son enfant revient au prochain trimestre. Vous lancez une campagne avec un nom, le trimestre et une date limite; KiddieTrac invite chaque enfant actuellement inscrit dans l’agence et avise ses parents, puis compte qui a répondu et qui s’est réinscrit. Les administrateurs d’agence l’utilisent quelques mois avant un nouveau trimestre ou une nouvelle année scolaire.
 
-## Lancer une campagne (administrateur)
+[[open: #reenrollment | Ouvrir Réinscription]]
 
-1. Barre latérale → **Réinscription**.
-2. Touchez **+ Lancer une campagne**.
-3. Saisissez : le nom de la campagne (p. ex. « Automne 2026 »), la session visée et la date limite (échéance des réponses).
-4. Limitez-la au besoin à un centre, ou envoyez-la à toute l’agence.
-5. Lancez.
+## Lancer une campagne
 
-Le système invite chaque enfant actuellement inscrit dans la portée choisie. Chaque famille reçoit une notification et un courriel.
+1. Ouvrez **Engagement › Réinscription**.
+2. Appuyez sur **+ Lancer la campagne** dans la bannière.
+3. Dans **Lancer une campagne de réinscription**, vérifiez le **Nom de la campagne** (il commence par « Fall 2026 re-enrolment ») et changez-le au besoin.
+4. Indiquez le **Trimestre visé**, par exemple « Automne 2026 » ou « Septembre 2027 ».
+5. Choisissez la **Date limite** — la date où les réponses sont attendues. Elle doit être après aujourd’hui.
+6. Appuyez sur **Lancer la campagne**.
 
-## Réponse du parent
+Un message indique combien d’enfants ont été invités (par exemple « Invited 84 children »), et la campagne paraît en haut de la liste avec le statut **sent**.
 
-1. Notification → ouvre l’écran de la campagne.
-2. Pour chaque enfant, touchez **Oui / Non / Incertain**.
-3. Commentaire facultatif.
-4. Soumettez.
+> ⚠️ Une campagne part vers **chaque enfant inscrit de l’agence** dès que vous la lancez, et leurs parents sont avisés tout de suite. Il n’y a pas de brouillon, pas de filtre par centre et pas d’annulation — vérifiez le nom, le trimestre et la date limite avant.
 
-## Suivi
+## Ce que reçoivent les familles
 
-La liste des campagnes indique pour chacune :
-- Total des invitations
-- Total des réponses
-- Total des renouvellements (réponse Oui)
-- Statut (planification / envoyée / fermée)
+Chaque tuteur d’un enfant invité reçoit une notification — dans la cloche du portail et sur son téléphone — intitulée **Re-enrol for** suivi du trimestre, avec **Confirm by** et la date limite. Pour chaque enfant, la réponse d’une famille est **oui**, **non** ou **incertain**, avec une note facultative.
 
-## Quand la lancer
+Les enfants retirés, en liste d’attente ou archivés au moment du lancement ne sont pas invités. Un enfant inscrit après le lancement n’est pas ajouté — il fera partie de la prochaine campagne.
 
-- 60 à 90 jours avant le début de la session
-- Après la planification des hausses de frais de garde (pour que les parents voient les nouveaux tarifs avant de s’engager)
-- Après le renouvellement des documents CWELCC (pour que la subvention soit assurée)
+## Suivre les résultats
 
-## Relances
+1. Ouvrez **Engagement › Réinscription**.
+2. Lisez la ligne de la campagne : **Campagne**, **Terme**, **Date limite**, **Statut**, **Invité** (enfants sollicités), **Répondu** (enfants avec une réponse) et **Renouvelé** (enfants dont la famille a dit oui, en vert).
+3. L’écart entre **Invité** et **Répondu**, ce sont les familles dont vous attendez encore la réponse. Relancez-les par message ou par téléphone avant la date limite.
+4. Après la date limite, planifiez les locaux du prochain trimestre à partir du compte **Renouvelé**, et offrez les places non renouvelées à votre **Liste d’attente**.
 
-Le système de campagnes goutte-à-goutte (fonction distincte) peut envoyer automatiquement un courriel de relance N jours après le lancement si la famille n’a pas répondu.
+## Quand lancer
 
-## Fermer une campagne
+- De 60 à 90 jours avant le début du trimestre, pour que les familles aient le temps de décider et vous, le temps de combler les places.
+- Après avoir planifié une hausse de frais, pour que les parents voient le nouveau tarif avant de s’engager — voir [[tuition-increases]].
+- Après le renouvellement des documents de subvention, pour que les familles sachent ce qu’elles paieront.
 
-Marquez manuellement une campagne comme fermée une fois la date limite passée. Les familles sans réponse sont ajoutées à la liste de suivi manuel du personnel.
+## Qui peut faire quoi
+
+| Rôle | Peut |
+|---|---|
+| Administrateur d’agence | Lancer des campagnes pour l’agence et suivre chaque campagne |
+| Administrateur de plateforme | La même chose, dans l’agence consultée |
+| Directeur de centre | N’a pas cet écran; demandez à un administrateur d’agence de lancer une campagne |
+| Parent | Reçoit la notification et répond pour ses propres enfants |
+
+## Questions fréquentes et problèmes
+
+??? Lancer la campagne ne fait rien quand j’appuie. | Les trois champs sont obligatoires. Remplissez **Nom de la campagne**, **Trimestre visé** et **Date limite**, et assurez-vous que la date limite est après aujourd’hui.
+??? Le message indique « Invited 0 children ». | Aucun enfant de l’agence n’avait le statut Inscrit à ce moment. Vérifiez **Administration › Enfants** avec le filtre de statut sur **Inscrit**.
+??? Puis-je l’envoyer à un seul centre? | Pas à partir de cet écran — une campagne va toujours à chaque enfant inscrit de l’agence.
+??? Répondu reste à 0. | Les familles n’ont peut-être pas encore répondu. Rappelez-le-leur avant la date limite par message ou par annonce, et notez dans le dossier de l’enfant les réponses reçues par téléphone.
+??? Puis-je fermer ou supprimer une campagne? | Non. Une campagne reste dans la liste avec ses comptes comme historique; lancez-en une nouvelle pour le prochain trimestre.
+??? Comment les familles sont-elles avisées? | Chaque tuteur d’un enfant invité reçoit une notification dans la cloche du portail et sur son téléphone.
+
+## Écrans liés
+
+[[open: #tuition-increases | Hausses de frais]]
+[[open: #synced-waitlist | Liste d’attente]]
+[[open: #admin-children | Enfants]]
+
+Voir aussi [[de-enrolling-a-family]] et [[synced-waitlist]].

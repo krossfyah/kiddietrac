@@ -16,15 +16,15 @@ nobody else ever sees their password.
 
 A parent must be linked to a **family**. Their child must already be enrolled in that family.
 
-1. Click **💌 Invite parent** in QUICK ADD
-2. Pick the family from the dropdown
+1. On a phone, tap **⚡ Quick add** → **💌 Invite parent**
+2. Under **Select family**, choose the family and press **Continue**
 3. Enter the parent's first name, last name, and email
 4. Set their relationship (mother / father / guardian / etc.)
 5. Choose their permissions:
    - **Primary contact** — main point of contact for the family. Usually one per family.
-   - **Can pick up** — allowed to sign the child out. Most family members are yes; emergency contacts might be no.
+   - **Can pick up the child** — allowed to sign the child out. Most family members are yes; emergency contacts might be no.
    - **Receives billing emails** — gets the monthly invoice email. Often only one parent per family checks this.
-6. Leave **Send welcome email** checked
+6. Leave **Send welcome email with login details** ticked
 7. Click **Send invitation**
 
 The parent gets an email like this:
@@ -36,14 +36,30 @@ The parent gets an email like this:
 
 They follow the link, choose a password and are signed straight in. If their email shows a temporary password instead, they will be asked to change it at their first sign-in.
 
-## Inviting a staff member (educator or director)
+## Inviting a staff member
 
-1. Click **👨‍🏫 Invite staff** in QUICK ADD
-2. Enter their first name, last name, email
-3. Choose role:
-   - **Educator** — uses the tablet view, can log activities, take photos, message parents
-   - **Director** — full admin access including billing and compliance
-4. Click **Send invitation**
+1. Open **Administration › User management** and press **+ Invite user**.
+2. Enter their **First name**, **Last name** and **Email** (a **Phone** is optional).
+3. Choose their **Role**: **Educator**, **Centre director**, **Home visitor**, **Agency admin** or **Auditor (read-only)**. A role that belongs to one centre also needs a **Centre**.
+4. Press **Create user**. They get an invite email with a secure "set your password" link.
+
+On a phone you can also tap **⚡ Quick add** → **👨‍🏫 Invite staff**, enter the name and email, choose **Educator (tablet view)** or **Director (full admin)**, keep **Send welcome email with login details** ticked and press **Send invitation**.
+
+> 💡 Choosing **Parent / guardian** as the role does not create a login on its own: the button becomes **Continue to Add Family →**, because a parent is always added together with their family and child. See [[adding-a-family]].
+
+## Parent invitation codes
+
+A code lets parents enrol their own child: you share a link, they fill in the form, and each new child lands on your waitlist for you to review.
+
+1. Open **Enrollment › Invitation codes** and press **+ New code**.
+2. In **New invitation code**, give it a **Label** if you like (for example the room and year), set **How many parents can use this code?** and an optional expiry date.
+3. Press **Generate code**. The **Code generated** box shows the link and the code itself.
+4. Press **Copy link** and send it to the parent (email, text or a printed note). The button reads **Copied!** for a moment.
+5. Press **Done**.
+
+The list shows each code's **Status** — **ACTIVE**, **AT CAP** (every use taken), expired or revoked — with **Uses**, **Expires** and **Created by**. **Revoke** stops a code at once: a parent part-way through the form is told it is no longer valid. **Delete** removes a code nobody has used yet.
+
+[[show: #invitation-codes @ + New code | Show me where to make a code]]
 
 ## When a new staff member finishes onboarding
 
@@ -84,7 +100,7 @@ a test from there.
 
 ## Re-inviting somebody
 
-**Resend welcome** no longer does the same thing to everybody, and the difference matters.
+**✉️ Resend welcome invite** no longer does the same thing to everybody, and the difference matters.
 
 - **An account never claimed** gets a fresh temporary password. That is exactly what
   "resend the welcome" means, and nothing is taken away.

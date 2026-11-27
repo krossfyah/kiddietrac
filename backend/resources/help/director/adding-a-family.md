@@ -2,7 +2,7 @@
 title: Adding a family
 category: Enrolment
 order: 0
-screens: ~synced-waitlist, admin-families
+screens: admin-families
 ---
 # Adding a family
 
@@ -12,8 +12,8 @@ Every child belongs to a family, so a new enrolment starts here. The **New famil
 
 ## Where it is
 
-- **Agency admins:** sidebar → **Administration** → **Families** → **+ Add family** opens the **New family** wizard described below.
-- **Directors and admins:** **⚡ Quick add** → **👪 New family** opens a shorter form for the family itself: family name, primary email, primary phone, country, the full address and preferred language. Email, country and the full address (street, city, province or state, postal or ZIP code) are required. Add the guardians and children afterwards.
+- **Agency admins and centre directors:** sidebar → **Administration** → **Families** → **+ Add family** opens the **New family** wizard described below.
+- **On a phone:** **⚡ Quick add** → **👪 New family** opens a shorter form for the family itself: family name, primary email, primary phone, country, the full address and preferred language. Email, country and the full address (street, city, province or state, postal or ZIP code) are required. Add the guardians and children afterwards.
 
 ## The five steps
 
@@ -82,4 +82,5 @@ Open the family and choose **Edit**. The editor has the tabs **Family**, **Guard
 
 ??? Why is the email required now? | The primary email is how the family receives invoices, notices and the welcome. A family can't be saved without it, or without a full address.
 ??? A second parent has no email. | Leave their email blank. They're on the family and can be called, but they won't have a login. Add an email later to invite them.
+??? The family is only enquiring for now. | Put them on **Enrollment › Waitlist** instead. When a space opens, **🎓 Enrol parent** there creates the family for you.
 ??? The address suggestions don't appear. | Type at least four characters of the street. Suggestions are for Canada and the US; anywhere else, type the address in full.

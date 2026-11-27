@@ -15,7 +15,25 @@ Lorsqu’une famille quitte votre service, la désinscription clôt sa place cor
 - Si la famille ne fait qu’une pause — un été à l’étranger, un congé parental — utilisez plutôt **Suspendre**. Une suspension est réversible; la désinscription ne l’est pas.
 - Si la famille passe chez un autre prestataire que vous gérez, utilisez plutôt **Passer à un autre prestataire**, afin que les enfants conservent leur historique et leur place.
 
-## Étape par étape
+## Examiner une demande de retrait d’un parent
+
+Les parents peuvent demander eux-mêmes de mettre fin à la garde de leur enfant, à partir de **🚸 Retrait de la garde** dans leur portail. Leurs demandes vous attendent dans **Opérations › Départs**.
+
+[[open: #withdrawals | Ouvrir Départs]]
+
+1. Ouvrez **Opérations › Départs**. Chaque carte montre l’enfant, la famille, qui a fait la demande, le **📅 Requested last day** et le motif. Les nouvelles demandes indiquent **En attente de révision**.
+2. Vérifiez **Effective date (when access is removed)**. Elle commence au dernier jour indiqué par le parent; changez-la si vous avez convenu d’une autre date.
+3. Si vous voulez, tapez un message dans **Optional note to the parent…**.
+4. Appuyez sur **Approuver** et confirmez, ou appuyez sur **Refuser**.
+5. Un message le confirme. La carte indique maintenant **Approuvé** — puis **Terminé** une fois la date d’effet atteinte — ou **Refusé**.
+
+À la date d’effet, l’enfant est marqué retiré et quitte les listes, et les éducatrices de son local sont avisées (dans l’application, par notification et par courriel). Si la famille n’a aucun autre enfant inscrit, les comptes des parents sont fermés — un parent qui travaille aussi pour vous ou qui a une autre famille garde le sien. Le parent qui a fait la demande est avisé de la décision, avec votre note.
+
+Seul un administrateur d’agence, ou le directeur du centre de l’enfant, peut décider d’une demande. « This request has already been decided. » veut dire que quelqu’un d’autre l’a déjà traitée — actualisez l’écran.
+
+> 💡 Un retrait met fin à la garde d’un seul enfant. Pour fermer tout le dossier d’une famille, avec le courriel d’au revoir et la vérification du solde, utilisez **Désinscrire** ci-dessous.
+
+## Désinscrire une famille : étape par étape
 
 1. Allez à **Administration → Familles**.
 2. Trouvez la famille et ouvrez les actions de la ligne (le **⋮** à la fin de la ligne).

@@ -22,7 +22,25 @@ screen. Read [What happens](#what-happens) before you start.
 - If they are moving to another provider you run, use **Move to another provider**
   instead, so the children keep their history and their place.
 
-## Step by step
+## Reviewing a parent's withdrawal request
+
+Parents can ask to end their child's care themselves, from **🚸 Withdraw from care** in their portal. Their requests wait for you in **Operations › Withdrawals**.
+
+[[open: #withdrawals | Open Withdrawals]]
+
+1. Open **Operations › Withdrawals**. Each card shows the child, the family, who asked, the **📅 Requested last day** and their reason. New requests say **Pending review**.
+2. Check **Effective date (when access is removed)**. It starts on the parent's last day; change it if you agreed another date.
+3. If you like, type a message in **Optional note to the parent…**.
+4. Press **Approve** and confirm, or press **Decline**.
+5. A toast confirms it. The card now says **Approved** — then **Completed** once the effective date is reached — or **Declined**.
+
+On the effective date the child is marked withdrawn and leaves the rosters, and the room's educators are told (in the app, by push and by email). If the family has no other enrolled child, the parents' accounts close — a parent who also works for you or has another family keeps theirs. The parent who asked is told the decision, with your note.
+
+Only an agency admin, or the director of the child's own centre, can decide a request. "This request has already been decided." means someone else got there first — refresh the screen.
+
+> 💡 A withdrawal ends one child's care. To close a whole family's file, with the goodbye email and the balance check, use **De-enrol** below.
+
+## De-enrolling a family: step by step
 
 1. Go to **Administration → Families**.
 2. Find the family and open the row actions (the **⋮** at the end of the row).

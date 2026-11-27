@@ -11,8 +11,8 @@ Cada niño pertenece a una familia, así que una nueva matrícula empieza aquí.
 
 ## Dónde está
 
-- **Administradores de agencia:** barra lateral → **Administración** → **Familias** → **+ Añadir familia** abre el asistente **Nueva familia** que se describe a continuación.
-- **Directores y administradores:** **⚡ Añadir rápido** → **👪 Nueva familia** abre un formulario más corto para la familia en sí: apellido de la familia, correo electrónico principal, teléfono principal, país, dirección completa e idioma preferido. El correo electrónico, el país y la dirección completa (calle, ciudad, provincia o estado, código postal o ZIP) son obligatorios. Añada los tutores y los niños después.
+- **Administradores de agencia y directores de centro:** barra lateral → **Administración** → **Familias** → **+ Añadir familia** abre el asistente **Nueva familia** que se describe a continuación.
+- **En un teléfono:** **⚡ Añadir rápido** → **👪 Nueva familia** abre un formulario más corto para la familia en sí: apellido de la familia, correo electrónico principal, teléfono principal, país, dirección completa e idioma preferido. El correo electrónico, el país y la dirección completa (calle, ciudad, provincia o estado, código postal o ZIP) son obligatorios. Añada los tutores y los niños después.
 
 ## Los cinco pasos
 
@@ -81,4 +81,5 @@ Abra la familia y elija **Editar**. El editor tiene las pestañas **Familia**, *
 
 ??? ¿Por qué ahora es obligatorio el correo electrónico? | El correo electrónico principal es cómo la familia recibe facturas, avisos y la bienvenida. No se puede guardar una familia sin él, ni sin una dirección completa.
 ??? Un segundo padre no tiene correo electrónico. | Deje su correo en blanco. Forma parte de la familia y se le puede llamar, pero no tendrá acceso. Añada un correo más tarde para invitarlo.
+??? La familia solo está preguntando por ahora. | Agréguela en **Matrícula › Lista de espera**. Cuando se abra un lugar, **🎓 Inscribir al padre o madre** crea la familia por usted.
 ??? No aparecen las sugerencias de dirección. | Escriba al menos cuatro caracteres de la calle. Las sugerencias son para Canadá y Estados Unidos; en cualquier otro lugar, escriba la dirección completa.

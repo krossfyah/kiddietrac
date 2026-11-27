@@ -2,7 +2,6 @@
 title: Compliance and reporting
 category: Compliance
 order: 1
-screens: ~children
 ---
 
 # Compliance and reporting

@@ -6,25 +6,21 @@ screens: report-cards
 ---
 # Report cards
 
-AI-generated narrative reports per child, organised by HDLH domain. Directors review, edit and send back; **report cards are now approved by agency admins**.
+AI-written narrative report cards for each child, organised by the areas of your learning framework. Directors review, edit and send back; **report cards are now approved by agency admins**.
 
-## Generating
+[[open: #report-cards | Open Report cards]]
 
-1. Sidebar → **Report cards**.
-2. Enter child ID + term (e.g. "2026 Year-End", "Fall 2026").
-3. Open the **✨ Generate with AI** tab on the Report cards screen, pick the child and term, and tap **Generate with AI**. (If AI is off for your agency, the button says **Draft from observations** and writes the draft from logged observations.)
-4. 15-30 seconds later, four narratives appear:
-   - **Belonging** — 4-5 sentences on sense of community + relationships
-   - **Well-being** — physical + emotional development
-   - **Engagement** — exploration + curiosity + play
-   - **Expression** — communication + creativity + language
-5. Plus a **Next steps** suggestion list (3 items).
+## Generating a draft
 
-The AI uses the child's HDLH-tagged observations + milestone records to write specific, warm, name-using narratives.
+1. Open **Administration › Report cards** and choose the **✨ Generate with AI** tab.
+2. Under **Child**, pick the child (**Select a child…**).
+3. Under **Term**, pick the term, or choose to type your own (for example "Summer 2027").
+4. Press **✨ Generate with AI**. If AI is off for your agency, the button reads **📝 Draft from observations** and the draft is written from the child's logged observations instead.
+5. After 15 to 30 seconds the draft appears: one narrative for each area of your learning framework — for How Does Learning Happen? that is **Belonging**, **Well-being**, **Engagement** and **Expression** — plus a short **Next steps** list.
+6. Read and edit each text. The AI gets you most of the way; you make it sound like you.
+7. Sign and submit it, or sign and approve it — see **Who approves** below.
 
-## Reviewing + editing
-
-Each domain text is editable. Tweak as needed — the AI gets you 90% of the way, you tighten the language.
+The draft uses the child's framework-tagged observations and milestone records, so it is specific and uses the child's name. A child with few observations gets a thinner draft — log a few more first.
 
 ## All report cards
 
@@ -50,13 +46,12 @@ Agency admins can choose whether the educator's RECE registration number is prin
 
 ## Statuses
 
-- **Draft** — generated, not yet sent
-- **Reviewed** — a director or admin has edited it
-- **Sent** — emailed to the family + guardians notified
+- **Draft** — generated or edited, not yet submitted.
+- **Awaiting approval** — signed and submitted, waiting for an agency admin to approve it.
+- **Sent** — approved and sent to the family.
+- **Replaced** — an earlier version of a card that was edited after it was sent.
 
-## PDF export
-
-Tap **⤓ Download PDF** on any report card. Cleanly formatted with the agency logo + child name + term + four domain blocks + next-steps.
+To save a PDF, open the card's **⋮** menu and choose **Download PDF**.
 
 ## When to generate
 
@@ -66,4 +61,4 @@ Tap **⤓ Download PDF** on any report card. Cleanly formatted with the agency l
 
 ## Reusing observations
 
-The same observations feed Year-end **Portfolios** (different feature — chronological evidence) and Report cards (narrative summary). Both share the underlying HDLH-tagged observation data.
+The same observations feed Year-end **Portfolios** (different feature — chronological evidence) and Report cards (narrative summary). Both share the same framework-tagged observations.

@@ -11,8 +11,8 @@ Chaque enfant appartient à une famille; une nouvelle inscription commence donc 
 
 ## Où le trouver
 
-- **Administrateurs d’agence :** barre latérale → **Administration** → **Familles** → **+ Ajouter une famille** ouvre l’assistant **Nouvelle famille** décrit ci-dessous.
-- **Directeurs et administrateurs :** **⚡ Ajout rapide** → **👪 Nouvelle famille** ouvre un formulaire plus court pour la famille elle-même : nom de famille, courriel principal, téléphone principal, pays, adresse complète et langue préférée. Le courriel, le pays et l’adresse complète (rue, ville, province ou État, code postal ou ZIP) sont obligatoires. Ajoutez les tuteurs et les enfants ensuite.
+- **Administrateurs d’agence et directeurs de centre :** barre latérale → **Administration** → **Familles** → **+ Ajouter une famille** ouvre l’assistant **Nouvelle famille** décrit ci-dessous.
+- **Sur un téléphone :** **⚡ Ajout rapide** → **👪 Nouvelle famille** ouvre un formulaire plus court pour la famille elle-même : nom de famille, courriel principal, téléphone principal, pays, adresse complète et langue préférée. Le courriel, le pays et l’adresse complète (rue, ville, province ou État, code postal ou ZIP) sont obligatoires. Ajoutez les tuteurs et les enfants ensuite.
 
 ## Les cinq étapes
 
@@ -81,4 +81,5 @@ Ouvrez la famille et choisissez **Modifier**. L’éditeur comporte les onglets 
 
 ??? Pourquoi le courriel est-il obligatoire maintenant? | Le courriel principal est la façon dont la famille reçoit les factures, les avis et l’accueil. Une famille ne peut pas être enregistrée sans lui, ni sans adresse complète.
 ??? Un deuxième parent n’a pas de courriel. | Laissez son courriel vide. Il fait partie de la famille et peut être joint par téléphone, mais n’aura pas d’accès. Ajoutez un courriel plus tard pour l’inviter.
+??? La famille ne fait que se renseigner pour l’instant. | Inscrivez-la plutôt dans **Inscriptions › Liste d’attente**. Quand une place se libère, **🎓 Inscrire le parent** crée la famille pour vous.
 ??? Les suggestions d’adresse n’apparaissent pas. | Saisissez au moins quatre caractères de la rue. Les suggestions couvrent le Canada et les États-Unis; ailleurs, saisissez l’adresse en entier.

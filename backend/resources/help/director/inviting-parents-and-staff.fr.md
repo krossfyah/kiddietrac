@@ -12,15 +12,15 @@ Lorsque vous invitez quelqu’un dans KiddieTrac, cette personne reçoit un cour
 
 Un parent doit être lié à une **famille**. Son enfant doit déjà être inscrit dans cette famille.
 
-1. Cliquez sur **💌 Inviter un parent** dans AJOUT RAPIDE
-2. Choisissez la famille dans la liste déroulante
+1. Sur un téléphone, touchez **⚡ Ajout rapide** → **💌 Inviter un parent**
+2. Sous **Sélectionner une famille**, choisissez la famille et appuyez sur **Continuer**
 3. Saisissez le prénom, le nom et le courriel du parent
 4. Indiquez son lien (mère / père / tuteur ou tutrice / etc.)
 5. Choisissez ses autorisations :
    - **Contact principal** — principal point de contact de la famille. Habituellement un seul par famille.
    - **Peut venir chercher l’enfant** — autorisé à signer le départ de l’enfant. La plupart des membres de la famille ont oui; les contacts d’urgence peuvent avoir non.
    - **Reçoit les courriels de facturation** — reçoit le courriel de la facture mensuelle. Souvent, un seul parent par famille coche cette case.
-6. Laissez **Envoyer le courriel de bienvenue** coché
+6. Laissez **Envoyer un courriel de bienvenue avec les détails de connexion** coché
 7. Cliquez sur **Envoyer l’invitation**
 
 Le parent reçoit un courriel comme celui-ci :
@@ -32,14 +32,30 @@ Le parent reçoit un courriel comme celui-ci :
 
 Il suit le lien, choisit un mot de passe et est connecté directement. Si son courriel indique plutôt un mot de passe temporaire, il lui sera demandé de le changer à sa première connexion.
 
-## Inviter un membre du personnel (éducateur ou directeur)
+## Inviter un membre du personnel
 
-1. Cliquez sur **👨‍🏫 Inviter du personnel** dans AJOUT RAPIDE
-2. Saisissez son prénom, son nom et son courriel
-3. Choisissez le rôle :
-   - **Éducateur** — utilise la vue tablette, peut consigner des activités, prendre des photos et écrire aux parents
-   - **Directeur** — accès administrateur complet, y compris la facturation et la conformité
-4. Cliquez sur **Envoyer l’invitation**
+1. Ouvrez **Administration › Gestion des utilisateurs** et appuyez sur **+ Inviter un utilisateur**.
+2. Saisissez son **First name**, son **Last name** et son **Email** (un **Phone** est facultatif).
+3. Choisissez son **Role** : **Educator**, **Centre director**, **Home visitor**, **Agency admin** ou **Auditor (read-only)**. Un rôle rattaché à un seul centre demande aussi un **Centre**.
+4. Appuyez sur **Créer l’utilisateur**. La personne reçoit un courriel d’invitation avec un lien sécurisé pour définir son mot de passe.
+
+Sur un téléphone, vous pouvez aussi toucher **⚡ Ajout rapide** → **👨‍🏫 Inviter du personnel**, saisir le nom et le courriel, choisir **Educator (tablet view)** ou **Director (full admin)**, garder **Envoyer un courriel de bienvenue avec les détails de connexion** coché et appuyer sur **Envoyer l’invitation**.
+
+> 💡 Choisir **Parent / guardian** comme rôle ne crée pas d’accès à lui seul : le bouton devient **Continue to Add Family →**, parce qu’un parent est toujours ajouté avec sa famille et son enfant. Voir [[adding-a-family]].
+
+## Codes d’invitation pour parents
+
+Un code permet aux parents d’inscrire eux-mêmes leur enfant : vous partagez un lien, ils remplissent le formulaire, et chaque nouvel enfant arrive dans votre liste d’attente pour que vous l’examiniez.
+
+1. Ouvrez **Inscriptions › Codes d’invitation** et appuyez sur **+ Nouveau code**.
+2. Dans **Nouveau code d’invitation**, donnez-lui une **Étiquette** si vous voulez (par exemple le local et l’année), indiquez **How many parents can use this code?** et une date d’expiration facultative.
+3. Appuyez sur **Générer le code**. La boîte **Code généré** affiche le lien et le code lui-même.
+4. Appuyez sur **Copier le lien** et envoyez-le au parent (courriel, texto ou note imprimée). Le bouton affiche **Copied!** un instant.
+5. Appuyez sur **Terminé**.
+
+La liste montre le **Statut** de chaque code — **ACTIVE**, **LIMITE ATTEINTE** (toutes les utilisations prises), expiré ou révoqué — avec **Utilisations**, **Expire** et **Créé par**. **Révoquer** arrête un code tout de suite : un parent en train de remplir le formulaire apprend qu’il n’est plus valide. **Supprimer** retire un code que personne n’a encore utilisé.
+
+[[show: #invitation-codes @ + New code | Me montrer où créer un code]]
 
 ## Quand un nouveau membre du personnel termine son intégration
 
@@ -71,7 +87,7 @@ Vous pouvez modifier le titre, l’accueil, les premières étapes et la formule
 
 ## Réinviter quelqu’un
 
-**Renvoyer le message de bienvenue** ne fait plus la même chose pour tout le monde, et la différence compte.
+**✉️ Renvoyer l’invitation de bienvenue** ne fait plus la même chose pour tout le monde, et la différence compte.
 
 - **Un compte jamais réclamé** reçoit un nouveau mot de passe temporaire. C’est exactement ce que veut dire « renvoyer la bienvenue », et rien n’est retiré.
 - **Un compte déjà actif** reçoit un **lien de réinitialisation**, et rien n’est modifié. Son mot de passe actuel continue de fonctionner.
