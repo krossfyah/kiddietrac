@@ -1,55 +1,102 @@
 ---
 title: Comptages et superviseur par intérim
-category: Health & Safety
-order: 46
 ---
-
 # Comptages et superviseur par intérim
 
-Le Règl. de l’Ont. 137/15 modifié entre en vigueur le 1er janvier 2027. Selon l’art. 11, votre politique de supervision doit préciser quand, comment et à quelle fréquence les enfants sont comptés, et ce que le personnel fait lorsqu’un enfant est introuvable. Selon l’art. 6.1(2), elle doit nommer la personne qui remplace le superviseur lorsque celui-ci est absent des lieux et qu’une situation urgente survient. KiddieTrac consigne les deux.
+Un comptage est un décompte nominatif, en regardant chaque visage, des enfants pointés dans
+une salle, fait à chaque transition, passage aux toilettes, entrée ou sortie de l’extérieur et
+départ. L’écran **Comptages** montre le dernier comptage de chaque salle, conserve le journal de
+tous les comptages et nomme la personne qui remplace le superviseur. Ouvrez-le dans le menu
+latéral : **Opérations** → **Comptages**.
 
-## L’écran Comptages
+[[open: #headcounts | Ouvrir les comptages]]
 
-Ouvrez **Comptages** depuis le menu. Il comporte deux onglets.
+Le Règl. de l’Ont. 137/15 modifié entre en vigueur le 1er janvier 2027. Selon l’article 11,
+votre politique de supervision doit préciser quand, comment et à quelle fréquence les enfants
+sont comptés, et ce que fait le personnel quand un enfant manque à l’appel. Selon le
+paragraphe 6.1(2), elle doit nommer la personne qui remplace le superviseur quand celui-ci
+est à l’extérieur. KiddieTrac consigne les deux.
 
-[[open: #headcounts | Ouvrir Comptages]]
+## Faire un comptage
 
-- **👀 Salles en ce moment** affiche chaque salle : combien d’enfants sont arrivés, quand le dernier comptage a été fait, et un bouton **👀 Comptage**. Une pastille rouge signifie que quelqu’un n’a pas été vu au dernier comptage. Le superviseur par intérim de chaque centre y figure aussi.
-- **📜 Journaux** liste chaque comptage : quand et où il a été fait, le moment, le résultat, qui n’a pas été vu, qui a compté, et le suivi (alerte envoyée, enfant retrouvé). Vous pouvez filtrer par date, centre, salle, moment et résultat.
-- Pour un comptage ouvert (un enfant non vu et pas encore marqué comme retrouvé), vous pouvez **Alerter le directeur** ou **Marquer comme retrouvé** depuis les journaux.
+1. Ouvrez l’onglet **👀 Salles en ce moment**. Chaque centre liste ses salles avec le nombre d’enfants **présents**, le dernier comptage et un bouton **👀 Comptage**. (Les éducateurs ont aussi **👀 Comptage** sur leur écran Aujourd’hui.)
+2. Appuyez sur **👀 Comptage** pour la salle. La liste des enfants pointés s’ouvre.
+3. Choisissez le moment en haut, par exemple routine, transition, extérieur ou départ.
+4. Touchez chaque enfant quand vous le voyez. Le compteur indique combien d’enfants pointés sont comptés.
+5. Si un enfant est là sans être pointé, cochez-le sous **Pas encore connecté**. Il compte comme arrivé pour Safe Arrival, donc ses parents ne reçoivent pas de message — pointez-le ensuite.
+6. Au besoin, ouvrez **Where / note (optional)** et indiquez où vous avez compté, comme la barrière du terrain de jeu.
+7. Appuyez sur **Save — all … accounted for** (ou **Save — … not seen**). Si personne n’est coché, le bouton vous demande d’abord de toucher de nouveau.
 
-L’écran se souvient du dernier onglet utilisé. Un lien vers un seul comptage, comme celui d’une alerte d’enfant manquant, ouvre l’onglet **Journaux**.
+Quand tout le monde est compté, vous voyez **All … accounted for** et le comptage se ferme de lui-même.
 
-Une alerte d’enfant manquant joint les directeurs du centre, les administrateurs d’agence et les superviseurs par intérim par la cloche et par notification poussée. Aucun message texte n’est envoyé. Chaque alerte renvoie à la fiche du comptage.
+## Quand un enfant n’est pas vu
 
-## Le rapport quotidien des comptages
+1. Le résultat affiche **⚠️ … not accounted for** avec chaque enfant manquant. Cherchez tout de suite : le dernier endroit où il a été vu, les toilettes, les casiers, le terrain de jeu et ses barrières, le stationnement, et suivez la procédure de votre centre pour un enfant disparu.
+2. Appuyez sur **🚨 Alerter le directeur maintenant**. Les directeurs du centre, les administrateurs de l’agence et les superviseurs par intérim reçoivent aussitôt une notification dans la cloche et une notification push. Aucun texto n’est envoyé.
+3. Quand l’enfant est retrouvé, appuyez sur **✅ Found — all accounted for**, indiquez où il a été retrouvé et appuyez sur **Marquer comme retrouvé**. Toutes les personnes alertées sont avisées.
+4. Ou appuyez sur **Recompter** pour compter de nouveau. **Rapport d’événement grave** à côté d’un enfant ouvre un rapport d’incident prérempli.
 
-Pour un document que vous pouvez classer ou remettre à un inspecteur, utilisez **Rapports → Comptages**.
+## Consulter les journaux
 
-1. Ouvrez **Rapports** et choisissez **👀 Comptages**.
-2. Choisissez une seule journée pour le registre quotidien, ou n’importe quelle plage de dates.
-3. Appuyez sur **Exécuter le rapport**, puis exportez-le en PDF, Excel ou CSV, ou imprimez-le.
+1. Ouvrez l’onglet **📜 Journaux**. Chaque comptage est listé : **Quand**, **Où**, **Moment**, **Résultat**, **Non vu**, **Compté par** et **Suivi**.
+2. Filtrez par date, centre (**Tous les centres**), salle (**Toutes les salles**), moment (**Tout moment**) et résultat (**Tout résultat**).
+3. Pour un comptage ouvert (un enfant non vu et pas encore marqué comme retrouvé), appuyez sur **Alerter le directeur** ou **Marquer comme retrouvé** sur sa ligne.
 
-Il y a une ligne par comptage : date et heure, centre, salle ou sortie, le moment, attendus et comptés, le résultat, qui n’a pas été vu, qui a compté, le suivi et toute note. Un comptage ouvert affiche **OUVERT** dans la colonne de suivi.
-
-Les administrateurs d’agence peuvent aussi le **planifier** depuis l’écran Rapports, pour qu’il vous soit envoyé par courriel chaque jour. Les éducateurs peuvent aussi exécuter le rapport, pour leurs propres salles et les comptages qu’ils ont faits.
+L’écran se souvient du dernier onglet utilisé. Un lien vers un comptage précis, comme celui d’une alerte d’enfant disparu, ouvre l’onglet **📜 Journaux** sur ce comptage.
 
 ## Nommer le superviseur par intérim
 
-Dans **Comptages → Salles en ce moment**, cliquez sur **Superviseur par intérim…** à côté d’un centre. Les administrateurs d’agence peuvent aussi le faire depuis **Centres** avec le bouton **Superviseur par intérim**.
+1. Dans **👀 Salles en ce moment**, appuyez sur **Superviseur par intérim…** à côté du centre. Les administrateurs de l’agence peuvent aussi le faire dans **Centres** avec le bouton **Superviseur par intérim**.
+2. Choisissez des personnes dans **Ajouter quelqu’un de ce centre**, dans l’ordre où il faut les joindre. Utilisez **↑** pour monter quelqu’un dans la liste et **Supprimer** pour le retirer.
+3. Appuyez sur **Enregistrer**. Le message **Superviseur suppléant enregistré** s’affiche.
 
-- Ajoutez une ou plusieurs personnes qui travaillent au centre, dans l’ordre où elles doivent être jointes.
-- Les noms s’affichent sur la carte Supervision du tableau de bord et sur chaque écran d’enfant manquant que voit un éducateur (« Si le superviseur est absent, communiquez avec : … »).
-- Si quelqu’un quitte le centre ou perd son rôle, il disparaît de la liste automatiquement.
+Les noms s’affichent sur la carte Supervision du tableau de bord et sur chaque écran d’enfant
+disparu que voit un éducateur (« Si le superviseur est absent, joindre : … »). Une personne qui
+quitte le centre ou y perd son rôle est retirée de la liste automatiquement.
 
-## Rappels (administrateurs d’agence)
+## Le rapport quotidien des comptages
 
-Les rappels de comptage de routine se règlent dans **Paramètres → Gestion des salles → Comptages**. Cochez **Rappeler aux éducateurs après** et choisissez un intervalle de 15 à 120 minutes. Si une salle où des enfants sont arrivés reste aussi longtemps sans comptage, les éducateurs pointés dans cette salle reçoivent un rappel par la cloche et par notification poussée. Les rappels sont désactivés par défaut.
+1. Ouvrez **Rapports** et choisissez **👀 Comptages**.
+2. Choisissez une seule journée pour le registre quotidien, ou n’importe quelle période.
+3. Appuyez sur **Lancer le rapport**, puis exportez-le en PDF, Excel ou CSV, ou imprimez-le.
 
-[[open: #educator-rooms?tab=headcounts | Ouvrir les paramètres de rappel des comptages]]
+Il y a une ligne par comptage, et un comptage ouvert affiche **OPEN** dans la colonne du suivi.
+Les administrateurs de l’agence peuvent aussi le **planifier** pour le recevoir par courriel chaque jour.
 
-Les rappels cessent à la fin du quart prévu de l’éducateur ce jour-là, ou à l’heure de fermeture du centre s’il n’a pas d’horaire. Une personne qui reste pointée après les heures ne reçoit pas de rappels toute la soirée.
+## Rappels (administrateurs de l’agence)
 
-L’onglet **Salles en ce moment** indique aux administrateurs d’agence si les rappels sont activés, avec un lien pour les modifier.
+Les rappels de comptage réguliers se règlent dans **Settings → Room Controls → 👀 Headcounts**.
+Cochez **Remind educators after** et choisissez de 15 à 120 minutes. Une salle où des enfants
+sont pointés et qui passe ce délai sans comptage envoie aux éducateurs pointés dans cette salle
+une notification dans la cloche et une notification push. Les rappels sont désactivés par défaut
+et s’arrêtent à la fin du quart prévu de l’éducateur (ou à l’heure de fermeture du centre).
+L’onglet **Salles en ce moment** indique aux administrateurs si les rappels sont activés, avec
+**Change in Room Controls →**.
 
-Voir aussi : [Gestion des salles](room-controls).
+[[open: #educator-rooms?tab=headcounts | Ouvrir les réglages des rappels de comptage]]
+
+## Qui peut faire quoi
+
+- Les **administrateurs de l’agence** voient tous les centres, font des comptages, traitent les comptages ouverts, nomment les superviseurs par intérim et règlent les rappels.
+- Les **directeurs de centre** font de même pour leurs propres centres, sauf les rappels.
+- Les **éducateurs** font les comptages de leurs salles et de leurs promenades, alertent le directeur, marquent les enfants comme retrouvés et lancent le rapport pour leurs propres salles.
+- Les parents ne voient pas les comptages.
+
+## FAQ et dépannage
+
+??? Le bouton 👀 Comptage est grisé. | Personne n’est pointé dans cette salle en ce moment. Un comptage liste les enfants pointés.
+??? Le message « More children signed in » s’affiche quand j’enregistre. | Quelqu’un a été pointé pendant votre comptage. L’enfant est ajouté à la liste avec la mention « just signed in » — trouvez-le aussi, puis enregistrez.
+??? Le message « No acting supervisor is named for this centre yet. » s’affiche. | Un directeur ou un administrateur de l’agence en nomme un avec Superviseur par intérim… dans l’onglet Salles en ce moment.
+??? Qui reçoit l’alerte d’enfant disparu ? | Les directeurs du centre, les administrateurs de l’agence et les superviseurs par intérim, par notification dans la cloche et notification push. Aucun texto n’est envoyé.
+??? J’ai enregistré par erreur sans cocher personne. | Recomptez tout de suite. Chaque comptage est conservé dans les journaux, et le nouveau comptage montre le vrai résultat.
+
+## Liens utiles
+
+[[open: #headcounts | Comptages]]
+[[open: #safe-arrival | Safe Arrival]]
+[[open: #educator-rooms | Gestion des salles]]
+
+- [Gestion des salles](room-controls)
+- [Safe Arrival — chaque enfant prévu, bien arrivé](safe-arrival)
+- [Walk Watch — promenades et sorties suivies par GPS en direct](field-trip-gps)
+- [Rapports d’incident](incident-reports)

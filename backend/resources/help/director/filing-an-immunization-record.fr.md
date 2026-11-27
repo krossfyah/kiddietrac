@@ -1,79 +1,92 @@
 ---
-title: Classer un dossier de vaccination
-category: Compliance
-order: 33
-roles: agency_admin, centre_director, platform_admin
+title: Classer un carnet de vaccination
 ---
-# Classer un dossier de vaccination
+# Classer un carnet de vaccination
 
-Classer la carte et consigner ce qu’elle indique étaient auparavant deux tâches sur deux écrans, ce qui explique pourquoi des dossiers restaient classés pendant des semaines alors que l’enfant apparaissait toujours en retard. C’est maintenant une seule action.
+L’écran **Vaccinations** montre quels enfants ont une dose en retard ou bientôt due, les
+dossiers remis par les familles et le personnel, et le calendrier auquel chaque enfant est
+comparé. Classer un carnet et consigner ce qu’il indique se fait en une seule étape : les
+doses que vous cochez retirent l’enfant de la liste des retards. Ouvrez l’écran dans le menu
+latéral : **Opérations** → **Vaccinations**.
 
-## Deux accès, un seul assistant
+[[open: #immunizations | Ouvrir les vaccinations]]
 
-- **Vaccinations** (barre latérale) → **↑ Téléverser un dossier**, sur chaque onglet. S’ouvre avec un sélecteur d’enfant — « le téléverser pour lui » est le réflexe qu’on a en regardant une ligne en retard.
-- **Le dossier d’un enfant → onglet Vaccination** → le même bouton, déjà associé à cet enfant.
+## Les quatre onglets
 
-Les deux ouvrent la même boîte de dialogue et font la même chose.
+- **Dû à l’âge de** — tous les enfants, avec un statut calculé à partir de leur date de naissance selon votre calendrier.
+- **En retard seulement** — la même liste, limitée aux enfants qui ont une dose en retard.
+- **Dossiers reçus** — chaque dossier remis, marqué **Parent** ou **Personnel**, avec **Envoyé par**.
+- **Calendrier par défaut** — ce à quoi chaque enfant est comparé. Changer une ligne recalcule le statut de chaque enfant. Voir [Calendrier de vaccination « Dû à l’âge de »](immunization-due-age).
 
-## Ce que demande la boîte de dialogue
+## Classer un carnet pour un enfant
 
-**Le dossier** — un PDF ou une photo de la carte, jusqu’à 10 Mo. Une photo prise au téléphone est normalement bien en dessous.
+1. Appuyez sur **↑ Téléverser un dossier**. Le bouton est dans chaque onglet, et aussi dans le dossier de l’enfant → onglet **Vaccination**, où l’enfant est déjà choisi.
+2. Choisissez l’enfant.
+3. Ajoutez **le document** — un PDF ou une photo du carnet, d’au plus 10 Mo. Une photo prise avec un téléphone est normalement bien en dessous.
+4. Sous **What does this record cover?**, cochez chaque dose indiquée sur le carnet, selon le calendrier de votre agence. La date est facultative : laissez-la vide si le carnet n’est pas clair, la dose compte quand même comme consignée.
+5. Si le carnet indique un vaccin qui n’est pas dans votre calendrier (une famille qui a déménagé d’une autre province, un vaccin de voyage), ajoutez-le en dessous : saisissez le vaccin et le nom de la dose.
+6. Ajoutez des **Notes** pour ce que le document ne dit pas : une ligne effacée, une dose que la clinique doit confirmer.
+7. Appuyez sur **Classer le carnet**. Le statut de l’enfant se met à jour tout de suite.
 
-**Que couvre ce dossier?** — cochez chaque dose que la carte indique, selon le calendrier de votre agence.
-
-- **La date est facultative.** Laissez-la vide lorsque la carte n’est pas claire; la dose compte tout de même comme consignée. Un dossier classé n’est pas la même chose qu’une dose consignée, et seules les cases cochées retirent un enfant de la liste des retards.
-- **Tout ce que la carte indique et qui ne figure pas à votre calendrier peut être ajouté en dessous** — saisissez le vaccin et le libellé de la dose. Une famille qui a déménagé d’une province à une autre, ou un vaccin de voyage, ne cadre pas avec un calendrier local, et refuser de l’enregistrer rendrait la carte moins utile que le papier sur lequel elle est arrivée.
-- Une dose déjà au dossier de l’enfant est **ignorée, non dupliquée**. Reclasser une photo plus claire de la même carte est tout à fait normal et ne doit pas doubler l’historique.
-
-**Notes** — tout ce que le dossier ne dit pas : une ligne effacée, une dose que la clinique est en train de confirmer.
+Une dose déjà inscrite au dossier de l’enfant est **ignorée, pas dédoublée** : classer de
+nouveau une photo plus claire du même carnet ne double jamais l’historique.
 
 ## Ce qui se passe quand vous le classez
 
 - Le document est classé au dossier de l’enfant; il apparaît donc aussi dans son onglet **Documents**.
-- Chaque dose cochée est consignée pour l’enfant, **liée au document sur lequel elle a été lue** — de sorte que la question « la 2e dose de DCaT a-t-elle été saisie à partir de cette carte? » a une réponse.
-- Le statut de l’enfant est mis à jour immédiatement. Si les cases cochées couvrent tout ce que le calendrier prévoit pour son âge, il n’est plus en retard.
-- **Le bureau reçoit un courriel** : vos autres directeurs et administrateurs d’agence sont informés de l’enfant visé, de la personne qui a fait le classement, des doses consignées, de celles ignorées parce qu’elles étaient déjà connues, de vos notes, et de **ce qui reste à faire par la suite** — la différence entre « réglé » et « réglé, continuez à relancer ». Vous ne recevez pas de courriel pour votre propre classement.
-- L’équipe est avisée dans l’application.
-- Une ligne d’audit est écrite **nommant chaque dose**, et non un simple total.
+- Chaque dose cochée est consignée pour l’enfant, **liée au document d’où elle a été lue**.
+- Si les doses cochées couvrent tout ce que le calendrier prévoit pour son âge, l’enfant n’est plus en retard.
+- **Le bureau reçoit un courriel** : vos autres directeurs et les administrateurs de l’agence sont informés de l’enfant, de la personne qui a classé le carnet, des doses consignées, de celles ignorées parce que déjà connues, de vos notes et de **ce qui reste à recevoir ensuite**. Vous ne recevez pas de courriel pour votre propre classement.
+- L’équipe est avisée dans l’application, et une entrée d’audit est créée **en nommant chaque dose**.
 
-## Un dossier arrivé sans rien de consigné
+## Ajouter les détails d’un dossier reçu sans rien de consigné
 
-La plupart des cartes viennent des parents, qui photographient la carte et l’envoient. Un parent peut cocher ce qu’il pense qu’elle indique, mais ce n’est qu’une indication pour vous : aucune dose n’est consignée. Tant que personne au centre ne l’a lue, le dossier affiche **Détails en attente**, avec ce que la personne qui l’a téléversé a listé marqué *non confirmé*.
+La plupart des carnets viennent des parents. Un parent peut cocher ce qu’il pense que le carnet
+indique, mais c’est seulement une piste pour vous — aucune dose n’est consignée. Tant que
+quelqu’un au centre ne l’a pas lu, le dossier affiche **Détails en attente**, avec ce que la
+personne qui l’a envoyé a indiqué, marqué *non confirmé*.
 
-Pour en compléter un, sans classer une deuxième copie de la même carte :
+1. Trouvez-le sous **📄 Dossiers conservés** dans le dossier de l’enfant, ou sous **Immunizations → Records received** pour tous les enfants.
+2. Appuyez sur **➕ Ajouter les détails**.
+3. Choisissez de quel document il s’agit : **Doses administrées** (un carnet de vaccination ou un relevé de la clinique) ou **Formulaire d’exemption** (une déclaration de conviction ou une exemption médicale — voir [Exemptions de vaccination](immunization-exemptions)).
+4. Pour des doses, cochez chaque dose indiquée, avec une date si le carnet en a une. Ce que la personne qui l’a envoyé a coché est précoché et marqué *uploader ticked this*; vérifiez chaque dose.
+5. Appuyez sur **Enregistrer les doses** (ou **Enregistrer les exemptions**).
 
-1. Repérez-le sous **📄 Dossiers au dossier** dans la fiche de l’enfant, ou sous **Vaccinations → Dossiers reçus** pour tous les enfants. Cet onglet marque chaque dossier **Parent** ou **Personnel**.
-2. Appuyez sur **➕ Ajouter des détails**.
-3. Choisissez la nature du document :
-   - **Doses administrées** — une carte de vaccination ou un relevé de clinique. Cochez chaque dose indiquée, avec une date si la carte en comporte une. Tout ce que la personne qui l’a téléversé a coché est précoché et marqué *coché par la personne qui a téléversé*; vérifiez chacune.
-   - **Formulaire d’exemption** — une déclaration de croyance ou une exemption médicale. Voir [Exemptions de vaccination](immunization-exemptions).
-4. **Consigner les doses** (ou **Consigner les exemptions**).
+Une fois qu’un dossier a des doses consignées, **Ajouter les détails** n’est plus offert;
+corrigez plutôt la dose dans le dossier de l’enfant.
 
-Les doses sont liées au dossier sur lequel elles ont été lues, et tout ce qui est déjà consigné est ignoré plutôt que doublé. Une fois qu’un dossier a des doses associées, **Ajouter des détails** n’est plus offert; corrigez plutôt une dose dans le dossier de l’enfant lui-même.
+[[show: #immunizations @ Records received | Me montrer les dossiers reçus]]
 
-[[show: #immunizations @ Records received | Montrez-moi Dossiers reçus]]
+## L’onglet Vaccination de l’enfant
 
-## L’onglet Vaccination
-
-L’onglet Vaccination d’un enfant comporte deux sous-onglets :
-
-- **💉 Ce qui est dû** — le calendrier et ce qui reste à faire.
-- **📄 Dossiers au dossier** — les cartes elles-mêmes, avec les doses lues sur chacune et les notes éventuelles. La personne qui vient de classer une carte cherche celui-ci.
-
-**Voir** ouvre un dossier dans le panneau de documents du portail, avec **Imprimer** dans son en-tête — il n’ouvre pas de nouvel onglet et ne vous fait pas quitter l’application. Voir [Ouvrir et imprimer des documents](opening-and-printing-documents).
+L’onglet Vaccination d’un enfant a deux sous-onglets : **💉 Ce qui est dû** (le calendrier et
+ce qui reste à recevoir) et **📄 Dossiers conservés** (les carnets eux-mêmes, avec les doses
+lues sur chacun et les notes). **Voir** ouvre un dossier dans le panneau de documents du
+portail, avec **Imprimer** dans son en-tête — sans ouvrir de nouvel onglet. Voir
+[Ouvrir et imprimer des documents](opening-and-printing-documents).
 
 ## Qui peut faire quoi
 
-- **Les administrateurs d’agence et les directeurs de centre** du centre de l’enfant peuvent classer un dossier, consigner les doses qui y figurent et ajouter des détails à un dossier arrivé vide.
-- **Les parents peuvent envoyer un dossier** et indiquer ce qu’ils pensent qu’il montre, et c’est tout. Décider qu’une ligne brouillée signifie « DCaT-VPI-Hib, 2e dose » est un jugement clinique, et il revient au centre. Leur téléversement arrive ici pour que vous le lisiez et le cochiez.
+- Les **administrateurs de l’agence et les directeurs du centre** de l’enfant peuvent classer un carnet, consigner les doses qu’il indique, ajouter les détails d’un dossier reçu vide, et modifier ou supprimer une dose.
+- Les **parents peuvent envoyer un dossier** et indiquer ce qu’ils pensent qu’il montre, sans plus. Lire une ligne floue comme « DCaT-VPI-Hib, 2e dose » est un jugement qui revient au centre.
+- Les **éducateurs** ne gèrent pas les vaccinations; ils voient « Immunizations are managed by the centre director. »
 
-## À savoir
+## FAQ et dépannage
 
-- Un dossier classé par un parent montre toujours l’enfant en retard jusqu’à ce que quelqu’un consigne les doses qui y figurent. C’est à ce moment qu’un indicateur de conformité disparaît, et c’est voulu.
-- Corrigez les données sous-jacentes dans le dossier de l’enfant lui-même. Le [Rapport de vaccination](immunization-report) est en lecture seule.
-- Un parent ne peut pas supprimer un dossier classé. Supprimez-en un par l’onglet Documents de l’enfant, ce qui est consigné à l’audit.
+??? Un parent a envoyé un carnet, mais l’enfant est encore en retard. | Seules les doses consignées à partir du carnet retirent le signalement. Ouvrez-le sous Dossiers reçus, appuyez sur ➕ Ajouter les détails et consignez les doses.
+??? Le message « No children to file against » s’affiche. | Aucun enfant inscrit n’a été trouvé pour cette agence. Vérifiez que les enfants sont inscrits et que vous êtes dans la bonne agence.
+??? Le téléversement a échoué. | Le fichier doit être un PDF ou une photo d’au plus 10 Mo. Essayez une photo plus petite, ou actualisez la page et réessayez.
+??? Le message « Vaccine name required » s’affiche. | Quand vous ajoutez un vaccin qui n’est pas dans votre calendrier, saisissez son nom avant d’enregistrer.
+??? Puis-je supprimer un dossier ? | Un parent ne le peut pas. Le personnel retire un dossier classé dans l’onglet Documents de l’enfant, ce qui est audité. Corrigez une dose dans le dossier de l’enfant; le rapport de vaccination ne fait que lire.
 
-Voir aussi : [Exemptions de vaccination](immunization-exemptions),
-[Rappels de vaccination](immunization-reminders), [Rapport de vaccination](immunization-report),
-[Vaccins dus selon l’âge](immunization-due-age), [Le dossier de l’enfant](child-record-tabs),
-[Ouvrir et imprimer des documents](opening-and-printing-documents).
+## Liens utiles
+
+[[open: #immunizations | Vaccinations]]
+[[open: #reports | Rapports]]
+
+- [Exemptions de vaccination](immunization-exemptions)
+- [Rappels de vaccination](immunization-reminders)
+- [Rapport de vaccination](immunization-report)
+- [Calendrier de vaccination « Dû à l’âge de »](immunization-due-age)
+- [Le dossier de l’enfant](child-record-tabs)
+- [Ouvrir et imprimer des documents](opening-and-printing-documents)

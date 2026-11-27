@@ -1,59 +1,89 @@
 ---
 title: Registro de simulacros
-category: Health & Safety
-order: 45
 ---
 # Registro de simulacros
 
-Registre cada simulacro de incendio, clima severo, encierro, vehículo y refugio en el lugar, y vea de un vistazo qué simulacros faltan según las normas de su provincia o estado.
+Registre cada simulacro de incendio, clima severo, encierro, vehículo, refugio en el lugar y niño perdido, y vea de un vistazo qué simulacros siguen pendientes según las reglas de su provincia o estado. Ábralo desde la barra lateral: **Operaciones** → **Registro de simulacros**.
 
-## Dónde está
+[[open: #drills | Abrir Registro de simulacros]]
 
-Barra lateral → **Registro de simulacros** (junto a Incidentes). Los administradores ven todos los centros; los directores y educadores ven sus propios centros.
+La pantalla tiene cuatro pestañas: **🚒 Drills** (lo que se debe y lo que se hizo), **🗺️ Plan contra incendios** (el plan de evacuación de cada centro o sala), **👩‍🏫 Educadores** (la capacitación, el horario y el mapa de simulacro de incendio de cada persona) y **⚙️ Ajustes**.
 
-## Qué comprueba
+## Qué revisa la pestaña Drills
 
-Las normas provienen de la **provincia / estado** de su agencia (Resumen de la agencia → Editar agencia → País y cumplimiento):
+Las reglas vienen de la **provincia / estado** de su agencia (Agency overview → Edit agency → Country & compliance):
 
 | Provincia / estado | Simulacros requeridos |
 | --- | --- |
-| Ontario, Alberta, Columbia Británica, Nueva Escocia | Simulacro de incendio cada mes |
+| Ontario | Simulacro de niño perdido al menos cada 3 meses (desde el 1 de enero de 2027); simulacro de incendio cada mes |
+| Alberta, Columbia Británica, Nueva Escocia | Simulacro de incendio cada mes |
 | Ohio | Simulacro de incendio cada mes; simulacro de clima severo cada mes de marzo a septiembre; simulacro de encierro cada trimestre; simulacro de evacuación de vehículo cada mes si transporta niños |
 | Texas | Simulacro de incendio cada mes; simulacros de clima severo y de encierro 4 veces al año |
 | Nueva York | Simulacro de evacuación cada mes; simulacro de refugio en el lugar dos veces al año |
 
-**Vencidos y omitidos** muestra, para cada centro y cada simulacro: *hecho* en este período, *pendiente* en este período u *omitido* en el período anterior.
+Cada centro es una tarjeta. Cada simulacro que debe tiene una fila con el último registrado, cuándo vence el siguiente y un estado: **Done**, **Vence**, **Not due**, **Perdidas** — o, en Ontario, **En camino**, **Vence pronto**, **Vence** o **Vencido**. Debajo de cada fila están los simulacros registrados en el mes elegido. Use el cuadro del mes y **Todos mis centros** arriba para cambiar lo que ve. Una etiqueta junto al nombre del centro muestra su plan contra incendios, por ejemplo **🗺️ Plan sin revisar en 12 meses**; tóquela para abrir la pestaña **🗺️ Plan contra incendios**.
 
 ## Registrar un simulacro
 
-1. Elija el centro (y la sala, si el simulacro fue solo de una sala), el tipo y cuándo ocurrió.
-2. Añada el tiempo de evacuación, cuántos niños estaban presentes, qué personal participó y cualquier cosa por corregir (una salida bloqueada, una sala lenta).
-3. Pulse **Registrar simulacro**.
+1. Pulse **＋ Registrar simulacro** arriba, o **＋ Record** en la fila del simulacro (el centro y el tipo se completan solos). Se abre la ventana **🚒 Registrar un simulacro**.
+2. Elija el **Centro**, la **Sala (opcional)** — deje **Todo el centro** para un simulacro de todo el centro — y el **Tipo**.
+3. Revise **Cuándo**. Empieza con la hora actual, en la zona horaria de su agencia.
+4. Escriba el **Tiempo de evacuación (segundos)**, los **Niños presentes** (en un simulacro de incendio: **Niños evacuados**), el **Personal presente** y cualquier **Notas**, como la salida usada.
+5. En un simulacro de incendio, elija el **Plan usado**, la **Ruta usada** (**Ruta principal**, **Ruta alternativa** u **Otro**), una **Route note** opcional, la **Asistencia (niños presentes hoy)** y los **Problemas encontrados**. **✏️ Dibujar o actualizar el plan** abre el editor del plan sin perder el formulario.
+6. En un simulacro de niño perdido, complete **Sala(s) / área**, **Dirigido por**, **Time until child located (seconds)**, el **Escenario**, **Qué mejorar**, y marque **Llamada al 911 simulada** y **Llamada a los padres simulada** si las hizo.
+7. Pulse **Registrar simulacro**. Aparece el mensaje **Simulacro registrado** y el simulacro se muestra debajo de su fila.
 
-Los simulacros no pueden fecharse en el futuro, y un simulacro registrado no puede editarse. Revise los detalles antes de pulsar **Registrar simulacro**.
+Los simulacros no pueden tener fecha futura y un simulacro registrado no se puede editar. Revise los datos antes de pulsar **Registrar simulacro**.
 
-## Eliminar un simulacro
+## Ver o quitar un simulacro
 
-Los registros de simulacros se conservan **12 meses**. Son su evidencia para las inspecciones.
+1. Toque un simulacro registrado, o pulse su **⋮** y elija **👁 Ver detalles**, para ver todo lo registrado. Desde ahí puede abrir el **🗺️ Plan contra incendios** que siguió o el **🗺️ Drill map**.
+2. Para quitar un simulacro registrado por error, pulse **⋮** > **🗑 Remove drill** (o **🗑 Quitar** en los detalles) y confirme. Aparece el mensaje **Drill removed**.
 
-- Quien registró un simulacro, un director o un administrador puede eliminarlo **dentro de las 24 horas siguientes a su ingreso**. Úselo para deshacer un error, como el centro o la fecha equivocados, y luego regístrelo de nuevo correctamente.
-- Pasadas 24 horas, el simulacro permanece en el registro hasta que cumple un año. Si intenta eliminarlo, el portal le indica la fecha a partir de la cual puede eliminarse.
+Los registros de simulacros se conservan **12 meses** como prueba para las inspecciones. La persona que registró un simulacro, un director o un administrador puede quitarlo **dentro de las 24 horas siguientes a su registro**. Después, el menú muestra **🔒 Conservado hasta** una fecha un año después del simulacro. Cada registro y cada eliminación quedan en el registro de auditoría, y un simulacro quitado se conserva en archivo.
 
-Cada registro y cada eliminación quedan en el registro de auditoría.
+## Marcar un simulacro como no requerido en un centro
 
-??? Ayer ingresé un simulacro con la fecha equivocada. ¿Puedo corregirlo? | Solo dentro de las 24 horas siguientes a su ingreso: elimínelo y regístrelo de nuevo. Después, el registro permanece 12 meses.
+1. En la fila del simulacro, pulse **⋮** > **🚫 Not required here…**.
+2. Escriba **Why is this drill not required here?** — por ejemplo «No hay niños en cuidado por la noche».
+3. Pulse **Mark not required**. La fila se vuelve gris y se detienen sus recordatorios y avisos de simulacro perdido.
+4. Para deshacerlo, pulse **⋮** > **✅ Make required again** y **Make required**.
 
-## Recordatorios
+## Educadores: capacitación, horario y mapa de simulacro
 
-Los administradores pueden activar un correo a los directores en las mañanas de los días laborables cuando falta un simulacro o se omitió uno. Está desactivado a menos que lo active.
+En la pestaña **👩‍🏫 Educadores**, los directores y administradores fijan, para cada persona:
 
-## Ontario: simulacros de niño desaparecido y calendario de simulacros
+1. **📅 Set training dates** — **Renewed on**, **Expires on** y una **Nota (opcional)**, y luego **Save dates**. La columna **Estado** muestra si la capacitación está **Actual**, **Expires soon** o **Vencido**.
+2. **🔥 Set fire drill schedule** — **Se repite** (semanal, mensual, cada 2 o 3 meses, una vez o **No schedule**), y luego la **Week of the month**, el **Día de la semana**, la fecha y la **Hora**. Pulse **Guardar horario**.
+3. **⬆️ Add a map** (o **🔄 Replace map**, **🗑 Remove map**) — una imagen o un PDF de hasta 15 MB. **🗺️ Ver mapa** lo abre.
 
-A partir del **1 de enero de 2027**, los centros de Ontario deben realizar un **simulacro de niño desaparecido al menos cada 3 meses** (O. Reg. 137/15 s.68.2) y conservar los registros al menos 12 meses. Los simulacros de incendio siguen siendo mensuales (s.68).
+Los educadores solo ven su propia fila.
 
-- **Niño desaparecido** es un tipo de simulacro para las agencias de Ontario. Al elegirlo se añade: la sala o salas o el área, el escenario, quién lo dirigió, cuánto tardó en localizarse al niño (segundos), si se simuló una llamada al 911 y una llamada a los padres, y qué mejorar.
-- La tarjeta **Calendario de simulacros** reemplaza a *Vencidos y omitidos* en Ontario. Para cada centro muestra el último simulacro de niño desaparecido y cuándo toca el siguiente (3 meses después), y lo mismo para los de incendio: **Al día**, **Vence**, **Vence pronto** o **Vencido**.
-- Un programa escolar puede cambiar los simulacros de incendio de un centro de **Mensual** a **3 por trimestre escolar** (los directores para su propio centro, o un administrador).
-- Una tarea de limpieza nunca elimina los registros de simulacros. Quitar uno del registro lo oculta pero lo conserva en el archivo.
+## Ajustes
 
-**Recordatorios del calendario** (Ontario, activados por defecto): cada mañana, los directores de un centro reciben un aviso en la aplicación y un correo cuando su simulacro de niño desaparecido vence en 14 días o está vencido, o cuando su simulacro de incendio está vencido. Los administradores de agencia también son informados de todo lo vencido. Cada cambio se envía una vez, no todos los días. Un administrador puede desactivarlos al final del Registro de simulacros.
+En **⚙️ Ajustes**, los centros de Ontario eligen su **🔥 Centre fire drill rule**: **Mensual**, o 3 por período escolar para un programa en una escuela. Los administradores de la agencia también eligen las **🔔 Notificaciones**: quién recibe avisos de simulacros, si se recuerda a cada educador antes de su simulacro de incendio programado, si se avisa a directores y administradores la mañana de cada simulacro programado y cuando uno no se registró, y el correo electrónico de los días hábiles por la mañana sobre simulacros pendientes o perdidos. Las agencias de Ontario también tienen los recordatorios de calendario (activados por defecto). Cada interruptor se guarda en cuanto lo cambia.
+
+## Quién puede hacer qué
+
+- Los **administradores de la agencia** ven todos los centros, registran y quitan simulacros, marcan simulacros como no requeridos, fijan la capacitación, el horario y el mapa de cada educador, y cambian todos los ajustes.
+- Los **directores de centro** hacen lo mismo en sus propios centros y fijan la regla de simulacros de incendio de sus centros. No ven los ajustes de **🔔 Notificaciones**.
+- Los **educadores** ven sus propios centros, registran simulacros y ven sus propias fechas de capacitación, su horario y su mapa.
+- Los padres no ven el Registro de simulacros.
+
+## Preguntas frecuentes y solución de problemas
+
+??? Ayer registré un simulacro con la fecha equivocada. ¿Puedo corregirlo? | Solo dentro de las 24 horas siguientes a su registro: quítelo y regístrelo de nuevo. Después, el registro se conserva 12 meses.
+??? La opción Quitar aparece en gris y dice «Kept until». | Ya pasaron las 24 horas. Los registros de simulacros son prueba y se conservan 12 meses.
+??? Un centro muestra «No drill rules for this jurisdiction yet.» | La provincia o el estado de su agencia todavía no tiene reglas de simulacros en KiddieTrac. Revise Country & compliance en la agencia; de todos modos puede registrar simulacros.
+??? La lista Plan usado dice «Fire plans could not be loaded». | Cierre la ventana e inténtelo de nuevo. Si sigue pasando, registre el simulacro sin plan y abra un ticket.
+??? Dice «The map must be 15 MB or smaller.» | Reduzca el archivo, por ejemplo con una foto en lugar de un escaneo grande, y vuelva a agregarlo.
+??? ¿Quién recibe los correos de simulacros? | Solo las personas elegidas en ⚙️ Ajustes → Notificaciones. Los recordatorios están desactivados hasta que un administrador los activa, salvo los recordatorios de calendario de Ontario, que están activados por defecto. Cada cambio se envía una sola vez, no todos los días.
+
+## Relacionado
+
+[[open: #drills | Registro de simulacros]]
+[[open: #incidents | Incidentes]]
+
+- [Plan contra incendios](fire-plan)
+- [Riesgos y aviso a los padres](hazards)
+- [Recuentos y el supervisor interino](headcounts-and-acting-supervisor)
